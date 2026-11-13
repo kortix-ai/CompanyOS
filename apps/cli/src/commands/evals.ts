@@ -72,6 +72,17 @@ Subcommands:
   cancel <job_id>       Stop a job: no trial starts, running sandboxes stop.
   rm <job_id>           Delete an ended job and its folder in Files.
 
+In a verifier (tests/test.sh), for open-ended tasks:
+  judge --criterion <name>="<what earns 1.0>"... [--input <file>]...
+        [--rubric <file>] [--model <id>] [--out <reward.json>]
+                        A model scores the inputs on each criterion from 0 to 1
+                        through the Kortix LLM gateway, as this session. The
+                        scores merge into --out (default
+                        /logs/verifier/reward.json), so code checks and judge
+                        scores combine in one reward. The reasoning goes to
+                        stdout (the trial's verifier/test-stdout.txt). Exit 0
+                        when every criterion scored, 1 otherwise.
+
 Agents: an agent of kortix.yaml, \`oracle\` (runs solution/solve.sh; proves a task
 is solvable and its verifier passes it) or \`nop\` (does nothing; a task that
 passes with nop is broken).
@@ -81,7 +92,7 @@ Options:
   -h, --help            Show this help.
 `;
 
-const SUBCOMMANDS = ['init', 'suites', 'tasks', 'datasets', 'run', 'jobs', 'ls', 'show', 'watch', 'trial', 'compare', 'rerun', 'cancel', 'rm'];
+const SUBCOMMANDS = ['judge', 'init', 'suites', 'tasks', 'datasets', 'run', 'jobs', 'ls', 'show', 'watch', 'trial', 'compare', 'rerun', 'cancel', 'rm'];
 
 interface Ctx {
   auth: Auth;
@@ -438,6 +449,136 @@ async function rerunJob(ctx: Ctx, id: string | undefined, argv: string[]): Promi
   return 0;
 }
 
+// ── judge ────────────────────────────────────────────────────────────────────
+
+/** Bytes of one input file the judge reads: the end of a long log is kept. */
+const JUDGE_INPUT_BYTES = 60_000;
+const JUDGE_ENV_FILE = '/dev/shm/kortix/agent-env.sh';
+
+/** KORTIX_TOKEN and KORTIX_API_URL from the environment, else from the sandbox's env file (a verifier runs without the agent's env). */
+function sessionCredentials(): { token: string; apiUrl: string } | null {
+  let token = process.env.KORTIX_TOKEN ?? '';
+  let apiUrl = process.env.KORTIX_API_URL ?? '';
+  if ((!token || !apiUrl) && existsSync(JUDGE_ENV_FILE)) {
+    for (const line of readFileSync(JUDGE_ENV_FILE, 'utf8').split('\n')) {
+      const match = /^export\s+(KORTIX_TOKEN|KORTIX_API_URL)='(.*)'$/.exec(line.trim());
+      if (!match) continue;
+      const value = match[2]!.replace(/'\\''/g, "'");
+      if (match[1] === 'KORTIX_TOKEN' && !token) token = value;
+      if (match[1] === 'KORTIX_API_URL' && !apiUrl) apiUrl = value;
+    }
+  }
+  return token && apiUrl ? { token, apiUrl } : null;
+}
+
+/** The judge's reply: one score per criterion, clamped to 0..1. Null when it is not that shape. */
+export function parseJudgeReply(text: string, criteria: string[]): { scores: Record<string, number>; reasoning: string } | null {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null;
+  const record = parsed as Record<string, unknown>;
+  const raw = (typeof record.scores === 'object' && record.scores !== null ? record.scores : record) as Record<string, unknown>;
+  const scores: Record<string, number> = {};
+  for (const name of criteria) {
+    const value = Number(raw[name]);
+    if (!Number.isFinite(value)) return null;
+    scores[name] = Math.min(1, Math.max(0, value));
+  }
+  return { scores, reasoning: typeof record.reasoning === 'string' ? record.reasoning : '' };
+}
+
+async function judge(argv: string[], json: boolean): Promise<number> {
+  const criteria = new Map<string, string>();
+  for (const value of takeFlagValues(argv, ['--criterion', '-c'])) {
+    const eq = value.indexOf('=');
+    if (eq < 1) return fail(`--criterion "${value}" must be <name>="<what earns 1.0>".`);
+    const name = value.slice(0, eq).trim();
+    if (!/^[a-z0-9_]+$/.test(name)) return fail(`Criterion name "${name}" must be lowercase letters, digits and _.`);
+    criteria.set(name, value.slice(eq + 1).trim());
+  }
+  const rubricPath = takeFlagValue(argv, ['--rubric']);
+  const inputs = takeFlagValues(argv, ['--input', '-i']);
+  const out = takeFlagValue(argv, ['--out']) ?? '/logs/verifier/reward.json';
+  let model = takeFlagValue(argv, ['--model', '-m']) ?? process.env.KORTIX_EVAL_JUDGE_MODEL ?? '';
+  if (!criteria.size) return fail('Pass at least one --criterion <name>="<what earns 1.0>".');
+  const creds = sessionCredentials();
+  if (!creds) return fail(`No session credentials: set KORTIX_TOKEN and KORTIX_API_URL, or run inside a Kortix sandbox (${JUDGE_ENV_FILE}).`);
+  const gateway = `${new URL(creds.apiUrl).origin}/v1/llm/v1`;
+  const headers = { Authorization: `Bearer ${creds.token}`, 'content-type': 'application/json' };
+  if (!model) {
+    // The first model the gateway serves this session.
+    const listed = (await fetch(`${gateway}/models`, { headers, signal: AbortSignal.timeout(30_000) }).then((r) => r.json()).catch(() => null)) as { data?: Array<{ id: string }> } | null;
+    model = listed?.data?.[0]?.id ?? '';
+    if (!model) return fail('No model: pass --model <id> or set KORTIX_EVAL_JUDGE_MODEL.');
+  }
+  const sections: string[] = [];
+  if (rubricPath) sections.push(`## Rubric\n${readFileSync(rubricPath, 'utf8').slice(0, JUDGE_INPUT_BYTES)}`);
+  for (const path of inputs) {
+    if (!existsSync(path)) {
+      sections.push(`## ${path}\n(missing: the file does not exist)`);
+      continue;
+    }
+    const text = readFileSync(path, 'utf8');
+    sections.push(`## ${path}\n${text.length > JUDGE_INPUT_BYTES ? `(last ${JUDGE_INPUT_BYTES} characters)\n${text.slice(-JUDGE_INPUT_BYTES)}` : text}`);
+  }
+  const names = [...criteria.keys()];
+  const prompt = [
+    'You grade the work of an AI agent. Score each criterion from 0 to 1: 1 fully met, 0 not met, a fraction for partial credit. Judge only from the material below; a missing file means the work is missing.',
+    '',
+    '## Criteria',
+    ...[...criteria].map(([name, text]) => `- ${name}: ${text}`),
+    '',
+    ...sections,
+    '',
+    `Reply with one JSON object and nothing else: {"scores": {${names.map((n) => `"${n}": <0..1>`).join(', ')}}, "reasoning": "<one short paragraph>"}`,
+  ].join('\n');
+  let reply = '';
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const res = await fetch(`${gateway}/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ model, temperature: 0, max_tokens: 4_000, messages: [{ role: 'user', content: prompt }] }),
+      signal: AbortSignal.timeout(180_000),
+    }).catch((err) => err as Error);
+    if (res instanceof Error || !res.ok) {
+      if (attempt === 3) return fail(`The judge model did not answer: ${res instanceof Error ? res.message : `HTTP ${res.status} ${(await res.text()).slice(0, 300)}`}`);
+      await Bun.sleep(2_000 * attempt);
+      continue;
+    }
+    const body = (await res.json()) as { choices?: Array<{ message?: { content?: string | null } }> };
+    reply = body.choices?.[0]?.message?.content ?? '';
+    if (parseJudgeReply(reply, names)) break;
+  }
+  const result = parseJudgeReply(reply, names);
+  if (!result) return fail(`The judge's reply is not one score per criterion: ${reply.slice(0, 300)}`);
+  // Merge: a test.sh may have written code-checked rewards first.
+  let merged: Record<string, number> = {};
+  if (existsSync(out)) {
+    try {
+      merged = JSON.parse(readFileSync(out, 'utf8')) as Record<string, number>;
+    } catch {
+      merged = {};
+    }
+  }
+  merged = { ...merged, ...result.scores };
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, `${JSON.stringify(merged)}\n`);
+  if (json) emitJson({ model, scores: result.scores, reasoning: result.reasoning, reward_file: out });
+  else {
+    process.stdout.write(`judge (${model}):\n`);
+    for (const [name, value] of Object.entries(result.scores)) process.stdout.write(`  ${name} ${value}\n`);
+    if (result.reasoning) process.stdout.write(`  ${result.reasoning}\n`);
+  }
+  return 0;
+}
+
 // ── entry ────────────────────────────────────────────────────────────────────
 
 export async function runEvals(argv: string[]): Promise<number> {
@@ -448,6 +589,7 @@ export async function runEvals(argv: string[]): Promise<number> {
   const sub = rest.shift();
   if (!sub || !SUBCOMMANDS.includes(sub)) return fail(`Unknown subcommand "${sub ?? ''}". Run \`kortix evals --help\`.`);
   if (sub === 'init') return initTask(rest[0], json);
+  if (sub === 'judge') return judge(rest, json);
   const resolved = await resolveProjectContext({});
   if (!resolved) return 1;
   const ctx: Ctx = { auth: resolved.auth, projectId: resolved.projectId, json };

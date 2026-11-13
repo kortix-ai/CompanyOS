@@ -34,8 +34,12 @@ export interface BoxOps {
 
 const q = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
 
-/** Run as root whatever user the provider's exec channel uses. */
-const asRoot = (script: string): string => `if [ "$(id -u)" = 0 ]; then bash -c ${q(script)}; else sudo -n bash -c ${q(script)}; fi`;
+/**
+ * Run as root whatever user the provider's exec channel uses. The script is in
+ * the command once: Linux caps one argument at 128 KiB (MAX_ARG_STRLEN), and a
+ * copy per branch doubled an upload chunk past it.
+ */
+const asRoot = (script: string): string => `S=${q(script)}; if [ "$(id -u)" = 0 ]; then bash -c "$S"; else sudo -n bash -c "$S"; fi`;
 
 const liveOps: BoxOps = {
   async exec(box, script, timeoutMs = 30_000) {
@@ -77,8 +81,8 @@ export async function boxReady(box: Box): Promise<boolean> {
   }
 }
 
-/** Base64 per exec call: under the argument size limit of one process (128 KiB per argument on Linux). */
-const UPLOAD_CHUNK_BYTES = 60_000;
+/** Bytes per exec call: 64 KiB as base64, half the 128 KiB a single Linux argument may hold. */
+const UPLOAD_CHUNK_BYTES = 48 * 1024;
 
 /** Replace `dir` in the sandbox with these files. Scripts get the execute bit. */
 export async function uploadDir(box: Box, dir: string, files: readonly TaskFile[]): Promise<void> {

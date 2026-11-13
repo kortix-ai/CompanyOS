@@ -90,11 +90,11 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
       <div className={cn(COLUMN, 'border-border relative border-x')}>
         <header className="border-border bg-background/80 sticky top-0 z-30 flex h-16 items-center justify-between border-b px-8 backdrop-blur md:px-10">
           <div className="flex items-center gap-4">
-            <a href={KORTIX} aria-label="Kortix" className="text-foreground">
-              <KortixLogo size={16} variant="logomark" />
+            <span className="text-foreground font-mono text-sm font-medium tracking-wider uppercase">Loopmaxxing</span>
+            <a href={KORTIX} className="text-muted-foreground hover:text-foreground flex items-center gap-2 text-xs transition-colors">
+              by
+              <KortixLogo size={14} variant="logomark" />
             </a>
-            <span aria-hidden className="text-muted-foreground/50 select-none">/</span>
-            <span className="text-foreground text-sm font-medium tracking-tight">Loopmaxxing</span>
           </div>
           <nav className="text-muted-foreground hidden items-center gap-8 text-sm md:flex">
             <Link href="#factories" className="hover:text-foreground">Factories</Link>
@@ -114,7 +114,7 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
           </div>
           <div className="relative flex flex-col items-center gap-8 px-8 pt-20 pb-24 text-center md:px-10 lg:pt-24 lg:pb-28">
             <span className="border-border bg-card text-muted-foreground inline-flex items-center rounded-full border px-3 py-1 text-sm">
-              Loopmaxxing, by Kortix
+              For dev teams
             </span>
             <h1 className="text-foreground text-[40px] leading-[1.04] font-medium tracking-tight sm:text-6xl lg:text-[72px]">
               Add a <RotatingFactory names={loops.map((loop) => loop.name)} />
@@ -122,8 +122,8 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
               with 1 prompt.
             </h1>
             <p className="text-foreground/70 max-w-xl text-lg text-pretty">
-              Paste it into <Mark name="Claude Code" /> or <Mark name="Codex" />. It connects your stack and puts agents on a loop, 24/7, in the
-              cloud.
+              Agents that work on your repo and your tools, in the cloud, 24/7. One prompt in <Mark name="Claude Code" /> or{' '}
+              <Mark name="Codex" /> sets them up. You approve what ships.
             </p>
             <PromptBox className="mt-2" />
           </div>

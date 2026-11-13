@@ -90,9 +90,9 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
   {
     kind: 'marketing',
     slug: 'loopmaxxing',
-    title: 'Loopmaxxing by Kortix: add a software factory with 1 prompt',
+    title: 'Loopmaxxing by Kortix: add a software factory to your repo with 1 prompt',
     description:
-      'Paste one prompt into Claude Code or Codex. It sets up cloud agents on your repository that ship pull requests, posts and drafts 24/7, on the plan you already pay for.',
+      'For dev teams. Agents that work on your repo and your tools, in the cloud, 24/7. One prompt in Claude Code or Codex sets them up, on the plan you already pay for. You approve what ships.',
     htmlPath: '/loopmaxxing',
   },
   {

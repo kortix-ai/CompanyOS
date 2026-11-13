@@ -21,7 +21,11 @@ export interface SetupTarget {
 
 export const PROD_TARGET: SetupTarget = { origin: 'https://kortix.com', apiBase: 'https://api.kortix.com' };
 
-const trim = (url: string) => url.trim().replace(/\/+$/, '');
+const trim = (url: string) => {
+  let out = url.trim();
+  while (out.endsWith('/')) out = out.slice(0, -1);
+  return out;
+};
 
 /**
  * The target of one deployment from its web origin and its backend URL

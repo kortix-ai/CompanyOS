@@ -1,6 +1,6 @@
 {
   "generatedAt": "static",
-  "count": 1759,
+  "count": 1761,
   "aliases": 678,
   "routes": [
     {
@@ -62,6 +62,14 @@
     {
       "method": "POST",
       "path": "/internal/gateway/claude-refused"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/gateway/idempotency/get"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/gateway/idempotency/put"
     },
     {
       "method": "POST",
@@ -3139,6 +3147,11 @@
       "aliasOf": "/v1/workspaces/:workspaceId/channels/slack/installation"
     },
     {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/channels/slack/join",
+      "aliasOf": "/v1/workspaces/:workspaceId/channels/slack/join"
+    },
+    {
       "method": "GET",
       "path": "/v1/projects/:workspaceId/channels/slack/mode",
       "aliasOf": "/v1/workspaces/:workspaceId/channels/slack/mode"
@@ -4027,6 +4040,11 @@
       "method": "POST",
       "path": "/v1/projects/:workspaceId/sandbox-templates/:templateId/build",
       "aliasOf": "/v1/workspaces/:workspaceId/sandbox-templates/:templateId/build"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/sandbox-templates/reconcile",
+      "aliasOf": "/v1/workspaces/:workspaceId/sandbox-templates/reconcile"
     },
     {
       "method": "GET",
@@ -5928,6 +5946,10 @@
       "path": "/v1/workspaces/:workspaceId/channels/slack/installation"
     },
     {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/channels/slack/join"
+    },
+    {
       "method": "GET",
       "path": "/v1/workspaces/:workspaceId/channels/slack/mode"
     },
@@ -6956,6 +6978,10 @@
       "path": "/v1/workspaces/:workspaceId/sandbox-templates/:templateId/build"
     },
     {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/sandbox-templates/reconcile"
+    },
+    {
       "method": "GET",
       "path": "/v1/workspaces/:workspaceId/sandboxes"
     },
@@ -7698,24 +7724,6 @@
     {
       "method": "GET",
       "path": "/v1/workspaces/managed-git/status"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/projects/:workspaceId/channels/slack/join",
-      "aliasOf": "/v1/workspaces/:workspaceId/channels/slack/join"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/projects/:workspaceId/sandbox-templates/reconcile",
-      "aliasOf": "/v1/workspaces/:workspaceId/sandbox-templates/reconcile"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/workspaces/:workspaceId/channels/slack/join"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/workspaces/:workspaceId/sandbox-templates/reconcile"
     }
   ]
 }

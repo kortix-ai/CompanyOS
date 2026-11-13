@@ -150,6 +150,8 @@ export const WORKSPACE_KEY_CLASSES = {
   ],
   ledger: [
     'audit_activity_daily',
+    // The audit archive's export progress (2026-11-12): keeps the account its events were for.
+    'audit_archive_parts',
     'audit_events',
     'claude_subscription_login_flows',
     'gateway_request_logs',

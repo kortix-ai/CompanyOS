@@ -359,6 +359,8 @@ export function validate(
     now?: number;
     /** Editing a saved trigger: its app may be missing from the catalog, and a webhook keeps its signing key. */
     edit?: boolean;
+    /** The agent runs a program (`run`): an empty instruction sends the payload as JSON. */
+    programAgent?: boolean;
   },
   tI18nComplete: UiTranslator,
 ): ComposerProblem[] {
@@ -395,7 +397,7 @@ export function validate(
   if (draft.thenKind === 'app') {
     if (!draft.targetApp) add('then', tI18nComplete.raw('text28d33d2ad989'));
     else if (!draft.targetPath.trim().startsWith('/')) add('then', tI18nComplete.raw('textd777d7805cfa'));
-  } else if (!draft.instruction.trim()) add('then', tI18nComplete.raw('texte7cd9e292007'));
+  } else if (!draft.instruction.trim() && !ctx.programAgent) add('then', tI18nComplete.raw('texte7cd9e292007'));
   if (!ctx.name.trim()) add('name', tI18nComplete.raw('textb67ba8d96c42'));
 
   if (draft.mode === 'pinned' && !draft.pinnedSessionId)

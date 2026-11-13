@@ -10,6 +10,7 @@
 import type { Part, TextPart, ToolPart } from '../../runtime/client';
 import { isTextPart, isToolPart } from '../parts';
 import { isInvisibleActivityPart, isStandaloneActivityTool } from './session-activity-groups';
+import { partStartsConnectorSignIn } from './sign-in-call';
 
 export type Segment =
   | { kind: 'burst'; parts: Part[] }
@@ -46,7 +47,9 @@ export function segmentTurn(parts: ReadonlyArray<Part>, opts: SegmentTurnOptions
 
     if (isToolPart(part)) {
       const standalone =
-        isStandaloneActivityTool(part.tool) || !!opts.standaloneCallIds?.has(part.callID);
+        isStandaloneActivityTool(part.tool) ||
+        !!opts.standaloneCallIds?.has(part.callID) ||
+        partStartsConnectorSignIn(part);
       if (standalone) {
         flush();
         segments.push({ kind: 'standalone', part });

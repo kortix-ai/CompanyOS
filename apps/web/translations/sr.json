@@ -1328,6 +1328,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "Kada su Prostori uključeni, prostor može sam sebe da prati: uključite Proaktivno u njegovim detaljima, i agent čita šta se tu dešava (završene niti, otvorena pitanja, ljudi koji se pridruže) i piše u čet samo kada je važno: rezultat vredan deljenja, odluka koju treba da donesete ili nešto što kasni. Može i da pokrene nit koja obavlja posao. Opcioni dnevni pregled u 9:00."
+        },
+        "program_agents": {
+          "name": "Programski agenti",
+          "description": "Agent koji pokreće vaš kod umesto modela. Dajte agentu `run: <command>` u kortix.yaml: svaki potez pokreće tu komandu u sandboxu sesije, sa radnim prostorom, tajnama i pristupima agenta. Poruka ili podaci triggera su ulaz, a ono što komanda ispiše je odgovor."
         }
       },
       "channelsSwitch": {
@@ -2097,7 +2101,13 @@
       "noModelUpgradeReason": "Нема модела: пређи на Credits план или додај свој кључ провајдера.",
       "noModelKeyReason": "Нема модела: додај свој кључ провајдера.",
       "noModelUpgradePlan": "Надогради план",
-      "noModelAddProviderKey": "Додај кључ провајдера"
+      "noModelAddProviderKey": "Додај кључ провајдера",
+      "stepTitle": "Повежи модел",
+      "stepBody": "Агентима у {workspace} треба модел да би одговорили. Повежи свој ChatGPT или Claude план, или додај кључ провајдера.",
+      "stepBodyUpgrade": "Агентима у {workspace} треба модел да би одговорили. Повежи свој ChatGPT или Claude план, додај кључ провајдера или пређи на Credits план за Kortix моделе.",
+      "stepBodyMember": "Агентима у {workspace} треба модел да би одговорили. Повежи свој ChatGPT или Claude план или свој кључ провајдера, или замоли некога ко управља овим радним простором да повеже модел за све.",
+      "stepThisWorkspace": "овом радном простору",
+      "stepBack": "Назад на радне просторе"
     },
     "providerRecovery": {
       "savedPrompt": "Сачуван упит",
@@ -21782,6 +21792,8 @@
     "llmEstimateLabel": "LLM procena:"
   },
   "triggerComposer": {
+    "programInputPlaceholder": "Prazno: program čita podatke triggera kao JSON",
+    "programInputHelp": "Ovaj agent pokreće program. Čita ovaj tekst sa stdin. Ostavite prazno da pošaljete sve podatke kao JSON: događaj, telo webhooka ili detalje rasporeda, plus fiksne podatke triggera.",
     "every": "Сваких",
     "dayOfMonth": "Дан у месецу",
     "details": "Детаљи",
@@ -24970,6 +24982,11 @@
       }
     },
     "modelView": {
+      "programTimeout": "Vremensko ograničenje",
+      "programTimeoutHelp": "Pokretanje koje traje duže se zaustavlja i potez ne uspeva. Od 1s do 6h, npr. 30m ili 2h. Prazno: 30m.",
+      "programTitle": "Program",
+      "programCommand": "Komanda",
+      "programHelp": "Svaki potez pokreće ovu komandu u sandboxu sesije umesto modela. Poruka stiže na stdin i u $KORTIX_EVENT_PATH. Ono što ispiše je odgovor. Izlazni kod različit od nule obara potez.",
       "title": "Модел",
       "help": "Како овај агент размишља.",
       "projectDefault": "Подразумевано за радни простор",
@@ -26879,6 +26896,20 @@
     "connect": "Poveži",
     "cardFailed": "Povezivanje sa {app} nije uspelo. Pokušaj ponovo.",
     "blockedTitle": "Otvori {app} za prijavu",
-    "blockedDescription": "Pregledač je blokirao prozor za prijavu. Otvori ga dugmetom ispod. Ova stranica se sama osvežava."
+    "blockedDescription": "Pregledač je blokirao prozor za prijavu. Otvori ga dugmetom ispod. Ova stranica se sama osvežava.",
+    "doneTitle": "{app} je povezan",
+    "doneTitleNoApp": "Povezano",
+    "doneDescription": "Tvoj agent sada može da koristi {app}.",
+    "doneClose": "Možeš da zatvoriš ovu karticu.",
+    "doneDeniedTitle": "Prijava je otkazana",
+    "doneDeniedDescription": "Nisi dozvolio pristup na {app}. Ponovo pokreni prijavu iz Kortixa da ga povežeš.",
+    "doneExpiredTitle": "Ovaj link za prijavu je istekao",
+    "doneExpiredDescription": "Već je iskorišćen ili je prestar. Ponovo pokreni prijavu iz Kortixa.",
+    "doneFailedTitle": "{app} nije povezan",
+    "doneFailedTitleNoApp": "Prijava nije završena",
+    "doneFailedDescription": "Ponovo pokreni prijavu iz Kortixa. Ako opet ne uspe, pošalji kod ispod podršci.",
+    "doneErrorCode": "Kod greške: {code}",
+    "doneOpenKortix": "Otvori Kortix",
+    "doneFallbackApp": "aplikacija"
   }
 }

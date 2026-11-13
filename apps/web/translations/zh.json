@@ -1328,6 +1328,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "开启空间后，空间可以自己留意动态：在空间详情中打开“主动”，一个智能体会阅读这里发生的事（完成的话题、未回答的问题、新加入的人），只在重要时在聊天中发言：值得分享的结果、需要你做的决定或逾期事项。它也可以开启一个话题来完成工作。可选每天 9:00 的简报。"
+        },
+        "program_agents": {
+          "name": "程序智能体",
+          "description": "运行你的代码而不是模型的智能体。在 kortix.yaml 中为智能体设置 `run: <command>`：每一轮都会在会话的沙箱中运行该命令，并使用该智能体的工作区、密钥和权限。消息或触发器数据是输入，命令打印的内容就是回复。"
         }
       },
       "channelsSwitch": {
@@ -2097,7 +2101,13 @@
       "noModelUpgradeReason": "没有模型：升级到 Credits 套餐，或添加你自己的提供商密钥。",
       "noModelKeyReason": "没有模型：添加你自己的提供商密钥。",
       "noModelUpgradePlan": "升级套餐",
-      "noModelAddProviderKey": "添加提供商密钥"
+      "noModelAddProviderKey": "添加提供商密钥",
+      "stepTitle": "连接模型",
+      "stepBody": "{workspace} 中的智能体需要模型才能回复。请连接你的 ChatGPT 或 Claude 套餐，或添加提供商密钥。",
+      "stepBodyUpgrade": "{workspace} 中的智能体需要模型才能回复。请连接你的 ChatGPT 或 Claude 套餐、添加提供商密钥，或升级到 Credits 套餐以使用 Kortix 模型。",
+      "stepBodyMember": "{workspace} 中的智能体需要模型才能回复。请连接你自己的 ChatGPT 或 Claude 套餐或提供商密钥，或请管理此工作区的人为所有人连接一个模型。",
+      "stepThisWorkspace": "此工作区",
+      "stepBack": "返回工作区"
     },
     "providerRecovery": {
       "savedPrompt": "已保存的提示词",
@@ -21782,6 +21792,8 @@
     "llmEstimateLabel": "LLM 估算:"
   },
   "triggerComposer": {
+    "programInputPlaceholder": "留空：程序以 JSON 读取触发器数据",
+    "programInputHelp": "此智能体运行一个程序。程序通过 stdin 读取此文本。留空则以 JSON 发送全部数据：事件、Webhook 正文或计划信息，以及触发器的固定数据。",
     "every": "每隔",
     "dayOfMonth": "每月日期",
     "details": "详情",
@@ -24970,6 +24982,11 @@
       }
     },
     "modelView": {
+      "programTimeout": "时间限制",
+      "programTimeoutHelp": "运行超过此时间会被停止，该轮失败。1s 到 6h，例如 30m 或 2h。留空：30m。",
+      "programTitle": "程序",
+      "programCommand": "命令",
+      "programHelp": "每一轮都会在会话的沙箱中运行此命令，而不是模型。消息通过 stdin 和 $KORTIX_EVENT_PATH 传入。它打印的内容就是回复。非零退出码会使该轮失败。",
       "title": "模型",
       "help": "这个智能体如何思考。",
       "projectDefault": "工作区默认",
@@ -26879,6 +26896,20 @@
     "connect": "连接",
     "cardFailed": "无法连接 {app}。请重试。",
     "blockedTitle": "打开 {app} 登录",
-    "blockedDescription": "你的浏览器阻止了登录窗口。请使用下方按钮打开。此页面会自动更新。"
+    "blockedDescription": "你的浏览器阻止了登录窗口。请使用下方按钮打开。此页面会自动更新。",
+    "doneTitle": "已连接 {app}",
+    "doneTitleNoApp": "已连接",
+    "doneDescription": "你的智能体现在可以使用 {app}。",
+    "doneClose": "你可以关闭此标签页。",
+    "doneDeniedTitle": "登录已取消",
+    "doneDeniedDescription": "你没有在 {app} 上允许访问。请在 Kortix 中重新登录以完成连接。",
+    "doneExpiredTitle": "此登录链接已过期",
+    "doneExpiredDescription": "它已被使用或已过期。请在 Kortix 中重新登录。",
+    "doneFailedTitle": "{app} 未能连接",
+    "doneFailedTitleNoApp": "登录未完成",
+    "doneFailedDescription": "请在 Kortix 中重新登录。如果再次失败，请将下方代码发送给支持团队。",
+    "doneErrorCode": "错误代码：{code}",
+    "doneOpenKortix": "打开 Kortix",
+    "doneFallbackApp": "该应用"
   }
 }

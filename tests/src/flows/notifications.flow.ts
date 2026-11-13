@@ -23,7 +23,7 @@ import type { FlowContext, Principal } from '../core/types';
 import { createDatabaseSession } from '../fixtures/database-project';
 import { mailpitMessagesTo, waitForMailpit } from '../fixtures/mailpit';
 import { PASSWORD } from '../fixtures/principals';
-import { openFlowDb, seedTurnSession, type TurnSession } from '../fixtures/turn-end';
+import { openFlowDb, seedTurnSession, withTurnSession, type TurnSession } from '../fixtures/turn-end';
 
 /**
  * A fire on an account with no credit is refused as account state: 402. The
@@ -518,14 +518,9 @@ flow(
   },
   async (ctx) => {
     const { team, project, a, b } = await teamWithTwoMembers(ctx);
-    const db = await openFlowDb(ctx.env);
-    const turn = await seedTurnSession(ctx, db, { projectId: project.id, accountId: team.id, creator: a }).catch(async (error) => {
-      await db.end();
-      throw error;
-    });
-    const sessionId = turn.sessionId;
-    const turnDone = (row: InboxRow) => row.session_id === sessionId && row.kind === 'turn_done';
-    try {
+    await withTurnSession(ctx, { projectId: project.id, accountId: team.id, creator: a }, async (turn, db) => {
+      const sessionId = turn.sessionId;
+      const turnDone = (row: InboxRow) => row.session_id === sessionId && row.kind === 'turn_done';
       await ctx.step("B's prompted turn in A's session ends: the relay closes it and promotes nothing", async () => {
         await turn.startTurn('msg_notif2_first', b.userId!);
         await turn.endTurn('msg_notif2_first');
@@ -555,10 +550,7 @@ flow(
         await settle();
         expectCount(await storedCount(db, a.userId!, { sessionId }), 1, "muted A's rows for the session");
       });
-    } finally {
-      await turn.cleanup();
-      await db.end();
-    }
+    });
   },
 );
 
@@ -855,17 +847,12 @@ flow(
   },
   async (ctx) => {
     const { team, project, a, b: w } = await teamWithTwoMembers(ctx);
-    const db = await openFlowDb(ctx.env);
-    const turn = await seedTurnSession(ctx, db, { projectId: project.id, accountId: team.id, creator: a }).catch(async (error) => {
-      await db.end();
-      throw error;
-    });
-    const params = { projectId: project.id, sessionId: turn.sessionId };
-    const watching = async (who: Principal) =>
-      (await ctx.client.as(who).get(watchRoute, { params })).status(200).json<{ watching: boolean }>().watching;
-    const setWatch = (who: Principal, value: boolean) =>
-      ctx.client.as(who).put(watchRoute, { watching: value }, { params }).then((r) => r.status(200).body().has('$.watching', value));
-    try {
+    await withTurnSession(ctx, { projectId: project.id, accountId: team.id, creator: a }, async (turn, db) => {
+      const params = { projectId: project.id, sessionId: turn.sessionId };
+      const watching = async (who: Principal) =>
+        (await ctx.client.as(who).get(watchRoute, { params })).status(200).json<{ watching: boolean }>().watching;
+      const setWatch = (who: Principal, value: boolean) =>
+        ctx.client.as(who).put(watchRoute, { watching: value }, { params }).then((r) => r.status(200).body().has('$.watching', value));
       await ctx.step('ANON → 401; a user outside the account → 403 workspace_access_denied', async () => {
         (await ctx.client.as(ctx.P.ANON).get(watchRoute, { params })).status(401);
         (await ctx.client.as(ctx.P.NONMEMBER).get(watchRoute, { params })).status(403).body().has('$.code', 'workspace_access_denied');
@@ -915,10 +902,7 @@ flow(
         await setWatch(a, true);
         if ((await watching(a)) !== true) throw new Error('unmute did not read back');
       });
-    } finally {
-      await turn.cleanup();
-      await db.end();
-    }
+    });
   },
 );
 
@@ -943,16 +927,11 @@ flow(
     // W, an unmuted follower, is the positive control for "never a muted watcher".
     const w = await team.addMember('member');
     await team.grantProjectRole(project.id, w.userId!, 'member');
-    const db = await openFlowDb(ctx.env);
-    const turn = await seedTurnSession(ctx, db, { projectId: project.id, accountId: team.id, creator: a }).catch(async (error) => {
-      await db.end();
-      throw error;
-    });
-    const sessionId = turn.sessionId;
-    const params = { projectId: project.id };
-    const ask = (requestId: string, who?: Client) => relayQuestion(turn, project.id, requestId, who);
-    const askPermission = (who?: Client) => relayPermission(turn, project.id, 'per_notif8', who);
-    try {
+    await withTurnSession(ctx, { projectId: project.id, accountId: team.id, creator: a }, async (turn, db) => {
+      const sessionId = turn.sessionId;
+      const params = { projectId: project.id };
+      const ask = (requestId: string, who?: Client) => relayQuestion(turn, project.id, requestId, who);
+      const askPermission = (who?: Client) => relayPermission(turn, project.id, 'per_notif8', who);
       await turn.startTurn('msg_notif8', b.userId!);
       await ctx.step('A, the creator, mutes the session; member W follows it; B prompted its running turn', async () => {
         (await ctx.client.as(a).put(watchRoute, { watching: false }, { params: { ...params, sessionId } })).status(200);
@@ -999,10 +978,7 @@ flow(
       await ctx.step("a person's token cannot relay a permission request → 403", async () => {
         (await askPermission(ctx.client.as(b))).status(403);
       });
-    } finally {
-      await turn.cleanup();
-      await db.end();
-    }
+    });
   },
 );
 
@@ -1029,23 +1005,18 @@ flow(
   },
   async (ctx) => {
     const { team, project, a, b } = await teamWithTwoMembers(ctx);
-    const db = await openFlowDb(ctx.env);
-    const turn = await seedTurnSession(ctx, db, { projectId: project.id, accountId: team.id, creator: a }).catch(async (error) => {
-      await db.end();
-      throw error;
-    });
-    const projectParams = { params: { projectId: project.id } };
-    const watchParams = { projectId: project.id, sessionId: turn.sessionId };
-    const creatorWatch = () => ctx.client.as(a).get(watchRoute, { params: watchParams });
-    /** The project detail reads the key `true` and lists no Settings row for it. */
-    const expectGraduatedDetail = async () => {
-      const r = await ctx.client.as(ctx.P.OWNER).get('/v1/projects/:projectId', projectParams);
-      r.status(200).body().has('$.experimental.notification_center', true);
-      const keys = r.json<{ experimental_features: Array<{ key: string }> }>().experimental_features.map((flag) => flag.key);
-      if (keys.includes('notification_center')) throw new Error(`the catalog lists notification_center: ${JSON.stringify(keys)}`);
-    };
-    const turnDone = (row: InboxRow) => row.session_id === turn.sessionId && row.kind === 'turn_done';
-    try {
+    await withTurnSession(ctx, { projectId: project.id, accountId: team.id, creator: a }, async (turn, db) => {
+      const projectParams = { params: { projectId: project.id } };
+      const watchParams = { projectId: project.id, sessionId: turn.sessionId };
+      const creatorWatch = () => ctx.client.as(a).get(watchRoute, { params: watchParams });
+      /** The project detail reads the key `true` and lists no Settings row for it. */
+      const expectGraduatedDetail = async () => {
+        const r = await ctx.client.as(ctx.P.OWNER).get('/v1/projects/:projectId', projectParams);
+        r.status(200).body().has('$.experimental.notification_center', true);
+        const keys = r.json<{ experimental_features: Array<{ key: string }> }>().experimental_features.map((flag) => flag.key);
+        if (keys.includes('notification_center')) throw new Error(`the catalog lists notification_center: ${JSON.stringify(keys)}`);
+      };
+      const turnDone = (row: InboxRow) => row.session_id === turn.sessionId && row.kind === 'turn_done';
       await ctx.step('a project that made no choice reads experimental.notification_center:true, with no Settings row for it', async () => {
         await expectGraduatedDetail();
       });
@@ -1088,9 +1059,6 @@ flow(
         const page = await readInbox(ctx, b);
         if (!page.notifications.some(turnDone)) throw new Error(`B's turn_done row is not listed: ${JSON.stringify(page)}`);
       });
-    } finally {
-      await turn.cleanup();
-      await db.end();
-    }
+    });
   },
 );

@@ -1150,6 +1150,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "With Spaces on, a space can watch itself: turn on Proactive in its details, and an agent reads what happens there (finished threads, questions left open, people who join) and writes in the chat only when it matters: a result worth sharing, a decision you need to make, or something overdue. It can also start a thread that does the work. Optional daily brief at 9:00."
+        },
+        "program_agents": {
+          "name": "Program agents",
+          "description": "An agent that runs your code instead of a model. Give an agent `run: <command>` in kortix.yaml: each turn runs that command in the session's sandbox, with the agent's workspace, secrets and access. The message or trigger payload is the input, and what the command prints is the reply."
         }
       },
       "channelsSwitch": {
@@ -2097,7 +2101,13 @@
       "noModelUpgradeReason": "No model: upgrade to the Credits plan or add your own provider key.",
       "noModelKeyReason": "No model: add your own provider key.",
       "noModelUpgradePlan": "Upgrade plan",
-      "noModelAddProviderKey": "Add provider key"
+      "noModelAddProviderKey": "Add provider key",
+      "stepTitle": "Connect a model",
+      "stepBody": "Agents in {workspace} need a model to answer. Connect your ChatGPT or Claude plan, or add a provider key.",
+      "stepBodyUpgrade": "Agents in {workspace} need a model to answer. Connect your ChatGPT or Claude plan, add a provider key, or upgrade to the Credits plan for Kortix models.",
+      "stepBodyMember": "Agents in {workspace} need a model to answer. Connect your own ChatGPT or Claude plan or provider key, or ask someone who manages this workspace to connect a model for everyone.",
+      "stepThisWorkspace": "this workspace",
+      "stepBack": "Back to workspaces"
     },
     "providerRecovery": {
       "savedPrompt": "Saved prompt",
@@ -21827,6 +21837,8 @@
     "llmEstimateLabel": "LLM estimate:"
   },
   "triggerComposer": {
+    "programInputPlaceholder": "Empty: the program reads the trigger's payload as JSON",
+    "programInputHelp": "This agent runs a program. It reads this text on stdin. Leave it empty to send the whole payload as JSON: the event, webhook body or schedule details, plus the trigger's static payload.",
     "every": "Every",
     "dayOfMonth": "Day of month",
     "details": "Details",
@@ -24970,6 +24982,11 @@
       }
     },
     "modelView": {
+      "programTimeout": "Time limit",
+      "programTimeoutHelp": "A run that takes longer is stopped and the turn fails. From 1s to 6h, such as 30m or 2h. Empty: 30m.",
+      "programTitle": "Program",
+      "programCommand": "Command",
+      "programHelp": "Each turn runs this command in the session's sandbox instead of a model. The message arrives on stdin and in $KORTIX_EVENT_PATH. What it prints is the reply. A non-zero exit fails the turn.",
       "title": "Model",
       "help": "How this agent thinks.",
       "projectDefault": "Workspace default",
@@ -26879,6 +26896,20 @@
     "connect": "Connect",
     "cardFailed": "Could not connect {app}. Try again.",
     "blockedTitle": "Open {app} to sign in",
-    "blockedDescription": "Your browser blocked the sign-in window. Open it with the button below. This page updates by itself."
+    "blockedDescription": "Your browser blocked the sign-in window. Open it with the button below. This page updates by itself.",
+    "doneTitle": "{app} connected",
+    "doneTitleNoApp": "Connected",
+    "doneDescription": "Your agent can use {app} now.",
+    "doneClose": "You can close this tab.",
+    "doneDeniedTitle": "Sign-in cancelled",
+    "doneDeniedDescription": "You did not allow access on {app}. Start the sign-in again from Kortix to connect it.",
+    "doneExpiredTitle": "This sign-in link expired",
+    "doneExpiredDescription": "It was already used or is too old. Start the sign-in again from Kortix.",
+    "doneFailedTitle": "{app} did not connect",
+    "doneFailedTitleNoApp": "The sign-in did not finish",
+    "doneFailedDescription": "Start the sign-in again from Kortix. If it fails again, send the code below to support.",
+    "doneErrorCode": "Error code: {code}",
+    "doneOpenKortix": "Open Kortix",
+    "doneFallbackApp": "the app"
   }
 }

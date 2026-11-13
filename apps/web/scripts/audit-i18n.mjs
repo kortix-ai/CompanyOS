@@ -296,6 +296,9 @@ const allowedLiteralValues = new Set([
   'my-recordings',
   'us-east-1',
   'arn:aws:iam::123456789012:role/kortix-capture',
+  // The trigger period example (when-schedule.tsx, #12645): `every` takes the
+  // duration syntax `1h` verbatim, in every locale.
+  '1h',
   // The email inbox form (#10866): a Resend API key prefix, the inbox username
   // and domain examples, the From header's angle brackets, and the sender name
   // the API sends when none is set (channel-email.ts), shown verbatim.

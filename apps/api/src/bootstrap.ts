@@ -25,6 +25,7 @@ import { startAccessControlCache, stopAccessControlCache } from './replica/acces
 import { startEventLoopLagSampler, stopEventLoopLagSampler } from './replica/event-loop-lag';
 import { startJobWorker, stopJobWorker } from './replica/job-queue';
 import { loadManagedLineupAtBoot, startManagedLineupRefresh, stopManagedLineupRefresh } from './replica/managed-lineup';
+import { startReplaySweep, stopReplaySweep } from './llm-gateway/idempotency-replays';
 import { startSessionLifecycleWorker, stopSessionLifecycleWorker } from './replica/session-lifecycle';
 import { startTeamsBotTokenRefresh, stopTeamsBotTokenRefresh } from './replica/teams-bot-token-refresh';
 import { startTmpReaper, stopTmpReaper } from './replica/tmp-reaper';
@@ -217,6 +218,8 @@ async function startReplicaServices(kind: ProcessKind) {
     startTeamsBotTokenRefresh();
     if (serving) {
       startSessionLifecycleWorker();
+      // Expired shared Idempotency-Key answers (KRTX-4612) leave the table on a timer.
+      startReplaySweep();
       // Kortix-polled app events: every web process checks due streams.
       startTriggerEventPollWorker();
       // Fill the Composio catalogue snapshot, the hidden-toolkit list, the toolkit
@@ -361,6 +364,7 @@ async function runShutdown(signal: string): Promise<void> {
   // Stop claiming lifecycle rows now. The leader's slow job stops used to
   // run first, so this replica kept claiming prompts while it waited to die.
   stopSessionLifecycleWorker();
+  stopReplaySweep();
   // Stop claiming queued jobs too; the request drain waits for the ones running.
   stopJobWorker();
   const handBack = handBackClaims()

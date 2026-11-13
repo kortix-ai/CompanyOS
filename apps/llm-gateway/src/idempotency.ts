@@ -45,6 +45,8 @@ export interface ReplayedResponse {
   statusText: string;
   headers: [string, string][];
   body: string;
+  /** Set by the shared store: the answer's original absolute expiry (epoch ms). A shared hit never outlives it. */
+  expiresAt?: number;
 }
 
 /** The fields of an inference request the replay reads; the edge passes its full request. */
@@ -188,6 +190,7 @@ export function createIdempotencyReplay(now: () => number = Date.now, options: R
     result.then(
       (answer) => {
         if (entries.get(key) !== entry) return;
+        if (answer.expiresAt !== undefined) entry.expiresAt = Math.min(entry.expiresAt, answer.expiresAt);
         const isOk = answer.status >= 200 && answer.status < 300;
         if (!isOk) {
           forget(key, entry); // an error stays retryable

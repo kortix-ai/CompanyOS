@@ -1,5 +1,5 @@
 import { gatewayIdempotencyReplays } from '@kortix/db';
-import { eq, gt, and, count, sql } from 'drizzle-orm';
+import { eq, gt, lt, and, count, sql } from 'drizzle-orm';
 import { z } from '@hono/zod-openapi';
 import { db } from '../shared/db';
 
@@ -21,44 +21,75 @@ export const ReplayAnswerSchema = z.object({
 });
 export type ReplayAnswer = z.infer<typeof ReplayAnswerSchema>;
 
-export async function getReplay(key: string): Promise<ReplayAnswer | null> {
+export async function getReplay(key: string): Promise<(ReplayAnswer & { expiresAt: number }) | null> {
   const [row] = await db
     .select({
       status: gatewayIdempotencyReplays.status,
       statusText: gatewayIdempotencyReplays.statusText,
       headers: gatewayIdempotencyReplays.headers,
       body: gatewayIdempotencyReplays.body,
+      expiresAt: gatewayIdempotencyReplays.expiresAt,
     })
     .from(gatewayIdempotencyReplays)
     .where(and(eq(gatewayIdempotencyReplays.keyHash, key), gt(gatewayIdempotencyReplays.expiresAt, new Date())))
     .limit(1);
-  return row ?? null;
+  return row ? { ...row, expiresAt: row.expiresAt.getTime() } : null;
 }
 
 /** Past this many live rows an answer stays replica-local: the table is shared by every tenant. */
 const MAX_LIVE_ROWS = 10_000;
-/** Expired rows reclaimed per write, so a backlog is swept over many writes, never in one statement. */
-const SWEEP_ROWS = 200;
+/** Serializes admission: without it concurrent writers all see the same count and all insert. */
+const ADMISSION_LOCK = 4612_0001;
+/** Expired rows deleted per statement, so a backlog is swept in bounded batches. */
+const SWEEP_BATCH = 1000;
+const SWEEP_EVERY_MS = 10 * 60 * 1000;
 
 /** First writer wins: a retry that raced the first answer keeps the answer clients already saw. */
 export async function putReplay(key: string, answer: ReplayAnswer, now = new Date()): Promise<void> {
-  // An expired row of this very key blocks its insert (primary key), so it always goes;
-  // the rest of the expired backlog goes in a bounded batch.
-  await db.execute(sql`
-    DELETE FROM ${gatewayIdempotencyReplays}
-    WHERE (${gatewayIdempotencyReplays.keyHash} = ${key} AND ${gatewayIdempotencyReplays.expiresAt} < ${now.toISOString()})
-       OR ctid IN (
-         SELECT ctid FROM ${gatewayIdempotencyReplays}
-         WHERE ${gatewayIdempotencyReplays.expiresAt} < ${now.toISOString()}
-         LIMIT ${SWEEP_ROWS}
-       )`);
-  const [live] = await db
-    .select({ n: count() })
-    .from(gatewayIdempotencyReplays)
-    .where(gt(gatewayIdempotencyReplays.expiresAt, now));
-  if ((live?.n ?? 0) >= MAX_LIVE_ROWS) return;
-  await db
-    .insert(gatewayIdempotencyReplays)
-    .values({ keyHash: key, ...answer, expiresAt: new Date(now.getTime() + TTL_MS) })
-    .onConflictDoNothing();
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${ADMISSION_LOCK})`);
+    // An expired row of this very key blocks its insert (primary key), so it goes first.
+    await tx
+      .delete(gatewayIdempotencyReplays)
+      .where(and(eq(gatewayIdempotencyReplays.keyHash, key), lt(gatewayIdempotencyReplays.expiresAt, now)));
+    const [live] = await tx
+      .select({ n: count() })
+      .from(gatewayIdempotencyReplays)
+      .where(gt(gatewayIdempotencyReplays.expiresAt, now));
+    if ((live?.n ?? 0) >= MAX_LIVE_ROWS) return;
+    await tx
+      .insert(gatewayIdempotencyReplays)
+      .values({ keyHash: key, ...answer, expiresAt: new Date(now.getTime() + TTL_MS) })
+      .onConflictDoNothing();
+  });
+}
+
+/** Deletes every expired row, one bounded batch at a time. Returns how many went. */
+export async function sweepExpiredReplays(now = new Date()): Promise<number> {
+  let total = 0;
+  for (;;) {
+    const gone = (await db.execute(sql`
+      DELETE FROM ${gatewayIdempotencyReplays}
+      WHERE ctid IN (
+        SELECT ctid FROM ${gatewayIdempotencyReplays}
+        WHERE ${gatewayIdempotencyReplays.expiresAt} < ${now.toISOString()}
+        LIMIT ${SWEEP_BATCH}
+      ) RETURNING 1`)) as unknown as unknown[];
+    total += gone.length;
+    if (gone.length < SWEEP_BATCH) return total;
+  }
+}
+
+let sweepTimer: ReturnType<typeof setInterval> | undefined;
+
+/** Model answers must not outlive their hour just because no one writes: sweep on a timer. */
+export function startReplaySweep(): void {
+  stopReplaySweep();
+  sweepTimer = setInterval(() => void sweepExpiredReplays().catch(() => {}), SWEEP_EVERY_MS);
+  sweepTimer.unref?.();
+}
+
+export function stopReplaySweep(): void {
+  if (sweepTimer) clearInterval(sweepTimer);
+  sweepTimer = undefined;
 }

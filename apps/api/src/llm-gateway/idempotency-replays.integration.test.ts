@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { sql } from 'drizzle-orm';
 import { db } from '../shared/db';
-import { getReplay, putReplay } from './idempotency-replays';
+import { getReplay, putReplay, sweepExpiredReplays } from './idempotency-replays';
 
 const key = 'cd'.repeat(32);
 const answer = { status: 200, statusText: 'OK', headers: [['content-type', 'application/json']] as [string, string][], body: '{"id":"cmpl-1"}' };
@@ -16,14 +16,14 @@ describe('gateway Idempotency-Key replay on PostgreSQL (KRTX-4612)', () => {
     expect(await getReplay(key)).toBeNull();
     await putReplay(key, answer);
     await putReplay(key, { ...answer, body: '{"id":"cmpl-2"}' });
-    expect(await getReplay(key)).toEqual(answer);
+    expect(await getReplay(key)).toEqual({ ...answer, expiresAt: expect.any(Number) });
   });
 
   test('an expired answer is not served, and the next write replaces it', async () => {
     await putReplay(key, answer, new Date(Date.now() - 2 * 60 * 60 * 1000));
     expect(await getReplay(key)).toBeNull();
     await putReplay(key, { ...answer, body: '{"id":"cmpl-3"}' });
-    expect(await getReplay(key)).toEqual({ ...answer, body: '{"id":"cmpl-3"}' });
+    expect(await getReplay(key)).toEqual({ ...answer, body: '{"id":"cmpl-3"}', expiresAt: expect.any(Number) });
   });
 
   const fill = (n: number, expires: string) => db.execute(sql`
@@ -32,10 +32,18 @@ describe('gateway Idempotency-Key replay on PostgreSQL (KRTX-4612)', () => {
     FROM generate_series(1, ${n}) AS i`);
   const rows = async () => Number(((await db.execute(sql`SELECT count(*)::int AS n FROM kortix.gateway_idempotency_replays`)) as unknown as { n: number }[])[0].n);
 
-  test('one write reclaims a bounded batch of expired rows, not the whole backlog', async () => {
-    await fill(250, '2000-01-01T00:00:00Z');
+  test('the sweep deletes every expired row, across batches, and keeps live ones', async () => {
+    await fill(2500, '2000-01-01T00:00:00Z');
     await putReplay(key, answer);
-    expect(await rows()).toBe(250 - 200 + 1);
+    expect(await sweepExpiredReplays()).toBe(2500);
+    expect(await rows()).toBe(1);
+    expect(await getReplay(key)).toEqual({ ...answer, expiresAt: expect.any(Number) });
+  });
+
+  test('concurrent writers at the ceiling never exceed it', async () => {
+    await fill(9_990, '2999-01-01T00:00:00Z');
+    await Promise.all(Array.from({ length: 30 }, (_, i) => putReplay(i.toString(16).padStart(64, '0'), answer)));
+    expect(await rows()).toBe(10_000);
   });
 
   test('past the live-row ceiling the answer is not stored', async () => {

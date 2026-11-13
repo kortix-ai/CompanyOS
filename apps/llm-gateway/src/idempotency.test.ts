@@ -448,6 +448,27 @@ describe('idempotency replay across replicas', () => {
     expect(state.calls).toBe(1);
   });
 
+  test('a shared hit keeps the original expiry: the local copy never outlives it', async () => {
+    let clock = 1_000_000;
+    const hour = 60 * 60 * 1000;
+    const rows = new Map<string, import('./idempotency').ReplayedResponse>();
+    const store = {
+      get: async (key: string) => rows.get(key) ?? null,
+      put: async (key: string, answer: import('./idempotency').ReplayedResponse) => {
+        if (!rows.has(key)) rows.set(key, { ...answer, expiresAt: clock + hour });
+      },
+    };
+    const { state, call } = provider();
+    await createIdempotencyReplay(() => clock, { shared: store })('chat', 'key-1', request, call);
+    clock += 50 * 60 * 1000; // a retry on another replica, 50 min in
+    const replicaB = createIdempotencyReplay(() => clock, { shared: store });
+    expect(await (await replicaB('chat', 'key-1', request, call)).json()).toEqual({ id: 'cmpl-1' });
+    clock += 11 * 60 * 1000; // 61 min after the original answer
+    rows.clear(); // the control plane expired it
+    await replicaB('chat', 'key-1', request, call);
+    expect(state.calls).toBe(2);
+  });
+
   test('an error answer and an oversized answer are not shared', async () => {
     const { store, rows } = sharedStore();
     const replica = createIdempotencyReplay(undefined, { shared: store });

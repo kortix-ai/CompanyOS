@@ -1766,6 +1766,20 @@ flow(
       await accepted(signed(ts));
     });
 
+    await ctx.step('a GitHub repository webhook (body-signed X-Hub-Signature-256, X-GitHub-Event, X-GitHub-Delivery, no timestamp) → 200; a wrong secret or no X-GitHub-Event → 401', async () => {
+      const github = (signature: string, extra: Record<string, string> = {}) => ({
+        'x-github-event': 'issues',
+        'x-github-delivery': crypto.randomUUID(),
+        'x-hub-signature-256': signature,
+        ...extra,
+      });
+      await accepted(github(sign(rawBody)));
+      await rejected(github(sign(rawBody, 'wrong-secret')));
+      await rejected({ 'x-github-delivery': crypto.randomUUID(), 'x-hub-signature-256': sign(rawBody) });
+      // A Kortix signing header turns the GitHub scheme off: the timestamp rule applies again.
+      await rejected(github(sign(rawBody), { 'x-kortix-signature': sign(rawBody) }));
+    });
+
     await ctx.step('static token: a wrong X-Kortix-Token → 401; the secret as X-Kortix-Token or Bearer → 200', async () => {
       await rejected({ 'x-kortix-token': 'nope' });
       await accepted({ 'x-kortix-token': secret });

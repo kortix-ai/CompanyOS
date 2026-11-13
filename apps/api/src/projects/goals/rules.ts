@@ -7,6 +7,7 @@ import { GOAL_LIMITS, GOAL_OPEN_STATES, type GoalCapabilities } from '@kortix/ap
 import type { ProjectGoalCriterion } from '@kortix/db';
 import { parseDurationSeconds } from '@kortix/manifest-schema';
 import type { GoalRow } from './store';
+import { isUuid } from '../../shared/validate';
 
 /**
  * Who calls. The route derives it from the credential, never from a body:
@@ -37,7 +38,7 @@ export function isBoundGoal(goal: { setup: Record<string, unknown> }): boolean {
 
 /** The marker every prompt the goal engine writes starts with (`goalWakePrompt`). */
 const wakeMarker = (boxFolder: string): string => `Goal wake: ${boxFolder}.`;
-const NAMED_GOAL = /\bgoal ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/;
+const NAMED_GOAL = /\bgoal ([0-9a-f-]{36})\b/g;
 
 /**
  * A prompt the goal engine queued, not a person, and the goal it names: one
@@ -47,7 +48,7 @@ const NAMED_GOAL = /\bgoal ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
  * the heartbeat, so a fire queued before it is known by its text.
  */
 export function goalEnginePrompt(prompt: { source: string; text: string }): { goalId: string | null } | null {
-  const goalId = prompt.text.match(NAMED_GOAL)?.[1] ?? null;
+  const goalId = [...prompt.text.matchAll(NAMED_GOAL)].map((m) => m[1]!).find(isUuid) ?? null;
   if (prompt.source === 'system:goal') return { goalId };
   return prompt.source === 'trigger:reminder' && goalId && prompt.text.includes('Goal wake: ') ? { goalId } : null;
 }

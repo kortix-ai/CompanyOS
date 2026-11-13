@@ -228,6 +228,19 @@ describe('sessionLogAgentRuns', () => {
     expect(layout.absorbed.has('show')).toBe(false);
   });
 
+  test('a report that starts a connector sign-in stays out of every run: its Connect card waits on the person', () => {
+    const connect = { ...call('c', 'bash'), input: { command: 'kortix connectors connect gmail' } } as ToolCallBlock;
+    const turns = [
+      launch,
+      report('r1', subagentNotice(1), 2),
+      report('connect', subagentNotice(2), 3, [connect, text('a', 'Click Connect on the card.')]),
+      report('r3', subagentNotice(3), 5, [text('f', 'Done.')]),
+    ];
+    const layout = sessionLogAgentRuns(turns);
+    expect(layout.runs.has('connect')).toBe(false);
+    expect(layout.absorbed.has('connect')).toBe(false);
+  });
+
   test('a single report is a run of one: nothing is absorbed', () => {
     const turns = [launch, report('r1', subagentNotice(1), 4, [text('f', 'The draft is in.')])];
     const layout = sessionLogAgentRuns(turns);

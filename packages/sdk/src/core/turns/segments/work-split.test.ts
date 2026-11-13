@@ -25,6 +25,30 @@ function text(id: string, body: string): Part {
 const segments = (parts: Part[]) => groupShowSegments(segmentTurn(parts));
 
 describe('splitTurnWork', () => {
+  test('a refused `kortix_connectors` connect (`ok: false`) folds into the work: it started no sign-in', () => {
+    const refused = {
+      ...tool('2', 'kortix_connectors'),
+      state: {
+        status: 'completed',
+        input: { action: 'connect', slug: 'googlecalendar' },
+        output: JSON.stringify({ ok: false, tool: 'kortix_connectors', action: 'connect', card: { title: 'Could not start the sign-in for googlecalendar', status: 'error' }, error: { kind: 'not_found', message: 'Connector not found' } }),
+      },
+    } as unknown as ToolPart;
+    const connect = tool('3', 'kortix_connectors', { action: 'connect', slug: 'google-calendar' });
+    const split = splitTurnWork(segments([tool('1', 'read'), refused, connect, text('4', 'Click Connect.')]), { working: false });
+    expect(split?.work.map((x) => (x.kind === 'standalone' ? x.part.id : x.kind))).toEqual(['burst', '2']);
+    expect(split?.hoisted.map((x) => (x.kind === 'standalone' ? x.part.id : x.kind))).toEqual(['3']);
+  });
+
+  test('a connector sign-in call stays out of the fold: the person still has to click Connect', () => {
+    const connect = tool('2', 'kortix_connectors', { action: 'connect', slug: 'gmail' });
+    const s = segments([tool('1', 'read'), connect, text('3', 'Click Connect on the card.')]);
+    const split = splitTurnWork(s, { working: false });
+    expect(split?.work.map((x) => x.kind)).toEqual(['burst']);
+    expect(split?.hoisted.map((x) => (x.kind === 'standalone' ? x.part.id : x.kind))).toEqual(['2']);
+    expect(split?.final.map((x) => (x.kind === 'text' ? x.part.id : null))).toEqual(['3']);
+  });
+
   test('interim text carrying a generative-UI block stays out of the fold, in call order', () => {
     const card = text('2', 'Here is the summary so far:\n\n```openui\nroot = Card([])\n```');
     const s = segments([tool('1', 'bash'), card, tool('3', 'read'), shown('4'), text('5', 'Done.')]);

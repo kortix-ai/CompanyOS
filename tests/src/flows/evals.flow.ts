@@ -159,7 +159,7 @@ flow(
 
     await ctx.step('delete of a queued job → 409 eval_conflict; cancel → cancelled, every trial cancelled', async () => {
       const jobId = job!.job_id;
-      expectError(await owner.delete(R.job, { params: { ...params, jobId } }), 409, 'eval_conflict');
+      expectError(await owner.del(R.job, { params: { ...params, jobId } }), 409, 'eval_conflict');
       const cancelled = (await owner.post(R.cancel, {}, { params: { ...params, jobId } })).status(200).json<{ job: Job }>().job;
       if (cancelled.status !== 'cancelled' || cancelled.stats.n_cancelled !== 8 || cancelled.stats.n_queued !== 0) throw new Error(JSON.stringify(cancelled));
     });
@@ -172,7 +172,7 @@ flow(
 
     await ctx.step('delete an ended job → 200; it reads 404 eval_not_found after', async () => {
       const jobId = job!.job_id;
-      (await owner.delete(R.job, { params: { ...params, jobId } })).status(200);
+      (await owner.del(R.job, { params: { ...params, jobId } })).status(200);
       expectError(await owner.get(R.job, { params: { ...params, jobId } }), 404, 'eval_not_found');
     });
   },

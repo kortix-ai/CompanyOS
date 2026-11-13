@@ -8,13 +8,13 @@ ran in (`$KORTIX_SESSION_ID`). Open-ended criteria use `kortix evals judge`.
 
 Run it from any Kortix project with the `evals` flag on:
 
+It is the built-in dataset `kortix/my-kortix`:
+
 ```yaml
 evals:
   my-kortix:
     datasets:
-      - git_url: https://github.com/kortix-ai/suna.git
-        git_commit_id: dev
-        path: evals/my-kortix
+      - name: kortix/my-kortix
     agents: [mykortix]
     n_attempts: 3
 ```

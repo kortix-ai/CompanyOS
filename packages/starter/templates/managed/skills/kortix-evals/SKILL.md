@@ -182,6 +182,9 @@ evals:
         model_name: <provider/model>   # the same agent on another model
     n_attempts: 3
     n_concurrent_trials: 4
+  my-kortix:                      # a built-in dataset Kortix ships
+    datasets: [{ name: kortix/my-kortix }]
+    agents: [mykortix]
   terminal-bench:
     datasets:
       - name: terminal-bench          # a Harbor registry dataset

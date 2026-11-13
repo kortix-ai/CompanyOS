@@ -14,6 +14,7 @@ import { mkdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { EVAL_LIMITS, type EvalTaskSource } from '@kortix/api-contract';
+import { RELEASE_COMMIT } from '../../config';
 import { ttlMemo } from '../../shared/ttl-memo';
 import { listRepoFiles, readRepoFileBytes, type GitBackedProject } from '../git';
 import { runGit, runGitBuffer } from '../git/mirror';
@@ -260,6 +261,36 @@ const loadRegistry = ttlMemo<[], RegistryDataset[]>({
   },
 });
 
+// ── Built-in datasets ────────────────────────────────────────────────────────
+
+/** The repository Kortix itself is built from: built-in datasets are folders of it. */
+const KORTIX_REPO = 'https://github.com/kortix-ai/suna.git';
+
+/**
+ * Datasets Kortix ships, available by name in every project (`datasets: [{ name: kortix/my-kortix }]`)
+ * the way built-in agents are. Each is a folder of the Kortix repository, read at the commit the
+ * running API was built from, so the tasks always match the deployed code.
+ */
+export const BUILTIN_DATASETS: Record<string, { path: string; description: string }> = {
+  'kortix/my-kortix': {
+    path: 'evals/my-kortix',
+    description: 'What people ask My Kortix to do: answer, analyze, write a file, ask when a request is ambiguous, schedule a Loop. Run it before and after any change to My Kortix.',
+  },
+};
+
+export const isBuiltinDataset = (name: string): boolean => Object.hasOwn(BUILTIN_DATASETS, name);
+
+/** The ref of the Kortix repository built-in datasets are read at: the release commit, else `dev`. */
+export const builtinDatasetRef = (): string => (/^[0-9a-f]{40}$/i.test(RELEASE_COMMIT) ? RELEASE_COMMIT : 'dev');
+
+/** A built-in dataset as a git source. */
+export function builtinDatasetSource(name: string, version?: string | null): { git_url: string; git_commit_id: string; path: string } {
+  const dataset = BUILTIN_DATASETS[name];
+  if (!dataset) throw new EvalTrialError('TaskLoadError', `There is no built-in dataset named ${name}. Built-in datasets: ${Object.keys(BUILTIN_DATASETS).join(', ')}.`);
+  // `version` pins another commit, branch or tag of the Kortix repository.
+  return { git_url: KORTIX_REPO, git_commit_id: version || builtinDatasetRef(), path: dataset.path };
+}
+
 export interface RegistryDatasetSummary {
   name: string;
   version: string;
@@ -268,12 +299,15 @@ export interface RegistryDatasetSummary {
 }
 
 export async function listRegistryDatasets(): Promise<RegistryDatasetSummary[]> {
-  return (await loadRegistry()).map((dataset) => ({
+  const builtins = Object.entries(BUILTIN_DATASETS).map(([name, dataset]) => ({ name, version: builtinDatasetRef(), description: dataset.description, n_tasks: 0 }));
+  // A Harbor registry that does not answer leaves the built-in datasets listed.
+  const registry = await loadRegistry().catch(() => [] as RegistryDataset[]);
+  return [...builtins, ...registry.map((dataset) => ({
     name: dataset.name,
     version: String(dataset.version),
     description: dataset.description ?? '',
     n_tasks: dataset.tasks.length,
-  }));
+  }))];
 }
 
 /** The task refs of one registry dataset. No version: the last one the registry lists. */

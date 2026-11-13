@@ -10,7 +10,7 @@ import { normalizeEvalConfig, readEvalSuites, type EvalConfigIssue, type EvalSui
 import { parse as parseYaml } from 'yaml';
 import { isRepoFileNotFoundError, readRepoFile, type GitBackedProject } from '../git';
 import type { HarborTask } from './harbor-task';
-import { discoverTasks, filterTasks, gitTree, loadTask, projectTree, registryTaskRefs, resolveGitRef, type DiscoveredTask, type EvalTaskRef } from './task-source';
+import { discoverTasks, filterTasks, gitTree, loadTask, projectTree, registryTaskRefs, resolveGitRef, builtinDatasetSource, isBuiltinDataset, type DiscoveredTask, type EvalTaskRef } from './task-source';
 import { EvalTrialError } from './scoring';
 
 /** A request the caller must fix: 422 `eval_invalid` with these lines. */
@@ -121,6 +121,9 @@ export interface PlannedTrial {
 }
 
 async function tasksOfSource(project: GitBackedProject, commit: string, source: EvalTaskSource, violations: string[]): Promise<DiscoveredTask[]> {
+  if (!source.git_url && source.name && isBuiltinDataset(source.name)) {
+    return tasksOfSource(project, commit, { ...source, ...builtinDatasetSource(source.name, source.version), name: null, version: null }, violations);
+  }
   if (source.git_url) {
     let commit: string;
     try {

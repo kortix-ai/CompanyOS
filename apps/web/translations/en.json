@@ -21417,7 +21417,9 @@
       "textccf59f978ef6": "No connector events here yet",
       "text82cbc4a4def0": "Connector events are not set up on this deployment, so no connector can send them yet.",
       "text458ceb31019b": "Connector event triggers",
-      "text27ca9df9dbaa": "Connector event triggers are off"
+      "text27ca9df9dbaa": "Connector event triggers are off",
+      "textfff553f218c7": "Evals",
+      "textd5b5d846044e": "evals eval benchmark score harbor terminal-bench tasks leaderboard"
     },
     "publicShareConfirm": {
       "title": "Create a public link?",

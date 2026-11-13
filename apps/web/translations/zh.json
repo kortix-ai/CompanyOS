@@ -1735,7 +1735,7 @@
         "email": "电子邮件",
         "scheduled": "已计划",
         "webhook": "Webhook",
-        "event": "应用事件",
+        "event": "连接器事件",
         "manual": "手动",
         "all": "全部"
       },
@@ -21352,7 +21352,16 @@
       "textb1f8e3109f1b": "{value0}：{value1} 天是 Kortix 允许的上限。",
       "textac20a57bfde0": "收起",
       "text268733ac2f60": "无法更新该应用",
-      "text5d8926d4a4dd": "无法注册该应用"
+      "text5d8926d4a4dd": "无法注册该应用",
+      "text30b9ce09f406": "输入一个时间段，例如 15m、1h 或 1d，至少 1m。",
+      "text28d33d2ad989": "选择要调用的应用",
+      "textd777d7805cfa": "输入以 / 开头的路径",
+      "text8043e69a8dd6": "删除触发器",
+      "textd6fa1626e3af": "已创建连接器事件",
+      "textccf59f978ef6": "这里还没有连接器事件",
+      "text82cbc4a4def0": "此部署未设置连接器事件，因此还没有连接器可以发送事件。",
+      "text458ceb31019b": "连接器事件触发器",
+      "text27ca9df9dbaa": "连接器事件触发器已关闭"
     },
     "publicShareConfirm": {
       "title": "创建公开链接？",
@@ -21814,7 +21823,16 @@
     "crBranchHelp": "变更请求合并到此分支时运行；留空则合并到任意分支时都运行。指令可以读取 <code>change_request.number</code>、<code>change_request.title</code> 和 <code>change_request.base_ref</code>。",
     "eventsOff": "连接器事件处于 Beta 阶段，此工作区中已关闭。请在工作区管理的功能开关中开启。",
     "noApps": "此工作区中还没有发送事件的应用。请部署一个向 <code>KORTIX_APP_EVENTS_URL</code> 发送 POST 的应用，然后在这里选择它。",
-    "openApps": "打开应用"
+    "openApps": "打开应用",
+    "thenLabel": "触发时执行",
+    "thenAgent": "运行智能体",
+    "thenApp": "调用应用",
+    "targetPath": "路径",
+    "targetMethod": "方法",
+    "targetHelp": "每次触发都会唤醒应用，并将负载发送到此路径。不会运行智能体。",
+    "intervalLabel": "重复间隔",
+    "intervalHelp": "固定时间段，例如 15m、1h 或 1d。",
+    "useCalendar": "改用日历计划"
   },
   "gatewayAccess": {
     "heroTitle": "在任何地方使用此工作区的模型",
@@ -22159,7 +22177,7 @@
     "infoRunsThrough": "提供方",
     "infoSignsInWith": "登录方式",
     "infoCategory": "类别",
-    "infoAppEvents": "应用事件",
+    "infoAppEvents": "事件",
     "infoAppEventsYes": "支持",
     "authOAuth": "OAuth 登录",
     "authApiKey": "API 密钥",
@@ -23710,9 +23728,9 @@
   },
   "automationsPause": {
     "groupTitle": "触发器",
-    "groupDescription": "此工作区中的计划、循环、Webhook、应用事件和监控。",
+    "groupDescription": "此工作区中的计划、循环、Webhook、连接器事件和应用事件。",
     "label": "暂停所有触发器",
-    "description": "此工作区中没有任何内容会自行运行:没有计划、循环、Webhook、应用事件或监视器。手动运行触发器仍然有效。",
+    "description": "此工作区中不会自动运行任何内容：没有计划、循环、Webhook、连接器事件或应用事件。手动运行触发器仍然可用。",
     "readOnlyDescription": "只有所有者或管理员可以暂停或恢复触发器。",
     "pausedSince": "自 {date} 起已暂停。",
     "pauseTitle": "暂停所有触发器？",

@@ -1735,7 +1735,7 @@
         "email": "E-mail",
         "scheduled": "Agendado",
         "webhook": "Webhook",
-        "event": "Evento de app",
+        "event": "Evento de conector",
         "manual": "Manual",
         "all": "Todos"
       },
@@ -21352,7 +21352,16 @@
       "textb1f8e3109f1b": "{value0}: {value1} dias é o máximo que o Kortix permite.",
       "textac20a57bfde0": "Ocultar",
       "text268733ac2f60": "Não foi possível atualizar esse app",
-      "text5d8926d4a4dd": "Não foi possível registrar esse app"
+      "text5d8926d4a4dd": "Não foi possível registrar esse app",
+      "text30b9ce09f406": "Insira um período como 15m, 1h ou 1d, de pelo menos 1m.",
+      "text28d33d2ad989": "Escolha o app a chamar",
+      "textd777d7805cfa": "Insira um caminho que comece com /",
+      "text8043e69a8dd6": "Excluir gatilho",
+      "textd6fa1626e3af": "Evento de conector criado",
+      "textccf59f978ef6": "Ainda não há eventos de conector aqui",
+      "text82cbc4a4def0": "Os eventos de conector não estão configurados nesta implantação, então nenhum conector pode enviá-los ainda.",
+      "text458ceb31019b": "Gatilhos de eventos de conector",
+      "text27ca9df9dbaa": "Os gatilhos de eventos de conector estão desativados"
     },
     "publicShareConfirm": {
       "title": "Criar um link público?",
@@ -21814,7 +21823,16 @@
     "crBranchHelp": "Roda quando uma solicitação de mudança é mesclada neste branch, ou em qualquer branch se o campo estiver vazio. A instrução pode ler <code>change_request.number</code>, <code>change_request.title</code> e <code>change_request.base_ref</code>.",
     "eventsOff": "Os eventos de conectores estão em beta e desativados neste espaço de trabalho. Ative-os em Feature flags, na administração do espaço de trabalho.",
     "noApps": "Nenhum app deste espaço de trabalho envia eventos ainda. Publique um app que faça POST para <code>KORTIX_APP_EVENTS_URL</code> e escolha-o aqui.",
-    "openApps": "Abrir apps"
+    "openApps": "Abrir apps",
+    "thenLabel": "O que um disparo faz",
+    "thenAgent": "Executar um agente",
+    "thenApp": "Chamar um app",
+    "targetPath": "Caminho",
+    "targetMethod": "Método",
+    "targetHelp": "Cada disparo ativa o app e envia o payload para este caminho. Nenhum agente é executado.",
+    "intervalLabel": "Repete a cada",
+    "intervalHelp": "Um período fixo como 15m, 1h ou 1d.",
+    "useCalendar": "Usar um agendamento de calendário"
   },
   "gatewayAccess": {
     "heroTitle": "Use os modelos deste espaço de trabalho em qualquer lugar",
@@ -22159,7 +22177,7 @@
     "infoRunsThrough": "Provedor",
     "infoSignsInWith": "Login com",
     "infoCategory": "Categoria",
-    "infoAppEvents": "Eventos do app",
+    "infoAppEvents": "Eventos",
     "infoAppEventsYes": "Compatível",
     "authOAuth": "Login OAuth",
     "authApiKey": "Chave de API",
@@ -23710,9 +23728,9 @@
   },
   "automationsPause": {
     "groupTitle": "Gatilhos",
-    "groupDescription": "Agendamentos, ciclos, webhooks, eventos de apps e monitores neste espaço de trabalho.",
+    "groupDescription": "Agendamentos, loops, webhooks, eventos de conector e eventos de app neste workspace.",
     "label": "Pausar todos os gatilhos",
-    "description": "Nada neste espaço de trabalho roda sozinho: nenhum agendamento, loop, webhook, evento de app ou monitor. Executar um gatilho manualmente ainda funciona.",
+    "description": "Nada neste workspace é executado sozinho: nenhum agendamento, loop, webhook, evento de conector ou evento de app. Executar um gatilho manualmente ainda funciona.",
     "readOnlyDescription": "Apenas um proprietário ou administrador pode pausar ou retomar os gatilhos.",
     "pausedSince": "Pausado desde {date}.",
     "pauseTitle": "Pausar todos os gatilhos?",

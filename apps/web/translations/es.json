@@ -1735,7 +1735,7 @@
         "email": "Correo electrónico",
         "scheduled": "Programado",
         "webhook": "Webhook",
-        "event": "Evento de app",
+        "event": "Evento de conector",
         "manual": "Manual",
         "all": "Todos"
       },
@@ -21352,7 +21352,16 @@
       "textb1f8e3109f1b": "{value0}: {value1} días es el máximo que Kortix permite.",
       "textac20a57bfde0": "Ocultar",
       "text268733ac2f60": "No se pudo actualizar esa aplicación",
-      "text5d8926d4a4dd": "No se pudo registrar esa aplicación"
+      "text5d8926d4a4dd": "No se pudo registrar esa aplicación",
+      "text30b9ce09f406": "Introduce un periodo como 15m, 1h o 1d, de al menos 1m.",
+      "text28d33d2ad989": "Elige la app a la que llamar",
+      "textd777d7805cfa": "Introduce una ruta que empiece por /",
+      "text8043e69a8dd6": "Eliminar trigger",
+      "textd6fa1626e3af": "Evento de conector creado",
+      "textccf59f978ef6": "Aún no hay eventos de conector aquí",
+      "text82cbc4a4def0": "Los eventos de conector no están configurados en esta implementación, así que ningún conector puede enviarlos todavía.",
+      "text458ceb31019b": "Triggers de eventos de conector",
+      "text27ca9df9dbaa": "Los triggers de eventos de conector están desactivados"
     },
     "publicShareConfirm": {
       "title": "¿Crear un enlace público?",
@@ -21814,7 +21823,16 @@
     "crBranchHelp": "Se ejecuta cuando una solicitud de cambio se fusiona en esta rama, o en cualquier rama si está vacío. La instrucción puede leer <code>change_request.number</code>, <code>change_request.title</code> y <code>change_request.base_ref</code>.",
     "eventsOff": "Los eventos de conectores están en beta y desactivados en este espacio de trabajo. Actívalos en Indicadores de funcionalidad, en la administración del espacio de trabajo.",
     "noApps": "Ninguna app de este espacio de trabajo envía eventos todavía. Despliega una app que haga POST a <code>KORTIX_APP_EVENTS_URL</code> y elígela aquí.",
-    "openApps": "Abrir apps"
+    "openApps": "Abrir apps",
+    "thenLabel": "Qué hace cada ejecución",
+    "thenAgent": "Ejecutar un agente",
+    "thenApp": "Llamar a una app",
+    "targetPath": "Ruta",
+    "targetMethod": "Método",
+    "targetHelp": "Cada ejecución activa la app y envía la carga a esta ruta. No se ejecuta ningún agente.",
+    "intervalLabel": "Se repite cada",
+    "intervalHelp": "Un periodo fijo como 15m, 1h o 1d.",
+    "useCalendar": "Usar un horario de calendario"
   },
   "gatewayAccess": {
     "heroTitle": "Use los modelos de este espacio de trabajo en cualquier lugar",
@@ -22159,7 +22177,7 @@
     "infoRunsThrough": "Proveedor",
     "infoSignsInWith": "Inicia sesión con",
     "infoCategory": "Categoría",
-    "infoAppEvents": "Eventos de la app",
+    "infoAppEvents": "Eventos",
     "infoAppEventsYes": "Compatible",
     "authOAuth": "Inicio con OAuth",
     "authApiKey": "Clave de API",
@@ -23710,9 +23728,9 @@
   },
   "automationsPause": {
     "groupTitle": "Activadores",
-    "groupDescription": "Programaciones, bucles, webhooks, eventos de apps y monitores en este espacio de trabajo.",
+    "groupDescription": "Horarios, bucles, webhooks, eventos de conector y eventos de app en este espacio de trabajo.",
     "label": "Pausar todos los activadores",
-    "description": "Nada en este espacio de trabajo se ejecuta solo: ni programaciones, ni bucles, ni webhooks, ni eventos de apps, ni monitores. Ejecutar un activador a mano sigue funcionando.",
+    "description": "Nada en este espacio de trabajo se ejecuta solo: ningún horario, bucle, webhook, evento de conector ni evento de app. Ejecutar un trigger a mano sigue funcionando.",
     "readOnlyDescription": "Solo un propietario o administrador puede pausar o reanudar los activadores.",
     "pausedSince": "Pausado desde {date}.",
     "pauseTitle": "¿Pausar todos los activadores?",

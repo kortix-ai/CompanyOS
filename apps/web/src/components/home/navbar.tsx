@@ -69,11 +69,7 @@ const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 type MenuId = MegaMenu['id'];
 
 /** Links in the bar that navigate directly, beside the three menus. */
-const PLAIN_LINKS = [
-  { label: 'Pricing', href: '/pricing' },
-  // The developer landing: Loopmaxxing, also served at loopmaxxing.sh.
-  { label: 'For developers', href: '/loopmaxxing' },
-];
+const PLAIN_LINKS = [{ label: 'Pricing', href: '/pricing' }];
 
 const USE_CASES_ENABLED = process.env.NEXT_PUBLIC_USE_CASES_ENABLED !== 'false';
 

@@ -1,20 +1,12 @@
 import { expect } from "@playwright/test";
-import { randomUUID } from "node:crypto";
-import {
-  createManifestProject,
-  type ManifestProject,
-} from "../manifest-project";
-import {
-  createAuthUser,
-  deleteAuthUser,
-  installBrowserSessionDirect,
-  signIn,
-} from "../session-auth";
+import { installBrowserSessionDirect } from "../session-auth";
 import { dismissOnboarding, selectAccountForUi } from "../ui";
 import {
-  accountsOf,
-  api,
   authOptions,
+  pinMacPlatform,
+  provisionDesktopScene,
+  resize,
+  desktopDatabaseUrl,
   test,
 } from "./fixture";
 
@@ -25,12 +17,10 @@ export function defineFrameParity(desktop: boolean): void {
       desktopApp,
     }) => {
       test.setTimeout(180_000);
-      await page.addInitScript(() =>
-        Object.defineProperty(navigator, "platform", { get: () => "MacIntel" }),
-      );
-      const email = `e2e-desktop-back-${randomUUID()}@example.test`;
-      const user = await createAuthUser(email, authOptions);
-      const session = await signIn(email, authOptions);
+      await pinMacPlatform(page);
+      const { session, dispose } = await provisionDesktopScene({
+        emailPrefix: "e2e-desktop-back",
+      });
       try {
         // No request_id: the OAuth consent page resolves to a status screen
         // with no action. The desktop shell has no browser toolbar, so before
@@ -85,7 +75,7 @@ export function defineFrameParity(desktop: boolean): void {
           await fresh.close();
         }
       } finally {
-        await deleteAuthUser(user.id, authOptions);
+        await dispose();
       }
     });
 
@@ -95,28 +85,15 @@ export function defineFrameParity(desktop: boolean): void {
       desktopApp,
     }) => {
       test.setTimeout(300_000);
-      const databaseUrl =
-        process.env.KE2E_DATABASE_URL || process.env.E2E_DATABASE_URL;
-      if (!databaseUrl)
-        throw new Error("Desktop parity requires the configured test database");
-      await page.addInitScript(() =>
-        Object.defineProperty(navigator, "platform", { get: () => "MacIntel" }),
-      );
-      const email = `e2e-desktop-new-${randomUUID()}@example.test`;
-      const user = await createAuthUser(email, authOptions);
-      const session = await signIn(email, authOptions);
-      let project: ManifestProject | undefined;
+      const databaseUrl = desktopDatabaseUrl();
+      await pinMacPlatform(page);
+      const { email, session, accounts, project, dispose } = await provisionDesktopScene({
+        databaseUrl,
+        emailPrefix: "e2e-desktop-new",
+        name: "Desktop back",
+      });
+      const accountId = accounts[0].account_id;
       try {
-        const accounts = await accountsOf(session.access_token);
-        const accountId = accounts[0].account_id;
-        project = await createManifestProject({
-          api,
-          accessToken: session.access_token,
-          accountId,
-          userId: user.id,
-          name: "Desktop back",
-          databaseUrl,
-        });
         const projectUrl = `${baseURL}/workspaces/${project.id}`;
         await installBrowserSessionDirect(
           page,
@@ -210,14 +187,8 @@ export function defineFrameParity(desktop: boolean): void {
           for (const platform of ["Win32", "Linux x86_64"]) {
             const other = await page.context().newPage();
             try {
-              await other.addInitScript(
-                (value) =>
-                  Object.defineProperty(navigator, "platform", {
-                    get: () => value,
-                  }),
-                platform,
-              );
-              await other.setViewportSize({ width: 1440, height: 900 });
+              await pinMacPlatform(other, platform);
+              await resize(other, null, 1440, 900);
               await other.goto(projectUrl);
               await expect(
                 other.getByRole("button", {
@@ -319,8 +290,7 @@ export function defineFrameParity(desktop: boolean): void {
         await clickMenu("kx-go-home");
         await expect(page).not.toHaveURL(/\/workspaces\/new(\?|$)/, { timeout: 60_000 });
       } finally {
-        await project?.dispose();
-        await deleteAuthUser(user.id, authOptions);
+        await dispose();
       }
     });
 }

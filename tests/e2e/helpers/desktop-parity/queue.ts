@@ -4,26 +4,19 @@ import { loadEnv } from "../../../src/core/env";
 import { createDatabaseSession } from "../../../src/fixtures/database-project";
 import { seedSessionTranscript } from "../../../src/fixtures/session-transcript";
 import { runDatabaseSql } from "../database";
-import {
-  createManifestProject,
-  isDeployedTarget,
-  type ManifestProject,
-} from "../manifest-project";
-import {
-  createAuthUser,
-  deleteAuthUser,
-  installBrowserSessionDirect,
-  signIn,
-} from "../session-auth";
+import { isDeployedTarget } from "../manifest-project";
+import { installBrowserSessionDirect } from "../session-auth";
 import {
   SESSION_READY_TIMEOUT_MS,
   waitForSessionReady,
 } from "../session-ready";
 import { dismissOnboarding, dismissWelcomeCard } from "../ui";
 import {
-  accountsOf,
   api,
   authOptions,
+  provisionDesktopScene,
+  resize,
+  desktopDatabaseUrl,
   chooseAppearanceTheme,
   expectThinkingMatchesStop,
   test,
@@ -39,29 +32,23 @@ export function defineQueueParity(): void {
       test.setTimeout(
         isDeployedTarget() ? 180_000 + SESSION_READY_TIMEOUT_MS : 180_000,
       );
-      const databaseUrl =
-        process.env.KE2E_DATABASE_URL || process.env.E2E_DATABASE_URL;
-      if (!databaseUrl)
-        throw new Error("Queue parity requires the configured test database");
-      const user = await createAuthUser(
-        `e2e-queue-${randomUUID()}@example.test`,
-        authOptions,
-      );
-      const auth = await signIn(user.email!, authOptions);
-      let project: ManifestProject | undefined;
+      const databaseUrl = desktopDatabaseUrl();
+      const {
+        user,
+        session: auth,
+        accounts,
+        project,
+        dispose,
+      } = await provisionDesktopScene({
+        databaseUrl,
+        emailPrefix: "e2e-queue",
+        name: "Queue placement",
+      });
+      let projectDisposed = false;
       let sessionId = "";
       let bootSessionId = "";
       const deliveryFixtureId = randomUUID();
       try {
-        const accounts = await accountsOf(auth.access_token);
-        project = await createManifestProject({
-          api,
-          accessToken: auth.access_token,
-          accountId: accounts[0].account_id,
-          userId: user.id,
-          name: "Queue placement",
-          databaseUrl,
-        });
         if (!isDeployedTarget()) {
           // A saved test credential makes a real catalog model selectable.
           // This journey verifies pending submission, not model execution.
@@ -435,11 +422,9 @@ export function defineQueueParity(): void {
             .click({ trial: true });
           await window.evaluate((window) => {
             window.webContents.setZoomFactor(1);
-            window.setContentSize(720, 480);
           });
-        } else {
-          await page.setViewportSize({ width: 720, height: 480 });
         }
+        await resize(page, desktopApp, 720, 480);
         await expect(input).toBeInViewport();
         await expect(
           page
@@ -588,7 +573,7 @@ export function defineQueueParity(): void {
             expect(await unloadAllowed(0)).toBe(true);
 
             await project.dispose();
-            project = undefined;
+            projectDisposed = true;
             await desktopApp.evaluate(
               async ({ BrowserWindow, Menu, dialog }, itemId) => {
                 const item = Menu.getApplicationMenu()?.getMenuItemById(itemId);
@@ -616,13 +601,13 @@ export function defineQueueParity(): void {
           }
         }
       } finally {
-        if (project && bootSessionId)
+        if (!projectDisposed && bootSessionId)
           await api(
             auth.access_token,
             "DELETE",
             `/projects/${project.id}/sessions/${bootSessionId}`,
           ).catch(() => undefined);
-        if (project && sessionId)
+        if (!projectDisposed && sessionId)
           await api(
             auth.access_token,
             "DELETE",
@@ -632,8 +617,7 @@ export function defineQueueParity(): void {
           "DELETE FROM kortix.session_lifecycle_commands WHERE command_id = $1",
           [deliveryFixtureId], databaseUrl,
         );
-        await project?.dispose();
-        await deleteAuthUser(user.id, authOptions);
+        await dispose();
       }
     });
 }

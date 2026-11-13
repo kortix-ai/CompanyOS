@@ -6,6 +6,7 @@ import {
   type ElectronApplication,
   type Page,
 } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import {
   createServer,
@@ -17,9 +18,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createApiJsonClient } from "../http";
+import {
+  createManifestProject,
+  fundAccount,
+  type ManifestProject,
+} from "../manifest-project";
+import { createAuthUser, deleteAuthUser, signIn } from "../session-auth";
 
 const desktopRoot = fileURLToPath(
-  new URL("../../../apps/desktop-electron", import.meta.url),
+  new URL("../../../../apps/desktop-electron", import.meta.url),
 );
 const requireDesktop = createRequire(join(desktopRoot, "package.json"));
 
@@ -112,20 +119,35 @@ export async function startBasicProxy(baseURL: string) {
   };
 }
 
-export const test = browserTest.extend<{ desktopApp: ElectronApplication | null }>({
-  desktopApp: async ({ baseURL }, use) => {
-    if (process.env.E2E_DESKTOP_NATIVE !== "1") return use(null);
-    const profile = await mkdtemp(join(tmpdir(), "kortix-desktop-parity-"));
-    let app: ElectronApplication | undefined;
-    try {
-      app = await launchDesktop(baseURL!, profile);
-      await use(app);
-    } finally {
+/** A profile directory and the apps launched on it, closed and removed by one `dispose`. */
+export async function openNativeDesktop(baseURL: string, prefix: string) {
+  const profile = await mkdtemp(join(tmpdir(), `kortix-desktop-${prefix}-`));
+  const apps: ElectronApplication[] = [];
+  return {
+    profile,
+    launch: async () => {
+      const app = await launchDesktop(baseURL, profile);
+      apps.push(app);
+      return app;
+    },
+    dispose: async () => {
       try {
-        await app?.close();
+        for (const app of apps) await app.close();
       } finally {
         await rm(profile, { recursive: true, force: true });
       }
+    },
+  };
+}
+
+export const test = browserTest.extend<{ desktopApp: ElectronApplication | null }>({
+  desktopApp: async ({ baseURL }, use) => {
+    if (process.env.E2E_DESKTOP_NATIVE !== "1") return use(null);
+    const native = await openNativeDesktop(baseURL!, "parity");
+    try {
+      await use(await native.launch());
+    } finally {
+      await native.dispose();
     }
   },
   page: async ({ page, desktopApp, baseURL }, use) => {
@@ -144,6 +166,108 @@ export const authOptions = {
   supabaseUrl: process.env.E2E_SUPABASE_URL || "http://127.0.0.1:54321",
   password: "DesktopParity123!",
 };
+
+/** Size the Electron window when the journey runs in the shell, else the browser viewport. */
+export async function resize(
+  page: Page,
+  desktopApp: ElectronApplication | null,
+  width: number,
+  height: number,
+) {
+  if (desktopApp) {
+    const window = await desktopApp.browserWindow(page);
+    await window.evaluate(
+      (window, size) => window.setContentSize(size.width, size.height),
+      { width, height },
+    );
+  } else {
+    await page.setViewportSize({ width, height });
+  }
+}
+
+/**
+ * One signed-in test user with an account and a manifest project, and the
+ * single teardown that removes both. A failure while provisioning removes the
+ * user too. Without a `name` only the user is created.
+ */
+export async function provisionDesktopScene(options: {
+  databaseUrl: string;
+  emailPrefix: string;
+  name: string;
+  fund?: boolean;
+}): Promise<DesktopScene>;
+export async function provisionDesktopScene(options: {
+  emailPrefix: string;
+}): Promise<Omit<DesktopScene, "accounts" | "project">>;
+export async function provisionDesktopScene(options: {
+  emailPrefix: string;
+  databaseUrl?: string;
+  name?: string;
+  fund?: boolean;
+}) {
+  const email = `${options.emailPrefix}-${randomUUID()}@example.test`;
+  const user = await createAuthUser(email, authOptions);
+  const session = await signIn(email, authOptions);
+  let project: ManifestProject | undefined;
+  const dispose = async () => {
+    await project?.dispose();
+    await deleteAuthUser(user.id, authOptions);
+  };
+  if (!options.name || !options.databaseUrl) return { email, user, session, dispose };
+  try {
+    const accounts = await accountsOf(session.access_token);
+    if (options.fund)
+      await fundAccount(options.databaseUrl, accounts[0].account_id);
+    const created = await createManifestProject({
+      api,
+      accessToken: session.access_token,
+      accountId: accounts[0].account_id,
+      userId: user.id,
+      name: options.name,
+      databaseUrl: options.databaseUrl,
+    });
+    let projectDisposed = false;
+    project = {
+      id: created.id,
+      dispose: async () => {
+        if (projectDisposed) return;
+        projectDisposed = true;
+        await created.dispose();
+      },
+    };
+    return { email, user, session, accounts, project, dispose };
+  } catch (error) {
+    await dispose();
+    throw error;
+  }
+}
+
+export interface DesktopScene {
+  email: string;
+  user: Awaited<ReturnType<typeof createAuthUser>>;
+  session: Awaited<ReturnType<typeof signIn>>;
+  accounts: { account_id: string }[];
+  project: ManifestProject;
+  dispose: () => Promise<void>;
+}
+
+/** The macOS row rule reads `navigator.platform`, which a Linux CI runner would report as Linux. */
+export async function pinMacPlatform(page: Page, platform = "MacIntel") {
+  await page.addInitScript(
+    (value) =>
+      Object.defineProperty(navigator, "platform", { get: () => value }),
+    platform,
+  );
+}
+
+/** The test database every journey provisions its project in. */
+export function desktopDatabaseUrl(): string {
+  const databaseUrl =
+    process.env.KE2E_DATABASE_URL || process.env.E2E_DATABASE_URL;
+  if (!databaseUrl)
+    throw new Error("Desktop parity requires the configured test database");
+  return databaseUrl;
+}
 
 /**
  * The caller's accounts. Sign-up creates no account (Workspaces), so a fresh

@@ -4,27 +4,17 @@ import {
   type Locator,
   type ElectronApplication,
 } from "@playwright/test";
-import { randomUUID } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runDatabaseSql } from "../database";
-import {
-  createManifestProject,
-  type ManifestProject,
-} from "../manifest-project";
-import {
-  createAuthUser,
-  deleteAuthUser,
-  installBrowserSessionDirect,
-  signIn,
-} from "../session-auth";
+import { installBrowserSessionDirect } from "../session-auth";
 import { dismissOnboarding, selectAccountForUi } from "../ui";
 import {
-  accountsOf,
   api,
   authOptions,
-  launchDesktop,
+  provisionDesktopScene,
+  openNativeDesktop,
+  desktopDatabaseUrl,
   startBasicProxy,
 } from "./fixture";
 
@@ -36,27 +26,16 @@ nativeBrowserTest?.(
   "27 — desktop parity keeps the collapsed Customize header draggable",
   async ({ baseURL }) => {
     browserTest.setTimeout(120_000);
-    const databaseUrl =
-      process.env.KE2E_DATABASE_URL || process.env.E2E_DATABASE_URL;
-    if (!databaseUrl)
-      throw new Error("Desktop drag test requires the configured test database");
-    const profile = await mkdtemp(join(tmpdir(), "kortix-desktop-drag-"));
-    const email = `e2e-desktop-drag-${randomUUID()}@example.test`;
-    const user = await createAuthUser(email, authOptions);
-    const session = await signIn(email, authOptions);
-    let project: ManifestProject | undefined;
+    const databaseUrl = desktopDatabaseUrl();
+    const native = await openNativeDesktop(baseURL!, "drag");
+    const { session, accounts, project, dispose } = await provisionDesktopScene({
+      databaseUrl,
+      emailPrefix: "e2e-desktop-drag",
+      name: "Desktop drag region",
+    });
     let app: ElectronApplication | undefined;
     try {
-      const accounts = await accountsOf(session.access_token);
-      project = await createManifestProject({
-        api,
-        accessToken: session.access_token,
-        accountId: accounts[0].account_id,
-        userId: user.id,
-        name: "Desktop drag region",
-        databaseUrl,
-      });
-      app = await launchDesktop(baseURL!, profile);
+      app = await native.launch();
       const main = app
         .windows()
         .find((window) => window.url().startsWith(baseURL!));
@@ -105,10 +84,8 @@ nativeBrowserTest?.(
       await opener.hover();
       expect(await dragPoint()).not.toBeNull();
     } finally {
-      await app?.close();
-      await project?.dispose();
-      await deleteAuthUser(user.id, authOptions);
-      await rm(profile, { recursive: true, force: true });
+      await native.dispose();
+      await dispose();
     }
   },
 );
@@ -116,27 +93,16 @@ nativeBrowserTest?.(
   "27 — desktop parity guards reload, Home, close, and quit with an unsaved agent draft",
   async ({ baseURL }) => {
     browserTest.setTimeout(240_000);
-    const databaseUrl =
-      process.env.KE2E_DATABASE_URL || process.env.E2E_DATABASE_URL;
-    if (!databaseUrl)
-      throw new Error("Desktop unsaved-edit test requires the test database");
-    const profile = await mkdtemp(join(tmpdir(), "kortix-desktop-unsaved-"));
-    const email = `e2e-desktop-unsaved-${randomUUID()}@example.test`;
-    const user = await createAuthUser(email, authOptions);
-    const session = await signIn(email, authOptions);
-    let project: ManifestProject | undefined;
+    const databaseUrl = desktopDatabaseUrl();
+    const native = await openNativeDesktop(baseURL!, "unsaved");
+    const { session, accounts, project, dispose } = await provisionDesktopScene({
+      databaseUrl,
+      emailPrefix: "e2e-desktop-unsaved",
+      name: "Desktop unsaved draft",
+    });
     let app: ElectronApplication | undefined;
     try {
-      const accounts = await accountsOf(session.access_token);
-      project = await createManifestProject({
-        api,
-        accessToken: session.access_token,
-        accountId: accounts[0].account_id,
-        userId: user.id,
-        name: "Desktop unsaved draft",
-        databaseUrl,
-      });
-      app = await launchDesktop(baseURL!, profile);
+      app = await native.launch();
       const main = app
         .windows()
         .find((window) => window.url().startsWith(baseURL!));
@@ -324,11 +290,9 @@ nativeBrowserTest?.(
           if (shared.__kortixUnloadProbe)
             shared.__kortixUnloadProbe.response = 0;
         });
-        await app.close();
       }
-      await project?.dispose();
-      await deleteAuthUser(user.id, authOptions);
-      await rm(profile, { recursive: true, force: true });
+      await native.dispose();
+      await dispose();
     }
   },
 );
@@ -336,30 +300,19 @@ nativeBrowserTest?.(
   "27 — desktop parity clears native controls on Apps, Files, account hub, and admin",
   async ({ baseURL }) => {
     browserTest.setTimeout(180_000);
-    const databaseUrl =
-      process.env.KE2E_DATABASE_URL || process.env.E2E_DATABASE_URL;
-    if (!databaseUrl)
-      throw new Error("Desktop geometry requires the configured test database");
-    const profile = await mkdtemp(join(tmpdir(), "kortix-desktop-geometry-"));
-    const email = `e2e-desktop-geometry-${randomUUID()}@example.test`;
-    const user = await createAuthUser(email, authOptions);
-    const session = await signIn(email, authOptions);
-    let project: ManifestProject | undefined;
+    const databaseUrl = desktopDatabaseUrl();
+    const native = await openNativeDesktop(baseURL!, "geometry");
+    const { user, session, accounts, project, dispose } = await provisionDesktopScene({
+      databaseUrl,
+      emailPrefix: "e2e-desktop-geometry",
+      name: "Desktop header geometry",
+    });
     let app: ElectronApplication | undefined;
     let adminRoleGranted = false;
     try {
-      const accounts = await accountsOf(session.access_token);
-      project = await createManifestProject({
-        api,
-        accessToken: session.access_token,
-        accountId: accounts[0].account_id,
-        userId: user.id,
-        name: "Desktop header geometry",
-        databaseUrl,
-      });
       // The titlebar row below carries the notification bell, which every
       // project renders (KRTX-1742; the flag graduated on 2026-11-06).
-      app = await launchDesktop(baseURL!, profile);
+      app = await native.launch();
       const main = app
         .windows()
         .find((window) => window.url().startsWith(baseURL!));
@@ -657,10 +610,8 @@ nativeBrowserTest?.(
           [user.id],
           databaseUrl,
         );
-      await project?.dispose();
-      await deleteAuthUser(user.id, authOptions);
-      await app?.close();
-      await rm(profile, { recursive: true, force: true });
+      await native.dispose();
+      await dispose();
     }
   },
 );
@@ -668,15 +619,15 @@ nativeBrowserTest?.(
   "27 — desktop parity restores the native theme before the first window and matches popups",
   async ({ baseURL }) => {
     browserTest.setTimeout(180_000);
-    const profile = await mkdtemp(join(tmpdir(), "kortix-desktop-theme-"));
+    const native = await openNativeDesktop(baseURL!, "theme");
     let app: ElectronApplication | undefined;
     try {
       await writeFile(
-        join(profile, "theme.json"),
+        join(native.profile, "theme.json"),
         JSON.stringify({ theme: "light" }),
         "utf8",
       );
-      app = await launchDesktop(baseURL!, profile);
+      app = await native.launch();
       const main = app
         .windows()
         .find((window) => window.url().startsWith(baseURL!));
@@ -751,8 +702,7 @@ nativeBrowserTest?.(
         true,
       );
     } finally {
-      await app?.close();
-      await rm(profile, { recursive: true, force: true });
+      await native.dispose();
     }
   },
 );
@@ -760,29 +710,16 @@ nativeBrowserTest?.(
   "27 — desktop parity recovers when Supabase authentication does not answer",
   async ({ baseURL }) => {
     browserTest.setTimeout(180_000);
-    const databaseUrl =
-      process.env.KE2E_DATABASE_URL || process.env.E2E_DATABASE_URL;
-    if (!databaseUrl)
-      throw new Error("Auth recovery requires the configured test database");
-    const profile = await mkdtemp(
-      join(tmpdir(), "kortix-desktop-auth-timeout-"),
-    );
-    const email = `e2e-desktop-auth-timeout-${randomUUID()}@example.test`;
-    const user = await createAuthUser(email, authOptions);
-    const session = await signIn(email, authOptions);
-    let project: ManifestProject | undefined;
+    const databaseUrl = desktopDatabaseUrl();
+    const native = await openNativeDesktop(baseURL!, "auth-timeout");
+    const { session, project, dispose } = await provisionDesktopScene({
+      databaseUrl,
+      emailPrefix: "e2e-desktop-auth-timeout",
+      name: "Desktop auth timeout",
+    });
     let app: ElectronApplication | undefined;
     try {
-      const accounts = await accountsOf(session.access_token);
-      project = await createManifestProject({
-        api,
-        accessToken: session.access_token,
-        accountId: accounts[0].account_id,
-        userId: user.id,
-        name: "Desktop auth timeout",
-        databaseUrl,
-      });
-      app = await launchDesktop(baseURL!, profile);
+      app = await native.launch();
       const main = app
         .windows()
         .find((window) => window.url().startsWith(baseURL!));
@@ -822,10 +759,8 @@ nativeBrowserTest?.(
         .click();
       await expect(main).toHaveURL(/\/auth(?:\?|$)/, { timeout: 15_000 });
     } finally {
-      await project?.dispose();
-      await deleteAuthUser(user.id, authOptions);
-      await app?.close();
-      await rm(profile, { recursive: true, force: true });
+      await native.dispose();
+      await dispose();
     }
   },
 );
@@ -833,12 +768,12 @@ nativeBrowserTest?.(
   "27 — desktop parity authenticates an HTTP proxy and recovers from cancel",
   async ({ baseURL }) => {
     browserTest.setTimeout(240_000);
-    const profile = await mkdtemp(join(tmpdir(), "kortix-desktop-proxy-"));
+    const native = await openNativeDesktop(baseURL!, "proxy");
     const firstProxy = await startBasicProxy(baseURL!);
     const secondProxy = await startBasicProxy(baseURL!);
     let app: ElectronApplication | undefined;
     try {
-      app = await launchDesktop(baseURL!, profile);
+      app = await native.launch();
       const main = app
         .windows()
         .find((window) => window.url().startsWith(baseURL!));
@@ -919,9 +854,8 @@ nativeBrowserTest?.(
         "Proxy sign-in for 127.0.0.1 was cancelled",
       );
     } finally {
-      await app?.close();
+      await native.dispose();
       await Promise.allSettled([firstProxy.close(), secondProxy.close()]);
-      await rm(profile, { recursive: true, force: true });
     }
   },
 );
@@ -930,11 +864,11 @@ nativeBrowserTest?.(
   "27 — desktop parity persists window state across a process relaunch",
   async ({ baseURL }) => {
     browserTest.setTimeout(240_000);
-    const profile = await mkdtemp(join(tmpdir(), "kortix-desktop-relaunch-"));
+    const native = await openNativeDesktop(baseURL!, "relaunch");
     let first: ElectronApplication | undefined;
     let second: ElectronApplication | undefined;
     try {
-      first = await launchDesktop(baseURL!, profile);
+      first = await native.launch();
       const firstPage = first
         .windows()
         .find((window) => window.url().startsWith(baseURL!));
@@ -1007,7 +941,7 @@ nativeBrowserTest?.(
       await first.close();
       first = undefined;
 
-      second = await launchDesktop(baseURL!, profile);
+      second = await native.launch();
       await expect
         .poll(() =>
           second!.evaluate(({ BrowserWindow }, origin) => {
@@ -1033,9 +967,7 @@ nativeBrowserTest?.(
       expect(restored.normalBounds).toEqual(expectedBounds);
       expect(restored.zoom).toBe(expectedZoom);
     } finally {
-      await first?.close();
-      await second?.close();
-      await rm(profile, { recursive: true, force: true });
+      await native.dispose();
     }
   },
 );

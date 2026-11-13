@@ -2,23 +2,14 @@ import { expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { loadEnv } from "../../../src/core/env";
 import { createDatabaseSession } from "../../../src/fixtures/database-project";
-import {
-  createManifestProject,
-  fundAccount,
-  isDeployedTarget,
-  type ManifestProject,
-} from "../manifest-project";
-import {
-  createAuthUser,
-  deleteAuthUser,
-  installBrowserSessionDirect,
-  signIn,
-} from "../session-auth";
+import { isDeployedTarget } from "../manifest-project";
+import { installBrowserSessionDirect } from "../session-auth";
 import { dismissOnboarding } from "../ui";
 import {
-  accountsOf,
   api,
   authOptions,
+  provisionDesktopScene,
+  desktopDatabaseUrl,
   test,
 } from "./fixture";
 
@@ -202,25 +193,14 @@ export function defineShellParity(): void {
         if (!desktopApp)
           throw new Error("native Electron application is required");
         test.setTimeout(240_000);
-        const databaseUrl =
-          process.env.KE2E_DATABASE_URL || process.env.E2E_DATABASE_URL;
-        if (!databaseUrl)
-          throw new Error("Quick Entry requires the configured test database");
-        const email = `e2e-desktop-quick-entry-${randomUUID()}@example.test`;
-        const user = await createAuthUser(email, authOptions);
-        const session = await signIn(email, authOptions);
-        let project: ManifestProject | undefined;
+        const databaseUrl = desktopDatabaseUrl();
+        const { session, project, dispose } = await provisionDesktopScene({
+          databaseUrl,
+          emailPrefix: "e2e-desktop-quick-entry",
+          name: "Quick Entry target",
+          fund: true,
+        });
         try {
-          const accounts = await accountsOf(session.access_token);
-          await fundAccount(databaseUrl, accounts[0].account_id);
-          project = await createManifestProject({
-            api,
-            accessToken: session.access_token,
-            accountId: accounts[0].account_id,
-            userId: user.id,
-            name: "Quick Entry target",
-            databaseUrl,
-          });
           const projectId = project.id;
           const { resolvedForCaller: modelId } = await api<{
             resolvedForCaller: string | null;
@@ -371,8 +351,7 @@ export function defineShellParity(): void {
           ).toBeNull();
         } finally {
           await page.unrouteAll({ behavior: "ignoreErrors" });
-          await project?.dispose();
-          await deleteAuthUser(user.id, authOptions);
+          await dispose();
         }
       },
     );
@@ -382,30 +361,19 @@ export function defineShellParity(): void {
         if (!desktopApp)
           throw new Error("native Electron application is required");
         test.setTimeout(240_000);
-        const databaseUrl =
-          process.env.KE2E_DATABASE_URL || process.env.E2E_DATABASE_URL;
-        if (!databaseUrl)
-          throw new Error("Quick Entry requires the configured test database");
-        const email = `e2e-desktop-quick-entry-pick-${randomUUID()}@example.test`;
-        const user = await createAuthUser(email, authOptions);
-        const session = await signIn(email, authOptions);
-        let project: ManifestProject | undefined;
+        const databaseUrl = desktopDatabaseUrl();
+        const { user, session, accounts, project, dispose } = await provisionDesktopScene({
+          databaseUrl,
+          emailPrefix: "e2e-desktop-quick-entry-pick",
+          name: "Quick Entry picker",
+          fund: true,
+        });
         type PickerMenu = {
           items: { label: string; click: () => void }[];
           closePopup: () => void;
         };
         type PickerHolder = { quickEntryPicker?: PickerMenu };
         try {
-          const accounts = await accountsOf(session.access_token);
-          await fundAccount(databaseUrl, accounts[0].account_id);
-          project = await createManifestProject({
-            api,
-            accessToken: session.access_token,
-            accountId: accounts[0].account_id,
-            userId: user.id,
-            name: "Quick Entry picker",
-            databaseUrl,
-          });
           const projectId = project.id;
           const pickedId = await createDatabaseSession(loadEnv(), {
             projectId,
@@ -506,8 +474,7 @@ export function defineShellParity(): void {
           );
           await bar.locator("#prompt").press("Escape");
         } finally {
-          await project?.dispose();
-          await deleteAuthUser(user.id, authOptions);
+          await dispose();
         }
       },
     );

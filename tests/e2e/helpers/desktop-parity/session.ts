@@ -1,21 +1,14 @@
 import { expect } from "@playwright/test";
-import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import {
-  createManifestProject,
-  type ManifestProject,
-} from "../manifest-project";
-import {
-  createAuthUser,
-  deleteAuthUser,
-  installBrowserSessionDirect,
-  signIn,
-} from "../session-auth";
+import { installBrowserSessionDirect } from "../session-auth";
 import { dismissOnboarding, selectAccountForUi } from "../ui";
 import {
-  accountsOf,
   api,
   authOptions,
+  pinMacPlatform,
+  provisionDesktopScene,
+  resize,
+  desktopDatabaseUrl,
   chooseAppearanceTheme,
   expectSeparateRows,
   test,
@@ -53,36 +46,18 @@ function defineSessionParity(desktop: boolean): void {
       desktopApp,
     }) => {
       test.setTimeout(120_000);
-      if (desktopApp) {
-        const window = await desktopApp.browserWindow(page);
-        await window.evaluate((nativeWindow) => nativeWindow.setContentSize(1100, 700));
-      } else {
-        await page.setViewportSize({ width: 1100, height: 700 });
-      }
-      const databaseUrl =
-        process.env.KE2E_DATABASE_URL || process.env.E2E_DATABASE_URL;
-      if (!databaseUrl)
-        throw new Error("Desktop parity requires the configured test database");
+      await resize(page, desktopApp, 1100, 700);
+      const databaseUrl = desktopDatabaseUrl();
       // The macOS row rule keys on `data-desktop-platform`, which the app reads
       // from `navigator.platform`, not from the user agent. Pin it, or a Linux
       // CI runner renders the Linux desktop layout and the row stays left.
-      await page.addInitScript(() =>
-        Object.defineProperty(navigator, "platform", { get: () => "MacIntel" }),
-      );
-      const email = `e2e-desktop-exit-${randomUUID()}@example.test`;
-      const user = await createAuthUser(email, authOptions);
-      const session = await signIn(email, authOptions);
-      let project: ManifestProject | undefined;
+      await pinMacPlatform(page);
+      const { session, accounts, project, dispose } = await provisionDesktopScene({
+        databaseUrl,
+        emailPrefix: "e2e-desktop-exit",
+        name: "Desktop exit alignment",
+      });
       try {
-        const accounts = await accountsOf(session.access_token);
-        project = await createManifestProject({
-          api,
-          accessToken: session.access_token,
-          accountId: accounts[0].account_id,
-          userId: user.id,
-          name: "Desktop exit alignment",
-          databaseUrl,
-        });
         await installBrowserSessionDirect(
           page,
           session,
@@ -130,8 +105,7 @@ function defineSessionParity(desktop: boolean): void {
         await expect(page.getByRole("dialog")).toHaveCount(0);
         await expect(page.getByText("General", { exact: true }).first()).toBeVisible();
       } finally {
-        await project?.dispose();
-        await deleteAuthUser(user.id, authOptions);
+        await dispose();
       }
     });
 
@@ -145,24 +119,13 @@ function defineSessionParity(desktop: boolean): void {
     }) => {
       test.skip(!desktop, "only the desktop shell keeps the /projects paths");
       test.setTimeout(120_000);
-      const databaseUrl =
-        process.env.KE2E_DATABASE_URL || process.env.E2E_DATABASE_URL;
-      if (!databaseUrl)
-        throw new Error("Desktop parity requires the configured test database");
-      const email = `e2e-desktop-legacy-${randomUUID()}@example.test`;
-      const user = await createAuthUser(email, authOptions);
-      const session = await signIn(email, authOptions);
-      let project: ManifestProject | undefined;
+      const databaseUrl = desktopDatabaseUrl();
+      const { session, project, dispose } = await provisionDesktopScene({
+        databaseUrl,
+        emailPrefix: "e2e-desktop-legacy",
+        name: "Desktop legacy paths",
+      });
       try {
-        const accounts = await accountsOf(session.access_token);
-        project = await createManifestProject({
-          api,
-          accessToken: session.access_token,
-          accountId: accounts[0].account_id,
-          userId: user.id,
-          name: "Desktop legacy paths",
-          databaseUrl,
-        });
         const opened = await installBrowserSessionDirect(
           page,
           session,
@@ -182,8 +145,7 @@ function defineSessionParity(desktop: boolean): void {
         expect(start?.status()).toBe(200);
         await expect(page.getByText("404 Page not found")).toHaveCount(0);
       } finally {
-        await project?.dispose();
-        await deleteAuthUser(user.id, authOptions);
+        await dispose();
       }
     });
 
@@ -195,41 +157,17 @@ function defineSessionParity(desktop: boolean): void {
       // 3.9-5.1 min on the 4 vCPU CI runners (runs 38913477440, 38919869428):
       // every route it visits compiles cold. 300 s timed out 1 of 4 attempts.
       test.setTimeout(480_000);
-      const resize = async (width: number, height: number) => {
-        if (desktopApp) {
-          const window = await desktopApp.browserWindow(page);
-          await window.evaluate(
-            (window, size) => window.setContentSize(size.width, size.height),
-            { width, height },
-          );
-        } else {
-          await page.setViewportSize({ width, height });
-        }
-      };
-      await resize(1440, 900);
-      const databaseUrl =
-        process.env.KE2E_DATABASE_URL || process.env.E2E_DATABASE_URL;
-      if (!databaseUrl)
-        throw new Error("Desktop parity requires the configured test database");
-      await page.addInitScript(() =>
-        Object.defineProperty(navigator, "platform", { get: () => "MacIntel" }),
-      );
-      const email = `e2e-desktop-${randomUUID()}@example.test`;
-      const user = await createAuthUser(email, authOptions);
-      const session = await signIn(email, authOptions);
-      let project: ManifestProject | undefined;
+      await resize(page, desktopApp, 1440, 900);
+      const databaseUrl = desktopDatabaseUrl();
+      await pinMacPlatform(page);
+      const { session, accounts, project, dispose } = await provisionDesktopScene({
+        databaseUrl,
+        emailPrefix: "e2e-desktop",
+        name: "Desktop parity",
+      });
+      const accountId = accounts[0].account_id;
       let pooledResource: { accountId: string; secretId: string } | undefined;
       try {
-        const accounts = await accountsOf(session.access_token);
-        const accountId = accounts[0].account_id;
-        project = await createManifestProject({
-          api,
-          accessToken: session.access_token,
-          accountId,
-          userId: user.id,
-          name: "Desktop parity",
-          databaseUrl,
-        });
         await installBrowserSessionDirect(
           page,
           session,
@@ -460,7 +398,7 @@ function defineSessionParity(desktop: boolean): void {
           ).toHaveCount(1);
           await page.mouse.move(1300, 850);
         }
-        await resize(720, 480);
+        await resize(page, desktopApp, 720, 480);
         // The sidebar is hidden at this width on both shells, so the toggle
         // reads "Open sidebar" (#9566: the mobile Sheet's own state names it,
         // not the desktop dock cookie).
@@ -487,7 +425,7 @@ function defineSessionParity(desktop: boolean): void {
           path: test.info().outputPath("desktop-narrow-settings.png"),
           scale: "css",
         });
-        await resize(1440, 900);
+        await resize(page, desktopApp, 1440, 900);
         if (desktopApp) {
           const window = await desktopApp.browserWindow(page);
           const originalZoom = await window.evaluate((window) =>
@@ -659,7 +597,7 @@ function defineSessionParity(desktop: boolean): void {
               url: `${baseURL}/favicon.png`,
               preload: fileURLToPath(
                 new URL(
-                  "../../../apps/desktop-electron/src/preload.js",
+                  "../../../../apps/desktop-electron/src/preload.js",
                   import.meta.url,
                 ),
               ),
@@ -667,7 +605,7 @@ function defineSessionParity(desktop: boolean): void {
           );
           expect(denied).toContain("Unauthorized IPC sender");
 
-          await resize(720, 480);
+          await resize(page, desktopApp, 720, 480);
           await page.goto(`${baseURL}/workspaces/${project.id}/settings/repositories`);
           const changeRepository = page.getByRole('button', { name: 'Change', exact: true });
           await expect(changeRepository).toBeVisible();
@@ -697,7 +635,7 @@ function defineSessionParity(desktop: boolean): void {
           }, 201,
         );
         pooledResource = { accountId, secretId: key.secret_id };
-        await resize(720, 480);
+        await resize(page, desktopApp, 720, 480);
         await page.goto(`${baseURL}/workspaces/${project.id}/customize/models`);
         // Since #9801 a provider's keys open in its sheet; below 48rem it covers the list.
         await page.locator('[data-provider-row="anthropic"]').click();
@@ -718,8 +656,7 @@ function defineSessionParity(desktop: boolean): void {
         if (pooledResource) {
           await api(session.access_token, 'DELETE', `/accounts/${pooledResource.accountId}/secret-resources/${pooledResource.secretId}`).catch(() => {});
         }
-        await project?.dispose();
-        await deleteAuthUser(user.id, authOptions);
+        await dispose();
       }
     });
 }

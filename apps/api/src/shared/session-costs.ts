@@ -995,15 +995,7 @@ const SOURCE_WINDOW_MAX_HOURS = 720;
  * session started (its `parent_session_id`) is billed to that trigger, so a
  * factory's fan-out shows up under the trigger that caused it.
  */
-export async function listProjectGatewaySourceSpend(input: {
-  accountId: string;
-  projectId: string;
-  hours: number;
-}): Promise<GatewaySourceSpend> {
-  const hours = Math.min(
-    Math.max(Math.trunc(Number(input.hours) || 0), 1),
-    SOURCE_WINDOW_MAX_HOURS,
-  );
+export function gatewaySourceSpendQuery(input: { accountId: string; projectId: string }, hours: number) {
   const parent = alias(projectSessions, 'parent_session');
 
   // Aggregate the window's log rows per session first, so the two session
@@ -1044,7 +1036,7 @@ export async function listProjectGatewaySourceSpend(input: {
     'unknown'
   )`;
 
-  const rows = await db
+  return db
     .select({
       source: sourceSql,
       estimated_usage_value: sql<number | null>`sum(${perSession.value})::float8`,
@@ -1071,6 +1063,18 @@ export async function listProjectGatewaySourceSpend(input: {
     )
     .leftJoin(parent, eq(parent.sessionId, projectSessions.parentSessionId))
     .groupBy(sourceSql);
+}
+
+export async function listProjectGatewaySourceSpend(input: {
+  accountId: string;
+  projectId: string;
+  hours: number;
+}): Promise<GatewaySourceSpend> {
+  const hours = Math.min(
+    Math.max(Math.trunc(Number(input.hours) || 0), 1),
+    SOURCE_WINDOW_MAX_HOURS,
+  );
+  const rows = await gatewaySourceSpendQuery(input, hours);
 
   const sources: GatewaySourceSpendRow[] = rows
     .map((row) => {

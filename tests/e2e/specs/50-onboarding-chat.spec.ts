@@ -4,6 +4,7 @@ import { expect, test } from '@playwright/test';
 import { type Env, loadEnv } from '../../src/core/env';
 import { createDatabaseProject, deleteDatabaseProject } from '../../src/fixtures/database-project';
 import { queryDatabaseRows, runDatabaseSql } from '../helpers/database';
+import { ensureOwnedAccount } from '../helpers/accounts';
 import { createApiJsonClient } from '../helpers/http';
 import { fundAccount, isDeployedTarget } from '../helpers/manifest-project';
 import {
@@ -52,13 +53,8 @@ async function freshUserWithProject(options: { realProject?: boolean } = {}): Pr
   const user = await createAuthUser(email, authOptions);
   try {
     const session = await signIn(email, authOptions);
-    const accounts = await api<Array<{ account_id: string; personal_account?: boolean }>>(
-      session.access_token,
-      'GET',
-      '/accounts',
-    );
-    const account = accounts.find((row) => row.personal_account) ?? accounts[0];
-    expect(account).toBeDefined();
+    // No account exists at sign-up (Workspaces D3): make the user's own.
+    const account = { account_id: await ensureOwnedAccount(api, session.access_token) };
     // The database fixture stamps `onboarding_completed_at` by default so
     // other journeys land on the usual home; null it here so this fresh
     // project opens on the onboarding chat.

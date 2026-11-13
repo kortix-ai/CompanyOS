@@ -6,6 +6,7 @@ import {
   createDatabaseSession,
   seedDatabaseRunningFirstPrompt,
 } from "../../src/fixtures/database-project";
+import { ensureOwnedAccount } from "../helpers/accounts";
 import { createApiJsonClient } from "../helpers/http";
 import { createManifestProject, fundAccount, type ManifestProject } from "../helpers/manifest-project";
 import {
@@ -68,12 +69,8 @@ test("55 — a session opens on its own model and its first web message keeps it
 
   try {
     const auth = await signIn(user.email!, authOptions);
-    const accounts = await api<{ account_id: string; personal_account?: boolean }[]>(
-      auth.access_token,
-      "GET",
-      "/accounts",
-    );
-    const accountId = (accounts.find((item) => item.personal_account) ?? accounts[0]).account_id;
+    // No account exists at sign-up (Workspaces D3): make the user's own.
+    const accountId = await ensureOwnedAccount(api, auth.access_token);
     await fundAccount(env.databaseUrl, accountId);
     project = await createManifestProject({
       api,

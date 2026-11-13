@@ -8,6 +8,9 @@ proof**. The factory is one agent, `factory`, with one contract skill,
 and 1 at least), so you know the identity, the store, the sources and the
 merge policy you set up.
 
+Every **Ask** below is a question for the one message of guide step 3, with
+its recommended answer. Never ask it where it appears.
+
 ### A. In guide steps 2 to 4: analysis, then factory.json
 
 1. Run every check of
@@ -168,9 +171,10 @@ and read its run line in `kortix triggers runs <slug>`: `errors=none`, and
    started on an unbuilt image runs on the platform default and cannot boot the app.
    The reviewer should run on the strongest connected model: when `models.reviewer`
    and `models.worker_hard` are null and a stronger model than the workspace
-   default is connected (`kortix models ls`), **Ask** to set them in `factory.json`.
-1. **Ask** for one tiny, real change (a typo, a missing test, a small bug) or
-   propose one you found in the analysis.
+   default is connected (`kortix models ls`), set them in `factory.json` unless
+   the person said no in guide step 3.
+1. Use the task the person approved in guide step 3: one tiny, real change
+   (a typo, a missing test, a small bug) you found in the analysis.
 2. File it in the store as a person would: on GitHub Issues,
    `gh issue create --title "<title>" --body "<what, where, expected>" --label kortix`.
    The webhook fires `source-github-issues`; confirm with

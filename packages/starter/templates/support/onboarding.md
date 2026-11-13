@@ -6,7 +6,10 @@ named here. The loop is one agent, `support`, with one contract skill,
 read `skills/support-loop/SKILL.md` once before you start, so you know the
 desk, the sources and the approval modes you set up.
 
-### A. After guide step 4: analyse the team, write support.json
+Every **Ask** below is a question for the one message of guide step 3, with
+its recommended answer. Never ask it where it appears.
+
+### A. In guide steps 2 to 4: analyse the team, then support.json
 
 1. Run every check of
    `.kortix/support/skills/support-loop/references/analysis.md`: the connected
@@ -32,7 +35,7 @@ desk, the sources and the approval modes you set up.
    the support defects into the same store; two producers would file each
    defect twice.
 
-### B. After guide step 8: the desk
+### B. After guide step 6: the desk
 
 1. **Plain, Intercom or Zendesk.** Install and connect it
    (`kortix connectors catalog install <app>`, then
@@ -62,9 +65,9 @@ desk, the sources and the approval modes you set up.
    ids into `sources.slack.channels`, and check that `notify.escalations`
    and `notify.digest` are internal channels, never shared ones.
 
-### C. After guide step 9: the webhook
+### C. After guide step 6: the webhook
 
-1. Guide step 9 generated `SUPPORT_WEBHOOK_SECRET`. Read the URL:
+1. `kortix onboard` (guide step 6) generated `SUPPORT_WEBHOOK_SECRET`. Read the URL:
    `kortix triggers info support-feedback --json` (`webhook_url`).
 2. **Ask** who adds the feedback call to the product: you, as a pull request
    in the code repository, or the person. The call goes in the backend, never
@@ -78,7 +81,7 @@ desk, the sources and the approval modes you set up.
    (**Workspace admin** → **Feature flags**). Without it, use `desk.kind:
    email` and `support-queue`.
 
-### D. Instead of guide step 11: prove one draft end to end
+### D. Instead of the real run of guide step 7: prove one draft end to end
 
 Synthetic data only. Never open, answer or change a real conversation in the
 proof. Nothing is sent to anybody.
@@ -104,7 +107,7 @@ proof. Nothing is sent to anybody.
    (`kortix review act <item> dismiss`) and remove the synthetic conversation
    from the JSON desk.
 
-### E. Add to the guide's step 13 report
+### E. Add to the guide's step 9 report
 
 - The desk and its link; the enabled sources with their schedules; the
   approval mode per category and where drafts appear.

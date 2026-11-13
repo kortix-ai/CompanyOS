@@ -7,7 +7,10 @@ named here. The loop is one agent, `recruiting`, with one contract skill,
 start, so you know the fairness rules, the system of record, the sources and
 the approval modes you set up.
 
-### A. After guide step 4: analyse the team, write recruiting.json
+Every **Ask** below is a question for the one message of guide step 3, with
+its recommended answer. Never ask it where it appears.
+
+### A. In guide steps 2 to 4: analyse the team, then recruiting.json
 
 1. Run every check of
    `.kortix/recruiting/skills/recruiting-loop/references/analysis.md`: the
@@ -17,11 +20,12 @@ the approval modes you set up.
    never `cat` an env file, never open a real candidate's data.
 2. **Ask** which ATS is the source of truth (analysis section 2). Recommend
    the one the evidence shows; none: a JSON file in a new private repository.
-3. **Ask** for each open role's rubric, one role at a time (analysis section
-   3): must-haves, signals and weights, knockout questions (job-related
-   only), the interview plan. Offer a draft from the public job post; the
-   person corrects it. Read it back against the fairness rules (contract §1
-   rules 3 and 4) before you write it.
+3. **Ask** for the open roles' rubrics as drafts, all roles in one question
+   (analysis section 3): one line per role from its public job post, with the
+   must-haves and the top signals. The person corrects them in their one
+   reply. Write the full rubric (signals and weights, knockout questions
+   that are job-related only, the interview plan) in guide step 4, and read
+   it back against the fairness rules (contract §1 rules 3 and 4) first.
 4. **Ask** where drafts go (`approval.draft_in`: the Review page, the
    mailbox, the record) and the retention period (`retention_days`, default
    180). Say plainly: a person decides every advance and every reject, and
@@ -30,7 +34,7 @@ the approval modes you set up.
    chosen source's trigger on and every other source's trigger off in
    `recruiting.yaml`.
 
-### B. After guide step 8: the system of record
+### B. After guide step 6: the system of record
 
 1. **Ashby, Greenhouse, Lever or Workable.** Install and connect it
    (`kortix connectors catalog install <app>`, then
@@ -54,9 +58,9 @@ the approval modes you set up.
        action: require_approval
    ```
 
-### C. After guide step 9: the webhook
+### C. After guide step 6: the webhook
 
-1. Guide step 9 generated `RECRUITING_WEBHOOK_SECRET`. Read the two URLs:
+1. `kortix onboard` (guide step 6) generated `RECRUITING_WEBHOOK_SECRET`. Read the two URLs:
    `kortix triggers info recruiting-applicant --json` and
    `kortix triggers info recruiting-referral --json` (`webhook_url`).
 2. **Ask** who adds the call to the careers form's backend: you, as a pull
@@ -75,7 +79,7 @@ the approval modes you set up.
    Sourcing needs `sourcing.enabled: true` and approved `sourcing.queries`
    per role, and `enabled: true` on `recruiting-sourcing`.
 
-### D. Instead of guide step 11: prove one screen end to end
+### D. Instead of the real run of guide step 7: prove one screen end to end
 
 Synthetic data only. Never screen or draft for a real person in the proof.
 
@@ -105,7 +109,7 @@ Synthetic data only. Never screen or draft for a real person in the proof.
 6. Delete the synthetic entry from the JSON ledger, and dismiss the Review
    item.
 
-### E. Add to the guide's step 13 report
+### E. Add to the guide's step 9 report
 
 - The system of record and its link; the enabled sources; the approval mode
   and where drafts appear; the retention period.

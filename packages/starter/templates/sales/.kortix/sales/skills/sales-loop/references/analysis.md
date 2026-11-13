@@ -35,14 +35,13 @@ shows; none: `json-file` in a new private repository, or a Google Sheet.
 
 ## 4. The ICP
 
-**Ask** the person, one question at a time:
+Draft the ICP from the website and the README, then **Ask** the person to
+correct the draft, as one question. The draft covers:
 
 1. Who buys today: the segments, the company size, the roles.
 2. What must be true for a good fit (`must_have`).
 3. What makes a lead better (`nice_to_have`).
 4. What rules a lead out (`disqualifiers`).
-
-Offer an ICP drafted from the website and the README; the person corrects it.
 Never invent customers. Ask for two or three real examples only to read their
 public websites, and never write their names into sales.json.
 

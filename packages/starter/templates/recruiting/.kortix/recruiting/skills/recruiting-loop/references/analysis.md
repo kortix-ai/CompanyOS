@@ -22,7 +22,8 @@ shows. None: the json-file record in a new private repository
 
 ## 3. The roles and their rubrics
 
-For each open role, **Ask** the hiring manager's must-haves and signals. Turn
+Draft the must-haves and signals of each open role from its public job post,
+then **Ask** the person to correct the drafts, all roles in one question. Turn
 them into `roles[]` (replace the `example-role` entry):
 
 - `must_have`: at most 4 job-related requirements a CV can show. Never a
@@ -39,8 +40,8 @@ them into `roles[]` (replace the `example-role` entry):
 
 Read every rubric back against contract §1 rules 3 and 4 before you write it.
 A criterion that could stand in for a protected attribute (a "culture fit",
-a "native speaker", a "recent graduate", a photo): **Ask** the person to
-replace it with the job-related ability behind it.
+a "native speaker", a "recent graduate", a photo): replace it with the
+job-related ability behind it, and name the change in one line to the person.
 
 ## 4. Sources, approval, retention
 

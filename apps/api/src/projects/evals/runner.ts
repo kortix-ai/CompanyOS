@@ -42,6 +42,7 @@ import { evalsDrive, json, trialFolder, writeEvalFiles, type StoredFile } from '
 import {
   ACTIVE_TRIAL_STATUSES,
   countActiveTrials,
+  endedTrialsWithLiveSandbox,
   getJob,
   getTrial,
   insertRetry,
@@ -171,10 +172,17 @@ export function trialPrompt(task: Pick<HarborTask, 'instruction' | 'workdir'>): 
   return `${task.instruction}\n\nThe working directory of this task is ${task.workdir}.`;
 }
 
-async function sessionExists(sessionId: string): Promise<{ status: string } | null> {
-  const [row] = await db.select({ status: projectSessions.status }).from(projectSessions).where(eq(projectSessions.sessionId, sessionId)).limit(1);
+async function sessionExists(sessionId: string): Promise<{ status: string; model: string | null } | null> {
+  const [row] = await db
+    .select({ status: projectSessions.status, model: sql<string | null>`${projectSessions.metadata}->>'model'` })
+    .from(projectSessions)
+    .where(eq(projectSessions.sessionId, sessionId))
+    .limit(1);
   return row ?? null;
 }
+
+/** `kortix/deepseek-v4.1-flash` → `deepseek-v4.1-flash`: the id the job config and the leaderboard name. */
+const modelId = (ref: string | null): string | null => (ref ? ref.replace(/^kortix\//, '') : null);
 
 /** queued → starting: read the task, pick the sandbox, create the session. */
 async function startTrial(ctx: TrialContext, trial: EvalTrialRow): Promise<void> {
@@ -247,7 +255,8 @@ async function awaitEnvironment(ctx: TrialContext, trial: EvalTrialRow): Promise
   }
   const box = found.box;
   if (!builtin) {
-    await updateTrial(trial, { status: 'agent_running', environmentFinishedAt: ctx.now, agentStartedAt: ctx.now });
+    // The model the session resolved, when the config names none: a score is only comparable with its model.
+    await updateTrial(trial, { status: 'agent_running', environmentFinishedAt: ctx.now, agentStartedAt: ctx.now, ...(trial.model ? {} : { model: modelId(session.model) }) });
     return;
   }
   await extendSandboxDeadline({ sessionId: trial.sessionId! }, RUNNER_DEADLINE_GRANT_MS);
@@ -581,6 +590,9 @@ async function tickJob(job: EvalJobRow, now: Date): Promise<number> {
 /** One pass over every open job. Returns the number of trials it advanced. */
 export async function runEvalRunnerTick(now: Date = new Date()): Promise<number> {
   let advanced = 0;
+  for (const { job, sessionId } of await endedTrialsWithLiveSandbox(20).catch(() => [])) {
+    await stopTrialSandbox(job, sessionId);
+  }
   for (const job of await listOpenJobs(100)) {
     try {
       advanced += await tickJob(job, now);

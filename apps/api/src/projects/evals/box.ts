@@ -123,14 +123,27 @@ export async function launch(
     input.command,
   ].filter(Boolean).join('\n');
   const seconds = Math.max(1, Math.ceil(input.timeoutSec));
+  // The wrapper records its own pid and the exit code. It is a file, not a nested `bash -c`, so no quoting
+  // layer can break it. `(setsid … &)` makes it its own session, re-parented to init.
+  const wrapper = [
+    '#!/bin/bash',
+    `D=${q(dir)}`,
+    'echo $$ > "$D/pid"',
+    `timeout -k 10 ${seconds} bash "$D/run.sh" > ${q(input.outputPath)} 2>&1 < /dev/null`,
+    'echo $? > "$D/exit.tmp" && mv "$D/exit.tmp" "$D/exit"',
+  ].join('\n');
   const script = [
     `D=${q(dir)}`,
-    '[ -f "$D/pid" ] && exit 0',
+    '[ -f "$D/started" ] && exit 0',
     `mkdir -p "$D" "$(dirname -- ${q(input.outputPath)})"`,
     `printf %s ${q(Buffer.from(body).toString('base64'))} | base64 -d > "$D/run.sh"`,
-    'S="$(command -v setsid || true)"',
-    `nohup $S bash -c 'timeout -k 10 ${seconds} bash "$0/run.sh" > "$1" 2>&1 < /dev/null; echo $? > "$0/exit.tmp" && mv "$0/exit.tmp" "$0/exit"' "$D" ${q(input.outputPath)} > /dev/null 2>&1 < /dev/null &`,
-    'echo $! > "$D/pid"',
+    `printf %s ${q(Buffer.from(wrapper).toString('base64'))} | base64 -d > "$D/wrap.sh"`,
+    ': > "$D/started"',
+    '(setsid bash "$D/wrap.sh" < /dev/null > /dev/null 2>&1 &)',
+    // Return only once the wrapper runs in its own session: the exec ends the call's processes when it
+    // returns, and a child that has not reached setsid() yet dies with them.
+    'for _ in $(seq 1 100); do [ -s "$D/pid" ] && exit 0; sleep 0.05; done',
+    'echo "the command did not start within 5 s" >&2; exit 1',
   ].join('\n');
   const result = await boxOps().exec(box, script, 30_000);
   if (result.exitCode !== 0) throw new EvalTrialError('RuntimeRequestError', `The command did not start: ${result.stderr.slice(0, 300) || `exit ${result.exitCode}`}`);
@@ -140,7 +153,7 @@ export type RunState = { state: 'running' } | { state: 'done'; exitCode: number 
 
 export async function poll(box: Box, id: string): Promise<RunState> {
   const dir = runDir(id);
-  const result = await boxOps().exec(box, `if [ -f ${q(`${dir}/exit`)} ]; then echo "done $(cat ${q(`${dir}/exit`)})"; elif [ -f ${q(`${dir}/pid`)} ]; then echo running; else echo missing; fi`, 15_000);
+  const result = await boxOps().exec(box, `if [ -f ${q(`${dir}/exit`)} ]; then echo "done $(cat ${q(`${dir}/exit`)})"; elif [ -f ${q(`${dir}/started`)} ]; then echo running; else echo missing; fi`, 15_000);
   const line = result.stdout.trim();
   if (line.startsWith('done')) return { state: 'done', exitCode: Number(line.slice(4).trim()) || 0 };
   return line === 'running' ? { state: 'running' } : { state: 'missing' };

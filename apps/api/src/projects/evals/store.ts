@@ -3,7 +3,7 @@
  * Files, and the runner's queue state. Every write of a trial names the status
  * it expects, so a cancel and a runner step cannot overwrite each other.
  */
-import { evalJobs, evalTrials } from '@kortix/db';
+import { evalJobs, evalTrials, sessionSandboxes } from '@kortix/db';
 import type { EvalJobConfig, EvalJobStats, EvalTrialStatus } from '@kortix/api-contract';
 import { and, asc, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
 import { db } from '../../shared/db';
@@ -200,4 +200,27 @@ export async function countActiveTrials(projectId: string): Promise<number> {
     .from(evalTrials)
     .where(and(eq(evalTrials.projectId, projectId), or(...ACTIVE_TRIAL_STATUSES.map((status) => eq(evalTrials.status, status)))));
   return row?.n ?? 0;
+}
+
+/**
+ * Ended trials whose sandbox still runs: a cancel that landed while the runner
+ * was creating the session, or a stop that failed. Jobs that keep their
+ * sandboxes (`environment.delete: false`) are left out.
+ */
+export async function endedTrialsWithLiveSandbox(limit: number): Promise<Array<{ job: EvalJobRow; sessionId: string }>> {
+  const rows = await db
+    .select({ job: evalJobs, sessionId: evalTrials.sessionId })
+    .from(evalTrials)
+    .innerJoin(evalJobs, eq(evalJobs.jobId, evalTrials.jobId))
+    .innerJoin(sessionSandboxes, eq(sessionSandboxes.sessionId, evalTrials.sessionId))
+    .where(
+      and(
+        inArray(evalTrials.status, ['completed', 'errored', 'cancelled']),
+        inArray(sessionSandboxes.status, ['provisioning', 'active']),
+        sql`coalesce(${evalJobs.config}->'environment'->>'delete', 'true') <> 'false'`,
+        sql`${evalTrials.finishedAt} > now() - interval '1 day'`,
+      ),
+    )
+    .limit(limit);
+  return rows.filter((row): row is { job: EvalJobRow; sessionId: string } => row.sessionId !== null);
 }

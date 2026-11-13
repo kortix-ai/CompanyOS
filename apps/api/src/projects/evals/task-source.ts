@@ -291,6 +291,18 @@ export function builtinDatasetSource(name: string, version?: string | null): { g
   return { git_url: KORTIX_REPO, git_commit_id: version || builtinDatasetRef(), path: dataset.path };
 }
 
+/** Task folders (`task.toml`) in a built-in dataset at the ref it reads, cached 10 minutes. */
+const countBuiltinTasks = ttlMemo<[string], number>({
+  ttlMs: 10 * 60_000,
+  keyFn: (name) => `${name}@${builtinDatasetRef()}`,
+  loader: async (name) => {
+    const source = builtinDatasetSource(name);
+    const sha = await resolveGitRef(source.git_url, source.git_commit_id);
+    const paths = await gitTree(source.git_url, sha).list(source.path);
+    return paths.filter((path) => path.endsWith('/task.toml')).length;
+  },
+});
+
 export interface RegistryDatasetSummary {
   name: string;
   version: string;
@@ -299,7 +311,14 @@ export interface RegistryDatasetSummary {
 }
 
 export async function listRegistryDatasets(): Promise<RegistryDatasetSummary[]> {
-  const builtins = Object.entries(BUILTIN_DATASETS).map(([name, dataset]) => ({ name, version: builtinDatasetRef(), description: dataset.description, n_tasks: 0 }));
+  const builtins = await Promise.all(
+    Object.entries(BUILTIN_DATASETS).map(async ([name, dataset]) => ({
+      name,
+      version: builtinDatasetRef(),
+      description: dataset.description,
+      n_tasks: await countBuiltinTasks(name).catch(() => 0),
+    })),
+  );
   // A Harbor registry that does not answer leaves the built-in datasets listed.
   const registry = await loadRegistry().catch(() => [] as RegistryDataset[]);
   return [...builtins, ...registry.map((dataset) => ({

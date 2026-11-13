@@ -16,6 +16,8 @@ import {
   EvalJobListResponseSchema,
   EvalJobResponseSchema,
   EvalSuitesResponseSchema,
+  EvalTaskDetailResponseSchema,
+  EvalTaskResultSchema,
   EvalTasksResponseSchema,
   EvalTrialDetailResponseSchema,
   EvalTrialListResponseSchema,
@@ -120,10 +122,10 @@ export function registerEvalRoutes(): void {
       method: 'get',
       path: '/{workspaceId}/evals/tasks',
       tags: ['evals'],
-      summary: 'List the tasks of a suite or a path',
-      description: 'The Harbor-format tasks a suite selects (`suite`), or the tasks under a repository path (`path`), parsed at `ref`. A task Kortix cannot run carries `unsupported`. Flag `evals`.',
+      summary: 'List the tasks of a suite, a path or a dataset',
+      description: 'The Harbor-format tasks a suite selects (`suite`), the tasks under a repository path (`path`), or the tasks of a dataset by name (`dataset`, `version`: built-in `kortix/…` or the Harbor registry), parsed at `ref`, with the dataset README. A task Kortix cannot run carries `unsupported`. Flag `evals`.',
       ...auth,
-      request: { params: projectParams, query: z.object({ suite: z.string().optional(), path: z.string().optional(), ref: z.string().optional() }) },
+      request: { params: projectParams, query: z.object({ suite: z.string().optional(), path: z.string().optional(), dataset: z.string().optional(), version: z.string().optional(), ref: z.string().optional() }) },
       responses: { 200: json(EvalTasksResponseSchema, 'The tasks'), ...errors(400), ...EVAL_ERRORS },
     }),
     handler(async (c) => {
@@ -131,9 +133,10 @@ export function registerEvalRoutes(): void {
       if (loaded instanceof Response) return loaded;
       const suite = c.req.query('suite');
       const path = c.req.query('path');
-      if (!suite && !path) return c.json({ error: 'eval_invalid' as const, message: 'Pass `suite` or `path`.' }, 422);
+      const dataset = c.req.query('dataset');
+      if (!suite && !path && !dataset) return c.json({ error: 'eval_invalid' as const, message: 'Pass `suite`, `path` or `dataset`.' }, 422);
       try {
-        return c.json(await evals.listTasks(loaded.row, { suite, path, ref: c.req.query('ref') }), 200);
+        return c.json(await evals.listTasks(loaded.row, { suite, path, dataset, version: c.req.query('version'), ref: c.req.query('ref') }), 200);
       } catch (error) {
         return errorResponse(c, error);
       }
@@ -159,6 +162,72 @@ export function registerEvalRoutes(): void {
       const loaded = await scopeOf(c);
       if (loaded instanceof Response) return loaded;
       return c.json({ datasets: await listRegistryDatasets() }, 200);
+    }),
+  );
+
+  const taskParams = projectParams.extend({ taskId: z.string() });
+  projectsApp.openapi(
+    createRoute({
+      method: 'get',
+      path: '/{workspaceId}/evals/tasks/{taskId}',
+      tags: ['evals'],
+      summary: 'Get one task',
+      description: 'A task by its `task_id`: the parsed task, its README, task.toml and every file of its folder. Flag `evals`.',
+      ...auth,
+      request: { params: taskParams },
+      responses: { 200: json(EvalTaskDetailResponseSchema, 'The task'), ...errors(400), ...EVAL_ERRORS },
+    }),
+    handler(async (c) => {
+      const loaded = await scopeOf(c);
+      if (loaded instanceof Response) return loaded;
+      try {
+        return c.json(await evals.taskDetail(loaded.row, c.req.param('taskId') ?? ''), 200);
+      } catch (error) {
+        return errorResponse(c, error);
+      }
+    }),
+  );
+
+  projectsApp.openapi(
+    createRoute({
+      method: 'get',
+      path: '/{workspaceId}/evals/tasks/{taskId}/file',
+      tags: ['evals'],
+      summary: 'Read one file of a task',
+      description: 'The text of a file the task detail lists, by its `path` (the first 1 MB). Flag `evals`.',
+      ...auth,
+      request: { params: taskParams, query: z.object({ path: z.string() }) },
+      responses: { 200: { description: 'The file' }, ...errors(400), ...EVAL_ERRORS },
+    }),
+    handler(async (c) => {
+      const loaded = await scopeOf(c);
+      if (loaded instanceof Response) return loaded;
+      try {
+        const text = await evals.taskFile(loaded.row, c.req.param('taskId') ?? '', c.req.query('path') ?? '');
+        return new Response(text, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'private, max-age=300' } });
+      } catch (error) {
+        return errorResponse(c, error);
+      }
+    }),
+  );
+
+  projectsApp.openapi(
+    createRoute({
+      method: 'get',
+      path: '/{workspaceId}/evals/results',
+      tags: ['evals'],
+      summary: 'Results of one task across jobs',
+      description: 'The newest trials (up to 100) of the task named `task` in this project’s jobs, each with its job, agent, model, rewards and error. Flag `evals`.',
+      ...auth,
+      request: { params: projectParams, query: z.object({ task: z.string() }) },
+      responses: { 200: json(z.object({ results: z.array(EvalTaskResultSchema) }), 'The results'), ...errors(400), ...EVAL_ERRORS },
+    }),
+    handler(async (c) => {
+      const loaded = await scopeOf(c);
+      if (loaded instanceof Response) return loaded;
+      const task = c.req.query('task');
+      if (!task) return c.json({ error: 'eval_invalid' as const, message: 'Pass `task`.' }, 422);
+      return c.json({ results: await evals.taskResults(loaded.row, task) }, 200);
     }),
   );
 

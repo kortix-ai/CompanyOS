@@ -182,7 +182,11 @@ export {
   useWorkspaceEvalJob,
   useWorkspaceEvalJobs,
   useWorkspaceEvalSuites,
+  useWorkspaceEvalTask,
+  useWorkspaceEvalTaskFile,
+  useWorkspaceEvalTaskResults,
   useWorkspaceEvalTasks,
+  type WorkspaceEvalTaskSource,
   useWorkspaceEvalTrial,
   useWorkspaceEvalTrialFile,
 } from './use-evals';

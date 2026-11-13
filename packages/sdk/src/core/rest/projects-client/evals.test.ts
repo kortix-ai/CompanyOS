@@ -7,11 +7,14 @@ import {
   evalJobScore,
   evalTrialScore,
   getWorkspaceEvalJob,
+  getWorkspaceEvalTask,
   getWorkspaceEvalTrial,
+  listWorkspaceEvalTaskResults,
   listWorkspaceEvalJobs,
   listWorkspaceEvalSuites,
   listWorkspaceEvalTasks,
   listWorkspaceEvalTrials,
+  readWorkspaceEvalTaskFile,
   readWorkspaceEvalTrialFile,
   rerunWorkspaceEvalJob,
   startWorkspaceEvalJob,
@@ -109,6 +112,18 @@ describe('evals client', () => {
     expect((await listWorkspaceEvalTrials('p1', 'j1'))[0]!.trial_id).toBe('t1');
     expect((await getWorkspaceEvalTrial('p1', 'j1', 't1')).instruction).toBe('Do it');
     expect(await readWorkspaceEvalTrialFile('p1', 'j1', 't1', 'verifier/test-stdout.txt')).toBe('ok 3/3\n');
+  });
+
+  test('tasks of a dataset by name, one task, one of its files, and its results across jobs', async () => {
+    routes['GET /workspaces/p1/evals/tasks?dataset=terminal-bench&version=2.0'] = { status: 200, body: { commit: 'abc', tasks: [{ task_id: 'T1', name: 'fix-git' }], readme: '# TB' } };
+    routes['GET /workspaces/p1/evals/tasks/T1'] = { status: 200, body: { task: { task_id: 'T1', name: 'fix-git' }, readme: null, task_toml: '[agent]', files: [{ path: 'tests/test.sh', size: null }] } };
+    routes['GET /workspaces/p1/evals/tasks/T1/file?path=tests%2Ftest.sh'] = { status: 200, body: '#!/bin/bash\n' };
+    routes['GET /workspaces/p1/evals/results?task=fix-git'] = { status: 200, body: { results: [{ job_id: 'j1', trial_id: 't1' }] } };
+    const listed = await listWorkspaceEvalTasks('p1', { dataset: 'terminal-bench', version: '2.0' });
+    expect([listed.readme, listed.tasks[0]!.task_id]).toEqual(['# TB', 'T1']);
+    expect((await getWorkspaceEvalTask('p1', 'T1')).files[0]!.path).toBe('tests/test.sh');
+    expect(await readWorkspaceEvalTaskFile('p1', 'T1', 'tests/test.sh')).toBe('#!/bin/bash\n');
+    expect((await listWorkspaceEvalTaskResults('p1', 'fix-git'))[0]!.trial_id).toBe('t1');
   });
 
   test('an eval_invalid answer throws ApiError with the violations', async () => {

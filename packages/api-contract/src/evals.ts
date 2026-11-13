@@ -156,6 +156,11 @@ export const EvalSuiteSchema = z.object({
 export type EvalSuite = z.infer<typeof EvalSuiteSchema>;
 
 export const EvalTaskSchema = z.object({
+  /**
+   * Opaque id of the task at one commit (where it lives and the commit it was
+   * read at). `GET /evals/tasks/{task_id}` reads it; stable while the commit is.
+   */
+  task_id: z.string(),
   /** `[task].name` of task.toml, else the folder name. */
   name: z.string(),
   /** Repository path of the task folder. */
@@ -169,13 +174,49 @@ export const EvalTaskSchema = z.object({
   metadata: z.record(z.string(), z.unknown()),
   /** Why this task cannot run on Kortix, or null. */
   unsupported: z.string().nullable(),
+  /** From `[metadata]` of task.toml: `category`, `difficulty`, and `tags` (or `keywords`). */
+  category: z.string().nullable(),
+  difficulty: z.string().nullable(),
+  tags: z.array(z.string()),
 });
 export type EvalTask = z.infer<typeof EvalTaskSchema>;
+
+/** One file of a task folder. */
+export const EvalTaskFileSchema = z.object({ path: z.string(), size: z.number().nullable() });
+
+export const EvalTaskDetailResponseSchema = z.object({
+  task: EvalTaskSchema,
+  /** The task folder's README.md, or null. */
+  readme: z.string().nullable(),
+  /** task.toml as written. */
+  task_toml: z.string().nullable(),
+  /** Every file of the task folder, paths relative to it. */
+  files: z.array(EvalTaskFileSchema),
+});
+export type EvalTaskDetailResponse = z.infer<typeof EvalTaskDetailResponseSchema>;
+
+/** A trial of this task in some job: its result and the job it belongs to. */
+export const EvalTaskResultSchema = z.object({
+  job_id: z.string(),
+  job_name: z.string(),
+  trial_id: z.string(),
+  agent: z.string(),
+  model: z.string().nullable(),
+  attempt: z.number().int(),
+  status: z.string(),
+  rewards: z.record(z.string(), z.number()).nullable(),
+  reward_valid: z.boolean(),
+  exception_type: z.string().nullable(),
+  finished_at: z.string().nullable(),
+});
+export type EvalTaskResult = z.infer<typeof EvalTaskResultSchema>;
 
 export const EvalSuitesResponseSchema = z.object({ suites: z.array(EvalSuiteSchema) });
 export const EvalTasksResponseSchema = z.object({
   commit: z.string().nullable(),
   tasks: z.array(EvalTaskSchema),
+  /** README.md at the root of the dataset (a suite's single task path, a built-in or git dataset folder), or null. */
+  readme: z.string().nullable(),
 });
 
 // ── Jobs and trials ──────────────────────────────────────────────────────────

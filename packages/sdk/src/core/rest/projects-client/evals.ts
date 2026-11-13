@@ -157,6 +157,8 @@ export interface WorkspaceEvalSuite {
 }
 
 export interface WorkspaceEvalTask {
+  /** Opaque id of the task at one commit: `getWorkspaceEvalTask` reads it. */
+  task_id: string;
   name: string;
   path: string;
   instruction: string;
@@ -167,6 +169,34 @@ export interface WorkspaceEvalTask {
   metadata: Record<string, unknown>;
   /** Why Kortix cannot run this task, or null. */
   unsupported: string | null;
+  /** From `[metadata]` of task.toml. */
+  category: string | null;
+  difficulty: string | null;
+  tags: string[];
+}
+
+export interface WorkspaceEvalTaskDetail {
+  task: WorkspaceEvalTask;
+  /** The task folder's README.md, or null. */
+  readme: string | null;
+  task_toml: string | null;
+  /** Every file of the task folder, paths relative to it. */
+  files: Array<{ path: string; size: number | null }>;
+}
+
+/** A trial of one task in some job. */
+export interface WorkspaceEvalTaskResult {
+  job_id: string;
+  job_name: string;
+  trial_id: string;
+  agent: string;
+  model: string | null;
+  attempt: number;
+  status: WorkspaceEvalTrialStatus;
+  rewards: Record<string, number> | null;
+  reward_valid: boolean;
+  exception_type: string | null;
+  finished_at: string | null;
 }
 
 export interface WorkspaceEvalTrialDetail {
@@ -217,12 +247,35 @@ export async function listWorkspaceEvalSuites(projectId: string, options?: { ref
   return unwrap(await backendApi.get<{ suites: WorkspaceEvalSuite[] }>(`${evalsPath(projectId)}${query({ ref: options?.ref })}`), 'Eval suites request failed').suites;
 }
 
-/** The tasks a suite selects, or the tasks under a repository path. */
+/**
+ * The tasks a suite selects, the tasks under a repository path, or the tasks
+ * of a dataset by name (built-in `kortix/…` or the Harbor registry), with the
+ * dataset's README.
+ */
 export async function listWorkspaceEvalTasks(
   projectId: string,
-  options: { suite?: string; path?: string; ref?: string },
-): Promise<{ commit: string | null; tasks: WorkspaceEvalTask[] }> {
-  return unwrap(await backendApi.get<{ commit: string | null; tasks: WorkspaceEvalTask[] }>(`${evalsPath(projectId)}/tasks${query(options)}`), 'Eval tasks request failed');
+  options: { suite?: string; path?: string; dataset?: string; version?: string | null; ref?: string },
+): Promise<{ commit: string | null; tasks: WorkspaceEvalTask[]; readme: string | null }> {
+  return unwrap(
+    await backendApi.get<{ commit: string | null; tasks: WorkspaceEvalTask[]; readme: string | null }>(`${evalsPath(projectId)}/tasks${query(options)}`),
+    'Eval tasks request failed',
+  );
+}
+
+/** One task by its `task_id`: the parsed task, its README, task.toml and its files. */
+export async function getWorkspaceEvalTask(projectId: string, taskId: string): Promise<WorkspaceEvalTaskDetail> {
+  return unwrap(await backendApi.get<WorkspaceEvalTaskDetail>(`${evalsPath(projectId)}/tasks/${segment(taskId, 'task id')}`), 'Eval task request failed');
+}
+
+/** One file of a task folder, as text. */
+export async function readWorkspaceEvalTaskFile(projectId: string, taskId: string, path: string): Promise<string> {
+  const data = unwrap(await backendApi.get<unknown>(`${evalsPath(projectId)}/tasks/${segment(taskId, 'task id')}/file${query({ path })}`), 'Eval task file request failed');
+  return typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+}
+
+/** The newest trials of a task, by its name, across the project's jobs. */
+export async function listWorkspaceEvalTaskResults(projectId: string, taskName: string): Promise<WorkspaceEvalTaskResult[]> {
+  return unwrap(await backendApi.get<{ results: WorkspaceEvalTaskResult[] }>(`${evalsPath(projectId)}/results${query({ task: taskName })}`), 'Eval task results request failed').results;
 }
 
 /** The datasets of the Harbor registry a suite can name. */

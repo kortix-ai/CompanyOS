@@ -5,11 +5,14 @@ import {
   cancelWorkspaceEvalJob,
   deleteWorkspaceEvalJob,
   getWorkspaceEvalJob,
+  getWorkspaceEvalTask,
   getWorkspaceEvalTrial,
   listWorkspaceEvalDatasets,
   listWorkspaceEvalJobs,
   listWorkspaceEvalSuites,
+  listWorkspaceEvalTaskResults,
   listWorkspaceEvalTasks,
+  readWorkspaceEvalTaskFile,
   listWorkspaceEvalTrials,
   readWorkspaceEvalTrialFile,
   rerunWorkspaceEvalJob,
@@ -53,12 +56,58 @@ export function useWorkspaceEvalDatasets(projectId: string | null | undefined) {
   });
 }
 
-/** The tasks a suite selects, parsed at the default branch. */
-export function useWorkspaceEvalTasks(projectId: string | null | undefined, suite: string | null | undefined) {
+/** Where a task list comes from: a suite of kortix.yaml, or a dataset by name (built-in `kortix/…` or Harbor registry). */
+export type WorkspaceEvalTaskSource = { suite: string } | { dataset: string; version?: string | null };
+
+/**
+ * The tasks of a suite or a dataset, parsed, with the dataset README. A
+ * registry dataset reads its git repository on first use, so the list is kept
+ * 10 minutes.
+ */
+export function useWorkspaceEvalTasks(projectId: string | null | undefined, source: WorkspaceEvalTaskSource | null | undefined) {
+  const key = !source ? '' : 'suite' in source ? `suite:${source.suite}` : `dataset:${source.dataset}@${source.version ?? ''}`;
   return useQuery({
-    queryKey: qk.project.evalTasks(projectId ?? '', suite ?? ''),
-    queryFn: () => listWorkspaceEvalTasks(projectId as string, { suite: suite as string }),
-    enabled: !!projectId && !!suite,
+    queryKey: qk.project.evalTasks(projectId ?? '', key),
+    queryFn: () =>
+      listWorkspaceEvalTasks(
+        projectId as string,
+        'suite' in source! ? { suite: source.suite } : { dataset: source!.dataset, version: source!.version ?? undefined },
+      ),
+    enabled: !!projectId && !!source,
+    ...inventory,
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+}
+
+/** One task by its `task_id`. */
+export function useWorkspaceEvalTask(projectId: string | null | undefined, taskId: string | null | undefined) {
+  return useQuery({
+    queryKey: [...qk.project.evals(projectId ?? ''), 'task', taskId ?? ''] as const,
+    queryFn: () => getWorkspaceEvalTask(projectId as string, taskId as string),
+    enabled: !!projectId && !!taskId,
+    ...inventory,
+    staleTime: 10 * 60_000,
+  });
+}
+
+/** One file of a task folder, as text. */
+export function useWorkspaceEvalTaskFile(projectId: string | null | undefined, taskId: string | null | undefined, path: string | null | undefined) {
+  return useQuery({
+    queryKey: [...qk.project.evals(projectId ?? ''), 'task', taskId ?? '', 'file', path ?? ''] as const,
+    queryFn: () => readWorkspaceEvalTaskFile(projectId as string, taskId as string, path as string),
+    enabled: !!projectId && !!taskId && !!path,
+    ...inventory,
+    staleTime: 10 * 60_000,
+  });
+}
+
+/** The newest trials of a task across the project's jobs. */
+export function useWorkspaceEvalTaskResults(projectId: string | null | undefined, taskName: string | null | undefined) {
+  return useQuery({
+    queryKey: [...qk.project.evals(projectId ?? ''), 'results', taskName ?? ''] as const,
+    queryFn: () => listWorkspaceEvalTaskResults(projectId as string, taskName as string),
+    enabled: !!projectId && !!taskName,
     ...inventory,
   });
 }

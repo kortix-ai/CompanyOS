@@ -46,7 +46,7 @@ Subcommands:
   init [<dir>]          Write a first task (evals/tasks/hello-world) and print
                         the \`evals:\` section to add to kortix.yaml.
   suites                The suites of kortix.yaml, each with its last score.
-  tasks <suite> | --path <dir>
+  tasks <suite> | --path <dir> | --dataset <name>[@<version>]
                         The tasks a suite selects, parsed. Lists what Kortix
                         cannot run, and why.
   datasets              Datasets of the Harbor registry (terminal-bench, …).
@@ -58,6 +58,10 @@ Subcommands:
   run --path <dir> --agent <name> ...
                         Start a job on the tasks under a repository path,
                         without a suite.
+  run --dataset <name>[@<version>] --agent <name> ...
+                        Start a job on a dataset by name: a built-in one
+                        (kortix/my-kortix) or one of the Harbor registry
+                        (terminal-bench@2.0).
   jobs [<suite>]        Jobs, newest first, with their scores.
   show <job_id>         One job: score per agent and model, then every trial.
   watch <job_id>        Print trial progress until the job ends.
@@ -198,9 +202,17 @@ async function listSuites(ctx: Ctx): Promise<number> {
   return 0;
 }
 
-async function listTasks(ctx: Ctx, suite: string | undefined, path: string | undefined, ref: string | undefined): Promise<number> {
-  if (!suite && !path) return fail('Name a suite, or pass --path <dir>. Run `kortix evals suites`.');
-  const result = await sdk(ctx, () => listWorkspaceEvalTasks(ctx.projectId, { suite, path, ref }));
+/** `name` or `name@version`; a name holds no `@` (Harbor and built-in names do not). */
+function splitDataset(value: string | undefined): { name: string; version: string | null } | null {
+  if (!value) return null;
+  const at = value.lastIndexOf('@');
+  return at > 0 ? { name: value.slice(0, at), version: value.slice(at + 1) || null } : { name: value, version: null };
+}
+
+async function listTasks(ctx: Ctx, suite: string | undefined, path: string | undefined, ref: string | undefined, datasetFlag?: string): Promise<number> {
+  const dataset = splitDataset(datasetFlag);
+  if (!suite && !path && !dataset) return fail('Name a suite, or pass --path <dir> or --dataset <name>. Run `kortix evals suites`.');
+  const result = await sdk(ctx, () => listWorkspaceEvalTasks(ctx.projectId, { suite, path, ref, ...(dataset ? { dataset: dataset.name, version: dataset.version } : {}) }));
   if (ctx.json) return (emitJson(result), 0);
   const w = Math.max(4, ...result.tasks.map((t) => t.name.length));
   process.stdout.write(`\n  ${C.dim}${result.tasks.length} task(s) at ${result.commit?.slice(0, 7) ?? '?'}${C.reset}\n`);
@@ -398,6 +410,7 @@ async function watchJob(ctx: Ctx, jobId: string, opts: { quiet?: boolean } = {})
 
 async function runJob(ctx: Ctx, suite: string | undefined, argv: string[]): Promise<number> {
   const path = takeFlagValue(argv, ['--path']);
+  const dataset = splitDataset(takeFlagValue(argv, ['--dataset', '-d']));
   const agents = agentFlags(takeFlagValues(argv, ['--agent']));
   const attempts = takeFlagValue(argv, ['--attempts', '-k']);
   const concurrency = takeFlagValue(argv, ['--concurrency', '-n']);
@@ -405,8 +418,8 @@ async function runJob(ctx: Ctx, suite: string | undefined, argv: string[]): Prom
   const ref = takeFlagValue(argv, ['--ref']);
   const name = takeFlagValue(argv, ['--name']);
   const wait = takeFlagBool(argv, ['--wait']);
-  if (!suite && !path) return fail('Name a suite, or pass --path <dir> with --agent. Run `kortix evals suites`.');
-  if (!suite && !agents) return fail('--path needs --agent <name> (an agent of kortix.yaml, oracle or nop).');
+  if (!suite && !path && !dataset) return fail('Name a suite, or pass --path <dir> or --dataset <name> with --agent. Run `kortix evals suites` or `kortix evals datasets`.');
+  if (!suite && !agents) return fail(`${dataset ? '--dataset' : '--path'} needs --agent <name> (an agent of kortix.yaml, oracle or nop).`);
   const toInt = (value: string | undefined, flag: string): number | undefined => {
     if (value === undefined) return undefined;
     const n = Number(value);
@@ -419,8 +432,9 @@ async function runJob(ctx: Ctx, suite: string | undefined, argv: string[]): Prom
     ...(concurrency ? { n_concurrent_trials: toInt(concurrency, '--concurrency') } : {}),
     ...(name ? { job_name: name } : {}),
     ...(path ? { tasks: [{ path, ...(tasks.length ? { task_names: tasks } : {}) }], datasets: [] } : {}),
+    ...(dataset ? { tasks: [], datasets: [{ name: dataset.name, ...(dataset.version ? { version: dataset.version } : {}), ...(tasks.length ? { task_names: tasks } : {}) }] } : {}),
   };
-  if (!path && tasks.length) {
+  if (!path && !dataset && tasks.length) {
     // A task filter on a suite applies to each of its sources.
     const suites = await sdk(ctx, () => listWorkspaceEvalSuites(ctx.projectId, { ref }));
     const declared = suites.find((s) => s.name === suite)?.config;
@@ -600,7 +614,8 @@ export async function runEvals(argv: string[]): Promise<number> {
       case 'tasks': {
         const path = takeFlagValue(rest, ['--path']);
         const ref = takeFlagValue(rest, ['--ref']);
-        return await listTasks(ctx, rest[0], path, ref);
+        const dataset = takeFlagValue(rest, ['--dataset', '-d']);
+        return await listTasks(ctx, rest[0], path, ref, dataset);
       }
       case 'datasets':
         return await listDatasets(ctx);

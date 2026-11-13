@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1785,
-  "aliases": 690,
+  "count": 1791,
+  "aliases": 693,
   "routes": [
     {
       "method": "GET",
@@ -3553,8 +3553,23 @@
     },
     {
       "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/results",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/results"
+    },
+    {
+      "method": "GET",
       "path": "/v1/projects/:workspaceId/evals/tasks",
       "aliasOf": "/v1/workspaces/:workspaceId/evals/tasks"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/tasks/:taskId",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/tasks/:taskId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/tasks/:taskId/file",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/tasks/:taskId/file"
     },
     {
       "method": "PATCH",
@@ -6331,7 +6346,19 @@
     },
     {
       "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/results"
+    },
+    {
+      "method": "GET",
       "path": "/v1/workspaces/:workspaceId/evals/tasks"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/tasks/:taskId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/tasks/:taskId/file"
     },
     {
       "method": "PATCH",

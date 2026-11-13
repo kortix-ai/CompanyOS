@@ -22,7 +22,7 @@ import { db } from '../../shared/db';
 import type { ProjectRow } from '../lib/serializers';
 import { goalEffects, readHeartbeat, sessionHealth } from './effects';
 import { notifyGoal } from './notify';
-import { isOpenState, utcDay } from './rules';
+import { isBoundGoal, isOpenState, utcDay } from './rules';
 import { applyHeartbeat, dropHeartbeat, finishGoalSetup, heartbeatWanted, moveHeartbeat } from './service';
 import { appendGoalEvent, dbNow, forgetGoalPrompts, goalsToReconcile, pendingGoalPrompts, writeGoal, type GoalRow } from './store';
 import { projectsView } from '../../workspaces/rows';
@@ -89,6 +89,18 @@ export async function reconcileGoal(goal: GoalRow, now: Date, result: GoalReconc
         : { unchanged: true },
     );
     goal = cleared.row;
+    result.unblocked += 1;
+  }
+  // Goal mode: a bound goal never leaves its chat, so no successor or restart clears its owner_lost.
+  // The chat works again (its person restarted its runtime): the goal wakes again.
+  if (goal.blockedReason === 'owner_lost' && isBoundGoal(goal) && goal.ownerSessionId && (await sessionHealth(goal.ownerSessionId)) === 'ok') {
+    const cleared = await writeGoal(goal.projectId, goal.goalId, (row) =>
+      row.blockedReason === 'owner_lost'
+        ? { patch: { blockedReason: null }, keepRevision: true, event: { kind: 'unblocked', actorKind: 'platform', actorId: null, message: 'The chat that owns this goal works again.' } }
+        : { unchanged: true },
+    );
+    goal = cleared.row;
+    await applyHeartbeat(goal);
     result.unblocked += 1;
   }
   if (goal.ownerSessionId && goal.blockedReason !== 'owner_lost' && !goal.pausedAt) {

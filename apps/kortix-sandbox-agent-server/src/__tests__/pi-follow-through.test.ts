@@ -103,7 +103,8 @@ describe('openWait', () => {
     for (const action of ['GMAIL_FETCH_MESSAGE_BY_THREAD_ID', 'GMAIL_LIST_DRAFTS', 'STRIPE_LIST_PAYMENT_INTENTS', 'GITHUB_LIST_PULL_REQUESTS', 'SLACK_SEARCH_MESSAGES', 'get_invoice', 'find_transfer']) {
       expect(outwardActions([bash(`kortix connectors call app ${action} '{}'`)])).toEqual([])
     }
-    for (const action of ['GMAIL_SEND_EMAIL', 'GMAIL_REPLY_TO_THREAD', 'STRIPE_CREATE_PAYMENT_INTENT', 'SLACK_SENDS_A_MESSAGE_TO_A_SLACK_CHANNEL']) {
+    // A read verb later in the name does not make an outward action a read.
+    for (const action of ['GMAIL_SEND_EMAIL', 'GMAIL_REPLY_TO_THREAD', 'STRIPE_CREATE_PAYMENT_INTENT', 'SLACK_SENDS_A_MESSAGE_TO_A_SLACK_CHANNEL', 'MAIL_SEND_MESSAGE_TO_LIST']) {
       expect(outwardActions([bash(`kortix connectors call app ${action} '{}'`)])).toEqual([`app.${action}`])
     }
   })

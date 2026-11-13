@@ -323,6 +323,38 @@ describe('goal mode: a goal bound to its chat', () => {
     expect((await goals.stopGoal(ctx(asSession(sessionId)), goal.goalId, { revision: now.revision, reason: 'Ana said: drop it' })).state).toBe('stopped');
   });
 
+  test('the chat works again after its box failed: the reconciler unblocks its goal and turns the heartbeat back on', async () => {
+    const sessionId = await chat();
+    const goal = await goals.createGoal(ctx(asSession(sessionId)), boundInput());
+    await db.update(projectSessions).set({ status: 'failed' }).where(eq(projectSessions.sessionId, sessionId));
+    await goalSuccessorAllowed(PROJECT, goal.heartbeatReminderId!);
+    // What the fire does after the refusal: the heartbeat goes off.
+    await db.update(projectTriggerRuntime).set({ enabled: false, nextFireAt: null }).where(and(eq(projectTriggerRuntime.projectId, PROJECT), eq(projectTriggerRuntime.slug, goal.heartbeatReminderId!)));
+    const sweep = async () => {
+      let cursor: string | null = null;
+      do {
+        cursor = (await runGoalReconcilerTick(cursor)).cursor;
+      } while (cursor);
+    };
+    // Still failed: it stays blocked, heartbeat off.
+    await sweep();
+    expect((await getGoal(PROJECT, goal.goalId))!.blockedReason).toBe('owner_lost');
+    expect((await heartbeat(goal.goalId))?.enabled).toBe(false);
+    // The person restarted the chat.
+    await db.update(projectSessions).set({ status: 'running' }).where(eq(projectSessions.sessionId, sessionId));
+    await sweep();
+    expect((await getGoal(PROJECT, goal.goalId))!).toMatchObject({ blockedReason: null, ownerSessionId: sessionId, state: 'active' });
+    expect((await heartbeat(goal.goalId))?.enabled).toBe(true);
+  });
+
+  test("a page goal's verifier session cannot bind a goal to itself: no goal session starts a goal", async () => {
+    const page = await activeGoal();
+    const verifierId = await chat();
+    await db.update(projectGoals).set({ state: 'verifying', verifierSessionId: verifierId, sessions: [...page.sessions, { id: verifierId, role: 'verifier', since: new Date().toISOString() }] }).where(eq(projectGoals.goalId, page.goalId));
+    expect(await refusal(goals.createGoal(ctx(asSession(verifierId)), boundInput()))).toMatchObject({ status: 403, code: 'goal_forbidden' });
+    await db.update(projectGoals).set({ state: 'stopped', verifierSessionId: null }).where(eq(projectGoals.goalId, page.goalId));
+  });
+
   test("a page goal's owner session still cannot stop it", async () => {
     const goal = await activeGoal();
     expect(await refusal(goals.stopGoal(ctx(asSession(goal.ownerSessionId!)), goal.goalId, { revision: goal.revision, reason: 'giving up' }))).toMatchObject({ status: 403 });

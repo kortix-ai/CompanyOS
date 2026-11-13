@@ -217,6 +217,9 @@ export async function createGoal(
   if (here) {
     // Goal mode: the chat owns its goal. One open goal per chat; a done or stopped one leaves room for the next.
     if (actor.kind !== 'session') forbidden('Only a chat session binds a goal to itself (`here`).');
+    // No goal session starts a goal: the owner or verifier of another open goal (a page goal's) is refused as before.
+    const worked = await goalOfSession(actor.sessionId);
+    if (worked && isOpenState(worked.state) && !(isBoundGoal(worked) && worked.ownerSessionId === actor.sessionId)) forbidden("A goal's own session cannot start another goal.");
     // The same goal_id again is a retry of this create: `sameGoal` answers it. The insert repeats this check under a lock.
     const current = await openGoalOwnedBy(actor.sessionId, input.goal_id);
     if (current) forbidden(`This chat already works goal "${current.title}". It ends when the verifier passes it or a person stops it.`);

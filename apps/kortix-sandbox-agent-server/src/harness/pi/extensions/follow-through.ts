@@ -49,8 +49,8 @@ const HAS_WHEN = new RegExp(String.raw`\b${WHEN}\b|⏳`, 'i')
 const CONNECTOR_CALL = /\bkortix\s+connectors\s+call\s+([\w.-]+)\s+([\w.-]+)/g
 /** An action that hands something to someone else, whose answer comes later. */
 const OUTWARD = /(?:^|[_.-])(?:send|reply|forward|draft|post|message|mail|invite|transfer|pay|payment|fund|order|book|submit|request|quote|invoice)/i
-/** A read: `GMAIL_LIST_DRAFTS`, `get_invoice`. Its noun can be an outward word, but nothing was handed to anyone. */
-const READ = /(?:^|[_.-])(?:get|list|fetch|search|find|read|count)(?:[_.-]|$)/i
+/** A read, by its leading verb after an optional toolkit prefix: `GMAIL_LIST_DRAFTS`, `get_invoice`. Its noun can be an outward word, but nothing was handed to anyone. */
+const READ = /^(?:[a-z0-9]+[_.-])?(?:get|list|fetch|search|find|read|count)(?:[_.-]|$)/i
 /** The tools and commands that set a wake-up. */
 const WAKE_ACTIONS = new Set(['follow_up', 'wake_on', 'create', 'automate'])
 /** The tools whose work reports back by itself: a promise to report it needs no wake-up. */

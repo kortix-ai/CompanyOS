@@ -1124,6 +1124,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 | `policy` | map | — | The decision for a connector call that no rule matches. See [policy keys](#policy-keys). |
 | `policies` | list | — | Connector rules for the whole project. They run before every policy set and base rule. See [policy keys](#policy-keys). |
 | `approvals` | map | — | How long a held connector call waits for a decision. See [policy keys](#policy-keys). |
+| `evals` | map | — | Eval suites. Each suite runs agents on Harbor-format tasks (an instruction, a sandbox and `tests/test.sh`, which writes the reward) and scores them. A suite is a job config in the field names of a Harbor job config, or `config: <path>` to a Harbor job config file. Start one with `kortix evals run <suite>`. Needs the `evals` feature. |
 | `spaces` | map | — | Spaces: channels with configured tabs. Agents join one with `agents.<name>.space`. |
 | `builtin_agents` | map | — | Built-in agents the platform adds to this project. Each is off unless set to true. |
 | `agents` | map | — | Agent name → agent block, here or in an imported file. A name is lowercase letters, digits, `-` and `_`, at most 128 characters. See [Agent keys](#agent-keys). |

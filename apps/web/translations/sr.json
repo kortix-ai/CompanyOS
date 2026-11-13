@@ -1332,6 +1332,10 @@
         "program_agents": {
           "name": "Programski agenti",
           "description": "Agent koji pokreće vaš kod umesto modela. Dajte agentu `run: <command>` u kortix.yaml: svaki potez pokreće tu komandu u sandboxu sesije, sa radnim prostorom, tajnama i pristupima agenta. Poruka ili podaci triggera su ulaz, a ono što komanda ispiše je odgovor."
+        },
+        "evals": {
+          "name": "Evals",
+          "description": "Run your agents on a list of tasks and score the results. A task is an instruction, a sandbox and a test script that writes a score (the Harbor task format). Declare a set of tasks under `evals:` in kortix.yaml, run it against any agent and model, and compare runs to see whether a change made the agent better or worse."
         }
       },
       "channelsSwitch": {

@@ -321,6 +321,7 @@ describe('useFeatureFlags', () => {
     'chat_front',
     'spaces_proactive',
     'program_agents',
+    'evals',
     'volumes',
     'drives',
     'artifacts',

@@ -22,6 +22,7 @@ import { SESSION_PROMPT_REASONS } from './wire-values';
 
 export * from './memory';
 export * from './goals';
+export * from './evals';
 export * from './wire-values';
 
 /** Loose JSON object — jsonb metadata/config columns surfaced as-is. */
@@ -74,6 +75,7 @@ export const FeatureFlagMapSchema = z.object({
   chat_front: z.boolean(),
   spaces_proactive: z.boolean(),
   program_agents: z.boolean(),
+  evals: z.boolean(),
 });
 export type FeatureFlagMap = z.infer<typeof FeatureFlagMapSchema>;
 

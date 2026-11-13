@@ -1332,6 +1332,10 @@
         "program_agents": {
           "name": "プログラムエージェント",
           "description": "モデルの代わりにあなたのコードを実行するエージェント。kortix.yaml でエージェントに `run: <command>` を指定すると、各ターンでそのコマンドがセッションのサンドボックスで、エージェントのワークスペース、シークレット、アクセス権とともに実行されます。メッセージまたはトリガーのデータが入力になり、コマンドの出力が返信になります。"
+        },
+        "evals": {
+          "name": "Evals",
+          "description": "Run your agents on a list of tasks and score the results. A task is an instruction, a sandbox and a test script that writes a score (the Harbor task format). Declare a set of tasks under `evals:` in kortix.yaml, run it against any agent and model, and compare runs to see whether a change made the agent better or worse."
         }
       },
       "channelsSwitch": {

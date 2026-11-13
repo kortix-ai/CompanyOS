@@ -24,4 +24,5 @@ incident_date: 2026-11-11
 
 On the Kortix side:
 - kortix-ai/CompanyOS#12640: `continueSession` reads back every `deduplicated` answer before it closes a row. A dedupe answer is the proxy repeating its own claim, not the box saying it has the message. Tests: `queued-continue-inbox-delivery` (hung POST is re-queued, not delivered), `forward.test` (a hung upstream: 502, then `duplicate` without reaching the box).
-- Still to build: an alert on a burst of prompt timeouts across many boxes (none exists in apps/api), and a UI state for a parked prompt (the SDK ignores `runtime_unreachable`, so the session shows as working).
+- kortix-ai/CompanyOS#12654: a prompt parked as `runtime_unreachable` says "Waits for the session's machine to answer. Kortix keeps retrying." and no longer claims "Read at next step". Browser journey 61 seeds a parked row and asserts it.
+- Still to build: an alert on a burst of prompt timeouts across many boxes (none exists in apps/api). It needs a prod baseline of proxy timeouts from the API logs first.

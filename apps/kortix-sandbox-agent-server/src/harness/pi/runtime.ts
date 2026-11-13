@@ -2913,8 +2913,10 @@ export class PiRuntime {
       color: agent?.color ?? null,
       variant: agent?.variant ?? null,
       source: 'config',
-      model:
-        name === this.agentName && selected
+      // A program agent's replies name provider `program` (program.ts): so does its listing, and pickers hide the model.
+      model: agent?.run?.trim()
+        ? { providerID: PROGRAM_PROVIDER_ID, modelID: name }
+        : name === this.agentName && selected
           ? { providerID: selected.providerID, modelID: selected.modelID }
           : agent?.model && nativeModelId(agent.model)
             ? agentModelRef(nativeModelId(agent.model)!)

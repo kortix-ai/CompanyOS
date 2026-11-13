@@ -258,6 +258,46 @@ On the agent's **People** page, choose who may run it.
 
 A change to an agent takes effect when it lands in the workspace. New sessions start with it, and running sessions pick it up.
 
+### Agents that run your code
+
+A **program agent** runs a command of yours instead of a model. Use one for a job with fixed steps: a nightly sync, a report, a cleanup, a webhook handler. It is an agent like any other: triggers, chat, Spaces and other agents start it, and it has its own access, secrets and computer.
+
+<Callout type="info">
+Program agents are experimental. Turn on **Program agents** under **Workspace settings** → **Feature flags**.
+</Callout>
+
+Give the agent `run` instead of a model and instructions:
+
+```yaml
+agents:
+  janitor:
+    description: Closes stale pull requests.
+    run: pnpm tsx agents/janitor.ts
+    secrets: [GITHUB_TOKEN]
+    kortix_permissions: [workspace.gitops.read]
+    workspace:
+      repos: [{ path: /workspace }]
+      setup: [pnpm install --frozen-lockfile]
+
+triggers:
+  - slug: hourly-janitor
+    on: { every: 1h }
+    run: { agent: janitor, prompt: "{{ payload }}" }
+```
+
+Each turn runs the command once, in the session's computer:
+
+| | |
+| --- | --- |
+| **Input** | The message, on standard input and as JSON in the file named by `$KORTIX_EVENT_PATH` (`prompt`, `agent`, `session_id`). A trigger's `{{ payload }}` sends the whole trigger payload as JSON. |
+| **Reply** | What the command prints. It renders as Markdown, like a model's reply. |
+| **Failure** | A non-zero exit fails the turn and shows the end of the error output. Kortix does not run a failed command again. |
+| **Stop** | **Stop** ends the command and everything it started. |
+| **Folder** | The agent's first `workspace.repos` path, else `/workspace`. The command waits until `workspace.setup` is done. |
+| **Kortix access** | `createKortix()` from `@kortix/sdk` needs no options: the computer holds the agent's own token. |
+
+A program agent has no model, so it cannot take `model`, `prompt` or `prompt_file`. Its agent page shows the command under **Program**.
+
 ### What an agent can access
 
 | Access | What it allows |

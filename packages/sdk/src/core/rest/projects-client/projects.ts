@@ -352,6 +352,9 @@ export interface ProjectConfigSummary {
     /** The agent's `model:` frontmatter (`provider/model`); absent on older
      *  servers, null when it follows the project default. */
     model?: string | null;
+    /** A program agent's command (`agents.<name>.run`): each turn runs it instead of a model.
+     *  Absent or null for a model agent. */
+    run?: string | null;
     /** The server sends `kortix.yaml`. `opencode` and `kortix.toml` are never sent; they stay
      *  in the union until the next major. */
     source?: 'opencode' | 'kortix.yaml' | 'kortix.toml';

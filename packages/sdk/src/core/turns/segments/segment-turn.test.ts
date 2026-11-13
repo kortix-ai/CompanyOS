@@ -2,13 +2,13 @@ import type { Part, ToolPart } from '../../runtime/client';
 import { describe, expect, test } from 'bun:test';
 import { segmentTurn } from './segment-turn';
 
-function tool(id: string, name: string, input?: Record<string, unknown>): ToolPart {
+function tool(id: string, name: string, input?: Record<string, unknown>, output?: string): ToolPart {
   return {
     id,
     type: 'tool',
     tool: name,
     callID: `call_${id}`,
-    state: { status: 'completed', ...(input ? { input } : {}) },
+    state: { status: 'completed', ...(input ? { input } : {}), ...(output === undefined ? {} : { output }) },
   } as unknown as ToolPart;
 }
 
@@ -210,7 +210,7 @@ describe('segmentTurn', () => {
 // already lists each of them, so they draw once, inside it (KRTX-4877).
 describe('a script\'s own calls', () => {
   const script = tool('s', 'codemode', { code: 'await tools.kortix_usage({ action: "summary" })' });
-  const child = (n: number, name: string, input?: Record<string, unknown>): ToolPart => ({ ...tool(`s${n}`, name, input), callID: `call_s/${n}` });
+  const child = (n: number, name: string, input?: Record<string, unknown>, output?: string): ToolPart => ({ ...tool(`s${n}`, name, input, output), callID: `call_s/${n}` });
   const ids = (segments: ReturnType<typeof segmentTurn>) =>
     segments.map((s) => (s.kind === 'burst' ? s.parts.map((p) => p.id) : [s.part.id]));
 
@@ -233,6 +233,14 @@ describe('a script\'s own calls', () => {
       { standaloneCallIds: new Set(['call_s/4']) },
     );
     expect(ids(segments)).toEqual([['s'], ['s1'], ['s2'], ['s3'], ['s4']]);
+  });
+
+  test('a connector sign-in the script started keeps its own row: its Connect card draws there', () => {
+    const connect = child(1, 'kortix_connectors', { action: 'connect', slug: 'linear' });
+    const refused = child(2, 'kortix_connectors', { action: 'connect', slug: 'nope' }, JSON.stringify({ ok: false, tool: 'kortix_connectors', action: 'connect', card: { title: 'Could not start the sign-in for nope', status: 'error' }, error: { kind: 'not_found', message: 'Connector not found' } }));
+    const segments = segmentTurn([script, connect, refused]);
+    expect(segments.map((s) => s.kind)).toEqual(['burst', 'standalone']);
+    expect(ids(segments)).toEqual([['s'], ['s1']]);
   });
 
   test('a call whose script is not in the turn is kept, and a slash alone is no script child', () => {

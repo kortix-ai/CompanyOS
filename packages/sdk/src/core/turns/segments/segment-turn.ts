@@ -30,7 +30,8 @@ export interface SegmentTurnOptions {
 /**
  * A call a codemode script in `parts` made (pi's nested id `<script callID>/<n>`) that its
  * script row already lists, so it draws nowhere else. A deliverable, a sub-agent (its card
- * opens the child session) and a call waiting on the person keep their own card.
+ * opens the child session), a call waiting on the person and a connector sign-in (its
+ * Connect card draws only under its own row) keep their own card.
  */
 function scriptChildIsListed(
   part: ToolPart,
@@ -42,7 +43,8 @@ function scriptChildIsListed(
   return (
     !isNoGroupActivityTool(part.tool) &&
     toolKind(part.tool) !== 'task' &&
-    !opts.standaloneCallIds?.has(part.callID)
+    !opts.standaloneCallIds?.has(part.callID) &&
+    !partStartsConnectorSignIn(part)
   );
 }
 

@@ -104,7 +104,8 @@ export async function readKortixState(root: string): Promise<KortixStateReport> 
   else {
     const managed = projectIsManaged(summary);
     report.workspace.name = summary.name ?? null;
-    report.workspace.github = { linked: !managed && /github\.com/i.test(summary.repo_url ?? ''), repository: managed ? null : githubRepoFromRemote(summary.repo_url ?? '') };
+    const repository = managed ? null : githubRepoFromRemote(summary.repo_url ?? '');
+    report.workspace.github = { linked: repository !== null, repository };
   }
   report.connectors = failed(connectors) ? connectors : connectors.connectors.map((c) => ({ slug: c.slug, state: c.state ?? c.status ?? 'unknown' }));
   report.slack = failed(slack) ? slack : { connected: !!slack, team: slack?.workspaceName ?? null };

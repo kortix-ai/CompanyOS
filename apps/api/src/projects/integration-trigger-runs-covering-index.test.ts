@@ -1,7 +1,7 @@
 /**
  * DB suite: the trigger-runs list (`GET /v1/projects/:id/trigger-runs`) pays
- * a correlated LLM-spend aggregate over `kortix.gateway_request_logs` once per
- * listed run (`triggerRunsPageQuery`). That read must be INDEX-ONLY on a
+ * an LLM-spend aggregate over `kortix.gateway_request_logs` once per
+ * returned run (`triggerRunCostsQuery`). That read must be INDEX-ONLY on a
  * covering index — never the wide heap rows (each carries the request/response
  * jsonb payloads) — and a mass UPDATE over the table degrades it to heap
  * fetches until VACUUM restores the visibility map. The planner serves the
@@ -202,8 +202,8 @@ test('the spend read prices exactly the runs it is given', async () => {
 
 test('the trigger-runs correlated spend read is index-only with zero heap fetches', async () => {
   const plan = await explainAnalyzed();
-  // The outer scan reads the full executions row, so every Index Only Scan
-  // node in this plan is the gateway-log spend subquery.
+  // The spend query reads only the gateway-log index, so every Index Only Scan
+  // node in this plan is the spend aggregate.
   expect(plan).toContain('Index Only Scan');
   expect(plan).toContain('on gateway_request_logs');
   expect(heapFetches(plan), `the visibility map is clean, the read must not touch the heap:\n${plan}`).toBe(0);

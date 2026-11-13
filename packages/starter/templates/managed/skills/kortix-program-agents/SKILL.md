@@ -71,6 +71,13 @@ console.log(`Checked ${sessions.length} sessions for ${payload.trigger.slug}.`)
 Add `@kortix/sdk` to the repository's `package.json` and install it in `workspace.setup`.
 </sdk>
 
+<setup-pitfalls>
+- Every agent that clones the repository shares its one `package.json`. Keep the dependencies compatible: `@kortix/sdk` needs `zod` `^3.25.0` or `^4`.
+- pnpm 10+ refuses dependency build scripts and exits 1 (`ERR_PNPM_IGNORED_BUILDS`, for example `esbuild` under `tsx`). Allow them in `pnpm-workspace.yaml`: `allowBuilds: { esbuild: true }`. pnpm no longer reads the `pnpm` field of `package.json`.
+- A failed setup step fails every turn with "The workspace setup failed at `<step>`" and the program does not run. The log is `/tmp/kortix/workspace-setup.log` in the session's computer.
+- A webhook trigger's secret must have connector scope: `kortix secrets set <NAME>=<value> --scope connector`. A runtime-scope secret answers `401` to every delivery.
+</setup-pitfalls>
+
 <checks>
 1. `kortix validate`: no error on the agent.
 2. Run the command once by hand in a session with a sample input: `echo '<input>' | KORTIX_EVENT_PATH=/tmp/e.json <command>`.

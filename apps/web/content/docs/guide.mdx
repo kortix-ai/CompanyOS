@@ -694,6 +694,8 @@ triggers:
     prompt: "Change request #{{ change_request.number }} merged into {{ change_request.base_ref }}. Verify prod."
 ```
 
+The prompt is a template over what fired the trigger. `{{ body.order.id }}` inserts one value of a webhook's JSON body, `{{ event.data.title }}` one value of an event, and `{{ payload }}` the whole payload as JSON. Every fire also has `{{ trigger.slug }}` and `{{ fired_at }}`. Test a template without starting anything: `kortix triggers fire <slug> --dry-run --payload '{"body":{"order":{"id":7}}}'`.
+
 To create a trigger at runtime, use the CLI: `kortix triggers add "<prompt>"` with a source flag (`--runtime --every 1h`, `--on webhook --secret-env NAME`, `--on cr-merged --cr <id>`) and a target (`--session <id>`, the default inside a session, or `--agent <name>`). `kortix triggers ls` lists both kinds. `pause`, `resume`, `run` and `rm` take a runtime ID (`trigger.<hex>`) or a `kortix.yaml` slug.
 
 <a id="reminders" />

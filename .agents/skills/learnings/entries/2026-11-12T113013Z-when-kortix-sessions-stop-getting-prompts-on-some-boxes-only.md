@@ -11,6 +11,7 @@ incident_date: 2026-11-11
 **Incident:** 2026-11-11, Kortix prod on Platinum prod eu-west.
 - The edge proxy on 2 of 6 Platinum hosts hung every preview request for 17 min, from 18:37:53 until manual restarts at 18:52 and 18:54 UTC. That made 33 of 90 running boxes unreachable, every box on those 2 hosts.
 - Kortix sessions there stopped receiving prompts. One went 9 min without a delivery. A user report found it; no alert fired.
+- Kortix marked those prompts **delivered**. The prompt POST hit the proxy's 15 s attempt timer, and the proxy kept its dedupe claim because a timeout cannot prove the box did not take the body. `deliverWithRetry` re-sent under the same Idempotency-Key, the claim answered `200 {deduplicated: true}`, and `sendPrompt` read that as delivery. The box never had the prompt.
 - Cause: Platinum prod never had a route-hint key, so every request was a Postgres lookup on the host, with no deadline. A PlanetScale connection reset hung those lookups for 490 s.
 - Fixed in kortix-ai/platinum#3278 (a derived hint key, a 1.5 s bounded lookup, a routed health probe, a host watchdog, alerts) and kortix-ai/platinum#3279 (a staging→prod env key parity check).
 
@@ -21,4 +22,6 @@ incident_date: 2026-11-11
 - alert-cron itself does not go blind when one check stalls (kortix-ai/platinum#3294). It runs 4 checks at a time. A check that does not answer keeps its last good value for 15 min, and `alert_checks_blind` pages after 2 blind runs in a row. Its 3 heaviest billing checks run every 3rd run (kortix-ai/platinum#3302), so they cost the region database 30 queries per hour, not 90.
 - `infra/env.sh check` fails on staging→prod key drift.
 
-Kortix: none yet. Enforcer to build: when a session's box stops answering, the Kortix UI and gateway should report "the session's machine is unreachable" within seconds, instead of "Gathering thoughts…" with no end.
+On the Kortix side:
+- kortix-ai/CompanyOS#12640: `continueSession` reads back every `deduplicated` answer before it closes a row. A dedupe answer is the proxy repeating its own claim, not the box saying it has the message. Tests: `queued-continue-inbox-delivery` (hung POST is re-queued, not delivered), `forward.test` (a hung upstream: 502, then `duplicate` without reaching the box).
+- Still to build: an alert on a burst of prompt timeouts across many boxes (none exists in apps/api), and a UI state for a parked prompt (the SDK ignores `runtime_unreachable`, so the session shows as working).

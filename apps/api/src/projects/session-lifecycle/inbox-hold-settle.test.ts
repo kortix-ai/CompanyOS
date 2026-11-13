@@ -143,6 +143,7 @@ describe('settleInboxHoldAfterStop', () => {
     ]);
     const { deps, calls } = fakeDeps({
       tips: [tip],
+      fullLog: tip,
       keepsMessageIds: async () => true,
       listStopPaused: async () => [{ commandId: 'c2', wireIds: [u2] }],
     });
@@ -169,6 +170,24 @@ describe('settleInboxHoldAfterStop', () => {
     const out = await settleInboxHoldAfterStop('s', deps);
     expect(out.closedAsInterrupted).toBe(1);
     expect(calls.close).toEqual([['c3']]);
+  });
+
+  test('absent from a short tip but present in the whole transcript (ids from another clock): read, not re-sent', async () => {
+    // The tip is not full and holds ids newer AND older than the steer, so no
+    // id comparison can prove it was read; only the transcript can.
+    const tip = tipOf([
+      { id: u1, role: 'user' },
+      { id: a1, role: 'assistant', parentID: u1, completed: T + 150 },
+    ]);
+    const { deps, calls } = fakeDeps({
+      tips: [tip],
+      fullLog: tipOf([{ id: u3, role: 'user' }, ...tip]),
+      keepsMessageIds: async () => true,
+      listStopPaused: async () => [{ commandId: 'c3', wireIds: [u3] }],
+    });
+    const out = await settleInboxHoldAfterStop('s', deps);
+    expect(out.closedAsInterrupted).toBe(1);
+    expect(calls.hold).toHaveLength(0);
   });
 
   describe('a steer below a full tip window (the tip cannot say whether it was read)', () => {

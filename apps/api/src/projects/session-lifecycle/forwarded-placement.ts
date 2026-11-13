@@ -204,43 +204,6 @@ export function reachedPlacement(
 }
 
 /**
- * Does this tip window reach back past the message? False when `limit`
- * messages were all spent on newer ones: the message may then sit below the
- * window, read and published long ago, and the tip cannot say.
- */
-export function tipReachesPast(
-  tip: ReadonlyArray<PlacementTipMessage>,
-  wireMessageId: string,
-  limit: number,
-): boolean {
-  const mine = wireIdTime(wireMessageId);
-  if (mine === null) return false;
-  return (
-    tip.length < limit ||
-    tip.some((m) => {
-      const at = wireIdTime(m.id);
-      return at !== null && wireIdClockDelta(at, mine) <= ZERO;
-    })
-  );
-}
-
-/**
- * Is this steer unread on a runtime that keeps message ids (pi)? pi publishes
- * a steered message only when a model call READS it. Until then it waits in the
- * runtime's own queue and a stop drops it: it is absent from the transcript, and
- * no later message's id or parent says anything about it, because pi reads by
- * queue position, not by id order (`reachedPlacement` is the OpenCode rule).
- * Call it with a transcript that reaches past the message (`tipReachesPast`, or
- * the whole log).
- */
-export function steerUnreadOnStableRuntime(
-  tip: ReadonlyArray<PlacementTipMessage>,
-  wireMessageId: string,
-): boolean {
-  return wireIdTime(wireMessageId) !== null && !tip.some((m) => m.id === wireMessageId);
-}
-
-/**
  * May a prompt go out under `wireMessageId` unchanged on a runtime that keeps
  * message ids (`RUNTIME_STABLE_MESSAGE_ID_CAPABILITY`, pi)? That runtime orders
  * by position, so nothing here is about the runtime's own order. Two checks:

@@ -64,9 +64,7 @@ import { resolveSessionRuntimeEndpoint, readSessionMessageTip, retractSessionMes
 import {
   type PlacementTipMessage,
   reachedPlacement,
-  steerUnreadOnStableRuntime,
   tipIsBusy,
-  tipReachesPast,
 } from './forwarded-placement';
 import { INBOX_HOLD_MS, inboxScope } from './inbox-rows';
 import { withNextDeliveryAttempt } from './store';
@@ -289,23 +287,20 @@ export async function settleInboxHoldAfterStop(
   for (const row of stopPaused) {
     const ids = row.wireIds;
     if (ids.length === 0) continue;
-    // An id that is not on the box was never read by pi, whatever later ids say.
-    // A tip that does not reach back past an id cannot say whether it was read
-    // long ago: ask the whole transcript. When that read fails the row stays
-    // stop-paused, the duplicating-but-never-losing path.
+    // An id absent from the tip is unread only if the whole transcript lacks
+    // it too: the tip window may just not reach back to a message read long
+    // ago, and wire-id clocks cannot tell the two apart. When the whole read
+    // fails the row stays stop-paused, the duplicating-but-never-losing path.
     let reached = false;
     let undecided = false;
     for (const id of ids) {
-      let log: PlacementTipMessage[] | null = tip;
-      if (stable && !tipReachesPast(tip, id, TIP_LIMIT)) {
-        fullLog ??= await deps.readFullLog(sessionId).catch(() => null);
-        log = fullLog;
-      }
-      if (!log) {
-        undecided = true;
+      if (!stable || tip.some((m) => m.id === id)) {
+        if (reachedPlacement(tip, id)) reached = true;
         continue;
       }
-      if (!(stable && steerUnreadOnStableRuntime(log, id)) && reachedPlacement(tip, id)) reached = true;
+      fullLog ??= await deps.readFullLog(sessionId).catch(() => null);
+      if (!fullLog) undecided = true;
+      else if (fullLog.some((m) => m.id === id)) reached = true;
     }
     if (!reached && undecided) continue;
     if (reached) {

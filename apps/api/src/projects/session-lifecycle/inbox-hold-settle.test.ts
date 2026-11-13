@@ -156,6 +156,28 @@ describe('settleInboxHoldAfterStop', () => {
     expect(calls.remove).toHaveLength(0);
   });
 
+  test('capability unknown (box unreadable): the ID heuristic is not used, the row stays stop-paused', async () => {
+    const report = id(T + 250, 'RPT0RPT0RPT0RP');
+    const tip = tipOf([
+      { id: u1, role: 'user' },
+      { id: report, role: 'user' },
+      { id: a1, role: 'assistant', parentID: report, completed: T + 450 },
+    ]);
+    for (const keepsMessageIds of [async () => null, async () => { throw new Error('db down'); }]) {
+      const { deps, calls } = fakeDeps({
+        tips: [tip],
+        keepsMessageIds,
+        listStopPaused: async () => [{ commandId: 'c2', wireIds: [u2] }],
+      });
+      const out = await settleInboxHoldAfterStop('s', deps);
+      expect(out.closedAsInterrupted).toBe(0);
+      expect(out.heldBack).toBe(0);
+      expect(calls.close).toHaveLength(0);
+      expect(calls.hold).toHaveLength(0);
+      expect(calls.remove).toHaveLength(0);
+    }
+  });
+
   test('a steer a pi runtime published (the step read it) still closes as delivered', async () => {
     const tip = tipOf([
       { id: u1, role: 'user' },

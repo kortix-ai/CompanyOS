@@ -69,7 +69,7 @@ import {
 import { INBOX_HOLD_MS, inboxScope } from './inbox-rows';
 import { withNextDeliveryAttempt } from './store';
 import { onWireSql } from './delivery-state';
-import { sessionKeepsMessageIds } from './inbox-admission';
+import { sessionMessageIdCapability } from './inbox-admission';
 
 const TIP_LIMIT = 16;
 /** A whole-transcript read of a long session, for a steer below the tip window. */
@@ -135,8 +135,8 @@ export interface HoldSettleDeps {
   closeDelivered: (commandId: string) => Promise<void>;
   /** The turn-ledger record opened for a wire id that was taken back out. */
   closeTurn: (sessionId: string, messageId: string) => Promise<void>;
-  /** The session's runtime keeps message ids (pi); false when the read fails. */
-  keepsMessageIds: (sessionId: string) => Promise<boolean>;
+  /** The session's runtime keeps message ids (pi); null when the box cannot be read. */
+  keepsMessageIds: (sessionId: string) => Promise<boolean | null>;
   sleep: (ms: number) => Promise<void>;
   now: () => number;
 }
@@ -224,7 +224,7 @@ export const liveHoldSettleDeps: HoldSettleDeps = {
   async closeTurn(sessionId, messageId) {
     await closeSandboxTurnByMessageId(sessionId, messageId, 'abandoned');
   },
-  keepsMessageIds: (sessionId) => sessionKeepsMessageIds(sessionId, null),
+  keepsMessageIds: (sessionId) => sessionMessageIdCapability(sessionId, null),
   sleep: Bun.sleep,
   now: () => Date.now(),
 };
@@ -282,7 +282,12 @@ export async function settleInboxHoldAfterStop(
   // that keeps message ids a steer is on the box only once a step read it, so
   // a steer the tip lacks is unread whatever later ids say (KRTX-4864: it was
   // closed as read and never sent).
-  const stable = stopPaused.length > 0 && (await deps.keepsMessageIds(sessionId).catch(() => false));
+  const capability = stopPaused.length > 0 ? await deps.keepsMessageIds(sessionId).catch(() => null) : false;
+  // Which clock the ids follow is unknown: the ID heuristic could close a
+  // dropped steer as read, so every row stays stop-paused (duplicating, never
+  // losing).
+  if (capability === null) return out;
+  const stable = capability;
   let fullLog: PlacementTipMessage[] | null | undefined;
   for (const row of stopPaused) {
     const ids = row.wireIds;

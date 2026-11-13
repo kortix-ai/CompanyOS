@@ -797,6 +797,9 @@ export async function composioSessionTools(input: {
   return session.tools();
 }
 
+/** Reason prefix of a call the Composio edge refused or could not serve (an HTML error page). */
+export const COMPOSIO_UPSTREAM_UNAVAILABLE = 'composio_upstream_unavailable';
+
 export async function executeComposio(
   input: ComposioExecuteInput & { runtime?: ComposioRuntime; catalogClient?: ComposioCatalogClient },
 ): Promise<ExecResult> {
@@ -875,7 +878,7 @@ export async function executeComposio(
         return {
           ok: false,
           status: refused ? upstreamStatus : 502,
-          data: `composio_upstream_unavailable: Composio answered ${String(limited?.status ?? 502)} with an HTML error page${page ? ` (page: ${page})` : ''}${guidance}`,
+          data: `${COMPOSIO_UPSTREAM_UNAVAILABLE}: Composio answered ${String(limited?.status ?? 502)} with an HTML error page${page ? ` (page: ${page})` : ''}${guidance}`,
         };
       }
       throw error;

@@ -135,6 +135,16 @@ export async function admitReminderFire(input: { project: ProjectRow; reminderId
 export async function goalSuccessorAllowed(projectId: string, reminderId: string): Promise<{ goal: GoalRow | null; allowed: boolean }> {
   const goal = await goalByHeartbeat(projectId, reminderId);
   if (!goal) return { goal: null, allowed: true };
+  // Goal mode: the goal belongs to its chat. A successor would take it away from the person, who
+  // could then neither see nor stop it. It blocks as owner_lost and stays the chat's.
+  if (isBoundGoal(goal)) {
+    const lost = await writeGoal(projectId, goal.goalId, (row) =>
+      row.blockedReason === 'owner_lost'
+        ? { unchanged: true }
+        : { patch: { blockedReason: 'owner_lost' }, keepRevision: true, event: { ...PLATFORM, kind: 'blocked', message: 'The chat that owns this goal failed. A goal in a chat has no successor session.', data: { reason: 'owner_lost' } } },
+    );
+    return { goal: lost.row, allowed: false };
+  }
   if (goal.sessions.length < goal.maxSessions) return { goal, allowed: true };
   const blocked = await writeGoal(projectId, goal.goalId, (row) =>
     row.blockedReason === 'session_cap'

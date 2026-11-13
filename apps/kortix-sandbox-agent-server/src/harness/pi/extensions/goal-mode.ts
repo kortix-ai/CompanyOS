@@ -23,7 +23,7 @@
  */
 import type { InlineExtension } from '@earendil-works/pi-coding-agent'
 import { promptOrigin } from '../prompt-origin'
-import { runMessages } from './follow-through'
+import { failedCalls, runMessages } from './follow-through'
 
 export const GOAL_MODE_BOX_FLAG = 'goal_mode'
 /** Must stay in follow-through.ts `HIDDEN_NOTE_TYPES`: the session log hides these notes. */
@@ -45,8 +45,8 @@ export interface ChatGoal {
   criteria: { id: string; text: string; reported_met?: boolean; verified?: boolean }[]
 }
 
-type Block = { type: string; text?: string; name?: string; arguments?: Record<string, unknown> }
-type Message = { role: string; content?: string | Block[] }
+type Block = { type: string; id?: string; text?: string; name?: string; arguments?: Record<string, unknown> }
+type Message = { role: string; content?: string | Block[]; toolCallId?: string; isError?: boolean }
 
 const OPEN = new Set(['draft', 'active', 'waiting_on_user', 'verifying'])
 /** A command that records where the goal stands. Creating the goal is not one: the turn that creates it starts the work. */
@@ -88,9 +88,10 @@ export function ownGoal(goals: readonly ChatGoal[], sessionId: string): ChatGoal
   return goals.find((goal) => goal.owner_session_id === sessionId && OPEN.has(goal.state)) ?? null
 }
 
-/** The run recorded where the goal stands. */
+/** The run recorded where the goal stands. A recording command whose result is an error recorded nothing. */
 export function recorded(run: readonly Message[]): boolean {
-  return toolCalls(run).some((block) => RECORDS.test(commandOf(block)))
+  const failed = failedCalls(run)
+  return toolCalls(run).some((block) => !(block.id && failed.has(block.id)) && RECORDS.test(commandOf(block)))
 }
 
 /** The run ran any `kortix goals` command: the goal may have changed. */
@@ -113,7 +114,8 @@ export function goalSection(goal: ChatGoal): string {
     'Each turn: do the next step that moves it forward, then record where it stands before you end the turn:',
     '- `kortix goals progress --summary "<what changed, what is next>"` (with `--met <id> --evidence <id>=evidence/<name>.md` for a criterion you proved);',
     '- `kortix goals verify` when every criterion is met with evidence: a separate verifier decides;',
-    '- `kortix goals transition waiting_on_user --reason "<question>"` when only the person can unblock it.',
+    '- `kortix goals transition waiting_on_user --reason "<question>"` when only the person can unblock it;',
+    '- `kortix goals transition active --reason "<their answer>"` when they answered that question here: the goal works again.',
     `Waiting on someone else (a reply, an approval, a payment): record it with \`progress\`, set a \`wake_on\` when an event can wake you, and end the turn. The goal's heartbeat wakes this chat${goal.next_wake_at ? ` (next ${goal.next_wake_at})` : ''}.`,
     'The person tells you to stop or drop it: `kortix goals stop --reason "<what they said>"`, then say it is stopped. Only then. Never stop it yourself because it is hard, slow or blocked.',
   ].join('\n')
@@ -191,7 +193,8 @@ export function goalMode(options: GoalModeOptions): InlineExtension {
         nudges += 1
         nudgedAt = messages.length
         options.onNudge?.(goal!, nudges)
-        return { entries: [{ type: 'custom_message' as const, customType: GOAL_NOTE_TYPE, content: decision.note, display: false }], continue: true }
+        // pi replaces the entries with each hook's result: keep what an earlier hook added.
+        return { entries: [...event.entries, { type: 'custom_message' as const, customType: GOAL_NOTE_TYPE, content: decision.note, display: false }], continue: true }
       })
     },
   }

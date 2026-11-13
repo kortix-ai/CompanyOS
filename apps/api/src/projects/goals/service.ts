@@ -69,6 +69,7 @@ import {
   getGoal,
   goalFolderTaken,
   goalOfSession,
+  openGoalOwnedBy,
   installGoalHeartbeat,
   rememberGoalPrompt,
   setGoalSetupKey,
@@ -216,16 +217,19 @@ export async function createGoal(
   if (here) {
     // Goal mode: the chat owns its goal. One open goal per chat; a done or stopped one leaves room for the next.
     if (actor.kind !== 'session') forbidden('Only a chat session binds a goal to itself (`here`).');
-    const current = await goalOfSession(actor.sessionId);
-    // The same goal_id again is a retry of this create: the lookup below answers it.
-    if (current && isOpenState(current.state) && current.goalId !== input.goal_id) forbidden(`This chat already works goal "${current.title}". It ends when the verifier passes it or a person stops it.`);
+    // The same goal_id again is a retry of this create: `sameGoal` answers it. The insert repeats this check under a lock.
+    const current = await openGoalOwnedBy(actor.sessionId, input.goal_id);
+    if (current) forbidden(`This chat already works goal "${current.title}". It ends when the verifier passes it or a person stops it.`);
     if (!input.criteria?.length) invalid('A goal in a chat needs 1 to 8 done criteria.');
   } else if (actor.kind === 'session' && (await goalOfSession(actor.sessionId))) forbidden("A goal's own session cannot start another goal.");
-  const existing = await getGoal(project.projectId, input.goal_id);
-  if (existing) {
-    if (existing.createdByUserId !== actor.userId) throw new GoalError(409, 'goal_conflict', 'This goal id is taken.');
+  /** The goal id exists: a retry of this create returns it; anyone else's id, or another chat's goal, is taken. */
+  const sameGoal = (existing: GoalRow): Promise<GoalRow> => {
+    const own = here && actor.kind === 'session' ? isBoundGoal(existing) && existing.ownerSessionId === actor.sessionId : !isBoundGoal(existing);
+    if (existing.createdByUserId !== actor.userId || !own) throw new GoalError(409, 'goal_conflict', 'This goal id is taken.');
     return finishGoalSetup(project, existing);
-  }
+  };
+  const existing = await getGoal(project.projectId, input.goal_id);
+  if (existing) return sameGoal(existing);
   if (input.criteria?.length) {
     const err = criteriaTextsValid(input.criteria);
     if (err) invalid(err);
@@ -268,10 +272,11 @@ export async function createGoal(
         setup: here ? { bound: true, session: true, prompt: true } : {},
       },
       ev(actor, 'created', here ? `Goal created in its chat: ${title}` : `Goal created: ${title}`),
+      here ? ownerId : undefined,
     );
     if (row) return finishGoalSetup(project, row);
     const raced = await getGoal(project.projectId, input.goal_id);
-    if (raced) return finishGoalSetup(project, raced);
+    if (raced) return sameGoal(raced);
     // Another goal took the folder between the pick and the insert: pick again.
   }
   return invalid('Could not reserve a folder for the goal. Try again.');

@@ -44,7 +44,7 @@ import type { AppEnv } from '../../types';
 import { assertProjectCapability, loadProjectForUser } from '../lib/access';
 import { resolveAndAuthorizeAgent } from '../lib/agent-access';
 import { projectsApp } from '../lib/app';
-import { NO_FILES_AGENTS, isGoalManager, goalAgentCandidates, type GoalActor } from '../goals/rules';
+import { NO_FILES_AGENTS, isBoundGoal, isGoalManager, goalAgentCandidates, type GoalActor } from '../goals/rules';
 import { serializeGoal, serializeGoalError, serializeGoalEvent } from '../goals/serialize';
 import * as goals from '../goals/service';
 import { GoalError, getGoal, listGoalEvents, listGoals, type GoalRow } from '../goals/store';
@@ -119,6 +119,8 @@ async function readableGoal(c: GoalContextC, scope: Scope): Promise<GoalRow | Re
   if (!goal || !(await mayRead(goal, scope.actor, folderReaderFor(scope.loaded.userId, scope.loaded.row.accountId)))) {
     return c.json({ error: 'goal_not_found' as const, message: 'Goal not found.' }, 404);
   }
+  // Flag off, a session reaches only the goal its chat owns (goal mode): a page goal's sessions stay gated.
+  if (!scope.flagOn && !isBoundGoal(goal)) return requireFeatureFlag(c, scope.loaded.row.metadata, 'goals')!;
   return goal;
 }
 
@@ -206,6 +208,7 @@ export function registerGoalRoutes(): void {
       for (const row of rows) {
         if (ownerFilter && row.ownerSessionId !== ownerFilter) continue;
         if (verifierFilter && row.verifierSessionId !== verifierFilter) continue;
+        if (!scope.flagOn && !isBoundGoal(row)) continue;
         if (await mayRead(row, scope.actor, reader)) visible.push(row);
       }
       return c.json({ goals: visible.map((row) => serializeGoal(row, scope.actor)) }, 200);

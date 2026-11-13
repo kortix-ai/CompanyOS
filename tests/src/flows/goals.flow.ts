@@ -445,12 +445,15 @@ flow(
     domain: 'goals',
     requires: ['database'],
     timeoutMs: 240_000,
-    routes: [`POST ${R.create}`, `GET ${R.read}`, `POST ${R.handover}`, `POST ${R.stop}`, 'GET /v1/projects/:projectId/sessions/:sessionId/reminders', 'PATCH /v1/projects/:projectId/features'],
+    routes: [`POST ${R.create}`, `GET ${R.list}`, `GET ${R.read}`, `POST ${R.progress}`, `POST ${R.handover}`, `POST ${R.stop}`, 'GET /v1/projects/:projectId/sessions/:sessionId/reminders', 'PATCH /v1/projects/:projectId/features'],
   },
   async (ctx) => {
     const { project, world, owner } = await openWorld(ctx);
     const params = { projectId: project.id };
     try {
+      // A page goal made while the flag is on: its owner session must stay gated once the flag is off.
+      const page = await createGoal(owner, project.id);
+      const pageOwner = await ownerCredential(ctx, world, page.owner_session_id!);
       // Goal mode needs no `goals` flag: the chat binds its own goal.
       await world.setFeature('goals', false);
       const chatId = randomUUID();
@@ -460,6 +463,14 @@ flow(
       await ctx.step('flag off: a person cannot create a page goal → 403 feature_disabled', async () => {
         const r = await owner.post(R.create, { goal_id: randomUUID(), brief: 'Synthetic report', criteria: ['Published'], agent: 'kortix' }, { params, timeoutMs: 60_000 });
         if (r.statusCode !== 403 || !r.text().includes('feature_disabled')) throw new Error(`${r.statusCode} ${r.text()}`);
+      });
+
+      await ctx.step("flag off: a page goal's own owner session is gated too: its read and its progress → 403 feature_disabled, its list is empty", async () => {
+        const goalParams = { ...params, goalId: page.goal_id };
+        expectError(await pageOwner.get(R.read, { params: goalParams }), 403, 'feature_disabled');
+        expectError(await pageOwner.post(R.progress, { revision: page.revision, summary: 'still working' }, { params: goalParams }), 403, 'feature_disabled');
+        const listed = (await pageOwner.get(R.list, { params })).status(200).json<{ goals: Goal[] }>().goals;
+        if (listed.length) throw new Error(JSON.stringify(listed));
       });
 
       await ctx.step('the chat creates a goal with `here` → 201 active, the chat is the owner, no other session; the chat reads it back', async () => {

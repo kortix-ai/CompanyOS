@@ -99,6 +99,15 @@ describe('openWait', () => {
     expect(await openWait([...earlier, user('thanks'), reply('You are welcome.')], noWakeUp)).toBeNull()
   })
 
+  test('a read is not an outward action, whatever noun it reads', () => {
+    for (const action of ['GMAIL_FETCH_MESSAGE_BY_THREAD_ID', 'GMAIL_LIST_DRAFTS', 'STRIPE_LIST_PAYMENT_INTENTS', 'GITHUB_LIST_PULL_REQUESTS', 'SLACK_SEARCH_MESSAGES', 'get_invoice', 'find_transfer']) {
+      expect(outwardActions([bash(`kortix connectors call app ${action} '{}'`)])).toEqual([])
+    }
+    for (const action of ['GMAIL_SEND_EMAIL', 'GMAIL_REPLY_TO_THREAD', 'STRIPE_CREATE_PAYMENT_INTENT', 'SLACK_SENDS_A_MESSAGE_TO_A_SLACK_CHANNEL']) {
+      expect(outwardActions([bash(`kortix connectors call app ${action} '{}'`)])).toEqual([`app.${action}`])
+    }
+  })
+
   test('outwardActions dedupes and keeps order', () => {
     expect(outwardActions([bash('kortix connectors call mail send_email {} && kortix connectors call mail send_email {}')])).toEqual(['mail.send_email'])
   })
@@ -138,5 +147,12 @@ describe('followThrough extension', () => {
 
   test('leaves a turn it does not apply to alone', async () => {
     expect(await load(false).settle(invoiceRun)).toBeUndefined()
+  })
+
+  test("keeps the entries an earlier settle hook added (pi replaces the list with each hook's result)", async () => {
+    const { handlers } = load()
+    const earlier = { type: 'custom_message', customType: 'kortix-goal', content: '[goal] …', display: false }
+    const result = (await handlers.get('agent_before_settle')!({ type: 'agent_before_settle', outcome: 'completed', continue: true, entries: [earlier], context: { contextMessages: invoiceRun, canContinue: false } })) as { entries: { customType: string }[] }
+    expect(result.entries.map((entry) => entry.customType)).toEqual(['kortix-goal', 'kortix-follow-through'])
   })
 })

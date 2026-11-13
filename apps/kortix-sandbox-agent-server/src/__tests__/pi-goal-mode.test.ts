@@ -38,6 +38,13 @@ describe('goalSettle', () => {
     }
   })
 
+  test('a recording command that failed recorded nothing', () => {
+    const call = { role: 'assistant', content: [{ type: 'toolCall', id: 'call-1', name: 'bash', arguments: { command: 'kortix goals progress --summary "emailed"' } }] }
+    const failed = { role: 'toolResult', toolCallId: 'call-1', isError: true, content: [{ type: 'text', text: 'goal_conflict' }] }
+    expect(goalSettle(goal(), [...run, call, failed], 0, [])).toMatchObject({ continue: true })
+    expect(goalSettle(goal(), [...run, call, { ...failed, isError: false }], 0, [])).toEqual({ continue: false })
+  })
+
   test('creating the goal is not recording: the creating turn starts the work', () => {
     expect(goalSettle(goal(), [...run, bash('kortix goals new "Invoice paid" --criterion "sent" --here')], 0, [])).toMatchObject({ continue: true })
   })
@@ -69,6 +76,10 @@ describe('goalSection', () => {
 
   test('says how the person stops it, and that the chat never stops it by itself', () => {
     expect(goalSection(goal())).toContain('kortix goals stop --reason')
+  })
+
+  test('says how a waiting goal goes back to active once the person answered in the chat', () => {
+    expect(goalSection(goal({ state: 'waiting_on_user' }))).toContain('kortix goals transition active')
   })
 })
 

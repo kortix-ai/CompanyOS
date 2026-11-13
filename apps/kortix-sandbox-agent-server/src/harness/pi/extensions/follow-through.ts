@@ -49,6 +49,8 @@ const HAS_WHEN = new RegExp(String.raw`\b${WHEN}\b|⏳`, 'i')
 const CONNECTOR_CALL = /\bkortix\s+connectors\s+call\s+([\w.-]+)\s+([\w.-]+)/g
 /** An action that hands something to someone else, whose answer comes later. */
 const OUTWARD = /(?:^|[_.-])(?:send|reply|forward|draft|post|message|mail|invite|transfer|pay|payment|fund|order|book|submit|request|quote|invoice)/i
+/** A read: `GMAIL_LIST_DRAFTS`, `get_invoice`. Its noun can be an outward word, but nothing was handed to anyone. */
+const READ = /(?:^|[_.-])(?:get|list|fetch|search|find|read|count)(?:[_.-]|$)/i
 /** The tools and commands that set a wake-up. */
 const WAKE_ACTIONS = new Set(['follow_up', 'wake_on', 'create', 'automate'])
 /** The tools whose work reports back by itself: a promise to report it needs no wake-up. */
@@ -73,9 +75,14 @@ function callText(block: Block): string {
   return typeof args.command === 'string' ? args.command : JSON.stringify(args)
 }
 
+/** The tool calls of the run whose result is an error: such a call set or recorded nothing. */
+export function failedCalls(run: readonly Message[]): Set<string | undefined> {
+  return new Set(run.filter((message) => message.role === 'toolResult' && message.isError).map((message) => message.toolCallId))
+}
+
 /** The run set a wake-up itself (the API is asked only when it did not). A call whose result is an error set nothing. */
 export function setWakeUp(run: readonly Message[]): boolean {
-  const failed = new Set(run.filter((message) => message.role === 'toolResult' && message.isError).map((message) => message.toolCallId))
+  const failed = failedCalls(run)
   return run.some((message) =>
     blocks(message).some((block) => {
       if (block.type !== 'toolCall' || (block.id && failed.has(block.id))) return false
@@ -96,7 +103,7 @@ export function outwardActions(run: readonly Message[]): string[] {
   for (const message of run) {
     for (const block of blocks(message)) {
       if (block.type !== 'toolCall') continue
-      for (const [, slug, action] of callText(block).matchAll(CONNECTOR_CALL)) if (OUTWARD.test(action!)) found.add(`${slug}.${action}`)
+      for (const [, slug, action] of callText(block).matchAll(CONNECTOR_CALL)) if (!READ.test(action!) && OUTWARD.test(action!)) found.add(`${slug}.${action}`)
     }
   }
   return [...found]
@@ -188,7 +195,8 @@ export function followThrough(options: FollowThroughOptions): InlineExtension {
         nudged = true
         options.onNudge?.(wait)
         // The model reads the note; the session log leaves it out (`isHiddenNote`), so the person never sees it.
-        return { entries: [{ type: 'custom_message' as const, customType: FOLLOW_THROUGH_NOTE_TYPE, content: followThroughNote(wait), display: false }], continue: true }
+        // pi replaces the entries with each hook's result: keep what an earlier hook (goal mode) added.
+        return { entries: [...event.entries, { type: 'custom_message' as const, customType: FOLLOW_THROUGH_NOTE_TYPE, content: followThroughNote(wait), display: false }], continue: true }
       })
     },
   }

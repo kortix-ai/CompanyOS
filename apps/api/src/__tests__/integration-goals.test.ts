@@ -295,6 +295,34 @@ describe('goal mode: a goal bound to its chat', () => {
     expect((await db.select().from(projectGoals).where(eq(projectGoals.ownerSessionId, sessionId))).length).toBe(1);
   });
 
+  test("a create that names another chat's goal, or a page goal, is refused: 409, nothing returned", async () => {
+    const owner = await chat();
+    const bound = await goals.createGoal(ctx(asSession(owner)), boundInput());
+    const page = await activeGoal();
+    for (const goalId of [bound.goalId, page.goalId]) {
+      expect(await refusal(goals.createGoal(ctx(asSession(await chat())), { ...boundInput(), goal_id: goalId }))).toMatchObject({ status: 409, code: 'goal_conflict' });
+    }
+  });
+
+  test('two creates from one chat at the same moment leave one open goal', async () => {
+    const sessionId = await chat();
+    const made = await Promise.allSettled([goals.createGoal(ctx(asSession(sessionId)), boundInput()), goals.createGoal(ctx(asSession(sessionId)), boundInput())]);
+    expect(made.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const open = (await db.select().from(projectGoals).where(eq(projectGoals.ownerSessionId, sessionId))).filter((row) => row.state === 'active');
+    expect(open).toHaveLength(1);
+  });
+
+  test("the chat's box failed: no successor session takes the goal; it blocks as owner_lost and stays the chat's", async () => {
+    const sessionId = await chat();
+    const goal = await goals.createGoal(ctx(asSession(sessionId)), boundInput());
+    const verdict = await goalSuccessorAllowed(PROJECT, goal.heartbeatReminderId!);
+    expect(verdict.allowed).toBe(false);
+    expect((await getGoal(PROJECT, goal.goalId))!).toMatchObject({ ownerSessionId: sessionId, blockedReason: 'owner_lost' });
+    // The chat still stops it for its person.
+    const now = (await getGoal(PROJECT, goal.goalId))!;
+    expect((await goals.stopGoal(ctx(asSession(sessionId)), goal.goalId, { revision: now.revision, reason: 'Ana said: drop it' })).state).toBe('stopped');
+  });
+
   test("a page goal's owner session still cannot stop it", async () => {
     const goal = await activeGoal();
     expect(await refusal(goals.stopGoal(ctx(asSession(goal.ownerSessionId!)), goal.goalId, { revision: goal.revision, reason: 'giving up' }))).toMatchObject({ status: 403 });

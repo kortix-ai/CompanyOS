@@ -2,7 +2,6 @@
  * Project triggers — manage-gated CRUD. Maps to spec §17 (TRG-1..5).
  * Trigger create commits the project manifest (a real git commit).
  */
-import { createHmac } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,7 +12,7 @@ import { waitFor } from '../core/poll';
 import { CliSandbox, throwIfCliInfraFailure } from '../fixtures/cli';
 import { createDatabaseSession } from '../fixtures/database-project';
 import { enableEnterpriseDemo } from '../fixtures/enterprise-access';
-import { withDb } from '../fixtures/chat';
+import { signedWebhookHeaders, webhookSignature, withDb } from '../fixtures/chat';
 
 type TriggerRow = { slug: string; model: string | null };
 
@@ -1530,12 +1529,7 @@ flow(
             ctx.client.as(ctx.P.ANON).post('/v1/webhooks/projects/:projectId/:slug', rawBody, {
               params: { projectId: p.id, slug: 'bp-hook' },
               raw: true,
-              headers: {
-                'content-type': 'application/json',
-                'x-kortix-timestamp': String(ts),
-                'x-kortix-signature': `sha256=${createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest('hex')}`,
-                'x-kortix-delivery-id': deliveryId,
-              },
+              headers: { ...signedWebhookHeaders(secret, rawBody, ts), 'x-kortix-delivery-id': deliveryId },
             });
           const first = await deliver();
           first.status(202).body().has('$.status', 'queued').has('$.reason', 'project provisioning backpressure').has('$.deduped', false);
@@ -1671,11 +1665,10 @@ flow(
     const params = { projectId: p.id };
     const secret = `ke2e-hook-${crypto.randomUUID()}`;
     const rawBody = JSON.stringify({ action: 'opened' });
-    const sign = (payload: string, key = secret) => `sha256=${createHmac('sha256', key).update(payload).digest('hex')}`;
     // KRTX-4098: signature auth requires X-Kortix-Timestamp and signs `<ts>.<body>`.
     const signed = (ts = Math.floor(Date.now() / 1000)) => ({
       'x-kortix-timestamp': String(ts),
-      'x-kortix-signature': sign(`${ts}.${rawBody}`),
+      'x-kortix-signature': webhookSignature(secret, `${ts}.${rawBody}`),
     });
     // The URL Kortix shows names the workspace; the project path answers the same, permanently.
     const deliverAt = (route: '/v1/webhooks/workspaces/:projectId/:slug' | '/v1/webhooks/projects/:projectId/:slug') =>
@@ -1742,13 +1735,13 @@ flow(
       await rejected({});
       await rejected(signed(), 'no-such-hook');
       const ts = String(Math.floor(Date.now() / 1000));
-      await rejected({ 'x-kortix-timestamp': ts, 'x-kortix-signature': sign(`${ts}.${rawBody}`, 'wrong-secret') });
+      await rejected({ 'x-kortix-timestamp': ts, 'x-kortix-signature': webhookSignature('wrong-secret', `${ts}.${rawBody}`) });
     });
 
     await ctx.step('a valid X-Kortix-Signature or X-Hub-Signature-256 with its timestamp authenticates → 200 skipped (paused)', async () => {
       const ts = Math.floor(Date.now() / 1000);
       await accepted(signed(ts));
-      await accepted({ 'x-kortix-timestamp': String(ts), 'x-hub-signature-256': sign(`${ts}.${rawBody}`) });
+      await accepted({ 'x-kortix-timestamp': String(ts), 'x-hub-signature-256': webhookSignature(secret, `${ts}.${rawBody}`) });
     });
 
     await ctx.step('the older /v1/webhooks/projects path: a valid signature → the same 200 skipped, a wrong one → the same 401', async () => {
@@ -1758,19 +1751,18 @@ flow(
 
     await ctx.step('X-Kortix-Timestamp signs <timestamp>.<body>: 1 h stale or 1 h ahead → 401, current → 200', async () => {
       const now = Math.floor(Date.now() / 1000);
-      const stamped = (ts: number) => ({ 'x-kortix-timestamp': String(ts), 'x-kortix-signature': sign(`${ts}.${rawBody}`) });
-      await rejected(stamped(now - 3600));
-      await rejected(stamped(now + 3600));
-      await accepted(stamped(now));
+      await rejected(signed(now - 3600));
+      await rejected(signed(now + 3600));
+      await accepted(signed(now));
     });
 
     await ctx.step('KRTX-4098: a captured signed delivery cannot replay — no timestamp → 401, and the old body-only signature → 401', async () => {
       // Without a timestamp the sender's old body-only HMAC is refused outright,
       // so a captured delivery must be re-stamped inside the window to run again.
-      await rejected({ 'x-kortix-signature': sign(rawBody) });
-      await rejected({ 'x-kortix-signature': sign(rawBody, 'wrong-secret') });
+      await rejected({ 'x-kortix-signature': webhookSignature(secret, rawBody) });
+      await rejected({ 'x-kortix-signature': webhookSignature('wrong-secret', rawBody) });
       const ts = Math.floor(Date.now() / 1000);
-      await rejected({ 'x-kortix-timestamp': String(ts), 'x-kortix-signature': sign(rawBody) });
+      await rejected({ 'x-kortix-timestamp': String(ts), 'x-kortix-signature': webhookSignature(secret, rawBody) });
       await accepted(signed(ts));
     });
 
@@ -2358,7 +2350,7 @@ flow(
     const secret = `ke2e-hook-${crypto.randomUUID()}`;
     const rawBody = JSON.stringify({ action: 'opened', api_key: 'synthetic-not-a-key' });
     const timestamp = String(Math.floor(Date.now() / 1000));
-    const signature = `sha256=${createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex')}`;
+    const signature = webhookSignature(secret, `${timestamp}.${rawBody}`);
     const addSecret = async () =>
       (await owner.post('/v1/workspaces/:projectId/secrets', { name: 'HOOK_SECRET', value: secret, strategy: 'broker', consumer: 'connector' }, { params })).status(200);
     const runs = async (slug = 'hook') =>
@@ -2459,7 +2451,7 @@ flow(
     await ctx.step('three refused deliveries in one second (bad signature, no timestamp, a timestamp 1 h old) → 401 each, and each is a rejected run with its own reason', async () => {
       (await owner.post('/v1/workspaces/:projectId/triggers', { name: 'hook2', slug: 'hook2', type: 'webhook', secret_env: 'HOOK_SECRET', prompt_template: 'x' }, { params })).status(201);
       const now = Math.floor(Date.now() / 1000);
-      const sign = (ts: number) => `sha256=${createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest('hex')}`;
+      const sign = (ts: number) => webhookSignature(secret, `${ts}.${rawBody}`);
       const deliveries: Record<string, string>[] = [
         { 'x-kortix-timestamp': String(now), 'x-kortix-signature': `sha256=${'0'.repeat(64)}` },
         { 'x-kortix-signature': sign(now) },
@@ -2766,16 +2758,10 @@ flow(
         ),
       );
       const rawBody = JSON.stringify({ action: 'opened' });
-      const ts = Math.floor(Date.now() / 1000);
       const r = await ctx.client.as(ctx.P.ANON).post('/v1/webhooks/projects/:projectId/:slug', rawBody, {
         params: { ...params, slug: 'capped' },
         raw: true,
-        headers: {
-          'content-type': 'application/json',
-          'x-kortix-timestamp': String(ts),
-          'x-kortix-signature': `sha256=${createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest('hex')}`,
-          'x-kortix-delivery-id': crypto.randomUUID(),
-        },
+        headers: signedWebhookHeaders(secret, rawBody),
       });
       r.status(200).body().has('$.status', 'skipped').has('$.reason', throttled);
       const runs = (await owner.get('/v1/workspaces/:projectId/triggers/:slug/runs', { params: { ...params, slug: 'capped' } })).status(200).json<RunList>().runs;
@@ -2857,16 +2843,10 @@ flow(
     type Status = { paused: boolean; paused_at: string | null; paused_by: string | null; can_change: boolean };
     const deliver = async () => {
       const rawBody = JSON.stringify({ action: 'opened' });
-      const ts = Math.floor(Date.now() / 1000);
       return ctx.client.as(ctx.P.ANON).post('/v1/webhooks/projects/:projectId/:slug', rawBody, {
         params: { ...params, slug: 'hook' },
         raw: true,
-        headers: {
-          'content-type': 'application/json',
-          'x-kortix-timestamp': String(ts),
-          'x-kortix-signature': `sha256=${createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest('hex')}`,
-          'x-kortix-delivery-id': crypto.randomUUID(),
-        },
+        headers: signedWebhookHeaders(secret, rawBody),
       });
     };
     const listingPaused = async () =>
@@ -2956,16 +2936,10 @@ flow(
     };
     const deliver = async (body: Record<string, unknown>) => {
       const rawBody = JSON.stringify(body);
-      const ts = Math.floor(Date.now() / 1000);
       return ctx.client.as(ctx.P.ANON).post('/v1/webhooks/projects/:projectId/:slug', rawBody, {
         params: slugParams,
         raw: true,
-        headers: {
-          'content-type': 'application/json',
-          'x-kortix-timestamp': String(ts),
-          'x-kortix-signature': `sha256=${createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest('hex')}`,
-          'x-kortix-delivery-id': crypto.randomUUID(),
-        },
+        headers: signedWebhookHeaders(secret, rawBody),
       });
     };
     const push = (ref: string, login: string) => ({ ref, sender: { login } });
@@ -3071,16 +3045,10 @@ flow(
     };
     const deliver = async () => {
       const rawBody = JSON.stringify({ action: 'opened' });
-      const ts = Math.floor(Date.now() / 1000);
       return ctx.client.as(ctx.P.ANON).post('/v1/webhooks/projects/:projectId/:slug', rawBody, {
         params: slugParams,
         raw: true,
-        headers: {
-          'content-type': 'application/json',
-          'x-kortix-timestamp': String(ts),
-          'x-kortix-signature': `sha256=${createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest('hex')}`,
-          'x-kortix-delivery-id': crypto.randomUUID(),
-        },
+        headers: signedWebhookHeaders(secret, rawBody),
       });
     };
 
@@ -3178,16 +3146,10 @@ flow(
     };
     const deliver = async () => {
       const rawBody = JSON.stringify({ action: 'opened' });
-      const ts = Math.floor(Date.now() / 1000);
       return ctx.client.as(ctx.P.ANON).post('/v1/webhooks/projects/:projectId/:slug', rawBody, {
         params: slugParams,
         raw: true,
-        headers: {
-          'content-type': 'application/json',
-          'x-kortix-timestamp': String(ts),
-          'x-kortix-signature': `sha256=${createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest('hex')}`,
-          'x-kortix-delivery-id': crypto.randomUUID(),
-        },
+        headers: signedWebhookHeaders(secret, rawBody),
       });
     };
 

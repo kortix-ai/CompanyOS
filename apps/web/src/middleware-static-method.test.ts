@@ -20,3 +20,9 @@ test('GET /llms.txt still reaches the route', async () => {
   const res = await middleware(new NextRequest('https://kortix.com/llms.txt'));
   expect(res.status).not.toBe(405);
 });
+
+test('POST /pricing answers 405 with Allow through the middleware', async () => {
+  const res = await middleware(new NextRequest('https://kortix.com/pricing', { method: 'POST' }));
+  expect(res.status).toBe(405);
+  expect(res.headers.get('allow')).toBe('GET, HEAD, OPTIONS');
+});

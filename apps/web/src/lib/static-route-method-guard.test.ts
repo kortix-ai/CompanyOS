@@ -7,6 +7,9 @@ test.each([
   ['PUT', '/llms-full.txt'],
   ['PATCH', '/robots.txt'],
   ['POST', '/sitemap.xml'],
+  ['POST', '/pricing'],
+  ['DELETE', '/docs/developers'],
+  ['PUT', '/apiary'],
 ])('%s %s answers 405 with Allow', (method, pathname) => {
   const res = staticRouteMethodNotAllowed(method, pathname, new Headers());
   expect(res?.status).toBe(405);
@@ -21,10 +24,12 @@ test.each([
   expect(staticRouteMethodNotAllowed(method, pathname, new Headers())).toBeNull();
 });
 
-test('a path outside the static set is left to the router', () => {
-  expect(staticRouteMethodNotAllowed('POST', '/auth', new Headers())).toBeNull();
-  expect(staticRouteMethodNotAllowed('POST', '/api/anything', new Headers())).toBeNull();
-});
+test.each(['/api/anything', '/api', '/v1/projects', '/scim/v2/Users', '/ingest/e', '/supabase/rest/v1/x', '/blog/post'])(
+  'POST %s is left to its handler or proxy',
+  (pathname) => {
+    expect(staticRouteMethodNotAllowed('POST', pathname, new Headers())).toBeNull();
+  },
+);
 
 test('a Server Action post is left to Next', () => {
   const headers = new Headers({ 'next-action': 'abc123' });

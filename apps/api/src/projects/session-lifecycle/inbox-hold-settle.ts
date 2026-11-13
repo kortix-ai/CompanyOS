@@ -66,13 +66,16 @@ import {
   reachedPlacement,
   steerUnreadOnStableRuntime,
   tipIsBusy,
+  tipReachesPast,
 } from './forwarded-placement';
 import { INBOX_HOLD_MS, inboxScope } from './inbox-rows';
 import { withNextDeliveryAttempt } from './store';
 import { onWireSql } from './delivery-state';
 import { sessionKeepsMessageIds } from './inbox-admission';
 
-export const TIP_LIMIT = 16;
+const TIP_LIMIT = 16;
+/** A whole-transcript read of a long session, for a steer below the tip window. */
+const FULL_LOG_TIMEOUT_MS = 10_000;
 /** How long a claimed delivery is given to land after the hold. A delivery is
  *  one proxied POST (~0.3–1.5 s); the drain's own retry budget is far longer,
  *  but a prompt that is still in flight after this is not going to land into
@@ -124,6 +127,8 @@ export interface HoldSettleDeps {
   countClaimed: (sessionId: string) => Promise<number>;
   listStopPaused: (sessionId: string) => Promise<StopPausedRow[]>;
   readTip: (sessionId: string) => Promise<PlacementTipMessage[] | null>;
+  /** The whole root transcript, for a message below the tip window. */
+  readFullLog: (sessionId: string) => Promise<PlacementTipMessage[] | null>;
   abort: (sessionId: string) => Promise<boolean>;
   removeMessage: (sessionId: string, messageId: string) => Promise<boolean>;
   /** Forwarded + stop-paused → plain queued + held (deliverable on release). */
@@ -166,6 +171,10 @@ export const liveHoldSettleDeps: HoldSettleDeps = {
   async readTip(sessionId) {
     const resolved = await resolveSessionRuntimeEndpoint(sessionId);
     return resolved ? readSessionMessageTip(resolved, { limit: TIP_LIMIT }) : null;
+  },
+  async readFullLog(sessionId) {
+    const resolved = await resolveSessionRuntimeEndpoint(sessionId);
+    return resolved ? readSessionMessageTip(resolved, { timeoutMs: FULL_LOG_TIMEOUT_MS }) : null;
   },
   // This abort is part of the Stop the user pressed, and it does not pass the
   // sandbox proxy that stamps `UserStop`. It also runs before the client's own
@@ -276,12 +285,29 @@ export async function settleInboxHoldAfterStop(
   // a steer the tip lacks is unread whatever later ids say (KRTX-4864: it was
   // closed as read and never sent).
   const stable = stopPaused.length > 0 && (await deps.keepsMessageIds(sessionId).catch(() => false));
+  let fullLog: PlacementTipMessage[] | null | undefined;
   for (const row of stopPaused) {
     const ids = row.wireIds;
     if (ids.length === 0) continue;
-    const reached = ids.some(
-      (id) => !(stable && steerUnreadOnStableRuntime(tip!, id, TIP_LIMIT)) && reachedPlacement(tip!, id),
-    );
+    // An id that is not on the box was never read by pi, whatever later ids say.
+    // A tip that does not reach back past an id cannot say whether it was read
+    // long ago: ask the whole transcript. When that read fails the row stays
+    // stop-paused, the duplicating-but-never-losing path.
+    let reached = false;
+    let undecided = false;
+    for (const id of ids) {
+      let log: PlacementTipMessage[] | null = tip;
+      if (stable && !tipReachesPast(tip, id, TIP_LIMIT)) {
+        fullLog ??= await deps.readFullLog(sessionId).catch(() => null);
+        log = fullLog;
+      }
+      if (!log) {
+        undecided = true;
+        continue;
+      }
+      if (!(stable && steerUnreadOnStableRuntime(log, id)) && reachedPlacement(tip, id)) reached = true;
+    }
+    if (!reached && undecided) continue;
     if (reached) {
       await deps.closeDelivered(row.commandId);
       out.closedAsInterrupted += 1;

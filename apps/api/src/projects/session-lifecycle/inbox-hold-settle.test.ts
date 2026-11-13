@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { WIRE_ID_TIME_SCALE, wireIdTime } from '../wire-message-id';
 import type { PlacementTipMessage } from './forwarded-placement';
-import { type HoldSettleDeps, TIP_LIMIT, settleInboxHoldAfterStop } from './inbox-hold-settle';
+import { type HoldSettleDeps, settleInboxHoldAfterStop } from './inbox-hold-settle';
 
 const id = (ms: number, tail: string) =>
   `msg_${((BigInt(ms) * WIRE_ID_TIME_SCALE + BigInt(1)) & BigInt(0xffffffffffff)).toString(16).padStart(12, '0')}${tail}`;
@@ -27,7 +27,7 @@ const tipOf = (messages: PlacementTipMessage[]): PlacementTipMessage[] =>
 
 const T = 1_800_000_000_000;
 
-function fakeDeps(over: Partial<HoldSettleDeps> & { claimed?: number[]; tips?: any[] }) {
+function fakeDeps(over: Partial<HoldSettleDeps> & { claimed?: number[]; tips?: any[]; fullLog?: PlacementTipMessage[] | null }) {
   let now = 0;
   const claimedSeq = [...(over.claimed ?? [0])];
   const tips = [...(over.tips ?? [[]])];
@@ -38,6 +38,7 @@ function fakeDeps(over: Partial<HoldSettleDeps> & { claimed?: number[]; tips?: a
     close: [],
     closeTurn: [],
     readTip: [],
+    readFullLog: [],
   };
   const deps: HoldSettleDeps = {
     countClaimed: async () => (claimedSeq.length > 1 ? claimedSeq.shift()! : claimedSeq[0]),
@@ -51,11 +52,12 @@ function fakeDeps(over: Partial<HoldSettleDeps> & { claimed?: number[]; tips?: a
     holdAsQueued: async (...a) => { calls.hold.push(a); },
     closeDelivered: async (...a) => { calls.close.push(a); },
     closeTurn: async (...a) => { calls.closeTurn.push(a); },
+    readFullLog: async (...a) => { calls.readFullLog.push(a); return over.fullLog ?? null; },
     keepsMessageIds: async () => false,
     sleep: async (ms) => { now += ms; },
     now: () => now,
     ...over,
-  };
+  } as HoldSettleDeps;
   return { deps, calls };
 }
 
@@ -169,25 +171,49 @@ describe('settleInboxHoldAfterStop', () => {
     expect(calls.close).toEqual([['c3']]);
   });
 
-  test('a full tip window that no longer reaches back to the steer proves nothing about it', async () => {
-    // The steer may have been read and published long ago, below the window:
-    // the id heuristic stays in charge and sees the later step that read it.
+  describe('a steer below a full tip window (the tip cannot say whether it was read)', () => {
     const old = id(T - 60_000, 'OLDUSEROLDUSER');
-    const messages: PlacementTipMessage[] = [];
-    for (let i = 0; i < TIP_LIMIT / 2; i += 1) {
-      const user = id(T + i * 1_000, `USER${String(i).padStart(2, '0')}USERUSER`);
-      messages.push({ id: user, role: 'user' });
-      messages.push({ id: id(T + i * 1_000 + 500, `ASST${String(i).padStart(2, '0')}ASSTASST`), role: 'assistant', parentID: user, completed: T + i * 1_000 + 600 });
-    }
-    expect(messages).toHaveLength(TIP_LIMIT);
-    const { deps, calls } = fakeDeps({
-      tips: [tipOf(messages)],
-      keepsMessageIds: async () => true,
-      listStopPaused: async () => [{ commandId: 'c0', wireIds: [old] }],
+    const fullWindow = (): PlacementTipMessage[] => {
+      const messages: PlacementTipMessage[] = [];
+      for (let i = 0; i < 8; i += 1) {
+        const user = id(T + i * 1_000, `USER${String(i).padStart(2, '0')}USERUSER`);
+        messages.push({ id: user, role: 'user' });
+        messages.push({ id: id(T + i * 1_000 + 500, `ASST${String(i).padStart(2, '0')}ASSTASST`), role: 'assistant', parentID: user, completed: T + i * 1_000 + 600 });
+      }
+      return messages;
+    };
+    const run = (fullLog: PlacementTipMessage[] | null) => {
+      const { deps, calls } = fakeDeps({
+        tips: [tipOf(fullWindow())],
+        fullLog,
+        keepsMessageIds: async () => true,
+        listStopPaused: async () => [{ commandId: 'c0', wireIds: [old] }],
+      });
+      return settleInboxHoldAfterStop('s', deps).then((out) => ({ out, calls }));
+    };
+
+    test('absent from the whole transcript: the steer was dropped unread, so it is held back', async () => {
+      const { out, calls } = await run(tipOf([{ id: old.replace('OLDUSEROLDUSER', 'OTHEROTHEROTHE'), role: 'user' }, ...fullWindow()]));
+      expect(calls.readFullLog).toHaveLength(1);
+      expect(out.closedAsInterrupted).toBe(0);
+      expect(out.heldBack).toBe(1);
+      expect(calls.hold).toEqual([['c0']]);
     });
-    const out = await settleInboxHoldAfterStop('s', deps);
-    expect(out.closedAsInterrupted).toBe(1);
-    expect(calls.hold).toHaveLength(0);
+
+    test('present in the whole transcript: a step read it, so it closes as delivered', async () => {
+      const read = [{ id: old, role: 'user' as const }, { id: id(T - 59_000, 'OLDASSTOLDASST'), role: 'assistant' as const, parentID: old, completed: T - 58_000 }];
+      const { out, calls } = await run(tipOf([...read, ...fullWindow()]));
+      expect(out.closedAsInterrupted).toBe(1);
+      expect(calls.hold).toHaveLength(0);
+    });
+
+    test('whole transcript unreadable: the row stays stop-paused, never closed or lost', async () => {
+      const { out, calls } = await run(null);
+      expect(out.closedAsInterrupted).toBe(0);
+      expect(out.heldBack).toBe(0);
+      expect(calls.close).toHaveLength(0);
+      expect(calls.hold).toHaveLength(0);
+    });
   });
 
   test('a box still mid-step after the hold (an escaped delivery restarted it) is aborted again', async () => {

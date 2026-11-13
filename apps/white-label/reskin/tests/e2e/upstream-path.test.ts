@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { buildUpstreamPath } from '../../src/server/upstream-path';
+import { buildUpstreamPath } from '@kortix/white-label-shared/upstream-path';
 
 const OWN = '00000000-0000-4000-8000-000000000001';
 const VICTIM = '00000000-0000-4000-8000-000000000002';

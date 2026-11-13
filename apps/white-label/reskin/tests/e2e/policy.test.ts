@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { evaluatePolicy } from '../../src/server/policy';
-import { buildUpstreamPath } from '../../src/server/upstream-path';
+import { buildUpstreamPath } from '@kortix/white-label-shared/upstream-path';
 import {
   APP_SETUP_TIMEOUT_MS,
   TEST_DATA_DIR,

@@ -2,13 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import {
   AUTHORIZATION_HEADER,
   CALL_SNIPPET_IDS,
-  SECRET_VALUE_PLACEHOLDER,
   type SnippetContext,
   callSnippet,
   callSnippets,
-  isCopyableHttp,
-  renderHttp,
 } from '../../src/lib/call-snippets';
+import { SECRET_VALUE_PLACEHOLDER, isCopyableHttp, renderHttp } from '@kortix/white-label-shared/call-snippets';
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
 const SESSION_ID = '00000000-0000-4000-8000-000000000001';
@@ -23,7 +21,7 @@ function rendered(id: (typeof CALL_SNIPPET_IDS)[number], ctx: SnippetContext = {
     snippet.title,
     snippet.summary,
     snippet.sdk,
-    renderHttp(snippet.http),
+    renderHttp(snippet.http, AUTHORIZATION_HEADER),
     ...snippet.notes,
   ].join('\n');
 }
@@ -69,7 +67,7 @@ describe('call snippets never render credentials', () => {
   test('every HTTP request carries the placeholder authorization line', () => {
     for (const snippet of callSnippets({ projectId: PROJECT_ID })) {
       if (!isCopyableHttp(snippet.http)) continue;
-      expect(renderHttp(snippet.http)).toContain(AUTHORIZATION_HEADER);
+      expect(renderHttp(snippet.http, AUTHORIZATION_HEADER)).toContain(AUTHORIZATION_HEADER);
     }
   });
 });
@@ -90,7 +88,7 @@ describe('the other calls', () => {
       projectId: PROJECT_ID,
       executionId: 'exec_42',
     });
-    const rendered = renderHttp(snippet.http);
+    const rendered = renderHttp(snippet.http, AUTHORIZATION_HEADER);
     expect(rendered).toContain(`POST /v1/projects/${PROJECT_ID}/approvals/exec_42`);
     expect(rendered).toContain('"decision": "approve"');
     // The documented call must not teach a scope that no longer exists — the
@@ -104,10 +102,10 @@ describe('every snippet is complete', () => {
   test('each one has both forms and at least one note', () => {
     for (const snippet of callSnippets()) {
       expect(snippet.sdk.trim().length).toBeGreaterThan(0);
-      expect(renderHttp(snippet.http).trim().length).toBeGreaterThan(0);
+      expect(renderHttp(snippet.http, AUTHORIZATION_HEADER).trim().length).toBeGreaterThan(0);
       expect(snippet.notes.length).toBeGreaterThan(0);
       // A blank placeholder would render as `/v1/projects//sessions`.
-      expect(renderHttp(snippet.http)).not.toContain('//sessions');
+      expect(renderHttp(snippet.http, AUTHORIZATION_HEADER)).not.toContain('//sessions');
     }
   });
 

@@ -47,7 +47,8 @@ import {
   redactsIdentity,
   runtimeSandbox,
 } from '@/server/proxy-policy';
-import { buildUpstreamPath, upstreamBase } from '@/server/upstream-path';
+import { buildUpstreamPath } from '@kortix/white-label-shared/upstream-path';
+import { upstreamBase } from '@/server/upstream-path';
 import { api } from '@convex/_generated/api';
 import type { Id } from '@convex/_generated/dataModel';
 import { tagSessionCreate, tagSessionPatch } from '@convex/tags';

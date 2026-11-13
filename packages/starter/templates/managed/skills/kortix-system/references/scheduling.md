@@ -183,26 +183,6 @@ and prompts its agent as a teammate would, or calls one of the workspace's Apps
 wakes the session that created it: a runtime trigger, stored in the database.
 `kortix triggers ls` lists both.
 
-## Prompt templates
-
-`run.prompt` is a template over the fire's payload. `{{ path.to.value }}`
-inserts one value (an object or list renders as JSON); `{{ payload }}`
-inserts the whole payload as JSON. The roots:
-
-| Source | Roots |
-| --- | --- |
-| every fire | `trigger` (`slug`, `type`), `fired_at` |
-| webhook | `body` (the parsed JSON body), `headers` (`content_type`, `user_agent`, `forwarded_for`) |
-| event, App event | `event` (`event.data.*`) |
-| change request | `change_request` (`number`, `title`, `base_ref`, …) |
-| manual fire (`kortix triggers fire`) | `source`, `actor`, `message`; `--payload` deep-merges over it |
-
-`run.payload` (a table) adds fixed values to every fire's payload, under the
-fire's own keys: `run: { agent: ops, payload: { region: eu }, prompt: "Check {{ region }}" }`.
-
-`kortix triggers fire <slug> --dry-run --payload '<json>'` prints the
-rendered prompt without starting anything.
-
 ## React to an outside system: the first that fits
 
 1. **A webhook.** The system can call a URL (Stripe, a CI job, your own
@@ -278,15 +258,13 @@ day-of-week`. A 5-field expression works too (seconds = 0). Day-of-week
 
 `run: { session: … }` decides what each fire runs in:
 
-- `fresh` (default): a new session with no history. Right for digests,
-  monitors and posts: judge "what is new" from the data, not from memory.
+- `fresh` (default): a new session with no memory of this chat, so the
+  prompt holds all it needs. Right for digests, monitors and posts: judge
+  "what is new" from the data.
 - `reuse`: the same long-lived session every fire. Use it only when a run
   needs what earlier runs saw.
 - `keyed` with `session_key` (`"{{ body.thread_id }}"`): one session per key.
 - `pinned` with `session_id`: one named session.
-
-A `fresh` run has no memory of this chat. Put everything it needs in the
-prompt.
 
 ## Notify, or stay silent
 
@@ -324,9 +302,7 @@ whole conversation and workspace.
   starts a new session instead). `kortix triggers rm <id>` removes it.
 - Every merge into a branch, for the whole workspace, is a `kortix.yaml`
   trigger: `type: change_request`, `filter: { base: main }` (omit the filter
-  for any branch), `agent`, `prompt`. The prompt reads
-  `{{ change_request.number }}`, `{{ change_request.title }}` and
-  `{{ change_request.base_ref }}`.
+  for any branch), `agent`, `prompt` (it reads `{{ change_request.* }}`).
 - A loop lives in the database, not in `kortix.yaml`: no CR. It never
   starts a new session; it pauses itself when its session is deleted.
 - From a Slack or Teams thread, the fire is not a channel turn: post the

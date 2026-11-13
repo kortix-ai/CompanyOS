@@ -366,6 +366,7 @@ export function registerSandboxTemplatesRoutes(): void {
         // The push this follows went to the upstream, not through Kortix: fetch it.
         await refreshMirror(project, true);
       } catch (err) {
+        rethrowDatabaseError(err);
         const message = err instanceof Error ? err.message : String(err);
         return c.json({ error: `Could not read the repository: ${message}` }, 502);
       }

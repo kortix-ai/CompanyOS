@@ -2105,7 +2105,7 @@
       "stepTitle": "Modell verbinden",
       "stepBody": "Agenten in {workspace} brauchen ein Modell, um zu antworten. Verbinde dein ChatGPT- oder Claude-Abo oder füge einen Anbieter-Schlüssel hinzu.",
       "stepBodyUpgrade": "Agenten in {workspace} brauchen ein Modell, um zu antworten. Verbinde dein ChatGPT- oder Claude-Abo, füge einen Anbieter-Schlüssel hinzu oder upgrade auf den Credits-Plan für Kortix-Modelle.",
-      "stepBodyMember": "Agenten in {workspace} brauchen ein Modell, um zu antworten. Melde dich mit deinem Claude-Abo an oder bitte jemanden, der diesen Workspace verwaltet, ein Modell zu verbinden.",
+      "stepBodyMember": "Agenten in {workspace} brauchen ein Modell, um zu antworten. Verbinde dein eigenes ChatGPT- oder Claude-Abo oder deinen Anbieter-Schlüssel, oder bitte jemanden, der diesen Workspace verwaltet, ein Modell für alle zu verbinden.",
       "stepThisWorkspace": "diesem Workspace",
       "stepBack": "Zurück zu den Workspaces"
     },

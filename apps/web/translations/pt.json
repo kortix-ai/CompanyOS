@@ -2105,7 +2105,7 @@
       "stepTitle": "Conecte um modelo",
       "stepBody": "Os agentes de {workspace} precisam de um modelo para responder. Conecte seu plano do ChatGPT ou do Claude, ou adicione uma chave de provedor.",
       "stepBodyUpgrade": "Os agentes de {workspace} precisam de um modelo para responder. Conecte seu plano do ChatGPT ou do Claude, adicione uma chave de provedor ou faça upgrade para o plano Credits para usar os modelos da Kortix.",
-      "stepBodyMember": "Os agentes de {workspace} precisam de um modelo para responder. Entre com seu plano do Claude ou peça a alguém que gerencia este espaço de trabalho para conectar um modelo.",
+      "stepBodyMember": "Os agentes de {workspace} precisam de um modelo para responder. Conecte seu próprio plano do ChatGPT ou do Claude ou sua chave de provedor, ou peça a alguém que gerencia este espaço de trabalho para conectar um modelo para todos.",
       "stepThisWorkspace": "este espaço de trabalho",
       "stepBack": "Voltar aos espaços de trabalho"
     },

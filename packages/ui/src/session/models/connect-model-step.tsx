@@ -24,10 +24,13 @@ export const CONNECT_MODEL_STEP_BACK_HREF = '/workspaces';
  * - The two plan tiles first (ChatGPT, Claude): most people already pay for
  *   one, and each opens the provider dialog with that provider expanded.
  * - "Add provider key" opens the same dialog on its provider list.
- * - "Upgrade plan" only when the workspace's plan has no Kortix models
+ * - "Upgrade plan" only for a viewer who may change the project's models,
+ *   when the workspace's plan has no Kortix models
  *   (`model_access.requires_provider_key`) and billing is on.
- * - A member who cannot change the project's models sees only the Claude tile
- *   (a Claude login is the member's own) and who to ask for the rest.
+ * - Every member gets the tiles and the key: the gate is per viewer, and a
+ *   member may connect a login or a key for themselves (the server refuses
+ *   only a connection shared with everyone, 403). A member who cannot change
+ *   the project's models also reads who can connect one for everyone.
  *
  * There is no skip: with no model, nothing in the workspace can run. "Back to
  * workspaces" is the way out, to another workspace or to Log out.
@@ -67,26 +70,19 @@ export function ConnectModelStep({
           {/* `above`: bordered tiles, the plan on a second line. One column at
               this frame's width, so each tile keeps its whole label. */}
           <ModelConnectionLayoutContext.Provider value="above">
-            <ConnectPlanRows
-              projectId={projectId}
-              dismissible={false}
-              plans={canWriteProviders ? undefined : ['anthropic']}
-              className="sm:grid-cols-1"
-            />
+            <ConnectPlanRows projectId={projectId} dismissible={false} className="sm:grid-cols-1" />
           </ModelConnectionLayoutContext.Provider>
           <div className="flex flex-col gap-2">
-            {canWriteProviders ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="lg"
-                className="w-full gap-1.5"
-                onClick={() => openConnectProvider('providers')}
-              >
-                <KeyIcon className="size-4 shrink-0" />
-                {t('noModelAddProviderKey')}
-              </Button>
-            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              className="w-full gap-1.5"
+              onClick={() => openConnectProvider('providers')}
+            >
+              <KeyIcon className="size-4 shrink-0" />
+              {t('noModelAddProviderKey')}
+            </Button>
             {offerUpgrade ? (
               <Button
                 type="button"

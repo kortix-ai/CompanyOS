@@ -2105,7 +2105,7 @@
       "stepTitle": "モデルを接続",
       "stepBody": "{workspace} のエージェントが応答するにはモデルが必要です。ChatGPT または Claude のプランを接続するか、プロバイダーキーを追加してください。",
       "stepBodyUpgrade": "{workspace} のエージェントが応答するにはモデルが必要です。ChatGPT または Claude のプランを接続するか、プロバイダーキーを追加するか、Kortix モデルを使える Credits プランにアップグレードしてください。",
-      "stepBodyMember": "{workspace} のエージェントが応答するにはモデルが必要です。自分の Claude プランでサインインするか、このワークスペースの管理者にモデルの接続を依頼してください。",
+      "stepBodyMember": "{workspace} のエージェントが応答するにはモデルが必要です。自分の ChatGPT または Claude のプランかプロバイダーキーを接続するか、このワークスペースの管理者に全員用のモデルの接続を依頼してください。",
       "stepThisWorkspace": "このワークスペース",
       "stepBack": "ワークスペースに戻る"
     },

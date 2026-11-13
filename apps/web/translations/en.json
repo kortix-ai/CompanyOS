@@ -2105,7 +2105,7 @@
       "stepTitle": "Connect a model",
       "stepBody": "Agents in {workspace} need a model to answer. Connect your ChatGPT or Claude plan, or add a provider key.",
       "stepBodyUpgrade": "Agents in {workspace} need a model to answer. Connect your ChatGPT or Claude plan, add a provider key, or upgrade to the Credits plan for Kortix models.",
-      "stepBodyMember": "Agents in {workspace} need a model to answer. Sign in with your Claude plan, or ask someone who manages this workspace to connect a model.",
+      "stepBodyMember": "Agents in {workspace} need a model to answer. Connect your own ChatGPT or Claude plan or provider key, or ask someone who manages this workspace to connect a model for everyone.",
       "stepThisWorkspace": "this workspace",
       "stepBack": "Back to workspaces"
     },

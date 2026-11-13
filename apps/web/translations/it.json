@@ -2105,7 +2105,7 @@
       "stepTitle": "Collega un modello",
       "stepBody": "Gli agenti di {workspace} hanno bisogno di un modello per rispondere. Collega il tuo piano ChatGPT o Claude, oppure aggiungi una chiave del provider.",
       "stepBodyUpgrade": "Gli agenti di {workspace} hanno bisogno di un modello per rispondere. Collega il tuo piano ChatGPT o Claude, aggiungi una chiave del provider, oppure passa al piano Credits per i modelli Kortix.",
-      "stepBodyMember": "Gli agenti di {workspace} hanno bisogno di un modello per rispondere. Accedi con il tuo piano Claude, oppure chiedi a chi gestisce questo workspace di collegare un modello.",
+      "stepBodyMember": "Gli agenti di {workspace} hanno bisogno di un modello per rispondere. Collega il tuo piano ChatGPT o Claude o la tua chiave del provider, oppure chiedi a chi gestisce questo workspace di collegare un modello per tutti.",
       "stepThisWorkspace": "questo workspace",
       "stepBack": "Torna ai workspace"
     },

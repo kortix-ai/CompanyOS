@@ -2105,7 +2105,7 @@
       "stepTitle": "连接模型",
       "stepBody": "{workspace} 中的智能体需要模型才能回复。请连接你的 ChatGPT 或 Claude 套餐，或添加提供商密钥。",
       "stepBodyUpgrade": "{workspace} 中的智能体需要模型才能回复。请连接你的 ChatGPT 或 Claude 套餐、添加提供商密钥，或升级到 Credits 套餐以使用 Kortix 模型。",
-      "stepBodyMember": "{workspace} 中的智能体需要模型才能回复。请用你的 Claude 套餐登录，或请管理此工作区的人连接一个模型。",
+      "stepBodyMember": "{workspace} 中的智能体需要模型才能回复。请连接你自己的 ChatGPT 或 Claude 套餐或提供商密钥，或请管理此工作区的人为所有人连接一个模型。",
       "stepThisWorkspace": "此工作区",
       "stepBack": "返回工作区"
     },

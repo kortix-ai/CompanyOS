@@ -11,7 +11,7 @@ import {
   InfoIcon as InfoCircleSolid,
 } from '@phosphor-icons/react';
 import { m, useReducedMotion } from 'motion/react';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { inputFocusClasses, inputSurfaceClasses } from '../../primitives/input';
 import { KortixLogo } from '../../primitives/kortix-logo';
@@ -104,7 +104,7 @@ export function StepHeader({
   description?: React.ReactNode;
 }) {
   return (
-    <div className="mb-10">
+    <div className="mb-8">
       {mark ? (
         <div className={markOnMobile ? undefined : 'hidden md:block'}>{mark}</div>
       ) : (
@@ -122,6 +122,73 @@ export function StepHeader({
         <p className="text-muted-foreground mt-2 text-sm text-pretty">{description}</p>
       ) : null}
     </div>
+  );
+}
+
+/** "or" between a provider button and the email form. */
+export function OrDivider({ label }: { label: string }) {
+  return (
+    <div className="text-muted-foreground my-6 flex items-center gap-3 text-xs">
+      <span className="bg-border h-px flex-1" />
+      {label}
+      <span className="bg-border h-px flex-1" />
+    </div>
+  );
+}
+
+export type QuietLink = {
+  key: string;
+  label: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  /** Muted text after the button, outside its accessible name (a countdown). */
+  hint?: React.ReactNode;
+};
+
+/**
+ * The secondary choices under a step's main action, on one muted row joined by
+ * middots ("Use a password · Use SSO"). Falsy entries drop out; an empty row
+ * renders nothing.
+ */
+export function QuietLinks({
+  links,
+  disabled = false,
+  className,
+}: {
+  links: Array<QuietLink | null | false | undefined>;
+  disabled?: boolean;
+  className?: string;
+}) {
+  const shown = links.filter(Boolean) as QuietLink[];
+  if (shown.length === 0) return null;
+  return (
+    <p className={cn('text-muted-foreground mt-5 flex flex-wrap items-center gap-x-2 text-sm', className)}>
+      {shown.map((link, i) => (
+        <span key={link.key} className="flex items-center gap-x-2">
+          {i > 0 ? (
+            <span aria-hidden className="select-none">
+              ·
+            </span>
+          ) : null}
+          <button
+            type="button"
+            onClick={link.onClick}
+            disabled={disabled || link.disabled}
+            className="hover:text-foreground -my-2 py-2 transition-colors disabled:opacity-50"
+          >
+            {link.label}
+          </button>
+          {link.hint ? (
+            <>
+              <span aria-hidden className="select-none">
+                ·
+              </span>
+              <span className="tabular-nums">{link.hint}</span>
+            </>
+          ) : null}
+        </span>
+      ))}
+    </p>
   );
 }
 
@@ -244,9 +311,12 @@ export function CodeInput({
   disabled,
   autoFocus = true,
   invalid = false,
+  onComplete,
 }: {
   value: string;
   onChange: (next: string) => void;
+  /** Called with the code the moment the last box fills: typed or pasted. */
+  onComplete?: (code: string) => void;
   disabled?: boolean;
   autoFocus?: boolean;
   /** Marks the boxes destructive and replays the shake (row-level, once). */
@@ -254,16 +324,27 @@ export function CodeInput({
 }) {
   const refs = useRef<Array<HTMLInputElement | null>>([]);
 
+  // A rejected code comes back empty: put the caret in the first box again
+  // once the boxes are enabled.
+  useEffect(() => {
+    if (invalid && !disabled && value === '') refs.current[0]?.focus();
+  }, [invalid, disabled, value]);
+
   const focusBox = (i: number) => refs.current[Math.max(0, Math.min(CODE_LENGTH - 1, i))]?.focus();
 
-  const applyEdit = (edit: { next: string; focus: number } | null) => {
+  // `retry`: a paste of the full code verifies again even when it is the code
+  // already in the boxes, the only retry after a failed check without a button.
+  const applyEdit = (edit: { next: string; focus: number } | null, retry = false) => {
     if (!edit) return;
     onChange(edit.next);
     focusBox(edit.focus);
+    if (onComplete && (retry || edit.next !== value) && /^\d+$/.test(edit.next) && edit.next.length === CODE_LENGTH) {
+      onComplete(edit.next);
+    }
   };
 
   return (
-    <div className={cn('flex gap-2.5', invalid && 'motion-safe:animate-shake')}>
+    <div className={cn('flex justify-between gap-2', invalid && 'motion-safe:animate-shake')}>
       {Array.from({ length: CODE_LENGTH }, (_, i) => (
         <input
           key={i}
@@ -293,7 +374,7 @@ export function CodeInput({
           onPaste={(e) => {
             e.preventDefault();
             const digits = e.clipboardData.getData('text').replace(/\D/g, '');
-            if (digits) applyEdit(insertDigits(value, i, digits));
+            if (digits) applyEdit(insertDigits(value, i, digits), true);
           }}
           onFocus={(e) => e.currentTarget.select()}
           aria-invalid={invalid || undefined}

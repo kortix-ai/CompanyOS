@@ -204,6 +204,34 @@ export function reachedPlacement(
 }
 
 /**
+ * Is this steer provably unread on a runtime that keeps message ids (pi)?
+ *
+ * pi publishes a steered message only when a model call READS it. Until then it
+ * waits in the runtime's own queue, and a stop drops it: it is absent from the
+ * tip, and no later message's id or parent says anything about it, because pi
+ * reads by queue position, not by id order (`reachedPlacement` is the OpenCode
+ * rule). True when the tip does not hold the message AND its window reaches back
+ * past it (`limit` messages were not all spent on newer ones) — a message below
+ * the window may have been read long ago.
+ */
+export function steerUnreadOnStableRuntime(
+  tip: ReadonlyArray<PlacementTipMessage>,
+  wireMessageId: string,
+  limit: number,
+): boolean {
+  if (tip.some((m) => m.id === wireMessageId)) return false;
+  const mine = wireIdTime(wireMessageId);
+  if (mine === null) return false;
+  return (
+    tip.length < limit ||
+    tip.some((m) => {
+      const at = wireIdTime(m.id);
+      return at !== null && wireIdClockDelta(at, mine) <= ZERO;
+    })
+  );
+}
+
+/**
  * May a prompt go out under `wireMessageId` unchanged on a runtime that keeps
  * message ids (`RUNTIME_STABLE_MESSAGE_ID_CAPABILITY`, pi)? That runtime orders
  * by position, so nothing here is about the runtime's own order. Two checks:

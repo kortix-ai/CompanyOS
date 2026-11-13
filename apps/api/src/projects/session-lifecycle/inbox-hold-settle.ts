@@ -64,13 +64,15 @@ import { resolveSessionRuntimeEndpoint, readSessionMessageTip, retractSessionMes
 import {
   type PlacementTipMessage,
   reachedPlacement,
+  steerUnreadOnStableRuntime,
   tipIsBusy,
 } from './forwarded-placement';
 import { INBOX_HOLD_MS, inboxScope } from './inbox-rows';
 import { withNextDeliveryAttempt } from './store';
 import { onWireSql } from './delivery-state';
+import { sessionKeepsMessageIds } from './inbox-admission';
 
-const TIP_LIMIT = 16;
+export const TIP_LIMIT = 16;
 /** How long a claimed delivery is given to land after the hold. A delivery is
  *  one proxied POST (~0.3–1.5 s); the drain's own retry budget is far longer,
  *  but a prompt that is still in flight after this is not going to land into
@@ -130,6 +132,8 @@ export interface HoldSettleDeps {
   closeDelivered: (commandId: string) => Promise<void>;
   /** The turn-ledger record opened for a wire id that was taken back out. */
   closeTurn: (sessionId: string, messageId: string) => Promise<void>;
+  /** The session's runtime keeps message ids (pi); false when the read fails. */
+  keepsMessageIds: (sessionId: string) => Promise<boolean>;
   sleep: (ms: number) => Promise<void>;
   now: () => number;
 }
@@ -213,6 +217,7 @@ export const liveHoldSettleDeps: HoldSettleDeps = {
   async closeTurn(sessionId, messageId) {
     await closeSandboxTurnByMessageId(sessionId, messageId, 'abandoned');
   },
+  keepsMessageIds: (sessionId) => sessionKeepsMessageIds(sessionId, null),
   sleep: Bun.sleep,
   now: () => Date.now(),
 };
@@ -266,11 +271,17 @@ export async function settleInboxHoldAfterStop(
     }
   }
 
-  // 3. Settle every stop-paused row by what the loop did with it.
+  // 3. Settle every stop-paused row by what the loop did with it. On a runtime
+  // that keeps message ids a steer is on the box only once a step read it, so
+  // a steer the tip lacks is unread whatever later ids say (KRTX-4864: it was
+  // closed as read and never sent).
+  const stable = stopPaused.length > 0 && (await deps.keepsMessageIds(sessionId).catch(() => false));
   for (const row of stopPaused) {
     const ids = row.wireIds;
     if (ids.length === 0) continue;
-    const reached = ids.some((id) => reachedPlacement(tip!, id));
+    const reached = ids.some(
+      (id) => !(stable && steerUnreadOnStableRuntime(tip!, id, TIP_LIMIT)) && reachedPlacement(tip!, id),
+    );
     if (reached) {
       await deps.closeDelivered(row.commandId);
       out.closedAsInterrupted += 1;

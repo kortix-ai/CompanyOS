@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { WIRE_ID_TIME_SCALE, wireIdTime } from '../wire-message-id';
 import type { PlacementTipMessage } from './forwarded-placement';
-import { type HoldSettleDeps, settleInboxHoldAfterStop } from './inbox-hold-settle';
+import { type HoldSettleDeps, TIP_LIMIT, settleInboxHoldAfterStop } from './inbox-hold-settle';
 
 const id = (ms: number, tail: string) =>
   `msg_${((BigInt(ms) * WIRE_ID_TIME_SCALE + BigInt(1)) & BigInt(0xffffffffffff)).toString(16).padStart(12, '0')}${tail}`;
@@ -51,6 +51,7 @@ function fakeDeps(over: Partial<HoldSettleDeps> & { claimed?: number[]; tips?: a
     holdAsQueued: async (...a) => { calls.hold.push(a); },
     closeDelivered: async (...a) => { calls.close.push(a); },
     closeTurn: async (...a) => { calls.closeTurn.push(a); },
+    keepsMessageIds: async () => false,
     sleep: async (ms) => { now += ms; },
     now: () => now,
     ...over,
@@ -121,6 +122,72 @@ describe('settleInboxHoldAfterStop', () => {
     expect(out.closedAsInterrupted).toBe(1);
     expect(calls.close).toEqual([['c3']]);
     expect(calls.remove).toHaveLength(0);
+  });
+
+  // KRTX-4864: pi publishes a steered message only when a model call READS it.
+  // An unread one lives in the runtime's own queue and a stop drops it, so it is
+  // absent from the tip. The id heuristic of `reachedPlacement` then read a
+  // later message the loop did read (a subagent's report, minted after the
+  // steer) as proof the steer was read, closed the row as delivered, and the
+  // first queued message was never sent.
+  test('a steer a pi runtime never published is held back, not closed as read', async () => {
+    const report = id(T + 250, 'RPT0RPT0RPT0RP'); // a later user message the loop did read
+    const a4 = id(T + 350, 'ASST4ASST4ASST');
+    const tip = tipOf([
+      { id: u1, role: 'user' },
+      { id: a1, role: 'assistant', parentID: u1, completed: T + 150 },
+      { id: report, role: 'user' },
+      { id: a4, role: 'assistant', parentID: report, completed: null },
+    ]);
+    const { deps, calls } = fakeDeps({
+      tips: [tip],
+      keepsMessageIds: async () => true,
+      listStopPaused: async () => [{ commandId: 'c2', wireIds: [u2] }],
+    });
+    const out = await settleInboxHoldAfterStop('s', deps);
+    expect(out.closedAsInterrupted).toBe(0);
+    expect(out.heldBack).toBe(1);
+    expect(calls.close).toHaveLength(0);
+    expect(calls.hold).toEqual([['c2']]);
+    // Nothing of it is on the box, so there is nothing to take back out.
+    expect(calls.remove).toHaveLength(0);
+  });
+
+  test('a steer a pi runtime published (the step read it) still closes as delivered', async () => {
+    const tip = tipOf([
+      { id: u1, role: 'user' },
+      { id: u3, role: 'user' },
+      { id: a3, role: 'assistant', parentID: u3, completed: T + 450 },
+    ]);
+    const { deps, calls } = fakeDeps({
+      tips: [tip],
+      keepsMessageIds: async () => true,
+      listStopPaused: async () => [{ commandId: 'c3', wireIds: [u3] }],
+    });
+    const out = await settleInboxHoldAfterStop('s', deps);
+    expect(out.closedAsInterrupted).toBe(1);
+    expect(calls.close).toEqual([['c3']]);
+  });
+
+  test('a full tip window that no longer reaches back to the steer proves nothing about it', async () => {
+    // The steer may have been read and published long ago, below the window:
+    // the id heuristic stays in charge and sees the later step that read it.
+    const old = id(T - 60_000, 'OLDUSEROLDUSER');
+    const messages: PlacementTipMessage[] = [];
+    for (let i = 0; i < TIP_LIMIT / 2; i += 1) {
+      const user = id(T + i * 1_000, `USER${String(i).padStart(2, '0')}USERUSER`);
+      messages.push({ id: user, role: 'user' });
+      messages.push({ id: id(T + i * 1_000 + 500, `ASST${String(i).padStart(2, '0')}ASSTASST`), role: 'assistant', parentID: user, completed: T + i * 1_000 + 600 });
+    }
+    expect(messages).toHaveLength(TIP_LIMIT);
+    const { deps, calls } = fakeDeps({
+      tips: [tipOf(messages)],
+      keepsMessageIds: async () => true,
+      listStopPaused: async () => [{ commandId: 'c0', wireIds: [old] }],
+    });
+    const out = await settleInboxHoldAfterStop('s', deps);
+    expect(out.closedAsInterrupted).toBe(1);
+    expect(calls.hold).toHaveLength(0);
   });
 
   test('a box still mid-step after the hold (an escaped delivery restarted it) is aborted again', async () => {

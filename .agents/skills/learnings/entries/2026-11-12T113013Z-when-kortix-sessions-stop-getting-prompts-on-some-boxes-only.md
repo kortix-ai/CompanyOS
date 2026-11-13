@@ -18,6 +18,7 @@ incident_date: 2026-11-11
 - `apps/edge/src/server.dbhang.test.ts` fails if a silent database can hang the edge.
 - `platinum-edge-watchdog.timer` restarts a hung edge in about 60 s.
 - alert-cron pages `edge_preview_failing` and `edge_routes_from_database`.
+- alert-cron itself does not go blind when one check stalls (kortix-ai/platinum#3294). It runs 4 checks at a time. A check that does not answer keeps its last good value for 15 min, and `alert_checks_blind` pages after 2 blind runs in a row. Its 3 heaviest billing checks run every 3rd run (kortix-ai/platinum#3302), so they cost the region database 30 queries per hour, not 90.
 - `infra/env.sh check` fails on staging→prod key drift.
 
 Kortix: none yet. Enforcer to build: when a session's box stops answering, the Kortix UI and gateway should report "the session's machine is unreachable" within seconds, instead of "Gathering thoughts…" with no end.

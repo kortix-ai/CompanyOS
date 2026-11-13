@@ -171,6 +171,7 @@ const RESOURCE_PAGES: Partial<Record<ProjectAdminResourceKey, SectionPage>> = {
   skills: lazyPage(() => import('../../customize/skills/skills-page'), (m) => m.SkillsPage),
   drives: lazyPage(() => import('../../customize/agents/agent-drives-section'), (m) => m.AgentDrivesSection),
   triggers: lazyPage(() => import('../../customize/triggers/triggers-page'), (m) => m.TriggersPage),
+  evals: lazyPage(() => import('../../customize/evals/evals-page'), (m) => m.EvalsPage),
   models: lazyPage(() => import('../../customize/models/models-page'), (m) => m.ModelsPage),
   secrets: lazyPage(() => import('../../customize/secrets/secrets-page'), (m) => m.SecretsPage),
   repo: lazyPage(() => import('../layout/project-files-view'), (m) => m.ProjectFilesView),
@@ -302,6 +303,7 @@ export function ProjectAdminDashboard({
   const canAdmin = pageCans[PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE];
   const projectRowsOpen = canAdmin?.allowed === true;
   const drives = useFeatureFlag(projectId, 'drives');
+  const evals = useFeatureFlag(projectId, 'evals');
 
   // The account rows: the account hub's own rule, for a member of the
   // workspace's account. A project shared into an account the caller does not
@@ -329,6 +331,7 @@ export function ProjectAdminDashboard({
     resources.settled &&
     settingsAnswered &&
     !drives.isLoading &&
+    !evals.isLoading &&
     // Members needs the account id: wait for the project so it never pops in.
     project.isFetched &&
     accountsQuery.isFetched &&
@@ -337,6 +340,7 @@ export function ProjectAdminDashboard({
   // `resources.tabs` is a fresh array each render; its contents are the key.
   const allowedTabs = resources.tabs.join(',');
   const drivesOn = drives.enabled;
+  const evalsOn = evals.enabled;
   const visibleSections = hub.sectionVisible;
   const groups = useMemo<RailGroupRows[]>(() => {
     const allowed = new Set(allowedTabs.split(','));
@@ -365,6 +369,7 @@ export function ProjectAdminDashboard({
         if (!resource || !adminResourceRowOpen(resource, projectRowsOpen, allowed)) return null;
         if (resource.host && !hostSections[resource.key as 'apps']) return null;
         if (resource.flag === 'drives' && !drivesOn) return null;
+        if (resource.flag === 'evals' && !evalsOn) return null;
         return {
           key,
           label: label(key),
@@ -409,6 +414,7 @@ export function ProjectAdminDashboard({
     projectRowsOpen,
     hostSections,
     drivesOn,
+    evalsOn,
     settingsCans,
     settingsProbeFailed,
     tI18nComplete,

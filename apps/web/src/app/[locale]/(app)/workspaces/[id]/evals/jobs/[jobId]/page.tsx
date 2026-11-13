@@ -1,11 +1,7 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import { useParams } from 'next/navigation';
-
-import { EvalJobPage } from '@/features/workspace/evals/eval-job-page';
-
-/** /workspaces/[id]/evals/jobs/[jobId] — one job's scores and trials (the layout gates the flag). */
-export default function ProjectEvalJobPage() {
-  const { id, jobId } = useParams<{ id: string; jobId: string }>();
-  return <EvalJobPage projectId={id} jobId={jobId} />;
+/** /workspaces/[id]/evals/jobs/<job_id> moved into Customize: /workspaces/[id]/admin/evals/jobs/<job_id>. */
+export default async function ProjectEvalJobRedirect({ params }: { params: Promise<{ id: string; jobId: string }> }) {
+  const { id, jobId } = await params;
+  redirect(`/workspaces/${encodeURIComponent(id)}/admin/evals/jobs/${encodeURIComponent(jobId)}`);
 }

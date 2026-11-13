@@ -769,15 +769,14 @@ export const menuRegistry: MenuItemDef[] = [
     keywords: 'goals goal objectives outcomes',
   },
   {
-    // The project's evals (flag `evals`): the sidebar Evals row
-    // (`project-evals-nav.tsx`), same icon, same route, same gate.
+    // The project's evals (flag `evals`): Customize → Evals.
     id: 'proj-evals',
     label: 'Evals',
     icon: ChartBar,
     group: 'navigation',
     showIn: ['commandPalette'],
     kind: 'navigate',
-    href: '/workspaces/{projectId}/evals',
+    href: '/workspaces/{projectId}/admin/evals',
     requiresProject: true,
     requiresFlag: 'evals',
     keywords: 'evals eval benchmark score harbor terminal-bench tasks leaderboard',

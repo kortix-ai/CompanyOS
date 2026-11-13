@@ -31,6 +31,10 @@ export interface WorkspaceEvalTaskSource {
   /** A dataset of the Harbor registry, such as `terminal-bench`. */
   name?: string | null;
   version?: string | null;
+  /** A public git repository (https); `path` is inside it. */
+  git_url?: string | null;
+  /** The commit, branch or tag of `git_url`. */
+  git_commit_id?: string | null;
   task_names?: string[] | null;
   exclude_task_names?: string[] | null;
   n_tasks?: number | null;
@@ -239,7 +243,8 @@ export async function listWorkspaceEvalJobs(
 
 /** Plan and queue a job. Throws `ApiError` 422 (`eval_invalid`, with `violations`) when the config does not resolve. */
 export async function startWorkspaceEvalJob(projectId: string, input: StartWorkspaceEvalJobInput): Promise<WorkspaceEvalJob> {
-  return unwrap(await backendApi.post<{ job: WorkspaceEvalJob }>(`${evalsPath(projectId)}/jobs`, input), 'Eval job start failed').job;
+  // No host error toast: every caller shows the refusal itself (the CLI prints it, the Run modal keeps it inline).
+  return unwrap(await backendApi.post<{ job: WorkspaceEvalJob }>(`${evalsPath(projectId)}/jobs`, input, { showErrors: false }), 'Eval job start failed').job;
 }
 
 export async function getWorkspaceEvalJob(projectId: string, jobId: string): Promise<WorkspaceEvalJob> {

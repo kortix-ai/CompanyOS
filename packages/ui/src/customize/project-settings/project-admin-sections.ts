@@ -1,5 +1,6 @@
 import {
   AppWindowIcon,
+  ChartBarIcon,
   BookOpenTextIcon,
   CpuIcon,
   FoldersIcon,
@@ -47,7 +48,7 @@ export type ProjectAdminSectionKey = WorkspaceSettingsSection;
 
 export type ProjectAdminResourceKey = Extract<
   WorkspaceSettingsSection,
-  'agents' | 'connectors' | 'skills' | 'triggers' | 'models' | 'secrets' | 'apps' | 'drives' | 'repo'
+  'agents' | 'connectors' | 'skills' | 'triggers' | 'evals' | 'models' | 'secrets' | 'apps' | 'drives' | 'repo'
 >;
 
 /**
@@ -153,7 +154,7 @@ export interface ProjectAdminResource {
    * The flag the row needs. Repo is a library only with `drives` on; with it
    * off, the sidebar's Files row is the repo browser (`projectNavRows`).
    */
-  flag?: 'drives';
+  flag?: 'drives' | 'evals';
   /**
    * The row opens on its capability alone, without Settings access. Agents:
    * a member who may read the agents browsed them under Customize before
@@ -173,6 +174,8 @@ export const PROJECT_ADMIN_RESOURCES: readonly ProjectAdminResource[] = [
   // Triggers: kortix.yaml triggers and runtime triggers (loops) on one page.
   // The key stays `triggers`: it is the URL segment, and live links name it.
   { key: 'triggers', icon: TimerIcon, capability: 'triggers', host: false },
+  // Evals (flag `evals`): every member reads scores; starting a job needs project.session.start (the API's rule).
+  { key: 'evals', icon: ChartBarIcon, capability: null, host: false, flag: 'evals', memberOpen: true },
   { key: 'models', icon: CpuIcon, capability: 'models', host: false },
   { key: 'repo', icon: FoldersIcon, capability: 'files', host: false, flag: 'drives' },
 ];

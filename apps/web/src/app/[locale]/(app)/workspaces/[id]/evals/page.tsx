@@ -1,11 +1,7 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import { useParams } from 'next/navigation';
-
-import { EvalsPage } from '@/features/workspace/evals/evals-page';
-
-/** /workspaces/[id]/evals — leaderboard, suites and jobs (the layout gates the flag). */
-export default function ProjectEvalsPage() {
-  const { id } = useParams<{ id: string }>();
-  return <EvalsPage projectId={id} />;
+/** /workspaces/[id]/evals moved into Customize: /workspaces/[id]/admin/evals. */
+export default async function ProjectEvalsRedirect({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  redirect(`/workspaces/${encodeURIComponent(id)}/admin/evals`);
 }

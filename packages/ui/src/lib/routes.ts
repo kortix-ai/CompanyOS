@@ -26,8 +26,6 @@ export interface UiRoutes {
   rooms?: (projectId: string) => string | null;
   /** The project's goals (flag `goals`); a goal is `<goals>/<scope>/<slug>`. */
   goals: (projectId: string) => string | null;
-  /** The project's evals (flag `evals`); a job is `<evals>/jobs/<job_id>`. Optional: a host without the page leaves it out. */
-  evals?: (projectId: string) => string | null;
   /** The project's artifacts (flag `artifacts`); one is `<artifacts>/<artifact_id>`. */
   artifacts: (projectId: string) => string | null;
   /** One space: a channel and its tabs (`?tab=` opens one). */
@@ -70,7 +68,6 @@ const DEFAULT_ROUTES = {
   drive: (p: string) => `/workspaces/${p}/drive`,
   apps: (p: string) => `/workspaces/${p}/apps`,
   goals: (p: string) => `/workspaces/${p}/goals`,
-  evals: (p: string) => `/workspaces/${p}/evals`,
   artifacts: (p: string) => `/workspaces/${p}/artifacts`,
   space: (p: string, slug: string) => `/workspaces/${p}/spaces/${encodeURIComponent(slug)}`,
   members: (p: string) => `/workspaces/${p}/members`,

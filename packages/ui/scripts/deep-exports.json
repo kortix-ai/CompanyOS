@@ -17,6 +17,7 @@
     "./customize/connectors/connectors-app-return-bar",
     "./customize/connectors/detail/app-page",
     "./customize/connectors/detail/connector-page",
+    "./customize/evals/eval-job-view",
     "./customize/sections/add-account-fields",
     "./customize/sections/component/email-connect-form",
     "./customize/sections/component/manifest-copy-block",

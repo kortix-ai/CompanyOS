@@ -2524,6 +2524,7 @@
     "useWorkspaceConfig",
     "useWorkspaceDrive",
     "useWorkspaceEvalActions",
+    "useWorkspaceEvalDatasets",
     "useWorkspaceEvalJob",
     "useWorkspaceEvalJobs",
     "useWorkspaceEvalSuites",

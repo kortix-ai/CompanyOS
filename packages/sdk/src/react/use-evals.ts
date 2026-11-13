@@ -6,6 +6,7 @@ import {
   deleteWorkspaceEvalJob,
   getWorkspaceEvalJob,
   getWorkspaceEvalTrial,
+  listWorkspaceEvalDatasets,
   listWorkspaceEvalJobs,
   listWorkspaceEvalSuites,
   listWorkspaceEvalTasks,
@@ -34,6 +35,21 @@ export function useWorkspaceEvalSuites(projectId: string | null | undefined) {
     queryFn: () => listWorkspaceEvalSuites(projectId as string),
     enabled: !!projectId,
     ...inventory,
+  });
+}
+
+/**
+ * The datasets a job can name: Kortix's built-in datasets (`kortix/…`) first,
+ * then the Harbor registry. The list changes with a release, so it is read once
+ * per mount.
+ */
+export function useWorkspaceEvalDatasets(projectId: string | null | undefined) {
+  return useQuery({
+    queryKey: [...qk.project.evals(projectId ?? ''), 'datasets'] as const,
+    queryFn: () => listWorkspaceEvalDatasets(projectId as string),
+    enabled: !!projectId,
+    ...inventory,
+    staleTime: 10 * 60_000,
   });
 }
 

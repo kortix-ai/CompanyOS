@@ -122,7 +122,12 @@ export interface PlannedTrial {
 
 async function tasksOfSource(project: GitBackedProject, commit: string, source: EvalTaskSource, violations: string[]): Promise<DiscoveredTask[]> {
   if (!source.git_url && source.name && isBuiltinDataset(source.name)) {
-    return tasksOfSource(project, commit, { ...source, ...builtinDatasetSource(source.name, source.version), name: null, version: null }, violations);
+    const builtin = builtinDatasetSource(source.name, source.version);
+    const found: string[] = [];
+    const tasks = await tasksOfSource(project, commit, { ...source, ...builtin, name: null, version: null }, found);
+    // Name the dataset, not the repository path behind it.
+    violations.push(...found.map(() => `The built-in dataset ${source.name} has no tasks at ${builtin.git_commit_id} of the Kortix repository. Pin a version that has it, e.g. version: dev after it ships.`));
+    return tasks;
   }
   if (source.git_url) {
     let commit: string;

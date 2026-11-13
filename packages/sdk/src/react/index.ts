@@ -178,6 +178,7 @@ export {
 } from './use-goals';
 export {
   useWorkspaceEvalActions,
+  useWorkspaceEvalDatasets,
   useWorkspaceEvalJob,
   useWorkspaceEvalJobs,
   useWorkspaceEvalSuites,

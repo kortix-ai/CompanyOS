@@ -1,13 +1,27 @@
-import { evalJobScore, evalTrialScore, type WorkspaceEvalJob, type WorkspaceEvalTrial } from '@kortix/sdk';
+import {
+  evalJobScore,
+  evalTrialScore,
+  type WorkspaceEvalJob,
+  type WorkspaceEvalTrial,
+} from '@kortix/sdk';
+
+import { adminPath } from '../../lib/routes';
+
+/** The Evals section of Customize, and one job inside it. */
+export const evalsHref = (projectId: string): string => adminPath(projectId, 'evals');
+export const evalJobHref = (projectId: string, jobId: string): string =>
+  `${evalsHref(projectId)}/jobs/${encodeURIComponent(jobId)}`;
 
 /** `82.5%`, or an em dash with no value. */
 export const percent = (value: number | null | undefined): string =>
   value === null || value === undefined ? '—' : `${Math.round(value * 1000) / 10}%`;
 
-export const isOpenJob = (job: Pick<WorkspaceEvalJob, 'status'>): boolean => job.status === 'queued' || job.status === 'running';
+export const isOpenJob = (job: Pick<WorkspaceEvalJob, 'status'>): boolean =>
+  job.status === 'queued' || job.status === 'running';
 
 /** `agent` or `agent @ model`: the one label an agent × model goes by on every surface. */
-export const agentLabel = (agent: string, model: string | null | undefined): string => (model ? `${agent} @ ${model}` : agent);
+export const agentLabel = (agent: string, model: string | null | undefined): string =>
+  model ? `${agent} @ ${model}` : agent;
 
 export type CellTone = 'pass' | 'fail' | 'error' | 'running' | 'queued' | 'cancelled';
 
@@ -15,7 +29,12 @@ export type CellTone = 'pass' | 'fail' | 'error' | 'running' | 'queued' | 'cance
 export function trialTone(trial: WorkspaceEvalTrial): CellTone {
   if (trial.status === 'cancelled') return 'cancelled';
   if (trial.status === 'queued') return 'queued';
-  if (trial.status === 'starting' || trial.status === 'agent_running' || trial.status === 'verifying') return 'running';
+  if (
+    trial.status === 'starting' ||
+    trial.status === 'agent_running' ||
+    trial.status === 'verifying'
+  )
+    return 'running';
   const { passed, score } = evalTrialScore(trial);
   if (score === null) return trial.exception ? 'error' : 'fail';
   return passed ? 'pass' : 'fail';
@@ -38,6 +57,16 @@ export function latestRuns(trials: WorkspaceEvalTrial[]): WorkspaceEvalTrial[] {
  */
 export function jobSource(job: Pick<WorkspaceEvalJob, 'suite' | 'config'>): string {
   if (job.suite) return job.suite;
+  const git = [...(job.config.tasks ?? []), ...(job.config.datasets ?? [])].find(
+    (source) => source.git_url,
+  );
+  if (git?.git_url) {
+    const repo = git.git_url
+      .replace(/\.git$/, '')
+      .split('/')
+      .slice(-1)[0];
+    return git.path ? `${repo}:${git.path}` : repo!;
+  }
   const dataset = job.config.datasets?.find((source) => source.name);
   if (dataset?.name) return dataset.version ? `${dataset.name}@${dataset.version}` : dataset.name;
   return job.config.tasks?.[0]?.path ?? job.config.datasets?.[0]?.path ?? '—';
@@ -77,12 +106,17 @@ export function leaderboard(jobs: WorkspaceEvalJob[]): LeaderboardRow[] {
       agent,
       model: model || null,
       passAt1: latest!.passAt1,
-      change: previous && latest!.passAt1 !== null && previous.passAt1 !== null ? latest!.passAt1 - previous.passAt1 : null,
+      change:
+        previous && latest!.passAt1 !== null && previous.passAt1 !== null
+          ? latest!.passAt1 - previous.passAt1
+          : null,
       jobs: runs.length,
       lastJob: latest!.job,
     });
   }
-  return rows.sort((a, b) => a.suite.localeCompare(b.suite) || (b.passAt1 ?? -1) - (a.passAt1 ?? -1));
+  return rows.sort(
+    (a, b) => a.suite.localeCompare(b.suite) || (b.passAt1 ?? -1) - (a.passAt1 ?? -1),
+  );
 }
 
 export { evalJobScore, evalTrialScore };

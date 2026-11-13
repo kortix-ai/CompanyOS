@@ -17,7 +17,7 @@ export const WORKSPACE_SETTINGS_GROUPS = [
   // 2026-11-08: Customize is this panel, one place to configure. Git
   // configures the repository connection; Repository browses its files
   // (with Drive on).
-  { id: 'library', sections: ['agents', 'models', 'connectors', 'secrets', 'skills', 'drives', 'apps', 'triggers', 'sandbox', 'git', 'repo'] },
+  { id: 'library', sections: ['agents', 'models', 'connectors', 'secrets', 'skills', 'drives', 'apps', 'triggers', 'evals', 'sandbox', 'git', 'repo'] },
   { id: 'people', sections: ['members', 'groups', 'roles', 'identity', 'audit'] },
   { id: 'billing', sections: ['plan', 'usage'] },
   { id: 'advanced', sections: ['feature-flags'] },
@@ -75,6 +75,7 @@ export const WORKSPACE_SETTINGS_LABELS: Readonly<Record<WorkspaceSettingsSection
   drives: 'Drives',
   apps: 'Apps',
   triggers: 'Triggers',
+  evals: 'Evals',
   models: 'Models',
   repo: 'Repository',
   members: 'Members',

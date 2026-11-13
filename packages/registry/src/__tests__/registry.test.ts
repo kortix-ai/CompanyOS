@@ -262,12 +262,12 @@ describe('buildRegistry', () => {
         'docs/sub/b.md': 'b',
       }),
     });
-    const files = (name: string) => registry.items!.find((i) => i.name === name)!.files;
+    const files = (name: string) => registry.items?.find((i) => i.name === name)?.files;
     expect(files('kb')).toEqual([
       { path: 'docs/a.md', type: 'registry:file', target: '~/kb/a.md' },
       { path: 'docs/sub/b.md', type: 'registry:file', target: '~/kb/sub/b.md' },
     ]);
-    expect(files('raw')!.map((f) => f.target)).toEqual(['~/docs/a.md', '~/docs/sub/b.md']);
+    expect(files('raw')?.map((f) => f.target)).toEqual(['~/docs/a.md', '~/docs/sub/b.md']);
   });
 });
 

@@ -60,8 +60,6 @@ let lifecycleCommandRows: Array<typeof sessionLifecycleCommands.$inferSelect>;
 let activeSessionCount = 0;
 let walletBalance = 1_000_000;
 let automationActor: string | null = USER_ID;
-/** Set to make the automation actor read throw (a transient database error). */
-let automationActorFailure: Error | null = null;
 const alertCalls: Array<{ kind: 'raise' | 'clear'; input: Record<string, unknown> }> = [];
 const watcherCalls: Array<{ kind: 'follow' | 'drop'; ref: Record<string, unknown> }> = [];
 /** The credential kind the mocked auth reports; unset by default, as before. */
@@ -144,7 +142,6 @@ function resetState() {
   secretConsumerReads.length = 0;
   walletBalance = 1_000_000;
   automationActor = USER_ID;
-  automationActorFailure = null;
   alertCalls.length = 0;
   watcherCalls.length = 0;
   testAuthType = undefined;
@@ -166,10 +163,7 @@ mockIamEngineAllowAll();
 mockIamReadModels();
 
 mock.module('../projects/session-lifecycle/actor', () => ({
-  resolveProjectAutomationActor: async () => {
-    if (automationActorFailure) throw automationActorFailure;
-    return automationActor;
-  },
+  resolveProjectAutomationActor: async () => automationActor,
   resolveAgentRunAttribution: async () => SERVICE_ACCOUNT_ID,
 }));
 
@@ -1251,47 +1245,29 @@ describe('git-backed triggers — runtime fire paths', () => {
     ]);
   });
 
-  test('a failed attempt the cron retries raises nothing; the fifth dead-letters and raises once', async () => {
+  // isTerminalFireFailure (#12645): a fire that says `retryable: false` is final on its
+  // first attempt. The five-attempt retry budget itself is trigger-execution-store's
+  // (trigger-execution-store.integration.test.ts).
+  test('a fire with no account owner to run as dead-letters on its first attempt and raises once', async () => {
     seedManifest(cronEntry({ slug: 'flaky', name: 'Flaky', cron: '* * * * * *', prompt: 'Report' }));
     const slot = new Date('2026-01-01T00:00:30Z');
     seedRuntimeCron({ slug: 'flaky', prompt: 'Report', nextFireAt: slot });
-    // The owner read throws: a failure with no permanent code, so it retries.
-    automationActorFailure = new Error('connection terminated unexpectedly');
-
-    await runProjectTriggerSweep(slot);
-    expect(await drainTriggerExecutionQueue(slot)).toMatchObject({ queued: 1, failed: 0 });
-    expect(runtimeRows[0]).toMatchObject({ lastStatus: 'failed' });
-    expect(alertCalls).toEqual([]);
-
-    // Each retry is due 2 s after its failure; claim each one well after that.
-    for (let attempt = 2; attempt <= 5; attempt += 1) {
-      await drainTriggerExecutionQueue(new Date(Date.now() + attempt * 60_000));
-    }
-    expect(triggerExecutionRows[0]).toMatchObject({ status: 'dead_lettered', attempts: 5 });
-    expect(alertCalls).toEqual([
-      {
-        kind: 'raise',
-        input: { projectId: PROJECT_ID, slug: 'flaky', source: 'fire', error: 'connection terminated unexpectedly' },
-      },
-    ]);
-  });
-
-  test('a cron fire with no account owner dead-letters on its first attempt and raises once', async () => {
-    seedManifest(cronEntry({ slug: 'ownerless', name: 'Ownerless', cron: '* * * * * *', prompt: 'Report' }));
-    const slot = new Date('2026-01-01T00:00:30Z');
-    seedRuntimeCron({ slug: 'ownerless', prompt: 'Report', nextFireAt: slot });
-    // No owner to run as: the fire answers `retryable: false`, so a retry cannot fix it (#12645).
+    // No owner to run as: no retry can find one.
     automationActor = null;
 
     await runProjectTriggerSweep(slot);
     expect(await drainTriggerExecutionQueue(slot)).toMatchObject({ queued: 0, failed: 1 });
+    expect(runtimeRows[0]).toMatchObject({ lastStatus: 'failed' });
+    expect(triggerExecutionRows[0]).toMatchObject({ status: 'dead_lettered', attempts: 1 });
+    // A later drain claims nothing and raises nothing more.
+    await drainTriggerExecutionQueue(new Date(Date.now() + 5 * 60_000));
     expect(triggerExecutionRows[0]).toMatchObject({ status: 'dead_lettered', attempts: 1 });
     expect(alertCalls).toEqual([
       {
         kind: 'raise',
         input: {
           projectId: PROJECT_ID,
-          slug: 'ownerless',
+          slug: 'flaky',
           source: 'fire',
           error: 'No account owner available to own the session',
         },

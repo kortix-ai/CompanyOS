@@ -33,6 +33,16 @@ describe('trigger split characterization', () => {
     });
   });
 
+  test('webhook payload names the GitHub event from its header (#12644)', async () => {
+    const app = new Hono();
+    app.post('/', (c) => c.json(webhookPayload((name) => c.req.header(name), '{"action":"opened"}')));
+    const response = await app.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-github-event': 'issues' },
+    });
+    expect((await response.json()).headers.github_event).toBe('issues');
+  });
+
   const valid = {
     name: 'Synthetic webhook',
     type: 'webhook',

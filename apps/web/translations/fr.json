@@ -1328,6 +1328,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "Avec les Espaces activés, un espace peut se surveiller lui-même : activez Proactif dans ses détails, et un agent lit ce qui s’y passe (fils terminés, questions restées ouvertes, personnes qui arrivent) et n’écrit dans le chat que lorsque c’est utile : un résultat à partager, une décision à prendre ou un retard. Il peut aussi lancer un fil qui fait le travail. Point quotidien facultatif à 9 h."
+        },
+        "program_agents": {
+          "name": "Agents programme",
+          "description": "Un agent qui exécute votre code au lieu d'un modèle. Donnez à un agent `run: <command>` dans kortix.yaml : chaque tour exécute cette commande dans le sandbox de la session, avec l'espace de travail, les secrets et les accès de l'agent. Le message ou les données du trigger sont l'entrée, et ce que la commande affiche est la réponse."
         }
       },
       "channelsSwitch": {
@@ -2097,7 +2101,13 @@
       "noModelUpgradeReason": "Aucun modèle : passez au plan Credits ou ajoutez votre propre clé de fournisseur.",
       "noModelKeyReason": "Aucun modèle : ajoutez votre propre clé de fournisseur.",
       "noModelUpgradePlan": "Changer de plan",
-      "noModelAddProviderKey": "Ajouter une clé de fournisseur"
+      "noModelAddProviderKey": "Ajouter une clé de fournisseur",
+      "stepTitle": "Connecter un modèle",
+      "stepBody": "Les agents de {workspace} ont besoin d’un modèle pour répondre. Connectez votre abonnement ChatGPT ou Claude, ou ajoutez une clé de fournisseur.",
+      "stepBodyUpgrade": "Les agents de {workspace} ont besoin d’un modèle pour répondre. Connectez votre abonnement ChatGPT ou Claude, ajoutez une clé de fournisseur, ou passez au plan Credits pour les modèles Kortix.",
+      "stepBodyMember": "Les agents de {workspace} ont besoin d’un modèle pour répondre. Connectez votre propre abonnement ChatGPT ou Claude ou votre clé de fournisseur, ou demandez à une personne qui gère cet espace de travail de connecter un modèle pour tout le monde.",
+      "stepThisWorkspace": "cet espace de travail",
+      "stepBack": "Retour aux espaces de travail"
     },
     "providerRecovery": {
       "savedPrompt": "Prompt enregistré",
@@ -21783,6 +21793,8 @@
     "llmEstimateLabel": "Estimation LLM :"
   },
   "triggerComposer": {
+    "programInputPlaceholder": "Vide : le programme lit les données du trigger en JSON",
+    "programInputHelp": "Cet agent exécute un programme. Il lit ce texte sur stdin. Laissez vide pour envoyer toutes les données en JSON : l'événement, le corps du webhook ou les détails de la planification, plus les données fixes du trigger.",
     "every": "Toutes les",
     "dayOfMonth": "Jour du mois",
     "details": "Détails",
@@ -24971,6 +24983,11 @@
       }
     },
     "modelView": {
+      "programTimeout": "Limite de temps",
+      "programTimeoutHelp": "Une exécution plus longue est arrêtée et le tour échoue. De 1s à 6h, par exemple 30m ou 2h. Vide : 30m.",
+      "programTitle": "Programme",
+      "programCommand": "Commande",
+      "programHelp": "Chaque tour exécute cette commande dans le sandbox de la session au lieu d'un modèle. Le message arrive sur stdin et dans $KORTIX_EVENT_PATH. Ce qu'elle affiche est la réponse. Un code de sortie non nul fait échouer le tour.",
       "title": "Modèle",
       "help": "Comment cet agent réfléchit.",
       "projectDefault": "Par défaut de l’espace de travail",
@@ -26880,6 +26897,20 @@
     "connect": "Connecter",
     "cardFailed": "Impossible de connecter {app}. Réessayez.",
     "blockedTitle": "Ouvrez {app} pour vous connecter",
-    "blockedDescription": "Votre navigateur a bloqué la fenêtre de connexion. Ouvrez-la avec le bouton ci-dessous. Cette page se met à jour toute seule."
+    "blockedDescription": "Votre navigateur a bloqué la fenêtre de connexion. Ouvrez-la avec le bouton ci-dessous. Cette page se met à jour toute seule.",
+    "doneTitle": "{app} connecté",
+    "doneTitleNoApp": "Connecté",
+    "doneDescription": "Votre agent peut maintenant utiliser {app}.",
+    "doneClose": "Vous pouvez fermer cet onglet.",
+    "doneDeniedTitle": "Connexion annulée",
+    "doneDeniedDescription": "Vous n’avez pas autorisé l’accès sur {app}. Relancez la connexion depuis Kortix pour le connecter.",
+    "doneExpiredTitle": "Ce lien de connexion a expiré",
+    "doneExpiredDescription": "Il a déjà été utilisé ou il est trop ancien. Relancez la connexion depuis Kortix.",
+    "doneFailedTitle": "{app} n’est pas connecté",
+    "doneFailedTitleNoApp": "La connexion n’a pas abouti",
+    "doneFailedDescription": "Relancez la connexion depuis Kortix. Si elle échoue encore, envoyez le code ci-dessous au support.",
+    "doneErrorCode": "Code d’erreur : {code}",
+    "doneOpenKortix": "Ouvrir Kortix",
+    "doneFallbackApp": "l’app"
   }
 }

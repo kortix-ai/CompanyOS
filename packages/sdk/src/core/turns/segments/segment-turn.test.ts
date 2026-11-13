@@ -171,6 +171,36 @@ describe('segmentTurn', () => {
     expect(segments.map((s) => s.kind)).toEqual(['burst', 'standalone']);
   });
 
+  test('a connector sign-in the agent started stands alone, so its Connect card is not folded into a burst', () => {
+    const segments = segmentTurn([
+      tool('1', 'read'),
+      tool('2', 'bash', { command: 'kortix connectors connect gmail --owner workspace' }),
+      tool('3', 'bash', { command: 'kortix connectors ls' }),
+    ]);
+
+    expect(segments.map((segment) => segment.kind)).toEqual(['burst', 'standalone', 'burst']);
+  });
+
+  test('a sign-in call that errored stays in its burst: no sign-in waits on the person', () => {
+    const command = 'kortix connectors connect gmail';
+    const failed = {
+      ...tool('2', 'bash'),
+      state: { status: 'error', input: { command }, error: 'exit 1' },
+    } as unknown as ToolPart;
+
+    expect(segmentTurn([tool('1', 'read'), failed]).map((segment) => segment.kind)).toEqual(['burst']);
+  });
+
+  test('a shell sign-in that exited non-zero stays in its burst: the command failed and started nothing', () => {
+    const command = 'kortix connectors connect notion --owner workspace';
+    const exited = {
+      ...tool('2', 'bash'),
+      state: { status: 'completed', input: { command }, output: 'connector not found', metadata: { exit: 1 } },
+    } as unknown as ToolPart;
+
+    expect(segmentTurn([tool('1', 'read'), exited]).map((segment) => segment.kind)).toEqual(['burst']);
+  });
+
   test('returns an empty array for no parts', () => {
     expect(segmentTurn([])).toEqual([]);
   });

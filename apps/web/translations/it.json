@@ -1328,6 +1328,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "Con gli Spazi attivi, uno spazio può sorvegliarsi da solo: attiva Proattivo nei suoi dettagli e un agente legge cosa succede (thread conclusi, domande rimaste aperte, persone che entrano) e scrive in chat solo quando conta: un risultato da condividere, una decisione da prendere o qualcosa in ritardo. Può anche avviare un thread che fa il lavoro. Riepilogo giornaliero facoltativo alle 9:00."
+        },
+        "program_agents": {
+          "name": "Agenti programma",
+          "description": "Un agente che esegue il tuo codice invece di un modello. Assegna a un agente `run: <command>` in kortix.yaml: ogni turno esegue quel comando nella sandbox della sessione, con workspace, secret e accessi dell'agente. Il messaggio o i dati del trigger sono l'input, e ciò che il comando stampa è la risposta."
         }
       },
       "channelsSwitch": {
@@ -2097,7 +2101,13 @@
       "noModelUpgradeReason": "Nessun modello: passa al piano Credits o aggiungi la tua chiave del provider.",
       "noModelKeyReason": "Nessun modello: aggiungi la tua chiave del provider.",
       "noModelUpgradePlan": "Aggiorna piano",
-      "noModelAddProviderKey": "Aggiungi chiave del provider"
+      "noModelAddProviderKey": "Aggiungi chiave del provider",
+      "stepTitle": "Collega un modello",
+      "stepBody": "Gli agenti di {workspace} hanno bisogno di un modello per rispondere. Collega il tuo piano ChatGPT o Claude, oppure aggiungi una chiave del provider.",
+      "stepBodyUpgrade": "Gli agenti di {workspace} hanno bisogno di un modello per rispondere. Collega il tuo piano ChatGPT o Claude, aggiungi una chiave del provider, oppure passa al piano Credits per i modelli Kortix.",
+      "stepBodyMember": "Gli agenti di {workspace} hanno bisogno di un modello per rispondere. Collega il tuo piano ChatGPT o Claude o la tua chiave del provider, oppure chiedi a chi gestisce questo workspace di collegare un modello per tutti.",
+      "stepThisWorkspace": "questo workspace",
+      "stepBack": "Torna ai workspace"
     },
     "providerRecovery": {
       "savedPrompt": "Prompt salvato",
@@ -21783,6 +21793,8 @@
     "llmEstimateLabel": "Stima LLM:"
   },
   "triggerComposer": {
+    "programInputPlaceholder": "Vuoto: il programma legge i dati del trigger come JSON",
+    "programInputHelp": "Questo agente esegue un programma. Legge questo testo da stdin. Lascialo vuoto per inviare tutti i dati come JSON: l'evento, il corpo del webhook o i dettagli della pianificazione, più i dati fissi del trigger.",
     "every": "Ogni",
     "dayOfMonth": "Giorno del mese",
     "details": "Dettagli",
@@ -24971,6 +24983,11 @@
       }
     },
     "modelView": {
+      "programTimeout": "Limite di tempo",
+      "programTimeoutHelp": "Un'esecuzione più lunga viene fermata e il turno fallisce. Da 1s a 6h, ad esempio 30m o 2h. Vuoto: 30m.",
+      "programTitle": "Programma",
+      "programCommand": "Comando",
+      "programHelp": "Ogni turno esegue questo comando nella sandbox della sessione invece di un modello. Il messaggio arriva su stdin e in $KORTIX_EVENT_PATH. Ciò che stampa è la risposta. Un'uscita diversa da zero fa fallire il turno.",
       "title": "Modello",
       "help": "Come ragiona questo agente.",
       "projectDefault": "Predefinito del workspace",
@@ -26880,6 +26897,20 @@
     "connect": "Connetti",
     "cardFailed": "Impossibile connettere {app}. Riprova.",
     "blockedTitle": "Apri {app} per accedere",
-    "blockedDescription": "Il browser ha bloccato la finestra di accesso. Aprila con il pulsante qui sotto. Questa pagina si aggiorna da sola."
+    "blockedDescription": "Il browser ha bloccato la finestra di accesso. Aprila con il pulsante qui sotto. Questa pagina si aggiorna da sola.",
+    "doneTitle": "{app} connesso",
+    "doneTitleNoApp": "Connesso",
+    "doneDescription": "Il tuo agente ora può usare {app}.",
+    "doneClose": "Puoi chiudere questa scheda.",
+    "doneDeniedTitle": "Accesso annullato",
+    "doneDeniedDescription": "Non hai consentito l’accesso su {app}. Riavvia l’accesso da Kortix per collegarlo.",
+    "doneExpiredTitle": "Questo link di accesso è scaduto",
+    "doneExpiredDescription": "È già stato usato o è troppo vecchio. Riavvia l’accesso da Kortix.",
+    "doneFailedTitle": "{app} non si è connesso",
+    "doneFailedTitleNoApp": "L’accesso non è stato completato",
+    "doneFailedDescription": "Riavvia l’accesso da Kortix. Se fallisce di nuovo, invia il codice qui sotto al supporto.",
+    "doneErrorCode": "Codice errore: {code}",
+    "doneOpenKortix": "Apri Kortix",
+    "doneFallbackApp": "l’app"
   }
 }

@@ -16,6 +16,7 @@
  * as one read-only list.
  */
 
+import { resolveProgramAgent } from '../../../session/composer/agent-selector';
 import { Alert, AlertDescription, AlertTitle } from '../../../primitives/alert';
 import { Button } from '../../../primitives/button';
 import { ButtonGroup } from '../../../primitives/button-group';
@@ -613,7 +614,7 @@ function SheetForm({
   }, [serverKey, server, dirty]);
 
   const name = draft.nameOverride ?? '';
-  const problems = validate(draft, { name, configFields, app, edit: true }, t);
+  const problems = validate(draft, { name, configFields, app, edit: true, programAgent: resolveProgramAgent(agents, draft.agent) }, t);
   const shown = showProblems ? problems : [];
   const blockError = (block: ComposerBlock) =>
     shown.find((p) => p.block === block && !p.field)?.message;

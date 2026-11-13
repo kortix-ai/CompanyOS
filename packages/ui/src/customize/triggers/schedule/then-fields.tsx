@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { type AutosizeTextAreaRef, Textarea } from '../../../primitives/textarea';
 import { ModelSelector } from '../../../session/models/model-selector';
 import { AgentSelector } from '../../../session/composer/session-chat-input';
+import { resolveProgramAgent } from '../../../session/composer/agent-selector';
 import { useTranslations as useI18nTranslations } from '../../../i18n';
 import {
   type Agent,
@@ -48,6 +49,8 @@ export function ThenFields({
   const tI18nComplete = useI18nTranslations('hardcodedUi.i18nComplete');
   const tComposer = useI18nTranslations('triggerComposer');
   const callsApp = draft.thenKind === 'app';
+  // A program agent (`run`) has no model: the text is its stdin, and empty sends the payload as JSON.
+  const programAgent = resolveProgramAgent(agents, draft.agent);
   // A null project id keeps the hook idle: only the App target lists the project's Apps.
   const projectApps = useProjectApps(callsApp ? projectId : null).data ?? [];
   // A saved target whose App is gone still shows its slug, so the form never reads as blank.
@@ -180,12 +183,14 @@ export function ThenFields({
           onChange={(e) => patch({ instruction: e.target.value })}
           aria-label={tI18nComplete.raw('text112f3ccb1b36')}
           aria-invalid={error ? true : undefined}
-          placeholder={tI18nComplete.raw('text2438ee64fbf9')}
+          placeholder={programAgent ? tComposer('programInputPlaceholder') : tI18nComplete.raw('text2438ee64fbf9')}
           rows={3}
-          className="leading-relaxed"
+          className={programAgent ? 'font-mono text-sm leading-relaxed' : 'leading-relaxed'}
         />
         <InlineError message={error} />
-        {draft.kind === 'event' && draft.eventType ? (
+        {programAgent ? (
+          <p className="text-muted-foreground text-xs leading-relaxed text-pretty">{tComposer('programInputHelp')}</p>
+        ) : draft.kind === 'event' && draft.eventType ? (
           <PromptVariableHints payloadSchema={payloadSchema} onInsert={insertVariable} />
         ) : (
           <p className="text-muted-foreground text-xs leading-relaxed text-pretty">
@@ -205,6 +210,7 @@ export function ThenFields({
             onSelect={(agent) => patch({ agent })}
           />
         </div>
+        {programAgent ? null : (
         <div className="space-y-1.5">
           <Label className="text-xs">{tI18nComplete.raw('text5e2c614c23f0')}</Label>
           <ModelSelector
@@ -217,6 +223,7 @@ export function ThenFields({
             onSelect={(model) => patch({ model })}
           />
         </div>
+        )}
       </div>
     </div>
   );

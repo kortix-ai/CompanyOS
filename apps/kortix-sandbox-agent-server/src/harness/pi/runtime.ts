@@ -31,7 +31,7 @@ import { kortixEventBus, sessionLogEventBus } from '@/services/event-bus/kortix-
 import { logger } from '@/lib/log/logger'
 import { resolveKortixRuntimeStateDirectory } from '@/lib/config/runtime-state-dir'
 import { SECRET_CAPABILITIES_INSTRUCTION_PATH } from '@/services/sandbox-env/secret-capabilities'
-import { WORKSPACE_SETUP_NOTE_PATH } from '../shared/workspace-setup'
+import { WORKSPACE_SETUP_NOTE_PATH, parseWorkspaceSetup } from '../shared/workspace-setup'
 import { withheldManagedSkills } from '@/services/skills/managed-skills'
 import { loadTools } from '@/services/tools/host'
 import { compiledAgentConfigFromEnv } from '@/services/config-provider/compiled-agent-config'
@@ -57,6 +57,7 @@ import { contextRecord } from './extensions/context-record'
 import { listCheckout } from './extensions/workflow-store'
 import { promptOrigin, TRIGGER_EVENT_TAG, ULTRACODE_SYSTEM_LINE, ultracodeRequested, type PromptOrigin } from './prompt-origin'
 import { enabledFeatureFlags } from '@/lib/config/feature-flags'
+import { PROGRAM_AGENTS_FLAG, PROGRAM_PROVIDER_ID, programStep, type ProgramRun } from './program'
 import type { WorkflowRunMetadata } from '@kortix/api-contract/kortix-tool-card'
 import type { WorkflowControlBody } from '@kortix/api-contract/multi-agent'
 import type { RuntimeCapability } from '@kortix/api-contract/runtime-relay'
@@ -819,7 +820,7 @@ export class PiRuntime {
         sessionID: this.rootId,
         mintMessageId: () => this.clock.mint(this.now()),
         parentMessageId: () => this.turnParent,
-        model: () => ({ providerID: this.selected!.providerID, modelID: this.selected!.modelID }),
+        model: () => (this.programRun(this.agentName) ? { providerID: PROGRAM_PROVIDER_ID, modelID: this.agentName } : { providerID: this.selected!.providerID, modelID: this.selected!.modelID }),
         agent: () => this.agentName,
         workspace: this.workspace,
         now: this.now,
@@ -850,7 +851,11 @@ export class PiRuntime {
         // `sessionId` names the thread, so a Claude subscription model keeps one Claude session per thread.
         streamFn: withMessageIdentity(
           withAgentSampling(
-            (model, context, options) => this.models!.models.streamSimple(model, context, { ...options, sessionId: this.rootId }),
+            (model, context, options) => {
+              // A program agent (`run`): its command takes the model's place (program.ts).
+              const program = this.programRun(this.agentName)
+              return program ? programStep(program, context, options) : this.models!.models.streamSimple(model, context, { ...options, sessionId: this.rootId })
+            },
             () => this.sampling(this.compiledAgent(), this.selected!, this.turnParent ?? undefined),
           ),
           { reserveMessageId: () => this.adapter!.reserveMessageId(), turnId: () => this.turnParent },
@@ -2389,7 +2394,10 @@ export class PiRuntime {
     const agent = new core.Agent({
       streamFn: withMessageIdentity(
         withAgentSampling(
-          (m, context, options) => this.models!.models.streamSimple(m, context, { ...options, sessionId: child.id }),
+          (m, context, options) => {
+            const program = this.programRun(input.agent, child.id)
+            return program ? programStep(program, context, options) : this.models!.models.streamSimple(m, context, { ...options, sessionId: child.id })
+          },
           () => this.sampling(this.compiled?.agent?.[input.agent], selected, messageId),
         ),
         { reserveMessageId: () => adapter.reserveMessageId(), turnId: () => messageId, threadId: child.id },
@@ -2600,6 +2608,22 @@ export class PiRuntime {
 
   private compiledAgent(): CompiledAgent | undefined {
     return this.compiled?.agent?.[this.agentName]
+  }
+
+  /** The run of `agent` when it is a program agent (`run`); null for a model agent. */
+  private programRun(agent: string, sessionId: string = this.sessionId): ProgramRun | null {
+    const command = this.compiled?.agent?.[agent]?.run?.trim()
+    if (!command) return null
+    const repo = parseWorkspaceSetup(this.env.KORTIX_WORKSPACE_SETUP)?.repos[0]?.path
+    return {
+      command,
+      agent,
+      sessionId,
+      enabled: enabledFeatureFlags(this.env).has(PROGRAM_AGENTS_FLAG),
+      cwd: repo && existsSync(repo) ? repo : this.workspace,
+      env: this.env,
+      ...(this.compiled?.agent?.[agent]?.timeout ? { timeoutMs: this.compiled.agent[agent]!.timeout! * 1000 } : {}),
+    }
   }
 
   /**
@@ -2890,8 +2914,10 @@ export class PiRuntime {
       color: agent?.color ?? null,
       variant: agent?.variant ?? null,
       source: 'config',
-      model:
-        name === this.agentName && selected
+      // A program agent's replies name provider `program` (program.ts): so does its listing, and pickers hide the model.
+      model: agent?.run?.trim()
+        ? { providerID: PROGRAM_PROVIDER_ID, modelID: name }
+        : name === this.agentName && selected
           ? { providerID: selected.providerID, modelID: selected.modelID }
           : agent?.model && nativeModelId(agent.model)
             ? agentModelRef(nativeModelId(agent.model)!)

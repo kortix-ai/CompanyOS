@@ -38,6 +38,9 @@ export const DENY_COMMANDS: Record<string, Denial> = {
     use: 'the Capture API with a Kortix API key: GET /v1/accounts/<account_id>/capture/… (timeline, timeline/items, search, frames, media)',
   },
   tools: { reason: "it reads and edits a local kortix.yaml, and this server has no project checkout", use: 'run_command in a session sandbox, where the project lives: `kortix tools ls` there' },
+  plan: { reason: 'it reads a local repository, and this server has no project checkout', use: 'run_command in a session sandbox, where the repository lives: `kortix plan --json` there' },
+  onboard: { reason: 'it ships a local repository and edits its kortix.yaml, and this server has no project checkout', use: 'run_command in a session sandbox, where the repository lives: `kortix onboard --yes` there' },
+  templates: { reason: 'it writes a template into a local kortix.yaml, and this server has no project checkout', use: 'run_command in a session sandbox, where the repository lives: `kortix templates add <id>` there' },
   chrome: { reason: "it attaches the user's browser to a session sandbox, and this server is not one", use: 'run_command in a session sandbox: `kortix chrome use` there' },
   goals: { reason: "its lifecycle commands act as the goal's own owner or verifier session, and this server is neither", use: 'the Goals REST API (GET/POST /v1/projects/<id>/goals) or the Goals page; inside the goal\'s session, `kortix goals` there' },
 };

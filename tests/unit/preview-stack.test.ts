@@ -214,6 +214,9 @@ describe('ephemeral self-host preview stack', () => {
     expect(configured.runtimeEnv).toContain('PLATINUM_INFERENCE_API_KEY=pt_live_inference');
     // The preview edge drops request bodies above ~124 KiB, Storage uploads included.
     expect(configured.runtimeEnv).toContain('PROMPT_ATTACHMENT_UPLOAD_MODE=chunked');
+    // One sandbox address drives both suites; the 300/min edge default answered 429.
+    expect(configured.runtimeEnv).toContain('KORTIX_PUBLIC_EDGE_REQS_PER_MIN=100000');
+    expect(configured.runtimeEnv).toContain('KORTIX_PUBLIC_AUTH_EDGE_REQS_PER_MIN=10000');
     expect(configured.runtimeEnv).toContain('KORTIX_FRONTEND_MEMORY_LIMIT=2048m');
     expect(configured.runtimeEnv).toContain('EMAIL_PROVIDER_ORDER=mailpit');
     expect(configured.runtimeEnv).toContain('MANAGED_GIT_PROVIDER=github');

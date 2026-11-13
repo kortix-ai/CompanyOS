@@ -1010,6 +1010,13 @@ const envSchema = z.object({
   // Per-session ceiling on stored-log reads (GET /v1/workspaces/:id/sessions/:id/log);
   // why and how it sits: the sessionLogReadLimiter in middleware/rate-limit.ts (KRTX-4696).
   KORTIX_SESSION_LOG_READS_PER_MIN: optInt(300),
+  // Per client address, before any route runs (middleware/public-edge-rate-limit.ts,
+  // KRTX-3932): every /v1 request, and a stricter budget for the auth families
+  // (/v1/auth, /v1/oauth, /v1/access, /v1/tunnel/device-auth). A deployment
+  // whose callers all share one address (a preview: its browser and API suites
+  // run from one sandbox) raises them; production keeps the defaults.
+  KORTIX_PUBLIC_EDGE_REQS_PER_MIN: optInt(300),
+  KORTIX_PUBLIC_AUTH_EDGE_REQS_PER_MIN: optInt(30),
   // Proxies in front of the API that APPEND to X-Forwarded-For. The client is
   // the entry this many places from the right; everything to its left was
   // written by the client. Cloud: Cloudflare + ALB = 2. Self-host Caddy
@@ -1808,6 +1815,8 @@ export const config = {
   KORTIX_LLM_GATEWAY_REQS_PER_MIN: env.KORTIX_LLM_GATEWAY_REQS_PER_MIN,
   KORTIX_PROXY_REQS_PER_MIN: env.KORTIX_PROXY_REQS_PER_MIN,
   KORTIX_SESSION_LOG_READS_PER_MIN: env.KORTIX_SESSION_LOG_READS_PER_MIN,
+  KORTIX_PUBLIC_EDGE_REQS_PER_MIN: env.KORTIX_PUBLIC_EDGE_REQS_PER_MIN,
+  KORTIX_PUBLIC_AUTH_EDGE_REQS_PER_MIN: env.KORTIX_PUBLIC_AUTH_EDGE_REQS_PER_MIN,
   KORTIX_TRUSTED_PROXY_HOPS: env.KORTIX_TRUSTED_PROXY_HOPS,
   KORTIX_UNKNOWN_TOKEN_ATTEMPTS_PER_MIN: env.KORTIX_UNKNOWN_TOKEN_ATTEMPTS_PER_MIN,
   KORTIX_TRIGGER_MAX_PROVISIONING_SESSIONS_PER_PROJECT:

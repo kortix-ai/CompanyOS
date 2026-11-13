@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Context, MiddlewareHandler } from 'hono';
 import { bearerToken } from '../shared/bearer-token';
 import { KEY_PREFIX_SANDBOX } from '../shared/crypto';
+import { config } from '../config';
 import { TokenBucketRateLimiter } from '../shared/rate-limit';
 import { isTokenValidated } from '../shared/token-hash';
 import { requestClientKey } from './client-ip';
@@ -26,8 +27,36 @@ function budgetKey(c: Context, clientKey: string): string {
   return `sandbox:${createHash('sha256').update(token).digest('base64url')}`;
 }
 
+export interface PublicEdgeBudgets {
+  /** Requests per minute per client on every /v1 route outside the auth families. */
+  apiPerMin: number;
+  /** Requests per minute per client on /v1/auth, /v1/oauth, /v1/access and /v1/tunnel/device-auth. */
+  authPerMin: number;
+}
+
+function perMin(value: unknown, fallback: number): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isInteger(n) && n > 0 ? n : fallback;
+}
+
+/**
+ * The budgets from config: `KORTIX_PUBLIC_EDGE_REQS_PER_MIN` (300) and
+ * `KORTIX_PUBLIC_AUTH_EDGE_REQS_PER_MIN` (30). A preview raises both: its
+ * browser and API suites reach it from one sandbox address, and at 300/minute
+ * that address got 429 on 11 of 41 API flows and 5 browser journeys
+ * (deploy-preview run 43495059821, 2026-11-13).
+ */
+export function publicEdgeBudgets(): PublicEdgeBudgets {
+  return {
+    apiPerMin: perMin(config.KORTIX_PUBLIC_EDGE_REQS_PER_MIN, 300),
+    authPerMin: perMin(config.KORTIX_PUBLIC_AUTH_EDGE_REQS_PER_MIN, 30),
+  };
+}
+
 /** Pre-validation budget: malformed bodies and missing credentials count too. */
-export function createPublicEdgeRateLimitMiddleware(): MiddlewareHandler {
+export function createPublicEdgeRateLimitMiddleware(
+  budgets: PublicEdgeBudgets = publicEdgeBudgets(),
+): MiddlewareHandler {
   // replica-local: budget scales with API replicas; this is abuse protection, not a quota.
   const authLimiter = new TokenBucketRateLimiter('public-auth-edge');
   // replica-local: general abuse budget, independent of the stricter auth budget.
@@ -48,8 +77,8 @@ export function createPublicEdgeRateLimitMiddleware(): MiddlewareHandler {
     );
     const key = budgetKey(c, clientKey);
     const result = isAuth
-      ? authLimiter.check(key, { limit: 30, windowMs: 60_000 })
-      : apiLimiter.check(key, { limit: 300, windowMs: 60_000 });
+      ? authLimiter.check(key, { limit: budgets.authPerMin, windowMs: 60_000 })
+      : apiLimiter.check(key, { limit: budgets.apiPerMin, windowMs: 60_000 });
     const setBudgetHeaders = () => {
       c.header('X-RateLimit-Limit', String(result.limit));
       c.header('X-RateLimit-Remaining', String(result.remaining));

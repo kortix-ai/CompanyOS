@@ -63,6 +63,7 @@ import { loadEnv } from '../../src/core/env';
 import { createDatabaseSession } from '../../src/fixtures/database-project';
 import { journalSessionLog, seedSessionTranscript } from '../../src/fixtures/session-transcript';
 import { runDatabaseSql } from '../helpers/database';
+import { ensureOwnedAccount } from '../helpers/accounts';
 import { createApiJsonClient } from '../helpers/http';
 import { createManifestProject, fundAccount } from '../helpers/manifest-project';
 import { createAuthUser, installBrowserSessionDirect, signIn } from '../helpers/session-auth';
@@ -253,12 +254,8 @@ async function setup(page: Page, label: string, messages?: SavedMessages) {
   const email = `instant-${label}-${Date.now()}@example.test`;
   const user = await createAuthUser(email, authOptions);
   const auth = await signIn(email, authOptions);
-  const accounts = await api<Array<{ account_id: string; personal_account?: boolean }>>(
-    auth.access_token,
-    'GET',
-    '/accounts',
-  );
-  const accountId = (accounts.find((a) => a.personal_account) ?? accounts[0]).account_id;
+  // No account exists at sign-up (Workspaces D3): make the user's own.
+  const accountId = await ensureOwnedAccount(api, auth.access_token);
   await fundAccount(env.databaseUrl!, accountId);
   const project = await createManifestProject({
     api,

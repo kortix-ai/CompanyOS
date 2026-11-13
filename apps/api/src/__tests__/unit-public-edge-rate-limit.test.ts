@@ -1,6 +1,7 @@
 import { afterEach, expect, setSystemTime, test } from 'bun:test';
 import { Hono } from 'hono';
-import { createPublicEdgeRateLimitMiddleware } from '../middleware/public-edge-rate-limit';
+import { config } from '../config';
+import { createPublicEdgeRateLimitMiddleware, publicEdgeBudgets } from '../middleware/public-edge-rate-limit';
 
 afterEach(() => setSystemTime());
 
@@ -154,4 +155,47 @@ test('an upgrade response is returned untouched', async () => {
   app.all('*', () => upgrade);
   const response = await app.request('/v1/p/x/ws', { headers: { 'X-Forwarded-For': '198.51.100.8' } });
   expect(response).toBe(upgrade);
+});
+
+test('the budgets default to 300 and 30 per minute and come from config', () => {
+  const settings = config as unknown as Record<string, unknown>;
+  const before = {
+    api: settings.KORTIX_PUBLIC_EDGE_REQS_PER_MIN,
+    auth: settings.KORTIX_PUBLIC_AUTH_EDGE_REQS_PER_MIN,
+  };
+  try {
+    delete settings.KORTIX_PUBLIC_EDGE_REQS_PER_MIN;
+    delete settings.KORTIX_PUBLIC_AUTH_EDGE_REQS_PER_MIN;
+    expect(publicEdgeBudgets()).toEqual({ apiPerMin: 300, authPerMin: 30 });
+    settings.KORTIX_PUBLIC_EDGE_REQS_PER_MIN = 100_000;
+    settings.KORTIX_PUBLIC_AUTH_EDGE_REQS_PER_MIN = 10_000;
+    expect(publicEdgeBudgets()).toEqual({ apiPerMin: 100_000, authPerMin: 10_000 });
+    // A zero budget would answer 429 to every request; it falls back instead.
+    settings.KORTIX_PUBLIC_EDGE_REQS_PER_MIN = 0;
+    settings.KORTIX_PUBLIC_AUTH_EDGE_REQS_PER_MIN = -1;
+    expect(publicEdgeBudgets()).toEqual({ apiPerMin: 300, authPerMin: 30 });
+  } finally {
+    settings.KORTIX_PUBLIC_EDGE_REQS_PER_MIN = before.api;
+    settings.KORTIX_PUBLIC_AUTH_EDGE_REQS_PER_MIN = before.auth;
+  }
+});
+
+test('a raised budget admits what the default refuses, for API and auth routes alike', async () => {
+  setSystemTime(new Date('2026-11-13T20:24:00Z'));
+  const app = new Hono();
+  app.use('*', createPublicEdgeRateLimitMiddleware({ apiPerMin: 1000, authPerMin: 100 }));
+  app.all('*', (c) => c.json({ ok: true }));
+  const from = { 'X-Forwarded-For': '51.158.248.121' };
+  for (let i = 0; i < 301; i++) {
+    expect((await app.request('/v1/projects/provision', { method: 'POST', headers: from })).status).toBe(200);
+  }
+  for (let i = 0; i < 31; i++) {
+    expect((await app.request('/v1/auth/sign-in', { method: 'POST', headers: from })).status).toBe(200);
+  }
+  const api = await app.request('/v1/accounts/tokens', { method: 'POST', headers: from });
+  expect(api.headers.get('X-RateLimit-Limit')).toBe('1000');
+  expect(api.headers.get('X-RateLimit-Remaining')).toBe('698');
+  const auth = await app.request('/v1/oauth/token', { method: 'POST', headers: from });
+  expect(auth.headers.get('X-RateLimit-Limit')).toBe('100');
+  expect(auth.headers.get('X-RateLimit-Remaining')).toBe('68');
 });

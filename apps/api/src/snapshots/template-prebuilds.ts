@@ -4,6 +4,7 @@ import { config, type SandboxProviderName } from '../config';
 import { computeTemplateIdentity, listTemplatesForProject, resolveTemplateForBuildSlug, refreshTemplateState, type ResolvedTemplate } from './templates';
 import { enabledTemplateBuildProviders, observeTemplateProviderCoverage, resolveRoutedTemplateState, type SandboxTemplateProvider, type SandboxTemplateProviderCoverage } from './provider-coverage';
 import { ensureSandboxImage, type SnapshotBuildSource } from './builder';
+import { logger } from '../lib/logger';
 import { shouldReconcileProviderState } from './builder-log';
 import type { ProviderState } from './providers';
 
@@ -64,7 +65,7 @@ export interface TemplateReconcileProvider {
 export interface TemplateReconcileResult {
   slug: string;
   snapshot_name: string | null;
-  /** `ready`: built on every provider. `building`: a build runs or was started. `error`: see `error`. */
+  /** `ready`: built on every provider that answered. `building`: a build runs or was started. `error`: see `error`. */
   state: 'ready' | 'building' | 'error';
   error: string | null;
   providers: TemplateReconcileProvider[];
@@ -102,7 +103,22 @@ export async function reconcileProjectTemplates(
     const answers: TemplateReconcileProvider[] = [];
     for (const providerId of providers) {
       const provider = getSandboxProvider(providerId);
-      const state = await provider.getSnapshotState(identity.snapshotName);
+      // A provider that cannot answer (bad credentials, an outage) is reported
+      // as `unknown` and gets no build: it must not fail the reconcile of the
+      // providers that work.
+      let state: ProviderState;
+      try {
+        state = await provider.getSnapshotState(identity.snapshotName);
+      } catch (err) {
+        logger.warn('[snapshots] reconcile: a provider cannot report a template image', {
+          provider: providerId,
+          projectId: project.projectId,
+          slug: t.slug,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        answers.push({ provider: providerId, state: 'unknown', started: false });
+        continue;
+      }
       const started = state !== 'active' && shouldReconcileProviderState(state);
       if (started) {
         kickPreBuild(project, {
@@ -115,10 +131,11 @@ export async function reconcileProjectTemplates(
       }
       answers.push({ provider: providerId, state, started });
     }
+    const reachable = answers.filter((a) => a.state !== 'unknown');
     results.push({
       slug: t.slug,
       snapshot_name: identity.snapshotName,
-      state: answers.length > 0 && answers.every((a) => a.state === 'active') ? 'ready' : 'building',
+      state: reachable.length > 0 && reachable.every((a) => a.state === 'active') ? 'ready' : 'building',
       error: null,
       providers: answers,
     });

@@ -1,5 +1,6 @@
 import { config } from '../../config';
-import { countUnreachablePrompts, unreachablePromptsMetricLine } from '../../projects/session-lifecycle/unreachable-prompts';
+import { logger } from '../../lib/logger';
+import { countUnreachablePrompts, unreachablePromptsMetricLine } from '../../projects/surface';
 import { runWorkerTick } from '../../shared/audit-scope';
 import { leaderTimer } from '../../shared/leader-timer';
 
@@ -18,7 +19,9 @@ const reporter = leaderTimer(async () => {
       process.stdout.write(`${unreachablePromptsMetricLine(counts, config.INTERNAL_KORTIX_ENV)}\n`);
     });
   } catch (err) {
-    console.error('[prompt delivery metric] tick failed', err);
+    logger.error('[prompt-delivery-metric] tick failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
   return TICK_MS;
 });

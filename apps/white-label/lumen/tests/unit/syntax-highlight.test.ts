@@ -10,13 +10,13 @@
  */
 
 import { describe, expect, test } from 'bun:test';
+import { isCopyableHttp, renderHttp } from '@kortix/white-label-shared/call-snippets';
 import {
   AUTHORIZATION_HEADER,
   CALL_SNIPPET_IDS,
   type SnippetContext,
   callSnippet,
 } from '../../src/lib/call-snippets';
-import { isCopyableHttp, renderHttp } from '@kortix/white-label-shared/call-snippets';
 import { type SnippetLanguage, type TokenKind, highlight } from '@kortix/white-label-shared/syntax-highlight';
 
 const LANGUAGES: SnippetLanguage[] = ['ts', 'json', 'http'];
@@ -98,7 +98,9 @@ describe('highlighting cannot alter the text', () => {
     for (const id of CALL_SNIPPET_IDS) {
       const snippet = callSnippet(id, { projectId: 'p1' });
       if (!isCopyableHttp(snippet.http)) continue;
-      expect(joined(renderHttp(snippet.http, AUTHORIZATION_HEADER), 'http')).toContain(AUTHORIZATION_HEADER);
+      expect(joined(renderHttp(snippet.http, AUTHORIZATION_HEADER), 'http')).toContain(
+        AUTHORIZATION_HEADER,
+      );
     }
   });
 

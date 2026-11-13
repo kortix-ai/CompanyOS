@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { buildUpstreamPath } from '@kortix/white-label-shared/upstream-path';
 import {
   SESSION_CREATE,
   SESSION_ONE,
@@ -14,7 +15,6 @@ import {
   redactsIdentity,
   runtimeSandbox,
 } from '../../src/server/proxy-policy';
-import { buildUpstreamPath } from '@kortix/white-label-shared/upstream-path';
 
 const P = 'projects/0b8c9d3e-1111-4222-8333-944455556666';
 const S = `${P}/sessions/7a1b2c3d-1111-4222-8333-944455556666`;

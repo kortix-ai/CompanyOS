@@ -35,6 +35,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { renderHttp } from '@kortix/white-label-shared/call-snippets';
 import {
   AUTHORIZATION_HEADER,
   CALL_SNIPPET_IDS,
@@ -42,7 +43,6 @@ import {
   callSnippet,
   callSnippets,
 } from '../../src/lib/call-snippets';
-import { renderHttp } from '@kortix/white-label-shared/call-snippets';
 const APP_ROOT = join(import.meta.dir, '..', '..');
 
 const SRC_ROOT = join(APP_ROOT, 'src');
@@ -357,7 +357,10 @@ describe('the new coverage does not weaken the two rules', () => {
 
   test('no snippet renders upstream customer attribution fields', () => {
     const text = callSnippets({ projectId: 'p1' })
-      .map((snippet) => `${snippet.sdk}\n${renderHttp(snippet.http, AUTHORIZATION_HEADER)}\n${snippet.notes.join('\n')}`)
+      .map(
+        (snippet) =>
+          `${snippet.sdk}\n${renderHttp(snippet.http, AUTHORIZATION_HEADER)}\n${snippet.notes.join('\n')}`,
+      )
       .join('\n');
     expect(text).not.toMatch(REMOVED_ATTRIBUTION_PATTERN);
   });

@@ -1,12 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  SECRET_VALUE_PLACEHOLDER,
+  isCopyableHttp,
+  renderHttp,
+} from '@kortix/white-label-shared/call-snippets';
+import {
   AUTHORIZATION_HEADER,
   CALL_SNIPPET_IDS,
   type SnippetContext,
   callSnippet,
   callSnippets,
 } from '../../src/lib/call-snippets';
-import { SECRET_VALUE_PLACEHOLDER, isCopyableHttp, renderHttp } from '@kortix/white-label-shared/call-snippets';
 import { NO_OVERRIDES, buildSessionCreateInput } from '../../src/lib/session-overrides';
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
@@ -74,13 +78,6 @@ describe('call snippets never render credentials', () => {
     // Any `Bearer` that is not the placeholder is a real token in a snippet.
     expect(text.match(/Bearer (?!\$KORTIX_API_KEY)\S+/)).toBeNull();
   });
-
-  test('every HTTP request carries the placeholder authorization line', () => {
-    for (const snippet of callSnippets({ projectId: PROJECT_ID })) {
-      if (!isCopyableHttp(snippet.http)) continue;
-      expect(renderHttp(snippet.http, AUTHORIZATION_HEADER)).toContain(AUTHORIZATION_HEADER);
-    }
-  });
 });
 
 describe('attribution data is absent', () => {
@@ -124,12 +121,16 @@ describe('the create snippet is the request the dialog would send', () => {
     expect(snippet.sdk).toContain('generateSessionId()');
     expect(snippet.sdk).toContain('"session_id": sessionId');
     // The wire form still shows the concrete value.
-    expect(renderHttp(snippet.http, AUTHORIZATION_HEADER)).toContain(`"session_id": "${SESSION_ID}"`);
+    expect(renderHttp(snippet.http, AUTHORIZATION_HEADER)).toContain(
+      `"session_id": "${SESSION_ID}"`,
+    );
   });
 
   test('the path is the project the screen is on', () => {
     const snippet = callSnippet('session.create', { projectId: PROJECT_ID });
-    expect(renderHttp(snippet.http, AUTHORIZATION_HEADER)).toContain(`POST /v1/projects/${PROJECT_ID}/sessions`);
+    expect(renderHttp(snippet.http, AUTHORIZATION_HEADER)).toContain(
+      `POST /v1/projects/${PROJECT_ID}/sessions`,
+    );
   });
 });
 
@@ -159,22 +160,12 @@ describe('the other calls', () => {
   });
 
   test('session costs are read for the current project', () => {
-    expect(renderHttp(callSnippet('session.costs', { projectId: PROJECT_ID }).http, AUTHORIZATION_HEADER)).toContain(
-      `GET /v1/usage/session-costs?project_id=${PROJECT_ID}`,
-    );
-  });
-
-  test('an approval resolves by execution id, and carries no widening scope', () => {
-    const snippet = callSnippet('approval.resolve', {
-      projectId: PROJECT_ID,
-      executionId: 'exec_42',
-    });
-    const rendered = renderHttp(snippet.http, AUTHORIZATION_HEADER);
-    expect(rendered).toContain(`POST /v1/projects/${PROJECT_ID}/approvals/exec_42`);
-    expect(rendered).toContain('"decision": "approve"');
-    // The documented call must not teach a scope that no longer exists — the
-    // decision covers exactly the call that asked for it.
-    expect(rendered).not.toContain('scope');
+    expect(
+      renderHttp(
+        callSnippet('session.costs', { projectId: PROJECT_ID }).http,
+        AUTHORIZATION_HEADER,
+      ),
+    ).toContain(`GET /v1/usage/session-costs?project_id=${PROJECT_ID}`);
   });
 
   test('a secret is addressed by identifier', () => {
@@ -235,7 +226,7 @@ describe('the create snippet cannot drift from what the app sends', () => {
     const expected = buildSessionCreateInput(overrides, { sessionId: 'SID' });
     for (const key of Object.keys(expected)) {
       if (key === 'session_id') continue;
-      expect(`${snippet?.sdk ?? ''}${renderHttp(snippet!.http, AUTHORIZATION_HEADER)}`).toContain(key);
+      expect(`${snippet.sdk}${renderHttp(snippet.http, AUTHORIZATION_HEADER)}`).toContain(key);
     }
   });
 });

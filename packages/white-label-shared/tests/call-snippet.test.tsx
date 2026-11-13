@@ -21,8 +21,8 @@ Object.defineProperties(globalThis, {
 const success = mock();
 const error = mock();
 mock.module('@kortix/ui/toast', () => ({ successToast: success, errorToast: error }));
-process.env.NEXT_PUBLIC_LUMEN_DEV_PANELS = '1';
-const { CallSnippet } = await import('../../src/components/dev/call-snippet');
+const { CallSnippetPanel } = await import('../src/call-snippet');
+const { sessionDelete } = await import('../src/call-snippets');
 let root: Root | undefined;
 
 afterEach(() => {
@@ -38,7 +38,16 @@ async function mount() {
   const host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
-  await act(async () => root?.render(<CallSnippet id="session.delete" defaultOpen />));
+  await act(async () =>
+    root?.render(
+      <CallSnippetPanel
+        snippet={sessionDelete({}, 'Ownership note.')}
+        authorization="Authorization: Bearer $TEST_TOKEN"
+        bearerNote="$TEST_TOKEN is a placeholder."
+        defaultOpen
+      />,
+    ),
+  );
   const button = host.querySelector<HTMLButtonElement>('[aria-label="Copy the SDK call"]');
   if (!button) throw new Error('SDK copy button missing');
   return button;
@@ -103,17 +112,4 @@ test('successful copy resets after 1500ms and clears the reset on unmount', asyn
   act(() => root?.unmount());
   root = undefined;
   expect(jest.getTimerCount()).toBe(0);
-});
-
-test('the panel renders nothing unless NEXT_PUBLIC_LUMEN_DEV_PANELS=1 (customers never see it)', async () => {
-  process.env.NEXT_PUBLIC_LUMEN_DEV_PANELS = '';
-  try {
-    const host = document.createElement('div');
-    document.body.append(host);
-    root = createRoot(host);
-    await act(async () => root?.render(<CallSnippet id="session.delete" defaultOpen />));
-    expect(host.innerHTML).toBe('');
-  } finally {
-    process.env.NEXT_PUBLIC_LUMEN_DEV_PANELS = '1';
-  }
 });

@@ -25,7 +25,11 @@
  * claims it sends can be asserted without rendering anything.
  */
 
-import { type CallSnippet, approvalResolve, sessionDelete } from '@kortix/white-label-shared/call-snippets';
+import {
+  type CallSnippet,
+  approvalResolve,
+  sessionDelete,
+} from '@kortix/white-label-shared/call-snippets';
 
 /**
  * The upstream bearer, as a placeholder: the member's project-scoped token

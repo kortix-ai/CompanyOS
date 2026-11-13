@@ -23,10 +23,10 @@ import { type SessionPayload, getRequestSession } from '@/server/auth';
 import { evaluatePolicy } from '@/server/policy';
 import { consumeRateLimit } from '@/server/rate-limit';
 import { recordRuntimeProject, resolveRuntimeProject } from '@/server/runtime-access';
-import { buildUpstreamPath } from '@kortix/white-label-shared/upstream-path';
 import { upstreamBase } from '@/server/upstream-path';
 import { addOwnedProject, isOwner, listOwnedProjects } from '@/server/users';
 import { forwardKortixRequest } from '@kortix/sdk/server';
+import { buildUpstreamPath } from '@kortix/white-label-shared/upstream-path';
 import type { NextRequest } from 'next/server';
 
 export const runtime = 'nodejs';

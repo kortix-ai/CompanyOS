@@ -15,8 +15,13 @@
  * (`src/lib/call-snippets.ts` has nowhere to put one).
  */
 
+import {
+  AUTHORIZATION_HEADER,
+  type CallSnippetId,
+  type SnippetContext,
+  callSnippet,
+} from '@/lib/call-snippets';
 import { CallSnippetPanel } from '@kortix/white-label-shared/call-snippet';
-import { AUTHORIZATION_HEADER, type CallSnippetId, type SnippetContext, callSnippet } from '@/lib/call-snippets';
 
 export function CallSnippet({
   id,

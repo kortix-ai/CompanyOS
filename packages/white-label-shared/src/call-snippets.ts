@@ -82,7 +82,10 @@ export function isCopyableHttp(form: HttpForm): boolean {
 // ── The calls both apps make ─────────────────────────────────────────────────
 
 /** `ownership`: how this app keeps one caller out of another's session. */
-export function sessionDelete(ctx: { projectId?: string; sessionId?: string }, ownership: string): CallSnippet {
+export function sessionDelete(
+  ctx: { projectId?: string; sessionId?: string },
+  ownership: string,
+): CallSnippet {
   const projectId = ctx.projectId ?? PLACEHOLDER.projectId;
   const sessionId = ctx.sessionId ?? PLACEHOLDER.sessionId;
 
@@ -113,7 +116,10 @@ export function sessionDelete(ctx: { projectId?: string; sessionId?: string }, o
 }
 
 /** `inbox`: why this app reads pending approvals from the session audit. */
-export function approvalResolve(ctx: { projectId?: string; executionId?: string }, inbox: string): CallSnippet {
+export function approvalResolve(
+  ctx: { projectId?: string; executionId?: string },
+  inbox: string,
+): CallSnippet {
   const projectId = ctx.projectId ?? PLACEHOLDER.projectId;
   const executionId = ctx.executionId ?? PLACEHOLDER.executionId;
   return {

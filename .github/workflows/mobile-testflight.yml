@@ -25,7 +25,7 @@ jobs:
   testflight:
     # Manual retries also use dev. PRs and other branches cannot submit.
     if: github.repository == 'kortix-ai/CompanyOS' && github.ref == 'refs/heads/dev'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_RUNNER_M || 'ubuntu-24.04' }}
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

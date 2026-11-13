@@ -17,7 +17,7 @@ Pick the path that matches what you have:
 | A repository you already work in | [Set up an existing repository](#set-up-an-existing-repository): one prompt to your coding agent adds `kortix.yaml` |
 | A workspace a teammate made | [Clone it](#create-or-get-a-workspace) with `kortix workspaces clone` |
 
-Each path ends at a merged change request. Each step is a git operation on your workspace's repository. Every API and `--json` response that names a workspace carries its id as `workspace_id`. The older project names keep working permanently: `kortix projects`, `--project`, `project_id` (always equal to `workspace_id`) and `KORTIX_PROJECT_ID` all mean the workspace. The SDK names are `kortix.workspaces` and `kortix.workspace(id)`.
+Each path ends at a merged change request. Each step is a git operation on your workspace's repository. Workspace and session objects in the API, and `kortix workspaces create --json`, carry the workspace id as `workspace_id`. Some older responses name it only `project_id`, which always holds the same id. The older project names keep working permanently: `kortix projects`, `--project`, `project_id` and `KORTIX_PROJECT_ID` all mean the workspace. The SDK names are `kortix.workspaces` and `kortix.workspace(id)`.
 
 | Step | Command | What happens in git |
 | --- | --- | --- |

@@ -41,7 +41,9 @@ any open state ──▶ stopped                    (a person, from the Goals pa
 ```
 
 You cannot reach `done`, and you cannot stop, pause, resume or restart a goal,
-or raise its caps. A person does those from the Goals page.
+or raise its caps. A person does those from the Goals page. One exception, in
+goal mode: the chat that owns the goal stops it when its person says so
+(`kortix goals stop`, below).
 </lifecycle>
 
 <commands>
@@ -52,6 +54,7 @@ or raise its caps. A person does those from the Goals page.
 | `kortix goals transition waiting_on_user --reason "<question>" [--chase-at <iso>]` | owner | asks the assigned user; see `<waiting>` |
 | `kortix goals progress [--met c1,c2] [--unmet c3] [--evidence c1=evidence/x.md] [--summary "…"]` | owner | reports criteria and the summary. Evidence paths are relative, under `evidence/`. Reporting is not verifying |
 | `kortix goals verify` | owner | every criterion reported met with an evidence file that exists: the API starts a verifier session and the goal is `verifying` |
+| `kortix goals stop --reason "<what the person said>"` | the chat that owns the goal (goal mode) | the person told you to stop or drop it: the goal ends as `stopped`, its heartbeat is removed. Runs only in a turn the person started. Never to get out of the work |
 | `kortix goals handover --note "<state of play>"` | owner | the API starts a fresh owner session with the note; you stop |
 | `kortix goals verdict --pass <ids> [--fail <ids>] [--inconclusive <ids>] [--note <id>="<why>"]…` | verifier | see `<verify>` |
 | `kortix goals check` | owner | prints what the goal needs from you |
@@ -83,6 +86,8 @@ criteria). Never ask permission to track what they just asked for. It starts
 `goals` flag is needed. One open goal per chat; it has no handover. Each turn
 the goal leads the chat's instructions, and the turn may not end until you
 record where it stands (`progress`, `verify`, or `transition waiting_on_user`).
+The person ends it by telling you: `kortix goals stop --reason "<what they
+said>"`, then say it is stopped. After that the chat can own a new goal.
 Without `--here` the API starts a separate owner session and the goal is
 tracked on the Goals page (needs the `goals` flag). A goal's own owner or
 verifier session cannot start another goal: note the follow-up in `log.md`.

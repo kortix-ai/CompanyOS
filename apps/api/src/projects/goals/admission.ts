@@ -15,7 +15,7 @@ import { logger } from '../../lib/logger';
 import type { ProjectRow } from '../lib/serializers';
 import { rescheduleHeartbeat, setHeartbeatEnabled } from './effects';
 import { notifyGoal } from './notify';
-import { decideWake, isBoundGoal, nextUtcMidnight, type WakeDecision } from './rules';
+import { decideWake, isBoundGoal, isGoalEnginePrompt, nextUtcMidnight, type WakeDecision } from './rules';
 import { GoalError, goalByHeartbeat, goalFlagOn, goalOfSession, setGoalRuntimeFields, writeGoal, type GoalRow } from './store';
 
 export type GoalWakeVerdict =
@@ -192,16 +192,23 @@ export async function goalHeartbeatEditRefusal(projectId: string, reminderId: st
 }
 
 /**
- * Why a goal prompt queued into `sessionId` must not run now, or null. A prompt
+ * Why the prompt queued into `sessionId` must not run now, or null. A prompt
  * the engine queued before a person paused or stopped the goal waits in the
  * session inbox; it is refused at delivery, so no turn starts after the control.
+ *
+ * A chat that owns its goal (goal mode) stays a chat: a prompt the engine did
+ * not queue (its person's message, another loop of the chat) always runs. The
+ * goal's own prompts (its heartbeat fire, a `system:goal` prompt) are refused
+ * like any goal's, and so is every prompt into its verifier session.
  */
-export async function goalPromptRefusal(sessionId: string): Promise<string | null> {
+export async function goalPromptRefusal(sessionId: string, prompt: { source: string; text: string }): Promise<string | null> {
   const goal = await goalOfSession(sessionId);
-  // The chat that owns its goal stays a chat: its person's messages always run. The heartbeat is gated at fire time.
-  if (!goal || isBoundGoal(goal)) return null;
+  if (!goal) return null;
+  const bound = isBoundGoal(goal);
+  if (bound && goal.ownerSessionId === sessionId && !isGoalEnginePrompt(goal, prompt)) return null;
   if (goal.state === 'done' || goal.state === 'stopped') return `The goal is ${goal.state}: its queued prompt does not run.`;
   if (goal.pausedAt) return 'A person paused the goal: its queued prompt does not run.';
-  if (!(await goalFlagOn(goal.projectId))) return 'Goals is turned off for this project: its queued prompt does not run.';
+  // Goal mode needs no flag.
+  if (!bound && !(await goalFlagOn(goal.projectId))) return 'Goals is turned off for this project: its queued prompt does not run.';
   return null;
 }

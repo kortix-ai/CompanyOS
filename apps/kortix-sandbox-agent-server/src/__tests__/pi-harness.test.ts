@@ -1955,6 +1955,32 @@ export default function (pi) {
     }
   })
 
+  // extensions/goal-mode.ts in the real runtime: only a turn the person started stops the chat's goal.
+  test("goal mode: a wake turn cannot stop the goal; the person's own turn can", async () => {
+    const goal = { goal_id: 'g1', title: 'Synthetic invoice paid', state: 'waiting_on_user', slug: 'invoice', folder: '/Users/u1/Goals/invoice', owner_session_id: 'sess-pi-test', paused_at: null, waiting_on: null, next_wake_at: null, criteria: [{ id: 'c1', text: 'The transfer shows as sent' }] }
+    const server = Bun.serve({
+      port: 0,
+      fetch: (req) => (new URL(req.url).pathname === '/v1/workspaces/proj-pi-test/goals' ? Response.json({ goals: [goal] }) : new Response('not found', { status: 404 })),
+    })
+    try {
+      const run = async (prompt: string) => {
+        const r = await boot({
+          script: [{ tool: 'bash', args: { command: 'echo kortix goals stop --reason gave-up' } }, { text: 'Done.' }],
+          env: { KORTIX_API_URL: `http://127.0.0.1:${server.port}/v1`, KORTIX_FEATURE_FLAGS: 'goal_mode' },
+        })
+        const before = gateway.sent.length
+        await promptAndSettle(r, prompt)
+        return JSON.stringify(gateway.sent.slice(before).at(-1))
+      }
+      const wake = await run('[REMINDER reminder.0123456789ab — recurring]\nGoal wake: /drives/me/Goals/invoice. Load the kortix-goals skill and run one wake (goal g1).')
+      expect(wake).toContain('Only the person stops this goal')
+      const person = await run('drop the invoice goal, the vendor cancelled')
+      expect(person).not.toContain('Only the person stops this goal')
+    } finally {
+      server.stop(true)
+    }
+  })
+
   test('the provider hooks route through the current runner, and pass through without one', async () => {
     const ref: { current?: any } = {}
     const hooks = extensionAgentHooks(ref)

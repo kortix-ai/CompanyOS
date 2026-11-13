@@ -5,6 +5,19 @@ each section. Decision owner: Marko until 2026-11-05, Jay from 2026-11-06.
 
 ## Decided
 
+- 2026-11-13 · **The chat stops its own goal when its person says so.** Goal
+  mode has no Goals page and a person's Goals API answers `403` while `goals`
+  is off, so the chat is the person's only control. `POST …/stop` accepts the
+  owning chat of a bound goal with a `reason` (what the person said);
+  `kortix goals stop --reason "…"`. Any other session, and every page goal,
+  stays person-only. kortixd `goal-mode.ts` blocks the command in a turn the
+  person did not start (a wake, a loop fire, a peer message), so the chat
+  cannot drop its goal unattended. Stop only: no pause or resume from the
+  chat in v1 (a stopped goal leaves room for the next `--here` goal). The
+  delivery gate (`goalPromptRefusal`) now refuses the goal's own queued
+  prompts (heartbeat fire, `system:goal`, the verifier session) after a stop
+  or pause, and still lets the person's messages and the chat's other loops
+  run. (Jay, as Goals owner, reviewing Marko's branch.)
 - 2026-11-11 · **Goal mode: a goal bound to its chat, on everywhere, no UI.**
   A chat that hears a clear outcome creates the goal on itself
   (`kortix goals new … --here`, `setup.bound`): no owner session, no first

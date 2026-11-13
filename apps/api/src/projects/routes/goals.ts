@@ -170,7 +170,7 @@ const ACTIONS: Array<{ verb: string; summary: string; who: string; schema: z.Zod
   { verb: 'handover', summary: 'Hand a goal to a fresh owner session', who: 'The owner session.', schema: HandoverGoalRequestSchema, run: goals.handoverGoal as Action },
   { verb: 'pause', summary: 'Pause a goal', who: 'Its creator, assigned person or a project admin.', schema: GoalControlRequestSchema, run: goals.pauseGoal as Action },
   { verb: 'resume', summary: 'Resume a goal', who: 'Its creator, assigned person or a project admin.', schema: GoalControlRequestSchema, run: goals.resumeGoal as Action },
-  { verb: 'stop', summary: 'Stop a goal', who: 'Its creator, assigned person or a project admin. A retry on a stopped goal finishes its cleanup.', schema: GoalControlRequestSchema, run: goals.stopGoal as Action },
+  { verb: 'stop', summary: 'Stop a goal', who: 'Its creator, assigned person or a project admin; or the chat that owns it (goal mode), with what its person said as `reason`. A retry on a stopped goal finishes its cleanup.', schema: GoalControlRequestSchema, run: goals.stopGoal as Action },
   { verb: 'restart', summary: 'Restart a stopped goal', who: 'Its creator, assigned person or a project admin.', schema: GoalControlRequestSchema, run: goals.restartGoal as Action },
 ];
 

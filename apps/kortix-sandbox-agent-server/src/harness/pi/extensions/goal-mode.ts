@@ -10,7 +10,11 @@
  *   stops early when a nudged step used no tool (it is stuck, not working);
  * - while the goal waits on the outside world, the goal's heartbeat loop
  *   (the API's, every 4 h by default) wakes the chat; `waiting_on_user`,
- *   `verifying`, a pause or a stop let the run settle.
+ *   `verifying`, a pause or a stop let the run settle;
+ * - the person ends it by telling the chat (`kortix goals stop`: goal mode
+ *   has no Goals page). That command runs only in a turn the person started:
+ *   in a wake, a loop fire or a peer message it is blocked, so the chat
+ *   cannot drop its goal while nobody watches.
  *
  * The chat reads its goal once per box (`undefined` → read); after that only
  * while it has one, or after a run that ran `kortix goals`. A chat without a
@@ -18,6 +22,7 @@
  * `goalModeExtensions` for a top-level session whose box lists `goal_mode`.
  */
 import type { InlineExtension } from '@earendil-works/pi-coding-agent'
+import { promptOrigin } from '../prompt-origin'
 import { runMessages } from './follow-through'
 
 export const GOAL_MODE_BOX_FLAG = 'goal_mode'
@@ -47,6 +52,22 @@ const OPEN = new Set(['draft', 'active', 'waiting_on_user', 'verifying'])
 /** A command that records where the goal stands. Creating the goal is not one: the turn that creates it starts the work. */
 const RECORDS = /\bkortix\s+goals\s+(?:progress|verify|transition)\b/
 const GOALS_COMMAND = /\bkortix\s+goals\b/
+const STOP_COMMAND = /\bkortix\s+goals\s+stop\b/
+/** How every prompt the goal engine writes starts (apps/api goals/rules.ts `goalWakePrompt`). */
+const GOAL_WAKE = /^Goal wake: /
+
+/** The person started this turn with a message of their own: not a loop fire, a goal wake or a peer message. */
+export function personTurn(text: string | null | undefined): boolean {
+  return promptOrigin(text) === 'human' && !GOAL_WAKE.test(text ?? '')
+}
+
+/** Why a tool call that stops the goal does not run in this turn, or null. */
+export function stopRefusal(input: unknown, inPersonTurn: boolean): string | null {
+  if (inPersonTurn) return null
+  const command = typeof (input as { command?: unknown } | null)?.command === 'string' ? (input as { command: string }).command : JSON.stringify(input ?? '')
+  if (!STOP_COMMAND.test(command)) return null
+  return 'Only the person stops this goal, in a message of their own, and this turn came from a wake, a loop or another session. Do the next step, or ask them: `kortix goals transition waiting_on_user --reason "<question>"`.'
+}
 
 function blocks(message: Message): Block[] {
   if (typeof message.content === 'string') return [{ type: 'text', text: message.content }]
@@ -94,6 +115,7 @@ export function goalSection(goal: ChatGoal): string {
     '- `kortix goals verify` when every criterion is met with evidence: a separate verifier decides;',
     '- `kortix goals transition waiting_on_user --reason "<question>"` when only the person can unblock it.',
     `Waiting on someone else (a reply, an approval, a payment): record it with \`progress\`, set a \`wake_on\` when an event can wake you, and end the turn. The goal's heartbeat wakes this chat${goal.next_wake_at ? ` (next ${goal.next_wake_at})` : ''}.`,
+    'The person tells you to stop or drop it: `kortix goals stop --reason "<what they said>"`, then say it is stopped. Only then. Never stop it yourself because it is hard, slow or blocked.',
   ].join('\n')
 }
 
@@ -127,6 +149,8 @@ export interface GoalModeOptions {
   listGoals: () => Promise<ChatGoal[] | null>
   /** False for a turn the extension leaves alone (a peer message). */
   applies: () => boolean
+  /** The text of the prompt that started the current turn. */
+  turnText: () => string
   onNudge?: (goal: ChatGoal, nudges: number) => void
 }
 
@@ -148,6 +172,10 @@ export function goalMode(options: GoalModeOptions): InlineExtension {
       pi.on('before_agent_start', async (event) => {
         const current = goal === undefined || goal ? await refresh() : null
         return current ? { systemPrompt: `${event.systemPrompt}\n\n${goalSection(current)}` } : undefined
+      })
+      pi.on('tool_call', (event) => {
+        const reason = stopRefusal(event.input, personTurn(options.turnText()))
+        return reason ? { block: true, reason } : undefined
       })
       pi.on('agent_settled', () => {
         nudges = 0

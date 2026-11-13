@@ -27,11 +27,26 @@ export function actorIdOf(actor: GoalActor): string | null {
 
 /**
  * Goal mode: a goal its chat created with `here` and owns itself
- * (`setup.bound`). It needs no `goals` flag, has no handover, and never
- * refuses a prompt into that chat.
+ * (`setup.bound`). It needs no `goals` flag and has no handover. The chat
+ * stays a chat: its person's messages always run, and it stops its own goal
+ * when its person says so.
  */
 export function isBoundGoal(goal: { setup: Record<string, unknown> }): boolean {
   return goal.setup?.bound === true;
+}
+
+/** The marker every prompt the goal engine writes starts with (`goalWakePrompt`). */
+const wakeMarker = (boxFolder: string): string => `Goal wake: ${boxFolder}.`;
+
+/**
+ * A prompt the goal engine queued, not a person: one from the goal queue
+ * (`system:goal`: an answer, a resume, a restart, a verifier's first prompt),
+ * or a fire of the goal's heartbeat reminder. A stop deletes the heartbeat,
+ * so a fire queued before it is known by the wake marker in its text.
+ */
+export function isGoalEnginePrompt(goal: Pick<GoalRow, 'boxFolder'>, prompt: { source: string; text: string }): boolean {
+  if (prompt.source === 'system:goal') return true;
+  return prompt.source === 'trigger:reminder' && prompt.text.includes(wakeMarker(goal.boxFolder));
 }
 
 export function isOpenState(state: string): boolean {
@@ -230,7 +245,7 @@ export function goalAgentCandidates(
 
 /** The heartbeat prompt. The marker `Goal wake: <box folder>.` is what `kortix goals` and older boxes look for. */
 export function goalWakePrompt(boxFolder: string, goalId: string): string {
-  return `Goal wake: ${boxFolder}. Load the kortix-goals skill and run one wake (goal ${goalId}).`;
+  return `${wakeMarker(boxFolder)} Load the kortix-goals skill and run one wake (goal ${goalId}).`;
 }
 
 export function chaseBounds(now: Date): { min: Date; max: Date } {

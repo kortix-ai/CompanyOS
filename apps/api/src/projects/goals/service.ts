@@ -121,6 +121,17 @@ function requireManager(goal: GoalRow, actor: GoalActor): void {
   if (!isGoalManager(goal, actor)) forbidden("Only the goal's creator, its assigned person or a project admin can do this.");
 }
 
+/**
+ * Who stops a goal: a person who manages it, or the chat that owns it (goal
+ * mode has no Goals page, so the chat is the person's only control). The chat
+ * passes what its person said as the reason. Any other session is refused.
+ */
+function requireStopper(goal: GoalRow, actor: GoalActor, reason: string | undefined): void {
+  if (actor.kind !== 'session' || !isBoundGoal(goal)) return requireManager(goal, actor);
+  if (goal.ownerSessionId !== actor.sessionId) forbidden('Only the chat that owns this goal stops it.');
+  if (!reason?.trim()) invalid('Pass the reason: what the person said when they told you to stop.');
+}
+
 /** The caller is the goal's CURRENT owner session, and the goal is not paused or closed (the generation fence). */
 function requireOwner(goal: GoalRow, actor: GoalActor): asserts actor is Extract<GoalActor, { kind: 'session' }> {
   if (actor.kind !== 'session') forbidden("Only the goal's owner session can do this.");
@@ -790,14 +801,16 @@ export async function resumeGoal(ctx: GoalContext, goalId: string, req: GoalCont
 
 /** `POST /stop`. On a goal already stopped it only finishes the cleanup, and answers 200: a retry completes a stop. */
 export async function stopGoal(ctx: GoalContext, goalId: string, req: GoalControlRequest): Promise<GoalRow> {
+  const actor = ctx.actor;
   const result = await writeGoal(ctx.project.projectId, goalId, (goal, now) => {
-    requireManager(goal, ctx.actor);
+    requireStopper(goal, ctx.actor, req.reason);
     if (goal.state === 'stopped') return { unchanged: true };
     checkRevision(goal, req.revision);
     if (!isOpenState(goal.state)) conflict(goal, 'A done goal cannot be stopped.');
     return {
       // Prompts that never queued are moot once a person stops the goal; a restart starts fresh.
-      patch: { state: 'stopped', stoppedAt: now, stoppedByUserId: actorIdOf(ctx.actor), verifierSessionId: null, setup: { ...goal.setup, pending_prompts: [] } },
+      // A chat stops its goal for the person it works for: that person is who stopped it.
+      patch: { state: 'stopped', stoppedAt: now, stoppedByUserId: actor.kind === 'session' ? actor.userId : actorIdOf(actor), verifierSessionId: null, setup: { ...goal.setup, pending_prompts: [] } },
       bumpGeneration: true,
       event: ev(ctx.actor, 'stopped', req.reason ?? 'Stopped by a person.'),
     };
@@ -806,7 +819,9 @@ export async function stopGoal(ctx: GoalContext, goalId: string, req: GoalContro
   await dropHeartbeat(goal);
   if (result.changed) {
     const by = actorIdOf(ctx.actor);
-    if (goal.ownerSessionId) await goalEffects().abortTurn(goal.ownerSessionId, by);
+    // The chat that stops its own goal is mid-turn, telling its person so: that turn runs on.
+    const ownTurn = actor.kind === 'session' && actor.sessionId === goal.ownerSessionId;
+    if (goal.ownerSessionId && !ownTurn) await goalEffects().abortTurn(goal.ownerSessionId, by);
     if (result.before.verifierSessionId) await goalEffects().abortTurn(result.before.verifierSessionId, by);
   }
   return reread(goal);

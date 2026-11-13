@@ -26,7 +26,7 @@ const { runGoalReconcilerTick } = await import('../projects/goals/reconcile');
 const { wakeGoalForMergedChangeRequest } = await import('../projects/lib/goal-wake');
 const { fireGitTrigger } = await import('../projects/lib/trigger-fire');
 const { GoalError, getGoal } = await import('../projects/goals/store');
-const { nextUtcMidnight } = await import('../projects/goals/rules');
+const { goalWakePrompt, nextUtcMidnight } = await import('../projects/goals/rules');
 type GoalActor = import('../projects/goals/rules').GoalActor;
 type ProjectRow = import('../projects/lib/serializers').ProjectRow;
 
@@ -35,6 +35,8 @@ const PROJECT = crypto.randomUUID();
 const ANA = crypto.randomUUID();
 const BO = crypto.randomUUID();
 const volume = new FakeVolume();
+/** A prompt a person typed into the session. */
+const PERSON = { source: 'ui', text: 'How is it going?' };
 
 const prompts: Array<{ sessionId: string; key: string; text: string; userId: string | null }> = [];
 /** Prompt keys whose next queue attempt fails once (a lifecycle queue outage). */
@@ -229,7 +231,52 @@ describe('goal mode: a goal bound to its chat', () => {
     const flagOff = { ...project, metadata: { experimental: { goals: false, reminders: true } } } as ProjectRow;
     expect(await admitGoalWake({ project: flagOff, goal, idempotencyKey: `bound-${goal.goalId}`, source: 'reminder' })).toMatchObject({ admitted: true });
     await db.update(projectGoals).set({ state: 'stopped' }).where(eq(projectGoals.goalId, goal.goalId));
-    expect(await goalPromptRefusal(sessionId)).toBeNull();
+    expect(await goalPromptRefusal(sessionId, PERSON)).toBeNull();
+  });
+
+  test("after a pause or a stop the goal's own queued prompts do not run; the person's messages and the chat's other loops do", async () => {
+    const sessionId = await chat();
+    const goal = await goals.createGoal(ctx(asSession(sessionId)), boundInput());
+    const wake = goalWakePrompt(goal.boxFolder, goal.goalId);
+    const heartbeatFire = { source: 'trigger:reminder', text: `[REMINDER reminder.0123456789ab — recurring]\n${wake}` };
+    const enginePrompt = { source: 'system:goal', text: `${wake} A person resumed the goal.` };
+    const otherLoop = { source: 'trigger:reminder', text: '[REMINDER reminder.ba9876543210 — recurring]\nCheck the synthetic mailbox.' };
+    // Active: everything runs, with the project's `goals` flag off too.
+    await db.update(projects).set({ metadata: { experimental: { goals: false, reminders: true } } }).where(eq(projects.projectId, PROJECT));
+    try {
+      for (const prompt of [PERSON, heartbeatFire, enginePrompt, otherLoop]) expect(await goalPromptRefusal(sessionId, prompt)).toBeNull();
+    } finally {
+      await db.update(projects).set({ metadata: { experimental: { goals: true, reminders: true } } }).where(eq(projects.projectId, PROJECT));
+    }
+    await db.update(projectGoals).set({ pausedAt: new Date() }).where(eq(projectGoals.goalId, goal.goalId));
+    expect(await goalPromptRefusal(sessionId, heartbeatFire)).toContain('paused');
+    expect(await goalPromptRefusal(sessionId, enginePrompt)).toContain('paused');
+    expect(await goalPromptRefusal(sessionId, PERSON)).toBeNull();
+    expect(await goalPromptRefusal(sessionId, otherLoop)).toBeNull();
+    const verifierId = await chat();
+    await db.update(projectGoals).set({ pausedAt: null, state: 'stopped', verifierSessionId: verifierId }).where(eq(projectGoals.goalId, goal.goalId));
+    expect(await goalPromptRefusal(sessionId, heartbeatFire)).toContain('stopped');
+    expect(await goalPromptRefusal(sessionId, PERSON)).toBeNull();
+    // The verifier session is not the chat: nothing runs in it once the goal is stopped.
+    expect(await goalPromptRefusal(verifierId, enginePrompt)).toContain('stopped');
+  });
+
+  test('the chat stops its own goal when its person says so: heartbeat gone, its own turn not aborted, room for the next goal', async () => {
+    const sessionId = await chat();
+    const goal = await goals.createGoal(ctx(asSession(sessionId)), boundInput());
+    expect(await refusal(goals.stopGoal(ctx(asSession(sessionId)), goal.goalId, { revision: goal.revision }))).toMatchObject({ status: 422 });
+    expect(await refusal(goals.stopGoal(ctx(asSession(await chat())), goal.goalId, { revision: goal.revision, reason: 'Ana said: drop it' }))).toMatchObject({ status: 403 });
+    const stopped = await goals.stopGoal(ctx(asSession(sessionId)), goal.goalId, { revision: goal.revision, reason: 'Ana said: drop it' });
+    expect(stopped).toMatchObject({ state: 'stopped', stoppedByUserId: ANA, heartbeatReminderId: null });
+    expect(aborted).not.toContain(sessionId);
+    const [event] = (await eventsOf(goal.goalId)).filter((row) => row.kind === 'stopped');
+    expect(event).toMatchObject({ actorKind: 'session', actorId: sessionId, message: 'Ana said: drop it' });
+    expect((await goals.createGoal(ctx(asSession(sessionId)), boundInput())).state).toBe('active');
+  });
+
+  test("a page goal's owner session still cannot stop it", async () => {
+    const goal = await activeGoal();
+    expect(await refusal(goals.stopGoal(ctx(asSession(goal.ownerSessionId!)), goal.goalId, { revision: goal.revision, reason: 'giving up' }))).toMatchObject({ status: 403 });
   });
 });
 
@@ -547,13 +594,13 @@ describe('the heartbeat belongs to the API', () => {
 describe('council round 1 fixes', () => {
   test('a goal prompt queued before a pause or stop is refused at delivery; after resume it runs', async () => {
     const goal = await activeGoal();
-    expect(await goalPromptRefusal(goal.ownerSessionId!)).toBeNull();
+    expect(await goalPromptRefusal(goal.ownerSessionId!, PERSON)).toBeNull();
     const paused = await goals.pauseGoal(ctx(ana), goal.goalId, { revision: goal.revision });
-    expect(await goalPromptRefusal(goal.ownerSessionId!)).toContain('paused');
+    expect(await goalPromptRefusal(goal.ownerSessionId!, PERSON)).toContain('paused');
     const resumed = await goals.resumeGoal(ctx(ana), goal.goalId, { revision: paused.revision });
-    expect(await goalPromptRefusal(goal.ownerSessionId!)).toBeNull();
+    expect(await goalPromptRefusal(goal.ownerSessionId!, PERSON)).toBeNull();
     await goals.stopGoal(ctx(ana), goal.goalId, { revision: resumed.revision });
-    expect(await goalPromptRefusal(goal.ownerSessionId!)).toContain('stopped');
+    expect(await goalPromptRefusal(goal.ownerSessionId!, PERSON)).toContain('stopped');
   });
 
   test('an answer whose prompt did not queue is kept and delivered once by the reconciler; a retry does not duplicate it', async () => {
@@ -608,10 +655,10 @@ describe('council round 1 fixes', () => {
 
   test('a queued goal prompt is refused while the project goals flag is off', async () => {
     const goal = await activeGoal();
-    expect(await goalPromptRefusal(goal.ownerSessionId!)).toBeNull();
+    expect(await goalPromptRefusal(goal.ownerSessionId!, PERSON)).toBeNull();
     await db.update(projects).set({ metadata: { experimental: { goals: false, reminders: true } } }).where(eq(projects.projectId, PROJECT));
     try {
-      expect(await goalPromptRefusal(goal.ownerSessionId!)).toContain('turned off');
+      expect(await goalPromptRefusal(goal.ownerSessionId!, PERSON)).toContain('turned off');
     } finally {
       await db.update(projects).set({ metadata: { experimental: { goals: true, reminders: true } } }).where(eq(projects.projectId, PROJECT));
     }
@@ -625,9 +672,9 @@ describe('council round 1 fixes', () => {
     const reported = await goals.reportProgress(ctx(owner), goal.goalId, { revision: goal.revision, criteria: [{ id: 'c1', reported_met: true, evidence: 'evidence/a.md' }, { id: 'c2', reported_met: true, evidence: 'evidence/b.md' }] });
     const verifying = await goals.requestVerification(ctx(owner), goal.goalId, { revision: reported.revision });
     const verifierId = verifying.verifierSessionId!;
-    expect(await goalPromptRefusal(verifierId)).toBeNull();
+    expect(await goalPromptRefusal(verifierId, PERSON)).toBeNull();
     await goals.stopGoal(ctx(ana), goal.goalId, { revision: verifying.revision });
-    expect(await goalPromptRefusal(verifierId)).toContain('stopped');
+    expect(await goalPromptRefusal(verifierId, PERSON)).toContain('stopped');
   });
 
   test('resuming a paused draft wakes its owner (a draft has no heartbeat)', async () => {

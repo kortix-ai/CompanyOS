@@ -445,7 +445,7 @@ flow(
     domain: 'goals',
     requires: ['database'],
     timeoutMs: 240_000,
-    routes: [`POST ${R.create}`, `GET ${R.read}`, `POST ${R.handover}`, 'GET /v1/projects/:projectId/sessions/:sessionId/reminders', 'PATCH /v1/projects/:projectId/features'],
+    routes: [`POST ${R.create}`, `GET ${R.read}`, `POST ${R.handover}`, `POST ${R.stop}`, 'GET /v1/projects/:projectId/sessions/:sessionId/reminders', 'PATCH /v1/projects/:projectId/features'],
   },
   async (ctx) => {
     const { project, world, owner } = await openWorld(ctx);
@@ -484,6 +484,19 @@ flow(
         const other = (await world.mintAgentSession({ agent: 'kortix', launcher: ctx.P.OWNER, sessionId: randomUUID(), skipGrantSync: true })).client;
         expectError(await other.post(R.create, { goal_id: randomUUID(), brief: 'No checks', agent: 'kortix', here: true }, { params }), 422, 'goal_invalid');
         expectError(await chat.post(R.handover, { revision: goal.revision, note: 'moving on' }, { params: { ...params, goalId: goal.goal_id } }), 409, 'goal_conflict');
+      });
+
+      await ctx.step('the person tells the chat to stop: another chat cannot see the goal → 404, no reason → 422, the owning chat → 200 stopped with no active loop left; the chat then opens its next goal → 201', async () => {
+        const goalParams = { ...params, goalId: goal.goal_id };
+        const other = (await world.mintAgentSession({ agent: 'kortix', launcher: ctx.P.OWNER, sessionId: randomUUID(), skipGrantSync: true })).client;
+        expectError(await other.post(R.stop, { revision: goal.revision, reason: 'The person said: drop it' }, { params: goalParams }), 404, 'goal_not_found');
+        expectError(await chat.post(R.stop, { revision: goal.revision }, { params: goalParams }), 422, 'goal_invalid');
+        const stopped = (await chat.post(R.stop, { revision: goal.revision, reason: 'The person said: drop it' }, { params: goalParams })).status(200).json<{ goal: Goal }>().goal;
+        if (stopped.state !== 'stopped') throw new Error(JSON.stringify(stopped));
+        const loops = (await owner.get('/v1/projects/:projectId/sessions/:sessionId/reminders', { params: { ...params, sessionId: chatId } })).status(200).json<{ reminders: Array<{ state: string }> }>().reminders;
+        if (loops.some((r) => r.state === 'active')) throw new Error(JSON.stringify(loops));
+        const next = await createGoal(chat, project.id, { brief: `Synthetic quote collected ${randomUUID().slice(0, 6)}`, criteria: ['Three quotes are on file'], here: true });
+        if (next.state !== 'active' || next.owner_session_id !== chatId) throw new Error(JSON.stringify(next));
       });
     } finally {
       await world.close();

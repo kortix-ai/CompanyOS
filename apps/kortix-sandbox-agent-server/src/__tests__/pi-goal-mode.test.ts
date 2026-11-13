@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { MAX_NUDGES, goalSection, goalSettle, ownGoal, type ChatGoal } from '@/harness/pi/extensions/goal-mode'
+import { MAX_NUDGES, goalSection, goalSettle, ownGoal, personTurn, stopRefusal, type ChatGoal } from '@/harness/pi/extensions/goal-mode'
 
 const goal = (patch: Partial<ChatGoal> = {}): ChatGoal => ({
   goal_id: 'g1',
@@ -65,5 +65,28 @@ describe('goalSection', () => {
     expect(text).toContain('- c2: The vendor confirmed the IBAN (open)')
     expect(text).toContain('/Users/u1/Goals/invoice-paid/evidence/')
     for (const command of ['kortix goals progress', 'kortix goals verify', 'kortix goals transition waiting_on_user']) expect(text).toContain(command)
+  })
+
+  test('says how the person stops it, and that the chat never stops it by itself', () => {
+    expect(goalSection(goal())).toContain('kortix goals stop --reason')
+  })
+})
+
+describe('stopping the goal', () => {
+  const stop = { command: 'kortix goals stop --reason "the person said drop it"' }
+
+  test("a person's own message is a person turn; a loop fire, a goal wake and a peer message are not", () => {
+    expect(personTurn('drop the invoice goal')).toBe(true)
+    expect(personTurn('[REMINDER reminder.0123456789ab — recurring]\nGoal wake: /drives/me/Goals/invoice. Load the kortix-goals skill and run one wake (goal g1).')).toBe(false)
+    expect(personTurn('Goal wake: /drives/me/Goals/invoice. Load the kortix-goals skill and run one wake (goal g1). A person resumed the goal.')).toBe(false)
+    expect(personTurn('<trigger_event>{"type":"cron"}</trigger_event>')).toBe(false)
+  })
+
+  test('a stop runs only in a person turn; every other goal command runs in any turn', () => {
+    expect(stopRefusal(stop, true)).toBeNull()
+    expect(stopRefusal(stop, false)).toContain('Only the person stops this goal')
+    expect(stopRefusal({ command: 'cd /tmp && kortix  goals stop --reason x' }, false)).not.toBeNull()
+    expect(stopRefusal({ command: 'kortix goals progress --summary "stop the old plan"' }, false)).toBeNull()
+    expect(stopRefusal({ command: 'kortix goals transition waiting_on_user --reason "stop or go on?"' }, false)).toBeNull()
   })
 })

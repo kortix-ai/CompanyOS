@@ -1973,6 +1973,7 @@ export class PiRuntime {
       goalMode({
         sessionId: plane.sessionId,
         applies: () => promptOrigin(this.active?.input.text ?? '') !== 'peer',
+        turnText: () => this.active?.input.text ?? '',
         listGoals: async () => {
           const answer = await callApi(plane, 'GET', `/workspaces/${encodeURIComponent(plane.projectId)}/goals`)
           const goals = (answer.body as { goals?: ChatGoal[] } | null)?.goals

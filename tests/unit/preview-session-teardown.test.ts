@@ -261,8 +261,10 @@ async function deployBranchEnvWith(publicOrigin: string) {
     branchEnv: 'feature-x',
     publicOrigin,
   }).catch((reason: unknown) => reason);
-  expect(error).toBeInstanceOf(PreviewInfrastructureError);
-  return { cause: String((error as PreviewInfrastructureError).cause), written };
+  if (!(error instanceof PreviewInfrastructureError)) {
+    throw new Error(`expected a PreviewInfrastructureError, got ${String(error)}`);
+  }
+  return { cause: String(error.cause), written };
 }
 
 describe('the public origin of a branch environment deploy', () => {

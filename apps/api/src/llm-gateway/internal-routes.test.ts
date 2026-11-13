@@ -99,6 +99,17 @@ mock.module('../secrets/account-resource', () => ({
   },
 }));
 
+// The shared Idempotency-Key replay (KRTX-4612): the database behind it is faked.
+const storedReplays = new Map<string, unknown>();
+const actualReplays = await import('./idempotency-replays');
+mock.module('./idempotency-replays', () => ({
+  ...actualReplays,
+  getReplay: async (key: string) => storedReplays.get(key) ?? null,
+  putReplay: async (key: string, answer: unknown) => {
+    if (!storedReplays.has(key)) storedReplays.set(key, answer);
+  },
+}));
+
 const { createInternalGatewayRoutes } = await import('./internal-routes');
 const { gatewayModelCatalog } = await import('./models/catalog-models');
 // The lineup Platinum Inference would list.
@@ -681,4 +692,37 @@ test('paid full discovery marks managed access available without claiming extern
   expect(res.status).toBe(200);
   expect(models['glm-5.3-flash']).toMatchObject({ availability: 'available' });
   expect(models['anthropic/claude-opus-4-8']).toMatchObject({ availability: 'provider' });
+});
+
+describe('POST /internal/gateway/idempotency/{get,put} — the replay shared by gateway replicas', () => {
+  const key = 'ab'.repeat(32);
+  const answer = { status: 200, statusText: 'OK', headers: [['content-type', 'application/json']], body: '{"id":"cmpl-1"}' };
+  const call = (path: string, body: unknown, authorization = `Bearer ${TOKEN}`) =>
+    app().request(new Request(`http://test/idempotency/${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization },
+      body: JSON.stringify(body),
+    }));
+
+  test('a stored answer is read back by key, and a missing key answers null', async () => {
+    storedReplays.clear();
+    expect(await (await call('get', { key })).json()).toEqual({ answer: null });
+    expect((await call('put', { key, answer })).status).toBe(200);
+    expect(await (await call('get', { key })).json()).toEqual({ answer });
+  });
+
+  test('the first writer wins', async () => {
+    storedReplays.clear();
+    await call('put', { key, answer });
+    await call('put', { key, answer: { ...answer, body: '{"id":"cmpl-2"}' } });
+    expect(await (await call('get', { key })).json()).toEqual({ answer });
+  });
+
+  test('rejects a malformed key, a non-2xx answer and a missing internal token', async () => {
+    storedReplays.clear();
+    expect((await call('get', { key: 'not-a-hash' })).status).toBe(400);
+    expect((await call('put', { key, answer: { ...answer, status: 500 } })).status).toBe(400);
+    expect((await call('put', { key, answer }, 'Bearer wrong')).status).toBe(401);
+    expect(storedReplays.size).toBe(0);
+  });
 });

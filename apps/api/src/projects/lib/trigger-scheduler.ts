@@ -1,5 +1,5 @@
 import { assertRepositoryConnected } from './git';
-import { REPOSITORY_DISCONNECTED_CODE, isRepositoryDisconnectedError } from '../../shared/repository-health';
+import { isRepositoryDisconnectedError } from '../../shared/repository-health';
 import { eq } from 'drizzle-orm';
 import { logger } from '../../lib/logger';
 import { db } from '../../shared/db';
@@ -10,8 +10,10 @@ import { drainMonitorEvents } from './monitor-observer';
 import { checkAppTriggerSilence } from './app-trigger-silence';
 import { renderPromptTemplate } from './trigger-payload';
 import { fireGitTrigger, markGitTriggerAttemptFailed, markGitTriggerFired } from './trigger-fire';
+import { isTerminalFireFailure } from './trigger-fire-failure';
 import { raiseTriggerAlert } from './trigger-alerts';
 import { pauseTriggerIfAlwaysFailing } from './trigger-failure-pause';
+import { resumeSetupPausesTick } from './trigger-setup-pause';
 import { runProjectConnectorSweep } from './trigger-connector-sweep';
 import { schedulerHealth, triggerFireTimeoutMs, triggerScheduleClaimLimit, triggerExecutionConcurrency, connectorSweepIntervalMs, mapWithConcurrency, schedulerSweepIsStale, automaticFirePauseReason, withTimeout } from './trigger-scheduler-state';
 import { projectsView } from '../../workspaces/rows';
@@ -232,27 +234,7 @@ async function recordTriggerExecutionResult(
       return result.status;
     }
     const error = result.error ?? result.reason ?? 'scheduled trigger execution failed';
-    // A billing-gate rejection (wallet drained / no plan / no account) is
-    // PERMANENT — a retry re-runs the same `createSession` →
-    // `checkBillingAdmission` only to fail identically, so retrying five times
-    // over ~30s only delays the terminal state. Mark it terminal on the first
-    // failure so the trigger runtime row shows `failed` + the machine-readable
-    // reason immediately.
-    const terminal = result.errorCode === 'insufficient_credits'
-      || result.errorCode === 'subscription_required'
-      || result.errorCode === 'no_account'
-      // The model gate fails identically on every retry until the account
-      // gains a usable model; retrying only delays the terminal state the
-      // same way a billing rejection does.
-      || result.errorCode === 'no_usable_model'
-      // A model this account may not use (createSession's model gate): every
-      // retry is refused the same way. Five tries a slot was 3,665 refused
-      // creates a day for one project on prod (2026-11-02).
-      || result.errorCode === 'INVALID_SESSION_MODEL'
-      // The fire already paused the reminder; a retry cannot bring the session back.
-      || result.errorCode === 'reminder_session_gone'
-      // No retry reaches a repository until a person reconnects GitHub.
-      || result.errorCode === REPOSITORY_DISCONNECTED_CODE;
+    const terminal = isTerminalFireFailure(result);
     const state = await markTriggerExecutionFailed({ row, failedAt: completedAt, error, terminal });
     await markGitTriggerAttemptFailed(row.projectId, row.slug, completedAt, error);
     // Only the dead letter alerts the watchers: a retried attempt may still work.
@@ -345,6 +327,16 @@ export function runProjectTriggerSchedulerTick(): void {
   checkAppTriggerSilence().catch((error) => {
     logger.warn('[app-trigger-silence] check failed', { error: error instanceof Error ? error.message : String(error) });
   });
+
+  // Triggers paused because the account could not run them (no model, no
+  // credits) resume once the cause is gone. At most every 2 minutes.
+  resumeSetupPausesTick()
+    .then((resumed) => {
+      if (resumed) logger.info('[trigger-setup-pause] resumed triggers whose account can run them again', { resumed });
+    })
+    .catch((error) => {
+      logger.warn('[trigger-setup-pause] resume pass failed', { error: error instanceof Error ? error.message : String(error) });
+    });
 
   // Connector reconcile backstop — slower cadence than the trigger sweep so
   // we don't re-read every manifest each tick. Catches out-of-band manifest

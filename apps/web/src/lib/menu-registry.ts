@@ -828,7 +828,7 @@ export const menuRegistry: MenuItemDef[] = [
     group: 'navigation',
     showIn: ['commandPalette'],
     kind: 'navigate',
-    // The Inbox's Review tab (`reviewHref`) since 2026-11-08.
+    // The workspace Review page (`reviewHref`).
     href: '/workspaces/{projectId}/inbox?view=review',
     requiresProject: true,
     keywords: 'review center inbox approvals awaiting waiting needs you outputs queue',

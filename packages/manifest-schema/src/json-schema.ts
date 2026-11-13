@@ -600,8 +600,12 @@ function onRunTriggerSchema(): JsonSchemaFragment {
         additionalProperties: false,
         anyOf: [{ required: ['prompt'] }, { required: ['app'] }],
         properties: {
-          agent: { ...NON_BLANK_STRING, description: 'A declared agent. Default: `default_agent`.' },
-          prompt: { ...NON_BLANK_STRING, description: 'The first message of the run. Required unless `run.app` is set.' },
+          agent: { ...NON_BLANK_STRING, description: 'A declared agent. Default: `default_agent`. A program agent (`agents.<name>.run`) runs its command with the prompt as input.' },
+          prompt: {
+            ...NON_BLANK_STRING,
+            description:
+              'The first message of the run, as a template over the fire payload. `{{ body.order.id }}` is one value (an object renders as JSON); `{{ payload }}` is the whole payload as JSON. Roots: `trigger` and `fired_at` always; `body` and `headers` for a webhook; `event` for an event or App trigger; `change_request` for a change request; `source`, `actor` and `message` for a manual fire. A program agent reads the rendered prompt on stdin. Required unless `run.app` is set.',
+          },
           session: {
             ...normalizedEnumSchema(['fresh', 'reuse', 'pinned', 'keyed']),
             default: 'fresh',
@@ -1253,8 +1257,14 @@ function agentBlockV3Schema(): JsonSchemaFragment {
         default: 'allow',
         description: 'Which tool calls run, ask a person, or never run: `allow`, `ask` or `deny` (`"*"` and `all` also mean `allow`). `skill` and `task` belong to `skills` and `subagents`.',
       },
-      prompt: { ...NON_BLANK_STRING, description: 'The system prompt. Set `prompt` or `prompt_file`, not both.' },
+      prompt: { ...NON_BLANK_STRING, description: 'The system prompt. Set `prompt` or `prompt_file`, not both. Not with `run`.' },
       prompt_file: { type: 'string', pattern: AGENT_FILE_PATTERN, description: 'A repository path to a `.md` file. The file is the system prompt. A leading `---` frontmatter block is dropped, so an agent file another tool reads (`.claude/agents/<name>.md`) works as is.' },
+      run: {
+        ...NON_BLANK_STRING,
+        maxLength: 4096,
+        description:
+          "A program agent: the shell command (`bash -c`) each turn runs instead of a model, once, in the session's sandbox. It runs in the first `workspace.repos` path (else `/workspace`), after `workspace.setup` is done, with the agent's secrets, `KORTIX_TOKEN` and `KORTIX_API_URL` (pass them to `createKortix` from `@kortix/sdk` to act as the agent). Input: the message on stdin, and `{ version, session_id, agent, prompt }` as JSON in the file `$KORTIX_EVENT_PATH`. A trigger with `prompt: \"{{ payload }}\"` sends its whole payload. Reply: stdout, rendered as Markdown (first 256 KiB). A non-zero exit fails the turn with the end of stderr, and the run is not retried. Stop ends the command's process group. Excludes `model`, `prompt` and `prompt_file`; model keys have no effect. Needs the `program_agents` feature.",
+      },
       enabled: { type: 'boolean', default: true, description: '`false`: no session starts with the agent, and no agent starts it as a subagent.' },
       codemode: {
         type: 'string',

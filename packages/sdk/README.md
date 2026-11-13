@@ -34,6 +34,15 @@ const kortix = createKortix({
 await kortix.workspaces.list();
 ```
 
+Inside a Kortix sandbox (a session, or a program agent's turn), call
+`createKortix()` with no options. It reads the sandbox's own `KORTIX_API_URL`
+and `KORTIX_TOKEN`, so every call acts as the session's agent:
+
+```ts
+const kortix = createKortix();
+await kortix.project(process.env.KORTIX_PROJECT_ID!).sessions.list();
+```
+
 ### Call external systems through Connectors
 
 Use one data plane for every Connector provider. A user token binds
@@ -705,7 +714,7 @@ exhaustive — see `API-MAP.md` for the full per-domain surface:
 | `kortix.workspaces` | `list` (every workspace the caller can open, across accounts, one request) · `get` (role + state + settings) · `update` · `create` · `delete` · `restore`. See [Workspaces](#workspaces) |
 | `kortix.workspace(id)` | everything on `kortix.project(id)`, except that `get` / `update` read and change the `Workspace` and `tokens` manages workspace keys (the project CLI tokens are `cliTokens`), plus `delete` · `restore` · `setup` · `accountId` · `members.{list,invite,updateRole,remove,invites,cancelInvite,resendInvite}` · `leave` · `billing.state` · `iam.{assignments.{list,create,revoke},roles,groups,can,canBatch}` |
 | `kortix.projects` | project-named calls, kept permanently: list · get · detail · create · provision · createWorkspace · update · archive · llmCatalog · modelPicker · sandboxTemplates · sessions (+ more: `listForAccount`, `sandboxHealth`, `createSession`) |
-| `kortix.accounts` | list · get · create · members · invites · `secretResources.{list,create,rotate,retry,remove,grant,revoke,setAccess}` · `subscriptions.{list,usage}` (project-authorized usage for named and legacy ChatGPT logins; reads credentials in place) · `tokens.{list,create,revoke}` (account-scoped CLI PATs, `kortix_pat_…`) · `audit.{log,export,activity,webhooks.*}` (filterable project/session reconstruction log; `activity` = who was active and how often, per UTC day) · `branding.{get,update,uploadAsset,removeAsset,reset}` (Enterprise organization branding: logo / icon / favicon, light + dark, product name) (+ more: `updateName`, `leave`, `invite`, `removeMember`, `updateMemberRole`) |
+| `kortix.accounts` | list · get · create · members · invites · `secretResources.{list,create,rotate,retry,verify,remove,grant,revoke,setAccess}` (a provider API key is checked against its provider on create and rotate; `verify` checks it again; the result is `verification`) · `subscriptions.{list,usage}` (project-authorized usage for named and legacy ChatGPT logins; reads credentials in place) · `tokens.{list,create,revoke}` (account-scoped CLI PATs, `kortix_pat_…`) · `audit.{log,export,activity,webhooks.*}` (filterable project/session reconstruction log; `activity` = who was active and how often, per UTC day) · `branding.{get,update,uploadAsset,removeAsset,reset}` (Enterprise organization branding: logo / icon / favicon, light + dark, product name) (+ more: `updateName`, `leave`, `invite`, `removeMember`, `updateMemberRole`) |
 | `kortix.billing` | entitlement/usage reads: `accountState` · `accountStateMinimal` · `transactions` · `transactionsSummary` · `creditBreakdown` · `usageHistory` · `usageRollup` · `sessionCosts.{list,get}` · `tierConfigurations` (with `min_monthly_usd` / `max_monthly_usd`) — plus a curated mutation surface: `setPlan` (subscribe to or change the credits plan; `useSetBillingPlan()` in `@kortix/sdk/react`) · `subscription.{createPortalSession,cancel,reactivate}` · `credits.{purchase,redeem,autoTopupSettings,configureAutoTopup}` (`redeem({ code, accountId })` adds a credit code's amount to the non-expiring credits, once per account). `checkout.{createSession,confirmSession}`, `subscription.{scheduleDowngrade,cancelScheduledChange,prorationPreview}`, `createPerSeatCheckout` and `claimPerSeatBilling` are deprecated: they reject with `ENDPOINT_RETIRED` |
 | `kortix.marketplace` | public marketplace catalog browse + sources (not project-scoped): `items` · `item` · `itemFile` · `marketplaces` · `featured` · `sources.{list,add,remove}`. A project installs an item through `createMarketplaceInstallSession(projectId, itemId)`, which starts a session whose agent merges the item into the project and opens a change request; it resolves `{ session_id }` |
 | `kortix.github` | account-scoped GitHub App installs and repo linking: `getInstallation` · `listInstallations` · `listLinkableInstallations` (each entry carries `linked_to_other_accounts`, a count and never a tenant name) · `listRepositories` · `listRepositoryBranches` · `linkInstallation` · `saveInstallation` · `deleteInstallation` · `linkRepository` (`source: 'managed'` imports a repository the instance backend holds — self-host operator only, and mutually exclusive with `installation_id`) · `replaceProjectRepository` (changes an existing project's repository with an expected old URL; accepts a repository-scoped PAT or a temporary GitHub user proof for a repository-scoped App grant; can atomically copy selected shared runtime secrets from another project in the same account) |
@@ -735,16 +744,19 @@ await kortix.project(projectId).sessions.create({
 });
 ```
 
-Do not put credentials in this map. For a white-label/backend wrapper, create an
-operator-managed connection, store its credential through the dedicated
-credential endpoint, and pass only the non-secret connection id at session create:
+Do not put credentials in this map. For a white-label/backend wrapper, give each
+end user their own project: a project-owned connection is reachable by every
+session in its project, so the project is the isolation boundary. Create the
+connection in that user's project, store its credential through the dedicated
+credential endpoint, and pass only the non-secret connection id at session
+create:
 
 ```ts
-const project = kortix.project(projectId);
+// One project per end user: never put two end users' credentials in one project.
+const project = kortix.project(projectIdOfThisEndUser);
 const connection = await project.connectors.connections.reconcile({
   connector_alias: "customer-data",
-  owner_type: "external",
-  owner_id: wrapperUserId,
+  owner_type: "project",
   label: "Customer data",
   metadata: { tenant_ref: wrapperTenantReference },
 });
@@ -787,7 +799,13 @@ await project.sessions.create({
 Member connections are owner-only even for project managers, and sessions using
 one must remain private. A service account — an agent or a trigger — never
 reaches a member connection, only the shared project one. Project defaults
-remain shared; external/agent/subject connections remain operator-managed. Every connection is project/connector scoped
+remain shared. A project-owned connection is reachable by every session in the
+project, and any of them may bind it by id, so it must never hold one end user's
+credential in a project other end users' sessions run in: give each end user their
+own project instead. The owner types `external`, `agent` and `subject`
+are retired: the API refuses to create them (`409
+CONNECTOR_CONNECTION_OWNER_NOT_REACHABLE`) and no session reaches an existing one.
+They stay in the `ConnectionOwnerType` union so existing code compiles. Every connection is project/connector scoped
 and resolved on every Connector request, so revocation takes effect without a
 restart. Credentials are encrypted server-side and are never returned, placed
 in `KORTIX_SESSION_CONTEXT`, or injected into the sandbox environment. Raw env

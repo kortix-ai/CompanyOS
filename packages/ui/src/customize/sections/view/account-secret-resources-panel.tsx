@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from '../../../i18n';
 import {
   ApiError, type AccountSecretResource, createAccountSecretResource, deleteAccountSecretResource,
-  listAccountMembers, setAccountSecretResourceAccess, rotateAccountSecretResource,
+  listAccountMembers, setAccountSecretResourceAccess, rotateAccountSecretResource, verifyAccountSecretResource,
   pollProjectProviderOAuth, startProjectProviderOAuth,
   completeClaudeSubscriptionLogin, startClaudeSubscriptionLogin,
 } from '@kortix/sdk';
@@ -183,6 +183,26 @@ function useClaudeAuthorization(projectId: string | undefined) {
 }
 
 /**
+ * The line above the provider list with pooled provider keys on: new keys and
+ * accounts are shared with the workspace, or, for a viewer who may not share,
+ * only theirs. A component, so the permission read runs only where it shows.
+ */
+export function PooledProvidersNote({ projectId, className }: { projectId: string; className?: string }) {
+  const t = useTranslations('pooledSecrets');
+  const canShare = useCanShareProviderAccounts(projectId);
+  return <p className={className}>{t(canShare ? 'sharedDescription' : 'sharedOnlyYouDescription')}</p>;
+}
+
+/**
+ * Whether a new provider key or account the viewer adds is shared with the
+ * workspace by default. A viewer without `project.secret.write` adds only
+ * private ones ("Only you"), so the copy above each list must say so.
+ */
+export function useCanShareProviderAccounts(projectId: string): boolean {
+  return useProjectCan(projectId, PROJECT_ACTIONS.PROJECT_SECRET_WRITE).allowed === true;
+}
+
+/**
  * Provider keys live beside the provider they configure. The secret value stays
  * write-only. With `oauth`, the panel manages ChatGPT or Claude accounts: any
  * project member can connect their own subscription ("Only you"); sharing one
@@ -207,7 +227,7 @@ export function AccountSecretResourcesPanel({ accountId, projectId, providerId, 
   const resources = useAccountSecretResources(accountId, projectId);
   // Hide share controls on anything but an explicit grant: an owner-only
   // connection is always allowed, so a slow probe never blocks the common case.
-  const canShare = useProjectCan(projectId, PROJECT_ACTIONS.PROJECT_SECRET_WRITE).allowed === true;
+  const canShare = useCanShareProviderAccounts(projectId);
   const [creating, setCreating] = useState(false);
   const [label, setLabel] = useState('');
   const [value, setValue] = useState('');
@@ -217,7 +237,9 @@ export function AccountSecretResourcesPanel({ accountId, projectId, providerId, 
   const [reconnectLabel, setReconnectLabel] = useState('');
   if (reconnecting && reconnecting.label !== reconnectLabel) setReconnectLabel(reconnecting.label);
   const [sharing, setSharing] = useState<AccountSecretResource | null>(null);
-  // New connections are private to their creator: sharing is opt-in.
+  // A new connection is shared with everyone in the workspace. A viewer who may
+  // not share gets "Only you", the one choice the API accepts from them.
+  // `openCreate` sets it from the probe's answer when the dialog opens.
   const [createMode, setCreateMode] = useState<ConnectionAccessChoice>('private');
   const [sharingMode, setSharingMode] = useState<'project' | 'members'>('project');
   const [selectedMembers, setSelectedMembers] = useState<PrincipalSelection>(NO_MEMBERS);
@@ -298,13 +320,29 @@ export function AccountSecretResourcesPanel({ accountId, projectId, providerId, 
         value, consumer: 'llm_gateway', strategy: 'broker',
       });
     },
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
       await refresh();
       setCreating(false); setRotating(null); setLabel(''); setValue('');
-      successToast(t('saved'));
+      // The server checked the key with one call to the provider. A refusal
+      // keeps the key saved; it says so instead of a plain "saved".
+      const verification = (saved as AccountSecretResource | undefined)?.verification;
+      if (verification?.status === 'invalid') errorToast(t('savedInvalid', { provider: providerName, message: verification.message }));
+      else successToast(verification?.status === 'verified' ? t('savedVerified') : t('saved'));
     },
     onError: (error) => errorToast(error instanceof Error ? error.message : t('saveError')),
   });
+  const verify = useMutation({
+    mutationFn: (secretId: string) => verifyAccountSecretResource(accountId, secretId),
+    onSettled: async () => { await refresh(); },
+    onError: (error) => errorToast(error instanceof Error ? error.message : t('checkError')),
+  });
+  const verificationLine = (secret: AccountSecretResource) => {
+    const verification = secret.verification;
+    if (oauth || !verification) return null;
+    if (verification.status === 'verified') return <span className="text-muted-foreground block text-xs font-normal">{t('keyVerified', { provider: providerName })}</span>;
+    if (verification.status === 'invalid') return <span className="text-destructive block text-xs font-normal break-words">{t('keyInvalid', { provider: providerName, message: verification.message })}</span>;
+    return <span className="text-muted-foreground block text-xs font-normal break-words">{t('keyUnchecked', { message: verification.message })}</span>;
+  };
   const remove = useMutation({
     mutationFn: (secretId: string) => deleteAccountSecretResource(accountId, secretId),
     onSuccess: async () => { await refresh(); setDeleting(null); successToast(t('deleted')); },
@@ -324,7 +362,7 @@ export function AccountSecretResourcesPanel({ accountId, projectId, providerId, 
     },
   });
   const openCreate = () => {
-    setCreateMode('private');
+    setCreateMode(canShare ? 'project' : 'private');
     setSelectedMembers(NO_MEMBERS);
     setLabel(defaultLabel());
     save.reset();
@@ -376,6 +414,7 @@ export function AccountSecretResourcesPanel({ accountId, projectId, providerId, 
                 <span className="block break-words">{secret.label}</span>
                 {usageShown && oauth && <SubscriptionAccountLine accountId={accountId} projectId={oauth.projectId} secret={secret} />}
                 <span className="text-muted-foreground block text-xs font-normal">{accessLine(secret)}</span>
+                {verificationLine(secret)}
                 {stale && (
                   <span className="text-muted-foreground block text-xs font-normal">{t('needsReconnection')}</span>
                 )}
@@ -400,6 +439,7 @@ export function AccountSecretResourcesPanel({ accountId, projectId, providerId, 
                 <DropdownMenuContent align="end">
                   {canReconnect && <DropdownMenuItem onSelect={() => openReconnect(secret)}>{t('reconnectAccount')}</DropdownMenuItem>}
                   {canChangeAccess && <DropdownMenuItem onSelect={() => { changeGrant.reset(); setSharingMode(secret.access_mode); setSelectedMembers({ memberIds: secret.granted_user_ids, groupIds: [], inviteEmails: [] }); setSharing(secret); }}>{t('manageAccess')}</DropdownMenuItem>}
+                  {canManage && !oauth && secret.project_id && <DropdownMenuItem disabled={verify.isPending} onSelect={() => verify.mutate(secret.secret_id)}>{t('checkKey')}</DropdownMenuItem>}
                   {canManage && !oauth && <DropdownMenuItem onSelect={() => { setValue(''); save.reset(); setRotating(secret); }}>{t('rotateKey')}</DropdownMenuItem>}
                   {canManage && <DropdownMenuItem onSelect={() => setDeleting(secret)}>{oauth ? t('deleteAccount') : t('deleteKey')}</DropdownMenuItem>}
                 </DropdownMenuContent>

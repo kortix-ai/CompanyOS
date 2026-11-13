@@ -19,11 +19,13 @@ import { notificationsApp } from './notifications/routes';
 import { drivesApp } from './drives/routes';
 import { feedbackApp } from './feedback';
 import {
+  agentMarkApp,
   channelAppWebhookRoutes,
   channelWebhookRoutes,
   discordInbound,
   discordOauthApp,
   emailWebhookApp,
+  registerAgentMarkRoutes,
   registerDiscordOauthRoutes,
   registerEmailWebhookRoutes,
   registerSlackWebhookRoutes,
@@ -313,6 +315,8 @@ registerTeamsWebhookRoutes();
 app.route('/v1/webhooks/teams', teamsWebhookApp); // /v1/webhooks/teams/messages — Bot Framework activities
 app.route('/v1/channels/slack/identity', slackIdentityApp); // /v1/channels/slack/identity/bind — authed /login bind
 app.route('/v1/channels/teams/identity', teamsIdentityApp); // /v1/channels/teams/identity/bind — authed login bind
+registerAgentMarkRoutes();
+app.route('/v1/agent-marks', agentMarkApp); // GET /v1/agent-marks/:slug.png — an agent's face, public (Slack icon_url)
 app.route('/v1/webhooks/telegram', channelWebhookRoutes(telegramInbound)); // /v1/webhooks/telegram/:projectId — Telegram updates
 registerDiscordOauthRoutes();
 app.route('/v1/webhooks/discord/oauth', discordOauthApp); // /v1/webhooks/discord/oauth/callback — Add to Discord

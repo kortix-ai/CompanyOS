@@ -100,8 +100,9 @@ first, then — unless you pass --host — scans every other logged-in host for
 it. A directory link (.kortix/link.json) always wins over the default; the
 default is what commands use anywhere else on your machine.
 
-The workspace id is the project_id field of --json output. kortix projects
-is the older name of this command and still works. So do --project <id> and
+The workspace id is the workspace_id field of --json output (project_id, the
+older name of the same field, stays). kortix projects is the older name of
+this command and still works. So do --project <id> and
 KORTIX_PROJECT_ID (KORTIX_WORKSPACE_ID wins when both are set).
 
 Examples:
@@ -110,7 +111,7 @@ Examples:
   kortix workspaces use 3f2a9c1e-…
 `;
 
-export interface RunProjectsOptions {
+interface RunProjectsOptions {
   /** Invoked as `kortix projects` / `project`, the older name. `ls` then
    *  prints exactly what it printed before Workspaces: the active account's
    *  projects. Scripts parse that output. */
@@ -190,7 +191,7 @@ export async function runProjects(argv: string[], options: RunProjectsOptions = 
         process.stderr.write(`${status.err((err as Error).message)}\n`);
         return 2;
       }
-      return projectsInfo(idFlag ?? restCopy[0], json, hostArg);
+      return projectsInfo(idFlag ?? restCopy[0], json, hostArg, options.olderName);
     }
     case 'use':
     case 'default': {
@@ -1009,7 +1010,8 @@ async function projectsCreate(argv: string[]): Promise<number> {
     );
     if (!isDefaultProjectResponse(project)) return invalidDefaultProjectResponse(project);
     // Provisioning also returns a one-time push credential. Never print it.
-    if (json) emitJson({ project_id: project.project_id, name: project.name, account_id: project.account_id });
+    // `workspace_id` equals `project_id`; `project_id` stays for older scripts.
+    if (json) emitJson({ workspace_id: project.project_id, project_id: project.project_id, name: project.name, account_id: project.account_id });
     else process.stdout.write(`${project.project_id}\n`);
     return 0;
   } catch (err) {
@@ -1317,7 +1319,7 @@ export function gitConnectionLines(git: GitConnectionState): string {
   return out;
 }
 
-async function projectsInfo(arg?: string, json = false, hostArg?: string): Promise<number> {
+async function projectsInfo(arg?: string, json = false, hostArg?: string, olderName = false): Promise<number> {
   const id = resolveProjectId(arg, { hostScoped: !hostArg, hostArg });
   if (!id) {
     process.stderr.write(
@@ -1344,7 +1346,8 @@ async function projectsInfo(arg?: string, json = false, hostArg?: string): Promi
   }
   process.stdout.write('\n');
   process.stdout.write(`  ${C.bold}${p.name}${C.reset}\n`);
-  process.stdout.write(`  ${C.dim}project_id ${C.reset}${p.project_id}\n`);
+  // `kortix projects info` prints what it printed before Workspaces: scripts parse it.
+  process.stdout.write(`  ${C.dim}${olderName ? 'project_id' : 'workspace '} ${C.reset}${p.project_id}\n`);
   process.stdout.write(`  ${C.dim}account_id ${C.reset}${p.account_id}\n`);
   process.stdout.write(`  ${C.dim}repo       ${C.reset}${p.repo_url}\n`);
   process.stdout.write(`  ${C.dim}branch     ${C.reset}${p.default_branch}\n`);

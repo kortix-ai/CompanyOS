@@ -1,11 +1,14 @@
 'use client';
 
-import { ImageBrokenIcon } from '@phosphor-icons/react';
+import { CreditCardIcon, ImageBrokenIcon, KeyIcon } from '@phosphor-icons/react';
 import { AnimatePresence, m, useReducedMotion } from 'motion/react';
-import { useState, type ReactNode } from 'react';
+import { useContext, useState, type ReactNode } from 'react';
 import { useTranslations } from '../../i18n';
 
+import { Button } from '../../primitives/button';
+import { ModelConnectionLayoutContext } from './model-connection-layout';
 import { ConnectPlanRows } from './subscription-offer';
+import { useModelConnectionGate } from './use-model-connection-gate';
 
 // Enter waits a beat (delay) so the composer paints first, then the bar slides
 // out from under it — height opens the space while the strip translates down,
@@ -17,7 +20,8 @@ const BAR_EXIT = { type: 'spring', duration: 0.35, bounce: 0 } as const;
 /**
  * No model can run: the composer shows the same "Connect ChatGPT" and "Connect
  * Claude" rows the project home offers (`ConnectPlanRows`), a gap below the
- * composer, not dismissible. Sending is already disabled by `modelUnavailable`.
+ * composer by default, and above it on first-chat home. The rows are not
+ * dismissible. Sending is already disabled by `modelUnavailable`.
  *
  * It used to be a heading ("Connect a model to start"), two bordered tiles,
  * "Use an API key" and "Upgrade". On the project home it stacked on top of the
@@ -27,7 +31,55 @@ const BAR_EXIT = { type: 'spring', duration: 0.35, bounce: 0 } as const;
  * `show` must only flip on settled data (see `entitlementsPending`).
  */
 export function ModelConnectionBar({ show }: { show: boolean }) {
-  return show ? <ConnectPlanRows dismissible={false} className="mt-4" /> : null;
+  const above = useContext(ModelConnectionLayoutContext) === 'above';
+  return show ? (
+    <div className={above ? 'mb-4 flex flex-col gap-2' : 'mt-4 flex flex-col gap-1'}>
+      <NoModelReason />
+      <ConnectPlanRows dismissible={false} />
+    </div>
+  ) : null;
+}
+
+/**
+ * Why Send is disabled, and the two ways out. A Free account sees no Kortix
+ * model (managed models are Credits-plan only) even with credits bought, so
+ * the composer said "No model" and gave no reason. The same sentence answers a
+ * session create refused with `no_model_available` (error-handler.tsx).
+ */
+function NoModelReason() {
+  const t = useTranslations('sessionUi.modelGate');
+  const { canConnectProvider, openConnectProvider, openUpgrade, showUpgradeOption, modal } =
+    useModelConnectionGate();
+  return (
+    <>
+      {modal}
+      <div
+        className="flex min-w-0 flex-wrap items-center gap-2 py-1 pr-3.5 pl-2.5"
+        data-testid="no-model-reason"
+      >
+        <span className="text-muted-foreground min-w-0 flex-1 text-xs">
+          {showUpgradeOption ? t('noModelUpgradeReason') : t('noModelKeyReason')}
+        </span>
+        {showUpgradeOption ? (
+          <Button type="button" size="xs" onClick={openUpgrade}>
+            <CreditCardIcon className="size-3.5" />
+            {t('noModelUpgradePlan')}
+          </Button>
+        ) : null}
+        {canConnectProvider ? (
+          <Button
+            type="button"
+            size="xs"
+            variant={showUpgradeOption ? 'outline' : 'default'}
+            onClick={() => openConnectProvider('providers')}
+          >
+            <KeyIcon className="size-3.5" />
+            {t('noModelAddProviderKey')}
+          </Button>
+        ) : null}
+      </div>
+    </>
+  );
 }
 
 /**

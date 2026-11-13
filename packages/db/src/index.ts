@@ -42,8 +42,10 @@ export {
   auditEvents,
   auditEventsAll,
   auditArchiveChunks,
+  auditArchiveParts,
   auditSessionSequences,
   usageEvents,
+  gatewayIdempotencyReplays,
   gatewayRequestLogs,
   gatewayApiKeys,
   gatewayBudgets,
@@ -68,6 +70,8 @@ export {
   accountSecretResources,
   accountSecretGrants,
   sessionProviderSecretPools,
+  llmCredentialBackfill,
+  legacyCredentialBackfill,
   projectSessionSecretHandles,
   projectSecretHandleStatusEnum,
   projectSecretConsumerEnum,
@@ -368,8 +372,6 @@ export type {
   TunnelPermissionScope,
 } from './schema/kortix';
 
-// Public tables
-export { apiKeys } from './schema/public';
 
 export type {
   Account,
@@ -394,9 +396,7 @@ export type {
   NewSandbox,
   SessionSandbox,
   NewSessionSandbox,
-  ApiKey,
   CreditAccount,
-  NewApiKey,
   SandboxSelect,
   KortixApiKey,
   NewKortixApiKey,

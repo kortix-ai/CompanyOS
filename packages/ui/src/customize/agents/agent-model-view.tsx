@@ -128,7 +128,51 @@ function ProviderOptions({
   );
 }
 
-export function AgentModelView({ oc, setOc, footer }: { oc: RuntimeAgentConfig; setOc: SetRuntime; footer?: ReactNode }) {
+/** A program agent's command (`run`): what each turn runs in place of a model. */
+export interface AgentProgram {
+  command: string;
+  onChange: (command: string) => void;
+}
+
+function ProgramView({ program, footer }: { program: AgentProgram; footer?: ReactNode }) {
+  const t = useI18nTranslations('agentEditor.modelView');
+  return (
+    <EditorSectionStyleProvider value="panel">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
+        <EditorSection title={t('programTitle')} lead>
+          <SettingBlock label={t('programCommand')} help={t('programHelp')}>
+            <Input
+              aria-label={t('programCommand')}
+              value={program.command}
+              spellCheck={false}
+              className="h-8 font-mono text-xs"
+              onChange={(e) => program.onChange(e.target.value)}
+            />
+          </SettingBlock>
+        </EditorSection>
+        {footer}
+      </div>
+    </EditorSectionStyleProvider>
+  );
+}
+
+export function AgentModelView({
+  oc,
+  setOc,
+  footer,
+  program,
+}: {
+  oc: RuntimeAgentConfig;
+  setOc: SetRuntime;
+  footer?: ReactNode;
+  /** Set for a program agent: the view shows its command instead of the model. */
+  program?: AgentProgram;
+}) {
+  if (program) return <ProgramView program={program} />;
+  return <ModelView oc={oc} setOc={setOc} footer={footer} />;
+}
+
+function ModelView({ oc, setOc, footer }: { oc: RuntimeAgentConfig; setOc: SetRuntime; footer?: ReactNode }) {
   const t = useI18nTranslations('agentEditor.modelView');
   const tTabs = useI18nTranslations('agentEditor.tabs');
   const { data: providers } = useRuntimeProviders();

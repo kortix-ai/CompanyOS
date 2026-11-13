@@ -1112,6 +1112,11 @@
       "count": 1
     }
   },
+  "src/llm-gateway/credentials/gateway-keys.ts": {
+    "kortix-api/projects-surface": {
+      "count": 1
+    }
+  },
   "src/llm-gateway/credentials/opencode-console.ts": {
     "kortix-api/projects-surface": {
       "count": 1
@@ -1143,22 +1148,12 @@
       "count": 1
     }
   },
-  "src/llm-gateway/models/servable-catalog.ts": {
-    "kortix-api/projects-surface": {
-      "count": 1
-    }
-  },
   "src/llm-gateway/resolution/default-model.ts": {
     "kortix-api/projects-surface": {
-      "count": 2
+      "count": 1
     },
     "kortix-api/replica-local": {
       "count": 2
-    }
-  },
-  "src/llm-gateway/resolution/resolve-candidates.ts": {
-    "kortix-api/projects-surface": {
-      "count": 1
     }
   },
   "src/llm-gateway/sandbox-credentials.ts": {
@@ -2485,11 +2480,6 @@
       "count": 3
     }
   },
-  "src/router/services/reservation.ts": {
-    "no-console": {
-      "count": 1
-    }
-  },
   "src/routes/platform-endpoints.ts": {
     "no-restricted-syntax": {
       "count": 4
@@ -2735,11 +2725,6 @@
   },
   "src/shared/account-limits.ts": {
     "kortix-api/layers": {
-      "count": 2
-    }
-  },
-  "src/shared/actor-context.ts": {
-    "no-console": {
       "count": 2
     }
   },
@@ -3090,11 +3075,6 @@
   "src/worker/jobs/app-idle-reaper.ts": {
     "no-restricted-properties": {
       "count": 2
-    }
-  },
-  "src/worker/jobs/audit-archive.ts": {
-    "no-console": {
-      "count": 3
     }
   },
   "src/worker/jobs/audit-partition.ts": {

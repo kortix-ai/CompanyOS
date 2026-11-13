@@ -173,3 +173,27 @@ test('account_required with no available accounts still carries a usable hint', 
   expect(body.available_accounts).toEqual([]);
   expect(body.default_account).toBeNull();
 });
+
+/**
+ * An account exists on the connector but this caller cannot reach it. Telling
+ * the agent "no credential stored, start a sign-in" made it add a duplicate
+ * account. The denial names the real remedy and offers no sign-in link.
+ */
+test('connector_not_shared names the agent, the remedy, and never a sign-in link', () => {
+  const body = connectorDenialBody('connector_not_shared', {
+    principal: { agentGrant: { ...narrow, agent: 'support' } },
+    connector: 'gmail',
+    action: 'send_message',
+    connectUrl: 'https://example.test/connect/should-not-appear',
+  });
+  expect(body).toMatchObject({ ok: false, status: 'denied', reason: 'connector_not_shared', connector: 'gmail' });
+  expect(body).not.toHaveProperty('connect_url');
+  const hint = String(body.hint);
+  expect(hint).toContain('agent "support"');
+  expect(hint).toContain('Settings → Connectors');
+  expect(hint).toContain('Do not start a new sign-in');
+  expect(hint).not.toContain('kortix connectors connect');
+
+  const sessionOnly = String(connectorDenialBody('connector_not_shared', { connector: 'gmail' }).hint);
+  expect(sessionOnly).toContain('this session');
+});

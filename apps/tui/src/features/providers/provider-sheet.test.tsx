@@ -42,9 +42,12 @@ interface Recorded {
 let server: ReturnType<typeof Bun.serve>;
 const requests: Recorded[] = [];
 
-/** Records every request; answers a new pooled key like the API does. */
+/** Records every API request; answers a new pooled key like the API does. */
 async function record(request: Request): Promise<Response> {
   const url = new URL(request.url);
+  // The SDK calls only `/v1/…`. A host port scanner (a dev box's link probe
+  // sends `HEAD /`) can reach this port too, and is not the sheet's request.
+  if (!url.pathname.startsWith('/v1/')) return new Response(null, { status: 404 });
   requests.push({ method: request.method, path: url.pathname, body: await request.text() });
   if (url.pathname.endsWith('/secret-resources') && request.method === 'POST') {
     return Response.json({ secret_id: 'sec-new', label: 'Work', provider_id: 'acme' });
@@ -88,7 +91,6 @@ function providersData(over: Partial<ProvidersData> = {}): ProvidersData {
     managed: null,
     byId: new Map(CATALOGUE.map((item) => [item.id, item])),
     connectedIds: new Set(),
-    pooled: false,
     accountId: 'acc-1',
     accounts: [],
     accountsReadAt: 0,
@@ -291,7 +293,7 @@ describe('<ProviderSheet/> project key (`key` sheet)', () => {
 
 describe('<ProviderSheet/> pooled key accounts (`pooled-key` sheet)', () => {
   test('label → access → members → key → save creates a key shared with the picked members', async () => {
-    const view = await mount('acme', 'none', { pooled: true });
+    const view = await mount('acme', 'none');
     expect(view.captureCharFrame()).toContain('Acme API keys');
     expect(view.captureCharFrame()).toContain('No keys yet.');
 
@@ -304,9 +306,8 @@ describe('<ProviderSheet/> pooled key accounts (`pooled-key` sheet)', () => {
 
     let frame = view.captureCharFrame();
     expect(frame).toContain('Who can use this connection?');
-    expect(frame).toContain('● 1 Only you');
-    await key(view, 'j');
-    expect(view.captureCharFrame()).toContain('● 2 Everyone in this workspace');
+    expect(frame).toContain('○ 1 Only you');
+    expect(frame).toContain('● 2 Everyone in this workspace');
     await key(view, 'j');
     frame = view.captureCharFrame();
     expect(frame).toContain('● 3 Specific members');
@@ -358,8 +359,50 @@ describe('<ProviderSheet/> pooled key accounts (`pooled-key` sheet)', () => {
     view.renderer.destroy();
   });
 
+  test('a viewer who may share gets "Everyone in this workspace" by default and saves a project-wide key', async () => {
+    const view = await mount('acme', 'none');
+    await key(view, 'a');
+    await type(view, 'Team');
+    await key(view, 'return');
+    expect(view.captureCharFrame()).toContain('● 2 Everyone in this workspace');
+    await key(view, 'return');
+    await type(view, 'sk2');
+    await key(view, 'return');
+    await settleWrite(view);
+
+    const writes = requests.filter((request) => request.method !== 'GET');
+    expect(writes.map((request) => [request.method, request.path])).toEqual([
+      ['POST', '/v1/accounts/acc-1/secret-resources'],
+    ]);
+    expect(JSON.parse(writes[0]?.body ?? '')).toMatchObject({ label: 'Team', value: 'sk2', access_mode: 'project', user_ids: [] });
+    view.renderer.destroy();
+  });
+
+  test('a viewer who may not share gets "Only you" by default and saves a key only they can use', async () => {
+    const view = await mount('acme', 'none', { canWrite: false });
+    await key(view, 'a');
+    await type(view, 'Mine');
+    await key(view, 'return');
+    let frame = view.captureCharFrame();
+    expect(frame).toContain('● 1 Only you');
+    expect(frame).toContain('○ 2 Everyone in this workspace');
+    expect(frame).toContain('Sharing with others requires permission to manage workspace secrets.');
+    // The shared choices are locked: j keeps "Only you".
+    await key(view, 'j');
+    frame = view.captureCharFrame();
+    expect(frame).toContain('● 1 Only you');
+    await key(view, 'return');
+    await type(view, 'sk3');
+    await key(view, 'return');
+    await settleWrite(view);
+
+    const writes = requests.filter((request) => request.method !== 'GET');
+    expect(JSON.parse(writes[0]?.body ?? '')).toMatchObject({ label: 'Mine', value: 'sk3', access_mode: 'members', user_ids: [] });
+    view.renderer.destroy();
+  });
+
   test('Esc from any step of the add flow returns to the list without a write', async () => {
-    const view = await mount('acme', 'none', { pooled: true });
+    const view = await mount('acme', 'none');
     await key(view, 'a');
     await type(view, 'Work');
     await key(view, 'return');

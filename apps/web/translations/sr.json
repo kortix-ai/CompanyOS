@@ -67,7 +67,7 @@
     "oauthWaiting": "Чека се овлашћење…",
     "oauthFinishing": "Пријава је успела. Налог се чува…",
     "oauthExpired": "Време за овлашћење је истекло. Покушајте поново.",
-    "oauthPrivateDescription": "Користите свој ChatGPT Plus или Pro план у овом радном простору. Нови налози су приватни док их не поделите.",
+    "oauthPrivateDescription": "Користите свој ChatGPT Plus или Pro план у овом радном простору. Нови налози се деле са сваким чланом радног простора. Сваки можете учинити приватним.",
     "chatGptSubscription": "ChatGPT претплата",
     "manageChatGptAccounts": "Управљајте ChatGPT налозима",
     "connect": "Повежи",
@@ -95,7 +95,7 @@
     "deleteError": "Тајна није обрисана",
     "accessError": "Приступ није промењен",
     "sharedTitle": "Везе са добављачима",
-    "sharedDescription": "Dodaj API ključeve, ChatGPT naloge i Claude naloge. Novi su privatni dok ih ne podeliš. Izaberi koje koristi svaka sesija.",
+    "sharedDescription": "Dodaj API ključeve, ChatGPT naloge i Claude naloge. Novi se dele sa svakim članom radnog prostora. Svaki možeš učiniti privatnim. Izaberi koje koristi svaka sesija.",
     "legacyProjectKey": "Постојећи кључ радног простора · Користи се када за ову сесију нису изабрани кључеви",
     "keyCount": "{count, plural, one {# кључ} few {# кључа} other {# кључева}}",
     "providerKeysFor": "API кључеви за {provider}",
@@ -106,6 +106,14 @@
     "access": "Приступ",
     "actions": "Радње",
     "coolingDown": "Период хлађења",
+    "keyVerified": "Provereno: {provider} je prihvatio ovaj ključ",
+    "keyInvalid": "{provider} je odbio ovaj ključ: {message}",
+    "keyUnchecked": "Nije provereno: {message}",
+    "checkKey": "Proveri ponovo",
+    "savedVerified": "Ključ je sačuvan i proveren",
+    "savedInvalid": "Ključ je sačuvan, ali ga je {provider} odbio: {message}",
+    "checkError": "Ključ nije mogao da se proveri",
+    "openProviderInModels": "Otvori {provider} u Modelima",
     "member": "члан",
     "members": "чланова",
     "actionsFor": "Радње за {label}",
@@ -145,6 +153,9 @@
     "providerKeys": "Кључеви провајдера",
     "chooseSharedKeys": "Изаберите дељене кључеве које ова сесија може да користи.",
     "sessionKeyPool": "Скуп кључева сесије",
+    "subscriptionSwitcher": "Претплата",
+    "subscriptionSwitcherDefault": "Смењује све повезане претплате",
+    "subscriptionSwitcherUse": "Користи {label} за ову сесију",
     "sharedSessionKeys": "Ова сесија је дељена са радним простором, па овде раде само кључеви дељени са целим радним простором. Кључеви додељени вама раде у вашим приватним сесијама.",
     "promptedSessionKeys": "Други члан је писао у овој сесији, па она више не ради у име свог власника. Овде раде само кључеви дељени са целим радним простором.",
     "noPersonSessionKeys": "Ова сесија не ради ни у чије име: покренута је пре личних кључева или без надзора. Овде раде само кључеви дељени са целим радним простором. Покрени нову сесију да би користио своје кључеве.",
@@ -166,7 +177,7 @@
     "claudeAccounts": "Claude nalozi",
     "noClaudeAccounts": "Još nema Claude naloga",
     "connectClaude": "Prijavi se preko Claude-a",
-    "claudeOauthPrivateDescription": "Користи свој Claude Pro или Max план за Claude моделе у овом радном простору. Нови налози су приватни док их не поделиш.",
+    "claudeOauthPrivateDescription": "Користи свој Claude Pro или Max план за Claude моделе у овом радном простору. Нови налози се деле са сваким чланом радног простора. Сваки можеш учинити приватним.",
     "claudeOauthCreationDescription": "Prijavi se svojim Claude Pro ili Max nalogom. Kortix čuva prijavu šifrovanu i nikada je ne prikazuje.",
     "claudeDefaultAccountLabel": "Claude · {name}",
     "claudeAccountConnected": "Claude nalog je povezan",
@@ -174,7 +185,10 @@
     "claudeConnectFailed": "Prijava preko Claude-a nije završena. Pokušaj ponovo.",
     "claudeReconnectDescription": "Ponovo se prijavi preko Claude-a. Nalog zadržava ime, pristup i izbore sesija.",
     "claudeAccountLabelPlaceholder": "npr. Moj Claude nalog",
-    "claudeDeleteAccountConfirmTitle": "Obrisati ovaj Claude nalog za sve?"
+    "claudeDeleteAccountConfirmTitle": "Obrisati ovaj Claude nalog za sve?",
+    "sharedOnlyYouDescription": "Dodaj API ključeve, ChatGPT naloge i Claude naloge. Samo ti možeš da koristiš one koje dodaš. Menadžer radnog prostora može da podeli jedan. Izaberi koje koristi svaka sesija.",
+    "oauthOnlyYouDescription": "Koristi svoj ChatGPT Plus ili Pro plan u ovom radnom prostoru. Samo ti možeš da koristiš naloge koje dodaš.",
+    "claudeOauthOnlyYouDescription": "Koristi svoj Claude Pro ili Max plan za Claude modele u ovom radnom prostoru. Samo ti možeš da koristiš naloge koje dodaš."
   },
   "secrets": {
     "undecryptable": {
@@ -326,6 +340,7 @@
       "repositoryLabel": "Repozitorijum",
       "loadingOptions": "Učitavanje opcija repozitorijuma…",
       "managedUnavailable": "Repozitorijumi kojima upravlja Kortix nisu dostupni na ovoj instanci. Administrator platforme to podešava u administratorskoj konzoli.",
+      "githubAfterCreate": "Da biste koristili svoj GitHub za sledeće radne prostore, povežite ga u Podešavanja radnog prostora › Git kada ovaj bude napravljen.",
       "installationUnreachable": "Ova GitHub veza više ne radi. Povežite je ponovo da biste izlistali repozitorijume.",
       "reconnect": "Ponovo poveži u Git podešavanjima",
       "managedImportLabel": "Uvezi postojeći upravljani repozitorijum",
@@ -694,6 +709,7 @@
       "gracePeriodDescription": "Брисање се обавља заказаног датума. Можете отказати пре тога.",
       "immediateLabel": "Избриши одмах",
       "immediateDescription": "Ваш налог и његови подаци се одмах бришу. Ово се не може поништити.",
+      "noWorkspaceImmediateOnly": "Не припадате ниједном радном простору, па нема периода одлагања: ваш налог се одмах брише.",
       "typeDeleteToConfirm": "Унесите „delete“ да потврдите",
       "keepAccount": "Задржи налог",
       "processing": "Обрада…",
@@ -716,7 +732,7 @@
         "left": "Напуштате",
         "blockers": "Ви сте једини власник, а други раде у њима. Пренесите власништво или обришите радни простор.",
         "members": "{count, plural, one {# члан} few {# члана} other {# чланова}}",
-        "nothing": "Не припадате ниједном радном простору. Брише се само ваша пријава.",
+        "nothing": "Са вашим налогом се не брише нити напушта ниједан радни простор.",
         "blockersTitle": "Прво их предајте"
       }
     },
@@ -1253,10 +1269,6 @@
           "name": "Тајне заштићене на мрежи",
           "description": "Контролишите који алати и одредишта могу да приме тајне радног простора."
         },
-        "pooled_provider_secrets": {
-          "name": "Дељени тајни кључеви провајдера",
-          "description": "Чланови повезују своје ChatGPT претплате и кључеве провајдера, деле их по потреби и бирају које користи свака сесија."
-        },
         "reminders": {
           "name": "Петље",
           "description": "Омогућава агентима и особама да закажу провере на сесији, једном или периодично. Свако активирање поново покреће ту сесију. Додаје петље на листу Окидача, ознаку петље у сесији и `kortix loop`."
@@ -1316,6 +1328,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "Kada su Prostori uključeni, prostor može sam sebe da prati: uključite Proaktivno u njegovim detaljima, i agent čita šta se tu dešava (završene niti, otvorena pitanja, ljudi koji se pridruže) i piše u čet samo kada je važno: rezultat vredan deljenja, odluka koju treba da donesete ili nešto što kasni. Može i da pokrene nit koja obavlja posao. Opcioni dnevni pregled u 9:00."
+        },
+        "program_agents": {
+          "name": "Programski agenti",
+          "description": "Agent koji pokreće vaš kod umesto modela. Dajte agentu `run: <command>` u kortix.yaml: svaki potez pokreće tu komandu u sandboxu sesije, sa radnim prostorom, tajnama i pristupima agenta. Poruka ili podaci triggera su ulaz, a ono što komanda ispiše je odgovor."
         }
       },
       "channelsSwitch": {
@@ -1719,7 +1735,7 @@
         "email": "Е-пошта",
         "scheduled": "Заказано",
         "webhook": "Webhook",
-        "event": "Događaj aplikacije",
+        "event": "Događaj konektora",
         "manual": "Ручно",
         "all": "Све"
       },
@@ -2081,7 +2097,17 @@
       "claudePlan": "Pro ili Max plan",
       "connectModel": "Повежи модел",
       "imagesUnsupported": "{model} не може да чита слике",
-      "imagesUnsupportedHint": "уклони их или изабери други модел"
+      "imagesUnsupportedHint": "уклони их или изабери други модел",
+      "noModelUpgradeReason": "Нема модела: пређи на Credits план или додај свој кључ провајдера.",
+      "noModelKeyReason": "Нема модела: додај свој кључ провајдера.",
+      "noModelUpgradePlan": "Надогради план",
+      "noModelAddProviderKey": "Додај кључ провајдера",
+      "stepTitle": "Повежи модел",
+      "stepBody": "Агентима у {workspace} треба модел да би одговорили. Повежи свој ChatGPT или Claude план, или додај кључ провајдера.",
+      "stepBodyUpgrade": "Агентима у {workspace} треба модел да би одговорили. Повежи свој ChatGPT или Claude план, додај кључ провајдера или пређи на Credits план за Kortix моделе.",
+      "stepBodyMember": "Агентима у {workspace} треба модел да би одговорили. Повежи свој ChatGPT или Claude план или свој кључ провајдера, или замоли некога ко управља овим радним простором да повеже модел за све.",
+      "stepThisWorkspace": "овом радном простору",
+      "stepBack": "Назад на радне просторе"
     },
     "providerRecovery": {
       "savedPrompt": "Сачуван упит",
@@ -2146,6 +2172,7 @@
       "agentWorkingOnFor": "ради на: {task} · {time}",
       "somethingWrong": "Нешто није у реду",
       "notSent": "Није послато",
+      "computerDisconnected": "Рачунар ове сесије није повезан.",
       "retry": "Покушај поново",
       "resume": "Настави",
       "agentIsWorking": "{agent} ради",
@@ -3405,9 +3432,6 @@
     },
     "inbox": {
       "title": "Пријемно сандуче",
-      "viewReview": "Review",
-      "viewNotifications": "Обавештења",
-      "viewLabel": "Приказ пријемног сандучета",
       "description": "Новости о сесијама, окидачима и артефактима који вас се тичу, из свих радних простора.",
       "unreadLabel": "Пријемно сандуче: непрочитаних {count}",
       "unreadCount": "непрочитаних {count}",
@@ -10378,6 +10402,8 @@
       "checkConnection": "Проверите везу, па покушајте поново."
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "Dodaj ključ provajdera",
+      "noModelUpgradePlan": "Nadogradi plan",
       "authEmailRateLimit": "Е-порука није послата. Покушај поново за око сат времена.",
       "authRequestRateLimit": "Превише захтева. Покушај поново за неколико минута.",
       "text03217276a5f1": "Стање {value0} кредита",
@@ -20676,10 +20702,11 @@
       "text5f6ba69d66d1": "Вештина је уклоњена",
       "textcb8d6b0c94c9": " и све датотеке у њој, укључујући измене, и уклања вештину из сваког агента који је користи. Један commit на подразумеваној грани.",
       "cliDeviceTitle": "Ovlasti Kortix CLI",
-      "cliDeviceWarning": "Odobrite samo prijavu koju ste sami pokrenuli. Unesite kod koji prikazuje vaš terminal.",
+      "cliDeviceWarning": "Odobrite samo prijavu koju ste sami pokrenuli. Proverite da li se ovaj kod poklapa sa kodom koji prikazuje vaš terminal.",
       "cliDeviceCode": "Kod za prijavu",
       "cliDeviceApproved": "Prijava je odobrena. Vratite se u terminal.",
       "cliDeviceAction": "Ovlasti CLI",
+      "cliDeviceConfirm": "Ovaj kod se poklapa sa mojim terminalom",
       "text705a7e325b66": "Kortix апликација је послала догађаје",
       "text4b80152fb96b": "Прочитани акредитиви за догађаје Kortix апликације",
       "text59374c1f1acd": "Kortix апликација је заказала покретање",
@@ -21331,7 +21358,16 @@
       "textb1f8e3109f1b": "{value0}: {value1} дана је највише што Kortix дозвољава.",
       "textac20a57bfde0": "Сакриј",
       "text268733ac2f60": "Није било могуће ажурирати ту апликацију",
-      "text5d8926d4a4dd": "Није било могуће регистровати ту апликацију"
+      "text5d8926d4a4dd": "Није било могуће регистровати ту апликацију",
+      "text30b9ce09f406": "Unesite period kao 15m, 1h ili 1d, najmanje 1m.",
+      "text28d33d2ad989": "Izaberite aplikaciju koju poziva",
+      "textd777d7805cfa": "Unesite putanju koja počinje sa /",
+      "text8043e69a8dd6": "Obriši okidač",
+      "textd6fa1626e3af": "Događaj konektora je napravljen",
+      "textccf59f978ef6": "Ovde još nema događaja konektora",
+      "text82cbc4a4def0": "Događaji konektora nisu podešeni na ovoj instalaciji, pa ih nijedan konektor još ne može slati.",
+      "text458ceb31019b": "Okidači događaja konektora",
+      "text27ca9df9dbaa": "Okidači događaja konektora su isključeni"
     },
     "publicShareConfirm": {
       "title": "Направити јавни линк?",
@@ -21793,7 +21829,16 @@
     "crBranchHelp": "Покреће се када се захтев за измену споји у ову грану, или у било коју грану ако је поље празно. Упутство може да чита <code>change_request.number</code>, <code>change_request.title</code> и <code>change_request.base_ref</code>.",
     "eventsOff": "Догађаји конектора су у бета фази и искључени за овај радни простор. Укључите их под Заставице функција у администрацији радног простора.",
     "noApps": "Ниједна апликација у овом радном простору још не шаље догађаје. Објавите апликацију која шаље POST на <code>KORTIX_APP_EVENTS_URL</code>, па је изаберите овде.",
-    "openApps": "Отвори апликације"
+    "openApps": "Отвори апликације",
+    "thenLabel": "Šta radi pokretanje",
+    "thenAgent": "Pokreni agenta",
+    "thenApp": "Pozovi aplikaciju",
+    "targetPath": "Putanja",
+    "targetMethod": "Metoda",
+    "targetHelp": "Svako pokretanje budi aplikaciju i šalje podatke na ovu putanju. Nijedan agent se ne pokreće.",
+    "intervalLabel": "Ponavlja se svakih",
+    "intervalHelp": "Fiksni period kao 15m, 1h ili 1d.",
+    "useCalendar": "Koristi kalendarski raspored"
   },
   "gatewayAccess": {
     "heroTitle": "Користите моделе овог радног простора било где",
@@ -22075,6 +22120,12 @@
     "noticeSignInTitle": "Prijavi se na {name}",
     "noticeSignInBody": "Kortix je dodao {name}. Završi prijavu da bi agenti mogli da koriste njegove alate.",
     "noticeSignInAction": "Prijavi se",
+    "noticeSignInAgainTitle": "Ponovo se prijavi na {name}",
+    "noticeSignInAgainBody": "Prijava je istekla ili je opozvana. Agenti ne mogu da koriste {name} dok se ponovo ne prijaviš.",
+    "noticeNoToolsTitle": "{name} nema alate",
+    "noticeNoToolsBody": "Nema rute, pa agenti nemaju šta da pozovu. Dodaj rute u specifikaciju ruta u Podešavanjima.",
+    "noticeAddRoutesAction": "Dodaj rute",
+    "statusNoTools": "Nema alata",
     "connectAccount": "Poveži",
     "notSignedIn": "Nije prijavljeno",
     "credentialRejected": "Akreditiv je odbijen: zamenite ga",
@@ -22132,7 +22183,7 @@
     "infoRunsThrough": "Провајдер",
     "infoSignsInWith": "Пријава помоћу",
     "infoCategory": "Категорија",
-    "infoAppEvents": "Догађаји апликације",
+    "infoAppEvents": "Događaji",
     "infoAppEventsYes": "Подржано",
     "authOAuth": "OAuth пријава",
     "authApiKey": "API кључ",
@@ -23683,9 +23734,9 @@
   },
   "automationsPause": {
     "groupTitle": "Okidači",
-    "groupDescription": "Распореди, петље, webhook-ови, догађаји апликација и монитори у овом радном простору.",
+    "groupDescription": "Rasporedi, petlje, webhookovi, događaji konektora i događaji aplikacija u ovom radnom prostoru.",
     "label": "Pauziraj sve okidače",
-    "description": "Ништа у овом радном простору се не покреће само: ни распоред, ни петља, ни webhook, ни догађај апликације, ни монитор. Ручно покретање окидача и даље ради.",
+    "description": "Ništa se u ovom radnom prostoru ne pokreće samo: nijedan raspored, petlja, webhook, događaj konektora ni događaj aplikacije. Ručno pokretanje okidača i dalje radi.",
     "readOnlyDescription": "Samo vlasnik ili administrator može da pauzira ili nastavi okidače.",
     "pausedSince": "Pauzirano od {date}.",
     "pauseTitle": "Pauzirati sve okidače?",
@@ -23713,7 +23764,13 @@
   },
   "triggerAutoPause": {
     "title": "Аутоматски паузиран",
-    "description": "Престао је да покреће извршавања из разлога наведеног испод. Отклони узрок, па га настави."
+    "description": "Престао је да покреће извршавања из разлога наведеног испод. Отклони узрок, па га настави.",
+    "billingTitle": "Паузирано: нема кредита",
+    "billingDescription": "Ниједно извршавање не може да се плати, па је престао да их покреће. Наставља сам неколико минута после допуне салда.",
+    "modelTitle": "Паузирано: нема доступног модела",
+    "modelDescription": "Аутоматизације користе само кључеве модела и налоге дељене са целим радним простором, а ниједан није доступан. Наставља сам неколико минута пошто додаш један у Моделима.",
+    "listBilling": "Нема кредита",
+    "listModel": "Нема модела"
   },
   "featureGate": {
     "enable": "Омогући {name}",
@@ -24923,6 +24980,9 @@
       }
     },
     "modelView": {
+      "programTitle": "Program",
+      "programCommand": "Komanda",
+      "programHelp": "Svaki potez pokreće ovu komandu u sandboxu sesije umesto modela. Poruka stiže na stdin i u $KORTIX_EVENT_PATH. Ono što ispiše je odgovor. Izlazni kod različit od nule obara potez.",
       "title": "Модел",
       "help": "Како овај агент размишља.",
       "projectDefault": "Подразумевано за радни простор",
@@ -26674,7 +26734,7 @@
       "apiKeysDescription": "Кључеви за скрипте, CI и интеграције. Кључ делује као ви, као агент или као бот. Правила за сваки кључ су у Безбедности.",
       "keys": {
         "title": "API кључеви",
-        "description": "Кључеви за скрипте, CI и интеграције. Кључ ради само у овом радном простору и делује као ви, као агент или као бот.",
+        "description": "Ključevi za skripte, CI i integracije. Ključ deluje kao ti, agent ili bot; „Važi za“ određuje koje radne prostore doseže.",
         "newKey": "Нови кључ",
         "count": "{count, plural, one {# кључ} few {# кључа} other {# кључева}}",
         "emptyTitle": "Нема API кључева",
@@ -26684,6 +26744,10 @@
         "actsAsAgent": "Агент",
         "actsAsBot": "Бот",
         "actsAsMeHint": "Ваша улога у овом радном простору. Кључ престаје да ради када одете.",
+        "worksIn": "Važi za",
+        "worksInAll": "Svi moji radni prostori",
+        "worksInAllHint": "Deluje kao ti u svakom tvom radnom prostoru, sa tvojom punom ulogom. Upravljaj njime u Podešavanjima → Lični ključevi.",
+        "worksInWorkspace": "Samo ovaj radni prostor",
         "actsAsAgentHint": "Тачно оно што агент сме према kortix.yaml. Његове радње се бележе као агент, а кључ ради и када одете.",
         "actsAsBotHint": "Бот за CI или интеграцију, са сопственом улогом. Кључ ради и када одете.",
         "needsPermission": "Потребна је дозвола за управљање акредитивима",
@@ -26702,6 +26766,7 @@
         "rowBot": "Бот · {name}",
         "createdBy": "Направио {email}",
         "createdDescription": "{name} делује као {actsAs}. Kortix приказује кључ само једном: копирајте га сада и сачувајте као тајну.",
+        "createdPersonalDescription": "{name} deluje kao ti u svakom tvom radnom prostoru — upravljaj njime u Podešavanjima → Lični ključevi. Kortix prikazuje ključ jednom: kopiraj ga sada i sačuvaj kao tajnu.",
         "accessFullHint": "Све што принципал кључа сме у овом радном простору.",
         "accessCustomHint": "Само дозволе које изаберете. Свака мора бити нешто што принципал кључа сме."
       },
@@ -26712,7 +26777,9 @@
       "noWorkspaceTitle": "Направите радни простор да бисте пријавили CLI",
       "noWorkspaceBody": "CLI се пријављује у радни простор. Направите га, затим одобрите ову пријаву.",
       "createAction": "Направи радни простор",
-      "workspaceLabel": "Радни простор"
+      "workspaceLabel": "Радни простор",
+      "loadFailedTitle": "Учитавање радних простора није успело",
+      "loadFailedBody": "Ова пријава захтева списак ваших радних простора. Са налогом је све у реду — покушајте поново да наставите."
     },
     "models": {
       "yourDefault": "Подразумевано за радни простор",
@@ -26721,12 +26788,6 @@
       "setDefaultTitle": "Постави као подразумевани модел радног простора",
       "setDefaultAria": "Постави {model} као подразумевани модел овог радног простора",
       "setWorkspaceDefault": "Постави као подразумевано за радни простор"
-    },
-    "profile": {
-      "deleteLogin": "Обриши моју пријаву",
-      "deleteLoginDescription": "Брише вашу Kortix пријаву. Не припадате ниједном радном простору, па се ништа друго не брише.",
-      "deleteLoginTitle": "Обрисати вашу пријаву?",
-      "deleteLoginWarning": "Ваша пријава се одмах брише. Ово се не може поништити."
     },
     "capture": {
       "noWorkspaceTitle": "Прво направите радни простор или му се придружите.",
@@ -26813,5 +26874,24 @@
   "gatewayBudgets": {
     "capWorkspace": "Ограничи потрошњу гејтвеја за овај радни простор.",
     "capMember": "Ограничи потрошњу гејтвеја за {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "Otvori prijavu za {app}",
+    "checkingTitle": "Završavanje prijave",
+    "checkingDescription": "Kortix proverava tvoju prijavu za {app}. Ova stranica se sama osvežava.",
+    "signInUnfinished": "Prijava nije završena",
+    "finishSignIn": "Završi prijavu",
+    "signInFinished": "Prijava je završena",
+    "cardHeadline": "Tvoj agent čeka da se prijaviš",
+    "cardTitle": "Poveži {app}",
+    "cardShared": "Deljeno sa radnim prostorom",
+    "cardPrivate": "Samo ti",
+    "signingIn": "Završi prijavu za {app} u prozoru koji se otvorio.",
+    "connectedAs": "Povezano kao {account}",
+    "connected": "Povezano",
+    "connect": "Poveži",
+    "cardFailed": "Povezivanje sa {app} nije uspelo. Pokušaj ponovo.",
+    "blockedTitle": "Otvori {app} za prijavu",
+    "blockedDescription": "Pregledač je blokirao prozor za prijavu. Otvori ga dugmetom ispod. Ova stranica se sama osvežava."
   }
 }

@@ -33,10 +33,13 @@ import {
   DEAD_CREDENTIAL_BURST_SUPPRESSED,
   deadCredentialLogKey,
   isAccountMfaDenial,
+  isAgentAccessDenial,
   isAgentGrantDenial,
   isCredentialFenceDenial,
   isDeadCredential,
   isInvalidExpiredTokenRefusal,
+  isPersonRoleDenial,
+  isPreviewSandboxDenied,
 } from './shared/dead-credential-log';
 import { inspectDatabaseError } from './shared/database-errors';
 import { logWindowDecision, logWindowWarnDecision } from './shared/log-window';
@@ -395,12 +398,33 @@ function handleHttpException(
   // person route — POST /v1/mcp with an OAuth workspace token — put 31 warn
   // lines in one hour, 0 in the 24 h before. Same line, same grouping; only
   // the rate and the severity band change.
+  // The person role/membership denial joins the same treatment (KRTX-4801):
+  // the typed body already names the permission and who grants it, and a
+  // host polling a connector route for sessions it renders — a caller whose
+  // role can never act on the permission — put 22 warn lines in one prod hour
+  // on GET /v1/connectors/…/connect-requests, 0 in the 24 h before, the
+  // first pattern of the #12240 assert-form gates.
+  // The agent-access denial joins the same treatment (KRTX-4800): the gate's
+  // typed body already names the remedy (ask a manager to grant you one) and
+  // the agents the caller could run, and two people of one workspace kept
+  // retrying the start of a session whose agent was never granted to them —
+  // 29 warn lines in one prod hour on POST …/sessions/<session_id>/start,
+  // 0 in the 24 h before.
   if (
     isDeadCredential(err)
     || isAgentGrantDenial(err)
+    || isAgentAccessDenial(err)
     || isAccountMfaDenial(err)
     || isCredentialFenceDenial(err)
+    || isPersonRoleDenial(err)
     || isInvalidExpiredTokenRefusal(err.status, reason)
+    // The preview sandbox denial joins the same treatment (KRTX-4768): the
+    // web client polls the runtime surface of the session it has open every
+    // 5 s, and a box that died while its session row still reads `running`
+    // is refused forever — 89 warn lines in one hour against a 1.58/h
+    // baseline, one open tab. The refusal is the gate working; the LINE is
+    // the anomaly.
+    || isPreviewSandboxDenied(err.status, reason)
   ) {
     // The bucket key normalizes the route's and the reason's token ids out
     // (deadCredentialLogKey), so KRTX-1564's named refusal cannot shard the

@@ -9,11 +9,13 @@ import { useEffect, useRef, useState } from 'react';
 import {
   INSTALL_DISMISSED_KEY,
   IOS_HINT_DISMISSED_KEY,
+  COARSE_POINTER_QUERY,
   STANDALONE_QUERY,
   dismiss,
   dismissed,
   isIosWithoutInstallPrompt,
   isStandalone,
+  offersInstallCard,
 } from './pwa-state';
 
 /** Chromium's install event. iOS never fires it; the one-time hint covers that path. */
@@ -32,7 +34,7 @@ const displayStandalone = () => {
 
 /**
  * The PWA host (KRTX-4719): registers the app-shell service worker on load,
- * offers the install entry point where the browser can install, shows the
+ * offers the install entry point on touch devices where the browser can install, shows the
  * one-time iOS Share → Add to Home Screen hint, and offers the waiting
  * service worker's update — the swap lands only on the reload it triggers.
  * Suppressed while standalone (the app is already installed). Mounted once by
@@ -172,7 +174,9 @@ export function PwaClient() {
     setInstallEvent(null);
   };
 
-  if (installEvent && !installDismissed) {
+  // Desktop keeps the browser's own Install entry in the address bar; the card
+  // would cover app controls at the bottom-right.
+  if (installEvent && !installDismissed && offersInstallCard(window.matchMedia(COARSE_POINTER_QUERY).matches)) {
     return (
       <PwaCard
         t={t}

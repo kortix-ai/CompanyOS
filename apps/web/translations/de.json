@@ -67,7 +67,7 @@
     "oauthWaiting": "Warte auf Autorisierung…",
     "oauthFinishing": "Angemeldet. Konto wird gespeichert…",
     "oauthExpired": "Autorisierung abgelaufen. Versuchen Sie es erneut.",
-    "oauthPrivateDescription": "Nutzen Sie Ihr ChatGPT-Plus- oder Pro-Abo in diesem Workspace. Neue Konten sind privat, bis Sie sie teilen.",
+    "oauthPrivateDescription": "Nutzen Sie Ihr ChatGPT-Plus- oder Pro-Abo in diesem Workspace. Neue Konten werden mit jedem Workspace-Mitglied geteilt. Sie können ein Konto privat machen.",
     "chatGptSubscription": "ChatGPT-Abo",
     "manageChatGptAccounts": "ChatGPT-Konten verwalten",
     "connect": "Verbinden",
@@ -95,7 +95,7 @@
     "deleteError": "Geheimnis konnte nicht gelöscht werden",
     "accessError": "Zugriff konnte nicht geändert werden",
     "sharedTitle": "Anbieter-Verbindungen",
-    "sharedDescription": "Füge API-Schlüssel, ChatGPT-Konten und Claude-Konten hinzu. Neue sind privat, bis du sie teilst. Wähle, welche jede Sitzung verwendet.",
+    "sharedDescription": "Füge API-Schlüssel, ChatGPT-Konten und Claude-Konten hinzu. Neue werden mit jedem Workspace-Mitglied geteilt. Du kannst einzelne privat machen. Wähle, welche jede Sitzung verwendet.",
     "legacyProjectKey": "Bestehender Workspace-Schlüssel · Wird verwendet, wenn für diese Sitzung keine Schlüssel ausgewählt sind",
     "keyCount": "{count, plural, one {# Schlüssel} other {# Schlüssel}}",
     "providerKeysFor": "API-Schlüssel für {provider}",
@@ -106,6 +106,14 @@
     "access": "Zugriff",
     "actions": "Aktionen",
     "coolingDown": "Abklingzeit aktiv",
+    "keyVerified": "Geprüft: {provider} hat diesen Schlüssel akzeptiert",
+    "keyInvalid": "{provider} hat diesen Schlüssel abgelehnt: {message}",
+    "keyUnchecked": "Nicht geprüft: {message}",
+    "checkKey": "Erneut prüfen",
+    "savedVerified": "Schlüssel gespeichert und geprüft",
+    "savedInvalid": "Schlüssel gespeichert, aber {provider} hat ihn abgelehnt: {message}",
+    "checkError": "Der Schlüssel konnte nicht geprüft werden",
+    "openProviderInModels": "{provider} in Modelle öffnen",
     "member": "Mitglied",
     "members": "Mitglieder",
     "actionsFor": "Aktionen für {label}",
@@ -145,6 +153,9 @@
     "providerKeys": "Anbieterschlüssel",
     "chooseSharedKeys": "Wählen Sie die freigegebenen Schlüssel aus, die diese Sitzung verwenden darf.",
     "sessionKeyPool": "Sitzungsschlüsselpool",
+    "subscriptionSwitcher": "Abonnement",
+    "subscriptionSwitcherDefault": "Wechselt durch alle verbundenen Abonnements",
+    "subscriptionSwitcherUse": "{label} für diese Sitzung verwenden",
     "sharedSessionKeys": "Diese Sitzung ist für den Workspace freigegeben, daher funktionieren hier nur Schlüssel, die für den ganzen Workspace freigegeben sind. Ihnen zugewiesene Schlüssel funktionieren in Ihren privaten Sitzungen.",
     "promptedSessionKeys": "Ein anderes Mitglied hat in dieser Sitzung geschrieben, daher handelt sie nicht mehr für ihren Besitzer. Hier funktionieren nur Schlüssel, die mit dem ganzen Workspace geteilt sind.",
     "noPersonSessionKeys": "Diese Sitzung handelt für keine Person: Sie wurde vor den persönlichen Schlüsseln oder unbeaufsichtigt gestartet. Hier funktionieren nur Schlüssel, die mit dem ganzen Workspace geteilt sind. Starte eine neue Sitzung, um deine eigenen Schlüssel zu nutzen.",
@@ -166,7 +177,7 @@
     "claudeAccounts": "Claude-Konten",
     "noClaudeAccounts": "Noch keine Claude-Konten",
     "connectClaude": "Mit Claude anmelden",
-    "claudeOauthPrivateDescription": "Nutze deinen Claude-Pro- oder Max-Plan für Claude-Modelle in diesem Workspace. Neue Konten sind privat, bis du sie teilst.",
+    "claudeOauthPrivateDescription": "Nutze deinen Claude-Pro- oder Max-Plan für Claude-Modelle in diesem Workspace. Neue Konten werden mit jedem Workspace-Mitglied geteilt. Du kannst ein Konto privat machen.",
     "claudeOauthCreationDescription": "Melde dich mit deinem Claude-Pro- oder Max-Konto an. Kortix speichert die Anmeldung verschlüsselt und zeigt sie nie an.",
     "claudeDefaultAccountLabel": "Claude · {name}",
     "claudeAccountConnected": "Claude-Konto verbunden",
@@ -174,7 +185,10 @@
     "claudeConnectFailed": "Die Claude-Anmeldung wurde nicht abgeschlossen. Versuche es erneut.",
     "claudeReconnectDescription": "Melde dich erneut mit Claude an. Das Konto behält Namen, Zugriff und Sitzungsauswahl.",
     "claudeAccountLabelPlaceholder": "z. B. Mein Claude-Konto",
-    "claudeDeleteAccountConfirmTitle": "Dieses Claude-Konto für alle löschen?"
+    "claudeDeleteAccountConfirmTitle": "Dieses Claude-Konto für alle löschen?",
+    "sharedOnlyYouDescription": "Füge API-Schlüssel, ChatGPT-Konten und Claude-Konten hinzu. Nur du kannst die verwenden, die du hinzufügst. Ein Workspace-Manager kann eines teilen. Wähle, welche jede Sitzung verwendet.",
+    "oauthOnlyYouDescription": "Nutze deinen ChatGPT-Plus- oder -Pro-Plan in diesem Workspace. Nur du kannst die Konten verwenden, die du hinzufügst.",
+    "claudeOauthOnlyYouDescription": "Nutze deinen Claude-Pro- oder -Max-Plan für Claude-Modelle in diesem Workspace. Nur du kannst die Konten verwenden, die du hinzufügst."
   },
   "secrets": {
     "undecryptable": {
@@ -326,6 +340,7 @@
       "repositoryLabel": "Repository",
       "loadingOptions": "Repository-Optionen werden geladen …",
       "managedUnavailable": "Von Kortix verwaltete Repositories sind auf dieser Instanz nicht verfügbar. Ein Plattform-Administrator richtet das in der Admin-Konsole ein.",
+      "githubAfterCreate": "Um dein eigenes GitHub für weitere Workspaces zu nutzen, verbinde es unter Workspace-Einstellungen › Git, sobald dieser Workspace existiert.",
       "installationUnreachable": "Diese GitHub-Verbindung funktioniert nicht mehr. Stellen Sie sie wieder her, um Repositories aufzulisten.",
       "reconnect": "In den Git-Einstellungen neu verbinden",
       "managedImportLabel": "Ein vorhandenes verwaltetes Repository importieren",
@@ -694,6 +709,7 @@
       "gracePeriodDescription": "Die Löschung erfolgt am geplanten Datum. Du kannst sie vorher jederzeit abbrechen.",
       "immediateLabel": "Sofort löschen",
       "immediateDescription": "Ihr Konto und seine Daten werden umgehend gelöscht. Dies kann nicht rückgängig gemacht werden.",
+      "noWorkspaceImmediateOnly": "Du gehörst zu keinem Workspace, daher gibt es keine Schonfrist: Dein Konto wird sofort gelöscht.",
       "typeDeleteToConfirm": "Geben Sie zur Bestätigung „delete“ ein",
       "keepAccount": "Konto behalten",
       "processing": "Verarbeitung…",
@@ -716,7 +732,7 @@
         "left": "Du verlässt",
         "blockers": "Du bist ihr einziger Inhaber, und andere arbeiten darin. Übertrage die Inhaberschaft oder lösche den Workspace.",
         "members": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
-        "nothing": "Du gehörst zu keinem Workspace. Nur deine Anmeldung wird gelöscht.",
+        "nothing": "Mit deinem Konto wird kein Workspace gelöscht oder verlassen.",
         "blockersTitle": "Übergib diese zuerst"
       }
     },
@@ -1253,10 +1269,6 @@
           "name": "Netzwerkerzwungene Geheimnisse",
           "description": "Steuern Sie, welche Werkzeuge und Ziele Workspace-Geheimnisse empfangen dürfen."
         },
-        "pooled_provider_secrets": {
-          "name": "Gemeinsam genutzte Anbieter-Schlüssel",
-          "description": "Mitglieder verbinden ihre eigenen ChatGPT-Abos und Anbieter-Schlüssel, teilen sie bei Bedarf und wählen pro Sitzung, welche genutzt werden."
-        },
         "reminders": {
           "name": "Schleifen",
           "description": "Agenten und Personen können Check-ins für eine Sitzung planen, einmalig oder wiederkehrend. Jede Auslösung spricht diese Sitzung erneut an. Fügt Schleifen zur Trigger-Liste, den Schleifen-Chip der Sitzung und `kortix loop` hinzu."
@@ -1316,6 +1328,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "Mit Spaces kann ein Space sich selbst beobachten: Schalten Sie in seinen Details Proaktiv ein, und ein Agent liest, was dort passiert (fertige Threads, offene Fragen, neue Mitglieder), und schreibt nur dann in den Chat, wenn es wichtig ist: ein Ergebnis, das sich zu teilen lohnt, eine Entscheidung, die Sie treffen müssen, oder etwas Überfälliges. Er kann auch einen Thread starten, der die Arbeit erledigt. Optional ein tägliches Briefing um 9:00."
+        },
+        "program_agents": {
+          "name": "Programm-Agenten",
+          "description": "Ein Agent, der Ihren Code statt eines Modells ausführt. Geben Sie einem Agenten `run: <command>` in kortix.yaml: Jeder Turn führt diesen Befehl in der Sandbox der Sitzung aus, mit Workspace, Secrets und Zugriffen des Agenten. Die Nachricht oder die Trigger-Daten sind die Eingabe, die Ausgabe des Befehls ist die Antwort."
         }
       },
       "channelsSwitch": {
@@ -1719,7 +1735,7 @@
         "email": "E-Mail",
         "scheduled": "Geplant",
         "webhook": "Webhook",
-        "event": "App-Ereignis",
+        "event": "Connector-Ereignis",
         "manual": "Manuell",
         "all": "Alle"
       },
@@ -2081,7 +2097,17 @@
       "claudePlan": "Pro- oder Max-Abo",
       "connectModel": "Modell verbinden",
       "imagesUnsupported": "{model} kann keine Bilder lesen",
-      "imagesUnsupportedHint": "entferne sie oder wähle ein anderes Modell"
+      "imagesUnsupportedHint": "entferne sie oder wähle ein anderes Modell",
+      "noModelUpgradeReason": "Kein Modell: auf den Credits-Plan upgraden oder einen eigenen Anbieter-Schlüssel hinzufügen.",
+      "noModelKeyReason": "Kein Modell: eigenen Anbieter-Schlüssel hinzufügen.",
+      "noModelUpgradePlan": "Plan upgraden",
+      "noModelAddProviderKey": "Anbieter-Schlüssel hinzufügen",
+      "stepTitle": "Modell verbinden",
+      "stepBody": "Agenten in {workspace} brauchen ein Modell, um zu antworten. Verbinde dein ChatGPT- oder Claude-Abo oder füge einen Anbieter-Schlüssel hinzu.",
+      "stepBodyUpgrade": "Agenten in {workspace} brauchen ein Modell, um zu antworten. Verbinde dein ChatGPT- oder Claude-Abo, füge einen Anbieter-Schlüssel hinzu oder upgrade auf den Credits-Plan für Kortix-Modelle.",
+      "stepBodyMember": "Agenten in {workspace} brauchen ein Modell, um zu antworten. Verbinde dein eigenes ChatGPT- oder Claude-Abo oder deinen Anbieter-Schlüssel, oder bitte jemanden, der diesen Workspace verwaltet, ein Modell für alle zu verbinden.",
+      "stepThisWorkspace": "diesem Workspace",
+      "stepBack": "Zurück zu den Workspaces"
     },
     "providerRecovery": {
       "savedPrompt": "Gespeicherter Prompt",
@@ -2146,6 +2172,7 @@
       "agentWorkingOnFor": "arbeitet an {task} · {time}",
       "somethingWrong": "Etwas ist schiefgelaufen",
       "notSent": "Nicht gesendet",
+      "computerDisconnected": "Der Computer dieser Sitzung ist nicht verbunden.",
       "retry": "Erneut versuchen",
       "resume": "Fortsetzen",
       "agentIsWorking": "{agent} arbeitet",
@@ -3405,9 +3432,6 @@
     },
     "inbox": {
       "title": "Posteingang",
-      "viewReview": "Review",
-      "viewNotifications": "Benachrichtigungen",
-      "viewLabel": "Posteingangsansicht",
       "description": "Neuigkeiten zu den Sitzungen, Triggern und Artefakten, die dich betreffen, aus allen Workspaces.",
       "unreadLabel": "Posteingang: {count} ungelesen",
       "unreadCount": "{count} ungelesen",
@@ -10378,6 +10402,8 @@
       "checkConnection": "Prüfen Sie Ihre Verbindung und versuchen Sie es erneut."
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "Anbieter-Schlüssel hinzufügen",
+      "noModelUpgradePlan": "Plan upgraden",
       "authEmailRateLimit": "Die E-Mail konnte nicht gesendet werden. Versuche es in etwa einer Stunde erneut.",
       "authRequestRateLimit": "Zu viele Anfragen. Versuche es in einigen Minuten erneut.",
       "text03217276a5f1": "Guthaben {value0} Credits",
@@ -20676,10 +20702,11 @@
       "text5f6ba69d66d1": "Skill entfernt",
       "textcb8d6b0c94c9": " und alle Dateien darin, einschließlich Änderungen, und entfernt den Skill aus jedem Agenten, der ihn verwendet. Ein Commit auf dem Standard-Branch.",
       "cliDeviceTitle": "Kortix CLI autorisieren",
-      "cliDeviceWarning": "Genehmige nur eine Anmeldung, die du selbst gestartet hast. Gib den Code ein, den dein Terminal anzeigt.",
+      "cliDeviceWarning": "Genehmige nur eine Anmeldung, die du selbst gestartet hast. Prüfe, ob dieser Code mit dem in deinem Terminal übereinstimmt.",
       "cliDeviceCode": "Anmeldecode",
       "cliDeviceApproved": "Anmeldung genehmigt. Kehre zu deinem Terminal zurück.",
       "cliDeviceAction": "CLI autorisieren",
+      "cliDeviceConfirm": "Dieser Code stimmt mit meinem Terminal überein",
       "text705a7e325b66": "Kortix-App hat Ereignisse gesendet",
       "text4b80152fb96b": "Ereignis-Zugangsdaten der Kortix-App gelesen",
       "text59374c1f1acd": "Kortix-App hat einen Lauf geplant",
@@ -21331,7 +21358,16 @@
       "textb1f8e3109f1b": "{value0}: {value1} Tage sind das Maximum, das Kortix erlaubt.",
       "textac20a57bfde0": "Ausblenden",
       "text268733ac2f60": "Die App konnte nicht aktualisiert werden",
-      "text5d8926d4a4dd": "Die App konnte nicht registriert werden"
+      "text5d8926d4a4dd": "Die App konnte nicht registriert werden",
+      "text30b9ce09f406": "Gib einen Zeitraum wie 15m, 1h oder 1d ein, mindestens 1m.",
+      "text28d33d2ad989": "Wähle die App, die aufgerufen wird",
+      "textd777d7805cfa": "Gib einen Pfad ein, der mit / beginnt",
+      "text8043e69a8dd6": "Trigger löschen",
+      "textd6fa1626e3af": "Connector-Ereignis erstellt",
+      "textccf59f978ef6": "Hier gibt es noch keine Connector-Ereignisse",
+      "text82cbc4a4def0": "Connector-Ereignisse sind in dieser Bereitstellung nicht eingerichtet, daher kann noch kein Connector sie senden.",
+      "text458ceb31019b": "Connector-Ereignis-Trigger",
+      "text27ca9df9dbaa": "Connector-Ereignis-Trigger sind aus"
     },
     "publicShareConfirm": {
       "title": "Öffentlichen Link erstellen?",
@@ -21793,7 +21829,16 @@
     "crBranchHelp": "Läuft, wenn eine Änderungsanfrage in diesen Branch zusammengeführt wird, oder in jeden Branch, wenn das Feld leer ist. Die Anweisung kann <code>change_request.number</code>, <code>change_request.title</code> und <code>change_request.base_ref</code> lesen.",
     "eventsOff": "Connector-Ereignisse sind in der Beta und für diesen Workspace aus. Schalte sie unter Feature-Flags in der Workspace-Verwaltung ein.",
     "noApps": "Noch keine App in diesem Workspace sendet Ereignisse. Stelle eine App bereit, die per POST an <code>KORTIX_APP_EVENTS_URL</code> sendet, und wähle sie dann hier aus.",
-    "openApps": "Apps öffnen"
+    "openApps": "Apps öffnen",
+    "thenLabel": "Was ein Auslösen tut",
+    "thenAgent": "Agent ausführen",
+    "thenApp": "App aufrufen",
+    "targetPath": "Pfad",
+    "targetMethod": "Methode",
+    "targetHelp": "Jedes Auslösen weckt die App und sendet die Nutzdaten an diesen Pfad. Es läuft kein Agent.",
+    "intervalLabel": "Wiederholt sich alle",
+    "intervalHelp": "Ein fester Zeitraum wie 15m, 1h oder 1d.",
+    "useCalendar": "Kalenderzeitplan verwenden"
   },
   "gatewayAccess": {
     "heroTitle": "Die Modelle dieses Workspace überall nutzen",
@@ -22075,6 +22120,12 @@
     "noticeSignInTitle": "Bei {name} anmelden",
     "noticeSignInBody": "Kortix hat {name} hinzugefügt. Schließe die Anmeldung ab, damit Agenten die Tools nutzen können.",
     "noticeSignInAction": "Anmelden",
+    "noticeSignInAgainTitle": "Erneut bei {name} anmelden",
+    "noticeSignInAgainBody": "Die Anmeldung ist abgelaufen oder wurde widerrufen. Agenten können {name} erst nach einer erneuten Anmeldung nutzen.",
+    "noticeNoToolsTitle": "{name} hat keine Tools",
+    "noticeNoToolsBody": "Es hat keine Routen, daher können Agenten nichts aufrufen. Füge in den Einstellungen Routen zur Routen-Spezifikation hinzu.",
+    "noticeAddRoutesAction": "Routen hinzufügen",
+    "statusNoTools": "Keine Tools",
     "connectAccount": "Verbinden",
     "notSignedIn": "Nicht angemeldet",
     "credentialRejected": "Zugangsdaten abgelehnt: ersetzen",
@@ -22132,7 +22183,7 @@
     "infoRunsThrough": "Anbieter",
     "infoSignsInWith": "Anmeldung mit",
     "infoCategory": "Kategorie",
-    "infoAppEvents": "App-Ereignisse",
+    "infoAppEvents": "Ereignisse",
     "infoAppEventsYes": "Unterstützt",
     "authOAuth": "OAuth-Anmeldung",
     "authApiKey": "API-Schlüssel",
@@ -23683,9 +23734,9 @@
   },
   "automationsPause": {
     "groupTitle": "Trigger",
-    "groupDescription": "Zeitpläne, Schleifen, Webhooks, App-Ereignisse und Monitore in diesem Workspace.",
+    "groupDescription": "Zeitpläne, Loops, Webhooks, Connector-Ereignisse und App-Ereignisse in diesem Workspace.",
     "label": "Alle Trigger pausieren",
-    "description": "In diesem Workspace läuft nichts mehr von selbst: kein Zeitplan, keine Schleife, kein Webhook, kein App-Ereignis und kein Monitor. Einen Trigger von Hand auszuführen funktioniert weiterhin.",
+    "description": "In diesem Workspace läuft nichts von selbst: kein Zeitplan, Loop, Webhook, Connector-Ereignis oder App-Ereignis. Einen Trigger von Hand auszuführen funktioniert weiterhin.",
     "readOnlyDescription": "Nur ein Inhaber oder Admin kann Trigger pausieren oder fortsetzen.",
     "pausedSince": "Pausiert seit {date}.",
     "pauseTitle": "Alle Trigger pausieren?",
@@ -23713,7 +23764,13 @@
   },
   "triggerAutoPause": {
     "title": "Automatisch pausiert",
-    "description": "Er startet aus dem unten genannten Grund keine Ausführungen mehr. Behebe die Ursache und setze ihn dann fort."
+    "description": "Er startet aus dem unten genannten Grund keine Ausführungen mehr. Behebe die Ursache und setze ihn dann fort.",
+    "billingTitle": "Pausiert: kein Guthaben",
+    "billingDescription": "Keine Ausführung kann bezahlt werden, deshalb startet er keine mehr. Er setzt sich einige Minuten nach dem Aufladen des Guthabens selbst fort.",
+    "modelTitle": "Pausiert: kein Modell verfügbar",
+    "modelDescription": "Automationen nutzen nur Modellschlüssel und Konten, die mit dem ganzen Workspace geteilt sind, und keiner ist nutzbar. Er setzt sich einige Minuten, nachdem du unter Modelle einen hinzufügst, selbst fort.",
+    "listBilling": "Kein Guthaben",
+    "listModel": "Kein Modell"
   },
   "featureGate": {
     "enable": "{name} aktivieren",
@@ -24923,6 +24980,9 @@
       }
     },
     "modelView": {
+      "programTitle": "Programm",
+      "programCommand": "Befehl",
+      "programHelp": "Jeder Turn führt diesen Befehl statt eines Modells in der Sandbox der Sitzung aus. Die Nachricht kommt über stdin und in $KORTIX_EVENT_PATH. Was er ausgibt, ist die Antwort. Ein Exit-Code ungleich null lässt den Turn fehlschlagen.",
       "title": "Modell",
       "help": "Wie dieser Agent denkt.",
       "projectDefault": "Workspace-Standard",
@@ -26674,7 +26734,7 @@
       "apiKeysDescription": "Schlüssel für Skripte, CI und Integrationen. Ein Schlüssel handelt als Sie, als Agent oder als Bot. Die Regeln für jeden Schlüssel stehen unter Sicherheit.",
       "keys": {
         "title": "API-Schlüssel",
-        "description": "Schlüssel für Skripte, CI und Integrationen. Ein Schlüssel gilt nur in diesem Workspace und handelt als Sie, als Agent oder als Bot.",
+        "description": "Keys für Scripts, CI und Integrationen. Ein Key wirkt wie du, ein Agent oder ein Bot; „Gilt für“ legt fest, welche Workspaces er erreicht.",
         "newKey": "Neuer Schlüssel",
         "count": "{count, plural, one {# Schlüssel} other {# Schlüssel}}",
         "emptyTitle": "Keine API-Schlüssel",
@@ -26684,6 +26744,10 @@
         "actsAsAgent": "Ein Agent",
         "actsAsBot": "Ein Bot",
         "actsAsMeHint": "Ihre Rolle in diesem Workspace. Der Schlüssel funktioniert nicht mehr, wenn Sie den Workspace verlassen.",
+        "worksIn": "Gilt für",
+        "worksInAll": "Alle meine Workspaces",
+        "worksInAllHint": "Wirkt wie du in jedem deiner Workspaces, mit deiner vollen Rolle. Verwalte ihn unter Einstellungen → Persönliche Keys.",
+        "worksInWorkspace": "Nur dieser Workspace",
         "actsAsAgentHint": "Genau das, was der Agent laut kortix.yaml darf. Seine Aktionen werden als Agent protokolliert, und der Schlüssel funktioniert weiter, wenn Sie gehen.",
         "actsAsBotHint": "Ein Bot für CI oder eine Integration, mit eigener Rolle. Der Schlüssel funktioniert weiter, wenn Sie gehen.",
         "needsPermission": "Erfordert die Berechtigung, Zugangsdaten zu verwalten",
@@ -26702,6 +26766,7 @@
         "rowBot": "Bot · {name}",
         "createdBy": "Erstellt von {email}",
         "createdDescription": "{name} handelt als {actsAs}. Kortix zeigt den Schlüssel nur einmal: Kopieren Sie ihn jetzt und speichern Sie ihn als Secret.",
+        "createdPersonalDescription": "{name} wirkt wie du in jedem deiner Workspaces — verwalte ihn unter Einstellungen → Persönliche Keys. Kortix zeigt den Key einmal: kopiere ihn jetzt und hinterlege ihn als Secret.",
         "accessFullHint": "Alles, was der Prinzipal des Schlüssels in diesem Workspace darf.",
         "accessCustomHint": "Nur die Berechtigungen, die Sie auswählen. Jede muss etwas sein, das der Prinzipal des Schlüssels darf."
       },
@@ -26712,7 +26777,9 @@
       "noWorkspaceTitle": "Erstelle einen Workspace, um die CLI anzumelden",
       "noWorkspaceBody": "Die CLI meldet sich bei einem Workspace an. Erstelle einen und bestätige dann diese Anmeldung.",
       "createAction": "Workspace erstellen",
-      "workspaceLabel": "Workspace"
+      "workspaceLabel": "Workspace",
+      "loadFailedTitle": "Workspaces konnten nicht geladen werden",
+      "loadFailedBody": "Diese Anmeldung benötigt deine Workspace-Liste. Mit deinem Konto ist alles in Ordnung — versuche es erneut, um fortzufahren."
     },
     "models": {
       "yourDefault": "Workspace-Standard",
@@ -26721,12 +26788,6 @@
       "setDefaultTitle": "Als Standardmodell des Workspace festlegen",
       "setDefaultAria": "{model} als Standardmodell dieses Workspace festlegen",
       "setWorkspaceDefault": "Als Workspace-Standard festlegen"
-    },
-    "profile": {
-      "deleteLogin": "Mein Login löschen",
-      "deleteLoginDescription": "Löscht deinen Kortix-Login. Du gehörst zu keinem Workspace, daher wird nichts anderes gelöscht.",
-      "deleteLoginTitle": "Login löschen?",
-      "deleteLoginWarning": "Dein Login wird sofort gelöscht. Das kann nicht rückgängig gemacht werden."
     },
     "capture": {
       "noWorkspaceTitle": "Erstelle zuerst einen Workspace oder tritt einem bei.",
@@ -26813,5 +26874,24 @@
   "gatewayBudgets": {
     "capWorkspace": "Begrenze die Gateway-Ausgaben für diesen Workspace.",
     "capMember": "Begrenze die Gateway-Ausgaben für {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "{app}-Anmeldung öffnen",
+    "checkingTitle": "Anmeldung wird abgeschlossen",
+    "checkingDescription": "Kortix prüft deine {app}-Anmeldung. Diese Seite aktualisiert sich selbst.",
+    "signInUnfinished": "Anmeldung nicht abgeschlossen",
+    "finishSignIn": "Anmeldung abschließen",
+    "signInFinished": "Anmeldung abgeschlossen",
+    "cardHeadline": "Dein Agent braucht deine Anmeldung",
+    "cardTitle": "{app} verbinden",
+    "cardShared": "Mit dem Workspace geteilt",
+    "cardPrivate": "Nur du",
+    "signingIn": "Schließe die Anmeldung bei {app} im geöffneten Fenster ab.",
+    "connectedAs": "Verbunden als {account}",
+    "connected": "Verbunden",
+    "connect": "Verbinden",
+    "cardFailed": "{app} konnte nicht verbunden werden. Versuche es erneut.",
+    "blockedTitle": "{app} zur Anmeldung öffnen",
+    "blockedDescription": "Dein Browser hat das Anmeldefenster blockiert. Öffne es mit der Schaltfläche unten. Diese Seite aktualisiert sich selbst."
   }
 }

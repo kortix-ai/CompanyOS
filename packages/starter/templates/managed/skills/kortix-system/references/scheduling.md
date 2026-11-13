@@ -183,6 +183,23 @@ and prompts its agent as a teammate would, or calls one of the workspace's Apps
 wakes the session that created it: a runtime trigger, stored in the database.
 `kortix triggers ls` lists both.
 
+## Prompt templates
+
+`run.prompt` is a template over the fire's payload. `{{ path.to.value }}`
+inserts one value (an object or list renders as JSON); `{{ payload }}`
+inserts the whole payload as JSON. The roots:
+
+| Source | Roots |
+| --- | --- |
+| every fire | `trigger` (`slug`, `type`), `fired_at` |
+| webhook | `body` (the parsed JSON body), `headers` (`content_type`, `user_agent`, `forwarded_for`) |
+| event, App event | `event` (`event.data.*`) |
+| change request | `change_request` (`number`, `title`, `base_ref`, …) |
+| manual fire (`kortix triggers fire`) | `source`, `actor`, `message`; `--payload` deep-merges over it |
+
+`kortix triggers fire <slug> --dry-run --payload '<json>'` prints the
+rendered prompt without starting anything.
+
 ## React to an outside system: the first that fits
 
 1. **A webhook.** The system can call a URL (Stripe, a CI job, your own

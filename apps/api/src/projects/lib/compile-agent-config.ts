@@ -84,6 +84,11 @@ export class CompileAgentConfigError extends Error {
   }
 }
 
+/** What a daemon that predates program agents tells the person instead of running the program. */
+const PROGRAM_AGENT_FALLBACK_PROMPT =
+  'This agent runs a program, and this sandbox cannot run program agents yet. Do not call any tool. ' +
+  'Reply with exactly this line: "This sandbox cannot run program agents yet. It updates itself within a few minutes: send the message again then."';
+
 /** Behavior keys an agent block copies onto its compiled agent. */
 const BEHAVIOR_KEYS = ['description', 'mode', 'model', 'variant', 'temperature', 'top_p', 'options', 'color', 'steps', 'hidden'] as const;
 
@@ -401,6 +406,14 @@ function compileAgent(
   const extensions = grantedNames(block.extensions, universe.extensions);
   if (extensions.length > 0) out.extensions = extensions;
   if (block.codemode !== undefined) out.codemode = block.codemode;
+  // A program agent: pi runs the command for each turn in place of a model step (harness/pi/program.ts).
+  // A daemon older than program agents ignores `run` and runs a model: that model gets no tool and
+  // one line to say, so it cannot act. The current daemon reads neither for a program agent.
+  if (typeof block.run === 'string' && block.run.trim()) {
+    out.run = block.run.trim();
+    out.tools = { '*': false };
+    out.prompt = PROGRAM_AGENT_FALLBACK_PROMPT;
+  }
   return out;
 }
 

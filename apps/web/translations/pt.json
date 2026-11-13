@@ -67,7 +67,7 @@
     "oauthWaiting": "Aguardando autorização…",
     "oauthFinishing": "Login concluído. Salvando sua conta…",
     "oauthExpired": "A autorização expirou. Tente novamente.",
-    "oauthPrivateDescription": "Use seu plano ChatGPT Plus ou Pro neste espaço de trabalho. Novas contas ficam privadas até você compartilhá-las.",
+    "oauthPrivateDescription": "Use seu plano ChatGPT Plus ou Pro neste espaço de trabalho. Novas contas são compartilhadas com todos os membros do espaço de trabalho. Você pode tornar qualquer uma privada.",
     "chatGptSubscription": "Assinatura do ChatGPT",
     "manageChatGptAccounts": "Gerenciar contas ChatGPT",
     "connect": "Conectar",
@@ -95,7 +95,7 @@
     "deleteError": "Não foi possível eliminar o segredo",
     "accessError": "Não foi possível alterar o acesso",
     "sharedTitle": "Conexões de provedores",
-    "sharedDescription": "Adicione chaves de API, contas do ChatGPT e contas do Claude. As novas ficam privadas até você compartilhá-las. Escolha quais cada sessão usa.",
+    "sharedDescription": "Adicione chaves de API, contas do ChatGPT e contas do Claude. As novas são compartilhadas com todos os membros do espaço de trabalho. Você pode tornar qualquer uma privada. Escolha quais cada sessão usa.",
     "legacyProjectKey": "Chave existente do espaço de trabalho · Usada quando esta sessão não tem uma seleção de chaves",
     "keyCount": "{count, plural, one {# chave} other {# chaves}}",
     "providerKeysFor": "Chaves API de {provider}",
@@ -106,6 +106,14 @@
     "access": "Acesso",
     "actions": "Ações",
     "coolingDown": "Em espera após limite",
+    "keyVerified": "Verificada: {provider} aceitou esta chave",
+    "keyInvalid": "{provider} recusou esta chave: {message}",
+    "keyUnchecked": "Não verificada: {message}",
+    "checkKey": "Verificar novamente",
+    "savedVerified": "Chave salva e verificada",
+    "savedInvalid": "Chave salva, mas {provider} a recusou: {message}",
+    "checkError": "Não foi possível verificar a chave",
+    "openProviderInModels": "Abrir {provider} em Modelos",
     "member": "membro",
     "members": "membros",
     "actionsFor": "Ações para {label}",
@@ -145,6 +153,9 @@
     "providerKeys": "Chaves de fornecedor",
     "chooseSharedKeys": "Escolha as chaves partilhadas que esta sessão pode usar.",
     "sessionKeyPool": "Conjunto de chaves da sessão",
+    "subscriptionSwitcher": "Assinatura",
+    "subscriptionSwitcherDefault": "Alterna entre todas as assinaturas conectadas",
+    "subscriptionSwitcherUse": "Usar {label} nesta sessão",
     "sharedSessionKeys": "Esta sessão está partilhada com o espaço de trabalho, por isso aqui só funcionam as chaves partilhadas com todo o espaço de trabalho. As chaves atribuídas a si funcionam nas suas sessões privadas.",
     "promptedSessionKeys": "Outro membro escreveu nesta sessão, por isso já não age pelo seu proprietário. Aqui só funcionam chaves partilhadas com todo o espaço de trabalho.",
     "noPersonSessionKeys": "Esta sessão não age por nenhuma pessoa: começou antes de existirem chaves pessoais, ou sem supervisão. Aqui só funcionam chaves partilhadas com todo o espaço de trabalho. Inicie uma nova sessão para usar as suas próprias chaves.",
@@ -166,7 +177,7 @@
     "claudeAccounts": "Contas do Claude",
     "noClaudeAccounts": "Ainda não há contas do Claude",
     "connectClaude": "Entrar com o Claude",
-    "claudeOauthPrivateDescription": "Use seu plano Claude Pro ou Max nos modelos Claude deste espaço de trabalho. Contas novas ficam privadas até você compartilhá-las.",
+    "claudeOauthPrivateDescription": "Use seu plano Claude Pro ou Max nos modelos Claude deste espaço de trabalho. Contas novas são compartilhadas com todos os membros do espaço de trabalho. Você pode tornar qualquer uma privada.",
     "claudeOauthCreationDescription": "Entre com sua conta Claude Pro ou Max. A Kortix guarda o login criptografado e nunca o mostra.",
     "claudeDefaultAccountLabel": "Claude · {name}",
     "claudeAccountConnected": "Conta do Claude conectada",
@@ -174,7 +185,10 @@
     "claudeConnectFailed": "O login no Claude não terminou. Tente novamente.",
     "claudeReconnectDescription": "Entre com o Claude de novo. A conta mantém o nome, o acesso e as seleções de sessão.",
     "claudeAccountLabelPlaceholder": "ex.: Minha conta do Claude",
-    "claudeDeleteAccountConfirmTitle": "Excluir esta conta do Claude para todos?"
+    "claudeDeleteAccountConfirmTitle": "Excluir esta conta do Claude para todos?",
+    "sharedOnlyYouDescription": "Adicione chaves de API, contas do ChatGPT e contas do Claude. Só você pode usar as que adicionar. Um gestor do workspace pode compartilhar uma. Escolha quais cada sessão usa.",
+    "oauthOnlyYouDescription": "Use seu plano ChatGPT Plus ou Pro neste workspace. Só você pode usar as contas que adicionar.",
+    "claudeOauthOnlyYouDescription": "Use seu plano Claude Pro ou Max para modelos Claude neste workspace. Só você pode usar as contas que adicionar."
   },
   "secrets": {
     "undecryptable": {
@@ -326,6 +340,7 @@
       "repositoryLabel": "Repositório",
       "loadingOptions": "A carregar opções de repositório…",
       "managedUnavailable": "Os repositórios geridos pelo Kortix não estão disponíveis nesta instância. Um administrador da plataforma configura isto na consola de administração.",
+      "githubAfterCreate": "Para usar o seu próprio GitHub nos próximos espaços de trabalho, ligue-o em Definições do espaço de trabalho › Git quando este existir.",
       "installationUnreachable": "Esta ligação do GitHub já não funciona. Volte a ligá-la para listar repositórios.",
       "reconnect": "Voltar a ligar nas definições de Git",
       "managedImportLabel": "Importar um repositório gerido existente",
@@ -694,6 +709,7 @@
       "gracePeriodDescription": "A exclusão ocorre na data prevista. Você pode cancelar antes.",
       "immediateLabel": "Excluir imediatamente",
       "immediateDescription": "Sua conta e seus dados são excluídos imediatamente. Isto não pode ser desfeito.",
+      "noWorkspaceImmediateOnly": "Você não pertence a nenhum espaço de trabalho, então não há período de carência: sua conta é excluída imediatamente.",
       "typeDeleteToConfirm": "Digite \"delete\" para confirmar",
       "keepAccount": "Manter conta",
       "processing": "Processando…",
@@ -716,7 +732,7 @@
         "left": "Você sai de",
         "blockers": "Você é o único proprietário e outras pessoas trabalham neles. Transfira a propriedade ou exclua o espaço de trabalho.",
         "members": "{count, plural, one {# membro} other {# membros}}",
-        "nothing": "Você não pertence a nenhum espaço de trabalho. Apenas seu login é excluído.",
+        "nothing": "Nenhum espaço de trabalho é excluído ou deixado com sua conta.",
         "blockersTitle": "Transfira estes primeiro"
       }
     },
@@ -1253,10 +1269,6 @@
           "name": "Segredos protegidos pela rede",
           "description": "Controle quais ferramentas e destinos podem receber os segredos do espaço de trabalho."
         },
-        "pooled_provider_secrets": {
-          "name": "Segredos de provedor compartilhados",
-          "description": "Os membros conectam as próprias assinaturas do ChatGPT e chaves de provedor, compartilham quando necessário e escolhem quais cada sessão usa."
-        },
         "reminders": {
           "name": "Ciclos",
           "description": "Permite que agentes e pessoas agendem verificações em uma sessão, uma vez ou de forma recorrente. Cada disparo aciona essa sessão novamente. Adiciona os ciclos à lista de Gatilhos, o indicador de ciclos da sessão e `kortix loop`."
@@ -1316,6 +1328,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "Com os Espaços ativados, um espaço pode vigiar a si mesmo: ative Proativo nos detalhes dele, e um agente lê o que acontece ali (threads concluídas, perguntas em aberto, pessoas que entram) e escreve no chat só quando importa: um resultado que vale compartilhar, uma decisão que você precisa tomar ou algo atrasado. Ele também pode iniciar uma thread que faz o trabalho. Resumo diário opcional às 9:00."
+        },
+        "program_agents": {
+          "name": "Agentes de programa",
+          "description": "Um agente que executa o seu código em vez de um modelo. Dê a um agente `run: <command>` no kortix.yaml: cada turno executa esse comando no sandbox da sessão, com o workspace, os segredos e os acessos do agente. A mensagem ou os dados do trigger são a entrada, e o que o comando imprime é a resposta."
         }
       },
       "channelsSwitch": {
@@ -1719,7 +1735,7 @@
         "email": "E-mail",
         "scheduled": "Agendado",
         "webhook": "Webhook",
-        "event": "Evento de app",
+        "event": "Evento de conector",
         "manual": "Manual",
         "all": "Todos"
       },
@@ -2081,7 +2097,17 @@
       "claudePlan": "Plano Pro ou Max",
       "connectModel": "Conectar modelo",
       "imagesUnsupported": "{model} não consegue ler imagens",
-      "imagesUnsupportedHint": "remova-as ou escolha outro modelo"
+      "imagesUnsupportedHint": "remova-as ou escolha outro modelo",
+      "noModelUpgradeReason": "Sem modelo: faça upgrade para o plano Credits ou adicione sua própria chave de provedor.",
+      "noModelKeyReason": "Sem modelo: adicione sua própria chave de provedor.",
+      "noModelUpgradePlan": "Fazer upgrade do plano",
+      "noModelAddProviderKey": "Adicionar chave do provedor",
+      "stepTitle": "Conecte um modelo",
+      "stepBody": "Os agentes de {workspace} precisam de um modelo para responder. Conecte seu plano do ChatGPT ou do Claude, ou adicione uma chave de provedor.",
+      "stepBodyUpgrade": "Os agentes de {workspace} precisam de um modelo para responder. Conecte seu plano do ChatGPT ou do Claude, adicione uma chave de provedor ou faça upgrade para o plano Credits para usar os modelos da Kortix.",
+      "stepBodyMember": "Os agentes de {workspace} precisam de um modelo para responder. Conecte seu próprio plano do ChatGPT ou do Claude ou sua chave de provedor, ou peça a alguém que gerencia este espaço de trabalho para conectar um modelo para todos.",
+      "stepThisWorkspace": "este espaço de trabalho",
+      "stepBack": "Voltar aos espaços de trabalho"
     },
     "providerRecovery": {
       "savedPrompt": "Prompt salvo",
@@ -2146,6 +2172,7 @@
       "agentWorkingOnFor": "está trabalhando em {task} · {time}",
       "somethingWrong": "Algo deu errado",
       "notSent": "Não enviado",
+      "computerDisconnected": "O computador desta sessão está desconectado.",
       "retry": "Tentar de novo",
       "resume": "Retomar",
       "agentIsWorking": "{agent} está trabalhando",
@@ -3405,9 +3432,6 @@
     },
     "inbox": {
       "title": "Caixa de entrada",
-      "viewReview": "Review",
-      "viewNotifications": "Notificações",
-      "viewLabel": "Visualização da caixa de entrada",
       "description": "Atualizações das sessões, gatilhos e artefatos que envolvem você, de todos os espaços de trabalho.",
       "unreadLabel": "Caixa de entrada: {count} não lidas",
       "unreadCount": "{count} não lidas",
@@ -10378,6 +10402,8 @@
       "checkConnection": "Verifique sua conexão e tente novamente."
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "Adicionar chave do provedor",
+      "noModelUpgradePlan": "Fazer upgrade do plano",
       "authEmailRateLimit": "Não foi possível enviar o e-mail. Tente novamente em cerca de uma hora.",
       "authRequestRateLimit": "Muitas solicitações. Tente novamente em alguns minutos.",
       "text03217276a5f1": "Saldo {value0} créditos",
@@ -20676,10 +20702,11 @@
       "text5f6ba69d66d1": "Habilidade removida",
       "textcb8d6b0c94c9": " e todos os arquivos nela, incluindo edições, e remove a habilidade de todos os agentes que a usam. Um commit no branch padrão.",
       "cliDeviceTitle": "Autorizar Kortix CLI",
-      "cliDeviceWarning": "Aprove apenas um início de sessão que você iniciou. Digite o código exibido no seu terminal.",
+      "cliDeviceWarning": "Aprove apenas um início de sessão que você iniciou. Confira se este código é igual ao exibido no seu terminal.",
       "cliDeviceCode": "Código de acesso",
       "cliDeviceApproved": "Acesso aprovado. Volte ao terminal.",
       "cliDeviceAction": "Autorizar CLI",
+      "cliDeviceConfirm": "Este código é igual ao do meu terminal",
       "text705a7e325b66": "O app do Kortix emitiu eventos",
       "text4b80152fb96b": "Credenciais de eventos do app do Kortix lidas",
       "text59374c1f1acd": "O app do Kortix agendou uma execução",
@@ -21331,7 +21358,16 @@
       "textb1f8e3109f1b": "{value0}: {value1} dias é o máximo que o Kortix permite.",
       "textac20a57bfde0": "Ocultar",
       "text268733ac2f60": "Não foi possível atualizar esse app",
-      "text5d8926d4a4dd": "Não foi possível registrar esse app"
+      "text5d8926d4a4dd": "Não foi possível registrar esse app",
+      "text30b9ce09f406": "Insira um período como 15m, 1h ou 1d, de pelo menos 1m.",
+      "text28d33d2ad989": "Escolha o app a chamar",
+      "textd777d7805cfa": "Insira um caminho que comece com /",
+      "text8043e69a8dd6": "Excluir gatilho",
+      "textd6fa1626e3af": "Evento de conector criado",
+      "textccf59f978ef6": "Ainda não há eventos de conector aqui",
+      "text82cbc4a4def0": "Os eventos de conector não estão configurados nesta implantação, então nenhum conector pode enviá-los ainda.",
+      "text458ceb31019b": "Gatilhos de eventos de conector",
+      "text27ca9df9dbaa": "Os gatilhos de eventos de conector estão desativados"
     },
     "publicShareConfirm": {
       "title": "Criar um link público?",
@@ -21793,7 +21829,16 @@
     "crBranchHelp": "Roda quando uma solicitação de mudança é mesclada neste branch, ou em qualquer branch se o campo estiver vazio. A instrução pode ler <code>change_request.number</code>, <code>change_request.title</code> e <code>change_request.base_ref</code>.",
     "eventsOff": "Os eventos de conectores estão em beta e desativados neste espaço de trabalho. Ative-os em Feature flags, na administração do espaço de trabalho.",
     "noApps": "Nenhum app deste espaço de trabalho envia eventos ainda. Publique um app que faça POST para <code>KORTIX_APP_EVENTS_URL</code> e escolha-o aqui.",
-    "openApps": "Abrir apps"
+    "openApps": "Abrir apps",
+    "thenLabel": "O que um disparo faz",
+    "thenAgent": "Executar um agente",
+    "thenApp": "Chamar um app",
+    "targetPath": "Caminho",
+    "targetMethod": "Método",
+    "targetHelp": "Cada disparo ativa o app e envia o payload para este caminho. Nenhum agente é executado.",
+    "intervalLabel": "Repete a cada",
+    "intervalHelp": "Um período fixo como 15m, 1h ou 1d.",
+    "useCalendar": "Usar um agendamento de calendário"
   },
   "gatewayAccess": {
     "heroTitle": "Use os modelos deste espaço de trabalho em qualquer lugar",
@@ -22075,6 +22120,12 @@
     "noticeSignInTitle": "Entrar no {name}",
     "noticeSignInBody": "O Kortix adicionou {name}. Conclua o login para que os agentes possam usar as ferramentas.",
     "noticeSignInAction": "Entrar",
+    "noticeSignInAgainTitle": "Entre novamente em {name}",
+    "noticeSignInAgainBody": "O login expirou ou foi revogado. Os agentes não podem usar {name} até você entrar novamente.",
+    "noticeNoToolsTitle": "{name} não tem ferramentas",
+    "noticeNoToolsBody": "Não tem rotas, então os agentes não têm nada para chamar. Adicione rotas à especificação de rotas em Configurações.",
+    "noticeAddRoutesAction": "Adicionar rotas",
+    "statusNoTools": "Sem ferramentas",
     "connectAccount": "Conectar",
     "notSignedIn": "Sem login",
     "credentialRejected": "Credencial rejeitada: substitua-a",
@@ -22132,7 +22183,7 @@
     "infoRunsThrough": "Provedor",
     "infoSignsInWith": "Login com",
     "infoCategory": "Categoria",
-    "infoAppEvents": "Eventos do app",
+    "infoAppEvents": "Eventos",
     "infoAppEventsYes": "Compatível",
     "authOAuth": "Login OAuth",
     "authApiKey": "Chave de API",
@@ -23683,9 +23734,9 @@
   },
   "automationsPause": {
     "groupTitle": "Gatilhos",
-    "groupDescription": "Agendamentos, ciclos, webhooks, eventos de apps e monitores neste espaço de trabalho.",
+    "groupDescription": "Agendamentos, loops, webhooks, eventos de conector e eventos de app neste workspace.",
     "label": "Pausar todos os gatilhos",
-    "description": "Nada neste espaço de trabalho roda sozinho: nenhum agendamento, loop, webhook, evento de app ou monitor. Executar um gatilho manualmente ainda funciona.",
+    "description": "Nada neste workspace é executado sozinho: nenhum agendamento, loop, webhook, evento de conector ou evento de app. Executar um gatilho manualmente ainda funciona.",
     "readOnlyDescription": "Apenas um proprietário ou administrador pode pausar ou retomar os gatilhos.",
     "pausedSince": "Pausado desde {date}.",
     "pauseTitle": "Pausar todos os gatilhos?",
@@ -23713,7 +23764,13 @@
   },
   "triggerAutoPause": {
     "title": "Pausado automaticamente",
-    "description": "Parou de iniciar execuções pelo motivo abaixo. Corrija a causa e depois retome-o."
+    "description": "Parou de iniciar execuções pelo motivo abaixo. Corrija a causa e depois retome-o.",
+    "billingTitle": "Pausado: sem créditos",
+    "billingDescription": "Nenhuma execução pode ser paga, então parou de iniciá-las. Retoma sozinho alguns minutos depois de recarregar o saldo.",
+    "modelTitle": "Pausado: nenhum modelo disponível",
+    "modelDescription": "As automações usam só chaves de modelo e contas compartilhadas com todo o workspace, e nenhuma está disponível. Retoma sozinho alguns minutos depois que você adicionar uma em Modelos.",
+    "listBilling": "Sem créditos",
+    "listModel": "Sem modelo"
   },
   "featureGate": {
     "enable": "Ativar {name}",
@@ -24923,6 +24980,9 @@
       }
     },
     "modelView": {
+      "programTitle": "Programa",
+      "programCommand": "Comando",
+      "programHelp": "Cada turno executa este comando no sandbox da sessão em vez de um modelo. A mensagem chega pelo stdin e em $KORTIX_EVENT_PATH. O que ele imprime é a resposta. Uma saída diferente de zero faz o turno falhar.",
       "title": "Modelo",
       "help": "Como este agente pensa.",
       "projectDefault": "Padrão do espaço de trabalho",
@@ -26674,7 +26734,7 @@
       "apiKeysDescription": "Chaves para scripts, CI e integrações. Uma chave age como você, como um agente ou como um bot. As regras de cada chave estão em Segurança.",
       "keys": {
         "title": "Chaves de API",
-        "description": "Chaves para scripts, CI e integrações. Uma chave funciona apenas neste workspace e age como você, como um agente ou como um bot.",
+        "description": "Chaves para scripts, CI e integrações. Uma chave age como você, um agente ou um bot; «Funciona em» define quais workspaces ela alcança.",
         "newKey": "Nova chave",
         "count": "{count, plural, one {# chave} other {# chaves}}",
         "emptyTitle": "Nenhuma chave de API",
@@ -26684,6 +26744,10 @@
         "actsAsAgent": "Um agente",
         "actsAsBot": "Um bot",
         "actsAsMeHint": "Sua função neste workspace. A chave para de funcionar quando você sai.",
+        "worksIn": "Funciona em",
+        "worksInAll": "Todos os meus workspaces",
+        "worksInAllHint": "Age como você em todos os seus workspaces, com o seu papel completo. Gerencie em Preferências → Chaves pessoais.",
+        "worksInWorkspace": "Somente este workspace",
         "actsAsAgentHint": "Exatamente o que o agente pode fazer no kortix.yaml. As ações dele são auditadas como o agente, e a chave continua funcionando quando você sai.",
         "actsAsBotHint": "Um bot para CI ou uma integração, com sua própria função. A chave continua funcionando quando você sai.",
         "needsPermission": "Requer a permissão para gerenciar credenciais",
@@ -26702,6 +26766,7 @@
         "rowBot": "Bot · {name}",
         "createdBy": "Criada por {email}",
         "createdDescription": "{name} age como {actsAs}. O Kortix mostra a chave uma única vez: copie-a agora e guarde-a como segredo.",
+        "createdPersonalDescription": "{name} age como você em todos os seus workspaces — gerencie em Preferências → Chaves pessoais. A Kortix mostra a chave uma vez: copie agora e guarde como segredo.",
         "accessFullHint": "Tudo o que o principal da chave pode fazer neste workspace.",
         "accessCustomHint": "Apenas as permissões que você escolher. Cada uma deve estar entre o que o principal da chave pode fazer."
       },
@@ -26712,7 +26777,9 @@
       "noWorkspaceTitle": "Crie um espaço de trabalho para entrar na CLI",
       "noWorkspaceBody": "A CLI entra em um espaço de trabalho. Crie um e depois aprove este acesso.",
       "createAction": "Criar espaço de trabalho",
-      "workspaceLabel": "Espaço de trabalho"
+      "workspaceLabel": "Espaço de trabalho",
+      "loadFailedTitle": "Não foi possível carregar seus espaços de trabalho",
+      "loadFailedBody": "Este login precisa da sua lista de espaços de trabalho. Sua conta está bem — tente novamente para continuar."
     },
     "models": {
       "yourDefault": "Padrão do espaço de trabalho",
@@ -26721,12 +26788,6 @@
       "setDefaultTitle": "Definir como modelo padrão do espaço de trabalho",
       "setDefaultAria": "Definir {model} como modelo padrão deste espaço de trabalho",
       "setWorkspaceDefault": "Definir como padrão do espaço de trabalho"
-    },
-    "profile": {
-      "deleteLogin": "Excluir meu login",
-      "deleteLoginDescription": "Exclui seu login do Kortix. Você não pertence a nenhum espaço de trabalho, então nada mais é excluído.",
-      "deleteLoginTitle": "Excluir seu login?",
-      "deleteLoginWarning": "Seu login é excluído imediatamente. Isso não pode ser desfeito."
     },
     "capture": {
       "noWorkspaceTitle": "Primeiro crie um espaço de trabalho ou entre em um.",
@@ -26813,5 +26874,24 @@
   "gatewayBudgets": {
     "capWorkspace": "Limite os gastos do gateway deste espaço de trabalho.",
     "capMember": "Limite os gastos do gateway de {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "Abrir login do {app}",
+    "checkingTitle": "Concluindo o login",
+    "checkingDescription": "O Kortix verifica seu login no {app}. Esta página se atualiza sozinha.",
+    "signInUnfinished": "Login não concluído",
+    "finishSignIn": "Concluir login",
+    "signInFinished": "Login concluído",
+    "cardHeadline": "Seu agente precisa que você faça login",
+    "cardTitle": "Conectar {app}",
+    "cardShared": "Compartilhada com o workspace",
+    "cardPrivate": "Só você",
+    "signingIn": "Conclua o login no {app} na janela que abriu.",
+    "connectedAs": "Conectado como {account}",
+    "connected": "Conectado",
+    "connect": "Conectar",
+    "cardFailed": "Não foi possível conectar {app}. Tente novamente.",
+    "blockedTitle": "Abra o {app} para fazer login",
+    "blockedDescription": "Seu navegador bloqueou a janela de login. Abra-a com o botão abaixo. Esta página se atualiza sozinha."
   }
 }

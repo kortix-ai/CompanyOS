@@ -895,9 +895,6 @@ export function defineDesktopParity(runtime: "web" | "desktop"): void {
           await cancelRepository.click();
           await expect(repositoryDialog).toBeHidden();
         }
-        await api(session.access_token, 'PATCH', `/projects/${project.id}/features`, {
-          feature: 'pooled_provider_secrets', enabled: true,
-        });
         const key = await api<{ secret_id: string }>(
           session.access_token, 'POST', `/accounts/${accountId}/secret-resources`, {
             label: 'Desktop pooled key', provider_id: 'anthropic', name: 'ANTHROPIC_API_KEY',

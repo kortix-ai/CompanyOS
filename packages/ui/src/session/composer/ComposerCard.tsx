@@ -18,6 +18,7 @@ import { lazy, Suspense, useContext, useMemo, useRef } from 'react';
 import { SpaceMentionContext } from './menus/space-mentions';
 import { useFeatureFlag } from '@kortix/sdk/react';
 
+import { ModelConnectionLayoutContext } from '../models/model-connection-layout';
 import { ImagesUnsupportedBar, ModelConnectionBar } from '../models/model-connection-gate';
 import { AnimatedComposerPlaceholder } from './animated-placeholder';
 import { AttachmentTiles } from './attachment-tiles';
@@ -36,6 +37,7 @@ import { ChatInputOverridesProvider } from './chat-input/chat-input-overrides';
 import type { ComposerEditorHandle } from './editor/composer-editor';
 import type { SlashAction } from './menus/slash-actions';
 import type { AttachedFile } from './types';
+import { resolveProgramAgent } from './agent-selector';
 import { useUiHostConfig } from '../../providers/ui-provider';
 
 /** What the attach picker offers when the host names no list. */
@@ -214,6 +216,7 @@ export function ComposerCard({
   cardClassName,
   call,
 }: ComposerCardProps) {
+  const connectionsAbove = useContext(ModelConnectionLayoutContext) === 'above';
   const cardRef = useRef<HTMLDivElement>(null);
   const { attachAccept, modelPickerEnabled } = useUiHostConfig();
   const inlineUnderbar = underbarPlacement === 'inline';
@@ -229,6 +232,8 @@ export function ComposerCard({
   // Inside a space the `@` menu is its people and agents (`menus/space-mentions.ts`).
   const spaceMentions = useContext(SpaceMentionContext);
   const chatInputOpen = agentMenuOpen || modelMenuOpen || reasoningMenuOpen;
+  // A program agent (`run` in kortix.yaml) has no model: its listing names provider `program`.
+  const programAgent = resolveProgramAgent(primaryAgents, selectedAgent);
   const chatInput = useMemo<ComposerUnderbarProps['chatInput']>(() => {
     if (!chatInputEnabled) return undefined;
     return {
@@ -282,6 +287,7 @@ export function ComposerCard({
 
   return (
     <ChatInputOverridesProvider enabled={chatInputEnabled}>
+    {connectionsAbove ? <ModelConnectionBar show={noModelsConnected} /> : null}
     <div
       ref={cardRef}
       onDragEnter={handleDragEnter}
@@ -454,6 +460,7 @@ export function ComposerCard({
             onChange={handleFileSelect}
           />
           <ComposerToolbar
+            noModel={programAgent}
             leading={
               inlineUnderbar ? (
                 <ComposerUnderbar
@@ -569,7 +576,7 @@ export function ComposerCard({
       below everything the composer owns (card and underbar) as a row of its
       own. See `ModelConnectionBar`.
     */}
-    <ModelConnectionBar show={noModelsConnected} />
+    {connectionsAbove ? null : <ModelConnectionBar show={noModelsConnected} />}
 
     {/*
       The `'below'` dock. Absolute, not in flow: `top-full` hangs it off the

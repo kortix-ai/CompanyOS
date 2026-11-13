@@ -52,7 +52,7 @@ const catalog = {
     "oauthWaiting": "Waiting for authorization…",
     "oauthFinishing": "Signed in. Saving your account…",
     "oauthExpired": "Authorization timed out. Try again.",
-    "oauthPrivateDescription": "Use your ChatGPT Plus or Pro plan in this workspace. New accounts are private to you until you share them.",
+    "oauthPrivateDescription": "Use your ChatGPT Plus or Pro plan in this workspace. New accounts are shared with every workspace member. You can make one private.",
     "chatGptSubscription": "ChatGPT subscription",
     "manageChatGptAccounts": "Manage ChatGPT accounts",
     "connect": "Connect",
@@ -88,7 +88,7 @@ const catalog = {
     "deleteError": "Secret could not be deleted",
     "accessError": "Access could not be changed",
     "sharedTitle": "Provider connections",
-    "sharedDescription": "Add API keys, ChatGPT accounts and Claude accounts. New ones are private to you until you share them. Choose which ones each session uses.",
+    "sharedDescription": "Add API keys, ChatGPT accounts and Claude accounts. New ones are shared with every workspace member. You can make one private. Choose which ones each session uses.",
     "legacyProjectKey": "Existing workspace key · Used when this session has no key selection",
     "keyCount": "{count, plural, one {# key} other {# keys}}",
     "providerKeysFor": "{provider} API keys",
@@ -99,6 +99,14 @@ const catalog = {
     "access": "Access",
     "actions": "Actions",
     "coolingDown": "Cooling down",
+    "keyVerified": "Verified: {provider} accepted this key",
+    "keyInvalid": "{provider} refused this key: {message}",
+    "keyUnchecked": "Not verified: {message}",
+    "checkKey": "Check again",
+    "savedVerified": "Key saved and verified",
+    "savedInvalid": "Key saved, but {provider} refused it: {message}",
+    "checkError": "The key could not be checked",
+    "openProviderInModels": "Open {provider} in Models",
     "member": "member",
     "members": "members",
     "actionsFor": "Actions for {label}",
@@ -162,7 +170,7 @@ const catalog = {
     "claudeAccounts": "Claude accounts",
     "noClaudeAccounts": "No Claude accounts yet",
     "connectClaude": "Sign in with Claude",
-    "claudeOauthPrivateDescription": "Use your Claude Pro or Max plan for Claude models in this workspace. New accounts are private to you until you share them.",
+    "claudeOauthPrivateDescription": "Use your Claude Pro or Max plan for Claude models in this workspace. New accounts are shared with every workspace member. You can make one private.",
     "claudeOauthCreationDescription": "Sign in with your Claude Pro or Max account. Kortix stores the login encrypted and never shows it.",
     "claudeDefaultAccountLabel": "Claude · {name}",
     "claudeAccountConnected": "Claude account connected",
@@ -170,7 +178,10 @@ const catalog = {
     "claudeConnectFailed": "The Claude sign-in did not finish. Try again.",
     "claudeReconnectDescription": "Sign in with Claude again. The account keeps its name, access, and session selections.",
     "claudeAccountLabelPlaceholder": "e.g. My Claude account",
-    "claudeDeleteAccountConfirmTitle": "Delete this Claude account for everyone?"
+    "claudeDeleteAccountConfirmTitle": "Delete this Claude account for everyone?",
+    "sharedOnlyYouDescription": "Add API keys, ChatGPT accounts and Claude accounts. Only you can use the ones you add. A workspace manager can share one. Choose which ones each session uses.",
+    "oauthOnlyYouDescription": "Use your ChatGPT Plus or Pro plan in this workspace. Only you can use the accounts you add.",
+    "claudeOauthOnlyYouDescription": "Use your Claude Pro or Max plan for Claude models in this workspace. Only you can use the accounts you add."
   },
   "secrets": {
     "undecryptable": {
@@ -278,6 +289,7 @@ const catalog = {
       "repositoryLabel": "Repository",
       "loadingOptions": "Loading repository options…",
       "managedUnavailable": "Kortix-managed repositories are not available on this instance. A platform admin sets this up in the admin console.",
+      "githubAfterCreate": "To use your own GitHub for later workspaces, connect it in Workspace settings › Git once this one exists.",
       "installationUnreachable": "This GitHub connection no longer works. Reconnect it to list repositories.",
       "reconnect": "Reconnect in Git settings",
       "managedImportLabel": "Import an existing managed repository",
@@ -785,10 +797,6 @@ const catalog = {
           "name": "Network-Enforced Secrets",
           "description": "Control which tools and destinations can receive workspace secrets."
         },
-        "pooled_provider_secrets": {
-          "name": "Pooled Provider Secrets",
-          "description": "Members connect their own ChatGPT subscriptions and provider keys, share them when needed, and choose which ones each session uses."
-        },
         "reminders": {
           "name": "Loops",
           "description": "Let agents and people schedule check-ins on a session, once or on repeat. Each fire re-prompts that session. Adds loops to the Triggers list, the session loop chip, and `kortix loop`."
@@ -848,6 +856,10 @@ const catalog = {
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "With Spaces on, a space can watch itself: turn on Proactive in its details, and an agent reads what happens there (finished threads, questions left open, people who join) and writes in the chat only when it matters: a result worth sharing, a decision you need to make, or something overdue. It can also start a thread that does the work. Optional daily brief at 9:00."
+        },
+        "program_agents": {
+          "name": "Program agents",
+          "description": "An agent that runs your code instead of a model. Give an agent `run: <command>` in kortix.yaml: each turn runs that command in the session's sandbox, with the agent's workspace, secrets and access. The message or trigger payload is the input, and what the command prints is the reply."
         }
       },
       "channelsSwitch": {
@@ -1219,7 +1231,7 @@ const catalog = {
         "email": "Email",
         "scheduled": "Scheduled",
         "webhook": "Webhook",
-        "event": "App event",
+        "event": "Connector event",
         "manual": "Manual",
         "all": "All"
       },
@@ -1488,7 +1500,17 @@ const catalog = {
       "claudePlan": "Pro or Max plan",
       "connectModel": "Connect model",
       "imagesUnsupported": "{model} can’t read images",
-      "imagesUnsupportedHint": "remove them or pick another model"
+      "imagesUnsupportedHint": "remove them or pick another model",
+      "noModelUpgradeReason": "No model: upgrade to the Credits plan or add your own provider key.",
+      "noModelKeyReason": "No model: add your own provider key.",
+      "noModelUpgradePlan": "Upgrade plan",
+      "noModelAddProviderKey": "Add provider key",
+      "stepTitle": "Connect a model",
+      "stepBody": "Agents in {workspace} need a model to answer. Connect your ChatGPT or Claude plan, or add a provider key.",
+      "stepBodyUpgrade": "Agents in {workspace} need a model to answer. Connect your ChatGPT or Claude plan, add a provider key, or upgrade to the Credits plan for Kortix models.",
+      "stepBodyMember": "Agents in {workspace} need a model to answer. Connect your own ChatGPT or Claude plan or provider key, or ask someone who manages this workspace to connect a model for everyone.",
+      "stepThisWorkspace": "this workspace",
+      "stepBack": "Back to workspaces"
     },
     "providerRecovery": {
       "savedPrompt": "Saved prompt",
@@ -1546,6 +1568,7 @@ const catalog = {
       "agentWorkingOnFor": "is working on {task} · {time}",
       "somethingWrong": "Something went wrong",
       "notSent": "Not sent",
+      "computerDisconnected": "This session's computer is disconnected.",
       "retry": "Retry",
       "resume": "Resume",
       "agentIsWorking": "{agent} is working",
@@ -2166,9 +2189,6 @@ const catalog = {
     },
     "inbox": {
       "title": "Inbox",
-      "viewReview": "Review",
-      "viewNotifications": "Notifications",
-      "viewLabel": "Inbox view",
       "description": "Updates about the sessions, triggers, and artifacts that concern you, from every workspace.",
       "unreadLabel": "Inbox: {count} unread",
       "unreadCount": "{count} unread",
@@ -2694,6 +2714,8 @@ const catalog = {
       "checkConnection": "Check your connection, then retry."
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "Add provider key",
+      "noModelUpgradePlan": "Upgrade plan",
       "text03217276a5f1": "Balance {value0} credits",
       "text0b6a47661327": "Unknown owner",
       "text1a9030082a20": "Create skill",
@@ -6197,7 +6219,16 @@ const catalog = {
       "text765a8cb04cf5": "LLM Hold Refund",
       "texta68ee4167406": "Proxy",
       "texta69c4dece144": "Storage",
-      "textab3aff8f7642": "Top-up Bonus"
+      "textab3aff8f7642": "Top-up Bonus",
+      "text30b9ce09f406": "Enter a period such as 15m, 1h or 1d, at least 1m.",
+      "text28d33d2ad989": "Choose the App to call",
+      "textd777d7805cfa": "Enter a path that starts with /",
+      "text8043e69a8dd6": "Delete trigger",
+      "textd6fa1626e3af": "Connector event created",
+      "textccf59f978ef6": "No connector events here yet",
+      "text82cbc4a4def0": "Connector events are not set up on this deployment, so no connector can send them yet.",
+      "text458ceb31019b": "Connector event triggers",
+      "text27ca9df9dbaa": "Connector event triggers are off"
     },
     "publicShareConfirm": {
       "title": "Create a public link?",
@@ -6625,7 +6656,16 @@ const catalog = {
     "crBranchHelp": "Runs when a change request merges into this branch, or into any branch when it is empty. The instruction can read <code>change_request.number</code>, <code>change_request.title</code> and <code>change_request.base_ref</code>.",
     "eventsOff": "Connector events are in beta and off for this workspace. Turn them on under Feature flags in Workspace admin.",
     "noApps": "No App in this workspace sends events yet. Deploy an App that POSTs to <code>KORTIX_APP_EVENTS_URL</code>, then pick it here.",
-    "openApps": "Open Apps"
+    "openApps": "Open Apps",
+    "thenLabel": "What a fire does",
+    "thenAgent": "Run an agent",
+    "thenApp": "Call an App",
+    "targetPath": "Path",
+    "targetMethod": "Method",
+    "targetHelp": "Each fire wakes the App and sends the payload to this path. No agent runs.",
+    "intervalLabel": "Repeats every",
+    "intervalHelp": "A fixed period such as 15m, 1h or 1d.",
+    "useCalendar": "Use a calendar schedule"
   },
   "gatewayAccess": {
     "heroTitle": "Use this workspace's models anywhere",
@@ -6835,6 +6875,12 @@ const catalog = {
     "noticeSignInTitle": "Sign in to {name}",
     "noticeSignInBody": "Kortix added {name}. Finish signing in so agents can use its tools.",
     "noticeSignInAction": "Sign in",
+    "noticeSignInAgainTitle": "Sign in to {name} again",
+    "noticeSignInAgainBody": "Its sign-in expired or was revoked. Agents cannot use {name} until you sign in again.",
+    "noticeNoToolsTitle": "{name} has no tools",
+    "noticeNoToolsBody": "It has no routes, so agents have nothing to call. Add routes to its routes spec in Settings.",
+    "noticeAddRoutesAction": "Add routes",
+    "statusNoTools": "No tools",
     "connectAccount": "Connect",
     "notSignedIn": "Not signed in",
     "credentialRejected": "Credential rejected: replace it",
@@ -6892,7 +6938,7 @@ const catalog = {
     "infoRunsThrough": "Provider",
     "infoSignsInWith": "Signs in with",
     "infoCategory": "Category",
-    "infoAppEvents": "App events",
+    "infoAppEvents": "Events",
     "infoAppEventsYes": "Supported",
     "authOAuth": "OAuth sign-in",
     "authApiKey": "API key",
@@ -7821,9 +7867,9 @@ const catalog = {
   },
   "automationsPause": {
     "groupTitle": "Triggers",
-    "groupDescription": "Schedules, loops, webhooks, app events and monitors in this workspace.",
+    "groupDescription": "Schedules, loops, webhooks, connector events and App events in this workspace.",
     "label": "Pause all triggers",
-    "description": "Nothing in this workspace runs on its own: no schedule, loop, webhook, app event or monitor. Running a trigger by hand still works.",
+    "description": "Nothing in this workspace runs on its own: no schedule, loop, webhook, connector event or App event. Running a trigger by hand still works.",
     "readOnlyDescription": "Only an owner or admin can pause or resume triggers.",
     "pausedSince": "Paused since {date}.",
     "pauseTitle": "Pause all triggers?",
@@ -7851,7 +7897,13 @@ const catalog = {
   },
   "triggerAutoPause": {
     "title": "Paused automatically",
-    "description": "It stopped starting runs for the reason below. Fix the cause, then resume it."
+    "description": "It stopped starting runs for the reason below. Fix the cause, then resume it.",
+    "billingTitle": "Paused: out of credits",
+    "billingDescription": "No run can be paid for, so it stopped starting runs. It resumes by itself a few minutes after the wallet is topped up.",
+    "modelTitle": "Paused: no model to run on",
+    "modelDescription": "Automations use only model keys and accounts shared with the whole workspace, and none is usable. It resumes by itself a few minutes after you add one in Models.",
+    "listBilling": "No credits",
+    "listModel": "No model"
   },
   "featureGate": {
     "enable": "Enable {name}",
@@ -8244,6 +8296,9 @@ const catalog = {
       }
     },
     "modelView": {
+      "programTitle": "Program",
+      "programCommand": "Command",
+      "programHelp": "Each turn runs this command in the session's sandbox instead of a model. The message arrives on stdin and in $KORTIX_EVENT_PATH. What it prints is the reply. A non-zero exit fails the turn.",
       "title": "Model",
       "help": "How this agent thinks.",
       "projectDefault": "Workspace default",
@@ -9983,7 +10038,7 @@ const catalog = {
       "apiKeysDescription": "Keys for scripts, CI and integrations. A key acts as you, an agent or a bot. The rules every key follows are in Security.",
       "keys": {
         "title": "API keys",
-        "description": "Keys for scripts, CI and integrations. A key works in this workspace only and acts as you, an agent or a bot.",
+        "description": "Keys for scripts, CI and integrations. A key acts as you, an agent or a bot; Works in sets which workspaces it reaches.",
         "newKey": "New key",
         "count": "{count, plural, one {# key} other {# keys}}",
         "emptyTitle": "No API keys",
@@ -9993,6 +10048,10 @@ const catalog = {
         "actsAsAgent": "An agent",
         "actsAsBot": "A bot",
         "actsAsMeHint": "Your role in this workspace. The key stops working when you leave.",
+        "worksIn": "Works in",
+        "worksInAll": "All my workspaces",
+        "worksInAllHint": "Acts as you in every workspace of yours, with your full role. Manage it under Preferences → Personal keys.",
+        "worksInWorkspace": "Only this workspace",
         "actsAsAgentHint": "Exactly what the agent may do in kortix.yaml. Its actions are audited as the agent, and the key keeps working when you leave.",
         "actsAsBotHint": "A bot for CI or an integration, with its own role. The key keeps working when you leave.",
         "needsPermission": "Needs the permission to manage credentials",
@@ -10011,6 +10070,7 @@ const catalog = {
         "rowBot": "Bot · {name}",
         "createdBy": "Created by {email}",
         "createdDescription": "{name} acts as {actsAs}. Kortix shows the key once: copy it now and store it as a secret.",
+        "createdPersonalDescription": "{name} acts as you in every workspace of yours — manage it under Preferences → Personal keys. Kortix shows the key once: copy it now and store it as a secret.",
         "accessFullHint": "Everything the key's principal may do in this workspace.",
         "accessCustomHint": "Only the permissions you pick. Each one must be something the key's principal may do."
       },
@@ -10083,6 +10143,25 @@ const catalog = {
   "gatewayBudgets": {
     "capWorkspace": "Cap gateway spend for this workspace.",
     "capMember": "Cap gateway spend for {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "Open {app} sign-in",
+    "checkingTitle": "Finishing sign-in",
+    "checkingDescription": "Kortix checks your {app} sign-in. This page updates by itself.",
+    "signInUnfinished": "Sign-in not finished",
+    "finishSignIn": "Finish sign-in",
+    "signInFinished": "Sign-in finished",
+    "cardHeadline": "Your agent needs you to sign in",
+    "cardTitle": "Connect {app}",
+    "cardShared": "Shared with the workspace",
+    "cardPrivate": "Only you",
+    "signingIn": "Finish signing in to {app} in the window that opened.",
+    "connectedAs": "Connected as {account}",
+    "connected": "Connected",
+    "connect": "Connect",
+    "cardFailed": "Could not connect {app}. Try again.",
+    "blockedTitle": "Open {app} to sign in",
+    "blockedDescription": "Your browser blocked the sign-in window. Open it with the button below. This page updates by itself."
   }
 };
 

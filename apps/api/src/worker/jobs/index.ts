@@ -35,6 +35,7 @@ import { startGatewaySpendBackfillWorker, stopGatewaySpendBackfillWorker } from 
 import { startGrantExpirySweeper, stopGrantExpirySweeper } from './grant-expiry';
 import { startNotificationWorker, stopNotificationWorker } from './notification';
 import { startOAuthSweeper, stopOAuthSweeper } from './oauth-sweep';
+import { startReplaySweeper, stopReplaySweeper } from './replay-sweep';
 import { startProjectMaintenance, stopProjectMaintenance } from './project-maintenance';
 import { startProjectSnapshotWorker, stopProjectSnapshotWorker } from './project-snapshot';
 import { startProviderTransitionWorker, stopProviderTransitionWorker } from './provider-transition';
@@ -52,6 +53,7 @@ import { startTunnelCleanup, stopTunnelCleanup } from './tunnel-cleanup';
 import { startTunnelForwardExpiry, stopTunnelForwardExpiry } from './tunnel-forward-expiry';
 import { startWorkspaceIdFillWorker, stopWorkspaceIdFillWorker } from './workspace-id-fill';
 import { startWorkspaceSplitWorker, stopWorkspaceSplitWorker } from './workspace-split';
+import { startLegacyCredentialBackfillWorker, stopLegacyCredentialBackfillWorker } from './legacy-credential-backfill';
 
 import { startSalesOutbox, stopSalesOutbox } from './sales-outbox';
 
@@ -74,6 +76,9 @@ export const JOBS: readonly Job[] = [
   // Mint the platform-default sandbox image once per leadership term, so the
   // first session anywhere lands on a cache hit. One shot, no timer.
   { ticks: { 'startup-prebuild': null }, start: kickStartupPreBuild, stop: () => {} },
+  // Move legacy LLM keys and connector rows to their canonical stores: at
+  // boot, then daily. On by default on self-host, off on Kortix cloud.
+  { ticks: { 'legacy-credential-backfill': 26 * HOUR }, start: startLegacyCredentialBackfillWorker, stop: stopLegacyCredentialBackfillWorker },
   // Resume durable sandbox-provider migrations a stop left mid-flight.
   { ticks: { 'provider-transition': 30 * MIN }, start: startProviderTransitionWorker, stop: stopProviderTransitionWorker },
   { ticks: { 'app-deployments': 60 * MIN }, start: startAppDeploymentWorker, stop: stopAppDeploymentWorker },
@@ -100,6 +105,8 @@ export const JOBS: readonly Job[] = [
   // Connector approvals past expires_at. Never resumes a session.
   { ticks: { 'approval-expiry': 10 * MIN }, start: startApprovalExpirySweeper, stop: stopApprovalExpirySweeper },
   { ticks: { 'oauth-sweep': 3 * HOUR }, start: startOAuthSweeper, stop: stopOAuthSweeper },
+  // Expired shared Idempotency-Key model answers (KRTX-4612) leave the table.
+  { ticks: { 'gateway-replay-sweep': 30 * MIN }, start: startReplaySweeper, stop: stopReplaySweeper },
   {
     ticks: { 'drive-conflict-scan': 10 * MIN, 'volume-deletions': 3 * HOUR, 'drive-mount-revocations': 10 * MIN, 'drive-index': 20 * MIN },
     start: startDriveWorkers,

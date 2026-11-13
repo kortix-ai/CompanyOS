@@ -135,7 +135,7 @@ async function recentAuditEvents(): Promise<RecentAuditEvent[]> {
   }));
 }
 
-async function usageLast24h(): Promise<UsageRow[]> {
+export async function usageLast24h(): Promise<UsageRow[]> {
   const rows = resultRows<{
     provider: string;
     calls: number | string;

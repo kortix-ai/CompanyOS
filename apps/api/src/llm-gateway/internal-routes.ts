@@ -47,9 +47,11 @@ export function createInternalGatewayRoutes() {
   // per request: a box's voice pipeline resolves its TTS model on every
   // spoken line, so one session against a deployment whose managed lineup
   // lists no audio models logged 41 warns in 2 h against a 0.13/h baseline
-  // (KRTX-4665). Log the first occurrence per (model, code) per day; the
-  // typed error in the 200 body is unchanged, so the gateway still refuses
-  // every time.
+  // (KRTX-4665). Log the first occurrence per (model, code) per day, at info:
+  // the refusal is an expected typed outcome (the gateway answers it cleanly
+  // and gateway_request_logs records every one), and even once per replica per
+  // day it kept breaching the warn baseline after every deploy. The typed
+  // error in the 200 body is unchanged, so the gateway still refuses every time.
   const logFirstResolutionFailure = createFirstInWindow({ windowMs: 24 * 60 * 60 * 1000 });
 
   for (const warning of weakInternalTokenWarnings(internalToken)) {
@@ -131,7 +133,7 @@ export function createInternalGatewayRoutes() {
           // bounded like the key.
           const loggedModel = JSON.stringify(keyModel);
           const loggedMessage = err.message.replace(/[\u0000-\u001f\u007f]+/g, ' ').slice(0, 500);
-          logger.warn(`[gateway-internal] resolution failed for ${loggedModel}: ${err.code} — ${loggedMessage}`);
+          logger.info(`[gateway-internal] resolution failed for ${loggedModel}: ${err.code} — ${loggedMessage}`);
         }
         return c.json({
           candidates: [],

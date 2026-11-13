@@ -1,5 +1,5 @@
 import { gatewayIdempotencyReplays } from '@kortix/db';
-import { eq, gt, lt, and, count, sql } from 'drizzle-orm';
+import { eq, gt, lt, and, count, inArray, sql } from 'drizzle-orm';
 import { z } from '@hono/zod-openapi';
 import { db } from '../shared/db';
 
@@ -67,13 +67,15 @@ export async function putReplay(key: string, answer: ReplayAnswer, now = new Dat
 export async function sweepExpiredReplays(now = new Date()): Promise<number> {
   let total = 0;
   for (;;) {
-    const gone = (await db.execute(sql`
-      DELETE FROM ${gatewayIdempotencyReplays}
-      WHERE ctid IN (
-        SELECT ctid FROM ${gatewayIdempotencyReplays}
-        WHERE ${gatewayIdempotencyReplays.expiresAt} < ${now.toISOString()}
-        LIMIT ${SWEEP_BATCH}
-      ) RETURNING 1`)) as unknown as unknown[];
+    const batch = db
+      .select({ keyHash: gatewayIdempotencyReplays.keyHash })
+      .from(gatewayIdempotencyReplays)
+      .where(lt(gatewayIdempotencyReplays.expiresAt, now))
+      .limit(SWEEP_BATCH);
+    const gone = await db
+      .delete(gatewayIdempotencyReplays)
+      .where(inArray(gatewayIdempotencyReplays.keyHash, batch))
+      .returning({ keyHash: gatewayIdempotencyReplays.keyHash });
     total += gone.length;
     if (gone.length < SWEEP_BATCH) return total;
   }

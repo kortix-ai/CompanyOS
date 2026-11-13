@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { gatewayIdempotencyReplays } from '@kortix/db';
 import { sql } from 'drizzle-orm';
 import { db } from '../shared/db';
 import { getReplay, putReplay, sweepExpiredReplays } from './idempotency-replays';
@@ -30,7 +31,7 @@ describe('gateway Idempotency-Key replay on PostgreSQL (KRTX-4612)', () => {
     INSERT INTO kortix.gateway_idempotency_replays (key_hash, status, status_text, headers, body, expires_at)
     SELECT md5(i::text) || md5((i + 1)::text), 200, 'OK', '[]'::jsonb, '{}', ${expires}::timestamptz
     FROM generate_series(1, ${n}) AS i`);
-  const rows = async () => Number(((await db.execute(sql`SELECT count(*)::int AS n FROM kortix.gateway_idempotency_replays`)) as unknown as { n: number }[])[0].n);
+  const rows = async () => (await db.select({ k: gatewayIdempotencyReplays.keyHash }).from(gatewayIdempotencyReplays)).length;
 
   test('the sweep deletes every expired row, across batches, and keeps live ones', async () => {
     await fill(2500, '2000-01-01T00:00:00Z');

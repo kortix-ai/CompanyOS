@@ -24,16 +24,21 @@ export async function ensureRuntimeArtifacts(worktreePath: string): Promise<numb
   return 0;
 }
 
-// Drain a spawned process's stdout+stderr and resolve the first regex match (the
+// Spawn `cmd`, drain its stdout+stderr and resolve the first regex match (the
 // tunnel URL and the stripe signing secret both print to the child's output).
 // Piping in-memory avoids a temp file entirely — no predictable /tmp path to leak
 // the `whsec_` secret through and no create-then-read race. The process is left
-// running on a match; the caller owns its lifecycle (and kills it on miss).
-async function waitForOutputMatch(
-  proc: ReturnType<typeof Bun.spawn>,
+// running on a match; the caller owns its lifecycle. A miss kills it. Null when
+// the binary is missing or nothing matched within `attempts` seconds.
+export async function spawnForFirstMatch(
+  cmd: [string, ...string[]],
   re: RegExp,
   attempts: number,
-): Promise<string | null> {
+): Promise<{ match: string; proc: ReturnType<typeof Bun.spawn> } | null> {
+  if (!which(cmd[0])) return null;
+  const proc = spawn(cmd, {
+    stdout: 'pipe', stderr: 'pipe', stdin: 'ignore',
+  });
   let buf = '';
   const pump = async (stream: ReadableStream<Uint8Array> | null | undefined) => {
     if (!stream) return;
@@ -51,29 +56,10 @@ async function waitForOutputMatch(
   void pump(proc.stderr as ReadableStream<Uint8Array>);
   for (let i = 0; i < attempts; i++) {
     const m = buf.match(re);
-    if (m) return m[0];
+    if (m) return { match: m[0], proc };
     if (proc.exitCode !== null) break;
     await Bun.sleep(1000);
   }
-  return null;
-}
-
-/**
- * Spawn `cmd` and resolve its first output match of `re` within `attempts`
- * seconds. Null when the binary is missing or nothing matched; a miss kills the
- * child, a match leaves it running for the caller.
- */
-export async function spawnForFirstMatch(
-  cmd: [string, ...string[]],
-  re: RegExp,
-  attempts: number,
-): Promise<{ match: string; proc: ReturnType<typeof Bun.spawn> } | null> {
-  if (!which(cmd[0])) return null;
-  const proc = spawn(cmd, {
-    stdout: 'pipe', stderr: 'pipe', stdin: 'ignore',
-  });
-  const match = await waitForOutputMatch(proc, re, attempts);
-  if (match) return { match, proc };
   try { proc.kill(); } catch {}
   return null;
 }

@@ -274,6 +274,27 @@ describe('goal mode: a goal bound to its chat', () => {
     expect((await goals.createGoal(ctx(asSession(sessionId)), boundInput())).state).toBe('active');
   });
 
+  test("a chat's next goal does not let the stopped goal's queued prompts through", async () => {
+    const sessionId = await chat();
+    const first = await goals.createGoal(ctx(asSession(sessionId)), boundInput());
+    const fireOf = (goal: { boxFolder: string; goalId: string }) => ({ source: 'trigger:reminder', text: `[REMINDER reminder.0123456789ab — recurring]\n${goalWakePrompt(goal.boxFolder, goal.goalId)}` });
+    await goals.stopGoal(ctx(asSession(sessionId)), first.goalId, { revision: first.revision, reason: 'Ana said: drop it' });
+    const second = await goals.createGoal(ctx(asSession(sessionId)), boundInput());
+    expect(await goalPromptRefusal(sessionId, fireOf(first))).toContain('stopped');
+    expect(await goalPromptRefusal(sessionId, { source: 'system:goal', text: `${goalWakePrompt(first.boxFolder, first.goalId)} A person resumed the goal.` })).toContain('stopped');
+    expect(await goalPromptRefusal(sessionId, fireOf(second))).toBeNull();
+    expect(await goalPromptRefusal(sessionId, PERSON)).toBeNull();
+  });
+
+  test('a retried create of the same bound goal answers that goal, not "this chat already works a goal"', async () => {
+    const sessionId = await chat();
+    const input = boundInput();
+    const goal = await goals.createGoal(ctx(asSession(sessionId)), input);
+    const again = await goals.createGoal(ctx(asSession(sessionId)), input);
+    expect(again).toMatchObject({ goalId: goal.goalId, state: 'active', ownerSessionId: sessionId });
+    expect((await db.select().from(projectGoals).where(eq(projectGoals.ownerSessionId, sessionId))).length).toBe(1);
+  });
+
   test("a page goal's owner session still cannot stop it", async () => {
     const goal = await activeGoal();
     expect(await refusal(goals.stopGoal(ctx(asSession(goal.ownerSessionId!)), goal.goalId, { revision: goal.revision, reason: 'giving up' }))).toMatchObject({ status: 403 });

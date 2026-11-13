@@ -37,16 +37,19 @@ export function isBoundGoal(goal: { setup: Record<string, unknown> }): boolean {
 
 /** The marker every prompt the goal engine writes starts with (`goalWakePrompt`). */
 const wakeMarker = (boxFolder: string): string => `Goal wake: ${boxFolder}.`;
+const NAMED_GOAL = /\bgoal ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/;
 
 /**
- * A prompt the goal engine queued, not a person: one from the goal queue
- * (`system:goal`: an answer, a resume, a restart, a verifier's first prompt),
- * or a fire of the goal's heartbeat reminder. A stop deletes the heartbeat,
- * so a fire queued before it is known by the wake marker in its text.
+ * A prompt the goal engine queued, not a person, and the goal it names: one
+ * from the goal queue (`system:goal`: an answer, a resume, a restart, a
+ * verifier's first prompt), or a fire of a goal's heartbeat reminder (its
+ * text carries the wake marker). Null for any other prompt. A stop deletes
+ * the heartbeat, so a fire queued before it is known by its text.
  */
-export function isGoalEnginePrompt(goal: Pick<GoalRow, 'boxFolder'>, prompt: { source: string; text: string }): boolean {
-  if (prompt.source === 'system:goal') return true;
-  return prompt.source === 'trigger:reminder' && prompt.text.includes(wakeMarker(goal.boxFolder));
+export function goalEnginePrompt(prompt: { source: string; text: string }): { goalId: string | null } | null {
+  const goalId = prompt.text.match(NAMED_GOAL)?.[1] ?? null;
+  if (prompt.source === 'system:goal') return { goalId };
+  return prompt.source === 'trigger:reminder' && goalId && prompt.text.includes('Goal wake: ') ? { goalId } : null;
 }
 
 export function isOpenState(state: string): boolean {

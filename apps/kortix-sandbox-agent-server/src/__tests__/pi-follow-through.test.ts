@@ -19,6 +19,18 @@ const invoiceRun = [
 ]
 
 describe('openWait', () => {
+  test('a wake-up call that failed sets nothing: the promise stays an open wait', async () => {
+    const failed = [
+      { role: 'assistant', content: [{ type: 'toolCall', id: 'call-1', name: 'kortix_schedules', arguments: { action: 'follow_up', text: 'check' } }] },
+      { role: 'toolResult', toolCallId: 'call-1', isError: true, content: [{ type: 'text', text: 'at must be in the future' }] },
+    ]
+    const run = [...invoiceRun.slice(0, -1), ...failed, reply("⏳ I'll check the thread tomorrow morning.")]
+    expect(await openWait(run, noWakeUp)).toMatchObject({ kind: 'promise' })
+    // The same call succeeding closes the wait.
+    const worked = [failed[0]!, { role: 'toolResult', toolCallId: 'call-1', isError: false, content: [{ type: 'text', text: 'set' }] }]
+    expect(await openWait([...invoiceRun.slice(0, -1), ...worked, reply("⏳ I'll check the thread tomorrow morning.")], noWakeUp)).toBeNull()
+  })
+
   test('an offer to check later is an open wait, even when a loop is set', async () => {
     const wait = await openWait(invoiceRun, wakeUp)
     expect(wait).toEqual({ kind: 'offer', offer: 'Want me to check the thread for her answer in a couple of hours and tell you when it arrives?' })

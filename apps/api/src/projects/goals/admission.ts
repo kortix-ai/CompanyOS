@@ -15,8 +15,8 @@ import { logger } from '../../lib/logger';
 import type { ProjectRow } from '../lib/serializers';
 import { rescheduleHeartbeat, setHeartbeatEnabled } from './effects';
 import { notifyGoal } from './notify';
-import { decideWake, isBoundGoal, isGoalEnginePrompt, nextUtcMidnight, type WakeDecision } from './rules';
-import { GoalError, goalByHeartbeat, goalFlagOn, goalOfSession, setGoalRuntimeFields, writeGoal, type GoalRow } from './store';
+import { decideWake, goalEnginePrompt, isBoundGoal, nextUtcMidnight, type WakeDecision } from './rules';
+import { GoalError, getGoal, goalByHeartbeat, goalFlagOn, goalOfSession, setGoalRuntimeFields, writeGoal, type GoalRow } from './store';
 
 export type GoalWakeVerdict =
   | { goal: null }
@@ -202,10 +202,14 @@ export async function goalHeartbeatEditRefusal(projectId: string, reminderId: st
  * like any goal's, and so is every prompt into its verifier session.
  */
 export async function goalPromptRefusal(sessionId: string, prompt: { source: string; text: string }): Promise<string | null> {
-  const goal = await goalOfSession(sessionId);
-  if (!goal) return null;
+  const latest = await goalOfSession(sessionId);
+  if (!latest) return null;
+  const engine = goalEnginePrompt(prompt);
+  // A chat owns one goal after another: an engine prompt is judged by the goal it names, not by the newest one.
+  const named = engine?.goalId && engine.goalId !== latest.goalId ? await getGoal(latest.projectId, engine.goalId) : null;
+  const goal = named?.sessions.some((s) => s.id === sessionId) ? named : latest;
   const bound = isBoundGoal(goal);
-  if (bound && goal.ownerSessionId === sessionId && !isGoalEnginePrompt(goal, prompt)) return null;
+  if (bound && goal.ownerSessionId === sessionId && !engine) return null;
   if (goal.state === 'done' || goal.state === 'stopped') return `The goal is ${goal.state}: its queued prompt does not run.`;
   if (goal.pausedAt) return 'A person paused the goal: its queued prompt does not run.';
   // Goal mode needs no flag.

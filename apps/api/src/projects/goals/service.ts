@@ -217,7 +217,8 @@ export async function createGoal(
     // Goal mode: the chat owns its goal. One open goal per chat; a done or stopped one leaves room for the next.
     if (actor.kind !== 'session') forbidden('Only a chat session binds a goal to itself (`here`).');
     const current = await goalOfSession(actor.sessionId);
-    if (current && isOpenState(current.state)) forbidden(`This chat already works goal "${current.title}". It ends when the verifier passes it or a person stops it.`);
+    // The same goal_id again is a retry of this create: the lookup below answers it.
+    if (current && isOpenState(current.state) && current.goalId !== input.goal_id) forbidden(`This chat already works goal "${current.title}". It ends when the verifier passes it or a person stops it.`);
     if (!input.criteria?.length) invalid('A goal in a chat needs 1 to 8 done criteria.');
   } else if (actor.kind === 'session' && (await goalOfSession(actor.sessionId))) forbidden("A goal's own session cannot start another goal.");
   const existing = await getGoal(project.projectId, input.goal_id);

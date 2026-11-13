@@ -32,8 +32,8 @@ export const LOOPS_FLAG = 'reminders'
 export type OpenWait = { kind: 'offer'; offer: string } | { kind: 'promise'; promise: string } | { kind: 'acted'; actions: string[] }
 
 /** The parts of a pi message the check reads. */
-type Block = { type: string; text?: string; name?: string; arguments?: Record<string, unknown> }
-type Message = { role: string; content?: string | Block[] }
+type Block = { type: string; id?: string; text?: string; name?: string; arguments?: Record<string, unknown> }
+type Message = { role: string; content?: string | Block[]; toolCallId?: string; isError?: boolean }
 
 const ASK = String.raw`(?:want me to|do you want me to|should I|shall I|would you like me to|I can|I could|happy to|soll ich|willst du(?:, dass ich)?|möchtest du(?:, dass ich)?|sollen wir)`
 const LATER = String.raw`(?:check|watch|follow[ -]?up|remind|chase|ping|look again|keep an eye|monitor|nudge|circle back|let you know when|tell you when|get back to you|check back|report back|nachschauen|nachsehen|prüfen|nachhaken|erinnern|im Auge|Bescheid|melde mich)`
@@ -73,11 +73,12 @@ function callText(block: Block): string {
   return typeof args.command === 'string' ? args.command : JSON.stringify(args)
 }
 
-/** The run set a wake-up itself (the API is asked only when it did not). */
+/** The run set a wake-up itself (the API is asked only when it did not). A call whose result is an error set nothing. */
 export function setWakeUp(run: readonly Message[]): boolean {
+  const failed = new Set(run.filter((message) => message.role === 'toolResult' && message.isError).map((message) => message.toolCallId))
   return run.some((message) =>
     blocks(message).some((block) => {
-      if (block.type !== 'toolCall') return false
+      if (block.type !== 'toolCall' || (block.id && failed.has(block.id))) return false
       if (block.name === 'kortix_schedules') return WAKE_ACTIONS.has(String(block.arguments?.action ?? ''))
       return WAKE_COMMAND.test(callText(block))
     }),

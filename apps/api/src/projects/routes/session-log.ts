@@ -162,7 +162,7 @@ async function readJournalBody(c: Context<AppEnv>): Promise<BodyRead> {
   }
 }
 
-/** The session read gate of `GET …/transcript`: the project row when the caller may read the session, else the response. */
+/** The session read gate: the project row when the caller may read the session, else the response. */
 async function sessionReadGate(
   c: Context<AppEnv>,
   projectId: string,
@@ -176,7 +176,7 @@ async function sessionReadGate(
   const visible = await loadVisibleSession(loaded, sessionId, c.get('sessionId') ?? null, callerKortixSessionId(c), {
     spawnAncestorRead: true,
   });
-  // A deleted session reads nothing (KRTX-2744, as `GET …/transcript`): its stored log and
+  // A deleted session reads nothing (KRTX-2744): its stored log and
   // loss report are content of a session the trash model advertises as gone. The restore
   // claim takes the session sandbox credential, not this gate, so a fresh box still claims.
   return !visible || sessionIsTombstoned(visible.row)
@@ -374,7 +374,7 @@ export function registerSessionLogRoutes(): void {
         'messages up to `SESSION_LOG_PAGE_MAX_BYTES` of stored payload (default 2 MiB): an over-budget ' +
         'window answers fewer than `limit` with `has_more: true`, the newest message served however large it is. ' +
         'Session read permission, ' +
-        'the same gate as `GET .../transcript`: a session-bound token reads the sessions that route serves it. ' +
+        'the session read gate: a session-bound token reads its own session and the sessions of its project it may see. ' +
         'Per-session read guard: past `KORTIX_SESSION_LOG_READS_PER_MIN` (300) reads a minute the route answers ' +
         '429 `rate_limit_exceeded` with `Retry-After` (KRTX-4696: a hot CLI poll loop against one session ' +
         'degraded the route and the API with it). ' +

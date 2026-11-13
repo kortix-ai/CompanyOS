@@ -27,11 +27,10 @@ import {
  * every consumer's bundle. {@link FEATURE_FLAG_KEYS} is the runtime witness of
  * the same list, so other packages can assert the two have not drifted.
  *
- * `review_center`, `agent_tunnel`, `session_transcript_history`, `teams`,
+ * `review_center`, `agent_tunnel`, `teams`,
  * `config_releases`, `apps`, `llm_gateway`, `pi_harness`, `genui`, `agentmail_email`, `connectors_v2` and `connectors_api_discover` are deprecated. `agent_tunnel` graduated like
  * `review_center` below: a paired computer is a connector account and needs no
- * flag. So did `session_transcript_history`: every session saves its
- * transcript and shows it while its computer is off. And `teams`: every
+ * flag. And `teams`: every
  * project can connect Microsoft Teams. And `config_releases`: every session
  * runs its base branch's config release. And `apps`: Apps is generally
  * available — every project can create and deploy Apps. And `llm_gateway`:
@@ -76,8 +75,6 @@ export type FeatureFlagKey =
   | 'secrets_egress'
   /** @deprecated Withdrawn — the pi worker split left the product; pi runs in the session sandbox. The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'pi_worker'
-  /** @deprecated Graduated — every session saves its transcript. Removed in the next major. */
-  | 'session_transcript_history'
   /** @deprecated Graduated 2026-11-12 — named provider keys, sharing, per-session key selection and named ChatGPT/Claude sign-ins are on for every project. The API sends `true` for every project, so `useFeatureFlag(id, 'pooled_provider_secrets')` reports `enabled: true`. Removed in the next major. */
   | 'pooled_provider_secrets'
   /** @deprecated Graduated — every new session runs pi; OpenCode is sunset. The API sends `true` for every project. Removed in the next major. */
@@ -144,7 +141,6 @@ type GraduatedFeatureFlagKey =
   | 'agent_tunnel'
   | 'teams'
   | 'review_center'
-  | 'session_transcript_history'
   | 'agent_principal'
   | 'human_messaging'
   | 'project_channels'

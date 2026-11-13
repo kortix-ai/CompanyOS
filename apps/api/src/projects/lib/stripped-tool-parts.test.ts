@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { restoreStrippedToolParts } from './session-transcript-mirror';
+import { restoreStrippedToolParts } from './stripped-tool-parts';
 
 describe('a row the old mirror stripped is served with what it kept', () => {
   // The old mirror kept each tool call's status, title, time and metadata.

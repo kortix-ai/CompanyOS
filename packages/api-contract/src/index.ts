@@ -2199,89 +2199,10 @@ export const TriggerReplayRequestSchema = z.object({
 });
 export type TriggerReplayRequest = z.infer<typeof TriggerReplayRequestSchema>;
 
-// ─── Session reads: transcript, turn, prompt queue, snapshot ────────────────
+// ─── Session reads: turn, prompt queue, snapshot ────────────────────────────
 // The wire shapes of the routes a session view reads on every open. apps/api
 // builds them through these types; the SDK's own interfaces are checked
 // against them by `packages/sdk/src/contract-drift.test.ts`.
-
-/** Which source answered a transcript read. `none` is the only value that
- *  accompanies `available: false`; `live` and `mirror` are never merged. */
-export const SessionTranscriptSourceSchema = z.enum(['live', 'mirror', 'none']);
-export type SessionTranscriptSource = z.infer<typeof SessionTranscriptSourceSchema>;
-
-export const SessionTranscriptToolCallSchema = z.object({
-  tool: z.string(),
-  status: z.string().nullable(),
-  /** `detail=full` only: the arguments as JSON, cut to the read's `chars` bound. */
-  input: z.string().optional(),
-  /** `detail=full` only: what the call returned (or its error), cut the same way. */
-  output: z.string().optional(),
-});
-export type SessionTranscriptToolCall = z.infer<typeof SessionTranscriptToolCallSchema>;
-
-/** One compact transcript row: text and tool names, no tool payloads. */
-export const SessionTranscriptMessageSchema = z.object({
-  /** The runtime message id, verbatim. */
-  id: z.string().nullable(),
-  /** Which user message a step was parented on. */
-  parent_id: z.string().nullable(),
-  role: z.string(),
-  created: z.string().nullable(),
-  completed: z.string().nullable(),
-  text: z.string(),
-  tools: z.array(SessionTranscriptToolCallSchema),
-  files: z.array(z.object({ filename: z.string().nullable(), mime: z.string().nullable() })),
-  reasoning_omitted: z.boolean(),
-  error: z.object({ name: z.string().optional(), message: z.string().optional() }).nullable(),
-});
-export type SessionTranscriptMessage = z.infer<typeof SessionTranscriptMessageSchema>;
-
-const SessionTranscriptHeadShape = {
-  available: z.boolean(),
-  /** Why this is not a live read. */
-  reason: z.string().nullable(),
-  source: SessionTranscriptSourceSchema,
-  /** The window contains the session's FIRST message. */
-  complete: z.boolean(),
-  /** When the mirror was last written. Null for a live read. */
-  captured_at: z.string().nullable(),
-  runtime_session_id: z.string().nullable(),
-  /** Messages in THIS window. */
-  message_count: z.number(),
-};
-
-/** `GET .../transcript` (default `shape=compact`). */
-export const SessionTranscriptSchema = z.object({
-  ...SessionTranscriptHeadShape,
-  messages: z.array(SessionTranscriptMessageSchema),
-});
-export type SessionTranscript = z.infer<typeof SessionTranscriptSchema>;
-
-/** One mirrored message: the runtime's envelope verbatim, parts 1:1 minus
- *  attachment bytes. Its inner shape is `kortix.transcript.v1`
- *  (`@kortix/api-contract/transcript`). */
-export const SessionTranscriptSyncMessageSchema = z.object({
-  info: JsonObjectSchema,
-  parts: z.array(JsonObjectSchema),
-});
-export type SessionTranscriptSyncMessage = z.infer<typeof SessionTranscriptSyncMessageSchema>;
-
-/** `GET .../transcript?shape=sync`: the durable mirror, one window. */
-export const SessionTranscriptSyncEnvelopeSchema = z.object({
-  ...SessionTranscriptHeadShape,
-  /** Messages the mirror holds for this session, across every window. */
-  total: z.number(),
-  /** Pass as `before` to read the window older than this one. */
-  next_cursor: z.string().nullable(),
-  messages: z.array(SessionTranscriptSyncMessageSchema),
-});
-export type SessionTranscriptSyncEnvelope = z.infer<typeof SessionTranscriptSyncEnvelopeSchema>;
-
-/** Either shape of `GET .../transcript`, chosen by `?shape=`. */
-export const SessionTranscriptReadSchema = z.union([
-  SessionTranscriptSchema,
-  SessionTranscriptSyncEnvelopeSchema,
-]);
 
 /** `delivering`: minted, not yet confirmed by the runtime. `active`: accepted. */
 export const SessionTurnStateSchema = z.enum(['delivering', 'active']);
@@ -2503,14 +2424,9 @@ export const SessionSnapshotSchema = z.object({
     z.object({ known: z.literal(true), prompts: z.array(SessionPromptSchema), held: z.boolean() }),
     SessionSnapshotUnknownSchema,
   ]),
-  transcript: z.union([
-    z.object({ known: z.literal(true), requested: z.literal(false) }),
-    SessionTranscriptSyncEnvelopeSchema.extend({
-      known: z.literal(true),
-      requested: z.literal(true),
-    }),
-    SessionSnapshotUnknownSchema,
-  ]),
+  /** Pointer only since session-log plan P8.3 (the v1 window is gone): the saved
+   *  history is `log`, the first page of `GET …/log`. Kept so an older client still parses. */
+  transcript: z.object({ known: z.literal(true), requested: z.literal(false) }),
   config: z.object({
     known: z.literal(true),
     base_ref: z.string().nullable(),

@@ -24,7 +24,6 @@ const { setRuntimeCapabilities } = await import('../browser/stores/sandbox-conne
 const { setSessionLogThreadLoader, useSessionLog, useSessionLogOlder, useSessionLogRecord, useSessionLogSync, useSessionLogThread } = await import('./use-session-log');
 const { notifyHostSignal } = await import('../core/session/host-signals');
 const { createSavedCopyStore, setSavedCopyStore } = await import('../core/session-sync/saved-copy-store');
-const { savedSessionLogCopies } = await import('../core/session-log/saved-log');
 const v1Convert = await import('../core/session-log/v1');
 
 const log: SessionLog = JSON.parse(readFileSync(join(import.meta.dir, '../../../api-contract/src/__tests__/fixtures/session-log/golden21.v2.json'), 'utf8'));
@@ -425,7 +424,7 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     setSavedCopyStore(store);
     const saved = v1Page();
     saved.messages = saved.messages.slice(0, 3);
-    await savedSessionLogCopies(store)!.write(PROJECT, SESSION, saved);
+    await store.write(PROJECT, SESSION, saved);
   }
 
   test('a failed read (500, a bare 404, the network) keeps the device copy painted and retries after 2 s, 10 s and 30 s, then only at a turn end', async () => {
@@ -552,12 +551,13 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     const data = new Map<string, string>();
     const store = createSavedCopyStore({ storage: { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v), removeItem: (k) => void data.delete(k) }, userId: 'u1' });
     setSavedCopyStore(store);
-    const v1Copy = { available: true, source: 'mirror', runtime_session_id: 'ses_a', captured_at: '2026-10-11T11:00:00Z', messages: [{ info: { id: 'msg_1', role: 'user' }, parts: [] }] };
-    await store.write(PROJECT, SESSION, v1Copy as never);
+    // The v1 copy an SDK before the session-log major kept, at its own key.
+    const v1Key = `kortix.saved-copy:u1:${PROJECT}/${SESSION}`;
+    data.set(v1Key, JSON.stringify({ v: 1, user: 'u1', at: Date.now(), e: { available: true, source: 'mirror', messages: [{}] } }));
     mount({ loader: async () => page() });
     await flush();
-    expect((await savedSessionLogCopies(store)!.read(PROJECT, SESSION))!.messages).toHaveLength(log.threads[0]!.messages.length);
-    expect(store.read(PROJECT, SESSION)).toBeNull();
+    expect((await store.read(PROJECT, SESSION))!.messages).toHaveLength(log.threads[0]!.messages.length);
+    expect(data.has(v1Key)).toBe(false);
     act(() => renderer?.unmount());
     renderer = null;
     mount({ loader: () => new Promise(() => {}) });
@@ -984,7 +984,7 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     setSavedCopyStore(store);
     const saved = v1Page();
     saved.messages = saved.messages.slice(0, 3);
-    await savedSessionLogCopies(store)!.write(PROJECT, SESSION, saved);
+    await store.write(PROJECT, SESSION, saved);
     let release: (value: unknown) => void = () => {};
     mount({ loader: () => new Promise((resolve) => { release = resolve; }) });
     await flush();
@@ -992,7 +992,7 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     await act(async () => release(v1Page()));
     await flush();
     expect(useSyncStore.getState().sessionLogs[SESSION]!.messages[log.threads[0]!.thread_id]).toHaveLength(log.threads[0]!.messages.length);
-    expect((await savedSessionLogCopies(store)!.read(PROJECT, SESSION))!.messages).toHaveLength(log.threads[0]!.messages.length);
+    expect((await store.read(PROJECT, SESSION))!.messages).toHaveLength(log.threads[0]!.messages.length);
   });
 
   test('v2 stays latched while a reconnect clears the capability list: no drop, no refetch', async () => {

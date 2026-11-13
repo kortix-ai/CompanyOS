@@ -861,12 +861,6 @@ test('session(...).log reads one page of the stored session log', async () => {
   expect(last().url).toContain('/workspaces/PID123/sessions/SID456/log?thread=ses_c&limit=5');
 });
 
-test('session(...).transcript hits the compact transcript endpoint with limit/chars', async () => {
-  await kortix.session('PID123', 'SID456').transcript({ limit: 10, chars: 200 });
-  expect(last().url).toContain('/workspaces/PID123/sessions/SID456/transcript?limit=10&chars=200');
-  expect(last().method).toBe('GET');
-});
-
 // The TUI's Repository screen reads a non-default branch's history: the facade
 // must forward the options `listProjectCommits` already takes.
 test('project(id).git.commits forwards ref, path and limit', async () => {
@@ -2054,9 +2048,9 @@ test('the facade carries the connect owner through to both connect surfaces', as
   expect(last().body).toEqual({ slug: 'slack-1', owner: 'me' });
 });
 
-test('project-bound session retains both ids for transcript', async () => {
-  await kortix.project('BOUND_PROJECT').session('BOUND_SESSION').transcript();
-  expect(last().url).toContain('/workspaces/BOUND_PROJECT/sessions/BOUND_SESSION/transcript');
+test('project-bound session retains both ids for its log', async () => {
+  await kortix.project('BOUND_PROJECT').session('BOUND_SESSION').log().catch(() => null);
+  expect(last().url).toContain('/workspaces/BOUND_PROJECT/sessions/BOUND_SESSION/log');
 });
 
 test('project agent identities retains its bound project id', async () => {

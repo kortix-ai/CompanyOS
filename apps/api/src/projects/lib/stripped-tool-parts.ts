@@ -1,55 +1,10 @@
 /**
- * The v1 transcript window shape the session-log reads answer in (`MirrorSnapshot`,
- * `boundMirrorWindow`, `UnknownTranscriptCursorError`), and `restoreStrippedToolParts`: a
- * tool call an old mirror row stored without its input (before 2026-09-28) gets back the
- * input its title and metadata prove.
+ * `restoreStrippedToolParts`: a tool call an old v1 mirror row stored without its input (before
+ * 2026-09-28, backfilled into the session log) gets back the input its title and metadata prove.
+ * `GET …/log` serves such a call with it (`withKeptToolInputs`, `session-log-read.ts`).
  */
 
 import { isRecord } from '@kortix/shared/guards';
-
-/** Per string: a text-like part, or one string in a tool call's payload. Real
- *  messages are 2-10 KB and the runtime truncates a tool's output, so this
- *  only stops one pathological string from becoming a pathological row. */
-export const MIRROR_MAX_PART_CHARS = 200_000;
-
-/** One sync window, serialized. A cold open waits for the first window, and
- *  1:1 tool payloads make 40 messages of a tool-heavy thread megabytes. The
- *  window keeps its NEWEST messages that fit; the rest is one cursor away. */
-export const MIRROR_WINDOW_MAX_CHARS = 1_000_000;
-
-/** One mirrored message in the shape the sync store hydrates from. */
-export interface MirrorMessage {
-  /** The message envelope of the `kortix.transcript.v1` wire (OpenCode 1.18 field names). */
-  info: Record<string, unknown>;
-  /** The message's parts. */
-  parts: Array<Record<string, unknown>>;
-}
-
-export interface MirrorSnapshot {
-  /** The runtime session whose messages this window holds: the root, or
-   *  the sub-agent session a child read asked for. */
-  runtime_session_id: string | null;
-  /** The runtime root the mirror was captured from. Equal to
-   *  `runtime_session_id` for a root read. */
-  root_runtime_session_id?: string | null;
-  captured_at: string;
-  /** Every message the mirror holds for this session, not just this window. */
-  total: number;
-  /** The mirror has PROVEN it holds the session's first message. */
-  head_complete: boolean;
-  messages: MirrorMessage[];
-  /**
-   * The message id to pass as `before` to read the page OLDER than this one,
-   * or null when this window already reaches the oldest row the mirror holds.
-   *
-   * A window without this is a dead end: the mirror retains a flagged
-   * project's whole history and every reader asks for a tail (the startup
-   * view asks for 40), so without a cursor everything before that tail is
-   * stored and unreachable. 25 of 375 mirrored dev sessions already hold more
-   * than 40 messages.
-   */
-  next_cursor: string | null;
-}
 
 /** Same normalization as the SDK's `normalizeActivityToolName`. */
 const normalizeToolName = (name: unknown) =>
@@ -135,39 +90,4 @@ export function restoreStrippedToolParts(
         : {};
     return { ...part, state: { ...state, input, ...output } };
   });
-}
-
-/**
- * Pure: a mirror window bounded by size. Keeps the NEWEST messages whose
- * serialized size fits `maxChars`, and always at least one, so paging older
- * always moves. A cut window points its cursor at the oldest message it kept:
- * the next window starts strictly behind it.
- */
-export function boundMirrorWindow(mirror: MirrorSnapshot, maxChars: number): MirrorSnapshot {
-  const { messages } = mirror;
-  let start = messages.length;
-  let size = 0;
-  while (start > 0) {
-    const next = JSON.stringify(messages[start - 1]).length;
-    if (start < messages.length && size + next > maxChars) break;
-    size += next;
-    start -= 1;
-  }
-  if (start === 0) return mirror;
-  const kept = messages.slice(start);
-  return { ...mirror, messages: kept, next_cursor: String(kept[0].info.id) };
-}
-
-/**
- * A `before` cursor that names no message this session has stored.
- *
- * Distinct from "no mirror" on purpose. Serving the newest window instead
- * would answer a question the caller did not ask, and a client paging older
- * would ask again with the same rejected cursor and loop forever on page one.
- */
-export class UnknownTranscriptCursorError extends Error {
-  constructor(public readonly cursor: string) {
-    super('Unknown transcript cursor');
-    this.name = 'UnknownTranscriptCursorError';
-  }
 }

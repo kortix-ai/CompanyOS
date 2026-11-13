@@ -957,7 +957,6 @@ export const AUDIT_ROUTE_LABELS: Readonly<Record<string, AuditRouteLabel | strin
   'GET /v1/projects/:workspaceId/sessions/:sessionId/snapshot': { action: 'session.snapshot.read', title: 'Opened session' },
   'POST /v1/projects/:workspaceId/sessions/:sessionId/start': { action: 'session.start', title: 'Started session' },
   'POST /v1/projects/:workspaceId/sessions/:sessionId/stop': { action: 'session.stop', title: 'Stopped session' },
-  'GET /v1/projects/:workspaceId/sessions/:sessionId/transcript': { action: 'session.transcript.read', title: 'Viewed session transcript' },
   'GET /v1/projects/:workspaceId/sessions/:sessionId/message-authors': { action: 'session.message_authors.read', title: 'Viewed session message authors' },
   'GET /v1/projects/:workspaceId/sessions/:sessionId/model-usage': { action: 'session.model_usage.read', title: 'Viewed session model usage' },
   'GET /v1/projects/:workspaceId/sessions/:sessionId/turn': { action: 'session.turn.read', title: 'Viewed session turn state' },

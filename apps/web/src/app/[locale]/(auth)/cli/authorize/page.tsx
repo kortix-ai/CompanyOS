@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@kortix/ui/button';
+import { Checkbox } from '@kortix/ui/checkbox';
 import { EntityAvatar } from '@kortix/ui/entity-avatar';
 import { Input } from '@kortix/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@kortix/ui/select';
@@ -70,8 +71,11 @@ function CliAuthorizeInner() {
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
   // The link's `user_code` is the code the CLI printed: start the field from
-  // it (still editable), so pressing Authorize is the only step left.
+  // it (still editable). The prefill is convenience, not consent: a phished
+  // link carries a code too, so approval also needs `matchConfirmed`, which
+  // no URL can set.
   const [typedCode, setTypedCode] = useState(() => userCode ?? '');
+  const [matchConfirmed, setMatchConfirmed] = useState(false);
   const [noWorkspace, setNoWorkspace] = useState(false);
   const tCli = useTranslations('workspaces.cli');
   const tCommon = useTranslations('common');
@@ -170,13 +174,11 @@ function CliAuthorizeInner() {
   }
 
   if (userCode) {
-    // The URL carries the code, so a link from someone else could too. The
-    // field starts from the link's code (KRTX-4802, the issue's accepted
-    // anti-phishing tradeoff — see the PR's Security & data review); the
-    // warning copy stays on the page, and only a value matching the URL's
-    // code approves. A person who types their own terminal's code over a
-    // phished link can never approve it.
-    const confirmed = typedCode.trim().length > 0 && normalizeCliCode(typedCode) === normalizeCliCode(userCode);
+    // The URL carries the code, so a link from someone else could too
+    // (RFC 8628 §5.4). Approval needs the field to match the link's code AND
+    // the person's confirmation that it matches their own terminal.
+    const confirmed =
+      matchConfirmed && typedCode.trim().length > 0 && normalizeCliCode(typedCode) === normalizeCliCode(userCode);
     if (phase === 'success') {
       return (
         <AuthStatusScreen
@@ -224,6 +226,11 @@ function CliAuthorizeInner() {
               className="font-mono tracking-widest uppercase"
               value={typedCode}
               onChange={(event) => setTypedCode(event.target.value)}
+            />
+            <Checkbox
+              checked={matchConfirmed}
+              onCheckedChange={setMatchConfirmed}
+              label={tI18nComplete.raw('cliDeviceConfirm')}
             />
             <Button type="submit" size="lg" className="w-full" disabled={!confirmed || approving}>
               {approving ? <Loading className="size-4 shrink-0" /> : null}

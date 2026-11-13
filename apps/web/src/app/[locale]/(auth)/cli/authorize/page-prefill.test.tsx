@@ -1,34 +1,45 @@
-import { describe, expect, mock, test } from 'bun:test';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
+import { Window } from 'happy-dom';
+import { act } from 'react';
+import type { Root } from 'react-dom/client';
 
-// KRTX-4802: opening a CLI login link (`/cli/authorize?user_code=…`) must show
-// the login code already in the field — the link carries it, so retyping it by
-// hand is the bug. The field stays editable, and the prefilled value alone
-// enables the Authorize button. A link with no code keeps rendering the
-// start-from-CLI screen with no field at all.
+// KRTX-4802: opening a CLI login link (`/cli/authorize?user_code=…`) shows the
+// login code already in the field, so nobody copies it from the terminal by
+// hand. The URL is not consent: a phished link carries a code too (RFC 8628
+// §5.4), so Authorize enables only after the person confirms that the code
+// matches their own terminal. A link with no code renders no field at all.
 
-// The page reads the signed-in user, the router's search params and the
-// workspace directory. Mock the three at their module boundary the way
-// `chat-identity-connect.test.tsx` does; `CliAuthorizeInner` then renders its
-// device-approval form synchronously.
-const auth = { user: { email: 'member@example.com' }, isLoading: false };
-mock.module('@/features/providers/auth-provider', () => ({ useAuth: () => auth }));
+Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
 
-const navigation = await import('next/navigation');
+const win = new Window();
+const setGlobal = (key: string, value: unknown) =>
+  Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+setGlobal('window', win);
+setGlobal('document', win.document);
+setGlobal('navigator', win.navigator);
+setGlobal('getComputedStyle', win.getComputedStyle.bind(win));
+for (const key of Object.getOwnPropertyNames(win)) {
+  if (/^[A-Z]/.test(key) && !(key in globalThis)) setGlobal(key, Reflect.get(win, key));
+}
+// Bun has its own event classes; happy-dom dispatches only its own.
+for (const key of ['Event', 'MouseEvent', 'PointerEvent', 'KeyboardEvent', 'FocusEvent']) {
+  setGlobal(key, Reflect.get(win, key));
+}
+
 let params = new URLSearchParams();
 mock.module('next/navigation', () => ({
-  ...navigation,
   useRouter: () => ({ replace: () => {}, push: () => {} }),
   useSearchParams: () => params,
+  usePathname: () => '/cli/authorize',
+  useParams: () => ({}),
 }));
-
+mock.module('@/features/providers/auth-provider', () => ({
+  useAuth: () => ({ user: { email: 'member@example.test' }, isLoading: false }),
+}));
 const syntheticRow = {
   workspaceId: 'w-synthetic',
   accountId: 'a-synthetic',
   project: { id: 'w-synthetic', name: 'Synthetic Workspace', icon: null, icon_glyph: null },
-  accountName: 'Synthetic',
-  role: 'owner',
-  state: 'active',
 };
 mock.module('@kortix/ui/workspace/sidebar/use-workspace-directory', () => ({
   useWorkspaceDirectory: () => ({
@@ -42,44 +53,104 @@ mock.module('@kortix/ui/workspace/sidebar/use-workspace-directory', () => ({
     retryFailed: () => {},
   }),
 }));
-
+const approved: string[] = [];
 mock.module('@kortix/sdk', () => ({
-  approveCliDevice: async () => ({}),
+  approveCliDevice: async (code: string) => {
+    approved.push(code);
+    return {};
+  },
   createAccountToken: async () => ({}),
   isNoWorkspaceError: () => false,
   revokeAccountToken: async () => ({}),
 }));
 
+// After the DOM globals: React DOM detects input-event support when it loads.
+const { createRoot } = await import('react-dom/client');
 const { default: CliAuthorizePage } = await import('./page');
 
-/** The device-approval submit button, or undefined when the page is not on the approval form. */
-function submitButton(html: string): string | undefined {
-  return /<button[^>]*type="submit"[\s\S]*?<\/button>/.exec(html)?.[0];
+let root: Root | null = null;
+function openLink(query: string) {
+  params = new URLSearchParams(query);
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const mounted = createRoot(host);
+  root = mounted;
+  act(() => mounted.render(<CliAuthorizePage />));
+}
+afterEach(() => {
+  act(() => root?.unmount());
+  root = null;
+  approved.length = 0;
+  document.body.innerHTML = '';
+});
+
+/** The one element `selector` matches; a missing element fails the test. */
+function the<T extends Element>(selector: string): T {
+  const node = document.querySelector<T>(selector);
+  if (!node) throw new Error(`no element matches ${selector}`);
+  return node;
+}
+const field = () => the<HTMLInputElement>('#cli-user-code');
+const authorize = () => the<HTMLButtonElement>('button[type="submit"]');
+const matchBox = () => the<HTMLButtonElement>('button[role="checkbox"]');
+const click = (el: Element) =>
+  act(() => {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  });
+/** Types into the code field the way a browser does: the native setter, then `input`. */
+function type(value: string) {
+  const input = field();
+  act(() => {
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')?.set?.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 }
 
-/** React renders a disabled button as `disabled=""`; the Tailwind `disabled:*`
- *  classes in the class list never match the attribute form. */
-const disabledAttribute = /\sdisabled="/;
-
 describe('the CLI authorize page prefills the login code from its link', () => {
-  test('a user_code link shows the code in the field and enables Authorize', () => {
-    params = new URLSearchParams(`user_code=${encodeURIComponent('ab12-cd34-ef56-7890')}`);
-    const html = renderToStaticMarkup(<CliAuthorizePage />);
+  test('a user_code link shows the code in the field; Authorize waits for the match confirmation', () => {
+    openLink(`user_code=${encodeURIComponent('ab12-cd34-ef56-7890')}`);
 
-    const field = /<input[^>]*id="cli-user-code"[^>]*>/.exec(html)?.[0];
-    expect(field).toBeDefined();
-    expect(field).toContain('value="ab12-cd34-ef56-7890"');
+    expect(field().value).toBe('ab12-cd34-ef56-7890');
+    expect(document.body.textContent).toContain('This code matches my terminal');
+    expect(authorize().disabled).toBe(true);
 
-    const button = submitButton(html);
-    expect(button).toBeDefined();
-    expect(button).not.toMatch(disabledAttribute);
+    click(matchBox());
+    expect(matchBox().getAttribute('aria-checked')).toBe('true');
+    expect(authorize().disabled).toBe(false);
+  });
+
+  test('the prefilled field stays editable, and only the matching code enables Authorize', () => {
+    openLink('user_code=AB12CD34');
+    click(matchBox());
+
+    type('ZZZZ9999');
+    expect(field().value).toBe('ZZZZ9999');
+    expect(authorize().disabled).toBe(true);
+
+    type('ab12-cd34');
+    expect(authorize().disabled).toBe(false);
+  });
+
+  test('a submit without the confirmation approves nothing', async () => {
+    openLink('user_code=AB12CD34');
+    // requestSubmit skips the disabled button, so this reaches the form's own guard.
+    const submit = () =>
+      act(async () => {
+        the<HTMLFormElement>('form').requestSubmit();
+      });
+
+    await submit();
+    expect(approved).toEqual([]);
+
+    click(matchBox());
+    await submit();
+    expect(approved).toEqual(['AB12CD34']);
   });
 
   test('a link with no user_code renders no login-code field at all', () => {
-    params = new URLSearchParams();
-    const html = renderToStaticMarkup(<CliAuthorizePage />);
-
-    expect(html).not.toContain('cli-user-code');
-    expect(submitButton(html)).toBeUndefined();
+    openLink('');
+    expect(document.body.textContent).toContain('kortix login');
+    expect(document.querySelector('#cli-user-code')).toBeNull();
+    expect(document.querySelector('button[role="checkbox"]')).toBeNull();
   });
 });

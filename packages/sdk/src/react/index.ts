@@ -176,6 +176,15 @@ export {
   useSessionGoal,
   type ProjectGoalControlInput, type WorkspaceGoalControlInput,
 } from './use-goals';
+export {
+  useWorkspaceEvalActions,
+  useWorkspaceEvalJob,
+  useWorkspaceEvalJobs,
+  useWorkspaceEvalSuites,
+  useWorkspaceEvalTasks,
+  useWorkspaceEvalTrial,
+  useWorkspaceEvalTrialFile,
+} from './use-evals';
 export { useRoom, useRoomConversations, useRoomMessages, useRoomThread, useRooms, useSpaceRoom } from './use-rooms';
 export { usePeerMessages, useReachableAgents, useSessionWorkflows, useTeamTasks, useTeammates } from './use-multi-agent';
 export { prefetchArtifact, useArtifact, useArtifactMutations, useArtifactText, useArtifactTypes, useArtifactVersions, useArtifacts } from './use-artifacts';

@@ -65,6 +65,7 @@ import {
   ShieldCheckIcon as ShieldCheck,
   SlidersHorizontalIcon as SlidersHorizontal,
   TargetIcon as Target,
+  ChartBarIcon as ChartBar,
   TerminalIcon as Terminal,
   TextAlignLeftIcon as TextAlignLeft,
   TrayIcon as Tray,
@@ -766,6 +767,20 @@ export const menuRegistry: MenuItemDef[] = [
     requiresProject: true,
     requiresFlag: 'goals',
     keywords: 'goals goal objectives outcomes',
+  },
+  {
+    // The project's evals (flag `evals`): the sidebar Evals row
+    // (`project-evals-nav.tsx`), same icon, same route, same gate.
+    id: 'proj-evals',
+    label: 'Evals',
+    icon: ChartBar,
+    group: 'navigation',
+    showIn: ['commandPalette'],
+    kind: 'navigate',
+    href: '/workspaces/{projectId}/evals',
+    requiresProject: true,
+    requiresFlag: 'evals',
+    keywords: 'evals eval benchmark score harbor terminal-bench tasks leaderboard',
   },
   {
     // The repo browser under Customize → Repo, where it moved with Drive

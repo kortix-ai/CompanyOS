@@ -34,8 +34,10 @@ async function readOptionalFile(project: GitBackedProject, path: string, commit:
 
 interface ManifestEvals {
   suites: EvalSuiteDeclaration[];
-  /** Agent names the manifest declares; null when it cannot say (no manifest, or built-in agents on). */
+  /** Agent names a suite may name; null when the manifest cannot say (no manifest, or built-in agents on). */
   agents: string[] | null;
+  /** The names under `agents:`, in file order. */
+  declared: string[];
 }
 
 /** The `evals` section and the agent names of the manifest at a commit. */
@@ -53,9 +55,9 @@ export async function readManifestEvals(project: GitBackedProject, commit: strin
     const manifest = (typeof parsed === 'object' && parsed !== null ? parsed : {}) as Record<string, unknown>;
     const declared = typeof manifest.agents === 'object' && manifest.agents !== null ? Object.keys(manifest.agents) : [];
     const builtins = typeof manifest.builtin_agents === 'object' && manifest.builtin_agents !== null && Object.values(manifest.builtin_agents).some(Boolean);
-    return { suites: readEvalSuites(manifest.evals), agents: builtins || declared.length === 0 ? null : declared };
+    return { suites: readEvalSuites(manifest.evals), agents: builtins || declared.length === 0 ? null : declared, declared };
   }
-  return { suites: [], agents: null };
+  return { suites: [], agents: null, declared: [] };
 }
 
 export interface ResolvedSuite {

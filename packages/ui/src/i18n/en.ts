@@ -1051,6 +1051,7 @@ const catalog = {
   },
   "sidebar": {
     "goals": "Goals",
+    "evals": "Evals",
     "artifacts": "Artifacts",
     "referAndEarn": "Refer & Earn",
     "referralShareTitle": "Refer Friends",

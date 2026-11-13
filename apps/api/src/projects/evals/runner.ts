@@ -57,6 +57,7 @@ import {
   type EvalTrialRow,
 } from './store';
 import { loadTask, loadTaskFolder, treeFor, type EvalTaskRef } from './task-source';
+import { readManifestEvals } from './config';
 
 /** The source of every session the runner creates. */
 export const EVAL_SESSION_SOURCE = 'system:eval' as const;
@@ -184,6 +185,18 @@ async function sessionExists(sessionId: string): Promise<{ status: string; model
 /** `kortix/deepseek-v4.1-flash` → `deepseek-v4.1-flash`: the id the job config and the leaderboard name. */
 const modelId = (ref: string | null): string | null => (ref ? ref.replace(/^kortix\//, '') : null);
 
+/**
+ * The agent a session of `oracle` or `nop` runs as. They call no model, so the
+ * session only provides the sandbox: the first agent kortix.yaml declares,
+ * because My Kortix (often the default) always boots its own sandbox and never
+ * a task's image.
+ */
+async function sandboxAgentFor(ctx: TrialContext): Promise<string> {
+  const gitProject = await withProjectGitAuth(ctx.project);
+  const { declared } = await readManifestEvals(gitProject, ctx.job.commitSha ?? gitProject.defaultBranch).catch(() => ({ declared: [] as string[] }));
+  return declared.find((name) => name !== 'mykortix' && name !== 'my_kortix') ?? 'default';
+}
+
 /** queued → starting: read the task, pick the sandbox, create the session. */
 async function startTrial(ctx: TrialContext, trial: EvalTrialRow): Promise<void> {
   const state = runState(trial);
@@ -220,7 +233,7 @@ async function startTrial(ctx: TrialContext, trial: EvalTrialRow): Promise<void>
         session_id: trial.sessionId,
         name: `Eval: ${trial.taskName} · ${trial.agent}`.slice(0, 120),
         // `oracle` and `nop` run no model: the session only provides the sandbox.
-        agent_name: builtin ? 'default' : trial.agent,
+        agent_name: builtin ? await sandboxAgentFor(ctx) : trial.agent,
         ...(!builtin && trial.model ? { model: trial.model } : {}),
         ...(!builtin ? { initial_prompt: trialPrompt(task) } : {}),
         ...(runState(trial).sandbox_slug ? { sandbox_slug: runState(trial).sandbox_slug } : {}),
@@ -230,6 +243,7 @@ async function startTrial(ctx: TrialContext, trial: EvalTrialRow): Promise<void>
     });
     if (result.error) {
       const message = String(result.error.body?.error ?? result.error.body?.message ?? 'The session could not start.');
+      logger.warn('[evals] trial session not created', { trial_id: trial.trialId, agent: trial.agent, status: result.error.status, error: message });
       throw new EvalTrialError(result.error.status === 402 ? 'BillingBlockedError' : 'SessionCreateError', message);
     }
   }

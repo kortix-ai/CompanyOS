@@ -138,7 +138,7 @@ test('two failing call paths log the identical message; the path rides in connec
 /**
  * KRTX-4722 follow-up: a Composio-edge WAF block (403 with the edge's HTML page)
  * is deterministic. The same arguments are refused again, and the caller that
- * keeps sending the blocked payload (about 3 a time an hour in prod after the
+ * keeps sending the blocked payload (about 3 an hour in prod after the
  * 403 stopped the SDK retry) re-fired the 60 s warn each time against a
  * baseline of 1.71 an hour. The block warns once per hour per call path.
  */

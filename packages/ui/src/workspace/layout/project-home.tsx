@@ -428,11 +428,12 @@ function ProjectHomeView({
       projectId={projectId}
       draftScope={draftScope}
       draftHandoffScope={onSend ? undefined : defaultSend.draftHandoffScope}
-      // Keep accepting keystrokes while creation runs. A second Enter is
-      // recovered as a draft and handed to the same session on navigation.
+      // While the create runs, the sent message stays in the composer, locked,
+      // with the spinner in the send slot. The session page then draws it as
+      // the first turn. A refused send unlocks the same text for a retry.
       isSending={creating}
-      disabled={onSend ? creating : false}
-      clearOnSend={onSend ? false : 'text-only'}
+      disabled={creating}
+      clearOnSend={false}
       autoFocus
       // Desktop: a hero composer floating mid-page has no column for a second
       // rail to align to, so the attach/agent/context controls ride on the

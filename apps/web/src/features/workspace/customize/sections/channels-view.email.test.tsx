@@ -162,7 +162,7 @@ describe('ChannelsSection — Email', () => {
   test('flag on, no inbox yet: the hero offers Add an inbox, no Feature flags detour', () => {
     const markup = renderEmail();
     expect(markup).toContain('Give your agent an inbox');
-    expect(markup).toContain('>Add an inbox</button>');
+    expect(markup).toContain('>Add an inbox</span></button>');
     expect(markup).not.toContain('Feature flags');
     expect(emailInboxes).toHaveBeenCalledWith('email-test');
   });
@@ -174,14 +174,14 @@ describe('ChannelsSection — Email', () => {
     expect(markup).toContain('support@kortixmail.com, sales@kortixmail.com');
     expect(markup).toContain('/connectors/connected/kortix_email');
     expect(markup).toContain('Manage inboxes');
-    expect(markup).toContain('>Add another inbox</button>');
+    expect(markup).toContain('>Add another inbox</span></button>');
   });
 
   test('read-only members still see Email, without an Add they cannot use', () => {
     canWrite = false;
     const markup = renderEmail();
     expect(markup).toContain('Give your agent an inbox');
-    expect(markup).not.toContain('>Add an inbox</button>');
+    expect(markup).not.toContain('>Add an inbox</span></button>');
   });
 });
 

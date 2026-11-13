@@ -466,7 +466,8 @@ function AppPreviewToolbar({
         <Hint label={tI18nComplete.raw('text306ef19c8ac3')} side="bottom">
           <Button
             variant="secondary"
-            size="icon"
+            size="md"
+            iconOnly
             disabled={!previewUrl}
             aria-label={tI18nComplete.raw('text306ef19c8ac3')}
             onClick={() => {
@@ -474,7 +475,7 @@ function AppPreviewToolbar({
               track('app_opened_new_tab');
               window.open(previewUrl, '_blank', 'noopener,noreferrer');
             }}
-            className="size-7 shrink-0 active:scale-[0.96]"
+            className="shrink-0"
           >
             <ArrowSquareOutIcon className="size-3.5" />
           </Button>

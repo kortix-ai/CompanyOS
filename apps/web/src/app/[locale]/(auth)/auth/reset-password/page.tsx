@@ -97,7 +97,6 @@ function ResetPasswordContent() {
             aria-invalid={!!errorMessage || undefined}
             name="password"
             type="password"
-            size="md"
             placeholder={t('form.newPasswordPlaceholder')}
             required
             autoComplete="new-password"
@@ -113,7 +112,6 @@ function ResetPasswordContent() {
             aria-invalid={!!errorMessage || undefined}
             name="confirmPassword"
             type="password"
-            size="md"
             placeholder={t('form.confirmPasswordPlaceholder')}
             required
             autoComplete="new-password"

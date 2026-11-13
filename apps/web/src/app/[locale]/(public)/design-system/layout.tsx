@@ -1,6 +1,10 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/i18n/get-translations';
+import { localeStaticParams } from '@/i18n/static-params';
 import type { ReactNode } from 'react';
+
+// Prerender the page once per locale, as the marketing group did.
+export const generateStaticParams = localeStaticParams;
 
 // Internal living design-system reference — public for sharing, not for search.
 export async function generateMetadata(): Promise<Metadata> {

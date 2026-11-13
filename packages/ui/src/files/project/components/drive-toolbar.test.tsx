@@ -33,7 +33,7 @@ describe('DriveNewMenu write actions', () => {
     const html = render(
       <DriveNewMenu onUpload={() => {}} onNewFile={() => {}} onNewFolder={() => {}} />,
     );
-    expect(html).toContain('>New</button>');
+    expect(html).toContain('>New</span></button>');
   });
 
   test('a read-only source sees no write control at all', () => {
@@ -53,7 +53,7 @@ describe('DriveNewMenu write actions', () => {
       <DriveNewMenu compact onUpload={() => {}} onNewFile={() => {}} onNewFolder={() => {}} />,
     );
     expect(html).toContain('aria-label="New"');
-    expect(html).not.toContain('>New</button>');
+    expect(html).not.toContain('>New</span></button>');
   });
 });
 

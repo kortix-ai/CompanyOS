@@ -20,9 +20,9 @@ Animation exists to make the UI feel faster, or to show where a thing came from.
 
 **Rule.** Never animate a keyboard-initiated action. — *Why:* a user drives them hundreds of times a day. Motion makes the interface feel laggy and disconnected from the key just pressed. — *Where:* app, mobile (hardware keyboard), deck engine slide navigation (a build-step opacity fade is not navigation: see the Deck paragraph). — *When silent:* no exceptions.
 
-## Instant floating panels (D4a)
+## Floating panels (D44, supersedes D4a)
 
-**Rule.** Open and close menus, selects, popovers, tooltips, submenus and the command palette with no animation. Modals, sheets and toasts keep 200 to 300ms. The hover card is the one animated floating panel. — *Why:* Radix `Presence` kept each panel mounted until its animate-out ended, "so every open and close waited 150 to 200ms" (#7301). The palette is "opened dozens of times a day, almost always from the keyboard" (#7675). "A submenu opens into the pointer's path, so about 150ms of animate-in was spent moving rows away from the cursor" (#7067). — *Where:* app. — *When silent:* if the panel opens from a trigger and closes on outside click, it is instant. Use `MENU_PANEL_STATIC` or `FLOATING_PANEL_SURFACE` from `menu-recipe.ts`. The animated `MENU_PANEL` and `FLOATING_PANEL` are for the hover card only. The context menu still uses the animated one: that is debt, not a precedent.
+**Rule.** Open and close every floating panel with one recipe: from its trigger (`origin-(--transform-origin)`), scale 0.95 to 1 and opacity 0 to 1 in `duration-moderate` (200ms) `ease-in-out`, reversed on close, `motion-reduce:transition-none`. That is `FLOATING_PANEL_MOTION` in `menu-recipe.ts`, on menus, submenus, popovers, the combobox, the hover card and tooltips. The select takes `SELECT_PANEL_MOTION`: the same from 0.97, because its list sits on its trigger. A tooltip adds a 4px nudge from its side and opens instantly once one in its group is open (`data-instant`). Dialogs and the command palette open the same way (0.95 and a fade, 200ms). — *Why:* founder decision, 2026-11-12 (D44): copy the reference design system's open and close (measured: 200ms, `cubic-bezier(0.4, 0, 0.2, 1)`, scale 0.95, 0.97 for the select). The scale shows which trigger a panel belongs to. — *Where:* app. — *When silent:* take the recipe from `menu-recipe.ts`; never write a panel's own keyframes (`audit.sh` flags them).
 
 **Rule.** Pin the command palette 17vh from the top at 600px wide. — *Why:* the input stays still while the list height changes (#7675). — *Where:* app. — *When silent:* copy `features/workspace/command-palette.tsx`.
 
@@ -31,6 +31,10 @@ Animation exists to make the UI feel faster, or to show where a thing came from.
 **Rule.** Show the first tooltip after a delay (150ms, `TooltipProvider`), then no delay and no animation for the next ones while the group is active. — *Why:* the delay prevents accidental activation. Repeating it makes the UI feel slow. The delay moved from 300ms to 150ms (#7301). — *Where:* app. — *When silent:* inherit the provider.
 
 **Rule.** Drive pointer hover highlights from CSS `:hover`, never from React state. Keyboard mode uses `data-selected`. — *Why:* a re-render on every pointer move is lag. The palette writes `data-nav="pointer" | "keyboard"` to the DOM with no re-render (#7301). — *Where:* app. — *When silent:* CSS first.
+
+**Rule.** The combobox opens with `FLOATING_PANEL_MOTION`, like every floating panel (D44).
+
+**Rule.** Slide the tab indicator, not the tab: the segmented chip or the underline bar moves to the new tab in 200ms `ease-out`. Arrow keys move focus at once; only the indicator travels. — *Why:* the indicator shows where the selection went, which is the one thing a tab switch must make visible (D43). — *Where:* app. — *When silent:* the segmented `TabsList` slides by default. An underline list slides only with `animate="fluid"`, because the indicator measures one row: a list that wraps or scrolls keeps the static rule.
 
 ## Easing
 

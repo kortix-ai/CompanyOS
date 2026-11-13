@@ -715,28 +715,28 @@ export function ModelSelector({
 
   const searchRight =
     canManageModels && canConnectProvider ? (
-    <div className="-mr-0.5 flex shrink-0 items-center gap-0.5">
-      <Hint label={tModel('connectProvider')} side="top" className="z-50">
-        <button
-          type="button"
-          aria-label={tModel('addProvider')}
-          onClick={() => handleOpenProviderModal('providers')}
-          className="text-muted-foreground hover:text-foreground hover:bg-muted flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors"
-        >
-          <Plus className="size-4" />
-        </button>
-      </Hint>
-      <Hint label={tModel('manageModels')} side="top" className="z-50">
-        <button
-          type="button"
-          aria-label={tModel('manageModels')}
-          onClick={() => handleOpenProviderModal('models')}
-          className="text-muted-foreground hover:text-foreground hover:bg-muted flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors"
-        >
-          <SlidersHorizontal className="size-4" />
-        </button>
-      </Hint>
-    </div>
+      <div className="-mr-0.5 flex shrink-0 items-center gap-0.5">
+        <Hint label={tModel('connectProvider')} side="top" className="z-50">
+          <button
+            type="button"
+            aria-label={tModel('addProvider')}
+            onClick={() => handleOpenProviderModal('providers')}
+            className="text-muted-foreground hover:text-foreground hover:bg-muted flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors"
+          >
+            <Plus className="size-4" />
+          </button>
+        </Hint>
+        <Hint label={tModel('manageModels')} side="top" className="z-50">
+          <button
+            type="button"
+            aria-label={tModel('manageModels')}
+            onClick={() => handleOpenProviderModal('models')}
+            className="text-muted-foreground hover:text-foreground hover:bg-muted flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors"
+          >
+            <SlidersHorizontal className="size-4" />
+          </button>
+        </Hint>
+      </div>
     ) : undefined;
 
   const searchEmptyState = (
@@ -959,21 +959,21 @@ export function ModelSelector({
       <>
         {modals}
         <div className="flex min-h-0 flex-1 flex-col">
-        {/* The popover's own list rhythm (`CommandPopoverContent`), on the host's surface. */}
-        <Command
-          shouldFilter={false}
-          className={cn(
-            'min-h-0 flex-1 rounded-none bg-transparent',
-            '[&_[cmdk-group]]:px-1.5 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0',
-            // No hairlines in a host pane: the search is a filled field, groups part by space.
-            '[&_[data-slot=command-input-wrapper]]:bg-muted [&_[data-slot=command-input-wrapper]]:mx-2 [&_[data-slot=command-input-wrapper]]:h-8 [&_[data-slot=command-input-wrapper]]:gap-2 [&_[data-slot=command-input-wrapper]]:rounded-md [&_[data-slot=command-input-wrapper]]:border-b-0 [&_[data-slot=command-input-wrapper]]:px-2.5',
-            '[&_[data-slot=command-input]]:h-8 [&_[data-slot=command-input]]:text-sm',
-            '[&_[data-slot=command-separator]]:hidden [&_[data-slot=command-group]]:py-1',
-          )}
-        >
-          {listBody}
-        </Command>
-        {subscriptionNode}
+          {/* The popover's own list rhythm (`CommandPopoverContent`), on the host's surface. */}
+          <Command
+            shouldFilter={false}
+            className={cn(
+              'min-h-0 flex-1 rounded-none bg-transparent',
+              '[&_[cmdk-group]]:px-1.5 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0',
+              // No hairlines in a host pane: the search is a filled field, groups part by space.
+              '[&_[data-slot=command-input-wrapper]]:bg-muted [&_[data-slot=command-input-wrapper]]:mx-2 [&_[data-slot=command-input-wrapper]]:h-8 [&_[data-slot=command-input-wrapper]]:gap-2 [&_[data-slot=command-input-wrapper]]:rounded-md [&_[data-slot=command-input-wrapper]]:border-b-0 [&_[data-slot=command-input-wrapper]]:px-2.5',
+              '[&_[data-slot=command-input]]:h-8 [&_[data-slot=command-input]]:text-sm',
+              '[&_[data-slot=command-separator]]:hidden [&_[data-slot=command-group]]:py-1',
+            )}
+          >
+            {listBody}
+          </Command>
+          {subscriptionNode}
         </div>
       </>
     );
@@ -997,27 +997,28 @@ export function ModelSelector({
               {disabled ? null : <ChevronDown className={cn(TRIGGER_CARET_CLASS, 'size-4')} />}
             </button>
           ) : (
-          <Button
-            type="button"
-            variant={triggerVariant}
-            size="sm"
-            // `min-w-0 shrink`: in a narrow toolbar (a channel's thread panel) the
-            // model name truncates; the controls beside it keep their width.
-            className={cn('min-w-0 shrink rounded-lg hit-area-y-3', triggerVariant === 'ghost' && 'text-muted-foreground')}
-          >
-            <span className={cn('max-w-30 truncate', triggerLabelClassName)}>{displayName}</span>
-            {showEffort && (
-              <span className="shrink-0">
-                {currentEffort ? effortLabel(currentEffort) : t('auto')}
-              </span>
-            )}
-            <ChevronDown
-              className={cn(
-                'duration-moderate size-3 transition-transform ease-out',
-                open && 'rotate-180',
+            <Button
+              type="button"
+              variant={triggerVariant}
+              size="md"
+              // md (28px, the ladder's 8px corner): the composer toolbar's height.
+              // `min-w-0 shrink`: in a narrow toolbar (a channel's thread panel) the
+              // model name truncates; the controls beside it keep their width.
+              className={cn('min-w-0 shrink', triggerVariant === 'ghost' && 'text-muted-foreground')}
+            >
+              <span className={cn('max-w-30 truncate', triggerLabelClassName)}>{displayName}</span>
+              {showEffort && (
+                <span className="shrink-0">
+                  {currentEffort ? effortLabel(currentEffort) : t('auto')}
+                </span>
               )}
-            />
-          </Button>
+              <ChevronDown
+                className={cn(
+                  'duration-moderate size-3 transition-transform ease-out',
+                  open && 'rotate-180',
+                )}
+              />
+            </Button>
           )}
         </CommandPopoverTrigger>
 
@@ -1055,10 +1056,10 @@ export function ModelSelector({
               effort={
                 showEffort
                   ? {
-                      choices: effortChoices,
-                      selectedVariant: reasoning?.selectedVariant,
-                      onChange: handleEffortChange,
-                    }
+                    choices: effortChoices,
+                    selectedVariant: reasoning?.selectedVariant,
+                    onChange: handleEffortChange,
+                  }
                   : undefined
               }
             />

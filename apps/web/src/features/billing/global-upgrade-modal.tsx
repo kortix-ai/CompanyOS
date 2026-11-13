@@ -152,7 +152,7 @@ export function UpgradePlansModal({
   return (
     <Modal open={open} onOpenChange={onOpenChange}>
       <ModalContent variant="base" className="gap-0 space-y-0 p-0 lg:max-w-4xl">
-        <ModalHeader className="space-y-2 px-6 pt-7 pb-6 md:px-8">
+        <ModalHeader className="mt-0 space-y-2 px-6 pt-7 pb-6 md:px-8">
           <ModalTitle className="text-2xl font-medium tracking-tight text-balance">
             {t('title')}
           </ModalTitle>
@@ -393,7 +393,7 @@ function CreditTopUpModal({
   return (
     <Modal open={open} onOpenChange={onOpenChange}>
       <ModalContent className="gap-0 space-y-0 p-0 sm:max-w-md">
-        <ModalHeader className="gap-1.5 px-6 pt-6 pb-6">
+        <ModalHeader className="mt-0 gap-1.5 px-6 pt-6 pb-6">
           <ModalTitle className="pr-8 text-lg font-medium tracking-tight">{copy.title}</ModalTitle>
           <ModalDescription className="text-sm text-pretty">{line}</ModalDescription>
         </ModalHeader>

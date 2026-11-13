@@ -378,7 +378,6 @@ export function NewWorkspacePage() {
                       // names at the limit with no message, and the validation
                       // below would stay unreachable. The limit is enforced by
                       // `isSubmittable` (shared form model) + the live message.
-                      size="md"
                       className="w-full"
                       aria-invalid={nameError ? true : undefined}
                       aria-describedby={nameError ? 'workspace-name-error' : undefined}

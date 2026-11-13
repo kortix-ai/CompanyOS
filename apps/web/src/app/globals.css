@@ -28,8 +28,8 @@
  *   surface        #141414     #fcfcfc
  *   surface-1      #141414     #f4f4f4
  *   surface-2      #1c1c1c     #ededed
- *   ink            #ffffff     #1f1f1f
- *   ink-muted      #999999     #666666
+ *   ink            #f2f2f2     #1f1f1f
+ *   ink-muted      #b7b7b7     #666666
  *   hairline       #262626     #e2e2e2
  *   hairline-soft  #1a1a1a     #eeeeee
  *   accent-blue    #0099ff     #0099ff
@@ -38,6 +38,7 @@
 :root {
   --background: oklch(1 0 0); /* canvas #ffffff */
   --pane: oklch(1 0 0); /* base #ffffff */
+  --frame: oklch(0.9672 0 0); /* frame #f4f4f4 */
   --surface: oklch(0.9911 0 0); /* surface #fcfcfc */
   --foreground: oklch(0.2393 0 0); /* ink #1f1f1f */
   --foreground-strong: var(--foreground);
@@ -126,6 +127,80 @@
   --text-7xl--line-height: 1;
   --text-8xl: 6rem;
   --text-8xl--line-height: 1;
+  --dialog-padding-top: 16px;
+  --dialog-inset: 12px;
+  --dialog-close-inset: 10px;
+  --dialog-padding: 16px;
+  --dialog-gap: 16px;
+  --dialog-header-gap: 4px;
+  --dialog-radius: 12px;
+  --shadow-ring-color: rgba(0, 0, 0, 0.05);
+  --control-xs-height: 20px;
+  --control-xs-padding: 6px;
+  --control-xs-gap: 4px;
+  --control-xs-icon: 12px;
+  --control-xs-radius: 4px;
+  --control-xs-icon-only-radius: 4px;
+  --control-xs-tab-padding: 6px;
+  --control-xs-tab-gap: 8px;
+  --control-xs-select-ps: 4px;
+  --control-xs-select-pe: 4px;
+  --control-xs-padding-icon: 4px;
+  --control-sm-height: 24px;
+  --control-sm-padding: 8px;
+  --control-sm-gap: 4px;
+  --control-sm-icon: 14px;
+  --control-sm-radius: 6px;
+  --control-sm-icon-only-radius: 6px;
+  --control-sm-tab-padding: 8px;
+  --control-sm-tab-gap: 12px;
+  --control-sm-select-ps: 6px;
+  --control-sm-select-pe: 4px;
+  --control-sm-padding-icon: 6px;
+  --control-md-height: 28px;
+  --control-md-padding: 10px;
+  --control-md-gap: 6px;
+  --control-md-icon: 16px;
+  --control-md-radius: 8px;
+  --control-md-icon-only-radius: 8px;
+  --control-md-tab-padding: 10px;
+  --control-md-tab-gap: 16px;
+  --control-md-select-ps: 8px;
+  --control-md-select-pe: 6px;
+  --control-md-padding-icon: 6px;
+  --control-lg-height: 34px;
+  --control-lg-padding: 12px;
+  --control-lg-gap: 6px;
+  --control-lg-icon: 16px;
+  --control-lg-radius: 8px;
+  --control-lg-icon-only-radius: 8px;
+  --control-lg-tab-padding: 12px;
+  --control-lg-tab-gap: 16px;
+  --control-lg-select-ps: 10px;
+  --control-lg-select-pe: 8px;
+  --control-lg-padding-icon: 10px;
+  --control-xl-height: 40px;
+  --control-xl-padding: 14px;
+  --control-xl-gap: 8px;
+  --control-xl-icon: 16px;
+  --control-xl-radius: 10px;
+  --control-xl-icon-only-radius: 10px;
+  --control-xl-tab-padding: 16px;
+  --control-xl-tab-gap: 20px;
+  --control-xl-select-ps: 12px;
+  --control-xl-select-pe: 10px;
+  --control-xl-padding-icon: 10px;
+  --control-2xl-height: 48px;
+  --control-2xl-padding: 20px;
+  --control-2xl-gap: 8px;
+  --control-2xl-icon: 20px;
+  --control-2xl-radius: 12px;
+  --control-2xl-icon-only-radius: 12px;
+  --control-2xl-tab-padding: 20px;
+  --control-2xl-tab-gap: 20px;
+  --control-2xl-select-ps: 14px;
+  --control-2xl-select-pe: 12px;
+  --control-2xl-padding-icon: 16px;
   --liquid-glass-bg: color-mix(in oklch, var(--secondary) 45%, transparent);
   --liquid-glass-bg-hover: color-mix(in oklch, var(--secondary) 62%, transparent);
   --liquid-glass-blur: 20px;
@@ -137,22 +212,23 @@
 .dark {
   --background: oklch(15% 0 0); /* canvas #0b0b0b */
   --pane: oklch(0.1543 0 0); /* base #0c0c0c */
+  --frame: oklch(0.12 0 0); /* frame #060606 */
   --surface: oklch(0.1913 0 0); /* surface #141414 */
-  --foreground: oklch(1 0 0); /* ink #ffffff */
+  --foreground: oklch(0.96 0 0); /* ink #f2f2f2 */
   --foreground-strong: var(--foreground);
   --foreground-weak: var(--muted-foreground);
   --card: oklch(0.1913 0 0); /* surface-1 #141414 */
-  --card-foreground: oklch(1 0 0); /* ink #ffffff */
+  --card-foreground: oklch(0.96 0 0); /* ink #f2f2f2 */
   --popover: oklch(0.1913 0 0); /* canvas / surface-1 #141414 */
-  --popover-foreground: oklch(1 0 0); /* ink #ffffff */
-  --primary: oklch(1 0 0); /* ink #ffffff */
+  --popover-foreground: oklch(0.96 0 0); /* ink #f2f2f2 */
+  --primary: oklch(0.96 0 0); /* ink #f2f2f2 */
   --primary-foreground: oklch(0.1398 0 0); /* #090909 */
   --secondary: oklch(0.2264 0 0); /* surface-2 #1c1c1c */
-  --secondary-foreground: oklch(1 0 0); /* ink #ffffff */
+  --secondary-foreground: oklch(0.96 0 0); /* ink #f2f2f2 */
   --muted: oklch(0.2264 0 0); /* surface-2 #1c1c1c */
-  --muted-foreground: oklch(0.683 0 0); /* ink-muted #999999 */
+  --muted-foreground: oklch(0.78 0 0); /* ink-muted #b7b7b7 */
   --accent: oklch(0.1913 0 0); /* surface-1 #141414 */
-  --accent-foreground: oklch(1 0 0); /* ink #ffffff */
+  --accent-foreground: oklch(0.96 0 0); /* ink #f2f2f2 */
   --destructive: oklch(0.7022 0.1892 22.2279); /* #ff6467 */
   --border: oklch(0.2686 0 0); /* hairline #262626 */
   --input: oklch(0.2264 0 0); /* surface-2 #1c1c1c */
@@ -160,16 +236,17 @@
   --active: oklch(1 0 0 / 0.1);
   --focus-ring: var(--ring);
   --sidebar: oklch(0.1913 0 0); /* surface-1 #141414 */
-  --sidebar-foreground: oklch(1 0 0); /* ink #ffffff */
+  --sidebar-foreground: oklch(0.96 0 0); /* ink #f2f2f2 */
   --sidebar-primary: var(--ring);
   --sidebar-accent: oklch(0.2264 0 0); /* surface-2 #1c1c1c */
-  --sidebar-accent-foreground: oklch(1 0 0); /* ink #ffffff */
+  --sidebar-accent-foreground: oklch(0.96 0 0); /* ink #f2f2f2 */
   --sidebar-row: var(--sidebar-accent);
   --sidebar-row-control: oklch(0.2686 0 0); /* #262626 */
   --sidebar-border: oklch(0.2178 0 0); /* hairline / hairline-soft #1a1a1a */
   --sidebar-ring: var(--ring);
   --kortix-base: var(--color-ring); /* #0099ff */
   --terminal-accent: #2ec4c4;
+  --shadow-ring-color: rgba(255, 255, 255, 0.18);
   --liquid-glass-bg: color-mix(in oklch, var(--secondary) 38%, transparent);
   --liquid-glass-bg-hover: color-mix(in oklch, var(--secondary) 52%, transparent);
   --liquid-glass-shadow: inset 0 0 0 1px oklch(1 0 0 / 0.1);
@@ -191,7 +268,9 @@
  *
  * Every palette is derived from two base colours (canvas + ink) by one rule,
  * the way Linear's theme generator derives borders and elevated boxes:
- *   - Pure: one flat surface (sidebar == canvas), full-contrast ink.
+ *   - Pure: one flat surface (sidebar == canvas), full-contrast ink: black in
+ *     Pure light, #f2f2f2 in Pure dark (light text on a dark canvas blooms at
+ *     pure white; dark text on white does not).
  *   - Light (dim): the canvas steps off white, the sidebar sits one step
  *     recessed, and ink is softened.
  *   - Dark is not derived: it is exactly the dark palette prod shipped before
@@ -199,6 +278,8 @@
  *   - Raised surfaces (popover) are lighter than the canvas in both modes;
  *     cards and hovers step toward the ink, input wells one step further.
  * Measured (WCAG): muted text is at least 5.0:1 on canvas, sidebar and wells.
+ * Measured (APCA): Pure dark muted text is Lc 61 or more on every surface, so a
+ * description reads as strongly in dark as in light (D47).
  * Mirrored in the Paper file "Kortix" › Appearances.
  *
  * Specificity: light blocks are (0,2,0) and come first; dark blocks are
@@ -295,24 +376,27 @@
 :root.dark[data-dark-theme='pure-dark'],
 [data-theme-preview='pure-dark'] {
   color-scheme: dark;
-  /* Inputs and hover fills sit above every raised surface: the settings panel
+  /* Text (D47): the ink stops at #f2f2f2, as text and as a fill (--primary),
+     because pure white on a near-black canvas blooms. Grey text is #b7b7b7: APCA Lc 61 or more on the
+     canvas, the cards, the popover and the wells (it was Lc 48-50).
+     Inputs and hover fills sit above every raised surface: the settings panel
      paints on --surface, and a well that matches it makes selects vanish. */
   --background: #0a0a0a;
-  --foreground: #ffffff;
+  --foreground: #f2f2f2;
   --pane: #0a0a0a;
   --surface: #141414;
   --card: #121212;
-  --card-foreground: #ffffff;
+  --card-foreground: #f2f2f2;
   --popover: #141414;
-  --popover-foreground: #ffffff;
-  --primary: #ffffff;
+  --popover-foreground: #f2f2f2;
+  --primary: #f2f2f2;
   --primary-foreground: #0a0a0a;
   --secondary: #212121;
-  --secondary-foreground: #ffffff;
+  --secondary-foreground: #f2f2f2;
   --muted: #212121;
-  --muted-foreground: #9e9e9e;
+  --muted-foreground: #b7b7b7;
   --accent: #1c1c1c;
-  --accent-foreground: #ffffff;
+  --accent-foreground: #f2f2f2;
   --destructive: #ff6467;
   --destructive-foreground: #fbfbfb;
   --border: #262626;
@@ -321,13 +405,13 @@
   --hover: rgba(255, 255, 255, 0.06);
   --active: rgba(255, 255, 255, 0.1);
   --selection: rgba(255, 255, 255, 0.1);
-  --selection-foreground: #ffffff;
+  --selection-foreground: #f2f2f2;
   --sidebar: #0a0a0a;
-  --sidebar-foreground: #ffffff;
+  --sidebar-foreground: #f2f2f2;
   --sidebar-primary: #0099ff;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #212121;
-  --sidebar-accent-foreground: #ffffff;
+  --sidebar-accent-foreground: #f2f2f2;
   --sidebar-border: #262626;
   --sidebar-ring: #0099ff;
   --kortix-blue: #2b91f7;

@@ -190,7 +190,6 @@ describe('EntityAvatar — the emoji tile’s surface', () => {
 
       expect(classes.some((c) => c.startsWith('bg-emoji-ring-'))).toBe(false);
       expect(classes.some((c) => c.startsWith('inset-ring-'))).toBe(false);
-      expect(classes).not.toContain('border-0');
     }
   });
 
@@ -338,11 +337,11 @@ describe('EntityAvatar — existing callers', () => {
    * caller.
    */
   const LEGACY_INITIAL_TILE =
-    '<span data-slot="entity-avatar" style="background-color:hsl(179 46% 79%);color:hsl(179 56% 27%);border-color:hsl(179 46% 67%)" class="inline-flex shrink-0 items-center justify-center border font-semibold size-8 rounded-md text-xs">D</span>';
+    '<span data-slot="entity-avatar" style="background-color:hsl(179 46% 79%);color:hsl(179 56% 27%)" class="inline-flex shrink-0 items-center justify-center border-0 font-semibold size-8 rounded-md text-xs">D</span>';
 
   /** The same, for the one call shape the project card uses today. */
   const LEGACY_CARD_TILE =
-    '<span data-slot="entity-avatar" style="background-color:hsl(179 46% 79%);color:hsl(179 56% 27%);border-color:hsl(179 46% 67%)" class="inline-flex shrink-0 items-center justify-center border font-semibold size-10 rounded-md text-sm bg-background">D</span>';
+    '<span data-slot="entity-avatar" style="background-color:hsl(179 46% 79%);color:hsl(179 56% 27%)" class="inline-flex shrink-0 items-center justify-center border-0 font-semibold size-10 rounded-md text-sm bg-background">D</span>';
 
   test('an emoji-less tile is byte-identical to the pre-emoji component', () => {
     expect(render({ label: 'Demo' })).toBe(LEGACY_INITIAL_TILE);
@@ -379,7 +378,7 @@ describe('EntityAvatar — existing callers', () => {
   const withoutPathData = (html: string) => html.replace(/<path\b[^>]*><\/path>/g, '<path/>');
 
   const LEGACY_ICON_TILE =
-    '<span data-slot="entity-avatar" style="background-color:hsl(179 46% 79%);color:hsl(179 56% 27%);border-color:hsl(179 46% 67%)" class="inline-flex shrink-0 items-center justify-center border font-semibold size-8 rounded-md text-xs"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="currentColor" viewBox="0 0 256 256" class="size-4"><path/></svg></span>';
+    '<span data-slot="entity-avatar" style="background-color:hsl(179 46% 79%);color:hsl(179 56% 27%)" class="inline-flex shrink-0 items-center justify-center border-0 font-semibold size-8 rounded-md text-xs"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="currentColor" viewBox="0 0 256 256" class="size-4"><path/></svg></span>';
 
   /** The icon slot per tile size — the other half of SIZE_MAP's geometry. */
   const ICON_SIZE: Record<EntityAvatarSize, string> = {

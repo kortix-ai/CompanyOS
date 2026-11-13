@@ -69,7 +69,7 @@ export function CreditTierSelect({
         onValueChange={(next) => onChange(Number(next))}
         disabled={disabled}
       >
-        <SelectTrigger size="md" className="w-full" aria-label={t('label')}>
+        <SelectTrigger size="lg" className="w-full" aria-label={t('label')}>
           <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
             {tier ? (
               <>

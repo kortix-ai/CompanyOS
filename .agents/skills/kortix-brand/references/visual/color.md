@@ -40,12 +40,15 @@ Values live in `visual-system.json` (keys `color.*`). This file says which token
 | --- | --- | --- |
 | canvas | `bg-background` (`color.semantic.background`) | The page itself. |
 | pane | `bg-pane` (`color.semantic.pane`) | The content pane inside the app shell. |
+| frame | `bg-frame` (`color.semantic.frame`) | The recessed app frame behind a lifted `bg-popover` sheet (D48). A control on it is lifted too: `Button` `outline` with `bg-popover`. Today only /design-system. |
 | shell | `bg-surface` (`color.semantic.surface`) | One thing only: a full-bleed pane that stands in for the page (settings at `side="fullscreen"`). Never a card, row or panel. |
 | surface-1 | `bg-card`, `bg-accent`, `bg-sidebar` | Lifted region, sidebar, hover surface. |
 | surface-2 | `bg-secondary`, `bg-muted` | Inset controls, track wells, chips, tiles that need a fill. |
 | top surface | `bg-popover` | Overlays, fields, and rows or panels inside another panel. |
 | ink | `text-foreground` | Primary text. |
 | ink-muted | `text-muted-foreground` | Descriptions, meta, idle state. |
+
+**Rule.** The two inks read equally strongly in both themes. Dark ink is `#f2f2f2`, not pure white; dark grey text is `#b7b7b7`. — *Why:* pure white on a near-black canvas blooms, and the old dark grey measured APCA Lc 47 against Lc 79 in light (D47). — *Where:* app, marketing, mobile. — *When silent:* a new dark text color keeps Lc 60 or more on the darkest and the lightest surface it sits on.
 | hairline | `border-border` | Every content border. |
 
 **Rule.** Use `bg-popover` for a floating or inset surface: an overlay, a field, or a row or panel inside another panel. Do not use `bg-card` for these. — *Why:* `bg-card` is the washed region tone. `bg-popover` is the flat elevated surface that sits on top of another surface. — *Where:* app. — *When silent:* if it floats, or sits inside another panel, use `bg-popover`. If it sits directly on the page, see the in-flow rule below.

@@ -30,7 +30,6 @@ import {
 } from './empty';
 import { cn } from '../lib/utils';
 import {
-  WarningIcon as DangerTriangleSolid,
   type Icon as IconMynauiType,
   type Icon as IconType,
   type Icon as LucideIcon,
@@ -48,7 +47,7 @@ export interface ErrorStateProps {
 }
 
 export function ErrorState({
-  icon: IconComponent = DangerTriangleSolid,
+  icon: IconComponent,
   title,
   description,
   action,
@@ -59,13 +58,18 @@ export function ErrorState({
   const maxW = size === 'sm' ? 'max-w-[240px]' : 'max-w-[320px]';
 
   return (
-    <Empty className={cn('', className)}>
-      <EmptyHeader className={maxW}>
-        <EmptyMedia className="mb-5">
-          <EmptyArt icon={IconComponent} glyphClassName="text-kortix-red" />
+    <Empty className={cn('gap-4', className)}>
+      <EmptyHeader className={cn('gap-0', maxW)}>
+        <EmptyMedia className="mb-3">
+          {/* The `error` picture (D49); a caller's own icon still lands on the fan, in red. */}
+          {IconComponent ? (
+            <EmptyArt icon={IconComponent} glyphClassName="text-kortix-red" />
+          ) : (
+            <EmptyArt kind="error" />
+          )}
         </EmptyMedia>
-        <EmptyTitle className="text-foreground text-sm font-semibold tracking-tight">{title}</EmptyTitle>
-        {description && <EmptyDescription className="text-muted-foreground mt-1.5">{description}</EmptyDescription>}
+        <EmptyTitle className="text-foreground text-sm leading-5 font-medium">{title}</EmptyTitle>
+        {description && <EmptyDescription className="text-muted-foreground mt-1 text-xs leading-normal">{description}</EmptyDescription>}
       </EmptyHeader>
       {(action || secondaryAction) && (
         <EmptyContent className="flex-row justify-center gap-2">

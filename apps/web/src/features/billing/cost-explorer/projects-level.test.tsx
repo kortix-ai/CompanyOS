@@ -1204,8 +1204,8 @@ describe('ProjectsLevelContent', () => {
       page: { ...twoProjectPage, total: 30, offset: 0, next_offset: 25 },
     });
     expect(html).toContain('Showing 1-2 of 30 workspaces');
-    const previousMatch = html.match(/<button[^>]*>Previous<\/button>/);
-    const nextMatch = html.match(/<button[^>]*>Next<\/button>/);
+    const previousMatch = html.match(/<button[^>]*><span>Previous<\/span><\/button>/);
+    const nextMatch = html.match(/<button[^>]*><span>Next<\/span><\/button>/);
     expect(previousMatch).not.toBeNull();
     expect(nextMatch).not.toBeNull();
     // `class="disabled:pointer-events-none …"` is present on every button
@@ -1219,8 +1219,8 @@ describe('ProjectsLevelContent', () => {
       page: { ...twoProjectPage, total: 27, offset: 25, next_offset: null },
     });
     expect(html).toContain('Showing 26-27 of 27 workspaces');
-    const previousMatch = html.match(/<button[^>]*>Previous<\/button>/);
-    const nextMatch = html.match(/<button[^>]*>Next<\/button>/);
+    const previousMatch = html.match(/<button[^>]*><span>Previous<\/span><\/button>/);
+    const nextMatch = html.match(/<button[^>]*><span>Next<\/span><\/button>/);
     expect(previousMatch![0]).not.toContain('disabled=""');
     expect(nextMatch![0]).toContain('disabled=""');
   });

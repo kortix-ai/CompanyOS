@@ -553,10 +553,11 @@ export function PanelWidthButton({ isMobile }: { isMobile: boolean }) {
     <Hint label={label} side="bottom">
       <Button
         variant="secondary"
-        size="icon"
+        size="md"
+        iconOnly
         onClick={toggleExpanded}
         aria-label={label}
-        className="size-7 shrink-0 active:scale-[0.96]"
+        className="shrink-0"
       >
         {isExpanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
       </Button>

@@ -123,17 +123,15 @@ export function EntityAvatar({
           : {
               backgroundColor: chalk.background,
               color: chalk.foreground,
-              borderColor: chalk.border,
             }
       }
       className={cn(
-        'inline-flex shrink-0 items-center justify-center border font-semibold',
+        // No border on any tile: the fill is the edge (owner decision, 2026-11-12).
+        'inline-flex shrink-0 items-center justify-center border-0 font-semibold',
         sizes.box,
         fullBleed && FULL_BLEED_BORDER,
         // After `sizes.box`, so tailwind-merge resolves `sizes.emoji` over the
-        // initial's text size — and so `border-0` resolves over the base
-        // `border`, which is what stops a neutral hairline being drawn OUTSIDE
-        // the coloured inset ring.
+        // initial's text size.
         //
         // `emojiTint()` is the picker's hovered-cell treatment (a pale
         // `--color-emoji-fill-*` under a 1px `--color-emoji-ring-*` inset ring)

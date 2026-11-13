@@ -12,6 +12,7 @@ import {
 } from '../lib/base-ui-compat';
 import { withPortalContainer } from '../lib/portal-container';
 import { cn } from '../lib/utils';
+import { FLOATING_PANEL_MOTION } from './menu-recipe';
 
 const TooltipPortal = withPortalContainer(TooltipPrimitive.Portal);
 
@@ -112,11 +113,14 @@ const TooltipContent = React.forwardRef<
         <TooltipPrimitive.Popup
           ref={ref}
           data-slot="tooltip-content"
-          // No enter/exit animation, the same as the dropdown, select and popover
-          // panels: the tooltip paints on the frame it mounts and unmounts on the
-          // frame it closes. The hover delay lives on `TooltipProvider`, not here.
+          // Opens like every floating panel (D44): 0.95 → 1 and a fade in 200ms
+          // from its trigger, plus a 4px nudge from the side it opens on. Once one
+          // tooltip in a group is open, the next opens instantly (`data-instant`).
+          // The hover delay lives on `TooltipProvider`, not here.
           className={cn(
             'bg-foreground text-background ring-foreground/5 z-[9999] overflow-hidden rounded-sm p-1 px-2 text-[length:var(--text-xs,0.8125rem)] ring-[1px]',
+            FLOATING_PANEL_MOTION,
+            'data-instant:transition-none data-[side=bottom]:data-starting-style:-translate-y-1 data-[side=top]:data-starting-style:translate-y-1 data-[side=left]:data-starting-style:translate-x-1 data-[side=right]:data-starting-style:-translate-x-1',
             className,
           )}
           {...props}

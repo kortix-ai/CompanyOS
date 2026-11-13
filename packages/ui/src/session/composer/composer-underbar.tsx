@@ -154,12 +154,15 @@ export function ComposerUnderbar({
           <Button
             type="button"
             variant="ghost"
-            size="icon-base"
+            // md icon-only: 28px with the ladder's 8px corner, the height of every
+            // control in this toolbar (agent, model, overrides).
+            size="md"
+            iconOnly
             onClick={onAttachClick}
             aria-label={t('attachFiles')}
-            // `hit-area-3` — the ≈29px ghost chip clears the 44px mobile tap
+            // `hit-area-3` — the 28px ghost chip clears the 44px mobile tap
             // floor only with the shared pseudo-element extension.
-            className="text-muted-foreground hit-area-3 rounded-lg"
+            className="text-muted-foreground hit-area-3"
           >
             <Paperclip className="size-4 shrink-0" />
           </Button>

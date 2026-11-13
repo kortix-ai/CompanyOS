@@ -227,10 +227,35 @@ export function useDismissContent(kind: string, handlers: DismissHandlers) {
  * the popup, so `event.currentTarget` is the popup; `preventDefault()` keeps
  * focus where the handler put it.
  */
+/**
+ * Where a dialog-like panel puts focus when it opens: the first field (an
+ * `autoFocus`/`data-autofocus` element first), else the panel itself. Never a
+ * button: Base UI's default, the first tabbable element, is the close × in a
+ * dialog with no field, and a focused × paints its focus/hover chrome the
+ * moment the panel opens (D45). Tab still reaches every button from the panel.
+ */
+const DIALOG_AUTOFOCUS = '[autofocus],[data-autofocus]';
+const DIALOG_FIELD =
+  'input:not([type=hidden]):not([disabled]),textarea:not([disabled]),select:not([disabled]),[contenteditable=""],[contenteditable=true]';
+
+export function dialogInitialFocusTarget(popup: HTMLElement): HTMLElement {
+  // Two passes: an explicit autofocus wins over a field earlier in the panel.
+  for (const selector of [DIALOG_AUTOFOCUS, DIALOG_FIELD]) {
+    for (const el of popup.querySelectorAll<HTMLElement>(selector)) {
+      if (el.closest('[inert],[aria-hidden=true]')) continue;
+      if (el.getClientRects().length === 0) continue; // display:none / not rendered
+      return el;
+    }
+  }
+  return popup;
+}
+
 export function focusProps(
   getPopup: () => HTMLElement | null,
   onOpenAutoFocus?: (event: Event) => void,
   onCloseAutoFocus?: (event: Event) => void,
+  /** A dialog, sheet or modal: open on the first field or the panel, never the close ×. */
+  { dialog = false }: { dialog?: boolean } = {},
 ) {
   const run = (type: string, handler: (event: Event) => void) => {
     const event = new CustomEvent(type, { cancelable: true });
@@ -250,7 +275,9 @@ export function focusProps(
       const node = getPopup();
       if (node) returnFocusTo.set(node, document.activeElement);
       if (node && node.contains(document.activeElement)) return false;
-      return onOpenAutoFocus ? run('focusScope.autoFocusOnMount', onOpenAutoFocus) : true;
+      const proceed = onOpenAutoFocus ? run('focusScope.autoFocusOnMount', onOpenAutoFocus) : true;
+      if (!proceed) return false;
+      return dialog && node ? dialogInitialFocusTarget(node) : true;
     },
     // Focus returns to where it was before the popup opened, a task after the
     // close, and only when nothing else took it meanwhile: a menu item that

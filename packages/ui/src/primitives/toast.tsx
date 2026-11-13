@@ -304,7 +304,7 @@ export function ToastCard({
 }) {
   if (options?.compact) {
     return (
-      <div className={cn(CARD, "flex w-fit items-center gap-2 px-3 py-2")}>
+      <div className={cn(CARD, "flex w-fit items-center gap-2 px-3 py-2 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground")}>
         {icon}
         <span className="text-xs leading-5 font-medium">{message}</span>
       </div>
@@ -325,7 +325,9 @@ export function ToastCard({
           variant={variant}
         />
       ) : (
-        <div className="flex h-5 w-4 shrink-0 items-center justify-center">
+        // A caller's icon (a trash can for an undo) is drawn at 16px in the muted
+        // ink; the status glyphs size and colour themselves.
+        <div className="flex h-5 w-4 shrink-0 items-center justify-center [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground">
           {icon}
         </div>
       )}

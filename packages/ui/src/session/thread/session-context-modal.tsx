@@ -2,16 +2,13 @@
 
 import { useTranslations } from '../../i18n';
 
-import { Button } from '../../primitives/button';
 import {
   Modal,
   ModalBody,
-  ModalClose,
   ModalContent,
   ModalHeader,
   ModalTitle,
 } from '../../primitives/modal';
-import { Close } from '../../icons/close';
 import { useModelPricingLookup } from '../../internal/lib/model-pricing';
 import { cn } from '../../lib/utils';
 import { type ProjectSession, type Session, type SessionLogBlock, type SessionLogMessage, type ToolCallBlock } from '@kortix/sdk';
@@ -339,12 +336,6 @@ function SessionContextModalBody({
               copyLabel={t.raw('copyJson')}
               copiedLabel={t.raw('copied')}
             />
-            <ModalClose asChild>
-              <Button variant="ghost" className="size-8 p-0">
-                <Close className="text-primary size-4 stroke-1" />
-                <span className="sr-only">{tI18nComplete.raw('text7d9eb7acb13e')}</span>
-              </Button>
-            </ModalClose>
           </div>
         </div>
       </ModalHeader>
@@ -528,7 +519,9 @@ export function SessionContextModal({
 }: SessionContextModalProps) {
   return (
     <Modal open={open} onOpenChange={onOpenChange}>
-      <ModalContent className="max-h-[85vh] lg:max-w-3xl" showCloseButton={false}>
+      {/* The shared × (D45), not a hand-made one: it is the only close that
+          keeps the recipe's corner, size and centring. */}
+      <ModalContent className="max-h-[85vh] lg:max-w-3xl">
         <SessionContextModalBody
           detachedRows={detachedRows}
           source={source}

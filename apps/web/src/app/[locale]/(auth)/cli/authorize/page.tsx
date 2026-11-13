@@ -88,7 +88,7 @@ function CliAuthorizeInner() {
       <div className="space-y-2">
         <FieldLabel htmlFor="cli-workspace">{tCli('workspaceLabel')}</FieldLabel>
         <Select value={pickedRow?.workspaceId ?? ''} onValueChange={setPickedWorkspaceId}>
-          <SelectTrigger id="cli-workspace" size="md" className="w-full">
+          <SelectTrigger id="cli-workspace" size="lg" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -189,7 +189,6 @@ function CliAuthorizeInner() {
             <FieldLabel htmlFor="cli-user-code">{tI18nComplete.raw('cliDeviceCode')}</FieldLabel>
             <Input
               id="cli-user-code"
-              size="md"
               autoFocus
               autoComplete="off"
               spellCheck={false}

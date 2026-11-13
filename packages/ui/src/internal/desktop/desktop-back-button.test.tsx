@@ -104,7 +104,7 @@ describe('DesktopBackControl', () => {
     // A bare arrow in the window corner reads as chrome. The visible word is
     // also the accessible name, so no aria-label is needed.
     expect(html).toContain('<svg');
-    expect(html).toContain('Back</button>');
+    expect(html).toContain('Back</span></button>');
     expect(html).not.toContain('aria-label');
   });
 

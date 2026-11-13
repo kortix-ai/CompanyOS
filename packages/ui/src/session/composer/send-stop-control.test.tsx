@@ -52,7 +52,7 @@ describe('editing a queued message shows Submit, never Stop', () => {
     const markup = renderToStaticMarkup(
       <SendStopControl {...idle} isBusy onStop={() => {}} submitLabel="Submit" />,
     );
-    expect(markup).toContain('>Submit</button>');
+    expect(markup).toContain('>Submit</span></button>');
     expect(markup).not.toContain('aria-label="Stop');
     expect(markup).not.toMatch(/<button[^>]*\sdisabled=""/);
   });
@@ -61,13 +61,13 @@ describe('editing a queued message shows Submit, never Stop', () => {
     const markup = renderToStaticMarkup(
       <SendStopControl {...idle} isBusy canSubmit={false} hasText={false} submitLabel="Submit" />,
     );
-    expect(markup).toContain('>Submit</button>');
+    expect(markup).toContain('>Submit</span></button>');
     expect(markup).toMatch(/<button[^>]*\sdisabled=""/);
   });
 
   test('without a submit label a busy session still shows Stop', () => {
     const markup = renderToStaticMarkup(<SendStopControl {...idle} isBusy onStop={() => {}} />);
-    expect(markup).not.toContain('>Submit</button>');
+    expect(markup).not.toContain('>Submit</span></button>');
   });
 });
 

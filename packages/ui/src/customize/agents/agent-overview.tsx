@@ -256,7 +256,7 @@ function NewSpaceInput({ onDone }: { onDone: (slug: string | null) => void }) {
   return (
     <Input
       autoFocus
-      size="sm"
+      size="md"
       aria-label={t('newSpace')}
       placeholder={t('newSpacePlaceholder')}
       value={value}

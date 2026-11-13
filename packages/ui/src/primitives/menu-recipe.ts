@@ -141,11 +141,22 @@ export function menuRow(size: MenuRowSize, tone: MenuRowTone, className?: string
  * away from the cursor.
  */
 export const FLOATING_PANEL_SURFACE =
-  'bg-popover text-popover-foreground border-border rounded-lg border shadow-md';
+  // shadow-ring-md: the stacked shadow with the hairline as its last layer, so
+  // there is one edge, not a border plus a shadow (D44).
+  'bg-popover text-popover-foreground rounded-lg shadow-ring-md';
 
-/** Enter/exit for panels that appear away from the pointer's path. */
+/**
+ * Open and close (D44): from the trigger (`--transform-origin`), scale 0.95 →
+ * 1 and opacity 0 → 1 in 200ms `ease-in-out`, reversed on close. Base UI sets
+ * `data-starting-style` on the first frame and `data-ending-style` while it
+ * closes, then unmounts. Reduced motion: no transition.
+ */
 export const FLOATING_PANEL_MOTION =
-  'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 ease-out';
+  'origin-(--transform-origin) transition-[opacity,scale,translate] duration-moderate ease-in-out data-starting-style:scale-95 data-starting-style:opacity-0 data-ending-style:scale-95 data-ending-style:opacity-0 motion-reduce:transition-none';
+
+/** The select's open: the same, from 0.97 — a list that sits on its trigger moves less. */
+export const SELECT_PANEL_MOTION =
+  'origin-(--transform-origin) transition-[opacity,scale,translate] duration-moderate ease-in-out data-starting-style:scale-[0.97] data-starting-style:opacity-0 data-ending-style:scale-[0.97] data-ending-style:opacity-0 motion-reduce:transition-none';
 
 export const FLOATING_PANEL = cn(FLOATING_PANEL_SURFACE, FLOATING_PANEL_MOTION);
 
@@ -153,13 +164,11 @@ export const FLOATING_PANEL = cn(FLOATING_PANEL_SURFACE, FLOATING_PANEL_MOTION);
 export const MENU_PANEL = cn(FLOATING_PANEL, 'p-1');
 
 /**
- * `MENU_PANEL` with no enter/exit animation — paints on the same frame it
- * mounts. Every dropdown panel (root and submenu) and every select list uses
- * it, and `PopoverContent` takes `FLOATING_PANEL_SURFACE` for the same reason.
- * The animated `MENU_PANEL` / `FLOATING_PANEL` remain for the context menu and
- * the animated hover card.
+ * The dropdown panel (root and submenu). Since D44 it opens and closes with
+ * `FLOATING_PANEL_MOTION` like every floating panel; the name is kept so call
+ * sites compile. The select takes `SELECT_PANEL_MOTION` instead.
  */
-export const MENU_PANEL_STATIC = cn(FLOATING_PANEL_SURFACE, 'p-1 py-[0.25rem]');
+export const MENU_PANEL_STATIC = cn(FLOATING_PANEL_SURFACE, FLOATING_PANEL_MOTION, 'p-1 py-[0.25rem]');
 
 /** Group label: `px-2` matches every row, so labels and rows share a left edge. */
 export const MENU_LABEL = 'text-muted-foreground px-2 py-1 text-xs font-medium tracking-normal';

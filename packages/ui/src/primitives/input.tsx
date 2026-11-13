@@ -28,7 +28,7 @@ export type InputProps = Omit<React.ComponentProps<'input'>, 'size'> & {
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 };
 
-function Input({ className, type, variant: _variant, size = 'sm', ...props }: InputProps) {
+function Input({ className, type, variant: _variant, size = 'lg', ...props }: InputProps) {
   return (
     <input
       type={type}
@@ -43,11 +43,13 @@ function Input({ className, type, variant: _variant, size = 'sm', ...props }: In
           '[&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none [&::-webkit-search-results-button]:appearance-none [&::-webkit-search-results-decoration]:appearance-none',
         type === 'file' &&
           'text-muted-foreground file:border-border file:text-foreground p-0 pr-3 italic file:me-3 file:h-full file:border-0 file:border-r file:border-solid file:bg-transparent file:px-3 file:text-sm file:font-medium file:not-italic',
+        // The control ladder (D43): an input is as tall as a Button or Select of
+        // the same size. lg (32px) is the field default; xs stays a legacy step.
         size === 'xs' && 'h-8 text-xs',
-        size === 'sm' && 'h-9 text-sm',
-        size === 'md' && 'h-10 text-sm',
-        size === 'lg' && 'h-11 text-sm',
-        size === 'xl' && 'h-12 text-base',
+        size === 'sm' && 'h-(--control-sm-height) rounded-(--control-sm-radius) px-(--control-sm-select-ps) text-xs',
+        size === 'md' && 'h-(--control-md-height) rounded-(--control-md-radius) px-(--control-md-select-ps) text-xs',
+        size === 'lg' && 'h-(--control-lg-height) rounded-(--control-lg-radius) text-sm',
+        size === 'xl' && 'h-(--control-xl-height) rounded-(--control-xl-radius) text-sm',
         className,
       )}
       {...props}

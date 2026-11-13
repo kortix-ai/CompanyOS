@@ -64,7 +64,6 @@ const InputComponent = React.forwardRef<HTMLInputElement, InputProps>(
     <Input
       type="text"
       // The wrapper owns the shake — a second one here would compound the translate.
-      size="md"
       // The wrapper owns the shake — a second one here would compound the translate.
       className={cn('aria-invalid:animate-none!! aria-invalid:animate-none', className)}
       {...props}

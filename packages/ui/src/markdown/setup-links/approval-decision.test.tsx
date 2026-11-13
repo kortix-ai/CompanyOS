@@ -460,7 +460,7 @@ describe('ApprovalDecisionPanel decisions', () => {
           args_preview: { text: 'x' },
         }),
       }),
-    ).toMatch(/>Approve<\/button>/);
+    ).toMatch(/>Approve<\/span><\/button>/);
   });
 
   test('approved on this screen: the outcome chip, and the decisions are gone', () => {

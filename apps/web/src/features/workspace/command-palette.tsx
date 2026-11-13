@@ -14,18 +14,15 @@ import {
 } from '@kortix/ui/alert-dialog';
 import { Badge } from '@kortix/ui/badge';
 import {
-  CommandDialog,
-  CommandFooter,
   CommandGroup,
-  CommandInput,
   CommandItem,
-  CommandList,
+  CommandPalette as CommandPaletteShell,
+  CommandPaletteHints,
   CommandShortcut,
   useCommandState,
 } from '@kortix/ui/command';
 import { EntityAvatar } from '@kortix/ui/entity-avatar';
 import { AgentMark } from '@kortix/ui/internal/components/agent-mark';
-import { FadedScrollArea } from '@kortix/ui/faded-scroll-area';
 import { Kbd } from '@kortix/ui/kbd';
 import Loading from '@kortix/ui/loading';
 import { SidebarContext } from '@kortix/ui/sidebar';
@@ -159,13 +156,10 @@ import {
 } from '@kortix/sdk/react';
 import { capitalizeWords, formatRelativeTime } from '@kortix/shared';
 import {
-  ArrowDownIcon as ArrowDown,
-  ArrowUpIcon as ArrowUp,
   RobotIcon as Bot,
   CheckIcon as Check,
   CaretLeftIcon as ChevronLeft,
   CaretRightIcon as ChevronRight,
-  ArrowElbowDownLeftIcon as CornerDownLeft,
   CpuIcon as Cpu,
   FileTextIcon as FileText,
   FlaskIcon as Flask,
@@ -2323,895 +2317,874 @@ export function CommandPalette() {
 
   return (
     <>
-      <CommandDialog
+      <CommandPaletteShell
         open={open}
         onOpenChange={setOpen}
-        // Pinned at 17vh, not centred: the input stays put while the list
-        // under it grows or shrinks between pages, so the eye never has to
-        // re-find the field after a page change.
-        className="top-[17vh] translate-y-0 sm:max-w-[600px]"
-        showCloseButton={false}
+        inputRef={inputRef}
+        // undefined = the palette's search glyph; a sub-page swaps in its back button.
+        leftElement={
+          page === 'root' || !pageTitle ? undefined : (
+            <button
+              type="button"
+              aria-label={tI18nComplete.raw('text76900f1bfd16')}
+              title={tI18nComplete.raw('text76900f1bfd16')}
+              onClick={() => {
+                goBack();
+                inputRef.current?.focus();
+              }}
+              className="text-muted-foreground hover:bg-hover hover:text-foreground -ml-1 flex size-6 shrink-0 items-center justify-center rounded-md"
+            >
+              <ChevronLeft className="size-4" />
+            </button>
+          )
+        }
+        rightElement={
+          query ? (
+            <button
+              type="button"
+              aria-label={tI18nComplete.raw('text3b7ea51793e9')}
+              title={tI18nComplete.raw('text3b7ea51793e9')}
+              onClick={() => {
+                setQuery('');
+                inputRef.current?.focus();
+              }}
+              className="text-muted-foreground hover:bg-hover hover:text-foreground -mr-1 flex size-6 shrink-0 items-center justify-center rounded-md"
+            >
+              <X className="size-4" />
+            </button>
+          ) : null
+        }
+        placeholder={placeholder}
+        value={query}
+        onValueChange={setQuery}
+        footer={
+          <CommandPaletteHints
+            navigateLabel={tHardcodedUi.raw('i18nComplete.textd0cda6559bb3')}
+            selectLabel={tHardcodedUi.raw('i18nComplete.textb1a36d25d963')}
+          >
+            {page === 'files' && (
+              <div className="flex items-center justify-center gap-1">
+                <Kbd>{tHardcodedUi.raw('componentsCommandPalette.line1744JsxTextText')}</Kbd>
+                <span>
+                  {tHardcodedUi.raw('componentsCommandPalette.line1745JsxTextContentSearch')}
+                </span>
+              </div>
+            )}
+            <div className="ml-auto flex items-center gap-4">
+              {totalSearchResults > 0 && (
+                <span className="tabular-nums">
+                  {totalSearchResults} {tHardcodedUi.raw('i18nComplete.textf6a214f7a5fc')}
+                  {totalSearchResults !== 1 ? 's' : ''}
+                </span>
+              )}
+              {page !== 'root' && (
+                <div className="flex items-center gap-1">
+                  <Kbd>{tI18nComplete.raw('text177b7cb06867')}</Kbd>
+                  <span>{tI18nComplete.raw('text3c482346f375')}</span>
+                </div>
+              )}
+            </div>
+          </CommandPaletteHints>
+        }
       >
-        <CommandInput
-          ref={inputRef}
-          leftElement={
-            page === 'root' || !pageTitle ? (
-              <Search className="text-muted-foreground size-4 shrink-0" />
-            ) : (
-              <button
-                type="button"
-                aria-label={tI18nComplete.raw('text76900f1bfd16')}
-                title={tI18nComplete.raw('text76900f1bfd16')}
-                onClick={() => {
-                  goBack();
-                  inputRef.current?.focus();
-                }}
-                className="text-muted-foreground hover:bg-hover hover:text-foreground -ml-1 flex size-6 shrink-0 items-center justify-center rounded-md"
-              >
-                <ChevronLeft className="size-4" />
-              </button>
-            )
-          }
-          rightElement={
-            query ? (
-              <button
-                type="button"
-                aria-label={tI18nComplete.raw('text3b7ea51793e9')}
-                title={tI18nComplete.raw('text3b7ea51793e9')}
-                onClick={() => {
-                  setQuery('');
-                  inputRef.current?.focus();
-                }}
-                className="text-muted-foreground hover:bg-hover hover:text-foreground -mr-1 flex size-6 shrink-0 items-center justify-center rounded-md"
-              >
-                <X className="size-4" />
-              </button>
-            ) : null
-          }
-          placeholder={placeholder}
-          value={query}
-          onValueChange={setQuery}
+        <ThemeHighlightPreview
+          themeByValue={themeByHighlightValue}
+          onPreview={previewInterfaceTheme}
         />
-
-        <FadedScrollArea fadeColor="from-popover" className="max-h-[min(60vh,380px)]">
-          {/* `scroll-my-10` = the fade's `h-10`: cmdk scrolls the highlighted
-              row with `scrollIntoView({ block: 'nearest' })`, which stops at
-              the edge — under the fade. The margin stops it clear of it. */}
-          <CommandList className="max-h-none overflow-visible [&_[cmdk-item]]:scroll-my-10">
-            <ThemeHighlightPreview
-              themeByValue={themeByHighlightValue}
-              onPreview={previewInterfaceTheme}
-            />
-            {page === 'root' && (
+        {page === 'root' && (
+          <>
+            {!hasQuery && (
               <>
-                {!hasQuery && (
-                  <>
-                    <CommandGroup heading="Suggestions" forceMount>
-                      <div className="space-y-0.5">
-                        {rootSuggestionItems.map((item, index) => {
-                          const Icon = item.icon;
-                          const isToggleSidebar = item.id === 'toggle-sidebar';
-                          const DisplayIcon = isToggleSidebar
-                            ? sidebarOpen
-                              ? PanelLeftClose
-                              : PanelLeftIcon
-                            : Icon;
-                          const displayLabel = isToggleSidebar
-                            ? sidebarOpen
-                              ? tHardcodedUi.raw('i18nComplete.text9da0bf42ad07')
-                              : tHardcodedUi.raw('i18nComplete.text2060803eeb71')
-                            : item.label;
+                <CommandGroup heading="Suggestions" forceMount>
+                  <div className="space-y-0.5">
+                    {rootSuggestionItems.map((item, index) => {
+                      const Icon = item.icon;
+                      const isToggleSidebar = item.id === 'toggle-sidebar';
+                      const DisplayIcon = isToggleSidebar
+                        ? sidebarOpen
+                          ? PanelLeftClose
+                          : PanelLeftIcon
+                        : Icon;
+                      const displayLabel = isToggleSidebar
+                        ? sidebarOpen
+                          ? tHardcodedUi.raw('i18nComplete.text9da0bf42ad07')
+                          : tHardcodedUi.raw('i18nComplete.text2060803eeb71')
+                        : item.label;
 
-                          const submenuPage = SUBMENU_PAGE_BY_ID[item.id];
-                          return (
-                            <Fragment key={item.id}>
-                              <CommandItem
-                                value={sanitizeCmdkValue(
-                                  `suggestion ${buildPaletteSearchText(item)}`,
-                                )}
-                                onSelect={() =>
-                                  submenuPage ? goToPage(submenuPage) : handleRegistryItem(item)
-                                }
-                                disabled={item.id === 'new-session' && isCreating}
-                              >
-                                {item.id === 'new-session' && isCreating ? (
-                                  <Loading className="text-muted-foreground size-4 shrink-0" />
-                                ) : (
-                                  <DisplayIcon className="size-4" />
-                                )}
-                                <span className="flex-1">{displayLabel}</span>
-                                {item.id === 'review-changes' && openChangeRequestCount > 0 && (
-                                  <span className="text-muted-foreground/40 text-xs tabular-nums">
-                                    {openChangeRequestCount}
-                                  </span>
-                                )}
-                                {submenuPage === 'density' && (
-                                  <span className="text-muted-foreground/40 text-xs">
-                                    {
-                                      densityPageOptions.find(
-                                        (option) => option.id === conversationDensity,
-                                      )?.label
-                                    }
-                                  </span>
-                                )}
-                                {item.shortcut && <CommandShortcut>{item.shortcut}</CommandShortcut>}
-                                {submenuPage && (
-                                  <ChevronRight className="text-muted-foreground/30 size-3" />
-                                )}
-                              </CommandItem>
-                              {index === 2 && suggestedSessionIdCopy ? (
-                                <CommandItem
-                                  value={sanitizeCmdkValue(
-                                    `suggestion copy-session-id ${suggestedSessionIdCopy.keywords}`,
-                                  )}
-                                  onSelect={() => void handleCopyValue(suggestedSessionIdCopy)}
-                                >
-                                  <Copy className="size-4" />
-                                  <span className="flex-1">
-                                    {tPalette('copyAction', { label: suggestedSessionIdCopy.label })}
-                                  </span>
-                                  <span className="text-muted-foreground max-w-40 truncate font-mono text-xs">
-                                    {suggestedSessionIdCopy.value}
-                                  </span>
-                                </CommandItem>
-                              ) : null}
-                              {index === 2 && suggestedSessionLinkCopy ? (
-                                <CommandItem
-                                  value={sanitizeCmdkValue(
-                                    `suggestion copy-session-link ${suggestedSessionLinkCopy.keywords}`,
-                                  )}
-                                  onSelect={() => void handleCopyValue(suggestedSessionLinkCopy)}
-                                >
-                                  <Copy className="size-4" />
-                                  <span className="flex-1">
-                                    {tPalette('copyAction', { label: suggestedSessionLinkCopy.label })}
-                                  </span>
-                                </CommandItem>
-                              ) : null}
-                            </Fragment>
-                          );
-                        })}
-                      </div>
-
-                      {currentSessionId && (
-                        <>
+                      const submenuPage = SUBMENU_PAGE_BY_ID[item.id];
+                      return (
+                        <Fragment key={item.id}>
                           <CommandItem
-                            value="suggestion change agent worker switch"
-                            onSelect={() => goToPage('agents')}
-                          >
-                            {currentAgent ? <AgentMark slug={currentAgent.name} /> : <Bot className="size-4" />}
-                            <span className="flex-1">
-                              {tHardcodedUi.raw(
-                                'componentsCommandPalette.line1209JsxTextChangeAgent',
-                              )}
-                            </span>
-                            {currentAgent && (
-                              <span className="text-muted-foreground/40 text-xs">
-                                {currentAgent.name}
-                              </span>
-                            )}
-                            <ChevronRight className="text-muted-foreground/30 size-3" />
-                          </CommandItem>
-                          <CommandItem
-                            value="suggestion change model llm switch"
-                            onSelect={() => goToPage('models')}
-                          >
-                            <Cpu className="size-4" />
-                            <span className="flex-1">
-                              {tHardcodedUi.raw(
-                                'componentsCommandPalette.line1220JsxTextChangeModel',
-                              )}
-                            </span>
-                            {currentModelKey && (
-                              <span className="text-muted-foreground/40 max-w-[160px] truncate text-xs">
-                                {allModels.find(
-                                  (m) =>
-                                    m.providerID === currentModelKey.providerID &&
-                                    m.modelID === currentModelKey.modelID,
-                                )?.modelName || currentModelKey.modelID}
-                              </span>
-                            )}
-                            <ChevronRight className="text-muted-foreground/30 size-3" />
-                          </CommandItem>
-                        </>
-                      )}
-
-                      {/* `currentSessionId`, not `projectId`. File search runs
-                          against the SESSION's sandbox daemon
-                          (`useWorkspaceSearch` -> `getActiveServerUrl()` ->
-                          `findFiles`/`findText`), so with no session mounted
-                          every query resolved to a swallowed fetch error and
-                          rendered "No files for …" — indistinguishable from a
-                          real zero-result search. A project id is not enough
-                          to make this row work; a session is. */}
-                      {currentSessionId && (
-                        <CommandItem
-                          value="suggestion search files find file grep repo content"
-                          onSelect={() => goToPage('files')}
-                        >
-                          <Search />
-                          <span className="flex-1">
-                            {tHardcodedUi.raw(
-                              'componentsCommandPalette.line1248JsxTextSearchFiles',
-                            )}
-                          </span>
-                          <Badge variant="kortix" size="sm">
-                            {tHardcodedUi.raw('i18nComplete.text071ca2227754')}
-                          </Badge>
-                          <ChevronRight className="text-muted-foreground/40 size-3" />
-                        </CommandItem>
-                      )}
-                    </CommandGroup>
-
-                    {projectId && recentProjectSessions.length > 0 && (
-                      <CommandGroup
-                        heading={
-                          channelsOn
-                            ? tPalette('recentThreads')
-                            : tHardcodedUi.raw('componentsCommandPalette.line1260JsxAttrHeadingRecentSessions')
-                        }
-                        forceMount
-                      >
-                        {recentProjectSessions.map((session) => (
-                          <CommandItem
-                            key={session.session_id}
                             value={sanitizeCmdkValue(
-                              `recent ${sessionName(session)} ${session.session_id}`,
+                              `suggestion ${buildPaletteSearchText(item)}`,
                             )}
-                            onSelect={() => handleSelectProjectSession(session)}
-                          >
-                            <MessageCircle className="size-4 shrink-0" />
-                            <span className="flex-1 truncate">{sessionName(session)}</span>
-                            <SessionSharedIcon session={session} />
-                            <span className="text-muted-foreground/30 shrink-0 text-xs tabular-nums">
-                              {formatRelativeTime(
-                                new Date(sessionLastActivityAt(session)).getTime(),
-                              )}
-                            </span>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    )}
-
-                    {/* Only OUTSIDE a workspace. Inside one, recent SESSIONS
-                        take this space — a user who is already somewhere wants
-                        a thread in it far more often than a different
-                        workspace, and search now reaches the other case from
-                        in here too. */}
-                    {!projectId && recentWorkspaces.length > 0 && (
-                      <CommandGroup
-                        heading={tHardcodedUi.raw(
-                          'componentsCommandPalette.line1281JsxAttrHeadingRecentProjects',
-                        )}
-                        forceMount
-                      >
-                        {recentWorkspaces.map((row) => (
-                          <WorkspaceCommandItem
-                            key={row.workspace.project_id}
-                            row={row}
-                            onSelect={() => handleSelectWorkspace(row.workspace)}
-                            trailing={
-                              (row.workspace.last_opened_at || row.workspace.updated_at) && (
-                                <span className="text-muted-foreground/30 shrink-0 text-xs tabular-nums">
-                                  {formatRelativeTime(
-                                    new Date(
-                                      row.workspace.last_opened_at || row.workspace.updated_at,
-                                    ).getTime(),
-                                  )}
-                                </span>
-                              )
+                            onSelect={() =>
+                              submenuPage ? goToPage(submenuPage) : handleRegistryItem(item)
                             }
-                          />
-                        ))}
-                      </CommandGroup>
-                    )}
-                  </>
+                            disabled={item.id === 'new-session' && isCreating}
+                          >
+                            {item.id === 'new-session' && isCreating ? (
+                              <Loading className="text-muted-foreground size-4 shrink-0" />
+                            ) : (
+                              <DisplayIcon className="size-4" />
+                            )}
+                            <span className="flex-1">{displayLabel}</span>
+                            {item.id === 'review-changes' && openChangeRequestCount > 0 && (
+                              <span className="text-muted-foreground/40 text-xs tabular-nums">
+                                {openChangeRequestCount}
+                              </span>
+                            )}
+                            {submenuPage === 'density' && (
+                              <span className="text-muted-foreground/40 text-xs">
+                                {
+                                  densityPageOptions.find(
+                                    (option) => option.id === conversationDensity,
+                                  )?.label
+                                }
+                              </span>
+                            )}
+                            {item.shortcut && <CommandShortcut>{item.shortcut}</CommandShortcut>}
+                            {submenuPage && (
+                              <ChevronRight className="text-muted-foreground/30 size-3" />
+                            )}
+                          </CommandItem>
+                          {index === 2 && suggestedSessionIdCopy ? (
+                            <CommandItem
+                              value={sanitizeCmdkValue(
+                                `suggestion copy-session-id ${suggestedSessionIdCopy.keywords}`,
+                              )}
+                              onSelect={() => void handleCopyValue(suggestedSessionIdCopy)}
+                            >
+                              <Copy className="size-4" />
+                              <span className="flex-1">
+                                {tPalette('copyAction', { label: suggestedSessionIdCopy.label })}
+                              </span>
+                              <span className="text-muted-foreground max-w-40 truncate font-mono text-xs">
+                                {suggestedSessionIdCopy.value}
+                              </span>
+                            </CommandItem>
+                          ) : null}
+                          {index === 2 && suggestedSessionLinkCopy ? (
+                            <CommandItem
+                              value={sanitizeCmdkValue(
+                                `suggestion copy-session-link ${suggestedSessionLinkCopy.keywords}`,
+                              )}
+                              onSelect={() => void handleCopyValue(suggestedSessionLinkCopy)}
+                            >
+                              <Copy className="size-4" />
+                              <span className="flex-1">
+                                {tPalette('copyAction', { label: suggestedSessionLinkCopy.label })}
+                              </span>
+                            </CommandItem>
+                          ) : null}
+                        </Fragment>
+                      );
+                    })}
+                  </div>
+
+                  {currentSessionId && (
+                    <>
+                      <CommandItem
+                        value="suggestion change agent worker switch"
+                        onSelect={() => goToPage('agents')}
+                      >
+                        {currentAgent ? <AgentMark slug={currentAgent.name} /> : <Bot className="size-4" />}
+                        <span className="flex-1">
+                          {tHardcodedUi.raw(
+                            'componentsCommandPalette.line1209JsxTextChangeAgent',
+                          )}
+                        </span>
+                        {currentAgent && (
+                          <span className="text-muted-foreground/40 text-xs">
+                            {currentAgent.name}
+                          </span>
+                        )}
+                        <ChevronRight className="text-muted-foreground/30 size-3" />
+                      </CommandItem>
+                      <CommandItem
+                        value="suggestion change model llm switch"
+                        onSelect={() => goToPage('models')}
+                      >
+                        <Cpu className="size-4" />
+                        <span className="flex-1">
+                          {tHardcodedUi.raw(
+                            'componentsCommandPalette.line1220JsxTextChangeModel',
+                          )}
+                        </span>
+                        {currentModelKey && (
+                          <span className="text-muted-foreground/40 max-w-[160px] truncate text-xs">
+                            {allModels.find(
+                              (m) =>
+                                m.providerID === currentModelKey.providerID &&
+                                m.modelID === currentModelKey.modelID,
+                            )?.modelName || currentModelKey.modelID}
+                          </span>
+                        )}
+                        <ChevronRight className="text-muted-foreground/30 size-3" />
+                      </CommandItem>
+                    </>
+                  )}
+
+                  {/* `currentSessionId`, not `projectId`. File search runs
+                      against the SESSION's sandbox daemon
+                      (`useWorkspaceSearch` -> `getActiveServerUrl()` ->
+                      `findFiles`/`findText`), so with no session mounted
+                      every query resolved to a swallowed fetch error and
+                      rendered "No files for …" — indistinguishable from a
+                      real zero-result search. A project id is not enough
+                      to make this row work; a session is. */}
+                  {currentSessionId && (
+                    <CommandItem
+                      value="suggestion search files find file grep repo content"
+                      onSelect={() => goToPage('files')}
+                    >
+                      <Search />
+                      <span className="flex-1">
+                        {tHardcodedUi.raw(
+                          'componentsCommandPalette.line1248JsxTextSearchFiles',
+                        )}
+                      </span>
+                      <Badge variant="kortix" size="sm">
+                        {tHardcodedUi.raw('i18nComplete.text071ca2227754')}
+                      </Badge>
+                      <ChevronRight className="text-muted-foreground/40 size-3" />
+                    </CommandItem>
+                  )}
+                </CommandGroup>
+
+                {projectId && recentProjectSessions.length > 0 && (
+                  <CommandGroup
+                    heading={
+                      channelsOn
+                        ? tPalette('recentThreads')
+                        : tHardcodedUi.raw('componentsCommandPalette.line1260JsxAttrHeadingRecentSessions')
+                    }
+                    forceMount
+                  >
+                    {recentProjectSessions.map((session) => (
+                      <CommandItem
+                        key={session.session_id}
+                        value={sanitizeCmdkValue(
+                          `recent ${sessionName(session)} ${session.session_id}`,
+                        )}
+                        onSelect={() => handleSelectProjectSession(session)}
+                      >
+                        <MessageCircle className="size-4 shrink-0" />
+                        <span className="flex-1 truncate">{sessionName(session)}</span>
+                        <SessionSharedIcon session={session} />
+                        <span className="text-muted-foreground/30 shrink-0 text-xs tabular-nums">
+                          {formatRelativeTime(
+                            new Date(sessionLastActivityAt(session)).getTime(),
+                          )}
+                        </span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
                 )}
 
-                {hasQuery && (
-                  <>
-                    {/* Channels and DMs lead: with Channels on they are where work lives. */}
-                    {rootSpaceResults.channels.length > 0 && projectId && (
-                      <CommandGroup heading={tSidebar('spaces.channels')} forceMount>
-                        {rootSpaceResults.channels.map((channel) => (
-                          <CommandItem
-                            key={channel.space_id}
-                            value={sanitizeCmdkValue(`channel ${channel.slug} ${channel.name}`)}
-                            onSelect={() => {
-                              router.push(uiRoutes().channel(projectId, channel.slug ?? ''));
-                              close();
-                            }}
-                          >
-                            <ChannelGlyph visibility={channel.visibility} className="size-4 shrink-0" />
-                            <span className="flex-1 truncate">{channel.slug}</span>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
+                {/* Only OUTSIDE a workspace. Inside one, recent SESSIONS
+                    take this space — a user who is already somewhere wants
+                    a thread in it far more often than a different
+                    workspace, and search now reaches the other case from
+                    in here too. */}
+                {!projectId && recentWorkspaces.length > 0 && (
+                  <CommandGroup
+                    heading={tHardcodedUi.raw(
+                      'componentsCommandPalette.line1281JsxAttrHeadingRecentProjects',
                     )}
-
-
-                    {hasSessionActionResults && (
-                      <CommandGroup heading="Session" forceMount>
-                        {sessionActionItems.map((item) => (
-                          <CommandItem
-                            key={item.id}
-                            value={`${item.label} ${item.keywords}`}
-                            onSelect={() => goToPage(item.targetPage)}
-                          >
-                            {item.id === 'change-agent' ? (
-                              currentAgent ? <AgentMark slug={currentAgent.name} /> : <Bot className="size-4" />
-                            ) : (
-                              <Cpu className="size-4" />
-                            )}
-                            <span className="flex-1">{item.label}</span>
-                            <ChevronRight className="text-muted-foreground/30 size-3" />
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    )}
-
-                    {hasNavResults && (
-                      <CommandGroup heading="Navigation" forceMount>
-                        {filteredNavItems.map((item) => {
-                          const Icon = item.icon;
-                          const isToggleSidebar = item.id === 'toggle-sidebar';
-                          const isTogglePanelMode = item.id === 'toggle-panel-mode';
-                          const SidebarIcon = isToggleSidebar
-                            ? sidebarOpen
-                              ? PanelLeftClose
-                              : PanelLeftIcon
-                            : Icon;
-                          const displayLabel = isToggleSidebar
-                            ? sidebarOpen
-                              ? tHardcodedUi.raw('i18nComplete.text9da0bf42ad07')
-                              : tHardcodedUi.raw('i18nComplete.text2060803eeb71')
-                            : isTogglePanelMode
-                              ? panelMode === 'easy'
-                                ? tHardcodedUi.raw('i18nComplete.text5f7c8d97889a')
-                                : tHardcodedUi.raw('i18nComplete.text9b21dbb9a947')
-                              : item.label;
-                          const isActiveTheme =
-                            item.kind === 'theme' && activeInterfaceTheme === item.themeValue;
-                          const isActiveWallpaper =
-                            item.kind === 'wallpaper' && activeWallpaperId === item.wallpaperValue;
-                          const submenuPage = SUBMENU_PAGE_BY_ID[item.id];
-
-                          return (
-                            <CommandItem
-                              key={item.id}
-                              value={buildPaletteSearchText(item)}
-                              onSelect={() =>
-                                submenuPage ? goToPage(submenuPage) : handleRegistryItem(item)
-                              }
-                              disabled={item.id === 'new-session' && isCreating}
-                            >
-                              {item.id === 'new-session' && isCreating ? (
-                                <Loading className="text-muted-foreground size-4 shrink-0" />
-                              ) : item.kind === 'theme' && item.themeValue ? (
-                                // The same live palette preview the Appearance tab shows.
-                                <ThemeSwatch value={item.themeValue} choice={themeChoice} />
-                              ) : (
-                                <SidebarIcon className="size-4" />
-                              )}
-                              <span className="flex-1">{displayLabel}</span>
-                              {item.id === 'review-changes' && openChangeRequestCount > 0 && (
-                                <span className="text-muted-foreground/40 text-xs tabular-nums">
-                                  {openChangeRequestCount}
-                                </span>
-                              )}
-                              {item.shortcut && <CommandShortcut>{item.shortcut}</CommandShortcut>}
-                              {(isActiveTheme || isActiveWallpaper) && (
-                                <span className="text-primary/60 text-xs font-medium">
-                                  {tHardcodedUi.raw('i18nComplete.text92340695899b')}
-                                </span>
-                              )}
-                              {submenuPage && (
-                                <ChevronRight className="text-muted-foreground/30 size-3" />
-                              )}
-                            </CommandItem>
-                          );
-                        })}
-                      </CommandGroup>
-                    )}
-
-                    {/* One group per rail group, headings and order intact.
-                        Flattening them would strip the only thing that tells
-                        Workspace › General and Organization › General apart —
-                        the same reason `filterRailGroups` keeps the rail's
-                        groups through a search. */}
-                    {filteredSettingsGroups.map((group) => (
-                      <CommandGroup
-                        key={group.label}
-                        heading={`Preferences · ${group.label}`}
-                        forceMount
-                      >
-                        {group.items.map((item) => {
-                          const SettingsIcon = item.icon;
-                          const submenuPage = SETTINGS_TAB_SUBMENU_PAGE[item.tab];
-                          return (
-                            <CommandItem
-                              key={item.id}
-                              // `item.tab` is deliberately absent — an internal
-                              // slug, same class as the registry `id` dropped
-                              // from the Navigation rows above.
-                              value={sanitizeCmdkValue(
-                                `settings ${settingsPaletteSearchText(item)}`,
-                              )}
-                              onSelect={() =>
-                                submenuPage ? goToPage(submenuPage) : openSettingsTab(item.tab)
-                              }
-                            >
-                              <SettingsIcon className="size-4" />
-                              <span className="flex-1">{item.label}</span>
-                            </CommandItem>
-                          );
-                        })}
-                      </CommandGroup>
-                    ))}
-
-                    {hasSessionResults && (
-                      <CommandGroup heading={sessionsHeading} forceMount>
-                        {rootSessionResults.map((session) => (
-                          <CommandItem
-                            key={session.session_id}
-                            value={sanitizeCmdkValue(
-                              `session ${sessionName(session)} ${session.initiator?.label ?? ''} ${session.session_id}`,
-                            )}
-                            onSelect={() => handleSelectProjectSession(session)}
-                          >
-                            <MessageCircle className="size-4 shrink-0" />
-                            <span className="flex-1 truncate">{sessionName(session)}</span>
-                            <SessionSharedIcon session={session} />
-                            {session.session_id === params?.sessionId && (
-                              <Check className="text-primary h-3.5 w-3.5 shrink-0" />
-                            )}
-                            <span className="text-muted-foreground/40 shrink-0 text-xs tabular-nums">
+                    forceMount
+                  >
+                    {recentWorkspaces.map((row) => (
+                      <WorkspaceCommandItem
+                        key={row.workspace.project_id}
+                        row={row}
+                        onSelect={() => handleSelectWorkspace(row.workspace)}
+                        trailing={
+                          (row.workspace.last_opened_at || row.workspace.updated_at) && (
+                            <span className="text-muted-foreground/30 shrink-0 text-xs tabular-nums">
                               {formatRelativeTime(
-                                new Date(sessionLastActivityAt(session)).getTime(),
+                                new Date(
+                                  row.workspace.last_opened_at || row.workspace.updated_at,
+                                ).getTime(),
                               )}
                             </span>
-                          </CommandItem>
-                        ))}
-                        {firstChatResult && projectId && (
-                          <CommandItem
-                            value={sanitizeCmdkValue(`session ${firstChatTitle}`)}
-                            onSelect={() => {
-                              // nav-contract: prefetch-only — a cmdk row activated by keyboard.
-                              router.push(firstChatHref(projectId));
-                              close();
-                            }}
-                          >
-                            <MessageCircle className="size-4 shrink-0" />
-                            <span className="flex-1 truncate">{firstChatTitle}</span>
-                          </CommandItem>
-                        )}
-                      </CommandGroup>
-                    )}
-
-                    {hasMemoryResults && (
-                      <CommandGroup heading={tMemory('palette.heading')} forceMount>
-                        {rootMemoryResults.map(({ hit, href, place }) => (
-                          <CommandItem
-                            key={hit.page_id}
-                            // The server matched the body too; cmdk scores only `value`, so a
-                            // body-only hit would unmount. The value stays its selection identity.
-                            forceMount
-                            // Label plus curated keywords: the title, its layer, its summary.
-                            value={sanitizeCmdkValue(`memory ${hit.title} ${place} ${hit.summary}`)}
-                            onSelect={() => {
-                              router.push(href);
-                              close();
-                            }}
-                          >
-                            <SunDimIcon aria-hidden className="size-4 shrink-0" />
-                            <span className="flex-1 truncate">{hit.title}</span>
-                            <span className="text-muted-foreground max-w-40 shrink-0 truncate text-xs">{place}</span>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    )}
-
-                    {/* Shown whether or not a workspace is open. The old
-                        version returned no rows at all while one was, which
-                        is the entire time the palette is used. */}
-                    {hasWorkspaceResults && (
-                      <CommandGroup heading="Workspaces" forceMount>
-                        {rootWorkspaceRows.map((row) => (
-                          <WorkspaceCommandItem
-                            key={row.workspace.project_id}
-                            row={row}
-                            onSelect={() => handleSelectWorkspace(row.workspace)}
-                            trailing={
-                              (row.workspace.last_opened_at || row.workspace.updated_at) && (
-                                <span className="text-muted-foreground/40 shrink-0 text-xs tabular-nums">
-                                  {formatRelativeTime(
-                                    new Date(
-                                      row.workspace.last_opened_at || row.workspace.updated_at,
-                                    ).getTime(),
-                                  )}
-                                </span>
-                              )
-                            }
-                          />
-                        ))}
-                      </CommandGroup>
-                    )}
-
-                    {queryLongEnough && currentSessionId && (
-                      <CommandGroup
-                        heading={tHardcodedUi.raw(
-                          'componentsCommandPalette.line1437JsxAttrHeadingFileSearch',
-                        )}
-                        forceMount
-                      >
-                        <CommandItem
-                          value={sanitizeCmdkValue(
-                            `search files ${query.trim()} repo grep find open`,
-                          )}
-                          onSelect={() => goToPage('files', true)}
-                        >
-                          <span className="flex-1">
-                            {tHardcodedUi.raw(
-                              'componentsCommandPalette.line1444JsxTextSearchFilesFor',
-                            )}
-                            {query.trim()}
-                            {tHardcodedUi.raw('componentsCommandPalette.line1444JsxTextText')}
-                          </span>
-                          <Badge variant="kortix" size="sm">
-                            {tHardcodedUi.raw('i18nComplete.text071ca2227754')}
-                          </Badge>
-                          <ChevronRight className="text-muted-foreground/40 size-3" />
-                        </CommandItem>
-                      </CommandGroup>
-                    )}
-
-                    {rootCopyResults.length > 0 && (
-                      <CommandGroup heading={tPalette('copyTitle')} forceMount>
-                        {rootCopyResults.map((item) => (
-                          <CommandItem
-                            key={item.id}
-                            value={sanitizeCmdkValue(`copy-${item.id} ${item.keywords}`)}
-                            onSelect={() => void handleCopyValue(item)}
-                          >
-                            <Copy className="text-muted-foreground shrink-0" />
-                            <span className="shrink-0">
-                              {tPalette('copyAction', { label: item.label })}
-                            </span>
-                            <span className="text-muted-foreground min-w-0 flex-1 truncate text-right font-mono text-xs">
-                              {item.value}
-                            </span>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    )}
-
-                    {showNoResults && (
-                      // The "Search files" half of the hint points at a row
-                      // that only exists on a session — see the
-                      // `currentSessionId` guards above. Off a session it
-                      // named a control that was not on screen, so the
-                      // generic half is all that is offered there.
-                      <PaletteEmpty
-                        hint={
-                          currentSessionId
-                            ? tHardcodedUi.raw(
-                                'componentsCommandPalette.line1465JsxTextTrySearchFilesOrADifferentTerm',
-                              )
-                            : tHardcodedUi.raw('i18nComplete.textce18e358bf01')
+                          )
                         }
-                      >
-                        {tHardcodedUi.raw('componentsCommandPalette.line1462JsxTextNoResultsFor')}
-                        {query.trim()}
-                        {tHardcodedUi.raw('componentsCommandPalette.line1462JsxTextText')}
-                      </PaletteEmpty>
-                    )}
-                  </>
+                      />
+                    ))}
+                  </CommandGroup>
                 )}
               </>
             )}
 
-            {page === 'agents' && (
+            {hasQuery && (
               <>
-                {filteredAgents.length > 0 && (
-                  <CommandGroup heading="Agents" forceMount>
-                    {filteredAgents.map((agent) => {
-                      const isActive = currentAgent?.name === agent.name;
+                {/* Channels and DMs lead: with Channels on they are where work lives. */}
+                {rootSpaceResults.channels.length > 0 && projectId && (
+                  <CommandGroup heading={tSidebar('spaces.channels')} forceMount>
+                    {rootSpaceResults.channels.map((channel) => (
+                      <CommandItem
+                        key={channel.space_id}
+                        value={sanitizeCmdkValue(`channel ${channel.slug} ${channel.name}`)}
+                        onSelect={() => {
+                          router.push(uiRoutes().channel(projectId, channel.slug ?? ''));
+                          close();
+                        }}
+                      >
+                        <ChannelGlyph visibility={channel.visibility} className="size-4 shrink-0" />
+                        <span className="flex-1 truncate">{channel.slug}</span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
+
+
+                {hasSessionActionResults && (
+                  <CommandGroup heading="Session" forceMount>
+                    {sessionActionItems.map((item) => (
+                      <CommandItem
+                        key={item.id}
+                        value={`${item.label} ${item.keywords}`}
+                        onSelect={() => goToPage(item.targetPage)}
+                      >
+                        {item.id === 'change-agent' ? (
+                          currentAgent ? <AgentMark slug={currentAgent.name} /> : <Bot className="size-4" />
+                        ) : (
+                          <Cpu className="size-4" />
+                        )}
+                        <span className="flex-1">{item.label}</span>
+                        <ChevronRight className="text-muted-foreground/30 size-3" />
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
+
+                {hasNavResults && (
+                  <CommandGroup heading="Navigation" forceMount>
+                    {filteredNavItems.map((item) => {
+                      const Icon = item.icon;
+                      const isToggleSidebar = item.id === 'toggle-sidebar';
+                      const isTogglePanelMode = item.id === 'toggle-panel-mode';
+                      const SidebarIcon = isToggleSidebar
+                        ? sidebarOpen
+                          ? PanelLeftClose
+                          : PanelLeftIcon
+                        : Icon;
+                      const displayLabel = isToggleSidebar
+                        ? sidebarOpen
+                          ? tHardcodedUi.raw('i18nComplete.text9da0bf42ad07')
+                          : tHardcodedUi.raw('i18nComplete.text2060803eeb71')
+                        : isTogglePanelMode
+                          ? panelMode === 'easy'
+                            ? tHardcodedUi.raw('i18nComplete.text5f7c8d97889a')
+                            : tHardcodedUi.raw('i18nComplete.text9b21dbb9a947')
+                          : item.label;
+                      const isActiveTheme =
+                        item.kind === 'theme' && activeInterfaceTheme === item.themeValue;
+                      const isActiveWallpaper =
+                        item.kind === 'wallpaper' && activeWallpaperId === item.wallpaperValue;
+                      const submenuPage = SUBMENU_PAGE_BY_ID[item.id];
+
                       return (
                         <CommandItem
-                          key={agent.name}
-                          value={sanitizeCmdkValue(
-                            `agent ${agent.name} ${agent.description || ''}`,
-                          )}
-                          onSelect={() => handleSelectAgent(agent.name)}
+                          key={item.id}
+                          value={buildPaletteSearchText(item)}
+                          onSelect={() =>
+                            submenuPage ? goToPage(submenuPage) : handleRegistryItem(item)
+                          }
+                          disabled={item.id === 'new-session' && isCreating}
                         >
-                          {/* The agent's pixel mark, its face on every surface. */}
-                          <AgentMark slug={agent.name} size={21} />
-                          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-                            <span className="truncate text-sm font-medium">
-                              {capitalizeWords(agent.name)}
+                          {item.id === 'new-session' && isCreating ? (
+                            <Loading className="text-muted-foreground size-4 shrink-0" />
+                          ) : item.kind === 'theme' && item.themeValue ? (
+                            // The same live palette preview the Appearance tab shows.
+                            <ThemeSwatch value={item.themeValue} choice={themeChoice} />
+                          ) : (
+                            <SidebarIcon className="size-4" />
+                          )}
+                          <span className="flex-1">{displayLabel}</span>
+                          {item.id === 'review-changes' && openChangeRequestCount > 0 && (
+                            <span className="text-muted-foreground/40 text-xs tabular-nums">
+                              {openChangeRequestCount}
                             </span>
-                            {agent.description && (
-                              <span className="text-muted-foreground/50 truncate text-xs">
-                                {agent.description}
-                              </span>
-                            )}
-                          </div>
-                          {isActive && <Check className="text-primary h-3.5 w-3.5 shrink-0" />}
+                          )}
+                          {item.shortcut && <CommandShortcut>{item.shortcut}</CommandShortcut>}
+                          {(isActiveTheme || isActiveWallpaper) && (
+                            <span className="text-primary/60 text-xs font-medium">
+                              {tHardcodedUi.raw('i18nComplete.text92340695899b')}
+                            </span>
+                          )}
+                          {submenuPage && (
+                            <ChevronRight className="text-muted-foreground/30 size-3" />
+                          )}
                         </CommandItem>
                       );
                     })}
                   </CommandGroup>
                 )}
 
-                {filteredAgents.length === 0 && (
-                  <PaletteEmpty>
-                    {query
-                      ? tI18nComplete('text20caf3bcf39b', { value0: query })
-                      : tHardcodedUi.raw('i18nComplete.textda9108359944')}
-                  </PaletteEmpty>
-                )}
-              </>
-            )}
-
-            {page === 'models' && (
-              <>
-                {groupedModels.map((group) => (
+                {/* One group per rail group, headings and order intact.
+                    Flattening them would strip the only thing that tells
+                    Workspace › General and Organization › General apart —
+                    the same reason `filterRailGroups` keeps the rail's
+                    groups through a search. */}
+                {filteredSettingsGroups.map((group) => (
                   <CommandGroup
-                    key={group.providerID}
-                    heading={
-                      <span className="inline-flex items-center gap-2">
-                        {/* `xs`, not `small`: a group heading is one line of
-                            13px text, and the 32px tiled logo it used to carry
-                            was 2.5× its cap height — it read as a row of its
-                            own rather than a label on the rows below. */}
-                        <ProviderLogo providerID={group.providerID} size="xs" />
-                        {group.providerName}
-                      </span>
-                    }
+                    key={group.label}
+                    heading={`Preferences · ${group.label}`}
                     forceMount
                   >
-                    {group.models.map((model) => {
-                      const isActive =
-                        currentModelKey?.providerID === model.providerID &&
-                        currentModelKey?.modelID === model.modelID;
+                    {group.items.map((item) => {
+                      const SettingsIcon = item.icon;
+                      const submenuPage = SETTINGS_TAB_SUBMENU_PAGE[item.tab];
                       return (
                         <CommandItem
-                          key={`${model.providerID}:${model.modelID}`}
+                          key={item.id}
+                          // `item.tab` is deliberately absent — an internal
+                          // slug, same class as the registry `id` dropped
+                          // from the Navigation rows above.
                           value={sanitizeCmdkValue(
-                            `model ${model.providerName} ${model.modelName} ${model.modelID}`,
+                            `settings ${settingsPaletteSearchText(item)}`,
                           )}
-                          onSelect={() => handleSelectModel(model.providerID, model.modelID)}
+                          onSelect={() =>
+                            submenuPage ? goToPage(submenuPage) : openSettingsTab(item.tab)
+                          }
                         >
-                          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-                            <span className="truncate text-sm">{model.modelName}</span>
-                            {/* Only when it says something the name does not —
-                                see `modelIdAddsInformation`. Printed on every
-                                row, it was the display name again in
-                                kebab-case, and it doubled the height of a list
-                                that is scanned by name. */}
-                            {modelIdAddsInformation(model.modelName, model.modelID) && (
-                              <span className="text-muted-foreground/40 truncate font-mono text-xs">
-                                {model.modelID}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex shrink-0 items-center gap-1.5">
-                            {/* Icons, not word badges. Two `reasoning`/`vision`
-                                pills competed with the model name for the eye
-                                on every row that had them, and the palette is
-                                scanned by name. Same component the model
-                                catalog in Customize uses, so a capability
-                                looks the same wherever it is shown. */}
-                            <ModelCapabilityIcons
-                              reasoning={model.capabilities?.reasoning}
-                              toolCall={model.capabilities?.toolcall}
-                              vision={model.capabilities?.vision}
-                            />
-                            {isActive && <Check className="text-primary h-3.5 w-3.5" />}
-                          </div>
+                          <SettingsIcon className="size-4" />
+                          <span className="flex-1">{item.label}</span>
                         </CommandItem>
                       );
                     })}
                   </CommandGroup>
                 ))}
 
-                {visibleModels.length === 0 && (
-                  <PaletteEmpty>
-                    {query
-                      ? tI18nComplete('textfc89d36d845d', { value0: query })
-                      : tHardcodedUi.raw('i18nComplete.texta5a9895b0241')}
-                  </PaletteEmpty>
+                {hasSessionResults && (
+                  <CommandGroup heading={sessionsHeading} forceMount>
+                    {rootSessionResults.map((session) => (
+                      <CommandItem
+                        key={session.session_id}
+                        value={sanitizeCmdkValue(
+                          `session ${sessionName(session)} ${session.initiator?.label ?? ''} ${session.session_id}`,
+                        )}
+                        onSelect={() => handleSelectProjectSession(session)}
+                      >
+                        <MessageCircle className="size-4 shrink-0" />
+                        <span className="flex-1 truncate">{sessionName(session)}</span>
+                        <SessionSharedIcon session={session} />
+                        {session.session_id === params?.sessionId && (
+                          <Check className="text-primary h-3.5 w-3.5 shrink-0" />
+                        )}
+                        <span className="text-muted-foreground/40 shrink-0 text-xs tabular-nums">
+                          {formatRelativeTime(
+                            new Date(sessionLastActivityAt(session)).getTime(),
+                          )}
+                        </span>
+                      </CommandItem>
+                    ))}
+                    {firstChatResult && projectId && (
+                      <CommandItem
+                        value={sanitizeCmdkValue(`session ${firstChatTitle}`)}
+                        onSelect={() => {
+                          // nav-contract: prefetch-only — a cmdk row activated by keyboard.
+                          router.push(firstChatHref(projectId));
+                          close();
+                        }}
+                      >
+                        <MessageCircle className="size-4 shrink-0" />
+                        <span className="flex-1 truncate">{firstChatTitle}</span>
+                      </CommandItem>
+                    )}
+                  </CommandGroup>
                 )}
-              </>
-            )}
 
-            {page === 'files' && currentSessionId && (
-              <FileSearchPage query={query} onSelect={handleSelectFile} />
-            )}
+                {hasMemoryResults && (
+                  <CommandGroup heading={tMemory('palette.heading')} forceMount>
+                    {rootMemoryResults.map(({ hit, href, place }) => (
+                      <CommandItem
+                        key={hit.page_id}
+                        // The server matched the body too; cmdk scores only `value`, so a
+                        // body-only hit would unmount. The value stays its selection identity.
+                        forceMount
+                        // Label plus curated keywords: the title, its layer, its summary.
+                        value={sanitizeCmdkValue(`memory ${hit.title} ${place} ${hit.summary}`)}
+                        onSelect={() => {
+                          router.push(href);
+                          close();
+                        }}
+                      >
+                        <SunDimIcon aria-hidden className="size-4 shrink-0" />
+                        <span className="flex-1 truncate">{hit.title}</span>
+                        <span className="text-muted-foreground max-w-40 shrink-0 truncate text-xs">{place}</span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
 
-            {/* The dedicated directory: one flat list like the sidebar
-                switcher (a workspace is one account and its project), the
-                workspace you are in checked, then Create workspace and
-                Workspace settings — the switcher's two bottom actions. */}
-            {page === 'workspaces' && (
-              <>
-                {workspacePageRows.length > 0 ? (
-                  <CommandGroup heading={tWorkspaces('heading')} forceMount>
-                    {workspacePageRows.map((row) => (
+                {/* Shown whether or not a workspace is open. The old
+                    version returned no rows at all while one was, which
+                    is the entire time the palette is used. */}
+                {hasWorkspaceResults && (
+                  <CommandGroup heading="Workspaces" forceMount>
+                    {rootWorkspaceRows.map((row) => (
                       <WorkspaceCommandItem
                         key={row.workspace.project_id}
                         row={row}
                         onSelect={() => handleSelectWorkspace(row.workspace)}
                         trailing={
-                          row.isActive ? <Check className="text-foreground size-3.5 shrink-0" /> : null
+                          (row.workspace.last_opened_at || row.workspace.updated_at) && (
+                            <span className="text-muted-foreground/40 shrink-0 text-xs tabular-nums">
+                              {formatRelativeTime(
+                                new Date(
+                                  row.workspace.last_opened_at || row.workspace.updated_at,
+                                ).getTime(),
+                              )}
+                            </span>
+                          )
                         }
                       />
                     ))}
                   </CommandGroup>
-                ) : workspacesLoading ? (
-                  // "No workspaces yet" over a list that has not arrived is a
-                  // lie the sidebar already learned not to tell.
-                  <div className="flex justify-center py-8">
-                    <Loading className="text-muted-foreground size-4" />
-                  </div>
-                ) : (
-                  <PaletteEmpty>
-                    {query
-                      ? tI18nComplete('textbe27a86a69e5', { value0: query })
-                      : tWorkspaces('noMatches')}
+                )}
+
+                {queryLongEnough && currentSessionId && (
+                  <CommandGroup
+                    heading={tHardcodedUi.raw(
+                      'componentsCommandPalette.line1437JsxAttrHeadingFileSearch',
+                    )}
+                    forceMount
+                  >
+                    <CommandItem
+                      value={sanitizeCmdkValue(
+                        `search files ${query.trim()} repo grep find open`,
+                      )}
+                      onSelect={() => goToPage('files', true)}
+                    >
+                      <span className="flex-1">
+                        {tHardcodedUi.raw(
+                          'componentsCommandPalette.line1444JsxTextSearchFilesFor',
+                        )}
+                        {query.trim()}
+                        {tHardcodedUi.raw('componentsCommandPalette.line1444JsxTextText')}
+                      </span>
+                      <Badge variant="kortix" size="sm">
+                        {tHardcodedUi.raw('i18nComplete.text071ca2227754')}
+                      </Badge>
+                      <ChevronRight className="text-muted-foreground/40 size-3" />
+                    </CommandItem>
+                  </CommandGroup>
+                )}
+
+                {rootCopyResults.length > 0 && (
+                  <CommandGroup heading={tPalette('copyTitle')} forceMount>
+                    {rootCopyResults.map((item) => (
+                      <CommandItem
+                        key={item.id}
+                        value={sanitizeCmdkValue(`copy-${item.id} ${item.keywords}`)}
+                        onSelect={() => void handleCopyValue(item)}
+                      >
+                        <Copy className="text-muted-foreground shrink-0" />
+                        <span className="shrink-0">
+                          {tPalette('copyAction', { label: item.label })}
+                        </span>
+                        <span className="text-muted-foreground min-w-0 flex-1 truncate text-right font-mono text-xs">
+                          {item.value}
+                        </span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
+
+                {showNoResults && (
+                  // The "Search files" half of the hint points at a row
+                  // that only exists on a session — see the
+                  // `currentSessionId` guards above. Off a session it
+                  // named a control that was not on screen, so the
+                  // generic half is all that is offered there.
+                  <PaletteEmpty
+                    hint={
+                      currentSessionId
+                        ? tHardcodedUi.raw(
+                            'componentsCommandPalette.line1465JsxTextTrySearchFilesOrADifferentTerm',
+                          )
+                        : tHardcodedUi.raw('i18nComplete.textce18e358bf01')
+                    }
+                  >
+                    {tHardcodedUi.raw('componentsCommandPalette.line1462JsxTextNoResultsFor')}
+                    {query.trim()}
+                    {tHardcodedUi.raw('componentsCommandPalette.line1462JsxTextText')}
                   </PaletteEmpty>
                 )}
-                <CommandGroup forceMount>
-                  {canCreateNewWorkspace ? (
-                    <CommandItem
-                      value={sanitizeCmdkValue(`create workspace new ${tWorkspaces('create')}`)}
-                      onSelect={() => {
-                        // nav-contract: prefetch-only — a cmdk row activated by keyboard; the 'workspaces' page effect warms it.
-                        router.push('/workspaces/new');
-                        close();
-                      }}
-                    >
-                      <PlusIcon className="text-muted-foreground size-4 shrink-0" />
-                      <span className="flex-1 truncate">{tWorkspaces('create')}</span>
-                    </CommandItem>
-                  ) : null}
-                  {projectId ? (
-                    <CommandItem
-                      value={sanitizeCmdkValue(`workspace settings ${tWorkspaces('settings')}`)}
-                      onSelect={() => {
-                        // nav-contract: prefetch-only — a cmdk row activated by keyboard; the 'workspaces' page effect warms it.
-                        router.push(`/workspaces/${projectId}/admin`);
-                        close();
-                      }}
-                    >
-                      <CogOne className="text-muted-foreground size-4 shrink-0" />
-                      <span className="flex-1 truncate">{tWorkspaces('settings')}</span>
-                    </CommandItem>
-                  ) : null}
-                </CommandGroup>
               </>
             )}
+          </>
+        )}
 
-            {page === 'density' &&
-              (filteredDensityOptions.length > 0 ? (
-                <CommandGroup
-                  heading={tHardcodedUi.raw('i18nComplete.textd0fffb7fa940')}
-                  forceMount
-                >
-                  {filteredDensityOptions.map((option) => {
-                    // Minimal is one line, Normal is many — let the glyphs say so.
-                    const OptionIcon = option.id === 'minimal' ? Minus : TextAlignLeft;
-                    return (
-                      <CommandItem
-                        key={option.id}
-                        value={sanitizeCmdkValue(`density ${option.label}`)}
-                        onSelect={() => handleSelectDensity(option.id)}
-                      >
-                        <OptionIcon className="text-muted-foreground size-4 shrink-0" />
-                        <span className="shrink-0">{option.label}</span>
-                        <span className="text-muted-foreground/60 flex-1 truncate text-xs">
-                          {option.description}
-                        </span>
-                        {option.id === conversationDensity && (
-                          <Check className="text-primary h-3.5 w-3.5 shrink-0" />
-                        )}
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
-              ) : (
-                <PaletteEmpty>{tI18nComplete('textec0ea7563cde', { value0: query })}</PaletteEmpty>
-              ))}
-
-            {page === 'sessions' &&
-              (filteredProjectSessionsList.length > 0 ? (
-                <CommandGroup heading={sessionsHeading} forceMount>
-                  {filteredProjectSessionsList.map((session) => (
+        {page === 'agents' && (
+          <>
+            {filteredAgents.length > 0 && (
+              <CommandGroup heading="Agents" forceMount>
+                {filteredAgents.map((agent) => {
+                  const isActive = currentAgent?.name === agent.name;
+                  return (
                     <CommandItem
-                      key={session.session_id}
+                      key={agent.name}
                       value={sanitizeCmdkValue(
-                        `session ${sessionName(session)} ${session.initiator?.label ?? ''} ${session.session_id}`,
+                        `agent ${agent.name} ${agent.description || ''}`,
                       )}
-                      onSelect={() => handleSelectProjectSession(session)}
+                      onSelect={() => handleSelectAgent(agent.name)}
                     >
-                      <MessageCircle className="text-muted-foreground size-4 shrink-0" />
-                      <span className="flex-1 truncate">{sessionName(session)}</span>
-                      <SessionSharedIcon session={session} />
-                      <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-                        {formatRelativeTime(new Date(sessionLastActivityAt(session)).getTime())}
-                      </span>
-                      {session.session_id === params?.sessionId && (
-                        <Check className="text-primary h-3.5 w-3.5 shrink-0" />
-                      )}
+                      {/* The agent's pixel mark, its face on every surface. */}
+                      <AgentMark slug={agent.name} size={21} />
+                      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+                        <span className="truncate text-sm font-medium">
+                          {capitalizeWords(agent.name)}
+                        </span>
+                        {agent.description && (
+                          <span className="text-muted-foreground/50 truncate text-xs">
+                            {agent.description}
+                          </span>
+                        )}
+                      </div>
+                      {isActive && <Check className="text-primary h-3.5 w-3.5 shrink-0" />}
                     </CommandItem>
-                  ))}
-                </CommandGroup>
-              ) : projectSessionsPending ? (
-                // No list and no sidebar pages to stand in: loading, not
-                // "No sessions yet". Same frame as the workspaces page.
-                <div className="flex justify-center py-8">
-                  <Loading className="text-muted-foreground size-4" />
-                </div>
-              ) : (
-                <PaletteEmpty>
-                  {query
-                    ? tI18nComplete('text6e51f320662f', { value0: query })
-                    : tHardcodedUi.raw('i18nComplete.textf502267deff4')}
-                </PaletteEmpty>
-              ))}
-
-            {page === 'changes' && projectId && (
-              <ChangeRequestsPage
-                projectId={projectId}
-                query={query}
-                onSelect={handleSelectChangeRequest}
-              />
+                  );
+                })}
+              </CommandGroup>
             )}
 
-            {page === 'flags' && projectId && (
-              <FeatureFlagsPage
-                projectId={projectId}
-                query={query}
-                onNavigate={handleOpenFeatureFlagsSection}
-              />
+            {filteredAgents.length === 0 && (
+              <PaletteEmpty>
+                {query
+                  ? tI18nComplete('text20caf3bcf39b', { value0: query })
+                  : tHardcodedUi.raw('i18nComplete.textda9108359944')}
+              </PaletteEmpty>
             )}
-          </CommandList>
-        </FadedScrollArea>
+          </>
+        )}
 
-        <CommandFooter>
-          <div className="flex items-center gap-1">
-            <ArrowUp className="size-3" />
-            <ArrowDown className="size-3" />
-            <span>{tHardcodedUi.raw('i18nComplete.textd0cda6559bb3')}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <CornerDownLeft className="size-3" />
-            <span>{tHardcodedUi.raw('i18nComplete.textb1a36d25d963')}</span>
-          </div>
-          {page === 'files' && (
-            <div className="flex items-center justify-center gap-1">
-              <Kbd>{tHardcodedUi.raw('componentsCommandPalette.line1744JsxTextText')}</Kbd>
-              <span>
-                {tHardcodedUi.raw('componentsCommandPalette.line1745JsxTextContentSearch')}
-              </span>
-            </div>
-          )}
-          <div className="ml-auto flex items-center gap-4">
-            {totalSearchResults > 0 && (
-              <span className="tabular-nums">
-                {totalSearchResults} {tHardcodedUi.raw('i18nComplete.textf6a214f7a5fc')}
-                {totalSearchResults !== 1 ? 's' : ''}
-              </span>
+        {page === 'models' && (
+          <>
+            {groupedModels.map((group) => (
+              <CommandGroup
+                key={group.providerID}
+                heading={
+                  <span className="inline-flex items-center gap-2">
+                    {/* `xs`, not `small`: a group heading is one line of
+                        13px text, and the 32px tiled logo it used to carry
+                        was 2.5× its cap height — it read as a row of its
+                        own rather than a label on the rows below. */}
+                    <ProviderLogo providerID={group.providerID} size="xs" />
+                    {group.providerName}
+                  </span>
+                }
+                forceMount
+              >
+                {group.models.map((model) => {
+                  const isActive =
+                    currentModelKey?.providerID === model.providerID &&
+                    currentModelKey?.modelID === model.modelID;
+                  return (
+                    <CommandItem
+                      key={`${model.providerID}:${model.modelID}`}
+                      value={sanitizeCmdkValue(
+                        `model ${model.providerName} ${model.modelName} ${model.modelID}`,
+                      )}
+                      onSelect={() => handleSelectModel(model.providerID, model.modelID)}
+                    >
+                      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+                        <span className="truncate text-sm">{model.modelName}</span>
+                        {/* Only when it says something the name does not —
+                            see `modelIdAddsInformation`. Printed on every
+                            row, it was the display name again in
+                            kebab-case, and it doubled the height of a list
+                            that is scanned by name. */}
+                        {modelIdAddsInformation(model.modelName, model.modelID) && (
+                          <span className="text-muted-foreground/40 truncate font-mono text-xs">
+                            {model.modelID}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {/* Icons, not word badges. Two `reasoning`/`vision`
+                            pills competed with the model name for the eye
+                            on every row that had them, and the palette is
+                            scanned by name. Same component the model
+                            catalog in Customize uses, so a capability
+                            looks the same wherever it is shown. */}
+                        <ModelCapabilityIcons
+                          reasoning={model.capabilities?.reasoning}
+                          toolCall={model.capabilities?.toolcall}
+                          vision={model.capabilities?.vision}
+                        />
+                        {isActive && <Check className="text-primary h-3.5 w-3.5" />}
+                      </div>
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            ))}
+
+            {visibleModels.length === 0 && (
+              <PaletteEmpty>
+                {query
+                  ? tI18nComplete('textfc89d36d845d', { value0: query })
+                  : tHardcodedUi.raw('i18nComplete.texta5a9895b0241')}
+              </PaletteEmpty>
             )}
-            {page !== 'root' && (
-              <div className="flex items-center gap-1">
-                <Kbd>{tI18nComplete.raw('text177b7cb06867')}</Kbd>
-                <span>{tI18nComplete.raw('text3c482346f375')}</span>
+          </>
+        )}
+
+        {page === 'files' && currentSessionId && (
+          <FileSearchPage query={query} onSelect={handleSelectFile} />
+        )}
+
+        {/* The dedicated directory: one flat list like the sidebar
+            switcher (a workspace is one account and its project), the
+            workspace you are in checked, then Create workspace and
+            Workspace settings — the switcher's two bottom actions. */}
+        {page === 'workspaces' && (
+          <>
+            {workspacePageRows.length > 0 ? (
+              <CommandGroup heading={tWorkspaces('heading')} forceMount>
+                {workspacePageRows.map((row) => (
+                  <WorkspaceCommandItem
+                    key={row.workspace.project_id}
+                    row={row}
+                    onSelect={() => handleSelectWorkspace(row.workspace)}
+                    trailing={
+                      row.isActive ? <Check className="text-foreground size-3.5 shrink-0" /> : null
+                    }
+                  />
+                ))}
+              </CommandGroup>
+            ) : workspacesLoading ? (
+              // "No workspaces yet" over a list that has not arrived is a
+              // lie the sidebar already learned not to tell.
+              <div className="flex justify-center py-8">
+                <Loading className="text-muted-foreground size-4" />
               </div>
+            ) : (
+              <PaletteEmpty>
+                {query
+                  ? tI18nComplete('textbe27a86a69e5', { value0: query })
+                  : tWorkspaces('noMatches')}
+              </PaletteEmpty>
             )}
-          </div>
-        </CommandFooter>
-      </CommandDialog>
+            <CommandGroup forceMount>
+              {canCreateNewWorkspace ? (
+                <CommandItem
+                  value={sanitizeCmdkValue(`create workspace new ${tWorkspaces('create')}`)}
+                  onSelect={() => {
+                    // nav-contract: prefetch-only — a cmdk row activated by keyboard; the 'workspaces' page effect warms it.
+                    router.push('/workspaces/new');
+                    close();
+                  }}
+                >
+                  <PlusIcon className="text-muted-foreground size-4 shrink-0" />
+                  <span className="flex-1 truncate">{tWorkspaces('create')}</span>
+                </CommandItem>
+              ) : null}
+              {projectId ? (
+                <CommandItem
+                  value={sanitizeCmdkValue(`workspace settings ${tWorkspaces('settings')}`)}
+                  onSelect={() => {
+                    // nav-contract: prefetch-only — a cmdk row activated by keyboard; the 'workspaces' page effect warms it.
+                    router.push(`/workspaces/${projectId}/admin`);
+                    close();
+                  }}
+                >
+                  <CogOne className="text-muted-foreground size-4 shrink-0" />
+                  <span className="flex-1 truncate">{tWorkspaces('settings')}</span>
+                </CommandItem>
+              ) : null}
+            </CommandGroup>
+          </>
+        )}
+
+        {page === 'density' &&
+          (filteredDensityOptions.length > 0 ? (
+            <CommandGroup
+              heading={tHardcodedUi.raw('i18nComplete.textd0fffb7fa940')}
+              forceMount
+            >
+              {filteredDensityOptions.map((option) => {
+                // Minimal is one line, Normal is many — let the glyphs say so.
+                const OptionIcon = option.id === 'minimal' ? Minus : TextAlignLeft;
+                return (
+                  <CommandItem
+                    key={option.id}
+                    value={sanitizeCmdkValue(`density ${option.label}`)}
+                    onSelect={() => handleSelectDensity(option.id)}
+                  >
+                    <OptionIcon className="text-muted-foreground size-4 shrink-0" />
+                    <span className="shrink-0">{option.label}</span>
+                    <span className="text-muted-foreground/60 flex-1 truncate text-xs">
+                      {option.description}
+                    </span>
+                    {option.id === conversationDensity && (
+                      <Check className="text-primary h-3.5 w-3.5 shrink-0" />
+                    )}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          ) : (
+            <PaletteEmpty>{tI18nComplete('textec0ea7563cde', { value0: query })}</PaletteEmpty>
+          ))}
+
+        {page === 'sessions' &&
+          (filteredProjectSessionsList.length > 0 ? (
+            <CommandGroup heading={sessionsHeading} forceMount>
+              {filteredProjectSessionsList.map((session) => (
+                <CommandItem
+                  key={session.session_id}
+                  value={sanitizeCmdkValue(
+                    `session ${sessionName(session)} ${session.initiator?.label ?? ''} ${session.session_id}`,
+                  )}
+                  onSelect={() => handleSelectProjectSession(session)}
+                >
+                  <MessageCircle className="text-muted-foreground size-4 shrink-0" />
+                  <span className="flex-1 truncate">{sessionName(session)}</span>
+                  <SessionSharedIcon session={session} />
+                  <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
+                    {formatRelativeTime(new Date(sessionLastActivityAt(session)).getTime())}
+                  </span>
+                  {session.session_id === params?.sessionId && (
+                    <Check className="text-primary h-3.5 w-3.5 shrink-0" />
+                  )}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          ) : projectSessionsPending ? (
+            // No list and no sidebar pages to stand in: loading, not
+            // "No sessions yet". Same frame as the workspaces page.
+            <div className="flex justify-center py-8">
+              <Loading className="text-muted-foreground size-4" />
+            </div>
+          ) : (
+            <PaletteEmpty>
+              {query
+                ? tI18nComplete('text6e51f320662f', { value0: query })
+                : tHardcodedUi.raw('i18nComplete.textf502267deff4')}
+            </PaletteEmpty>
+          ))}
+
+        {page === 'changes' && projectId && (
+          <ChangeRequestsPage
+            projectId={projectId}
+            query={query}
+            onSelect={handleSelectChangeRequest}
+          />
+        )}
+
+        {page === 'flags' && projectId && (
+          <FeatureFlagsPage
+            projectId={projectId}
+            query={query}
+            onNavigate={handleOpenFeatureFlagsSection}
+          />
+        )}
+      </CommandPaletteShell>
 
       {currentSessionId && (
         <>

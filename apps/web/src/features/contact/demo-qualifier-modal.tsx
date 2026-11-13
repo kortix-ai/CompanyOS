@@ -125,7 +125,10 @@ function DemoHeader({ step }: { step?: 0 | 1 }) {
           {t('meetingTitle')}
         </span>
         <ModalClose asChild>
-          <Button variant="ghost" size="icon-base" className="-mr-2 shrink-0">
+          <Button
+                variant="ghost"
+                size="sm"
+                iconOnly className="shrink-0 text-muted-foreground hover:text-foreground">
             <Close className="size-4 stroke-1" />
             <span className="sr-only">{t('close')}</span>
           </Button>
@@ -435,7 +438,7 @@ export function DemoQualifierModal({
           >
             <DemoHeader step={0} />
 
-            <ModalHeader className="gap-1.5 px-6 pt-6">
+            <ModalHeader className="mt-6 gap-1.5 px-6">
               <ModalTitle className="text-lg font-medium text-balance">
                 {title ?? t('formTitle')}
               </ModalTitle>
@@ -610,7 +613,7 @@ export function DemoQualifierModal({
         >
           <DemoHeader />
 
-          <ModalHeader className="gap-1.5 px-6 pt-6">
+          <ModalHeader className="mt-6 gap-1.5 px-6">
             <ModalTitle className="text-lg font-medium text-balance">
               {tI18nHardcoded.raw(
                 'autoFeaturesContactDemoQualifierModalJsxTextRequestReceivedab5bf6e1',

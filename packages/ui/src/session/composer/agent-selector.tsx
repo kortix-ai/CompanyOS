@@ -328,9 +328,10 @@ export function AgentSelector({
       <Button
         type="button"
         variant="ghost"
-        size="sm"
+        // md (28px, the ladder's 8px corner): the composer toolbar's height.
+        size="md"
         aria-label={compact ? `${t('selectAgent')}: ${displayName}` : t('selectAgent')}
-        className={cn('text-muted-foreground rounded-lg hit-area-y-3', compact && 'px-1.5')}
+        className={cn('text-muted-foreground', compact && 'px-1.5')}
       >
         {compact ? (
           // The mark alone: the name is the tooltip and the menu's checked row.

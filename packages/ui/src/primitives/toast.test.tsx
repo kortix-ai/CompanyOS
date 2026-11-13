@@ -325,8 +325,8 @@ describe("toast options — actions, entity, compact", () => {
       meta: "4m 12s",
     });
     const html = lastMarkup();
-    expect(html).toContain(">View</button>");
-    expect(html).toContain(">Copy link</button>");
+    expect(html).toContain("><span>View</span></button>");
+    expect(html).toContain("><span>Copy link</span></button>");
     expect(html).toContain("text-kortix-blue");
     expect(html).toContain(">4m 12s</span>");
   });
@@ -389,7 +389,7 @@ describe("undoToast", () => {
     // text-link action "Open session" uses.
     expect(html).toContain(">Session archived</p>");
     expect(html).toMatch(
-      /<button[^>]*hover:bg-kortix-blue\/15[^>]*>Undo<\/button>/,
+      /<button[^>]*hover:bg-kortix-blue\/15[^>]*><span>Undo<\/span><\/button>/,
     );
     expect(html).toContain('aria-label="Close notification"');
   });

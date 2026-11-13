@@ -141,7 +141,7 @@ function ProviderModalBody({
           the one page-level control on the right. `pr-11` is the modal's close
           button — `absolute top-3 right-3` at `size-8`, so 44px of the right
           edge is spoken for and the picker has to stop short of it. */}
-      <ModalHeader className="shrink-0 gap-0 px-5 pt-4 pr-64">
+      <ModalHeader className="mt-4 shrink-0 gap-0 px-5 pr-64">
         <ModalTitle className="text-base leading-8 font-medium">{MODELS_PAGE_TITLE}</ModalTitle>
         <ModalDescription>{MODELS_PAGE_DESCRIPTION}</ModalDescription>
       </ModalHeader>

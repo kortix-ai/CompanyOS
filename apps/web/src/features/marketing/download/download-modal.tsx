@@ -37,7 +37,7 @@ export function DownloadModal({
         variant="base"
         animation="none"
         overlayClassName="data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-(--duration-moderate)"
-        className="bg-background data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 inset-0 h-dvh max-h-none w-screen max-w-none space-y-0 rounded-none! border-0 duration-(--duration-moderate) lg:top-0 lg:left-0 lg:block lg:h-dvh lg:max-w-none lg:translate-x-0 lg:translate-y-0"
+        className="bg-background data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 inset-0 h-dvh max-h-none w-screen max-w-none space-y-0 rounded-none! border-0 duration-(--duration-moderate) top-0 left-0 block translate-x-0 translate-y-0"
         closeClassName="size-10 rounded-full"
       >
         <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col justify-center px-6 py-16">

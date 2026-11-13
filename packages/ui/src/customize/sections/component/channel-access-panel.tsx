@@ -352,7 +352,7 @@ function AddByIdField({ projectId, platform }: { projectId: string; platform: Ch
         <div className="flex gap-2">
           <Input
             id={inputId}
-            size="sm"
+            size="md"
             inputMode={idInputMode}
             autoComplete="off"
             placeholder={idPlaceholder}

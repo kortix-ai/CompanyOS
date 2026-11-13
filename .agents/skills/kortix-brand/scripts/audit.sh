@@ -287,11 +287,13 @@ scan "Press scale off the ladder" \
   'buttons are active:scale-[0.96]. Full-width rows are active:scale-[0.998]. A form field never scales (trigger-variants.ts keeps 0.98 on the borderless toolbar trigger only)' \
   all '(/trigger-variants\.)'
 
-# D4a: menus, selects, popovers, tooltips, submenus and the command palette
-# open and close with no animation. The palette and menu primitives pin this.
-scan_files "Animation on an instant floating panel" \
+# D44 (supersedes D4a): floating panels open and close with ONE recipe,
+# FLOATING_PANEL_MOTION / SELECT_PANEL_MOTION in menu-recipe.ts (200ms,
+# ease-in-out, scale + fade from the trigger). A hand-written keyframe
+# animation on one of them is drift from that recipe.
+scan_files "Hand-written motion on a floating panel" \
   '\banimate-in\b|\bfade-(in|out)\b|\bzoom-(in|out)\b|\bslide-in-from|\bslide-out-to|data-\[state=(open|closed)\]:(animate|fade|zoom|slide)' \
-  'menus, selects, popovers, tooltips and the palette have no enter or exit motion (menu-recipe.ts). Only hover-card, modals, sheets and toasts animate' \
+  'menus, selects, popovers and tooltips take FLOATING_PANEL_MOTION or SELECT_PANEL_MOTION from menu-recipe.ts, never their own keyframes' \
   '/(dropdown-menu|select|popover|tooltip|context-menu)\.tsx'
 
 if [ "$SUMMARY" -eq 1 ]; then
@@ -303,7 +305,7 @@ printf '\033[2mRules the audit cannot check. Verify by hand:\033[0m\n'
 printf '\033[2m  · frequency counted before animating (constant-use = no animation)\033[0m\n'
 printf '\033[2m  · keyboard-driven interactions are not animated\033[0m\n'
 printf '\033[2m  · every animation ships a prefers-reduced-motion variant\033[0m\n'
-printf '\033[2m  · hover-card is the only animated floating panel; modals, sheets, toasts are 200-300ms\033[0m\n'
+printf '\033[2m  · floating panels open with FLOATING_PANEL_MOTION (200ms); modals, sheets, toasts are 200-300ms\033[0m\n'
 printf '\033[2m  · no stagger in product UI; one moving thing at a time\033[0m\n'
 printf '\033[2m  · a nested rounded child is concentric (inner = outer - inset), else flush\033[0m\n'
 printf '\033[2m  · a p-[2px] or [1px] bracket has a comment stating the whole-pixel arithmetic\033[0m\n'

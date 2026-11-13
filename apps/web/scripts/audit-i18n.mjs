@@ -212,15 +212,10 @@ const ignoredPathParts = [
   // the English card text the landing scrolls to, like the command palette
   // registry (see the file's header, #12077).
   '/packages/ui/src/workspace/admin/settings-search.ts',
-  // English-only copy of the design-system guidance rebuild (#12031): demo
-  // fixtures and section titles of the /design-system catalog. Exact files, so
-  // the rest of the tree stays audited. Move the copy into design-system keys
-  // and delete each line when the sections are translated.
-  '/src/app/[locale]/(public)/(marketing)/design-system/page.tsx',
-  '/src/app/[locale]/(public)/(marketing)/design-system/states-section.tsx',
-  '/src/app/[locale]/(public)/(marketing)/design-system/interaction-section.tsx',
-  '/src/app/[locale]/(public)/(marketing)/design-system/card-section.tsx',
-  '/src/app/[locale]/(public)/(marketing)/design-system/token-map-section.tsx',
+  // English-only copy of the /design-system catalog (#12031, D43): a
+  // no-index internal reference (robots: noindex), demo fixtures and spec
+  // tables. The whole route, and only that route, is exempt.
+  '/src/app/[locale]/(public)/design-system/',
 ];
 
 const ignoredFilePattern = /\.(?:test|spec)\.[cm]?[jt]sx?$/;
@@ -973,10 +968,6 @@ function scanFile(file) {
       const coveredWallpaperDownload =
         file === path.join(srcDir, 'lib/wallpaper-downloads.ts') &&
         localizedDesignSystemText.has(node.text);
-      const coveredDesignToken =
-        file === path.join(srcDir, 'app/[locale]/(public)/(marketing)/design-system/page.tsx') &&
-        catalogRoot === 'SHADOW_SCALE' &&
-        /^shadow-/.test(node.text);
       const coveredLocalizedSourceCatalog =
         (file === path.join(srcDir, 'features/marketplace/marketplace-meta.tsx') &&
           ['TYPE_META', 'TYPE_FILTERS'].includes(catalogRoot)) ||
@@ -1188,7 +1179,6 @@ function scanFile(file) {
         !coveredSnapshotsFallbackCopy &&
         !coveredPublicMetadata &&
         !coveredWallpaperDownload &&
-        !coveredDesignToken &&
         !coveredLocalizedSourceCatalog &&
         !coveredPresentationCatalog &&
         !coveredLocalizedLeafCatalog &&

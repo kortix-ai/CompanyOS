@@ -115,7 +115,6 @@ function CaptureAuthorize() {
             <FieldLabel htmlFor="capture-user-code">{t('codeLabel')}</FieldLabel>
             <Input
               id="capture-user-code"
-              size="md"
               autoFocus
               autoComplete="off"
               value={typedCode}

@@ -84,7 +84,7 @@ icon-only control; the info icon is for a sentence about a labelled thing. —
 *Why:* the hover card is the one animated floating panel (motion.md, D4a), it
 opens from its trigger, and it costs no line until asked. — *Where:* app. —
 *When silent:* `InfoHint` in
-`apps/web/src/app/[locale]/(public)/(marketing)/design-system/spec.tsx` is the
+`apps/web/src/app/[locale]/(public)/design-system/spec.tsx` is the
 reference composition. In `packages/ui` compose `HoverCard` + `HoverCardTrigger
 asChild` + a `<button aria-label>` + `HoverCardContent`. Rendered at
 `/design-system#interaction-translate` ("Explain").

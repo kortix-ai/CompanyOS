@@ -118,8 +118,8 @@ describe('AK01 — Add key becomes a field on the row', () => {
   });
 
   test('Save stays off until there is a value', () => {
-    expect(field()).toMatch(/<button[^>]*disabled=""[^>]*>Save<\/button>/);
-    expect(field({ value: 'AIza-test' })).not.toMatch(/<button[^>]*disabled=""[^>]*>Save<\/button>/);
+    expect(field()).toMatch(/<button[^>]*disabled=""[^>]*><span>Save<\/span><\/button>/);
+    expect(field({ value: 'AIza-test' })).not.toMatch(/<button[^>]*disabled=""[^>]*><span>Save<\/span><\/button>/);
   });
 
   test('while saving: a spinner in Save, the field and × locked', () => {

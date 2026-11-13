@@ -73,21 +73,21 @@
     --background: 0 0% 4.3%; /* oklch(15% 0 0) */
     --pane: 0 0% 4.7%; /* oklch(0.1543 0 0) */
     --surface: 0 0% 7.8%; /* oklch(0.1913 0 0) */
-    --foreground: 0 0% 100%; /* oklch(1 0 0) */
+    --foreground: 0 0% 94.8%; /* oklch(0.96 0 0) */
     --foreground-strong: var(--foreground);
     --foreground-weak: var(--muted-foreground);
     --card: 0 0% 7.8%; /* oklch(0.1913 0 0) */
-    --card-foreground: 0 0% 100%; /* oklch(1 0 0) */
+    --card-foreground: 0 0% 94.8%; /* oklch(0.96 0 0) */
     --popover: 0 0% 7.8%; /* oklch(0.1913 0 0) */
-    --popover-foreground: 0 0% 100%; /* oklch(1 0 0) */
-    --primary: 0 0% 100%; /* oklch(1 0 0) */
+    --popover-foreground: 0 0% 94.8%; /* oklch(0.96 0 0) */
+    --primary: 0 0% 94.8%; /* oklch(0.96 0 0) */
     --primary-foreground: 0 0% 3.5%; /* oklch(0.1398 0 0) */
     --secondary: 0 0% 11%; /* oklch(0.2264 0 0) */
-    --secondary-foreground: 0 0% 100%; /* oklch(1 0 0) */
+    --secondary-foreground: 0 0% 94.8%; /* oklch(0.96 0 0) */
     --muted: 0 0% 11%; /* oklch(0.2264 0 0) */
-    --muted-foreground: 0 0% 60%; /* oklch(0.683 0 0) */
+    --muted-foreground: 0 0% 71.8%; /* oklch(0.78 0 0) */
     --accent: 0 0% 7.8%; /* oklch(0.1913 0 0) */
-    --accent-foreground: 0 0% 100%; /* oklch(1 0 0) */
+    --accent-foreground: 0 0% 94.8%; /* oklch(0.96 0 0) */
     --destructive: 358.8 100% 69.6%; /* oklch(0.7022 0.1892 22.2279) */
     --destructive-foreground: 0 0% 98%; /* oklch(0.9851 0 0) */
     --border: 0 0% 14.9%; /* oklch(0.2686 0 0) */
@@ -98,11 +98,11 @@
     --focus-ring: var(--ring);
     --sidebar: 0 0% 7.8%; /* oklch(0.1913 0 0) */
     --chrome-background: var(--sidebar);
-    --sidebar-foreground: 0 0% 100%; /* oklch(1 0 0) */
+    --sidebar-foreground: 0 0% 94.8%; /* oklch(0.96 0 0) */
     --sidebar-primary: var(--ring);
     --sidebar-primary-foreground: 0 0% 100%; /* oklch(1 0 0) */
     --sidebar-accent: 0 0% 11%; /* oklch(0.2264 0 0) */
-    --sidebar-accent-foreground: 0 0% 100%; /* oklch(1 0 0) */
+    --sidebar-accent-foreground: 0 0% 94.8%; /* oklch(0.96 0 0) */
     --sidebar-border: 0 0% 10.2%; /* oklch(0.2178 0 0) */
     --sidebar-ring: var(--ring);
     --kortix-base: var(--ring);

@@ -22,6 +22,7 @@
     "semantic": {
       "background": { "light": "oklch(1 0 0)", "dark": "oklch(15% 0 0)", "hex": ["#ffffff", "#0b0b0b"], "ramp": "canvas", "utility": "bg-background", "mobile": true, "use": "The page itself." },
       "pane": { "light": "oklch(1 0 0)", "dark": "oklch(0.1543 0 0)", "hex": ["#ffffff", "#0c0c0c"], "ramp": "base", "utility": "bg-pane", "mobile": true, "use": "Content pane inside the app shell." },
+      "frame": { "light": "oklch(0.9672 0 0)", "dark": "oklch(0.12 0 0)", "hex": ["#f4f4f4", "#060606"], "ramp": "frame", "utility": "bg-frame", "mobile": false, "use": "The recessed app frame behind a lifted bg-popover sheet (D48): 4 to 5 points of perceived lightness under the sheet in both themes. Today only the /design-system frame. Controls on it are lifted: Button outline with bg-popover, never secondary." },
       "surface": {
         "light": "oklch(0.9911 0 0)",
         "dark": "oklch(0.1913 0 0)",
@@ -31,7 +32,7 @@
         "mobile": true,
         "use": "Full-bleed shell pane that stands in for the page (settings at side=fullscreen). Never a card, row or panel."
       },
-      "foreground": { "light": "oklch(0.2393 0 0)", "dark": "oklch(1 0 0)", "hex": ["#1f1f1f", "#ffffff"], "ramp": "ink", "utility": "text-foreground", "mobile": true, "use": "Primary text." },
+      "foreground": { "light": "oklch(0.2393 0 0)", "dark": "oklch(0.96 0 0)", "hex": ["#1f1f1f", "#f2f2f2"], "ramp": "ink", "utility": "text-foreground", "mobile": true, "use": "Primary text." },
       "foreground-strong": { "ref": "foreground", "utility": "text-foreground-strong", "mobile": true, "use": "Alias for title-weight text." },
       "foreground-weak": { "ref": "muted-foreground", "utility": "text-foreground-weak", "mobile": true, "use": "Alias for description-weight text." },
       "card": {
@@ -43,7 +44,7 @@
         "mobile": true,
         "use": "Washed lifted region. Not the panel default (that is popover)."
       },
-      "card-foreground": { "light": "oklch(0.2393 0 0)", "dark": "oklch(1 0 0)", "hex": ["#1f1f1f", "#ffffff"], "ramp": "ink", "utility": "text-card-foreground", "mobile": true },
+      "card-foreground": { "light": "oklch(0.2393 0 0)", "dark": "oklch(0.96 0 0)", "hex": ["#1f1f1f", "#f2f2f2"], "ramp": "ink", "utility": "text-card-foreground", "mobile": true },
       "popover": {
         "light": "oklch(1 0 0)",
         "dark": "oklch(0.1913 0 0)",
@@ -53,24 +54,24 @@
         "mobile": true,
         "use": "Panels, rows, overlays: the default panel fill. Floating use pairs with border + shadow."
       },
-      "popover-foreground": { "light": "oklch(0.2393 0 0)", "dark": "oklch(1 0 0)", "hex": ["#1f1f1f", "#ffffff"], "ramp": "ink", "utility": "text-popover-foreground", "mobile": true },
+      "popover-foreground": { "light": "oklch(0.2393 0 0)", "dark": "oklch(0.96 0 0)", "hex": ["#1f1f1f", "#f2f2f2"], "ramp": "ink", "utility": "text-popover-foreground", "mobile": true },
       "primary": {
         "light": "oklch(0.2393 0 0)",
-        "dark": "oklch(1 0 0)",
-        "hex": ["#1f1f1f", "#ffffff"],
+        "dark": "oklch(0.96 0 0)",
+        "hex": ["#1f1f1f", "#f2f2f2"],
         "ramp": "ink",
         "utility": "bg-primary",
         "mobile": true,
-        "use": "Black (light) / white (dark) pill CTA."
+        "use": "The ink as a fill: black (light) / off-white (dark). Same value as foreground in both themes (D47)."
       },
       "primary-foreground": { "light": "oklch(1 0 0)", "dark": "oklch(0.1398 0 0)", "hex": ["#ffffff", "#090909"], "utility": "text-primary-foreground", "mobile": true },
       "secondary": { "light": "oklch(0.9461 0 0)", "dark": "oklch(0.2264 0 0)", "hex": ["#ededed", "#1c1c1c"], "ramp": "surface-2", "utility": "bg-secondary", "mobile": true, "use": "Inset controls, chips." },
-      "secondary-foreground": { "light": "oklch(0.2393 0 0)", "dark": "oklch(1 0 0)", "hex": ["#1f1f1f", "#ffffff"], "ramp": "ink", "utility": "text-secondary-foreground", "mobile": true },
+      "secondary-foreground": { "light": "oklch(0.2393 0 0)", "dark": "oklch(0.96 0 0)", "hex": ["#1f1f1f", "#f2f2f2"], "ramp": "ink", "utility": "text-secondary-foreground", "mobile": true },
       "muted": { "light": "oklch(0.9461 0 0)", "dark": "oklch(0.2264 0 0)", "hex": ["#ededed", "#1c1c1c"], "ramp": "surface-2", "utility": "bg-muted", "mobile": true },
       "muted-foreground": {
         "light": "oklch(0.5103 0 0)",
-        "dark": "oklch(0.683 0 0)",
-        "hex": ["#666666", "#999999"],
+        "dark": "oklch(0.78 0 0)",
+        "hex": ["#666666", "#b7b7b7"],
         "ramp": "ink-muted",
         "utility": "text-muted-foreground",
         "mobile": true,
@@ -85,7 +86,7 @@
         "mobile": true,
         "use": "Solid hover surface. Not a hue: kortix-* are the hues."
       },
-      "accent-foreground": { "light": "oklch(0.2393 0 0)", "dark": "oklch(1 0 0)", "hex": ["#1f1f1f", "#ffffff"], "ramp": "ink", "utility": "text-accent-foreground", "mobile": true },
+      "accent-foreground": { "light": "oklch(0.2393 0 0)", "dark": "oklch(0.96 0 0)", "hex": ["#1f1f1f", "#f2f2f2"], "ramp": "ink", "utility": "text-accent-foreground", "mobile": true },
       "destructive": {
         "light": "oklch(0.583 0.2387 28.4765)",
         "dark": "oklch(0.7022 0.1892 22.2279)",
@@ -126,7 +127,7 @@
         "mobile": true,
         "mobile_aliases": ["chrome-background"]
       },
-      "sidebar-foreground": { "light": "oklch(0.2393 0 0)", "dark": "oklch(1 0 0)", "hex": ["#1f1f1f", "#ffffff"], "ramp": "ink", "utility": "text-sidebar-foreground", "mobile": true },
+      "sidebar-foreground": { "light": "oklch(0.2393 0 0)", "dark": "oklch(0.96 0 0)", "hex": ["#1f1f1f", "#f2f2f2"], "ramp": "ink", "utility": "text-sidebar-foreground", "mobile": true },
       "sidebar-primary": {
         "ref": "ring",
         "utility": "bg-sidebar-primary",
@@ -135,7 +136,7 @@
       },
       "sidebar-primary-foreground": { "light": "oklch(1 0 0)", "dark": "oklch(1 0 0)", "hex": ["#ffffff", "#ffffff"], "utility": "text-sidebar-primary-foreground", "mobile": true },
       "sidebar-accent": { "light": "oklch(0.9461 0 0)", "dark": "oklch(0.2264 0 0)", "hex": ["#ededed", "#1c1c1c"], "ramp": "surface-2", "utility": "bg-sidebar-accent", "mobile": true },
-      "sidebar-accent-foreground": { "light": "oklch(0.2393 0 0)", "dark": "oklch(1 0 0)", "hex": ["#1f1f1f", "#ffffff"], "ramp": "ink", "utility": "text-sidebar-accent-foreground", "mobile": true },
+      "sidebar-accent-foreground": { "light": "oklch(0.2393 0 0)", "dark": "oklch(0.96 0 0)", "hex": ["#1f1f1f", "#f2f2f2"], "ramp": "ink", "utility": "text-sidebar-accent-foreground", "mobile": true },
       "sidebar-row": {
         "light": { "ref": "card" },
         "dark": { "ref": "sidebar-accent" },
@@ -326,15 +327,61 @@
       "note": "Mobile xl/2xl are Tailwind 3 defaults (0.75rem, 1rem), not derived from --radius. rounded-xl is 14px on web and 12px on mobile. Decision J-5."
     }
   },
+  "controls": {
+    "rule": "One size ladder for every control (Button, Tabs, Select, Combobox trigger, Input). Whole pixels, not --spacing steps, so a size reads the same at every density. size=\"md\" is the default. One radius per size, about a quarter of the height (D44): every control of a size has the same corner, icon-only included. Decision D43, D44.",
+    "source": "Measured on 2026-11-12 from the computed styles of the reference design system the founder chose (its button, tabs list and select trigger).",
+    "sizes": {
+      "xs": {"height": 20, "padding": 6, "gap": 4, "icon": 12, "icon_offset": 2, "radius": 4, "icon_only_radius": 4, "tab_padding": 6, "tab_gap": 8, "select_ps": 4, "select_pe": 4, "use": "Icon-only toolbar buttons inside dense rows"},
+      "sm": {"height": 24, "padding": 8, "gap": 4, "icon": 14, "icon_offset": 2, "radius": 6, "icon_only_radius": 6, "tab_padding": 8, "tab_gap": 12, "select_ps": 6, "select_pe": 4, "use": "Row actions, table toolbars, inline controls"},
+      "md": {"height": 28, "padding": 10, "gap": 6, "icon": 16, "icon_offset": 4, "radius": 8, "icon_only_radius": 8, "tab_padding": 10, "tab_gap": 16, "select_ps": 8, "select_pe": 6, "use": "The default: forms, dialogs, page headers"},
+      "lg": {"height": 34, "padding": 12, "gap": 6, "icon": 16, "icon_offset": 2, "radius": 8, "icon_only_radius": 8, "tab_padding": 12, "tab_gap": 16, "select_ps": 10, "select_pe": 8, "use": "Primary page actions, onboarding"},
+      "xl": {"height": 40, "padding": 14, "gap": 8, "icon": 16, "icon_offset": 4, "radius": 10, "icon_only_radius": 10, "tab_padding": 16, "tab_gap": 20, "select_ps": 12, "select_pe": 10, "use": "Marketing CTAs, empty-state actions"},
+      "2xl": {"height": 48, "padding": 20, "gap": 8, "icon": 20, "icon_offset": 4, "radius": 12, "icon_only_radius": 12, "tab_padding": 20, "tab_gap": 20, "select_ps": 14, "select_pe": 12, "use": "Marketing hero only"}
+    }
+  },
+  "dialog": {
+    "rule": "One look for Dialog, Modal, AlertDialog, ConfirmDialog and Sheet (D45): whole pixels. close_inset is how far the close button stands from the top and the end edge: equal on both, tighter than the padding, so the button sits in the corner. inset is how far a floating Sheet stands off the viewport edge.",
+    "padding_top": 16,
+    "inset": 12,
+    "close_inset": 10,
+    "padding": 16,
+    "gap": 16,
+    "header_gap": 4,
+    "radius": 12
+  },
   "elevation": {
-    "rule": "In page flow = border, no shadow. Floating = shadow + hairline border. Never dark:shadow-*.",
-    "source": "Tailwind 4.3.3 defaults (node_modules/tailwindcss/theme.css:406-412). Kortix defines no shadow tokens.",
+    "rule": "In page flow = hairline border, no shadow. Floating = shadow-ring-* (the stacked shadow with the hairline baked in as its last layer), never border + shadow: the two edges stack into a grey double line. Decision D44.",
+    "source": "shadow-plugin 2.1.1 (Florian Kiem, MIT): stacked smooth shadows; the ring layer is a 1px hairline at --shadow-ring-color.",
+    "ring": {
+      "light": "rgba(0, 0, 0, 0.05)",
+      "dark": "rgba(255, 255, 255, 0.18)",
+      "use": "The hairline in shadow-ring-*. Dark is white at 18%: a lower alpha lands on the raised surface's own colour and the edge vanishes."
+    },
     "steps": {
-      "xs": { "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)", "use": "Chips, the segmented chip, slider thumbs" },
-      "sm": { "value": "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)", "use": "Sticky bars" },
-      "md": { "value": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)", "use": "Dropdowns, selects, popovers" },
-      "lg": { "value": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)", "use": "Modals, sheets, toasts" },
-      "xl": { "value": "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)", "use": "Command palette, floating windows" }
+      "xs": {
+        "value": "0 0 4px 0 rgba(0, 0, 0, 0.04)",
+        "use": "Chips, the segmented chip, slider thumbs"
+      },
+      "sm": {
+        "value": "0 18px 47px 0 rgba(0, 0, 0, 0.03), 0 7.5px 19px 0 rgba(0, 0, 0, 0.02), 0 4px 10.5px 0 rgba(0, 0, 0, 0.02), 0 2.3px 5.8px 0 rgba(0, 0, 0, 0.01), 0 1.2px 3.1px 0 rgba(0, 0, 0, 0.01), 0 0.5px 1.3px 0 rgba(0, 0, 0, 0.01)",
+        "use": "Sticky bars, elevated cards"
+      },
+      "md": {
+        "value": "0 17.54px 23.39px 0 rgba(0, 0, 0, 0.04), 0 9.4px 12.5px 0 rgba(0, 0, 0, 0.03), 0 5.25px 7px 0 rgba(0, 0, 0, 0.02), 0 2.79px 3.72px -2px rgba(0, 0, 0, 0.01), 0 1.16px 1.5px 0 rgba(0, 0, 0, 0.01)",
+        "use": "Selects, menus, popovers, the combobox"
+      },
+      "lg": {
+        "value": "0 25px 50px 0 rgba(0, 0, 0, 0.05), 0 12px 24px 0 rgba(0, 0, 0, 0.04), 0 6px 12px 0 rgba(0, 0, 0, 0.03), 0 3px 6px 0 rgba(0, 0, 0, 0.02), 0 1.5px 3px 0 rgba(0, 0, 0, 0.02)",
+        "use": "Modals, sheets, toasts"
+      },
+      "xl": {
+        "value": "0 40px 80px 0 rgba(0, 0, 0, 0.06), 0 20px 40px 0 rgba(0, 0, 0, 0.05), 0 10px 20px 0 rgba(0, 0, 0, 0.04), 0 5px 10px 0 rgba(0, 0, 0, 0.03), 0 2px 4px 0 rgba(0, 0, 0, 0.02)",
+        "use": "Command palette, floating windows"
+      },
+      "2xl": {
+        "value": "0 60px 120px 0 rgba(0, 0, 0, 0.07), 0 30px 60px 0 rgba(0, 0, 0, 0.06), 0 15px 30px 0 rgba(0, 0, 0, 0.05), 0 7.5px 15px 0 rgba(0, 0, 0, 0.04), 0 3px 6px 0 rgba(0, 0, 0, 0.03)",
+        "use": "Marketing hero surfaces only"
+      }
     }
   },
   "effects": {

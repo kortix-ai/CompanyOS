@@ -47,6 +47,17 @@ import * as React from 'react';
 
 import { Close } from '../icons/close';
 import {
+  DIALOG_CLOSE_LOOK,
+  DIALOG_CLOSE_POSITION,
+  DIALOG_CLOSE_STYLE,
+  DIALOG_DESCRIPTION,
+  DIALOG_FOOTER,
+  DIALOG_FOOTER_ACTIONS,
+  DIALOG_HEADER,
+  DIALOG_OVERLAY,
+  DIALOG_TITLE,
+} from './dialog-recipe';
+import {
   asChildRender,
   openState,
   stateRender,
@@ -60,7 +71,6 @@ import {
   isFloatingLayerTarget,
   useDialogDepth,
 } from '../lib/z-stack';
-import { Button } from './button';
 import {
   Dialog,
   DialogClose,
@@ -99,7 +109,8 @@ const ModalOverlay = React.forwardRef<
     <DialogPrimitive.Backdrop
       render={stateRender('div', openState)}
       className={cn(
-        'fixed inset-0 bg-black/65 backdrop-blur-xs',
+        'fixed inset-0 ',
+        DIALOG_OVERLAY,
         overlayAnimationClasses[animation],
         className,
       )}
@@ -111,60 +122,38 @@ const ModalOverlay = React.forwardRef<
 });
 ModalOverlay.displayName = 'ModalOverlay';
 
+/** Centered like Dialog at every width: the phone gets the same card, 1rem from each edge. */
+const MODAL_CENTERED =
+  'top-1/2 left-1/2 w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 max-h-[calc(100dvh-2rem)] sm:max-w-lg';
+
 const ModalVariants = cva(
-  cn(
-    'fixed gap-0 border p-0 shadow-lg overflow-y-auto',
-    'lg:top-[50%] lg:left-[50%] lg:grid lg:w-full lg:max-w-lg lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-xl',
-    'lg:flex lg:h-full lg:flex-col space-y-4',
-  ),
+  // The Dialog's look (D45), part for part: bg-popover, no border, the
+  // shadow-ring-lg edge, 12px corners, the same fade + zoom. No gap and no
+  // padding here: each part owns the space ABOVE it, so spacing never stacks.
+  'fixed flex flex-col gap-0 border-0 p-0 shadow-ring-lg outline-none overflow-y-auto rounded-(--dialog-radius)',
   {
     variants: {
       variant: {
-        default: 'bg-sidebar border-muted/60',
-        base: 'bg-background border-muted/60',
-        transparent: 'bg-transparent border-none p-0',
+        default: 'bg-popover',
+        // `base` is kept for its callers; it is the same surface now (D45).
+        base: 'bg-popover',
+        transparent: 'bg-transparent border-none p-0 shadow-none',
       },
       side: {
-        top: 'inset-x-0 top-0 border-b rounded-b-xl max-h-[90%] lg:h-fit',
-        bottom: 'inset-x-0 bottom-0 lg:bottom-auto border-t lg:h-auto max-h-[90%] rounded-t-xl',
-        left: 'inset-y-0 left-0 h-full lg:h-fit w-3/4 border-r rounded-r-xl sm:max-w-sm',
-        right: 'inset-y-0 right-0 h-full lg:h-fit w-3/4 border-l rounded-l-xl sm:max-w-sm',
-        fullscreen: 'inset-0 bg-black/60 dark:bg-black/85',
+        // top/bottom/left/right are kept for their callers. A side panel is a
+        // Sheet; a Modal is always the centered card.
+        top: MODAL_CENTERED,
+        bottom: MODAL_CENTERED,
+        left: MODAL_CENTERED,
+        right: MODAL_CENTERED,
+        fullscreen: 'inset-0 rounded-none bg-black/60 dark:bg-black/85', // audit:allow full-screen media scrim: black in both themes, deeper in dark so the image keeps its edge
       },
       animation: {
-        default: cn(
-          'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 duration-moderate',
-          'lg:data-[state=closed]:zoom-out-95 lg:data-[state=open]:zoom-in-95',
-        ),
+        default:
+          'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 duration-moderate',
         none: '',
       },
     },
-    compoundVariants: [
-      {
-        animation: 'default',
-        side: 'top',
-        class:
-          'max-lg:data-[state=closed]:slide-out-to-top max-lg:data-[state=open]:slide-in-from-top',
-      },
-      {
-        animation: 'default',
-        side: 'bottom',
-        class:
-          'max-lg:data-[state=closed]:slide-out-to-bottom max-lg:data-[state=open]:slide-in-from-bottom',
-      },
-      {
-        animation: 'default',
-        side: 'left',
-        class:
-          'max-lg:data-[state=closed]:slide-out-to-left max-lg:data-[state=open]:slide-in-from-left',
-      },
-      {
-        animation: 'default',
-        side: 'right',
-        class:
-          'max-lg:data-[state=closed]:slide-out-to-right max-lg:data-[state=open]:slide-in-from-right',
-      },
-    ],
     defaultVariants: {
       side: 'bottom',
       variant: 'default',
@@ -259,7 +248,6 @@ const ModalContentInner = React.forwardRef<HTMLDivElement, ModalContentProps>(
         className={cn(
           ModalVariants({ side, animation, className: modalClassName, variant }),
           className,
-          'rounded-xl rounded-b-none lg:rounded-b-xl',
         )}
         style={{ zIndex: dialogContentZ(depth), ...style }}
         onInteractOutside={handleInteractOutside}
@@ -268,20 +256,13 @@ const ModalContentInner = React.forwardRef<HTMLDivElement, ModalContentProps>(
       >
         {children}
 
-        <div className="absolute top-3 right-3 flex items-center justify-end gap-2">
+        {/* The × and any extra controls beside it, on the title's line (D45). */}
+        <div className={cn(DIALOG_CLOSE_POSITION, 'flex items-center justify-end gap-2')} style={DIALOG_CLOSE_STYLE}>
           {closeButtonChildren}
           {showCloseButton && (
-            <ModalClose asChild>
-              <Button
-                variant="ghost"
-                className={cn(
-                  'size-8 p-0 text-xs font-semibold focus:outline-none',
-                  closeClassName,
-                )}
-              >
-                <Close className="text-primary size-4 stroke-1" />
-                <span className="sr-only">{closeLabel}</span>
-              </Button>
+            <ModalClose className={cn(DIALOG_CLOSE_LOOK, closeClassName)}>
+              <Close className="size-4" />
+              <span className="sr-only">{closeLabel}</span>
             </ModalClose>
           )}
         </div>
@@ -305,14 +286,21 @@ const ModalContent = React.forwardRef<HTMLDivElement, ModalContentProps>(
 ModalContent.displayName = 'ModalContent';
 
 const ModalHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('flex flex-col space-y-0 text-left', 'px-5 pt-5', className)} {...props} />
+  // Spacing (D45): the header holds the panel's top padding; the body and the
+  // footer each hold the 16px gap above them; only the footer holds the bottom
+  // padding. Nothing else adds vertical space, so a gap can never double.
+  // mt, not pt: the top space sits outside the header box (callers set their own mt).
+  <div className={cn(DIALOG_HEADER, 'ps-(--dialog-padding) pe-12 mt-(--dialog-padding-top)', className)} {...props} />
 );
 ModalHeader.displayName = 'ModalHeader';
 
 const ModalFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
+    data-slot="modal-footer"
     className={cn(
-      'flex flex-col-reverse items-center justify-end gap-y-2 rounded-b-none px-5 sm:flex-row sm:justify-end sm:space-x-2 sm:gap-y-0 md:rounded-b-xl md:px-5 lg:rounded-b-xl',
+      DIALOG_FOOTER,
+      DIALOG_FOOTER_ACTIONS,
+      'items-center px-(--dialog-padding) pt-(--dialog-gap) pb-(--dialog-padding)',
 
       className,
     )}
@@ -328,7 +316,7 @@ const ModalTitle = React.forwardRef<
   <DialogPrimitive.Title
     {...asChildRender(asChild, children)}
     ref={ref}
-    className={cn('text-foreground text-base font-semibold', className)}
+    className={cn(DIALOG_TITLE, className)}
     {...props}
   />
 ));
@@ -341,14 +329,25 @@ const ModalDescription = React.forwardRef<
   <DialogPrimitive.Description
     {...asChildRender(asChild, children)}
     ref={ref}
-    className={cn('text-muted-foreground text-sm', className)}
+    className={cn(DIALOG_DESCRIPTION, className)}
     {...props}
   />
 ));
 ModalDescription.displayName = 'ModalDescription';
 
 const ModalBody = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('flex-1 space-y-4 p-5 pt-0', className)} {...props} />
+  <div
+    data-slot="modal-body"
+    className={cn(
+      'flex-1 space-y-4 px-(--dialog-padding) pt-(--dialog-gap)',
+      // A body with no footer after it is the modal's last part, so it holds the
+      // bottom padding itself; otherwise the footer holds it (D45: spacing never
+      // stacks, and never goes missing).
+      'not-has-[~[data-slot=modal-footer]]:pb-(--dialog-padding)',
+      className,
+    )}
+    {...props}
+  />
 );
 ModalBody.displayName = 'ModalBody';
 

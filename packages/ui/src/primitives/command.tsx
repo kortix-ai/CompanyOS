@@ -15,6 +15,13 @@ import {
 } from './command-core';
 
 import { cn } from '../lib/utils';
+import {
+  ArrowDownIcon,
+  ArrowElbowDownLeftIcon,
+  ArrowUpIcon,
+  MagnifyingGlassIcon,
+} from '@phosphor-icons/react';
+import { FadedScrollArea } from './faded-scroll-area';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './dialog';
 import { Popover, PopoverContent, PopoverTrigger } from './popover';
 
@@ -84,12 +91,15 @@ function CommandDialog({
   children,
   className,
   showCloseButton = true,
+  filter,
   ...props
 }: React.ComponentProps<typeof Dialog> & {
   title?: string;
   description?: string;
   className?: string;
   showCloseButton?: boolean;
+  /** cmdk's ranking (value, search, keywords) → 0..1. Default: cmdk's fuzzy score. */
+  filter?: React.ComponentProps<typeof CommandPrimitive>['filter'];
 }) {
   const strings = useUiStrings();
 
@@ -100,32 +110,19 @@ function CommandDialog({
         <DialogDescription>{description ?? strings.commandPaletteDescription}</DialogDescription>
       </DialogHeader>
       <DialogContent
-        // `data-[state=closed]:animate-none!` on the panel AND the overlay: the
-        // palette closes on the frame you dismiss it, with no exit animation.
-        // `DialogContent` and `DialogOverlay` both play a 200ms `animate-out`
-        // (fade, plus a zoom to 95% on the panel), and the dialog keeps the
-        // node mounted until the animation ends — so Escape, a selected command,
-        // or an outside click left the palette on screen for 200ms after it
-        // was done. With `animation-name: none`, it unmounts at once.
-        // `!` because tailwind-merge does not know `animate-out` (it comes from
-        // tw-animate-css) and keeps both classes; without it, the winner would
-        // be whichever utility Tailwind happens to emit last.
-        //
-        // `data-[state=open]:animate-none!` does the same for the way in. The
-        // stock 200ms fade + zoom from 95% made ⌘K — opened dozens of times a
-        // day, almost always from the keyboard — read as late and as growing
-        // out of the page. The palette now paints complete on the first frame.
+        // Opens and closes like every dialog (D44): 0.95 → 1 and a fade in 200ms.
         className={cn(
-          'border p-0 shadow-[0_0_50px_0] shadow-black/10 data-[state=closed]:animate-none! data-[state=open]:animate-none!',
+          'border-0 p-0 shadow-ring-xl',
           className,
         )}
         hideCloseButton={!showCloseButton}
-        overlayClassName="bg-black/20 backdrop-blur-[1px] data-[state=open]:animate-none! data-[state=closed]:animate-none!"
+        overlayClassName="bg-black/20 backdrop-blur-[1px]" // audit:allow the palette scrim is lighter than a dialog: it is summoned and dismissed constantly
       >
         {/* `loop`: ↑ on the first row lands on the last, ↓ on the last lands on
             the first — the list is a ring, so the far end is one key away. */}
         <Command
           loop
+          filter={filter}
           className="[&_[cmdk-group-heading]]:text-muted-foreground bg-popover **:data-[slot=command-input-wrapper]:h-12 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12"
         >
           {children}
@@ -283,6 +280,104 @@ function CommandFooter({ className, children, ...props }: React.ComponentProps<'
   );
 }
 
+/**
+ * The ⌘K palette (D46): the one shape every command palette takes. A
+ * CommandDialog pinned 17vh from the top at 600px (the input stays put while
+ * the list under it grows or shrinks), a search glyph in the input, a list in a
+ * faded scroll area capped at min(60vh, 380px), and an optional footer of key
+ * hints. The workspace palette (apps/web features/workspace/command-palette)
+ * renders this; the design system shows it.
+ */
+function CommandPalette({
+  open,
+  onOpenChange,
+  title,
+  description,
+  placeholder,
+  value,
+  onValueChange,
+  inputRef,
+  leftElement,
+  rightElement,
+  listClassName,
+  footer,
+  filter,
+  children,
+}: {
+  /** cmdk's ranking (value, search, keywords) → 0..1. Default: cmdk's fuzzy score. */
+  filter?: React.ComponentProps<typeof CommandPrimitive>['filter'];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title?: string;
+  description?: string;
+  placeholder?: string;
+  value?: string;
+  onValueChange?: (value: string) => void;
+  inputRef?: React.Ref<HTMLInputElement>;
+  /** Replaces the search glyph, for a sub-page's back button. */
+  leftElement?: React.ReactNode;
+  rightElement?: React.ReactNode;
+  listClassName?: string;
+  /** Key hints under the list; `CommandPaletteHints` is the standard set. */
+  footer?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      description={description}
+      className="top-[17vh] translate-y-0 sm:max-w-[600px]"
+      showCloseButton={false}
+      filter={filter}
+    >
+      <CommandInput
+        ref={inputRef}
+        leftElement={leftElement ?? <MagnifyingGlassIcon className="text-muted-foreground size-4 shrink-0" />}
+        rightElement={rightElement}
+        placeholder={placeholder}
+        value={value}
+        onValueChange={onValueChange}
+      />
+      <FadedScrollArea fadeColor="from-popover" className="max-h-[min(60vh,380px)]">
+        {/* `scroll-my-10` = the fade's height: cmdk scrolls the highlighted row
+            into view at the edge, which would leave it under the fade. */}
+        <CommandList className={cn('max-h-none overflow-visible [&_[cmdk-item]]:scroll-my-10', listClassName)}>
+          {children}
+        </CommandList>
+      </FadedScrollArea>
+      {footer ? <CommandFooter>{footer}</CommandFooter> : null}
+    </CommandDialog>
+  );
+}
+
+/** The palette's standard footer: ↑↓ to move, ↵ to select, then any extras on the end. */
+function CommandPaletteHints({
+  navigateLabel,
+  selectLabel,
+  children,
+}: {
+  navigateLabel: string;
+  selectLabel: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <>
+      <div className="flex items-center gap-1">
+        <ArrowUpIcon className="size-3" />
+        <ArrowDownIcon className="size-3" />
+        <span>{navigateLabel}</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <ArrowElbowDownLeftIcon className="size-3" />
+        <span>{selectLabel}</span>
+      </div>
+      {children}
+    </>
+  );
+}
+
 function CommandPopover({
   open,
   onOpenChange,
@@ -362,6 +457,8 @@ function CommandPopoverContent({
 export {
   Command,
   CommandDialog,
+  CommandPalette,
+  CommandPaletteHints,
   CommandEmpty,
   CommandFooter,
   CommandGroup,

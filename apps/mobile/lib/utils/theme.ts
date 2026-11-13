@@ -119,19 +119,19 @@ export const THEME = {
   },
   dark: {
     background: 'hsl(0 0% 4.3%)', // --background
-    foreground: 'hsl(0 0% 100%)', // --foreground
+    foreground: 'hsl(0 0% 94.8%)', // --foreground
     card: 'hsl(0 0% 7.8%)', // --card
-    cardForeground: 'hsl(0 0% 100%)', // --card-foreground
+    cardForeground: 'hsl(0 0% 94.8%)', // --card-foreground
     popover: 'hsl(0 0% 7.8%)', // --popover
-    popoverForeground: 'hsl(0 0% 100%)', // --popover-foreground
-    primary: 'hsl(0 0% 100%)', // --primary
+    popoverForeground: 'hsl(0 0% 94.8%)', // --popover-foreground
+    primary: 'hsl(0 0% 94.8%)', // --primary
     primaryForeground: 'hsl(0 0% 3.5%)', // --primary-foreground
     secondary: 'hsl(0 0% 11%)', // --secondary
-    secondaryForeground: 'hsl(0 0% 100%)', // --secondary-foreground
+    secondaryForeground: 'hsl(0 0% 94.8%)', // --secondary-foreground
     muted: 'hsl(0 0% 11%)', // --muted
-    mutedForeground: 'hsl(0 0% 60%)', // --muted-foreground
+    mutedForeground: 'hsl(0 0% 71.8%)', // --muted-foreground
     accent: 'hsl(0 0% 7.8%)', // --accent
-    accentForeground: 'hsl(0 0% 100%)', // --accent-foreground
+    accentForeground: 'hsl(0 0% 94.8%)', // --accent-foreground
     destructive: 'hsl(358.8 100% 69.6%)', // --destructive
     destructiveForeground: 'hsl(60 0% 98%)', // --destructive-foreground
     border: 'hsl(0 0% 14.9%)', // --border
@@ -143,14 +143,14 @@ export const THEME = {
     active: 'hsla(0, 0%, 100%, 0.1)', // --active
     focusRing: 'hsl(204 100% 50%)', // --focus-ring (= var(--ring))
     chromeBackground: 'hsl(0 0% 7.8%)', // --chrome-background (= var(--sidebar))
-    foregroundStrong: 'hsl(0 0% 100%)', // --foreground-strong (= var(--foreground))
-    foregroundWeak: 'hsl(0 0% 60%)', // --foreground-weak (= var(--muted-foreground))
+    foregroundStrong: 'hsl(0 0% 94.8%)', // --foreground-strong (= var(--foreground))
+    foregroundWeak: 'hsl(0 0% 71.8%)', // --foreground-weak (= var(--muted-foreground))
     sidebar: 'hsl(0 0% 7.8%)', // --sidebar
-    sidebarForeground: 'hsl(0 0% 100%)', // --sidebar-foreground
+    sidebarForeground: 'hsl(0 0% 94.8%)', // --sidebar-foreground
     sidebarPrimary: 'hsl(204 100% 50%)', // --sidebar-primary
     sidebarPrimaryForeground: 'hsl(0 0% 100%)', // --sidebar-primary-foreground
     sidebarAccent: 'hsl(0 0% 11%)', // --sidebar-accent
-    sidebarAccentForeground: 'hsl(0 0% 100%)', // --sidebar-accent-foreground
+    sidebarAccentForeground: 'hsl(0 0% 94.8%)', // --sidebar-accent-foreground
     sidebarBorder: 'hsl(0 0% 10.2%)', // --sidebar-border
     sidebarRing: 'hsl(204 100% 50%)', // --sidebar-ring
     success: 'hsl(135 70.5% 33.8%)', // --success

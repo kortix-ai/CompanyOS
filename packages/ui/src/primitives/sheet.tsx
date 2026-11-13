@@ -7,9 +7,18 @@ import * as React from 'react';
 import { Close } from '../icons/close';
 import { asChildRender, openState, stateRender } from '../lib/base-ui-compat';
 import { cn } from '../lib/utils';
+import {
+  DIALOG_CLOSE,
+  DIALOG_CLOSE_STYLE,
+  DIALOG_DESCRIPTION,
+  DIALOG_FOOTER,
+  DIALOG_HEADER,
+  DIALOG_OVERLAY,
+  DIALOG_PADDING,
+  DIALOG_TITLE,
+} from './dialog-recipe';
 import { useUiStrings } from '../providers/ui-provider';
 import { dialogContentZ, dialogOverlayZ, useDialogDepth } from '../lib/z-stack';
-import { buttonVariants } from './button';
 import {
   Dialog,
   DialogClose,
@@ -36,7 +45,8 @@ const SheetOverlay = React.forwardRef<HTMLDivElement, React.ComponentPropsWithou
     return (
       <SheetPrimitive.Backdrop
         className={cn(
-          'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 bg-black/80',
+          'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0',
+          DIALOG_OVERLAY,
           className,
         )}
         style={{ zIndex: dialogOverlayZ(depth), ...style }}
@@ -49,17 +59,27 @@ const SheetOverlay = React.forwardRef<HTMLDivElement, React.ComponentPropsWithou
 );
 SheetOverlay.displayName = 'SheetOverlay';
 
+/**
+ * Every side floats the same way (D45): a 12px margin from the window edge and
+ * 12px corners from md up (full-bleed on a phone), the dialog's shadow ring for
+ * an edge, and the dialog's spacing. Left and right take the full height; top
+ * and bottom take their content, up to 85% of the screen.
+ */
 const sheetVariants = cva(
-  'fixed flex min-h-0 flex-col gap-4 overflow-hidden bg-sidebar p-4 shadow-lg transition ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out h-[calc(100vh-1.4rem)]',
+  cn(
+    'bg-popover fixed flex min-h-0 flex-col overflow-hidden shadow-ring-lg outline-none transition-transform ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out',
+    'md:m-(--dialog-inset) md:rounded-(--dialog-radius)',
+    DIALOG_PADDING,
+  ),
   {
     variants: {
       side: {
-        top: 'inset-x-0 top-0 border-b-[1.5px] border-border/40 data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top',
+        top: 'inset-x-0 top-0 max-h-[85dvh] data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top',
         bottom:
-          'inset-x-0 bottom-0 border-t-[1.5px] border-border/40 data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom',
-        left: 'inset-y-0 left-0 h-full w-full md:w-3/4 border-r-[1.5px] border-border/40 data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm',
+          'inset-x-0 bottom-0 max-h-[85dvh] data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom',
+        left: 'inset-y-0 left-0 h-full w-full md:h-[calc(100dvh-2*var(--dialog-inset))] md:w-3/4 sm:max-w-sm data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left',
         right:
-          'inset-y-0 right-0 h-full md:h-[calc(100vh-1.4rem)] w-full md:w-3/4 border-[length:calc(var(--border-width,1px)*1.5)] md:rounded-lg border-border/40 data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm md:m-[0.7rem]',
+          'inset-y-0 right-0 h-full w-full md:h-[calc(100dvh-2*var(--dialog-inset))] md:w-3/4 sm:max-w-sm data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right',
       },
     },
     defaultVariants: {
@@ -101,13 +121,11 @@ const SheetContent = React.forwardRef<HTMLDivElement, SheetContentProps>(
         >
           {children}
           {showCloseButton && (
-            <SheetPrimitive.Close
-              className={cn(
-                'absolute top-4 right-4',
-                buttonVariants({ variant: 'ghost', size: 'icon' }),
-              )}
-            >
-              <Close className="size-[1.15rem] stroke-0" />
+            // The dialog's close (D45): a 24px ghost square on the title's line.
+            // DIALOG_CLOSE puts `absolute` after the button classes, so the
+            // button's own `relative` cannot override it.
+            <SheetPrimitive.Close className={DIALOG_CLOSE} style={DIALOG_CLOSE_STYLE}>
+              <Close className="size-4" />
               <span className="sr-only">{strings.close}</span>
             </SheetPrimitive.Close>
           )}
@@ -120,7 +138,7 @@ SheetContent.displayName = 'SheetContent';
 
 const SheetHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
-    className={cn('flex shrink-0 flex-col space-y-2 text-center sm:text-left', className)}
+    className={cn(DIALOG_HEADER, 'shrink-0', className)}
     {...props}
   />
 );
@@ -129,7 +147,8 @@ SheetHeader.displayName = 'SheetHeader';
 const SheetFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      'flex shrink-0 flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2',
+      DIALOG_FOOTER,
+      'shrink-0',
       className,
     )}
     {...props}
@@ -140,7 +159,7 @@ SheetFooter.displayName = 'SheetFooter';
 const SheetBody = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      'flex min-h-0 w-full flex-1 flex-col items-start justify-start gap-4 overflow-y-auto py-6',
+      'flex min-h-0 w-full flex-1 flex-col items-start justify-start gap-4 overflow-y-auto',
       className,
     )}
     {...props}
@@ -155,7 +174,7 @@ const SheetTitle = React.forwardRef<
   <SheetPrimitive.Title
     {...asChildRender(asChild, children)}
     ref={ref}
-    className={cn('text-foreground text-lg font-semibold', className)}
+    className={cn(DIALOG_TITLE, className)}
     {...props}
   />
 ));
@@ -168,7 +187,7 @@ const SheetDescription = React.forwardRef<
   <SheetPrimitive.Description
     {...asChildRender(asChild, children)}
     ref={ref}
-    className={cn('text-muted-foreground text-sm', className)}
+    className={cn(DIALOG_DESCRIPTION, className)}
     {...props}
   />
 ));

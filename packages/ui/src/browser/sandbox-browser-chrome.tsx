@@ -28,6 +28,7 @@ import { Input } from '../primitives/input';
 import { Home } from '../internal/icons/home';
 import { isKortixAppUrl } from '../apps/kortix-app-url';
 import Loading from '../primitives/loading';
+import { FLOATING_PANEL_MOTION, FLOATING_PANEL_SURFACE } from '../primitives/menu-recipe';
 import { useTranslations } from '../i18n';
 import { cn } from '../lib/utils';
 import { parseLocalhostUrl, toInternalUrl } from '@kortix/sdk';
@@ -37,7 +38,7 @@ import {
   ArrowClockwiseIcon as GrRefresh,
 } from '@phosphor-icons/react';
 import type { FormEvent, ReactNode, RefObject } from 'react';
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 /** Split a URL so the hostname can be rendered brighter than the rest. */
 export function splitUrlForDisplay(
@@ -167,9 +168,42 @@ export function SandboxAddressBar({
     [isEditing, addressError, hasPreview, displayValue],
   );
 
+  const suggestionsId = useId();
+  const optionId = (index: number) => `${suggestionsId}-option-${index}`;
+
+  // Our own suggestion list, not a native <datalist>: the browser draws that
+  // one itself, so no Kortix padding, row height or highlight could reach it.
+  const [listOpen, setListOpen] = useState(false);
+  const [highlight, setHighlight] = useState(-1);
+  const matches = useMemo(() => {
+    const draft = addressValue.trim().toLowerCase();
+    // At rest (the bar still shows the current address) every destination is offered.
+    if (!draft || addressValue === displayValue) return suggestions;
+    return suggestions.filter((entry) => entry.label.toLowerCase().includes(draft));
+  }, [addressValue, displayValue, suggestions]);
+  const showList = listOpen && isEditing && matches.length > 0;
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const pick = useCallback(
+    (entry: { label: string; url: string }) => {
+      setListOpen(false);
+      setHighlight(-1);
+      setAddressError(false);
+      setIsEditing(false);
+      setAddressValue(entry.label);
+      inputRef.current?.blur();
+      onNavigate(entry.url);
+    },
+    [inputRef, onNavigate],
+  );
+
   const handleAddressSubmit = useCallback(
     (e: FormEvent) => {
       e.preventDefault();
+      if (showList && highlight >= 0 && matches[highlight]) {
+        pick(matches[highlight]);
+        return;
+      }
       if (!addressValue.trim()) return;
 
       const wanted = addressValue.trim().toLowerCase();
@@ -185,9 +219,8 @@ export function SandboxAddressBar({
       setIsEditing(false);
       onNavigate(internal);
     },
-    [addressValue, onNavigate, suggestions],
+    [addressValue, onNavigate, suggestions, showList, highlight, matches, pick],
   );
-  const suggestionsId = useId();
 
   return (
     <>
@@ -195,7 +228,8 @@ export function SandboxAddressBar({
         <Hint label={tI18nComplete.raw('text76900f1bfd16')} side="bottom">
           <Button
             variant="secondary"
-            size="icon"
+            size="md"
+            iconOnly
             onClick={onBack}
             disabled={!hasPreview || !canGoBack}
           >
@@ -206,7 +240,8 @@ export function SandboxAddressBar({
         <Hint label={tI18nComplete.raw('textf1c65e14817e')} side="bottom">
           <Button
             variant="secondary"
-            size="icon"
+            size="md"
+            iconOnly
             onClick={onForward}
             disabled={!hasPreview || !canGoForward}
           >
@@ -223,7 +258,8 @@ export function SandboxAddressBar({
             <Button
               type="button"
               variant="secondary"
-              size="icon"
+              size="md"
+            iconOnly
               onClick={onHome}
               disabled={!hasPreview}
               aria-label={tI18nComplete.raw('text3a78695388b3')}
@@ -233,7 +269,7 @@ export function SandboxAddressBar({
           </Hint>
           <div
             className={cn(
-              'bg-muted flex h-7 min-w-0 flex-1 items-center gap-1 rounded-md border border-transparent px-2 text-xs tracking-tight transition-colors',
+              'bg-muted relative flex h-(--control-md-height) min-w-0 flex-1 items-center gap-1 rounded-(--control-md-radius) border border-transparent px-2 text-xs tracking-tight transition-colors',
               addressError && 'border-kortix-red/60 focus-within:border-kortix-red/60 animate-shake',
             )}
           >
@@ -245,17 +281,43 @@ export function SandboxAddressBar({
                 disabled={disabled}
                 value={urlParts ? displayValue : addressValue}
                 aria-label={ariaLabel}
-                list={suggestions.length ? suggestionsId : undefined}
+                role={suggestions.length ? 'combobox' : undefined}
+                aria-expanded={suggestions.length ? showList : undefined}
+                aria-controls={showList ? suggestionsId : undefined}
+                aria-autocomplete={suggestions.length ? 'list' : undefined}
+                aria-activedescendant={showList && highlight >= 0 ? optionId(highlight) : undefined}
                 onChange={(e) => {
                   setAddressValue(e.target.value);
+                  setListOpen(true);
+                  setHighlight(-1);
                   if (addressError) setAddressError(false);
                 }}
                 onFocus={() => {
                   setIsEditing(true);
+                  setListOpen(true);
+                  setHighlight(-1);
                   setTimeout(() => inputRef.current?.select(), 0);
                 }}
-                onBlur={() => setIsEditing(false)}
+                onBlur={() => {
+                  setIsEditing(false);
+                  setListOpen(false);
+                }}
                 onKeyDown={(e) => {
+                  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && matches.length) {
+                    e.preventDefault();
+                    setListOpen(true);
+                    setHighlight((current) => {
+                      const step = e.key === 'ArrowDown' ? 1 : -1;
+                      return (current + step + matches.length) % matches.length;
+                    });
+                    return;
+                  }
+                  if (e.key === 'Escape' && showList) {
+                    e.preventDefault();
+                    setListOpen(false);
+                    setHighlight(-1);
+                    return;
+                  }
                   if (e.key === 'Escape') {
                     setIsEditing(false);
                     setAddressError(false);
@@ -265,8 +327,7 @@ export function SandboxAddressBar({
                 }}
                 placeholder={placeholder}
                 className={cn(
-                  // The `<datalist>` suggestions must not paint Chrome's dropdown arrow.
-                  'h-full min-w-0 flex-1 truncate rounded-none border-none bg-transparent px-0 font-medium focus:border-none focus:ring-0 [&::-webkit-calendar-picker-indicator]:hidden',
+                  'h-full min-w-0 flex-1 truncate rounded-none border-none bg-transparent px-0 font-medium focus:border-none focus:ring-0',
                   urlParts && 'text-transparent',
                 )}
               />
@@ -283,12 +344,39 @@ export function SandboxAddressBar({
                 </span>
               )}
             </div>
-            {suggestions.length ? (
-              <datalist id={suggestionsId}>
-                {suggestions.map((entry) => (
-                  <option key={entry.url} value={entry.label} />
+            {showList ? (
+              <div
+                ref={listRef}
+                id={suggestionsId}
+                role="listbox"
+                aria-label={ariaLabel}
+                className={cn(
+                  FLOATING_PANEL_SURFACE,
+                  FLOATING_PANEL_MOTION,
+                  'absolute inset-x-0 top-full z-50 mt-1 flex max-h-72 flex-col overflow-y-auto p-1',
+                )}
+              >
+                {matches.map((entry, index) => (
+                  <div
+                    key={entry.url}
+                    id={optionId(index)}
+                    role="option"
+                    aria-selected={index === highlight}
+                    // mousedown, not click: a click would blur the input first and close the list.
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      pick(entry);
+                    }}
+                    onMouseEnter={() => setHighlight(index)}
+                    className={cn(
+                      'text-foreground flex h-(--control-md-height) shrink-0 cursor-pointer items-center truncate rounded-sm px-2 text-xs font-medium transition-colors duration-fast ease-out',
+                      index === highlight && 'bg-hover',
+                    )}
+                  >
+                    <span className="truncate">{entry.label}</span>
+                  </div>
                 ))}
-              </datalist>
+              </div>
             ) : null}
             {addressError && (
               <span className="text-kortix-red shrink-0 text-xs">
@@ -301,7 +389,8 @@ export function SandboxAddressBar({
             <Button
               type="button"
               variant="secondary"
-              size="icon"
+              size="md"
+            iconOnly
               onClick={onReload}
               disabled={!hasPreview}
               aria-label={tI18nComplete.raw('text0e9161011702')}

@@ -391,8 +391,8 @@ function DefaultAgentSelector({
       >
         <SelectTrigger
           aria-label={tI18nComplete.raw('text94da52ecd6c5')}
-          className="h-9 w-44 shrink-0"
-          size="sm"
+          className="w-44 shrink-0"
+          size="lg"
         >
           <SelectValue />
         </SelectTrigger>

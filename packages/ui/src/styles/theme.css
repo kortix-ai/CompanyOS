@@ -98,6 +98,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-pane: var(--pane);
+  --color-frame: var(--frame);
   --color-surface: var(--surface);
   --color-foreground: var(--foreground);
   --color-foreground-strong: var(--foreground-strong);
@@ -185,16 +186,9 @@
      (1px unless a host sets --border-width). Heavier strokes in the components
      are multiples of it: border-[length:calc(var(--border-width,1px)*1.5)]. */
   --default-border-width: var(--border-width, 1px);
-  /* Elevation. Tailwind's default shadow values, read through a variable so a
-     host can flatten or deepen every shadow-* step. The fallback keeps
-     --tw-shadow-color, so shadow-black/20 still tints the default. */
+  /* Elevation lives in the generated region below (D44). 2xs stays Tailwind's
+     default, read through a variable so a host can re-theme it. */
   --shadow-2xs: var(--shadow-2xs, 0 1px var(--tw-shadow-color, rgb(0 0 0 / 0.05)));
-  --shadow-xs: var(--shadow-xs, 0 1px 2px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.05)));
-  --shadow-sm: var(--shadow-sm, 0 1px 3px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 1px 2px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1)));
-  --shadow-md: var(--shadow-md, 0 4px 6px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 2px 4px -2px var(--tw-shadow-color, rgb(0 0 0 / 0.1)));
-  --shadow-lg: var(--shadow-lg, 0 10px 15px -3px var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 4px 6px -4px var(--tw-shadow-color, rgb(0 0 0 / 0.1)));
-  --shadow-xl: var(--shadow-xl, 0 20px 25px -5px var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 8px 10px -6px var(--tw-shadow-color, rgb(0 0 0 / 0.1)));
-  --shadow-2xl: var(--shadow-2xl, 0 25px 50px -12px var(--tw-shadow-color, rgb(0 0 0 / 0.25)));
   /* @generated kortix-brand:start theme — edit .agents/skills/kortix-brand/references/visual/visual-system.json, then run generate-tokens.ts */
   /* Type scale. Roles and surfaces are in references/visual/typography.md. */
   --text-xs: var(--text-xs, 0.8125rem);
@@ -262,6 +256,19 @@
   --color-glyph-solid-blue: var(--glyph-solid-blue);
   --color-glyph-solid-purple: var(--glyph-solid-purple);
   --color-glyph-solid-magenta: var(--glyph-solid-magenta);
+  /* Elevation (D44): stacked smooth shadows. shadow-ring-* adds the hairline as the last layer. */
+  --shadow-xs: var(--shadow-xs, 0 0 4px 0 rgba(0, 0, 0, 0.04));
+  --shadow-ring-xs: var(--shadow-ring-xs, 0 0 4px 0 rgba(0, 0, 0, 0.04), 0 0 0 1px var(--shadow-ring-color));
+  --shadow-sm: var(--shadow-sm, 0 18px 47px 0 rgba(0, 0, 0, 0.03), 0 7.5px 19px 0 rgba(0, 0, 0, 0.02), 0 4px 10.5px 0 rgba(0, 0, 0, 0.02), 0 2.3px 5.8px 0 rgba(0, 0, 0, 0.01), 0 1.2px 3.1px 0 rgba(0, 0, 0, 0.01), 0 0.5px 1.3px 0 rgba(0, 0, 0, 0.01));
+  --shadow-ring-sm: var(--shadow-ring-sm, 0 18px 47px 0 rgba(0, 0, 0, 0.03), 0 7.5px 19px 0 rgba(0, 0, 0, 0.02), 0 4px 10.5px 0 rgba(0, 0, 0, 0.02), 0 2.3px 5.8px 0 rgba(0, 0, 0, 0.01), 0 1.2px 3.1px 0 rgba(0, 0, 0, 0.01), 0 0.5px 1.3px 0 rgba(0, 0, 0, 0.01), 0 0 0 1px var(--shadow-ring-color));
+  --shadow-md: var(--shadow-md, 0 17.54px 23.39px 0 rgba(0, 0, 0, 0.04), 0 9.4px 12.5px 0 rgba(0, 0, 0, 0.03), 0 5.25px 7px 0 rgba(0, 0, 0, 0.02), 0 2.79px 3.72px -2px rgba(0, 0, 0, 0.01), 0 1.16px 1.5px 0 rgba(0, 0, 0, 0.01));
+  --shadow-ring-md: var(--shadow-ring-md, 0 17.54px 23.39px 0 rgba(0, 0, 0, 0.04), 0 9.4px 12.5px 0 rgba(0, 0, 0, 0.03), 0 5.25px 7px 0 rgba(0, 0, 0, 0.02), 0 2.79px 3.72px -2px rgba(0, 0, 0, 0.01), 0 1.16px 1.5px 0 rgba(0, 0, 0, 0.01), 0 0 0 1px var(--shadow-ring-color));
+  --shadow-lg: var(--shadow-lg, 0 25px 50px 0 rgba(0, 0, 0, 0.05), 0 12px 24px 0 rgba(0, 0, 0, 0.04), 0 6px 12px 0 rgba(0, 0, 0, 0.03), 0 3px 6px 0 rgba(0, 0, 0, 0.02), 0 1.5px 3px 0 rgba(0, 0, 0, 0.02));
+  --shadow-ring-lg: var(--shadow-ring-lg, 0 25px 50px 0 rgba(0, 0, 0, 0.05), 0 12px 24px 0 rgba(0, 0, 0, 0.04), 0 6px 12px 0 rgba(0, 0, 0, 0.03), 0 3px 6px 0 rgba(0, 0, 0, 0.02), 0 1.5px 3px 0 rgba(0, 0, 0, 0.02), 0 0 0 1px var(--shadow-ring-color));
+  --shadow-xl: var(--shadow-xl, 0 40px 80px 0 rgba(0, 0, 0, 0.06), 0 20px 40px 0 rgba(0, 0, 0, 0.05), 0 10px 20px 0 rgba(0, 0, 0, 0.04), 0 5px 10px 0 rgba(0, 0, 0, 0.03), 0 2px 4px 0 rgba(0, 0, 0, 0.02));
+  --shadow-ring-xl: var(--shadow-ring-xl, 0 40px 80px 0 rgba(0, 0, 0, 0.06), 0 20px 40px 0 rgba(0, 0, 0, 0.05), 0 10px 20px 0 rgba(0, 0, 0, 0.04), 0 5px 10px 0 rgba(0, 0, 0, 0.03), 0 2px 4px 0 rgba(0, 0, 0, 0.02), 0 0 0 1px var(--shadow-ring-color));
+  --shadow-2xl: var(--shadow-2xl, 0 60px 120px 0 rgba(0, 0, 0, 0.07), 0 30px 60px 0 rgba(0, 0, 0, 0.06), 0 15px 30px 0 rgba(0, 0, 0, 0.05), 0 7.5px 15px 0 rgba(0, 0, 0, 0.04), 0 3px 6px 0 rgba(0, 0, 0, 0.03));
+  --shadow-ring-2xl: var(--shadow-ring-2xl, 0 60px 120px 0 rgba(0, 0, 0, 0.07), 0 30px 60px 0 rgba(0, 0, 0, 0.06), 0 15px 30px 0 rgba(0, 0, 0, 0.05), 0 7.5px 15px 0 rgba(0, 0, 0, 0.04), 0 3px 6px 0 rgba(0, 0, 0, 0.03), 0 0 0 1px var(--shadow-ring-color));
   /* Motion. Tailwind 4 reads duration utilities from --transition-duration-*. */
   --transition-duration-fast: var(--duration-fast, 100ms);
   --transition-duration-normal: var(--duration-normal, 150ms);

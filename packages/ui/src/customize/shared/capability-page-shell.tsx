@@ -70,6 +70,20 @@ export function useCapabilityShellEmbed(): CapabilityShellEmbed | null {
  * The ref costs this shell nothing — no state, no re-render — so the two
  * capability pages that do not page are unaffected by the one that does.
  */
+/**
+ * The header's search-and-action group (the Patterns "Page header with search"
+ * rule): the search field and every action sit at one height, lg (34px, D50).
+ * A page passes whatever it has (a search input, a Button, a menu trigger) and
+ * the group sizes it, so no page needs its own size and none can drift. It
+ * reaches buttons that are direct children or one wrapper deep; the search's
+ * own clear button sits deeper and keeps its size.
+ */
+const HEADER_CONTROLS = cn(
+  '[&_[data-slot=input-group-search-control]]:h-(--control-lg-height) [&_[data-slot=input-group-search-control]]:rounded-(--control-lg-radius) [&_[data-slot=input-group-search-control]]:text-sm',
+  '[&>[data-slot=button]]:h-(--control-lg-height) [&>[data-slot=button]]:rounded-(--control-lg-radius) [&>[data-slot=button]:not([data-icon-only])]:px-(--control-lg-padding) [&>[data-slot=button][data-icon-only]]:w-(--control-lg-height)',
+  '[&>*>[data-slot=button]]:h-(--control-lg-height) [&>*>[data-slot=button]]:rounded-(--control-lg-radius) [&>*>[data-slot=button]:not([data-icon-only])]:px-(--control-lg-padding) [&>*>[data-slot=button][data-icon-only]]:w-(--control-lg-height)',
+);
+
 export function CapabilityPageShell({
   title,
   description,
@@ -97,7 +111,7 @@ export function CapabilityPageShell({
             {filters ? <div className="shrink-0">{filters}</div> : null}
           </header>
           {search || action ? (
-            <div className="flex items-center gap-2">
+            <div className={cn('flex items-center gap-2', HEADER_CONTROLS)}>
               {search ? <div className="min-w-0 flex-1">{search}</div> : null}
               {action}
             </div>
@@ -116,7 +130,7 @@ export function CapabilityPageShell({
             <h2 className="sr-only">{title}</h2>
             <p className="text-muted-foreground min-w-0 text-sm text-pretty md:max-w-xl">{description}</p>
             {search || action ? (
-              <div className={cn('flex w-full shrink-0 items-center gap-2', !stacked && 'md:w-auto')}>
+              <div className={cn('flex w-full shrink-0 items-center gap-2', !stacked && 'md:w-auto', HEADER_CONTROLS)}>
                 {search ? <div className={cn('min-w-0 flex-1', !stacked && 'md:w-64 md:flex-none')}>{search}</div> : null}
                 {action}
               </div>
@@ -140,7 +154,7 @@ export function CapabilityPageShell({
         <header
           className={cn(
             'flex flex-col gap-3',
-            !stacked && 'sm:flex-row sm:items-start sm:justify-between',
+            !stacked && 'sm:flex-row sm:items-center sm:justify-between',
           )}
         >
           {/* `sm:max-w-md` fixes where the description wraps. Without it the
@@ -163,7 +177,7 @@ export function CapabilityPageShell({
               the middle of the header — visually detached from both the
               heading it did not belong to and the search it sat next to. */}
           {search || action ? (
-            <div className={cn('flex w-full shrink-0 items-center gap-2', !stacked && 'sm:w-auto')}>
+            <div className={cn('flex w-full shrink-0 items-center gap-2', !stacked && 'sm:w-auto', HEADER_CONTROLS)}>
               {search ? (
                 <div className={cn('min-w-0 flex-1', !stacked && 'sm:w-64 sm:flex-none')}>
                   {search}

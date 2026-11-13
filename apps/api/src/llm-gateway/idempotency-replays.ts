@@ -42,7 +42,6 @@ const MAX_LIVE_ROWS = 10_000;
 const ADMISSION_LOCK = 4612_0001;
 /** Expired rows deleted per statement, so a backlog is swept in bounded batches. */
 const SWEEP_BATCH = 1000;
-const SWEEP_EVERY_MS = 10 * 60 * 1000;
 
 /** First writer wins: a retry that raced the first answer keeps the answer clients already saw. */
 export async function putReplay(key: string, answer: ReplayAnswer, now = new Date()): Promise<void> {
@@ -78,18 +77,4 @@ export async function sweepExpiredReplays(now = new Date()): Promise<number> {
     total += gone.length;
     if (gone.length < SWEEP_BATCH) return total;
   }
-}
-
-let sweepTimer: ReturnType<typeof setInterval> | undefined;
-
-/** Model answers must not outlive their hour just because no one writes: sweep on a timer. */
-export function startReplaySweep(): void {
-  stopReplaySweep();
-  sweepTimer = setInterval(() => void sweepExpiredReplays().catch(() => {}), SWEEP_EVERY_MS);
-  sweepTimer.unref?.();
-}
-
-export function stopReplaySweep(): void {
-  if (sweepTimer) clearInterval(sweepTimer);
-  sweepTimer = undefined;
 }

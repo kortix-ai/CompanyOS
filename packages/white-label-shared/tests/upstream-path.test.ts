@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { buildUpstreamPath } from '../../src/server/upstream-path';
+import { buildUpstreamPath } from '../src/upstream-path';
 
 const OWN = '00000000-0000-4000-8000-000000000001';
 const VICTIM = '00000000-0000-4000-8000-000000000002';
@@ -34,6 +34,16 @@ describe('buildUpstreamPath', () => {
   test('a bare .. segment is refused even without an encoded slash', () => {
     expect(buildUpstreamPath(['projects', OWN, '..', VICTIM, 'secrets']).ok).toBe(false);
     expect(buildUpstreamPath(['projects', '.', OWN]).ok).toBe(false);
+  });
+
+  test('a dot segment that is still percent-encoded is refused', () => {
+    // `%252e%252e` arrives from Next as the segment `%2e%2e`. fetch() resolves
+    // it as `..`, so the policy would approve <own> and the upstream would get
+    // <victim>, or /v1/accounts.
+    expect(buildUpstreamPath(['projects', OWN, '%2e%2e', VICTIM, 'secrets']).ok).toBe(false);
+    expect(buildUpstreamPath(['projects', OWN, '%2E%2E', '%2e%2e', 'accounts']).ok).toBe(false);
+    expect(buildUpstreamPath(['projects', OWN, 'a?b']).ok).toBe(false);
+    expect(buildUpstreamPath(['projects', OWN, 'a#b']).ok).toBe(false);
   });
 
   test('a backslash cannot stand in for the slash', () => {
@@ -88,6 +98,51 @@ describe('buildUpstreamPath: canonical workspace names', () => {
     [['projects', OWN, 'secrets'], `projects/${OWN}/secrets`],
     [['p', 'ext', '8000', 'v1', 'me'], 'p/ext/8000/v1/me'],
     [['memberships'], 'memberships'],
+    // Characterization (KRTX-4847): the names the proxy forwards, pinned before
+    // the map moved to `@kortix/shared/workspace-routes`.
+    [['workspaces', OWN, 'sessions'], `projects/${OWN}/sessions`],
+    [['workspaces', OWN, 'sessions', 's1', 'audit'], `projects/${OWN}/sessions/s1/audit`],
+    [
+      ['workspaces', OWN, 'sessions', 's1', 'audit', 'events'],
+      `projects/${OWN}/sessions/s1/audit/events`,
+    ],
+    [['workspaces', OWN, 'secrets'], `projects/${OWN}/secrets`],
+    [['workspaces', OWN, 'audit'], `accounts/${OWN}/audit`],
+    [['workspaces', OWN, 'audit', 'export'], `accounts/${OWN}/audit/export`],
+    [['workspaces', OWN, 'automations'], `accounts/${OWN}/automations`],
+    [['workspaces', OWN, 'branding'], `accounts/${OWN}/branding`],
+    [['workspaces', OWN, 'capture'], `accounts/${OWN}/capture`],
+    [
+      ['workspaces', OWN, 'iam', 'members', 'u1', 'effective'],
+      `accounts/${OWN}/iam/members/u1/effective`,
+    ],
+    [['workspaces', OWN, 'invites'], `accounts/${OWN}/invites`],
+    [['workspaces', OWN, 'leave'], `accounts/${OWN}/leave`],
+    [['workspaces', OWN, 'secret-resources'], `accounts/${OWN}/secret-resources`],
+    [['workspaces', OWN, 'subscription-connections'], `accounts/${OWN}/subscription-connections`],
+    [['workspaces', OWN, 'tokens'], `accounts/${OWN}/tokens`],
+    [['workspaces', OWN, 'top-up-requests'], `accounts/${OWN}/top-up-requests`],
+    [['invites'], 'account-invites'],
+    [['workspacesx'], 'workspacesx'],
+    [['mex'], 'mex'],
+    [['invitesx'], 'invitesx'],
+    [['connectors', 'workspaces'], 'connectors/workspaces'],
+    [['connectors', 'projects', OWN, 'connectors'], `connectors/projects/${OWN}/connectors`],
+    [['scim', 'v2', 'workspaces', OWN, 'Users'], `scim/v2/workspaces/${OWN}/Users`],
+  ])('%j → %s', (segments, path) => {
+    expect(buildUpstreamPath(segments)).toEqual({ ok: true, path });
+  });
+});
+
+describe('buildUpstreamPath: the map is the one @kortix/shared/workspace-routes owns', () => {
+  // The white-label copies of the map lacked three cases of the canonical one.
+  // The SDK's project audit client calls `GET /v1/workspaces/:id/audit/events`;
+  // the API serves it as `/v1/projects/:id/audit`, and mounts no
+  // `/v1/accounts/:id/audit/events`.
+  test.each([
+    [['workspaces', OWN, 'audit', 'events'], `projects/${OWN}/audit`],
+    [['workspaces', OWN, 'keys'], `accounts/${OWN}/keys`],
+    [['webhooks', 'workspaces', OWN, 'w1'], `webhooks/projects/${OWN}/w1`],
   ])('%j → %s', (segments, path) => {
     expect(buildUpstreamPath(segments)).toEqual({ ok: true, path });
   });

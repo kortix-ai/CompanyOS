@@ -24956,6 +24956,9 @@
       }
     },
     "modelView": {
+      "programTitle": "Programma",
+      "programCommand": "Comando",
+      "programHelp": "Ogni turno esegue questo comando nella sandbox della sessione invece di un modello. Il messaggio arriva su stdin e in $KORTIX_EVENT_PATH. Ciò che stampa è la risposta. Un'uscita diversa da zero fa fallire il turno.",
       "title": "Modello",
       "help": "Come ragiona questo agente.",
       "projectDefault": "Predefinito del workspace",

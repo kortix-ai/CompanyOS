@@ -24956,6 +24956,9 @@
       }
     },
     "modelView": {
+      "programTitle": "Programme",
+      "programCommand": "Commande",
+      "programHelp": "Chaque tour exécute cette commande dans le sandbox de la session au lieu d'un modèle. Le message arrive sur stdin et dans $KORTIX_EVENT_PATH. Ce qu'elle affiche est la réponse. Un code de sortie non nul fait échouer le tour.",
       "title": "Modèle",
       "help": "Comment cet agent réfléchit.",
       "projectDefault": "Par défaut de l’espace de travail",

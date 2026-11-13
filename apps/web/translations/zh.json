@@ -24956,6 +24956,9 @@
       }
     },
     "modelView": {
+      "programTitle": "程序",
+      "programCommand": "命令",
+      "programHelp": "每一轮都会在会话的沙箱中运行此命令，而不是模型。消息通过 stdin 和 $KORTIX_EVENT_PATH 传入。它打印的内容就是回复。非零退出码会使该轮失败。",
       "title": "模型",
       "help": "这个智能体如何思考。",
       "projectDefault": "工作区默认",

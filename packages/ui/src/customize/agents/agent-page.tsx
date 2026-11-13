@@ -749,6 +749,7 @@ function EditableAgentPage({
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const pathname = useUiPathname();
   const drivesOn = useFeatureFlag(projectId, 'drives').enabled;
+  const programAgentsOn = useFeatureFlag(projectId, 'program_agents').enabled;
   const views = useMemo<AgentConfigSectionKey[]>(
     () => AGENT_CONFIG_SECTIONS.map((s) => s.key).filter((k) => drivesOn || k !== 'drives'),
     [drivesOn],
@@ -937,7 +938,12 @@ function EditableAgentPage({
         if (view === 'model')
           return (
             <AgentTabBody>
-              <AgentModelView oc={editor.oc} setOc={editor.setOc} footer={<ProjectModelsLink projectId={projectId} />} />
+              <AgentModelView
+                oc={editor.oc}
+                setOc={editor.setOc}
+                footer={<ProjectModelsLink projectId={projectId} />}
+                program={programAgentsOn && typeof editor.draft.run === 'string' ? { command: editor.draft.run, onChange: (next) => editor.set('run', next) } : undefined}
+              />
             </AgentTabBody>
           );
         return (

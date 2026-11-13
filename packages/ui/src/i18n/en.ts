@@ -8272,6 +8272,9 @@ const catalog = {
       }
     },
     "modelView": {
+      "programTitle": "Program",
+      "programCommand": "Command",
+      "programHelp": "Each turn runs this command in the session's sandbox instead of a model. The message arrives on stdin and in $KORTIX_EVENT_PATH. What it prints is the reply. A non-zero exit fails the turn.",
       "title": "Model",
       "help": "How this agent thinks.",
       "projectDefault": "Workspace default",

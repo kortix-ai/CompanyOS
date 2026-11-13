@@ -24956,6 +24956,9 @@
       }
     },
     "modelView": {
+      "programTitle": "Programm",
+      "programCommand": "Befehl",
+      "programHelp": "Jeder Turn führt diesen Befehl statt eines Modells in der Sandbox der Sitzung aus. Die Nachricht kommt über stdin und in $KORTIX_EVENT_PATH. Was er ausgibt, ist die Antwort. Ein Exit-Code ungleich null lässt den Turn fehlschlagen.",
       "title": "Modell",
       "help": "Wie dieser Agent denkt.",
       "projectDefault": "Workspace-Standard",

@@ -24956,6 +24956,9 @@
       }
     },
     "modelView": {
+      "programTitle": "Program",
+      "programCommand": "Komanda",
+      "programHelp": "Svaki potez pokreće ovu komandu u sandboxu sesije umesto modela. Poruka stiže na stdin i u $KORTIX_EVENT_PATH. Ono što ispiše je odgovor. Izlazni kod različit od nule obara potez.",
       "title": "Модел",
       "help": "Како овај агент размишља.",
       "projectDefault": "Подразумевано за радни простор",

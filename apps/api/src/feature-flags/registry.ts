@@ -568,6 +568,7 @@ const FLAGS: readonly FeatureFlagDef[] = [
       'feed to events.md in the space folder. BOX: runtime_context `kortix.watcher` gives the watcher no tools ' +
       '(harness/pi/watcher.ts); its answer is one JSON decision that the API carries out at turn end through the space post ' +
       'path, in that space only, with the owner\'s rights. WEB: the Proactive and Daily brief rows in Space details.',
+  },
   {
     key: 'program_agents',
     name: 'Program agents',

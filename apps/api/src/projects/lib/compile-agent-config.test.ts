@@ -304,7 +304,9 @@ describe('a program agent (`run`)', () => {
     const manifest = parseYaml(`default_agent: janitor\nagents:\n  janitor:\n    run: "  pnpm tsx agents/janitor.ts  "\n    workspace:\n      setup: [pnpm install]\n  writer:\n    model: test/model\n    prompt: Be brief.\n`);
     const compiled = compileAgentConfig(manifest, {});
     expect(compiled.agent.janitor?.run).toBe('pnpm tsx agents/janitor.ts');
-    expect(compiled.agent.janitor?.prompt).toBeUndefined();
+    // A daemon older than program agents runs a model instead: it gets no tool and one line to say.
+    expect(compiled.agent.janitor?.tools).toEqual({ '*': false });
+    expect(compiled.agent.janitor?.prompt).toContain('cannot run program agents yet');
     expect(compiled.agent.janitor?.disable).toBeUndefined();
     expect(compiled.agent.writer?.run).toBeUndefined();
     expect(compiled.model).toBeUndefined();

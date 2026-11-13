@@ -24956,6 +24956,9 @@
       }
     },
     "modelView": {
+      "programTitle": "プログラム",
+      "programCommand": "コマンド",
+      "programHelp": "各ターンで、モデルの代わりにこのコマンドがセッションのサンドボックスで実行されます。メッセージは stdin と $KORTIX_EVENT_PATH で渡されます。出力が返信になります。終了コードが 0 以外の場合、ターンは失敗します。",
       "title": "モデル",
       "help": "このエージェントの考え方。",
       "projectDefault": "ワークスペースのデフォルト",

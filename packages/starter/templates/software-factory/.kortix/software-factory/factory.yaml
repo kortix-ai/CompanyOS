@@ -13,8 +13,12 @@ agents:
     secrets: "*"
     connectors: "*"
     tools: "*"
-    workspace: { project_repository: true }
+    # Every session starts with the repository cloned on its own branch.
+    workspace:
+      repos:
+        - path: /workspace
     kortix_permissions:
+      - workspace.gitops.read
       - workspace.read
       - workspace.session.read
       - workspace.session.start

@@ -213,6 +213,17 @@ mock.module('../../session-open', () => ({
   },
 }));
 
+/** Every turn record the delivery closed by message id: [sessionId, messageId, reason]. */
+let closedTurns: Array<[string, string, string]> = [];
+const realTurnLifecycle = await import('../../sandbox-turn-lifecycle');
+mock.module('../../sandbox-turn-lifecycle', () => ({
+  ...realTurnLifecycle,
+  closeSandboxTurnByMessageId: async (sessionId: string, messageId: string, reason: string) => {
+    closedTurns.push([sessionId, messageId, reason]);
+    return true;
+  },
+}));
+
 mock.module('../../../sandbox-proxy/forward', () => ({
   forwardToSandbox: async (
     _externalId: string,
@@ -559,6 +570,7 @@ beforeEach(() => {
   promptDeduplicationsRemaining = 0;
   promptResponsePlan = [];
   landingReadFailuresRemaining = 0;
+  closedTurns = [];
   runtimeDropsFirstDelivery = false;
   promotionCalls = [];
   onPromotion = null;
@@ -898,6 +910,8 @@ describe('executeQueuedContinue — what actually goes on the wire', () => {
     // Nothing closed the row. It went back on the queue under a FRESH attempt
     // (fresh key + re-mint on the next drain), which is the whole fix.
     expect(forwardedCalls).toEqual([]);
+    // The turn the proxy accepted for the dropped body is closed with it.
+    expect(closedTurns).toEqual([[SESSION_ID, SUBMITTED_WIRE_ID, 'abandoned']]);
     expect(succeededCalls).toEqual([]);
     expect(unlandedRequeues).toEqual([
       {
@@ -988,6 +1002,10 @@ describe('executeQueuedContinue — what actually goes on the wire', () => {
     expect(unlandedRequeues).toEqual([
       { commandId: 'cmd-1', reason: 'prompt accepted by the runtime but never became a message' },
     ]);
+    // The turn the proxy accepted for the timed-out POST is closed: the box
+    // does not have the message, so nothing is running. Left open, it held the
+    // re-sent prompt behind `turn_active` and showed the session as working.
+    expect(closedTurns).toEqual([[SESSION_ID, SUBMITTED_WIRE_ID, 'abandoned']]);
     expect(outcome).toBe('queued');
   }, 20_000);
 
@@ -1011,8 +1029,9 @@ describe('executeQueuedContinue — what actually goes on the wire', () => {
     );
 
     // One read failed (unknown), the loop went round, the next read answered
-    // that the box does not have it.
+    // that the box does not have it. Only that answer closes the turn.
     expect(landingReads.filter((id) => id === SUBMITTED_WIRE_ID).length).toBeGreaterThanOrEqual(2);
+    expect(closedTurns).toEqual([[SESSION_ID, SUBMITTED_WIRE_ID, 'abandoned']]);
     expect(capturedBodies).toEqual([]);
     expect(forwardedCalls).toEqual([]);
     expect(succeededCalls).toEqual([]);

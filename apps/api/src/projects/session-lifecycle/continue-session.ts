@@ -30,6 +30,7 @@ import { effortVariantForPrompt } from '../lib/effort-default';
 import type { ContinueSessionCommand, SessionDeliveryOutcome } from './types';
 import { onDevTunnel, staleDevTunnelReason } from '../../platform/dev-tunnel-stamp';
 import { PromptNeverLandedError, postPrompt, readRuntimeMessage } from './runtime-client';
+import { closeSandboxTurnByMessageId } from '../sandbox-turn-lifecycle';
 
 export async function continueSession(
   command: ContinueSessionCommand,
@@ -252,6 +253,21 @@ export async function continueSession(
           delivery,
           parts: command.parts?.length ?? 0,
         });
+        // The proxy accepted a turn for this message when the POST answered,
+        // or timed out (`retry.ts`, `giveUpForward`). The box does not have the
+        // message, so that turn is not running. Close it: left open it holds
+        // the re-sent prompt behind `turn_active` and shows the session as
+        // working until the active-turn renewal sees the daemon idle (every
+        // 20 s, backing off to 5 min while the box was unreadable).
+        // Best-effort: a failed close leaves that renewal as the backstop.
+        if (command.wireMessageId) {
+          await closeSandboxTurnByMessageId(sessionId, command.wireMessageId, 'abandoned').catch((err) =>
+            logger.warn('[session-lifecycle] the turn of a prompt that never landed was not closed', {
+              session_id: sessionId,
+              wire_message_id: command.wireMessageId,
+              error: err instanceof Error ? err.message : String(err),
+            }));
+        }
         throw new PromptNeverLandedError(command.wireMessageId);
       }
     }

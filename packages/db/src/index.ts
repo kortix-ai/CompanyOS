@@ -45,6 +45,7 @@ export {
   auditArchiveParts,
   auditSessionSequences,
   usageEvents,
+  gatewayIdempotencyReplays,
   gatewayRequestLogs,
   gatewayApiKeys,
   gatewayBudgets,

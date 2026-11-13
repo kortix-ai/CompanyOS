@@ -36,10 +36,6 @@ flow(
   },
 );
 
-// The warm-snapshot-config admin flow was removed with its deleted routes.
-// were deleted in #4095 ("remove the dead warm-fork sessions toggle") without
-// retiring this flow, leaving stale manifest drift.
-
 flow(
   'CONN-20',
   {

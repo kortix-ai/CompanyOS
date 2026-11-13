@@ -3513,8 +3513,7 @@ flow(
         const without = (await owner.put(shareRoute, { include_prompt: false }, { params: turn })).status(200);
         const b = without.json<{ share: { token: string; include_prompt: boolean } }>().share;
         if (b.token !== token || b.include_prompt !== false) throw new Error(`bad share ${JSON.stringify(b)}`);
-        const res = (await anon.get(publicRoute, { params: { token } })).status(200).body().has('$.response.prompt', null);
-        void res;
+        (await anon.get(publicRoute, { params: { token } })).status(200).body().has('$.response.prompt', null);
       });
 
       await ctx.step('the response token opens no sandbox proxy and is not in the preview/file share list', async () => {

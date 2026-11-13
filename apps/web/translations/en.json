@@ -531,6 +531,7 @@
       "gracePeriodDescription": "Deletion happens on the scheduled date. Cancel any time before then.",
       "immediateLabel": "Delete immediately",
       "immediateDescription": "Your account and its data are deleted right away. This cannot be undone.",
+      "noWorkspaceImmediateOnly": "You belong to no workspace, so there is no grace period: your account is deleted right away.",
       "typeDeleteToConfirm": "Type \"delete\" to confirm",
       "keepAccount": "Keep account",
       "processing": "Processing…",
@@ -553,7 +554,7 @@
         "left": "You leave",
         "blockers": "You are their only owner, and others work in them. Transfer ownership or delete the workspace.",
         "members": "{count, plural, one {# member} other {# members}}",
-        "nothing": "You belong to no workspace. Only your login is deleted.",
+        "nothing": "No workspace is deleted or left with your account.",
         "blockersTitle": "Hand these over first"
       }
     },
@@ -1149,6 +1150,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "With Spaces on, a space can watch itself: turn on Proactive in its details, and an agent reads what happens there (finished threads, questions left open, people who join) and writes in the chat only when it matters: a result worth sharing, a decision you need to make, or something overdue. It can also start a thread that does the work. Optional daily brief at 9:00."
+        },
+        "program_agents": {
+          "name": "Program agents",
+          "description": "An agent that runs your code instead of a model. Give an agent `run: <command>` in kortix.yaml: each turn runs that command in the session's sandbox, with the agent's workspace, secrets and access. The message or trigger payload is the input, and what the command prints is the reply."
         }
       },
       "channelsSwitch": {
@@ -1730,7 +1735,7 @@
         "email": "Email",
         "scheduled": "Scheduled",
         "webhook": "Webhook",
-        "event": "App event",
+        "event": "Connector event",
         "manual": "Manual",
         "all": "All"
       },
@@ -2096,7 +2101,13 @@
       "noModelUpgradeReason": "No model: upgrade to the Credits plan or add your own provider key.",
       "noModelKeyReason": "No model: add your own provider key.",
       "noModelUpgradePlan": "Upgrade plan",
-      "noModelAddProviderKey": "Add provider key"
+      "noModelAddProviderKey": "Add provider key",
+      "stepTitle": "Connect a model",
+      "stepBody": "Agents in {workspace} need a model to answer. Connect your ChatGPT or Claude plan, or add a provider key.",
+      "stepBodyUpgrade": "Agents in {workspace} need a model to answer. Connect your ChatGPT or Claude plan, add a provider key, or upgrade to the Credits plan for Kortix models.",
+      "stepBodyMember": "Agents in {workspace} need a model to answer. Connect your own ChatGPT or Claude plan or provider key, or ask someone who manages this workspace to connect a model for everyone.",
+      "stepThisWorkspace": "this workspace",
+      "stepBack": "Back to workspaces"
     },
     "providerRecovery": {
       "savedPrompt": "Saved prompt",
@@ -20736,10 +20747,11 @@
       "text5f6ba69d66d1": "Skill removed",
       "textcb8d6b0c94c9": " and every file in it, edits included, and removes the skill from every agent that lists it. One commit on the default branch.",
       "cliDeviceTitle": "Authorize Kortix CLI",
-      "cliDeviceWarning": "Approve only a login you started. Type the code your terminal shows.",
+      "cliDeviceWarning": "Approve only a login you started. Check that this code matches the one your terminal shows.",
       "cliDeviceCode": "Login code",
       "cliDeviceApproved": "Login approved. Return to your terminal.",
       "cliDeviceAction": "Authorize CLI",
+      "cliDeviceConfirm": "This code matches my terminal",
       "text705a7e325b66": "Kortix App emitted events",
       "text4b80152fb96b": "Read Kortix App event credentials",
       "text59374c1f1acd": "Kortix App scheduled a run",
@@ -21391,7 +21403,16 @@
       "textb1f8e3109f1b": "{value0}: {value1} days is the most Kortix allows.",
       "textac20a57bfde0": "Hide",
       "text268733ac2f60": "Could not update that app",
-      "text5d8926d4a4dd": "Could not register that app"
+      "text5d8926d4a4dd": "Could not register that app",
+      "text30b9ce09f406": "Enter a period such as 15m, 1h or 1d, at least 1m.",
+      "text28d33d2ad989": "Choose the App to call",
+      "textd777d7805cfa": "Enter a path that starts with /",
+      "text8043e69a8dd6": "Delete trigger",
+      "textd6fa1626e3af": "Connector event created",
+      "textccf59f978ef6": "No connector events here yet",
+      "text82cbc4a4def0": "Connector events are not set up on this deployment, so no connector can send them yet.",
+      "text458ceb31019b": "Connector event triggers",
+      "text27ca9df9dbaa": "Connector event triggers are off"
     },
     "publicShareConfirm": {
       "title": "Create a public link?",
@@ -21816,6 +21837,8 @@
     "llmEstimateLabel": "LLM estimate:"
   },
   "triggerComposer": {
+    "programInputPlaceholder": "Empty: the program reads the trigger's payload as JSON",
+    "programInputHelp": "This agent runs a program. It reads this text on stdin. Leave it empty to send the whole payload as JSON: the event, webhook body or schedule details, plus the trigger's static payload.",
     "every": "Every",
     "dayOfMonth": "Day of month",
     "details": "Details",
@@ -21853,7 +21876,16 @@
     "crBranchHelp": "Runs when a change request merges into this branch, or into any branch when it is empty. The instruction can read <code>change_request.number</code>, <code>change_request.title</code> and <code>change_request.base_ref</code>.",
     "eventsOff": "Connector events are in beta and off for this workspace. Turn them on under Feature flags in Workspace admin.",
     "noApps": "No App in this workspace sends events yet. Deploy an App that POSTs to <code>KORTIX_APP_EVENTS_URL</code>, then pick it here.",
-    "openApps": "Open Apps"
+    "openApps": "Open Apps",
+    "thenLabel": "What a fire does",
+    "thenAgent": "Run an agent",
+    "thenApp": "Call an App",
+    "targetPath": "Path",
+    "targetMethod": "Method",
+    "targetHelp": "Each fire wakes the App and sends the payload to this path. No agent runs.",
+    "intervalLabel": "Repeats every",
+    "intervalHelp": "A fixed period such as 15m, 1h or 1d.",
+    "useCalendar": "Use a calendar schedule"
   },
   "gatewayAccess": {
     "heroTitle": "Use this workspace's models anywhere",
@@ -22153,7 +22185,7 @@
     "infoRunsThrough": "Provider",
     "infoSignsInWith": "Signs in with",
     "infoCategory": "Category",
-    "infoAppEvents": "App events",
+    "infoAppEvents": "Events",
     "infoAppEventsYes": "Supported",
     "authOAuth": "OAuth sign-in",
     "authApiKey": "API key",
@@ -23704,9 +23736,9 @@
   },
   "automationsPause": {
     "groupTitle": "Triggers",
-    "groupDescription": "Schedules, loops, webhooks, app events and monitors in this workspace.",
+    "groupDescription": "Schedules, loops, webhooks, connector events and App events in this workspace.",
     "label": "Pause all triggers",
-    "description": "Nothing in this workspace runs on its own: no schedule, loop, webhook, app event or monitor. Running a trigger by hand still works.",
+    "description": "Nothing in this workspace runs on its own: no schedule, loop, webhook, connector event or App event. Running a trigger by hand still works.",
     "readOnlyDescription": "Only an owner or admin can pause or resume triggers.",
     "pausedSince": "Paused since {date}.",
     "pauseTitle": "Pause all triggers?",
@@ -24950,6 +24982,11 @@
       }
     },
     "modelView": {
+      "programTimeout": "Time limit",
+      "programTimeoutHelp": "A run that takes longer is stopped and the turn fails. From 1s to 6h, such as 30m or 2h. Empty: 30m.",
+      "programTitle": "Program",
+      "programCommand": "Command",
+      "programHelp": "Each turn runs this command in the session's sandbox instead of a model. The message arrives on stdin and in $KORTIX_EVENT_PATH. What it prints is the reply. A non-zero exit fails the turn.",
       "title": "Model",
       "help": "How this agent thinks.",
       "projectDefault": "Workspace default",
@@ -26756,12 +26793,6 @@
       "setDefaultAria": "Set {model} as the default model for this workspace",
       "setWorkspaceDefault": "Set as workspace default"
     },
-    "profile": {
-      "deleteLogin": "Delete my login",
-      "deleteLoginDescription": "Deletes your Kortix login. You belong to no workspace, so nothing else is deleted.",
-      "deleteLoginTitle": "Delete your login?",
-      "deleteLoginWarning": "This deletes your login right away. This cannot be undone."
-    },
     "capture": {
       "noWorkspaceTitle": "Create or join a workspace first.",
       "noWorkspaceBody": "Kortix Capture records into a workspace. Then open this sign-in again.",
@@ -26865,6 +26896,20 @@
     "connect": "Connect",
     "cardFailed": "Could not connect {app}. Try again.",
     "blockedTitle": "Open {app} to sign in",
-    "blockedDescription": "Your browser blocked the sign-in window. Open it with the button below. This page updates by itself."
+    "blockedDescription": "Your browser blocked the sign-in window. Open it with the button below. This page updates by itself.",
+    "doneTitle": "{app} connected",
+    "doneTitleNoApp": "Connected",
+    "doneDescription": "Your agent can use {app} now.",
+    "doneClose": "You can close this tab.",
+    "doneDeniedTitle": "Sign-in cancelled",
+    "doneDeniedDescription": "You did not allow access on {app}. Start the sign-in again from Kortix to connect it.",
+    "doneExpiredTitle": "This sign-in link expired",
+    "doneExpiredDescription": "It was already used or is too old. Start the sign-in again from Kortix.",
+    "doneFailedTitle": "{app} did not connect",
+    "doneFailedTitleNoApp": "The sign-in did not finish",
+    "doneFailedDescription": "Start the sign-in again from Kortix. If it fails again, send the code below to support.",
+    "doneErrorCode": "Error code: {code}",
+    "doneOpenKortix": "Open Kortix",
+    "doneFallbackApp": "the app"
   }
 }

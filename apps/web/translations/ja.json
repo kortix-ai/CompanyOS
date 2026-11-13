@@ -709,6 +709,7 @@
       "gracePeriodDescription": "予定日に削除されます。それまではいつでもキャンセルできます。",
       "immediateLabel": "すぐに削除",
       "immediateDescription": "あなたのアカウントとそのデータはすぐに削除されます。これを元に戻すことはできません。",
+      "noWorkspaceImmediateOnly": "どのワークスペースにも所属していないため、猶予期間はありません。アカウントはすぐに削除されます。",
       "typeDeleteToConfirm": "確認のため「delete」と入力してください",
       "keepAccount": "アカウントを維持する",
       "processing": "処理中…",
@@ -731,7 +732,7 @@
         "left": "退出するワークスペース",
         "blockers": "あなたが唯一のオーナーで、他のメンバーが利用しています。オーナー権限を移譲するか、ワークスペースを削除してください。",
         "members": "{count, plural, other {# 人のメンバー}}",
-        "nothing": "どのワークスペースにも所属していません。ログインだけが削除されます。",
+        "nothing": "アカウントと一緒に削除または退出するワークスペースはありません。",
         "blockersTitle": "先に引き継いでください"
       }
     },
@@ -1327,6 +1328,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "スペースがオンのとき、スペースは自分自身を見守れます。詳細でプロアクティブをオンにすると、エージェントがそこで起きたこと（完了したスレッド、未回答の質問、参加した人）を読み、共有する価値のある結果、あなたが下すべき判断、期限切れの項目など、重要なときだけチャットに書き込みます。作業を行うスレッドを始めることもできます。9:00 のデイリーブリーフも選べます。"
+        },
+        "program_agents": {
+          "name": "プログラムエージェント",
+          "description": "モデルの代わりにあなたのコードを実行するエージェント。kortix.yaml でエージェントに `run: <command>` を指定すると、各ターンでそのコマンドがセッションのサンドボックスで、エージェントのワークスペース、シークレット、アクセス権とともに実行されます。メッセージまたはトリガーのデータが入力になり、コマンドの出力が返信になります。"
         }
       },
       "channelsSwitch": {
@@ -1730,7 +1735,7 @@
         "email": "電子メール",
         "scheduled": "スケジュール済み",
         "webhook": "Webhook",
-        "event": "アプリイベント",
+        "event": "コネクタイベント",
         "manual": "手動",
         "all": "すべて"
       },
@@ -2096,7 +2101,13 @@
       "noModelUpgradeReason": "モデルがありません: Credits プランにアップグレードするか、自分のプロバイダーキーを追加してください。",
       "noModelKeyReason": "モデルがありません: 自分のプロバイダーキーを追加してください。",
       "noModelUpgradePlan": "プランをアップグレード",
-      "noModelAddProviderKey": "プロバイダーキーを追加"
+      "noModelAddProviderKey": "プロバイダーキーを追加",
+      "stepTitle": "モデルを接続",
+      "stepBody": "{workspace} のエージェントが応答するにはモデルが必要です。ChatGPT または Claude のプランを接続するか、プロバイダーキーを追加してください。",
+      "stepBodyUpgrade": "{workspace} のエージェントが応答するにはモデルが必要です。ChatGPT または Claude のプランを接続するか、プロバイダーキーを追加するか、Kortix モデルを使える Credits プランにアップグレードしてください。",
+      "stepBodyMember": "{workspace} のエージェントが応答するにはモデルが必要です。自分の ChatGPT または Claude のプランかプロバイダーキーを接続するか、このワークスペースの管理者に全員用のモデルの接続を依頼してください。",
+      "stepThisWorkspace": "このワークスペース",
+      "stepBack": "ワークスペースに戻る"
     },
     "providerRecovery": {
       "savedPrompt": "保存済みプロンプト",
@@ -20691,10 +20702,11 @@
       "text5f6ba69d66d1": "スキルを削除しました",
       "textcb8d6b0c94c9": " とその中のすべてのファイル（編集内容を含む）。このスキルを使うすべてのエージェントからも外します。デフォルトブランチへの 1 回のコミットです。",
       "cliDeviceTitle": "Kortix CLI を認証",
-      "cliDeviceWarning": "自分で開始したログインのみ承認してください。ターミナルに表示されたコードを入力してください。",
+      "cliDeviceWarning": "自分で開始したログインのみ承認してください。このコードがターミナルに表示されたコードと一致することを確認してください。",
       "cliDeviceCode": "ログインコード",
       "cliDeviceApproved": "ログインを承認しました。ターミナルに戻ってください。",
       "cliDeviceAction": "CLI を認証",
+      "cliDeviceConfirm": "このコードはターミナルの表示と一致しています",
       "text705a7e325b66": "Kortix アプリがイベントを送信しました",
       "text4b80152fb96b": "Kortix アプリのイベント認証情報を読み取りました",
       "text59374c1f1acd": "Kortix アプリが実行を予約しました",
@@ -21346,7 +21358,16 @@
       "textb1f8e3109f1b": "{value0}: {value1} 日が Kortix の上限です。",
       "textac20a57bfde0": "隠す",
       "text268733ac2f60": "そのアプリを更新できませんでした",
-      "text5d8926d4a4dd": "そのアプリを登録できませんでした"
+      "text5d8926d4a4dd": "そのアプリを登録できませんでした",
+      "text30b9ce09f406": "15m、1h、1d のような期間を入力してください（1m 以上）。",
+      "text28d33d2ad989": "呼び出すアプリを選択",
+      "textd777d7805cfa": "/ で始まるパスを入力してください",
+      "text8043e69a8dd6": "トリガーを削除",
+      "textd6fa1626e3af": "コネクタイベントを作成しました",
+      "textccf59f978ef6": "コネクタイベントはまだありません",
+      "text82cbc4a4def0": "このデプロイではコネクタイベントが設定されていないため、まだどのコネクタも送信できません。",
+      "text458ceb31019b": "コネクタイベントのトリガー",
+      "text27ca9df9dbaa": "コネクタイベントのトリガーはオフです"
     },
     "publicShareConfirm": {
       "title": "公開リンクを作成しますか？",
@@ -21771,6 +21792,8 @@
     "llmEstimateLabel": "LLM の推定:"
   },
   "triggerComposer": {
+    "programInputPlaceholder": "空欄: プログラムはトリガーのデータを JSON として受け取ります",
+    "programInputHelp": "このエージェントはプログラムを実行します。このテキストは stdin で渡されます。空欄にすると、イベント、Webhook の本文、スケジュールの情報とトリガーの固定データが JSON で渡されます。",
     "every": "間隔",
     "dayOfMonth": "日付",
     "details": "詳細",
@@ -21808,7 +21831,16 @@
     "crBranchHelp": "変更リクエストがこのブランチにマージされたときに実行されます。空欄なら、どのブランチへのマージでも実行されます。指示では <code>change_request.number</code>、<code>change_request.title</code>、<code>change_request.base_ref</code> を使えます。",
     "eventsOff": "コネクタイベントはベータ版で、このワークスペースではオフです。ワークスペース管理の機能フラグでオンにしてください。",
     "noApps": "このワークスペースには、まだイベントを送るアプリがありません。<code>KORTIX_APP_EVENTS_URL</code> に POST するアプリをデプロイしてから、ここで選んでください。",
-    "openApps": "アプリを開く"
+    "openApps": "アプリを開く",
+    "thenLabel": "実行時の動作",
+    "thenAgent": "エージェントを実行",
+    "thenApp": "アプリを呼び出す",
+    "targetPath": "パス",
+    "targetMethod": "メソッド",
+    "targetHelp": "実行のたびにアプリを起動し、ペイロードをこのパスに送信します。エージェントは実行されません。",
+    "intervalLabel": "繰り返し間隔",
+    "intervalHelp": "15m、1h、1d のような固定期間。",
+    "useCalendar": "カレンダーのスケジュールを使う"
   },
   "gatewayAccess": {
     "heroTitle": "このワークスペースのモデルをどこでも使う",
@@ -22153,7 +22185,7 @@
     "infoRunsThrough": "プロバイダー",
     "infoSignsInWith": "サインイン方法",
     "infoCategory": "カテゴリ",
-    "infoAppEvents": "アプリイベント",
+    "infoAppEvents": "イベント",
     "infoAppEventsYes": "対応",
     "authOAuth": "OAuth サインイン",
     "authApiKey": "API キー",
@@ -23704,9 +23736,9 @@
   },
   "automationsPause": {
     "groupTitle": "トリガー",
-    "groupDescription": "このワークスペースのスケジュール、ループ、Webhook、アプリイベント、モニター。",
+    "groupDescription": "このワークスペースのスケジュール、ループ、Webhook、コネクタイベント、アプリイベント。",
     "label": "すべてのトリガーを一時停止",
-    "description": "このワークスペースでは何も自動で実行されません: スケジュール、ループ、Webhook、アプリイベント、モニターのいずれも。トリガーの手動実行は引き続き使えます。",
+    "description": "このワークスペースでは何も自動で実行されません。スケジュール、ループ、Webhook、コネクタイベント、アプリイベントはすべて停止します。トリガーの手動実行は引き続き使えます。",
     "readOnlyDescription": "トリガーの一時停止と再開ができるのはオーナーまたは管理者だけです。",
     "pausedSince": "{date} から一時停止中。",
     "pauseTitle": "すべてのトリガーを一時停止しますか？",
@@ -24950,6 +24982,11 @@
       }
     },
     "modelView": {
+      "programTimeout": "制限時間",
+      "programTimeoutHelp": "これより長い実行は停止され、ターンは失敗します。1s から 6h まで（例: 30m、2h）。空欄: 30m。",
+      "programTitle": "プログラム",
+      "programCommand": "コマンド",
+      "programHelp": "各ターンで、モデルの代わりにこのコマンドがセッションのサンドボックスで実行されます。メッセージは stdin と $KORTIX_EVENT_PATH で渡されます。出力が返信になります。終了コードが 0 以外の場合、ターンは失敗します。",
       "title": "モデル",
       "help": "このエージェントの考え方。",
       "projectDefault": "ワークスペースのデフォルト",
@@ -26756,12 +26793,6 @@
       "setDefaultAria": "{model} をこのワークスペースの既定モデルに設定",
       "setWorkspaceDefault": "ワークスペースの既定に設定"
     },
-    "profile": {
-      "deleteLogin": "ログインを削除",
-      "deleteLoginDescription": "Kortix のログインを削除します。どのワークスペースにも属していないため、他には何も削除されません。",
-      "deleteLoginTitle": "ログインを削除しますか？",
-      "deleteLoginWarning": "ログインはすぐに削除されます。元に戻すことはできません。"
-    },
     "capture": {
       "noWorkspaceTitle": "まずワークスペースを作成するか、参加してください。",
       "noWorkspaceBody": "Kortix Capture はワークスペースに記録します。その後、このサインインをもう一度開いてください。",
@@ -26865,6 +26896,20 @@
     "connect": "接続",
     "cardFailed": "{app} を接続できませんでした。もう一度お試しください。",
     "blockedTitle": "{app} を開いてサインイン",
-    "blockedDescription": "ブラウザがサインインウィンドウをブロックしました。下のボタンから開いてください。このページは自動で更新されます。"
+    "blockedDescription": "ブラウザがサインインウィンドウをブロックしました。下のボタンから開いてください。このページは自動で更新されます。",
+    "doneTitle": "{app} に接続しました",
+    "doneTitleNoApp": "接続しました",
+    "doneDescription": "エージェントは今から {app} を使えます。",
+    "doneClose": "このタブは閉じてかまいません。",
+    "doneDeniedTitle": "サインインはキャンセルされました",
+    "doneDeniedDescription": "{app} でアクセスを許可しませんでした。接続するには Kortix からもう一度サインインしてください。",
+    "doneExpiredTitle": "このサインインリンクは期限切れです",
+    "doneExpiredDescription": "すでに使用済みか、古すぎます。Kortix からもう一度サインインしてください。",
+    "doneFailedTitle": "{app} に接続できませんでした",
+    "doneFailedTitleNoApp": "サインインが完了しませんでした",
+    "doneFailedDescription": "Kortix からもう一度サインインしてください。再び失敗する場合は、下のコードをサポートに送ってください。",
+    "doneErrorCode": "エラーコード: {code}",
+    "doneOpenKortix": "Kortix を開く",
+    "doneFallbackApp": "アプリ"
   }
 }

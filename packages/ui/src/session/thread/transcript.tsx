@@ -42,6 +42,7 @@ import {
   sessionLogAgentRunLabel,
   isNoGroupActivityTool,
   toolCallMetadata,
+  toolCallConnectorSignIns,
   toolKind,
 } from '@kortix/sdk';
 import {
@@ -2006,7 +2007,8 @@ function segmentRendersSomething(segment: SessionLogSegment): boolean {
 /**
  * The segments a messages-only thread (`TranscriptRows.messagesOnly`) draws:
  * the agent's words and the deliverables it showed on purpose (`show`,
- * `image_gen`), plus a call that waits on the person's permission. Never a
+ * `image_gen`), plus a call that waits on the person's permission or started a
+ * connector sign-in (its Connect card). Never a
  * burst (tools, thinking) or another standalone call (a sub-agent card).
  * Settled, the interim sentences are work too: only the deliverables and the
  * final text stay, the rule of the "Worked for" fold (`splitSessionLogTurnWork`).
@@ -2023,7 +2025,12 @@ export function messageOnlySegments(
     // element, and the words after it took the column's gap: a blank line above short answers.
     if (segment.kind === 'text') return segment.block.text.trim() !== '';
     if (segment.kind === 'show-group') return true;
-    return isNoGroupActivityTool(segment.block.name) || !!getPermissionForTool(options.permissions, segment.block.call_id);
+    return (
+      isNoGroupActivityTool(segment.block.name) ||
+      !!getPermissionForTool(options.permissions, segment.block.call_id) ||
+      // The call that started a connector sign-in: its Connect card waits on the person.
+      toolCallConnectorSignIns(segment.block).length > 0
+    );
   };
   const split = options.working ? null : splitSessionLogTurnWork(visible, { working: false });
   return (split ? [...split.hoisted, ...split.final] : visible).filter(kept);

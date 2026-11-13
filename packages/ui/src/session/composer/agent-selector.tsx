@@ -54,6 +54,12 @@ export function resolveDisplayedAgentName(primaryAgents: Agent[], selectedAgent:
   return current?.name ?? selectedAgent ?? primaryAgents[0]?.name;
 }
 
+/** Is the displayed agent a program agent (`run`)? Its runtime listing names provider `program`: it has no model to pick. */
+export function resolveProgramAgent(primaryAgents: Agent[], selectedAgent: string | null): boolean {
+  const name = resolveDisplayedAgentName(primaryAgents, selectedAgent);
+  return primaryAgents.find((a) => a.name === name)?.model?.providerID === 'program';
+}
+
 /** The label `AgentSelector` shows for a selection (null = nothing picked). Other surfaces that name the agent reuse it. */
 export function agentDisplayLabel(agents: Agent[], selectedAgent: string | null): string {
   const name = resolveDisplayedAgentName(composerSelectableAgents(agents), selectedAgent);

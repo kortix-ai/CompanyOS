@@ -35,6 +35,7 @@ import { startGatewaySpendBackfillWorker, stopGatewaySpendBackfillWorker } from 
 import { startGrantExpirySweeper, stopGrantExpirySweeper } from './grant-expiry';
 import { startNotificationWorker, stopNotificationWorker } from './notification';
 import { startOAuthSweeper, stopOAuthSweeper } from './oauth-sweep';
+import { startReplaySweeper, stopReplaySweeper } from './replay-sweep';
 import { startProjectMaintenance, stopProjectMaintenance } from './project-maintenance';
 import { startProjectSnapshotWorker, stopProjectSnapshotWorker } from './project-snapshot';
 import { startProviderTransitionWorker, stopProviderTransitionWorker } from './provider-transition';
@@ -104,6 +105,8 @@ export const JOBS: readonly Job[] = [
   // Connector approvals past expires_at. Never resumes a session.
   { ticks: { 'approval-expiry': 10 * MIN }, start: startApprovalExpirySweeper, stop: stopApprovalExpirySweeper },
   { ticks: { 'oauth-sweep': 3 * HOUR }, start: startOAuthSweeper, stop: stopOAuthSweeper },
+  // Expired shared Idempotency-Key model answers (KRTX-4612) leave the table.
+  { ticks: { 'gateway-replay-sweep': 30 * MIN }, start: startReplaySweeper, stop: stopReplaySweeper },
   {
     ticks: { 'drive-conflict-scan': 10 * MIN, 'volume-deletions': 3 * HOUR, 'drive-mount-revocations': 10 * MIN, 'drive-index': 20 * MIN },
     start: startDriveWorkers,

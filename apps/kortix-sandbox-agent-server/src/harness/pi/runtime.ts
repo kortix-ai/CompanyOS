@@ -31,7 +31,7 @@ import { kortixEventBus, sessionLogEventBus } from '@/services/event-bus/kortix-
 import { logger } from '@/lib/log/logger'
 import { resolveKortixRuntimeStateDirectory } from '@/lib/config/runtime-state-dir'
 import { SECRET_CAPABILITIES_INSTRUCTION_PATH } from '@/services/sandbox-env/secret-capabilities'
-import { WORKSPACE_SETUP_NOTE_PATH } from '../shared/workspace-setup'
+import { WORKSPACE_SETUP_NOTE_PATH, parseWorkspaceSetup } from '../shared/workspace-setup'
 import { withheldManagedSkills } from '@/services/skills/managed-skills'
 import { loadTools } from '@/services/tools/host'
 import { compiledAgentConfigFromEnv } from '@/services/config-provider/compiled-agent-config'
@@ -45,16 +45,19 @@ import { FRONT_AGENTS_TTL_MS, FRONT_PROMPT, FRONT_TOOLS, FRONT_WORKER_NOTE, fetc
 import { WATCHER_PROMPT } from './watcher'
 import { frontSpaceAgentsFrom, frontSpaceRoster, frontSpaceRosterSection } from './front-space'
 import { cloudChildReport, cloudChildToolDetails, cloudSpawnSession, cloudStopChild, cloudSubagentApiFrom, routeSubagent, subagentContextFrom, type CloudSubagentApi, type SubagentContext } from './cloud-subagent'
-import type { ControlPlane } from './extensions/control-plane'
+import { callApi, sessionPath, type ControlPlane } from './extensions/control-plane'
 import { messaging, MESSAGING_TOOLS } from './extensions/messaging'
 import { TEAM_TASK_TOOLS, teamTasks } from './extensions/team-tasks'
 import { VOICE_CALL_FLAG, voice } from './extensions/voice'
+import { LOOPS_FLAG, followThrough } from './extensions/follow-through'
+import { GOAL_MODE_BOX_FLAG, goalMode, type ChatGoal } from './extensions/goal-mode'
 import { BUNDLED_WORKFLOWS } from './extensions/bundled-workflows'
 import { isWorkflowRunner, WORKFLOW_TOOL, WorkflowRuns, type WorkflowControlAnswer } from './extensions/workflow'
 import { contextRecord } from './extensions/context-record'
 import { listCheckout } from './extensions/workflow-store'
-import { promptOrigin, ULTRACODE_SYSTEM_LINE, ultracodeRequested, type PromptOrigin } from './prompt-origin'
+import { promptOrigin, TRIGGER_EVENT_TAG, ULTRACODE_SYSTEM_LINE, ultracodeRequested, type PromptOrigin } from './prompt-origin'
 import { enabledFeatureFlags } from '@/lib/config/feature-flags'
+import { PROGRAM_AGENTS_FLAG, PROGRAM_PROVIDER_ID, programStep, type ProgramRun } from './program'
 import type { WorkflowRunMetadata } from '@kortix/api-contract/kortix-tool-card'
 import type { WorkflowControlBody } from '@kortix/api-contract/multi-agent'
 import type { RuntimeCapability } from '@kortix/api-contract/runtime-relay'
@@ -817,7 +820,7 @@ export class PiRuntime {
         sessionID: this.rootId,
         mintMessageId: () => this.clock.mint(this.now()),
         parentMessageId: () => this.turnParent,
-        model: () => ({ providerID: this.selected!.providerID, modelID: this.selected!.modelID }),
+        model: () => (this.programRun(this.agentName) ? { providerID: PROGRAM_PROVIDER_ID, modelID: this.agentName } : { providerID: this.selected!.providerID, modelID: this.selected!.modelID }),
         agent: () => this.agentName,
         workspace: this.workspace,
         now: this.now,
@@ -848,7 +851,11 @@ export class PiRuntime {
         // `sessionId` names the thread, so a Claude subscription model keeps one Claude session per thread.
         streamFn: withMessageIdentity(
           withAgentSampling(
-            (model, context, options) => this.models!.models.streamSimple(model, context, { ...options, sessionId: this.rootId }),
+            (model, context, options) => {
+              // A program agent (`run`): its command takes the model's place (program.ts).
+              const program = this.programRun(this.agentName)
+              return program ? programStep(program, context, options) : this.models!.models.streamSimple(model, context, { ...options, sessionId: this.rootId })
+            },
             () => this.sampling(this.compiledAgent(), this.selected!, this.turnParent ?? undefined),
           ),
           { reserveMessageId: () => this.adapter!.reserveMessageId(), turnId: () => this.turnParent },
@@ -892,7 +899,7 @@ export class PiRuntime {
         prebuilt: project.prebuilt,
         baseTools: this.baseTools,
         // The nested-call gate is first: pi runs `tool_call` handlers in load order and stops at the first block.
-        extensions: [this.nestedCallGate(), this.presentationExtension(), this.turnExtension(), ...this.contextExtensions(), subagents(this.kortixHost()), workflow(this.kortixHost()), ...this.voiceExtensions(), ...this.multiAgentExtensions(), ...codemodeExtensions(this.codemodeMode, coding.createCodemodeExtension), ...local, ...project.extensions],
+        extensions: [this.nestedCallGate(), this.presentationExtension(), this.turnExtension(), ...this.contextExtensions(), subagents(this.kortixHost()), workflow(this.kortixHost()), ...this.voiceExtensions(), ...this.multiAgentExtensions(), ...this.goalModeExtensions(), ...this.followThroughExtensions(), ...codemodeExtensions(this.codemodeMode, coding.createCodemodeExtension), ...local, ...project.extensions],
         systemPrompt: () => this.systemPrompt(),
         skillAllowed: (name) => skillGranted(this.policy, name),
         // Every provider a turn may switch to: the gateway, and Claude subscription models.
@@ -1958,6 +1965,59 @@ export class PiRuntime {
     return [voice(session, this.agentName)]
   }
 
+  /**
+   * Goal mode (`extensions/goal-mode.ts`): a top-level chat that owns a goal
+   * keeps working it until the verifier passes it. The box lists `goal_mode`
+   * wherever a Drive can hold a goal (apps/api feature-flag-env.ts).
+   */
+  private goalModeExtensions(): InlineExtension[] {
+    const plane = this.controlPlane()
+    const flags = enabledFeatureFlags(this.env)
+    if (!plane || this.subagentContext.depth !== 0 || !(flags.has(GOAL_MODE_BOX_FLAG) || flags.has('goals'))) return []
+    return [
+      goalMode({
+        sessionId: plane.sessionId,
+        applies: () => promptOrigin(this.active?.input.text ?? '') !== 'peer',
+        turnText: () => this.active?.input.text ?? '',
+        listGoals: async () => {
+          const answer = await callApi(plane, 'GET', `/workspaces/${encodeURIComponent(plane.projectId)}/goals`)
+          const goals = (answer.body as { goals?: ChatGoal[] } | null)?.goals
+          return answer.status === 200 && Array.isArray(goals) ? goals : null
+        },
+        onNudge: (goal, nudges) => logger.info('[pi] goal-mode nudge', { rootId: this.rootId, goalId: goal.goal_id, nudges }),
+      }),
+    ]
+  }
+
+  /**
+   * Follow-through (`extensions/follow-through.ts`): a top-level session with
+   * Loops on never ends a turn with a wait it set no wake-up for. Not for a
+   * peer message or a trigger-started session: nobody waits on those turns.
+   */
+  private followThroughExtensions(): InlineExtension[] {
+    const plane = this.controlPlane()
+    if (!plane || this.subagentContext.depth !== 0 || !enabledFeatureFlags(this.env).has(LOOPS_FLAG)) return []
+    return [
+      followThrough({
+        applies: () => {
+          const text = this.active?.input.text ?? ''
+          return promptOrigin(text) !== 'peer' && !text.includes(TRIGGER_EVENT_TAG)
+        },
+        hasWakeUp: async () => {
+          try {
+            const answer = await callApi(plane, 'GET', sessionPath(plane.projectId, plane.sessionId, '/reminders'))
+            const rows = (answer.body as { reminders?: { state?: string }[] } | null)?.reminders
+            // An unreadable list counts as a wake-up: the guard never nudges on a guess.
+            return answer.status !== 200 || !Array.isArray(rows) || rows.some((row) => row.state === 'active')
+          } catch {
+            return true
+          }
+        },
+        onNudge: (wait) => logger.info('[pi] follow-through nudge', { rootId: this.rootId, kind: wait.kind, actions: wait.kind === 'acted' ? wait.actions : undefined }),
+      }),
+    ]
+  }
+
   /** The lead whose task list this session uses: itself at depth 0, its lead as a teammate; null without agent teams. */
   private teamListLead(): string | null {
     const plane = this.controlPlane()
@@ -2334,7 +2394,10 @@ export class PiRuntime {
     const agent = new core.Agent({
       streamFn: withMessageIdentity(
         withAgentSampling(
-          (m, context, options) => this.models!.models.streamSimple(m, context, { ...options, sessionId: child.id }),
+          (m, context, options) => {
+            const program = this.programRun(input.agent, child.id)
+            return program ? programStep(program, context, options) : this.models!.models.streamSimple(m, context, { ...options, sessionId: child.id })
+          },
           () => this.sampling(this.compiled?.agent?.[input.agent], selected, messageId),
         ),
         { reserveMessageId: () => adapter.reserveMessageId(), turnId: () => messageId, threadId: child.id },
@@ -2545,6 +2608,22 @@ export class PiRuntime {
 
   private compiledAgent(): CompiledAgent | undefined {
     return this.compiled?.agent?.[this.agentName]
+  }
+
+  /** The run of `agent` when it is a program agent (`run`); null for a model agent. */
+  private programRun(agent: string, sessionId: string = this.sessionId): ProgramRun | null {
+    const command = this.compiled?.agent?.[agent]?.run?.trim()
+    if (!command) return null
+    const repo = parseWorkspaceSetup(this.env.KORTIX_WORKSPACE_SETUP)?.repos[0]?.path
+    return {
+      command,
+      agent,
+      sessionId,
+      enabled: enabledFeatureFlags(this.env).has(PROGRAM_AGENTS_FLAG),
+      cwd: repo && existsSync(repo) ? repo : this.workspace,
+      env: this.env,
+      ...(this.compiled?.agent?.[agent]?.timeout ? { timeoutMs: this.compiled.agent[agent]!.timeout! * 1000 } : {}),
+    }
   }
 
   /**
@@ -2835,8 +2914,10 @@ export class PiRuntime {
       color: agent?.color ?? null,
       variant: agent?.variant ?? null,
       source: 'config',
-      model:
-        name === this.agentName && selected
+      // A program agent's replies name provider `program` (program.ts): so does its listing, and pickers hide the model.
+      model: agent?.run?.trim()
+        ? { providerID: PROGRAM_PROVIDER_ID, modelID: name }
+        : name === this.agentName && selected
           ? { providerID: selected.providerID, modelID: selected.modelID }
           : agent?.model && nativeModelId(agent.model)
             ? agentModelRef(nativeModelId(agent.model)!)

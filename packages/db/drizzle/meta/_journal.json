@@ -1709,6 +1709,20 @@
       "when": 1794450982100,
       "tag": "20261112023622_llm_credential_backfill_account_nullable",
       "breakpoints": true
+    },
+    {
+      "idx": 244,
+      "version": "7",
+      "when": 1794452225350,
+      "tag": "20261112025705_chat_installs_own_app",
+      "breakpoints": true
+    },
+    {
+      "idx": 245,
+      "version": "7",
+      "when": 1794487696871,
+      "tag": "20261112124816_audit_archive_resume",
+      "breakpoints": true
     }
   ]
 }

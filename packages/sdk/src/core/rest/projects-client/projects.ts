@@ -78,6 +78,7 @@ export type FeatureFlagKey =
   | 'pi_worker'
   /** @deprecated Graduated — every session saves its transcript. Removed in the next major. */
   | 'session_transcript_history'
+  /** @deprecated Graduated 2026-11-12 — named provider keys, sharing, per-session key selection and named ChatGPT/Claude sign-ins are on for every project. The API sends `true` for every project, so `useFeatureFlag(id, 'pooled_provider_secrets')` reports `enabled: true`. Removed in the next major. */
   | 'pooled_provider_secrets'
   /** @deprecated Graduated — every new session runs pi; OpenCode is sunset. The API sends `true` for every project. Removed in the next major. */
   | 'pi_harness'
@@ -138,7 +139,7 @@ export type FeatureFlagKey =
   /** @deprecated Withdrawn — agents messaging people left the product. The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'human_messaging';
 
-/** The keys of {@link FeatureFlagKey} that are no flag: the API never sends them, or (`llm_gateway`, `session_log`, `session_log_restore`, `pi_harness`, `genui`, `meta_agent`, `notification_center`) sends a constant `true`, or (`volumes`, `drives`, `artifacts`) sends whether the platform stores a Drive, or (`artifact_comments`) sends a constant `false`. */
+/** The keys of {@link FeatureFlagKey} that are no flag: the API never sends them, or (`llm_gateway`, `session_log`, `session_log_restore`, `pi_harness`, `genui`, `meta_agent`, `notification_center`, `pooled_provider_secrets`) sends a constant `true`, or (`volumes`, `drives`, `artifacts`) sends whether the platform stores a Drive, or (`artifact_comments`) sends a constant `false`. */
 type GraduatedFeatureFlagKey =
   | 'agent_tunnel'
   | 'teams'
@@ -167,6 +168,7 @@ type GraduatedFeatureFlagKey =
   | 'volumes'
   | 'drives'
   | 'notification_center'
+  | 'pooled_provider_secrets'
   | 'artifacts'
   | 'artifact_comments';
 /** The keys `KortixProject.experimental` carries on every response. */
@@ -181,7 +183,6 @@ export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'marketplace',
   'reminders',
   'secrets_egress',
-  'pooled_provider_secrets',
   'us_region',
   'event_triggers',
   'chat',

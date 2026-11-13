@@ -340,6 +340,7 @@
       "repositoryLabel": "Dépôt",
       "loadingOptions": "Chargement des options de dépôt…",
       "managedUnavailable": "Les dépôts gérés par Kortix ne sont pas disponibles sur cette instance. Un administrateur de la plateforme les configure dans la console d'administration.",
+      "githubAfterCreate": "Pour utiliser votre propre GitHub pour vos prochains espaces de travail, connectez-le dans Paramètres de l'espace de travail › Git une fois celui-ci créé.",
       "installationUnreachable": "Cette connexion GitHub ne fonctionne plus. Reconnectez-la pour lister les dépôts.",
       "reconnect": "Reconnecter dans les réglages Git",
       "managedImportLabel": "Importer un dépôt géré existant",
@@ -1267,10 +1268,6 @@
           "name": "Secrets protégés par le réseau",
           "description": "Contrôlez les outils et destinations autorisés à recevoir les secrets de l’espace de travail."
         },
-        "pooled_provider_secrets": {
-          "name": "Secrets de fournisseur partagés",
-          "description": "Les membres connectent leurs propres abonnements ChatGPT et clés de fournisseur, les partagent si besoin et choisissent ceux que chaque session utilise."
-        },
         "reminders": {
           "name": "Boucles",
           "description": "Permet aux agents et aux personnes de planifier des points de contrôle sur une session, une fois ou de façon récurrente. Chaque déclenchement relance cette session. Ajoute les boucles à la liste des Déclencheurs, l’indicateur de boucles de la session et `kortix loop`."
@@ -2164,6 +2161,7 @@
       "agentWorkingOnFor": "travaille sur {task} · {time}",
       "somethingWrong": "Un problème est survenu",
       "notSent": "Non envoyé",
+      "computerDisconnected": "L'ordinateur de cette session est déconnecté.",
       "retry": "Réessayer",
       "resume": "Reprendre",
       "agentIsWorking": "{agent} travaille",
@@ -3423,9 +3421,6 @@
     },
     "inbox": {
       "title": "Boîte de réception",
-      "viewReview": "Review",
-      "viewNotifications": "Notifications",
-      "viewLabel": "Vue de la boîte de réception",
       "description": "Les nouvelles des sessions, déclencheurs et artefacts qui vous concernent, dans tous les espaces de travail.",
       "unreadLabel": "Boîte de réception : {count} non lues",
       "unreadCount": "{count} non lues",
@@ -26706,7 +26701,7 @@
       "apiKeysDescription": "Des clés pour les scripts, la CI et les intégrations. Une clé agit en votre nom, au nom d'un agent ou d'un bot. Les règles de chaque clé sont dans Sécurité.",
       "keys": {
         "title": "Clés d'API",
-        "description": "Des clés pour les scripts, la CI et les intégrations. Une clé fonctionne uniquement dans cet espace de travail et agit en votre nom, au nom d'un agent ou d'un bot.",
+        "description": "Clés pour scripts, CI et intégrations. Une clé agit comme vous, un agent ou un bot ; « S'applique à » définit les espaces de travail qu'elle atteint.",
         "newKey": "Nouvelle clé",
         "count": "{count, plural, one {# clé} other {# clés}}",
         "emptyTitle": "Aucune clé d'API",
@@ -26716,6 +26711,10 @@
         "actsAsAgent": "Un agent",
         "actsAsBot": "Un bot",
         "actsAsMeHint": "Votre rôle dans cet espace de travail. La clé cesse de fonctionner quand vous partez.",
+        "worksIn": "S'applique à",
+        "worksInAll": "Tous mes espaces de travail",
+        "worksInAllHint": "Agit comme vous dans chacun de vos espaces de travail, avec votre rôle complet. Gérez-la dans Préférences → Clés personnelles.",
+        "worksInWorkspace": "Uniquement cet espace de travail",
         "actsAsAgentHint": "Exactement ce que l'agent peut faire selon kortix.yaml. Ses actions sont journalisées au nom de l'agent, et la clé continue de fonctionner après votre départ.",
         "actsAsBotHint": "Un bot pour la CI ou une intégration, avec son propre rôle. La clé continue de fonctionner après votre départ.",
         "needsPermission": "Nécessite l'autorisation de gérer les identifiants",
@@ -26734,6 +26733,7 @@
         "rowBot": "Bot · {name}",
         "createdBy": "Créée par {email}",
         "createdDescription": "{name} agit en tant que {actsAs}. Kortix n'affiche la clé qu'une fois : copiez-la maintenant et stockez-la comme secret.",
+        "createdPersonalDescription": "{name} agit comme vous dans chacun de vos espaces de travail — gérez-la dans Préférences → Clés personnelles. Kortix affiche la clé une seule fois : copiez-la maintenant et conservez-la comme secret.",
         "accessFullHint": "Tout ce que le principal de la clé peut faire dans cet espace de travail.",
         "accessCustomHint": "Uniquement les autorisations choisies. Chacune doit faire partie de ce que le principal de la clé peut faire."
       },
@@ -26744,7 +26744,9 @@
       "noWorkspaceTitle": "Créez un espace de travail pour connecter la CLI",
       "noWorkspaceBody": "La CLI se connecte à un espace de travail. Créez-en un, puis approuvez cette connexion.",
       "createAction": "Créer un espace de travail",
-      "workspaceLabel": "Espace de travail"
+      "workspaceLabel": "Espace de travail",
+      "loadFailedTitle": "Impossible de charger vos espaces de travail",
+      "loadFailedBody": "Cette connexion a besoin de votre liste d'espaces de travail. Votre compte est en bon état : réessayez pour continuer."
     },
     "models": {
       "yourDefault": "Par défaut de l'espace de travail",

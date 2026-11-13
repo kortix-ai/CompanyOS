@@ -3031,6 +3031,14 @@ export const chatInstalls = kortixSchema.table(
       .notNull()
       .references(() => projects.projectId, { onDelete: 'cascade' }),
     connectedAt: timestamp('connected_at', { withTimezone: true }).defaultNow().notNull(),
+    /**
+     * A Slack install of the Kortix workspace's OWN Slack app (its own bot and
+     * token), written only by that install path. False: the shared Kortix
+     * app, whose one token per Slack workspace belongs to one Kortix
+     * workspace (channels/slack/link.ts). Never derived from a secret a
+     * workspace admin can write.
+     */
+    ownApp: boolean('own_app').default(false).notNull(),
   },
   (table) => [
     uniqueIndex('idx_chat_installs_workspace_project').on(
@@ -4967,7 +4975,46 @@ export const auditArchiveChunks = kortixSchema.table('audit_archive_chunks', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   removedAt: timestamp('removed_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  /**
+   * The legacy table's share of a week while it is `exporting`: `{ rows, sum, accounts }` (counts
+   * as decimal strings). Read once per week, not once per worker life: on prod a week's tally
+   * reads ~50M rows at the archive rate cap (~2 h 50 min). Cleared when the week is archived.
+   */
+  legacyTally: jsonb('legacy_tally').$type<{ rows: string; sum: string; accounts: Array<string | null> }>(),
 });
+
+/**
+ * One row per object the archive has uploaded and verified for a week that is still `exporting`:
+ * the export's progress. A restarted export continues after the last recorded part instead of at
+ * the start of the week, and the week's totals and manifest come from these rows. Deleted when the
+ * week is archived (the manifest in S3 then lists the same objects).
+ */
+export const auditArchiveParts = kortixSchema.table(
+  'audit_archive_parts',
+  {
+    objectKey: text('object_key').primaryKey(),
+    weekStart: date('week_start', { mode: 'string' }).notNull(),
+    accountId: uuid('account_id'),
+    part: integer('part').notNull(),
+    rowCount: integer('row_count').notNull(),
+    byteCount: bigint('byte_count', { mode: 'number' }).notNull(),
+    /** sha256 hex of the object bytes. */
+    sha256: varchar('sha256', { length: 64 }).notNull(),
+    /** Sum of the part's event-id checksums (up to 2^77, so numeric). */
+    checksumSum: numeric('checksum_sum').notNull(),
+    firstOccurredAt: text('first_occurred_at').notNull(),
+    lastOccurredAt: text('last_occurred_at').notNull(),
+    /** The keyset cursor a restart continues from: (last_occurred_at, last_event_id). */
+    lastEventId: uuid('last_event_id').notNull(),
+    /** The account's last part of the week: nothing of this account is left to export. */
+    accountDone: boolean('account_done').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('audit_archive_parts_week_idx').on(table.weekStart),
+    foreignKey({ name: 'audit_archive_parts_week_fk', columns: [table.weekStart], foreignColumns: [auditArchiveChunks.weekStart] }).onDelete('cascade'),
+  ],
+);
 
 /** Deprecated: nothing writes it since migration 20261001223552613 (the prepare trigger no
  *  longer allocates sequences). Kept for old rows; drop it in a later forward migration. */

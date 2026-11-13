@@ -340,6 +340,7 @@
       "repositoryLabel": "リポジトリ",
       "loadingOptions": "リポジトリの選択肢を読み込んでいます…",
       "managedUnavailable": "このインスタンスでは Kortix 管理リポジトリを利用できません。プラットフォーム管理者が管理コンソールで設定します。",
+      "githubAfterCreate": "今後のワークスペースで自分の GitHub を使うには、このワークスペースの作成後に「ワークスペース設定 › Git」で接続してください。",
       "installationUnreachable": "この GitHub 接続は使えなくなりました。リポジトリを一覧表示するには接続し直してください。",
       "reconnect": "Git 設定で接続し直す",
       "managedImportLabel": "既存の管理リポジトリをインポート",
@@ -1267,10 +1268,6 @@
           "name": "ネットワーク強制シークレット",
           "description": "ワークスペースのシークレットを受け取れるツールと送信先を制御します。"
         },
-        "pooled_provider_secrets": {
-          "name": "共有プロバイダーシークレット",
-          "description": "メンバーが自分の ChatGPT サブスクリプションとプロバイダーキーを接続し、必要に応じて共有し、セッションごとに使用するものを選択します。"
-        },
         "reminders": {
           "name": "ループ",
           "description": "エージェントやユーザーがセッションのチェックインを1回または繰り返しで予定できます。実行のたびにそのセッションに再度呼びかけます。トリガー一覧へのループ、セッションのループ表示、`kortix loop` が追加されます。"
@@ -2164,6 +2161,7 @@
       "agentWorkingOnFor": "が {task} に取り組み中 · {time}",
       "somethingWrong": "問題が発生しました",
       "notSent": "未送信",
+      "computerDisconnected": "このセッションのコンピューターは接続されていません。",
       "retry": "再試行",
       "resume": "再開",
       "agentIsWorking": "{agent} が作業中",
@@ -3423,9 +3421,6 @@
     },
     "inbox": {
       "title": "受信トレイ",
-      "viewReview": "Review",
-      "viewNotifications": "通知",
-      "viewLabel": "受信トレイの表示",
       "description": "あなたに関係するセッション、トリガー、アーティファクトの最新情報を、すべてのワークスペースから表示します。",
       "unreadLabel": "受信トレイ：未読 {count} 件",
       "unreadCount": "未読 {count} 件",
@@ -26706,7 +26701,7 @@
       "apiKeysDescription": "スクリプト、CI、連携用のキーです。キーはあなた、エージェント、またはボットとして動作します。すべてのキーに適用されるルールはセキュリティにあります。",
       "keys": {
         "title": "API キー",
-        "description": "スクリプト、CI、連携用のキーです。キーはこのワークスペースでのみ有効で、あなた、エージェント、またはボットとして動作します。",
+        "description": "スクリプト・CI・連携用のキーです。キーはあなた・エージェント・ボットとして動作し、「適用範囲」でどのワークスペースに届くかを決めます。",
         "newKey": "新しいキー",
         "count": "{count, plural, other {# 個のキー}}",
         "emptyTitle": "API キーがありません",
@@ -26716,6 +26711,10 @@
         "actsAsAgent": "エージェント",
         "actsAsBot": "ボット",
         "actsAsMeHint": "このワークスペースでのあなたのロールです。あなたが退出するとキーは無効になります。",
+        "worksIn": "適用範囲",
+        "worksInAll": "すべてのワークスペース",
+        "worksInAllHint": "すべてのワークスペースであなたとして動作し、完全なロールを持ちます。管理は「設定 → 個人キー」で行えます。",
+        "worksInWorkspace": "このワークスペースのみ",
         "actsAsAgentHint": "kortix.yaml でエージェントに許可された範囲そのものです。操作はエージェントとして監査記録され、あなたが退出してもキーは有効です。",
         "actsAsBotHint": "CI や連携のためのボットで、独自のロールを持ちます。あなたが退出してもキーは有効です。",
         "needsPermission": "認証情報を管理する権限が必要です",
@@ -26734,6 +26733,7 @@
         "rowBot": "ボット · {name}",
         "createdBy": "作成者: {email}",
         "createdDescription": "{name} は {actsAs} として動作します。キーは一度だけ表示されます。今すぐコピーしてシークレットとして保存してください。",
+        "createdPersonalDescription": "{name} はすべてのワークスペースであなたとして動作します。管理は「設定 → 個人キー」で行えます。Kortix がキーを表示するのは一度だけです。今すぐコピーしてシークレットとして保管してください。",
         "accessFullHint": "キーの実行主体がこのワークスペースで行えるすべての操作。",
         "accessCustomHint": "選択した権限のみ。各権限は、キーの実行主体が行える操作でなければなりません。"
       },
@@ -26744,7 +26744,9 @@
       "noWorkspaceTitle": "CLI にサインインするにはワークスペースを作成してください",
       "noWorkspaceBody": "CLI はワークスペースにサインインします。ワークスペースを作成してから、このサインインを承認してください。",
       "createAction": "ワークスペースを作成",
-      "workspaceLabel": "ワークスペース"
+      "workspaceLabel": "ワークスペース",
+      "loadFailedTitle": "ワークスペースを読み込めませんでした",
+      "loadFailedBody": "このサインインにはワークスペース一覧が必要です。アカウントに問題はありません。もう一度お試しください。"
     },
     "models": {
       "yourDefault": "ワークスペースの既定",

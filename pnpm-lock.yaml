@@ -29,7 +29,7 @@ overrides:
   smol-toml@<1.9.0: 1.9.0
   astro@>=7.1.0 <7.3.3: 7.3.3
   ip-address@<10.7.4: 10.7.4
-  hono@>=4.0.0 <4.13.11: 4.13.11
+  hono@>=4.0.0 <4.13.18: 4.13.18
   next-intl@>=4.0.0 <4.13.4: 4.13.4
   icu-minify@>=4.0.0 <4.9.2: 4.9.2
   zod@>=4.0.0 <4.6.6: 4.6.7
@@ -44,7 +44,7 @@ overrides:
   fast-xml-parser@>=5.0.0 <5.7.0: 5.7.2
   '@xmldom/xmldom@>=0.0.0 <0.8.15': 0.8.15
   dompurify@>=3.0.0 <3.4.17: 3.4.17
-  '@hono/node-server@>=1.0.0 <2.1.3': 2.1.3
+  '@hono/node-server@>=1.0.0 <2.1.6': 2.1.6
   '@modelcontextprotocol/server@>=2.0.0 <2.3.0': 2.3.0
   svgo@>=3.0.0 <3.3.5: 3.3.5
   esbuild@>=0.0.0 <0.28.1: 0.28.1
@@ -115,7 +115,7 @@ patchedDependencies:
     hash: dbxh2pp57mgbhmbbexdoga4pp4
     path: patches/next@16.4.2.patch
   postgres@3.4.9:
-    hash: bw5g3bgyrs6h7lakof5ye2m344
+    hash: ezbhojs7o5rwjfkvz2rr32jyxm
     path: patches/postgres@3.4.9.patch
   rimraf@2.6.3:
     hash: oxh6dlce75fzpsgtgehkso22hi
@@ -260,7 +260,7 @@ importers:
         version: 0.184.0(ws@8.22.0)
       '@hono/zod-openapi':
         specifier: 1.6.2
-        version: 1.6.2(hono@4.13.11)(zod@4.6.7)
+        version: 1.6.2(hono@4.13.18)(zod@4.6.7)
       '@kortix/api-contract':
         specifier: workspace:*
         version: link:../../packages/api-contract
@@ -299,7 +299,7 @@ importers:
         version: 1.0.12(react-dom@19.2.0)(react@19.2.0)
       '@scalar/hono-api-reference':
         specifier: ^0.10.20
-        version: 0.10.20(hono@4.13.11)
+        version: 0.10.20(hono@4.13.18)
       '@sentry/bun':
         specifier: ^10.47.0
         version: 10.74.0(@opentelemetry/core@2.8.0)
@@ -316,8 +316,8 @@ importers:
         specifier: ^0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.0)(@types/pg@8.23.1)(bun-types@1.4.2)(pg@8.23.0)(postgres@3.4.9)
       hono:
-        specifier: ^4.13.11
-        version: 4.13.11
+        specifier: ^4.13.18
+        version: 4.13.18
       jose:
         specifier: ^5.9.6
         version: 5.10.0
@@ -332,7 +332,7 @@ importers:
         version: 3.8.8
       postgres:
         specifier: ^3.4.8
-        version: 3.4.9(patch_hash=bw5g3bgyrs6h7lakof5ye2m344)
+        version: 3.4.9(patch_hash=ezbhojs7o5rwjfkvz2rr32jyxm)
       posthog-node:
         specifier: ^5.61.2
         version: 5.61.2(@opentelemetry/api@1.9.0)
@@ -510,8 +510,8 @@ importers:
         specifier: 0.3.4
         version: 0.3.4
       hono:
-        specifier: ^4.13.11
-        version: 4.13.11
+        specifier: ^4.13.18
+        version: 4.13.18
       node-forge:
         specifier: ^1.4.3
         version: 1.4.3
@@ -562,8 +562,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shared
       hono:
-        specifier: ^4.13.11
-        version: 4.13.11
+        specifier: ^4.13.18
+        version: 4.13.18
       langfuse:
         specifier: ^3.38.20
         version: 3.39.2
@@ -1658,8 +1658,8 @@ importers:
   packages/agent-tunnel:
     dependencies:
       hono:
-        specifier: ^4.13.11
-        version: 4.13.11
+        specifier: ^4.13.18
+        version: 4.13.18
       ws:
         specifier: ^8.18.0
         version: 8.21.3
@@ -1712,7 +1712,7 @@ importers:
         version: 8.23.0
       postgres:
         specifier: ^3.4.0
-        version: 3.4.9(patch_hash=bw5g3bgyrs6h7lakof5ye2m344)
+        version: 3.4.9(patch_hash=ezbhojs7o5rwjfkvz2rr32jyxm)
     devDependencies:
       '@types/bun':
         specifier: ^1.3.12
@@ -7370,36 +7370,36 @@ packages:
       yargs: 17.7.3
     dev: false
 
-  /@hono/node-server@2.1.3(hono@4.13.11):
-    resolution: {integrity: sha512-TA//nWMqPhbfdfneACk6t5a9eqbS9lABEPyKn0/xZTah3H3U2XaVg85rJFl0/Fyit0I552YDHgXGVSf3GwqbUw==}
+  /@hono/node-server@2.1.6(hono@4.13.18):
+    resolution: {integrity: sha512-p/KH9MnfNcsm3sR6x4lNgm5j+QN4Et8srKredl9DZfXiyZ1UQ3aQ2YVpFLbqktYN5JI+DB+VZFKM2PqE5hLKjQ==}
     engines: {node: '>=20'}
     peerDependencies:
-      hono: 4.13.11
+      hono: 4.13.18
     dependencies:
-      hono: 4.13.11
+      hono: 4.13.18
     dev: false
 
-  /@hono/zod-openapi@1.6.2(hono@4.13.11)(zod@4.6.7):
+  /@hono/zod-openapi@1.6.2(hono@4.13.18)(zod@4.6.7):
     resolution: {integrity: sha512-ktnBqVgvIlopiiB9ab6hqoYefhcb0DUZU5QJ1F5UtDu8w6+cIORENz93sTZT6G0mQNes0/TbbadfrOpdehioPA==}
     engines: {node: '>=16.0.0'}
     peerDependencies:
-      hono: 4.13.11
+      hono: 4.13.18
       zod: 4.6.7
     dependencies:
       '@asteasolutions/zod-to-openapi': 9.1.0(zod@4.6.7)
-      '@hono/zod-validator': 0.9.1(hono@4.13.11)(zod@4.6.7)
-      hono: 4.13.11
+      '@hono/zod-validator': 0.9.1(hono@4.13.18)(zod@4.6.7)
+      hono: 4.13.18
       openapi3-ts: 4.6.1
       zod: 4.6.7
     dev: false
 
-  /@hono/zod-validator@0.9.1(hono@4.13.11)(zod@4.6.7):
+  /@hono/zod-validator@0.9.1(hono@4.13.18)(zod@4.6.7):
     resolution: {integrity: sha512-iiv6w0qrIc0arfvCtUqBWsvl4fXjzaTcQcCJTTtCnkawF9HHGE+KjEl0ox3gQJ6rKZEgE3mLExlQCF72M+mNuw==}
     peerDependencies:
-      hono: 4.13.11
+      hono: 4.13.18
       zod: 4.6.7
     dependencies:
-      hono: 4.13.11
+      hono: 4.13.18
       zod: 4.6.7
     dev: false
 
@@ -8181,7 +8181,7 @@ packages:
       '@cfworker/json-schema':
         optional: true
     dependencies:
-      '@hono/node-server': 2.1.3(hono@4.13.11)
+      '@hono/node-server': 2.1.6(hono@4.13.18)
       ajv: 8.18.0
       ajv-formats: 3.0.1(ajv@8.18.0)
       content-type: 1.0.5
@@ -8191,7 +8191,7 @@ packages:
       eventsource-parser: 3.1.1
       express: 5.2.1
       express-rate-limit: 8.7.0(express@5.2.1)
-      hono: 4.13.11
+      hono: 4.13.18
       jose: 6.2.12
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -11849,14 +11849,14 @@ packages:
     engines: {node: '>=22'}
     dev: false
 
-  /@scalar/hono-api-reference@0.10.20(hono@4.13.11):
+  /@scalar/hono-api-reference@0.10.20(hono@4.13.18):
     resolution: {integrity: sha512-/Ae0M9rOpsJJb5b121G8LX4vvBo1t2qFX1ffRKkTgCS9VWfpsfq11r0yBcYy1fmAn1x8YLO21Ls1/9h8LzHuDw==}
     engines: {node: '>=22'}
     peerDependencies:
-      hono: 4.13.11
+      hono: 4.13.18
     dependencies:
       '@scalar/client-side-rendering': 0.1.13
-      hono: 4.13.11
+      hono: 4.13.18
     dev: false
 
   /@scalar/json-magic@0.13.2:
@@ -17980,7 +17980,7 @@ packages:
     peerDependencies:
       '@standard-schema/spec': ^1.0.0
       convex: ^1.46.0
-      hono: 4.13.11
+      hono: 4.13.18
       react: ^17.0.2 || ^18.0.0 || ^19.0.0
       typescript: ^5.5 || ^6.0.0 || ^7.0.0
       zod: 4.6.7
@@ -18995,7 +18995,7 @@ packages:
       '@types/pg': 8.23.1
       bun-types: 1.4.2
       pg: 8.23.0
-      postgres: 3.4.9(patch_hash=bw5g3bgyrs6h7lakof5ye2m344)
+      postgres: 3.4.9(patch_hash=ezbhojs7o5rwjfkvz2rr32jyxm)
     dev: false
 
   /dset@3.1.4:
@@ -21968,8 +21968,8 @@ packages:
       parse-passwd: 1.0.0
     dev: false
 
-  /hono@4.13.11:
-    resolution: {integrity: sha512-/SMX/RQNJn7oNmFwH6DtwDqcrzZU2otm1FD6OJe2cWF6cfy/F8hq0XVBv7xW3FTJshRQwuBnXHDq2kNsdZnshg==}
+  /hono@4.13.18:
+    resolution: {integrity: sha512-H9q/E1XizaWstJxUW881dmLxEj+t/TrGGnyxINkm4+sK0qUwsMtFdo2BWI9Vs3cIS19MU6b6iCijoUoEf4f3DA==}
     engines: {node: '>=16.9.0'}
     dev: false
 
@@ -26148,7 +26148,7 @@ packages:
     dependencies:
       xtend: 4.0.2
 
-  /postgres@3.4.9(patch_hash=bw5g3bgyrs6h7lakof5ye2m344):
+  /postgres@3.4.9(patch_hash=ezbhojs7o5rwjfkvz2rr32jyxm):
     resolution: {integrity: sha512-GD3qdB0x1z9xgFI6cdRD6xu2Sp2WCOEoe3mtnyB5Ee0XrrL5Pe+e4CCnJrRMnL1zYtRDZmQQVbvOttLnKDLnaw==}
     engines: {node: '>=12'}
     dev: false

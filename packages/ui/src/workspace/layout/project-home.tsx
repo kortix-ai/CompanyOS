@@ -421,16 +421,12 @@ function ProjectHomeView({
       onCommand={handleCommand}
       projectId={projectId}
       draftScope={draftScope}
-      // `busy` here means "create in flight" — spinner in the send slot,
-      // input locked. NOT isBusy (that renders agent-running stop-button
-      // semantics, which leave the composer with no button at all here).
+      draftHandoffScope={onSend ? undefined : defaultSend.draftHandoffScope}
+      // Keep accepting keystrokes while creation runs. A second Enter is
+      // recovered as a draft and handed to the same session on navigation.
       isSending={creating}
-      disabled={creating}
-      // The home composer navigates to the new session on send — don't
-      // clear it first (that would drop the text on a gated send). The
-      // message rides across via `create.pending_prompt` and reappears
-      // as the instant shell's optimistic turn.
-      clearOnSend={false}
+      disabled={onSend ? creating : false}
+      clearOnSend={onSend ? false : 'text-only'}
       autoFocus
       // Desktop: a hero composer floating mid-page has no column for a second
       // rail to align to, so the attach/agent/context controls ride on the
@@ -496,7 +492,7 @@ function ProjectHomeView({
           branch={projectRowQuery.data?.default_branch}
         />
       ) : firstChat ? (
-        <FirstChat composer={composer} />
+        <FirstChat projectId={projectId} composer={composer} />
       ) : (
         <ProjectHomeWelcomeBody
           projectId={projectId}

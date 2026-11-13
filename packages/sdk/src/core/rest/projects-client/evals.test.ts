@@ -1,0 +1,140 @@
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { ApiError } from '../../http/api-client';
+import { configureKortix } from '../../http/config';
+import {
+  cancelWorkspaceEvalJob,
+  deleteWorkspaceEvalJob,
+  evalJobScore,
+  evalTrialScore,
+  getWorkspaceEvalJob,
+  getWorkspaceEvalTrial,
+  listWorkspaceEvalJobs,
+  listWorkspaceEvalSuites,
+  listWorkspaceEvalTasks,
+  listWorkspaceEvalTrials,
+  readWorkspaceEvalTrialFile,
+  rerunWorkspaceEvalJob,
+  startWorkspaceEvalJob,
+  type WorkspaceEvalJob,
+  type WorkspaceEvalTrial,
+} from './evals';
+
+configureKortix({ backendUrl: 'http://test.local', getToken: async () => 'tok' });
+
+type Call = { method: string; key: string; body: unknown };
+
+function serve(routes: Record<string, { status: number; body: unknown }>, calls: Call[]) {
+  globalThis.fetch = mock(async (input: unknown, init: RequestInit = {}) => {
+    const request = input instanceof Request ? input : null;
+    const url = new URL(request ? request.url : String(input));
+    const method = (init.method ?? request?.method ?? 'GET').toUpperCase();
+    const key = `${method} ${url.pathname}${url.search}`;
+    const raw = init.body != null ? await new Response(init.body as BodyInit).text() : '';
+    calls.push({ method, key, body: raw ? JSON.parse(raw) : null });
+    const route = routes[key] ?? { status: 404, body: { error: 'eval_not_found', message: 'Not found.' } };
+    const text = typeof route.body === 'string' ? route.body : JSON.stringify(route.body);
+    return new Response(text, { status: route.status, headers: { 'content-type': typeof route.body === 'string' ? 'text/plain' : 'application/json' } });
+  }) as unknown as typeof fetch;
+}
+
+const STATS = {
+  n_total_trials: 4,
+  n_queued: 0,
+  n_running: 0,
+  n_completed: 3,
+  n_errored: 1,
+  n_cancelled: 0,
+  agents: [{ agent: 'worker', model: 'p/m', n_trials: 3, n_errors: 1, metrics: [{ mean: 0.6667 }], pass_at_k: { '1': 0.5 } }],
+};
+const JOB = {
+  job_id: 'j1',
+  project_id: 'p1',
+  suite: 'smoke',
+  job_name: 'smoke-1',
+  status: 'completed',
+  commit: 'abc',
+  ref: null,
+  config: { n_attempts: 1 },
+  stats: STATS,
+  rerun_of: null,
+  folder: '/Evals/smoke-1',
+  drive_id: 'd1',
+  created_by: 'u1',
+  created_at: '2026-11-13T00:00:00Z',
+  started_at: null,
+  finished_at: null,
+} as unknown as WorkspaceEvalJob;
+
+describe('evals client', () => {
+  let calls: Call[] = [];
+  const routes: Record<string, { status: number; body: unknown }> = {};
+  beforeEach(() => {
+    calls = [];
+    for (const key of Object.keys(routes)) delete routes[key];
+    serve(routes, calls);
+  });
+
+  test('suites, tasks and jobs read their routes', async () => {
+    routes['GET /workspaces/p1/evals'] = { status: 200, body: { suites: [{ name: 'smoke' }] } };
+    routes['GET /workspaces/p1/evals/tasks?suite=smoke'] = { status: 200, body: { commit: 'abc', tasks: [{ name: 't1' }] } };
+    routes['GET /workspaces/p1/evals/jobs?suite=smoke&limit=5'] = { status: 200, body: { jobs: [JOB], next_cursor: null } };
+    expect((await listWorkspaceEvalSuites('p1')).map((s) => s.name)).toEqual(['smoke']);
+    expect((await listWorkspaceEvalTasks('p1', { suite: 'smoke' })).tasks.map((t) => t.name)).toEqual(['t1']);
+    expect((await listWorkspaceEvalJobs('p1', { suite: 'smoke', limit: 5 })).jobs[0]!.job_id).toBe('j1');
+  });
+
+  test('start, rerun, cancel and delete send their bodies', async () => {
+    routes['POST /workspaces/p1/evals/jobs'] = { status: 201, body: { job: JOB } };
+    routes['POST /workspaces/p1/evals/jobs/j1/rerun'] = { status: 201, body: { job: { ...JOB, job_id: 'j2', rerun_of: 'j1' } } };
+    routes['POST /workspaces/p1/evals/jobs/j1/cancel'] = { status: 200, body: { job: { ...JOB, status: 'cancelled' } } };
+    routes['DELETE /workspaces/p1/evals/jobs/j1'] = { status: 200, body: { ok: true } };
+    await startWorkspaceEvalJob('p1', { suite: 'smoke', config: { n_attempts: 3 } });
+    expect((await rerunWorkspaceEvalJob('p1', 'j1', { scope: 'failed' })).rerun_of).toBe('j1');
+    expect((await cancelWorkspaceEvalJob('p1', 'j1')).status).toBe('cancelled');
+    await deleteWorkspaceEvalJob('p1', 'j1');
+    expect(calls.map((c) => [c.key, c.body])).toEqual([
+      ['POST /workspaces/p1/evals/jobs', { suite: 'smoke', config: { n_attempts: 3 } }],
+      ['POST /workspaces/p1/evals/jobs/j1/rerun', { scope: 'failed' }],
+      ['POST /workspaces/p1/evals/jobs/j1/cancel', {}],
+      ['DELETE /workspaces/p1/evals/jobs/j1', null],
+    ]);
+  });
+
+  test('a job, its trials, one trial and one of its files', async () => {
+    routes['GET /workspaces/p1/evals/jobs/j1'] = { status: 200, body: { job: JOB } };
+    routes['GET /workspaces/p1/evals/jobs/j1/trials'] = { status: 200, body: { trials: [{ trial_id: 't1' }] } };
+    routes['GET /workspaces/p1/evals/jobs/j1/trials/t1'] = { status: 200, body: { trial: { trial_id: 't1' }, instruction: 'Do it', files: [] } };
+    routes['GET /workspaces/p1/evals/jobs/j1/trials/t1/file?path=verifier%2Ftest-stdout.txt'] = { status: 200, body: 'ok 3/3\n' };
+    expect((await getWorkspaceEvalJob('p1', 'j1')).job_name).toBe('smoke-1');
+    expect((await listWorkspaceEvalTrials('p1', 'j1'))[0]!.trial_id).toBe('t1');
+    expect((await getWorkspaceEvalTrial('p1', 'j1', 't1')).instruction).toBe('Do it');
+    expect(await readWorkspaceEvalTrialFile('p1', 'j1', 't1', 'verifier/test-stdout.txt')).toBe('ok 3/3\n');
+  });
+
+  test('an eval_invalid answer throws ApiError with the violations', async () => {
+    routes['POST /workspaces/p1/evals/jobs'] = { status: 422, body: { error: 'eval_invalid', message: 'evals/x: no task found', violations: ['evals/x: no task found'] } };
+    const err = await startWorkspaceEvalJob('p1', { suite: 'smoke' }).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(422);
+    expect((err as ApiError).message).toContain('no task found');
+  });
+
+  test('an id with a "." or ".." segment is refused before any request', async () => {
+    await expect(getWorkspaceEvalJob('p1', '..')).rejects.toThrow('another endpoint');
+    expect(calls).toEqual([]);
+  });
+});
+
+describe('scores', () => {
+  const trial = (rewards: Record<string, number> | null, valid = true) => ({ rewards, reward_valid: valid }) as WorkspaceEvalTrial;
+  test('a trial passes when every reward is 1 or more; its score is the mean of its rewards', () => {
+    expect(evalTrialScore(trial({ reward: 1 }))).toEqual({ passed: true, score: 1 });
+    expect(evalTrialScore(trial({ exists: 1, correctness: 0.5 }))).toEqual({ passed: false, score: 0.75 });
+    expect(evalTrialScore(trial(null))).toEqual({ passed: false, score: null });
+    expect(evalTrialScore(trial({ reward: 1 }, false))).toEqual({ passed: false, score: null });
+  });
+  test('the headline of a job is pass@1 of its best agent, with its metric', () => {
+    expect(evalJobScore(JOB)).toEqual({ agent: 'worker', model: 'p/m', passAt1: 0.5, metric: { name: 'mean', value: 0.6667 }, validTrials: 3, errors: 1 });
+    expect(evalJobScore({ ...JOB, stats: { ...STATS, agents: [] } })).toBeNull();
+  });
+});

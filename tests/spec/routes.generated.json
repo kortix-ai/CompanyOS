@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1759,
-  "aliases": 678,
+  "count": 1794,
+  "aliases": 690,
   "routes": [
     {
       "method": "GET",
@@ -62,6 +62,14 @@
     {
       "method": "POST",
       "path": "/internal/gateway/claude-refused"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/gateway/idempotency/get"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/gateway/idempotency/put"
     },
     {
       "method": "POST",
@@ -3139,6 +3147,11 @@
       "aliasOf": "/v1/workspaces/:workspaceId/channels/slack/installation"
     },
     {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/channels/slack/join",
+      "aliasOf": "/v1/workspaces/:workspaceId/channels/slack/join"
+    },
+    {
       "method": "GET",
       "path": "/v1/projects/:workspaceId/channels/slack/mode",
       "aliasOf": "/v1/workspaces/:workspaceId/channels/slack/mode"
@@ -3482,6 +3495,66 @@
       "method": "GET",
       "path": "/v1/projects/:workspaceId/detail",
       "aliasOf": "/v1/workspaces/:workspaceId/detail"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/datasets",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/datasets"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/jobs",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/evals/jobs",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/projects/:workspaceId/evals/jobs/:jobId",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs/:jobId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/jobs/:jobId",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs/:jobId"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/evals/jobs/:jobId/cancel",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/cancel"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/evals/jobs/:jobId/rerun",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/rerun"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/jobs/:jobId/trials",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/trials"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/jobs/:jobId/trials/:trialId",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/trials/:trialId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/jobs/:jobId/trials/:trialId/file",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/trials/:trialId/file"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/tasks",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/tasks"
     },
     {
       "method": "PATCH",
@@ -4027,6 +4100,11 @@
       "method": "POST",
       "path": "/v1/projects/:workspaceId/sandbox-templates/:templateId/build",
       "aliasOf": "/v1/workspaces/:workspaceId/sandbox-templates/:templateId/build"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/sandbox-templates/reconcile",
+      "aliasOf": "/v1/workspaces/:workspaceId/sandbox-templates/reconcile"
     },
     {
       "method": "GET",
@@ -5067,6 +5145,42 @@
       "path": "/v1/setup-links/secret/:token"
     },
     {
+      "method": "POST",
+      "path": "/v1/setup/bootstrap-owner"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/setup/health"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/setup/install-status"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/setup/sandbox-providers"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/setup/setup-complete"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/setup/setup-status"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/setup/setup-wizard-step"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/setup/setup-wizard-step"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/setup/status"
+    },
+    {
       "method": "GET",
       "path": "/v1/skills"
     },
@@ -5928,6 +6042,10 @@
       "path": "/v1/workspaces/:workspaceId/channels/slack/installation"
     },
     {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/channels/slack/join"
+    },
+    {
       "method": "GET",
       "path": "/v1/workspaces/:workspaceId/channels/slack/mode"
     },
@@ -6202,6 +6320,54 @@
     {
       "method": "GET",
       "path": "/v1/workspaces/:workspaceId/detail"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/datasets"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs/:jobId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs/:jobId"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/cancel"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/rerun"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/trials"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/trials/:trialId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/trials/:trialId/file"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/tasks"
     },
     {
       "method": "PATCH",
@@ -6956,6 +7122,10 @@
       "path": "/v1/workspaces/:workspaceId/sandbox-templates/:templateId/build"
     },
     {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/sandbox-templates/reconcile"
+    },
+    {
       "method": "GET",
       "path": "/v1/workspaces/:workspaceId/sandboxes"
     },
@@ -7698,24 +7868,6 @@
     {
       "method": "GET",
       "path": "/v1/workspaces/managed-git/status"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/projects/:workspaceId/channels/slack/join",
-      "aliasOf": "/v1/workspaces/:workspaceId/channels/slack/join"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/projects/:workspaceId/sandbox-templates/reconcile",
-      "aliasOf": "/v1/workspaces/:workspaceId/sandbox-templates/reconcile"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/workspaces/:workspaceId/channels/slack/join"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/workspaces/:workspaceId/sandbox-templates/reconcile"
     }
   ]
 }

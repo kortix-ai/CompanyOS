@@ -321,7 +321,12 @@ export const CreateEvalJobRequestSchema = z
   .object({
     /** A suite of `evals:`. Its config is the base; `config` overrides field by field. */
     suite: z.string().min(1).max(120).optional(),
-    config: EvalJobConfigSchema.partial().optional(),
+    /**
+     * Job config fields, layered over the suite's field by field. Validated as a
+     * whole job config after the layering, so a field it leaves out keeps the
+     * suite's value, not a default.
+     */
+    config: z.record(z.string(), z.unknown()).optional(),
     /** Branch or commit the tasks are read at. Default: the default branch. */
     ref: z.string().min(1).max(250).optional(),
   })

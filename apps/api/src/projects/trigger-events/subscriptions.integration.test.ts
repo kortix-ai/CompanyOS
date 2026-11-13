@@ -17,7 +17,10 @@ import { clearAuthorizeCaches } from '../../iam/authorize';
 import type { GitTriggerSpec } from '../trigger-types';
 
 const fires: Array<Record<string, any>> = [];
-let fireStatus: 'fired' | 'failed' | 'retryable' | 'deduped' | 'throws' = 'fired';
+type FireKind = 'fired' | 'failed' | 'retryable' | 'account_state' | 'deduped' | 'throws';
+let fireStatus: FireKind = 'fired';
+/** Per-fire plan for a mixed batch: each entry is consumed before `fireStatus` applies. */
+let firePlan: FireKind[] = [];
 /** The create command a fire leaves under its key, as `createSession` does. */
 let leftCommand: 'dead_lettered' | 'queued' | null = null;
 const actualTriggers = await import('../lib/triggers');
@@ -25,6 +28,7 @@ mock.module('../lib/triggers', () => ({
   ...actualTriggers,
   fireGitTrigger: async (input: Record<string, any>) => {
     fires.push(input);
+    const kind = firePlan.shift() ?? fireStatus;
     if (leftCommand) {
       await testDb().insert(sessionLifecycleCommands).values({
         commandType: 'create_session',
@@ -35,10 +39,12 @@ mock.module('../lib/triggers', () => ({
         idempotencyKey: input.idempotencyKey,
       });
     }
-    if (fireStatus === 'failed') return { status: 'failed', error: 'boom', retryable: false };
-    if (fireStatus === 'retryable') return { status: 'failed', error: 'The sandbox provider is busy', retryable: true };
-    if (fireStatus === 'throws') throw new Error('sandbox unavailable');
-    return { status: 'fired', sessionId: 'sess_synthetic', deduped: fireStatus === 'deduped' };
+    if (kind === 'failed') return { status: 'failed', error: 'boom', retryable: false };
+    if (kind === 'retryable') return { status: 'failed', error: 'The sandbox provider is busy', retryable: true };
+    if (kind === 'account_state')
+      return { status: 'failed', error: 'No usable model for this account. Connect a provider key or upgrade the plan, then fire again.', errorCode: 'no_usable_model', retryable: false };
+    if (kind === 'throws') throw new Error('sandbox unavailable');
+    return { status: 'fired', sessionId: 'sess_synthetic', deduped: kind === 'deduped' };
   },
 }));
 
@@ -203,6 +209,7 @@ describeWithDb('event subscriptions — real PostgreSQL, fake provider', () => {
     calls.length = 0;
     fires.length = 0;
     fireStatus = 'fired';
+    firePlan = [];
     leftCommand = null;
     subscribeError = null;
     manifestDefaultAgent = null;
@@ -602,7 +609,7 @@ describeWithDb('event subscriptions — real PostgreSQL, fake provider', () => {
     const tally = await deliverEvents('composio', [
       { externalId: 'ti_EXAMPLE_NEW_MESSAGE_{}', eventId: 'msg_parked', type: 'EXAMPLE_NEW_MESSAGE', occurredAt: new Date().toISOString(), data: {} },
     ]);
-    expect(tally).toEqual({ fired: 0, skipped: 1, ignored: 0, failed: 0 });
+    expect(tally).toEqual({ fired: 0, skipped: 1, ignored: 0, failed: 0, refused: 0 });
     expect(fires).toHaveLength(0);
   });
 
@@ -704,7 +711,7 @@ describeWithDb('event subscriptions — real PostgreSQL, fake provider', () => {
       expect(await status('a')).toBe('active');
       await setFlag(false);
       const tally = await deliverEvents('composio', [delivery]);
-      expect(tally).toEqual({ fired: 0, skipped: 1, ignored: 0, failed: 0 });
+      expect(tally).toEqual({ fired: 0, skipped: 1, ignored: 0, failed: 0, refused: 0 });
       expect(fires).toHaveLength(0);
       await setFlag(true);
       expect((await deliverEvents('composio', [{ ...delivery, eventId: 'msg_on' }])).fired).toBe(1);
@@ -766,7 +773,7 @@ describeWithDb('event subscriptions — real PostgreSQL, fake provider', () => {
 
     test('fires with the payload roots, the preamble and the idempotency key', async () => {
       await armed({ filter: { 'event.data.subject': 'Hello' } });
-      expect(await deliverEvents('composio', [delivery()])).toEqual({ fired: 1, skipped: 0, ignored: 0, failed: 0 });
+      expect(await deliverEvents('composio', [delivery()])).toEqual({ fired: 1, skipped: 0, ignored: 0, failed: 0, refused: 0 });
       expect(fires).toHaveLength(1);
       expect(fires[0]!.source).toBe('event');
       expect(fires[0]!.idempotencyKey).toBe(`trigger:event:${PROJECT_ID}:a:msg_synthetic1`);
@@ -781,7 +788,7 @@ describeWithDb('event subscriptions — real PostgreSQL, fake provider', () => {
     test('an unknown external id is ignored and never unsubscribed', async () => {
       await armed();
       calls.length = 0;
-      expect(await deliverEvents('composio', [delivery({ externalId: 'ti_other_env' })])).toEqual({ fired: 0, skipped: 0, ignored: 1, failed: 0 });
+      expect(await deliverEvents('composio', [delivery({ externalId: 'ti_other_env' })])).toEqual({ fired: 0, skipped: 0, ignored: 1, failed: 0, refused: 0 });
       expect(calls).toEqual([]);
       expect(fires).toHaveLength(0);
     });
@@ -827,6 +834,40 @@ describeWithDb('event subscriptions — real PostgreSQL, fake provider', () => {
       // A failure no redelivery can fix opens an alert on its first attempt (KRTX-1742).
       expect(await runtime('a')).toMatchObject({ alertSource: 'fire' });
       expect((await runtime('a'))?.alertFailingSince).toBeInstanceOf(Date);
+      await settleTriggerAlerts();
+    });
+
+    test('an account-state refusal counts as failed and carries the billing-gate code (KRTX-4771)', async () => {
+      await armed();
+      fireStatus = 'account_state';
+      const tally = await deliverEvents('composio', [delivery()]);
+      expect(tally.failed).toBe(1);
+      expect(tally.refused).toBe(1);
+      expect(tally.accountState).toEqual({
+        error: 'No usable model for this account. Connect a provider key or upgrade the plan, then fire again.',
+        code: 'no_usable_model',
+      });
+      await settleTriggerAlerts();
+    });
+
+    test('a refusal beside a transient failure tallies both, so the ingress keeps the 500-retry contract (KRTX-4771)', async () => {
+      // Two triggers subscribed to one event: one refuses (billing gate), one fails transiently.
+      await armed();
+      await catalog(spec('b'));
+      await reconcileEventSubscriptions(PROJECT_ID, ACCOUNT_ID, [spec('a'), spec('b')]);
+      firePlan = ['account_state', 'retryable'];
+      const tally = await deliverEvents('composio', [delivery()]);
+      expect(tally).toEqual({
+        fired: 0,
+        skipped: 0,
+        ignored: 0,
+        failed: 2,
+        refused: 1,
+        accountState: {
+          error: 'No usable model for this account. Connect a provider key or upgrade the plan, then fire again.',
+          code: 'no_usable_model',
+        },
+      });
       await settleTriggerAlerts();
     });
 

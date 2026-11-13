@@ -1021,6 +1021,7 @@ export async function handleCall(deps: GatewayDeps, input: CallInput): Promise<C
   const channelInput: ChannelReadInput = {
     projectId: input.projectId,
     sessionId: input.sessionId ?? null,
+    userId: input.subject.userId,
     platform: connector.platform ?? null,
     actionPath: input.actionPath,
     args: input.args ?? {},

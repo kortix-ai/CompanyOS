@@ -52,19 +52,12 @@ export interface UiRoutes {
   /** The project's Company memory (`chat` flag); a page is `?page=<page_id>`. */
   memory: (projectId: string) => string | null;
   /**
-   * Review: everything that waits on a person (asks, approvals, changes), as
-   * its own page beside the app sidebar. Absent: the host serves Review only
-   * inside its `customize` route.
+   * Review: the workspace's Review queue, beside the app sidebar. Since
+   * KRTX-4799 it lives at the workspace Inbox address; the person's
+   * notifications are not a view of it (they span every workspace). Absent:
+   * the host serves Review only inside its `customize` route.
    */
   review?: (projectId: string) => string | null;
-  /**
-   * The Inbox: the signed-in person's notifications from every project, as a
-   * page beside the project sidebar (KRTX-1742). Absent or null: the host
-   * serves no Inbox page and the sidebar has no Inbox row. It is new
-   * (2026-11-06), so a host that maps any route (its own router) gets no
-   * Inbox row until it routes `inbox` too: no host gets a link it does not serve.
-   */
-  inbox?: (projectId: string) => string | null;
 }
 
 const DEFAULT_ROUTES = {
@@ -84,9 +77,9 @@ const DEFAULT_ROUTES = {
   channel: (p: string, slug: string) => `/workspaces/${p}/c/${slug}`,
   dm: (p: string, agentName: string) => `/workspaces/${p}/dm/${encodeURIComponent(agentName)}`,
   memory: (p: string) => `/workspaces/${p}/memory`,
-  // Review is a tab of the Inbox (2026-11-08); `/workspaces/<id>/review` redirects here.
+  // The workspace Inbox page IS the Review queue (KRTX-4799); the old
+  // `/workspaces/<id>/review` route redirects here.
   review: (p: string) => `/workspaces/${p}/inbox?view=review`,
-  inbox: (p: string) => `/workspaces/${p}/inbox`,
 };
 
 export const defaultUiRoutes: UiRoutes = DEFAULT_ROUTES;
@@ -103,9 +96,7 @@ export function setUiRoutes(overrides: Partial<UiRoutes>): void {
   const admin = overrides.admin ?? overrides.customize;
   // A host that routes its own customize pages serves Review there unless it also routes `review`.
   const review = overrides.review ?? (overrides.customize ? undefined : DEFAULT_ROUTES.review);
-  // The Inbox page is new: only the default router (no override) serves it unasked.
-  const inbox = overrides.inbox ?? (Object.keys(overrides).length === 0 ? DEFAULT_ROUTES.inbox : undefined);
-  routes = { ...DEFAULT_ROUTES, ...overrides, ...(admin ? { admin } : {}), review, inbox };
+  routes = { ...DEFAULT_ROUTES, ...overrides, ...(admin ? { admin } : {}), review };
 }
 
 export function uiRoutes(): UiRoutes {

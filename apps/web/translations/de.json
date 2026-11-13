@@ -340,6 +340,7 @@
       "repositoryLabel": "Repository",
       "loadingOptions": "Repository-Optionen werden geladen …",
       "managedUnavailable": "Von Kortix verwaltete Repositories sind auf dieser Instanz nicht verfügbar. Ein Plattform-Administrator richtet das in der Admin-Konsole ein.",
+      "githubAfterCreate": "Um dein eigenes GitHub für weitere Workspaces zu nutzen, verbinde es unter Workspace-Einstellungen › Git, sobald dieser Workspace existiert.",
       "installationUnreachable": "Diese GitHub-Verbindung funktioniert nicht mehr. Stellen Sie sie wieder her, um Repositories aufzulisten.",
       "reconnect": "In den Git-Einstellungen neu verbinden",
       "managedImportLabel": "Ein vorhandenes verwaltetes Repository importieren",
@@ -1267,10 +1268,6 @@
           "name": "Netzwerkerzwungene Geheimnisse",
           "description": "Steuern Sie, welche Werkzeuge und Ziele Workspace-Geheimnisse empfangen dürfen."
         },
-        "pooled_provider_secrets": {
-          "name": "Gemeinsam genutzte Anbieter-Schlüssel",
-          "description": "Mitglieder verbinden ihre eigenen ChatGPT-Abos und Anbieter-Schlüssel, teilen sie bei Bedarf und wählen pro Sitzung, welche genutzt werden."
-        },
         "reminders": {
           "name": "Schleifen",
           "description": "Agenten und Personen können Check-ins für eine Sitzung planen, einmalig oder wiederkehrend. Jede Auslösung spricht diese Sitzung erneut an. Fügt Schleifen zur Trigger-Liste, den Schleifen-Chip der Sitzung und `kortix loop` hinzu."
@@ -2164,6 +2161,7 @@
       "agentWorkingOnFor": "arbeitet an {task} · {time}",
       "somethingWrong": "Etwas ist schiefgelaufen",
       "notSent": "Nicht gesendet",
+      "computerDisconnected": "Der Computer dieser Sitzung ist nicht verbunden.",
       "retry": "Erneut versuchen",
       "resume": "Fortsetzen",
       "agentIsWorking": "{agent} arbeitet",
@@ -3423,9 +3421,6 @@
     },
     "inbox": {
       "title": "Posteingang",
-      "viewReview": "Review",
-      "viewNotifications": "Benachrichtigungen",
-      "viewLabel": "Posteingangsansicht",
       "description": "Neuigkeiten zu den Sitzungen, Triggern und Artefakten, die dich betreffen, aus allen Workspaces.",
       "unreadLabel": "Posteingang: {count} ungelesen",
       "unreadCount": "{count} ungelesen",
@@ -26706,7 +26701,7 @@
       "apiKeysDescription": "Schlüssel für Skripte, CI und Integrationen. Ein Schlüssel handelt als Sie, als Agent oder als Bot. Die Regeln für jeden Schlüssel stehen unter Sicherheit.",
       "keys": {
         "title": "API-Schlüssel",
-        "description": "Schlüssel für Skripte, CI und Integrationen. Ein Schlüssel gilt nur in diesem Workspace und handelt als Sie, als Agent oder als Bot.",
+        "description": "Keys für Scripts, CI und Integrationen. Ein Key wirkt wie du, ein Agent oder ein Bot; „Gilt für“ legt fest, welche Workspaces er erreicht.",
         "newKey": "Neuer Schlüssel",
         "count": "{count, plural, one {# Schlüssel} other {# Schlüssel}}",
         "emptyTitle": "Keine API-Schlüssel",
@@ -26716,6 +26711,10 @@
         "actsAsAgent": "Ein Agent",
         "actsAsBot": "Ein Bot",
         "actsAsMeHint": "Ihre Rolle in diesem Workspace. Der Schlüssel funktioniert nicht mehr, wenn Sie den Workspace verlassen.",
+        "worksIn": "Gilt für",
+        "worksInAll": "Alle meine Workspaces",
+        "worksInAllHint": "Wirkt wie du in jedem deiner Workspaces, mit deiner vollen Rolle. Verwalte ihn unter Einstellungen → Persönliche Keys.",
+        "worksInWorkspace": "Nur dieser Workspace",
         "actsAsAgentHint": "Genau das, was der Agent laut kortix.yaml darf. Seine Aktionen werden als Agent protokolliert, und der Schlüssel funktioniert weiter, wenn Sie gehen.",
         "actsAsBotHint": "Ein Bot für CI oder eine Integration, mit eigener Rolle. Der Schlüssel funktioniert weiter, wenn Sie gehen.",
         "needsPermission": "Erfordert die Berechtigung, Zugangsdaten zu verwalten",
@@ -26734,6 +26733,7 @@
         "rowBot": "Bot · {name}",
         "createdBy": "Erstellt von {email}",
         "createdDescription": "{name} handelt als {actsAs}. Kortix zeigt den Schlüssel nur einmal: Kopieren Sie ihn jetzt und speichern Sie ihn als Secret.",
+        "createdPersonalDescription": "{name} wirkt wie du in jedem deiner Workspaces — verwalte ihn unter Einstellungen → Persönliche Keys. Kortix zeigt den Key einmal: kopiere ihn jetzt und hinterlege ihn als Secret.",
         "accessFullHint": "Alles, was der Prinzipal des Schlüssels in diesem Workspace darf.",
         "accessCustomHint": "Nur die Berechtigungen, die Sie auswählen. Jede muss etwas sein, das der Prinzipal des Schlüssels darf."
       },
@@ -26744,7 +26744,9 @@
       "noWorkspaceTitle": "Erstelle einen Workspace, um die CLI anzumelden",
       "noWorkspaceBody": "Die CLI meldet sich bei einem Workspace an. Erstelle einen und bestätige dann diese Anmeldung.",
       "createAction": "Workspace erstellen",
-      "workspaceLabel": "Workspace"
+      "workspaceLabel": "Workspace",
+      "loadFailedTitle": "Workspaces konnten nicht geladen werden",
+      "loadFailedBody": "Diese Anmeldung benötigt deine Workspace-Liste. Mit deinem Konto ist alles in Ordnung — versuche es erneut, um fortzufahren."
     },
     "models": {
       "yourDefault": "Workspace-Standard",

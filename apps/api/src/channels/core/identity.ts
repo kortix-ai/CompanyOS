@@ -61,12 +61,14 @@ export type ChatLinkResult = { ok: true } | { ok: false; reason: 'linked_to_othe
  * `/logout` in the chat first. A sign-in link links whoever opens it, so
  * replacing live links let anyone holding one take over a linked identity
  * (2026-09-29 permissions audit). `mfaVerified` records whether the Kortix
- * session making the link had passed a second factor.
+ * session making the link had passed a second factor. `createOnly`: link only
+ * a chat identity that has no row yet, live or revoked (a link made by email
+ * never revives one its person revoked with `/logout`).
  */
 export async function linkChatIdentity(
   user: ChatUser,
   userId: string,
-  opts: { mfaVerified?: boolean } = {},
+  opts: { mfaVerified?: boolean; createOnly?: boolean } = {},
 ): Promise<ChatLinkResult> {
   const now = new Date();
   const rows = await db
@@ -90,7 +92,9 @@ export async function linkChatIdentity(
           : sql`case when ${chatUserIdentities.revokedAt} is null then ${chatUserIdentities.mfaVerifiedAt} end`,
       },
       // One statement, so two racing links cannot both replace a live link.
-      setWhere: or(isNotNull(chatUserIdentities.revokedAt), eq(chatUserIdentities.userId, userId)),
+      setWhere: opts.createOnly
+        ? sql`false`
+        : or(isNotNull(chatUserIdentities.revokedAt), eq(chatUserIdentities.userId, userId)),
     })
     .returning({ identityId: chatUserIdentities.identityId });
   return rows.length > 0 ? { ok: true } : { ok: false, reason: 'linked_to_other' };

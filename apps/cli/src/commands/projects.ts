@@ -110,7 +110,7 @@ Examples:
   kortix workspaces use 3f2a9c1e-…
 `;
 
-export interface RunProjectsOptions {
+interface RunProjectsOptions {
   /** Invoked as `kortix projects` / `project`, the older name. `ls` then
    *  prints exactly what it printed before Workspaces: the active account's
    *  projects. Scripts parse that output. */

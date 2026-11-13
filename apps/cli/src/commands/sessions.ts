@@ -1,4 +1,5 @@
 import { ApiError } from '../api/client.ts';
+import { splitHelp } from '../command-argv.ts';
 import {
   describeConfigStatus,
   describeReloadOutcome,
@@ -417,10 +418,8 @@ export async function runSessions(argv: string[]): Promise<number> {
   // this a bare `--help` falls through as an ordinary positional arg — e.g.
   // `sessions info --help` would try to look up a session literally named
   // "--help" instead of showing usage.
-  if (rest.includes('-h') || rest.includes('--help')) {
-    process.stdout.write(HELP);
-    return 0;
-  }
+  const helped = splitHelp(argv, HELP);
+  if (helped !== null) return helped;
   const json = takeFlagBool(rest, ['--json']);
   const wait = takeFlagBool(rest, ['--wait']);
   const listPreviews = takeFlagBool(rest, ['--list']);

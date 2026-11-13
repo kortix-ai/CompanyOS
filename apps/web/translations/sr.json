@@ -340,6 +340,7 @@
       "repositoryLabel": "Repozitorijum",
       "loadingOptions": "Učitavanje opcija repozitorijuma…",
       "managedUnavailable": "Repozitorijumi kojima upravlja Kortix nisu dostupni na ovoj instanci. Administrator platforme to podešava u administratorskoj konzoli.",
+      "githubAfterCreate": "Da biste koristili svoj GitHub za sledeće radne prostore, povežite ga u Podešavanja radnog prostora › Git kada ovaj bude napravljen.",
       "installationUnreachable": "Ova GitHub veza više ne radi. Povežite je ponovo da biste izlistali repozitorijume.",
       "reconnect": "Ponovo poveži u Git podešavanjima",
       "managedImportLabel": "Uvezi postojeći upravljani repozitorijum",
@@ -1267,10 +1268,6 @@
           "name": "Тајне заштићене на мрежи",
           "description": "Контролишите који алати и одредишта могу да приме тајне радног простора."
         },
-        "pooled_provider_secrets": {
-          "name": "Дељени тајни кључеви провајдера",
-          "description": "Чланови повезују своје ChatGPT претплате и кључеве провајдера, деле их по потреби и бирају које користи свака сесија."
-        },
         "reminders": {
           "name": "Петље",
           "description": "Омогућава агентима и особама да закажу провере на сесији, једном или периодично. Свако активирање поново покреће ту сесију. Додаје петље на листу Окидача, ознаку петље у сесији и `kortix loop`."
@@ -2164,6 +2161,7 @@
       "agentWorkingOnFor": "ради на: {task} · {time}",
       "somethingWrong": "Нешто није у реду",
       "notSent": "Није послато",
+      "computerDisconnected": "Рачунар ове сесије није повезан.",
       "retry": "Покушај поново",
       "resume": "Настави",
       "agentIsWorking": "{agent} ради",
@@ -3423,9 +3421,6 @@
     },
     "inbox": {
       "title": "Пријемно сандуче",
-      "viewReview": "Review",
-      "viewNotifications": "Обавештења",
-      "viewLabel": "Приказ пријемног сандучета",
       "description": "Новости о сесијама, окидачима и артефактима који вас се тичу, из свих радних простора.",
       "unreadLabel": "Пријемно сандуче: непрочитаних {count}",
       "unreadCount": "непрочитаних {count}",
@@ -26706,7 +26701,7 @@
       "apiKeysDescription": "Кључеви за скрипте, CI и интеграције. Кључ делује као ви, као агент или као бот. Правила за сваки кључ су у Безбедности.",
       "keys": {
         "title": "API кључеви",
-        "description": "Кључеви за скрипте, CI и интеграције. Кључ ради само у овом радном простору и делује као ви, као агент или као бот.",
+        "description": "Ključevi za skripte, CI i integracije. Ključ deluje kao ti, agent ili bot; „Važi za“ određuje koje radne prostore doseže.",
         "newKey": "Нови кључ",
         "count": "{count, plural, one {# кључ} few {# кључа} other {# кључева}}",
         "emptyTitle": "Нема API кључева",
@@ -26716,6 +26711,10 @@
         "actsAsAgent": "Агент",
         "actsAsBot": "Бот",
         "actsAsMeHint": "Ваша улога у овом радном простору. Кључ престаје да ради када одете.",
+        "worksIn": "Važi za",
+        "worksInAll": "Svi moji radni prostori",
+        "worksInAllHint": "Deluje kao ti u svakom tvom radnom prostoru, sa tvojom punom ulogom. Upravljaj njime u Podešavanjima → Lični ključevi.",
+        "worksInWorkspace": "Samo ovaj radni prostor",
         "actsAsAgentHint": "Тачно оно што агент сме према kortix.yaml. Његове радње се бележе као агент, а кључ ради и када одете.",
         "actsAsBotHint": "Бот за CI или интеграцију, са сопственом улогом. Кључ ради и када одете.",
         "needsPermission": "Потребна је дозвола за управљање акредитивима",
@@ -26734,6 +26733,7 @@
         "rowBot": "Бот · {name}",
         "createdBy": "Направио {email}",
         "createdDescription": "{name} делује као {actsAs}. Kortix приказује кључ само једном: копирајте га сада и сачувајте као тајну.",
+        "createdPersonalDescription": "{name} deluje kao ti u svakom tvom radnom prostoru — upravljaj njime u Podešavanjima → Lični ključevi. Kortix prikazuje ključ jednom: kopiraj ga sada i sačuvaj kao tajnu.",
         "accessFullHint": "Све што принципал кључа сме у овом радном простору.",
         "accessCustomHint": "Само дозволе које изаберете. Свака мора бити нешто што принципал кључа сме."
       },
@@ -26744,7 +26744,9 @@
       "noWorkspaceTitle": "Направите радни простор да бисте пријавили CLI",
       "noWorkspaceBody": "CLI се пријављује у радни простор. Направите га, затим одобрите ову пријаву.",
       "createAction": "Направи радни простор",
-      "workspaceLabel": "Радни простор"
+      "workspaceLabel": "Радни простор",
+      "loadFailedTitle": "Учитавање радних простора није успело",
+      "loadFailedBody": "Ова пријава захтева списак ваших радних простора. Са налогом је све у реду — покушајте поново да наставите."
     },
     "models": {
       "yourDefault": "Подразумевано за радни простор",

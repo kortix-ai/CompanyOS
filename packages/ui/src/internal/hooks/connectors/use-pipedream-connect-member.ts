@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { invalidateConnections } from '../../../customize/connectors/invalidate-connections';
+import { invalidateConnections } from './invalidate-connections';
 import { useTranslations } from '../../../i18n';
 
 import { errorToast, successToast } from '../../../primitives/toast';

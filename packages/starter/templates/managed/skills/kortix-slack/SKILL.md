@@ -412,15 +412,16 @@ slack thread  --channel "$SLACK_CHANNEL_ID" --ts "$SLACK_THREAD_TS"  # this thre
 
 Each message carries `user`, the author's id, and `user_name`, the author's display name when Slack has one. Write people's names from `user_name` in an answer. Use `<@user>` only to mention someone, because a mention notifies them.
 
-### Reads and writes stay inside this workspace
+### Where you can read and write
 
-Every Kortix workspace in a Slack workspace shares one bot, so reads reach only this workspace's conversations: the channels and DMs connected to it, and the threads its sessions started or joined. `slack history`, `slack thread`, `slack channel-info`, `slack file-info` and `slack search` refuse anything else with `conversation_not_in_project`, and `slack channels` lists public channels plus this workspace's private ones.
+One Slack workspace runs in one Kortix workspace, and you move through it like a teammate, under your own connector rules:
 
-Writes never act inside another workspace's channel or thread: `slack send` (text or `--file`), `slack edit`, `slack delete`, `slack react`, `slack unreact`, `slack join` and `slack bind-thread` refuse them with the same `conversation_not_in_project`. A channel no workspace is connected to and a DM with a person are fine. Pass `--channel` as the id (`C0123ABCD`, or a user id `U0123ABCD` for a DM), never a channel name.
+- **Public channels:** read and post anywhere. A read of a public channel the bot is not in joins it and reads again, by itself: you do not need `slack join` first.
+- **Private channels, group DMs and DMs:** the bot must be in them (a person invites it to a private channel). You read one only when the person you work for is in it too; otherwise the read is refused with `slack_private_conversation`. A private channel the bot is not in answers `channel_not_found`: ask the person to invite the bot.
+- **Writes** (`slack send`, `--file`, `slack edit`, `slack delete`, `slack react`, `slack unreact`, `slack join`, `slack bind-thread`) go anywhere the bot may post. Pass `--channel` as the id (`C0123ABCD`, or a user id `U0123ABCD` for a DM), never a channel name.
+- `slack_not_linked` means this Kortix workspace no longer holds the Slack workspace (another one installed Slack). Tell the user to connect Slack again from this workspace.
 
-A read of a public channel the bot is not in joins it and reads again, by itself: you do not need `slack join` first. A private channel answers `channel_not_found` until a person invites the bot; tell the user that and ask them to invite it.
-
-On that error, do not retry with another id. Tell the user what the error message says: the conversation belongs to another workspace, or they can connect it by running `/kortix switch` in it.
+On a refusal, do not retry with another id. Tell the user what the error message says.
 
 ### React to a message
 

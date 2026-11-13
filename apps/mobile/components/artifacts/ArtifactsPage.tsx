@@ -33,6 +33,7 @@ import { ARTIFACT_SCOPES, artifactsEmptyState } from '@/lib/artifacts/artifacts'
 import { haptics } from '@/lib/haptics';
 import { BrowserIcon, FileTextIcon } from '@/lib/icons';
 import { formatRelativeTime } from '@/lib/ui/format';
+import { useDebouncedValue } from '@/lib/ui/use-debounced-value';
 import { THEME } from '@/lib/utils/theme';
 import { useTone } from '@/lib/utils/tone';
 import { useArtifactViewerStore } from '@/stores/artifact-viewer-store';
@@ -170,13 +171,4 @@ export function ArtifactsPage({ projectId, onOpenDrawer }: ArtifactsPageProps) {
       <ArtifactActionsSheet ref={actionsRef} projectId={projectId} />
     </View>
   );
-}
-
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = React.useState(value);
-  React.useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(timer);
-  }, [value, delayMs]);
-  return debounced;
 }

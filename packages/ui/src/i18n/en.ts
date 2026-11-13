@@ -289,6 +289,7 @@ const catalog = {
       "repositoryLabel": "Repository",
       "loadingOptions": "Loading repository options…",
       "managedUnavailable": "Kortix-managed repositories are not available on this instance. A platform admin sets this up in the admin console.",
+      "githubAfterCreate": "To use your own GitHub for later workspaces, connect it in Workspace settings › Git once this one exists.",
       "installationUnreachable": "This GitHub connection no longer works. Reconnect it to list repositories.",
       "reconnect": "Reconnect in Git settings",
       "managedImportLabel": "Import an existing managed repository",
@@ -795,10 +796,6 @@ const catalog = {
         "secrets_egress": {
           "name": "Network-Enforced Secrets",
           "description": "Control which tools and destinations can receive workspace secrets."
-        },
-        "pooled_provider_secrets": {
-          "name": "Pooled Provider Secrets",
-          "description": "Members connect their own ChatGPT subscriptions and provider keys, share them when needed, and choose which ones each session uses."
         },
         "reminders": {
           "name": "Loops",
@@ -1561,6 +1558,7 @@ const catalog = {
       "agentWorkingOnFor": "is working on {task} · {time}",
       "somethingWrong": "Something went wrong",
       "notSent": "Not sent",
+      "computerDisconnected": "This session's computer is disconnected.",
       "retry": "Retry",
       "resume": "Resume",
       "agentIsWorking": "{agent} is working",
@@ -2181,9 +2179,6 @@ const catalog = {
     },
     "inbox": {
       "title": "Inbox",
-      "viewReview": "Review",
-      "viewNotifications": "Notifications",
-      "viewLabel": "Inbox view",
       "description": "Updates about the sessions, triggers, and artifacts that concern you, from every workspace.",
       "unreadLabel": "Inbox: {count} unread",
       "unreadCount": "{count} unread",
@@ -10012,7 +10007,7 @@ const catalog = {
       "apiKeysDescription": "Keys for scripts, CI and integrations. A key acts as you, an agent or a bot. The rules every key follows are in Security.",
       "keys": {
         "title": "API keys",
-        "description": "Keys for scripts, CI and integrations. A key works in this workspace only and acts as you, an agent or a bot.",
+        "description": "Keys for scripts, CI and integrations. A key acts as you, an agent or a bot; Works in sets which workspaces it reaches.",
         "newKey": "New key",
         "count": "{count, plural, one {# key} other {# keys}}",
         "emptyTitle": "No API keys",
@@ -10022,6 +10017,10 @@ const catalog = {
         "actsAsAgent": "An agent",
         "actsAsBot": "A bot",
         "actsAsMeHint": "Your role in this workspace. The key stops working when you leave.",
+        "worksIn": "Works in",
+        "worksInAll": "All my workspaces",
+        "worksInAllHint": "Acts as you in every workspace of yours, with your full role. Manage it under Preferences → Personal keys.",
+        "worksInWorkspace": "Only this workspace",
         "actsAsAgentHint": "Exactly what the agent may do in kortix.yaml. Its actions are audited as the agent, and the key keeps working when you leave.",
         "actsAsBotHint": "A bot for CI or an integration, with its own role. The key keeps working when you leave.",
         "needsPermission": "Needs the permission to manage credentials",
@@ -10040,6 +10039,7 @@ const catalog = {
         "rowBot": "Bot · {name}",
         "createdBy": "Created by {email}",
         "createdDescription": "{name} acts as {actsAs}. Kortix shows the key once: copy it now and store it as a secret.",
+        "createdPersonalDescription": "{name} acts as you in every workspace of yours — manage it under Preferences → Personal keys. Kortix shows the key once: copy it now and store it as a secret.",
         "accessFullHint": "Everything the key's principal may do in this workspace.",
         "accessCustomHint": "Only the permissions you pick. Each one must be something the key's principal may do."
       },

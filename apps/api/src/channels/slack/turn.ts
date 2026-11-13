@@ -5,7 +5,7 @@ import { chatEventDedup, chatTurnStreams, projectSessions } from '@kortix/db';
 import { db } from '../../shared/db';
 import { registerSessionFailureNotifier } from '../../shared/session-failure-notifier';
 import { config } from '../../config';
-import { escapeMrkdwn, sessionWebUrl, slackChannelIsDm } from './util';
+import { sessionWebUrl, slackChannelIsDm } from './util';
 import { markdownToMrkdwn, mrkdwnToRichTextElements, slackMentionsAsText, unlabelledMentionIds } from './mrkdwn';
 import { slackUserNames } from './labels';
 import { loadSlackTokenForProject } from '../install-store';
@@ -547,27 +547,16 @@ function buildFinalPlanBlocks(
 }
 
 /**
- * What every agent answer ends with. The first answer of a new thread names
- * the agent the channel picked; every answer offers Switch agent (the
- * channel's picker, for the clicker) and Open in Kortix (the whole session:
- * logs, files, diff). A button, not a slash command: it works in every app's
- * command name and in the DM assistant pane, which runs no slash command.
+ * What every agent answer ends with: Switch agent (the channel's agent picker,
+ * in a modal for the clicker) and Open in Kortix (the whole session: logs,
+ * files, diff). The agent is already named by the post's author and face. A
+ * button, not a slash command: it works in every app's command name and in
+ * the DM assistant pane, which runs no slash command.
  */
 export function answerFooter(
-  handle: Pick<LiveTurn, 'channel' | 'projectId' | 'sessionId' | 'originatingEvent'>,
+  handle: Pick<LiveTurn, 'channel' | 'projectId' | 'sessionId'>,
   persona: SlackPersona | null,
 ): Array<Record<string, unknown>> {
-  const blocks: Array<Record<string, unknown>> = [];
-  if (persona && !handle.originatingEvent?.thread_ts) {
-    const where = slackChannelIsDm(handle.channel) ? 'this DM' : 'this channel';
-    blocks.push({
-      type: 'context',
-      elements: [
-        ...(persona.icon_url ? [{ type: 'image', image_url: persona.icon_url, alt_text: persona.username }] : []),
-        { type: 'mrkdwn', text: `Auto-selected *${escapeMrkdwn(persona.username)}* for ${where}` },
-      ],
-    });
-  }
   const controls: Array<Record<string, unknown>> = [];
   if (persona) {
     controls.push({
@@ -585,8 +574,7 @@ export function answerFooter(
       url: sessionWebUrl(config.FRONTEND_URL, handle.projectId, handle.sessionId),
     });
   }
-  if (controls.length) blocks.push({ type: 'actions', block_id: 'answer_controls', elements: controls });
-  return blocks;
+  return controls.length ? [{ type: 'actions', block_id: 'answer_controls', elements: controls }] : [];
 }
 
 // ── Turn-stream relays ──────────────────────────────────────────────────────
@@ -785,11 +773,7 @@ export async function postAnswerWithoutTurnDetailed(
   const body = rendered.slice(0, MAX_BODY);
   const url = sessionWebUrl(config.FRONTEND_URL, row.projectId, sessionId);
   const persona = await slackAgentPersona({ sessionId, projectId: row.projectId, token }).catch(() => null);
-  // A rescued answer lands in a thread that already exists: no "Auto-selected" line.
-  const footer = answerFooter(
-    { channel, projectId: row.projectId, sessionId, originatingEvent: { thread_ts: threadTs } as SlackEvent },
-    persona,
-  );
+  const footer = answerFooter({ channel, projectId: row.projectId, sessionId }, persona);
   const finalBlocks =
     blocks && blocks.length > 0 ? [...blocks, ...footer] : [...toSectionBlocks(body, truncated), ...footer];
 

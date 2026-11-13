@@ -340,6 +340,7 @@
       "repositoryLabel": "仓库",
       "loadingOptions": "正在加载仓库选项…",
       "managedUnavailable": "此实例无法使用由 Kortix 托管的仓库。平台管理员可在管理控制台中完成设置。",
+      "githubAfterCreate": "如需在之后的工作区中使用你自己的 GitHub，请在此工作区创建后前往「工作区设置 › Git」连接。",
       "installationUnreachable": "此 GitHub 连接已失效。请重新连接以列出仓库。",
       "reconnect": "在 Git 设置中重新连接",
       "managedImportLabel": "导入现有的托管仓库",
@@ -1267,10 +1268,6 @@
           "name": "网络强制保护的机密",
           "description": "控制哪些工具和目标可以接收工作区机密。"
         },
-        "pooled_provider_secrets": {
-          "name": "共享提供商密钥",
-          "description": "成员连接自己的 ChatGPT 订阅和提供商密钥，按需共享，并为每个会话选择要使用的连接。"
-        },
         "reminders": {
           "name": "循环",
           "description": "让代理和用户在会话上安排一次性或重复的检查。每次触发都会重新提示该会话。在触发器列表中新增循环，以及会话循环标记和 `kortix loop`。"
@@ -2164,6 +2161,7 @@
       "agentWorkingOnFor": "正在处理 {task} · {time}",
       "somethingWrong": "出了点问题",
       "notSent": "未发送",
+      "computerDisconnected": "此会话的计算机已断开连接。",
       "retry": "重试",
       "resume": "继续",
       "agentIsWorking": "{agent} 正在处理",
@@ -3423,9 +3421,6 @@
     },
     "inbox": {
       "title": "收件箱",
-      "viewReview": "Review",
-      "viewNotifications": "通知",
-      "viewLabel": "收件箱视图",
       "description": "来自所有工作区、与你相关的会话、触发器和工件的动态。",
       "unreadLabel": "收件箱：{count} 条未读",
       "unreadCount": "{count} 条未读",
@@ -26706,7 +26701,7 @@
       "apiKeysDescription": "用于脚本、CI 和集成的密钥。密钥以你、某个智能体或某个机器人的身份运行。所有密钥遵循的规则见“安全”。",
       "keys": {
         "title": "API 密钥",
-        "description": "用于脚本、CI 和集成的密钥。密钥只在此工作区内有效，以你、某个智能体或某个机器人的身份运行。",
+        "description": "用于脚本、CI 和集成的密钥。密钥以你、代理或机器人身份行动；“作用范围”决定它能触及哪些工作区。",
         "newKey": "新建密钥",
         "count": "{count, plural, other {# 个密钥}}",
         "emptyTitle": "没有 API 密钥",
@@ -26716,6 +26711,10 @@
         "actsAsAgent": "智能体",
         "actsAsBot": "机器人",
         "actsAsMeHint": "你在此工作区中的角色。你离开后，密钥即失效。",
+        "worksIn": "作用范围",
+        "worksInAll": "我的所有工作区",
+        "worksInAllHint": "在你的每个工作区中以你的身份行动，并拥有你的完整角色。在“偏好设置 → 个人密钥”中管理。",
+        "worksInWorkspace": "仅此工作区",
         "actsAsAgentHint": "正是该智能体在 kortix.yaml 中被允许的权限。其操作以该智能体的身份记录审计，你离开后密钥仍然有效。",
         "actsAsBotHint": "用于 CI 或集成的机器人，拥有自己的角色。你离开后密钥仍然有效。",
         "needsPermission": "需要管理凭据的权限",
@@ -26734,6 +26733,7 @@
         "rowBot": "机器人 · {name}",
         "createdBy": "由 {email} 创建",
         "createdDescription": "{name} 以 {actsAs} 的身份运行。Kortix 只显示一次密钥：请立即复制并作为密钥保存。",
+        "createdPersonalDescription": "{name} 在你的每个工作区中以你的身份行动 — 在“偏好设置 → 个人密钥”中管理。Kortix 只显示一次密钥：请立即复制并作为机密保存。",
         "accessFullHint": "密钥的运行身份在此工作区中可以执行的全部操作。",
         "accessCustomHint": "仅限你选择的权限。每项权限都必须在密钥运行身份的权限范围内。"
       },
@@ -26744,7 +26744,9 @@
       "noWorkspaceTitle": "创建工作区以登录 CLI",
       "noWorkspaceBody": "CLI 会登录到一个工作区。请先创建工作区，然后批准此次登录。",
       "createAction": "创建工作区",
-      "workspaceLabel": "工作区"
+      "workspaceLabel": "工作区",
+      "loadFailedTitle": "无法加载你的工作区",
+      "loadFailedBody": "此次登录需要你的工作区列表。你的账户没有问题——请重试以继续。"
     },
     "models": {
       "yourDefault": "工作区默认",

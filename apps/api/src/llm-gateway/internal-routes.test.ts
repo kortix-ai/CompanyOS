@@ -5,13 +5,14 @@ import { GatewayResolutionError } from '@kortix/llm-gateway';
 // app and the real model catalog. Mocked: resolveCandidates, the servable
 // project catalog (it reads the database), and the hooks' persistence.
 const loggerWarn = mock((..._line: unknown[]) => {});
+const loggerInfo = mock((..._line: unknown[]) => {});
 // Swapped per-test so a test can hold the trace write open and prove the route
 // does not wait for it.
 const persistGatewayTraceMock = mock<(trace: unknown) => Promise<void>>(async () => {});
 mock.module('../lib/logger', () => ({
   logger: {
     warn: loggerWarn,
-    info: mock(() => {}),
+    info: loggerInfo,
     error: mock(() => {}),
     debug: mock(() => {}),
   },
@@ -563,7 +564,7 @@ describe('POST /admit — authorize, route, resolve and billing in one call', ()
   });
 });
 
-describe('POST /internal/gateway/resolve-upstream — the failure warn is logged once per model and code', () => {
+describe('POST /internal/gateway/resolve-upstream — the refusal is logged once per model and code, at info', () => {
   // KRTX-4665: a box's voice pipeline resolves its TTS model through this route
   // on every spoken line. When the deployment cannot serve the model (the
   // managed lineup lists no audio models), the per-occurrence warn logged
@@ -575,7 +576,7 @@ describe('POST /internal/gateway/resolve-upstream — the failure warn is logged
     resolveCandidatesMock.mockRejectedValue(
       new GatewayResolutionError('model_not_found', '"inworld-tts-2" is not a recognized model.', 'Check the model id, or choose a different model.'),
     );
-    loggerWarn.mockClear();
+    loggerInfo.mockClear();
     try {
       const a = app();
       for (let i = 0; i < 5; i++) {
@@ -585,7 +586,28 @@ describe('POST /internal/gateway/resolve-upstream — the failure warn is logged
         expect(json.candidates).toEqual([]);
         expect(json.resolutionError.code).toBe('model_not_found');
       }
-      expect(loggerWarn).toHaveBeenCalledTimes(1);
+      expect(loggerInfo).toHaveBeenCalledTimes(1);
+    } finally {
+      resolveCandidatesMock.mockReset();
+    }
+  });
+
+  // KRTX-4665 (third cycle): the per-replica first-occurrence floor still
+  // breached the 0.13/h warn baseline after every deploy. A typed refusal is
+  // an expected outcome the gateway answers cleanly, not a warning: it is
+  // logged at info and never at warn.
+  test('a typed refusal is never logged at warn level', async () => {
+    resolveCandidatesMock.mockReset();
+    resolveCandidatesMock.mockRejectedValue(
+      new GatewayResolutionError('plan_upgrade_required', '"inworld-tts-2" requires a paid plan.', 'Upgrade your plan.'),
+    );
+    loggerWarn.mockClear();
+    loggerInfo.mockClear();
+    try {
+      const res = await app().request(authedRequest({ principal: { userId: 'u' }, model: 'inworld-tts-2' }));
+      expect(res.status).toBe(200);
+      expect(loggerWarn).not.toHaveBeenCalled();
+      expect(loggerInfo).toHaveBeenCalledTimes(1);
     } finally {
       resolveCandidatesMock.mockReset();
     }
@@ -596,12 +618,12 @@ describe('POST /internal/gateway/resolve-upstream — the failure warn is logged
     resolveCandidatesMock.mockRejectedValue(
       new GatewayResolutionError('model_not_found', '"other-model" is not a recognized model.', 'Check the model id.'),
     );
-    loggerWarn.mockClear();
+    loggerInfo.mockClear();
     try {
       const a = app();
       await a.request(authedRequest({ principal: { userId: 'u' }, model: 'other-model' }));
       await a.request(authedRequest({ principal: { userId: 'u' }, model: 'inworld-tts-2' }));
-      expect(loggerWarn).toHaveBeenCalledTimes(2);
+      expect(loggerInfo).toHaveBeenCalledTimes(2);
     } finally {
       resolveCandidatesMock.mockReset();
     }
@@ -609,7 +631,7 @@ describe('POST /internal/gateway/resolve-upstream — the failure warn is logged
 
   test('the same model failing with two different codes logs twice (the code pins the key)', async () => {
     resolveCandidatesMock.mockReset();
-    loggerWarn.mockClear();
+    loggerInfo.mockClear();
     try {
       const a = app();
       resolveCandidatesMock.mockRejectedValueOnce(
@@ -622,7 +644,7 @@ describe('POST /internal/gateway/resolve-upstream — the failure warn is logged
       );
       const second = await a.request(authedRequest({ principal: { userId: 'u' }, model: 'inworld-tts-2' }));
       expect(second.status).toBe(200);
-      expect(loggerWarn).toHaveBeenCalledTimes(2);
+      expect(loggerInfo).toHaveBeenCalledTimes(2);
     } finally {
       resolveCandidatesMock.mockReset();
     }
@@ -637,12 +659,12 @@ describe('POST /internal/gateway/resolve-upstream — the failure warn is logged
     resolveCandidatesMock.mockRejectedValue(
       new GatewayResolutionError('model_not_found', '"bad\nmodel" is not a recognized model.', 'Check the model id.'),
     );
-    loggerWarn.mockClear();
+    loggerInfo.mockClear();
     try {
       const res = await app().request(authedRequest({ principal: { userId: 'u' }, model: 'bad\nmodel' }));
       expect(res.status).toBe(200);
-      expect(loggerWarn).toHaveBeenCalledTimes(1);
-      const line = String(loggerWarn.mock.calls[0][0]);
+      expect(loggerInfo).toHaveBeenCalledTimes(1);
+      const line = String(loggerInfo.mock.calls[0][0]);
       expect(line.startsWith('[gateway-internal] resolution failed for "bad\\nmodel":')).toBe(true);
       expect(line).not.toContain('"bad\nmodel" is not');
     } finally {
@@ -659,14 +681,14 @@ describe('POST /internal/gateway/resolve-upstream — the failure warn is logged
     resolveCandidatesMock.mockRejectedValue(
       new GatewayResolutionError('model_not_found', '"" is not a recognized model.', 'Check the model id, or choose a different model.'),
     );
-    loggerWarn.mockClear();
+    loggerInfo.mockClear();
     try {
       const res = await app().request(authedRequest({ principal: { userId: 'u' }, model: null }));
       expect(res.status).toBe(200);
       const json = (await res.json()) as { candidates: unknown[]; resolutionError: { code: string } };
       expect(json.candidates).toEqual([]);
       expect(json.resolutionError.code).toBe('model_not_found');
-      expect(loggerWarn).toHaveBeenCalledTimes(1);
+      expect(loggerInfo).toHaveBeenCalledTimes(1);
     } finally {
       resolveCandidatesMock.mockReset();
     }

@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { reconcilePlatinumPreviews, teardownPlatinumPreview } from '../src/core/preview-reaper-io';
+import {
+  reconcilePlatinumPreviews,
+  reportPoolUsage,
+  teardownPlatinumPreview,
+} from '../src/core/preview-reaper-io';
+import { PlatinumApi } from '../src/core/platinum-ci';
+import { PLATINUM_POOL_MB_DEFAULT } from '../src/core/preview-session-reaper';
 import {
   managedReposCreatedLastHour,
   runPlatinumPreviewSuite,
@@ -63,6 +69,7 @@ function stubPlatinum(rows: unknown[] = listing, reread: Record<string, unknown>
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe('preview teardown and sweep against the provider API', () => {
@@ -173,5 +180,27 @@ describe('preview teardown and sweep against the provider API', () => {
     expect(await managedReposCreatedLastHour('org', 't', NOW)).toBe(3);
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 403 })));
     expect(await managedReposCreatedLastHour('org', 't', NOW)).toBeNull();
+  });
+
+  it('reads the idle limit and the pool size from the environment, else the defaults', async () => {
+    const boxes = [session('idle-5h', null, 'preview', 5), session('idle-7h', null, 'preview', 7)];
+    const sweep = async (hours: string, poolMb: string) => {
+      stubPlatinum(boxes);
+      vi.stubEnv('PREVIEW_SESSION_MAX_IDLE_HOURS', hours);
+      vi.stubEnv('PREVIEW_PLATINUM_POOL_MB', poolMb);
+      const usage = await reportPoolUsage(new PlatinumApi('https://platinum.example.test', 'k'), boxes);
+      return { stopped: calls, poolMb: usage.poolMb };
+    };
+    // Unset, blank, non-numeric, zero, negative or infinite: 6 h and the default pool.
+    for (const value of ['', ' ', 'abc', '0', '-1', 'Infinity']) {
+      expect(await sweep(value, value), value).toEqual({
+        stopped: ['POST /v1/sandboxes/idle-7h/stop'],
+        poolMb: PLATINUM_POOL_MB_DEFAULT,
+      });
+    }
+    expect(await sweep('4', '1024')).toEqual({
+      stopped: ['POST /v1/sandboxes/idle-5h/stop', 'POST /v1/sandboxes/idle-7h/stop'],
+      poolMb: 1024,
+    });
   });
 });

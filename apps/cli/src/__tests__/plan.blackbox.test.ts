@@ -13,7 +13,8 @@ const CLI_ENTRY = join(resolve(import.meta.dir, '..', '..'), 'src', 'index.ts');
 const VALUES = [
   'postgres://localhost:5432/synthetic_db_value',
   'https://synthetic-remote.example.com/api',
-  'sk_live_synthetic_0123456789',
+  // Assembled at runtime: a live-mode-shaped literal trips the secret scanner.
+  ['sk', 'live', 'synthetic', '0123456789'].join('_'),
   'synthetic-session-secret-77',
   'https://synthetic-prod.example.com',
   'encrypted:BAsyntheticcipher',

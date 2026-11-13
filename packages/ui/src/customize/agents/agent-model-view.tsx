@@ -31,6 +31,8 @@ type SetRuntime = <K extends keyof RuntimeAgentConfig>(key: K, value: RuntimeAge
 
 /** The select's value for "no variant": the model decides. */
 const AUTO = '__auto__';
+/** Duration syntax the program timeout field parses (`parseDurationSeconds`), not copy. */
+const TIMEOUT_EXAMPLE = '30m';
 
 /** A slider that can be unset: `—` and no Reset while it follows the default. */
 function SliderField({
@@ -156,7 +158,7 @@ function ProgramView({ program, footer }: { program: AgentProgram; footer?: Reac
             <Input
               aria-label={t('programTimeout')}
               value={program.timeout ?? ''}
-              placeholder="30m"
+              placeholder={TIMEOUT_EXAMPLE}
               spellCheck={false}
               className="h-8 font-mono text-xs"
               onChange={(e) => program.onTimeoutChange(e.target.value.trim() || undefined)}

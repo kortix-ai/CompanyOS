@@ -9,5 +9,7 @@ import { catalogViews, loopViews } from '@/features/marketing/one-prompt/loops-c
  * what this build really ships.
  */
 export default function Loopmaxxing() {
-  return <FactoryHome loops={loopViews()} catalog={catalogViews()} />;
+  // The launch leads with one template. The other factories are in the build; they join the page when their reference repositories are public.
+  const loops = loopViews().filter((loop) => loop.id === 'software-factory');
+  return <FactoryHome loops={loops} catalog={['Marketing', 'Sales', 'Support', 'Recruiting', ...catalogViews()]} />;
 }

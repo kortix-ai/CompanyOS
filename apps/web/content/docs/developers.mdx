@@ -2212,9 +2212,12 @@ Every command prints its subcommands and flags with `kortix <command> --help`, o
 
 | Command | What it does | See |
 | --- | --- | --- |
+| `plan [--json]` | Read this repository without changing it: stack, `.env` key names and classes, integrations, Kortix state. | [Set up an existing repository](/docs/developers#plan-one-go-onboard) |
+| `onboard --yes [--json]` | Make `kortix.yaml` real in one go: validate, ship, secrets, webhooks, Slack, connectors, images, then the doctor. | [Set up an existing repository](/docs/developers#plan-one-go-onboard) |
+| `templates <ls\|show\|add\|onboard\|doctor>` | List, show and add a hand-approved set of agents and triggers to this repository. | [Templates](/docs/developers#templates) |
 | `ship` | Validate, commit and push the current branch. A folder with no link and no default project gets a new project. `kortix deploy` is the same command. | [Commit and push](/docs/developers#commit-and-push) |
 | `validate` | Check `kortix.yaml` and the sandbox template Dockerfiles. One line per issue: `<file>:<line>:<col>  <severity>  <path>  <message>`. | [Check and validate](#check-and-validate) |
-| `doctor [--no-session]` | Check the login and the project, then start a throwaway session and wait for an agent reply. | [Check and validate](#check-and-validate) |
+| `doctor [--no-session\|--loops [--fix]]` | Check the login and the project, then start a throwaway session and wait for an agent reply. | [Check and validate](#check-and-validate) |
 | `schema [--url]` | Print the `kortix.yaml` JSON Schema. | [Check and validate](#check-and-validate) |
 
 **Agents and connectors**

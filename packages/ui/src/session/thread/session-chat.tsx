@@ -4068,8 +4068,15 @@ export function SessionChat({
   // (Claude Code's agent panel). It reads its own lists and never holds the composer.
   const agentsLineCompact = !!transcriptRows && !isPhone;
   const chatUnderbarSlot = useMemo(
-    () => <AgentsLine projectId={projectId} sessionId={projectSessionId} compact={agentsLineCompact} />,
-    [projectId, projectSessionId, agentsLineCompact],
+    () => (
+      <AgentsLine
+        projectId={projectId}
+        sessionId={projectSessionId}
+        compact={agentsLineCompact}
+        live={isServerBusy}
+      />
+    ),
+    [projectId, projectSessionId, agentsLineCompact, isServerBusy],
   );
 
   // A space's thread lists only the queue's live messages in its card: failed
@@ -4574,6 +4581,7 @@ export function SessionChat({
             sessionTitle={session?.title || 'Untitled'}
             leadingAction={headerLeadingAction}
             parent={parentCrumb}
+            live={isServerBusy}
           />
         )}
 

@@ -5087,6 +5087,28 @@ export const usageEvents = kortixSchema.table(
   ],
 );
 
+/**
+ * The first 2xx answer of an inference request that carried a client
+ * `Idempotency-Key`, shared by every gateway replica (KRTX-4612). The key is
+ * a sha256 over the credential, the wire operation, the client key and the
+ * body, so it neither exposes the credential nor matches across credentials.
+ * Rows live an hour and are deleted by the writes that follow; the gateway
+ * re-checks the caller's credential and budget before serving one.
+ */
+export const gatewayIdempotencyReplays = kortixSchema.table(
+  'gateway_idempotency_replays',
+  {
+    keyHash: varchar('key_hash', { length: 64 }).primaryKey(),
+    status: integer('status').notNull(),
+    statusText: text('status_text').notNull(),
+    headers: jsonb('headers').notNull().$type<[string, string][]>(),
+    body: text('body').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [index('idx_gateway_idempotency_replays_expires').on(table.expiresAt)],
+);
+
 // ─── Gateway (observability + control plane) ───────────────────────────────
 
 export const gatewayRequestLogs = kortixSchema.table(

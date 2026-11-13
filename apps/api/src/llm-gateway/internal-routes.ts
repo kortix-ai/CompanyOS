@@ -16,6 +16,7 @@ import {
   persistGatewayTrace,
   recordGatewayUsage,
 } from './hooks';
+import { ReplayAnswerSchema, ReplayKeySchema, getReplay, putReplay } from './idempotency-replays';
 import { matchesInternalToken, weakInternalTokenWarnings } from './internal-auth';
 import { createFirstInWindow } from '../shared/audit-dedupe';
 import { gatewayModelCatalog } from './models/catalog-models';
@@ -162,6 +163,22 @@ export function createInternalGatewayRoutes() {
     }).safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid pool usage' }, 400);
     await recordSubscriptionUsage(parsed.data.secretId, parsed.data.principal.accountId, parsed.data.usage);
+    return c.json({ ok: true });
+  });
+
+  // The Idempotency-Key replay every gateway replica shares (KRTX-4612): the
+  // first 2xx answer of a keyed inference request, read back by a retry that
+  // landed on another replica. The key is the gateway's credential-scoped hash.
+  app.post('/idempotency/get', async (c) => {
+    const parsed = z.object({ key: ReplayKeySchema }).safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid replay key' }, 400);
+    return c.json({ answer: await getReplay(parsed.data.key) });
+  });
+
+  app.post('/idempotency/put', async (c) => {
+    const parsed = z.object({ key: ReplayKeySchema, answer: ReplayAnswerSchema }).safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid replay answer' }, 400);
+    await putReplay(parsed.data.key, parsed.data.answer);
     return c.json({ ok: true });
   });
 

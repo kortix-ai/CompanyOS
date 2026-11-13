@@ -1757,6 +1757,10 @@ const AUDIT_HTTP_ROUTE_KEYS = [
   "POST|v1|workspaces|github|user-token",
   "POST|v1|workspaces|link-repository",
   "GET|v1|workspaces|managed-git|status",
+  "POST|v1|projects|:workspaceId|channels|slack|join",
+  "POST|v1|projects|:workspaceId|sandbox-templates|reconcile",
+  "POST|v1|workspaces|:workspaceId|channels|slack|join",
+  "POST|v1|workspaces|:workspaceId|sandbox-templates|reconcile",
 ] as const;
 
 export const AUDIT_HTTP_ROUTES = AUDIT_HTTP_ROUTE_KEYS.map((key) => {

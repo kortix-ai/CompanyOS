@@ -14,7 +14,7 @@ Pick the path that matches what you have:
 | You have | Start here |
 | --- | --- |
 | Nothing yet | [Create a workspace](#create-or-get-a-workspace) with `kortix init` |
-| A repository you already work in | [Set up an existing repository](#set-up-an-existing-repository): one prompt to your coding agent adds `kortix.yaml` |
+| A repository you already work in | [Set up an existing repository](#set-up-an-existing-repository): one prompt to your coding agent adds `kortix.yaml`, a [template](#templates) and its agents |
 | A workspace a teammate made | [Clone it](#create-or-get-a-workspace) with `kortix workspaces clone` |
 
 Each path ends at a merged change request. Each step is a git operation on your workspace's repository. Workspace and session objects in the API, and `kortix workspaces create --json`, carry the workspace id as `workspace_id`. Some older responses name it only `project_id`, which always holds the same id. The older project names keep working permanently: `kortix projects`, `--project`, `project_id` and `KORTIX_PROJECT_ID` all mean the workspace. The SDK names are `kortix.workspaces` and `kortix.workspace(id)`.
@@ -125,60 +125,67 @@ my-agent/
 
 ### Set up an existing repository
 
-Kortix reads agents from `kortix.yaml` at the root of the branch the workspace uses. A repository you link keeps its own files: Kortix never writes to it. You add the file once, from your own clone, with the coding agent you already use.
+One prompt adds Kortix agents to a repository you already work in. Paste it into the coding agent on your computer (Claude Code, Codex, Cursor) in your clone:
 
-1. **Link the repository.** In the web app, open **Create a workspace** (`/new`) and choose **Import an existing repository**. Pick the branch Kortix reads. From a terminal, you link it in step 3 instead.
-2. **Copy the setup prompt.** The workspace page of a repository with no `kortix.yaml` shows **Copy setup prompt**, filled in with the repository and the branch. Or copy it from below.
-3. **Paste it into Claude Code, Codex or Cursor** in your clone. The agent writes `kortix.yaml`, runs `kortix validate` and pushes the file. With no workspace linked yet, run `kortix ship` after it: it links the GitHub `origin` and pushes.
-
-Until then the workspace home shows only this step, because no agent can run. It checks the branch every 15 seconds and whenever you return to the tab, and opens the chat within about a minute of the push.
-
-The prompt:
-
-````text
-Set up this repository for Kortix. Kortix reads `kortix.yaml` from the branch the workspace uses. The reference is https://kortix.com/docs/developers#set-up-an-existing-repository.
-
-1. If the `kortix` command is missing, install it: `curl -fsSL https://kortix.com/install | bash`.
-2. Create `kortix.yaml` at the repository root with this content:
-
-```yaml
-# yaml-language-server: $schema=https://kortix.com/schema/kortix.schema.json
-project:
-  name: "<the repository name>"
-builtin_agents:
-  my_kortix: true
-default_agent: mykortix
-skills: {}
-agents:
-  worker:
-    description: "General-purpose worker: coding, research, writing, ops and data work."
-    mode: primary
-    permission: allow
-    prompt: "Your session starts with an empty /workspace. Run `kortix workspaces clone` to get this repository, then read AGENTS.md or CLAUDE.md when it exists."
-    tools: "*"
-    skills: "*"
-    connectors: "*"
-    secrets: "*"
-    kortix_permissions: "*"
+```text
+Set up Kortix cloud agents on this repository with me.
+Read https://kortix.com/setup.md (curl -fsSL https://kortix.com/setup.md) and follow it step by step.
+Ask all your questions in one message. Never print a secret value.
 ```
 
-3. Keep the agent setup this repository already has. Do not move, copy or edit those files.
-   - For each `.claude/agents/<name>.md`, add an agent `<name>` with `prompt_file: .claude/agents/<name>.md`, the `description` from its frontmatter, `mode: primary`, `tools: "*"` and `kortix_permissions: [workspace.gitops.read]`, so it can clone the repository.
-   - For each folder that holds a `SKILL.md` (`.agents/skills/<name>`, `.claude/skills/<name>`, `skills/<name>`), add `<name>: <folder>` under `skills:`. Skip a name that starts with `kortix-`.
-4. Run `kortix validate`. Fix every error it prints and run it again until it exits 0.
-5. Commit only `kortix.yaml` with the message "chore: add kortix.yaml" and push it to the branch the workspace uses.
-6. Reply with the agents and skills you declared.
-````
+Your agent reads the guide at [kortix.com/setup.md](https://kortix.com/setup.md) and does each step with you:
 
-What the prompt keeps from your repository:
+1. Installs the `kortix` CLI and signs you in (one click in your browser).
+2. Reads the repository, your other repositories and the software you use. It asks nothing yet.
+3. Asks every question in one message of at most 8 questions, each with its recommended answer: the loops to start (from the [templates](#templates)), where work lands, the software to connect, the models, and where the config lives. The config lives in this repository (one `kortix.yaml` and one `.kortix/` folder at the root of a monorepo), or in its own private repository, `<owner>/kortix`, so the code repository gets no file at all. You reply once: `go`, or `go` with changes.
+4. Keeps the agents you already have: each `.claude/agents/<name>.md` becomes an agent whose `prompt_file` is that file, and each folder with a `SKILL.md` becomes a skill.
+5. Writes the dev environment: `.kortix/sandbox/Dockerfile` (a sandbox template) and the `dev-environment` skill (the install, start and test commands every agent loads).
+6. Uploads only the `.env` names its message listed, never a value it read (`kortix env push --names`, `--only`).
+7. Connects the plan your agents run on: your Claude or ChatGPT subscription, shared with the workspace so triggered sessions use it, or an API key.
+8. Runs `kortix validate`, commits `kortix.yaml` and `.kortix/`, and runs `kortix ship`, which creates the workspace and links the GitHub repository.
+9. Stores each template secret: a random webhook secret it generates, and your GitHub token through a link where you paste it, so the value never passes through the agent.
+10. Creates the GitHub webhooks with your own `gh`.
+11. Fires one trigger and shows you the session.
 
-| In your repository | In `kortix.yaml` |
-| --- | --- |
-| `.claude/agents/<name>.md` | An agent `<name>` whose `prompt_file` is that file. Kortix drops the file's frontmatter and uses the body as the prompt, so Claude Code and Kortix read one file. |
-| A folder with a `SKILL.md` | A project skill under `skills:`, granted to `worker` by `skills: "*"`. |
-| `AGENTS.md`, `CLAUDE.md` | Read by `worker` at the start of each session, as its prompt says. |
+#### Plan, one go, onboard
 
-`builtin_agents.my_kortix: true` turns on My Kortix, and `default_agent: mykortix` makes it run when a session names no agent. My Kortix hands project work to `worker` and to your agents. Each grant of `"*"` means every name: narrow them in the [kortix.yaml reference](#kortixyaml-reference).
+Three commands carry the mechanics, so the agent and you only agree the plan:
+
+```sh
+kortix plan --json                         # read-only: the repository, stack, env names and classes, integrations, Kortix state
+kortix onboard --yes --json \
+  --env-file .env.local --only DATABASE_URL,API_KEY \
+  --channels eng,bugs                       # make kortix.yaml real, in phases
+kortix doctor --loops --fix --json         # one green/red list; --fix repairs what it can
+```
+
+- `kortix plan` classifies each key of every `.env*` file as `local`, `remote` (a URL on another host, or a staging file) or `prod` (a production file, a `PROD`/`LIVE` name, a live-mode key). It reads each value in its own process and prints none. It also proposes the dev environment (runtimes, services, commands) and lists the public reference repositories an agent can adapt.
+- `kortix onboard --yes` runs, in order: `validate`, `ship`, `secrets` (pushes the approved names, generates every unset webhook secret, one intake link for the rest), `webhooks` (a GitHub webhook and label for each webhook trigger that filters on `headers.github_event`, through your `gh`), `slack` (connect link, then the bot joins `--channels`; a private channel needs `/invite`), `connectors` (a sign-in link per declared connector), `sandbox` (builds each image and waits), then the doctor. Each phase skips what is done: run it again after you finish a `user_actions` item. Exit `0`: done and green. `4`: something waits on you. `1`: a phase failed.
+- `kortix channels join eng bugs` joins the Slack bot to public channels on its own.
+
+A workspace that already reads a repository with no `kortix.yaml` shows **Copy setup prompt** on its home page: the same prompt, with the repository and the branch to push to. Until the push, the workspace home shows only this step, because no agent can run. It checks the branch every 15 seconds and whenever you return to the tab.
+
+#### Templates
+
+A template is a hand-approved set of agents and triggers. `kortix templates add <id>` writes its folder, `.kortix/<id>/`, and adds that folder under `imports:` in `kortix.yaml`. Remove a template by deleting both.
+
+| Template | `id` | What runs |
+| --- | --- | --- |
+| Software Factory | `software-factory` | One `factory` agent. Sources file tickets into one store (GitHub Issues by default; Linear, Jira, Asana or a JSON file): GitHub issues labeled `kortix` and nightly end-to-end failures by default; errors, logs and database anomalies, Slack, codebase analysis, dependencies, a nightly security review and the support inbox when you turn them on. Intake gives each ticket one worker that verifies the change and opens a pull request with a demo; feedback, an independent review and a merge gate follow. A person merges until you set `merge.policy: auto` in `factory.json`. |
+| Marketing Factory | `marketing` | One `marketing` agent with a skill library under `.kortix/marketing/skills/`: `brand` (voice, logos, colors, fonts, claims; setup fills it from your site), `changelog`, `blog-post`, `social`, `video` (the real feature recorded in the sandbox, composed and rendered to a captioned MP4 with HyperFrames), `design` (covers and OG images with `image_gen`), `aeo-seo` and `competitor-intel`. Every merged pull request updates one changelog pull request. Schedules draft social posts on weekdays, a blog post on Tuesdays, a weekly AEO audit and a technical SEO crawl; video, answer pages and the competitor digest start off. Every output is a pull request or an issue: the agent never merges, posts or publishes. Settings are in `marketing.json`. |
+| Sales Factory | `sales` | One `sales` agent with a skill library: lead research from public sources, qualification against the ICP in `sales.json`, outreach drafts, meeting briefs, deal hygiene and offer drafts. Sources: a webhook from your product for each signup, inbound forms, and, when you turn them on, the sales inbox and CRM changes. One system of record: Attio, HubSpot, Salesforce, Pipedrive, a Google Sheet or a JSON file in a private repository. A person sends every message. |
+| Recruiting Factory | `recruiting` | One `recruiting` agent: screens each applicant against the role rubric in `recruiting.json`, writes interview kits, scheduling and candidate-update drafts, keeps the pipeline clean and sources from public profiles when you turn it on. Sources: a webhook for applications and referrals, and, when you turn them on, the ATS and the recruiting inbox. One system of record: Ashby, Greenhouse, Lever, Workable or a JSON file in a private repository. A person decides every advance and every rejection, and approves every message to a candidate. |
+| Support Factory | `support` | One `support` agent: triages each conversation, drafts answers from your docs and code, hands bugs to the Software Factory's ticket store (or a GitHub issue), clusters feedback every week and proposes help-center pages as pull requests. Sources: in-app feedback by webhook, and, when you turn them on, the help desk (Plain, Intercom, Zendesk or email), the support inbox and Slack shared channels. Replies stay drafts unless you allow sending per category in `support.json`. |
+
+```sh
+kortix templates ls                       # the templates
+kortix templates show software-factory    # its agents, secrets and webhooks
+kortix templates add software-factory     # into the repository you stand in
+```
+
+`add` reads the GitHub repository from `origin` and the default branch from `origin/HEAD`; `--repo <owner/repo>` and `--branch <name>` set them. It refuses to overwrite a template file you changed unless you pass `--force`. `--json` prints the secrets and GitHub webhooks the template needs.
+
+The agents of the Software Factory, the AEO Loop and the Automated Changelog use your GitHub token (`GH_TOKEN`) with `gh`: they clone the repository, push `kortix/<slug>` branches and open pull requests. They never push to the default branch. The Sales, Recruiting and Support Factorys need no dev sandbox: their agents work in the systems of record you connect, and they write drafts that a person approves on the **Review** page. A GitHub repository webhook fires a trigger as GitHub sends it: its URL is the trigger's `webhook_url`, its secret is the trigger's webhook secret.
 
 If the composer says **No agents available to you**, the workspace has no agent you may run. With no `kortix.yaml` on the branch, set it up as above. With a `kortix.yaml`, a person who manages the workspace grants you an agent: see [Teams](/docs/guide#teams).
 
@@ -2833,7 +2840,7 @@ take a different credential or protocol than a plain bearer call:
 |---|---|
 | The session runtime under `/v1/p/<external_id>/8000/kortix/runtime/*`: prompts, the event stream, files, and the transcript of a running session. The path takes the sandbox's external id at the provider, not the `session_id`. Read it from `sandbox_url` in `kortix sessions info <session_id> --json` (after `/v1/p/`), or from `sandboxId` in the SDK's `ensureReady()`. | The SDK session handle, `kortix.session(projectId, sessionId)`. See [Sessions from code](/docs/developers#sessions-from-code). |
 | SCIM 2.0 under `/scim/v2/accounts/<account_id>`. It takes a `kortix_scim_` token, not a personal key. | [Single sign-on and directory sync](/docs/guide#single-sign-on-and-directory-sync) |
-| Inbound trigger webhooks, `POST /v1/webhooks/workspaces/<workspace_id>/<slug>` (the older `/v1/webhooks/projects/<workspace_id>/<slug>` answers the same, permanently). They authenticate with the trigger secret, not a Kortix token: send an HMAC signature (`X-Kortix-Signature` or `X-Hub-Signature-256`), `X-Kortix-Token`, or `Authorization: Bearer <secret>`. | [Webhooks](/docs/guide#triggers) |
+| Inbound trigger webhooks, `POST /v1/webhooks/workspaces/<workspace_id>/<slug>` (the older `/v1/webhooks/projects/<workspace_id>/<slug>` answers the same, permanently). They authenticate with the trigger secret, not a Kortix token: send an HMAC signature (`X-Kortix-Signature` or `X-Hub-Signature-256`), `X-Kortix-Token`, or `Authorization: Bearer <secret>`. A GitHub repository webhook works as GitHub sends it: point it at the URL with the trigger secret as its secret. | [Webhooks](/docs/guide#triggers) |
 | App events and App runs: `POST …/apps/<app_id>/events`, `POST` and `DELETE …/apps/<app_id>/runs`. They take the App's `KORTIX_APP_TOKEN`, not a Kortix token. | [App events](/docs/guide#triggers) |
 | The LLM gateway's OpenAI- and Anthropic-compatible endpoints. They take a `kortix_gw_` key. | [Call the LLM gateway from your own app](#call-the-llm-gateway-from-your-own-app) |
 | The workspace git origin, `https://api.kortix.com/v1/git/<workspace_id>.git`. | [Git](/docs/developers#git) |

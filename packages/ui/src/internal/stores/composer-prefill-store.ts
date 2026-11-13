@@ -83,3 +83,5 @@ export const useComposerPrefillStore = create<ComposerPrefillState>((set, get) =
     return value;
   },
 }));
+
+export { useSessionComposerPrefillStore } from '../../session/composer/stores/session-composer-prefill-store';

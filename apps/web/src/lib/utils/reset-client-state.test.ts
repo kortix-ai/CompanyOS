@@ -8,7 +8,7 @@ import * as deviceCaches from '@/lib/device-caches';
 import { useBrowserRecentsStore } from '@kortix/ui/internal/stores/browser-recents-store';
 import { useMobileAppPromoStore } from '@kortix/ui/internal/stores/mobile-app-promo-store';
 import { useTabStore } from '@kortix/ui/internal/stores/tab-store';
-import { useComposerPrefillStore } from '@kortix/ui/internal/stores/composer-prefill-store';
+import { useComposerPrefillStore, useSessionComposerPrefillStore } from '@kortix/ui/internal/stores/composer-prefill-store';
 import { useUserPreferencesStore } from '@kortix/ui/internal/stores/user-preferences-store';
 import {
   clearImpersonationSession,
@@ -384,4 +384,14 @@ describe('resetClientState clears prompts waiting for a composer', () => {
     await resetClientState({ idbTimeoutMs: 5 });
     expect(useComposerPrefillStore.getState().prefillByProject).toEqual({});
   });
+});
+
+
+test('identity reset clears queued session prompts and attachment requests', async () => {
+  const store = useSessionComposerPrefillStore.getState();
+  store.setPrefill('synthetic-session', 'private queued prompt', undefined, undefined, { submit: true });
+  store.requestAttach('synthetic-session');
+  await resetClientState({ idbTimeoutMs: 5 });
+  expect(useSessionComposerPrefillStore.getState().prefillBySession).toEqual({});
+  expect(useSessionComposerPrefillStore.getState().attachRequestBySession).toEqual({});
 });

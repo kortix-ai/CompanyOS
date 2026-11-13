@@ -294,7 +294,7 @@ Each turn runs the command once, in the session's computer:
 | **Failure** | A non-zero exit fails the turn and shows the end of the error output. Kortix does not run a failed command again. |
 | **Stop** | **Stop** ends the command and everything it started. |
 | **Folder** | The agent's first `workspace.repos` path, else `/workspace`. The command waits until `workspace.setup` is done. |
-| **Kortix access** | `createKortix()` from `@kortix/sdk` needs no options: the computer holds the agent's own token. |
+| **Kortix access** | The computer holds the agent's own token: `createKortix({ backendUrl: process.env.KORTIX_API_URL, getToken: async () => process.env.KORTIX_TOKEN })` from `@kortix/sdk` acts as the agent. |
 
 A program agent has no model, so it cannot take `model`, `prompt` or `prompt_file`. Its agent page shows the command under **Program**.
 

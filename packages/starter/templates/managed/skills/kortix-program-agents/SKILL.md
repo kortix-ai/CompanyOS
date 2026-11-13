@@ -55,7 +55,7 @@ One turn = one run of the command, in the first `workspace.repos` path (else `/w
 </contract>
 
 <sdk>
-`createKortix()` with no options uses the computer's `KORTIX_API_URL` and `KORTIX_TOKEN`, so calls act as the agent:
+The computer holds the agent's own `KORTIX_API_URL` and `KORTIX_TOKEN`. Pass them to `createKortix`, so every call acts as the agent:
 
 ```ts
 import { readFileSync } from 'node:fs'
@@ -63,12 +63,12 @@ import { createKortix } from '@kortix/sdk'
 
 const event = JSON.parse(readFileSync(process.env.KORTIX_EVENT_PATH!, 'utf8'))
 const payload = JSON.parse(event.prompt) // with prompt: "{{ payload }}"
-const kortix = createKortix()
+const kortix = createKortix({ backendUrl: process.env.KORTIX_API_URL!, getToken: async () => process.env.KORTIX_TOKEN! })
 const sessions = await kortix.project(process.env.KORTIX_PROJECT_ID!).sessions.list()
 console.log(`Checked ${sessions.length} sessions for ${payload.trigger.slug}.`)
 ```
 
-Add `@kortix/sdk` to the repository's `package.json` and install it in `workspace.setup`.
+Add `@kortix/sdk` to the repository's `package.json` and install it in `workspace.setup`. SDK releases after 0.15.10 also accept `createKortix()` with no options and read the same two variables.
 </sdk>
 
 <setup-pitfalls>

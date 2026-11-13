@@ -151,6 +151,7 @@ function ProjectHomeView({
     submit?: boolean | 'when-ready';
     files?: AttachedFile[];
     options?: SessionPromptOverrides;
+    restoreDraft?: boolean;
   } | null>(null);
 
   // The sandbox TEMPLATE catalog, not live sandbox health (that is
@@ -374,6 +375,7 @@ function ProjectHomeView({
       submit: pendingPrefill.submit,
       files: pendingPrefill.files,
       options: pendingPrefill.options,
+      restoreDraft: pendingPrefill.restoreDraft,
     });
   }, [pendingPrefill, projectId, consumePrefill]);
 

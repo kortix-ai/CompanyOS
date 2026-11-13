@@ -834,6 +834,7 @@ function SpaceComposer({
       submit: pendingPrefill.submit,
       files: pendingPrefill.files,
       options: pendingPrefill.options,
+      restoreDraft: pendingPrefill.restoreDraft,
     });
   }, [pendingPrefill, projectId, consumePrefill]);
 

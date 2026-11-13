@@ -1,0 +1,121 @@
+import { afterEach, expect, mock, test } from 'bun:test';
+import { Window } from 'happy-dom';
+import { act, StrictMode, useEffect } from 'react';
+
+Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
+const win = new Window({ url: 'http://localhost/workspaces/p1' });
+const globals = globalThis as Record<string, unknown>;
+globals.window = win;
+globals.document = win.document;
+globals.navigator = win.navigator;
+for (const key of Object.getOwnPropertyNames(win)) {
+  if (/^[A-Z]/.test(key) && (!(key in globals) || key.endsWith('Event'))) {
+    globals[key] = Reflect.get(win, key);
+  }
+}
+const { createRoot } = await import('react-dom/client');
+
+const realNav = await import('next/navigation');
+let pathname = '/workspaces/p1';
+mock.module('next/navigation', () => ({ ...realNav, usePathname: () => pathname }));
+const { useComposerPrefillStore } = await import('@kortix/ui/internal/stores/composer-prefill-store');
+const { useHomeTypingBuffer } = await import('./use-home-typing-buffer');
+
+const consumed: unknown[] = [];
+
+/** Stands in for `ProjectHome`: a child that consumes the store in a passive effect. */
+function Home() {
+  const pending = useComposerPrefillStore((s) => s.prefillByProject.p1);
+  useEffect(() => {
+    if (!pending) return;
+    consumed.push(useComposerPrefillStore.getState().consume('p1'));
+  }, [pending]);
+  return null;
+}
+
+function Boundary({ home = true }: { home?: boolean }) {
+  useHomeTypingBuffer();
+  return home ? <Home /> : null;
+}
+
+const container = document.createElement('div');
+document.body.appendChild(container);
+const root = createRoot(container as unknown as Element);
+
+function press(key: string, target: EventTarget = document.body) {
+  act(() => {
+    target.dispatchEvent(new win.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }) as unknown as Event);
+  });
+}
+
+afterEach(() => {
+  act(() => root.render(null));
+  consumed.length = 0;
+  pathname = '/workspaces/p1';
+  useComposerPrefillStore.setState({ prefillByProject: {} });
+});
+
+test('keys typed before the editor exists are stored for the home composer', () => {
+  act(() => root.render(<Boundary />));
+  press('h');
+  press('i');
+  expect(consumed.at(-1)).toEqual({ text: 'hi', restoreDraft: true });
+});
+
+test('a prompt handed over before mount wins, even after the child consumed it first', () => {
+  useComposerPrefillStore.getState().setPrefill('p1', 'Quick Entry prompt', { submit: true });
+  act(() => root.render(<Boundary />));
+  expect(consumed).toEqual([{ text: 'Quick Entry prompt', submit: true }]);
+  press('x');
+  expect(useComposerPrefillStore.getState().prefillByProject.p1).toBeUndefined();
+  expect(consumed).toHaveLength(1);
+});
+
+test('a focused control keeps its keys', () => {
+  act(() => root.render(<Boundary />));
+  const button = document.createElement('button');
+  document.body.appendChild(button);
+  const event = new win.KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+  act(() => {
+    button.dispatchEvent(event as unknown as Event);
+  });
+  expect(event.defaultPrevented).toBe(false);
+  expect(consumed).toHaveLength(0);
+  button.remove();
+});
+
+test('a body key is taken: Space does not scroll the page', () => {
+  act(() => root.render(<Boundary />));
+  const event = new win.KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+  act(() => {
+    document.body.dispatchEvent(event as unknown as Event);
+  });
+  expect(event.defaultPrevented).toBe(true);
+  expect(consumed.at(-1)).toEqual({ text: ' ', restoreDraft: true });
+});
+
+test('StrictMode re-running the effect keeps the handover', () => {
+  useComposerPrefillStore.getState().setPrefill('p1', 'Quick Entry prompt', { submit: true });
+  act(() =>
+    root.render(
+      <StrictMode>
+        <Boundary />
+      </StrictMode>,
+    ),
+  );
+  press('x');
+  expect(useComposerPrefillStore.getState().prefillByProject.p1).toBeUndefined();
+  // StrictMode also replays the stand-in's effect, whose second consume finds nothing.
+  expect(consumed.filter(Boolean)).toEqual([{ text: 'Quick Entry prompt', submit: true }]);
+});
+
+test('home redirecting to the chat route keeps the keys for the chat composer', () => {
+  act(() => root.render(<Boundary home={false} />));
+  press('h');
+  press('i');
+  pathname = '/workspaces/p1/chat';
+  act(() => root.render(<Boundary home={false} />));
+  // The chat composer is still loading: keys typed now join the buffer.
+  press('!');
+  expect(useComposerPrefillStore.getState().prefillByProject.p1).toEqual({ text: 'hi!', restoreDraft: true });
+});

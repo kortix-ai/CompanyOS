@@ -11,6 +11,8 @@ import { TimezoneField } from './schedule-fields';
 import type { ComposerDraft } from './trigger-composer-logic';
 
 const EVERY_ERROR_ID = 'trigger-every-error';
+/** Duration syntax the `every` field parses, not copy. */
+const EVERY_EXAMPLE = '1h';
 
 /**
  * When: a repeating schedule, or one run at a set time. A trigger saved with a
@@ -40,7 +42,7 @@ export function WhenSchedule({
               size="xs"
               value={draft.every}
               onChange={(e) => patch({ every: e.target.value })}
-              placeholder="1h"
+              placeholder={EVERY_EXAMPLE}
               maxLength={16}
               className="w-32 font-mono text-sm"
               aria-invalid={error ? true : undefined}

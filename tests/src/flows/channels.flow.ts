@@ -304,10 +304,10 @@ flow(
   },
 );
 
-// CHN-35 — the Slack bot joins channels: connector-write ACL, body validation,
+// CHN-36 — the Slack bot joins channels: connector-write ACL, body validation,
 // and the "not connected" answer the CLI turns into `kortix channels connect`.
 flow(
-  "CHN-35",
+  "CHN-36",
   {
     domain: "channels",
     routes: ["GET /v1/me", "POST /v1/workspaces/:projectId/channels/slack/join"],

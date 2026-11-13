@@ -6,6 +6,7 @@ import { uiRoutes } from '../../lib/routes';
 import { isQuestionTool } from '@kortix/sdk';
 import { SessionAccessPrompt } from '../prompts/session-access-prompt';
 import { SessionApprovalPrompt } from '../prompts/session-approval-prompt';
+import { SessionConnectPrompt } from '../prompts/session-connect-prompt';
 import { childSessionHref } from '../tool/tools/session-spawn-urls';
 import { SessionPermissionPrompt } from '../prompts/session-permission-prompt';
 import { useSessionWallpaperLayer } from '../panel/session-wallpaper-layer';
@@ -306,6 +307,7 @@ import { useSessionHistoryViewStore } from '../../internal/stores/session-histor
 import { downloadBlob } from '../../internal/lib/utils/download';
 import { RestoreNotice, hasOutOfContext, type FullTextState } from './session-history';
 
+import { useAgentRunLayout } from './agent-run-props';
 import {
   TranscriptTurnRow,
   isAgentNoticeTurn,
@@ -1687,7 +1689,9 @@ export function SessionChat({
     startAtTop,
   } = useAutoScroll({
     hasContent: messageCount > 0,
-    room: !transcriptRows,
+    // Pin the newest prompt while it runs. Settled history needs only the
+    // bottom gap, so short conversations reveal their earlier turns.
+    room: !transcriptRows && effectiveBusy,
   });
   // Cmd/Ctrl+P prints the WHOLE conversation. The shortcut is intercepted
   // because neither half of what printing needs can be done in CSS: the
@@ -1944,6 +1948,8 @@ export function SessionChat({
   const [approvalDocked, setApprovalDocked] = useState(false);
   // My Kortix asking to give a colleague access docks the same way.
   const [accessDocked, setAccessDocked] = useState(false);
+  // A connector sign-in the agent started docks the same way (`SessionConnectPrompt`).
+  const [connectDocked, setConnectDocked] = useState(false);
   const questionPromptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const nextQuestion = activePendingQuestion;
@@ -2471,6 +2477,10 @@ export function SessionChat({
     () => new Set(turns.filter((turn) => isAgentNoticeTurn(turn)).map((turn) => turn.id)),
     [turns],
   );
+  // A person's agents report back as one unit: the reports and work of a run fold into one row
+  // on its last turn, and every answer stays in view under it (KRTX-4732). The main transcript
+  // only: a messages-only thread already hides notices.
+  const agentRunLayout = useAgentRunLayout(turns, transcriptRows);
   const turnRenderKeys = useMemo(() => {
     const keys = new Map<string, string>();
     const used = new Set<string>();
@@ -3015,8 +3025,13 @@ export function SessionChat({
       // row with that key is a refusal, never proof the send landed.
       const inboxRowExists = async () => {
         if (!projectId || !projectSessionId) return false;
-        const { prompts } = await listSessionPrompts(projectId, projectSessionId);
-        return inboxHoldsLivePrompt(prompts, clientMessageId);
+        const { prompts, sent } = await listSessionPrompts(projectId, projectSessionId);
+        // A delivered prompt leaves `prompts` and is listed in `sent` until the
+        // session log holds it, under the wire id this send minted.
+        const delivered = (sent ?? []).some(
+          (row) => row.message_id === messageID || row.wire_message_id === messageID,
+        );
+        return delivered || inboxHoldsLivePrompt(prompts, clientMessageId);
       };
 
       const deliver = async (detached: boolean): Promise<string> => {
@@ -3227,6 +3242,16 @@ export function SessionChat({
               useQueuedDraftStore.getState().markPosted(sessionId, clientMessageId);
             return { ok: true } as const;
           } catch (cause) {
+            // A lost ACK does not refuse a prompt the inbox already holds.
+            // Resolve that verdict before the composer can restore its draft:
+            // recoverFromSendFailure checks asynchronously and returns an error now.
+            if (!keepsPainted && (await inboxRowExists().catch(() => false))) {
+              acceptSendReceipt(messageID);
+              attachments?.release();
+              if (!paintTranscript)
+                useQueuedDraftStore.getState().markPosted(sessionId, clientMessageId);
+              return { ok: true } as const;
+            }
             // A kept send is settled below: its painted message stays.
             if (keepsPainted) return { ok: false, cause, error: null } as const;
             // Ask the INBOX, not the runtime. This prompt's home is a durable
@@ -4143,6 +4168,16 @@ export function SessionChat({
         {/* My Kortix asks to start a colleague with extra connectors or
             secrets. Self-hides when nothing's pending. */}
         <SessionAccessPrompt projectId={projectId ?? ''} asks={accessAsks} onDockedChange={setAccessDocked} />
+        {/* A connector sign-in the agent started: a Connect button that
+            finishes it. Self-hides when nothing's pending. */}
+        {projectId && projectSessionId ? (
+          <SessionConnectPrompt
+            projectId={projectId}
+            sessionId={projectSessionId}
+            busy={effectiveBusy}
+            onDockedChange={setConnectDocked}
+          />
+        ) : null}
         {/* Runtime tool permissions (bash/edit/…) awaiting a decision —
             the turn is blocked inside the runtime and resumes the moment
             a reply lands. Self-hides when nothing's pending. */}
@@ -4176,6 +4211,8 @@ export function SessionChat({
     [
       projectId,
       accessAsks,
+      effectiveBusy,
+      projectSessionId,
       sessionId,
       sessionScopeAgentName,
       pendingPermissions,
@@ -4863,7 +4900,10 @@ export function SessionChat({
                               key={turnRenderKeys.get(turn.id)}
                               turnId={turn.id}
                               modelOptions={modelOptions}
-                              suppressed={suppressedFailedCompaction}
+                              // An absorbed run turn keeps its viewport (keys, scroll
+                              // anchors) and draws nothing: its anchor folds it.
+                              suppressed={suppressedFailedCompaction || agentRunLayout.absorbed.has(turn.id)}
+                              {...agentRunLayout.propsOf(turn.id)}
                               continuedWith={harnessSwitches.get(turn.id)?.harness}
                               fullTextState={loaded.state[turn.id] ?? 'idle'}
                               onLoadFullText={loadFullTexts}
@@ -5250,7 +5290,7 @@ export function SessionChat({
                 lockForApproval={runtimePermissionLocksComposer(livePermissions.length, isBusy)}
                 onCustomAnswer={handleCustomAnswer}
                 questionButtonLabel={renderedQuestion ? questionAction.label : null}
-                questionActive={!!renderedQuestion || approvalDocked || accessDocked}
+                questionActive={!!renderedQuestion || approvalDocked || accessDocked || connectDocked}
                 questionCanAct={questionAction.canAct}
                 onQuestionAction={handleQuestionAction}
                 aboveSlot={chatAboveSlot}

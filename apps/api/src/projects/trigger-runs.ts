@@ -139,6 +139,42 @@ export function serializeTriggerRun({ row, costUsd }: Pick<RunRow, 'row' | 'cost
 const MAX_SCAN_PAGES = 5;
 
 /**
+ * One page of the runs list, newest first, each run carrying its LLM spend as
+ * a correlated aggregate over `gateway_request_logs`. Named and exported so
+ * the covering-index DB suite can EXPLAIN the exact statement the route runs
+ * (KRTX-4795): the spend read must stay index-only on a covering index of
+ * `gateway_request_logs` — the same contract KRTX-4022 and KRTX-4638 pinned
+ * for the other gateway-log readers. A column read that drifts out of every
+ * covering index's INCLUDE turns the scan into per-row heap fetches of the
+ * wide (request/response jsonb) rows, and a page of runs pays that once per
+ * row.
+ */
+export function triggerRunsPageQuery(input: {
+  projectId: string;
+  slug?: string;
+  status?: TriggerRunApiStatus;
+  cursor: { createdAt: string; executionId: string } | null;
+  limit: number;
+}) {
+  const filters: SQL[] = [eq(t.projectId, input.projectId)];
+  if (input.slug) filters.push(eq(t.slug, input.slug));
+  if (input.status === 'failed') {
+    // A failed run is a fire that failed OR a fire whose agent turn failed:
+    // the second is the most common failure and must not hide behind `fired`.
+    filters.push(or(inArray(t.status, dbStatusesFor('failed')), eq(t.runStatus, 'failed'))!);
+  } else if (input.status) {
+    filters.push(inArray(t.status, dbStatusesFor(input.status)));
+  }
+  if (input.cursor) filters.push(sql`(${t.createdAt}, ${t.executionId}) < (${input.cursor.createdAt}::timestamptz, ${input.cursor.executionId}::uuid)`);
+  return db
+    .select(runColumns)
+    .from(t)
+    .where(and(...filters))
+    .orderBy(desc(t.createdAt), desc(t.executionId))
+    .limit(input.limit + 1);
+}
+
+/**
  * Runs newest first, keyset-paged on `(created_at, execution_id)`. A run with a
  * session is listed only when the caller may open that session (ruling 6).
  */
@@ -153,22 +189,13 @@ export async function listVisibleTriggerRuns(input: {
   const runs: TriggerRun[] = [];
   let cursor = input.cursor;
   for (let page = 0; page < MAX_SCAN_PAGES; page += 1) {
-    const filters: SQL[] = [eq(t.projectId, input.loaded.row.projectId)];
-    if (input.slug) filters.push(eq(t.slug, input.slug));
-    if (input.status === 'failed') {
-      // A failed run is a fire that failed OR a fire whose agent turn failed:
-      // the second is the most common failure and must not hide behind `fired`.
-      filters.push(or(inArray(t.status, dbStatusesFor('failed')), eq(t.runStatus, 'failed'))!);
-    } else if (input.status) {
-      filters.push(inArray(t.status, dbStatusesFor(input.status)));
-    }
-    if (cursor) filters.push(sql`(${t.createdAt}, ${t.executionId}) < (${cursor.createdAt}::timestamptz, ${cursor.executionId}::uuid)`);
-    const rows: RunRow[] = await db
-      .select(runColumns)
-      .from(t)
-      .where(and(...filters))
-      .orderBy(desc(t.createdAt), desc(t.executionId))
-      .limit(input.limit + 1);
+    const rows: RunRow[] = await triggerRunsPageQuery({
+      projectId: input.loaded.row.projectId,
+      slug: input.slug,
+      status: input.status,
+      cursor,
+      limit: input.limit,
+    });
     const more = rows.length > input.limit;
     const batch = rows.slice(0, input.limit);
     const sessionIds = batch.flatMap((r) => (r.row.sessionId ? [r.row.sessionId] : []));

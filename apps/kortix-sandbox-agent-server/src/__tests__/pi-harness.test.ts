@@ -76,6 +76,8 @@ type Step =
   | { cutMidLine: string }
   | { status: number; message?: string }
   | { stall: true }
+  /** Streams `hold` as text, then holds the reply open until the request aborts: a turn caught mid-answer. */
+  | { hold: string }
 
 /**
  * An OpenAI-compatible `/chat/completions` that answers each request with the
@@ -122,6 +124,19 @@ function startFakeGateway() {
         req.signal.addEventListener('abort', () => resolve(new Response('aborted', { status: 499 })), { once: true })
       })
       let body = chunk({ role: 'assistant', content: '' })
+      if ('hold' in step) {
+        const encoder = new TextEncoder()
+        const head = body + chunk({ content: step.hold })
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(encoder.encode(head))
+              req.signal.addEventListener('abort', () => controller.close(), { once: true })
+            },
+          }),
+          { headers: { 'content-type': 'text/event-stream' } },
+        )
+      }
       if ('cut' in step) {
         if (step.cut) body += chunk({ content: step.cut })
         return new Response(body, { headers: { 'content-type': 'text/event-stream' } })
@@ -3722,6 +3737,14 @@ describe('pi compaction', () => {
     return { seen, hooks }
   }
 
+  test("a turn's end carries the text of its last assistant message: a chat thread the agent did not answer gets it", async () => {
+    const { seen, hooks } = compactionRelays()
+    const r = await boot({ script: [{ tool: 'bash', args: { command: 'echo working' } }, { text: 'The deploy is green.' }], hooks })
+    await promptAndSettle(r, 'is the deploy green?')
+    await waitFor(() => seen.ends.length === 1)
+    expect(seen.ends[0]).toMatchObject({ status: 'idle', finalText: 'The deploy is green.' })
+  })
+
   test('a /summarize is a turn named by its compaction marker: begin and end relay its id, and the log stores the compaction under it', async () => {
     const { seen, hooks } = compactionRelays()
     const r = await boot({ script: [{ text: 'first answer' }, { text: 'second answer' }, ...SUMMARY], prepare: compactEverything, env: SUMMARY_CONTEXT, hooks })
@@ -4985,6 +5008,32 @@ describe('pi session log on the v2 stream (P4.3)', () => {
     const batches = readdirSync(dump).map((f) => JSON.parse(readFileSync(join(dump, f), 'utf8')) as { puts: Array<{ rev: number; message: SessionLogMessage }> })
     const onStream = new Map(frames.filter((x) => x.type === 'log.message').map((f) => [`${f.payload.message.message_id}@${f.payload.rev}`, f.payload.message]))
     for (const p of batches.flatMap((b) => b.puts)) expect(onStream.get(`${p.message.message_id}@${p.rev}`)).toEqual(p.message)
+  })
+
+  // F-011: a tab that left a session mid-answer and came back joins the v2 stream live-only.
+  // pi stores the reply only at its message_end, so no page holds it, and the deltas name a
+  // message the tab's log lacks. The stream must open with the answer so far.
+  test('a v2 subscriber that joins mid-answer first gets the streaming reply so far as a log.message put', async () => {
+    const r = await boot({ script: [{ hold: 'Section 1. The head of the answer.' }], env: { KORTIX_PI_NO_PROGRESS_MS: '5000' } })
+    const rt = r.service.runtime()!
+    const root = rt.rootId
+    expect(startSessionLogJournal(createPiSessionLogPort(() => r.service.runtime()?.sessionLogSnapshot() ?? null), { generation: 0 })).not.toBeNull()
+    const first = await r.bearer('/kortix/runtime/events?schema=v2&since=0')
+    expect((await prompt(r, root, { parts: [{ type: 'text', text: 'write sections' }] })).status).toBe(204)
+    await readSse(first, (t) => t.includes('The head of the answer.'))
+    // A fresh subscriber: no cursor, so the box replays nothing.
+    const late = await r.bearer('/kortix/runtime/events?schema=v2')
+    const raw = await readSse(late, (t) => t.includes('The head of the answer.'), 1_500)
+    const puts = raw
+      .split('\n\n')
+      .filter((f) => f.startsWith('event: log.message'))
+      .map((f) => JSON.parse(f.slice(f.indexOf('data: ') + 6)) as { seq: number; payload: { rev: number; message: SessionLogMessage } })
+    const reply = puts.find((f) => f.payload.message.role === 'assistant')
+    expect(reply).toBeDefined()
+    expect(typeof reply!.seq).toBe('number')
+    expect(SESSION_LOG_EVENTS['log.message'].safeParse(reply!.payload).success).toBe(true)
+    expect(reply!.payload.message).toMatchObject({ thread_id: root, status: 'streaming' })
+    expect(reply!.payload.message.blocks).toContainEqual(expect.objectContaining({ type: 'text', text: 'Section 1. The head of the answer.' }))
   })
 
   test('a prompt queued behind a running turn is on the stream at its queued seq from admission, then at its real seq; GET /log shows the seqs the API stores', async () => {

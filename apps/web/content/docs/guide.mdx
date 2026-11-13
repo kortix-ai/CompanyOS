@@ -514,7 +514,7 @@ An agent can use a connector only when it has been given access to it. The perso
 - **Everyone in the workspace.** A shared account that every member and every allowed agent can use.
 - **Specific people, groups, or agents.** A shared account for an audience you choose.
 
-Triggers never use a private account. They need an account shared with the whole workspace. See [Triggers](/docs/guide#triggers).
+Triggers never use a private account. They need an account shared with the whole workspace or with the agent the trigger runs as. See [Triggers](/docs/guide#triggers).
 
 ### Set it up
 
@@ -621,7 +621,7 @@ A trigger lives in one of two places:
 Some rules keep this safe:
 
 - **App events are marked.** A session that an App event starts opens with a line that says the content is automated, not input from a person. The agent treats it as data, not as instructions.
-- **Shared accounts only.** A private connector account never serves a trigger. Use an account shared with the whole workspace.
+- **Shared accounts only.** A private connector account never serves a trigger. Use an account shared with the whole workspace, or with the agent the trigger runs as: the agent it names, else the workspace's default agent.
 - **Nobody to ask.** If a session that a trigger started waits on a person, it waits at most 30 minutes, then stops. Set connector rules that let the needed actions run. See [Connectors](/docs/guide#connectors).
 - **Who can see the runs.** By default, only people who manage triggers, plus workspace owners and admins, can open the sessions. You can choose **Selected teammates** or **Whole workspace** instead.
 - **One run at a time.** A schedule skips a run while its previous run is still going.
@@ -684,6 +684,7 @@ To watch something around the clock, such as a status page or a price, an agent 
 
 - **Run limits.** A trigger starts at most 60 runs an hour unless you set another limit under **Options** → **Run limits**. You can add a daily limit too.
 - **Auto-pause.** A trigger that hits its hourly limit 2 hours in a row pauses itself. It shows **Paused** until you select **Resume**.
+- **No model or no credits.** A trigger runs without a person, so it can use only model keys and accounts shared with the whole workspace. When the workspace has none, or the wallet cannot pay for a run, the trigger pauses when you save it or at its first refused run. The list shows **No model** or **No credits**, and the trigger page says why. It resumes by itself a few minutes after you add a shared model key in **Models** or top up the wallet. A trigger you save turned off is not checked.
 - **Failures.** A failed run shows **Last run didn’t finish**. When a trigger's runs start to fail, a workspace owner's phone gets one notification.
 - **Pause everything.** **Workspace settings** → **Settings** → **Triggers** → **Pause all triggers** stops every schedule, webhook, event and loop in the workspace.
 
@@ -838,7 +839,7 @@ Connect a Claude Pro or Max plan, and Claude models run on it: **Claude Opus 5.5
 - Each turn runs through Claude Code, Anthropic's own program, on the session's computer. Claude Code sends each model request to the Kortix LLM gateway, which adds the Claude account's login and forwards the request to Anthropic unchanged. The login never enters the session's computer. Claude requests use no credits.
 - Everything else works as with any other model: the agent's tools, permissions, questions, subagents, skills and pi extensions, and the messages and tool calls the session shows.
 - You can switch between a Claude subscription model and any other model in the same session. The new model sees the whole session.
-- A Claude account works like a ChatGPT account. It is private to you until you share it with the workspace or with chosen members. A session uses the accounts selected for it, then your own, then one shared with the workspace. Triggers and channels use the shared ones. Kortix stores the login encrypted and never shows it again.
+- A Claude account works like a ChatGPT account. A new one is shared with everyone in the workspace when you may share workspace keys, and only you can use it otherwise; you can make it private or limit it to chosen members. A session uses the accounts selected for it, then your own, then one shared with the workspace. Triggers, channels and shared sessions run with no person, so they use only the shared ones. Kortix stores the login encrypted and never shows it again.
 - Your Claude plan sets the limits. When every Claude account the session may use reaches its limit, the workspace's [fallback models](/docs/guide#fallback-models) take over the turn, and the session moves to the model that answered. It moves back to Claude once an account has room again. A fallback model with a smaller context window than the session needs cannot take over. A workspace without fallback models ends the turn with "Your Claude subscription limit is reached" and the time it resets.
 - Claude Code features that Kortix has no version of do not apply: plan usage (`/usage`), auto mode and Claude Code's own skills.
 
@@ -1017,8 +1018,12 @@ Channels connect a workspace to Slack, Microsoft Teams, Telegram and Discord. Pe
 <a id="one-thread-one-session" />
 
 - **In Slack, one thread is one session.** The first message in a thread starts the session, and later messages in the thread continue it.
-- **In a Slack channel, only a mention reaches the agent.** A reply without a mention stays between people. The agent reads the whole thread the next time someone mentions it.
-- **In a direct message with the bot, every message reaches the agent.** That session is private to you.
+- **In a Slack channel, a mention starts the agent.** In the agent's thread, the person who started it keeps talking with plain replies. Anyone else mentions the bot to reach it; their other replies stay between people, and the agent reads them the next time it runs.
+- **In a direct message with the bot, every message reaches the agent.** That session is private to you. The bot's status line shows what the agent is doing.
+- **People link automatically.** A Slack member whose confirmed email matches a member of the Kortix workspace needs no `/kortix login`. A workspace that requires two-factor sign-in still asks for `/kortix login` from a session that passed it.
+- **Private content follows the person.** The agent reads a private channel or DM only for someone who is in it. Public channels are open to every agent, as to every member.
+- **Each reply is signed by the agent.** The author is the agent's name and face, as in Kortix, not "Kortix". Every reply has **Switch agent**, which opens the channel's agent picker and changes the agent for the channel's next threads, and **Open in Kortix**, which opens the session.
+- **The agent moves through public channels on its own.** It joins a public channel when it needs to read one. A private channel needs a person to invite the bot.
 - **In Teams, each channel post is its own session.** A personal or group chat keeps one session until someone sends `/new`.
 
 #### Each person links their account
@@ -1077,9 +1082,11 @@ The agent replies in the thread, with live progress.
 </Step>
 </Steps>
 
-When one Slack workspace or Teams tenant serves several workspaces, the first message in a new channel shows a workspace picker. The choice binds the channel to that workspace.
+One Slack workspace runs in one Kortix workspace: every channel and DM there. Adding Kortix to Slack from another Kortix workspace moves the connection there, and the first workspace loses its Slack connector. `/kortix workspaces` in Slack says which workspace it runs in. A workspace that needs a separate bot in the same Slack workspace runs its own Slack app.
 
-Deleting a workspace disconnects Slack and Teams from it. Its channels move to the one workspace that is still connected, or show the picker again. A reply in one of the deleted workspace's Slack threads gets no answer.
+When one Teams tenant serves several workspaces, the first message in a new channel shows a workspace picker. The choice binds the channel to that workspace.
+
+Deleting a workspace disconnects Slack and Teams from it. A reply in one of its Slack threads starts over in the workspace that holds Slack now, without the earlier context.
 
 ### Telegram
 

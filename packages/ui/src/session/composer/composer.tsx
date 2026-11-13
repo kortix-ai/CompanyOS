@@ -272,6 +272,7 @@ export interface SessionChatInputProps {
    * marketing-demo composers rely on.
    */
   draftScope?: DraftScope | null;
+  draftHandoffScope?: RefObject<DraftScope | null>;
   draftActive?: boolean;
   disabled?: boolean;
   /**
@@ -530,13 +531,9 @@ function setDocumentWithoutStealingFocus(
   doc: JSONContent,
 ): void {
   if (!handle) return;
-  const el = handle.getElement();
-  const wasFocused = !!el && (document.activeElement === el || el.contains(document.activeElement));
-  const previouslyFocused = wasFocused ? null : (document.activeElement as HTMLElement | null);
-  handle.setDocument(doc);
-  if (!wasFocused) {
-    previouslyFocused?.focus?.();
-  }
+  // A focus command schedules a later animation frame. Restoring DOM focus
+  // immediately after it cannot cancel that scheduled focus.
+  handle.setDocument(doc, false);
 }
 
 function ComposerImpl(props: SessionChatInputProps) {
@@ -571,6 +568,7 @@ function ComposerImpl(props: SessionChatInputProps) {
   sessionId,
   projectId,
   draftScope = null,
+  draftHandoffScope,
   draftActive = true,
   disabled = false,
   notice = null,
@@ -835,6 +833,7 @@ function ComposerImpl(props: SessionChatInputProps) {
   const { handleDocChange, clearSavedDraft } = useComposerDraft({
     active: draftActive,
     scope: draftScope,
+    handoffScope: draftHandoffScope,
     editorRef,
     editorReady: editorElement != null,
     attachedFiles,

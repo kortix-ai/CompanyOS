@@ -5,7 +5,7 @@ import * as realTiers from '../../billing/services/tiers';
 let modelAccess = { disabledProviders: [] as string[], disabledModels: [] as string[] };
 mock.module('../../repositories/project-model-access', () => ({
   getProjectModelAccess: async () => modelAccess,
-  getProjectGatewayResolution: async () => ({ access: modelAccess, pooledEnabled }),
+  getProjectGatewayResolution: async () => ({ access: modelAccess }),
 }));
 
 let tierByAccount: Record<string, string> = {};
@@ -32,20 +32,19 @@ mock.module('../../config', () => ({ config }));
 let resolvedSecret: string | null = null;
 let secretsByName: Record<string, string | null> = {};
 let resolvedSecrets: Array<{ identifier: string; value: string }> = [];
-let pooledEnabled = false;
 let flagHelperCalls = 0;
 type PooledSecret = { secretId: string; label: string; value: string | null; updatedAt?: Date };
 let pooledSecrets: { configured: boolean; coolingDown: boolean; retryAfterSeconds?: number; secrets: PooledSecret[] } = { configured: false, coolingDown: false, secrets: [] };
 let defaultCodexSecret: PooledSecret | null = null;
 mock.module('../../feature-flags/for-project', () => ({
-  projectFeatureFlagEnabled: async () => { flagHelperCalls += 1; return pooledEnabled; },
+  projectFeatureFlagEnabled: async () => { flagHelperCalls += 1; return false; },
 }));
 const resolveSessionProviderSecrets = mock(async (_input: unknown) => pooledSecrets);
 const resolveDefaultCodexAccountSecret = mock(async (..._args: unknown[]) => defaultCodexSecret);
 // The project's shared ChatGPT accounts an unconfigured session falls back to.
 // Which accounts are usable is the real SQL's job (integration-usable-gateway-
 // secrets.test.ts); here the stub answers what that read returned.
-let sharedSecrets: { coolingDown: boolean; retryAfterSeconds?: number; secrets: PooledSecret[] } = { coolingDown: false, secrets: [] };
+let sharedSecrets: { coolingDown: boolean; retryAfterSeconds?: number; withheld?: number; secrets: PooledSecret[] } = { coolingDown: false, secrets: [] };
 const resolveProjectSharedProviderSecrets = mock(async (_input: unknown) => sharedSecrets);
 mock.module('../../secrets/account-resource', () => ({
   resolveSessionProviderSecrets,
@@ -57,6 +56,7 @@ mock.module('../../secrets/account-resource', () => ({
   readAccountSecret: () => null,
   resolveDefaultProviderAccountSecret: async () => null,
   listUsableGatewaySecrets: async () => [],
+  listGrantedGatewaySecretNames: async () => [],
 }));
 const getProjectSecretValueForConsumer = mock(async (input: { name: string }) => {
   const name = input.name;
@@ -71,6 +71,8 @@ const resolveProjectSecretsForConsumer = mock(async (input: { name: string }) =>
 mock.module('../../projects/secrets', () => ({
   getProjectSecretValueForConsumer,
   resolveProjectSecretsForConsumer,
+  // Read by the one key reader (credentials/gateway-keys.ts) for key names.
+  listProjectSecretNamesForConsumer: async () => [],
 }));
 
 class CodexRefreshError extends Error {}
@@ -169,7 +171,6 @@ function principal(overrides: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
-  pooledEnabled = false;
   flagHelperCalls = 0;
   resolveSessionProviderSecrets.mockClear();
   pooledSecrets = { configured: false, coolingDown: false, secrets: [] };
@@ -223,7 +224,6 @@ describe('resolveCandidates — selected account key pool', () => {
     [false, undefined, 'provider_not_connected'],
     [true, 11, 'provider_pool_rate_limited'],
   ] as const)('selected BYOK pool coolingDown=%s refuses with %s', async (coolingDown, retryAfterSeconds, code) => {
-    pooledEnabled = true;
     catalogUpstream = { baseUrl: 'https://api.anthropic.com/v1', envVar: 'ANTHROPIC_API_KEY', kind: 'anthropic' };
     resolvedSecrets = [{ identifier: 'legacy', value: 'legacy-value' }];
     pooledSecrets = { configured: true, coolingDown, retryAfterSeconds, secrets: [] };
@@ -232,7 +232,7 @@ describe('resolveCandidates — selected account key pool', () => {
     expect(resolveProjectSecretsForConsumer).not.toHaveBeenCalled();
   });
 
-  test('the flag preserves legacy keys until enabled, then selects only granted pool keys', async () => {
+  test('a session selection serves only its granted pool keys, never the legacy key', async () => {
     catalogUpstream = { baseUrl: 'https://api.anthropic.com/v1', envVar: 'ANTHROPIC_API_KEY', kind: 'anthropic' };
     resolvedSecrets = [{ identifier: 'legacy', value: 'legacy-value' }];
     pooledSecrets = { configured: true, coolingDown: false, secrets: [
@@ -240,8 +240,6 @@ describe('resolveCandidates — selected account key pool', () => {
       { secretId: 'id-b', label: 'B', value: 'key-b' },
     ] };
     const p = principal({ sessionId: 'session-1' });
-    expect((await resolveCandidates(p, 'anthropic/claude-sonnet-4.6'))[0]?.credentialRef).toBe('legacy');
-    pooledEnabled = true;
     const candidates = await resolveCandidates(p, 'anthropic/claude-sonnet-4.6');
     expect(candidates.map((candidate) => candidate.poolSecretId)).toEqual(['id-a', 'id-b']);
     expect(candidates.map((candidate) => candidate.apiKey)).toEqual(['key-a', 'key-b']);
@@ -251,7 +249,6 @@ describe('resolveCandidates — selected account key pool', () => {
   // governs only what reaches its sandbox, so a narrowed grant does not block it.
   test('a narrowed agent grant still reaches the pool', async () => {
     catalogUpstream = { baseUrl: 'https://api.anthropic.com/v1', envVar: 'ANTHROPIC_API_KEY', kind: 'anthropic' };
-    pooledEnabled = true;
     pooledSecrets = { configured: true, coolingDown: false, secrets: [{ secretId: 'id-a', label: 'A', value: 'key-a' }] };
     const candidates = await resolveCandidates(principal({ sessionId: 'session-1', agentGrant: { env: [] } }),
       'anthropic/claude-sonnet-4.6');
@@ -261,7 +258,6 @@ describe('resolveCandidates — selected account key pool', () => {
   // A key this API cannot decrypt is unusable, not a server error.
   test('a pooled key that cannot be read is skipped, and a pool of only such keys is not connected', async () => {
     catalogUpstream = { baseUrl: 'https://api.anthropic.com/v1', envVar: 'ANTHROPIC_API_KEY', kind: 'anthropic' };
-    pooledEnabled = true;
     pooledSecrets = { configured: true, coolingDown: false, secrets: [
       { secretId: 'unreadable', label: 'Old', value: null },
       { secretId: 'id-b', label: 'B', value: 'key-b' },
@@ -275,7 +271,6 @@ describe('resolveCandidates — selected account key pool', () => {
 
   test('an exhausted selected pool returns a rate-limit reason and never uses a legacy key', async () => {
     catalogUpstream = { baseUrl: 'https://api.anthropic.com/v1', envVar: 'ANTHROPIC_API_KEY', kind: 'anthropic' };
-    pooledEnabled = true;
     resolvedSecrets = [{ identifier: 'legacy', value: 'legacy-value' }];
     pooledSecrets = { configured: true, coolingDown: true, retryAfterSeconds: 7, secrets: [] };
     await expect(resolveCandidates(principal({ sessionId: 'session-1' }),
@@ -283,9 +278,130 @@ describe('resolveCandidates — selected account key pool', () => {
   });
 });
 
+// The Models panel stores API keys as named accounts. A request with no
+// session selection (the playground, a gateway API key, a session started
+// before the key, a trigger) read only the legacy project key, and answered
+// "No anthropic API key is connected" with a key in the panel (2026-11-11).
+describe('resolveCandidates — Models-panel keys without a session selection', () => {
+  const anthropic = () => {
+    catalogUpstream = { baseUrl: 'https://api.anthropic.com/v1', envVar: 'ANTHROPIC_API_KEY', kind: 'anthropic' };
+  };
+
+  test('a request with no selection uses the Models-panel keys the principal may use', async () => {
+    anthropic();
+    sharedSecrets = { coolingDown: false, secrets: [
+      { secretId: 'id-a', label: 'A', value: 'key-a' },
+      { secretId: 'id-b', label: 'B', value: 'key-b' },
+    ] };
+    const actor = principal();
+    const candidates = await resolveCandidates(actor, 'anthropic/claude-sonnet-4.6');
+    expect(candidates.map((c) => [c.apiKey, c.credentialRef, c.poolSecretId])).toEqual([
+      ['key-a', 'id-a', 'id-a'], ['key-b', 'id-b', 'id-b'],
+    ]);
+    expect(candidates.every((c) => c.billingMode === 'none' && c.markup === 0)).toBe(true);
+    expect(resolveProjectSharedProviderSecrets).toHaveBeenCalledWith({
+      accountId: actor.accountId, projectId: 'p1', userId: 'u1', grantUserId: 'u1',
+      providerId: 'anthropic', name: 'ANTHROPIC_API_KEY', sessionId: undefined, probe: undefined,
+    });
+  });
+
+  test('a Models-panel key wins over the legacy project key the panel does not show', async () => {
+    anthropic();
+    resolvedSecrets = [{ identifier: 'legacy', value: 'legacy-value' }];
+    sharedSecrets = { coolingDown: false, secrets: [{ secretId: 'id-a', label: 'A', value: 'key-a' }] };
+    const candidates = await resolveCandidates(principal({ sessionId: 'session-1' }), 'anthropic/claude-sonnet-4.6');
+    expect(candidates.map((c) => c.apiKey)).toEqual(['key-a']);
+    expect(resolveProjectSecretsForConsumer).not.toHaveBeenCalled();
+  });
+
+  test('with no usable Models-panel key, the legacy project key serves', async () => {
+    anthropic();
+    resolvedSecrets = [{ identifier: 'legacy', value: 'legacy-value' }];
+    const candidates = await resolveCandidates(principal({ sessionId: 'session-1' }), 'anthropic/claude-sonnet-4.6');
+    expect(candidates.map((c) => [c.apiKey, c.credentialRef, c.poolSecretId])).toEqual([['legacy-value', 'legacy', undefined]]);
+  });
+
+  test('a Models-panel key the API cannot read is skipped', async () => {
+    anthropic();
+    resolvedSecrets = [{ identifier: 'legacy', value: 'legacy-value' }];
+    sharedSecrets = { coolingDown: false, secrets: [{ secretId: 'unreadable', label: 'Old', value: null }] };
+    const candidates = await resolveCandidates(principal(), 'anthropic/claude-sonnet-4.6');
+    expect(candidates.map((c) => c.apiKey)).toEqual(['legacy-value']);
+  });
+
+  // One store (2026-11-11): every writer writes named keys, so the flag no
+  // longer hides them. With it off, a named key still serves first.
+  test('with the flag off, a named key still serves ahead of the legacy key', async () => {
+    anthropic();
+    resolvedSecrets = [{ identifier: 'legacy', value: 'legacy-value' }];
+    sharedSecrets = { coolingDown: false, secrets: [{ secretId: 'id-a', label: 'A', value: 'key-a' }] };
+    const candidates = await resolveCandidates(principal(), 'anthropic/claude-sonnet-4.6');
+    expect(candidates.map((c) => c.apiKey)).toEqual(['key-a']);
+    expect(resolveProjectSecretsForConsumer).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['a gateway API key', { keyId: 'gw-key' }],
+    ['a shared or unattended session', { sessionId: 'trigger-session', personalUserId: null }],
+  ] as const)('%s counts no member grant: only keys shared with the whole workspace', async (_name, overrides) => {
+    anthropic();
+    sharedSecrets = { coolingDown: false, secrets: [{ secretId: 'team', label: 'Team', value: 'team-key' }] };
+    const candidates = await resolveCandidates(principal(overrides), 'anthropic/claude-sonnet-4.6');
+    expect(candidates.map((c) => c.apiKey)).toEqual(['team-key']);
+    expect(resolveProjectSharedProviderSecrets).toHaveBeenCalledWith(expect.objectContaining({ grantUserId: null }));
+  });
+
+  test('a private session counts the grants of the person it acts for', async () => {
+    anthropic();
+    sharedSecrets = { coolingDown: false, secrets: [{ secretId: 'mine', label: 'Mine', value: 'my-key' }] };
+    await resolveCandidates(principal({ sessionId: 's', personalUserId: 'human-1' }), 'anthropic/claude-sonnet-4.6', { probe: true });
+    expect(resolveProjectSharedProviderSecrets).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'u1', grantUserId: 'human-1', sessionId: 's', probe: true,
+    }));
+  });
+
+  test('every Models-panel key resting and no legacy key: a rate limit with the earliest retry', async () => {
+    anthropic();
+    sharedSecrets = { coolingDown: true, retryAfterSeconds: 9, secrets: [] };
+    await expect(resolveCandidates(principal(), 'anthropic/claude-sonnet-4.6'))
+      .rejects.toMatchObject({ code: 'provider_pool_rate_limited', retryAfterSeconds: 9 });
+  });
+
+  test('every Models-panel key resting: the legacy project key serves', async () => {
+    anthropic();
+    resolvedSecrets = [{ identifier: 'legacy', value: 'legacy-value' }];
+    sharedSecrets = { coolingDown: true, retryAfterSeconds: 9, secrets: [] };
+    const candidates = await resolveCandidates(principal(), 'anthropic/claude-sonnet-4.6');
+    expect(candidates.map((c) => c.apiKey)).toEqual(['legacy-value']);
+  });
+
+  test('a key private to another member: not connected, and the error says why', async () => {
+    anthropic();
+    sharedSecrets = { coolingDown: false, secrets: [], withheld: 1 };
+    const refusal = await resolveCandidates(principal(), 'anthropic/claude-sonnet-4.6').catch((err) => err);
+    expect(refusal).toBeInstanceOf(GatewayResolutionError);
+    expect(refusal).toMatchObject({ code: 'provider_not_connected' });
+    expect(refusal.message).toContain('private');
+    expect(refusal.suggestion).toContain('everyone in the workspace');
+  });
+
+  test('a gateway API key with only private keys in the workspace: the error names the gateway key rule', async () => {
+    anthropic();
+    sharedSecrets = { coolingDown: false, secrets: [], withheld: 2 };
+    const refusal = await resolveCandidates(principal({ keyId: 'gw-key' }), 'anthropic/claude-sonnet-4.6').catch((err) => err);
+    expect(refusal).toMatchObject({ code: 'provider_not_connected' });
+    expect(refusal.message).toContain('gateway API key');
+  });
+
+  test('no key anywhere: the plain not-connected error', async () => {
+    anthropic();
+    await expect(resolveCandidates(principal(), 'anthropic/claude-sonnet-4.6'))
+      .rejects.toMatchObject({ code: 'provider_not_connected', message: 'No anthropic API key is connected for this project.' });
+  });
+});
+
 describe('resolveCandidates — one projects-row read per resolve', () => {
   test('the pooled flag never pays its own projects-row query', async () => {
-    pooledEnabled = true;
     catalogUpstream = { baseUrl: 'https://api.anthropic.com/v1', envVar: 'ANTHROPIC_API_KEY', kind: 'anthropic' };
     pooledSecrets = { configured: true, coolingDown: false, secrets: [
       { secretId: 'id-a', label: 'A', value: 'key-a' },
@@ -484,6 +600,29 @@ describe('resolveCandidates — BYOK billing', () => {
     expect(getProjectSecretValueForConsumer).toHaveBeenCalledWith(
       expect.objectContaining({ projectId: 'p1', name: 'AWS_REGION', consumer: 'llm_gateway' }),
     );
+  });
+
+  // The backfill moves the legacy AWS_REGION secret to a named row of provider
+  // `amazon-bedrock`; the legacy secret is then unread (llm-credential-move.ts).
+  test('BYOK Bedrock: the region of a named AWS_REGION row serves ahead of the legacy secret', async () => {
+    catalogUpstream = { envVar: 'AWS_BEARER_TOKEN_BEDROCK', kind: 'bedrock' };
+    secretsByName = { AWS_BEARER_TOKEN_BEDROCK: 'bedrock-bearer-key', AWS_REGION: 'us-west-2' };
+    resolveProjectSharedProviderSecrets.mockImplementation(async (input: unknown) => {
+      const { name } = input as { name: string };
+      return name === 'AWS_REGION'
+        ? { coolingDown: false, secrets: [{ secretId: 'region-row', label: 'Bedrock region', value: 'eu-central-1' }] }
+        : { coolingDown: false, secrets: [] };
+    });
+    try {
+      const p = principal();
+      tierByAccount[p.accountId] = 'pro';
+      const candidates = await resolveCandidates(p, 'amazon-bedrock/us.anthropic.claude-opus-4-8');
+      expect(candidates[0]).toMatchObject({ baseUrl: 'https://bedrock-runtime.eu-central-1.amazonaws.com', region: 'eu-central-1' });
+      // The region read is a probe: it never moves the session's account pin.
+      expect(resolveProjectSharedProviderSecrets).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'amazon-bedrock', name: 'AWS_REGION', probe: true }));
+    } finally {
+      resolveProjectSharedProviderSecrets.mockImplementation(async () => sharedSecrets);
+    }
   });
 
   test('BYOK Bedrock with no AWS_REGION set: falls back to us-east-1', async () => {
@@ -714,7 +853,6 @@ describe('resolveCandidates — codex + unknown provider', () => {
   // A project default saved before gpt-5.5 left the lineup kept pinning new
   // sessions to it, and every turn died on ChatGPT's 400 (2026-10-16).
   test('a slug the ChatGPT backend refuses is retired, even with a connected account', async () => {
-    pooledEnabled = true;
     codexCredential = { access: 'legacy-token' };
     await expect(resolveCandidates(principal({ sessionId: 'session-1' }), 'codex/gpt-5.5'))
       .rejects.toMatchObject({ code: 'model_retired' });
@@ -725,7 +863,6 @@ describe('resolveCandidates — codex + unknown provider', () => {
     [false, undefined, 'provider_not_connected'],
     [true, 13, 'provider_pool_rate_limited'],
   ] as const)('selected Codex pool coolingDown=%s refuses with %s', async (coolingDown, retryAfterSeconds, code) => {
-    pooledEnabled = true;
     codexCredential = { access: 'legacy-token' };
     pooledSecrets = { configured: true, coolingDown, retryAfterSeconds, secrets: [] };
     await expect(resolveCandidates(principal({ sessionId: 'session-1' }), 'codex/gpt-6.1-sol'))
@@ -736,7 +873,6 @@ describe('resolveCandidates — codex + unknown provider', () => {
   // A rest longer than a rate limit is ChatGPT's plan limit (days). "Cooling
   // down" and a 60 s retry told a prod Slack thread to try again in a minute.
   test('a selected Codex pool resting for days says its usage limit and when it resets, with no retry', async () => {
-    pooledEnabled = true;
     pooledSecrets = { configured: true, coolingDown: true, retryAfterSeconds: 414_374, secrets: [] };
     const refusal = await resolveCandidates(principal({ sessionId: 'session-1' }), 'codex/gpt-6.1-sol').catch((e) => e);
     // No client retry hint, but the rest itself travels on for the gateway's route hold.
@@ -748,14 +884,12 @@ describe('resolveCandidates — codex + unknown provider', () => {
 
   // Dev showed "resets in 3 days" for a rest of 4 days less a few seconds.
   test('a rest just under a whole number of days reads as that number', async () => {
-    pooledEnabled = true;
     pooledSecrets = { configured: true, coolingDown: true, retryAfterSeconds: 4 * 86_400 - 30, secrets: [] };
     const refusal = await resolveCandidates(principal({ sessionId: 'session-1' }), 'codex/gpt-6.1-sol').catch((e) => e);
     expect(refusal.message).toBe('All selected ChatGPT connections reached their usage limit. The first resets in 4 days.');
   });
 
   test('every shared ChatGPT account resting for hours names the hours', async () => {
-    pooledEnabled = true;
     sharedSecrets = { coolingDown: true, retryAfterSeconds: 3 * 3600 + 100, secrets: [] };
     const refusal = await resolveCandidates(principal({ sessionId: 's', personalUserId: null }), 'codex/gpt-6').catch((e) => e);
     expect(refusal.message).toBe('All ChatGPT connections shared with this project reached their usage limit. The first resets in 3 hours.');
@@ -763,7 +897,6 @@ describe('resolveCandidates — codex + unknown provider', () => {
   });
 
   test('selected Codex account descriptor retains its credential and pool references', async () => {
-    pooledEnabled = true;
     pooledSecrets = { configured: true, coolingDown: false, secrets: [
       { secretId: 'selected', label: 'Selected', value: JSON.stringify({ openai: { access: 'oauth-token' } }) },
     ] };
@@ -776,7 +909,6 @@ describe('resolveCandidates — codex + unknown provider', () => {
   });
 
   test('a shared project gateway key never borrows its creator’s personal ChatGPT account', async () => {
-    pooledEnabled = true;
     codexCredential = { access: 'legacy-token' };
     defaultCodexSecret = { secretId: 'private', label: 'Private account', value: JSON.stringify({ openai: { access: 'private-token' } }) };
     const candidates = await resolveCandidates(principal({ keyId: 'shared-project-key' }), 'codex/gpt-6.1-sol');
@@ -784,7 +916,6 @@ describe('resolveCandidates — codex + unknown provider', () => {
   });
 
   test('an unselected session uses the caller’s newest personal ChatGPT account', async () => {
-    pooledEnabled = true;
     codexCredential = { access: 'legacy-token' };
     defaultCodexSecret = { secretId: 'mine', label: 'My account', value: JSON.stringify({ openai: { access: 'mine-token' } }) };
     const candidates = await resolveCandidates(principal({ sessionId: 'session-1' }), 'codex/gpt-6.1-sol');
@@ -795,7 +926,6 @@ describe('resolveCandidates — codex + unknown provider', () => {
   // The personal default skipped the rest a 429 recorded: every request went
   // to ChatGPT again and was refused (dev, 2026-10-20).
   test('a resting personal ChatGPT account is unavailable, with its rest, when nothing shared can serve', async () => {
-    pooledEnabled = true;
     defaultCodexSecret = { secretId: 'mine', label: 'My account', value: JSON.stringify({ openai: { access: 'mine-token' } }), restingSeconds: 180 } as PooledSecret;
     const refusal = await resolveCandidates(principal({ sessionId: 'session-1' }), 'codex/gpt-6.1-sol').catch((e) => e);
     expect(refusal).toBeInstanceOf(GatewayResolutionError);
@@ -804,7 +934,6 @@ describe('resolveCandidates — codex + unknown provider', () => {
   });
 
   test('a resting personal ChatGPT account yields to a ready shared account', async () => {
-    pooledEnabled = true;
     defaultCodexSecret = { secretId: 'mine', label: 'My account', value: JSON.stringify({ openai: { access: 'mine-token' } }), restingSeconds: 180 } as PooledSecret;
     sharedSecrets = { coolingDown: false, secrets: [{ secretId: 'team', label: 'Team', value: JSON.stringify({ openai: { access: 'team-token' } }) }] };
     const candidates = await resolveCandidates(principal({ sessionId: 'session-1' }), 'codex/gpt-6.1-sol');
@@ -812,14 +941,12 @@ describe('resolveCandidates — codex + unknown provider', () => {
   });
 
   test('the personal ChatGPT account is a pool account, so a 429 records its rest', async () => {
-    pooledEnabled = true;
     defaultCodexSecret = { secretId: 'mine', label: 'My account', value: JSON.stringify({ openai: { access: 'mine-token' } }) };
     const [candidate] = await resolveCandidates(principal({ sessionId: 'session-1' }), 'codex/gpt-6.1-sol');
     expect(candidate).toMatchObject({ credentialRef: 'mine', poolSecretId: 'mine' });
   });
 
   test('a selected ChatGPT pool uses separate OAuth accounts and never the project login', async () => {
-    pooledEnabled = true;
     codexCredential = { access: 'legacy-token' };
     pooledSecrets = { configured: true, coolingDown: false, secrets: [
       { secretId: 'account-a', label: 'Personal', value: JSON.stringify({ openai: { access: 'oauth-a' } }) },
@@ -833,7 +960,6 @@ describe('resolveCandidates — codex + unknown provider', () => {
   });
 
   test('a narrowed agent grant still reaches the personal ChatGPT default', async () => {
-    pooledEnabled = true;
     defaultCodexSecret = { secretId: 'mine', label: 'My account', value: JSON.stringify({ openai: { access: 'mine-token' } }) };
     const candidates = await resolveCandidates(principal({ sessionId: 'session-1', agentGrant: { env: [] } }),
       'codex/gpt-6.1-sol');
@@ -841,7 +967,6 @@ describe('resolveCandidates — codex + unknown provider', () => {
   });
 
   test('an agent grant that names CODEX_AUTH_JSON reaches the personal ChatGPT default', async () => {
-    pooledEnabled = true;
     defaultCodexSecret = { secretId: 'mine', label: 'My account', value: JSON.stringify({ openai: { access: 'mine-token' } }) };
     const candidates = await resolveCandidates(principal({ sessionId: 'session-1', agentGrant: { env: ['codex_auth_json'] } }),
       'codex/gpt-6.1-sol');
@@ -851,7 +976,6 @@ describe('resolveCandidates — codex + unknown provider', () => {
   // The error names the account to reconnect: a member with several ChatGPT
   // accounts cannot otherwise tell which one stopped working.
   test('a selected ChatGPT account whose login fails is named in the error', async () => {
-    pooledEnabled = true;
     pooledSecrets = { configured: true, coolingDown: false, secrets: [
       { secretId: 'work', label: 'ChatGPT · Work', value: JSON.stringify({ openai: {} }) },
     ] };
@@ -863,7 +987,6 @@ describe('resolveCandidates — codex + unknown provider', () => {
   });
 
   test('several failing ChatGPT accounts are listed, three at most', async () => {
-    pooledEnabled = true;
     pooledSecrets = { configured: true, coolingDown: false, secrets: ['A', 'B', 'C', 'D', 'E'].map((label) => ({
       secretId: `id-${label}`, label, value: null,
     })) };
@@ -875,7 +998,6 @@ describe('resolveCandidates — codex + unknown provider', () => {
   });
 
   test('the personal ChatGPT default names its account', async () => {
-    pooledEnabled = true;
     defaultCodexSecret = { secretId: 'mine', label: 'ChatGPT · Me', value: null };
     await expect(resolveCandidates(principal({ sessionId: 'session-1' }), 'codex/gpt-6.1-sol')).rejects.toMatchObject({
       code: 'provider_reauth_required',
@@ -885,7 +1007,6 @@ describe('resolveCandidates — codex + unknown provider', () => {
   });
 
   test('the credential resolver receives the version each account was read at', async () => {
-    pooledEnabled = true;
     const readAt = new Date('2026-09-25T10:00:00.123Z');
     pooledSecrets = { configured: true, coolingDown: false, secrets: [
       { secretId: 'account-a', label: 'A', value: JSON.stringify({ openai: { access: 'oauth-a' } }), updatedAt: readAt },
@@ -969,7 +1090,6 @@ describe('explicit project model access', () => {
 });
 
 test('a prospective ChatGPT pool validates through the same member-bound resolver before a session exists', async () => {
-  pooledEnabled = true;
   pooledSecrets = { configured: true, coolingDown: false, secrets: [
     { secretId: 'shared', label: 'Shared', value: JSON.stringify({ openai: { access: 'shared-token' } }) },
   ] };
@@ -981,14 +1101,13 @@ test('a prospective ChatGPT pool validates through the same member-bound resolve
 });
 
 test('an explicitly empty prospective pool never borrows the legacy project credential', async () => {
-  pooledEnabled = true;
   codexCredential = { access: 'legacy-token' };
   pooledSecrets = { configured: true, coolingDown: false, secrets: [] };
   await expect(resolveCandidates(principal(), 'codex/gpt-6.1-sol', { providerSecretPools: { codex: [] } })).rejects.toMatchObject({ code: 'provider_not_connected' });
   expect(resolveCodexCredential).not.toHaveBeenCalled();
 });
 
-// Incident 2026-09-26: with `pooled_provider_secrets` ON, a ChatGPT account
+// Incident 2026-09-26: a ChatGPT account
 // shared with "Everyone in this project" reached only sessions with an explicit
 // pool or the member who created it. Slack, cron-trigger, and agent-started
 // sessions have no pool row, so they fell through to the legacy project
@@ -999,7 +1118,6 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
   });
 
   test('an agent-principal session (no on-behalf-of human) uses a project-shared account', async () => {
-    pooledEnabled = true;
     sharedSecrets = { coolingDown: false, secrets: [account('team', 'team-token')] };
     const actor = principal({ sessionId: 'trigger-session', personalUserId: null });
     const candidates = await resolveCandidates(actor, 'codex/gpt-6');
@@ -1015,7 +1133,6 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
   });
 
   test('a member who did not create the shared account uses it', async () => {
-    pooledEnabled = true;
     sharedSecrets = { coolingDown: false, secrets: [account('team', 'team-token')] };
     const actor = principal({ userId: 'u2', sessionId: 'slack-session' });
     const candidates = await resolveCandidates(actor, 'codex/gpt-6');
@@ -1026,7 +1143,6 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
   });
 
   test('a member-restricted account the principal is not granted stays unusable: provider_not_connected', async () => {
-    pooledEnabled = true;
     // The usable-key read filtered it out; nothing shared remains.
     sharedSecrets = { coolingDown: false, secrets: [] };
     await expect(resolveCandidates(principal({ sessionId: 's', personalUserId: null }), 'codex/gpt-6'))
@@ -1034,7 +1150,6 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
   });
 
   test('an explicit session pool still wins over the shared accounts', async () => {
-    pooledEnabled = true;
     pooledSecrets = { configured: true, coolingDown: false, secrets: [account('picked', 'picked-token')] };
     sharedSecrets = { coolingDown: false, secrets: [account('team', 'team-token')] };
     const candidates = await resolveCandidates(principal({ sessionId: 's' }), 'codex/gpt-6');
@@ -1043,7 +1158,6 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
   });
 
   test('the caller’s personal account is still preferred over the shared accounts', async () => {
-    pooledEnabled = true;
     defaultCodexSecret = account('mine', 'mine-token');
     sharedSecrets = { coolingDown: false, secrets: [account('team', 'team-token')] };
     const candidates = await resolveCandidates(principal({ sessionId: 's' }), 'codex/gpt-6');
@@ -1052,7 +1166,6 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
   });
 
   test('the shared accounts are preferred over the legacy project connection', async () => {
-    pooledEnabled = true;
     codexCredential = { access: 'legacy-token' };
     sharedSecrets = { coolingDown: false, secrets: [account('team', 'team-token')] };
     const candidates = await resolveCandidates(principal({ sessionId: 's', personalUserId: null }), 'codex/gpt-6');
@@ -1061,14 +1174,12 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
   });
 
   test('an expired shared account falls through to the next one, oldest first', async () => {
-    pooledEnabled = true;
     sharedSecrets = { coolingDown: false, secrets: [account('old-expired', null), account('newer', 'newer-token'), account('newest', 'newest-token')] };
     const candidates = await resolveCandidates(principal({ sessionId: 's', personalUserId: null }), 'codex/gpt-6');
     expect(candidates.map((c) => c.poolSecretId)).toEqual(['newer', 'newest']);
   });
 
   test('a shared account whose refresh throws is treated as expired, not as a crash', async () => {
-    pooledEnabled = true;
     sharedSecrets = { coolingDown: false, secrets: [account('broken', 'x'), account('ok', 'ok-token')] };
     codexAccountRefreshFails = new Set(['broken']);
     const candidates = await resolveCandidates(principal({ sessionId: 's', personalUserId: null }), 'codex/gpt-6');
@@ -1076,14 +1187,12 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
   });
 
   test('every shared account expired and no legacy connection: provider_reauth_required, not provider_not_connected', async () => {
-    pooledEnabled = true;
     sharedSecrets = { coolingDown: false, secrets: [account('a', null), account('b', null)] };
     await expect(resolveCandidates(principal({ sessionId: 's', personalUserId: null }), 'codex/gpt-6'))
       .rejects.toMatchObject({ code: 'provider_reauth_required' });
   });
 
   test('the shared accounts whose login fails are named, with who can fix them', async () => {
-    pooledEnabled = true;
     const unattended = principal({ sessionId: 's', personalUserId: null });
     sharedSecrets = { coolingDown: false, secrets: [account('Team A', null)] };
     await expect(resolveCandidates(unattended, 'codex/gpt-6')).rejects.toMatchObject({
@@ -1099,7 +1208,6 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
   });
 
   test('the credential resolver receives the version each shared account was read at', async () => {
-    pooledEnabled = true;
     const readAt = new Date('2026-09-28T08:00:00.000Z');
     sharedSecrets = { coolingDown: false, secrets: [{ ...account('team', 'team-token'), updatedAt: readAt }] };
     await resolveCandidates(principal({ sessionId: 's', personalUserId: null }), 'codex/gpt-6');
@@ -1107,7 +1215,6 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
   });
 
   test('every shared account expired but a legacy connection exists: the legacy connection serves', async () => {
-    pooledEnabled = true;
     codexCredential = { access: 'legacy-token' };
     sharedSecrets = { coolingDown: false, secrets: [account('a', null)] };
     const candidates = await resolveCandidates(principal({ sessionId: 's', personalUserId: null }), 'codex/gpt-6');
@@ -1115,14 +1222,12 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
   });
 
   test('every shared account cooling down and no legacy connection: provider_pool_rate_limited with retry-after', async () => {
-    pooledEnabled = true;
     sharedSecrets = { coolingDown: true, retryAfterSeconds: 9, secrets: [] };
     await expect(resolveCandidates(principal({ sessionId: 's', personalUserId: null }), 'codex/gpt-6'))
       .rejects.toMatchObject({ code: 'provider_pool_rate_limited', retryAfterSeconds: 9 });
   });
 
   test('an agent whose secret grant omits CODEX_AUTH_JSON still uses a shared account', async () => {
-    pooledEnabled = true;
     sharedSecrets = { coolingDown: false, secrets: [account('team', 'team-token')] };
     const actor = principal({ sessionId: 's', personalUserId: null, agentGrant: { env: ['OTHER'] } });
     await expect(resolveCandidates(actor, 'codex/gpt-6')).resolves.toBeDefined();
@@ -1130,7 +1235,6 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
   });
 
   test('an agent without CODEX_AUTH_JSON in its grant gets the cooldown when every shared account cools down', async () => {
-    pooledEnabled = true;
     sharedSecrets = { coolingDown: true, retryAfterSeconds: 9, secrets: [] };
     const actor = principal({ sessionId: 's', personalUserId: null, agentGrant: { env: ['OTHER'] } });
     await expect(resolveCandidates(actor, 'codex/gpt-6')).rejects.toMatchObject({ code: 'provider_pool_rate_limited' });
@@ -1140,7 +1244,6 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
   // key. Only accounts shared with the whole project count: the key carries no
   // member, so no personal grant applies (`grantUserId: null`).
   test('a project gateway API key (keyId) uses the accounts shared with the whole project', async () => {
-    pooledEnabled = true;
     codexCredential = { access: 'legacy-token' };
     sharedSecrets = { coolingDown: false, secrets: [account('team', 'team-token')] };
     const actor = principal({ keyId: 'kgw' });
@@ -1155,20 +1258,29 @@ describe('resolveCandidates — codex, unconfigured session, project-shared Chat
   });
 
   test('a project gateway API key with no project-wide account falls back to the legacy connection', async () => {
-    pooledEnabled = true;
     codexCredential = { access: 'legacy-token' };
     sharedSecrets = { coolingDown: false, secrets: [] };
     const candidates = await resolveCandidates(principal({ keyId: 'kgw' }), 'codex/gpt-6');
     expect(candidates.map((c) => c.apiKey)).toEqual(['legacy-token']);
   });
 
-  test('flag off: shared accounts are never read', async () => {
-    pooledEnabled = false;
+  test('a gateway API key whose workspace has only private ChatGPT accounts: the refusal names the rule and the way out', async () => {
+    codexCredential = null;
+    sharedSecrets = { coolingDown: false, withheld: 1, secrets: [] };
+    const refusal = await resolveCandidates(principal({ keyId: 'kgw' }), 'codex/gpt-6').catch((err) => err);
+    expect(refusal).toMatchObject({ code: 'provider_not_connected' });
+    expect(refusal.message).toContain('a gateway API key uses only ChatGPT accounts shared with everyone');
+    expect(refusal.suggestion).toContain('personal access token');
+    // The legacy project connection still serves first when there is one.
+    codexCredential = { access: 'legacy-token' };
+    expect((await resolveCandidates(principal({ keyId: 'kgw' }), 'codex/gpt-6')).map((c) => c.apiKey)).toEqual(['legacy-token']);
+  });
+
+  test('in a session, a shared named account serves ahead of the legacy login', async () => {
     codexCredential = { access: 'legacy-token' };
     sharedSecrets = { coolingDown: false, secrets: [account('team', 'team-token')] };
     const candidates = await resolveCandidates(principal({ sessionId: 's' }), 'codex/gpt-6');
-    expect(candidates.map((c) => c.apiKey)).toEqual(['legacy-token']);
-    expect(resolveProjectSharedProviderSecrets).not.toHaveBeenCalled();
+    expect(candidates.map((c) => c.apiKey)).toEqual(['team-token']);
   });
 });
 

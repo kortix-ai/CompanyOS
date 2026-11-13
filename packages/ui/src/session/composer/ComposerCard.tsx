@@ -18,6 +18,7 @@ import { lazy, Suspense, useContext, useMemo, useRef } from 'react';
 import { SpaceMentionContext } from './menus/space-mentions';
 import { useFeatureFlag } from '@kortix/sdk/react';
 
+import { ModelConnectionLayoutContext } from '../models/model-connection-layout';
 import { ImagesUnsupportedBar, ModelConnectionBar } from '../models/model-connection-gate';
 import { AnimatedComposerPlaceholder } from './animated-placeholder';
 import { AttachmentTiles } from './attachment-tiles';
@@ -214,6 +215,7 @@ export function ComposerCard({
   cardClassName,
   call,
 }: ComposerCardProps) {
+  const connectionsAbove = useContext(ModelConnectionLayoutContext) === 'above';
   const cardRef = useRef<HTMLDivElement>(null);
   const { attachAccept, modelPickerEnabled } = useUiHostConfig();
   const inlineUnderbar = underbarPlacement === 'inline';
@@ -282,6 +284,7 @@ export function ComposerCard({
 
   return (
     <ChatInputOverridesProvider enabled={chatInputEnabled}>
+    {connectionsAbove ? <ModelConnectionBar show={noModelsConnected} /> : null}
     <div
       ref={cardRef}
       onDragEnter={handleDragEnter}
@@ -569,7 +572,7 @@ export function ComposerCard({
       below everything the composer owns (card and underbar) as a row of its
       own. See `ModelConnectionBar`.
     */}
-    <ModelConnectionBar show={noModelsConnected} />
+    {connectionsAbove ? null : <ModelConnectionBar show={noModelsConnected} />}
 
     {/*
       The `'below'` dock. Absolute, not in flow: `top-full` hangs it off the

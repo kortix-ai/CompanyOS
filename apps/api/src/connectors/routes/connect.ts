@@ -184,7 +184,7 @@ export function registerConnectRoutes(app: OpenAPIHono, deps: ConnectorRouterDep
       if (!deps.listSessionConnectRequests) {
         return featureNotSupportedResponse(c, 'session_connect_requests');
       }
-      return c.json({ connectors: await deps.listSessionConnectRequests(projectId, sessionId) });
+      return c.json({ connectors: await deps.listSessionConnectRequests(projectId, sessionId, admin.userId) });
     },
   );
 }

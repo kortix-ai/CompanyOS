@@ -59,11 +59,11 @@ import {
 import {
   qk,
   useAccountSecretResources,
-  useFeatureFlag,
   useModelAccess,
   useProjectModelPickerCatalog,
 } from '@kortix/sdk/react';
 import { useQuery } from '@tanstack/react-query';
+import { useCanShareProviderAccounts } from '../sections/view/account-secret-resources-panel';
 import {
   SUBSCRIPTION_ROW,
   SubscriptionRowMeter,
@@ -198,7 +198,7 @@ export interface ProviderConnectViewProps {
   /** The provider open in the host's sheet, if any. */
   selectedId?: string | null;
   onSelect: (providerId: string) => void;
-  /** One line above the list: read-only members and pooled-keys mode only. */
+  /** One line above the list: who the keys added here are shared with. */
   note?: string;
   className?: string;
 }
@@ -391,18 +391,13 @@ export function useManagedProvider(projectId: string | null): LlmProviderEntry {
 
 /** Provider ids that hold a usable pooled (account-level) key for this project. */
 export function usePooledProviderIds(projectId: string, enabled: boolean) {
-  const pooledFlag = useFeatureFlag(enabled ? projectId : null, 'pooled_provider_secrets');
-  const pooledSecretsEnabled = pooledFlag.enabled;
   const project = useQuery({
     queryKey: qk.project.detail(projectId),
     queryFn: () => getProjectDetail(projectId),
-    enabled: enabled && pooledSecretsEnabled,
+    enabled,
   });
   const accountId = project.data?.project?.account_id;
-  const pooledResources = useAccountSecretResources(
-    enabled && pooledSecretsEnabled ? accountId : null,
-    projectId,
-  );
+  const pooledResources = useAccountSecretResources(enabled ? accountId : null, projectId);
   const pooledProviderIds = useMemo(
     () =>
       new Set(
@@ -413,12 +408,10 @@ export function usePooledProviderIds(projectId: string, enabled: boolean) {
     [pooledResources.data],
   );
   return {
-    pooledSecretsEnabled,
     accountId,
     pooledProviderIds,
-    isLoading:
-      pooledFlag.isLoading || (pooledSecretsEnabled && (project.isLoading || pooledResources.isLoading)),
-    isError: pooledSecretsEnabled && (project.isError || pooledResources.isError),
+    isLoading: project.isLoading || pooledResources.isLoading,
+    isError: project.isError || pooledResources.isError,
     isFetching: project.isFetching || pooledResources.isFetching,
     refetch: () => {
       void project.refetch();
@@ -429,6 +422,7 @@ export function usePooledProviderIds(projectId: string, enabled: boolean) {
 
 export interface ProviderConnectProps {
   projectId: string;
+  /** @deprecated Unused: every member sees who the keys added here are shared with. */
   canWrite?: boolean;
   /** Set while this surface is visible; drives the underlying queries. */
   enabled?: boolean;
@@ -439,23 +433,22 @@ export interface ProviderConnectProps {
 
 export function ProviderConnect({
   projectId,
-  canWrite = false,
   enabled = true,
   selectedId,
   onSelect,
   className,
 }: ProviderConnectProps) {
-  const t = useTranslations('providerSheet');
   const common = useTranslations('common');
   const tPooled = useTranslations('pooledSecrets');
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const access = useModelAccess(enabled ? projectId : null);
   const managedProvider = useManagedProvider(enabled ? projectId : null);
   const pooled = usePooledProviderIds(projectId, enabled);
+  const canShare = useCanShareProviderAccounts(projectId);
   useLiveLlmProviderCatalog(projectId, enabled);
   const catalogRevision = useLlmProviderCatalogRevision();
   const { connectedProviders, providerStateLoading } = useConnectedProviders(projectId, enabled);
-  const subscriptionAccountId = enabled && pooled.pooledSecretsEnabled ? pooled.accountId : null;
+  const subscriptionAccountId = enabled ? pooled.accountId : null;
   const subscriptions = useSubscriptionLogins(subscriptionAccountId, projectId);
   const liveUsage = useLiveSubscriptionUsages(subscriptionAccountId, projectId, subscriptions.logins);
   const rowSummary = useSubscriptionRowSummary();
@@ -568,13 +561,7 @@ export function ProviderConnect({
       onSearchChange={setSearch}
       selectedId={selectedId}
       onSelect={onSelect}
-      note={
-        pooled.pooledSecretsEnabled
-          ? tPooled('sharedDescription')
-          : canWrite
-            ? undefined
-            : t('readOnly')
-      }
+      note={tPooled(canShare ? 'sharedDescription' : 'sharedOnlyYouDescription')}
       className={className}
     />
   );

@@ -67,7 +67,7 @@
     "oauthWaiting": "認証を待機中…",
     "oauthFinishing": "サインインしました。アカウントを保存しています…",
     "oauthExpired": "認証がタイムアウトしました。もう一度お試しください。",
-    "oauthPrivateDescription": "このワークスペースで ChatGPT Plus または Pro プランを使用します。新しいアカウントは共有するまで自分専用です。",
+    "oauthPrivateDescription": "このワークスペースで ChatGPT Plus または Pro プランを使用します。新しいアカウントはワークスペースのすべてのメンバーと共有されます。自分専用にすることもできます。",
     "chatGptSubscription": "ChatGPT サブスクリプション",
     "manageChatGptAccounts": "ChatGPT アカウントを管理",
     "connect": "接続",
@@ -95,7 +95,7 @@
     "deleteError": "シークレットを削除できませんでした",
     "accessError": "アクセス権を変更できませんでした",
     "sharedTitle": "プロバイダー接続",
-    "sharedDescription": "API キー、ChatGPT アカウント、Claude アカウントを追加します。新しいものは共有するまで自分専用です。各セッションで使うものを選びます。",
+    "sharedDescription": "API キー、ChatGPT アカウント、Claude アカウントを追加します。新しいものはワークスペースのすべてのメンバーと共有されます。自分専用にすることもできます。各セッションで使うものを選びます。",
     "legacyProjectKey": "既存のワークスペースキー · このセッションでキーを選択していない場合に使用",
     "keyCount": "{count, plural, other {# 個のキー}}",
     "providerKeysFor": "{provider} の API キー",
@@ -106,6 +106,14 @@
     "access": "アクセス",
     "actions": "アクション",
     "coolingDown": "クールダウン中",
+    "keyVerified": "確認済み: {provider} がこのキーを受け付けました",
+    "keyInvalid": "{provider} がこのキーを拒否しました: {message}",
+    "keyUnchecked": "未確認: {message}",
+    "checkKey": "再確認",
+    "savedVerified": "キーを保存して確認しました",
+    "savedInvalid": "キーを保存しましたが、{provider} が拒否しました: {message}",
+    "checkError": "キーを確認できませんでした",
+    "openProviderInModels": "モデルで {provider} を開く",
     "member": "メンバー",
     "members": "人のメンバー",
     "actionsFor": "{label} の操作",
@@ -145,6 +153,9 @@
     "providerKeys": "プロバイダーキー",
     "chooseSharedKeys": "このセッションで使用できる共有キーを選択します。",
     "sessionKeyPool": "セッションのキープール",
+    "subscriptionSwitcher": "サブスクリプション",
+    "subscriptionSwitcherDefault": "接続済みのすべてのサブスクリプションを順番に使います",
+    "subscriptionSwitcherUse": "このセッションで {label} を使う",
     "sharedSessionKeys": "このセッションはワークスペースと共有されているため、ここではワークスペース全体で共有されているキーのみ使用できます。自分に付与されたキーは、自分の非公開セッションで使用できます。",
     "promptedSessionKeys": "別のメンバーがこのセッションでプロンプトを送信したため、所有者の代理として動作しなくなりました。ここではワークスペース全体で共有されたキーのみが使えます。",
     "noPersonSessionKeys": "このセッションは特定のユーザーの代理として動作していません。個人キーの導入前に、または無人で開始されました。ここではワークスペース全体で共有されたキーのみが使えます。自分のキーを使うには新しいセッションを開始してください。",
@@ -166,7 +177,7 @@
     "claudeAccounts": "Claude アカウント",
     "noClaudeAccounts": "Claude アカウントはまだありません",
     "connectClaude": "Claude でサインイン",
-    "claudeOauthPrivateDescription": "このワークスペースの Claude モデルで Claude Pro または Max プランを使います。新しいアカウントは共有するまで自分専用です。",
+    "claudeOauthPrivateDescription": "このワークスペースの Claude モデルで Claude Pro または Max プランを使います。新しいアカウントはワークスペースのすべてのメンバーと共有されます。自分専用にすることもできます。",
     "claudeOauthCreationDescription": "Claude Pro または Max のアカウントでサインインします。Kortix はログインを暗号化して保存し、表示しません。",
     "claudeDefaultAccountLabel": "Claude · {name}",
     "claudeAccountConnected": "Claude アカウントを接続しました",
@@ -174,7 +185,10 @@
     "claudeConnectFailed": "Claude のサインインが完了しませんでした。もう一度お試しください。",
     "claudeReconnectDescription": "もう一度 Claude でサインインします。アカウントの名前、アクセス、セッションの選択はそのまま残ります。",
     "claudeAccountLabelPlaceholder": "例: 自分の Claude アカウント",
-    "claudeDeleteAccountConfirmTitle": "この Claude アカウントを全員分削除しますか?"
+    "claudeDeleteAccountConfirmTitle": "この Claude アカウントを全員分削除しますか?",
+    "sharedOnlyYouDescription": "API キー、ChatGPT アカウント、Claude アカウントを追加します。追加したものはあなただけが使えます。ワークスペースの管理者は共有できます。各セッションで使うものを選びます。",
+    "oauthOnlyYouDescription": "このワークスペースで ChatGPT Plus または Pro プランを使います。追加したアカウントはあなただけが使えます。",
+    "claudeOauthOnlyYouDescription": "このワークスペースの Claude モデルで Claude Pro または Max プランを使います。追加したアカウントはあなただけが使えます。"
   },
   "secrets": {
     "undecryptable": {
@@ -326,6 +340,7 @@
       "repositoryLabel": "リポジトリ",
       "loadingOptions": "リポジトリの選択肢を読み込んでいます…",
       "managedUnavailable": "このインスタンスでは Kortix 管理リポジトリを利用できません。プラットフォーム管理者が管理コンソールで設定します。",
+      "githubAfterCreate": "今後のワークスペースで自分の GitHub を使うには、このワークスペースの作成後に「ワークスペース設定 › Git」で接続してください。",
       "installationUnreachable": "この GitHub 接続は使えなくなりました。リポジトリを一覧表示するには接続し直してください。",
       "reconnect": "Git 設定で接続し直す",
       "managedImportLabel": "既存の管理リポジトリをインポート",
@@ -1253,10 +1268,6 @@
           "name": "ネットワーク強制シークレット",
           "description": "ワークスペースのシークレットを受け取れるツールと送信先を制御します。"
         },
-        "pooled_provider_secrets": {
-          "name": "共有プロバイダーシークレット",
-          "description": "メンバーが自分の ChatGPT サブスクリプションとプロバイダーキーを接続し、必要に応じて共有し、セッションごとに使用するものを選択します。"
-        },
         "reminders": {
           "name": "ループ",
           "description": "エージェントやユーザーがセッションのチェックインを1回または繰り返しで予定できます。実行のたびにそのセッションに再度呼びかけます。トリガー一覧へのループ、セッションのループ表示、`kortix loop` が追加されます。"
@@ -2081,7 +2092,11 @@
       "claudePlan": "Pro または Max プラン",
       "connectModel": "モデルを接続",
       "imagesUnsupported": "{model} は画像を読み取れません",
-      "imagesUnsupportedHint": "画像を削除するか、別のモデルを選択してください"
+      "imagesUnsupportedHint": "画像を削除するか、別のモデルを選択してください",
+      "noModelUpgradeReason": "モデルがありません: Credits プランにアップグレードするか、自分のプロバイダーキーを追加してください。",
+      "noModelKeyReason": "モデルがありません: 自分のプロバイダーキーを追加してください。",
+      "noModelUpgradePlan": "プランをアップグレード",
+      "noModelAddProviderKey": "プロバイダーキーを追加"
     },
     "providerRecovery": {
       "savedPrompt": "保存済みプロンプト",
@@ -2146,6 +2161,7 @@
       "agentWorkingOnFor": "が {task} に取り組み中 · {time}",
       "somethingWrong": "問題が発生しました",
       "notSent": "未送信",
+      "computerDisconnected": "このセッションのコンピューターは接続されていません。",
       "retry": "再試行",
       "resume": "再開",
       "agentIsWorking": "{agent} が作業中",
@@ -3405,9 +3421,6 @@
     },
     "inbox": {
       "title": "受信トレイ",
-      "viewReview": "Review",
-      "viewNotifications": "通知",
-      "viewLabel": "受信トレイの表示",
       "description": "あなたに関係するセッション、トリガー、アーティファクトの最新情報を、すべてのワークスペースから表示します。",
       "unreadLabel": "受信トレイ：未読 {count} 件",
       "unreadCount": "未読 {count} 件",
@@ -10378,6 +10391,8 @@
       "checkConnection": "接続を確認してから、再試行してください。"
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "プロバイダーキーを追加",
+      "noModelUpgradePlan": "プランをアップグレード",
       "authEmailRateLimit": "メールを送信できませんでした。約1時間後にもう一度お試しください。",
       "authRequestRateLimit": "リクエストが多すぎます。数分後にもう一度お試しください。",
       "text03217276a5f1": "残高 {value0} クレジット",
@@ -20676,10 +20691,11 @@
       "text5f6ba69d66d1": "スキルを削除しました",
       "textcb8d6b0c94c9": " とその中のすべてのファイル（編集内容を含む）。このスキルを使うすべてのエージェントからも外します。デフォルトブランチへの 1 回のコミットです。",
       "cliDeviceTitle": "Kortix CLI を認証",
-      "cliDeviceWarning": "自分で開始したログインのみ承認してください。ターミナルに表示されたコードを入力してください。",
+      "cliDeviceWarning": "自分で開始したログインのみ承認してください。このコードがターミナルに表示されたコードと一致することを確認してください。",
       "cliDeviceCode": "ログインコード",
       "cliDeviceApproved": "ログインを承認しました。ターミナルに戻ってください。",
       "cliDeviceAction": "CLI を認証",
+      "cliDeviceConfirm": "このコードはターミナルの表示と一致しています",
       "text705a7e325b66": "Kortix アプリがイベントを送信しました",
       "text4b80152fb96b": "Kortix アプリのイベント認証情報を読み取りました",
       "text59374c1f1acd": "Kortix アプリが実行を予約しました",
@@ -22075,6 +22091,12 @@
     "noticeSignInTitle": "{name} にサインイン",
     "noticeSignInBody": "Kortix は {name} を追加しました。エージェントがツールを使えるよう、サインインを完了してください。",
     "noticeSignInAction": "サインイン",
+    "noticeSignInAgainTitle": "{name} に再度サインイン",
+    "noticeSignInAgainBody": "サインインの有効期限が切れたか、取り消されました。再度サインインするまで、エージェントは {name} を使用できません。",
+    "noticeNoToolsTitle": "{name} にツールがありません",
+    "noticeNoToolsBody": "ルートがないため、エージェントが呼び出せるものはありません。設定でルート仕様にルートを追加してください。",
+    "noticeAddRoutesAction": "ルートを追加",
+    "statusNoTools": "ツールなし",
     "connectAccount": "接続",
     "notSignedIn": "未サインイン",
     "credentialRejected": "認証情報が拒否されました: 置き換えてください",
@@ -23713,7 +23735,13 @@
   },
   "triggerAutoPause": {
     "title": "自動で一時停止しました",
-    "description": "以下の理由で実行の開始を停止しました。原因を解消してから再開してください。"
+    "description": "以下の理由で実行の開始を停止しました。原因を解消してから再開してください。",
+    "billingTitle": "一時停止中: クレジット不足",
+    "billingDescription": "実行の料金を支払えないため、実行の開始を停止しました。残高をチャージすると数分以内に自動で再開します。",
+    "modelTitle": "一時停止中: 使えるモデルがありません",
+    "modelDescription": "自動化はワークスペース全体で共有されたモデルキーとアカウントだけを使いますが、使えるものがありません。モデルで追加すると数分以内に自動で再開します。",
+    "listBilling": "クレジット不足",
+    "listModel": "モデルなし"
   },
   "featureGate": {
     "enable": "{name}を有効にする",
@@ -26674,7 +26702,7 @@
       "apiKeysDescription": "スクリプト、CI、連携用のキーです。キーはあなた、エージェント、またはボットとして動作します。すべてのキーに適用されるルールはセキュリティにあります。",
       "keys": {
         "title": "API キー",
-        "description": "スクリプト、CI、連携用のキーです。キーはこのワークスペースでのみ有効で、あなた、エージェント、またはボットとして動作します。",
+        "description": "スクリプト・CI・連携用のキーです。キーはあなた・エージェント・ボットとして動作し、「適用範囲」でどのワークスペースに届くかを決めます。",
         "newKey": "新しいキー",
         "count": "{count, plural, other {# 個のキー}}",
         "emptyTitle": "API キーがありません",
@@ -26684,6 +26712,10 @@
         "actsAsAgent": "エージェント",
         "actsAsBot": "ボット",
         "actsAsMeHint": "このワークスペースでのあなたのロールです。あなたが退出するとキーは無効になります。",
+        "worksIn": "適用範囲",
+        "worksInAll": "すべてのワークスペース",
+        "worksInAllHint": "すべてのワークスペースであなたとして動作し、完全なロールを持ちます。管理は「設定 → 個人キー」で行えます。",
+        "worksInWorkspace": "このワークスペースのみ",
         "actsAsAgentHint": "kortix.yaml でエージェントに許可された範囲そのものです。操作はエージェントとして監査記録され、あなたが退出してもキーは有効です。",
         "actsAsBotHint": "CI や連携のためのボットで、独自のロールを持ちます。あなたが退出してもキーは有効です。",
         "needsPermission": "認証情報を管理する権限が必要です",
@@ -26702,6 +26734,7 @@
         "rowBot": "ボット · {name}",
         "createdBy": "作成者: {email}",
         "createdDescription": "{name} は {actsAs} として動作します。キーは一度だけ表示されます。今すぐコピーしてシークレットとして保存してください。",
+        "createdPersonalDescription": "{name} はすべてのワークスペースであなたとして動作します。管理は「設定 → 個人キー」で行えます。Kortix がキーを表示するのは一度だけです。今すぐコピーしてシークレットとして保管してください。",
         "accessFullHint": "キーの実行主体がこのワークスペースで行えるすべての操作。",
         "accessCustomHint": "選択した権限のみ。各権限は、キーの実行主体が行える操作でなければなりません。"
       },
@@ -26712,7 +26745,9 @@
       "noWorkspaceTitle": "CLI にサインインするにはワークスペースを作成してください",
       "noWorkspaceBody": "CLI はワークスペースにサインインします。ワークスペースを作成してから、このサインインを承認してください。",
       "createAction": "ワークスペースを作成",
-      "workspaceLabel": "ワークスペース"
+      "workspaceLabel": "ワークスペース",
+      "loadFailedTitle": "ワークスペースを読み込めませんでした",
+      "loadFailedBody": "このサインインにはワークスペース一覧が必要です。アカウントに問題はありません。もう一度お試しください。"
     },
     "models": {
       "yourDefault": "ワークスペースの既定",
@@ -26813,5 +26848,24 @@
   "gatewayBudgets": {
     "capWorkspace": "このワークスペースのゲートウェイ支出に上限を設定します。",
     "capMember": "{who} のゲートウェイ支出に上限を設定します。"
+  },
+  "connectSignIn": {
+    "openSignIn": "{app} のサインインを開く",
+    "checkingTitle": "サインインを完了しています",
+    "checkingDescription": "Kortix が {app} のサインインを確認します。このページは自動で更新されます。",
+    "signInUnfinished": "サインイン未完了",
+    "finishSignIn": "サインインを完了",
+    "signInFinished": "サインインが完了しました",
+    "cardHeadline": "エージェントがあなたのサインインを待っています",
+    "cardTitle": "{app} を接続",
+    "cardShared": "ワークスペースで共有",
+    "cardPrivate": "自分のみ",
+    "signingIn": "開いたウィンドウで {app} へのサインインを完了してください。",
+    "connectedAs": "{account} として接続済み",
+    "connected": "接続済み",
+    "connect": "接続",
+    "cardFailed": "{app} を接続できませんでした。もう一度お試しください。",
+    "blockedTitle": "{app} を開いてサインイン",
+    "blockedDescription": "ブラウザがサインインウィンドウをブロックしました。下のボタンから開いてください。このページは自動で更新されます。"
   }
 }

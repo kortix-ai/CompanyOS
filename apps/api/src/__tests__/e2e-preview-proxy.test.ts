@@ -505,6 +505,16 @@ const { verifyKortixUserContext, KORTIX_USER_CONTEXT_HEADER } = await import(
 );
 const { resolvePreviewWsUpstream } = await import('../sandbox-proxy/routes/preview');
 const { invalidateSandbox } = await import('../sandbox-proxy/backend');
+const {
+  __resetDialDeadForTests,
+  __setDialProbeBudgetForTests,
+  __setDialProbeForTests,
+  recordDialTimeout,
+  clearDialDead,
+  dialDeadKey,
+  maybeProbeDialDeadCandidate,
+  DIAL_LIVENESS_PATH,
+} = await import('../sandbox-proxy/forward/dial-dead');
 const { preparePreviewWsUpgrade } = await import('../sandbox-proxy/ws-proxy');
 const { __resetPromptDedupe } = await import('../sandbox-proxy/prompt-dedupe');
 
@@ -546,11 +556,47 @@ function createProxyTestApp() {
   return app;
 }
 
+/** The dial-dead tests' upstream + clock: a fetch that never resolves unless
+ *  the attempt's connect timer aborts it (the fake clock below fires every
+ *  timer synchronously, so an attempt costs exactly its connect timeout), and
+ *  a setTimeout that fires instantly. Returns the restore function. */
+function stubHangingUpstreamAndSyncClock(): () => void {
+  const savedFetch = globalThis.fetch;
+  const savedSetTimeout = globalThis.setTimeout;
+  globalThis.fetch = ((_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    mockFetchCallCount += 1; // the harness's dial counter: these stubs replace mockFetch
+    const signal = init?.signal;
+    return new Promise<Response>((_resolve, reject) => {
+      const abortWith = () =>
+        reject(signal?.reason ?? new DOMException('proxy attempt connect timeout', 'TimeoutError'));
+      if (signal?.aborted) {
+        abortWith();
+        return;
+      }
+      signal?.addEventListener('abort', abortWith);
+    });
+  }) as typeof globalThis.fetch;
+  globalThis.setTimeout = ((callback: TimerHandler) => {
+    if (typeof callback === 'function') callback();
+    return 0;
+  }) as typeof globalThis.setTimeout;
+  return () => {
+    globalThis.fetch = savedFetch;
+    globalThis.setTimeout = savedSetTimeout;
+  };
+}
+
 // ─── Reset ───────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
   __resetPromptDedupe();
   __resetProxyRetryDelaysForTests();
+  __resetDialDeadForTests();
+  // The harness's dead-box tests run against a mocked network; the HTTP
+  // confirmation probe must not dial the real one, and the harness's stub
+  // answers what a dead path answers: nothing. The slow-handler regression
+  // below replaces the stub with the answer a live path gives.
+  __setDialProbeForTests(async () => false);
   resetLogWindowsForTests();
   invalidateSandbox(TEST_SANDBOX_ID);
   invalidateSandbox('platinum-oc-http');
@@ -1758,19 +1804,25 @@ describe('Preview proxy: retry exhaustion', () => {
       }
     }
 
-    test('an ordinary request answers before the ALB idle cut, each attempt shrunk to the budget left', async () => {
+    // Two consecutive connect timeouts mark the box dial-dead (dial-dead.ts):
+    // attempt 1 (stale-ingress chance) still retries, attempt 2 proves the box
+    // never answers TCP, and the ladder stops instead of dialling a third and
+    // fourth time (KRTX-4459). The 50 s budget still bounds any request whose
+    // attempts don't time out — the response-path give-up below covers that.
+    test('an ordinary request answers before the ALB idle cut; the second connect timeout stops the ladder', async () => {
       const run = await hangingRun('/');
       expect(run.status).toBe(502);
-      expect(run.dials).toBe(4);
+      expect(run.dials).toBe(2);
       expect(run.elapsedMs).toBeLessThan(60_000);
     });
 
-    // Each ingress resolution takes 1 s. Three attempts end at 52.25 s, past
-    // the 50 s budget, so the loop answers instead of dialling a fourth time.
-    test('no attempt starts once the budget is spent', async () => {
+    // The mark holds regardless of how much budget is left: once the box has
+    // proven dial-dead, no attempt starts, budget or not (the 1 s ingress
+    // resolutions would otherwise buy the ladder two more full dials).
+    test('no attempt starts once the box is marked dial-dead', async () => {
       const run = await hangingRun('/', 'GET', 1_000);
       expect(run.status).toBe(502);
-      expect(run.dials).toBe(3);
+      expect(run.dials).toBe(2);
       expect(run.elapsedMs).toBeLessThan(60_000);
     });
   });
@@ -1928,7 +1980,7 @@ describe('Preview proxy: long-turn completion timeout', () => {
     expect(mockWakeCalls.length).toBe(0);
   });
 
-  test('an ordinary connect-timer abort (non-message path) still wakes + retries as before', async () => {
+  test('an ordinary connect-timer abort (non-message path) wakes, then stops dialling after the second timeout', async () => {
     const savedFetch = globalThis.fetch;
     const origSetTimeout = globalThis.setTimeout;
     let callCount = 0;
@@ -1937,7 +1989,7 @@ describe('Preview proxy: long-turn completion timeout', () => {
       const signal = init?.signal;
       return new Promise((_resolve, reject) => {
         const abortWith = () =>
-          reject((signal as any)?.reason ?? new DOMException('aborted', 'TimeoutError'));
+          reject(signal?.reason ?? new DOMException('proxy attempt connect timeout', 'TimeoutError'));
         if (signal?.aborted) {
           abortWith();
           return;
@@ -1959,10 +2011,216 @@ describe('Preview proxy: long-turn completion timeout', () => {
     globalThis.fetch = savedFetch;
 
     // Unchanged prior behavior: a plain GET that never gets bytes is a real
-    // stall, not a long-turn completion — full retry/wake path still applies.
+    // stall, not a long-turn completion. The FIRST timeout still wakes +
+    // retries (one timeout is the stale-ingress case a re-resolve recovers
+    // from); the SECOND consecutive timeout marks the box dial-dead and the
+    // ladder stops dialling a box that never answers TCP (KRTX-4459) — two
+    // dials, then the give-up 502, instead of four dials against a dead box.
     expect(res.status).toBe(502);
-    expect(callCount).toBe(4);
+    expect(callCount).toBe(2);
     expect(mockWakeCalls.length).toBe(1);
+  });
+
+  // The dial-dead mark (KRTX-4459): once a box PROVES dial-dead at the HTTP
+  // layer (two connect timeouts AND an HTTP probe through the ingress that got
+  // no answer), the requests that follow fail fast WITHOUT dialling — the
+  // observed dead-box cadence was ~7-request bursts every ~2-3 min, each
+  // request burning the full ~50 s ladder before the give-up 502, which put
+  // the route's p95 at 15-45 s while its p50 stayed at ~90 ms. Two timeouts
+  // alone are only a CANDIDATE: the connect timer bounds the header phase too,
+  // so a healthy-but-slow handler must never mark (the next request must still
+  // dial). The probe is detached, so the confirming request keeps today's
+  // ladder; the probe's verdict fast-fails the requests after it.
+  describe('Preview proxy: dial-dead fast-fail', () => {
+    // Marks key on the EXTERNAL id the proxy resolves the request to (the DB
+    // row's), which is TEST_SANDBOX_ID here — not the URL's spelling.
+    const deadSandbox = TEST_SANDBOX_ID;
+
+    test('the candidate request keeps the ladder; the confirmed mark fails the next request fast', async () => {
+      // A deferred probe: the verdict arrives only when the test releases it,
+      // like the real 30 s probe arrives after the confirming request gave up.
+      let settleProbe!: (answered: boolean) => void;
+      __setDialProbeForTests(
+        () =>
+          new Promise<boolean>((resolve) => {
+            settleProbe = resolve;
+          }),
+      );
+      recordDialTimeout(dialDeadKey(deadSandbox, 8000));
+      recordDialTimeout(dialDeadKey(deadSandbox, 8000));
+      const restoreClock = stubHangingUpstreamAndSyncClock();
+      try {
+        const app = createProxyTestApp();
+        const res = await app.request(`/v1/p/${deadSandbox}/8000/kortix/runtime/pending`, {
+          headers: { Authorization: 'Bearer test' },
+        });
+        // Unconfirmed candidate: the request still dialled once (attempt 0
+        // always does), then the ladder stopped — a further dial buys another
+        // 15 s hang — and the give-up 502 arrived as before.
+        expect(res.status).toBe(502);
+        expect(mockFetchCallCount).toBe(1);
+        expect(mockWakeCalls.length).toBe(1);
+        // The probe settles unanswered: the box proved its HTTP path dead.
+        settleProbe(false);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        // Every request AFTER the confirmation fails fast with zero dials.
+        const res2 = await app.request(`/v1/p/${deadSandbox}/8000/kortix/runtime/pending`, {
+          headers: { Authorization: 'Bearer test' },
+        });
+        expect(res2.status).toBe(502);
+        expect(mockFetchCallCount).toBe(1);
+        expect(mockWakeCalls.length).toBe(1);
+        // The answer attributes the hop it never reached (the port's own).
+        expect(res2.headers.get('X-Kortix-Proxy-Hop')).toBe('daemon');
+      } finally {
+        restoreClock();
+        __setDialProbeForTests(async () => false);
+      }
+    });
+
+    test('a revival clears the mark and the next request dials again', async () => {
+      recordDialTimeout(dialDeadKey(deadSandbox, 8000));
+      recordDialTimeout(dialDeadKey(deadSandbox, 8000));
+      clearDialDead(dialDeadKey(deadSandbox, 8000));
+      const app = createProxyTestApp();
+      const res = await app.request(`/v1/p/${deadSandbox}/8000/kortix/runtime/pending`, {
+        headers: { Authorization: 'Bearer test' },
+      });
+      expect(res.status).toBe(200);
+      expect(mockFetchCallCount).toBe(1);
+    });
+
+    test('a replayable POST fast-fails like a GET (only prompt deliveries and uploads keep the ladder)', async () => {
+      // A plain POST is replayable — nothing reached the box, so the same
+      // zero-dial give-up is safe. The non-replayable classes (prompt
+      // delivery, upload, env-rpc) skip this gate entirely and keep today's
+      // ladder and their own ambiguity guards.
+      recordDialTimeout(dialDeadKey(deadSandbox, TEST_PORT));
+      recordDialTimeout(dialDeadKey(deadSandbox, TEST_PORT));
+      const restoreClock = stubHangingUpstreamAndSyncClock();
+      try {
+        const app = createProxyTestApp();
+        // The GET confirms the mark (the harness probe stub answers
+        // unreachable); the ladder ran to its give-up first.
+        const get = await app.request(`/v1/p/${deadSandbox}/${TEST_PORT}/api/x`, {
+          headers: { Authorization: 'Bearer test' },
+        });
+        expect(get.status).toBe(502);
+        const dialsAfterGet = mockFetchCallCount;
+        expect(dialsAfterGet).toBeGreaterThan(0);
+        const res = await app.request(`/v1/p/${deadSandbox}/${TEST_PORT}/api/x`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer test' },
+        });
+        expect(res.status).toBe(502);
+        expect(mockFetchCallCount).toBe(dialsAfterGet);
+      } finally {
+        restoreClock();
+        __setDialProbeForTests(async () => false);
+      }
+    });
+
+    // The reviewer's regression (2026-11-11): the connect timer bounds the
+    // HEADER phase too, so a healthy-but-slow handler (a busy box answering
+    // headers in >15 s) produces the same TimeoutError as a dead dial. Two of
+    // those must NOT mark the port — the probe receives an answer from the
+    // path (the one observable the provider edge passes through) and clears
+    // the streak, so the next request dials normally.
+    test('a healthy-but-slow handler never marks the port: the probe answers and clears the streak', async () => {
+      // The e2e harness's beforeEach stubs the probe; this test needs the
+      // probe to answer what the box's HTTP layer answers for a LIVE port.
+      // A real fetch against a real Bun.serve would work, but the proxy's
+      // fake clock replaces globalThis.setTimeout with a synchronous fake for
+      // the whole test, which fires the real probe's budget timer instantly
+      // and answers "no answer" for every target. So the probe stub here IS
+      // the backend's answer: true = the path served a response.
+      __setDialProbeForTests(async () => true);
+      const restoreClock = stubHangingUpstreamAndSyncClock();
+      try {
+        const app = createProxyTestApp();
+        const res = await app.request(`/v1/p/${deadSandbox}/${TEST_PORT}/`, {
+          headers: { Authorization: 'Bearer test' },
+        });
+        // The probe proved the path answers; the streak cleared; the request
+        // stopped after its second dial instead of a third against the
+        // slow-but-alive upstream, and nothing was marked.
+        expect(res.status).toBe(502);
+        expect(mockFetchCallCount).toBe(2);
+        // The next request dials normally: no fast-fail mark.
+        const res2 = await app.request(`/v1/p/${deadSandbox}/${TEST_PORT}/`, {
+          headers: { Authorization: 'Bearer test' },
+        });
+        expect(res2.status).toBe(502);
+        expect(mockFetchCallCount).toBe(4);
+      } finally {
+        restoreClock();
+        __setDialProbeForTests(async () => false);
+      }
+    });
+
+    // The reviewer's regression (2026-11-12): the probe must not dial the
+    // request's own route. Probing a hung route hangs WITH it, confirms the
+    // mark, and every later read on the port — healthy or not — fails fast
+    // with zero dials (a real server hung only /slow; /health served 200;
+    // reads were still suppressed). The wiring dials the LIVENESS path with
+    // the REAL probe, so a live box answers it (a fast 404 is an answer) and
+    // its siblings keep being served; a box whose whole HTTP path is dead
+    // hangs there too and still confirms (dial-dead.test.ts pins that one).
+    test('one hung route never marks the port: the real probe dials the liveness path, siblings keep being served', async () => {
+      __setDialProbeForTests(null); // the REAL probe — its target wiring is what's under test
+      __setDialProbeBudgetForTests(1_000);
+      const savedFetch = globalThis.fetch;
+      const savedSetTimeout = globalThis.setTimeout;
+      const answeredPaths: string[] = [];
+      // The box's HTTP layer: /slow hangs forever; every other path — a
+      // healthy sibling AND the liveness probe — answers from the same server.
+      globalThis.fetch = ((url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        mockFetchCallCount += 1;
+        const pathname = new URL(String(url)).pathname;
+        if (pathname.endsWith('/slow')) {
+          const signal = init?.signal;
+          return new Promise<Response>((_resolve, reject) => {
+            const abortWith = () =>
+              reject(signal?.reason ?? new DOMException('proxy attempt connect timeout', 'TimeoutError'));
+            if (signal?.aborted) {
+              abortWith();
+              return;
+            }
+            signal?.addEventListener('abort', abortWith);
+          });
+        }
+        answeredPaths.push(pathname);
+        return Promise.resolve(new Response('ok', { status: 200 }));
+      }) as typeof globalThis.fetch;
+      globalThis.setTimeout = ((callback: TimerHandler) => {
+        if (typeof callback === 'function') callback();
+        return 0;
+      }) as typeof globalThis.setTimeout;
+      try {
+        const app = createProxyTestApp();
+        // Two /slow connect timeouts form the candidate; the detached probe
+        // settles while the ladder runs, then the give-up 502 arrives.
+        const res = await app.request(`/v1/p/${deadSandbox}/${TEST_PORT}/slow`, {
+          headers: { Authorization: 'Bearer test' },
+        });
+        expect(res.status).toBe(502);
+        // Await the detached probe's verdict through the shared in-flight
+        // handle (a no-op once settled): the confirmation must be in before
+        // the sibling request reads the mark.
+        await maybeProbeDialDeadCandidate(dialDeadKey(deadSandbox, TEST_PORT), { url: '', headers: {} });
+        // The probe asked the liveness path — never the hung route.
+        expect(answeredPaths.some((p) => p.endsWith(DIAL_LIVENESS_PATH))).toBe(true);
+        // The healthy sibling is served: dialled, answered, no fast-fail mark.
+        const healthy = await app.request(`/v1/p/${deadSandbox}/${TEST_PORT}/health`, {
+          headers: { Authorization: 'Bearer test' },
+        });
+        expect(healthy.status).toBe(200);
+      } finally {
+        globalThis.fetch = savedFetch;
+        globalThis.setTimeout = savedSetTimeout;
+        __resetDialDeadForTests();
+      }
+    });
   });
 });
 

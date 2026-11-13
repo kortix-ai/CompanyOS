@@ -67,7 +67,7 @@
     "oauthWaiting": "En attente d’autorisation…",
     "oauthFinishing": "Connecté. Enregistrement de votre compte…",
     "oauthExpired": "L’autorisation a expiré. Réessayez.",
-    "oauthPrivateDescription": "Utilisez votre abonnement ChatGPT Plus ou Pro dans cet espace de travail. Les nouveaux comptes restent privés jusqu’à ce que vous les partagiez.",
+    "oauthPrivateDescription": "Utilisez votre abonnement ChatGPT Plus ou Pro dans cet espace de travail. Les nouveaux comptes sont partagés avec tous les membres de l’espace de travail. Vous pouvez en rendre un privé.",
     "chatGptSubscription": "Abonnement ChatGPT",
     "manageChatGptAccounts": "Gérer les comptes ChatGPT",
     "connect": "Connecter",
@@ -95,7 +95,7 @@
     "deleteError": "Impossible de supprimer le secret",
     "accessError": "Impossible de modifier l’accès",
     "sharedTitle": "Connexions aux fournisseurs",
-    "sharedDescription": "Ajoutez des clés API, des comptes ChatGPT et des comptes Claude. Les nouveaux restent privés jusqu’à ce que vous les partagiez. Choisissez ceux que chaque session utilise.",
+    "sharedDescription": "Ajoutez des clés API, des comptes ChatGPT et des comptes Claude. Les nouveaux sont partagés avec tous les membres de l’espace de travail. Vous pouvez en rendre un privé. Choisissez ceux que chaque session utilise.",
     "legacyProjectKey": "Clé d’espace de travail existante · Utilisée si aucune clé n’est sélectionnée pour cette session",
     "keyCount": "{count, plural, one {# clé} other {# clés}}",
     "providerKeysFor": "Clés API de {provider}",
@@ -106,6 +106,14 @@
     "access": "Accès",
     "actions": "Actions",
     "coolingDown": "En attente après une limite",
+    "keyVerified": "Vérifiée : {provider} a accepté cette clé",
+    "keyInvalid": "{provider} a refusé cette clé : {message}",
+    "keyUnchecked": "Non vérifiée : {message}",
+    "checkKey": "Vérifier à nouveau",
+    "savedVerified": "Clé enregistrée et vérifiée",
+    "savedInvalid": "Clé enregistrée, mais {provider} l’a refusée : {message}",
+    "checkError": "La clé n’a pas pu être vérifiée",
+    "openProviderInModels": "Ouvrir {provider} dans Modèles",
     "member": "membre",
     "members": "membres",
     "actionsFor": "Actions pour {label}",
@@ -145,6 +153,9 @@
     "providerKeys": "Clés du fournisseur",
     "chooseSharedKeys": "Choisissez les clés partagées que cette session peut utiliser.",
     "sessionKeyPool": "Groupe de clés de session",
+    "subscriptionSwitcher": "Abonnement",
+    "subscriptionSwitcherDefault": "Alterne entre tous les abonnements connectés",
+    "subscriptionSwitcherUse": "Utiliser {label} pour cette session",
     "sharedSessionKeys": "Cette session est partagée avec l’espace de travail : seules les clés partagées avec tout l’espace de travail fonctionnent ici. Les clés qui vous sont attribuées fonctionnent dans vos sessions privées.",
     "promptedSessionKeys": "Un autre membre a écrit dans cette session, elle n’agit donc plus pour son propriétaire. Seules les clés partagées avec tout l’espace de travail fonctionnent ici.",
     "noPersonSessionKeys": "Cette session n’agit pour personne : elle a démarré avant l’arrivée des clés personnelles, ou sans surveillance. Seules les clés partagées avec tout l’espace de travail fonctionnent ici. Démarrez une nouvelle session pour utiliser vos propres clés.",
@@ -166,7 +177,7 @@
     "claudeAccounts": "Comptes Claude",
     "noClaudeAccounts": "Aucun compte Claude pour le moment",
     "connectClaude": "Se connecter avec Claude",
-    "claudeOauthPrivateDescription": "Utilisez votre forfait Claude Pro ou Max pour les modèles Claude de cet espace de travail. Les nouveaux comptes restent privés jusqu’à ce que vous les partagiez.",
+    "claudeOauthPrivateDescription": "Utilisez votre forfait Claude Pro ou Max pour les modèles Claude de cet espace de travail. Les nouveaux comptes sont partagés avec tous les membres de l’espace de travail. Vous pouvez en rendre un privé.",
     "claudeOauthCreationDescription": "Connectez-vous avec votre compte Claude Pro ou Max. Kortix stocke la connexion chiffrée et ne l’affiche jamais.",
     "claudeDefaultAccountLabel": "Claude · {name}",
     "claudeAccountConnected": "Compte Claude connecté",
@@ -174,7 +185,10 @@
     "claudeConnectFailed": "La connexion Claude n’a pas abouti. Réessayez.",
     "claudeReconnectDescription": "Reconnectez-vous avec Claude. Le compte conserve son nom, ses accès et les sélections de session.",
     "claudeAccountLabelPlaceholder": "p. ex. Mon compte Claude",
-    "claudeDeleteAccountConfirmTitle": "Supprimer ce compte Claude pour tout le monde ?"
+    "claudeDeleteAccountConfirmTitle": "Supprimer ce compte Claude pour tout le monde ?",
+    "sharedOnlyYouDescription": "Ajoutez des clés API, des comptes ChatGPT et des comptes Claude. Vous seul pouvez utiliser ceux que vous ajoutez. Un gestionnaire de l'espace de travail peut en partager un. Choisissez ceux que chaque session utilise.",
+    "oauthOnlyYouDescription": "Utilisez votre forfait ChatGPT Plus ou Pro dans cet espace de travail. Vous seul pouvez utiliser les comptes que vous ajoutez.",
+    "claudeOauthOnlyYouDescription": "Utilisez votre forfait Claude Pro ou Max pour les modèles Claude dans cet espace de travail. Vous seul pouvez utiliser les comptes que vous ajoutez."
   },
   "secrets": {
     "undecryptable": {
@@ -326,6 +340,7 @@
       "repositoryLabel": "Dépôt",
       "loadingOptions": "Chargement des options de dépôt…",
       "managedUnavailable": "Les dépôts gérés par Kortix ne sont pas disponibles sur cette instance. Un administrateur de la plateforme les configure dans la console d'administration.",
+      "githubAfterCreate": "Pour utiliser votre propre GitHub pour vos prochains espaces de travail, connectez-le dans Paramètres de l'espace de travail › Git une fois celui-ci créé.",
       "installationUnreachable": "Cette connexion GitHub ne fonctionne plus. Reconnectez-la pour lister les dépôts.",
       "reconnect": "Reconnecter dans les réglages Git",
       "managedImportLabel": "Importer un dépôt géré existant",
@@ -1253,10 +1268,6 @@
           "name": "Secrets protégés par le réseau",
           "description": "Contrôlez les outils et destinations autorisés à recevoir les secrets de l’espace de travail."
         },
-        "pooled_provider_secrets": {
-          "name": "Secrets de fournisseur partagés",
-          "description": "Les membres connectent leurs propres abonnements ChatGPT et clés de fournisseur, les partagent si besoin et choisissent ceux que chaque session utilise."
-        },
         "reminders": {
           "name": "Boucles",
           "description": "Permet aux agents et aux personnes de planifier des points de contrôle sur une session, une fois ou de façon récurrente. Chaque déclenchement relance cette session. Ajoute les boucles à la liste des Déclencheurs, l’indicateur de boucles de la session et `kortix loop`."
@@ -2081,7 +2092,11 @@
       "claudePlan": "Abonnement Pro ou Max",
       "connectModel": "Connecter un modèle",
       "imagesUnsupported": "{model} ne peut pas lire les images",
-      "imagesUnsupportedHint": "retirez-les ou choisissez un autre modèle"
+      "imagesUnsupportedHint": "retirez-les ou choisissez un autre modèle",
+      "noModelUpgradeReason": "Aucun modèle : passez au plan Credits ou ajoutez votre propre clé de fournisseur.",
+      "noModelKeyReason": "Aucun modèle : ajoutez votre propre clé de fournisseur.",
+      "noModelUpgradePlan": "Changer de plan",
+      "noModelAddProviderKey": "Ajouter une clé de fournisseur"
     },
     "providerRecovery": {
       "savedPrompt": "Prompt enregistré",
@@ -2146,6 +2161,7 @@
       "agentWorkingOnFor": "travaille sur {task} · {time}",
       "somethingWrong": "Un problème est survenu",
       "notSent": "Non envoyé",
+      "computerDisconnected": "L'ordinateur de cette session est déconnecté.",
       "retry": "Réessayer",
       "resume": "Reprendre",
       "agentIsWorking": "{agent} travaille",
@@ -3405,9 +3421,6 @@
     },
     "inbox": {
       "title": "Boîte de réception",
-      "viewReview": "Review",
-      "viewNotifications": "Notifications",
-      "viewLabel": "Vue de la boîte de réception",
       "description": "Les nouvelles des sessions, déclencheurs et artefacts qui vous concernent, dans tous les espaces de travail.",
       "unreadLabel": "Boîte de réception : {count} non lues",
       "unreadCount": "{count} non lues",
@@ -10378,6 +10391,8 @@
       "checkConnection": "Vérifiez votre connexion, puis réessayez."
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "Ajouter une clé de fournisseur",
+      "noModelUpgradePlan": "Changer de plan",
       "authEmailRateLimit": "Impossible d’envoyer l’e-mail. Réessaie dans environ une heure.",
       "authRequestRateLimit": "Trop de demandes. Réessaie dans quelques minutes.",
       "text03217276a5f1": "Solde {value0} crédits",
@@ -20676,10 +20691,11 @@
       "text5f6ba69d66d1": "Compétence supprimée",
       "textcb8d6b0c94c9": " et tous ses fichiers, modifications comprises, et retire la compétence de chaque agent qui l'utilise. Un commit sur la branche par défaut.",
       "cliDeviceTitle": "Autoriser Kortix CLI",
-      "cliDeviceWarning": "Approuvez uniquement une connexion que vous avez lancée. Saisissez le code affiché dans votre terminal.",
+      "cliDeviceWarning": "Approuvez uniquement une connexion que vous avez lancée. Vérifiez que ce code correspond à celui affiché dans votre terminal.",
       "cliDeviceCode": "Code de connexion",
       "cliDeviceApproved": "Connexion approuvée. Retournez dans votre terminal.",
       "cliDeviceAction": "Autoriser CLI",
+      "cliDeviceConfirm": "Ce code correspond à mon terminal",
       "text705a7e325b66": "L’app Kortix a émis des événements",
       "text4b80152fb96b": "Identifiants d’événements de l’app Kortix lus",
       "text59374c1f1acd": "L’app Kortix a planifié une exécution",
@@ -22075,6 +22091,12 @@
     "noticeSignInTitle": "Se connecter à {name}",
     "noticeSignInBody": "Kortix a ajouté {name}. Terminez la connexion pour que les agents puissent utiliser ses outils.",
     "noticeSignInAction": "Se connecter",
+    "noticeSignInAgainTitle": "Reconnectez-vous à {name}",
+    "noticeSignInAgainBody": "La connexion a expiré ou a été révoquée. Les agents ne peuvent pas utiliser {name} tant que vous ne vous reconnectez pas.",
+    "noticeNoToolsTitle": "{name} n’a aucun outil",
+    "noticeNoToolsBody": "Il n’a aucune route, les agents n’ont donc rien à appeler. Ajoutez des routes à sa spécification de routes dans Paramètres.",
+    "noticeAddRoutesAction": "Ajouter des routes",
+    "statusNoTools": "Aucun outil",
     "connectAccount": "Connecter",
     "notSignedIn": "Non connecté",
     "credentialRejected": "Identifiant refusé : remplacez-le",
@@ -23713,7 +23735,13 @@
   },
   "triggerAutoPause": {
     "title": "Mis en pause automatiquement",
-    "description": "Il ne lance plus d’exécutions pour la raison ci-dessous. Corrigez la cause, puis reprenez-le."
+    "description": "Il ne lance plus d’exécutions pour la raison ci-dessous. Corrigez la cause, puis reprenez-le.",
+    "billingTitle": "En pause : plus de crédits",
+    "billingDescription": "Aucune exécution ne peut être payée, il n’en lance donc plus. Il reprend tout seul quelques minutes après la recharge du solde.",
+    "modelTitle": "En pause : aucun modèle disponible",
+    "modelDescription": "Les automatisations n’utilisent que les clés de modèle et les comptes partagés avec tout l’espace de travail, et aucun n’est utilisable. Il reprend tout seul quelques minutes après l’ajout d’un modèle dans Modèles.",
+    "listBilling": "Plus de crédits",
+    "listModel": "Aucun modèle"
   },
   "featureGate": {
     "enable": "Activer {name}",
@@ -26674,7 +26702,7 @@
       "apiKeysDescription": "Des clés pour les scripts, la CI et les intégrations. Une clé agit en votre nom, au nom d'un agent ou d'un bot. Les règles de chaque clé sont dans Sécurité.",
       "keys": {
         "title": "Clés d'API",
-        "description": "Des clés pour les scripts, la CI et les intégrations. Une clé fonctionne uniquement dans cet espace de travail et agit en votre nom, au nom d'un agent ou d'un bot.",
+        "description": "Clés pour scripts, CI et intégrations. Une clé agit comme vous, un agent ou un bot ; « S'applique à » définit les espaces de travail qu'elle atteint.",
         "newKey": "Nouvelle clé",
         "count": "{count, plural, one {# clé} other {# clés}}",
         "emptyTitle": "Aucune clé d'API",
@@ -26684,6 +26712,10 @@
         "actsAsAgent": "Un agent",
         "actsAsBot": "Un bot",
         "actsAsMeHint": "Votre rôle dans cet espace de travail. La clé cesse de fonctionner quand vous partez.",
+        "worksIn": "S'applique à",
+        "worksInAll": "Tous mes espaces de travail",
+        "worksInAllHint": "Agit comme vous dans chacun de vos espaces de travail, avec votre rôle complet. Gérez-la dans Préférences → Clés personnelles.",
+        "worksInWorkspace": "Uniquement cet espace de travail",
         "actsAsAgentHint": "Exactement ce que l'agent peut faire selon kortix.yaml. Ses actions sont journalisées au nom de l'agent, et la clé continue de fonctionner après votre départ.",
         "actsAsBotHint": "Un bot pour la CI ou une intégration, avec son propre rôle. La clé continue de fonctionner après votre départ.",
         "needsPermission": "Nécessite l'autorisation de gérer les identifiants",
@@ -26702,6 +26734,7 @@
         "rowBot": "Bot · {name}",
         "createdBy": "Créée par {email}",
         "createdDescription": "{name} agit en tant que {actsAs}. Kortix n'affiche la clé qu'une fois : copiez-la maintenant et stockez-la comme secret.",
+        "createdPersonalDescription": "{name} agit comme vous dans chacun de vos espaces de travail — gérez-la dans Préférences → Clés personnelles. Kortix affiche la clé une seule fois : copiez-la maintenant et conservez-la comme secret.",
         "accessFullHint": "Tout ce que le principal de la clé peut faire dans cet espace de travail.",
         "accessCustomHint": "Uniquement les autorisations choisies. Chacune doit faire partie de ce que le principal de la clé peut faire."
       },
@@ -26712,7 +26745,9 @@
       "noWorkspaceTitle": "Créez un espace de travail pour connecter la CLI",
       "noWorkspaceBody": "La CLI se connecte à un espace de travail. Créez-en un, puis approuvez cette connexion.",
       "createAction": "Créer un espace de travail",
-      "workspaceLabel": "Espace de travail"
+      "workspaceLabel": "Espace de travail",
+      "loadFailedTitle": "Impossible de charger vos espaces de travail",
+      "loadFailedBody": "Cette connexion a besoin de votre liste d'espaces de travail. Votre compte est en bon état : réessayez pour continuer."
     },
     "models": {
       "yourDefault": "Par défaut de l'espace de travail",
@@ -26813,5 +26848,24 @@
   "gatewayBudgets": {
     "capWorkspace": "Plafonnez les dépenses du gateway de cet espace de travail.",
     "capMember": "Plafonnez les dépenses du gateway de {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "Ouvrir la connexion {app}",
+    "checkingTitle": "Finalisation de la connexion",
+    "checkingDescription": "Kortix vérifie votre connexion à {app}. Cette page se met à jour toute seule.",
+    "signInUnfinished": "Connexion non terminée",
+    "finishSignIn": "Terminer la connexion",
+    "signInFinished": "Connexion terminée",
+    "cardHeadline": "Votre agent a besoin que vous vous connectiez",
+    "cardTitle": "Connecter {app}",
+    "cardShared": "Partagé avec l'espace de travail",
+    "cardPrivate": "Vous seul",
+    "signingIn": "Terminez la connexion à {app} dans la fenêtre ouverte.",
+    "connectedAs": "Connecté en tant que {account}",
+    "connected": "Connecté",
+    "connect": "Connecter",
+    "cardFailed": "Impossible de connecter {app}. Réessayez.",
+    "blockedTitle": "Ouvrez {app} pour vous connecter",
+    "blockedDescription": "Votre navigateur a bloqué la fenêtre de connexion. Ouvrez-la avec le bouton ci-dessous. Cette page se met à jour toute seule."
   }
 }

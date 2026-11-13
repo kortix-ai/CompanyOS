@@ -67,7 +67,7 @@
     "oauthWaiting": "In attesa di autorizzazione…",
     "oauthFinishing": "Accesso effettuato. Salvataggio dell’account…",
     "oauthExpired": "Autorizzazione scaduta. Riprova.",
-    "oauthPrivateDescription": "Usa il tuo piano ChatGPT Plus o Pro in questo workspace. I nuovi workspace restano privati finché non li condividi.",
+    "oauthPrivateDescription": "Usa il tuo piano ChatGPT Plus o Pro in questo workspace. I nuovi account sono condivisi con ogni membro del workspace. Puoi renderne uno privato.",
     "chatGptSubscription": "Abbonamento ChatGPT",
     "manageChatGptAccounts": "Gestisci account ChatGPT",
     "connect": "Connetti",
@@ -95,7 +95,7 @@
     "deleteError": "Impossibile eliminare il segreto",
     "accessError": "Impossibile modificare l’accesso",
     "sharedTitle": "Connessioni ai provider",
-    "sharedDescription": "Aggiungi chiavi API, account ChatGPT e account Claude. I nuovi restano privati finché non li condividi. Scegli quali usa ogni sessione.",
+    "sharedDescription": "Aggiungi chiavi API, account ChatGPT e account Claude. I nuovi sono condivisi con ogni membro del workspace. Puoi renderne uno privato. Scegli quali usa ogni sessione.",
     "legacyProjectKey": "Chiave del workspace esistente · Usata quando la sessione non ha una selezione di chiavi",
     "keyCount": "{count, plural, one {# chiave} other {# chiavi}}",
     "providerKeysFor": "Chiavi API di {provider}",
@@ -106,6 +106,14 @@
     "access": "Accesso",
     "actions": "Azioni",
     "coolingDown": "In pausa dopo il limite",
+    "keyVerified": "Verificata: {provider} ha accettato questa chiave",
+    "keyInvalid": "{provider} ha rifiutato questa chiave: {message}",
+    "keyUnchecked": "Non verificata: {message}",
+    "checkKey": "Verifica di nuovo",
+    "savedVerified": "Chiave salvata e verificata",
+    "savedInvalid": "Chiave salvata, ma {provider} l’ha rifiutata: {message}",
+    "checkError": "Impossibile verificare la chiave",
+    "openProviderInModels": "Apri {provider} in Modelli",
     "member": "membro",
     "members": "membri",
     "actionsFor": "Azioni per {label}",
@@ -145,6 +153,9 @@
     "providerKeys": "Chiavi fornitore",
     "chooseSharedKeys": "Scegli le chiavi condivise che questa sessione può usare.",
     "sessionKeyPool": "Pool di chiavi della sessione",
+    "subscriptionSwitcher": "Abbonamento",
+    "subscriptionSwitcherDefault": "Ruota tra tutti gli abbonamenti collegati",
+    "subscriptionSwitcherUse": "Usa {label} per questa sessione",
     "sharedSessionKeys": "Questa sessione è condivisa con il workspace, quindi qui funzionano solo le chiavi condivise con tutto il workspace. Le chiavi assegnate a te funzionano nelle tue sessioni private.",
     "promptedSessionKeys": "Un altro membro ha scritto in questa sessione, quindi non agisce più per il suo proprietario. Qui funzionano solo le chiavi condivise con tutto il workspace.",
     "noPersonSessionKeys": "Questa sessione non agisce per nessuna persona: è iniziata prima delle chiavi personali o senza supervisione. Qui funzionano solo le chiavi condivise con tutto il workspace. Avvia una nuova sessione per usare le tue chiavi.",
@@ -166,7 +177,7 @@
     "claudeAccounts": "Account Claude",
     "noClaudeAccounts": "Ancora nessun account Claude",
     "connectClaude": "Accedi con Claude",
-    "claudeOauthPrivateDescription": "Usa il tuo piano Claude Pro o Max per i modelli Claude in questo workspace. I nuovi workspace restano privati finché non li condividi.",
+    "claudeOauthPrivateDescription": "Usa il tuo piano Claude Pro o Max per i modelli Claude in questo workspace. I nuovi account sono condivisi con ogni membro del workspace. Puoi renderne uno privato.",
     "claudeOauthCreationDescription": "Accedi con il tuo account Claude Pro o Max. Kortix conserva l’accesso cifrato e non lo mostra mai.",
     "claudeDefaultAccountLabel": "Claude · {name}",
     "claudeAccountConnected": "Account Claude collegato",
@@ -174,7 +185,10 @@
     "claudeConnectFailed": "L’accesso a Claude non è stato completato. Riprova.",
     "claudeReconnectDescription": "Accedi di nuovo con Claude. L’account mantiene nome, accesso e selezioni di sessione.",
     "claudeAccountLabelPlaceholder": "es. Il mio account Claude",
-    "claudeDeleteAccountConfirmTitle": "Eliminare questo account Claude per tutti?"
+    "claudeDeleteAccountConfirmTitle": "Eliminare questo account Claude per tutti?",
+    "sharedOnlyYouDescription": "Aggiungi chiavi API, account ChatGPT e account Claude. Solo tu puoi usare quelli che aggiungi. Un responsabile del workspace può condividerne uno. Scegli quali usa ogni sessione.",
+    "oauthOnlyYouDescription": "Usa il tuo piano ChatGPT Plus o Pro in questo workspace. Solo tu puoi usare gli account che aggiungi.",
+    "claudeOauthOnlyYouDescription": "Usa il tuo piano Claude Pro o Max per i modelli Claude in questo workspace. Solo tu puoi usare gli account che aggiungi."
   },
   "secrets": {
     "undecryptable": {
@@ -326,6 +340,7 @@
       "repositoryLabel": "Repository",
       "loadingOptions": "Caricamento delle opzioni del repository…",
       "managedUnavailable": "I repository gestiti da Kortix non sono disponibili in questa istanza. Un amministratore della piattaforma lo configura nella console di amministrazione.",
+      "githubAfterCreate": "Per usare il tuo GitHub nei prossimi workspace, collegalo in Impostazioni workspace › Git quando questo esiste.",
       "installationUnreachable": "Questa connessione GitHub non funziona più. Ricollegala per elencare i repository.",
       "reconnect": "Ricollega nelle impostazioni Git",
       "managedImportLabel": "Importa un repository gestito esistente",
@@ -1253,10 +1268,6 @@
           "name": "Segreti protetti dalla rete",
           "description": "Controlla quali strumenti e destinazioni possono ricevere i segreti del workspace."
         },
-        "pooled_provider_secrets": {
-          "name": "Segreti del provider condivisi",
-          "description": "I membri collegano i propri abbonamenti ChatGPT e chiavi dei provider, li condividono quando serve e scelgono quali usa ogni sessione."
-        },
         "reminders": {
           "name": "Cicli",
           "description": "Consente ad agenti e persone di programmare controlli su una sessione, una volta o in modo ricorrente. Ogni attivazione richiama quella sessione. Aggiunge i cicli all’elenco dei Trigger, l’indicatore dei cicli della sessione e `kortix loop`."
@@ -2081,7 +2092,11 @@
       "claudePlan": "Piano Pro o Max",
       "connectModel": "Collega modello",
       "imagesUnsupported": "{model} non può leggere le immagini",
-      "imagesUnsupportedHint": "rimuovile o scegli un altro modello"
+      "imagesUnsupportedHint": "rimuovile o scegli un altro modello",
+      "noModelUpgradeReason": "Nessun modello: passa al piano Credits o aggiungi la tua chiave del provider.",
+      "noModelKeyReason": "Nessun modello: aggiungi la tua chiave del provider.",
+      "noModelUpgradePlan": "Aggiorna piano",
+      "noModelAddProviderKey": "Aggiungi chiave del provider"
     },
     "providerRecovery": {
       "savedPrompt": "Prompt salvato",
@@ -2146,6 +2161,7 @@
       "agentWorkingOnFor": "sta lavorando a {task} · {time}",
       "somethingWrong": "Qualcosa è andato storto",
       "notSent": "Non inviato",
+      "computerDisconnected": "Il computer di questa sessione è disconnesso.",
       "retry": "Riprova",
       "resume": "Riprendi",
       "agentIsWorking": "{agent} sta lavorando",
@@ -3405,9 +3421,6 @@
     },
     "inbox": {
       "title": "Posta in arrivo",
-      "viewReview": "Review",
-      "viewNotifications": "Notifiche",
-      "viewLabel": "Vista della posta in arrivo",
       "description": "Aggiornamenti su sessioni, trigger e artefatti che ti riguardano, da tutti i workspace.",
       "unreadLabel": "Posta in arrivo: {count} non lette",
       "unreadCount": "{count} non lette",
@@ -10378,6 +10391,8 @@
       "checkConnection": "Controlla la connessione, poi riprova."
     },
     "i18nComplete": {
+      "noModelAddProviderKey": "Aggiungi chiave del provider",
+      "noModelUpgradePlan": "Aggiorna piano",
       "authEmailRateLimit": "Impossibile inviare l’email. Riprova tra circa un’ora.",
       "authRequestRateLimit": "Troppe richieste. Riprova tra qualche minuto.",
       "text03217276a5f1": "Saldo {value0} crediti",
@@ -20676,10 +20691,11 @@
       "text5f6ba69d66d1": "Competenza rimossa",
       "textcb8d6b0c94c9": " e tutti i suoi file, modifiche incluse, e rimuove la competenza da ogni agente che la usa. Un commit sul branch predefinito.",
       "cliDeviceTitle": "Autorizza Kortix CLI",
-      "cliDeviceWarning": "Approva solo un accesso avviato da te. Digita il codice mostrato dal terminale.",
+      "cliDeviceWarning": "Approva solo un accesso avviato da te. Verifica che questo codice corrisponda a quello mostrato dal terminale.",
       "cliDeviceCode": "Codice di accesso",
       "cliDeviceApproved": "Accesso approvato. Torna al terminale.",
       "cliDeviceAction": "Autorizza CLI",
+      "cliDeviceConfirm": "Questo codice corrisponde al mio terminale",
       "text705a7e325b66": "L’app Kortix ha emesso eventi",
       "text4b80152fb96b": "Lette le credenziali degli eventi dell’app Kortix",
       "text59374c1f1acd": "L’app Kortix ha pianificato un’esecuzione",
@@ -22075,6 +22091,12 @@
     "noticeSignInTitle": "Accedi a {name}",
     "noticeSignInBody": "Kortix ha aggiunto {name}. Completa l'accesso perché gli agenti possano usarne gli strumenti.",
     "noticeSignInAction": "Accedi",
+    "noticeSignInAgainTitle": "Accedi di nuovo a {name}",
+    "noticeSignInAgainBody": "L’accesso è scaduto o è stato revocato. Gli agenti non possono usare {name} finché non accedi di nuovo.",
+    "noticeNoToolsTitle": "{name} non ha strumenti",
+    "noticeNoToolsBody": "Non ha route, quindi gli agenti non hanno nulla da chiamare. Aggiungi route alla sua specifica delle route in Impostazioni.",
+    "noticeAddRoutesAction": "Aggiungi route",
+    "statusNoTools": "Nessuno strumento",
     "connectAccount": "Connetti",
     "notSignedIn": "Accesso non effettuato",
     "credentialRejected": "Credenziale rifiutata: sostituiscila",
@@ -23713,7 +23735,13 @@
   },
   "triggerAutoPause": {
     "title": "Messo in pausa automaticamente",
-    "description": "Ha smesso di avviare esecuzioni per il motivo qui sotto. Correggi la causa, poi riprendilo."
+    "description": "Ha smesso di avviare esecuzioni per il motivo qui sotto. Correggi la causa, poi riprendilo.",
+    "billingTitle": "In pausa: crediti esauriti",
+    "billingDescription": "Nessuna esecuzione può essere pagata, quindi ha smesso di avviarle. Riprende da solo pochi minuti dopo la ricarica del saldo.",
+    "modelTitle": "In pausa: nessun modello disponibile",
+    "modelDescription": "Le automazioni usano solo chiavi di modello e account condivisi con tutto il workspace, e nessuno è utilizzabile. Riprende da solo pochi minuti dopo che ne aggiungi uno in Modelli.",
+    "listBilling": "Crediti esauriti",
+    "listModel": "Nessun modello"
   },
   "featureGate": {
     "enable": "Abilita {name}",
@@ -26674,7 +26702,7 @@
       "apiKeysDescription": "Chiavi per script, CI e integrazioni. Una chiave agisce come te, come un agente o come un bot. Le regole di ogni chiave sono in Sicurezza.",
       "keys": {
         "title": "Chiavi API",
-        "description": "Chiavi per script, CI e integrazioni. Una chiave funziona solo in questo workspace e agisce come te, come un agente o come un bot.",
+        "description": "Chiavi per script, CI e integrazioni. Una chiave agisce come te, un agente o un bot; «Funziona in» definisce quali spazi di lavoro raggiunge.",
         "newKey": "Nuova chiave",
         "count": "{count, plural, one {# chiave} other {# chiavi}}",
         "emptyTitle": "Nessuna chiave API",
@@ -26684,6 +26712,10 @@
         "actsAsAgent": "Un agente",
         "actsAsBot": "Un bot",
         "actsAsMeHint": "Il tuo ruolo in questo workspace. La chiave smette di funzionare quando esci.",
+        "worksIn": "Funziona in",
+        "worksInAll": "Tutti i miei spazi di lavoro",
+        "worksInAllHint": "Agisce come te in ogni tuo spazio di lavoro, con il tuo ruolo completo. Gestiscila in Preferenze → Chiavi personali.",
+        "worksInWorkspace": "Solo questo spazio di lavoro",
         "actsAsAgentHint": "Esattamente ciò che l'agente può fare secondo kortix.yaml. Le sue azioni vengono registrate come l'agente e la chiave continua a funzionare quando esci.",
         "actsAsBotHint": "Un bot per la CI o un'integrazione, con il proprio ruolo. La chiave continua a funzionare quando esci.",
         "needsPermission": "Richiede il permesso di gestire le credenziali",
@@ -26702,6 +26734,7 @@
         "rowBot": "Bot · {name}",
         "createdBy": "Creata da {email}",
         "createdDescription": "{name} agisce come {actsAs}. Kortix mostra la chiave una sola volta: copiala ora e salvala come segreto.",
+        "createdPersonalDescription": "{name} agisce come te in ogni tuo spazio di lavoro — gestiscila in Preferenze → Chiavi personali. Kortix mostra la chiave una sola volta: copiala ora e conservala come segreto.",
         "accessFullHint": "Tutto ciò che il principal della chiave può fare in questo workspace.",
         "accessCustomHint": "Solo i permessi che scegli. Ognuno deve rientrare in ciò che il principal della chiave può fare."
       },
@@ -26712,7 +26745,9 @@
       "noWorkspaceTitle": "Crea un workspace per accedere con la CLI",
       "noWorkspaceBody": "La CLI accede a un workspace. Creane uno, poi approva questo accesso.",
       "createAction": "Crea workspace",
-      "workspaceLabel": "Workspace"
+      "workspaceLabel": "Workspace",
+      "loadFailedTitle": "Impossibile caricare i tuoi workspace",
+      "loadFailedBody": "Questo accesso richiede l'elenco dei tuoi workspace. L'account è a posto: riprova per continuare."
     },
     "models": {
       "yourDefault": "Predefinito del workspace",
@@ -26813,5 +26848,24 @@
   "gatewayBudgets": {
     "capWorkspace": "Limita la spesa del gateway per questo workspace.",
     "capMember": "Limita la spesa del gateway per {who}."
+  },
+  "connectSignIn": {
+    "openSignIn": "Apri l'accesso a {app}",
+    "checkingTitle": "Completamento dell'accesso",
+    "checkingDescription": "Kortix verifica il tuo accesso a {app}. Questa pagina si aggiorna da sola.",
+    "signInUnfinished": "Accesso non completato",
+    "finishSignIn": "Completa l'accesso",
+    "signInFinished": "Accesso completato",
+    "cardHeadline": "Il tuo agente ha bisogno che tu acceda",
+    "cardTitle": "Connetti {app}",
+    "cardShared": "Condiviso con il workspace",
+    "cardPrivate": "Solo tu",
+    "signingIn": "Completa l'accesso a {app} nella finestra che si è aperta.",
+    "connectedAs": "Connesso come {account}",
+    "connected": "Connesso",
+    "connect": "Connetti",
+    "cardFailed": "Impossibile connettere {app}. Riprova.",
+    "blockedTitle": "Apri {app} per accedere",
+    "blockedDescription": "Il browser ha bloccato la finestra di accesso. Aprila con il pulsante qui sotto. Questa pagina si aggiorna da sola."
   }
 }

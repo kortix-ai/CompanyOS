@@ -6,14 +6,24 @@ let billing: Record<string, unknown> = { ok: true };
 let inserted: Record<string, unknown> | undefined;
 /** The billing entitlement under test. False = free tier (KRTX-1067). */
 let mayUseManagedModels = true;
+/** The agent's `project.gitops.read` grant and the launcher's `project.file.read`: the two halves of `repository_access`. */
+let agentAllowsRepository = false;
+let launcherMayRead = false;
+let launcherAsked: unknown[] | undefined;
 
 mock.module('../../billing/services/billing-gate', () => ({ checkBillingAdmission: async () => billing }));
 mock.module('../../billing/services/entitlements', () => ({ accountMayUseManagedModels: async () => mayUseManagedModels }));
 mock.module('../../shared/audit', () => ({ recordAuditEvent: async () => {} }));
 mock.module('../agents', () => ({
   loadProjectAgents: async () => ({ defaultAgent: 'default', builtinAgents: { my_kortix: false } }),
-  agentGrantAllowsRepository: () => false,
+  agentGrantAllowsRepository: () => agentAllowsRepository,
   sandboxFromLoadedAgents: () => null,
+}));
+mock.module('./launcher-repository-access', () => ({
+  launcherMayReadRepository: async (...args: unknown[]) => {
+    launcherAsked = args;
+    return launcherMayRead;
+  },
 }));
 mock.module('./session-connector-bindings', () => ({
   parseSessionConnectorBindings: () => ({ ok: true, bindings: undefined }),
@@ -51,6 +61,12 @@ mock.module('../../llm-gateway/models/served-managed-models', () => ({
   platformVisionModelId: () => '',
 }));
 
+// The models the box registers at boot. Empty = the box dies ("pi harness has no model").
+let catalogModels: Record<string, unknown> = { 'openai/gpt-x': {} };
+mock.module('../../llm-gateway/models/servable-catalog', () => ({
+  servableProjectCatalog: async () => ({ models: catalogModels }),
+}));
+
 import { createProjectSession } from './sessions';
 
 // My Kortix runs only when kortix.yaml turns it on. This suite characterizes the
@@ -68,6 +84,9 @@ beforeEach(() => {
   billing = { ok: true };
   inserted = undefined;
   mayUseManagedModels = true;
+  agentAllowsRepository = false;
+  launcherMayRead = false;
+  launcherAsked = undefined;
   servable = () => true;
   config.KORTIX_URL = 'https://api.example.test';
   // A non-default operator config, so the free-tier test can tell the RESOLVED
@@ -106,6 +125,21 @@ test('insert stores the exact create-time metadata fields and override order', a
   });
 });
 
+// A launcher who may read the repository gets it only through
+// `launcherMayReadRepository`, the role check that ignores the account-MFA
+// gate (prod 2026-11-12: an MFA account's admins got repository_access false).
+test('repository_access follows the agent grant AND launcherMayReadRepository', async () => {
+  agentAllowsRepository = true;
+  launcherMayRead = true;
+  await createProjectSession({ project, userId: 'synthetic-user', requestingPrincipalType: 'human', body: {} });
+  expect(launcherAsked).toEqual(['synthetic-user', 'synthetic-account', 'synthetic-project']);
+  expect(inserted?.metadata).toMatchObject({ repository_access: true, workspace_mode: 'branch' });
+
+  launcherMayRead = false;
+  await createProjectSession({ project, userId: 'synthetic-user', requestingPrincipalType: 'human', body: {} });
+  expect(inserted?.metadata).toMatchObject({ repository_access: false, workspace_mode: 'runtime' });
+});
+
 // KRTX-1547: the CLI spawn prompt is the caller's words, verbatim; the worker
 // contract rides in `initial_context` and reaches the model only.
 test('initial_prompt is stored verbatim and initial_context rides beside it', async () => {
@@ -135,6 +169,19 @@ test('an oversized initial_context is refused and inserts nothing', async () => 
 // The boot model of a session with nothing stored. The gateway refuses every
 // managed model to a FREE account, so it never boots pinned to the platform
 // default: it runs its own connected model, or none.
+test('a free-tier account with no model and an empty catalog is refused before any row: 409 no_model_available', async () => {
+  mayUseManagedModels = false;
+  catalogModels = {};
+  try {
+    const result = await createProjectSession({ project, userId: 'synthetic-user', requestingPrincipalType: 'human', body: {} });
+    expect(result.error?.status).toBe(409);
+    expect(result.error?.body).toMatchObject({ code: 'no_model_available', plan_upgrade: true });
+    expect(inserted).toBeUndefined();
+  } finally {
+    catalogModels = { 'openai/gpt-x': {} };
+  }
+});
+
 test('a fresh free-tier account never boots pinned to a managed model', async () => {
   mayUseManagedModels = false;
   const result = await createProjectSession({ project, userId: 'synthetic-user', requestingPrincipalType: 'human', body: {} });

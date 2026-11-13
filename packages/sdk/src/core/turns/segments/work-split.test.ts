@@ -149,6 +149,14 @@ describe('splitTurnWork', () => {
     expect((split!.final[0] as { part: { id: string } }).part.id).toBe('7');
   });
 
+  test('foldStartedWork: once every agent reported, the calls that started them fold; deliverables stay', () => {
+    const s = segments([tool('1', 'agent'), tool('2', 'agent'), shown('3'), text('4', 'Three colleagues are on it.')]);
+    const split = splitTurnWork(s, { working: false, foldStartedWork: true });
+    expect(split!.work.map((seg) => (seg as { part: ToolPart }).part.id)).toEqual(['1', '2']);
+    expect(split!.hoisted.map((seg) => seg.kind)).toEqual(['standalone']);
+    expect((split!.final[0] as { part: { id: string } }).part.id).toBe('4');
+  });
+
   test('a turn whose only work started an agent has nothing left to fold', () => {
     const s = segments([tool('1', 'agent'), text('2', 'On it.')]);
     expect(splitTurnWork(s, { working: false })).toBeNull();

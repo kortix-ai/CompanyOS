@@ -106,6 +106,7 @@
  * Kortix operator on request. Their 403 says "contact Kortix" instead of
  * naming a toggle the caller cannot see (gate.ts).
  */
+import { CHROME_LAUNCHED } from '@kortix/shared/chrome-launch';
 import { config } from '../config';
 import { platinumUsRegion } from '../shared/platinum-region';
 import type { FeatureFlagKey, FeatureFlagStability } from '@kortix/api-contract';
@@ -237,18 +238,12 @@ const FLAGS: readonly FeatureFlagDef[] = [
       'is already egress keeps serving and stays editable, so turning the flag ' +
       'off never strands an existing enforced secret.',
   },
-  {
-    key: 'pooled_provider_secrets',
-    name: 'Pooled Provider Secrets',
-    description: 'Members connect their own ChatGPT and Claude subscriptions and provider keys, share them when needed, and choose which ones each session uses.',
-    stability: 'experimental',
-    available: () => true,
-    // On by default since 2026-10-31: every project gets private-by-default
-    // provider accounts. A project that turned it off keeps it off.
-    platformDefault: () => true,
-    enforcement: 'behavioral',
-    enforcementNote: 'Session selection and provider credential resolution reject or ignore resource secrets while disabled.',
-  },
+  // `pooled_provider_secrets` graduated (2026-11-12, Marko: "remove this as a
+  // feature flag … 1 common across the board default"): every project has
+  // named provider accounts with sharing, per-session key selection and named
+  // ChatGPT/Claude sign-ins. A stored `experimental.pooled_provider_secrets`
+  // override is inert. The project detail still sends the key as `true` for
+  // older SDKs, hosts, CLIs and the terminal UI.
   // `pi_harness` graduated (2026-10-23): every new session runs pi; OpenCode is
   // sunset (kortixd has no OpenCode harness since 2026-10-30). No flag, no
   // operator lever, no manifest `runtime:` choice. A stored
@@ -466,7 +461,11 @@ const FLAGS: readonly FeatureFlagDef[] = [
     stability: 'experimental',
     // Off on staging and prod until the Chrome Web Store listing is public.
     available: () => config.KORTIX_CHROME_ENABLED,
-    platformDefault: () => true,
+    // Not launched (CHROME_LAUNCHED, #11436): the web has no Chrome surface, so
+    // no project gets it by default and the catalog does not offer it. An
+    // operator can still turn it on for one project (the extension's dev pairing).
+    platformDefault: () => CHROME_LAUNCHED,
+    ...(CHROME_LAUNCHED ? {} : { catalogHidden: true as const }),
     enforcement: 'routes',
     enforcementNote:
       'ROUTES: POST /v1/chrome/attach answers 403 `feature_disabled` when the calling session\'s project has it ' +

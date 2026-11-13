@@ -91,6 +91,8 @@ export type NewProjectSessionOpts = {
    */
   onCreating?: (sessionId: string) => void;
   onError?: () => void;
+  /** Keep the submission pending while the connector gate owns its retry. */
+  deferConnectorRecovery?: boolean;
   scope?: SessionScopeCommit;
   create?: {
     sandbox_slug?: string;
@@ -298,6 +300,7 @@ export function useNewProjectSession(projectId: string | undefined) {
               projectId,
               connectorConnections,
               retry: () => startRef.current(opts),
+              onCancel: opts.deferConnectorRecovery ? opts.onError : undefined,
             });
           } else {
             errorToast(err instanceof Error ? err.message : failed);
@@ -308,7 +311,9 @@ export function useNewProjectSession(projectId: string | undefined) {
         // No navigation happened, so release the claim now — the user stays
         // where they are and must be able to try again immediately.
         release();
-        opts?.onError?.();
+        if (!(action === 'connect' && getRequiredConnectorConnections(err) && opts.deferConnectorRecovery)) {
+          opts?.onError?.();
+        }
       });
     },
     [

@@ -413,6 +413,10 @@ export interface ConnectorRouterDeps extends ConnectorRouterAuth {
       label: string;
       owner_type: string;
       is_default: boolean;
+      /** `connected`: a call can run as it. `sign_in_not_finished`: its sign-in
+       *  started and did not finish; finish it, do not add another account.
+       *  Absent: `connected`. */
+      status?: 'connected' | 'sign_in_not_finished';
       /** Who the account was authorized as. `null` when unknown. */
       connected_as?: string | null;
       /** When the upstream first answered 401 to this account's stored
@@ -477,11 +481,13 @@ export interface ConnectorRouterDeps extends ConnectorRouterAuth {
     label?: string;
   } | null>;
   /** Connectors this session's agent asked a human to authorize, and whether
-   *  each is connected yet. Drives the in-session Connect button. */
+   *  each is connected yet. Drives the in-session Connect card. `userId` is
+   *  the caller: another member's private account is not listed. */
   listSessionConnectRequests?(
     projectId: string,
     sessionId: string,
-  ): Promise<Array<{ slug: string; app: string; provider: string; connected: boolean }>>;
+    userId: string,
+  ): Promise<SessionConnectRequestRow[]>;
   connectStatus?(): Promise<{ configured: boolean; provider: string | null; providers?: string[] }>;
   /** API/MCP catalogue id by app join key, for the managed listings' `directId`. */
   catalogDirectIds?(): Promise<ReadonlyMap<string, string>>;
@@ -591,4 +597,21 @@ export interface ConnectorRouterDeps extends ConnectorRouterAuth {
     policies: ProjectPolicyView[],
     defaultMode: DefaultMode,
   ): Promise<CrudOutcome>;
+}
+
+/** One account a session's agent asked a person to sign in (`GET .../sessions/:id/connect-requests`). */
+export interface SessionConnectRequestRow {
+  slug: string;
+  /** The connector's display name ("Gmail"). */
+  name: string;
+  app: string;
+  provider: string;
+  connected: boolean;
+  /** The account row the sign-in lands on. */
+  connection_id: string;
+  /** `project`: shared; `member`: the caller's own. */
+  owner_type: string;
+  label: string;
+  /** Who the account was signed in as, once known. */
+  connected_as: string | null;
 }

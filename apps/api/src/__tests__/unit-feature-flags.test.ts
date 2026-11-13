@@ -138,6 +138,16 @@ describe('resolveFeatureFlag — explicit override wins', () => {
     expect(buildFeatureFlagCatalog(metadata).map((flag) => flag.key)).not.toContain('llm_gateway');
   });
 
+  test('pooled_provider_secrets graduated: provider keys need no flag and a stored override is inert', () => {
+    // 2026-11-12: named provider keys, sharing, per-session key selection and
+    // named ChatGPT/Claude sign-ins are on for every project. A stored `false`
+    // must not resurface as a key, a catalog row, or a gate.
+    expect(isFeatureFlagKey('pooled_provider_secrets')).toBe(false);
+    const metadata = { experimental: { pooled_provider_secrets: false } };
+    expect(Object.keys(resolveFeatureFlags(metadata))).not.toContain('pooled_provider_secrets');
+    expect(buildFeatureFlagCatalog(metadata).map((flag) => flag.key)).not.toContain('pooled_provider_secrets');
+  });
+
   test('notification_center graduated: notifications are on for every project and a stored override is inert', () => {
     // 2026-11-06: inbox rows, Web Push, mobile push, follows and alerts run for
     // every project; email is opt-in per kind. A project that stored
@@ -321,10 +331,17 @@ describe('buildFeatureFlagCatalog', () => {
  * break (d) and take the operator lever with it.
  */
 describe('catalogHidden', () => {
-  test('only internal-only surfaces are hidden: workspace_volume (stateless sandboxes)', () => {
+  test('only internal-only surfaces are hidden: workspace_volume (stateless sandboxes) and chrome (not launched)', () => {
     // `apps` graduated (2026-10-14), `session_log` (2026-10-22), `session_log_restore` (2026-11-05) and
     // `meta_agent` was removed (2026-11-02): none is a flag.
-    expect(HIDDEN_KEYS).toEqual(['workspace_volume']);
+    expect([...HIDDEN_KEYS].sort()).toEqual(['chrome', 'workspace_volume']);
+  });
+
+  // The web has no Chrome surface (CHROME_LAUNCHED = false, #11436): nothing
+  // may advertise it. Off by default and absent from the catalog while off.
+  test('chrome is off by default and not listed while CHROME_LAUNCHED is false', () => {
+    expect(resolveFeatureFlag({}, 'chrome')).toBe(false);
+    expect(buildFeatureFlagCatalog({}).some((flag) => flag.key === 'chrome')).toBe(false);
   });
 
   test('workspace_volume is a behavioral flag that defaults off and needs Platinum', () => {

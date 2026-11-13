@@ -15,7 +15,7 @@ import {
 } from '../../connectors/credentials';
 import { validateConnectionLabel } from '../../connectors/connection-identity';
 import { oauth2ConnectionStatus, revokeConnectionOAuth2, startConnectionSignIn } from '../../connectors/oauth2-store';
-import { composioConfigured } from '../../connectors/composio';
+import { composioConfigured, setComposioConnectedAccountEnabled } from '../../connectors/composio';
 import { pipedreamConfigured } from '../../connectors/pipedream';
 import { rematerializeCatalogAfterCredentialUpdate } from '../../connectors/sync';
 import { SecretUndecryptableError } from '../../secrets/undecryptable';
@@ -483,6 +483,12 @@ export function registerConnectionActionsRoutes(): void {
               'reconnect',
             );
           }
+          // A Composio account follows its Kortix row: revoke turns it off at
+          // Composio too, activate turns it back on.
+          const connectedAccountId = (connection.metadata as Record<string, unknown> | null)?.connected_account_id;
+          if (connection.providerType === 'composio' && typeof connectedAccountId === 'string' && connectedAccountId) {
+            await setComposioConnectedAccountEnabled(connectedAccountId, operation === 'activate');
+          }
         }
         // The default shared account may have changed: activate or park pending event triggers.
         await reconcileEventSubscriptionsFromCatalog(projectId, loaded.row.accountId);
@@ -584,7 +590,7 @@ export function registerConnectionActionsRoutes(): void {
               ),
             );
           }
-          return c.json(await finalizeComposioConnect(projectId, connectionId, connection, app));
+          return c.json(await finalizeComposioConnect(projectId, connectionId, connection, app, loaded.userId));
         }
         if (!pipedreamConfigured()) {
           return c.json({ error: 'pipedream not configured' }, 501);

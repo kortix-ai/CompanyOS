@@ -28,7 +28,9 @@ function Home() {
   const pending = useComposerPrefillStore((s) => s.prefillByProject.p1);
   useEffect(() => {
     if (!pending) return;
-    consumed.push(useComposerPrefillStore.getState().consume('p1'));
+    // As the real hosts do: apply what `consume` returns, not the render snapshot.
+    const taken = useComposerPrefillStore.getState().consume('p1');
+    if (taken) consumed.push(taken);
   }, [pending]);
   return null;
 }
@@ -106,7 +108,7 @@ test('StrictMode re-running the effect keeps the handover', () => {
   press('x');
   expect(useComposerPrefillStore.getState().prefillByProject.p1).toBeUndefined();
   // StrictMode also replays the stand-in's effect, whose second consume finds nothing.
-  expect(consumed.filter(Boolean)).toEqual([{ text: 'Quick Entry prompt', submit: true }]);
+  expect(consumed).toEqual([{ text: 'Quick Entry prompt', submit: true }]);
 });
 
 test('home redirecting to the chat route keeps the keys for the chat composer', () => {
@@ -144,4 +146,15 @@ test('the auth bootstrap flickering to null and back keeps the buffer', () => {
   act(() => root.render(<Boundary home={false} user="u1" />));
   press('i');
   expect(useComposerPrefillStore.getState().prefillByProject.p1).toEqual({ text: 'hi', restoreDraft: true });
+});
+
+test('a home mounting for the next account in the same commit gets nothing', () => {
+  act(() => root.render(<Boundary home={false} user="u1" />));
+  press('s');
+  press('e');
+  // The next account's home renders while the entry still exists; the hook's
+  // layout effect drops it before the home's passive consume runs.
+  act(() => root.render(<Boundary home user="u2" />));
+  expect(consumed).toEqual([]);
+  expect(useComposerPrefillStore.getState().prefillByProject.p1).toBeUndefined();
 });

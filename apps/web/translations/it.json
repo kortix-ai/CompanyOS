@@ -709,6 +709,7 @@
       "gracePeriodDescription": "L’eliminazione avviene alla data prevista. Puoi annullarla prima.",
       "immediateLabel": "Elimina immediatamente",
       "immediateDescription": "Il tuo account e i suoi dati verranno eliminati immediatamente. Questa operazione non può essere annullata.",
+      "noWorkspaceImmediateOnly": "Non appartieni a nessuno spazio di lavoro, quindi non c'è un periodo di attesa: il tuo account viene eliminato subito.",
       "typeDeleteToConfirm": "Digita \"delete\" per confermare",
       "keepAccount": "Mantieni l'account",
       "processing": "Elaborazione...",
@@ -731,7 +732,7 @@
         "left": "Lasci",
         "blockers": "Sei l'unico proprietario e altre persone ci lavorano. Trasferisci la proprietà o elimina il workspace.",
         "members": "{count, plural, one {# membro} other {# membri}}",
-        "nothing": "Non appartieni a nessun workspace. Viene eliminato solo il tuo accesso.",
+        "nothing": "Con il tuo account non viene eliminato né abbandonato nessuno spazio di lavoro.",
         "blockersTitle": "Trasferiscili prima"
       }
     },
@@ -26756,12 +26757,6 @@
       "setDefaultTitle": "Imposta come modello predefinito del workspace",
       "setDefaultAria": "Imposta {model} come modello predefinito di questo workspace",
       "setWorkspaceDefault": "Imposta come predefinito del workspace"
-    },
-    "profile": {
-      "deleteLogin": "Elimina il mio accesso",
-      "deleteLoginDescription": "Elimina il tuo accesso a Kortix. Non appartieni a nessun workspace, quindi non viene eliminato nient'altro.",
-      "deleteLoginTitle": "Eliminare il tuo accesso?",
-      "deleteLoginWarning": "Il tuo accesso viene eliminato subito. Non si può annullare."
     },
     "capture": {
       "noWorkspaceTitle": "Prima crea un workspace o unisciti a uno.",

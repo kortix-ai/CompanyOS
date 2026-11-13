@@ -709,6 +709,7 @@
       "gracePeriodDescription": "账户将在预定日期删除。在此之前可随时取消。",
       "immediateLabel": "立即删除",
       "immediateDescription": "您的帐户及其数据将立即删除。此操作无法撤消。",
+      "noWorkspaceImmediateOnly": "你不属于任何工作区，因此没有宽限期：你的账号会立即删除。",
       "typeDeleteToConfirm": "输入“delete”进行确认",
       "keepAccount": "保留帐户",
       "processing": "正在处理…",
@@ -731,7 +732,7 @@
         "left": "你将离开",
         "blockers": "你是唯一的所有者,且有其他人在使用。请转让所有权或删除该工作区。",
         "members": "{count, plural, other {# 名成员}}",
-        "nothing": "你不属于任何工作区。仅删除你的登录。",
+        "nothing": "删除账号不会删除或退出任何工作区。",
         "blockersTitle": "请先移交这些工作区"
       }
     },
@@ -26756,12 +26757,6 @@
       "setDefaultTitle": "设为工作区默认模型",
       "setDefaultAria": "将 {model} 设为此工作区的默认模型",
       "setWorkspaceDefault": "设为工作区默认"
-    },
-    "profile": {
-      "deleteLogin": "删除我的登录",
-      "deleteLoginDescription": "删除你的 Kortix 登录。你不属于任何工作区，因此不会删除其他内容。",
-      "deleteLoginTitle": "删除你的登录？",
-      "deleteLoginWarning": "你的登录将立即删除。此操作无法撤销。"
     },
     "capture": {
       "noWorkspaceTitle": "请先创建或加入一个工作区。",

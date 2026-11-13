@@ -709,6 +709,7 @@
       "gracePeriodDescription": "La suppression a lieu à la date prévue. Vous pouvez annuler avant cette date.",
       "immediateLabel": "Supprimer immédiatement",
       "immediateDescription": "Votre compte et ses données sont immédiatement supprimés. Cela ne peut pas être annulé.",
+      "noWorkspaceImmediateOnly": "Vous n'appartenez à aucun espace de travail : il n'y a donc pas de délai de grâce et votre compte est supprimé immédiatement.",
       "typeDeleteToConfirm": "Saisissez \"delete\" pour confirmer",
       "keepAccount": "Conserver le compte",
       "processing": "Traitement…",
@@ -731,7 +732,7 @@
         "left": "Vous quittez",
         "blockers": "Vous en êtes le seul propriétaire et d'autres y travaillent. Transférez la propriété ou supprimez l'espace de travail.",
         "members": "{count, plural, one {# membre} other {# membres}}",
-        "nothing": "Vous n'appartenez à aucun espace de travail. Seul votre identifiant est supprimé.",
+        "nothing": "Aucun espace de travail n'est supprimé ni quitté avec votre compte.",
         "blockersTitle": "Transférez-les d'abord"
       }
     },
@@ -26756,12 +26757,6 @@
       "setDefaultTitle": "Définir comme modèle par défaut de l'espace de travail",
       "setDefaultAria": "Définir {model} comme modèle par défaut de cet espace de travail",
       "setWorkspaceDefault": "Définir par défaut pour l'espace de travail"
-    },
-    "profile": {
-      "deleteLogin": "Supprimer ma connexion",
-      "deleteLoginDescription": "Supprime votre connexion Kortix. Vous n'appartenez à aucun espace de travail : rien d'autre n'est supprimé.",
-      "deleteLoginTitle": "Supprimer votre connexion ?",
-      "deleteLoginWarning": "Votre connexion est supprimée immédiatement. Cette action est irréversible."
     },
     "capture": {
       "noWorkspaceTitle": "Créez ou rejoignez d'abord un espace de travail.",

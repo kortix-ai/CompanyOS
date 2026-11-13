@@ -531,6 +531,7 @@
       "gracePeriodDescription": "Deletion happens on the scheduled date. Cancel any time before then.",
       "immediateLabel": "Delete immediately",
       "immediateDescription": "Your account and its data are deleted right away. This cannot be undone.",
+      "noWorkspaceImmediateOnly": "You belong to no workspace, so there is no grace period: your account is deleted right away.",
       "typeDeleteToConfirm": "Type \"delete\" to confirm",
       "keepAccount": "Keep account",
       "processing": "Processing…",
@@ -553,7 +554,7 @@
         "left": "You leave",
         "blockers": "You are their only owner, and others work in them. Transfer ownership or delete the workspace.",
         "members": "{count, plural, one {# member} other {# members}}",
-        "nothing": "You belong to no workspace. Only your login is deleted.",
+        "nothing": "No workspace is deleted or left with your account.",
         "blockersTitle": "Hand these over first"
       }
     },
@@ -26756,12 +26757,6 @@
       "setDefaultTitle": "Set as the workspace default model",
       "setDefaultAria": "Set {model} as the default model for this workspace",
       "setWorkspaceDefault": "Set as workspace default"
-    },
-    "profile": {
-      "deleteLogin": "Delete my login",
-      "deleteLoginDescription": "Deletes your Kortix login. You belong to no workspace, so nothing else is deleted.",
-      "deleteLoginTitle": "Delete your login?",
-      "deleteLoginWarning": "This deletes your login right away. This cannot be undone."
     },
     "capture": {
       "noWorkspaceTitle": "Create or join a workspace first.",

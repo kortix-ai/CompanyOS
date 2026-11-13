@@ -410,11 +410,12 @@ function SheetPanel({
                     {controls.canDelete ? (
                       <DropdownMenuItem variant="destructive" onClick={onDelete}>
                         <TrashIcon />
+                        {/* Named by type: a schedule, a webhook, any other kind a trigger. */}
                         {trigger.type === 'cron'
                           ? t.raw('textd8d0bd5c5106')
-                          : event
-                            ? t.raw('textf2f698118cc1')
-                            : t.raw('text60f85e57e4a7')}
+                          : trigger.type === 'webhook'
+                            ? t.raw('text60f85e57e4a7')
+                            : t.raw('text8043e69a8dd6')}
                       </DropdownMenuItem>
                     ) : null}
                   </DropdownMenuContent>

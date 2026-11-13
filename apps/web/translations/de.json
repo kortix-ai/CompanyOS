@@ -1731,7 +1731,7 @@
         "email": "E-Mail",
         "scheduled": "Geplant",
         "webhook": "Webhook",
-        "event": "App-Ereignis",
+        "event": "Connector-Ereignis",
         "manual": "Manuell",
         "all": "Alle"
       },
@@ -21348,7 +21348,16 @@
       "textb1f8e3109f1b": "{value0}: {value1} Tage sind das Maximum, das Kortix erlaubt.",
       "textac20a57bfde0": "Ausblenden",
       "text268733ac2f60": "Die App konnte nicht aktualisiert werden",
-      "text5d8926d4a4dd": "Die App konnte nicht registriert werden"
+      "text5d8926d4a4dd": "Die App konnte nicht registriert werden",
+      "text30b9ce09f406": "Gib einen Zeitraum wie 15m, 1h oder 1d ein, mindestens 1m.",
+      "text28d33d2ad989": "Wähle die App, die aufgerufen wird",
+      "textd777d7805cfa": "Gib einen Pfad ein, der mit / beginnt",
+      "text8043e69a8dd6": "Trigger löschen",
+      "textd6fa1626e3af": "Connector-Ereignis erstellt",
+      "textccf59f978ef6": "Hier gibt es noch keine Connector-Ereignisse",
+      "text82cbc4a4def0": "Connector-Ereignisse sind in dieser Bereitstellung nicht eingerichtet, daher kann noch kein Connector sie senden.",
+      "text458ceb31019b": "Connector-Ereignis-Trigger",
+      "text27ca9df9dbaa": "Connector-Ereignis-Trigger sind aus"
     },
     "publicShareConfirm": {
       "title": "Öffentlichen Link erstellen?",
@@ -21810,7 +21819,16 @@
     "crBranchHelp": "Läuft, wenn eine Änderungsanfrage in diesen Branch zusammengeführt wird, oder in jeden Branch, wenn das Feld leer ist. Die Anweisung kann <code>change_request.number</code>, <code>change_request.title</code> und <code>change_request.base_ref</code> lesen.",
     "eventsOff": "Connector-Ereignisse sind in der Beta und für diesen Workspace aus. Schalte sie unter Feature-Flags in der Workspace-Verwaltung ein.",
     "noApps": "Noch keine App in diesem Workspace sendet Ereignisse. Stelle eine App bereit, die per POST an <code>KORTIX_APP_EVENTS_URL</code> sendet, und wähle sie dann hier aus.",
-    "openApps": "Apps öffnen"
+    "openApps": "Apps öffnen",
+    "thenLabel": "Was ein Auslösen tut",
+    "thenAgent": "Agent ausführen",
+    "thenApp": "App aufrufen",
+    "targetPath": "Pfad",
+    "targetMethod": "Methode",
+    "targetHelp": "Jedes Auslösen weckt die App und sendet die Nutzdaten an diesen Pfad. Es läuft kein Agent.",
+    "intervalLabel": "Wiederholt sich alle",
+    "intervalHelp": "Ein fester Zeitraum wie 15m, 1h oder 1d.",
+    "useCalendar": "Kalenderzeitplan verwenden"
   },
   "gatewayAccess": {
     "heroTitle": "Die Modelle dieses Workspace überall nutzen",
@@ -22155,7 +22173,7 @@
     "infoRunsThrough": "Anbieter",
     "infoSignsInWith": "Anmeldung mit",
     "infoCategory": "Kategorie",
-    "infoAppEvents": "App-Ereignisse",
+    "infoAppEvents": "Ereignisse",
     "infoAppEventsYes": "Unterstützt",
     "authOAuth": "OAuth-Anmeldung",
     "authApiKey": "API-Schlüssel",
@@ -23706,9 +23724,9 @@
   },
   "automationsPause": {
     "groupTitle": "Trigger",
-    "groupDescription": "Zeitpläne, Schleifen, Webhooks, App-Ereignisse und Monitore in diesem Workspace.",
+    "groupDescription": "Zeitpläne, Loops, Webhooks, Connector-Ereignisse und App-Ereignisse in diesem Workspace.",
     "label": "Alle Trigger pausieren",
-    "description": "In diesem Workspace läuft nichts mehr von selbst: kein Zeitplan, keine Schleife, kein Webhook, kein App-Ereignis und kein Monitor. Einen Trigger von Hand auszuführen funktioniert weiterhin.",
+    "description": "In diesem Workspace läuft nichts von selbst: kein Zeitplan, Loop, Webhook, Connector-Ereignis oder App-Ereignis. Einen Trigger von Hand auszuführen funktioniert weiterhin.",
     "readOnlyDescription": "Nur ein Inhaber oder Admin kann Trigger pausieren oder fortsetzen.",
     "pausedSince": "Pausiert seit {date}.",
     "pauseTitle": "Alle Trigger pausieren?",

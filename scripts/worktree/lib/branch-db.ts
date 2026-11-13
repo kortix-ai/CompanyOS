@@ -121,14 +121,21 @@ function conninfo(p: PrimaryDb, database: string): string {
   return `host=${p.container} port=5432 dbname=${database} user=${decodeURIComponent(u.username)} password=${decodeURIComponent(u.password)}`;
 }
 
-function psql(url: string, sql: string): ShResult {
-  return sh(['psql', url, '-X', '-q', '-v', 'ON_ERROR_STOP=1', '-c', sql]);
+function psql(url: string, sql: string, flags: string[] = []): ShResult {
+  return sh(['psql', url, '-X', '-q', '-v', 'ON_ERROR_STOP=1', ...flags, '-c', sql]);
+}
+
+/** The query's unaligned, tuples-only output, trimmed. Throws when psql fails. */
+function psqlValue(url: string, sql: string): string {
+  const r = psql(url, sql, ['-A', '-t']);
+  if (!r.ok) throw new Error(`psql: ${(r.stderr || r.stdout).trim()}`);
+  return r.stdout.trim();
 }
 
 function lit(s: string): string { return `'${s.replace(/'/g, "''")}'`; }
 
 export function branchDbExists(p: PrimaryDb, name: string): boolean {
-  return sh(['psql', p.url, '-XAtc', `select 1 from pg_database where datname = ${lit(branchDbName(name))}`]).stdout.trim() === '1';
+  return psqlValue(p.url, `select 1 from pg_database where datname = ${lit(branchDbName(name))}`) === '1';
 }
 
 /**
@@ -183,7 +190,7 @@ export function syncBranchUsers(p: PrimaryDb, name: string): string | null {
   if (!r.ok) return `register branch: ${r.stderr.trim()}`;
   // Every registered branch, not only this one: the primary trigger now calls
   // apply_rows, which a branch created by an older checkout does not have yet.
-  const branches = sh(['psql', p.url, '-XAtc', 'select br.datname from kortix_wt.branches br join pg_database d using (datname)']).stdout
+  const branches = psqlValue(p.url, 'select br.datname from kortix_wt.branches br join pg_database d using (datname)')
     .split('\n').map((n) => n.trim()).filter(Boolean);
   for (const other of branches) {
     r = psql(withDatabase(p.url, other), BRANCH_SQL);

@@ -58,6 +58,26 @@ async function waitForOutputMatch(
   return null;
 }
 
+/**
+ * Spawn `cmd` and resolve its first output match of `re` within `attempts`
+ * seconds. Null when the binary is missing or nothing matched; a miss kills the
+ * child, a match leaves it running for the caller.
+ */
+export async function spawnForFirstMatch(
+  cmd: [string, ...string[]],
+  re: RegExp,
+  attempts: number,
+): Promise<{ match: string; proc: ReturnType<typeof Bun.spawn> } | null> {
+  if (!which(cmd[0])) return null;
+  const proc = spawn(cmd, {
+    stdout: 'pipe', stderr: 'pipe', stdin: 'ignore',
+  });
+  const match = await waitForOutputMatch(proc, re, attempts);
+  if (match) return { match, proc };
+  try { proc.kill(); } catch {}
+  return null;
+}
+
 export interface Tunnel { url: string; proc: ReturnType<typeof Bun.spawn>; }
 
 /** True when the quick tunnel's public URL answers the API health route. */
@@ -71,20 +91,14 @@ export async function tunnelAnswers(url: string, apiPath = '/v1/health', timeout
 }
 
 export async function startTunnel(apiPort: number): Promise<Tunnel | null> {
-  if (!which('cloudflared')) return null;
   // `--protocol http2`: quick tunnels default to QUIC, and on a UDP-hostile or
   // congested path the single QUIC connection drops and never re-registers —
   // the hostname dies while the process lives (2026-08-22: five quick tunnels
   // died within 10–30 min each; cloudflared metrics showed
   // quic_client_congestion_state 3 on every one). HTTP/2 rides TCP/443 and
   // reconnects like any HTTPS client. The watchdog still covers a real death.
-  const proc = spawn(['cloudflared', 'tunnel', '--no-autoupdate', '--protocol', 'http2', '--url', `http://localhost:${apiPort}`], {
-    stdout: 'pipe', stderr: 'pipe', stdin: 'ignore',
-  });
-  const url = await waitForOutputMatch(proc, /https:\/\/[a-z0-9.-]+\.trycloudflare\.com/, 30);
-  if (url) return { url, proc };
-  try { proc.kill(); } catch {}
-  return null;
+  const hit = await spawnForFirstMatch(['cloudflared', 'tunnel', '--no-autoupdate', '--protocol', 'http2', '--url', `http://localhost:${apiPort}`], /https:\/\/[a-z0-9.-]+\.trycloudflare\.com/, 30);
+  return hit && { url: hit.match, proc: hit.proc };
 }
 
 export interface StripeListen { secret: string; proc: ReturnType<typeof Bun.spawn>; }
@@ -96,13 +110,7 @@ export interface StripeListen { secret: string; proc: ReturnType<typeof Bun.spaw
 // signatures. Returns null if the stripe CLI is missing or not logged in
 // (`stripe login`), in which case it just times out.
 export async function startStripeListen(apiPort: number): Promise<StripeListen | null> {
-  if (!which('stripe')) return null;
   const forwardTo = `http://localhost:${apiPort}/v1/billing/webhooks/stripe`;
-  const proc = spawn(['stripe', 'listen', '--forward-to', forwardTo], {
-    stdout: 'pipe', stderr: 'pipe', stdin: 'ignore',
-  });
-  const secret = await waitForOutputMatch(proc, /whsec_[A-Za-z0-9]+/, 20);
-  if (secret) return { secret, proc };
-  try { proc.kill(); } catch {}
-  return null;
+  const hit = await spawnForFirstMatch(['stripe', 'listen', '--forward-to', forwardTo], /whsec_[A-Za-z0-9]+/, 20);
+  return hit && { secret: hit.match, proc: hit.proc };
 }

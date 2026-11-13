@@ -184,13 +184,18 @@ export function updateCachedWorkspaceSessions(
   projectId: string,
   update: ProjectSessionsUpdater,
 ): void {
-  queryClient.setQueriesData(
-    {
-      queryKey: qk.project.sessionsScope(projectId),
-      predicate: (query) => isSessionCacheKey(projectId, query),
-    },
-    (cached: unknown) => applyToCachedSessionShape(cached, update),
-  );
+  const entries = queryClient.getQueriesData({
+    queryKey: qk.project.sessionsScope(projectId),
+    predicate: (query) => isSessionCacheKey(projectId, query),
+  });
+  for (const [key, cached] of entries) {
+    // Only an entry the update changed is written. `setQueryData` stamps
+    // `dataUpdatedAt` even for the same object, which keeps a list from going
+    // stale and restarts its `refetchInterval` — a verdict re-sent every 20 s
+    // held off the sidebar's 60 s poll for good (F-025).
+    const next = applyToCachedSessionShape(cached, update);
+    if (next !== cached) queryClient.setQueryData(key, next);
+  }
 }
 
 /** @deprecated Use `updateCachedWorkspaceSessions`. Kept permanently. */

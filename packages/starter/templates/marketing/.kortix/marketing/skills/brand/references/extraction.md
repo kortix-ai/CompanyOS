@@ -1,7 +1,9 @@
 # Fill the brand skill from the site
 
-The onboarding agent runs this once with the person, and again when the
-site's look changes. A triggered run never runs it.
+The onboarding agent runs this once during setup, and again when the site's
+look changes. A triggered run never runs it. It asks the person nothing:
+during setup, the voice is one entry on the `Defaults:` line of the guide's
+one message of questions.
 
 ## 1. Read what exists
 
@@ -22,17 +24,16 @@ Read only. Never print an env file.
    - the `<title>`, the meta description and the `og:image`;
    - the computed colors of the body, the headings and the primary button,
      and the font families (`agent-browser eval` with `getComputedStyle`).
-3. A brand skill or voice guide already in the repository: reuse it. With
-   the person's yes, point `marketing.json` `brand.*` at those files instead
-   of copying them.
+3. A brand skill or voice guide already in the repository: reuse it. Point
+   `marketing.json` `brand.*` at those files instead of copying them.
 
 ## 2. Fill the files
 
 - `visual.md`: logos with real paths, colors with their source token, fonts
   with their source, the image direction from 2 existing images.
 - `voice.md`: the reader, the tone from 3 passages of the site, the product
-  terms as the site spells them, the banned list. Show the person the draft
-  and ask what is wrong. Write their answer in, word for word.
+  terms as the site spells them, the banned list. When the person corrects
+  the voice, write their words in, word for word.
 - `claims.md`: 5 to 20 rows, each with a proof URL you opened.
 - `marketing.json` `brand.logos` and `brand.fonts`: the same paths.
 
@@ -40,7 +41,7 @@ Read only. Never print an env file.
 
 1. Render one test card with the `design` skill: 1200×630, the product name
    on the brand background, the real logo.
-2. Show it to the person. Fix the files until they say it looks like their
-   brand.
+2. Show it to the person (during setup: in the final report). A correction
+   they send later goes into the files.
 3. Remove every marker: `grep -rn "TODO(onboarding)" .kortix/marketing/`
    prints nothing.

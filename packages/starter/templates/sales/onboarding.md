@@ -6,7 +6,10 @@ named here. The loop is one agent, `sales`, with one contract skill,
 `skills/sales-loop/SKILL.md` once before you start, so you know the system of
 record, the sources and the approval modes you set up.
 
-### A. After guide step 4: analyse the team, write sales.json
+Every **Ask** below is a question for the one message of guide step 3, with
+its recommended answer. Never ask it where it appears.
+
+### A. In guide steps 2 to 4: analyse the team, then sales.json
 
 1. Run every check of
    `.kortix/sales/skills/sales-loop/references/analysis.md`: what the company
@@ -15,15 +18,16 @@ record, the sources and the approval modes you set up.
 2. **Ask** which system of record is the source of truth (analysis section
    2). Recommend the one the evidence shows; none: a JSON file in a new
    private repository, or a Google Sheet.
-3. **Ask** for the ICP, one question at a time (analysis section 4). Offer a
-   draft from the website; the person corrects it.
+3. **Ask** for the ICP as one draft (analysis section 4): at most 4 lines,
+   written from the website and the README. The person corrects it in their
+   one reply.
 4. **Ask** where drafts go (`approval.draft_in`: the Review page, the
    mailbox, the CRM) and whether the agent may move deal stages. Defaults:
    `review` and `notes`. Say plainly: the agent never sends a message.
 5. Write `.kortix/sales/sales.json` (analysis section 6). Turn each chosen
    source's trigger on and every other source's trigger off in `sales.yaml`.
 
-### B. After guide step 8: the system of record
+### B. After guide step 6: the system of record
 
 1. **Attio, HubSpot, Salesforce or Pipedrive.** Install and connect it
    (`kortix connectors catalog install <app>`, then
@@ -51,9 +55,9 @@ record, the sources and the approval modes you set up.
        action: require_approval
    ```
 
-### C. After guide step 9: the webhook
+### C. After guide step 6: the webhook
 
-1. Guide step 9 generated `SALES_WEBHOOK_SECRET`. Read the two URLs:
+1. `kortix onboard` (guide step 6) generated `SALES_WEBHOOK_SECRET`. Read the two URLs:
    `kortix triggers info sales-signup --json` and
    `kortix triggers info sales-inbound --json` (`webhook_url`).
 2. **Ask** who adds the signup call to the product: you, as a pull request in
@@ -70,7 +74,7 @@ record, the sources and the approval modes you set up.
    `enabled: true` in both files; meeting prep also needs a calendar
    connector in `meeting_prep.calendar_connector`.
 
-### D. Instead of guide step 11: prove one draft end to end
+### D. Instead of the real run of guide step 7: prove one draft end to end
 
 Synthetic data only. Never research or draft for a real person in the proof.
 
@@ -93,7 +97,7 @@ Synthetic data only. Never research or draft for a real person in the proof.
 4. With the person's OK, delete the synthetic records from the system of
    record (or the `example.com` entries of the JSON ledger).
 
-### E. Add to the guide's step 13 report
+### E. Add to the guide's step 9 report
 
 - The system of record and its link; the enabled sources; the approval mode
   and where drafts appear.

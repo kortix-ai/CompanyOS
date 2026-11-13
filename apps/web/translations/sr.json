@@ -26892,6 +26892,20 @@
     "connect": "Poveži",
     "cardFailed": "Povezivanje sa {app} nije uspelo. Pokušaj ponovo.",
     "blockedTitle": "Otvori {app} za prijavu",
-    "blockedDescription": "Pregledač je blokirao prozor za prijavu. Otvori ga dugmetom ispod. Ova stranica se sama osvežava."
+    "blockedDescription": "Pregledač je blokirao prozor za prijavu. Otvori ga dugmetom ispod. Ova stranica se sama osvežava.",
+    "doneTitle": "{app} je povezan",
+    "doneTitleNoApp": "Povezano",
+    "doneDescription": "Tvoj agent sada može da koristi {app}.",
+    "doneClose": "Možeš da zatvoriš ovu karticu.",
+    "doneDeniedTitle": "Prijava je otkazana",
+    "doneDeniedDescription": "Nisi dozvolio pristup na {app}. Ponovo pokreni prijavu iz Kortixa da ga povežeš.",
+    "doneExpiredTitle": "Ovaj link za prijavu je istekao",
+    "doneExpiredDescription": "Već je iskorišćen ili je prestar. Ponovo pokreni prijavu iz Kortixa.",
+    "doneFailedTitle": "{app} nije povezan",
+    "doneFailedTitleNoApp": "Prijava nije završena",
+    "doneFailedDescription": "Ponovo pokreni prijavu iz Kortixa. Ako opet ne uspe, pošalji kod ispod podršci.",
+    "doneErrorCode": "Kod greške: {code}",
+    "doneOpenKortix": "Otvori Kortix",
+    "doneFallbackApp": "aplikacija"
   }
 }

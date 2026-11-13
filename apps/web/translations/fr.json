@@ -26892,6 +26892,20 @@
     "connect": "Connecter",
     "cardFailed": "Impossible de connecter {app}. Réessayez.",
     "blockedTitle": "Ouvrez {app} pour vous connecter",
-    "blockedDescription": "Votre navigateur a bloqué la fenêtre de connexion. Ouvrez-la avec le bouton ci-dessous. Cette page se met à jour toute seule."
+    "blockedDescription": "Votre navigateur a bloqué la fenêtre de connexion. Ouvrez-la avec le bouton ci-dessous. Cette page se met à jour toute seule.",
+    "doneTitle": "{app} connecté",
+    "doneTitleNoApp": "Connecté",
+    "doneDescription": "Votre agent peut maintenant utiliser {app}.",
+    "doneClose": "Vous pouvez fermer cet onglet.",
+    "doneDeniedTitle": "Connexion annulée",
+    "doneDeniedDescription": "Vous n’avez pas autorisé l’accès sur {app}. Relancez la connexion depuis Kortix pour le connecter.",
+    "doneExpiredTitle": "Ce lien de connexion a expiré",
+    "doneExpiredDescription": "Il a déjà été utilisé ou il est trop ancien. Relancez la connexion depuis Kortix.",
+    "doneFailedTitle": "{app} n’est pas connecté",
+    "doneFailedTitleNoApp": "La connexion n’a pas abouti",
+    "doneFailedDescription": "Relancez la connexion depuis Kortix. Si elle échoue encore, envoyez le code ci-dessous au support.",
+    "doneErrorCode": "Code d’erreur : {code}",
+    "doneOpenKortix": "Ouvrir Kortix",
+    "doneFallbackApp": "l’app"
   }
 }

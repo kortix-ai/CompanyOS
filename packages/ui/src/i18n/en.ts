@@ -10161,7 +10161,21 @@ const catalog = {
     "connect": "Connect",
     "cardFailed": "Could not connect {app}. Try again.",
     "blockedTitle": "Open {app} to sign in",
-    "blockedDescription": "Your browser blocked the sign-in window. Open it with the button below. This page updates by itself."
+    "blockedDescription": "Your browser blocked the sign-in window. Open it with the button below. This page updates by itself.",
+    "doneTitle": "{app} connected",
+    "doneTitleNoApp": "Connected",
+    "doneDescription": "Your agent can use {app} now.",
+    "doneClose": "You can close this tab.",
+    "doneDeniedTitle": "Sign-in cancelled",
+    "doneDeniedDescription": "You did not allow access on {app}. Start the sign-in again from Kortix to connect it.",
+    "doneExpiredTitle": "This sign-in link expired",
+    "doneExpiredDescription": "It was already used or is too old. Start the sign-in again from Kortix.",
+    "doneFailedTitle": "{app} did not connect",
+    "doneFailedTitleNoApp": "The sign-in did not finish",
+    "doneFailedDescription": "Start the sign-in again from Kortix. If it fails again, send the code below to support.",
+    "doneErrorCode": "Error code: {code}",
+    "doneOpenKortix": "Open Kortix",
+    "doneFallbackApp": "the app"
   }
 };
 

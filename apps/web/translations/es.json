@@ -26892,6 +26892,20 @@
     "connect": "Conectar",
     "cardFailed": "No se pudo conectar {app}. Inténtalo de nuevo.",
     "blockedTitle": "Abre {app} para iniciar sesión",
-    "blockedDescription": "Tu navegador bloqueó la ventana de inicio de sesión. Ábrela con el botón de abajo. Esta página se actualiza sola."
+    "blockedDescription": "Tu navegador bloqueó la ventana de inicio de sesión. Ábrela con el botón de abajo. Esta página se actualiza sola.",
+    "doneTitle": "{app} conectado",
+    "doneTitleNoApp": "Conectado",
+    "doneDescription": "Tu agente ya puede usar {app}.",
+    "doneClose": "Puedes cerrar esta pestaña.",
+    "doneDeniedTitle": "Inicio de sesión cancelado",
+    "doneDeniedDescription": "No permitiste el acceso en {app}. Vuelve a iniciar sesión desde Kortix para conectarlo.",
+    "doneExpiredTitle": "Este enlace de inicio de sesión caducó",
+    "doneExpiredDescription": "Ya se usó o es demasiado antiguo. Vuelve a iniciar sesión desde Kortix.",
+    "doneFailedTitle": "{app} no se conectó",
+    "doneFailedTitleNoApp": "El inicio de sesión no terminó",
+    "doneFailedDescription": "Vuelve a iniciar sesión desde Kortix. Si falla de nuevo, envía el código de abajo a soporte.",
+    "doneErrorCode": "Código de error: {code}",
+    "doneOpenKortix": "Abrir Kortix",
+    "doneFallbackApp": "la app"
   }
 }

@@ -26892,6 +26892,20 @@
     "connect": "Connetti",
     "cardFailed": "Impossibile connettere {app}. Riprova.",
     "blockedTitle": "Apri {app} per accedere",
-    "blockedDescription": "Il browser ha bloccato la finestra di accesso. Aprila con il pulsante qui sotto. Questa pagina si aggiorna da sola."
+    "blockedDescription": "Il browser ha bloccato la finestra di accesso. Aprila con il pulsante qui sotto. Questa pagina si aggiorna da sola.",
+    "doneTitle": "{app} connesso",
+    "doneTitleNoApp": "Connesso",
+    "doneDescription": "Il tuo agente ora può usare {app}.",
+    "doneClose": "Puoi chiudere questa scheda.",
+    "doneDeniedTitle": "Accesso annullato",
+    "doneDeniedDescription": "Non hai consentito l’accesso su {app}. Riavvia l’accesso da Kortix per collegarlo.",
+    "doneExpiredTitle": "Questo link di accesso è scaduto",
+    "doneExpiredDescription": "È già stato usato o è troppo vecchio. Riavvia l’accesso da Kortix.",
+    "doneFailedTitle": "{app} non si è connesso",
+    "doneFailedTitleNoApp": "L’accesso non è stato completato",
+    "doneFailedDescription": "Riavvia l’accesso da Kortix. Se fallisce di nuovo, invia il codice qui sotto al supporto.",
+    "doneErrorCode": "Codice errore: {code}",
+    "doneOpenKortix": "Apri Kortix",
+    "doneFallbackApp": "l’app"
   }
 }

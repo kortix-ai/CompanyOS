@@ -70,6 +70,9 @@ export interface QueueRow {
   steer?: true;
   /** Why a steer prompt waits for the turn to end instead. */
   steerFallback?: SessionPromptSteerFallback;
+  /** The session's machine did not answer, so the server parked this prompt
+   *  and re-sends it on its own backoff (`reason: 'runtime_unreachable'`). */
+  unreachable?: true;
   /** "Send now" can send it next: it is still waiting and not yet on the wire. */
   interruptible: boolean;
   /** A `/` command held in this tab until the session can run it
@@ -193,6 +196,7 @@ export function projectQueueRows(input: {
       ...(own ? {} : { fromAnotherMember: true as const }),
       ...(steer ? { steer: true as const } : {}),
       ...(prompt.steer_fallback ? { steerFallback: prompt.steer_fallback } : {}),
+      ...(state === 'queued' && prompt.reason === 'runtime_unreachable' ? { unreachable: true as const } : {}),
       interruptible: own && state === 'queued',
       // The edit changes the text in place on the server; files stay on the row.
       takeBackEligible: own && state === 'queued' && editText !== null,

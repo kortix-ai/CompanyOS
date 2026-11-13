@@ -102,10 +102,13 @@ describe('readSessionBoards: what a session waits on', () => {
     await askQuestion(w1, 'que_worker', onQuestion);
     await askPermission(w2, 'perm_worker', onPermission);
     await askColleagueAccess(w3, onColleague);
-    expect(await boards([onQuestion, onPermission, onColleague, w1, w2, w3])).toEqual([
+    // Read the surfaces alone: only the `surface_session_id` filter finds the workers' asks.
+    expect(await boards([onQuestion, onPermission, onColleague])).toEqual([
       ['question', 'needs_input'],
       ['approval', 'needs_input'],
       ['approval', 'needs_input'],
+    ]);
+    expect(await boards([w1, w2, w3])).toEqual([
       ['question', 'needs_input'],
       ['approval', 'needs_input'],
       ['approval', 'needs_input'],

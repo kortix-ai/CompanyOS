@@ -2325,7 +2325,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
                   />
                 ) : null}
                 {/* Web `HeldMessageList` above the composer: messages another agent sent that wait on the person. */}
-                {projectId && projectSessionId ? <HeldMessages projectId={projectId} sessionId={projectSessionId} /> : null}
+                {projectId && projectSessionId ? <HeldMessages projectId={projectId} sessionId={projectSessionId} live={isBusy} /> : null}
               </View>
               {/* The room (FACT 1): lets the newest turn pin near the top. */}
               <View onLayout={handleSpacerLayout} style={{ height: room }} />

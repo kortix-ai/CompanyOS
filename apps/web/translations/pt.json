@@ -709,6 +709,7 @@
       "gracePeriodDescription": "A exclusão ocorre na data prevista. Você pode cancelar antes.",
       "immediateLabel": "Excluir imediatamente",
       "immediateDescription": "Sua conta e seus dados são excluídos imediatamente. Isto não pode ser desfeito.",
+      "noWorkspaceImmediateOnly": "Você não pertence a nenhum espaço de trabalho, então não há período de carência: sua conta é excluída imediatamente.",
       "typeDeleteToConfirm": "Digite \"delete\" para confirmar",
       "keepAccount": "Manter conta",
       "processing": "Processando…",
@@ -731,7 +732,7 @@
         "left": "Você sai de",
         "blockers": "Você é o único proprietário e outras pessoas trabalham neles. Transfira a propriedade ou exclua o espaço de trabalho.",
         "members": "{count, plural, one {# membro} other {# membros}}",
-        "nothing": "Você não pertence a nenhum espaço de trabalho. Apenas seu login é excluído.",
+        "nothing": "Nenhum espaço de trabalho é excluído ou deixado com sua conta.",
         "blockersTitle": "Transfira estes primeiro"
       }
     },
@@ -26756,12 +26757,6 @@
       "setDefaultTitle": "Definir como modelo padrão do espaço de trabalho",
       "setDefaultAria": "Definir {model} como modelo padrão deste espaço de trabalho",
       "setWorkspaceDefault": "Definir como padrão do espaço de trabalho"
-    },
-    "profile": {
-      "deleteLogin": "Excluir meu login",
-      "deleteLoginDescription": "Exclui seu login do Kortix. Você não pertence a nenhum espaço de trabalho, então nada mais é excluído.",
-      "deleteLoginTitle": "Excluir seu login?",
-      "deleteLoginWarning": "Seu login é excluído imediatamente. Isso não pode ser desfeito."
     },
     "capture": {
       "noWorkspaceTitle": "Primeiro crie um espaço de trabalho ou entre em um.",

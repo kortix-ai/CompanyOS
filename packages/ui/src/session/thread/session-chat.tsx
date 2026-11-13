@@ -5328,7 +5328,7 @@ export function SessionChat({
               {/* Messages from other sessions that wait for the person: one card each,
                   under the composer. `empty:hidden` drops the gutter while none waits. */}
               <div className={cn(COMPOSER_SHELL_CLASS, 'pb-3 empty:hidden', transcriptRows && 'max-w-none px-5')}>
-                <HeldMessages projectId={projectId} sessionId={projectSessionId} />
+                <HeldMessages projectId={projectId} sessionId={projectSessionId} live={isServerBusy} />
               </div>
             </>
           )}

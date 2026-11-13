@@ -1689,7 +1689,9 @@ export function SessionChat({
     startAtTop,
   } = useAutoScroll({
     hasContent: messageCount > 0,
-    room: !transcriptRows,
+    // Pin the newest prompt while it runs. Settled history needs only the
+    // bottom gap, so short conversations reveal their earlier turns.
+    room: !transcriptRows && effectiveBusy,
   });
   // Cmd/Ctrl+P prints the WHOLE conversation. The shortcut is intercepted
   // because neither half of what printing needs can be done in CSS: the
@@ -3023,8 +3025,13 @@ export function SessionChat({
       // row with that key is a refusal, never proof the send landed.
       const inboxRowExists = async () => {
         if (!projectId || !projectSessionId) return false;
-        const { prompts } = await listSessionPrompts(projectId, projectSessionId);
-        return inboxHoldsLivePrompt(prompts, clientMessageId);
+        const { prompts, sent } = await listSessionPrompts(projectId, projectSessionId);
+        // A delivered prompt leaves `prompts` and is listed in `sent` until the
+        // session log holds it, under the wire id this send minted.
+        const delivered = (sent ?? []).some(
+          (row) => row.message_id === messageID || row.wire_message_id === messageID,
+        );
+        return delivered || inboxHoldsLivePrompt(prompts, clientMessageId);
       };
 
       const deliver = async (detached: boolean): Promise<string> => {
@@ -3235,6 +3242,16 @@ export function SessionChat({
               useQueuedDraftStore.getState().markPosted(sessionId, clientMessageId);
             return { ok: true } as const;
           } catch (cause) {
+            // A lost ACK does not refuse a prompt the inbox already holds.
+            // Resolve that verdict before the composer can restore its draft:
+            // recoverFromSendFailure checks asynchronously and returns an error now.
+            if (!keepsPainted && (await inboxRowExists().catch(() => false))) {
+              acceptSendReceipt(messageID);
+              attachments?.release();
+              if (!paintTranscript)
+                useQueuedDraftStore.getState().markPosted(sessionId, clientMessageId);
+              return { ok: true } as const;
+            }
             // A kept send is settled below: its painted message stays.
             if (keepsPainted) return { ok: false, cause, error: null } as const;
             // Ask the INBOX, not the runtime. This prompt's home is a durable

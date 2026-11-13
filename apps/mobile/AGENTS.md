@@ -396,6 +396,11 @@ snap up, the keyboard lift), on settle, and during a drag only while the
 visible sheet is taller than it. A `PinnedBar` inside follows the visible edge
 by `translateY` (`sheetFillShift` through `PinnedBarShiftContext`), so the bar
 does not lag the drag.
+One exception on the iOS native sheet: `nativeFullDetent={false}` lists no
+full detent, so the sheet stops at its highest partial snap point. UIKit sizes
+a sheet's view to its largest detent; with `'100%'` listed, the model sheet's
+Agent · Model tab bar sat below the screen at 85% (2026-11-13). `PickerSheet`
+passes it while it shows `tabs`. Android (gorhom) ignores the prop.
 
 `title="…"` adds the title row in the handle area, above any content: a close
 button at the far left, the title centred (`Text variant="large"`), a spacer

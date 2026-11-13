@@ -222,6 +222,34 @@ export function isPersonRoleDenial(err: HTTPException): boolean {
   return personRoleDenials.has(err);
 }
 
+// KRTX-4800: the agent-access gate (projects/lib/agent-access.ts) refuses a
+// caller whose session's agent is not theirs with the SAME typed 403 on every
+// call — the state changes only when a manager grants the agent, and the body
+// already names the remedy ("ask a manager to grant you one") plus the agents
+// the caller could run instead. Two people of one workspace kept retrying the
+// start of one such session: 29 warn lines in one prod hour against a 0
+// baseline, every line repeating what the response had just said. The mark
+// routes the LINE through the shared window throttle without touching the
+// response, exactly as markAgentGrantDenial does — that one is the sibling
+// family for the agent principal's own kortix_permissions refusals.
+const agentAccessDenials = new WeakSet<HTTPException>();
+
+/**
+ * Mark an exception as an agent-access denial: the deny-by-default agent gate
+ * refused the agent this caller's session resolves to. Called by the gate's
+ * `denial()` constructor, the one constructor every such refusal throws
+ * (`no_agent_access` and `agent_not_accessible`, human and agent-delegation
+ * paths alike).
+ */
+export function markAgentAccessDenial(err: HTTPException): void {
+  agentAccessDenials.add(err);
+}
+
+/** True for an exception `markAgentAccessDenial` marked. */
+export function isAgentAccessDenial(err: HTTPException): boolean {
+  return agentAccessDenials.has(err);
+}
+
 /**
  * The 403 message `combinedAuth` throws when a valid caller is refused a
  * preview sandbox proxy route: the sandbox's `session_sandboxes` row is gone

@@ -515,6 +515,10 @@ export function ModelSelector({
   );
   // The pill names the model, never its plan suffix: "GPT-6 Luna", not "GPT-6 Luna (ChatGPT)".
   const displayName = (current && pickerModelName(current)) || unsetLabel || t('noModel');
+  const triggerLoading = !current && (modelsLoading || entitlementsPending);
+  const triggerLabel = triggerLoading
+    ? <span className="bg-primary/10 inline-block h-3.5 w-20 animate-pulse rounded-md" aria-hidden="true" />
+    : displayName;
 
   // A subscription model names the login that pays for it: the picker grows a
   // subscription pane under the list (both appearances), so switching the
@@ -989,21 +993,23 @@ export function ModelSelector({
             <button
               type="button"
               disabled={disabled}
+              aria-label={triggerLoading ? tModel('loading') : undefined}
               className={cn(triggerVariants(), 'h-9 w-full')}
             >
-              <span className="truncate">{displayName}</span>
+              <span className="truncate">{triggerLabel}</span>
               {disabled ? null : <ChevronDown className={cn(TRIGGER_CARET_CLASS, 'size-4')} />}
             </button>
           ) : (
           <Button
             type="button"
+            aria-label={triggerLoading ? tModel('loading') : undefined}
             variant={triggerVariant}
             size="sm"
             // `min-w-0 shrink`: in a narrow toolbar (a channel's thread panel) the
             // model name truncates; the controls beside it keep their width.
             className={cn('min-w-0 shrink rounded-lg hit-area-y-3', triggerVariant === 'ghost' && 'text-muted-foreground')}
           >
-            <span className={cn('max-w-30 truncate', triggerLabelClassName)}>{displayName}</span>
+            <span className={cn('max-w-30 truncate', triggerLabelClassName)}>{triggerLabel}</span>
             {showEffort && (
               <span className="shrink-0">
                 {currentEffort ? effortLabel(currentEffort) : t('auto')}

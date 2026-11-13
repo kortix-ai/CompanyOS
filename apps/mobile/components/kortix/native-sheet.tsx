@@ -106,6 +106,8 @@ type Phase = 'closed' | 'open' | 'closing';
 export interface NativeSheetProps extends BottomSheetModalProps {
   /** The title row (or the handle spacer), drawn at the top of the content. */
   header: React.ReactNode;
+  /** `false`: the sheet stops at its highest snap point (`resolveNativeDetents`). */
+  nativeFullDetent?: boolean;
 }
 
 export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(function NativeSheet(
@@ -122,6 +124,7 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
     backgroundStyle,
     onChange,
     onDismiss,
+    nativeFullDetent = true,
   },
   ref
 ) {
@@ -152,9 +155,16 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
   const maxHeight = nativeSheetMaxHeight(windowHeight, insets.top, insets.bottom);
   const key = detentsKey(snapPoints);
   const { detents: baseDetents, initialIndex } = React.useMemo(
-    () => resolveNativeDetents({ snapPoints, dynamicSizing: enableDynamicSizing !== false, index, maxHeight }),
+    () =>
+      resolveNativeDetents({
+        snapPoints,
+        dynamicSizing: enableDynamicSizing !== false,
+        index,
+        maxHeight,
+        fullDetent: nativeFullDetent,
+      }),
     // Keyed by value: most call sites pass an inline array.
-    [key, enableDynamicSizing, index, maxHeight]
+    [key, enableDynamicSizing, index, maxHeight, nativeFullDetent]
   );
   const fit = baseDetents === 'fitToContents';
   // A fixed-detent sheet's content end (`SheetBox`'s hidden margin) follows
@@ -355,7 +365,7 @@ export const NativeSheet = React.forwardRef<BottomSheetModal, NativeSheetProps>(
                   reachable. A content-sized sheet is lifted by UIKit itself. */}
               <SheetBox
                 fit={fit}
-                avoid={!fit && (expanded || detentAt === (baseDetents as number[]).length - 1)}
+                avoid={!fit && (expanded || (baseDetents as number[])[detentAt] === 1)}
                 fraction={fit || expanded ? 1 : ((baseDetents as number[])[detentAt] ?? 1)}
                 maxHeight={maxHeight}
                 bottomInset={insets.bottom}

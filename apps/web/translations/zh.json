@@ -709,6 +709,7 @@
       "gracePeriodDescription": "账户将在预定日期删除。在此之前可随时取消。",
       "immediateLabel": "立即删除",
       "immediateDescription": "您的帐户及其数据将立即删除。此操作无法撤消。",
+      "noWorkspaceImmediateOnly": "你不属于任何工作区，因此没有宽限期：你的账号会立即删除。",
       "typeDeleteToConfirm": "输入“delete”进行确认",
       "keepAccount": "保留帐户",
       "processing": "正在处理…",
@@ -731,7 +732,7 @@
         "left": "你将离开",
         "blockers": "你是唯一的所有者,且有其他人在使用。请转让所有权或删除该工作区。",
         "members": "{count, plural, other {# 名成员}}",
-        "nothing": "你不属于任何工作区。仅删除你的登录。",
+        "nothing": "删除账号不会删除或退出任何工作区。",
         "blockersTitle": "请先移交这些工作区"
       }
     },
@@ -1327,6 +1328,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "开启空间后，空间可以自己留意动态：在空间详情中打开“主动”，一个智能体会阅读这里发生的事（完成的话题、未回答的问题、新加入的人），只在重要时在聊天中发言：值得分享的结果、需要你做的决定或逾期事项。它也可以开启一个话题来完成工作。可选每天 9:00 的简报。"
+        },
+        "program_agents": {
+          "name": "程序智能体",
+          "description": "运行你的代码而不是模型的智能体。在 kortix.yaml 中为智能体设置 `run: <command>`：每一轮都会在会话的沙箱中运行该命令，并使用该智能体的工作区、密钥和权限。消息或触发器数据是输入，命令打印的内容就是回复。"
         }
       },
       "channelsSwitch": {
@@ -1730,7 +1735,7 @@
         "email": "电子邮件",
         "scheduled": "已计划",
         "webhook": "Webhook",
-        "event": "应用事件",
+        "event": "连接器事件",
         "manual": "手动",
         "all": "全部"
       },
@@ -2096,7 +2101,13 @@
       "noModelUpgradeReason": "没有模型：升级到 Credits 套餐，或添加你自己的提供商密钥。",
       "noModelKeyReason": "没有模型：添加你自己的提供商密钥。",
       "noModelUpgradePlan": "升级套餐",
-      "noModelAddProviderKey": "添加提供商密钥"
+      "noModelAddProviderKey": "添加提供商密钥",
+      "stepTitle": "连接模型",
+      "stepBody": "{workspace} 中的智能体需要模型才能回复。请连接你的 ChatGPT 或 Claude 套餐，或添加提供商密钥。",
+      "stepBodyUpgrade": "{workspace} 中的智能体需要模型才能回复。请连接你的 ChatGPT 或 Claude 套餐、添加提供商密钥，或升级到 Credits 套餐以使用 Kortix 模型。",
+      "stepBodyMember": "{workspace} 中的智能体需要模型才能回复。请连接你自己的 ChatGPT 或 Claude 套餐或提供商密钥，或请管理此工作区的人为所有人连接一个模型。",
+      "stepThisWorkspace": "此工作区",
+      "stepBack": "返回工作区"
     },
     "providerRecovery": {
       "savedPrompt": "已保存的提示词",
@@ -20691,10 +20702,11 @@
       "text5f6ba69d66d1": "技能已移除",
       "textcb8d6b0c94c9": " 及其中的所有文件（包括修改），并从所有使用该技能的代理中移除它。在默认分支上提交一次。",
       "cliDeviceTitle": "授权 Kortix CLI",
-      "cliDeviceWarning": "仅批准您自己发起的登录。请输入终端中显示的代码。",
+      "cliDeviceWarning": "仅批准您自己发起的登录。请确认此代码与终端中显示的代码一致。",
       "cliDeviceCode": "登录代码",
       "cliDeviceApproved": "登录已批准。请返回终端。",
       "cliDeviceAction": "授权 CLI",
+      "cliDeviceConfirm": "此代码与我终端中的代码一致",
       "text705a7e325b66": "Kortix 应用发出了事件",
       "text4b80152fb96b": "读取了 Kortix 应用的事件凭据",
       "text59374c1f1acd": "Kortix 应用安排了一次运行",
@@ -21346,7 +21358,16 @@
       "textb1f8e3109f1b": "{value0}：{value1} 天是 Kortix 允许的上限。",
       "textac20a57bfde0": "收起",
       "text268733ac2f60": "无法更新该应用",
-      "text5d8926d4a4dd": "无法注册该应用"
+      "text5d8926d4a4dd": "无法注册该应用",
+      "text30b9ce09f406": "输入一个时间段，例如 15m、1h 或 1d，至少 1m。",
+      "text28d33d2ad989": "选择要调用的应用",
+      "textd777d7805cfa": "输入以 / 开头的路径",
+      "text8043e69a8dd6": "删除触发器",
+      "textd6fa1626e3af": "已创建连接器事件",
+      "textccf59f978ef6": "这里还没有连接器事件",
+      "text82cbc4a4def0": "此部署未设置连接器事件，因此还没有连接器可以发送事件。",
+      "text458ceb31019b": "连接器事件触发器",
+      "text27ca9df9dbaa": "连接器事件触发器已关闭"
     },
     "publicShareConfirm": {
       "title": "创建公开链接？",
@@ -21771,6 +21792,8 @@
     "llmEstimateLabel": "LLM 估算:"
   },
   "triggerComposer": {
+    "programInputPlaceholder": "留空：程序以 JSON 读取触发器数据",
+    "programInputHelp": "此智能体运行一个程序。程序通过 stdin 读取此文本。留空则以 JSON 发送全部数据：事件、Webhook 正文或计划信息，以及触发器的固定数据。",
     "every": "每隔",
     "dayOfMonth": "每月日期",
     "details": "详情",
@@ -21808,7 +21831,16 @@
     "crBranchHelp": "变更请求合并到此分支时运行；留空则合并到任意分支时都运行。指令可以读取 <code>change_request.number</code>、<code>change_request.title</code> 和 <code>change_request.base_ref</code>。",
     "eventsOff": "连接器事件处于 Beta 阶段，此工作区中已关闭。请在工作区管理的功能开关中开启。",
     "noApps": "此工作区中还没有发送事件的应用。请部署一个向 <code>KORTIX_APP_EVENTS_URL</code> 发送 POST 的应用，然后在这里选择它。",
-    "openApps": "打开应用"
+    "openApps": "打开应用",
+    "thenLabel": "触发时执行",
+    "thenAgent": "运行智能体",
+    "thenApp": "调用应用",
+    "targetPath": "路径",
+    "targetMethod": "方法",
+    "targetHelp": "每次触发都会唤醒应用，并将负载发送到此路径。不会运行智能体。",
+    "intervalLabel": "重复间隔",
+    "intervalHelp": "固定时间段，例如 15m、1h 或 1d。",
+    "useCalendar": "改用日历计划"
   },
   "gatewayAccess": {
     "heroTitle": "在任何地方使用此工作区的模型",
@@ -22153,7 +22185,7 @@
     "infoRunsThrough": "提供方",
     "infoSignsInWith": "登录方式",
     "infoCategory": "类别",
-    "infoAppEvents": "应用事件",
+    "infoAppEvents": "事件",
     "infoAppEventsYes": "支持",
     "authOAuth": "OAuth 登录",
     "authApiKey": "API 密钥",
@@ -23704,9 +23736,9 @@
   },
   "automationsPause": {
     "groupTitle": "触发器",
-    "groupDescription": "此工作区中的计划、循环、Webhook、应用事件和监控。",
+    "groupDescription": "此工作区中的计划、循环、Webhook、连接器事件和应用事件。",
     "label": "暂停所有触发器",
-    "description": "此工作区中没有任何内容会自行运行:没有计划、循环、Webhook、应用事件或监视器。手动运行触发器仍然有效。",
+    "description": "此工作区中不会自动运行任何内容：没有计划、循环、Webhook、连接器事件或应用事件。手动运行触发器仍然可用。",
     "readOnlyDescription": "只有所有者或管理员可以暂停或恢复触发器。",
     "pausedSince": "自 {date} 起已暂停。",
     "pauseTitle": "暂停所有触发器？",
@@ -24950,6 +24982,11 @@
       }
     },
     "modelView": {
+      "programTimeout": "时间限制",
+      "programTimeoutHelp": "运行超过此时间会被停止，该轮失败。1s 到 6h，例如 30m 或 2h。留空：30m。",
+      "programTitle": "程序",
+      "programCommand": "命令",
+      "programHelp": "每一轮都会在会话的沙箱中运行此命令，而不是模型。消息通过 stdin 和 $KORTIX_EVENT_PATH 传入。它打印的内容就是回复。非零退出码会使该轮失败。",
       "title": "模型",
       "help": "这个智能体如何思考。",
       "projectDefault": "工作区默认",
@@ -26756,12 +26793,6 @@
       "setDefaultAria": "将 {model} 设为此工作区的默认模型",
       "setWorkspaceDefault": "设为工作区默认"
     },
-    "profile": {
-      "deleteLogin": "删除我的登录",
-      "deleteLoginDescription": "删除你的 Kortix 登录。你不属于任何工作区，因此不会删除其他内容。",
-      "deleteLoginTitle": "删除你的登录？",
-      "deleteLoginWarning": "你的登录将立即删除。此操作无法撤销。"
-    },
     "capture": {
       "noWorkspaceTitle": "请先创建或加入一个工作区。",
       "noWorkspaceBody": "Kortix Capture 会录制到工作区中。之后请再次打开此登录。",
@@ -26865,6 +26896,20 @@
     "connect": "连接",
     "cardFailed": "无法连接 {app}。请重试。",
     "blockedTitle": "打开 {app} 登录",
-    "blockedDescription": "你的浏览器阻止了登录窗口。请使用下方按钮打开。此页面会自动更新。"
+    "blockedDescription": "你的浏览器阻止了登录窗口。请使用下方按钮打开。此页面会自动更新。",
+    "doneTitle": "已连接 {app}",
+    "doneTitleNoApp": "已连接",
+    "doneDescription": "你的智能体现在可以使用 {app}。",
+    "doneClose": "你可以关闭此标签页。",
+    "doneDeniedTitle": "登录已取消",
+    "doneDeniedDescription": "你没有在 {app} 上允许访问。请在 Kortix 中重新登录以完成连接。",
+    "doneExpiredTitle": "此登录链接已过期",
+    "doneExpiredDescription": "它已被使用或已过期。请在 Kortix 中重新登录。",
+    "doneFailedTitle": "{app} 未能连接",
+    "doneFailedTitleNoApp": "登录未完成",
+    "doneFailedDescription": "请在 Kortix 中重新登录。如果再次失败，请将下方代码发送给支持团队。",
+    "doneErrorCode": "错误代码：{code}",
+    "doneOpenKortix": "打开 Kortix",
+    "doneFallbackApp": "该应用"
   }
 }

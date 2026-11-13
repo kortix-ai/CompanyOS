@@ -53,6 +53,7 @@ const WORKERS: Record<string, string> = {
   'iam-grant-expiry': 'worker/jobs/grant-expiry.ts',
   'approval-expiry': 'worker/jobs/approval-expiry.ts',
   'oauth-sweep': 'worker/jobs/oauth-sweep.ts',
+  'gateway-replay-sweep': 'worker/jobs/replay-sweep.ts',
   'session-model-fallback': 'worker/jobs/session-model-fallback.ts',
   'space-watcher': 'worker/jobs/space-watcher.ts',
   'goal-reconciler': 'worker/jobs/goal-reconciler.ts',

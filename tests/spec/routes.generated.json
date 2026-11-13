@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1755,
-  "aliases": 676,
+  "count": 1759,
+  "aliases": 678,
   "routes": [
     {
       "method": "GET",
@@ -7698,6 +7698,24 @@
     {
       "method": "GET",
       "path": "/v1/workspaces/managed-git/status"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/channels/slack/join",
+      "aliasOf": "/v1/workspaces/:workspaceId/channels/slack/join"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/sandbox-templates/reconcile",
+      "aliasOf": "/v1/workspaces/:workspaceId/sandbox-templates/reconcile"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/channels/slack/join"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/sandbox-templates/reconcile"
     }
   ]
 }

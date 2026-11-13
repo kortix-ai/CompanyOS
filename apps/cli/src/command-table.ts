@@ -144,11 +144,14 @@ export const TIERS: readonly CommandTier[] = [
       {
         title: 'Author & ship',
         commands: [
+          { name: 'plan', args: '[--json]', blurb: 'Read this repository: stack, env names and classes, integrations, Kortix state (read-only)' },
+          { name: 'onboard', args: '--yes [--json]', blurb: "Make kortix.yaml real: ship, secrets, webhooks, Slack, connectors, images, doctor" },
+          { name: 'templates', args: '<ls|show|add|onboard|doctor>', blurb: 'Add a hand-approved set of agents and triggers to this repository' },
           { name: 'ship', blurb: 'Create the cloud workspace (first run) + push your code' },
           { name: 'validate', blurb: "Statically validate this workspace's kortix.yaml" },
           {
             name: 'doctor',
-            args: '[--no-session]',
+            args: '[--no-session|--loops [--fix]]',
             blurb: 'End-to-end health check: auth, workspace, session, agent reply',
           },
           { name: 'schema', args: '[--url]', blurb: 'Print the canonical kortix.yaml JSON Schema' },

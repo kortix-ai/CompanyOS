@@ -151,6 +151,7 @@ function ProjectHomeView({
     submit?: boolean | 'when-ready';
     files?: AttachedFile[];
     options?: SessionPromptOverrides;
+    restoreDraft?: boolean;
   } | null>(null);
 
   // The sandbox TEMPLATE catalog, not live sandbox health (that is
@@ -367,13 +368,18 @@ function ProjectHomeView({
 
   useEffect(() => {
     if (!pendingPrefill) return;
-    consumePrefill(projectId);
+    // Apply what `consume` returns, never the render-time snapshot: the
+    // typing buffer may have dropped the entry since this render (another
+    // account signed in on the tab), and a dropped entry must not land.
+    const taken = consumePrefill(projectId);
+    if (!taken) return;
     setPrefill({
-      text: pendingPrefill.text,
+      text: taken.text,
       id: Date.now(),
-      submit: pendingPrefill.submit,
-      files: pendingPrefill.files,
-      options: pendingPrefill.options,
+      submit: taken.submit,
+      files: taken.files,
+      options: taken.options,
+      restoreDraft: taken.restoreDraft,
     });
   }, [pendingPrefill, projectId, consumePrefill]);
 
@@ -422,11 +428,12 @@ function ProjectHomeView({
       projectId={projectId}
       draftScope={draftScope}
       draftHandoffScope={onSend ? undefined : defaultSend.draftHandoffScope}
-      // Keep accepting keystrokes while creation runs. A second Enter is
-      // recovered as a draft and handed to the same session on navigation.
+      // While the create runs, the sent message stays in the composer, locked,
+      // with the spinner in the send slot. The session page then draws it as
+      // the first turn. A refused send unlocks the same text for a retry.
       isSending={creating}
-      disabled={onSend ? creating : false}
-      clearOnSend={onSend ? false : 'text-only'}
+      disabled={creating}
+      clearOnSend={false}
       autoFocus
       // Desktop: a hero composer floating mid-page has no column for a second
       // rail to align to, so the attach/agent/context controls ride on the
@@ -490,6 +497,7 @@ function ProjectHomeView({
           reason={noAgentReason}
           repoUrl={projectRowQuery.data?.repo_url}
           branch={projectRowQuery.data?.default_branch}
+          dashboardUrl={projectRowQuery.data?.dashboard_url}
         />
       ) : firstChat ? (
         <FirstChat projectId={projectId} composer={composer} />

@@ -271,6 +271,7 @@
     "./internal/hooks/use-debounced-value": "./src/internal/hooks/use-debounced-value.ts",
     "./internal/hooks/use-slash-focus": "./src/internal/hooks/use-slash-focus.ts",
     "./internal/icons/claude": "./src/internal/icons/claude.tsx",
+    "./internal/icons/codex": "./src/internal/icons/codex.tsx",
     "./internal/icons/discord": "./src/internal/icons/discord.tsx",
     "./internal/icons/download": "./src/internal/icons/download.tsx",
     "./internal/icons/edge": "./src/internal/icons/edge.tsx",
@@ -436,9 +437,11 @@
     "./session/composer/queue-projection": "./src/session/composer/queue-projection.ts",
     "./session/composer/session-chat-input": "./src/session/composer/session-chat-input.tsx",
     "./session/models/ask-owner-for-credits-button": "./src/session/models/ask-owner-for-credits-button.tsx",
+    "./session/models/connect-model-step": "./src/session/models/connect-model-step.tsx",
     "./session/models/model-grouping": "./src/session/models/model-grouping.ts",
     "./session/models/model-search-empty": "./src/session/models/model-search-empty.tsx",
     "./session/models/model-selector": "./src/session/models/model-selector.tsx",
+    "./session/models/use-workspace-model-gate": "./src/session/models/use-workspace-model-gate.ts",
     "./session/panel/audit/audit-credential-label": "./src/session/panel/audit/audit-credential-label.ts",
     "./session/panel/easy/detail-view": "./src/session/panel/easy/detail-view.tsx",
     "./session/participants/session-participants": "./src/session/participants/session-participants.tsx",
@@ -1551,6 +1554,10 @@
         "types": "./dist/internal/icons/claude.d.ts",
         "import": "./dist/internal/icons/claude.js"
       },
+      "./internal/icons/codex": {
+        "types": "./dist/internal/icons/codex.d.ts",
+        "import": "./dist/internal/icons/codex.js"
+      },
       "./internal/icons/discord": {
         "types": "./dist/internal/icons/discord.d.ts",
         "import": "./dist/internal/icons/discord.js"
@@ -2205,6 +2212,10 @@
         "types": "./dist/session/models/ask-owner-for-credits-button.d.ts",
         "import": "./dist/session/models/ask-owner-for-credits-button.js"
       },
+      "./session/models/connect-model-step": {
+        "types": "./dist/session/models/connect-model-step.d.ts",
+        "import": "./dist/session/models/connect-model-step.js"
+      },
       "./session/models/model-grouping": {
         "types": "./dist/session/models/model-grouping.d.ts",
         "import": "./dist/session/models/model-grouping.js"
@@ -2216,6 +2227,10 @@
       "./session/models/model-selector": {
         "types": "./dist/session/models/model-selector.d.ts",
         "import": "./dist/session/models/model-selector.js"
+      },
+      "./session/models/use-workspace-model-gate": {
+        "types": "./dist/session/models/use-workspace-model-gate.d.ts",
+        "import": "./dist/session/models/use-workspace-model-gate.js"
       },
       "./session/panel/audit/audit-credential-label": {
         "types": "./dist/session/panel/audit/audit-credential-label.d.ts",

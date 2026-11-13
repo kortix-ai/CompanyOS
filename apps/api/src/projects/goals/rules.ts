@@ -25,6 +25,33 @@ export function actorIdOf(actor: GoalActor): string | null {
   return null;
 }
 
+/**
+ * Goal mode: a goal its chat created with `here` and owns itself
+ * (`setup.bound`). It needs no `goals` flag and has no handover. The chat
+ * stays a chat: its person's messages always run, and it stops its own goal
+ * when its person says so.
+ */
+export function isBoundGoal(goal: { setup: Record<string, unknown> }): boolean {
+  return goal.setup?.bound === true;
+}
+
+/** The marker every prompt the goal engine writes starts with (`goalWakePrompt`). */
+const wakeMarker = (boxFolder: string): string => `Goal wake: ${boxFolder}.`;
+const NAMED_GOAL = /\bgoal ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/;
+
+/**
+ * A prompt the goal engine queued, not a person, and the goal it names: one
+ * from the goal queue (`system:goal`: an answer, a resume, a restart, a
+ * verifier's first prompt), or a fire of a goal's heartbeat reminder (its
+ * text carries the wake marker). Null for any other prompt. A stop deletes
+ * the heartbeat, so a fire queued before it is known by its text.
+ */
+export function goalEnginePrompt(prompt: { source: string; text: string }): { goalId: string | null } | null {
+  const goalId = prompt.text.match(NAMED_GOAL)?.[1] ?? null;
+  if (prompt.source === 'system:goal') return { goalId };
+  return prompt.source === 'trigger:reminder' && goalId && prompt.text.includes('Goal wake: ') ? { goalId } : null;
+}
+
 export function isOpenState(state: string): boolean {
   return (GOAL_OPEN_STATES as readonly string[]).includes(state);
 }
@@ -221,7 +248,7 @@ export function goalAgentCandidates(
 
 /** The heartbeat prompt. The marker `Goal wake: <box folder>.` is what `kortix goals` and older boxes look for. */
 export function goalWakePrompt(boxFolder: string, goalId: string): string {
-  return `Goal wake: ${boxFolder}. Load the kortix-goals skill and run one wake (goal ${goalId}).`;
+  return `${wakeMarker(boxFolder)} Load the kortix-goals skill and run one wake (goal ${goalId}).`;
 }
 
 export function chaseBounds(now: Date): { min: Date; max: Date } {

@@ -550,8 +550,8 @@ export function useAgentsLine(
   const sid = sessionId ?? '';
   const ready = !!projectId && !!sessionId;
   const teams = useFeatureFlag(projectId, 'agent_teams').enabled;
-  // A child or teammate can keep working, or wait on its person, after the
-  // lead's turn ends: the lists stay at 5 s while any of them is active.
+  // A child or teammate can keep working after the lead's turn ends: the lists
+  // stay at 5 s while any of them works.
   const [agentsActive, setAgentsActive] = useState(false);
   const fast = live || agentsActive;
   const childList = useSessionChildren(pid, sid, {
@@ -606,7 +606,7 @@ export function useAgentsLine(
       }),
     [sid, children, teammates, runs, now],
   );
-  const anyActive = [...groups.agents, ...groups.team].some((row) => isActive(row.state));
+  const anyActive = [...groups.agents, ...groups.team].some((row) => row.state === 'working');
   // Adjusted during render (React's derived-state pattern): the lists read it next render.
   if (anyActive !== agentsActive) setAgentsActive(anyActive);
   const leadsTeam = teams && ((teammates?.length ?? 0) > 0 || (tasks?.length ?? 0) > 0);

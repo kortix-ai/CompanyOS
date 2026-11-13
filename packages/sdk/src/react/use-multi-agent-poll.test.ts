@@ -58,7 +58,7 @@ async function advance(ms: number) {
 }
 
 function PeerReader() {
-  usePeerMessages('p1', 's1', 'in');
+  usePeerMessages('p1', 's1', 'in', { live: false });
   return null;
 }
 

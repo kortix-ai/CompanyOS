@@ -68,15 +68,17 @@ mock.module('@kortix/sdk/react', () => ({
     _projectId: string | undefined,
     sessionId: string | undefined,
     options: { live?: boolean } = {},
-  ) => ({
-    ...(workflowLive.push(options.live) && {}),
-    data: sessionId ? runsBySession[sessionId] : undefined,
-    control: {
-      mutate: (variables: unknown) => controls.push(variables),
-      isPending: false,
-      variables: undefined,
-    },
-  }),
+  ) => {
+    workflowLive.push(options.live);
+    return {
+      data: sessionId ? runsBySession[sessionId] : undefined,
+      control: {
+        mutate: (variables: unknown) => controls.push(variables),
+        isPending: false,
+        variables: undefined,
+      },
+    };
+  },
 }));
 
 // Imported after the globals above: Base UI picks its layout effect when its module loads,

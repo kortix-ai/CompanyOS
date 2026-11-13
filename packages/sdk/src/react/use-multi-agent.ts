@@ -39,12 +39,16 @@ const TEAMMATES_LIMIT = 50;
 /** Options of the polled multi-agent reads. */
 interface MultiAgentPollOptions {
   enabled?: boolean;
-  /** The session works now: poll every 5 s instead of every 30 s. */
+  /**
+   * Whether the session works now. `false` (idle) polls every 30 s; `true`
+   * polls every 5 s. Left out, the read keeps the 5 s poll it always had.
+   */
   live?: boolean;
 }
 
+const pollMs = (live: boolean | undefined) => (live === false ? IDLE_POLL_MS : POLL_MS);
 const poll = (live: boolean | undefined) =>
-  ({ refetchInterval: live ? POLL_MS : IDLE_POLL_MS, refetchIntervalInBackground: false }) as const;
+  ({ refetchInterval: pollMs(live), refetchIntervalInBackground: false }) as const;
 
 /** The agents a session can message (`list_agents`): `mine` (default) or every live session of the project. */
 export function useReachableAgents(
@@ -160,11 +164,7 @@ export function useSessionWorkflows(
     enabled: !!projectId && !!sessionId && (options.enabled ?? true),
     ...contract('inventory'),
     refetchInterval: (state: { state: { data?: WorkflowRunMetadata[] } }) =>
-      state.state.data?.some((run) => run.status === 'running')
-        ? LIVE_RUN_POLL_MS
-        : options.live
-          ? POLL_MS
-          : IDLE_POLL_MS,
+      state.state.data?.some((run) => run.status === 'running') ? LIVE_RUN_POLL_MS : pollMs(options.live),
     refetchIntervalInBackground: false,
   });
   const control = useMutation({

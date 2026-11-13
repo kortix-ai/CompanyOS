@@ -2101,7 +2101,13 @@
       "noModelUpgradeReason": "没有模型：升级到 Credits 套餐，或添加你自己的提供商密钥。",
       "noModelKeyReason": "没有模型：添加你自己的提供商密钥。",
       "noModelUpgradePlan": "升级套餐",
-      "noModelAddProviderKey": "添加提供商密钥"
+      "noModelAddProviderKey": "添加提供商密钥",
+      "stepTitle": "连接模型",
+      "stepBody": "{workspace} 中的智能体需要模型才能回复。请连接你的 ChatGPT 或 Claude 套餐，或添加提供商密钥。",
+      "stepBodyUpgrade": "{workspace} 中的智能体需要模型才能回复。请连接你的 ChatGPT 或 Claude 套餐、添加提供商密钥，或升级到 Credits 套餐以使用 Kortix 模型。",
+      "stepBodyMember": "{workspace} 中的智能体需要模型才能回复。请连接你自己的 ChatGPT 或 Claude 套餐或提供商密钥，或请管理此工作区的人为所有人连接一个模型。",
+      "stepThisWorkspace": "此工作区",
+      "stepBack": "返回工作区"
     },
     "providerRecovery": {
       "savedPrompt": "已保存的提示词",
@@ -26890,6 +26896,20 @@
     "connect": "连接",
     "cardFailed": "无法连接 {app}。请重试。",
     "blockedTitle": "打开 {app} 登录",
-    "blockedDescription": "你的浏览器阻止了登录窗口。请使用下方按钮打开。此页面会自动更新。"
+    "blockedDescription": "你的浏览器阻止了登录窗口。请使用下方按钮打开。此页面会自动更新。",
+    "doneTitle": "已连接 {app}",
+    "doneTitleNoApp": "已连接",
+    "doneDescription": "你的智能体现在可以使用 {app}。",
+    "doneClose": "你可以关闭此标签页。",
+    "doneDeniedTitle": "登录已取消",
+    "doneDeniedDescription": "你没有在 {app} 上允许访问。请在 Kortix 中重新登录以完成连接。",
+    "doneExpiredTitle": "此登录链接已过期",
+    "doneExpiredDescription": "它已被使用或已过期。请在 Kortix 中重新登录。",
+    "doneFailedTitle": "{app} 未能连接",
+    "doneFailedTitleNoApp": "登录未完成",
+    "doneFailedDescription": "请在 Kortix 中重新登录。如果再次失败，请将下方代码发送给支持团队。",
+    "doneErrorCode": "错误代码：{code}",
+    "doneOpenKortix": "打开 Kortix",
+    "doneFallbackApp": "该应用"
   }
 }

@@ -668,10 +668,9 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
        * dev.kortix.com: clear at T, phantom write at T+406ms, and the next
        * visit to project home restored "Hi" into the composer.
        *
-       * That composer clears now (`clearOnSend="text-only"`), so its phantom
-       * write would carry an empty document. The guard stays: it is about
-       * `setEditable`, and every composer that flips `disabled` mid-send is one
-       * debounce away from the same bug.
+       * Project home keeps the sent text in the locked box again, so this
+       * guard is what keeps the message out of the saved draft. Every composer
+       * that flips `disabled` mid-send is one debounce away from the same bug.
        *
        * The view still refreshes — `setOptions` calls `view.updateState`
        * whether or not the event is emitted.

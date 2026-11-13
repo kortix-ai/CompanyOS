@@ -1504,7 +1504,13 @@ const catalog = {
       "noModelUpgradeReason": "No model: upgrade to the Credits plan or add your own provider key.",
       "noModelKeyReason": "No model: add your own provider key.",
       "noModelUpgradePlan": "Upgrade plan",
-      "noModelAddProviderKey": "Add provider key"
+      "noModelAddProviderKey": "Add provider key",
+      "stepTitle": "Connect a model",
+      "stepBody": "Agents in {workspace} need a model to answer. Connect your ChatGPT or Claude plan, or add a provider key.",
+      "stepBodyUpgrade": "Agents in {workspace} need a model to answer. Connect your ChatGPT or Claude plan, add a provider key, or upgrade to the Credits plan for Kortix models.",
+      "stepBodyMember": "Agents in {workspace} need a model to answer. Connect your own ChatGPT or Claude plan or provider key, or ask someone who manages this workspace to connect a model for everyone.",
+      "stepThisWorkspace": "this workspace",
+      "stepBack": "Back to workspaces"
     },
     "providerRecovery": {
       "savedPrompt": "Saved prompt",
@@ -10159,7 +10165,21 @@ const catalog = {
     "connect": "Connect",
     "cardFailed": "Could not connect {app}. Try again.",
     "blockedTitle": "Open {app} to sign in",
-    "blockedDescription": "Your browser blocked the sign-in window. Open it with the button below. This page updates by itself."
+    "blockedDescription": "Your browser blocked the sign-in window. Open it with the button below. This page updates by itself.",
+    "doneTitle": "{app} connected",
+    "doneTitleNoApp": "Connected",
+    "doneDescription": "Your agent can use {app} now.",
+    "doneClose": "You can close this tab.",
+    "doneDeniedTitle": "Sign-in cancelled",
+    "doneDeniedDescription": "You did not allow access on {app}. Start the sign-in again from Kortix to connect it.",
+    "doneExpiredTitle": "This sign-in link expired",
+    "doneExpiredDescription": "It was already used or is too old. Start the sign-in again from Kortix.",
+    "doneFailedTitle": "{app} did not connect",
+    "doneFailedTitleNoApp": "The sign-in did not finish",
+    "doneFailedDescription": "Start the sign-in again from Kortix. If it fails again, send the code below to support.",
+    "doneErrorCode": "Error code: {code}",
+    "doneOpenKortix": "Open Kortix",
+    "doneFallbackApp": "the app"
   }
 };
 

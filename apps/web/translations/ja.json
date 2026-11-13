@@ -2101,7 +2101,13 @@
       "noModelUpgradeReason": "モデルがありません: Credits プランにアップグレードするか、自分のプロバイダーキーを追加してください。",
       "noModelKeyReason": "モデルがありません: 自分のプロバイダーキーを追加してください。",
       "noModelUpgradePlan": "プランをアップグレード",
-      "noModelAddProviderKey": "プロバイダーキーを追加"
+      "noModelAddProviderKey": "プロバイダーキーを追加",
+      "stepTitle": "モデルを接続",
+      "stepBody": "{workspace} のエージェントが応答するにはモデルが必要です。ChatGPT または Claude のプランを接続するか、プロバイダーキーを追加してください。",
+      "stepBodyUpgrade": "{workspace} のエージェントが応答するにはモデルが必要です。ChatGPT または Claude のプランを接続するか、プロバイダーキーを追加するか、Kortix モデルを使える Credits プランにアップグレードしてください。",
+      "stepBodyMember": "{workspace} のエージェントが応答するにはモデルが必要です。自分の ChatGPT または Claude のプランかプロバイダーキーを接続するか、このワークスペースの管理者に全員用のモデルの接続を依頼してください。",
+      "stepThisWorkspace": "このワークスペース",
+      "stepBack": "ワークスペースに戻る"
     },
     "providerRecovery": {
       "savedPrompt": "保存済みプロンプト",
@@ -26890,6 +26896,20 @@
     "connect": "接続",
     "cardFailed": "{app} を接続できませんでした。もう一度お試しください。",
     "blockedTitle": "{app} を開いてサインイン",
-    "blockedDescription": "ブラウザがサインインウィンドウをブロックしました。下のボタンから開いてください。このページは自動で更新されます。"
+    "blockedDescription": "ブラウザがサインインウィンドウをブロックしました。下のボタンから開いてください。このページは自動で更新されます。",
+    "doneTitle": "{app} に接続しました",
+    "doneTitleNoApp": "接続しました",
+    "doneDescription": "エージェントは今から {app} を使えます。",
+    "doneClose": "このタブは閉じてかまいません。",
+    "doneDeniedTitle": "サインインはキャンセルされました",
+    "doneDeniedDescription": "{app} でアクセスを許可しませんでした。接続するには Kortix からもう一度サインインしてください。",
+    "doneExpiredTitle": "このサインインリンクは期限切れです",
+    "doneExpiredDescription": "すでに使用済みか、古すぎます。Kortix からもう一度サインインしてください。",
+    "doneFailedTitle": "{app} に接続できませんでした",
+    "doneFailedTitleNoApp": "サインインが完了しませんでした",
+    "doneFailedDescription": "Kortix からもう一度サインインしてください。再び失敗する場合は、下のコードをサポートに送ってください。",
+    "doneErrorCode": "エラーコード: {code}",
+    "doneOpenKortix": "Kortix を開く",
+    "doneFallbackApp": "アプリ"
   }
 }

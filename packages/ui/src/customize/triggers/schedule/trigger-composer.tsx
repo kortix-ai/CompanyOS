@@ -16,6 +16,7 @@
  * are off (the beta flag `event_triggers`, Project admin › Feature flags).
  */
 
+import { resolveProgramAgent } from '../../../session/composer/agent-selector';
 import { Button } from '../../../primitives/button';
 import { Alert as BannerAlert, AlertDescription as BannerAlertDescription, AlertActions as BannerAlertActions} from '../../../primitives/alert';
 import { Input } from '../../../primitives/input';
@@ -235,7 +236,7 @@ function ComposerForm({
   );
   const name = triggerName(draft, tI18nComplete);
 
-  const problems = validate(draft, { name, configFields, app }, tI18nComplete);
+  const problems = validate(draft, { name, configFields, app, programAgent: resolveProgramAgent(agents, draft.agent) }, tI18nComplete);
   const shown = showProblems ? problems : [];
   const blockError = (block: ComposerBlock) =>
     shown.find((p) => p.block === block && !p.field)?.message;

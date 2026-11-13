@@ -19,7 +19,7 @@ import { ACCOUNT_STATE_FIRE_CODES, markGitTriggerAttemptFailed } from '../lib/tr
 import { takeThrottledRunSlot } from '../lib/trigger-run-caps';
 import { raiseTriggerAlert } from '../lib/trigger-alerts';
 import { recordTriggerRun, triggerRunFromFire } from '../trigger-execution-store';
-import { extractWebhookToken, fireGitTrigger, markGitTriggerFired, renderPromptTemplate, triggerFilterMatches, verifyWebhookSignature, verifyWebhookToken, webhookPayload, webhookTimestampProblem } from '../lib/triggers';
+import { extractWebhookToken, fireGitTrigger, markGitTriggerFired, renderTriggerInput, triggerFilterMatches, verifyWebhookSignature, verifyWebhookToken, webhookPayload, webhookTimestampProblem } from '../lib/triggers';
 import { PROJECT_TRIGGERS_PAUSED_REASON, automaticFirePauseReason } from '../lib/trigger-scheduler-state';
 import {
   validateWebhookSecretConfiguration,
@@ -212,7 +212,7 @@ export function registerTriggerWebhooksRoutes(): void {
     const firedAt = new Date();
     const recordRun = (run: Omit<Parameters<typeof recordTriggerRun>[0], 'projectId' | 'slug' | 'source' | 'spec' | 'payload' | 'now'>) =>
       recordTriggerRun({ projectId, slug, source: 'webhook', spec, payload, ...run, now: firedAt });
-    const renderedPrompt = renderPromptTemplate(spec.promptTemplate, payload);
+    const renderedPrompt = renderTriggerInput(spec, payload);
     // One delivery runs once: keyed on the event when the sender names one,
     // else on the body inside a replay window (projects/lib/webhook-delivery.ts).
     const delivery = webhookDeliveryKey({

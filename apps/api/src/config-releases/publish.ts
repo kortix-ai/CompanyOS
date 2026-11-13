@@ -29,7 +29,7 @@ import type { GitBackedProject } from '../projects/surface';
 import { db } from '../shared/db';
 import { bumpBounded } from '../shared/ttl-memo';
 import { loadAgentRosterAtCommit } from './agent-roster';
-import { buildConfigRelease, CONFIG_RELEASE_FORMAT_V3, toDescriptor, type ConfigRelease } from './builder';
+import { buildConfigRelease, CONFIG_RELEASE_FORMAT_V3, configReleaseId, toDescriptor, type ConfigRelease } from './builder';
 import { dbConfigReleaseLedger, PROJECT_QUARANTINE_SESSIONS, type ConfigReleaseLedger } from './quarantine';
 import { publicDownloadTarget } from './serve-archive';
 import { resolveSessionReleaseAgent, type DeclaredAgentRoster } from './session-agent';
@@ -242,7 +242,18 @@ export interface PublishedReleaseEnv {
  * still serves, and a publish of the tip starts.
  */
 export async function configReleaseEnvForSession(
-  input: { projectId: string; ref: string; agentName: string | null; tip: string | null },
+  input: {
+    projectId: string;
+    ref: string;
+    agentName: string | null;
+    tip: string | null;
+    /**
+     * The etag of the agent config this API compiled for the session (`agentConfigEtag`).
+     * A head whose release this compile would not produce is refused: another API
+     * version built it (a compile change since), or it is another commit.
+     */
+    expectedGovernanceEtag?: Promise<string | null>;
+  },
   deps: Pick<PublishDeps, 'store' | 'ledger' | 'now' | 'schedule'> = defaultDeps,
 ): Promise<string | null> {
   const head = await readReleaseHead(input.projectId, input.ref);
@@ -258,6 +269,19 @@ export async function configReleaseEnvForSession(
   if (resolveSessionReleaseAgent(input.agentName, head.roster).kind !== 'declared') return null;
   const quarantined = await deps.ledger.quarantined(input.projectId, [head.releaseId], PROJECT_QUARANTINE_SESSIONS);
   if (quarantined.size > 0) return null;
+  // The box would run the head's compiled config, not the one this API just
+  // compiled into its env. They differ after a deploy that changed the compile
+  // (the head was built by the old API) or when the tip moved: republish, and
+  // let the box run the provisioned config.
+  const expectedEtag = input.expectedGovernanceEtag ? await input.expectedGovernanceEtag.catch(() => null) : null;
+  if (expectedEtag && configReleaseId(head.configTreeId, expectedEtag) !== head.releaseId) {
+    deps.schedule(input.projectId, input.ref, tip);
+    logger.info('[config-releases] the published release differs from this compile; the box runs the provisioned config', {
+      projectId: input.projectId,
+      releaseId: head.releaseId,
+    });
+    return null;
+  }
 
   const store = deps.store();
   const [descriptorSigned, archiveSigned] = await Promise.all([

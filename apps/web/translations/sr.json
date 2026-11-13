@@ -21786,6 +21786,8 @@
     "llmEstimateLabel": "LLM procena:"
   },
   "triggerComposer": {
+    "programInputPlaceholder": "Prazno: program čita podatke triggera kao JSON",
+    "programInputHelp": "Ovaj agent pokreće program. Čita ovaj tekst sa stdin. Ostavite prazno da pošaljete sve podatke kao JSON: događaj, telo webhooka ili detalje rasporeda, plus fiksne podatke triggera.",
     "every": "Сваких",
     "dayOfMonth": "Дан у месецу",
     "details": "Детаљи",
@@ -24974,6 +24976,8 @@
       }
     },
     "modelView": {
+      "programTimeout": "Vremensko ograničenje",
+      "programTimeoutHelp": "Pokretanje koje traje duže se zaustavlja i potez ne uspeva. Od 1s do 6h, npr. 30m ili 2h. Prazno: 30m.",
       "programTitle": "Program",
       "programCommand": "Komanda",
       "programHelp": "Svaki potez pokreće ovu komandu u sandboxu sesije umesto modela. Poruka stiže na stdin i u $KORTIX_EVENT_PATH. Ono što ispiše je odgovor. Izlazni kod različit od nule obara potez.",

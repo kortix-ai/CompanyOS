@@ -568,6 +568,8 @@ export interface CompiledAgent {
   codemode?: 'on' | 'only' | 'off';
   /** kortix.yaml v3: a program agent. The shell command each turn runs in place of a model step (flag `program_agents`). */
   run?: string;
+  /** kortix.yaml v3: a program agent's run limit in seconds (`timeout`, default 1800). A run still going is stopped and the turn fails. */
+  timeout?: number;
 }
 
 /** A kortix.yaml v3 slash command. */
@@ -659,6 +661,7 @@ export const AGENT_SETTING_HARNESSES = {
   extensions: ['pi'],
   codemode: ['pi'],
   run: ['pi'],
+  timeout: ['pi'],
 } as const satisfies Record<keyof CompiledAgent, readonly 'pi'[]>;
 export type AgentSetting = keyof typeof AGENT_SETTING_HARNESSES;
 

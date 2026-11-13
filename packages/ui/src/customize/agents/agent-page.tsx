@@ -953,7 +953,16 @@ function EditableAgentPage({
                 oc={editor.oc}
                 setOc={editor.setOc}
                 footer={<ProjectModelsLink projectId={projectId} />}
-                program={programAgentsOn && typeof editor.draft.run === 'string' ? { command: editor.draft.run, onChange: (next) => editor.set('run', next) } : undefined}
+                program={
+                  programAgentsOn && typeof editor.draft.run === 'string'
+                    ? {
+                        command: editor.draft.run,
+                        onChange: (next) => editor.set('run', next),
+                        timeout: editor.draft.timeout,
+                        onTimeoutChange: (next) => editor.set('timeout', next),
+                      }
+                    : undefined
+                }
               />
             </AgentTabBody>
           );

@@ -21786,6 +21786,8 @@
     "llmEstimateLabel": "Estimation LLM :"
   },
   "triggerComposer": {
+    "programInputPlaceholder": "Vide : le programme lit les données du trigger en JSON",
+    "programInputHelp": "Cet agent exécute un programme. Il lit ce texte sur stdin. Laissez vide pour envoyer toutes les données en JSON : l'événement, le corps du webhook ou les détails de la planification, plus les données fixes du trigger.",
     "every": "Toutes les",
     "dayOfMonth": "Jour du mois",
     "details": "Détails",
@@ -24974,6 +24976,8 @@
       }
     },
     "modelView": {
+      "programTimeout": "Limite de temps",
+      "programTimeoutHelp": "Une exécution plus longue est arrêtée et le tour échoue. De 1s à 6h, par exemple 30m ou 2h. Vide : 30m.",
       "programTitle": "Programme",
       "programCommand": "Commande",
       "programHelp": "Chaque tour exécute cette commande dans le sandbox de la session au lieu d'un modèle. Le message arrive sur stdin et dans $KORTIX_EVENT_PATH. Ce qu'elle affiche est la réponse. Un code de sortie non nul fait échouer le tour.",

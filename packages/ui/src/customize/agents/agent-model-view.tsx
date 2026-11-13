@@ -132,6 +132,9 @@ function ProviderOptions({
 export interface AgentProgram {
   command: string;
   onChange: (command: string) => void;
+  /** `timeout`, a duration (`30m`); undefined follows the default. */
+  timeout: string | undefined;
+  onTimeoutChange: (timeout: string | undefined) => void;
 }
 
 function ProgramView({ program, footer }: { program: AgentProgram; footer?: ReactNode }) {
@@ -149,6 +152,16 @@ function ProgramView({ program, footer }: { program: AgentProgram; footer?: Reac
               onChange={(e) => program.onChange(e.target.value)}
             />
           </SettingBlock>
+          <SettingRow label={t('programTimeout')} help={t('programTimeoutHelp')}>
+            <Input
+              aria-label={t('programTimeout')}
+              value={program.timeout ?? ''}
+              placeholder="30m"
+              spellCheck={false}
+              className="h-8 font-mono text-xs"
+              onChange={(e) => program.onTimeoutChange(e.target.value.trim() || undefined)}
+            />
+          </SettingRow>
         </EditorSection>
         {footer}
       </div>

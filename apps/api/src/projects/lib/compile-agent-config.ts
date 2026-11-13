@@ -43,6 +43,9 @@ import {
   type PermissionConfigObjectV2,
   type PermissionConfigV2,
   type PermissionRuleV2,
+  AGENT_RUN_TIMEOUT_DEFAULT_SECONDS,
+  AGENT_RUN_TIMEOUT_MAX_SECONDS,
+  parseDurationSeconds,
 } from '@kortix/manifest-schema';
 import {
   isRepoFileNotFoundError,
@@ -411,6 +414,8 @@ function compileAgent(
   // one line to say, so it cannot act. The current daemon reads neither for a program agent.
   if (typeof block.run === 'string' && block.run.trim()) {
     out.run = block.run.trim();
+    const timeout = typeof block.timeout === 'string' ? parseDurationSeconds(block.timeout) : null;
+    out.timeout = timeout && timeout > 0 ? Math.min(timeout, AGENT_RUN_TIMEOUT_MAX_SECONDS) : AGENT_RUN_TIMEOUT_DEFAULT_SECONDS;
     out.tools = { '*': false };
     out.prompt = PROGRAM_AGENT_FALLBACK_PROMPT;
   }

@@ -21786,6 +21786,8 @@
     "llmEstimateLabel": "LLM-Schätzung:"
   },
   "triggerComposer": {
+    "programInputPlaceholder": "Leer: Das Programm liest die Trigger-Daten als JSON",
+    "programInputHelp": "Dieser Agent führt ein Programm aus. Es liest diesen Text über stdin. Lassen Sie das Feld leer, um alle Trigger-Daten als JSON zu senden: das Ereignis, den Webhook-Body oder die Zeitplan-Details, dazu die festen Daten des Triggers.",
     "every": "Alle",
     "dayOfMonth": "Tag im Monat",
     "details": "Details",
@@ -24974,6 +24976,8 @@
       }
     },
     "modelView": {
+      "programTimeout": "Zeitlimit",
+      "programTimeoutHelp": "Ein Lauf, der länger dauert, wird gestoppt und der Turn schlägt fehl. Von 1s bis 6h, z. B. 30m oder 2h. Leer: 30m.",
       "programTitle": "Programm",
       "programCommand": "Befehl",
       "programHelp": "Jeder Turn führt diesen Befehl statt eines Modells in der Sandbox der Sitzung aus. Die Nachricht kommt über stdin und in $KORTIX_EVENT_PATH. Was er ausgibt, ist die Antwort. Ein Exit-Code ungleich null lässt den Turn fehlschlagen.",

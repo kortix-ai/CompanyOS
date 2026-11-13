@@ -43,7 +43,12 @@ export interface ProgramRun {
   /** The workspace setup's status; null when the agent declares none. */
   setup?: () => WorkspaceSetupStatus | null
   eventDir?: string
+  /** The run limit in ms (`agents.<name>.timeout`, compiled to seconds). Default 30 min. */
+  timeoutMs?: number
 }
+
+/** A program agent's run limit when its compiled config names none. */
+export const PROGRAM_TIMEOUT_DEFAULT_MS = 30 * 60_000
 
 /** The model a program agent's messages name: provider `program`, model the agent. */
 export function programModel(agent: string): Model<Api> {
@@ -200,22 +205,32 @@ export function programStep(run: ProgramRun, context: { messages: Message[] }, o
 
     let killTimer: ReturnType<typeof setTimeout> | undefined
     const stop = () => {
+      if (killTimer) return
       signalGroup(child.pid, 'SIGTERM')
       killTimer = setTimeout(() => signalGroup(child.pid, 'SIGKILL'), KILL_GRACE_MS)
       killTimer.unref?.()
     }
     options.signal?.addEventListener('abort', stop, { once: true })
+    const limitMs = run.timeoutMs ?? PROGRAM_TIMEOUT_DEFAULT_MS
+    let timedOut = false
+    const limit = setTimeout(() => {
+      timedOut = true
+      stop()
+    }, limitMs)
+    limit.unref?.()
 
     const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null; error?: Error }>((done) => {
       child.once('error', (error) => done({ code: null, signal: null, error }))
       child.once('close', (code, signal) => done({ code, signal }))
     })
     options.signal?.removeEventListener('abort', stop)
+    clearTimeout(limit)
     if (killTimer) clearTimeout(killTimer)
     reply.write(stdout.end())
     logger.info('[program] run ended', { agent: run.agent, code: exit.code, signal: exit.signal, ms: Date.now() - started })
 
     if (options.signal?.aborted) return void reply.fail('Request was aborted', 'aborted')
+    if (timedOut) return void reply.fail(`\`${run.command}\` ran longer than its timeout (${formatLimit(limitMs)}) and was stopped. Raise \`timeout\` on agents.${run.agent} (at most 6h), or make the run shorter.`)
     if (exit.error) return void reply.fail(`The program could not start: ${exit.error.message}`)
     if (exit.code === 0) return void reply.finish()
     const tail = stderr.toString('utf8').trim()
@@ -223,6 +238,14 @@ export function programStep(run: ProgramRun, context: { messages: Message[] }, o
     reply.fail(`\`${run.command}\` ${how}.${tail ? `\n\n${tail}` : ''}`)
   })().catch((err) => reply.fail(err instanceof Error ? err.message : String(err)))
   return out
+}
+
+/** `30 min`, `2 h`, `45 s`: the limit as a person reads it. */
+function formatLimit(ms: number): string {
+  const seconds = Math.round(ms / 1000)
+  if (seconds % 3600 === 0) return `${seconds / 3600} h`
+  if (seconds % 60 === 0) return `${seconds / 60} min`
+  return `${seconds} s`
 }
 
 function signalGroup(pid: number | undefined, signal: NodeJS.Signals): void {

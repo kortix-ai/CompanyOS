@@ -21831,6 +21831,8 @@
     "llmEstimateLabel": "LLM estimate:"
   },
   "triggerComposer": {
+    "programInputPlaceholder": "Empty: the program reads the trigger's payload as JSON",
+    "programInputHelp": "This agent runs a program. It reads this text on stdin. Leave it empty to send the whole payload as JSON: the event, webhook body or schedule details, plus the trigger's static payload.",
     "every": "Every",
     "dayOfMonth": "Day of month",
     "details": "Details",
@@ -24974,6 +24976,8 @@
       }
     },
     "modelView": {
+      "programTimeout": "Time limit",
+      "programTimeoutHelp": "A run that takes longer is stopped and the turn fails. From 1s to 6h, such as 30m or 2h. Empty: 30m.",
       "programTitle": "Program",
       "programCommand": "Command",
       "programHelp": "Each turn runs this command in the session's sandbox instead of a model. The message arrives on stdin and in $KORTIX_EVENT_PATH. What it prints is the reply. A non-zero exit fails the turn.",

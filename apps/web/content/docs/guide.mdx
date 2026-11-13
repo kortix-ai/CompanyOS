@@ -273,6 +273,7 @@ agents:
   janitor:
     description: Closes stale pull requests.
     run: pnpm tsx agents/janitor.ts
+    timeout: 10m
     secrets: [GITHUB_TOKEN]
     kortix_permissions: [workspace.gitops.read]
     workspace:
@@ -280,23 +281,30 @@ agents:
       setup: [pnpm install --frozen-lockfile]
 
 triggers:
-  - slug: hourly-janitor
-    on: { every: 1h }
-    run: { agent: janitor, prompt: "{{ payload }}" }
+  - slug: janitor-nightly
+    on: { cron: "0 3 * * *" }
+    run: { agent: janitor, session: reuse, payload: { days: 30 } }
+  - slug: janitor-hook
+    on: { webhook: { secret: JANITOR_HOOK } }
+    run: { agent: janitor }
 ```
 
 Each turn runs the command once, in the session's computer:
 
 | | |
 | --- | --- |
-| **Input** | The message, on standard input and as JSON in the file named by `$KORTIX_EVENT_PATH` (`prompt`, `agent`, `session_id`). A trigger's `{{ payload }}` sends the whole trigger payload as JSON. |
+| **Input** | The message, on standard input and as JSON in the file named by `$KORTIX_EVENT_PATH` (`prompt`, `agent`, `session_id`). A trigger with no `prompt` sends its whole payload as JSON: the webhook body, the event, or the schedule details, plus the trigger's `payload`. |
+| **Parameters** | Fixed for the agent: arguments in `run`. Per trigger: `run.payload`, merged into the input (the fire's own keys win). Credentials: `secrets`, as environment variables. |
 | **Reply** | What the command prints. It renders as Markdown, like a model's reply. |
 | **Failure** | A non-zero exit fails the turn and shows the end of the error output. Kortix does not run a failed command again. |
+| **Time limit** | `timeout`, from `1s` to `6h`. Default `30m`. A run that takes longer is stopped and the turn fails. |
 | **Stop** | **Stop** ends the command and everything it started. |
 | **Folder** | The agent's first `workspace.repos` path, else `/workspace`. The command waits until `workspace.setup` is done. |
 | **Kortix access** | The computer holds the agent's own token: `createKortix({ backendUrl: process.env.KORTIX_API_URL, getToken: async () => process.env.KORTIX_TOKEN })` from `@kortix/sdk` acts as the agent. |
 
-A program agent has no model, so it cannot take `model`, `prompt` or `prompt_file`. Its agent page shows the command under **Program**.
+Each fire with the default `session: fresh` starts a new computer and runs `workspace.setup` again. For a frequent trigger, `session: reuse` keeps one session: its computer resumes with the dependencies already installed.
+
+A program agent has no model, so it cannot take `model`, `prompt` or `prompt_file`. Its agent page shows the command and the time limit under **Program**. For a job that must run all the time, use an [App](#apps) that sends App events, and let a trigger start the program agent for each event.
 
 ### What an agent can access
 

@@ -39,6 +39,7 @@ import {
   SPACE_SLUG_RE,
   SPACE_TAB_TYPES,
   TOOL_NAME_RE,
+  parseDurationSeconds,
 } from './constants';
 
 export { SPACE_HEADER_ITEMS, SPACE_TAB_TYPES };
@@ -58,6 +59,7 @@ import {
   validateProject,
   validateSandbox,
   validateTriggers,
+  type TriggerAgentContext,
 } from './index';
 import {
   type GrantSetV2,
@@ -147,6 +149,8 @@ export interface AgentBlockV3 {
    * turn. Excludes `model`, `prompt` and `prompt_file`.
    */
   run?: string;
+  /** A program agent's run limit, a duration (`"30m"`, `"2h"`). Default `30m`, at most `6h`. */
+  timeout?: string;
   /** Tool policy. Omitted: `allow`. `skill` and `task` belong to `skills` / `subagents`. */
   permission?: PermissionConfigV2;
   /** Default `true`. */
@@ -225,6 +229,18 @@ export function workspaceStepCwdProblem(cwd: unknown): string | null {
   return null;
 }
 
+/** The trigger checks' view of the agents: who has `run`, and `default_agent`. */
+function triggerAgentContextV3(parsed: Record<string, unknown>): TriggerAgentContext {
+  const agents = isTable(parsed.agents) ? parsed.agents : {};
+  const programAgents = new Set(Object.entries(agents).flatMap(([name, block]) => (isTable(block) && typeof block.run === 'string' && block.run.trim() ? [name] : [])));
+  const defaultAgent = typeof parsed.default_agent === 'string' && parsed.default_agent.trim() ? parsed.default_agent.trim() : undefined;
+  return { programAgents, ...(defaultAgent ? { defaultAgent } : {}) };
+}
+
+/** A program agent's run limit: default and ceiling, in seconds. */
+export const AGENT_RUN_TIMEOUT_DEFAULT_SECONDS = 30 * 60;
+export const AGENT_RUN_TIMEOUT_MAX_SECONDS = 6 * 60 * 60;
+
 /** The longest `run` command: a command line, not a script. */
 export const AGENT_RUN_MAX_LENGTH = 4096;
 /** Keys a program agent refuses: it has no model and no system prompt. */
@@ -235,6 +251,14 @@ const PROGRAM_AGENT_IGNORED_KEYS = ['variant', 'temperature', 'top_p', 'steps', 
 /** `run`: a non-empty command line, and no model, prompt or model-only key beside it. */
 function validateProgramAgentV3(entry: Record<string, unknown>, where: string, issues: ManifestIssue[]): void {
   const run = entry.run;
+  if (entry.timeout !== undefined) {
+    const seconds = typeof entry.timeout === 'string' ? parseDurationSeconds(entry.timeout) : null;
+    if (run === undefined) {
+      issues.push({ path: `${where}.timeout`, message: 'applies only to a program agent (`run`).', severity: 'error' });
+    } else if (seconds === null || seconds < 1 || seconds > AGENT_RUN_TIMEOUT_MAX_SECONDS) {
+      issues.push({ path: `${where}.timeout`, message: 'must be a duration from "1s" to "6h", such as "30m". Default: "30m".', severity: 'error' });
+    }
+  }
   if (run === undefined) return;
   if (typeof run !== 'string' || !run.trim() || run.length > AGENT_RUN_MAX_LENGTH) {
     issues.push({ path: `${where}.run`, message: `must be a shell command of 1 to ${AGENT_RUN_MAX_LENGTH} characters.`, severity: 'error' });
@@ -440,6 +464,7 @@ export const AGENT_BLOCK_KEYS_V3 = [
   'prompt',
   'prompt_file',
   'run',
+  'timeout',
   'enabled',
   'codemode',
   'context',
@@ -505,7 +530,7 @@ export function validateManifestBody(parsed: Record<string, unknown>, issues: Ma
   validateEnv(parsed.env, 'env', issues);
   validateSandbox(parsed.sandbox, 'sandbox', issues);
   validateRuntimeV2(parsed.runtime, 'runtime', issues);
-  validateTriggers(parsed.triggers, 'triggers', issues);
+  validateTriggers(parsed.triggers, 'triggers', issues, triggerAgentContextV3(parsed));
   validateConnectors(parsed.connectors, 'connectors', issues);
   validateAppsV2(parsed.apps, 'apps', issues);
   validateSpacesV3(parsed.spaces, 'spaces', issues);

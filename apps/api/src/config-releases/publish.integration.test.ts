@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { accounts, configReleaseHeads, projects } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 import { db } from '../shared/db';
-import type { ConfigRelease } from './builder';
+import { configReleaseId, type ConfigRelease } from './builder';
 import { configReleaseEnvForSession, publishConfigRelease, readReleaseHead, REPUBLISH_AFTER_MS, type PublishDeps } from './publish';
 import type { DeclaredAgentRoster } from './session-agent';
 import { MemoryConfigArchiveStore, MemoryConfigReleaseLedger } from './__tests__/fakes';
@@ -151,6 +151,21 @@ describe('configReleaseEnvForSession', () => {
     const releaseId = (await readReleaseHead(projectId, 'main'))!.releaseId;
     for (const sessionId of ['s1', 's2']) await ledger.recordFailure({ projectId, releaseId, sessionId, reason: 'boom' });
     expect(await env('build')).toBeNull();
+  });
+
+  test('a release this API would not compile (built before a deploy, or another commit) gives no env and starts a republish', async () => {
+    const now = new Date();
+    const etag = 'e'.repeat(16);
+    await publishConfigRelease(project(), 'main', TIP_A, deps(now, { release_id: configReleaseId(TREE, etag) }));
+    const env = (expected: string) =>
+      configReleaseEnvForSession(
+        { projectId, ref: 'main', agentName: 'build', tip: TIP_A, expectedGovernanceEtag: Promise.resolve(expected) },
+        { store: () => store, ledger, now: () => now, schedule },
+      );
+    expect(await env(etag)).not.toBeNull();
+    expect(scheduled).toEqual([]);
+    expect(await env('f'.repeat(16))).toBeNull();
+    expect(scheduled).toEqual([[projectId, 'main', TIP_A]]);
   });
 
   test('a row near the store lifecycle gives no env and starts a republish', async () => {

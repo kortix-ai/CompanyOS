@@ -21786,6 +21786,8 @@
     "llmEstimateLabel": "LLM の推定:"
   },
   "triggerComposer": {
+    "programInputPlaceholder": "空欄: プログラムはトリガーのデータを JSON として受け取ります",
+    "programInputHelp": "このエージェントはプログラムを実行します。このテキストは stdin で渡されます。空欄にすると、イベント、Webhook の本文、スケジュールの情報とトリガーの固定データが JSON で渡されます。",
     "every": "間隔",
     "dayOfMonth": "日付",
     "details": "詳細",
@@ -24974,6 +24976,8 @@
       }
     },
     "modelView": {
+      "programTimeout": "制限時間",
+      "programTimeoutHelp": "これより長い実行は停止され、ターンは失敗します。1s から 6h まで（例: 30m、2h）。空欄: 30m。",
       "programTitle": "プログラム",
       "programCommand": "コマンド",
       "programHelp": "各ターンで、モデルの代わりにこのコマンドがセッションのサンドボックスで実行されます。メッセージは stdin と $KORTIX_EVENT_PATH で渡されます。出力が返信になります。終了コードが 0 以外の場合、ターンは失敗します。",

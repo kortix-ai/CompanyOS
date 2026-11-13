@@ -21786,6 +21786,8 @@
     "llmEstimateLabel": "LLM 估算:"
   },
   "triggerComposer": {
+    "programInputPlaceholder": "留空：程序以 JSON 读取触发器数据",
+    "programInputHelp": "此智能体运行一个程序。程序通过 stdin 读取此文本。留空则以 JSON 发送全部数据：事件、Webhook 正文或计划信息，以及触发器的固定数据。",
     "every": "每隔",
     "dayOfMonth": "每月日期",
     "details": "详情",
@@ -24974,6 +24976,8 @@
       }
     },
     "modelView": {
+      "programTimeout": "时间限制",
+      "programTimeoutHelp": "运行超过此时间会被停止，该轮失败。1s 到 6h，例如 30m 或 2h。留空：30m。",
       "programTitle": "程序",
       "programCommand": "命令",
       "programHelp": "每一轮都会在会话的沙箱中运行此命令，而不是模型。消息通过 stdin 和 $KORTIX_EVENT_PATH 传入。它打印的内容就是回复。非零退出码会使该轮失败。",

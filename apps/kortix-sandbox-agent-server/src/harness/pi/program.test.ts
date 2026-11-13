@@ -89,6 +89,15 @@ describe('programStep', () => {
     expect(() => readFileSync(join(failed.cwd, 'ran'))).toThrow()
   })
 
+  test('a run past its timeout is stopped and the turn fails, naming the limit', async () => {
+    const started = Date.now()
+    const { message } = await step(run('echo started; sleep 30', { timeoutMs: 400 }))
+    expect(message.stopReason).toBe('error')
+    expect(message.errorMessage).toContain('ran longer than its timeout')
+    expect(text(message)).toBe('started\n')
+    expect(Date.now() - started).toBeLessThan(5_000)
+  })
+
   test('the reply stops at the cap and says so', async () => {
     const { message } = await step(run(`head -c ${PROGRAM_REPLY_MAX_BYTES + 5000} /dev/zero | tr '\\0' 'a'`))
     expect(message.stopReason).toBe('stop')

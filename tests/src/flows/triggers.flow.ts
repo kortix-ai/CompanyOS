@@ -1767,6 +1767,8 @@ flow(
     });
 
     await ctx.step('a GitHub repository webhook (body-signed X-Hub-Signature-256, X-GitHub-Event, X-GitHub-Delivery, no timestamp) → 200; a wrong secret or no X-GitHub-Event → 401', async () => {
+      // GitHub signs the raw body alone: `sha256=<hex HMAC of the body>`.
+      const sign = (body: string, key = secret) => webhookSignature(key, body);
       const github = (signature: string, extra: Record<string, string> = {}) => ({
         'x-github-event': 'issues',
         'x-github-delivery': crypto.randomUUID(),

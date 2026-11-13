@@ -2,7 +2,6 @@
 
 import { KortixLogo } from '@/components/sidebar/kortix-logo';
 import { DitherField } from '@/features/marketing/kit/dither-field';
-import { AudienceGate, AudienceSwitch } from './audience-gate';
 import { setupPromptFor } from '@kortix/shared/setup-guide';
 import { cn } from '@kortix/ui';
 import Link from 'next/link';
@@ -14,6 +13,9 @@ import { ENGINE, FAQ, MANIFEST, TOOLS } from './factory-content';
 import { FactoryStack } from './factory-stack';
 import type { LoopView } from './loops-content';
 import { CopyButton, Eyebrow, GhostButton, Mark, useCopy, useSetupTarget } from './parts';
+
+/** The company site: this page is one product of it. */
+const KORTIX = 'https://kortix.com';
 
 /** The column every section sits in, between the two hairline rails. */
 const COLUMN = 'mx-auto w-full max-w-[1192px]';
@@ -43,7 +45,7 @@ function RotatingFactory({ names }: { names: string[] }) {
   }, [names.length]);
   return (
     <span key={index} className="text-kortix-base animate-in fade-in slide-in-from-bottom-2 inline-block duration-500">
-      {names[index]}.
+      {names[index]}
     </span>
   );
 }
@@ -76,7 +78,7 @@ function PromptBox({ className }: { className?: string }) {
 }
 
 /**
- * kortix.com. One job: get a developer to copy the prompt. The hero is the
+ * Loopmaxxing (loopmaxxing.sh), the developer landing. One job: get a developer to copy the prompt. The hero is the
  * prompt; the stack shows what each factory does, one clip per team; three
  * steps, the kortix.yaml section and the FAQ answer what is left. The frame (one
  * railed column, hairlines) is after wonder.design; the blue, the dither field
@@ -85,14 +87,14 @@ function PromptBox({ className }: { className?: string }) {
 export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: string[] }) {
   return (
     <div className="dark bg-background text-foreground relative min-h-screen overflow-x-clip">
-      <AudienceGate />
       <div className={cn(COLUMN, 'border-border relative border-x')}>
         <header className="border-border bg-background/80 sticky top-0 z-30 flex h-16 items-center justify-between border-b px-8 backdrop-blur md:px-10">
           <div className="flex items-center gap-4">
-            <Link href="/" aria-label="Kortix" className="text-foreground">
+            <a href={KORTIX} aria-label="Kortix" className="text-foreground">
               <KortixLogo size={16} variant="logomark" />
-            </Link>
-            <AudienceSwitch />
+            </a>
+            <span aria-hidden className="text-muted-foreground/50 select-none">/</span>
+            <span className="text-foreground text-sm font-medium tracking-tight">Loopmaxxing</span>
           </div>
           <nav className="text-muted-foreground hidden items-center gap-8 text-sm md:flex">
             <Link href="#factories" className="hover:text-foreground">Factories</Link>
@@ -112,12 +114,12 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
           </div>
           <div className="relative flex flex-col items-center gap-8 px-8 pt-20 pb-24 text-center md:px-10 lg:pt-24 lg:pb-28">
             <span className="border-border bg-card text-muted-foreground inline-flex items-center rounded-full border px-3 py-1 text-sm">
-              Cloud loops for your coding agent
+              Loopmaxxing, by Kortix
             </span>
             <h1 className="text-foreground text-[40px] leading-[1.04] font-medium tracking-tight sm:text-6xl lg:text-[72px]">
-              One prompt. Your
+              Add a <RotatingFactory names={loops.map((loop) => loop.name)} />
               <br />
-              <RotatingFactory names={loops.map((loop) => loop.name)} />
+              with 1 prompt.
             </h1>
             <p className="text-foreground/70 max-w-xl text-lg text-pretty">
               Paste it into <Mark name="Claude Code" /> or <Mark name="Codex" />. It connects your stack and puts agents on a loop, 24/7, in the
@@ -240,7 +242,7 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
           {[
             { title: 'Product', links: [['Factories', '#factories'], ['How it works', '#how'], ['kortix.yaml', '#engine']] },
             { title: 'Developers', links: [['Docs', '/docs/developers'], ['The setup guide', '/setup.md'], ['GitHub', 'https://github.com/kortix-ai/CompanyOS']] },
-            { title: 'Company', links: [['CompanyOS', '/companyos'], ['Careers', '/careers']] },
+            { title: 'Company', links: [['Kortix', KORTIX], ['Careers', '/careers']] },
             { title: 'Legal', links: [['Terms', '/legal/terms'], ['Privacy', '/legal?tab=privacy']] },
           ].map((group) => (
             <div key={group.title} className="flex flex-col gap-3 text-sm">
@@ -253,7 +255,7 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
             </div>
           ))}
         </footer>
-        <div className="border-border text-muted-foreground border-t px-8 py-6 text-center text-xs md:px-10">Kortix. Open source.</div>
+        <div className="border-border text-muted-foreground border-t px-8 py-6 text-center text-xs md:px-10">Loopmaxxing, by Kortix. Open source.</div>
       </div>
     </div>
   );

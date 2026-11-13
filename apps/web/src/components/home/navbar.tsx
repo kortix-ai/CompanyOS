@@ -71,8 +71,8 @@ type MenuId = MegaMenu['id'];
 /** Links in the bar that navigate directly, beside the three menus. */
 const PLAIN_LINKS = [
   { label: 'Pricing', href: '/pricing' },
-  // The developer home. The query records the choice, so the home shows no audience gate.
-  { label: 'For developers', href: '/?audience=developer' },
+  // The developer landing: Loopmaxxing, also served at loopmaxxing.sh.
+  { label: 'For developers', href: '/loopmaxxing' },
 ];
 
 const USE_CASES_ENABLED = process.env.NEXT_PUBLIC_USE_CASES_ENABLED !== 'false';
@@ -592,7 +592,7 @@ export function Navbar({ solidAtTop = false }: { solidAtTop?: boolean } = {}) {
                   <MarketingButton variant="secondary" asChild className="hidden lg:inline-flex">
                     <Link href={CTA_LINK}>{signInLabel}</Link>
                   </MarketingButton>
-                  <MarketingButton asChild className="hit-area-y-3">
+                  <MarketingButton variant="accent" asChild className="hit-area-y-3">
                     <Link href={CTA_LINK} onClick={trackCtaSignup}>
                       {getStartedLabel}
                     </Link>

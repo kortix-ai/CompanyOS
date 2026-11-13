@@ -51,9 +51,8 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
   {
     kind: 'marketing',
     slug: 'index',
-    title: 'Kortix: one prompt puts agents on your repo, 24/7',
-    description:
-      'Paste one prompt into Claude Code or Codex. It sets up cloud agents on your repository that ship pull requests, posts and drafts 24/7, on the plan you already pay for.',
+    title: siteMetadata.title,
+    description: siteMetadata.description,
     htmlPath: '/',
     markdownPath: '/markdown/index.md',
   },
@@ -90,10 +89,11 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
   },
   {
     kind: 'marketing',
-    slug: 'companyos',
-    title: 'Kortix CompanyOS',
-    description: siteMetadata.description,
-    htmlPath: '/companyos',
+    slug: 'loopmaxxing',
+    title: 'Loopmaxxing by Kortix: add a software factory with 1 prompt',
+    description:
+      'Paste one prompt into Claude Code or Codex. It sets up cloud agents on your repository that ship pull requests, posts and drafts 24/7, on the plan you already pay for.',
+    htmlPath: '/loopmaxxing',
   },
   {
     kind: 'marketing',

@@ -89,14 +89,6 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
   },
   {
     kind: 'marketing',
-    slug: 'loopmaxxing',
-    title: 'Loopmaxxing by Kortix: add a software factory to your repo with 1 prompt',
-    description:
-      'For dev teams. Agents that work on your repo and your tools, in the cloud, 24/7. One prompt in Claude Code or Codex sets them up, on the plan you already pay for. You approve what ships.',
-    htmlPath: '/loopmaxxing',
-  },
-  {
-    kind: 'marketing',
     slug: 'developers',
     title: 'Developers: CLI, SDK and API for AI agents',
     description:

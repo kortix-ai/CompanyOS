@@ -1,18 +1,18 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
-import { localeStaticParams } from '@/i18n/static-params';
-import { localizedMarketingMetadata } from '@/lib/seo/metadata';
+import { requireLoopmaxxing } from '@/lib/loopmaxxing-gate';
 
-// Prerendered per locale; an unknown locale is a 404 without a render.
-export const dynamicParams = false;
-// Outside the marketing layout (its own header and footer), so this route prerenders its locales itself.
-export const generateStaticParams = localeStaticParams;
+// Its own site: the page is canonical at loopmaxxing.sh, and it stays out of
+// kortix.com's sitemap and public content list.
+export const metadata: Metadata = {
+  title: 'Loopmaxxing by Kortix: add a software factory to your repo with 1 prompt',
+  description:
+    'For dev teams. Agents that work on your repo and your tools, in the cloud, 24/7. One prompt in Claude Code or Codex sets them up, on the plan you already pay for. You approve what ships.',
+  alternates: { canonical: 'https://loopmaxxing.sh' },
+};
 
-export function generateMetadata(): Promise<Metadata> {
-  return localizedMarketingMetadata('/loopmaxxing');
-}
-
-export default function LoopmaxxingLayout({ children }: { children: ReactNode }) {
+export default async function LoopmaxxingLayout({ children }: { children: ReactNode }) {
+  await requireLoopmaxxing();
   return children;
 }

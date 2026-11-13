@@ -311,6 +311,8 @@ export async function middleware(request: NextRequest) {
   // name, because the copied prompt names them there; every other path is
   // kortix.com's.
   if (LOOPMAXXING_HOSTS.has(visitorHostname(request))) {
+    // Before the launch the host shows nothing of its own.
+    if (!loopmaxxingEnabled()) return NextResponse.redirect('https://kortix.com/', 307);
     if (pathname === '/') {
       const landing = request.nextUrl.clone();
       landing.pathname = `/${defaultLocale}/loopmaxxing`;
@@ -991,6 +993,14 @@ export async function middleware(request: NextRequest) {
 const LOOPMAXXING_HOSTS = new Set(['loopmaxxing.sh', 'www.loopmaxxing.sh']);
 /** What those hosts serve themselves, beside the landing at their root. */
 const LOOPMAXXING_SERVED = /^\/(?:setup\.md|factory\.md|install(?:\.sh)?|loops\/[^/]+)$/;
+
+/** Read at request time (dynamic key), so one image serves dev with it and prod without. */
+function loopmaxxingEnabled(): boolean {
+  const flag =
+    (Reflect.get(process.env, 'KORTIX_PUBLIC_LOOPMAXXING_ENABLED') as string | undefined) ||
+    (Reflect.get(process.env, 'NEXT_PUBLIC_LOOPMAXXING_ENABLED') as string | undefined);
+  return flag === 'true' || process.env.NODE_ENV === 'development';
+}
 
 /** The host the visitor typed: the forwarded one behind a proxy, else the request's. */
 function visitorHostname(request: NextRequest): string {

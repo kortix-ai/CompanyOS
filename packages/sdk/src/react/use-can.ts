@@ -238,7 +238,10 @@ export function useCans(
     queryKey: permissionProbeBatchKey(accountId, userId, probes),
     queryFn: () => probeThroughCache(queryClient, accountId as string, userId as string, probes),
     enabled,
-    staleTime: PROBE_STALE_MS,
+    // The single-probe entries own freshness: a batch rereads them on every
+    // mount, so it never keeps a verdict past their window, and a fresh one
+    // costs no request.
+    staleTime: 0,
   });
 
   const map: Record<string, CanResult> = {};
@@ -277,7 +280,10 @@ export function usePermissionsFor(
     queryKey: permissionProbeBatchKey(accountId, memberUserId, probes),
     queryFn: () => probeThroughCache(queryClient, accountId as string, memberUserId as string, probes),
     enabled,
-    staleTime: PROBE_STALE_MS,
+    // The single-probe entries own freshness: a batch rereads them on every
+    // mount, so it never keeps a verdict past their window, and a fresh one
+    // costs no request.
+    staleTime: 0,
   });
 
   return probes.map((_, i) => {

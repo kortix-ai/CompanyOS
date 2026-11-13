@@ -94,3 +94,37 @@ test('gates that mount together send one batch, and a later gate reuses the answ
   await settle();
   expect(batches.length).toBeGreaterThan(1);
 });
+
+test('a batch never keeps a verdict past the single-probe freshness window', async () => {
+  const { setSystemTime } = await import('bun:test');
+  configureKortix({ backendUrl: 'http://test.local', getToken: async () => 'tok' });
+  const batches = recordBatches();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const start = Date.parse('2026-11-13T00:00:00Z');
+  setSystemTime(new Date(start));
+  try {
+    // A verdict cached 299 s ago: still fresh for one more second.
+    for (const action of NARROW) {
+      client.setQueryData(
+        ['iam-permission', 'acc-1', ME, action, 'project', 'proj-1'],
+        { action, resource_type: 'project', resource_id: 'proj-1', allowed: true, reason: 'role' },
+        { updatedAt: start - 299_000 },
+      );
+    }
+    const page = (key: string) =>
+      React.createElement(QueryClientProvider, { client }, React.createElement(Many, { key, id: key, actions: NARROW }));
+    await act(async () => {
+      renderer = create(page('first'));
+    });
+    await settle();
+    expect(batches).toHaveLength(0);
+
+    // Two seconds later the verdict is 301 s old: a new gate asks the server.
+    setSystemTime(new Date(start + 2_000));
+    await act(async () => renderer?.update(page('second')));
+    await settle();
+    expect(batches).toHaveLength(1);
+  } finally {
+    setSystemTime();
+  }
+});

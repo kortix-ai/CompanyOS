@@ -134,6 +134,7 @@ export function ThenFields({
             </Label>
             <Input
               id="trigger-target-path"
+              size="xs"
               value={draft.targetPath}
               onChange={(e) => patch({ targetPath: e.target.value })}
               placeholder="/"

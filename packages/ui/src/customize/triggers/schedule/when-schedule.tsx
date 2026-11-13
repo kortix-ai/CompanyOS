@@ -37,6 +37,7 @@ export function WhenSchedule({
           <div className="flex items-center gap-2">
             <Input
               id="trigger-every"
+              size="xs"
               value={draft.every}
               onChange={(e) => patch({ every: e.target.value })}
               placeholder="1h"

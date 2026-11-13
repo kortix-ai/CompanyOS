@@ -1731,7 +1731,7 @@
         "email": "Е-пошта",
         "scheduled": "Заказано",
         "webhook": "Webhook",
-        "event": "Događaj aplikacije",
+        "event": "Događaj konektora",
         "manual": "Ручно",
         "all": "Све"
       },
@@ -21348,7 +21348,16 @@
       "textb1f8e3109f1b": "{value0}: {value1} дана је највише што Kortix дозвољава.",
       "textac20a57bfde0": "Сакриј",
       "text268733ac2f60": "Није било могуће ажурирати ту апликацију",
-      "text5d8926d4a4dd": "Није било могуће регистровати ту апликацију"
+      "text5d8926d4a4dd": "Није било могуће регистровати ту апликацију",
+      "text30b9ce09f406": "Unesite period kao 15m, 1h ili 1d, najmanje 1m.",
+      "text28d33d2ad989": "Izaberite aplikaciju koju poziva",
+      "textd777d7805cfa": "Unesite putanju koja počinje sa /",
+      "text8043e69a8dd6": "Obriši okidač",
+      "textd6fa1626e3af": "Događaj konektora je napravljen",
+      "textccf59f978ef6": "Ovde još nema događaja konektora",
+      "text82cbc4a4def0": "Događaji konektora nisu podešeni na ovoj instalaciji, pa ih nijedan konektor još ne može slati.",
+      "text458ceb31019b": "Okidači događaja konektora",
+      "text27ca9df9dbaa": "Okidači događaja konektora su isključeni"
     },
     "publicShareConfirm": {
       "title": "Направити јавни линк?",
@@ -21810,7 +21819,16 @@
     "crBranchHelp": "Покреће се када се захтев за измену споји у ову грану, или у било коју грану ако је поље празно. Упутство може да чита <code>change_request.number</code>, <code>change_request.title</code> и <code>change_request.base_ref</code>.",
     "eventsOff": "Догађаји конектора су у бета фази и искључени за овај радни простор. Укључите их под Заставице функција у администрацији радног простора.",
     "noApps": "Ниједна апликација у овом радном простору још не шаље догађаје. Објавите апликацију која шаље POST на <code>KORTIX_APP_EVENTS_URL</code>, па је изаберите овде.",
-    "openApps": "Отвори апликације"
+    "openApps": "Отвори апликације",
+    "thenLabel": "Šta radi pokretanje",
+    "thenAgent": "Pokreni agenta",
+    "thenApp": "Pozovi aplikaciju",
+    "targetPath": "Putanja",
+    "targetMethod": "Metoda",
+    "targetHelp": "Svako pokretanje budi aplikaciju i šalje podatke na ovu putanju. Nijedan agent se ne pokreće.",
+    "intervalLabel": "Ponavlja se svakih",
+    "intervalHelp": "Fiksni period kao 15m, 1h ili 1d.",
+    "useCalendar": "Koristi kalendarski raspored"
   },
   "gatewayAccess": {
     "heroTitle": "Користите моделе овог радног простора било где",
@@ -22155,7 +22173,7 @@
     "infoRunsThrough": "Провајдер",
     "infoSignsInWith": "Пријава помоћу",
     "infoCategory": "Категорија",
-    "infoAppEvents": "Догађаји апликације",
+    "infoAppEvents": "Događaji",
     "infoAppEventsYes": "Подржано",
     "authOAuth": "OAuth пријава",
     "authApiKey": "API кључ",
@@ -23706,9 +23724,9 @@
   },
   "automationsPause": {
     "groupTitle": "Okidači",
-    "groupDescription": "Распореди, петље, webhook-ови, догађаји апликација и монитори у овом радном простору.",
+    "groupDescription": "Rasporedi, petlje, webhookovi, događaji konektora i događaji aplikacija u ovom radnom prostoru.",
     "label": "Pauziraj sve okidače",
-    "description": "Ништа у овом радном простору се не покреће само: ни распоред, ни петља, ни webhook, ни догађај апликације, ни монитор. Ручно покретање окидача и даље ради.",
+    "description": "Ništa se u ovom radnom prostoru ne pokreće samo: nijedan raspored, petlja, webhook, događaj konektora ni događaj aplikacije. Ručno pokretanje okidača i dalje radi.",
     "readOnlyDescription": "Samo vlasnik ili administrator može da pauzira ili nastavi okidače.",
     "pausedSince": "Pauzirano od {date}.",
     "pauseTitle": "Pauzirati sve okidače?",

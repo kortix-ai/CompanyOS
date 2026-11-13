@@ -1731,7 +1731,7 @@
         "email": "電子メール",
         "scheduled": "スケジュール済み",
         "webhook": "Webhook",
-        "event": "アプリイベント",
+        "event": "コネクタイベント",
         "manual": "手動",
         "all": "すべて"
       },
@@ -21348,7 +21348,16 @@
       "textb1f8e3109f1b": "{value0}: {value1} 日が Kortix の上限です。",
       "textac20a57bfde0": "隠す",
       "text268733ac2f60": "そのアプリを更新できませんでした",
-      "text5d8926d4a4dd": "そのアプリを登録できませんでした"
+      "text5d8926d4a4dd": "そのアプリを登録できませんでした",
+      "text30b9ce09f406": "15m、1h、1d のような期間を入力してください（1m 以上）。",
+      "text28d33d2ad989": "呼び出すアプリを選択",
+      "textd777d7805cfa": "/ で始まるパスを入力してください",
+      "text8043e69a8dd6": "トリガーを削除",
+      "textd6fa1626e3af": "コネクタイベントを作成しました",
+      "textccf59f978ef6": "コネクタイベントはまだありません",
+      "text82cbc4a4def0": "このデプロイではコネクタイベントが設定されていないため、まだどのコネクタも送信できません。",
+      "text458ceb31019b": "コネクタイベントのトリガー",
+      "text27ca9df9dbaa": "コネクタイベントのトリガーはオフです"
     },
     "publicShareConfirm": {
       "title": "公開リンクを作成しますか？",
@@ -21810,7 +21819,16 @@
     "crBranchHelp": "変更リクエストがこのブランチにマージされたときに実行されます。空欄なら、どのブランチへのマージでも実行されます。指示では <code>change_request.number</code>、<code>change_request.title</code>、<code>change_request.base_ref</code> を使えます。",
     "eventsOff": "コネクタイベントはベータ版で、このワークスペースではオフです。ワークスペース管理の機能フラグでオンにしてください。",
     "noApps": "このワークスペースには、まだイベントを送るアプリがありません。<code>KORTIX_APP_EVENTS_URL</code> に POST するアプリをデプロイしてから、ここで選んでください。",
-    "openApps": "アプリを開く"
+    "openApps": "アプリを開く",
+    "thenLabel": "実行時の動作",
+    "thenAgent": "エージェントを実行",
+    "thenApp": "アプリを呼び出す",
+    "targetPath": "パス",
+    "targetMethod": "メソッド",
+    "targetHelp": "実行のたびにアプリを起動し、ペイロードをこのパスに送信します。エージェントは実行されません。",
+    "intervalLabel": "繰り返し間隔",
+    "intervalHelp": "15m、1h、1d のような固定期間。",
+    "useCalendar": "カレンダーのスケジュールを使う"
   },
   "gatewayAccess": {
     "heroTitle": "このワークスペースのモデルをどこでも使う",
@@ -22155,7 +22173,7 @@
     "infoRunsThrough": "プロバイダー",
     "infoSignsInWith": "サインイン方法",
     "infoCategory": "カテゴリ",
-    "infoAppEvents": "アプリイベント",
+    "infoAppEvents": "イベント",
     "infoAppEventsYes": "対応",
     "authOAuth": "OAuth サインイン",
     "authApiKey": "API キー",
@@ -23706,9 +23724,9 @@
   },
   "automationsPause": {
     "groupTitle": "トリガー",
-    "groupDescription": "このワークスペースのスケジュール、ループ、Webhook、アプリイベント、モニター。",
+    "groupDescription": "このワークスペースのスケジュール、ループ、Webhook、コネクタイベント、アプリイベント。",
     "label": "すべてのトリガーを一時停止",
-    "description": "このワークスペースでは何も自動で実行されません: スケジュール、ループ、Webhook、アプリイベント、モニターのいずれも。トリガーの手動実行は引き続き使えます。",
+    "description": "このワークスペースでは何も自動で実行されません。スケジュール、ループ、Webhook、コネクタイベント、アプリイベントはすべて停止します。トリガーの手動実行は引き続き使えます。",
     "readOnlyDescription": "トリガーの一時停止と再開ができるのはオーナーまたは管理者だけです。",
     "pausedSince": "{date} から一時停止中。",
     "pauseTitle": "すべてのトリガーを一時停止しますか？",

@@ -1227,7 +1227,7 @@ const catalog = {
         "email": "Email",
         "scheduled": "Scheduled",
         "webhook": "Webhook",
-        "event": "App event",
+        "event": "Connector event",
         "manual": "Manual",
         "all": "All"
       },
@@ -6209,7 +6209,16 @@ const catalog = {
       "text765a8cb04cf5": "LLM Hold Refund",
       "texta68ee4167406": "Proxy",
       "texta69c4dece144": "Storage",
-      "textab3aff8f7642": "Top-up Bonus"
+      "textab3aff8f7642": "Top-up Bonus",
+      "text30b9ce09f406": "Enter a period such as 15m, 1h or 1d, at least 1m.",
+      "text28d33d2ad989": "Choose the App to call",
+      "textd777d7805cfa": "Enter a path that starts with /",
+      "text8043e69a8dd6": "Delete trigger",
+      "textd6fa1626e3af": "Connector event created",
+      "textccf59f978ef6": "No connector events here yet",
+      "text82cbc4a4def0": "Connector events are not set up on this deployment, so no connector can send them yet.",
+      "text458ceb31019b": "Connector event triggers",
+      "text27ca9df9dbaa": "Connector event triggers are off"
     },
     "publicShareConfirm": {
       "title": "Create a public link?",
@@ -6637,7 +6646,16 @@ const catalog = {
     "crBranchHelp": "Runs when a change request merges into this branch, or into any branch when it is empty. The instruction can read <code>change_request.number</code>, <code>change_request.title</code> and <code>change_request.base_ref</code>.",
     "eventsOff": "Connector events are in beta and off for this workspace. Turn them on under Feature flags in Workspace admin.",
     "noApps": "No App in this workspace sends events yet. Deploy an App that POSTs to <code>KORTIX_APP_EVENTS_URL</code>, then pick it here.",
-    "openApps": "Open Apps"
+    "openApps": "Open Apps",
+    "thenLabel": "What a fire does",
+    "thenAgent": "Run an agent",
+    "thenApp": "Call an App",
+    "targetPath": "Path",
+    "targetMethod": "Method",
+    "targetHelp": "Each fire wakes the App and sends the payload to this path. No agent runs.",
+    "intervalLabel": "Repeats every",
+    "intervalHelp": "A fixed period such as 15m, 1h or 1d.",
+    "useCalendar": "Use a calendar schedule"
   },
   "gatewayAccess": {
     "heroTitle": "Use this workspace's models anywhere",
@@ -6910,7 +6928,7 @@ const catalog = {
     "infoRunsThrough": "Provider",
     "infoSignsInWith": "Signs in with",
     "infoCategory": "Category",
-    "infoAppEvents": "App events",
+    "infoAppEvents": "Events",
     "infoAppEventsYes": "Supported",
     "authOAuth": "OAuth sign-in",
     "authApiKey": "API key",
@@ -7839,9 +7857,9 @@ const catalog = {
   },
   "automationsPause": {
     "groupTitle": "Triggers",
-    "groupDescription": "Schedules, loops, webhooks, app events and monitors in this workspace.",
+    "groupDescription": "Schedules, loops, webhooks, connector events and App events in this workspace.",
     "label": "Pause all triggers",
-    "description": "Nothing in this workspace runs on its own: no schedule, loop, webhook, app event or monitor. Running a trigger by hand still works.",
+    "description": "Nothing in this workspace runs on its own: no schedule, loop, webhook, connector event or App event. Running a trigger by hand still works.",
     "readOnlyDescription": "Only an owner or admin can pause or resume triggers.",
     "pausedSince": "Paused since {date}.",
     "pauseTitle": "Pause all triggers?",

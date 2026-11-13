@@ -151,6 +151,7 @@ function ProjectHomeView({
     submit?: boolean | 'when-ready';
     files?: AttachedFile[];
     options?: SessionPromptOverrides;
+    restoreDraft?: boolean;
   } | null>(null);
 
   // The sandbox TEMPLATE catalog, not live sandbox health (that is
@@ -367,13 +368,18 @@ function ProjectHomeView({
 
   useEffect(() => {
     if (!pendingPrefill) return;
-    consumePrefill(projectId);
+    // Apply what `consume` returns, never the render-time snapshot: the
+    // typing buffer may have dropped the entry since this render (another
+    // account signed in on the tab), and a dropped entry must not land.
+    const taken = consumePrefill(projectId);
+    if (!taken) return;
     setPrefill({
-      text: pendingPrefill.text,
+      text: taken.text,
       id: Date.now(),
-      submit: pendingPrefill.submit,
-      files: pendingPrefill.files,
-      options: pendingPrefill.options,
+      submit: taken.submit,
+      files: taken.files,
+      options: taken.options,
+      restoreDraft: taken.restoreDraft,
     });
   }, [pendingPrefill, projectId, consumePrefill]);
 

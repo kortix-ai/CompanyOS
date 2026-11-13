@@ -618,6 +618,9 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
           role: 'textbox',
           'aria-multiline': 'true',
           'aria-label': t('messageInput'),
+          // A locale-free hook for code outside the composer that must know
+          // the editor exists (`use-home-typing-buffer.ts` in apps/web).
+          'data-composer-editor': '',
           /**
            * `min-h-[3.5em]` — taller than one line by design. History: was
            * `1.5em` (exactly one line) on the reasoning that a taller floor

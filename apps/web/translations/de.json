@@ -709,6 +709,7 @@
       "gracePeriodDescription": "Die Löschung erfolgt am geplanten Datum. Du kannst sie vorher jederzeit abbrechen.",
       "immediateLabel": "Sofort löschen",
       "immediateDescription": "Ihr Konto und seine Daten werden umgehend gelöscht. Dies kann nicht rückgängig gemacht werden.",
+      "noWorkspaceImmediateOnly": "Du gehörst zu keinem Workspace, daher gibt es keine Schonfrist: Dein Konto wird sofort gelöscht.",
       "typeDeleteToConfirm": "Geben Sie zur Bestätigung „delete“ ein",
       "keepAccount": "Konto behalten",
       "processing": "Verarbeitung…",
@@ -731,7 +732,7 @@
         "left": "Du verlässt",
         "blockers": "Du bist ihr einziger Inhaber, und andere arbeiten darin. Übertrage die Inhaberschaft oder lösche den Workspace.",
         "members": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
-        "nothing": "Du gehörst zu keinem Workspace. Nur deine Anmeldung wird gelöscht.",
+        "nothing": "Mit deinem Konto wird kein Workspace gelöscht oder verlassen.",
         "blockersTitle": "Übergib diese zuerst"
       }
     },
@@ -26756,12 +26757,6 @@
       "setDefaultTitle": "Als Standardmodell des Workspace festlegen",
       "setDefaultAria": "{model} als Standardmodell dieses Workspace festlegen",
       "setWorkspaceDefault": "Als Workspace-Standard festlegen"
-    },
-    "profile": {
-      "deleteLogin": "Mein Login löschen",
-      "deleteLoginDescription": "Löscht deinen Kortix-Login. Du gehörst zu keinem Workspace, daher wird nichts anderes gelöscht.",
-      "deleteLoginTitle": "Login löschen?",
-      "deleteLoginWarning": "Dein Login wird sofort gelöscht. Das kann nicht rückgängig gemacht werden."
     },
     "capture": {
       "noWorkspaceTitle": "Erstelle zuerst einen Workspace oder tritt einem bei.",

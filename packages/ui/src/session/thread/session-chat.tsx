@@ -4068,8 +4068,15 @@ export function SessionChat({
   // (Claude Code's agent panel). It reads its own lists and never holds the composer.
   const agentsLineCompact = !!transcriptRows && !isPhone;
   const chatUnderbarSlot = useMemo(
-    () => <AgentsLine projectId={projectId} sessionId={projectSessionId} compact={agentsLineCompact} />,
-    [projectId, projectSessionId, agentsLineCompact],
+    () => (
+      <AgentsLine
+        projectId={projectId}
+        sessionId={projectSessionId}
+        compact={agentsLineCompact}
+        live={isServerBusy}
+      />
+    ),
+    [projectId, projectSessionId, agentsLineCompact, isServerBusy],
   );
 
   // A space's thread lists only the queue's live messages in its card: failed
@@ -4574,6 +4581,7 @@ export function SessionChat({
             sessionTitle={session?.title || 'Untitled'}
             leadingAction={headerLeadingAction}
             parent={parentCrumb}
+            live={isServerBusy}
           />
         )}
 
@@ -5320,7 +5328,7 @@ export function SessionChat({
               {/* Messages from other sessions that wait for the person: one card each,
                   under the composer. `empty:hidden` drops the gutter while none waits. */}
               <div className={cn(COMPOSER_SHELL_CLASS, 'pb-3 empty:hidden', transcriptRows && 'max-w-none px-5')}>
-                <HeldMessages projectId={projectId} sessionId={projectSessionId} />
+                <HeldMessages projectId={projectId} sessionId={projectSessionId} live={isServerBusy} />
               </div>
             </>
           )}

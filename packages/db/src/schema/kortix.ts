@@ -5075,6 +5075,8 @@ export const usageEvents = kortixSchema.table(
       .on(table.requestId)
       .where(sql`${table.requestId} is not null`),
     index('idx_usage_events_account_time').on(table.accountId, table.createdAt),
+    // Account-agnostic time-range read of the ops overview (last 24h, all accounts).
+    index('idx_usage_events_created_at').on(table.createdAt),
     index('idx_usage_events_project_time').on(table.projectId, table.createdAt),
     index('idx_usage_events_session').on(table.sessionId),
     index('idx_usage_events_model').on(table.provider, table.model),

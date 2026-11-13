@@ -28,8 +28,8 @@ tasks serve traffic only.
 | Image and command | the API image, `bun run src/worker.ts` |
 | Environment | copied from the running API task definition by `ecs-deploy.sh --service worker`, without `KORTIX_PROCESS_ROLE` |
 | Logs | `/ecs/kortix-prod`, streams `worker/worker/<task-id>` |
-| Alarms | `kortix-prod-worker-not-running`, `kortix-prod-worker-stale-jobs` → SNS `kortix-compliance-alerts` (eu-west-2, read by `compliance-monitoring/monitoring.tf`; the topic itself is not in Terraform) |
-| Metric | `Kortix/Worker` `StaleJobs`, dimension `Environment = prod` |
+| Alarms | `kortix-prod-worker-not-running`, `kortix-prod-worker-stale-jobs`, `kortix-prod-worker-prompt-delivery` (3 or more running boxes holding an undelivered prompt for 3 of 3 minutes) → SNS `kortix-compliance-alerts` (eu-west-2, read by `compliance-monitoring/monitoring.tf`; the topic itself is not in Terraform) |
+| Metrics | `Kortix/Worker` `StaleJobs`; `Kortix/Sessions` `UnreachableActiveBoxes` and `ParkedPrompts`; dimension `Environment = prod` |
 
 Deploy Prod's `deploy-ecs` job rolls the worker first, then the
 API. The API gets `KORTIX_PROCESS_ROLE=web` only when the worker runs a revision

@@ -63,7 +63,11 @@ their cursor in the database, and billing rotations are idempotent per account
 and month.
 
 Alarms (`infra/terraform/modules/ecs-api`): the worker service runs no task for
-5 minutes, or `StaleJobs` stays at 1 or more for 5 minutes. The kill switch puts
+5 minutes, or `StaleJobs` stays at 1 or more for 5 minutes. A third alarm is
+not about the worker itself: `jobs/prompt-delivery-metric.ts` writes one
+`{"kortix_metric":"prompt_delivery",…}` line a minute, and
+`Kortix/Sessions` `UnreachableActiveBoxes` pages when 3 or more running boxes
+hold a prompt Kortix could not deliver for 3 minutes (prod only). The kill switch puts
 the jobs back on the web servers: `infra/scripts/ecs-deploy.sh <env> <image>
 --service api --process-role all`.
 

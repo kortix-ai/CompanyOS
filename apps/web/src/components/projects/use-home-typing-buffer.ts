@@ -52,10 +52,10 @@ const COMPOSER_EDITOR = '[data-composer-editor]';
  * keeps it after `ProjectHome` consumed the prompt.
  *
  * The entry is not dropped when the route leaves the home: home redirects to
- * `/chat` when chats are on, and `SpaceView` consumes it there. Known edge:
- * keys typed on an access-gate screen, followed by leaving the project before
- * any home composer mounts, land in that project's home composer on a later
- * visit in the same tab.
+ * `/chat` when chats are on, and `SpaceView` consumes it there. A buffer left
+ * behind (keys typed on an access-gate screen, then the person leaves every
+ * workspace page before a home composer mounts) is dropped on the next mount,
+ * so it never shows on a later visit or to another account.
  *
  * The buffer belongs to the person who typed it. When the signed-in user
  * changes without a page load (another tab signs out, or signs in as someone
@@ -75,15 +75,30 @@ export function useHomeTypingBuffer(viewerUserId: string | null): void {
   const latch = useRef<{ projectId: string | null; handedOver: boolean; text: string }>({ projectId: null, handedOver: false, text: '' });
   const lastViewer = useRef<string | null>(null);
 
+  // Mount: an entry this hook did not write in this mount is stale. It was
+  // left by an earlier visit, maybe by another account that signed in while
+  // no workspace page (and so no buffer) was open. This hook stays mounted
+  // from the first paint through the redirect to the chat, so a live buffer
+  // is never older than the mount.
+  useLayoutEffect(() => {
+    const prefills = useComposerPrefillStore.getState();
+    for (const [id, entry] of Object.entries(prefills.prefillByProject)) {
+      if (entry.restoreDraft) prefills.consume(id);
+    }
+  }, []);
+
   useLayoutEffect(() => {
     const previousViewer = lastViewer.current;
     if (viewerUserId) lastViewer.current = viewerUserId;
     if (previousViewer && viewerUserId && previousViewer !== viewerUserId) {
+      // Everything in the store was written before this account change, so it
+      // belongs to the previous viewer: keys this buffer took and prompts
+      // other surfaces handed over (some send themselves on arrival).
+      // `resetClientState` empties the store too; this also covers the
+      // buffer's own text, which lives in this hook.
       latch.current.text = '';
       const prefills = useComposerPrefillStore.getState();
-      for (const [id, entry] of Object.entries(prefills.prefillByProject)) {
-        if (entry.restoreDraft) prefills.consume(id);
-      }
+      for (const id of Object.keys(prefills.prefillByProject)) prefills.consume(id);
     }
     if (!projectId || typeof window === 'undefined') {
       latch.current = { projectId: null, handedOver: false, text: '' };

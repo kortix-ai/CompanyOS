@@ -158,3 +158,31 @@ test('a home mounting for the next account in the same commit gets nothing', () 
   expect(consumed).toEqual([]);
   expect(useComposerPrefillStore.getState().prefillByProject.p1).toBeUndefined();
 });
+
+test('a buffer left behind by an earlier mount never reaches the next one', () => {
+  act(() => root.render(<Boundary home={false} user="u1" />));
+  press('s');
+  // Leave every workspace page: the buffer unmounts with its entry still stored.
+  act(() => root.render(null));
+  // Another account opens the workspace home later in the same tab.
+  act(() => root.render(<Boundary user="u2" />));
+  expect(consumed).toEqual([]);
+  expect(useComposerPrefillStore.getState().prefillByProject.p1).toBeUndefined();
+});
+
+test('a prompt handed over by another surface survives the mount', () => {
+  useComposerPrefillStore.getState().setPrefill('p1', 'Quick Entry prompt', { submit: true });
+  act(() => root.render(<Boundary />));
+  expect(consumed).toEqual([{ text: 'Quick Entry prompt', submit: true }]);
+});
+
+test('an account change also drops a handed-over prompt and the buffer text', () => {
+  act(() => root.render(<Boundary home={false} user="u1" />));
+  press('s');
+  useComposerPrefillStore.getState().setPrefill('p2', 'quick entry prompt', { submit: true });
+  act(() => root.render(<Boundary home={false} user="u2" />));
+  expect(useComposerPrefillStore.getState().prefillByProject).toEqual({});
+  // The next account's keys start a fresh buffer: nothing of "s" survives.
+  press('x');
+  expect(useComposerPrefillStore.getState().prefillByProject.p1).toEqual({ text: 'x', restoreDraft: true });
+});

@@ -8,6 +8,7 @@ import * as deviceCaches from '@/lib/device-caches';
 import { useBrowserRecentsStore } from '@kortix/ui/internal/stores/browser-recents-store';
 import { useMobileAppPromoStore } from '@kortix/ui/internal/stores/mobile-app-promo-store';
 import { useTabStore } from '@kortix/ui/internal/stores/tab-store';
+import { useComposerPrefillStore } from '@kortix/ui/internal/stores/composer-prefill-store';
 import { useUserPreferencesStore } from '@kortix/ui/internal/stores/user-preferences-store';
 import {
   clearImpersonationSession,
@@ -373,5 +374,14 @@ describe('resetClientState clears the impersonation session, module state includ
     // file is still the wrong default to model.
     clearImpersonationSession();
     expect(getImpersonationSession()).toBeNull();
+  });
+});
+
+describe('resetClientState clears prompts waiting for a composer', () => {
+  test('a self-sending handed-over prompt and typed-while-loading keys do not reach the next user', async () => {
+    useComposerPrefillStore.getState().setPrefill('p1', 'quick entry prompt', { submit: true });
+    useComposerPrefillStore.getState().setPrefill('p2', 'typed while loading', { restoreDraft: true });
+    await resetClientState({ idbTimeoutMs: 5 });
+    expect(useComposerPrefillStore.getState().prefillByProject).toEqual({});
   });
 });

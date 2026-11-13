@@ -6,6 +6,7 @@
 import { GOAL_LIMITS, GOAL_OPEN_STATES, type GoalCapabilities } from '@kortix/api-contract';
 import type { ProjectGoalCriterion } from '@kortix/db';
 import { parseDurationSeconds } from '@kortix/manifest-schema';
+import { UUID_SOURCE } from '../../shared/validate';
 import type { GoalRow } from './store';
 
 /**
@@ -37,7 +38,7 @@ export function isBoundGoal(goal: { setup: Record<string, unknown> }): boolean {
 
 /** The marker every prompt the goal engine writes starts with (`goalWakePrompt`). */
 const wakeMarker = (boxFolder: string): string => `Goal wake: ${boxFolder}.`;
-const NAMED_GOAL = /\bgoal ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/;
+const NAMED_GOAL = new RegExp(`\\bgoal (${UUID_SOURCE})\\b`);
 
 /**
  * A prompt the goal engine queued, not a person, and the goal it names: one

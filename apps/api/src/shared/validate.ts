@@ -27,6 +27,13 @@ export function isUuid(value: unknown): value is Uuid {
 
 const UUID_IN_TEXT = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
+/**
+ * The lowercase 8-4-4-4-12 shape as a RegExp source, for a pattern that finds a
+ * UUID inside other text (e.g. `goal <uuid>` in a prompt). It has no flags and
+ * no anchors; the caller adds both.
+ */
+export const UUID_SOURCE = UUID_IN_TEXT.source;
+
 /** Every UUID-shaped substring of `text`, in order (e.g. session ids in a git ref). */
 export function uuidsIn(text: string): string[] {
   return text.match(UUID_IN_TEXT) ?? [];

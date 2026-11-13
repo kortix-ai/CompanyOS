@@ -8,7 +8,8 @@ import * as deviceCaches from '@/lib/device-caches';
 import { useBrowserRecentsStore } from '@kortix/ui/internal/stores/browser-recents-store';
 import { useMobileAppPromoStore } from '@kortix/ui/internal/stores/mobile-app-promo-store';
 import { useTabStore } from '@kortix/ui/internal/stores/tab-store';
-import { useComposerPrefillStore, useSessionComposerPrefillStore } from '@kortix/ui/internal/stores/composer-prefill-store';
+import { useComposerPrefillStore } from '@kortix/ui/internal/stores/composer-prefill-store';
+import { useSessionComposerPrefillStore } from '@kortix/ui/session/composer/stores/session-composer-prefill-store';
 import { useUserPreferencesStore } from '@kortix/ui/internal/stores/user-preferences-store';
 import {
   clearImpersonationSession,

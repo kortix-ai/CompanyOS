@@ -2101,7 +2101,13 @@
       "noModelUpgradeReason": "Kein Modell: auf den Credits-Plan upgraden oder einen eigenen Anbieter-Schlüssel hinzufügen.",
       "noModelKeyReason": "Kein Modell: eigenen Anbieter-Schlüssel hinzufügen.",
       "noModelUpgradePlan": "Plan upgraden",
-      "noModelAddProviderKey": "Anbieter-Schlüssel hinzufügen"
+      "noModelAddProviderKey": "Anbieter-Schlüssel hinzufügen",
+      "stepTitle": "Modell verbinden",
+      "stepBody": "Agenten in {workspace} brauchen ein Modell, um zu antworten. Verbinde dein ChatGPT- oder Claude-Abo oder füge einen Anbieter-Schlüssel hinzu.",
+      "stepBodyUpgrade": "Agenten in {workspace} brauchen ein Modell, um zu antworten. Verbinde dein ChatGPT- oder Claude-Abo, füge einen Anbieter-Schlüssel hinzu oder upgrade auf den Credits-Plan für Kortix-Modelle.",
+      "stepBodyMember": "Agenten in {workspace} brauchen ein Modell, um zu antworten. Melde dich mit deinem Claude-Abo an oder bitte jemanden, der diesen Workspace verwaltet, ein Modell zu verbinden.",
+      "stepThisWorkspace": "diesem Workspace",
+      "stepBack": "Zurück zu den Workspaces"
     },
     "providerRecovery": {
       "savedPrompt": "Gespeicherter Prompt",

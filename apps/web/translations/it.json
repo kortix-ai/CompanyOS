@@ -2101,7 +2101,13 @@
       "noModelUpgradeReason": "Nessun modello: passa al piano Credits o aggiungi la tua chiave del provider.",
       "noModelKeyReason": "Nessun modello: aggiungi la tua chiave del provider.",
       "noModelUpgradePlan": "Aggiorna piano",
-      "noModelAddProviderKey": "Aggiungi chiave del provider"
+      "noModelAddProviderKey": "Aggiungi chiave del provider",
+      "stepTitle": "Collega un modello",
+      "stepBody": "Gli agenti di {workspace} hanno bisogno di un modello per rispondere. Collega il tuo piano ChatGPT o Claude, oppure aggiungi una chiave del provider.",
+      "stepBodyUpgrade": "Gli agenti di {workspace} hanno bisogno di un modello per rispondere. Collega il tuo piano ChatGPT o Claude, aggiungi una chiave del provider, oppure passa al piano Credits per i modelli Kortix.",
+      "stepBodyMember": "Gli agenti di {workspace} hanno bisogno di un modello per rispondere. Accedi con il tuo piano Claude, oppure chiedi a chi gestisce questo workspace di collegare un modello.",
+      "stepThisWorkspace": "questo workspace",
+      "stepBack": "Torna ai workspace"
     },
     "providerRecovery": {
       "savedPrompt": "Prompt salvato",

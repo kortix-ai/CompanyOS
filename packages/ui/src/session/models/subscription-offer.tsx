@@ -63,15 +63,22 @@ function writeDismissed(projectId: string, ids: PlanId[]) {
  * send with, so the rows stay.
  *
  * `projectId` omitted: the gate reads the `[id]` route segment.
+ *
+ * `plans` limits the rows to these providers, in their usual order. A member
+ * who cannot change the project's models signs in to their own Claude plan
+ * only; a ChatGPT login and keys are project-wide (`provider-accordion.tsx`
+ * `canSignIn`).
  */
 export function ConnectPlanRows({
   projectId,
   dismissible,
   className,
+  plans: only,
 }: {
   projectId?: string;
   dismissible: boolean;
   className?: string;
+  plans?: ReadonlyArray<PlanId>;
 }) {
   const above = useContext(ModelConnectionLayoutContext) === 'above';
   const t = useTranslations('sessionUi.modelGate');
@@ -82,7 +89,9 @@ export function ConnectPlanRows({
   const [dismissed, setDismissed] = useState<PlanId[]>(() =>
     dismissible ? readDismissed(projectId) : [],
   );
-  const plans = PLANS.filter((plan) => !dismissed.includes(plan.providerId));
+  const plans = PLANS.filter(
+    (plan) => !dismissed.includes(plan.providerId) && (!only || only.includes(plan.providerId)),
+  );
 
   const dismiss = (id: PlanId) => {
     const next = [...dismissed, id];

@@ -2101,7 +2101,13 @@
       "noModelUpgradeReason": "Нема модела: пређи на Credits план или додај свој кључ провајдера.",
       "noModelKeyReason": "Нема модела: додај свој кључ провајдера.",
       "noModelUpgradePlan": "Надогради план",
-      "noModelAddProviderKey": "Додај кључ провајдера"
+      "noModelAddProviderKey": "Додај кључ провајдера",
+      "stepTitle": "Повежи модел",
+      "stepBody": "Агентима у {workspace} треба модел да би одговорили. Повежи свој ChatGPT или Claude план, или додај кључ провајдера.",
+      "stepBodyUpgrade": "Агентима у {workspace} треба модел да би одговорили. Повежи свој ChatGPT или Claude план, додај кључ провајдера или пређи на Credits план за Kortix моделе.",
+      "stepBodyMember": "Агентима у {workspace} треба модел да би одговорили. Пријави се својим Claude планом или замоли некога ко управља овим радним простором да повеже модел.",
+      "stepThisWorkspace": "овом радном простору",
+      "stepBack": "Назад на радне просторе"
     },
     "providerRecovery": {
       "savedPrompt": "Сачуван упит",

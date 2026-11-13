@@ -2101,7 +2101,13 @@
       "noModelUpgradeReason": "No model: upgrade to the Credits plan or add your own provider key.",
       "noModelKeyReason": "No model: add your own provider key.",
       "noModelUpgradePlan": "Upgrade plan",
-      "noModelAddProviderKey": "Add provider key"
+      "noModelAddProviderKey": "Add provider key",
+      "stepTitle": "Connect a model",
+      "stepBody": "Agents in {workspace} need a model to answer. Connect your ChatGPT or Claude plan, or add a provider key.",
+      "stepBodyUpgrade": "Agents in {workspace} need a model to answer. Connect your ChatGPT or Claude plan, add a provider key, or upgrade to the Credits plan for Kortix models.",
+      "stepBodyMember": "Agents in {workspace} need a model to answer. Sign in with your Claude plan, or ask someone who manages this workspace to connect a model.",
+      "stepThisWorkspace": "this workspace",
+      "stepBack": "Back to workspaces"
     },
     "providerRecovery": {
       "savedPrompt": "Saved prompt",

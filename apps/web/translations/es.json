@@ -2101,7 +2101,13 @@
       "noModelUpgradeReason": "Sin modelo: mejora al plan Credits o añade tu propia clave de proveedor.",
       "noModelKeyReason": "Sin modelo: añade tu propia clave de proveedor.",
       "noModelUpgradePlan": "Mejorar plan",
-      "noModelAddProviderKey": "Añadir clave de proveedor"
+      "noModelAddProviderKey": "Añadir clave de proveedor",
+      "stepTitle": "Conecta un modelo",
+      "stepBody": "Los agentes de {workspace} necesitan un modelo para responder. Conecta tu plan de ChatGPT o Claude, o añade una clave de proveedor.",
+      "stepBodyUpgrade": "Los agentes de {workspace} necesitan un modelo para responder. Conecta tu plan de ChatGPT o Claude, añade una clave de proveedor o mejora al plan Credits para usar los modelos de Kortix.",
+      "stepBodyMember": "Los agentes de {workspace} necesitan un modelo para responder. Inicia sesión con tu plan de Claude o pide a alguien que gestione este espacio de trabajo que conecte un modelo.",
+      "stepThisWorkspace": "este espacio de trabajo",
+      "stepBack": "Volver a los espacios de trabajo"
     },
     "providerRecovery": {
       "savedPrompt": "Prompt guardado",

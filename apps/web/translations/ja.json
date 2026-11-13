@@ -2101,7 +2101,13 @@
       "noModelUpgradeReason": "モデルがありません: Credits プランにアップグレードするか、自分のプロバイダーキーを追加してください。",
       "noModelKeyReason": "モデルがありません: 自分のプロバイダーキーを追加してください。",
       "noModelUpgradePlan": "プランをアップグレード",
-      "noModelAddProviderKey": "プロバイダーキーを追加"
+      "noModelAddProviderKey": "プロバイダーキーを追加",
+      "stepTitle": "モデルを接続",
+      "stepBody": "{workspace} のエージェントが応答するにはモデルが必要です。ChatGPT または Claude のプランを接続するか、プロバイダーキーを追加してください。",
+      "stepBodyUpgrade": "{workspace} のエージェントが応答するにはモデルが必要です。ChatGPT または Claude のプランを接続するか、プロバイダーキーを追加するか、Kortix モデルを使える Credits プランにアップグレードしてください。",
+      "stepBodyMember": "{workspace} のエージェントが応答するにはモデルが必要です。自分の Claude プランでサインインするか、このワークスペースの管理者にモデルの接続を依頼してください。",
+      "stepThisWorkspace": "このワークスペース",
+      "stepBack": "ワークスペースに戻る"
     },
     "providerRecovery": {
       "savedPrompt": "保存済みプロンプト",

@@ -3341,3 +3341,112 @@ flow(
     });
   },
 );
+
+// ── TRG-43: a plain `git push` through the proxy applies kortix.yaml at once ──
+// Before 2026-11-12 only the periodic sweep (100 projects every 120 s) read a
+// pushed kortix.yaml into the trigger runtime and the project policies, so a
+// trigger turned off by a push kept firing for up to ~3 h. Each wait below is
+// 20 s: the push applies it, not the sweep.
+flow(
+  'TRG-43',
+  {
+    domain: 'triggers',
+    requires: ['database'],
+    timeoutMs: 300_000,
+    routes: [
+      'POST /v1/accounts/tokens',
+      'GET /v1/git/:project/info/refs',
+      'POST /v1/git/:project/git-upload-pack',
+      'POST /v1/git/:project/git-receive-pack',
+    ],
+  },
+  async (ctx) => {
+    if (ctx.env.target !== 'local') return; // serves the fixture repository over local HTTP, as AUD-7
+    const { serveFixtureRepoLocally } = await import('../fixtures/local-git');
+    const p = await ctx.fixtures.project({ managedGit: true });
+    const created = await ctx.client.as(ctx.P.OWNER).post('/v1/accounts/tokens', {
+      name: ctx.fixtures.name('trg43'),
+      account_id: ctx.P.accountId,
+    });
+    created.status(201);
+    const token = created.json<{ token_id: string; secret_key: string }>();
+    const work = mkdtempSync(join(tmpdir(), 'ke2e-trg43-'));
+    const remote = `${ctx.env.apiUrl.replace(/\/v1$/, '')}/v1/git/${p.id}`;
+    const gitEnv = {
+      ...process.env,
+      GIT_TERMINAL_PROMPT: '0',
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'http.extraHeader',
+      GIT_CONFIG_VALUE_0: `Authorization: Bearer ${token.secret_key}`,
+    };
+    // Async: the fixture's git HTTP server runs in this process, so a blocking
+    // exec would leave it unable to answer the proxy.
+    const { execFile } = await import('node:child_process');
+    const { promisify } = await import('node:util');
+    const exec = promisify(execFile);
+    const git = (args: string[]) => exec('git', args, { cwd: work, env: gitEnv, timeout: 60_000 });
+    const push = async (manifest: string, message: string) => {
+      writeFileSync(join(work, 'kortix.yaml'), manifest);
+      await git(['add', 'kortix.yaml']);
+      await git(['-c', 'user.name=KE2E', '-c', 'user.email=ke2e@kortix.invalid', 'commit', '-qm', message]);
+      await git(['push', '-q', 'origin', 'HEAD:refs/heads/main']);
+    };
+    const manifest = (enabled: boolean, policy: string) =>
+      'project:\n  name: trg43\ndefault_agent: kortix\nagents:\n  kortix: {}\n' +
+      `triggers:\n  - slug: pushed\n    name: Pushed\n    type: cron\n    enabled: ${enabled}\n    cron: "0 0 3 * * *"\n    timezone: UTC\n    prompt: run\n` +
+      policy;
+    const runtime = () =>
+      withDb(ctx, async (db) =>
+        (await db.query(
+          "SELECT enabled FROM kortix.project_trigger_runtime WHERE project_id = $1 AND slug = 'pushed'",
+          [p.id],
+        )).rows as Array<{ enabled: boolean | null }>,
+      );
+    const policies = () =>
+      withDb(ctx, async (db) =>
+        (await db.query(
+          'SELECT match, action FROM kortix.connector_project_policies WHERE project_id = $1 ORDER BY position',
+          [p.id],
+        )).rows as Array<{ match: string; action: string }>,
+      );
+    let server: import('node:http').Server | null = null;
+    try {
+      server = await withDb(ctx, (db) => serveFixtureRepoLocally(ctx, db, p.id, 'TRG-43'));
+      await git(['clone', '-q', '--branch', 'main', remote, '.']);
+
+      await ctx.step('push kortix.yaml with an enabled cron trigger through the proxy → its runtime row is on within 20 s', async () => {
+        await push(manifest(true, ''), 'ke2e: add pushed trigger');
+        await waitFor(runtime, {
+          until: (rows) => rows[0]?.enabled === true,
+          timeoutMs: 20_000,
+          intervalMs: 500,
+          description: 'the pushed trigger reaches the runtime',
+        });
+      });
+
+      await ctx.step('push `enabled: false` → the runtime row is off within 20 s', async () => {
+        await push(manifest(false, ''), 'ke2e: disable pushed trigger');
+        await waitFor(runtime, {
+          until: (rows) => rows[0]?.enabled === false,
+          timeoutMs: 20_000,
+          intervalMs: 500,
+          description: 'the disabled trigger reaches the runtime',
+        });
+      });
+
+      await ctx.step('push a `block` policy → the project policy row exists within 20 s', async () => {
+        await push(manifest(false, 'policies:\n  - match: "gmail.send_email"\n    action: block\n'), 'ke2e: block sends');
+        await waitFor(policies, {
+          until: (rows) => rows.some((r) => r.match === 'gmail.send_email' && r.action === 'block'),
+          timeoutMs: 20_000,
+          intervalMs: 500,
+          description: 'the pushed block policy reaches the gateway table',
+        });
+      });
+    } finally {
+      server?.close();
+      rmSync(work, { recursive: true, force: true });
+      await withDb(ctx, (db) => db.query('DELETE FROM kortix.account_tokens WHERE token_id = $1', [token.token_id]));
+    }
+  },
+);

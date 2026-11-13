@@ -201,4 +201,13 @@ describe('GlassSearchField (the switcher sheet)', () => {
     act(() => (button('Close search')[0]!.props.onPress as () => void)());
     expect(pill()[0]!.props.value).toBe('');
   });
+
+  test('Android: the pill sits in a row, so its flex-1 is its width, not a squeezed height', () => {
+    platform.OS = 'android';
+    render(<Field />);
+    const parent = tree!.toJSON() as { type: string; props: { className?: string }; children: Array<{ type: string }> };
+    expect(parent.type).toBe('view');
+    expect(parent.props.className).toContain('flex-row');
+    expect(parent.children[0]!.type).toBe('search-pill');
+  });
 });

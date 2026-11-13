@@ -3,7 +3,7 @@
  * Supabase (`kortix-local`), instead of a second Supabase stack per worktree.
  *
  * A full stack costs ~0.6–0.9 GB of RAM and 8 containers. A branch database is
- * a copy of the primary's `auth`, `basejump`, `kortix*` and `public` schemas
+ * a copy of the primary's `auth`, `kortix*` and `public` schemas
  * (~200 MB, ~3 s), migrated to the worktree branch. GoTrue, Kong, Storage and
  * Studio stay shared.
  *
@@ -30,7 +30,7 @@ export function withDatabase(url: string, database: string): string {
 }
 
 /** Schemas a branch copies. Supabase's own (storage, realtime, cron, vault, …) stay in the primary. */
-const BRANCH_SCHEMAS = ['auth', 'basejump', 'kortix', 'kortix_wallet', 'kortix_migrations', 'public'];
+const BRANCH_SCHEMAS = ['auth', 'kortix', 'kortix_wallet', 'kortix_migrations', 'public'];
 /** Audit rows are ~1.5 GB on a long-lived primary and nothing in a branch reads history. */
 const SKIP_DATA = ['kortix.audit_events*', 'auth.audit_log_entries'];
 

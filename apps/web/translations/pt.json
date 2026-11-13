@@ -340,6 +340,7 @@
       "repositoryLabel": "Repositório",
       "loadingOptions": "A carregar opções de repositório…",
       "managedUnavailable": "Os repositórios geridos pelo Kortix não estão disponíveis nesta instância. Um administrador da plataforma configura isto na consola de administração.",
+      "githubAfterCreate": "Para usar o seu próprio GitHub nos próximos espaços de trabalho, ligue-o em Definições do espaço de trabalho › Git quando este existir.",
       "installationUnreachable": "Esta ligação do GitHub já não funciona. Volte a ligá-la para listar repositórios.",
       "reconnect": "Voltar a ligar nas definições de Git",
       "managedImportLabel": "Importar um repositório gerido existente",
@@ -1267,10 +1268,6 @@
           "name": "Segredos protegidos pela rede",
           "description": "Controle quais ferramentas e destinos podem receber os segredos do espaço de trabalho."
         },
-        "pooled_provider_secrets": {
-          "name": "Segredos de provedor compartilhados",
-          "description": "Os membros conectam as próprias assinaturas do ChatGPT e chaves de provedor, compartilham quando necessário e escolhem quais cada sessão usa."
-        },
         "reminders": {
           "name": "Ciclos",
           "description": "Permite que agentes e pessoas agendem verificações em uma sessão, uma vez ou de forma recorrente. Cada disparo aciona essa sessão novamente. Adiciona os ciclos à lista de Gatilhos, o indicador de ciclos da sessão e `kortix loop`."
@@ -2164,6 +2161,7 @@
       "agentWorkingOnFor": "está trabalhando em {task} · {time}",
       "somethingWrong": "Algo deu errado",
       "notSent": "Não enviado",
+      "computerDisconnected": "O computador desta sessão está desconectado.",
       "retry": "Tentar de novo",
       "resume": "Retomar",
       "agentIsWorking": "{agent} está trabalhando",
@@ -3423,9 +3421,6 @@
     },
     "inbox": {
       "title": "Caixa de entrada",
-      "viewReview": "Review",
-      "viewNotifications": "Notificações",
-      "viewLabel": "Visualização da caixa de entrada",
       "description": "Atualizações das sessões, gatilhos e artefatos que envolvem você, de todos os espaços de trabalho.",
       "unreadLabel": "Caixa de entrada: {count} não lidas",
       "unreadCount": "{count} não lidas",
@@ -26706,7 +26701,7 @@
       "apiKeysDescription": "Chaves para scripts, CI e integrações. Uma chave age como você, como um agente ou como um bot. As regras de cada chave estão em Segurança.",
       "keys": {
         "title": "Chaves de API",
-        "description": "Chaves para scripts, CI e integrações. Uma chave funciona apenas neste workspace e age como você, como um agente ou como um bot.",
+        "description": "Chaves para scripts, CI e integrações. Uma chave age como você, um agente ou um bot; «Funciona em» define quais workspaces ela alcança.",
         "newKey": "Nova chave",
         "count": "{count, plural, one {# chave} other {# chaves}}",
         "emptyTitle": "Nenhuma chave de API",
@@ -26716,6 +26711,10 @@
         "actsAsAgent": "Um agente",
         "actsAsBot": "Um bot",
         "actsAsMeHint": "Sua função neste workspace. A chave para de funcionar quando você sai.",
+        "worksIn": "Funciona em",
+        "worksInAll": "Todos os meus workspaces",
+        "worksInAllHint": "Age como você em todos os seus workspaces, com o seu papel completo. Gerencie em Preferências → Chaves pessoais.",
+        "worksInWorkspace": "Somente este workspace",
         "actsAsAgentHint": "Exatamente o que o agente pode fazer no kortix.yaml. As ações dele são auditadas como o agente, e a chave continua funcionando quando você sai.",
         "actsAsBotHint": "Um bot para CI ou uma integração, com sua própria função. A chave continua funcionando quando você sai.",
         "needsPermission": "Requer a permissão para gerenciar credenciais",
@@ -26734,6 +26733,7 @@
         "rowBot": "Bot · {name}",
         "createdBy": "Criada por {email}",
         "createdDescription": "{name} age como {actsAs}. O Kortix mostra a chave uma única vez: copie-a agora e guarde-a como segredo.",
+        "createdPersonalDescription": "{name} age como você em todos os seus workspaces — gerencie em Preferências → Chaves pessoais. A Kortix mostra a chave uma vez: copie agora e guarde como segredo.",
         "accessFullHint": "Tudo o que o principal da chave pode fazer neste workspace.",
         "accessCustomHint": "Apenas as permissões que você escolher. Cada uma deve estar entre o que o principal da chave pode fazer."
       },
@@ -26744,7 +26744,9 @@
       "noWorkspaceTitle": "Crie um espaço de trabalho para entrar na CLI",
       "noWorkspaceBody": "A CLI entra em um espaço de trabalho. Crie um e depois aprove este acesso.",
       "createAction": "Criar espaço de trabalho",
-      "workspaceLabel": "Espaço de trabalho"
+      "workspaceLabel": "Espaço de trabalho",
+      "loadFailedTitle": "Não foi possível carregar seus espaços de trabalho",
+      "loadFailedBody": "Este login precisa da sua lista de espaços de trabalho. Sua conta está bem — tente novamente para continuar."
     },
     "models": {
       "yourDefault": "Padrão do espaço de trabalho",

@@ -28,37 +28,32 @@ import { CaretRightIcon } from '@/lib/icons';
  * no press, no chevron.
  */
 export function PromptPreview({ value, onEdit }: { value: string; onEdit?: () => void }) {
-  if (!onEdit) {
-    return (
-      <View className="gap-2">
-        <Text variant="muted" className="px-4">
-          Prompt
-        </Text>
-        <View className="overflow-hidden rounded-2xl bg-secondary px-4 py-3">
-          <Text numberOfLines={4}>{value.trim() || 'No prompt'}</Text>
-        </View>
-      </View>
-    );
-  }
+  const tile = 'overflow-hidden rounded-2xl bg-secondary px-4 py-3';
   return (
     <View className="gap-2">
       <Text variant="muted" className="px-4">
         Prompt
       </Text>
-      <Pressable
-        onPress={() => {
-          haptics.tap();
-          onEdit();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel="Edit prompt"
-        accessibilityHint="Opens the prompt editor"
-        className="flex-row items-center gap-3 overflow-hidden rounded-2xl bg-secondary px-4 py-3 active:bg-accent">
-        <Text className="flex-1" numberOfLines={4}>
-          {value.trim() || 'No prompt'}
-        </Text>
-        <Icon as={CaretRightIcon} size={16} className="text-muted-foreground/70" />
-      </Pressable>
+      {onEdit ? (
+        <Pressable
+          onPress={() => {
+            haptics.tap();
+            onEdit();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Edit prompt"
+          accessibilityHint="Opens the prompt editor"
+          className={`flex-row items-center gap-3 ${tile} active:bg-accent`}>
+          <Text className="flex-1" numberOfLines={4}>
+            {value.trim() || 'No prompt'}
+          </Text>
+          <Icon as={CaretRightIcon} size={16} className="text-muted-foreground/70" />
+        </Pressable>
+      ) : (
+        <View className={tile}>
+          <Text numberOfLines={4}>{value.trim() || 'No prompt'}</Text>
+        </View>
+      )}
     </View>
   );
 }

@@ -377,6 +377,12 @@ interface KortixBottomSheetModalProps extends BottomSheetModalProps {
   titleTrailingGlass?: boolean;
   /** Replaces the centred title text with a control (a tab list). Needs `title` (used as the accessible name). */
   titleCenter?: React.ReactNode;
+  /**
+   * iOS native sheet only. `false`: no full detent after `snapPoints`, so the
+   * sheet's view ends at the visible edge and a bar pinned to its bottom shows
+   * (the model sheet's Agent · Model tabs). gorhom ignores it.
+   */
+  nativeFullDetent?: boolean;
 }
 
 /**
@@ -442,7 +448,7 @@ const GorhomSheetModal = React.forwardRef<
   BottomSheetModal,
   KortixBottomSheetModalProps
 >(({ title, hideClose = false, backgroundStyle, handleComponent, snapPoints, topInset, children, ...rest }, ref) => {
-  const { titleLeading, titleTrailing, titleTrailingGlass = true, titleCenter, onChange, onDismiss, ...props } = rest;
+  const { titleLeading, titleTrailing, titleTrailingGlass = true, titleCenter, nativeFullDetent: _native, onChange, onDismiss, ...props } = rest;
   // gorhom sizes the content box to the HIGHEST detent, which is now always
   // 100%. A fixed-detent sheet shown at 92% would lay its content out
   // full-screen tall and push a bottom Save row off-screen, so its body is
@@ -581,8 +587,9 @@ GorhomSheetModal.displayName = 'GorhomSheetModal';
  * inside follows the visible edge by a transform (`PinnedBarShiftContext`).
  */
 export function SheetFill(props: { children: React.ReactNode; style?: Omit<ViewStyle, 'flex' | 'height'> }) {
-  // In a native sheet the content view IS the visible sheet and resizes with
-  // it: `flex: 1` is the visible edge, and a `PinnedBar` needs no shift.
+  // In a native sheet `NativeSheet`'s box already ends at the visible edge
+  // (`nativeSheetHiddenBottom`): `flex: 1` is that edge, and a `PinnedBar`
+  // needs no shift.
   const native = useNativeSheet();
   if (native) {
     return (

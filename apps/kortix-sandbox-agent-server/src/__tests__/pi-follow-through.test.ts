@@ -19,6 +19,15 @@ const invoiceRun = [
 ]
 
 describe('openWait', () => {
+  test('a very long reply on one line is checked in milliseconds, and its closing offer is still found', async () => {
+    const wall = 'word '.repeat(8000)
+    const started = performance.now()
+    expect(await openWait([user('summarise'), reply(wall)], noWakeUp)).toBeNull()
+    expect(await openWait([user('summarise'), reply(`${wall}I'll then check and I will check again and I'll check`)], wakeUp)).toBeNull()
+    expect(await openWait([user('summarise'), reply(`${wall}\n\nWant me to check the thread again tomorrow?`)], wakeUp)).toMatchObject({ kind: 'offer' })
+    expect(performance.now() - started).toBeLessThan(500)
+  })
+
   test('a wake-up call that failed sets nothing: the promise stays an open wait', async () => {
     const failed = [
       { role: 'assistant', content: [{ type: 'toolCall', id: 'call-1', name: 'kortix_schedules', arguments: { action: 'follow_up', text: 'check' } }] },

@@ -38,11 +38,17 @@ type Message = { role: string; content?: string | Block[]; toolCallId?: string; 
 const ASK = String.raw`(?:want me to|do you want me to|should I|shall I|would you like me to|I can|I could|happy to|soll ich|willst du(?:, dass ich)?|möchtest du(?:, dass ich)?|sollen wir)`
 const LATER = String.raw`(?:check|watch|follow[ -]?up|remind|chase|ping|look again|keep an eye|monitor|nudge|circle back|let you know when|tell you when|get back to you|check back|report back|nachschauen|nachsehen|prüfen|nachhaken|erinnern|im Auge|Bescheid|melde mich)`
 /** "Want me to check the thread for her answer in a couple of hours?": one sentence, ending in a question mark. */
-const OFFER = new RegExp(String.raw`[^.!?\n]*\b${ASK}\b[^.!?\n]{0,160}\b${LATER}[^.!?\n]{0,160}\?`, 'i')
+const OFFER = new RegExp(String.raw`[^.!?\n]{0,200}\b${ASK}\b[^.!?\n]{0,160}\b${LATER}[^.!?\n]{0,160}\?`, 'i')
 const WILL = String.raw`(?:I['’]ll|I will|I['’]m going to|ich)`
 const WHEN = String.raw`(?:tomorrow|tonight|morning|afternoon|evening|later|daily|hourly|every|in (?:a|an|\d+|a few|a couple)|at \d|after|until|once|by (?:mon|tue|wed|thu|fri|sat|sun|\d)|on (?:mon|tue|wed|thu|fri|sat|sun)|if (?:she|he|they|it|nothing)|morgen|später|täglich|in \d+|um \d|bis|sobald|falls)`
 /** "⏳ I'll check in tomorrow morning", "if she's still quiet after 2 days, I'll draft a chase": a check the reply says will happen. */
-const PROMISE = new RegExp(String.raw`(?:^|\n)\s*⏳[^\n]*|[^.!?\n]*\b${WILL}\b[^.!?\n]{0,160}\b${LATER}[^.!?\n]*|[^.!?\n]*\b${WHEN}\b[^.!?\n]{0,160}\b${WILL}\b[^.!?\n]{0,160}\b${LATER}[^.!?\n]*`, 'i')
+const PROMISE = new RegExp(String.raw`(?:^|\n)\s{0,10}⏳[^\n]{0,300}|[^.!?\n]{0,200}\b${WILL}\b[^.!?\n]{0,160}\b${LATER}[^.!?\n]{0,200}|[^.!?\n]{0,200}\b${WHEN}\b[^.!?\n]{0,160}\b${WILL}\b[^.!?\n]{0,160}\b${LATER}[^.!?\n]{0,200}`, 'i')
+/**
+ * The reply text the guard reads: its end. An offer or a promise closes a reply, and the patterns
+ * run in the daemon's one thread, so their input and every quantifier are bounded: a long reply on
+ * one line took seconds to match before (a 20,000-character line froze the box for 110 s).
+ */
+const REPLY_TAIL_CHARS = 4000
 const HAS_WHEN = new RegExp(String.raw`\b${WHEN}\b|⏳`, 'i')
 
 /** A connector call the CLI runs: `kortix connectors call <slug> <action> …`. */
@@ -128,7 +134,7 @@ function finalText(run: readonly Message[]): string {
 export async function openWait(messages: readonly Message[], hasWakeUp: () => Promise<boolean>): Promise<OpenWait | null> {
   const run = runMessages(messages)
   if (setWakeUp(run)) return null
-  const text = finalText(run)
+  const text = finalText(run).slice(-REPLY_TAIL_CHARS)
   const offer = text.match(OFFER)?.[0]?.trim()
   const promise = text.match(PROMISE)?.[0]?.trim()
   const actions = outwardActions(run)

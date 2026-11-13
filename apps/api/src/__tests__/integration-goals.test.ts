@@ -347,6 +347,23 @@ describe('goal mode: a goal bound to its chat', () => {
     expect((await heartbeat(goal.goalId))?.enabled).toBe(true);
   });
 
+  test('a restart never takes a bound goal from its chat: refused while the chat is down, or while the chat works another goal', async () => {
+    const sessionId = await chat();
+    const first = await goals.createGoal(ctx(asSession(sessionId)), boundInput());
+    const stopped = await goals.stopGoal(ctx(asSession(sessionId)), first.goalId, { revision: first.revision, reason: 'Ana said: drop it' });
+    // The chat is down: no new owner session is made for the goal.
+    await db.update(projectSessions).set({ status: 'failed' }).where(eq(projectSessions.sessionId, sessionId));
+    expect(await refusal(goals.restartGoal(ctx(ana), first.goalId, { revision: stopped.revision }))).toMatchObject({ status: 409, code: 'goal_conflict' });
+    expect((await getGoal(PROJECT, first.goalId))!).toMatchObject({ state: 'stopped', ownerSessionId: sessionId });
+    await db.update(projectSessions).set({ status: 'running' }).where(eq(projectSessions.sessionId, sessionId));
+    // The chat works another goal: one open goal per chat.
+    const second = await goals.createGoal(ctx(asSession(sessionId)), boundInput());
+    expect(await refusal(goals.restartGoal(ctx(ana), first.goalId, { revision: stopped.revision }))).toMatchObject({ status: 409, code: 'goal_conflict' });
+    // With the chat free again the restart keeps the goal in its chat.
+    await goals.stopGoal(ctx(asSession(sessionId)), second.goalId, { revision: second.revision, reason: 'Ana said: the first one again' });
+    expect(await goals.restartGoal(ctx(ana), first.goalId, { revision: stopped.revision })).toMatchObject({ state: 'active', ownerSessionId: sessionId });
+  });
+
   test("a page goal's verifier session cannot bind a goal to itself: no goal session starts a goal", async () => {
     const page = await activeGoal();
     const verifierId = await chat();

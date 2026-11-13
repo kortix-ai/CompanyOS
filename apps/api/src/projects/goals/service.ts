@@ -844,6 +844,11 @@ export async function restartGoal(ctx: GoalContext, goalId: string, req: GoalCon
   // A stopped goal, or an open goal whose owner session is lost (owner_lost): a new owner continues where it was.
   const lost = current.blockedReason === 'owner_lost' && isOpenState(current.state);
   if (current.state !== 'stopped' && !lost) conflict(current, 'Only a stopped goal, or one whose owner session is lost, restarts.');
+  // Goal mode: the goal belongs to its chat. A restart gives it no new owner session, and its chat no second open goal.
+  if (isBoundGoal(current)) {
+    if ((await sessionHealth(current.ownerSessionId!)) !== 'ok') conflict(current, 'This goal belongs to its chat, and that chat is not working. Restart the chat: the goal picks up again.');
+    if (await openGoalOwnedBy(current.ownerSessionId!, goalId)) conflict(current, 'Its chat already works another goal. Stop that one first.');
+  }
   let owner = current.ownerSessionId;
   if (!owner || (await sessionHealth(owner)) !== 'ok') {
     if (current.sessions.length >= current.maxSessions) await blockSessionCap(current, ctx);

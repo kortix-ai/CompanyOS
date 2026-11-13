@@ -91,7 +91,7 @@ export async function reconcileGoal(goal: GoalRow, now: Date, result: GoalReconc
     goal = cleared.row;
     result.unblocked += 1;
   }
-  // Goal mode: a bound goal never leaves its chat, so no successor or restart clears its owner_lost.
+  // Goal mode: a bound goal never leaves its chat, so no successor clears its owner_lost and no restart gives it a new owner.
   // The chat works again (its person restarted its runtime): the goal wakes again.
   if (goal.blockedReason === 'owner_lost' && isBoundGoal(goal) && goal.ownerSessionId && (await sessionHealth(goal.ownerSessionId)) === 'ok') {
     const cleared = await writeGoal(goal.projectId, goal.goalId, (row) =>
@@ -117,7 +117,7 @@ export async function reconcileGoal(goal: GoalRow, now: Date, result: GoalReconc
       );
       // Nothing may fire into the lost owner: the heartbeat goes off until a restart.
       await applyHeartbeat(lost.row);
-      await notifyGoal(lost.row, 'blocked', 'Its owner session stopped working. Restart the goal to give it a new owner.', now);
+      await notifyGoal(lost.row, 'blocked', isBoundGoal(lost.row) ? 'Its chat stopped working. Restart the chat: the goal picks up again.' : 'Its owner session stopped working. Restart the goal to give it a new owner.', now);
       result.ownerLost += 1;
       return;
     }

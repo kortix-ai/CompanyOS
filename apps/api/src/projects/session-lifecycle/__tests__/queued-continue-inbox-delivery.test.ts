@@ -95,7 +95,9 @@ let runtimeWriteError: Error | null = null;
 let landingReads: string[] = [];
 let promptFailuresRemaining = 0;
 let promptDeduplicationsRemaining = 0;
-let promptResponsePlan: Array<'failed' | 'deduplicated' | 'permanent-refusal'> = [];
+let promptResponsePlan: Array<'failed' | 'deduplicated' | 'permanent-refusal' | 'ambiguous-timeout'> = [];
+/** Landing-proof reads that fail (the box cannot be asked) before reads answer again. */
+let landingReadFailuresRemaining = 0;
 // Models the sandbox edge DISCARDING an oversized body while answering ok: the
 // POST is captured, but the runtime never holds that message. Scoped to the
 // FIRST posted id, so the delivery's retry lands and the test does not have to
@@ -211,6 +213,17 @@ mock.module('../../session-open', () => ({
   },
 }));
 
+/** Every turn record the delivery closed by message id: [sessionId, messageId, reason]. */
+let closedTurns: Array<[string, string, string]> = [];
+const realTurnLifecycle = await import('../../sandbox-turn-lifecycle');
+mock.module('../../sandbox-turn-lifecycle', () => ({
+  ...realTurnLifecycle,
+  closeSandboxTurnByMessageId: async (sessionId: string, messageId: string, reason: string) => {
+    closedTurns.push([sessionId, messageId, reason]);
+    return true;
+  },
+}));
+
 mock.module('../../../sandbox-proxy/forward', () => ({
   forwardToSandbox: async (
     _externalId: string,
@@ -238,6 +251,16 @@ mock.module('../../../sandbox-proxy/forward', () => ({
       capturedKeys.push(idempotencyKey);
       if (idempotencyKey && seenKeys.has(idempotencyKey)) {
         return Response.json({ status: 'duplicate', deduplicated: true });
+      }
+      // A HUNG EDGE (2026-11-11): the TCP connection is accepted and nothing
+      // answers. The proxy's 15 s attempt timer fires; nothing proves the box
+      // did not take the body, so the real proxy KEEPS the dedupe claim and
+      // answers 502 (`retry.ts`: `promptDeliveryMaybeAccepted`, `giveUpForward`).
+      // Here the box never received it: no body is captured.
+      if (promptResponsePlan[0] === 'ambiguous-timeout') {
+        promptResponsePlan.shift();
+        if (idempotencyKey) seenKeys.add(idempotencyKey);
+        return Response.json({ error: 'sandbox upstream unreachable' }, { status: 502 });
       }
       capturedBodies.push(JSON.parse(new TextDecoder().decode(body)));
       capturedSources.push(opts?.promptSource);
@@ -546,6 +569,8 @@ beforeEach(() => {
   promptFailuresRemaining = 0;
   promptDeduplicationsRemaining = 0;
   promptResponsePlan = [];
+  landingReadFailuresRemaining = 0;
+  closedTurns = [];
   runtimeDropsFirstDelivery = false;
   promotionCalls = [];
   onPromotion = null;
@@ -570,6 +595,10 @@ beforeEach(() => {
     if (one) {
       const requestedId = decodeURIComponent(one[1]!);
       landingReads.push(requestedId);
+      if (landingReadFailuresRemaining > 0) {
+        landingReadFailuresRemaining -= 1;
+        return Response.json({ error: 'sandbox upstream unreachable' }, { status: 502 });
+      }
       const posted = capturedBodies.some((sent) => sent.message_id === requestedId);
       const dropped = runtimeDropsFirstDelivery && requestedId === (capturedBodies[0]?.message_id as string);
       return posted && !dropped
@@ -881,6 +910,8 @@ describe('executeQueuedContinue — what actually goes on the wire', () => {
     // Nothing closed the row. It went back on the queue under a FRESH attempt
     // (fresh key + re-mint on the next drain), which is the whole fix.
     expect(forwardedCalls).toEqual([]);
+    // The turn the proxy accepted for the dropped body is closed with it.
+    expect(closedTurns).toEqual([[SESSION_ID, SUBMITTED_WIRE_ID, 'abandoned']]);
     expect(succeededCalls).toEqual([]);
     expect(unlandedRequeues).toEqual([
       {
@@ -935,6 +966,80 @@ describe('executeQueuedContinue — what actually goes on the wire', () => {
     expect(capturedKeys).toEqual(['cmd-1']);
     expect(landingReads).toEqual([]);
   });
+
+  // The 2026-11-11 incident (kortix-ai/platinum#3249). The Platinum edge on 2
+  // hosts accepted connections and answered nothing for 17 min. The prompt POST
+  // timed out after 15 s; the proxy kept its dedupe claim (the box MIGHT have
+  // the body) and answered 502. `deliverWithRetry` re-sent under the same key,
+  // the proxy's own claim answered `200 {deduplicated:true}`, and the row
+  // closed as delivered. The box never had the prompt. `deduplicated` is the
+  // proxy repeating its own claim, not the box saying it has the message, so
+  // it is read back whatever the body size.
+  test('a prompt whose POST hung is not reported delivered when the box never received it', async () => {
+    promptResponsePlan = ['ambiguous-timeout'];
+
+    const outcome = await executeQueuedContinue(
+      baseRow({
+        payload: {
+          text: 'HII',
+          clientMessageId: 'q_hung',
+          wireMessageId: SUBMITTED_WIRE_ID,
+          parts: [{ type: 'text', text: 'HII' }],
+        },
+      }),
+    );
+
+    // The first POST hung; the retry under the SAME key was answered by the
+    // proxy's claim. The box received neither.
+    expect(capturedKeys).toEqual(['cmd-1', 'cmd-1']);
+    expect(capturedBodies).toEqual([]);
+    // The duplicate answer was read back, and the box does not hold the message.
+    expect(landingReads).toContain(SUBMITTED_WIRE_ID);
+    expect(forwardedCalls).toEqual([]);
+    expect(succeededCalls).toEqual([]);
+    // Back on the queue under a fresh attempt: the next drain reads the
+    // transcript first, then re-sends under a fresh key.
+    expect(unlandedRequeues).toEqual([
+      { commandId: 'cmd-1', reason: 'prompt accepted by the runtime but never became a message' },
+    ]);
+    // The turn the proxy accepted for the timed-out POST is closed: the box
+    // does not have the message, so nothing is running. Left open, it held the
+    // re-sent prompt behind `turn_active` and showed the session as working.
+    expect(closedTurns).toEqual([[SESSION_ID, SUBMITTED_WIRE_ID, 'abandoned']]);
+    expect(outcome).toBe('queued');
+  }, 20_000);
+
+  // The same hang, while the box cannot even be READ: the edge is still
+  // hung when the read-back goes out. An unreadable box is not proof either
+  // way, so the row must not close; the loop keeps trying until the box
+  // answers, and only then decides.
+  test('a hung prompt whose read-back cannot reach the box keeps trying instead of closing', async () => {
+    promptResponsePlan = ['ambiguous-timeout'];
+    landingReadFailuresRemaining = 1;
+
+    const outcome = await executeQueuedContinue(
+      baseRow({
+        payload: {
+          text: 'HII',
+          clientMessageId: 'q_hung_unreadable',
+          wireMessageId: SUBMITTED_WIRE_ID,
+          parts: [{ type: 'text', text: 'HII' }],
+        },
+      }),
+    );
+
+    // One read failed (unknown), the loop went round, the next read answered
+    // that the box does not have it. Only that answer closes the turn.
+    expect(landingReads.filter((id) => id === SUBMITTED_WIRE_ID).length).toBeGreaterThanOrEqual(2);
+    expect(closedTurns).toEqual([[SESSION_ID, SUBMITTED_WIRE_ID, 'abandoned']]);
+    expect(capturedBodies).toEqual([]);
+    expect(forwardedCalls).toEqual([]);
+    expect(succeededCalls).toEqual([]);
+    expect(unlandedRequeues).toEqual([
+      { commandId: 'cmd-1', reason: 'prompt accepted by the runtime but never became a message' },
+    ]);
+    expect(outcome).toBe('queued');
+  }, 20_000);
 
   test('an ATTACHMENT-ONLY prompt is delivered, not dead-lettered', async () => {
     // The POST route deliberately accepts an empty flattened text when a

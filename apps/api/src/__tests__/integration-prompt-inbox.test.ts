@@ -49,8 +49,10 @@ import {
   markCommandFailed,
   markInboxDeliveryStarted,
   markCommandForwarded,
+  parkPromptForUnreachableRuntime,
   promoteNextInboxRow,
   requeueForAdmission,
+  requeueUnlandedPrompt,
   requeueUnverifiedRedelivery,
 } from '../projects/session-lifecycle/store';
 import type { CommandLease } from '../projects/session-lifecycle/command-lease';
@@ -1625,6 +1627,46 @@ describe('a FORWARDED prompt stays open until the ledger confirms it', () => {
       'pending_delivery',
     );
     expect((await readRow(row.commandId)).payload).toMatchObject({ consumedOnDelivery: true });
+  });
+
+  // 2026-11-11 (kortix-ai/platinum#3249): a hung edge makes the proxy accept a
+  // turn for a prompt POST that TIMED OUT (`retry.ts`, `giveUpForward`), so the
+  // acceptance witness marks the in-flight row while the box may never have
+  // seen the message. That attempt then parks (the box is unreachable) or fails
+  // its landing read. Its mark must not close the NEXT attempt as `delivered`
+  // at the forward: only the turn ledger may close that one.
+  async function acceptedThenSettled(settle: 'park' | 'not-landed') {
+    const row = await enqueue(`q_unproven_accept_${settle}`);
+    await db.execute(sql`
+      UPDATE kortix.session_lifecycle_commands
+         SET status = 'running'
+       WHERE command_id = ${row.commandId}::uuid`);
+    expect(await confirmInboxPromptConsumed(SESSION_ID, WIRE_ID)).toBe('pending_delivery');
+    expect((await readRow(row.commandId)).payload).toMatchObject({ consumedOnDelivery: true });
+    const lease = await hold(row);
+    if (settle === 'park') {
+      const parked = await parkPromptForUnreachableRuntime(lease, "the session's machine could not be reached", {
+        sessionId: SESSION_ID,
+      });
+      expect(parked.parked).toBe(true);
+    } else {
+      const requeued = await requeueUnlandedPrompt(lease, 'prompt accepted by the runtime but never became a message', new Date());
+      expect(requeued.requeued).toBe(true);
+    }
+    const settled = await readRow(row.commandId);
+    expect(settled.status).toBe('queued');
+    expect(settled.payload as Record<string, unknown>).not.toHaveProperty('consumedOnDelivery');
+    // The next attempt is forwarded and waits for the ledger like any other.
+    await markCommandForwarded(await hold(row), SESSION_ID, WIRE_ID);
+    expect((await readRow(row.commandId)).result).toMatchObject({ status: 'forwarded', forwarded_message_id: WIRE_ID });
+  }
+
+  test('an acceptance a parked attempt could not prove does not close the next attempt', async () => {
+    await acceptedThenSettled('park');
+  });
+
+  test('an acceptance a failed landing read voided does not close the next attempt', async () => {
+    await acceptedThenSettled('not-landed');
   });
 
   test('a delivery a turn ACCEPTED is not mislabelled as stop-paused', async () => {

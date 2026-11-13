@@ -528,6 +528,39 @@ describe('forwardToSandbox — every definitive non-delivery releases the dedupe
     expect(retryFetches).toBe(0);
     expect(await retry.json()).toEqual({ status: 'duplicate', deduplicated: true });
   });
+
+  // 2026-11-11 (kortix-ai/platinum#3249): the Platinum edge accepted the
+  // connection and answered nothing. Only the attempt timer ends such a POST,
+  // and a timeout cannot prove the box did not take the body, so the claim is
+  // KEPT and the same-key retry is answered `duplicate` WITHOUT reaching the
+  // box. That answer is the proxy's own claim, not the box's word, which is why
+  // `continueSession` reads every `deduplicated` back before it closes a row.
+  test('a hung upstream keeps the claim: the same-key retry is deduped without reaching the box', async () => {
+    const args = [
+      // The path server-side delivery posts to (`runtimeVerbPaths.prompt`).
+      'sb-1', 8000, principal, 'POST', '/kortix/runtime/sessions/oc-1/prompt', '',
+      jsonHeaders({ 'idempotency-key': 'keep-hang' }), PROMPT_BODY, 'http://app.local',
+    ] as const;
+    let upstreamAttempts = 0;
+    (globalThis as { fetch: unknown }).fetch = (_url: string, init?: RequestInit) => {
+      upstreamAttempts += 1;
+      // Accepted, never answered: settles only when the attempt timer aborts it.
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
+      });
+    };
+    // The 15 s attempt timer, fired at once.
+    globalThis.setTimeout = ((handler: TimerHandler, _timeout?: number, ...rest: unknown[]) =>
+      ORIGINAL_SET_TIMEOUT(handler, 1, ...rest)) as typeof setTimeout;
+
+    const first = await forwardToSandbox(...args);
+    expect(first.status).toBe(502);
+    expect(upstreamAttempts).toBe(1);
+
+    const retry = await forwardToSandbox(...args);
+    expect(upstreamAttempts).toBe(1);
+    expect(await retry.json()).toEqual({ status: 'duplicate', deduplicated: true });
+  });
 });
 
 // ── wire id placement ──

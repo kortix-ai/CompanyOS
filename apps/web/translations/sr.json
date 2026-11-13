@@ -1328,6 +1328,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "Kada su Prostori uključeni, prostor može sam sebe da prati: uključite Proaktivno u njegovim detaljima, i agent čita šta se tu dešava (završene niti, otvorena pitanja, ljudi koji se pridruže) i piše u čet samo kada je važno: rezultat vredan deljenja, odluka koju treba da donesete ili nešto što kasni. Može i da pokrene nit koja obavlja posao. Opcioni dnevni pregled u 9:00."
+        },
+        "program_agents": {
+          "name": "Programski agenti",
+          "description": "Agent koji pokreće vaš kod umesto modela. Dajte agentu `run: <command>` u kortix.yaml: svaki potez pokreće tu komandu u sandboxu sesije, sa radnim prostorom, tajnama i pristupima agenta. Poruka ili podaci triggera su ulaz, a ono što komanda ispiše je odgovor."
         }
       },
       "channelsSwitch": {

@@ -1150,6 +1150,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "With Spaces on, a space can watch itself: turn on Proactive in its details, and an agent reads what happens there (finished threads, questions left open, people who join) and writes in the chat only when it matters: a result worth sharing, a decision you need to make, or something overdue. It can also start a thread that does the work. Optional daily brief at 9:00."
+        },
+        "program_agents": {
+          "name": "Program agents",
+          "description": "An agent that runs your code instead of a model. Give an agent `run: <command>` in kortix.yaml: each turn runs that command in the session's sandbox, with the agent's workspace, secrets and access. The message or trigger payload is the input, and what the command prints is the reply."
         }
       },
       "channelsSwitch": {

@@ -141,6 +141,12 @@ export interface AgentBlockV3 {
   hidden?: boolean;
   prompt?: string;
   prompt_file?: string;
+  /**
+   * A program agent: the shell command each turn runs, in place of a model. The turn's prompt
+   * arrives on stdin and in `$KORTIX_EVENT_PATH`; stdout is the reply; a non-zero exit fails the
+   * turn. Excludes `model`, `prompt` and `prompt_file`.
+   */
+  run?: string;
   /** Tool policy. Omitted: `allow`. `skill` and `task` belong to `skills` / `subagents`. */
   permission?: PermissionConfigV2;
   /** Default `true`. */
@@ -217,6 +223,29 @@ export function workspaceStepCwdProblem(cwd: unknown): string | null {
   if (value.startsWith('/')) return workspaceRepoPathProblem(value);
   if (value.split('/').some((part) => part === '..')) return 'must not contain `..`.';
   return null;
+}
+
+/** The longest `run` command: a command line, not a script. */
+export const AGENT_RUN_MAX_LENGTH = 4096;
+/** Keys a program agent refuses: it has no model and no system prompt. */
+const PROGRAM_AGENT_REFUSED_KEYS = ['model', 'prompt', 'prompt_file'] as const;
+/** Keys that only tune a model or its tools: a program agent ignores them. */
+const PROGRAM_AGENT_IGNORED_KEYS = ['variant', 'temperature', 'top_p', 'steps', 'options', 'codemode', 'context', 'skills', 'extensions', 'subagents', 'commands'] as const;
+
+/** `run`: a non-empty command line, and no model, prompt or model-only key beside it. */
+function validateProgramAgentV3(entry: Record<string, unknown>, where: string, issues: ManifestIssue[]): void {
+  const run = entry.run;
+  if (run === undefined) return;
+  if (typeof run !== 'string' || !run.trim() || run.length > AGENT_RUN_MAX_LENGTH) {
+    issues.push({ path: `${where}.run`, message: `must be a shell command of 1 to ${AGENT_RUN_MAX_LENGTH} characters.`, severity: 'error' });
+    return;
+  }
+  for (const key of PROGRAM_AGENT_REFUSED_KEYS) {
+    if (entry[key] !== undefined) issues.push({ path: `${where}.${key}`, message: 'a program agent (`run`) has no model and no prompt. Remove this key or `run`.', severity: 'error' });
+  }
+  for (const key of PROGRAM_AGENT_IGNORED_KEYS) {
+    if (entry[key] !== undefined) issues.push({ path: `${where}.${key}`, message: 'has no effect on a program agent (`run`).', severity: 'warning' });
+  }
 }
 
 function validateAgentWorkspaceV3(entry: Record<string, unknown>, where: string, issues: ManifestIssue[]): void {
@@ -410,6 +439,7 @@ export const AGENT_BLOCK_KEYS_V3 = [
   ...BEHAVIOR_KEYS_V3,
   'prompt',
   'prompt_file',
+  'run',
   'enabled',
   'codemode',
   'context',
@@ -816,6 +846,7 @@ function validateAgentBlockV3(
       issues.push({ path: `${where}.prompt_file`, message: 'must be a repository path to a .md file.', severity: 'error' });
     }
   }
+  validateProgramAgentV3(entry, where, issues);
   if (entry.enabled !== undefined && typeof entry.enabled !== 'boolean') {
     issues.push({ path: `${where}.enabled`, message: 'must be a boolean.', severity: 'error' });
   }
@@ -835,7 +866,8 @@ function validateAgentBlockV3(
   validateNetworkEgressV3(entry.network_egress, `${where}.network_egress`, issues);
 
   // Grants of registered things.
-  validateToolGrantV3(entry.tools, `${where}.tools`, registry.tools, issues);
+  // A program agent (`run`) calls no tools, so an unset `tools` is not worth a warning.
+  if (entry.run === undefined || entry.tools !== undefined) validateToolGrantV3(entry.tools, `${where}.tools`, registry.tools, issues);
   validateNamedGrantV3(entry.skills, `${where}.skills`, 'skills', registry.skills, issues, true);
   validateNamedGrantV3(entry.commands, `${where}.commands`, 'commands', registry.commands, issues);
   validateNamedGrantV3(entry.extensions, `${where}.extensions`, 'extensions', registry.extensions, issues, true);

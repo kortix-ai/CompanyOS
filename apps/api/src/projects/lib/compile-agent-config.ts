@@ -401,6 +401,8 @@ function compileAgent(
   const extensions = grantedNames(block.extensions, universe.extensions);
   if (extensions.length > 0) out.extensions = extensions;
   if (block.codemode !== undefined) out.codemode = block.codemode;
+  // A program agent: pi runs the command for each turn in place of a model step (harness/pi/program.ts).
+  if (typeof block.run === 'string' && block.run.trim()) out.run = block.run.trim();
   return out;
 }
 

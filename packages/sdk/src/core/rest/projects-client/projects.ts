@@ -136,6 +136,8 @@ export type FeatureFlagKey =
   | 'chat_front'
   /** Proactive spaces: with `chat` on, a space's watcher reads what happens in the space and posts, starts a thread or asks only when it matters. Experimental, off by default. */
   | 'spaces_proactive'
+  /** Program agents: an agent with `run` in kortix.yaml runs that command for each turn instead of a model. Experimental, off by default. */
+  | 'program_agents'
   /** @deprecated Withdrawn — agents messaging people left the product. The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'human_messaging';
 
@@ -197,6 +199,7 @@ export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'chat_input',
   'chat_front',
   'spaces_proactive',
+  'program_agents',
 ] as const;
 
 /**

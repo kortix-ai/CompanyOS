@@ -1255,6 +1255,12 @@ function agentBlockV3Schema(): JsonSchemaFragment {
       },
       prompt: { ...NON_BLANK_STRING, description: 'The system prompt. Set `prompt` or `prompt_file`, not both.' },
       prompt_file: { type: 'string', pattern: AGENT_FILE_PATTERN, description: 'A repository path to a `.md` file. The file is the system prompt. A leading `---` frontmatter block is dropped, so an agent file another tool reads (`.claude/agents/<name>.md`) works as is.' },
+      run: {
+        ...NON_BLANK_STRING,
+        maxLength: 4096,
+        description:
+          'A program agent: the shell command each turn runs in the session\'s box, in place of a model. The prompt arrives on stdin and in `$KORTIX_EVENT_PATH`; stdout is the reply; a non-zero exit fails the turn. Excludes `model`, `prompt` and `prompt_file`. Needs the `program_agents` feature.',
+      },
       enabled: { type: 'boolean', default: true, description: '`false`: no session starts with the agent, and no agent starts it as a subagent.' },
       codemode: {
         type: 'string',

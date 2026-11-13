@@ -1328,6 +1328,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "Com os Espaços ativados, um espaço pode vigiar a si mesmo: ative Proativo nos detalhes dele, e um agente lê o que acontece ali (threads concluídas, perguntas em aberto, pessoas que entram) e escreve no chat só quando importa: um resultado que vale compartilhar, uma decisão que você precisa tomar ou algo atrasado. Ele também pode iniciar uma thread que faz o trabalho. Resumo diário opcional às 9:00."
+        },
+        "program_agents": {
+          "name": "Agentes de programa",
+          "description": "Um agente que executa o seu código em vez de um modelo. Dê a um agente `run: <command>` no kortix.yaml: cada turno executa esse comando no sandbox da sessão, com o workspace, os segredos e os acessos do agente. A mensagem ou os dados do trigger são a entrada, e o que o comando imprime é a resposta."
         }
       },
       "channelsSwitch": {

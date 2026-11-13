@@ -460,3 +460,32 @@ describe('"*" is the canonical "every" value; `all` stays its alias', () => {
     expect(validateManifest('agents:\n  a:\n    tools:\n      - *\n').issues[0]!.message).toContain('Quote it: `- "*"`');
   });
 });
+
+describe('agents.<name>.run: a program agent', () => {
+  const yaml = (block: string) => `agents:\n  janitor:\n${block}`;
+
+  test('is valid with run alone, and with run beside workspace and grants', () => {
+    expect(check(yaml('    run: pnpm tsx agents/janitor.ts\n')).errors).toEqual([]);
+    expect(check(yaml('    run: node janitor.js\n    secrets: [GITHUB_TOKEN]\n    workspace:\n      setup: [pnpm install]\n')).errors).toEqual([]);
+    expect((validateManifest(yaml('    run: "  node janitor.js "\n')).parsed?.agents as any).janitor.run).toBe('  node janitor.js ');
+  });
+
+  test('must be a non-empty command', () => {
+    expect(errorPaths(yaml('    run: ""\n'))).toEqual(['agents.janitor.run']);
+    expect(errorPaths(yaml('    run: [node, x.js]\n'))).toEqual(['agents.janitor.run']);
+    expect(errorPaths(yaml(`    run: ${'x'.repeat(4097)}\n`))).toEqual(['agents.janitor.run']);
+  });
+
+  test('refuses a model, a prompt and a prompt file: a program agent has no model', () => {
+    expect(errorPaths(yaml('    run: node x.js\n    model: kortix/kimi\n'))).toEqual(['agents.janitor.model']);
+    expect(errorPaths(yaml('    run: node x.js\n    prompt: be nice\n'))).toEqual(['agents.janitor.prompt']);
+    expect(errorPaths(yaml('    run: node x.js\n    prompt_file: agents/x.md\n'))).toEqual(['agents.janitor.prompt_file']);
+  });
+
+  test('warns on a model-only key: it has no effect', () => {
+    const { errors, warnings } = check(yaml('    run: node x.js\n    codemode: off\n    variant: high\n'));
+    expect(errors).toEqual([]);
+    const ignored = warnings.filter((issue) => issue.message.includes('program agent'));
+    expect(ignored.map((issue) => issue.path).sort()).toEqual(['agents.janitor.codemode', 'agents.janitor.variant']);
+  });
+});

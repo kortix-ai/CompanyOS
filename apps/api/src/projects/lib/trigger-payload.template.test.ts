@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { renderPromptTemplate } from './trigger-payload';
+import { renderPromptTemplate, renderTriggerInput, triggerInputPreamble } from './trigger-payload';
 
 describe('renderPromptTemplate', () => {
   test('a root token renders its value; an object renders as JSON', () => {
@@ -13,5 +13,29 @@ describe('renderPromptTemplate', () => {
 
   test('a payload with its own `payload` key keeps that value', () => {
     expect(renderPromptTemplate('{{ payload }}', { payload: 'own' })).toBe('own');
+  });
+});
+
+describe('renderTriggerInput', () => {
+  const payload = { trigger: { slug: 'nightly', type: 'cron' }, fired_at: 'T' };
+
+  test('an omitted prompt is the payload itself, as JSON', () => {
+    expect(JSON.parse(renderTriggerInput({ promptTemplate: '' }, payload))).toEqual(payload);
+  });
+
+  test('run.payload is merged under the fire payload: the fire wins a clash', () => {
+    const input = renderTriggerInput({ promptTemplate: '', runPayload: { days: 30, trigger: { slug: 'spoof' } } }, payload);
+    expect(JSON.parse(input)).toEqual({ days: 30, trigger: { slug: 'nightly', type: 'cron' }, fired_at: 'T' });
+  });
+
+  test('a prompt template reads the merged payload', () => {
+    expect(renderTriggerInput({ promptTemplate: 'Sweep {{ days }} days for {{ trigger.slug }}', runPayload: { days: 7 } }, payload)).toBe('Sweep 7 days for nightly');
+  });
+});
+
+describe('triggerInputPreamble', () => {
+  test('a prompt keeps the third-party notice; a payload input gets none, so it stays valid JSON', () => {
+    expect(triggerInputPreamble({ promptTemplate: 'Label {{ event.data.id }}' }, '[Connector event: x]\n')).toBe('[Connector event: x]\n');
+    expect(triggerInputPreamble({ promptTemplate: '' }, '[Connector event: x]\n')).toBe('');
   });
 });

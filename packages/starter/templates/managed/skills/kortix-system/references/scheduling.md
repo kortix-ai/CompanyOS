@@ -197,6 +197,9 @@ inserts the whole payload as JSON. The roots:
 | change request | `change_request` (`number`, `title`, `base_ref`, …) |
 | manual fire (`kortix triggers fire`) | `source`, `actor`, `message`; `--payload` deep-merges over it |
 
+`run.payload` (a table) adds fixed values to every fire's payload, under the
+fire's own keys: `run: { agent: ops, payload: { region: eu }, prompt: "Check {{ region }}" }`.
+
 `kortix triggers fire <slug> --dry-run --payload '<json>'` prints the
 rendered prompt without starting anything.
 

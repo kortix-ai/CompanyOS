@@ -2622,6 +2622,7 @@ export class PiRuntime {
       enabled: enabledFeatureFlags(this.env).has(PROGRAM_AGENTS_FLAG),
       cwd: repo && existsSync(repo) ? repo : this.workspace,
       env: this.env,
+      ...(this.compiled?.agent?.[agent]?.timeout ? { timeoutMs: this.compiled.agent[agent]!.timeout! * 1000 } : {}),
     }
   }
 

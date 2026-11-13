@@ -489,3 +489,32 @@ describe('agents.<name>.run: a program agent', () => {
     expect(ignored.map((issue) => issue.path).sort()).toEqual(['agents.janitor.codemode', 'agents.janitor.variant']);
   });
 });
+
+describe('program agents: timeout and trigger input', () => {
+  const base = (agentExtra: string, triggers: string) =>
+    `agents:\n  janitor:\n    run: node j.js\n${agentExtra}  writer:\n    prompt: Write.\n    tools: "*"\ntriggers:\n${triggers}`;
+
+  test('timeout is a duration from 1s to 6h, only on a program agent', () => {
+    expect(check(base('    timeout: 45m\n', '')).errors).toEqual([]);
+    expect(errorPaths(base('    timeout: 7h\n', ''))).toEqual(['agents.janitor.timeout']);
+    expect(errorPaths(base('    timeout: soon\n', ''))).toEqual(['agents.janitor.timeout']);
+    expect(errorPaths(`agents:\n  writer:\n    prompt: Write.\n    tools: "*"\n    timeout: 5m\n`)).toEqual(['agents.writer.timeout']);
+  });
+
+  test('a trigger of a program agent may omit prompt; a model agent still needs one', () => {
+    const hourly = (agent: string) => `  - slug: hourly\n    on: { every: 1h }\n    run: { agent: ${agent} }\n`;
+    expect(check(base('', hourly('janitor'))).errors).toEqual([]);
+    expect(errorPaths(base('', hourly('writer')))).toEqual(['triggers[0].prompt']);
+  });
+
+  test('default_agent decides when the trigger names no agent', () => {
+    const yaml = `default_agent: janitor\n${base('', '  - slug: hourly\n    on: { every: 1h }\n    run: {}\n')}`;
+    expect(check(yaml).errors).toEqual([]);
+  });
+
+  test('run.payload on an agent run is a table of static input', () => {
+    const t = (payload: string) => `  - slug: nightly\n    on: { cron: "0 3 * * *" }\n    run: { agent: janitor, payload: ${payload} }\n`;
+    expect(check(base('', t('{ days: 30, mode: full }'))).errors).toEqual([]);
+    expect(errorPaths(base('', t('[1, 2]')))).toEqual(['triggers[0].payload']);
+  });
+});

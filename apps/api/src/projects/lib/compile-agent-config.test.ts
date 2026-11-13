@@ -311,6 +311,13 @@ describe('a program agent (`run`)', () => {
     expect(compiled.agent.writer?.run).toBeUndefined();
     expect(compiled.model).toBeUndefined();
   });
+
+  test('timeout compiles to seconds; omitted, it is the 30 min default', () => {
+    const manifest = parseYaml(`agents:\n  slow:\n    run: node s.js\n    timeout: 2h\n  quick:\n    run: node q.js\n`);
+    const compiled = compileAgentConfig(manifest, {});
+    expect(compiled.agent.slow?.timeout).toBe(7200);
+    expect(compiled.agent.quick?.timeout).toBe(1800);
+  });
 });
 
 // Prod 2026-10-14: a project whose declared agents held ~270 KB of prompts never

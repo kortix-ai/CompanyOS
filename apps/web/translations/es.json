@@ -21792,6 +21792,8 @@
     "llmEstimateLabel": "Estimación del LLM:"
   },
   "triggerComposer": {
+    "programInputPlaceholder": "Vacío: el programa lee los datos del trigger como JSON",
+    "programInputHelp": "Este agente ejecuta un programa. Lee este texto por stdin. Déjalo vacío para enviar todos los datos como JSON: el evento, el cuerpo del webhook o los datos de la programación, más los datos fijos del trigger.",
     "every": "Cada",
     "dayOfMonth": "Día del mes",
     "details": "Detalles",
@@ -24980,6 +24982,8 @@
       }
     },
     "modelView": {
+      "programTimeout": "Límite de tiempo",
+      "programTimeoutHelp": "Una ejecución más larga se detiene y el turno falla. De 1s a 6h, por ejemplo 30m o 2h. Vacío: 30m.",
       "programTitle": "Programa",
       "programCommand": "Comando",
       "programHelp": "Cada turno ejecuta este comando en el sandbox de la sesión en lugar de un modelo. El mensaje llega por stdin y en $KORTIX_EVENT_PATH. Lo que imprime es la respuesta. Una salida distinta de cero hace fallar el turno.",

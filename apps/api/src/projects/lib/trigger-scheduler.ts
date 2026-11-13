@@ -8,7 +8,7 @@ import { claimDueScheduleSlots, claimTriggerExecutions, markTriggerExecutionDisp
 import type { GitTriggerSpec } from '../triggers';
 import { drainMonitorEvents } from './monitor-observer';
 import { checkAppTriggerSilence } from './app-trigger-silence';
-import { renderPromptTemplate } from './trigger-payload';
+import { renderTriggerInput } from './trigger-payload';
 import { fireGitTrigger, markGitTriggerAttemptFailed, markGitTriggerFired } from './trigger-fire';
 import { isTerminalFireFailure } from './trigger-fire-failure';
 import { raiseTriggerAlert } from './trigger-alerts';
@@ -162,7 +162,7 @@ async function executeTriggerExecution(
 
   const spec = row.spec as unknown as GitTriggerSpec;
   const payload = row.payload as Record<string, unknown>;
-  const renderedPrompt = renderPromptTemplate(spec.promptTemplate, payload);
+  const renderedPrompt = renderTriggerInput(spec, payload);
   const idempotencyKey = `trigger:cron:${row.projectId}:${row.slug}:${row.scheduleRevision}:${row.scheduledFor.toISOString()}`;
   try {
     await markTriggerExecutionDispatched({ row, dispatchedAt: new Date() });

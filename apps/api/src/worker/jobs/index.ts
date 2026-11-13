@@ -33,6 +33,7 @@ import { startDiscordGateway, stopDiscordGateway } from './discord-gateway';
 import { startDriveWorkers, stopDriveWorkers } from './drive';
 import { startGatewaySpendBackfillWorker, stopGatewaySpendBackfillWorker } from './gateway-spend-backfill';
 import { startGrantExpirySweeper, stopGrantExpirySweeper } from './grant-expiry';
+import { startPromptDeliveryMetric, stopPromptDeliveryMetric } from './prompt-delivery-metric';
 import { startNotificationWorker, stopNotificationWorker } from './notification';
 import { startOAuthSweeper, stopOAuthSweeper } from './oauth-sweep';
 import { startReplaySweeper, stopReplaySweeper } from './replay-sweep';
@@ -66,6 +67,9 @@ const HOUR = 60 * MIN;
 export const JOBS: readonly Job[] = [
   { ticks: { 'sales-outbox': 10 * MIN }, start: startSalesOutbox, stop: stopSalesOutbox },
   { ticks: { 'active-turn-renewal': 10 * MIN }, start: () => startActiveTurnRenewal(), stop: stopActiveTurnRenewal },
+  // Once a minute: running boxes holding a prompt Kortix could not deliver
+  // (Kortix/Sessions UnreachableActiveBoxes, 2026-11-11 edge hang).
+  { ticks: { 'prompt-delivery-metric': 10 * MIN }, start: startPromptDeliveryMetric, stop: stopPromptDeliveryMetric },
   { ticks: { 'project-maintenance': 20 * MIN }, start: startProjectMaintenance, stop: stopProjectMaintenance },
   {
     ticks: { 'trigger-scheduler': 10 * MIN },

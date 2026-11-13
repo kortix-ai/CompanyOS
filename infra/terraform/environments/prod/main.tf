@@ -204,11 +204,19 @@ module "api" {
   # leader API task, so 2048 keeps them under ~40 % of the worker task.
   # ecs-deploy.sh --service worker rolls it before the API, and the API gets
   # KORTIX_PROCESS_ROLE=web only while that worker is healthy on its image.
+  #
+  # prompt_delivery_alarm_threshold: 3 running boxes holding a prompt Kortix
+  # could not deliver, for 3 of 3 minutes, pages (Kortix/Sessions
+  # UnreachableActiveBoxes). One dead box is 1; on 2026-11-11 a Platinum edge
+  # hang made 33 running boxes unreachable for 17 min and nothing paged. A
+  # starting value from the mechanism, not from a baseline: read the metric's
+  # first 7 days in CloudWatch and move it if its normal maximum is near 3.
   worker = {
-    task_cpu           = 2048
-    task_memory        = 4096
-    metric_environment = "prod"
-    alarm_topic_arn    = data.aws_sns_topic.alerts.arn
+    task_cpu                        = 2048
+    task_memory                     = 4096
+    metric_environment              = "prod"
+    alarm_topic_arn                 = data.aws_sns_topic.alerts.arn
+    prompt_delivery_alarm_threshold = 3
   }
 }
 

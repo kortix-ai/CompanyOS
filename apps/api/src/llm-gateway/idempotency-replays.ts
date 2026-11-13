@@ -1,5 +1,5 @@
 import { gatewayIdempotencyReplays } from '@kortix/db';
-import { eq, gt, lt, and } from 'drizzle-orm';
+import { eq, gt, and, count, sql } from 'drizzle-orm';
 import { z } from '@hono/zod-openapi';
 import { db } from '../shared/db';
 
@@ -35,10 +35,28 @@ export async function getReplay(key: string): Promise<ReplayAnswer | null> {
   return row ?? null;
 }
 
+/** Past this many live rows an answer stays replica-local: the table is shared by every tenant. */
+const MAX_LIVE_ROWS = 10_000;
+/** Expired rows reclaimed per write, so a backlog is swept over many writes, never in one statement. */
+const SWEEP_ROWS = 200;
+
 /** First writer wins: a retry that raced the first answer keeps the answer clients already saw. */
 export async function putReplay(key: string, answer: ReplayAnswer, now = new Date()): Promise<void> {
-  // An expired row blocks the same key's insert (primary key), so drop it first.
-  await db.delete(gatewayIdempotencyReplays).where(lt(gatewayIdempotencyReplays.expiresAt, now));
+  // An expired row of this very key blocks its insert (primary key), so it always goes;
+  // the rest of the expired backlog goes in a bounded batch.
+  await db.execute(sql`
+    DELETE FROM ${gatewayIdempotencyReplays}
+    WHERE (${gatewayIdempotencyReplays.keyHash} = ${key} AND ${gatewayIdempotencyReplays.expiresAt} < ${now.toISOString()})
+       OR ctid IN (
+         SELECT ctid FROM ${gatewayIdempotencyReplays}
+         WHERE ${gatewayIdempotencyReplays.expiresAt} < ${now.toISOString()}
+         LIMIT ${SWEEP_ROWS}
+       )`);
+  const [live] = await db
+    .select({ n: count() })
+    .from(gatewayIdempotencyReplays)
+    .where(gt(gatewayIdempotencyReplays.expiresAt, now));
+  if ((live?.n ?? 0) >= MAX_LIVE_ROWS) return;
   await db
     .insert(gatewayIdempotencyReplays)
     .values({ keyHash: key, ...answer, expiresAt: new Date(now.getTime() + TTL_MS) })

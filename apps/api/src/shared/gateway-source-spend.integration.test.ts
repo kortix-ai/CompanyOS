@@ -116,6 +116,36 @@ withDb('listProjectGatewaySourceSpend', () => {
     expect(out.total.requests).toBe(5);
   });
 
+  test('counts one session once however many requests it made, and keeps a session with no row as unknown', async () => {
+    const project = await seedProject('source-spend-per-session');
+    seeded.push(project);
+
+    const busy = await session(project, { type: 'member', id: MEMBER });
+    for (let i = 0; i < 3; i++) await request(project, busy, 1, 100 * (i + 1), 1, i !== 2);
+    const quiet = await session(project, { type: 'member', id: MEMBER });
+    await request(project, quiet, 2, 50);
+    // A session id with no project_sessions row: not attributable.
+    await request(project, `ghost-${crypto.randomUUID()}`, 0.5, 10);
+
+    const out = await listProjectGatewaySourceSpend({
+      accountId: project.account_id,
+      projectId: project.project_id,
+      hours: 2,
+    });
+
+    const member = out.sources.find((s) => s.source === 'member')!;
+    expect(member.sessions).toBe(2);
+    expect(member.requests).toBe(4);
+    expect(member.errors).toBe(1);
+    expect(member.cost).toBeCloseTo(5, 6);
+    expect(member.input_tokens).toBe(100 + 200 + 300 + 50);
+    const unknown = out.sources.find((s) => s.source === 'unknown')!;
+    expect(unknown.sessions).toBe(1);
+    expect(unknown.requests).toBe(1);
+    expect(out.total.sessions).toBe(3);
+    expect(out.total.requests).toBe(5);
+  });
+
   test('clamps the window to 1..720 hours', async () => {
     const project = await seedProject('source-spend-clamp');
     seeded.push(project);

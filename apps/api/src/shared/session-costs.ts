@@ -1005,37 +1005,27 @@ export async function listProjectGatewaySourceSpend(input: {
     SOURCE_WINDOW_MAX_HOURS,
   );
   const parent = alias(projectSessions, 'parent_session');
-  const sourceSql = sql<string>`coalesce(
-    case when ${projectSessions.initiatorType} = 'trigger' then ${projectSessions.initiatorId} end,
-    case when ${parent.initiatorType} = 'trigger' then ${parent.initiatorId} end,
-    ${projectSessions.initiatorType}::text,
-    case when ${gatewayRequestLogs.sessionId} is null then 'unattributed' end,
-    'unknown'
-  )`;
 
-  const rows = await db
+  // Aggregate the window's log rows per session first, so the two session
+  // joins below run once per distinct session instead of once per request
+  // (and the planner no longer hash-joins every session the project ever had
+  // against the window's rows: KRTX-4869).
+  const perSession = db
     .select({
-      ...llmValueFields,
-      source: sourceSql,
-      sessions: sql<number>`count(distinct ${gatewayRequestLogs.sessionId})::int`,
-      requests: sql<number>`count(*)::int`,
-      errors: sql<number>`count(*) filter (where not ${gatewayRequestLogs.ok})::int`,
-      cost: totalSpendSql,
-      kortixCost: kortixBilledSpendSql,
-      inputTokens: sql<number>`coalesce(sum(${gatewayRequestLogs.inputTokens}), 0)::float8`,
-      cachedTokens: sql<number>`coalesce(sum(${gatewayRequestLogs.cachedTokens}), 0)::float8`,
-      outputTokens: sql<number>`coalesce(sum(${gatewayRequestLogs.outputTokens}), 0)::float8`,
-      lastAt: sql<Date | null>`max(${gatewayRequestLogs.createdAt})`,
+      sessionId: gatewayRequestLogs.sessionId,
+      value: llmValueFields.estimated_usage_value.as('value'),
+      priced: llmValueFields.priced_requests.as('priced'),
+      unpriced: llmValueFields.unpriced_requests.as('unpriced'),
+      requests: sql<number>`count(*)::int`.as('requests'),
+      errors: sql<number>`count(*) filter (where not ${gatewayRequestLogs.ok})::int`.as('errors'),
+      cost: totalSpendSql.as('cost'),
+      kortixCost: kortixBilledSpendSql.as('kortix_cost'),
+      inputTokens: sql<number>`coalesce(sum(${gatewayRequestLogs.inputTokens}), 0)::float8`.as('input_tokens'),
+      cachedTokens: sql<number>`coalesce(sum(${gatewayRequestLogs.cachedTokens}), 0)::float8`.as('cached_tokens'),
+      outputTokens: sql<number>`coalesce(sum(${gatewayRequestLogs.outputTokens}), 0)::float8`.as('output_tokens'),
+      lastAt: sql<Date | null>`max(${gatewayRequestLogs.createdAt})`.as('last_at'),
     })
     .from(gatewayRequestLogs)
-    .leftJoin(
-      projectSessions,
-      and(
-        eq(projectSessions.sessionId, gatewayRequestLogs.sessionId),
-        eq(projectSessions.projectId, gatewayRequestLogs.projectId),
-      ),
-    )
-    .leftJoin(parent, eq(parent.sessionId, projectSessions.parentSessionId))
     .where(
       and(
         // By project, wherever it was billed (CostScope).
@@ -1043,6 +1033,43 @@ export async function listProjectGatewaySourceSpend(input: {
         sql`${gatewayRequestLogs.createdAt} >= now() - make_interval(hours => ${hours})`,
       ),
     )
+    .groupBy(gatewayRequestLogs.sessionId)
+    .as('per_session');
+
+  const sourceSql = sql<string>`coalesce(
+    case when ${projectSessions.initiatorType} = 'trigger' then ${projectSessions.initiatorId} end,
+    case when ${parent.initiatorType} = 'trigger' then ${parent.initiatorId} end,
+    ${projectSessions.initiatorType}::text,
+    case when ${perSession.sessionId} is null then 'unattributed' end,
+    'unknown'
+  )`;
+
+  const rows = await db
+    .select({
+      source: sourceSql,
+      estimated_usage_value: sql<number | null>`sum(${perSession.value})::float8`,
+      priced_requests: sql<number>`coalesce(sum(${perSession.priced}), 0)::int`,
+      unpriced_requests: sql<number>`coalesce(sum(${perSession.unpriced}), 0)::int`,
+      // The null-session group is one row and is no session.
+      sessions: sql<number>`count(${perSession.sessionId})::int`,
+      requests: sql<number>`coalesce(sum(${perSession.requests}), 0)::int`,
+      errors: sql<number>`coalesce(sum(${perSession.errors}), 0)::int`,
+      cost: sql<number>`coalesce(sum(${perSession.cost}), 0)::float8`,
+      kortixCost: sql<number>`coalesce(sum(${perSession.kortixCost}), 0)::float8`,
+      inputTokens: sql<number>`coalesce(sum(${perSession.inputTokens}), 0)::float8`,
+      cachedTokens: sql<number>`coalesce(sum(${perSession.cachedTokens}), 0)::float8`,
+      outputTokens: sql<number>`coalesce(sum(${perSession.outputTokens}), 0)::float8`,
+      lastAt: sql<Date | null>`max(${perSession.lastAt})`,
+    })
+    .from(perSession)
+    .leftJoin(
+      projectSessions,
+      and(
+        eq(projectSessions.sessionId, perSession.sessionId),
+        eq(projectSessions.projectId, input.projectId),
+      ),
+    )
+    .leftJoin(parent, eq(parent.sessionId, projectSessions.parentSessionId))
     .groupBy(sourceSql);
 
   const sources: GatewaySourceSpendRow[] = rows

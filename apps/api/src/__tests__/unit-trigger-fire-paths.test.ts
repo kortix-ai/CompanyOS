@@ -60,6 +60,8 @@ let lifecycleCommandRows: Array<typeof sessionLifecycleCommands.$inferSelect>;
 let activeSessionCount = 0;
 let walletBalance = 1_000_000;
 let automationActor: string | null = USER_ID;
+/** Set to make the automation actor read throw (a transient database error). */
+let automationActorFailure: Error | null = null;
 const alertCalls: Array<{ kind: 'raise' | 'clear'; input: Record<string, unknown> }> = [];
 const watcherCalls: Array<{ kind: 'follow' | 'drop'; ref: Record<string, unknown> }> = [];
 /** The credential kind the mocked auth reports; unset by default, as before. */
@@ -142,6 +144,7 @@ function resetState() {
   secretConsumerReads.length = 0;
   walletBalance = 1_000_000;
   automationActor = USER_ID;
+  automationActorFailure = null;
   alertCalls.length = 0;
   watcherCalls.length = 0;
   testAuthType = undefined;
@@ -163,7 +166,10 @@ mockIamEngineAllowAll();
 mockIamReadModels();
 
 mock.module('../projects/session-lifecycle/actor', () => ({
-  resolveProjectAutomationActor: async () => automationActor,
+  resolveProjectAutomationActor: async () => {
+    if (automationActorFailure) throw automationActorFailure;
+    return automationActor;
+  },
   resolveAgentRunAttribution: async () => SERVICE_ACCOUNT_ID,
 }));
 
@@ -1249,8 +1255,8 @@ describe('git-backed triggers — runtime fire paths', () => {
     seedManifest(cronEntry({ slug: 'flaky', name: 'Flaky', cron: '* * * * * *', prompt: 'Report' }));
     const slot = new Date('2026-01-01T00:00:30Z');
     seedRuntimeCron({ slug: 'flaky', prompt: 'Report', nextFireAt: slot });
-    // No owner to run as: a failure with no permanent code, so it retries.
-    automationActor = null;
+    // The owner read throws: a failure with no permanent code, so it retries.
+    automationActorFailure = new Error('connection terminated unexpectedly');
 
     await runProjectTriggerSweep(slot);
     expect(await drainTriggerExecutionQueue(slot)).toMatchObject({ queued: 1, failed: 0 });
@@ -1265,9 +1271,27 @@ describe('git-backed triggers — runtime fire paths', () => {
     expect(alertCalls).toEqual([
       {
         kind: 'raise',
+        input: { projectId: PROJECT_ID, slug: 'flaky', source: 'fire', error: 'connection terminated unexpectedly' },
+      },
+    ]);
+  });
+
+  test('a cron fire with no account owner dead-letters on its first attempt and raises once', async () => {
+    seedManifest(cronEntry({ slug: 'ownerless', name: 'Ownerless', cron: '* * * * * *', prompt: 'Report' }));
+    const slot = new Date('2026-01-01T00:00:30Z');
+    seedRuntimeCron({ slug: 'ownerless', prompt: 'Report', nextFireAt: slot });
+    // No owner to run as: the fire answers `retryable: false`, so a retry cannot fix it (#12645).
+    automationActor = null;
+
+    await runProjectTriggerSweep(slot);
+    expect(await drainTriggerExecutionQueue(slot)).toMatchObject({ queued: 0, failed: 1 });
+    expect(triggerExecutionRows[0]).toMatchObject({ status: 'dead_lettered', attempts: 1 });
+    expect(alertCalls).toEqual([
+      {
+        kind: 'raise',
         input: {
           projectId: PROJECT_ID,
-          slug: 'flaky',
+          slug: 'ownerless',
           source: 'fire',
           error: 'No account owner available to own the session',
         },

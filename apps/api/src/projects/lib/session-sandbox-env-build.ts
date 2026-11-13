@@ -423,7 +423,8 @@ export async function buildSessionSandboxEnvVars(input: SessionSandboxEnvInput):
             ref: input.baseRef,
             agentName: input.agentName,
             tip: input.baseSha ?? null,
-            expectedGovernanceEtag: agentConfigRead.then(({ compiledAgentConfig }) => agentConfigEtag(compiledAgentConfig)),
+            // An early answer (no head yet) never awaits this; `started` owns its rejection.
+            expectedGovernanceEtag: started(agentConfigRead.then(({ compiledAgentConfig }) => agentConfigEtag(compiledAgentConfig))),
           }).catch((error: Error) => {
             logger.warn('[config-releases] published release lookup failed; the box asks the route', {
               projectId: input.projectId,

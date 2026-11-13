@@ -29,7 +29,7 @@ describe('trigger split characterization', () => {
     });
     expect(await response.json()).toEqual({
       body: { event: 'synthetic' },
-      headers: { content_type: 'application/json', user_agent: 'synthetic-agent', forwarded_for: null },
+      headers: { content_type: 'application/json', user_agent: 'synthetic-agent', forwarded_for: null, github_event: null },
     });
   });
 

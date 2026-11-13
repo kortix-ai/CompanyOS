@@ -2357,6 +2357,7 @@
     "steerNextStep": "Lu à la prochaine étape",
     "queuedByAnotherMember": "Envoyé par un autre membre. Seule cette personne peut le modifier ou l'envoyer.",
     "commandRunsWhenDone": "S’exécute quand l’agent a terminé",
+    "queuedRuntimeUnreachable": "Attend que la machine de la session réponde. Kortix réessaie automatiquement.",
     "steerFallbackUnsupported": "Attend ce tour. Cette session n'accepte pas de messages pendant un tour.",
     "steerFallbackNotPrompter": "Attend ce tour. Un autre membre l'a lancé.",
     "steerFallbackTurnEnded": "S'exécute comme son propre tour. Le tour s'est terminé avant.",

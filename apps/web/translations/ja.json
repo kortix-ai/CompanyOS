@@ -2357,6 +2357,7 @@
     "steerNextStep": "次のステップで読み取り",
     "queuedByAnotherMember": "別のメンバーが送信しました。編集や送信ができるのはそのメンバーのみです。",
     "commandRunsWhenDone": "エージェントの完了後に実行",
+    "queuedRuntimeUnreachable": "セッションのマシンの応答を待っています。Kortix が再試行を続けます。",
     "steerFallbackUnsupported": "このターンの終了を待ちます。このセッションはターン中にメッセージを受け取れません。",
     "steerFallbackNotPrompter": "このターンの終了を待ちます。別のメンバーが開始したターンです。",
     "steerFallbackTurnEnded": "独立したターンとして実行します。先にターンが終了しました。",

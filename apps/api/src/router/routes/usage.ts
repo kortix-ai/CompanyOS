@@ -22,6 +22,7 @@ import {
   parseCostWindow,
 } from '../../shared/cost-window';
 import { db } from '../../shared/db';
+import { sessionCostsReadDenial } from '../../middleware/rate-limit';
 import { resolveScopedAccountId } from '../../middleware/resolve-account';
 import { getSessionCostRecord, listSessionCosts } from '../../shared/session-costs';
 import { isUuid } from '../../shared/validate';
@@ -548,10 +549,14 @@ usageApp.openapi(
           'text/csv': { schema: z.string() },
         },
       },
-      ...errors(400, 401, 403),
+      ...errors(400, 401, 403, 429),
     },
   }),
   async (c) => {
+    // Front door, before auth and any query: see sessionCostsReadLimiter (KRTX-4372).
+    const denied = sessionCostsReadDenial(c);
+    if (denied) return c.json(denied.body, 429, { 'Retry-After': denied.retryAfter });
+
     let parsed: {
       window: CostWindow;
       sort: CostSort;

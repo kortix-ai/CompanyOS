@@ -153,6 +153,41 @@ export function storedLogReadDenial(c: Context, sessionId: string): StoredLogRea
 }
 
 /**
+ * Per-caller ceiling on `GET /v1/usage/session-costs` (`KORTIX_SESSION_COSTS_READS_PER_MIN`,
+ * 12). INCIDENT 2026-11-13 22:10 UTC (KRTX-4372): one CLI client sent about 140
+ * requests in three minutes. Each request runs four aggregate queries over the
+ * account's 30-day gateway log, so they queued behind each other for the whole
+ * 25 s request deadline (`db_pool_wait_suspected`), the 503s were retried, and
+ * the orphaned handlers kept their queries running. The pool starved: 276 5xx
+ * on this route and, in the same minutes, on unrelated routes of other
+ * customers. A person paging the cost explorer makes a few requests a minute.
+ *
+ * Keyed on the authenticated user id, else the client key, so a caller only
+ * spends their own bucket. Replica-local, like every limiter here.
+ */
+const sessionCostsReadLimiter = new TokenBucketRateLimiter('session_costs_read');
+
+/** The session-costs read denial for one GET (null = allowed); answered like {@link StoredLogReadDenial}. */
+export function sessionCostsReadDenial(c: Context): StoredLogReadDenial | null {
+  const userId = c.get('userId');
+  const caller = typeof userId === 'string' && userId ? userId : requestClientKey(c);
+  const result = sessionCostsReadLimiter.check(caller, {
+    limit: positiveInt(config.KORTIX_SESSION_COSTS_READS_PER_MIN, 12),
+    windowMs: 60_000,
+  });
+  if (result.allowed) return null;
+  const retryAfterSeconds = Math.ceil((result.retryAfterMs ?? result.resetMs) / 1000);
+  return {
+    body: {
+      error: 'rate_limit_exceeded',
+      message: 'Session costs are being read faster than the per-caller limit. Slow down or honor Retry-After.',
+      retry_after_seconds: retryAfterSeconds,
+    },
+    retryAfter: String(retryAfterSeconds),
+  };
+}
+
+/**
  * Per-project budget on secret WRITES (POST/PUT/PATCH/DELETE under
  * /:projectId/secrets*). Reads pass untouched.
  *

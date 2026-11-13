@@ -37,6 +37,7 @@ import { ChatInputOverridesProvider } from './chat-input/chat-input-overrides';
 import type { ComposerEditorHandle } from './editor/composer-editor';
 import type { SlashAction } from './menus/slash-actions';
 import type { AttachedFile } from './types';
+import { resolveProgramAgent } from './agent-selector';
 import { useUiHostConfig } from '../../providers/ui-provider';
 
 /** What the attach picker offers when the host names no list. */
@@ -231,6 +232,8 @@ export function ComposerCard({
   // Inside a space the `@` menu is its people and agents (`menus/space-mentions.ts`).
   const spaceMentions = useContext(SpaceMentionContext);
   const chatInputOpen = agentMenuOpen || modelMenuOpen || reasoningMenuOpen;
+  // A program agent (`run` in kortix.yaml) has no model: its listing names provider `program`.
+  const programAgent = resolveProgramAgent(primaryAgents, selectedAgent);
   const chatInput = useMemo<ComposerUnderbarProps['chatInput']>(() => {
     if (!chatInputEnabled) return undefined;
     return {
@@ -457,6 +460,7 @@ export function ComposerCard({
             onChange={handleFileSelect}
           />
           <ComposerToolbar
+            noModel={programAgent}
             leading={
               inlineUnderbar ? (
                 <ComposerUnderbar

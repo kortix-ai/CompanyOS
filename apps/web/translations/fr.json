@@ -1328,6 +1328,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "Avec les Espaces activés, un espace peut se surveiller lui-même : activez Proactif dans ses détails, et un agent lit ce qui s’y passe (fils terminés, questions restées ouvertes, personnes qui arrivent) et n’écrit dans le chat que lorsque c’est utile : un résultat à partager, une décision à prendre ou un retard. Il peut aussi lancer un fil qui fait le travail. Point quotidien facultatif à 9 h."
+        },
+        "program_agents": {
+          "name": "Agents programme",
+          "description": "Un agent qui exécute votre code au lieu d'un modèle. Donnez à un agent `run: <command>` dans kortix.yaml : chaque tour exécute cette commande dans le sandbox de la session, avec l'espace de travail, les secrets et les accès de l'agent. Le message ou les données du trigger sont l'entrée, et ce que la commande affiche est la réponse."
         }
       },
       "channelsSwitch": {
@@ -1731,7 +1735,7 @@
         "email": "Courriel",
         "scheduled": "Programmée",
         "webhook": "Webhook",
-        "event": "Événement d'app",
+        "event": "Événement de connecteur",
         "manual": "Manuel",
         "all": "Tous"
       },
@@ -2097,7 +2101,13 @@
       "noModelUpgradeReason": "Aucun modèle : passez au plan Credits ou ajoutez votre propre clé de fournisseur.",
       "noModelKeyReason": "Aucun modèle : ajoutez votre propre clé de fournisseur.",
       "noModelUpgradePlan": "Changer de plan",
-      "noModelAddProviderKey": "Ajouter une clé de fournisseur"
+      "noModelAddProviderKey": "Ajouter une clé de fournisseur",
+      "stepTitle": "Connecter un modèle",
+      "stepBody": "Les agents de {workspace} ont besoin d’un modèle pour répondre. Connectez votre abonnement ChatGPT ou Claude, ou ajoutez une clé de fournisseur.",
+      "stepBodyUpgrade": "Les agents de {workspace} ont besoin d’un modèle pour répondre. Connectez votre abonnement ChatGPT ou Claude, ajoutez une clé de fournisseur, ou passez au plan Credits pour les modèles Kortix.",
+      "stepBodyMember": "Les agents de {workspace} ont besoin d’un modèle pour répondre. Connectez votre propre abonnement ChatGPT ou Claude ou votre clé de fournisseur, ou demandez à une personne qui gère cet espace de travail de connecter un modèle pour tout le monde.",
+      "stepThisWorkspace": "cet espace de travail",
+      "stepBack": "Retour aux espaces de travail"
     },
     "providerRecovery": {
       "savedPrompt": "Prompt enregistré",
@@ -21348,7 +21358,16 @@
       "textb1f8e3109f1b": "{value0} : {value1} jours — c'est le maximum que Kortix autorise.",
       "textac20a57bfde0": "Masquer",
       "text268733ac2f60": "Impossible de mettre à jour l'application",
-      "text5d8926d4a4dd": "Impossible d'enregistrer l'application"
+      "text5d8926d4a4dd": "Impossible d'enregistrer l'application",
+      "text30b9ce09f406": "Saisissez une période comme 15m, 1h ou 1d, d’au moins 1m.",
+      "text28d33d2ad989": "Choisissez l’app à appeler",
+      "textd777d7805cfa": "Saisissez un chemin qui commence par /",
+      "text8043e69a8dd6": "Supprimer le déclencheur",
+      "textd6fa1626e3af": "Événement de connecteur créé",
+      "textccf59f978ef6": "Aucun événement de connecteur ici pour l’instant",
+      "text82cbc4a4def0": "Les événements de connecteur ne sont pas configurés sur ce déploiement : aucun connecteur ne peut encore les envoyer.",
+      "text458ceb31019b": "Déclencheurs d’événements de connecteur",
+      "text27ca9df9dbaa": "Les déclencheurs d’événements de connecteur sont désactivés"
     },
     "publicShareConfirm": {
       "title": "Créer un lien public ?",
@@ -21773,6 +21792,8 @@
     "llmEstimateLabel": "Estimation LLM :"
   },
   "triggerComposer": {
+    "programInputPlaceholder": "Vide : le programme lit les données du trigger en JSON",
+    "programInputHelp": "Cet agent exécute un programme. Il lit ce texte sur stdin. Laissez vide pour envoyer toutes les données en JSON : l'événement, le corps du webhook ou les détails de la planification, plus les données fixes du trigger.",
     "every": "Toutes les",
     "dayOfMonth": "Jour du mois",
     "details": "Détails",
@@ -21810,7 +21831,16 @@
     "crBranchHelp": "S'exécute quand une demande de modification est fusionnée dans cette branche, ou dans n'importe quelle branche si le champ est vide. L'instruction peut lire <code>change_request.number</code>, <code>change_request.title</code> et <code>change_request.base_ref</code>.",
     "eventsOff": "Les événements de connecteur sont en bêta et désactivés pour cet espace de travail. Activez-les dans Indicateurs de fonctionnalité, dans l'administration de l'espace de travail.",
     "noApps": "Aucune app de cet espace de travail n'envoie encore d'événements. Déployez une app qui fait un POST vers <code>KORTIX_APP_EVENTS_URL</code>, puis choisissez-la ici.",
-    "openApps": "Ouvrir les apps"
+    "openApps": "Ouvrir les apps",
+    "thenLabel": "Ce que fait un déclenchement",
+    "thenAgent": "Lancer un agent",
+    "thenApp": "Appeler une app",
+    "targetPath": "Chemin",
+    "targetMethod": "Méthode",
+    "targetHelp": "Chaque déclenchement réveille l’app et envoie la charge utile à ce chemin. Aucun agent ne s’exécute.",
+    "intervalLabel": "Se répète toutes les",
+    "intervalHelp": "Une période fixe comme 15m, 1h ou 1d.",
+    "useCalendar": "Utiliser une planification par calendrier"
   },
   "gatewayAccess": {
     "heroTitle": "Utilisez les modèles de cet espace de travail partout",
@@ -22155,7 +22185,7 @@
     "infoRunsThrough": "Fournisseur",
     "infoSignsInWith": "Connexion par",
     "infoCategory": "Catégorie",
-    "infoAppEvents": "Événements d’app",
+    "infoAppEvents": "Événements",
     "infoAppEventsYes": "Pris en charge",
     "authOAuth": "Connexion OAuth",
     "authApiKey": "Clé d’API",
@@ -23706,9 +23736,9 @@
   },
   "automationsPause": {
     "groupTitle": "Déclencheurs",
-    "groupDescription": "Planifications, boucles, webhooks, événements d'apps et moniteurs dans cet espace de travail.",
+    "groupDescription": "Planifications, boucles, webhooks, événements de connecteur et événements d’app de cet espace de travail.",
     "label": "Mettre en pause tous les déclencheurs",
-    "description": "Rien dans cet espace de travail ne s'exécute tout seul : ni planification, ni boucle, ni webhook, ni événement d'application, ni moniteur. Lancer un déclencheur à la main fonctionne toujours.",
+    "description": "Rien ne s’exécute seul dans cet espace de travail : aucune planification, boucle, webhook, événement de connecteur ni événement d’app. Lancer un déclencheur à la main fonctionne toujours.",
     "readOnlyDescription": "Seul un propriétaire ou un administrateur peut mettre en pause ou reprendre les déclencheurs.",
     "pausedSince": "En pause depuis {date}.",
     "pauseTitle": "Mettre en pause tous les déclencheurs ?",
@@ -24952,6 +24982,11 @@
       }
     },
     "modelView": {
+      "programTimeout": "Limite de temps",
+      "programTimeoutHelp": "Une exécution plus longue est arrêtée et le tour échoue. De 1s à 6h, par exemple 30m ou 2h. Vide : 30m.",
+      "programTitle": "Programme",
+      "programCommand": "Commande",
+      "programHelp": "Chaque tour exécute cette commande dans le sandbox de la session au lieu d'un modèle. Le message arrive sur stdin et dans $KORTIX_EVENT_PATH. Ce qu'elle affiche est la réponse. Un code de sortie non nul fait échouer le tour.",
       "title": "Modèle",
       "help": "Comment cet agent réfléchit.",
       "projectDefault": "Par défaut de l’espace de travail",
@@ -26861,6 +26896,20 @@
     "connect": "Connecter",
     "cardFailed": "Impossible de connecter {app}. Réessayez.",
     "blockedTitle": "Ouvrez {app} pour vous connecter",
-    "blockedDescription": "Votre navigateur a bloqué la fenêtre de connexion. Ouvrez-la avec le bouton ci-dessous. Cette page se met à jour toute seule."
+    "blockedDescription": "Votre navigateur a bloqué la fenêtre de connexion. Ouvrez-la avec le bouton ci-dessous. Cette page se met à jour toute seule.",
+    "doneTitle": "{app} connecté",
+    "doneTitleNoApp": "Connecté",
+    "doneDescription": "Votre agent peut maintenant utiliser {app}.",
+    "doneClose": "Vous pouvez fermer cet onglet.",
+    "doneDeniedTitle": "Connexion annulée",
+    "doneDeniedDescription": "Vous n’avez pas autorisé l’accès sur {app}. Relancez la connexion depuis Kortix pour le connecter.",
+    "doneExpiredTitle": "Ce lien de connexion a expiré",
+    "doneExpiredDescription": "Il a déjà été utilisé ou il est trop ancien. Relancez la connexion depuis Kortix.",
+    "doneFailedTitle": "{app} n’est pas connecté",
+    "doneFailedTitleNoApp": "La connexion n’a pas abouti",
+    "doneFailedDescription": "Relancez la connexion depuis Kortix. Si elle échoue encore, envoyez le code ci-dessous au support.",
+    "doneErrorCode": "Code d’erreur : {code}",
+    "doneOpenKortix": "Ouvrir Kortix",
+    "doneFallbackApp": "l’app"
   }
 }

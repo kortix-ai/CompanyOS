@@ -44,11 +44,14 @@ import { runReview } from './commands/review.ts';
 import { runRoles } from './commands/roles.ts';
 import { runSandboxes } from './commands/sandboxes.ts';
 import { runSchema } from './commands/schema.ts';
+import { runTemplates } from './commands/templates.ts';
 import { runSecrets } from './commands/secrets.ts';
 import { runSelfHost } from './commands/self-host.ts';
 import { runSessionsChat } from './commands/sessions-chat.ts';
 import { runSessions } from './commands/sessions.ts';
 import { runShip } from './commands/ship.ts';
+import { runPlan } from './commands/plan.ts';
+import { runOnboard } from './commands/onboard.ts';
 import { runSystemSkills } from './commands/system-skills.ts';
 import { runTokens } from './commands/tokens.ts';
 import { runKeys } from './commands/keys.ts';
@@ -231,6 +234,9 @@ const COMMAND_HANDLERS: Record<string, RootCommandHandler> = {
   deploy: (rest) => runShip(rest),
   validate: (rest) => runValidate(rest),
   schema: (rest) => runSchema(rest),
+  templates: (rest) => runTemplates(rest),
+  plan: (rest) => runPlan(rest),
+  onboard: (rest) => runOnboard(rest),
   'self-host': (rest) => runSelfHost(rest),
   login: (rest) => runLogin(rest),
   logout: (rest) => runLogout(rest),

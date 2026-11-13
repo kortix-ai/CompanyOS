@@ -59,6 +59,7 @@ import {
 import { loadTask, loadTaskFolder, treeFor, type EvalTaskRef } from './task-source';
 import { readManifestEvals } from './config';
 import { readSessionLogPage } from '../session-log-read';
+import { FEATURE_FLAGS_ENV_NAME, featureFlagsEnvValue } from '../lib/feature-flag-env';
 
 /** The source of every session the runner creates. */
 export const EVAL_SESSION_SOURCE = 'system:eval' as const;
@@ -427,6 +428,9 @@ async function beginVerify(ctx: TrialContext, trial: EvalTrialRow, box: Box): Pr
       ...ctx.config.verifier.env,
       // Which session the agent ran in: a grader inspects its loops, child sessions and log with `kortix`.
       ...(trial.sessionId ? { KORTIX_SESSION_ID: trial.sessionId } : {}),
+      // The project's flags, as a session box gets them: the CLI shows a flagged command (`evals judge`,
+      // `loops`) only when it knows the flag is on, and a verifier runs without the agent's environment.
+      [FEATURE_FLAGS_ENV_NAME]: featureFlagsEnvValue(ctx.project.metadata),
       KORTIX_EVAL_JOB_ID: ctx.job.jobId,
       KORTIX_EVAL_TRIAL_ID: trial.trialId,
     },

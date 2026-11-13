@@ -1731,7 +1731,7 @@
         "email": "E-mail",
         "scheduled": "Programmato",
         "webhook": "Webhook",
-        "event": "Evento app",
+        "event": "Evento del connettore",
         "manual": "Manuale",
         "all": "Tutti"
       },
@@ -21348,7 +21348,16 @@
       "textb1f8e3109f1b": "{value0}: {value1} giorni sono il massimo che Kortix consente.",
       "textac20a57bfde0": "Nascondi",
       "text268733ac2f60": "Impossibile aggiornare questa app",
-      "text5d8926d4a4dd": "Impossibile registrare questa app"
+      "text5d8926d4a4dd": "Impossibile registrare questa app",
+      "text30b9ce09f406": "Inserisci un periodo come 15m, 1h o 1d, di almeno 1m.",
+      "text28d33d2ad989": "Scegli l’app da chiamare",
+      "textd777d7805cfa": "Inserisci un percorso che inizia con /",
+      "text8043e69a8dd6": "Elimina trigger",
+      "textd6fa1626e3af": "Evento del connettore creato",
+      "textccf59f978ef6": "Ancora nessun evento del connettore qui",
+      "text82cbc4a4def0": "Gli eventi del connettore non sono configurati in questa installazione, quindi nessun connettore può ancora inviarli.",
+      "text458ceb31019b": "Trigger di eventi del connettore",
+      "text27ca9df9dbaa": "I trigger di eventi del connettore sono disattivati"
     },
     "publicShareConfirm": {
       "title": "Creare un link pubblico?",
@@ -21810,7 +21819,16 @@
     "crBranchHelp": "Si avvia quando una richiesta di modifica viene unita in questo branch, o in qualsiasi branch se il campo è vuoto. L’istruzione può leggere <code>change_request.number</code>, <code>change_request.title</code> e <code>change_request.base_ref</code>.",
     "eventsOff": "Gli eventi dei connettori sono in beta e disattivati per questo workspace. Attivali in Flag delle funzionalità, nell’amministrazione del workspace.",
     "noApps": "Nessuna app di questo workspace invia ancora eventi. Distribuisci un’app che fa POST a <code>KORTIX_APP_EVENTS_URL</code>, poi sceglila qui.",
-    "openApps": "Apri le app"
+    "openApps": "Apri le app",
+    "thenLabel": "Cosa fa un’attivazione",
+    "thenAgent": "Esegui un agente",
+    "thenApp": "Chiama un’app",
+    "targetPath": "Percorso",
+    "targetMethod": "Metodo",
+    "targetHelp": "Ogni attivazione riattiva l’app e invia il payload a questo percorso. Nessun agente viene eseguito.",
+    "intervalLabel": "Si ripete ogni",
+    "intervalHelp": "Un periodo fisso come 15m, 1h o 1d.",
+    "useCalendar": "Usa una pianificazione a calendario"
   },
   "gatewayAccess": {
     "heroTitle": "Usa i modelli di questo workspace ovunque",
@@ -22155,7 +22173,7 @@
     "infoRunsThrough": "Provider",
     "infoSignsInWith": "Accesso con",
     "infoCategory": "Categoria",
-    "infoAppEvents": "Eventi dell’app",
+    "infoAppEvents": "Eventi",
     "infoAppEventsYes": "Supportati",
     "authOAuth": "Accesso OAuth",
     "authApiKey": "Chiave API",
@@ -23706,9 +23724,9 @@
   },
   "automationsPause": {
     "groupTitle": "Trigger",
-    "groupDescription": "Pianificazioni, cicli, webhook, eventi delle app e monitor in questo workspace.",
+    "groupDescription": "Pianificazioni, loop, webhook, eventi del connettore ed eventi delle app in questo workspace.",
     "label": "Metti in pausa tutti i trigger",
-    "description": "Niente in questo workspace parte da solo: nessuna pianificazione, loop, webhook, evento di app o monitor. Avviare un trigger a mano funziona ancora.",
+    "description": "In questo workspace nulla si avvia da solo: nessuna pianificazione, loop, webhook, evento del connettore o evento dell’app. Eseguire un trigger a mano funziona ancora.",
     "readOnlyDescription": "Solo un proprietario o un amministratore può mettere in pausa o riprendere i trigger.",
     "pausedSince": "In pausa dal {date}.",
     "pauseTitle": "Mettere in pausa tutti i trigger?",

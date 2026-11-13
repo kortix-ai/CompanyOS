@@ -57,23 +57,40 @@ const COMPOSER_EDITOR = '[data-composer-editor]';
  * any home composer mounts, land in that project's home composer on a later
  * visit in the same tab.
  *
+ * The buffer belongs to the person who typed it. When the signed-in user
+ * changes without a page load (another tab signs out, or signs in as someone
+ * else), the entry is dropped before the next viewer's composer can read it.
+ * Only a different signed-in id counts: `null` is the session still resolving
+ * (a hard load, or the auth bootstrap flickering), the window this buffer
+ * exists for. A sign-out from this tab reloads the page (`performSignOut`),
+ * which empties the in-memory store anyway.
+ *
  * Mounted by `ProjectAccessBoundary`, which stays mounted from the first
  * paint to the composer. Keys typed before React hydrates are not seen.
  * Enter is ignored: nothing is sent from a screen the person cannot see.
  * Shortcuts (Cmd, Ctrl, Alt) and IME composition pass through untouched.
  */
-export function useHomeTypingBuffer(): void {
+export function useHomeTypingBuffer(viewerUserId: string | null): void {
   const projectId = homeProjectIdFromPath(usePathname());
-  const latch = useRef<{ projectId: string | null; handedOver: boolean }>({ projectId: null, handedOver: false });
+  const latch = useRef<{ projectId: string | null; handedOver: boolean; text: string }>({ projectId: null, handedOver: false, text: '' });
+  const lastViewer = useRef<string | null>(null);
 
   useLayoutEffect(() => {
+    const previousViewer = lastViewer.current;
+    if (viewerUserId) lastViewer.current = viewerUserId;
+    if (previousViewer && viewerUserId && previousViewer !== viewerUserId) {
+      latch.current.text = '';
+      const prefills = useComposerPrefillStore.getState();
+      for (const [id, entry] of Object.entries(prefills.prefillByProject)) {
+        if (entry.restoreDraft) prefills.consume(id);
+      }
+    }
     if (!projectId || typeof window === 'undefined') {
-      latch.current = { projectId: null, handedOver: false };
+      latch.current = { projectId: null, handedOver: false, text: '' };
       return;
     }
-    if (latch.current.projectId !== projectId) latch.current = { projectId, handedOver: false };
+    if (latch.current.projectId !== projectId) latch.current = { projectId, handedOver: false, text: '' };
     const state = latch.current;
-    let text = '';
     const watch = (entry: { restoreDraft?: boolean } | undefined) => {
       if (entry && !entry.restoreDraft) state.handedOver = true;
     };
@@ -82,7 +99,7 @@ export function useHomeTypingBuffer(): void {
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (document.querySelector(COMPOSER_EDITOR)) {
-        text = '';
+        state.text = '';
         state.handedOver = false;
         return;
       }
@@ -90,16 +107,16 @@ export function useHomeTypingBuffer(): void {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.target !== document.body && event.target !== document.documentElement) return;
       if (event.key === 'Backspace') {
-        if (!text) return;
-        text = text.slice(0, -1);
+        if (!state.text) return;
+        state.text = state.text.slice(0, -1);
       } else if (event.key.length === 1) {
-        text += event.key;
+        state.text += event.key;
       } else {
         return;
       }
       // Space would scroll the page; the key belongs to the composer.
       event.preventDefault();
-      useComposerPrefillStore.getState().setPrefill(projectId, text, { restoreDraft: true });
+      useComposerPrefillStore.getState().setPrefill(projectId, state.text, { restoreDraft: true });
     };
 
     window.addEventListener('keydown', onKeyDown);
@@ -107,5 +124,5 @@ export function useHomeTypingBuffer(): void {
       window.removeEventListener('keydown', onKeyDown);
       unsubscribe();
     };
-  }, [projectId]);
+  }, [projectId, viewerUserId]);
 }

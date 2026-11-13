@@ -33,8 +33,8 @@ function Home() {
   return null;
 }
 
-function Boundary({ home = true }: { home?: boolean }) {
-  useHomeTypingBuffer();
+function Boundary({ home = true, user = 'u1' }: { home?: boolean; user?: string | null }) {
+  useHomeTypingBuffer(user);
   return home ? <Home /> : null;
 }
 
@@ -118,4 +118,30 @@ test('home redirecting to the chat route keeps the keys for the chat composer', 
   // The chat composer is still loading: keys typed now join the buffer.
   press('!');
   expect(useComposerPrefillStore.getState().prefillByProject.p1).toEqual({ text: 'hi!', restoreDraft: true });
+});
+
+test('another account signing in on the same tab never receives the buffer', () => {
+  act(() => root.render(<Boundary home={false} user="u1" />));
+  press('s');
+  press('e');
+  act(() => root.render(<Boundary home={false} user={null} />));
+  act(() => root.render(<Boundary home={false} user="u2" />));
+  expect(useComposerPrefillStore.getState().prefillByProject.p1).toBeUndefined();
+});
+
+test('the session resolving on a hard load keeps the buffer', () => {
+  act(() => root.render(<Boundary home={false} user={null} />));
+  press('h');
+  act(() => root.render(<Boundary home={false} user="u1" />));
+  press('i');
+  expect(useComposerPrefillStore.getState().prefillByProject.p1).toEqual({ text: 'hi', restoreDraft: true });
+});
+
+test('the auth bootstrap flickering to null and back keeps the buffer', () => {
+  act(() => root.render(<Boundary home={false} user="u1" />));
+  press('h');
+  act(() => root.render(<Boundary home={false} user={null} />));
+  act(() => root.render(<Boundary home={false} user="u1" />));
+  press('i');
+  expect(useComposerPrefillStore.getState().prefillByProject.p1).toEqual({ text: 'hi', restoreDraft: true });
 });

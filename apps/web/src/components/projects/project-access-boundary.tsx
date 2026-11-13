@@ -240,7 +240,7 @@ export function ProjectAccessBoundary(props: ProjectAccessBoundaryProps) {
   useSignedOutRedirect();
   // Above the keyed child, so the buffer survives the remount when the user
   // id resolves: keys typed before the home composer exists land in it.
-  useHomeTypingBuffer();
+  useHomeTypingBuffer(user?.id ?? null);
   return <ProjectAccessForUser key={`${props.projectId}:${user?.id ?? "pending"}`} {...props} />;
 }
 

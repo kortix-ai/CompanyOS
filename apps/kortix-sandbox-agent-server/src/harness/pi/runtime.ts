@@ -373,6 +373,8 @@ export interface PiRuntimeHooks {
   onFrame?: (frame: RuntimeFrame) => void
   /** A turn read a steered message: it is on the wire and in the model's context. */
   onSteerRead?: (read: { rootId: string; messageId: string }) => void
+  /** A stopped turn dropped a steered message it never read: apps/api sends it again as the next turn. */
+  onSteerDropped?: (drop: { rootId: string; messageId: string }) => void
 }
 
 export interface PiRuntimeOptions {
@@ -1409,6 +1411,7 @@ export class PiRuntime {
     if (turn) {
       this.clearActiveTurn()
       this.completedTurns.set(turn.messageId, 'idle')
+      this.dropUnreadSteers()
       this.hooks.onTurnEnd?.({ rootId: this.rootId, messageId: turn.messageId, status: 'idle' })
     }
     for (const item of [turn, ...this.work]) (item as Turn | null)?.resolve?.('aborted')
@@ -1426,6 +1429,20 @@ export class PiRuntime {
     // A stopped turn reads no steered message; the turn's end drops what is unread.
     this.agent?.clearSteeringQueue()
     this.pi?.session.abort().catch((err) => logger.warn('[pi] abort failed', { err: err instanceof Error ? err.message : String(err) }))
+  }
+
+  /**
+   * A stopped turn's end: every steered message it did not read is dropped and
+   * reported (`onSteerDropped`), before the turn's end is. The steer was
+   * accepted (202), so apps/api holds its row as forwarded; without the report
+   * nothing ever sends it. A steer the API's Stop settle withdrew first
+   * (`withdrawSteer`) is no longer listed.
+   */
+  private dropUnreadSteers(): void {
+    const dropped = this.steered
+    this.steered = []
+    this.agent?.clearSteeringQueue()
+    for (const entry of dropped) this.hooks.onSteerDropped?.({ rootId: this.rootId, messageId: entry.messageId })
   }
 
   private async runTurn(turn: Turn): Promise<void> {
@@ -1539,6 +1556,7 @@ export class PiRuntime {
       if (!abandoned) claudeSessions()?.settle(this.rootId)
       // `abandonWork` already reported the abandoned turn's end.
       const finalText = outcome === 'completed' ? assistantFinalText(this.turnAssistant) : ''
+      if (!abandoned && turn.stopRequested) this.dropUnreadSteers()
       if (!abandoned)
         this.hooks.onTurnEnd?.({
           rootId: this.rootId,
@@ -1551,11 +1569,11 @@ export class PiRuntime {
     if (abandoned) return
     // Started while the live model list was down: fetch it again, so the next turn runs on real limits.
     if (this.models?.live === false) this.refreshModelsSoon()
-    // Steered messages the turn did not read. A stopped turn drops them (the
-    // API's Stop path owns them). Otherwise they start the next turn: the first
-    // is its prompt, the rest are read before its first model call. Same queue
-    // slot, so no prompt admitted meanwhile runs before them.
-    const [next, ...rest] = turn.stopRequested ? [] : this.steered
+    // Steered messages the turn did not read. A stopped turn dropped and
+    // reported them above (`dropUnreadSteers`). Otherwise they start the next
+    // turn: the first is its prompt, the rest are read before its first model
+    // call. Same queue slot, so no prompt admitted meanwhile runs before them.
+    const [next, ...rest] = this.steered
     this.steered = rest
     agent.clearSteeringQueue()
     if (!next) return

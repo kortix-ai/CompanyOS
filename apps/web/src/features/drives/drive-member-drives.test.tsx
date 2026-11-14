@@ -26,17 +26,22 @@ const listings: Record<string, DriveEntry[]> = {
   '/': [dir('/Company'), dir('/Marketing'), dir('/Users')],
   '/Users': [dir('/Users/you', 'You'), dir('/Users/ana.lima', 'Ana Lima'), dir('/Users/ben.ortiz', 'Ben Ortiz')],
 };
+/** The folders the code under test asked the API for (a null drive id is a disabled query). */
+const requested = new Set<string>();
 const files = await import('@kortix/ui/files');
 mock.module('@kortix/ui/files', () => ({
   ...files,
-  useDriveFolder: (_id: string | null, path: string) => ({
+  useDriveFolder: (id: string | null, path: string) => {
+    if (id) requested.add(path);
+    return {
     data: { entries: listings[path] ?? [], access: 'manage' },
     isLoading: false,
     isError: false,
     isSuccess: true,
     isFetching: false,
     refetch: () => {},
-  }),
+    };
+  },
 }));
 const { createRoot } = await import('react-dom/client');
 const { DriveFolderTree, useDriveNav } = await import('./drive-folder-tree');
@@ -76,6 +81,7 @@ let root: ReturnType<typeof createRoot> | undefined;
 afterEach(async () => {
   await act(async () => root?.unmount());
   document.body.innerHTML = '';
+  requested.clear();
 });
 
 /** Everything the caller can read on the panel, or in the opened mobile menu. */
@@ -115,6 +121,8 @@ for (const mobile of [false, true]) {
       for (const name of NAMES) expect(text).not.toContain(name);
       expect(text).not.toContain('Admin: member drives');
       expect(text).not.toContain('Members');
+      // Not only undrawn: the listing that holds every member's name is never requested.
+      expect(requested.has('/Users')).toBe(false);
     });
   }
 
@@ -124,5 +132,6 @@ for (const mobile of [false, true]) {
     for (const name of NAMES) expect(text).toContain(name);
     expect(text.indexOf('Admin: member drives')).toBeGreaterThan(text.indexOf('Marketing'));
     expect(text).not.toContain('You');
+    expect(requested.has('/Users')).toBe(true);
   });
 }

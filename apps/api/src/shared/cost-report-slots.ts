@@ -2,8 +2,8 @@ import { HTTPException } from 'hono/http-exception';
 
 /**
  * Per-account cap on cost reports running against the database at once
- * (`GET /v1/usage/session-costs`, `/v1/usage/cost-summary`). Each is a grouping
- * aggregation over gateway_request_logs that can run for the whole 25 s request
+ * (`GET /v1/usage/session-costs`, `/v1/usage/cost-summary`,
+ * `/v1/usage/cost-by-project`). Each is a grouping aggregation over gateway_request_logs that can run for the whole 25 s request
  * deadline, and the deadline answers the client without cancelling the query.
  * The slot is held until the query itself settles, so orphaned queries still
  * count and a retry storm cannot pile more of them onto the database

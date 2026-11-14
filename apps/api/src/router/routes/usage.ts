@@ -761,15 +761,17 @@ usageApp.openapi(
       // Same filtered query as the JSON branch (accountId, window, sort) —
       // only limit/offset differ, because a CSV export wants up to
       // CSV_ROW_CAP rows in one shot, not one paginated page of it.
-      const page = await listCostByProject({
-        accountId,
-        projectId,
-        visibleProjectIds,
-        window,
-        sort,
-        limit: CSV_ROW_CAP,
-        offset: 0,
-      });
+      const page = await withCostReportSlot(accountId, () =>
+        listCostByProject({
+          accountId,
+          projectId,
+          visibleProjectIds,
+          window,
+          sort,
+          limit: CSV_ROW_CAP,
+          offset: 0,
+        }),
+      );
       const body = toCsv(
         [
           'project_id',
@@ -797,7 +799,11 @@ usageApp.openapi(
       });
     }
 
-    return c.json(await listCostByProject({ accountId, projectId, visibleProjectIds, window, sort, limit, offset }));
+    return c.json(
+      await withCostReportSlot(accountId, () =>
+        listCostByProject({ accountId, projectId, visibleProjectIds, window, sort, limit, offset }),
+      ),
+    );
   },
 );
 

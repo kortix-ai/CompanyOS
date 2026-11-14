@@ -444,7 +444,13 @@ jobs:
           while (-not $w -and ((Get-Date) - $t0).TotalSeconds -lt 60) { Start-Sleep 1; $w = Window }
           Start-Sleep 10
           $w2 = Window
-          $webview = if ($w2) { @(Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe' AND ParentProcessId=$($w2.Id)").Count } else { 0 }
+          # WebView2 starts its browser process after the window shows. A cold first start
+          # on a busy runner took over 10 s (v0.15.11: a blank window, then the full UI on
+          # the rerun). Wait up to 60 s for it, and record how long it took.
+          function WebViews($p) { if ($p) { @(Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe' AND ParentProcessId=$($p.Id)").Count } else { 0 } }
+          $tw = Get-Date; $webview = WebViews $w2
+          while ($w2 -and $webview -lt 1 -and ((Get-Date) - $tw).TotalSeconds -lt 60) { Start-Sleep 1; $webview = WebViews $w2 }
+          $webviewWait = [math]::Round(((Get-Date) - $tw).TotalSeconds)
           $cmd = if ($w2) { (Get-CimInstance Win32_Process -Filter "ProcessId=$($w2.Id)").CommandLine } else { $null }
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
           $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
@@ -462,6 +468,7 @@ jobs:
             same_process_after_10s = [bool]($w -and $w2 -and $w.Id -eq $w2.Id)
             cmd = $cmd
             webview_processes = $webview
+            webview_wait_s = $webviewWait
             profile_in_program_files = Test-Path "$env:ProgramFiles\Kortix\Capture\kortix-capture.exe.WebView2"
             profile_in_local_app_data = Test-Path "$env:LOCALAPPDATA\Kortix\WebView2\EBWebView"
             ui_log = Test-Path "$env:EV\ui.log"

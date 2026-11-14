@@ -23,6 +23,8 @@ import {
 } from '../../shared/cost-window';
 import { db } from '../../shared/db';
 import { sessionCostsReadDenial } from '../../middleware/rate-limit';
+import { config } from '../../config';
+import { createHolderSlots } from '../../shared/holder-slots';
 import { resolveScopedAccountId } from '../../middleware/resolve-account';
 import { getSessionCostRecord, listSessionCosts } from '../../shared/session-costs';
 import { isUuid } from '../../shared/validate';
@@ -159,6 +161,36 @@ async function sessionCostOwner(
   }
   return actor.userId;
 }
+
+// One session-cost list query in flight per API task (KRTX-4372). A list runs
+// four aggregate queries at once and the main pool holds DEFAULT_DB_POOL_MAX (6)
+// connections, so two concurrent lists fill it and every other route on the
+// task waits for the 25 s deadline (prod 2026-11-13 22:10 UTC: waves of 20
+// concurrent lists from one CLI client, 503s on about 100 routes). A list that
+// cannot get the slot within KORTIX_SESSION_COSTS_SLOT_WAIT_MS answers 429.
+class SessionCostListBusyError extends Error {}
+const sessionCostListSlots = createHolderSlots(1, () => new SessionCostListBusyError());
+
+/** Runs one list query under the slot; null when the slot stayed taken. */
+async function withSessionCostListSlot<T>(run: () => Promise<T>): Promise<T | null> {
+  try {
+    await sessionCostListSlots.acquire(config.KORTIX_SESSION_COSTS_SLOT_WAIT_MS);
+  } catch (error) {
+    if (error instanceof SessionCostListBusyError) return null;
+    throw error;
+  }
+  try {
+    return await run();
+  } finally {
+    sessionCostListSlots.release();
+  }
+}
+
+const SESSION_COST_LIST_BUSY = {
+  error: 'rate_limit_exceeded',
+  message: 'Session costs are being computed for another request. Retry shortly.',
+  retry_after_seconds: 5,
+};
 
 const UsageTotalsSchema = z
   .object({
@@ -590,15 +622,18 @@ usageApp.openapi(
       // Same filtered query as the JSON branch (accountId, projectId, ownerId,
       // window, sort) — only limit/offset differ, because a CSV export wants
       // up to CSV_ROW_CAP rows in one shot, not one paginated page of it.
-      const page = await listSessionCosts({
-        accountId,
-        projectId,
-        ownerId,
-        window: parsed.window,
-        sort: parsed.sort,
-        limit: CSV_ROW_CAP,
-        offset: 0,
-      });
+      const page = await withSessionCostListSlot(() =>
+        listSessionCosts({
+          accountId,
+          projectId,
+          ownerId,
+          window: parsed.window,
+          sort: parsed.sort,
+          limit: CSV_ROW_CAP,
+          offset: 0,
+        }),
+      );
+      if (!page) return c.json(SESSION_COST_LIST_BUSY, 429, { 'Retry-After': '5' });
       const body = toCsv(
         [
           'session_id',
@@ -635,7 +670,9 @@ usageApp.openapi(
       });
     }
 
-    return c.json(await listSessionCosts({ accountId, projectId, ownerId, ...parsed }));
+    const page = await withSessionCostListSlot(() => listSessionCosts({ accountId, projectId, ownerId, ...parsed }));
+    if (!page) return c.json(SESSION_COST_LIST_BUSY, 429, { 'Retry-After': '5' });
+    return c.json(page);
   },
 );
 

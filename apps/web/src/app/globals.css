@@ -1493,6 +1493,19 @@ html[data-desktop='true']
   height: revert-layer !important;
   min-height: revert-layer;
 }
+/* A project view sized to the window (`h-svh`, `h-dvh`, `h-screen`) sits
+   below the strip, so it is the window minus the strip. Without this the view
+   overflows by the strip's height and the whole window scrolls, strip and
+   all. The strip writes its measured height (it differs per platform and in
+   fullscreen) to `--kx-desktop-tabstrip-height` on <html>. */
+html[data-desktop='true'] [data-kx-desktop-tabs-on] :is(.h-svh, .h-dvh, .h-screen) {
+  height: calc(100svh - var(--kx-desktop-tabstrip-height, 0px));
+}
+/* The tabbed shell is never taller than the window, so a view that sizes
+   itself with `flex-1 min-h-0` (Drive) scrolls inside, below the strip. */
+html[data-desktop='true'] [data-kx-desktop-tabs-on] {
+  max-height: 100svh;
+}
 
 /* Overlay sidebars share the native-light row instead of adding a blank strip.
    Keep their controls out of AppKit's hit area at every renderer zoom. */

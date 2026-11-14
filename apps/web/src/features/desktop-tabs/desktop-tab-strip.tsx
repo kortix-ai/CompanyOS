@@ -504,12 +504,32 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
 
   const mod = isMac() ? '⌘' : 'Ctrl+';
 
+  // The strip's height, for views sized to the window (globals.css): it is
+  // one band row, but its height differs per platform and in fullscreen.
+  const stripRef = useRef<HTMLDivElement>(null);
+  const shown = stripVisible(project.tabs, pathname, projectId);
+  useLayoutEffect(() => {
+    const el = stripRef.current;
+    if (!shown || !el) return;
+    const root = document.documentElement;
+    const write = () =>
+      root.style.setProperty('--kx-desktop-tabstrip-height', `${el.offsetHeight}px`);
+    write();
+    const observer = new ResizeObserver(write);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty('--kx-desktop-tabstrip-height');
+    };
+  }, [shown]);
+
   // Hidden (a fresh start): stays mounted, so the tabs keep following the
   // window, but draws nothing and leaves the title band to the page.
-  if (!stripVisible(project.tabs, pathname, projectId)) return null;
+  if (!shown) return null;
 
   return (
     <div
+      ref={stripRef}
       data-kx-desktop-tabs=""
       data-sidebar-collapsed={collapsed ? '' : undefined}
       // `.kx-titlebar-row` + `.kx-titlebar-band-height`: the strip IS the band

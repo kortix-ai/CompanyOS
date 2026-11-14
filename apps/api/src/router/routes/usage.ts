@@ -8,6 +8,7 @@ import { assertAuthorized, listAccessible } from '../../iam/authorize';
 import { visibleDirectory } from '../../iam/directory-visibility';
 import { actorOf } from '../../middleware/actor';
 import { combinedAuth } from '../../middleware/auth';
+import { inFlightLimit } from '../../middleware/in-flight-limit';
 import { rejectSandboxTokens } from '../../middleware/reject-sandbox-tokens';
 import { auth, errors, json, makeOpenApiApp } from '../../openapi';
 import { assertProjectCapability, loadProjectForUser } from '../../projects/lib/access';
@@ -48,6 +49,22 @@ usageApp.use('*', combinedAuth);
 // reason to read account-wide usage/cost rollups — without this they'd see
 // every project's spend on multi-user accounts. See reject-sandbox-tokens.ts.
 usageApp.use('*', rejectSandboxTokens);
+
+// The three account-wide aggregates each fan out several `gateway_request_logs`
+// statements. A caller's retry of one the request deadline already answered must
+// not stack the same heavy query again on the shared DB pool (KRTX-4889): one at a
+// time per user, route and query string (one limiter per route). The query string
+// is in the key because the explorer legitimately loads different windows, projects
+// and workspaces of one route in parallel; only an identical repeat is a retry.
+for (const path of ['/session-costs', '/cost-by-project', '/cost-summary']) {
+  usageApp.use(
+    path,
+    inFlightLimit(1, (c) => {
+      const userId = c.get('userId');
+      return userId ? `${userId}?${new URL(c.req.url).searchParams.toString()}` : null;
+    }),
+  );
+}
 
 /**
  * The workspace a workspace-bound token reads usage for: its own, always.

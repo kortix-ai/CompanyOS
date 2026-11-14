@@ -789,7 +789,10 @@ function handleUnhandledError(err: Error, c: Context): Response {
   const undecryptable = handleSecretUndecryptable(err, c, method, path);
   if (undecryptable) return undecryptable;
   if (err instanceof BillingError) {
-    appLogger.error(`${method} ${path} -> ${err.statusCode} [BillingError]`, {
+    // A 4xx is the caller's validation/precondition failure, not a server fault:
+    // warn keeps it visible without feeding the prod error-log anomaly source.
+    const log = err.statusCode >= 500 ? appLogger.error : appLogger.warn;
+    log.call(appLogger, `${method} ${path} -> ${err.statusCode} [BillingError]`, {
       statusCode: err.statusCode,
       message: err.message,
       path,

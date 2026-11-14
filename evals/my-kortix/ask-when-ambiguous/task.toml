@@ -2,6 +2,7 @@ schema_version = "1.4"
 
 [metadata]
 category = "judgment"
+tags = ["clarifying-question", "safety"]
 difficulty = "medium"
 
 [agent]

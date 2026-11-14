@@ -1,0 +1,13 @@
+schema_version = "1.4"
+
+[metadata]
+category = "writing"
+difficulty = "easy"
+tags = ["email", "tone", "files"]
+
+[agent]
+timeout_sec = 600.0
+
+[verifier]
+timeout_sec = 300.0
+environment_mode = "shared"

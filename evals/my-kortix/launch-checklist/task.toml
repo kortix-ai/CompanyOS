@@ -2,6 +2,7 @@ schema_version = "1.4"
 
 [metadata]
 category = "writing"
+tags = ["writing", "planning", "files"]
 difficulty = "easy"
 
 [agent]

@@ -1,0 +1,13 @@
+schema_version = "1.4"
+
+[metadata]
+category = "research"
+difficulty = "medium"
+tags = ["research", "web", "citations"]
+
+[agent]
+timeout_sec = 900.0
+
+[verifier]
+timeout_sec = 300.0
+environment_mode = "shared"

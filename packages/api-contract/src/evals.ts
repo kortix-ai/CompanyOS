@@ -228,7 +228,7 @@ export const EvalTaskResultSummarySchema = z.object({
   n: z.number().int(),
   /** Of those, attempts with every reward at 1 or above. */
   n_passed: z.number().int(),
-  /** Mean of the first reward key over the counted attempts; null with none. */
+  /** Mean over the counted attempts of each attempt's mean reward (over its keys); null with none. */
   mean_reward: z.number().nullable(),
 });
 export type EvalTaskResultSummary = z.infer<typeof EvalTaskResultSummarySchema>;
@@ -452,6 +452,7 @@ export const EvalCompareCellSchema = z.object({
   n_passed: z.number().int(),
   /** `n_passed / n`; null with no counted attempt (not run, or every run errored). */
   pass_rate: z.number().nullable(),
+  /** Mean over the counted attempts of each attempt's mean reward (over its keys). */
   mean_reward: z.number().nullable(),
   /** The most frequent exception type among the attempts, or null. */
   exception_type: z.string().nullable(),

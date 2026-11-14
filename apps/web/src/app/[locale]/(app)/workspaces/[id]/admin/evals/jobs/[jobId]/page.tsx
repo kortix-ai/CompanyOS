@@ -1,14 +1,7 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import { useParams } from 'next/navigation';
-
-import { EvalJobView } from '@kortix/ui/customize/evals/eval-job-view';
-
-import { decodeSegment, ProjectAdminRoute } from '@/features/workspace/project-admin/project-admin-route';
-
-/** /workspaces/[id]/admin/evals/jobs/<job_id> — one eval job, in the Evals pane of Customize. */
-export default function ProjectAdminEvalJobPage() {
-  const { id: projectId, jobId } = useParams<{ id: string; jobId: string }>();
-  const job = decodeSegment(jobId);
-  return <ProjectAdminRoute projectId={projectId} section="evals" content={<EvalJobView key={job} projectId={projectId} jobId={job} />} />;
+/** The job page moved to Customize → Evals → Jobs on 2026-11-13: an old link opens it there. */
+export default async function LegacyEvalJobPage({ params }: { params: Promise<{ locale: string; id: string; jobId: string }> }) {
+  const { id, jobId } = await params;
+  redirect(`/workspaces/${encodeURIComponent(id)}/admin/eval-jobs/${encodeURIComponent(jobId)}`);
 }

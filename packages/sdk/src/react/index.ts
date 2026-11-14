@@ -178,11 +178,13 @@ export {
 } from './use-goals';
 export {
   useWorkspaceEvalActions,
+  useWorkspaceEvalCompare,
   useWorkspaceEvalDatasets,
   useWorkspaceEvalJob,
   useWorkspaceEvalJobs,
   useWorkspaceEvalSuites,
   useWorkspaceEvalTask,
+  useWorkspaceEvalTaskCatalog,
   useWorkspaceEvalTaskFile,
   useWorkspaceEvalTaskResults,
   useWorkspaceEvalTasks,

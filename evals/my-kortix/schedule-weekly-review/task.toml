@@ -2,6 +2,7 @@ schema_version = "1.4"
 
 [metadata]
 category = "automation"
+tags = ["loops", "reminders"]
 difficulty = "medium"
 requires_flags = ["reminders"]
 

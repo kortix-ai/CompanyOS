@@ -29,7 +29,9 @@ Kortix runs the **Harbor task format** unchanged
 
 The tests reach the sandbox only after the agent stops, so the agent never
 sees them. Results are in Files under `/Evals/<job>/`, in Harbor's `jobs/`
-layout, and on the Evals page.
+layout, and in the web app under Customize → Evals: Overview (the
+leaderboard), Datasets, Tasks and Jobs. Jobs → select two → Compare shows the
+same table `kortix evals compare` prints.
 </overview>
 
 <loop>
@@ -210,8 +212,12 @@ Harbor registry.
   count; a verifier that writes no reward is an error.
 - The default metric is the mean per reward key; a trial without a key
   counts 0 for it.
-- pass@k: the share of tasks with a pass in their first k attempts. Report
-  pass@1; pass@3 shows what more attempts would buy.
+- pass@k is Harbor's unbiased estimate, `1 − C(n−c, k) / C(n, k)` per task
+  (n attempts, c passed), averaged over tasks. It exists only when every
+  reward is one key of 0 or 1; a graded task reports its mean instead.
+  Report pass@1; pass@3 shows what more attempts would buy.
+- Each score carries a 95% interval (`± x`). Two scores whose intervals
+  overlap are not a clear change: add tasks or attempts before you call it.
 - A job's numbers are only comparable with a job of the same suite, at a
   commit whose tasks did not change, with the same judge model.
 </scoring>
@@ -222,8 +228,10 @@ Harbor registry.
 | `kortix evals init` | write a first task and print a suite |
 | `kortix evals suites` | the suites of kortix.yaml, each with its last score |
 | `kortix evals tasks <suite>` | the tasks a suite selects, and what cannot run |
-| `kortix evals datasets` | datasets of the Harbor registry |
+| `kortix evals datasets` | the built-in datasets (`kortix/…`) and the Harbor registry |
+| `kortix evals tasks --dataset <name>[@<version>]` | the tasks of a dataset |
 | `kortix evals run <suite> [--agent <name>[@<model>]] [--attempts <n>] [--task <glob>] [--wait]` | start a job |
+| `kortix evals run --dataset <name>[@<version>] --agent <name> [--task <glob>]` | start a job on a dataset, without a suite |
 | `kortix evals jobs` / `show <job>` / `watch <job>` | read jobs and scores |
 | `kortix evals trial <job> <trial> [--file <path>]` | one trial and its files |
 | `kortix evals compare <job_a> <job_b>` | task by task: better, worse, same |

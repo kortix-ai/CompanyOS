@@ -2,6 +2,7 @@ schema_version = "1.4"
 
 [metadata]
 category = "analysis"
+tags = ["data", "files", "json"]
 difficulty = "easy"
 
 [agent]

@@ -1,8 +1,10 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   cancelWorkspaceEvalJob,
+  cancelWorkspaceEvalTrial,
+  compareWorkspaceEvalJobs,
   deleteWorkspaceEvalJob,
   getWorkspaceEvalJob,
   getWorkspaceEvalTask,
@@ -15,9 +17,12 @@ import {
   readWorkspaceEvalTaskFile,
   listWorkspaceEvalTrials,
   readWorkspaceEvalTrialFile,
+  planWorkspaceEvalJob,
   rerunWorkspaceEvalJob,
+  retryWorkspaceEvalTrial,
   startWorkspaceEvalJob,
   type RerunWorkspaceEvalJobInput,
+  type WorkspaceEvalJobFilters,
   type StartWorkspaceEvalJobInput,
   type WorkspaceEvalJob,
   type WorkspaceEvalTrial,
@@ -26,6 +31,9 @@ import { contract } from './query-contracts';
 import { qk } from './query-keys';
 
 const inventory = contract('inventory');
+
+/** An idempotency key per call. Not a secret: it only tells the API that two POSTs are one request. */
+const newKey = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 
 /** A job that has not ended re-reads every 5 seconds; an ended one does not. */
 const OPEN_JOB_MS = 5_000;
@@ -59,13 +67,15 @@ export function useWorkspaceEvalDatasets(projectId: string | null | undefined) {
 /** Where a task list comes from: a suite of kortix.yaml, or a dataset by name (built-in `kortix/…` or Harbor registry). */
 export type WorkspaceEvalTaskSource = { suite: string } | { dataset: string; version?: string | null };
 
+const sourceKey = (source: WorkspaceEvalTaskSource) => ('suite' in source ? `suite:${source.suite}` : `dataset:${source.dataset}@${source.version ?? ''}`);
+
 /**
  * The tasks of a suite or a dataset, parsed, with the dataset README. A
  * registry dataset reads its git repository on first use, so the list is kept
  * 10 minutes.
  */
 export function useWorkspaceEvalTasks(projectId: string | null | undefined, source: WorkspaceEvalTaskSource | null | undefined) {
-  const key = !source ? '' : 'suite' in source ? `suite:${source.suite}` : `dataset:${source.dataset}@${source.version ?? ''}`;
+  const key = source ? sourceKey(source) : '';
   return useQuery({
     queryKey: qk.project.evalTasks(projectId ?? '', key),
     queryFn: () =>
@@ -77,6 +87,25 @@ export function useWorkspaceEvalTasks(projectId: string | null | undefined, sour
     ...inventory,
     staleTime: 10 * 60_000,
     retry: false,
+  });
+}
+
+/**
+ * The tasks of several suites and datasets at once, each list cached as
+ * `useWorkspaceEvalTasks` caches it. `results[i]` answers `sources[i]`; a
+ * source that fails (no file access, a dataset that does not resolve) carries
+ * its error and the rest still load.
+ */
+export function useWorkspaceEvalTaskCatalog(projectId: string | null | undefined, sources: WorkspaceEvalTaskSource[]) {
+  return useQueries({
+    queries: sources.map((source) => ({
+      queryKey: qk.project.evalTasks(projectId ?? '', sourceKey(source)),
+      queryFn: () => listWorkspaceEvalTasks(projectId as string, 'suite' in source ? { suite: source.suite } : { dataset: source.dataset, version: source.version ?? undefined }),
+      enabled: !!projectId,
+      ...inventory,
+      staleTime: 10 * 60_000,
+      retry: false,
+    })),
   });
 }
 
@@ -102,24 +131,42 @@ export function useWorkspaceEvalTaskFile(projectId: string | null | undefined, t
   });
 }
 
-/** The newest trials of a task across the project's jobs. */
-export function useWorkspaceEvalTaskResults(projectId: string | null | undefined, taskName: string | null | undefined) {
+/** The last run of each attempt of a task across the project's jobs, with a summary per agent × model. */
+export function useWorkspaceEvalTaskResults(projectId: string | null | undefined, taskId: string | null | undefined) {
   return useQuery({
-    queryKey: [...qk.project.evals(projectId ?? ''), 'results', taskName ?? ''] as const,
-    queryFn: () => listWorkspaceEvalTaskResults(projectId as string, taskName as string),
-    enabled: !!projectId && !!taskName,
+    queryKey: [...qk.project.evals(projectId ?? ''), 'task', taskId ?? '', 'results'] as const,
+    queryFn: () => listWorkspaceEvalTaskResults(projectId as string, taskId as string),
+    enabled: !!projectId && !!taskId,
     ...inventory,
   });
 }
 
-/** The newest 100 jobs (of one suite, or all). Re-reads every 5 seconds while one of them runs. */
-export function useWorkspaceEvalJobs(projectId: string | null | undefined, suite?: string | null) {
-  return useQuery({
-    queryKey: qk.project.evalJobs(projectId ?? '', suite ?? ''),
-    queryFn: async () => (await listWorkspaceEvalJobs(projectId as string, { suite: suite ?? undefined, limit: 100 })).jobs,
+/**
+ * The newest 100 jobs that match `filters` (a suite name for one suite, or
+ * none for all). `total` counts every match. Re-reads every 5 seconds while
+ * one of them runs.
+ */
+export function useWorkspaceEvalJobs(projectId: string | null | undefined, filters?: string | null | WorkspaceEvalJobFilters) {
+  const where: WorkspaceEvalJobFilters = typeof filters === 'string' ? { suite: filters } : (filters ?? {});
+  const key = JSON.stringify(Object.entries(where).filter(([, v]) => v !== undefined && v !== null && v !== '').sort());
+  const query = useQuery({
+    queryKey: qk.project.evalJobs(projectId ?? '', key),
+    queryFn: () => listWorkspaceEvalJobs(projectId as string, { ...where, limit: 100 }),
     enabled: !!projectId,
     ...inventory,
-    refetchInterval: (query) => ((query.state.data as WorkspaceEvalJob[] | undefined)?.some(isOpen) ? OPEN_JOB_MS : false),
+    refetchInterval: (q) => ((q.state.data as { jobs: WorkspaceEvalJob[] } | undefined)?.jobs.some(isOpen) ? OPEN_JOB_MS : false),
+  });
+  return { ...query, data: query.data?.jobs, total: query.data?.total ?? 0 };
+}
+
+/** Jobs side by side, task by task. Pass two or more job ids, first the baseline. Re-reads while one of them runs. */
+export function useWorkspaceEvalCompare(projectId: string | null | undefined, jobIds: string[] | null | undefined, by?: 'task' | 'task_agent_model') {
+  return useQuery({
+    queryKey: [...qk.project.evals(projectId ?? ''), 'compare', (jobIds ?? []).join(','), by ?? ''] as const,
+    queryFn: () => compareWorkspaceEvalJobs(projectId as string, jobIds as string[], { by }),
+    enabled: !!projectId && (jobIds?.length ?? 0) >= 2,
+    ...inventory,
+    refetchInterval: (q) => ((q.state.data as { jobs: WorkspaceEvalJob[] } | undefined)?.jobs.some(isOpen) ? OPEN_JOB_MS : false),
   });
 }
 
@@ -169,8 +216,12 @@ export function useWorkspaceEvalActions(projectId: string | null | undefined) {
     return projectId;
   };
   return {
-    start: useMutation({ mutationFn: (input: StartWorkspaceEvalJobInput) => startWorkspaceEvalJob(pid(), input), onSuccess: refresh }),
-    rerun: useMutation({ mutationFn: (input: { jobId: string } & RerunWorkspaceEvalJobInput) => rerunWorkspaceEvalJob(pid(), input.jobId, { scope: input.scope, trial_ids: input.trial_ids }), onSuccess: refresh }),
+    // One idempotency key per mutation call: a network retry of the same POST returns the same job.
+    start: useMutation({ mutationFn: (input: StartWorkspaceEvalJobInput) => startWorkspaceEvalJob(pid(), input, { idempotencyKey: newKey() }), onSuccess: refresh }),
+    plan: useMutation({ mutationFn: (input: StartWorkspaceEvalJobInput) => planWorkspaceEvalJob(pid(), input) }),
+    rerun: useMutation({ mutationFn: (input: { jobId: string } & RerunWorkspaceEvalJobInput) => rerunWorkspaceEvalJob(pid(), input.jobId, { scope: input.scope, trial_ids: input.trial_ids }, { idempotencyKey: newKey() }), onSuccess: refresh }),
+    retryTrial: useMutation({ mutationFn: (input: { jobId: string; trialId: string }) => retryWorkspaceEvalTrial(pid(), input.jobId, input.trialId, { idempotencyKey: newKey() }), onSuccess: refresh }),
+    cancelTrial: useMutation({ mutationFn: (input: { jobId: string; trialId: string }) => cancelWorkspaceEvalTrial(pid(), input.jobId, input.trialId), onSuccess: refresh }),
     cancel: useMutation({ mutationFn: (jobId: string) => cancelWorkspaceEvalJob(pid(), jobId), onSuccess: refresh }),
     remove: useMutation({ mutationFn: (jobId: string) => deleteWorkspaceEvalJob(pid(), jobId), onSuccess: refresh }),
   };

@@ -2,6 +2,7 @@ schema_version = "1.4"
 
 [metadata]
 category = "answer"
+tags = ["math", "short-answer"]
 difficulty = "easy"
 
 [agent]

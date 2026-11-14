@@ -242,7 +242,11 @@ const passes = (rewards: Record<string, number> | null): boolean => {
 };
 
 /** The first reward key (Harbor's single reward), 0 for a counted trial with none. */
-const firstReward = (rewards: Record<string, number> | null): number => Object.values(rewards ?? {})[0] ?? 0;
+/** One attempt's score: the mean of its reward keys (`evalTrialScore` in the SDK reads it the same way). A trial without a key scores 0. */
+const meanReward = (rewards: Record<string, number> | null): number => {
+  const values = Object.values(rewards ?? {});
+  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+};
 
 /**
  * One task across the project's jobs: the last run of each attempt, newest
@@ -278,7 +282,7 @@ export async function taskResults(project: ProjectRow, taskId: string, limit = 2
     model: group[0]!.model,
     n: group.length,
     n_passed: group.filter((result) => passes(result.rewards)).length,
-    mean_reward: group.reduce((sum, result) => sum + firstReward(result.rewards), 0) / group.length,
+    mean_reward: group.reduce((sum, result) => sum + meanReward(result.rewards), 0) / group.length,
   }));
   return { results, summary: summary.sort((a, b) => b.n_passed / b.n - a.n_passed / a.n || a.agent.localeCompare(b.agent)) };
 }
@@ -536,7 +540,7 @@ function cellOf(jobId: string, runs: EvalTrialRow[]): CompareCell {
     n: counted.length,
     n_passed: nPassed,
     pass_rate: counted.length ? nPassed / counted.length : null,
-    mean_reward: counted.length ? counted.reduce((sum, trial) => sum + firstReward(trial.rewards ?? null), 0) / counted.length : null,
+    mean_reward: counted.length ? counted.reduce((sum, trial) => sum + meanReward(trial.rewards ?? null), 0) / counted.length : null,
     exception_type: [...types.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null,
   };
 }

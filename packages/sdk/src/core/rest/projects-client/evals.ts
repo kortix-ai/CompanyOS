@@ -76,17 +76,33 @@ export interface WorkspaceEvalTiming {
   finished_at: string | null;
 }
 
-/** The score of one agent × model over the job's tasks. */
+/** The score of one agent × model over the tasks of one source of the job (Harbor's grouping). */
 export interface WorkspaceEvalAgentStats {
   agent: string;
   model: string | null;
+  /** The dataset (`name@version`) or task path; null for a job with one source. */
+  source: string | null;
   /** Trials whose reward counts. */
   n_trials: number;
   n_errors: number;
   /** One entry per metric of the job: `{ mean: 0.5 }`, or one value per reward key. */
   metrics: Array<Record<string, number>>;
-  /** `k` → share of tasks with a pass in their first `k` attempts. */
+  /**
+   * `k` → Harbor's unbiased pass@k, averaged over tasks. Only when every
+   * reward value is 0 or 1 (a trial passes when all its keys are 1); empty
+   * for graded rewards.
+   */
   pass_at_k: Record<string, number>;
+}
+
+/** Token use and gateway cost. */
+export interface WorkspaceEvalUsage {
+  n_input_tokens: number;
+  n_output_tokens: number;
+  /** Cache reads and cache writes. */
+  n_cache_tokens: number;
+  /** USD; null when the gateway recorded no cost. */
+  cost_usd: number | null;
 }
 
 export interface WorkspaceEvalJobStats {
@@ -96,6 +112,12 @@ export interface WorkspaceEvalJobStats {
   n_completed: number;
   n_errored: number;
   n_cancelled: number;
+  /** Runs superseded by a retry (not in `n_total_trials`). */
+  n_retries: number;
+  /** Exception type → trials that ended with it. */
+  exception_stats: Record<string, number>;
+  /** Token use and cost of every trial so far. */
+  usage: WorkspaceEvalUsage | null;
   agents: WorkspaceEvalAgentStats[];
 }
 
@@ -126,6 +148,8 @@ export interface WorkspaceEvalTrial {
   trial_name: string;
   task_name: string;
   task_path: string;
+  /** Opens the task: `getWorkspaceEvalTask(projectId, task_id)`. */
+  task_id: string | null;
   agent: string;
   model: string | null;
   attempt: number;
@@ -138,7 +162,8 @@ export interface WorkspaceEvalTrial {
   environment_setup: WorkspaceEvalTiming;
   agent_execution: WorkspaceEvalTiming;
   verifier: WorkspaceEvalTiming;
-  usage: { n_input_tokens: number; n_output_tokens: number; n_cache_tokens: number } | null;
+  /** Token use of the trial's session; refreshed while the agent runs. */
+  usage: WorkspaceEvalUsage | null;
   folder: string;
   created_at: string;
   started_at: string | null;
@@ -181,10 +206,10 @@ export interface WorkspaceEvalTaskDetail {
   readme: string | null;
   task_toml: string | null;
   /** Every file of the task folder, paths relative to it. */
-  files: Array<{ path: string; size: number | null }>;
+  files: Array<{ path: string; size: number }>;
 }
 
-/** A trial of one task in some job. */
+/** The last run of one attempt of a task in some job. */
 export interface WorkspaceEvalTaskResult {
   job_id: string;
   job_name: string;
@@ -205,11 +230,77 @@ export interface WorkspaceEvalTrialDetail {
   files: Array<{ path: string; size: number }>;
 }
 
+/** One agent × model on one task, over every ended attempt. */
+export interface WorkspaceEvalTaskResultSummary {
+  agent: string;
+  model: string | null;
+  /** Ended attempts whose reward counts. */
+  n: number;
+  n_passed: number;
+  mean_reward: number | null;
+}
+
+/** A dataset a job names by `name` and `version`: built-in (`kortix/…`) or Harbor registry. */
 export interface WorkspaceEvalDataset {
   name: string;
+  /** The version a job without one runs. */
   version: string;
+  /** Every version, newest first. */
+  versions: string[];
+  kind: 'builtin' | 'registry';
   description: string;
+  /** Null when not known without reading the dataset. */
+  n_tasks: number | null;
+}
+
+/** What `planWorkspaceEvalJob` says a job would run. */
+export interface WorkspaceEvalJobPlan {
+  commit: string;
   n_tasks: number;
+  n_trials: number;
+  agents: Array<{ name: string; model: string | null }>;
+  /** The first 200 task names. */
+  tasks: string[];
+  warnings: string[];
+}
+
+export interface WorkspaceEvalCompareCell {
+  job_id: string;
+  n: number;
+  n_passed: number;
+  pass_rate: number | null;
+  mean_reward: number | null;
+  exception_type: string | null;
+}
+
+export interface WorkspaceEvalCompareRow {
+  task_name: string;
+  /** Set when the compare is `by: 'task_agent_model'`. */
+  agent: string | null;
+  model: string | null;
+  /** One per job, in the order of `jobs`. */
+  cells: WorkspaceEvalCompareCell[];
+  /** The last job against the first. */
+  change: 'better' | 'worse' | 'same' | 'only_one';
+}
+
+export interface WorkspaceEvalCompare {
+  jobs: WorkspaceEvalJob[];
+  by: 'task' | 'task_agent_model';
+  rows: WorkspaceEvalCompareRow[];
+  summary: { better: number; worse: number; same: number; only_one: number };
+}
+
+/** Filters of `listWorkspaceEvalJobs`. */
+export interface WorkspaceEvalJobFilters {
+  status?: WorkspaceEvalJobStatus;
+  suite?: string;
+  /** A dataset name of the job's config, such as `kortix/my-kortix`. */
+  dataset?: string;
+  agent?: string;
+  model?: string;
+  /** Part of the job name. */
+  q?: string;
 }
 
 export interface StartWorkspaceEvalJobInput {
@@ -218,6 +309,11 @@ export interface StartWorkspaceEvalJobInput {
   config?: Partial<WorkspaceEvalJobConfig>;
   /** Branch or commit the tasks are read at. */
   ref?: string;
+}
+
+/** Retries of a POST with the same key return the job the first one created. */
+export interface WorkspaceEvalRequestOptions {
+  idempotencyKey?: string;
 }
 
 export interface RerunWorkspaceEvalJobInput {
@@ -267,37 +363,74 @@ export async function getWorkspaceEvalTask(projectId: string, taskId: string): P
   return unwrap(await backendApi.get<WorkspaceEvalTaskDetail>(`${evalsPath(projectId)}/tasks/${segment(taskId, 'task id')}`), 'Eval task request failed');
 }
 
-/** One file of a task folder, as text. */
+/** A body read as text: the API serves eval files as `text/plain`, and a `.json` file stays as written. */
+const asText = (data: unknown): string => (typeof data === 'string' ? data : JSON.stringify(data, null, 2));
+
+/** One file of a task folder, as text (the first 1 MB). */
 export async function readWorkspaceEvalTaskFile(projectId: string, taskId: string, path: string): Promise<string> {
-  const data = unwrap(await backendApi.get<unknown>(`${evalsPath(projectId)}/tasks/${segment(taskId, 'task id')}/file${query({ path })}`), 'Eval task file request failed');
-  return typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  return asText(unwrap(await backendApi.get<unknown>(`${evalsPath(projectId)}/tasks/${segment(taskId, 'task id')}/file${query({ path })}`), 'Eval task file request failed'));
 }
 
-/** The newest trials of a task, by its name, across the project's jobs. */
-export async function listWorkspaceEvalTaskResults(projectId: string, taskName: string): Promise<WorkspaceEvalTaskResult[]> {
-  return unwrap(await backendApi.get<{ results: WorkspaceEvalTaskResult[] }>(`${evalsPath(projectId)}/results${query({ task: taskName })}`), 'Eval task results request failed').results;
+/** The last run of each attempt of a task across the project's jobs, newest first, with one summary per agent × model. */
+export async function listWorkspaceEvalTaskResults(
+  projectId: string,
+  taskId: string,
+): Promise<{ results: WorkspaceEvalTaskResult[]; summary: WorkspaceEvalTaskResultSummary[] }> {
+  return unwrap(
+    await backendApi.get<{ results: WorkspaceEvalTaskResult[]; summary: WorkspaceEvalTaskResultSummary[] }>(`${evalsPath(projectId)}/tasks/${segment(taskId, 'task id')}/results`),
+    'Eval task results request failed',
+  );
 }
 
-/** The datasets of the Harbor registry a suite can name. */
-export async function listWorkspaceEvalDatasets(projectId: string): Promise<WorkspaceEvalDataset[]> {
-  return unwrap(await backendApi.get<{ datasets: WorkspaceEvalDataset[] }>(`${evalsPath(projectId)}/datasets`), 'Eval datasets request failed').datasets;
+/** The datasets a job can name: built-in (`kortix/…`) first, then the Harbor registry. `registry_error` says why the registry is missing. */
+export async function listWorkspaceEvalDatasets(projectId: string): Promise<{ datasets: WorkspaceEvalDataset[]; registry_error: string | null }> {
+  return unwrap(await backendApi.get<{ datasets: WorkspaceEvalDataset[]; registry_error: string | null }>(`${evalsPath(projectId)}/datasets`), 'Eval datasets request failed');
 }
 
-/** Jobs, newest first. Pass `next_cursor` back as `cursor` for the next page. */
+/** Jobs, newest first. Pass `next_cursor` back as `cursor` for the next page; `total` counts every page. */
 export async function listWorkspaceEvalJobs(
   projectId: string,
-  options?: { suite?: string; limit?: number; cursor?: string },
-): Promise<{ jobs: WorkspaceEvalJob[]; next_cursor: string | null }> {
+  options?: WorkspaceEvalJobFilters & { limit?: number; cursor?: string },
+): Promise<{ jobs: WorkspaceEvalJob[]; next_cursor: string | null; total: number }> {
+  const { status, suite, dataset, agent, model, q, limit, cursor } = options ?? {};
   return unwrap(
-    await backendApi.get<{ jobs: WorkspaceEvalJob[]; next_cursor: string | null }>(`${evalsPath(projectId)}/jobs${query({ suite: options?.suite, limit: options?.limit, cursor: options?.cursor })}`),
+    await backendApi.get<{ jobs: WorkspaceEvalJob[]; next_cursor: string | null; total: number }>(
+      `${evalsPath(projectId)}/jobs${query({ status, suite, dataset, agent, model, q, limit, cursor })}`,
+    ),
     'Eval jobs request failed',
   );
 }
 
-/** Plan and queue a job. Throws `ApiError` 422 (`eval_invalid`, with `violations`) when the config does not resolve. */
-export async function startWorkspaceEvalJob(projectId: string, input: StartWorkspaceEvalJobInput): Promise<WorkspaceEvalJob> {
+const idempotency = (options?: WorkspaceEvalRequestOptions) => (options?.idempotencyKey ? { headers: { 'Idempotency-Key': options.idempotencyKey } } : {});
+
+/**
+ * Plan and queue a job. Throws `ApiError` 422 (`eval_invalid`, with
+ * `violations`) when the config does not resolve. With an `idempotencyKey`, a
+ * retry returns the job the first request created.
+ */
+export async function startWorkspaceEvalJob(projectId: string, input: StartWorkspaceEvalJobInput, options?: WorkspaceEvalRequestOptions): Promise<WorkspaceEvalJob> {
   // No host error toast: every caller shows the refusal itself (the CLI prints it, the Run modal keeps it inline).
-  return unwrap(await backendApi.post<{ job: WorkspaceEvalJob }>(`${evalsPath(projectId)}/jobs`, input, { showErrors: false }), 'Eval job start failed').job;
+  return unwrap(
+    await backendApi.post<{ job: WorkspaceEvalJob }>(`${evalsPath(projectId)}/jobs`, { ...input, dry_run: undefined }, { showErrors: false, ...idempotency(options) }),
+    'Eval job start failed',
+  ).job;
+}
+
+/** What a job would run (tasks, trials, agents, warnings), with nothing created. Throws like `startWorkspaceEvalJob`. */
+export async function planWorkspaceEvalJob(projectId: string, input: StartWorkspaceEvalJobInput): Promise<WorkspaceEvalJobPlan> {
+  return unwrap(await backendApi.post<WorkspaceEvalJobPlan>(`${evalsPath(projectId)}/jobs`, { ...input, dry_run: true }, { showErrors: false }), 'Eval job plan failed');
+}
+
+/**
+ * Two or more jobs task by task: one row per task (or per task × agent × model
+ * with `by: 'task_agent_model'`), and what changed from the first job to the
+ * last.
+ */
+export async function compareWorkspaceEvalJobs(projectId: string, jobIds: string[], options?: { by?: 'task' | 'task_agent_model' }): Promise<WorkspaceEvalCompare> {
+  return unwrap(
+    await backendApi.get<WorkspaceEvalCompare>(`${evalsPath(projectId)}/compare${query({ jobs: jobIds.map((id) => segment(id, 'job id')).join(','), by: options?.by })}`),
+    'Eval compare request failed',
+  );
 }
 
 export async function getWorkspaceEvalJob(projectId: string, jobId: string): Promise<WorkspaceEvalJob> {
@@ -314,14 +447,25 @@ export async function getWorkspaceEvalTrial(projectId: string, jobId: string, tr
 
 /** One file of a trial's folder, as text (`result.json`, `verifier/test-stdout.txt`, …). */
 export async function readWorkspaceEvalTrialFile(projectId: string, jobId: string, trialId: string, path: string): Promise<string> {
-  const response = await backendApi.get<unknown>(`${trialPath(projectId, jobId, trialId)}/file${query({ path })}`);
-  const data = unwrap(response, 'Eval trial file request failed');
-  return typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  return asText(unwrap(await backendApi.get<unknown>(`${trialPath(projectId, jobId, trialId)}/file${query({ path })}`), 'Eval trial file request failed'));
 }
 
-/** A new job that runs trials of this one again, at the same commit and config. */
-export async function rerunWorkspaceEvalJob(projectId: string, jobId: string, input: RerunWorkspaceEvalJobInput = {}): Promise<WorkspaceEvalJob> {
-  return unwrap(await backendApi.post<{ job: WorkspaceEvalJob }>(`${jobPath(projectId, jobId)}/rerun`, input), 'Eval job rerun failed').job;
+/** A new job that runs trials of an ended job again, at the same commit and config. A running job throws `ApiError` 409. */
+export async function rerunWorkspaceEvalJob(projectId: string, jobId: string, input: RerunWorkspaceEvalJobInput = {}, options?: WorkspaceEvalRequestOptions): Promise<WorkspaceEvalJob> {
+  return unwrap(await backendApi.post<{ job: WorkspaceEvalJob }>(`${jobPath(projectId, jobId)}/rerun`, input, idempotency(options)), 'Eval job rerun failed').job;
+}
+
+/**
+ * Run one ended trial again inside its job: a new run of the same attempt
+ * (`retry` + 1) that supersedes it, and the job runs until it ends.
+ */
+export async function retryWorkspaceEvalTrial(projectId: string, jobId: string, trialId: string, options?: WorkspaceEvalRequestOptions): Promise<WorkspaceEvalTrial> {
+  return unwrap(await backendApi.post<{ trial: WorkspaceEvalTrial }>(`${trialPath(projectId, jobId, trialId)}/retry`, {}, idempotency(options)), 'Eval trial retry failed').trial;
+}
+
+/** Cancel one queued or running trial; its sandbox stops. The rest of the job runs on. */
+export async function cancelWorkspaceEvalTrial(projectId: string, jobId: string, trialId: string): Promise<WorkspaceEvalTrial> {
+  return unwrap(await backendApi.post<{ trial: WorkspaceEvalTrial }>(`${trialPath(projectId, jobId, trialId)}/cancel`, {}), 'Eval trial cancel failed').trial;
 }
 
 /** No queued trial starts; every running trial ends `cancelled` with its sandbox stopped. */
@@ -353,13 +497,24 @@ export interface WorkspaceEvalJobScore {
   passAt1: number | null;
   /** The job's first metric, when it has one value. */
   metric: { name: string; value: number } | null;
+  /** The mean of the first metric's values over every reward key: the headline when there is no pass@1. */
+  mean: number | null;
   validTrials: number;
   errors: number;
 }
 
-/** A job's headline: the agent × model with the highest pass@1. Null before any trial counts. */
+/**
+ * A job's headline: the agent × model (and source) with the highest pass@1,
+ * else the highest first metric (a job with graded, non-binary rewards has no
+ * pass@k). Null before any trial counts.
+ */
 export function evalJobScore(job: Pick<WorkspaceEvalJob, 'stats'>): WorkspaceEvalJobScore | null {
-  const ranked = [...(job.stats.agents ?? [])].sort((a, b) => (b.pass_at_k['1'] ?? -1) - (a.pass_at_k['1'] ?? -1));
+  const mean = (stats: WorkspaceEvalAgentStats) => {
+    const values = Object.values(stats.metrics[0] ?? {});
+    return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+  };
+  const headline = (stats: WorkspaceEvalAgentStats) => stats.pass_at_k['1'] ?? mean(stats) ?? -1;
+  const ranked = [...(job.stats.agents ?? [])].sort((a, b) => headline(b) - headline(a));
   const best = ranked[0];
   if (!best) return null;
   const first = best.metrics[0] ?? {};
@@ -369,6 +524,7 @@ export function evalJobScore(job: Pick<WorkspaceEvalJob, 'stats'>): WorkspaceEva
     model: best.model,
     passAt1: best.pass_at_k['1'] ?? null,
     metric: keys.length === 1 ? { name: keys[0]!, value: first[keys[0]!]! } : null,
+    mean: mean(best),
     validTrials: best.n_trials,
     errors: best.n_errors,
   };

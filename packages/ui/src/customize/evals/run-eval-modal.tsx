@@ -6,7 +6,7 @@ import {
   useWorkspaceEvalActions,
   useWorkspaceEvalDatasets,
 } from '@kortix/sdk/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useTranslations } from '../../i18n';
 import { Alert, AlertDescription, AlertTitle } from '../../primitives/alert';
@@ -35,8 +35,13 @@ import { successToast } from '../../primitives/toast';
 import { useUiRouter } from '../../providers/ui-provider';
 import { evalJobHref } from './eval-meta';
 
-/** What a job runs: a suite of kortix.yaml, or a built-in dataset Kortix ships. */
-export type RunTarget = { kind: 'suite'; name: string } | { kind: 'dataset'; name: string };
+/**
+ * What a job runs: a suite of kortix.yaml, or a dataset by name (built-in or
+ * Harbor registry). `tasks` keeps only those tasks (a task page runs one).
+ */
+export type RunTarget =
+  | { kind: 'suite'; name: string; tasks?: string[] }
+  | { kind: 'dataset'; name: string; version?: string | null; tasks?: string[] };
 
 const AS_SUITE = '__suite__';
 const key = (target: RunTarget) => `${target.kind}:${target.name}`;
@@ -67,11 +72,18 @@ export function RunEvalModal({
 }) {
   const t = useTranslations('evals');
   const router = useUiRouter();
-  const { start } = useWorkspaceEvalActions(projectId);
+  const actions = useWorkspaceEvalActions(projectId);
+  const { start } = actions;
   const datasets = useWorkspaceEvalDatasets(open ? projectId : null);
   const agents = useVisibleAgents({ projectId });
   const runnable = suites.filter((s) => s.config);
-  const builtins = (datasets.data ?? []).filter((d) => d.name.startsWith('kortix/'));
+  const catalog = datasets.data?.datasets ?? [];
+  const builtins = catalog.filter((d) => d.kind === 'builtin');
+  // A registry dataset opened from its page is a choice too, beside the built-ins.
+  const extra =
+    initial?.kind === 'dataset' && !builtins.some((d) => d.name === initial.name)
+      ? [initial.name]
+      : [];
 
   const [target, setTarget] = useState('');
   const [agent, setAgent] = useState(AS_SUITE);
@@ -98,6 +110,10 @@ export function RunEvalModal({
 
   const chosen = parse(target);
   const suite = chosen?.kind === 'suite' ? runnable.find((s) => s.name === chosen.name) : undefined;
+  // The version and the task filter belong to the target the modal opened on.
+  const sameAsInitial = !!chosen && !!initial && chosen.kind === initial.kind && chosen.name === initial.name;
+  const version = sameAsInitial && initial?.kind === 'dataset' ? (initial.version ?? null) : null;
+  const onlyTasks = sameAsInitial ? (initial?.tasks ?? []) : [];
   const agentNames = [
     ...new Set([
       ...(suite?.config?.agents ?? []).map((a) => a.name),
@@ -110,8 +126,8 @@ export function RunEvalModal({
   const ready =
     !!chosen && (chosen.kind === 'dataset' || !!suite) && !needsAgent && !start.isPending;
 
-  const submit = () => {
-    if (!chosen) return;
+  const request = () => {
+    if (!chosen) return null;
     const config: Partial<WorkspaceEvalJobConfig> = {};
     const modelName = model.trim();
     if (agent && agent !== AS_SUITE)
@@ -123,15 +139,34 @@ export function RunEvalModal({
       }));
     if (Number(attempts) >= 1) config.n_attempts = Math.floor(Number(attempts));
     if (Number(concurrency) >= 1) config.n_concurrent_trials = Math.floor(Number(concurrency));
+    const filter = onlyTasks.length ? { task_names: onlyTasks } : {};
     if (chosen.kind === 'dataset') {
-      config.datasets = [{ name: chosen.name }];
+      config.datasets = [{ name: chosen.name, ...(version ? { version } : {}), ...filter }];
       config.tasks = [];
+    } else if (onlyTasks.length && suite?.config) {
+      config.tasks = suite.config.tasks.map((source) => ({ ...source, ...filter }));
+      config.datasets = suite.config.datasets.map((source) => ({ ...source, ...filter }));
     }
+    return {
+      ...(chosen.kind === 'suite' ? { suite: chosen.name } : {}),
+      ...(Object.keys(config).length ? { config } : {}),
+    };
+  };
+  const planInput = ready ? JSON.stringify(request()) : '';
+  // The dry run: what Start would queue, re-read 400 ms after the form stops changing.
+  const { plan } = actions;
+  useEffect(() => {
+    if (!open || !planInput) return;
+    const timer = setTimeout(() => plan.mutate(JSON.parse(planInput)), 400);
+    return () => clearTimeout(timer);
+    // `plan` is a new object each render; the input is the key.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, planInput]);
+  const submit = () => {
+    const input = request();
+    if (!input) return;
     start.mutate(
-      {
-        ...(chosen.kind === 'suite' ? { suite: chosen.name } : {}),
-        ...(Object.keys(config).length ? { config } : {}),
-      },
+      input,
       {
         onSuccess: (job) => {
           successToast(t('started', { job: job.job_name }));
@@ -142,7 +177,12 @@ export function RunEvalModal({
     );
   };
   // The API's `422 eval_invalid` names every problem in `violations`.
-  const error = start.error instanceof Error ? start.error : null;
+  // A dry run that the API refuses (`422`) shows its violations before Start is pressed.
+  const planRefused =
+    plan.error instanceof Error && (plan.error as { status?: number }).status === 422 && ready
+      ? plan.error
+      : null;
+  const error = start.error instanceof Error ? start.error : planRefused;
   const body = (error as { data?: { violations?: unknown } } | null)?.data;
   const violations = Array.isArray(body?.violations)
     ? body.violations.filter((v): v is string => typeof v === 'string')
@@ -200,11 +240,33 @@ export function RunEvalModal({
                     ))}
                   </SelectGroup>
                 ) : null}
+                {extra.length ? (
+                  <SelectGroup>
+                    <SelectLabel>{t('registryGroup')}</SelectLabel>
+                    {extra.map((name) => (
+                      <SelectItem key={name} value={`dataset:${name}`}>
+                        {name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ) : null}
               </SelectContent>
             </Select>
-            {chosen?.kind === 'dataset' ? (
+            {chosen?.kind === 'dataset' || onlyTasks.length || version ? (
               <FieldDescription>
-                {builtins.find((d) => d.name === chosen.name)?.description}
+                {[
+                  chosen?.kind === 'dataset'
+                    ? catalog.find((d) => d.name === chosen.name)?.description
+                    : null,
+                  version ? t('runVersion', { version }) : null,
+                  onlyTasks.length === 1
+                    ? t('runOneTask', { task: onlyTasks[0]! })
+                    : onlyTasks.length
+                      ? t('runSomeTasks', { count: onlyTasks.length })
+                      : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
               </FieldDescription>
             ) : null}
           </Field>
@@ -264,6 +326,16 @@ export function RunEvalModal({
               />
             </Field>
           </div>
+          {ready && !error && plan.data && !plan.isError ? (
+            <p className="text-muted-foreground text-xs tabular-nums" data-testid="evals-run-plan">
+              {t('planLine', {
+                trials: plan.data.n_trials,
+                tasks: plan.data.n_tasks,
+                agents: plan.data.agents.length,
+              })}
+              {plan.data.warnings.length ? ` · ${plan.data.warnings.join(' ')}` : ''}
+            </p>
+          ) : null}
           {/* The refusal stays in the modal: a toast disappears before a long violation list is read. */}
           {error ? (
             <Alert variant="destructive" data-testid="evals-run-error">

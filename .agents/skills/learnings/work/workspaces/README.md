@@ -146,7 +146,7 @@ Prod, read-only, aggregates only. Prod runs v0.15.11.
 | `split_pending` | 0 projects. 0 accounts with 2 or more active projects (the accounts with more than one project row hold archived ones only) |
 | New accounts since the split | every one has its `kortix.workspaces` row |
 | Invariants over the 635 runs | I1, I2, I3, I5, I7, I8, I9, I10, I12: 0 |
-| Invariants, global | I4 9, I6 1, I11 1 (all from before the split, see below). I9/I12: the one account with no row, which `20261114163000000` reconciles. I10: rows of erased accounts, which this branch stops counting |
+| Invariants, global | I4 9, I6 1, I11 1 (all from before the split, see below). I9/I12: the one account with no row. Its id is the first uuid (`00000000-…`), which the keyset of `20261114163000000` skips; `20261114171401000` reconciles it. I10: rows of erased accounts, which this branch stops counting |
 
 The split stalled once (2026-11-12, 16:43–18:45 UTC). `finishAccountIfLast` re-stamps a
 keeper account's expand rows with one `UPDATE` per table (`kortix.workspace_fill_account`).
@@ -180,7 +180,7 @@ R2a-0 migration ran at 18:14 UTC. Step 1 of the order below is done.
 What the invariant failures are:
 
 - I10 57: rows of accounts the deletion sweep erased after the fill stamped them. A false positive, fixed on branch `workspaces-r2a`.
-- I9 1 and I12 1: one account (created 2026-04, no project row, no member) has no `kortix.workspaces` row. `20261114163000000` reconciles it.
+- I9 1 and I12 1: one account (created 2026-04, no project row, no member) has no `kortix.workspaces` row. Its id is the first uuid; `20261114171401000` reconciles it (`20261114163000000` skips that id).
 - I4 9: project-scope grants held by users who are not members of the account (7 Manager grants from 2026-11-03, 2 "Folder: manage" from 2026-10-30 to 2026-11-11). Not a split artifact. Open: which write path grants a project role to a non-member.
 - I6 1: one 1:1 account whose name differs from its project's (the project was created 2026-11-10). Open.
 - I11 1: the known shared Stripe subscription id (design.md §3.3). It needs the owner-confirmed billing review before the gate can be met.

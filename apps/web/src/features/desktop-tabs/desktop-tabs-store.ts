@@ -264,14 +264,9 @@ export function closeTab(
   };
 }
 
-/** Keep only `id` (and every pinned tab, unless `pinned`). */
-export function closeOthers(
-  state: ProjectTabs,
-  id: string,
-  /** Close all other tabs: the pinned ones too (they reopen pinned). */
-  { pinned = false }: { pinned?: boolean } = {},
-): ProjectTabs {
-  const keep = state.tabs.filter((t) => t.id === id || (t.pinned && !pinned));
+/** Keep only `id` (and every pinned tab). */
+export function closeOthers(state: ProjectTabs, id: string): ProjectTabs {
+  const keep = state.tabs.filter((t) => t.id === id || t.pinned);
   const gone = state.tabs
     .map((t, index) => ({ ...t, index }))
     .filter((t) => !keep.some((k) => k.id === t.id));

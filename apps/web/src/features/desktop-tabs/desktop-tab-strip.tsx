@@ -447,13 +447,6 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
       go(next.tabs.find((x) => x.id === id)?.path ?? null);
     },
     [go, projectId, update],
-  );  const closeAllOthersOf = useCallback(
-    (id: string) => {
-      const next = closeOthers(readProjectTabs(projectId), id, { pinned: true });
-      update(projectId, () => next);
-      go(next.tabs.find((x) => x.id === id)?.path ?? null);
-    },
-    [go, projectId, update],
   );
   const closeRightOf = useCallback(
     (id: string) => {
@@ -631,8 +624,6 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
                 onDuplicate={duplicate}
                 onPin={pin}
                 onCloseOthers={closeOthersOf}
-                onCloseAllOthers={closeAllOthersOf}
-                otherPinned={project.tabs.some((other) => other.pinned && other.id !== tab.id)}
                 onCloseToRight={closeRightOf}
                 canReopen={project.closed.length > 0}
                 onReopen={reopen}
@@ -689,10 +680,6 @@ interface TabItemProps {
   onDuplicate: (id: string, path: string) => void;
   onPin: (id: string, pinned: boolean) => void;
   onCloseOthers: (id: string) => void;
-  /** Close every other tab, pinned ones too. */
-  onCloseAllOthers: (id: string) => void;
-  /** Another tab is pinned: only then does "Close all other tabs" differ. */
-  otherPinned: boolean;
   onCloseToRight: (id: string) => void;
   canReopen: boolean;
   onReopen: () => void;
@@ -713,8 +700,6 @@ const TabItem = memo(function TabItem({
   onDuplicate,
   onPin,
   onCloseOthers,
-  onCloseAllOthers,
-  otherPinned,
   onCloseToRight,
   canReopen,
   onReopen,
@@ -842,11 +827,6 @@ const TabItem = memo(function TabItem({
           <ContextMenuItem inset onClick={() => onCloseOthers(tab.id)}>
             {t('closeOthers')}
           </ContextMenuItem>
-          {otherPinned && (
-            <ContextMenuItem inset onClick={() => onCloseAllOthers(tab.id)}>
-              {t('closeAllOthers')}
-            </ContextMenuItem>
-          )}
           <ContextMenuItem inset onClick={() => onCloseToRight(tab.id)}>
             {t('closeToRight')}
           </ContextMenuItem>

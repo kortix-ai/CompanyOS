@@ -1477,6 +1477,7 @@ export class PiRuntime {
     // a retract or a Stop takes it back, and a steer finds no turn and is queued as a prompt
     // instead of joining the extension's run.
     const abandons = this.abandons
+    if (this.pi && !this.pi.session.isIdle) logger.info('[pi] the turn waits for a run pi started on its own', { messageId: turn.messageId })
     await this.piIdle()
     if (this.abandons !== abandons || !this.pi) {
       turn.resolve('aborted')

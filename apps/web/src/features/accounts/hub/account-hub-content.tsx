@@ -27,7 +27,6 @@
  */
 
 import { useTranslations } from '@/i18n/use-translations';
-import { useSearchParams as usePageSearchParams } from 'next/navigation';
 import { invalidatePermissionProbes, qk, useWorkspace } from '@kortix/sdk/react';
 import {
   ArrowSquareOutIcon as ExternalLink,
@@ -191,7 +190,7 @@ export function AccountHubContent({
   const accountId = useAccountPanelId();
   const searchParams = useHubSearchParams();
   // The cost explorer keeps its level in the page's own `project` param.
-  const explorerProject = usePageSearchParams()?.get('project') ?? null;
+  const explorerProject = useUiSearchParams()?.get('project') ?? null;
   const queryClient = useQueryClient();
   const { user, isLoading: authLoading } = useAuth();
 

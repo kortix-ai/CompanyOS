@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Window } from 'happy-dom';
 import { act, type ReactNode } from 'react';
@@ -46,28 +46,18 @@ const SERVER_ORDER = [
   node('c.json', 'file'),
 ];
 
-let listing: ExplorerQueryResult<FileNode[]>;
-const complete = (): ExplorerQueryResult<FileNode[]> => ({
-  data: SERVER_ORDER.map((n) => ({ ...n })),
-  isLoading: false,
-  error: null,
-  refetch: async () => undefined,
-});
-const empty: ExplorerQueryResult<FileNode[]> = {
-  data: [],
+const COMPLETE: ExplorerQueryResult<FileNode[]> = {
+  data: SERVER_ORDER,
   isLoading: false,
   error: null,
   refetch: async () => undefined,
 };
-const useFileList = (dirPath: string) => (dirPath === '/workspace' ? listing : empty);
+let listing = COMPLETE;
+// Folder thumbnails list their own folder: empty here.
+const useFileList = (dirPath: string) => (dirPath === '/workspace' ? listing : { ...COMPLETE, data: [] });
 
 // Every request the page could make is a write or a fetch this test does not serve.
-const fetchCalls: string[] = [];
-const originalFetch = globalThis.fetch;
-globalThis.fetch = (async (input: RequestInfo | URL) => {
-  fetchCalls.push(String(input));
-  return new Response('{}', { status: 500 });
-}) as typeof fetch;
+const fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 500 }));
 
 // The page reads the git-ref hooks directly; serve them the same fixture.
 const gitStatus = await import('../hooks/use-git-status');
@@ -94,21 +84,23 @@ const { IntlTestProvider } = await import('../../../test-utils/intl');
 const { defaultUiMessages } = await import('../../../i18n');
 
 const mutation = () => ({ mutateAsync: async () => undefined, isPending: false });
-const idle = () => ({ data: undefined, isLoading: false, error: null });
+const idle = () => ({ data: undefined, isLoading: false, error: null, refetch: async () => undefined });
 const readOnlySource: FileExplorerSource = {
   capabilities: { write: false, search: true, hiddenToggle: false, gitStatusChip: false },
   useFileViewerSource: () => ({
     id: 'stub',
     useFileContent: idle,
-    useBinaryBlob: idle,
-  }) as unknown as ReturnType<FileExplorerSource['useFileViewerSource']>,
+    useBinaryBlob: () => ({ blobUrl: null, blob: null, isLoading: false, error: null }),
+    download: async () => undefined,
+    upload: async () => undefined,
+  }),
   useFileList,
   useReadinessParked: () => false,
   useGitStatus: () => ({ data: [] }),
   useFileEventInvalidation: () => {},
   useFileSearch: idle,
-  useFileHistory: () => ({ ...idle(), refetch: async () => undefined }),
-  useFileCommitDiff: () => ({ ...idle(), refetch: async () => undefined }),
+  useFileHistory: idle,
+  useFileCommitDiff: idle,
   useFileUpload: mutation,
   useFileDelete: mutation,
   useFileMkdir: mutation,
@@ -124,8 +116,8 @@ let container: HTMLElement;
 let store: ReturnType<typeof createFilesStore>;
 
 beforeEach(() => {
-  listing = complete();
-  fetchCalls.length = 0;
+  listing = COMPLETE;
+  fetchSpy.mockClear();
   store = createFilesStore();
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -138,10 +130,10 @@ afterEach(async () => {
 });
 
 afterAll(() => {
-  globalThis.fetch = originalFetch;
+  fetchSpy.mockRestore();
   for (const [key, descriptor] of originals) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else delete (globalThis as Record<string, unknown>)[key];
+    else Reflect.deleteProperty(globalThis, key);
   }
 });
 
@@ -229,7 +221,7 @@ describe.each(EXPLORERS)('%s listing order', (_name, explorer) => {
 
   test('a partly loaded folder keeps the server order (KRTX-1723)', async () => {
     sortListing('name', 'desc');
-    listing = { ...complete(), hasNextPage: true, fetchNextPage: async () => undefined };
+    listing = { ...COMPLETE, hasNextPage: true, fetchNextPage: async () => undefined };
     await mount(explorer());
     expect(listedNames()).toEqual(['.kortix', 'zeta', 'alpha', 'b.txt', 'a.md', 'c.json']);
   });
@@ -263,13 +255,11 @@ describe('FileExplorerPage is read-only', () => {
   test('⌘V changes nothing', async () => {
     sortListing('name', 'asc');
     await mount(<FileExplorerPage />);
-    const paste = new browser.KeyboardEvent('keydown', { key: 'v', metaKey: true, bubbles: true, cancelable: true });
-    await act(async () => {
-      window.dispatchEvent(paste as unknown as Event);
-    });
+    const paste = new KeyboardEvent('keydown', { key: 'v', metaKey: true, bubbles: true, cancelable: true });
+    await act(async () => window.dispatchEvent(paste));
     expect(paste.defaultPrevented).toBe(false);
     expect(store.getState().clipboard).toBeNull();
     expect(listedNames()).toEqual(['.kortix', 'alpha', 'zeta', 'a.md', 'b.txt', 'c.json']);
-    expect(fetchCalls).toEqual([]);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

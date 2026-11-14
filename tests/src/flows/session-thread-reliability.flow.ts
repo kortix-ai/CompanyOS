@@ -973,3 +973,102 @@ harnessFlow(
     });
   },
 );
+
+// A Stop never loses a prompt to the turn it is ending. Stop's hold settle
+// released what waited before the client's abort landed, the drain steered a
+// prompt into the turn being stopped, pi accepted it and the abort dropped it
+// unread: "Read at next step" until a sweep closed it, never answered.
+harnessFlow(
+  'SESS-65',
+  {
+    domain: 'sessions',
+    requires: ['funded', 'sandbox'],
+    // Boot (≤540s) + two long turns, each stopped, each followed by its answer.
+    timeoutMs: 1_200_000,
+    routes: [
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts/hold',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
+    ],
+  },
+  async (ctx, harness) => {
+    const session = await bootSession(ctx, harness);
+    const { projectId, sessionId } = session;
+    const params = { projectId, sessionId };
+    const owner = ctx.client.as(ctx.P.OWNER);
+    const stamp = Date.now();
+    const inbox = async () => {
+      const r = await owner.get('/v1/workspaces/:projectId/sessions/:sessionId/prompts', { params });
+      r.status(200);
+      return r.json<{ prompts?: Array<{ prompt_id: string; state: string; reason?: string | null }> }>().prompts ?? [];
+    };
+    const longTurn = async (word: string) => {
+      await sendPrompt(ctx, projectId, sessionId, `Run the shell command "sleep 90" with your bash tool, then reply with the word ${word}.`);
+      await waitFor(
+        async () => (await readTranscript(ctx, projectId, sessionId)).messages,
+        {
+          until: (messages) =>
+            messages.some((m) => m.role === 'assistant' && (m.tools ?? []).some((t) => t.tool === 'bash' && (t.status === 'running' || t.status === 'pending'))),
+          timeoutMs: 120_000,
+          intervalMs: 2_000,
+          description: `the sleep command to be running in ${sessionId}`,
+          retryOnError: isKe2eRetryableError,
+        },
+      );
+    };
+    const answered = async (marker: string) => {
+      const messages = await waitForAssistantText(ctx, projectId, sessionId, marker, { timeoutMs: 240_000 });
+      const prompt = messages.find((m) => m.role === 'user' && m.text.includes(marker));
+      if (!prompt?.id) throw new Error(`the prompt carrying ${marker} is not in the transcript`);
+      if (!messages.some((m) => m.role === 'assistant' && m.parent_id === prompt.id && m.text.includes(marker))) {
+        throw new Error(`no reply parented on the prompt carries ${marker}`);
+      }
+    };
+
+    const released = `RELEASED${stamp}`;
+    await ctx.step('a prompt sent after Stop released the queue, before the abort lands, is answered as the next turn', async () => {
+      await longTurn(`FIRST${stamp}`);
+      // The hold settles at once (nothing on the wire) and releases the queue;
+      // the client's abort comes later. A prompt sent in between must not be
+      // steered into the turn this Stop is ending.
+      (await owner.post('/v1/workspaces/:projectId/sessions/:sessionId/prompts/hold', { held: true }, { params })).status(200);
+      await waitFor(inbox, {
+        until: (rows) => rows.every((p) => p.reason !== 'held'),
+        timeoutMs: 15_000,
+        intervalMs: 250,
+        description: 'the Stop hold to be released',
+        retryOnError: isKe2eRetryableError,
+      });
+      const id = await sendPrompt(ctx, projectId, sessionId, `Reply with the word ${released}.`);
+      await Bun.sleep(3_000);
+      const row = (await inbox()).find((p) => p.prompt_id === id);
+      if (row && row.state !== 'queued' && row.state !== 'waiting') {
+        throw new Error(`a prompt was handed to the turn being stopped: ${JSON.stringify(row)}`);
+      }
+      await abortTurn(ctx, session);
+      await answered(released);
+    });
+
+    const dropped = `DROPPED${stamp}`;
+    await ctx.step('a steer the running turn accepted and a Stop dropped unread is answered as the next turn', async () => {
+      await waitForTurn(ctx, projectId, sessionId, (turn) => turn.turns.length === 0, `the turn of ${released} to end`);
+      await longTurn(`SECOND${stamp}`);
+      const id = await sendPrompt(ctx, projectId, sessionId, `Reply with the word ${dropped}.`);
+      // Steered: on the runtime, not read yet (the bash call holds the step).
+      await waitFor(inbox, {
+        until: (rows) => rows.find((p) => p.prompt_id === id)?.state === 'delivering',
+        timeoutMs: 30_000,
+        intervalMs: 500,
+        description: `the prompt ${id} to be steered into the running turn`,
+        retryOnError: isKe2eRetryableError,
+      });
+      // The runtime abort alone, as a client without the hold sends it.
+      await abortTurn(ctx, session);
+      await answered(dropped);
+    });
+  },
+);

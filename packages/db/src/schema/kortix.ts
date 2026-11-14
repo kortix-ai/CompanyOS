@@ -3888,11 +3888,17 @@ export const sandboxTemplates = kortixSchema.table(
     /** 'daytona' (others to follow). */
     provider: text('provider').default('daytona').notNull(),
 
-    // ─── Image definition (exactly one of image / dockerfilePath) ──────────
+    // ─── Image definition (at most one of image / dockerfilePath / dockerfileInline) ──
     /** Public Docker image reference (e.g. python:3.12-slim). */
     image: text('image'),
     /** Repo-relative path to a Dockerfile. Mutually exclusive with `image`. */
     dockerfilePath: text('dockerfile_path'),
+    /**
+     * A Dockerfile's text, for an image defined outside the project repository
+     * (an eval task from a Harbor dataset). Built without a build context, as a
+     * repository Dockerfile is. Mutually exclusive with the two above.
+     */
+    dockerfileInline: text('dockerfile_inline'),
     /** Optional entrypoint override. */
     entrypoint: text('entrypoint'),
 
@@ -10424,7 +10430,13 @@ export const evalJobs = kortixSchema.table('eval_jobs', {
   /** The `evals:` suite of kortix.yaml the job ran; null for an ad-hoc config. */
   suite: text('suite'),
   jobName: text('job_name').notNull(),
-  status: text('status').$type<'queued' | 'running' | 'completed' | 'cancelled'>().default('queued').notNull(),
+  status: text('status').$type<'queued' | 'running' | 'paused' | 'completed' | 'cancelled'>().default('queued').notNull(),
+  /**
+   * Set by a cancel. `hard`: running trials stop now. `soft`: queued trials
+   * are cancelled and running ones finish without a retry; the job then ends
+   * `cancelled`. Null: not cancelled.
+   */
+  cancelMode: text('cancel_mode').$type<'soft' | 'hard'>(),
   /** The commit the config and the tasks were read at. */
   commitSha: text('commit_sha'),
   ref: text('ref'),
@@ -10454,7 +10466,8 @@ export const evalJobs = kortixSchema.table('eval_jobs', {
   index('idx_eval_jobs_project_created').on(table.projectId, table.createdAt),
   uniqueIndex('uniq_eval_jobs_project_name').on(table.projectId, table.jobName),
   index('idx_eval_jobs_active').on(table.status).where(sql`${table.status} in ('queued', 'running')`),
-  check('eval_jobs_status_check', sql`${table.status} in ('queued', 'running', 'completed', 'cancelled')`),
+  check('eval_jobs_status_check', sql`${table.status} in ('queued', 'running', 'paused', 'completed', 'cancelled')`),
+  check('eval_jobs_cancel_mode_check', sql`${table.cancelMode} in ('soft', 'hard')`),
 ]).enableRLS();
 
 export const evalTrials = kortixSchema.table('eval_trials', {
@@ -10473,7 +10486,7 @@ export const evalTrials = kortixSchema.table('eval_trials', {
   attempt: integer('attempt').notNull(),
   retry: integer('retry').default(0).notNull(),
   status: text('status')
-    .$type<'queued' | 'starting' | 'agent_running' | 'verifying' | 'completed' | 'errored' | 'cancelled'>()
+    .$type<'queued' | 'paused' | 'starting' | 'agent_running' | 'verifying' | 'completed' | 'errored' | 'cancelled'>()
     .default('queued')
     .notNull(),
   sessionId: text('session_id'),
@@ -10499,9 +10512,10 @@ export const evalTrials = kortixSchema.table('eval_trials', {
   index('idx_eval_trials_job').on(table.jobId, table.taskName, table.agent, table.attempt),
   uniqueIndex('uniq_eval_trials_job_name').on(table.jobId, table.trialName),
   index('idx_eval_trials_session').on(table.sessionId).where(sql`${table.sessionId} is not null`),
+  index('idx_eval_trials_project_created').on(table.projectId, table.createdAt),
   check(
     'eval_trials_status_check',
-    sql`${table.status} in ('queued', 'starting', 'agent_running', 'verifying', 'completed', 'errored', 'cancelled')`,
+    sql`${table.status} in ('queued', 'paused', 'starting', 'agent_running', 'verifying', 'completed', 'errored', 'cancelled')`,
   ),
 ]).enableRLS();
 

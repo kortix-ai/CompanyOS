@@ -1640,10 +1640,15 @@ function evalSourcesSchema(description: string): JsonSchemaFragment {
               type: 'object',
               properties: {
                 path: { type: 'string', description: 'A repository path: one task folder (it holds `task.toml`) or a folder of task folders.' },
-                name: { type: 'string', description: 'A dataset of the Harbor registry, such as `terminal-bench`.' },
+                name: {
+                  type: 'string',
+                  description:
+                    'A Harbor Hub package `org/name` (under `tasks` a task, under `datasets` a dataset), optionally `@ref`; or a dataset of the legacy Harbor registry, such as `terminal-bench`.',
+                },
                 git_url: { type: 'string', description: 'A public git repository (https). `path` is inside it.' },
                 git_commit_id: { type: 'string', description: 'The commit, branch or tag of `git_url`. Default: its default branch.' },
-                version: { type: ['string', 'number'], description: 'The dataset version, such as `2.0`.' },
+                version: { type: ['string', 'number'], description: 'The legacy registry dataset version, such as `2.0`, or a Harbor Hub ref.' },
+                ref: { type: 'string', description: 'A Harbor Hub ref: a tag (`latest`), a revision (`3`) or `sha256:<digest>`. Default: `latest`.' },
                 task_names: { type: 'array', items: { type: 'string' }, description: 'Glob patterns of task names to keep.' },
                 exclude_task_names: { type: 'array', items: { type: 'string' }, description: 'Glob patterns of task names to leave out.' },
                 n_tasks: { type: 'integer', minimum: 1, description: 'Keep at most this many tasks, in name order.' },
@@ -1667,7 +1672,7 @@ function evalsSchema(): JsonSchemaFragment {
       properties: {
         config: { type: 'string', description: 'A repository path to a Harbor job config (`.yaml`, `.yml` or `.json`). The other keys of the suite override its fields.' },
         tasks: evalSourcesSchema('The tasks to run: a repository path, or a list of them.'),
-        datasets: evalSourcesSchema('Folders of tasks, or datasets of the Harbor registry (`{ name: terminal-bench, version: "2.0" }`).'),
+        datasets: evalSourcesSchema('Folders of tasks, Harbor Hub datasets (`{ name: terminal-bench/terminal-bench-2-1 }`), or datasets of the legacy Harbor registry (`{ name: terminal-bench, version: "2.0" }`).'),
         agents: {
           description: 'The agents to score. Default: `oracle`, which runs each task\'s `solution/solve.sh` and proves the task is solvable.',
           type: 'array',

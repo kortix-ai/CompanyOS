@@ -1,6 +1,6 @@
 {
-  "id": "d09896b8-3580-4b37-9416-c47d927ca4df",
-  "prevId": "2f3d75e6-a562-4b8e-b079-c8a43ed16e65",
+  "id": "b03fb9fd-d21c-4117-99f2-4aad58bce000",
+  "prevId": "4bb5aa3f-9c86-43bc-9192-3caa5c91f0a9",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -7691,157 +7691,6 @@
       "checkConstraints": {},
       "isRLSEnabled": true
     },
-    "kortix.calendar_item_people": {
-      "name": "calendar_item_people",
-      "schema": "kortix",
-      "columns": {
-        "item_id": {
-          "name": "item_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "agent": {
-          "name": "agent",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "added_at": {
-          "name": "added_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "uniq_calendar_item_people_user": {
-          "name": "uniq_calendar_item_people_user",
-          "columns": [
-            {
-              "expression": "item_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"kortix\".\"calendar_item_people\".\"user_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "uniq_calendar_item_people_agent": {
-          "name": "uniq_calendar_item_people_agent",
-          "columns": [
-            {
-              "expression": "item_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "agent",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"kortix\".\"calendar_item_people\".\"agent\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_calendar_item_people_project_user": {
-          "name": "idx_calendar_item_people_project_user",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_calendar_item_people_project_agent": {
-          "name": "idx_calendar_item_people_project_agent",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "agent",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "calendar_item_people_item_id_calendar_items_item_id_fk": {
-          "name": "calendar_item_people_item_id_calendar_items_item_id_fk",
-          "tableFrom": "calendar_item_people",
-          "tableTo": "calendar_items",
-          "schemaTo": "kortix",
-          "columnsFrom": [
-            "item_id"
-          ],
-          "columnsTo": [
-            "item_id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "calendar_item_people_one_kind": {
-          "name": "calendar_item_people_one_kind",
-          "value": "(\"kortix\".\"calendar_item_people\".\"user_id\" IS NULL) <> (\"kortix\".\"calendar_item_people\".\"agent\" IS NULL)"
-        }
-      },
-      "isRLSEnabled": true
-    },
     "kortix.calendar_items": {
       "name": "calendar_items",
       "schema": "kortix",
@@ -7892,9 +7741,15 @@
           "notNull": true,
           "default": "'open'"
         },
-        "ends_at": {
-          "name": "ends_at",
-          "type": "timestamp with time zone",
+        "assignee_user_id": {
+          "name": "assignee_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "assignee_agent": {
+          "name": "assignee_agent",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -7958,6 +7813,28 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "idx_calendar_items_project_assignee": {
+          "name": "idx_calendar_items_project_assignee",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "assignee_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"kortix\".\"calendar_items\".\"status\" = 'open'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -7984,9 +7861,9 @@
           "name": "calendar_items_status_check",
           "value": "\"kortix\".\"calendar_items\".\"status\" in ('open', 'done')"
         },
-        "calendar_items_ends_after_starts": {
-          "name": "calendar_items_ends_after_starts",
-          "value": "\"kortix\".\"calendar_items\".\"ends_at\" IS NULL OR (\"kortix\".\"calendar_items\".\"starts_at\" IS NOT NULL AND \"kortix\".\"calendar_items\".\"ends_at\" > \"kortix\".\"calendar_items\".\"starts_at\")"
+        "calendar_items_one_assignee": {
+          "name": "calendar_items_one_assignee",
+          "value": "\"kortix\".\"calendar_items\".\"assignee_user_id\" IS NULL OR \"kortix\".\"calendar_items\".\"assignee_agent\" IS NULL"
         }
       },
       "isRLSEnabled": true
@@ -15837,6 +15714,12 @@
           "notNull": true,
           "default": "'queued'"
         },
+        "cancel_mode": {
+          "name": "cancel_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "commit_sha": {
           "name": "commit_sha",
           "type": "text",
@@ -16013,7 +15896,11 @@
       "checkConstraints": {
         "eval_jobs_status_check": {
           "name": "eval_jobs_status_check",
-          "value": "\"kortix\".\"eval_jobs\".\"status\" in ('queued', 'running', 'completed', 'cancelled')"
+          "value": "\"kortix\".\"eval_jobs\".\"status\" in ('queued', 'running', 'paused', 'completed', 'cancelled')"
+        },
+        "eval_jobs_cancel_mode_check": {
+          "name": "eval_jobs_cancel_mode_check",
+          "value": "\"kortix\".\"eval_jobs\".\"cancel_mode\" in ('soft', 'hard')"
         }
       },
       "isRLSEnabled": true
@@ -16262,6 +16149,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "idx_eval_trials_project_created": {
+          "name": "idx_eval_trials_project_created",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -16286,7 +16194,7 @@
       "checkConstraints": {
         "eval_trials_status_check": {
           "name": "eval_trials_status_check",
-          "value": "\"kortix\".\"eval_trials\".\"status\" in ('queued', 'starting', 'agent_running', 'verifying', 'completed', 'errored', 'cancelled')"
+          "value": "\"kortix\".\"eval_trials\".\"status\" in ('queued', 'paused', 'starting', 'agent_running', 'verifying', 'completed', 'errored', 'cancelled')"
         }
       },
       "isRLSEnabled": true
@@ -29785,6 +29693,12 @@
         },
         "dockerfile_path": {
           "name": "dockerfile_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dockerfile_inline": {
+          "name": "dockerfile_inline",
           "type": "text",
           "primaryKey": false,
           "notNull": false

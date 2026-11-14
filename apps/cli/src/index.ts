@@ -37,6 +37,7 @@ import { runProviders } from './commands/providers.ts';
 import { runRegistry } from './commands/registry.ts';
 import { runReminders } from './commands/reminders.ts';
 import { runGoals } from './commands/goals.ts';
+import { runEvals } from './commands/evals.ts';
 import { runSpaces } from './commands/spaces.ts';
 import { runTasks } from './commands/tasks.ts';
 import { runArtifacts } from './commands/artifacts.ts';
@@ -271,6 +272,7 @@ const COMMAND_HANDLERS: Record<string, RootCommandHandler> = {
   reminders: (rest) => runReminders(rest),
   chrome: (rest) => runChrome(rest),
   goals: (rest) => runGoals(rest),
+  evals: (rest) => runEvals(rest),
   artifacts: (rest) => runArtifacts(rest),
   capture: (rest) => runCapture(rest),
   spaces: (rest) => runSpaces(rest),

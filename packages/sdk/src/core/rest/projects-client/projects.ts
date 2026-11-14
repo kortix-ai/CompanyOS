@@ -138,6 +138,8 @@ export type FeatureFlagKey =
   | 'spaces_proactive'
   /** Program agents: an agent with `run` in kortix.yaml runs that command for each turn instead of a model. Experimental, off by default. */
   | 'program_agents'
+  /** Evals: run agents on Harbor-format tasks and score them (`evals:` in kortix.yaml, `kortix evals`). Experimental, off by default. */
+  | 'evals'
   /** @deprecated Withdrawn — agents messaging people left the product. The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'human_messaging';
 
@@ -200,6 +202,7 @@ export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'chat_front',
   'spaces_proactive',
   'program_agents',
+  'evals',
 ] as const;
 
 /**

@@ -165,6 +165,7 @@ function projectFixture(overrides: Record<string, unknown> = {}) {
       chat_front: false,
       spaces_proactive: false,
       program_agents: false,
+      evals: false,
     },
     experimental_features: [],
     default_sandbox_provider: null,
@@ -899,6 +900,7 @@ describe('envelopes', () => {
       'chat_front',
       'spaces_proactive',
       'program_agents',
+      'evals',
     ]);
   });
 

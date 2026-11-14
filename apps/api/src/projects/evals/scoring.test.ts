@@ -2,17 +2,19 @@ import { describe, expect, test } from 'bun:test';
 import { EvalJobConfigSchema } from '@kortix/api-contract';
 import { planTrials } from './config';
 import { cleanInstruction, dockerfileWorkdir, parseHarborTask, taskNameMatches } from './harbor-task';
-import { EvalTrialError, computeJobStats, computeMetric, errorPolicyFor, parseRewards, shouldRetry, toEvalException, turnFailureType, type ScoredTrial } from './scoring';
+import { EvalTrialError, computeJobStats, computeMetric, errorPolicyFor, parseRewards, passAtKEstimate, passAtKValues, shouldRetry, toEvalException, turnFailureType, type ScoredTrial } from './scoring';
 
 const trial = (over: Partial<ScoredTrial>): ScoredTrial => ({
   taskName: 't1',
   agent: 'a',
   model: null,
+  source: null,
   attempt: 1,
   status: 'completed',
   rewards: { reward: 1 },
   rewardValid: true,
-  hasException: false,
+  exceptionType: null,
+  usage: null,
   superseded: false,
   ...over,
 });
@@ -85,7 +87,7 @@ describe('metrics', () => {
   });
   test('an invalid reward is in neither the numerator nor the denominator', () => {
     const stats = computeJobStats(
-      [trial({ taskName: 'a', rewards: { reward: 0 } }), trial({ taskName: 'b', rewards: { reward: 1 } }), trial({ taskName: 'c', rewards: { reward: 1 }, rewardValid: false, hasException: true, status: 'errored' })],
+      [trial({ taskName: 'a', rewards: { reward: 0 } }), trial({ taskName: 'b', rewards: { reward: 1 } }), trial({ taskName: 'c', rewards: { reward: 1 }, rewardValid: false, exceptionType: 'AgentTimeoutError', status: 'errored' })],
       [],
     );
     expect(stats.agents[0]!.metrics).toEqual([{ mean: 0.5 }]);
@@ -96,7 +98,7 @@ describe('metrics', () => {
   test('a superseded run is in no count; agents and models score apart', () => {
     const stats = computeJobStats(
       [
-        trial({ rewards: null, rewardValid: false, hasException: true, status: 'errored', superseded: true }),
+        trial({ rewards: null, rewardValid: false, exceptionType: 'AgentTimeoutError', status: 'errored', superseded: true }),
         trial({ rewards: { reward: 1 } }),
         trial({ agent: 'b', model: 'p/m', rewards: { reward: 0 } }),
       ],
@@ -108,7 +110,7 @@ describe('metrics', () => {
       ['b', 'p/m', [{ mean: 0 }, { max: 0 }]],
     ]);
   });
-  test('pass@k is the share of tasks with a pass in their first k attempts', () => {
+  test('pass@k is Harbor\'s unbiased estimator, averaged over tasks', () => {
     const stats = computeJobStats(
       [
         trial({ taskName: 'a', attempt: 1, rewards: { reward: 0 } }),
@@ -118,7 +120,48 @@ describe('metrics', () => {
       ],
       [],
     );
-    expect(stats.agents[0]!.pass_at_k).toEqual({ '1': 0, '2': 0.5 });
+    // a: n=2, c=1 → pass@1 = 0.5, pass@2 = 1. b: c=0 → 0. Mean over tasks.
+    expect(stats.agents[0]!.pass_at_k).toEqual({ '1': 0.25, '2': 0.5 });
+  });
+  test('the estimator matches 1 − C(n−c, k) / C(n, k)', () => {
+    const choose = (n: number, k: number): number => (k > n ? 0 : k === 0 ? 1 : (n / k) * choose(n - 1, k - 1));
+    for (const [n, c, k] of [[10, 3, 1], [10, 3, 5], [8, 0, 4], [8, 8, 2], [5, 2, 4]] as const) {
+      expect(passAtKEstimate(n, c, k)).toBeCloseTo(1 - choose(n - c, k) / choose(n, k), 12);
+    }
+  });
+  test('k is 1, then powers of 2 and multiples of 5, up to the fewest attempts', () => {
+    expect(passAtKValues(1)).toEqual([1]);
+    expect(passAtKValues(16)).toEqual([1, 2, 4, 5, 8, 10, 15, 16]);
+    const uneven = computeJobStats([trial({ taskName: 'a', attempt: 1 }), trial({ taskName: 'a', attempt: 2 }), trial({ taskName: 'b', attempt: 1 })], []);
+    expect(Object.keys(uneven.agents[0]!.pass_at_k)).toEqual(['1']);
+  });
+  test('several 0/1 keys are binary: a trial passes when every key is 1', () => {
+    const stats = computeJobStats(
+      [trial({ taskName: 'a', rewards: { asks: 1, channel: 1 } }), trial({ taskName: 'b', rewards: { asks: 1, channel: 0 } }), trial({ taskName: 'c', rewards: { reward: 1 } })],
+      [],
+    );
+    expect(stats.agents[0]!.pass_at_k).toEqual({ '1': 2 / 3 });
+  });
+  test('a graded value leaves pass@k empty; the metric still scores it', () => {
+    const stats = computeJobStats([trial({ rewards: { reward: 0.75 } }), trial({ taskName: 't2', rewards: { exists: 1, correct: 0 } })], []);
+    expect(stats.agents[0]!.pass_at_k).toEqual({});
+    expect(stats.agents[0]!.metrics[0]).toEqual({ reward: 0.375, exists: 0.5, correct: 0 });
+  });
+  test('two sources score apart; retries, exception types and usage add up', () => {
+    const usage = { n_input_tokens: 10, n_output_tokens: 2, n_cache_tokens: 1, cost_usd: 0.5 };
+    const stats = computeJobStats(
+      [
+        trial({ source: 'kortix/my-kortix@dev', usage }),
+        trial({ source: 'terminal-bench@2.0', rewards: { reward: 0 }, usage: { ...usage, cost_usd: null } }),
+        trial({ source: 'terminal-bench@2.0', taskName: 't2', status: 'errored', rewards: null, rewardValid: false, exceptionType: 'ApiRateLimitError', superseded: true }),
+        trial({ source: 'terminal-bench@2.0', taskName: 't2', status: 'errored', exceptionType: 'AgentTimeoutError', rewards: { reward: 0 } }),
+      ],
+      [],
+    );
+    expect(stats.agents.map((a) => [a.source, a.n_trials])).toEqual([['kortix/my-kortix@dev', 1], ['terminal-bench@2.0', 2]]);
+    expect([stats.n_total_trials, stats.n_retries, stats.exception_stats]).toEqual([3, 1, { AgentTimeoutError: 1 }]);
+    expect(stats.usage).toEqual({ n_input_tokens: 20, n_output_tokens: 4, n_cache_tokens: 2, cost_usd: 0.5 });
+    expect(computeJobStats([trial({ source: 'x' })], []).agents[0]!.source).toBeNull();
   });
 });
 

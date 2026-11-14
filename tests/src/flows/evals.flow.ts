@@ -5,8 +5,10 @@
  *
  * The local profile runs no sandbox and no Drive storage. These flows cover
  * what runs without one: the flag gate, suites (inline and a Harbor job
- * config file), task parsing, validation, job planning (tasks × agents ×
- * attempts), cancel, re-run and delete. A trial worked by a real sandbox and
+ * config file), task parsing, task pages (detail, files, results), the
+ * repository-read gate, validation, dry runs, job planning (tasks × agents ×
+ * attempts), idempotent starts, job filters and paging, compare, cancel and
+ * retry of one trial, cancel, re-run and delete. A trial worked by a real sandbox and
  * graded by tests/test.sh needs the `sandbox` capability and is not part of
  * these flows.
  */
@@ -22,6 +24,15 @@ const R = {
   trials: '/v1/projects/:projectId/evals/jobs/:jobId/trials',
   cancel: '/v1/projects/:projectId/evals/jobs/:jobId/cancel',
   rerun: '/v1/projects/:projectId/evals/jobs/:jobId/rerun',
+  task: '/v1/projects/:projectId/evals/tasks/:taskId',
+  taskFile: '/v1/projects/:projectId/evals/tasks/:taskId/file',
+  taskResults: '/v1/projects/:projectId/evals/tasks/:taskId/results',
+  datasets: '/v1/projects/:projectId/evals/datasets',
+  compare: '/v1/projects/:projectId/evals/compare',
+  trialRetry: '/v1/projects/:projectId/evals/jobs/:jobId/trials/:trialId/retry',
+  trialCancel: '/v1/projects/:projectId/evals/jobs/:jobId/trials/:trialId/cancel',
+  trial: '/v1/projects/:projectId/evals/jobs/:jobId/trials/:trialId',
+  trialFile: '/v1/projects/:projectId/evals/jobs/:jobId/trials/:trialId/file',
 } as const;
 
 const TASK_TOML = '[agent]\ntimeout_sec = 120.0\n\n[verifier]\ntimeout_sec = 30.0\nenvironment_mode = "shared"\n';
@@ -63,6 +74,8 @@ interface Job {
 
 async function openWorld(ctx: FlowContext) {
   const team = await ctx.fixtures.team();
+  // An account member: reads scores, has no `project.file.read`.
+  const member = await team.addMember('member');
   const project = await team.project({ managedGit: true });
   const world = await AgentPrincipalsWorld.open(ctx, { accountId: team.id, projectId: project.id });
   await world.commitToMain(
@@ -70,7 +83,7 @@ async function openWorld(ctx: FlowContext) {
     'ke2e: eval tasks',
   );
   await world.setFeature('evals', true);
-  return { project, world, owner: ctx.client.as(ctx.P.OWNER) };
+  return { project, world, owner: ctx.client.as(ctx.P.OWNER), member: ctx.client.as(member) };
 }
 
 function expectError(r: { statusCode: number; json<T>(): T; text(): string }, status: number, code: string) {
@@ -95,11 +108,20 @@ flow(
       `GET ${R.trials}`,
       `POST ${R.cancel}`,
       `POST ${R.rerun}`,
+      `GET ${R.task}`,
+      `GET ${R.taskFile}`,
+      `GET ${R.taskResults}`,
+      `GET ${R.datasets}`,
+      `GET ${R.compare}`,
+      `POST ${R.trialRetry}`,
+      `POST ${R.trialCancel}`,
+      `GET ${R.trial}`,
+      `GET ${R.trialFile}`,
       'PATCH /v1/projects/:projectId/features',
     ],
   },
   async (ctx) => {
-    const { project, world, owner } = await openWorld(ctx);
+    const { project, world, owner, member } = await openWorld(ctx);
     const params = { projectId: project.id };
 
     await ctx.step('an anonymous caller → 401; the flag off → 403 feature_disabled on read and start; on again → 200', async () => {
@@ -129,6 +151,43 @@ flow(
       if (alpha.instruction !== 'Create /var/tmp/alpha.txt.' || alpha.agent_timeout_sec !== 120 || alpha.verifier_timeout_sec !== 30 || !alpha.has_solution || alpha.unsupported) throw new Error(JSON.stringify(alpha));
     });
 
+    let taskId = '';
+    await ctx.step('a task by its task_id: its files with sizes, one file as text/plain, no results yet; a forged id → 404', async () => {
+      taskId = (await owner.get(R.tasks, { params, query: { suite: 'smoke' } })).status(200).json<{ tasks: Array<{ task_id: string }> }>().tasks[0]!.task_id;
+      const detail = (await owner.get(R.task, { params: { ...params, taskId } })).status(200).json<{ task: { name: string }; files: Array<{ path: string; size: number }>; task_toml: string }>();
+      const test = detail.files.find((f) => f.path === 'tests/test.sh');
+      if (detail.task.name !== 'alpha' || !test || test.size <= 0 || !detail.task_toml.includes('timeout_sec')) throw new Error(JSON.stringify(detail));
+      const file = (await owner.get(R.taskFile, { params: { ...params, taskId }, query: { path: 'tests/test.sh' } })).status(200);
+      if (!file.text().startsWith('#!/bin/bash') || !String(file.header('content-type') ?? '').startsWith('text/plain')) throw new Error(file.text());
+      const results = (await owner.get(R.taskResults, { params: { ...params, taskId } })).status(200).json<{ results: unknown[]; summary: unknown[] }>();
+      if (results.results.length !== 0 || results.summary.length !== 0) throw new Error(JSON.stringify(results));
+      // The unsigned shape of an id names another repository: the API fetches nothing and answers 404.
+      const forged = Buffer.from(JSON.stringify({ k: 'git', p: 'x', c: 'a'.repeat(40), u: 'https://github.com/example/huge.git' })).toString('base64url');
+      expectError(await owner.get(R.task, { params: { ...params, taskId: forged } }), 404, 'eval_not_found');
+      expectError(await owner.get(R.task, { params: { ...params, taskId: `${forged}~${taskId.split('~')[1]}` } }), 404, 'eval_not_found');
+    });
+
+    await ctx.step('a member without project.file.read: suites and jobs → 200; tasks, a task, its file and its results → 403', async () => {
+      (await member.get(R.suites, { params })).status(200);
+      (await member.get(R.jobs, { params })).status(200);
+      (await member.get(R.tasks, { params, query: { suite: 'smoke' } })).status(403);
+      (await member.get(R.task, { params: { ...params, taskId } })).status(403);
+      (await member.get(R.taskFile, { params: { ...params, taskId }, query: { path: 'tests/test.sh' } })).status(403);
+      (await member.get(R.taskResults, { params: { ...params, taskId } })).status(403);
+    });
+
+    await ctx.step('the dataset catalog lists the built-in dataset first, with its kind and versions', async () => {
+      const body = (await owner.get(R.datasets, { params })).status(200).json<{ datasets: Array<{ name: string; kind: string; versions: string[] }>; registry_error: string | null }>();
+      const first = body.datasets[0];
+      if (first?.name !== 'kortix/my-kortix' || first.kind !== 'builtin' || first.versions.length !== 1) throw new Error(JSON.stringify(body.datasets.slice(0, 2)));
+    });
+
+    await ctx.step('dry_run → 200 with tasks, trials and the ignored-key warning; no job is created', async () => {
+      const plan = (await owner.post(R.jobs, { suite: 'smoke', dry_run: true, config: { agents: ['oracle'], jobs_dir: 'x' } }, { params })).status(200).json<{ n_tasks: number; n_trials: number; tasks: string[]; warnings: string[] }>();
+      if (plan.n_tasks !== 2 || plan.n_trials !== 4 || plan.tasks.join() !== 'alpha,beta' || !plan.warnings.some((w) => w.includes('jobs_dir'))) throw new Error(JSON.stringify(plan));
+      if ((await owner.get(R.jobs, { params })).json<{ total: number }>().total !== 0) throw new Error('a dry run created a job');
+    });
+
     await ctx.step('invalid starts → 422 eval_invalid with violations and no job: unknown suite, unknown agent, a path with no task', async () => {
       const unknownSuite = await owner.post(R.jobs, { suite: 'nope' }, { params });
       expectError(unknownSuite, 422, 'eval_invalid');
@@ -149,12 +208,82 @@ flow(
       if (names.length !== 8 || names[0] !== 'alpha__nop__1' || names[7] !== 'beta__oracle__2' || trials.some((t) => t.status !== 'queued')) throw new Error(JSON.stringify(names));
     });
 
+    await ctx.step('an Idempotency-Key replay → 200 with the same job; the key with another body → 409 eval_conflict', async () => {
+      const headers = { 'Idempotency-Key': `ke2e-${project.id}` };
+      const body = { suite: 'smoke', config: { agents: [{ name: 'nop' }], n_attempts: 1, job_name: 'idem' } };
+      const first = (await owner.post(R.jobs, body, { params, headers })).status(201).json<{ job: Job }>().job;
+      const replay = (await owner.post(R.jobs, body, { params, headers })).status(200).json<{ job: Job }>().job;
+      if (replay.job_id !== first.job_id) throw new Error(`${replay.job_id} != ${first.job_id}`);
+      expectError(await owner.post(R.jobs, { ...body, config: { ...body.config, n_attempts: 2 } }, { params, headers }), 409, 'eval_conflict');
+      (await owner.post(R.cancel, {}, { params: { ...params, jobId: first.job_id } })).status(200);
+    });
+
     await ctx.step('a config override layers over the suite: one agent, one attempt → 2 trials; the suite’s tasks stay', async () => {
       const small = (await owner.post(R.jobs, { suite: 'smoke', config: { agents: [{ name: 'oracle' }], n_attempts: 1, job_name: 'oracle-once' } }, { params })).status(201).json<{ job: Job }>().job;
       if (small.job_name !== 'oracle-once' || small.stats.n_total_trials !== 2) throw new Error(JSON.stringify(small));
       // The same name again gets a suffix, not a conflict.
       const again = (await owner.post(R.jobs, { suite: 'smoke', config: { agents: [{ name: 'oracle' }], n_attempts: 1, job_name: 'oracle-once' } }, { params })).status(201).json<{ job: Job }>().job;
       if (again.job_name !== 'oracle-once-2') throw new Error(again.job_name);
+    });
+
+    await ctx.step('job filters narrow the list and total counts them; pages walk every job once; a bad limit, status or cursor → 422', async () => {
+      const list = (query: Record<string, string>) => owner.get(R.jobs, { params, query });
+      const all = (await list({})).status(200).json<{ jobs: Job[]; total: number }>();
+      if (all.total !== 4 || all.jobs.length !== 4) throw new Error(`total ${all.total}`);
+      if ((await list({ q: 'oracle-once' })).json<{ total: number }>().total !== 2) throw new Error('q');
+      if ((await list({ agent: 'nop' })).json<{ total: number }>().total !== 2) throw new Error('agent');
+      if ((await list({ status: 'cancelled' })).json<{ total: number }>().total !== 1) throw new Error('status');
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      do {
+        const page: { jobs: Job[]; next_cursor: string | null } = (await list({ limit: '1', ...(cursor ? { cursor } : {}) })).status(200).json();
+        seen.push(...page.jobs.map((j) => j.job_id));
+        cursor = page.next_cursor;
+      } while (cursor);
+      if (seen.join() !== all.jobs.map((j) => j.job_id).join()) throw new Error(`paged ${seen.length} of ${all.jobs.length}`);
+      for (const query of [{ limit: 'abc' }, { limit: '0' }, { status: 'done' }, { cursor: 'bm9wZQ' }] as Array<Record<string, string>>) expectError(await list(query), 422, 'eval_invalid');
+    });
+
+    await ctx.step('compare two jobs task by task → one row per task; one job or an unknown job → 422 / 404', async () => {
+      const ids = (await owner.get(R.jobs, { params, query: { q: 'oracle-once' } })).json<{ jobs: Job[] }>().jobs.map((j) => j.job_id);
+      const result = (await owner.get(R.compare, { params, query: { jobs: ids.join(',') } })).status(200).json<{ by: string; rows: Array<{ task_name: string; cells: unknown[]; change: string }>; summary: { same: number } }>();
+      if (result.by !== 'task' || result.rows.map((r) => r.task_name).join() !== 'alpha,beta' || result.rows.some((r) => r.cells.length !== 2) || result.summary.same !== 2) throw new Error(JSON.stringify(result));
+      expectError(await owner.get(R.compare, { params, query: { jobs: ids[0]! } }), 422, 'eval_invalid');
+      expectError(await owner.get(R.compare, { params, query: { jobs: `${ids[0]},00000000-0000-4000-8000-000000000000` } }), 404, 'eval_not_found');
+    });
+
+    await ctx.step('one trial: retry while queued → 409; cancel → cancelled; retry → 201 a new run (retry 1) that replaces it', async () => {
+      const jobId = job!.job_id;
+      const trials = (await owner.get(R.trials, { params: { ...params, jobId } })).json<{ trials: Array<{ trial_id: string; trial_name: string }> }>().trials;
+      const first = trials.find((t) => t.trial_name === 'alpha__oracle__1')!;
+      const trialParams = { ...params, jobId, trialId: first.trial_id };
+      expectError(await owner.post(R.trialRetry, {}, { params: trialParams }), 409, 'eval_conflict');
+      const cancelled = (await owner.post(R.trialCancel, {}, { params: trialParams })).status(200).json<{ trial: { status: string } }>().trial;
+      if (cancelled.status !== 'cancelled') throw new Error(JSON.stringify(cancelled));
+      const retried = (await owner.post(R.trialRetry, {}, { params: trialParams })).status(201).json<{ trial: { trial_name: string; retry: number; status: string } }>().trial;
+      if (retried.trial_name !== 'alpha__oracle__1__r1' || retried.retry !== 1 || retried.status !== 'queued') throw new Error(JSON.stringify(retried));
+      const after = (await owner.get(R.job, { params: { ...params, jobId } })).json<{ job: Job & { stats: { n_retries: number } } }>().job;
+      if (after.stats.n_total_trials !== 8 || after.stats.n_retries !== 1) throw new Error(JSON.stringify(after.stats));
+    });
+
+    await ctx.step('a trial: the owner reads its instruction, a member without file read gets null; a file it never wrote or a ../ path → 404', async () => {
+      const jobId = job!.job_id;
+      const trialId = (await owner.get(R.trials, { params: { ...params, jobId } })).json<{ trials: Array<{ trial_id: string }> }>().trials[0]!.trial_id;
+      const trialParams = { ...params, jobId, trialId };
+      const mine = (await owner.get(R.trial, { params: trialParams })).status(200).json<{ trial: { task_id: string | null }; instruction: string | null }>();
+      if (!mine.instruction?.startsWith('Create /var/tmp/') || !mine.trial.task_id?.includes('~')) throw new Error(JSON.stringify(mine));
+      const theirs = (await member.get(R.trial, { params: trialParams })).status(200).json<{ instruction: string | null }>();
+      if (theirs.instruction !== null) throw new Error('a member without project.file.read read the instruction');
+      expectError(await owner.get(R.trialFile, { params: trialParams, query: { path: 'result.json' } }), 404, 'eval_not_found');
+      expectError(await owner.get(R.trialFile, { params: trialParams, query: { path: '../config.json' } }), 404, 'eval_not_found');
+    });
+
+    await ctx.step('an id that is no UUID → 404 eval_not_found on read, cancel, re-run, delete and a trial action', async () => {
+      expectError(await owner.get(R.job, { params: { ...params, jobId: 'nope' } }), 404, 'eval_not_found');
+      expectError(await owner.post(R.cancel, {}, { params: { ...params, jobId: 'nope' } }), 404, 'eval_not_found');
+      expectError(await owner.post(R.rerun, {}, { params: { ...params, jobId: 'nope' } }), 404, 'eval_not_found');
+      expectError(await owner.del(R.job, { params: { ...params, jobId: 'nope' } }), 404, 'eval_not_found');
+      expectError(await owner.post(R.trialCancel, {}, { params: { ...params, jobId: job!.job_id, trialId: 'nope' } }), 404, 'eval_not_found');
     });
 
     await ctx.step('delete of a queued job → 409 eval_conflict; cancel → cancelled, every trial cancelled', async () => {
@@ -165,6 +294,10 @@ flow(
     });
 
     await ctx.step('re-run all → a new queued job at the same commit with rerun_of set and the same 8 trials', async () => {
+      // A re-run of a job that has not ended is refused: the queued `idem`-free job above is still open.
+      const open = (await owner.post(R.jobs, { suite: 'smoke', config: { agents: [{ name: 'nop' }], n_attempts: 1 } }, { params })).status(201).json<{ job: Job }>().job;
+      expectError(await owner.post(R.rerun, { scope: 'all' }, { params: { ...params, jobId: open.job_id } }), 409, 'eval_conflict');
+      (await owner.post(R.cancel, {}, { params: { ...params, jobId: open.job_id } })).status(200);
       const next = (await owner.post(R.rerun, { scope: 'all' }, { params: { ...params, jobId: job!.job_id } })).status(201).json<{ job: Job }>().job;
       if (next.rerun_of !== job!.job_id || next.commit !== job!.commit || next.stats.n_total_trials !== 8 || next.status !== 'queued') throw new Error(JSON.stringify(next));
       (await owner.post(R.cancel, {}, { params: { ...params, jobId: next.job_id } })).status(200);

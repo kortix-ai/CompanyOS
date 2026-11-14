@@ -21,7 +21,7 @@
 import { randomUUID } from 'node:crypto';
 import { gatewayRequestLogs, projectSessions, sessionTurns } from '@kortix/db';
 import { EVAL_LIMITS, isEvalBuiltinAgent, type EvalException, type EvalJobConfig, type EvalRewards } from '@kortix/api-contract';
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { checkBillingAdmission } from '../../billing/services/billing-gate';
 import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { logger } from '../../lib/logger';
@@ -52,6 +52,7 @@ import {
   listTrials,
   refreshJobStats,
   setJobStatus,
+  startedByOf,
   updateTrial,
   type EvalJobRow,
   type EvalTrialRow,
@@ -86,6 +87,8 @@ interface RunState {
   workdir?: string | null;
   /** When the runner aborted the agent's turn for running past its timeout. */
   aborted_at?: string;
+  /** When the runner last read the session's token use. */
+  usage_at?: string;
 }
 
 const runState = (trial: EvalTrialRow): RunState => (trial.runState ?? {}) as RunState;
@@ -225,12 +228,17 @@ async function startTrial(ctx: TrialContext, trial: EvalTrialRow): Promise<void>
   if (!(await sessionExists(trial.sessionId!))) {
     const { task } = await loadTrialTask(ctx, trial);
     const builtin = isEvalBuiltinAgent(trial.agent);
+    // The session runs as whoever started the job: a service account stays one, and an agent's token makes the trial its child session.
+    const startedBy = startedByOf(ctx.job);
     const result = await createSession({
       source: EVAL_SESSION_SOURCE,
       project: ctx.project,
       userId: ctx.job.createdBy ?? ctx.project.accountId,
-      requestingPrincipalType: 'human',
-      inSession: false,
+      requestingPrincipalType: startedBy?.principal_type ?? 'human',
+      authType: startedBy?.auth_type ?? null,
+      apiKeyType: startedBy?.api_key_type ?? null,
+      inSession: startedBy?.in_session ?? false,
+      callerSessionId: startedBy?.caller_session_id ?? null,
       body: {
         session_id: trial.sessionId,
         name: `Eval: ${trial.taskName} · ${trial.agent}`.slice(0, 120),
@@ -249,7 +257,11 @@ async function startTrial(ctx: TrialContext, trial: EvalTrialRow): Promise<void>
       throw new EvalTrialError(result.error.status === 402 ? 'BillingBlockedError' : 'SessionCreateError', message);
     }
   }
-  await updateTrial(trial, { runState: { ...runState(trial), session_created: true } as Record<string, unknown> });
+  // A cancel that landed while the session was created: its sandbox stops now, not on the sweep.
+  if (!(await updateTrial(trial, { runState: { ...runState(trial), session_created: true } as Record<string, unknown> }))) {
+    const now = await getTrial(ctx.job.jobId, trial.trialId);
+    if (now?.status === 'cancelled') await stopTrialSandbox(ctx.job, trial.sessionId!);
+  }
 }
 
 /** starting → agent_running (or → verifying for `nop`), once the sandbox answers. */
@@ -469,18 +481,40 @@ async function awaitVerifier(ctx: TrialContext, trial: EvalTrialRow): Promise<vo
   return finishTrial(ctx, trial, rewards, box, failure ? toEvalException(failure, ctx.config.override_error_policy, ctx.now) : null);
 }
 
-async function sessionUsage(sessionId: string): Promise<Record<string, number> | null> {
+/** Token use and gateway cost of a session, from the gateway's request log (project first: the index leads with it). */
+async function sessionUsage(projectId: string, sessionId: string): Promise<Record<string, number> | null> {
   const [row] = await db
     .select({
       n_input_tokens: sql<number>`coalesce(sum(${gatewayRequestLogs.inputTokens}), 0)::float8`,
       n_output_tokens: sql<number>`coalesce(sum(${gatewayRequestLogs.outputTokens}), 0)::float8`,
-      n_cache_tokens: sql<number>`coalesce(sum(${gatewayRequestLogs.cachedTokens}), 0)::float8`,
+      n_cache_tokens: sql<number>`coalesce(sum(${gatewayRequestLogs.cachedTokens} + ${gatewayRequestLogs.cacheWriteTokens}), 0)::float8`,
+      cost_usd: sql<number | null>`sum(${gatewayRequestLogs.finalCost})::float8`,
       requests: sql<number>`count(*)::int`,
     })
     .from(gatewayRequestLogs)
-    .where(eq(gatewayRequestLogs.sessionId, sessionId));
+    .where(and(eq(gatewayRequestLogs.projectId, projectId), eq(gatewayRequestLogs.sessionId, sessionId)));
   if (!row || !row.requests) return null;
-  return { n_input_tokens: Number(row.n_input_tokens), n_output_tokens: Number(row.n_output_tokens), n_cache_tokens: Number(row.n_cache_tokens) };
+  // No `cost_usd` key when the gateway recorded no cost: the wire reads it as null.
+  return {
+    n_input_tokens: Number(row.n_input_tokens),
+    n_output_tokens: Number(row.n_output_tokens),
+    n_cache_tokens: Number(row.n_cache_tokens),
+    ...(row.cost_usd === null ? {} : { cost_usd: Number(row.cost_usd) }),
+  };
+}
+
+/** Token use is read again at most this often while the agent runs. */
+const LIVE_USAGE_MS = 30_000;
+
+/** While the agent runs, keep the trial's usage current, so a running job shows its tokens and cost. */
+async function refreshLiveUsage(ctx: TrialContext, trial: EvalTrialRow): Promise<EvalTrialRow> {
+  if (!trial.sessionId || isEvalBuiltinAgent(trial.agent)) return trial;
+  const at = runState(trial).usage_at;
+  if (at && ctx.now.getTime() - Date.parse(at) < LIVE_USAGE_MS) return trial;
+  const usage = await sessionUsage(ctx.job.projectId, trial.sessionId).catch(() => null);
+  const state = { ...runState(trial), usage_at: ctx.now.toISOString() } as Record<string, unknown>;
+  // The row's `updated_at` moves with the write; the status guard keeps a cancel in front.
+  return (await updateTrial(trial, { runState: state, ...(usage ? { usage } : {}) })) ? { ...trial, runState: state, ...(usage ? { usage } : {}) } : trial;
 }
 
 /** What the verifier and the oracle left in /logs, for the trial folder. */
@@ -504,7 +538,7 @@ async function finishTrial(ctx: TrialContext, trial: EvalTrialRow, rewards: Eval
   const exception = ((trial.exception as EvalException | null) ?? later) || null;
   // A reward counts when the verifier wrote one and no error says otherwise. Every error of the trial must allow it.
   const rewardValid = rewards !== null && [trial.exception as EvalException | null, later].every((e) => !e || e.policy.has_valid_reward);
-  const usage = trial.sessionId && !isEvalBuiltinAgent(trial.agent) ? await sessionUsage(trial.sessionId).catch(() => null) : null;
+  const usage = trial.sessionId && !isEvalBuiltinAgent(trial.agent) ? await sessionUsage(ctx.job.projectId, trial.sessionId).catch(() => null) : null;
   const logs = box ? await collectLogs(box).catch(() => []) : [];
   const finished: EvalTrialRow = {
     ...trial,
@@ -516,7 +550,6 @@ async function finishTrial(ctx: TrialContext, trial: EvalTrialRow, rewards: Eval
     verifierFinishedAt: trial.verifierStartedAt ? ctx.now : null,
     finishedAt: ctx.now,
   };
-  await writeTrialFolder(ctx, finished, logs).catch((err) => logger.warn('[evals] trial folder not written', { trial_id: trial.trialId, error: String(err) }));
   const written = await updateTrial(trial, {
     status: finished.status,
     rewards,
@@ -526,7 +559,9 @@ async function finishTrial(ctx: TrialContext, trial: EvalTrialRow, rewards: Eval
     verifierFinishedAt: finished.verifierFinishedAt,
     finishedAt: ctx.now,
   });
+  // Files follows the row: a cancel that won the write leaves no `completed` result.json behind.
   if (!written) return;
+  await writeTrialFolder(ctx, finished, logs).catch((err) => logger.warn('[evals] trial folder not written', { trial_id: trial.trialId, error: String(err) }));
   if (trial.sessionId && ctx.config.environment.delete) await stopTrialSandbox(ctx.job, trial.sessionId);
   if (exception && shouldRetry(exception, ctx.config.retry, trial.retry)) await insertRetry(trial);
 }
@@ -592,7 +627,7 @@ async function failTrial(ctx: TrialContext, stale: EvalTrialRow, err: unknown): 
 async function advanceTrial(ctx: TrialContext, trial: EvalTrialRow): Promise<void> {
   try {
     if (trial.status === 'starting') await awaitEnvironment(ctx, trial);
-    else if (trial.status === 'agent_running') await awaitAgent(ctx, trial);
+    else if (trial.status === 'agent_running') await awaitAgent(ctx, await refreshLiveUsage(ctx, trial));
     else if (trial.status === 'verifying') await awaitVerifier(ctx, trial);
   } catch (err) {
     await failTrial(ctx, trial, err).catch((inner) => logger.error('[evals] trial could not be ended', { trial_id: trial.trialId, error: String(inner) }));

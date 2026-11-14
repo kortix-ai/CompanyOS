@@ -24,6 +24,39 @@ file is how the system works and how to verify a change to it.
 `eval_jobs` / `eval_trials` are the index and the queue state; the job folder
 in Files is the content.
 
+## API rules (`routes/evals.ts`, `service.ts`)
+
+- **Who reads what.** Jobs, trials, stats and compare need project read.
+  Repository content — task lists, a task (`/tasks/{task_id}`), its files,
+  its results, a trial's `instruction` — also needs `project.file.read`
+  (a plain account member gets `403`, and `instruction: null`). Start,
+  cancel, rerun and a trial retry/cancel need `project.session.start`.
+- **Trial sessions run as the starter.** `eval_jobs.started_by` keeps the
+  principal type, token kind and the session a token acts from; the runner
+  creates every trial session with them. An agent's token makes each trial
+  that session's child.
+- **`task_id` is signed** (`task-id.ts`, HKDF of `API_KEY_SECRET`, bound to
+  the project). The API mints it only from a suite, a built-in or the
+  registry, so no client can make it fetch an arbitrary repository. The
+  fetched-repo cache keeps the 24 most recently read repos.
+- **Idempotency.** `POST /jobs`, `/rerun` and `/trials/{id}/retry` take
+  `Idempotency-Key`: a replay answers `200` with the first result, the key
+  with another body `409 eval_conflict` (`job_id` in the body).
+- **`verifier.env` values are redacted** (`<redacted>`) in every read and in
+  Files `config.json`. Do not put a secret there.
+- **Ids that are no UUID** answer `404 eval_not_found`. Bad `limit`,
+  `status` or `cursor` answer `422`.
+- **pass@k** is Harbor's unbiased estimator (`scoring.ts`), computed when
+  every reward value is 0 or 1 (any number of keys; a trial passes when
+  every key is 1). A graded value leaves it empty; the metric still scores.
+  Stats group by agent × model × source (`source` null for one source).
+- **Retry one trial** inside its job (`/trials/{id}/retry`): the trial must
+  have ended and be the last run of its attempt; an ended job reopens.
+  **Rerun** makes a new job and refuses a job that has not ended (`409`).
+- **Compare** (`GET /evals/compare?jobs=a,b[,…]&by=`) uses the last run of
+  each attempt; `change` is the last job against the first. The CLI
+  `compare` prints it.
+
 ## Trial lifecycle (runner.ts, one leader tick every 3 s busy / 15 s idle)
 
 `queued → starting` (session created; id stored first, so a lost create is
@@ -60,8 +93,9 @@ cancel that landed during session create).
    `kortix evals run smoke --wait`, `show`, `compare`, `trial … --file verifier/test-stdout.txt`.
 4. A change is proved when `oracle` scores 1 and `nop` 0 on every task,
    and a model agent's trial shows real token usage.
-5. REST contract: `pnpm test -- --id EVAL-1` (no sandbox; planning,
-   validation, cancel, rerun, delete).
+5. REST contract: `pnpm test -- --id EVAL-1` (no sandbox; planning, dry
+   run, idempotency, task pages and the file-read gate, filters and paging,
+   compare, trial cancel/retry, cancel, rerun, delete).
 
 ## The My Kortix benchmark
 

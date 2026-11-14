@@ -12,6 +12,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   cancelWorkspaceEvalJob,
+  cancelWorkspaceEvalTrial,
+  compareWorkspaceEvalJobs,
   deleteWorkspaceEvalJob,
   evalJobScore,
   evalTrialScore,
@@ -24,9 +26,10 @@ import {
   listWorkspaceEvalTrials,
   readWorkspaceEvalTrialFile,
   rerunWorkspaceEvalJob,
+  retryWorkspaceEvalTrial,
   startWorkspaceEvalJob,
 } from '@kortix/sdk';
-import type { WorkspaceEvalJob, WorkspaceEvalJobConfig, WorkspaceEvalTrial } from '@kortix/sdk';
+import type { WorkspaceEvalJob, WorkspaceEvalJobConfig, WorkspaceEvalJobFilters, WorkspaceEvalJobStatus, WorkspaceEvalTrial } from '@kortix/sdk';
 import type { Auth } from '../api/auth.ts';
 import { withCliErrors } from '../api/client.ts';
 import { splitHelp } from '../command-argv.ts';
@@ -49,7 +52,8 @@ Subcommands:
   tasks <suite> | --path <dir> | --dataset <name>[@<version>]
                         The tasks a suite selects, parsed. Lists what Kortix
                         cannot run, and why.
-  datasets              Datasets of the Harbor registry (terminal-bench, …).
+  datasets              Datasets a job can name: built-in (kortix/my-kortix)
+                        and the Harbor registry (terminal-bench, …).
   run <suite> [--agent <name>[@<provider/model>]]... [--attempts <n>]
         [--concurrency <n>] [--task <glob>]... [--ref <branch|sha>] [--wait]
                         Start a job. Flags override the suite's fields.
@@ -62,14 +66,23 @@ Subcommands:
                         Start a job on a dataset by name: a built-in one
                         (kortix/my-kortix) or one of the Harbor registry
                         (terminal-bench@2.0).
-  jobs [<suite>]        Jobs, newest first, with their scores.
+  jobs [<suite>] [--status <s>] [--dataset <name>] [--agent <name>]
+        [--model <id>] [-q <text>]
+                        Jobs, newest first, with their scores. Filters narrow
+                        the list; the count of every match is printed.
   show <job_id>         One job: score per agent and model, then every trial.
   watch <job_id>        Print trial progress until the job ends.
   trial <job_id> <trial_id> [--file <path>]
                         One trial: reward, error, timings, the instruction and
                         its files. --file prints one file (verifier/test-stdout.txt).
-  compare <job_a> <job_b>
-                        Task by task: which passed in A and B, and the change.
+  trial retry <job_id> <trial_id>
+                        Run one ended trial again inside its job; the new run
+                        replaces it in every score.
+  trial cancel <job_id> <trial_id>
+                        Stop one queued or running trial; the job runs on.
+  compare <job_a> <job_b> [<job_c>...] [--by task|task_agent_model]
+                        Task by task: the pass rate in each job, and the change
+                        from the first job to the last.
   rerun <job_id> [--failed | --errored]
                         A new job with the trials of this one (all, the failed
                         ones, or the errored ones), at the same commit.
@@ -226,28 +239,46 @@ async function listTasks(ctx: Ctx, suite: string | undefined, path: string | und
 }
 
 async function listDatasets(ctx: Ctx): Promise<number> {
-  const datasets = await sdk(ctx, () => listWorkspaceEvalDatasets(ctx.projectId));
-  if (ctx.json) return (emitJson({ datasets }), 0);
+  const catalog = await sdk(ctx, () => listWorkspaceEvalDatasets(ctx.projectId));
+  if (ctx.json) return (emitJson(catalog), 0);
+  const { datasets } = catalog;
   const w = Math.max(7, ...datasets.map((d) => `${d.name}@${d.version}`.length));
-  process.stdout.write(`\n  ${C.dim}${pad('DATASET', w)}  ${pad('TASKS', 6)}  DESCRIPTION${C.reset}\n`);
-  for (const d of datasets) process.stdout.write(`  ${pad(`${d.name}@${d.version}`, w)}  ${pad(String(d.n_tasks), 6)}  ${d.description.slice(0, 80)}\n`);
+  process.stdout.write(`\n  ${C.dim}${pad('DATASET', w)}  ${pad('KIND', 8)}  ${pad('TASKS', 6)}  DESCRIPTION${C.reset}\n`);
+  for (const d of datasets) process.stdout.write(`  ${pad(`${d.name}@${d.version}`, w)}  ${pad(d.kind, 8)}  ${pad(d.n_tasks === null ? '—' : String(d.n_tasks), 6)}  ${d.description.slice(0, 80)}\n`);
+  if (catalog.registry_error) process.stdout.write(`\n  ${C.red}The Harbor registry is not listed: ${catalog.registry_error}${C.reset}\n`);
   process.stdout.write(`\n  ${C.dim}Use one in a suite: datasets: [{ name: terminal-bench, version: "2.0", n_tasks: 5 }]${C.reset}\n\n`);
   return 0;
 }
 
-async function listJobs(ctx: Ctx, suite: string | undefined): Promise<number> {
-  const { jobs } = await sdk(ctx, () => listWorkspaceEvalJobs(ctx.projectId, { suite, limit: 50 }));
-  if (ctx.json) return (emitJson({ jobs }), 0);
+async function listJobs(ctx: Ctx, filters: WorkspaceEvalJobFilters): Promise<number> {
+  const { jobs, total } = await sdk(ctx, () => listWorkspaceEvalJobs(ctx.projectId, { ...filters, limit: 50 }));
+  if (ctx.json) return (emitJson({ jobs, total }), 0);
   if (!jobs.length) {
-    process.stdout.write(`  ${C.dim}No jobs yet. Start one: kortix evals run <suite>${C.reset}\n`);
+    const filtered = Object.values(filters).some(Boolean);
+    process.stdout.write(`  ${C.dim}${filtered ? 'No job matches.' : 'No jobs yet. Start one: kortix evals run <suite>'}${C.reset}\n`);
     return 0;
   }
   process.stdout.write(`\n  ${C.dim}${pad('JOB', 8)}  ${pad('NAME', 40)}  ${pad('STATUS', 10)}  ${pad('TRIALS', 7)}  ${pad('COMMIT', 7)}  SCORE${C.reset}\n`);
   for (const job of jobs) {
     process.stdout.write(`  ${short(job.job_id)}  ${pad(job.job_name.slice(0, 40), 40)}  ${statusColor(job.status)}${pad(job.status, 10)}${C.reset}  ${pad(String(job.stats.n_total_trials), 7)}  ${pad(job.commit?.slice(0, 7) ?? '—', 7)}  ${scoreLine(job)}\n`);
   }
-  process.stdout.write('\n');
+  process.stdout.write(`\n  ${C.dim}${jobs.length} of ${total} job(s)${C.reset}\n\n`);
   return 0;
+}
+
+const JOB_STATUSES: readonly WorkspaceEvalJobStatus[] = ['queued', 'running', 'completed', 'cancelled'];
+
+function jobFilterFlags(rest: string[]): WorkspaceEvalJobFilters | string {
+  const status = takeFlagValue(rest, ['--status']);
+  if (status && !(JOB_STATUSES as readonly string[]).includes(status)) return `--status is one of ${JOB_STATUSES.join(', ')}.`;
+  return {
+    status: status as WorkspaceEvalJobStatus | undefined,
+    dataset: takeFlagValue(rest, ['--dataset', '-d']),
+    agent: takeFlagValue(rest, ['--agent']),
+    model: takeFlagValue(rest, ['--model']),
+    q: takeFlagValue(rest, ['-q', '--query']),
+    suite: rest[0] && !rest[0].startsWith('-') ? rest[0] : undefined,
+  };
 }
 
 /** A job id, or a prefix of one of the 50 newest jobs. */
@@ -286,16 +317,32 @@ async function showJob(ctx: Ctx, id: string | undefined): Promise<number> {
   return 0;
 }
 
+/** A trial id, or a prefix or name of a trial of the job. */
+async function resolveTrialId(ctx: Ctx, jobId: string, trialArg: string | undefined): Promise<string> {
+  if (!trialArg) throw new Error('Name a trial: its id, the first 8 characters of it, or its name (kortix evals show <job_id>).');
+  if (/^[0-9a-f-]{36}$/i.test(trialArg)) return trialArg;
+  const trials = await sdk(ctx, () => listWorkspaceEvalTrials(ctx.projectId, jobId));
+  const match = trials.filter((t) => t.trial_id.startsWith(trialArg) || t.trial_name === trialArg);
+  if (match.length !== 1) throw new Error(`"${trialArg}" matches ${match.length} trials of this job.`);
+  return match[0]!.trial_id;
+}
+
+async function trialAction(ctx: Ctx, action: 'retry' | 'cancel', jobArg: string | undefined, trialArg: string | undefined): Promise<number> {
+  const jobId = await resolveJobId(ctx, jobArg);
+  const trialId = await resolveTrialId(ctx, jobId, trialArg);
+  const trial = await sdk(ctx, () => (action === 'retry' ? retryWorkspaceEvalTrial(ctx.projectId, jobId, trialId) : cancelWorkspaceEvalTrial(ctx.projectId, jobId, trialId)));
+  if (ctx.json) return (emitJson({ trial }), 0);
+  process.stdout.write(
+    action === 'retry'
+      ? `  Queued ${C.bold}${trial.trial_name}${C.reset} (retry ${trial.retry}) in job ${short(jobId)}. Follow it: kortix evals watch ${short(jobId)}\n`
+      : `  ${trial.trial_name}: ${trial.status}\n`,
+  );
+  return 0;
+}
+
 async function showTrial(ctx: Ctx, jobArg: string | undefined, trialArg: string | undefined, file: string | undefined): Promise<number> {
   const jobId = await resolveJobId(ctx, jobArg);
-  if (!trialArg) return fail('Name a trial: kortix evals trial <job_id> <trial_id>.');
-  let trialId = trialArg;
-  if (!/^[0-9a-f-]{36}$/i.test(trialArg)) {
-    const trials = await sdk(ctx, () => listWorkspaceEvalTrials(ctx.projectId, jobId));
-    const match = trials.filter((t) => t.trial_id.startsWith(trialArg) || t.trial_name === trialArg);
-    if (match.length !== 1) return fail(`"${trialArg}" matches ${match.length} trials of this job.`);
-    trialId = match[0]!.trial_id;
-  }
+  const trialId = await resolveTrialId(ctx, jobId, trialArg);
   if (file) {
     process.stdout.write(await sdk(ctx, () => readWorkspaceEvalTrialFile(ctx.projectId, jobId, trialId, file)));
     return 0;
@@ -308,7 +355,8 @@ async function showTrial(ctx: Ctx, jobArg: string | undefined, trialArg: string 
   if (t.exception) process.stdout.write(`  ${C.red}${t.exception.exception_type}: ${t.exception.exception_message}${C.reset}\n  ${C.dim}policy: retry ${t.exception.policy.should_retry}, graded ${t.exception.policy.should_grade}, reward counts ${t.exception.policy.has_valid_reward}${C.reset}\n`);
   const secs = (timing: { started_at: string | null; finished_at: string | null }) =>
     timing.started_at && timing.finished_at ? `${Math.round((Date.parse(timing.finished_at) - Date.parse(timing.started_at)) / 100) / 10} s` : '—';
-  process.stdout.write(`  ${C.dim}sandbox ${secs(t.environment_setup)} · agent ${secs(t.agent_execution)} · verifier ${secs(t.verifier)}${t.usage ? ` · tokens in ${t.usage.n_input_tokens} out ${t.usage.n_output_tokens}` : ''}${C.reset}\n`);
+  const cost = t.usage?.cost_usd != null ? ` · $${t.usage.cost_usd.toFixed(4)}` : '';
+  process.stdout.write(`  ${C.dim}sandbox ${secs(t.environment_setup)} · agent ${secs(t.agent_execution)} · verifier ${secs(t.verifier)}${t.usage ? ` · tokens in ${t.usage.n_input_tokens} out ${t.usage.n_output_tokens}${cost}` : ''}${C.reset}\n`);
   if (detail.instruction) process.stdout.write(`\n  ${C.dim}Instruction:${C.reset}\n${detail.instruction.replace(/^/gm, '    ')}\n`);
   if (detail.files.length) {
     process.stdout.write(`\n  ${C.dim}Files (kortix evals trial ${short(jobId)} ${short(t.trial_id)} --file <path>):${C.reset}\n`);
@@ -320,60 +368,27 @@ async function showTrial(ctx: Ctx, jobArg: string | undefined, trialArg: string 
 
 // ── compare ──────────────────────────────────────────────────────────────────
 
-/**
- * Per task × agent: pass share across attempts (the last run of each attempt
- * counts). `byTaskOnly`: the key is the task alone, to compare two jobs that
- * each ran one agent × model (another agent, another model, or the same one
- * after a change).
- */
-function passByTask(trials: WorkspaceEvalTrial[], byTaskOnly: boolean): Map<string, { passed: number; total: number }> {
-  const last = new Map<string, WorkspaceEvalTrial>();
-  for (const t of trials) {
-    const key = `${t.task_name}\u0000${t.agent}\u0000${t.attempt}`;
-    if (!last.has(key) || last.get(key)!.retry < t.retry) last.set(key, t);
+/** The API compares (`GET /evals/compare`): one row per task (per task × agent × model when a job ran several), first job against last. */
+async function compareJobs(ctx: Ctx, args: string[], by: string | undefined): Promise<number> {
+  if (args.length < 2) return fail('Name two or more jobs: kortix evals compare <job_a> <job_b> [<job_c>...].');
+  if (by && by !== 'task' && by !== 'task_agent_model') return fail('--by is task or task_agent_model.');
+  const ids: string[] = [];
+  for (const arg of args) ids.push(await resolveJobId(ctx, arg));
+  const result = await sdk(ctx, () => compareWorkspaceEvalJobs(ctx.projectId, ids, by ? { by: by as 'task' | 'task_agent_model' } : undefined));
+  if (ctx.json) return (emitJson(result), 0);
+  const letter = (i: number) => String.fromCharCode(65 + i);
+  process.stdout.write('\n');
+  result.jobs.forEach((job, i) => process.stdout.write(`  ${letter(i)} ${C.bold}${job.job_name}${C.reset} ${C.dim}(${job.commit?.slice(0, 7) ?? '—'})${C.reset}  ${scoreLine(job)}\n`));
+  const label = (row: (typeof result.rows)[number]) => (row.agent ? `${row.task_name} · ${row.agent}${row.model ? ` @ ${row.model}` : ''}` : row.task_name);
+  const w = Math.max(4, ...result.rows.map((row) => label(row).length));
+  process.stdout.write(`\n  ${C.dim}${pad('TASK', w)}  ${result.jobs.map((_, i) => pad(letter(i), 7)).join('  ')}  CHANGE${C.reset}\n`);
+  for (const row of result.rows) {
+    const color = row.change === 'better' ? C.green : row.change === 'worse' ? C.red : C.dim;
+    const cells = row.cells.map((cell) => pad(cell.pass_rate === null ? (cell.exception_type ? 'error' : '—') : percent(cell.pass_rate), 7)).join('  ');
+    process.stdout.write(`  ${pad(label(row), w)}  ${cells}  ${color}${row.change === 'only_one' ? 'only in one' : row.change}${C.reset}\n`);
   }
-  const out = new Map<string, { passed: number; total: number }>();
-  for (const t of last.values()) {
-    if (t.status === 'cancelled') continue;
-    const key = byTaskOnly ? t.task_name : `${t.task_name} · ${t.agent}`;
-    const cell = out.get(key) ?? { passed: 0, total: 0 };
-    cell.total += 1;
-    if (evalTrialScore(t).passed) cell.passed += 1;
-    out.set(key, cell);
-  }
-  return out;
-}
-
-async function compareJobs(ctx: Ctx, a: string | undefined, b: string | undefined): Promise<number> {
-  const [idA, idB] = [await resolveJobId(ctx, a), await resolveJobId(ctx, b)];
-  const [jobA, jobB, trialsA, trialsB] = await Promise.all([
-    sdk(ctx, () => getWorkspaceEvalJob(ctx.projectId, idA)),
-    sdk(ctx, () => getWorkspaceEvalJob(ctx.projectId, idB)),
-    sdk(ctx, () => listWorkspaceEvalTrials(ctx.projectId, idA)),
-    sdk(ctx, () => listWorkspaceEvalTrials(ctx.projectId, idB)),
-  ]);
-  const single = (trials: WorkspaceEvalTrial[]) => new Set(trials.map((t) => `${t.agent}\u0000${t.model ?? ''}`)).size === 1;
-  const byTaskOnly = single(trialsA) && single(trialsB);
-  const [mapA, mapB] = [passByTask(trialsA, byTaskOnly), passByTask(trialsB, byTaskOnly)];
-  const keys = [...new Set([...mapA.keys(), ...mapB.keys()])].sort();
-  const rows = keys.map((key) => {
-    const ra = mapA.get(key);
-    const rb = mapB.get(key);
-    const pa = ra ? ra.passed / ra.total : null;
-    const pb = rb ? rb.passed / rb.total : null;
-    return { task: key, a: pa, b: pb, change: pa !== null && pb !== null ? (pb > pa ? 'better' : pb < pa ? 'worse' : 'same') : 'only in one' };
-  });
-  const agentsOf = (trials: WorkspaceEvalTrial[]) => [...new Set(trials.map((t) => (t.model ? `${t.agent} @ ${t.model}` : t.agent)))].join(', ');
-  const summary = { better: rows.filter((r) => r.change === 'better').length, worse: rows.filter((r) => r.change === 'worse').length, same: rows.filter((r) => r.change === 'same').length };
-  if (ctx.json) return (emitJson({ a: jobA, b: jobB, rows, summary }), 0);
-  process.stdout.write(`\n  A ${C.bold}${jobA.job_name}${C.reset} ${C.dim}(${jobA.commit?.slice(0, 7) ?? '—'} · ${agentsOf(trialsA)})${C.reset}  ${scoreLine(jobA)}\n  B ${C.bold}${jobB.job_name}${C.reset} ${C.dim}(${jobB.commit?.slice(0, 7) ?? '—'} · ${agentsOf(trialsB)})${C.reset}  ${scoreLine(jobB)}\n\n`);
-  const w = Math.max(4, ...rows.map((r) => r.task.length));
-  process.stdout.write(`  ${C.dim}${pad('TASK', w)}  ${pad('A', 7)}  ${pad('B', 7)}  CHANGE${C.reset}\n`);
-  for (const r of rows) {
-    const color = r.change === 'better' ? C.green : r.change === 'worse' ? C.red : C.dim;
-    process.stdout.write(`  ${pad(r.task, w)}  ${pad(percent(r.a), 7)}  ${pad(percent(r.b), 7)}  ${color}${r.change}${C.reset}\n`);
-  }
-  process.stdout.write(`\n  ${C.green}${summary.better} better${C.reset} · ${C.red}${summary.worse} worse${C.reset} · ${summary.same} same\n\n`);
+  const { better, worse, same, only_one } = result.summary;
+  process.stdout.write(`\n  ${C.green}${better} better${C.reset} · ${C.red}${worse} worse${C.reset} · ${same} same${only_one ? ` · ${only_one} only in one` : ''}\n\n`);
   return 0;
 }
 
@@ -624,18 +639,23 @@ export async function runEvals(argv: string[]): Promise<number> {
         return await runJob(ctx, suite, rest);
       }
       case 'jobs':
-      case 'ls':
-        return await listJobs(ctx, rest[0]);
+      case 'ls': {
+        const filters = jobFilterFlags(rest);
+        return typeof filters === 'string' ? fail(filters) : await listJobs(ctx, filters);
+      }
       case 'show':
         return await showJob(ctx, rest[0]);
       case 'watch':
         return await watchJob(ctx, await resolveJobId(ctx, rest[0]));
       case 'trial': {
+        if (rest[0] === 'retry' || rest[0] === 'cancel') return await trialAction(ctx, rest[0], rest[1], rest[2]);
         const file = takeFlagValue(rest, ['--file']);
         return await showTrial(ctx, rest[0], rest[1], file);
       }
-      case 'compare':
-        return await compareJobs(ctx, rest[0], rest[1]);
+      case 'compare': {
+        const by = takeFlagValue(rest, ['--by']);
+        return await compareJobs(ctx, rest.filter((arg) => !arg.startsWith('-')), by);
+      }
       case 'rerun': {
         const id = rest.shift();
         return await rerunJob(ctx, id, rest);

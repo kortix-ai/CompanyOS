@@ -10,21 +10,21 @@
  * and `cat-file`. Each process keeps its own copy; a missing one is fetched again.
  */
 import { createHash } from 'node:crypto';
-import { mkdir, rm, stat } from 'node:fs/promises';
+import { mkdir, readdir, rm, stat, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { EVAL_LIMITS, type EvalTaskSource } from '@kortix/api-contract';
 import { RELEASE_COMMIT } from '../../config';
 import { ttlMemo } from '../../shared/ttl-memo';
-import { listRepoFiles, readRepoFileBytes, type GitBackedProject } from '../git';
+import { listRepoDirectory, listRepoFiles, readRepoFileBytes, type GitBackedProject } from '../git';
 import { runGit, runGitBuffer } from '../git/mirror';
 import { HarborTaskError, parseHarborTask, taskNameMatches, type HarborTask } from './harbor-task';
 import { EvalTrialError } from './scoring';
 
 /** Stored on a trial (`eval_trials.task_ref`): where its task is. */
 export type EvalTaskRef =
-  | { kind: 'repo'; path: string }
-  | { kind: 'git'; git_url: string; commit: string; path: string };
+  | { kind: 'repo'; path: string; source?: string }
+  | { kind: 'git'; git_url: string; commit: string; path: string; source?: string };
 
 export const taskRefLabel = (ref: EvalTaskRef): string =>
   ref.kind === 'repo' ? ref.path : `${ref.git_url.replace(/^https:\/\//, '').replace(/\.git$/, '')}@${ref.commit.slice(0, 7)}:${ref.path}`;
@@ -39,6 +39,8 @@ export interface TaskFile {
 export interface TaskTree {
   /** Every file path under `path` (all files when empty). */
   list(path: string): Promise<string[]>;
+  /** Every file under `path` with its size in bytes. */
+  listSized(path: string): Promise<Array<{ path: string; size: number }>>;
   read(path: string): Promise<Uint8Array<ArrayBuffer>>;
 }
 
@@ -49,6 +51,20 @@ export function projectTree(project: GitBackedProject, commit: string): TaskTree
   return {
     async list(path) {
       return (await listRepoFiles(project, commit, path || null)).map((entry) => entry.path);
+    },
+    async listSized(path) {
+      // One level at a time: the directory listing carries blob sizes. A blob the store has not fetched has none (0).
+      const out: Array<{ path: string; size: number }> = [];
+      const folders = [path];
+      while (folders.length && out.length < 2_000) {
+        const folder = folders.shift()!;
+        const { entries } = await listRepoDirectory(project, commit, folder || null, { limit: 2_000 });
+        for (const entry of entries) {
+          if (entry.type === 'directory') folders.push(entry.path);
+          else out.push({ path: entry.path, size: entry.size ?? 0 });
+        }
+      }
+      return out;
     },
     async read(path) {
       const bytes = await readRepoFileBytes(project, path, commit);
@@ -84,12 +100,32 @@ const checkedCommit = (commit: string): string => {
 // replica-local: in-flight fetches of this process, so two trials of one dataset share one `git fetch`.
 const fetching = new Map<string, Promise<string>>();
 
+const GIT_CACHE = join(tmpdir(), 'kortix-evals-git');
+/** Fetched repositories kept on disk per process; the least recently read go first. */
+const GIT_CACHE_MAX = 24;
+
+/** Keep the `GIT_CACHE_MAX` most recently read repositories, delete the rest. */
+async function evictGitCache(keep: string): Promise<void> {
+  const names = await readdir(GIT_CACHE).catch(() => [] as string[]);
+  if (names.length <= GIT_CACHE_MAX) return;
+  const aged = await Promise.all(
+    names.map(async (name) => ({ dir: join(GIT_CACHE, name), at: await stat(join(GIT_CACHE, name, 'kortix-fetched')).then((info) => info.mtimeMs, () => 0) })),
+  );
+  const old = aged.filter((entry) => entry.dir !== keep && !fetching.has(entry.dir)).sort((a, b) => a.at - b.at);
+  await Promise.all(old.slice(0, names.length - GIT_CACHE_MAX).map((entry) => rm(entry.dir, { recursive: true, force: true })));
+}
+
 async function fetchedRepo(gitUrl: string, commit: string): Promise<string> {
   const url = checkedGitUrl(gitUrl);
   const sha = checkedCommit(commit);
-  const dir = join(tmpdir(), 'kortix-evals-git', createHash('sha256').update(`${url}\n${sha}`).digest('hex').slice(0, 32));
+  const dir = join(GIT_CACHE, createHash('sha256').update(`${url}\n${sha}`).digest('hex').slice(0, 32));
   const ready = join(dir, 'kortix-fetched');
-  if (await stat(ready).then(() => true, () => false)) return dir;
+  if (await stat(ready).then(() => true, () => false)) {
+    // The marker's mtime is the last read, for eviction.
+    const now = new Date();
+    await utimes(ready, now, now).catch(() => undefined);
+    return dir;
+  }
   const inFlight = fetching.get(dir);
   if (inFlight) return inFlight;
   const run = (async () => {
@@ -99,6 +135,7 @@ async function fetchedRepo(gitUrl: string, commit: string): Promise<string> {
       await runGit(['init', '--bare', '--quiet'], dir, false);
       await runGit(['fetch', '--quiet', '--depth', '1', url, sha], dir, false, null, undefined, 'github.com', GIT_FETCH_TIMEOUT_MS);
       await Bun.write(ready, sha);
+      await evictGitCache(dir).catch(() => undefined);
     } catch (err) {
       await rm(dir, { recursive: true, force: true });
       throw new EvalTrialError('TaskLoadError', `Could not fetch ${url} at ${sha.slice(0, 7)}: ${err instanceof Error ? err.message.slice(0, 300) : String(err)}`);
@@ -118,6 +155,18 @@ export function gitTree(gitUrl: string, commit: string): TaskTree {
       if (path) args.push(path);
       const { stdout } = await runGit(args, dir, false);
       return stdout.split('\0').filter(Boolean);
+    },
+    async listSized(path) {
+      const dir = await fetchedRepo(gitUrl, sha);
+      const args = ['ls-tree', '-r', '-z', '-l', sha, '--'];
+      if (path) args.push(path);
+      const { stdout } = await runGit(args, dir, false);
+      // `<mode> <type> <object> <size>\t<path>`
+      return stdout.split('\0').filter(Boolean).flatMap((line) => {
+        const tab = line.indexOf('\t');
+        const size = Number(line.slice(0, tab).trim().split(/\s+/)[3]);
+        return tab > 0 ? [{ path: line.slice(tab + 1), size: Number.isFinite(size) ? size : 0 }] : [];
+      });
     },
     async read(path) {
       const dir = await fetchedRepo(gitUrl, sha);
@@ -291,42 +340,87 @@ export function builtinDatasetSource(name: string, version?: string | null): { g
   return { git_url: KORTIX_REPO, git_commit_id: version || builtinDatasetRef(), path: dataset.path };
 }
 
-/** Task folders (`task.toml`) in a built-in dataset at the ref it reads, cached 10 minutes. */
-const countBuiltinTasks = ttlMemo<[string], number>({
-  ttlMs: 10 * 60_000,
-  keyFn: (name) => `${name}@${builtinDatasetRef()}`,
-  loader: async (name) => {
-    const source = builtinDatasetSource(name);
-    const sha = await resolveGitRef(source.git_url, source.git_commit_id);
-    const paths = await gitTree(source.git_url, sha).list(source.path);
-    return paths.filter((path) => path.endsWith('/task.toml')).length;
-  },
-});
+// replica-local: task counts of built-in datasets by `name@ref`, filled when a count finishes (null: the folder is not at that ref).
+const builtinCounts = new Map<string, number | null>();
+// replica-local: counts in flight, so a burst of catalog reads starts one fetch.
+const counting = new Map<string, Promise<void>>();
 
-export interface RegistryDatasetSummary {
-  name: string;
-  version: string;
-  description: string;
-  n_tasks: number;
+/** Count a built-in dataset's tasks in the background; the catalog shows null until the count lands. */
+function builtinTaskCount(name: string): number | null {
+  const key = `${name}@${builtinDatasetRef()}`;
+  if (builtinCounts.has(key)) return builtinCounts.get(key) ?? null;
+  if (!counting.has(key)) {
+    const run = (async () => {
+      const source = builtinDatasetSource(name);
+      const sha = await resolveGitRef(source.git_url, source.git_commit_id);
+      const paths = await gitTree(source.git_url, sha).list(source.path);
+      const count = paths.filter((path) => path.endsWith('/task.toml')).length;
+      // No task at the ref (the folder ships with a later commit): unknown, never 0.
+      builtinCounts.set(key, count > 0 ? count : null);
+    })()
+      .catch(() => undefined)
+      .finally(() => counting.delete(key));
+    counting.set(key, run);
+  }
+  return null;
 }
 
-export async function listRegistryDatasets(): Promise<RegistryDatasetSummary[]> {
-  const builtins = await Promise.all(
-    Object.entries(BUILTIN_DATASETS).map(async ([name, dataset]) => ({
+/** Record a built-in dataset's task count from a task list read at the ref the catalog uses. */
+export function rememberBuiltinTaskCount(name: string, version: string | null | undefined, count: number): void {
+  if ((!version || version === builtinDatasetRef()) && count > 0) builtinCounts.set(`${name}@${builtinDatasetRef()}`, count);
+}
+
+export interface EvalDatasetSummary {
+  name: string;
+  version: string;
+  versions: string[];
+  kind: 'builtin' | 'registry';
+  description: string;
+  n_tasks: number | null;
+}
+
+/**
+ * The datasets a job can name: Kortix's built-in datasets first, then the
+ * Harbor registry, one row per dataset with its versions newest first. No
+ * dataset is read: a built-in dataset's task count is null until a background
+ * count lands. A registry that does not answer leaves `registry_error`.
+ */
+export async function listEvalDatasets(): Promise<{ datasets: EvalDatasetSummary[]; registry_error: string | null }> {
+  const builtins: EvalDatasetSummary[] = Object.entries(BUILTIN_DATASETS).map(([name, dataset]) => ({
+    name,
+    version: builtinDatasetRef(),
+    versions: [builtinDatasetRef()],
+    kind: 'builtin',
+    description: dataset.description,
+    n_tasks: builtinTaskCount(name),
+  }));
+  let registry: RegistryDataset[] = [];
+  let registryError: string | null = null;
+  try {
+    registry = await loadRegistry();
+  } catch (err) {
+    registryError = err instanceof Error ? err.message : String(err);
+  }
+  // The registry lists versions oldest first; a job without one runs the last.
+  const byName = new Map<string, RegistryDataset[]>();
+  for (const dataset of registry) byName.set(dataset.name, [...(byName.get(dataset.name) ?? []), dataset]);
+  const listed: EvalDatasetSummary[] = [...byName.entries()].map(([name, versions]) => {
+    const latest = versions[versions.length - 1]!;
+    return {
       name,
-      version: builtinDatasetRef(),
-      description: dataset.description,
-      n_tasks: await countBuiltinTasks(name).catch(() => 0),
-    })),
-  );
-  // A Harbor registry that does not answer leaves the built-in datasets listed.
-  const registry = await loadRegistry().catch(() => [] as RegistryDataset[]);
-  return [...builtins, ...registry.map((dataset) => ({
-    name: dataset.name,
-    version: String(dataset.version),
-    description: dataset.description ?? '',
-    n_tasks: dataset.tasks.length,
-  }))];
+      version: String(latest.version),
+      versions: versions.map((entry) => String(entry.version)).reverse(),
+      kind: 'registry',
+      description: latest.description ?? '',
+      n_tasks: Array.isArray(latest.tasks) ? latest.tasks.length : null,
+    };
+  });
+  return { datasets: [...builtins, ...listed], registry_error: registryError };
+}
+
+/** How many tasks a registry dataset has, without reading any of them. */
+export async function registryTaskCount(name: string, version: string | null | undefined): Promise<number> {
+  return (await registryTaskRefs(name, version)).length;
 }
 
 /** The task refs of one registry dataset. No version: the last one the registry lists. */

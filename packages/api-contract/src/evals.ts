@@ -182,7 +182,8 @@ export const EvalTaskSchema = z.object({
 export type EvalTask = z.infer<typeof EvalTaskSchema>;
 
 /** One file of a task folder. */
-export const EvalTaskFileSchema = z.object({ path: z.string(), size: z.number().nullable() });
+/** One file of a task folder: its path relative to the folder and its size in bytes. */
+export const EvalTaskFileSchema = z.object({ path: z.string(), size: z.number() });
 
 export const EvalTaskDetailResponseSchema = z.object({
   task: EvalTaskSchema,
@@ -195,7 +196,7 @@ export const EvalTaskDetailResponseSchema = z.object({
 });
 export type EvalTaskDetailResponse = z.infer<typeof EvalTaskDetailResponseSchema>;
 
-/** A trial of this task in some job: its result and the job it belongs to. */
+/** The last run of one attempt of this task in some job: its result and the job it belongs to. */
 export const EvalTaskResultSchema = z.object({
   job_id: z.string(),
   job_name: z.string(),
@@ -203,13 +204,64 @@ export const EvalTaskResultSchema = z.object({
   agent: z.string(),
   model: z.string().nullable(),
   attempt: z.number().int(),
-  status: z.string(),
+  status: z.enum([
+    'queued',
+    'starting',
+    'agent_running',
+    'verifying',
+    'completed',
+    'errored',
+    'cancelled',
+  ]),
   rewards: z.record(z.string(), z.number()).nullable(),
   reward_valid: z.boolean(),
   exception_type: z.string().nullable(),
   finished_at: z.string().nullable(),
 });
 export type EvalTaskResult = z.infer<typeof EvalTaskResultSchema>;
+
+/** One agent × model on one task, over every ended attempt the results hold. */
+export const EvalTaskResultSummarySchema = z.object({
+  agent: z.string(),
+  model: z.string().nullable(),
+  /** Ended attempts whose reward counts. */
+  n: z.number().int(),
+  /** Of those, attempts with every reward at 1 or above. */
+  n_passed: z.number().int(),
+  /** Mean of the first reward key over the counted attempts; null with none. */
+  mean_reward: z.number().nullable(),
+});
+export type EvalTaskResultSummary = z.infer<typeof EvalTaskResultSummarySchema>;
+
+export const EvalTaskResultsResponseSchema = z.object({
+  results: z.array(EvalTaskResultSchema),
+  summary: z.array(EvalTaskResultSummarySchema),
+});
+export type EvalTaskResultsResponse = z.infer<typeof EvalTaskResultsResponseSchema>;
+
+/**
+ * A dataset a job can name by `name` and `version`: a built-in dataset Kortix
+ * ships (`kortix/…`), or one of the Harbor registry.
+ */
+export const EvalDatasetSchema = z.object({
+  name: z.string(),
+  /** The version a job without one runs. */
+  version: z.string(),
+  /** Every version, newest first. */
+  versions: z.array(z.string()),
+  kind: z.enum(['builtin', 'registry']),
+  description: z.string(),
+  /** Tasks of `version`; null when not known without reading the dataset. */
+  n_tasks: z.number().int().nullable(),
+});
+export type EvalDataset = z.infer<typeof EvalDatasetSchema>;
+
+export const EvalDatasetsResponseSchema = z.object({
+  datasets: z.array(EvalDatasetSchema),
+  /** Why the Harbor registry could not be read; the built-in datasets are still listed. */
+  registry_error: z.string().nullable(),
+});
+export type EvalDatasetsResponse = z.infer<typeof EvalDatasetsResponseSchema>;
 
 export const EvalSuitesResponseSchema = z.object({ suites: z.array(EvalSuiteSchema) });
 export const EvalTasksResponseSchema = z.object({
@@ -255,7 +307,10 @@ export type EvalTiming = z.infer<typeof TimingSchema>;
 export const EvalUsageSchema = z.object({
   n_input_tokens: z.number(),
   n_output_tokens: z.number(),
+  /** Cache reads and cache writes. */
   n_cache_tokens: z.number(),
+  /** What the LLM gateway billed, in USD; null when it recorded no cost. */
+  cost_usd: z.number().nullable(),
 });
 export type EvalUsage = z.infer<typeof EvalUsageSchema>;
 
@@ -269,6 +324,8 @@ export const EvalTrialSchema = z.object({
   trial_name: z.string(),
   task_name: z.string(),
   task_path: z.string(),
+  /** The task's id at the job's commit: `GET /evals/tasks/{task_id}` reads it. */
+  task_id: z.string().nullable(),
   agent: z.string(),
   model: z.string().nullable(),
   /** 1-based attempt of this task × agent. */
@@ -285,6 +342,7 @@ export const EvalTrialSchema = z.object({
   environment_setup: TimingSchema,
   agent_execution: TimingSchema,
   verifier: TimingSchema,
+  /** Token use of the trial's session; refreshed while the agent runs. */
   usage: EvalUsageSchema.nullable(),
   /** Files path of the trial folder. */
   folder: z.string(),
@@ -294,17 +352,26 @@ export const EvalTrialSchema = z.object({
 });
 export type EvalTrial = z.infer<typeof EvalTrialSchema>;
 
-/** The score of one agent × model over the job's tasks. */
+/** The score of one agent × model over the tasks of one source of the job (Harbor's grouping). */
 export const EvalAgentStatsSchema = z.object({
   agent: z.string(),
   model: z.string().nullable(),
+  /** The dataset (`name@version`) or task path the tasks came from; null for a job with one source. */
+  source: z.string().nullable(),
   /** Trials whose reward counts. */
   n_trials: z.number().int(),
   /** Trials that ended with an exception. */
   n_errors: z.number().int(),
   /** `{ "<metric>": value }` for one reward key, `{ "<key>": value }` per key for several (the first metric). */
   metrics: z.array(z.record(z.string(), z.number())),
-  /** `k` → share of tasks with at least one reward of 1 in their first `k` attempts. */
+  /**
+   * `k` → Harbor's unbiased pass@k, `1 − C(n−c, k) / C(n, k)` averaged over
+   * tasks (`n` attempts, `c` of them passed: every reward key is 1). Only when
+   * every value of every reward is 0 or 1, with any number of keys (one key is
+   * Harbor's rule; several are one 0/1 criterion each). A graded value
+   * (strictly between 0 and 1) leaves it empty. `k` is 1 and Harbor's set (2,
+   * 4, 8, … and 5, 10, 15, …) up to the fewest attempts of any task.
+   */
   pass_at_k: z.record(z.string(), z.number()),
 });
 export type EvalAgentStats = z.infer<typeof EvalAgentStatsSchema>;
@@ -316,6 +383,12 @@ export const EvalJobStatsSchema = z.object({
   n_completed: z.number().int(),
   n_errored: z.number().int(),
   n_cancelled: z.number().int(),
+  /** Runs superseded by a retry (not in `n_total_trials`). */
+  n_retries: z.number().int().default(0),
+  /** Exception type → trials that ended with it. */
+  exception_stats: z.record(z.string(), z.number().int()).default({}),
+  /** Token use and cost of every trial so far. */
+  usage: EvalUsageSchema.nullable().default(null),
   agents: z.array(EvalAgentStatsSchema),
 });
 export type EvalJobStats = z.infer<typeof EvalJobStatsSchema>;
@@ -346,10 +419,70 @@ export type EvalJob = z.infer<typeof EvalJobSchema>;
 
 export const EvalJobListResponseSchema = z.object({
   jobs: z.array(EvalJobSchema),
+  /** Opaque; pass it as `cursor` for the next page. Null on the last page. */
   next_cursor: z.string().nullable(),
+  /** Jobs that match the filters, over every page. */
+  total: z.number().int(),
 });
-export const EvalJobResponseSchema = z.object({ job: EvalJobSchema });
+export const EvalJobResponseSchema = z.object({
+  job: EvalJobSchema,
+  /** What the config reader noticed and ignored (`POST /jobs` only). */
+  warnings: z.array(z.string()).optional(),
+});
 export const EvalTrialListResponseSchema = z.object({ trials: z.array(EvalTrialSchema) });
+export const EvalTrialResponseSchema = z.object({ trial: EvalTrialSchema });
+
+/** `POST /jobs` with `dry_run: true`: what the job would run. Nothing is created. */
+export const EvalJobPlanResponseSchema = z.object({
+  commit: z.string(),
+  n_tasks: z.number().int(),
+  n_trials: z.number().int(),
+  agents: z.array(z.object({ name: z.string(), model: z.string().nullable() })),
+  /** The first 200 task names. */
+  tasks: z.array(z.string()),
+  warnings: z.array(z.string()),
+});
+export type EvalJobPlanResponse = z.infer<typeof EvalJobPlanResponseSchema>;
+
+/** One job's result on one compare row. */
+export const EvalCompareCellSchema = z.object({
+  job_id: z.string(),
+  /** Ended attempts whose reward counts (last run of each attempt). */
+  n: z.number().int(),
+  n_passed: z.number().int(),
+  /** `n_passed / n`; null with no counted attempt (not run, or every run errored). */
+  pass_rate: z.number().nullable(),
+  mean_reward: z.number().nullable(),
+  /** The most frequent exception type among the attempts, or null. */
+  exception_type: z.string().nullable(),
+});
+
+/**
+ * One task (with `by=task_agent_model`: one task × agent × model) across the
+ * compared jobs. `change` compares the last job with the first: `better` or
+ * `worse` by pass rate, then by mean reward; `only_one` when one side has no
+ * counted attempt.
+ */
+export const EvalCompareRowSchema = z.object({
+  task_name: z.string(),
+  agent: z.string().nullable(),
+  model: z.string().nullable(),
+  cells: z.array(EvalCompareCellSchema),
+  change: z.enum(['better', 'worse', 'same', 'only_one']),
+});
+
+export const EvalCompareResponseSchema = z.object({
+  jobs: z.array(EvalJobSchema),
+  by: z.enum(['task', 'task_agent_model']),
+  rows: z.array(EvalCompareRowSchema),
+  summary: z.object({
+    better: z.number().int(),
+    worse: z.number().int(),
+    same: z.number().int(),
+    only_one: z.number().int(),
+  }),
+});
+export type EvalCompareResponse = z.infer<typeof EvalCompareResponseSchema>;
 
 /** One file of a trial folder: `result.json`, `verifier/test-stdout.txt`, … */
 export const EvalTrialFileSchema = z.object({ path: z.string(), size: z.number() });
@@ -374,6 +507,8 @@ export const CreateEvalJobRequestSchema = z
     config: z.record(z.string(), z.unknown()).optional(),
     /** Branch or commit the tasks are read at. Default: the default branch. */
     ref: z.string().min(1).max(250).optional(),
+    /** Plan only: answer `200` with what would run (`EvalJobPlanResponse`) and create nothing. */
+    dry_run: z.boolean().optional(),
   })
   .strict();
 export type CreateEvalJobRequest = z.input<typeof CreateEvalJobRequestSchema>;

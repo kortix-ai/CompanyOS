@@ -95,9 +95,16 @@ export async function resolveSuite(project: GitBackedProject, commit: string, su
       }
     }
   }
+  // A request's fields go through the same reader as kortix.yaml: aliases, `agents: [oracle]`, ignored-key warnings.
+  let requested: Record<string, unknown> | undefined;
+  if (overrides) {
+    const read = normalizeEvalConfig(overrides);
+    for (const issue of read.issues) (issue.severity === 'error' ? errors : warnings).push(line(issue, 'config.'));
+    requested = read.config;
+  }
   const result: ResolvedSuite = { name: suite.name, source: suite.configPath ? 'config' : 'inline', configPath: suite.configPath, config: null, error: null, warnings };
   if (errors.length) return { ...result, error: errors.join(' ') };
-  const parsed = EvalJobConfigSchema.safeParse(layered(base, suite.config, overrides));
+  const parsed = EvalJobConfigSchema.safeParse(layered(base, suite.config, requested));
   if (!parsed.success) return { ...result, error: parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join(' ') };
   if (parsed.data.tasks.length + parsed.data.datasets.length === 0) return { ...result, error: 'The config names no `tasks` and no `datasets`.' };
   return { ...result, config: parsed.data };
@@ -120,11 +127,30 @@ export interface PlannedTrial {
   attempt: number;
 }
 
-async function tasksOfSource(project: GitBackedProject, commit: string, source: EvalTaskSource, violations: string[]): Promise<DiscoveredTask[]> {
+/** The label a source's tasks score under: `name@version` of a dataset, `repo:path` of a git source, else the path. */
+export function sourceLabel(source: EvalTaskSource): string {
+  if (source.name && !source.git_url) return source.version ? `${source.name}@${source.version}` : source.name;
+  if (source.git_url) {
+    const repo = source.git_url.replace(/\.git$/, '').split('/').slice(-1)[0] ?? source.git_url;
+    return source.path ? `${repo}:${source.path}` : repo;
+  }
+  return source.path ?? '';
+}
+
+const labelled = (tasks: DiscoveredTask[], label: string): DiscoveredTask[] => tasks.map((entry) => ({ ...entry, ref: { ...entry.ref, source: label } }));
+
+/** How many trials one task plans: distinct agents × attempts. */
+const trialsPerTask = (config: EvalJobConfig): number => new Set(config.agents.map((agent) => `${agent.name}\u0000${agent.model_name ?? ''}`)).size * config.n_attempts;
+
+async function tasksOfSource(project: GitBackedProject, commit: string, source: EvalTaskSource, violations: string[], budget = Number.POSITIVE_INFINITY): Promise<DiscoveredTask[]> {
+  return labelled(await readSource(project, commit, source, violations, budget), sourceLabel(source));
+}
+
+async function readSource(project: GitBackedProject, commit: string, source: EvalTaskSource, violations: string[], budget: number): Promise<DiscoveredTask[]> {
   if (!source.git_url && source.name && isBuiltinDataset(source.name)) {
     const builtin = builtinDatasetSource(source.name, source.version);
     const found: string[] = [];
-    const tasks = await tasksOfSource(project, commit, { ...source, ...builtin, name: null, version: null }, found);
+    const tasks = await readSource(project, commit, { ...source, ...builtin, name: null, version: null }, found, budget);
     // Name the dataset, not the repository path behind it.
     violations.push(...found.map(() => `The built-in dataset ${source.name} has no tasks at ${builtin.git_commit_id} of the Kortix repository. Pin a version that has it, e.g. version: dev after it ships.`));
     return tasks;
@@ -160,6 +186,10 @@ async function tasksOfSource(project: GitBackedProject, commit: string, source: 
   }
   // Filter by the registry's names first, so `n_tasks: 3` fetches three tasks, not the whole dataset.
   const kept = filterTasks(refs.map((entry) => ({ ref: { ...entry.ref, path: entry.ref.path }, task: null, error: null, name: entry.name })), source);
+  // Refuse a job over the trial cap before reading a single task of a large dataset.
+  if (kept.length > budget) {
+    throw new EvalConfigError([`The dataset ${source.name} selects ${kept.length} tasks, more than this job may run (${EVAL_LIMITS.max_trials_per_job} trials). Set \`n_tasks\` or \`task_names\`.`]);
+  }
   const out: DiscoveredTask[] = [];
   for (const entry of kept) {
     if (entry.ref.kind !== 'git') continue;
@@ -177,8 +207,10 @@ async function tasksOfSource(project: GitBackedProject, commit: string, source: 
 export async function planTasks(project: GitBackedProject, commit: string, config: EvalJobConfig): Promise<PlannedTask[]> {
   const violations: string[] = [];
   const byName = new Map<string, PlannedTask>();
+  const perTask = Math.max(1, trialsPerTask(config));
   for (const source of [...config.tasks, ...config.datasets]) {
-    for (const found of await tasksOfSource(project, commit, source, violations)) {
+    const budget = Math.floor(EVAL_LIMITS.max_trials_per_job / perTask) - byName.size;
+    for (const found of await tasksOfSource(project, commit, source, violations, budget)) {
       if (!found.task) {
         violations.push(found.error ?? `${found.ref.path}: not a task.`);
         continue;

@@ -10,9 +10,15 @@
  * (`harbor/models/trial/error_policy.py`); a type not listed retries, grades
  * and counts.
  *
- * METRIC: an aggregate over the valid rewards of one agent × model. A trial
- * whose reward is invalid is in neither the numerator nor the denominator. A
- * valid trial with no reward counts as 0.
+ * METRIC: an aggregate over the valid rewards of one agent × model × source.
+ * A trial whose reward is invalid is in neither the numerator nor the
+ * denominator. A valid trial with no reward counts as 0.
+ *
+ * PASS@K: Harbor's unbiased estimator, on binary rewards only: every value of
+ * every counted reward is 0 or 1, with any number of keys, and a trial passes
+ * when all its keys are 1. One 0/1 key is exactly Harbor's rule; several keys
+ * are one 0/1 criterion each (a judge). A graded value (strictly between 0
+ * and 1) leaves pass@k empty.
  */
 import type {
   EvalAgentStats,
@@ -23,6 +29,7 @@ import type {
   EvalMetricConfig,
   EvalRewards,
   EvalTrialStatus,
+  EvalUsage,
 } from '@kortix/api-contract';
 
 export class EvalTrialError extends Error {
@@ -226,11 +233,15 @@ export interface ScoredTrial {
   taskName: string;
   agent: string;
   model: string | null;
+  /** The dataset (`name@version`) or task path the task came from. */
+  source: string | null;
   attempt: number;
   status: EvalTrialStatus;
   rewards: EvalRewards | null;
   rewardValid: boolean;
-  hasException: boolean;
+  /** The exception type the trial ended with, or null. */
+  exceptionType: string | null;
+  usage: EvalUsage | null;
   /** A later retry of the same attempt replaced this run: it is in no count. */
   superseded: boolean;
 }
@@ -241,29 +252,72 @@ const passed = (rewards: EvalRewards | null): boolean => {
   return values.length > 0 && values.every((value) => value >= 1);
 };
 
-/** pass@k: the share of tasks with a pass in their first `k` valid attempts, for k = 1 and each power of 2 up to the attempt count. */
-function passAtK(trials: ScoredTrial[]): Record<string, number> {
-  const byTask = new Map<string, ScoredTrial[]>();
-  for (const trial of trials) byTask.set(trial.taskName, [...(byTask.get(trial.taskName) ?? []), trial]);
-  const tasks = [...byTask.values()].map((list) => list.sort((a, b) => a.attempt - b.attempt));
-  const most = Math.max(0, ...tasks.map((list) => list.length));
+/** pass@k counts only binary rewards: every value 0 or 1, any number of keys (no reward counts 0). */
+const binary = (rewards: EvalRewards | null): boolean => Object.values(rewards ?? {}).every((value) => value === 0 || value === 1);
+
+/** Harbor's unbiased estimator for one task: `1 − C(n−c, k) / C(n, k)`, as a product. */
+export function passAtKEstimate(n: number, c: number, k: number): number {
+  if (n - c < k) return 1;
+  let miss = 1;
+  for (let i = n - c + 1; i <= n; i += 1) miss *= 1 - k / i;
+  return 1 - miss;
+}
+
+/** k = 1, then Harbor's set: powers of 2 from 2 and multiples of 5, up to `most`. */
+export function passAtKValues(most: number): number[] {
+  const ks = new Set<number>(most >= 1 ? [1] : []);
+  for (let k = 2; k <= most; k *= 2) ks.add(k);
+  for (let k = 5; k <= most; k += 5) ks.add(k);
+  return [...ks].sort((a, b) => a - b);
+}
+
+/**
+ * pass@k over the valid trials of one group (Harbor's `utils/pass_at_k.py`):
+ * per task, `n` attempts with `c` passes (every key 1), the estimate averaged
+ * over tasks, for each k up to the fewest attempts of any task. Empty when a
+ * reward holds a graded value.
+ */
+export function passAtK(trials: ScoredTrial[]): Record<string, number> {
+  if (trials.length === 0 || !trials.every((trial) => binary(trial.rewards))) return {};
+  const byTask = new Map<string, { n: number; c: number }>();
+  for (const trial of trials) {
+    const entry = byTask.get(trial.taskName) ?? { n: 0, c: 0 };
+    entry.n += 1;
+    if (passed(trial.rewards)) entry.c += 1;
+    byTask.set(trial.taskName, entry);
+  }
+  const tasks = [...byTask.values()];
+  const fewest = Math.min(...tasks.map((task) => task.n));
   const out: Record<string, number> = {};
-  for (let k = 1; k <= most; k *= 2) {
-    const eligible = tasks.filter((list) => list.length >= k);
-    if (eligible.length === 0) break;
-    out[String(k)] = eligible.filter((list) => list.slice(0, k).some((trial) => passed(trial.rewards))).length / eligible.length;
+  for (const k of passAtKValues(fewest)) {
+    out[String(k)] = tasks.reduce((sum, task) => sum + passAtKEstimate(task.n, task.c, k), 0) / tasks.length;
   }
   return out;
 }
 
-/** The job's counts and each agent × model's score. */
+const addUsage = (total: EvalUsage | null, usage: EvalUsage | null): EvalUsage | null => {
+  if (!usage) return total;
+  const base = total ?? { n_input_tokens: 0, n_output_tokens: 0, n_cache_tokens: 0, cost_usd: null };
+  return {
+    n_input_tokens: base.n_input_tokens + usage.n_input_tokens,
+    n_output_tokens: base.n_output_tokens + usage.n_output_tokens,
+    n_cache_tokens: base.n_cache_tokens + usage.n_cache_tokens,
+    cost_usd: usage.cost_usd === null ? base.cost_usd : (base.cost_usd ?? 0) + usage.cost_usd,
+  };
+};
+
+/**
+ * The job's counts and the score of each agent × model × source (Harbor's
+ * grouping). `source` is null on every row when the job has one source.
+ */
 export function computeJobStats(trials: ScoredTrial[], metrics: EvalMetricConfig[]): EvalJobStats {
   const live = trials.filter((trial) => !trial.superseded);
   const count = (statuses: EvalTrialStatus[]) => live.filter((trial) => statuses.includes(trial.status)).length;
   const types = metrics.length ? metrics.map((metric) => metric.type) : (['mean'] as const);
+  const several = new Set(live.map((trial) => trial.source ?? '')).size > 1;
   const groups = new Map<string, ScoredTrial[]>();
   for (const trial of live) {
-    const key = `${trial.agent}\u0000${trial.model ?? ''}`;
+    const key = `${trial.agent}\u0000${trial.model ?? ''}\u0000${several ? (trial.source ?? '') : ''}`;
     groups.set(key, [...(groups.get(key) ?? []), trial]);
   }
   const agents: EvalAgentStats[] = [...groups.values()].map((group) => {
@@ -271,12 +325,15 @@ export function computeJobStats(trials: ScoredTrial[], metrics: EvalMetricConfig
     return {
       agent: group[0]!.agent,
       model: group[0]!.model,
+      source: several ? group[0]!.source : null,
       n_trials: valid.length,
-      n_errors: group.filter((trial) => trial.hasException).length,
+      n_errors: group.filter((trial) => trial.exceptionType !== null).length,
       metrics: types.map((type) => computeMetric(type, valid.map((trial) => trial.rewards))),
       pass_at_k: passAtK(valid),
     };
   });
+  const exceptionStats: Record<string, number> = {};
+  for (const trial of live) if (trial.exceptionType) exceptionStats[trial.exceptionType] = (exceptionStats[trial.exceptionType] ?? 0) + 1;
   return {
     n_total_trials: live.length,
     n_queued: count(['queued']),
@@ -284,6 +341,9 @@ export function computeJobStats(trials: ScoredTrial[], metrics: EvalMetricConfig
     n_completed: count(['completed']),
     n_errored: count(['errored']),
     n_cancelled: count(['cancelled']),
+    n_retries: trials.length - live.length,
+    exception_stats: exceptionStats,
+    usage: trials.reduce<EvalUsage | null>((total, trial) => addUsage(total, trial.usage), null),
     agents,
   };
 }

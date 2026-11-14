@@ -10435,6 +10435,15 @@ export const evalJobs = kortixSchema.table('eval_jobs', {
   /** Files path of the job folder, `/Evals/<job_name>`. */
   folder: text('folder').notNull(),
   createdBy: uuid('created_by'),
+  /**
+   * Who started the job, as the session create needs it: principal type,
+   * token kind and the session the token acts from. Trial sessions are
+   * created as this principal. Null on jobs from before the column.
+   */
+  startedBy: jsonb('started_by').$type<Record<string, unknown>>(),
+  /** `Idempotency-Key` of the POST that created the job, and a hash of its body. */
+  idempotencyKey: text('idempotency_key'),
+  requestHash: text('request_hash'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   startedAt: timestamp('started_at', { withTimezone: true }),
   finishedAt: timestamp('finished_at', { withTimezone: true }),

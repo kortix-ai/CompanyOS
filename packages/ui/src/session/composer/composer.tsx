@@ -16,7 +16,7 @@ import { useProjectConfig, usePromptAttachments, useRuntimeSessions } from '@kor
 import { useActiveSpace } from '../../internal/stores/active-space-store';
 import { MoonIcon, WarningIcon } from '@phosphor-icons/react';
 import { SESSION_NOTICE, type SessionLogMessage } from '@kortix/sdk';
-import { newPastedContentId, type PastedContent, splitPastedContent, trimPastedText } from '@kortix/shared';
+import { agentDisplayName, newPastedContentId, type PastedContent, splitPastedContent, trimPastedText } from '@kortix/shared';
 import type { JSONContent } from '@tiptap/core';
 import type { RefObject } from 'react';
 import {
@@ -724,7 +724,8 @@ function ComposerImpl(props: SessionChatInputProps) {
   useMenuRevalidation(menuOpen, projectId);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { takeFiles, modelPickerEnabled, contextMeterEnabled, runtimeSlashEnabled, useSlashActions } = useUiHostConfig();
+  const { takeFiles, modelPickerEnabled, contextMeterEnabled, runtimeSlashEnabled, useSlashActions, agentLabels } =
+    useUiHostConfig();
   // The host's own `/` rows. The config is fixed for the app's life, so the hook is the same one every render.
   const hostSlashRows = (useSlashActions ?? useNoSlashActions)();
   // A host that hides the harness lists none of its commands, and a typed "/init" stays text.
@@ -1600,7 +1601,8 @@ function ComposerImpl(props: SessionChatInputProps) {
     });
     return available.map((action) => {
       if (action.id === 'switch-agent' && selectedAgent) {
-        return { ...action, value: selectedAgent };
+        // The name the agent chip shows, not the slug.
+        return { ...action, value: agentLabels?.[selectedAgent] ?? agentDisplayName(selectedAgent) };
       }
       // The ring icon (via `context`) plus the reading as the row's
       // "current setting" text — same grammar as the agent row's value.
@@ -1610,7 +1612,7 @@ function ComposerImpl(props: SessionChatInputProps) {
       return action;
     }).concat(hostSlashActions(hostSlashRows));
   }, [
-    selectedAgent, canSwitchAgent, onCompactClick, onContextClick, contextUsage, tI18nComplete,
+    selectedAgent, agentLabels, canSwitchAgent, onCompactClick, onContextClick, contextUsage, tI18nComplete,
     modelPickerEnabled, contextMeterEnabled, runtimeSlashEnabled, hostSlashRows,
   ]);
 

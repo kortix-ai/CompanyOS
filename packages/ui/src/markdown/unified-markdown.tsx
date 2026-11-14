@@ -40,6 +40,7 @@ import {
   shouldUseNextLink,
 } from './unified-markdown-utils';
 import { remarkSetupLinkBlocks } from './setup-link-blocks';
+import { remarkSoftBreaks } from './soft-breaks';
 import {
   rehypeStreamWords,
   STREAM_WORD_CLASS,
@@ -684,6 +685,14 @@ export interface UnifiedMarkdownProps {
    * (the transcript and the share view); everywhere else such a fence is an ordinary code block.
    */
   genui?: boolean;
+  /**
+   * `chat`: every single newline is a line break, as chat text is written
+   * (one item per line stays one per line). Only chat transcript text sets it
+   * (assistant replies, peer messages). The default, `commonmark`, joins
+   * wrapped lines, as a README or a scraped page expects. Ignored for
+   * `variant="document"`.
+   */
+  lineBreaks?: 'commonmark' | 'chat';
 }
 
 /**
@@ -693,6 +702,12 @@ export interface UnifiedMarkdownProps {
  */
 const REMARK_PLUGINS_WITH_SETUP_LINKS = [...katexRemarkPlugins, remarkSetupLinkBlocks];
 const REMARK_PLUGINS_WITH_FILE_LINKS = [...REMARK_PLUGINS_WITH_SETUP_LINKS, remarkWorkspaceFileLinks];
+// Chat text keeps every line the author wrote (one `\n` = one line break,
+// `lineBreaks="chat"`). Everything else stays strict CommonMark. Module-level
+// so no render builds a new array.
+const MESSAGE_REMARK_PLUGINS = [...katexRemarkPlugins, remarkSoftBreaks];
+const MESSAGE_REMARK_PLUGINS_WITH_SETUP_LINKS = [...REMARK_PLUGINS_WITH_SETUP_LINKS, remarkSoftBreaks];
+const MESSAGE_REMARK_PLUGINS_WITH_FILE_LINKS = [...REMARK_PLUGINS_WITH_FILE_LINKS, remarkSoftBreaks];
 // Last, so the words it wraps are the final, sanitized text.
 const STREAMING_REHYPE_PLUGINS = [...katexRehypePlugins, rehypeStreamWords];
 const STREAMING_REHYPE_PLUGINS_NO_RAW = [...katexRehypePluginsNoRaw, rehypeStreamWords];
@@ -700,7 +715,7 @@ const STREAMING_REHYPE_PLUGINS_NO_RAW = [...katexRehypePluginsNoRaw, rehypeStrea
 // Single source of truth for markdown rendering across the app — clean, minimal,
 // readable in both themes.
 export const UnifiedMarkdown = React.memo<UnifiedMarkdownProps>(
-  ({ content, trust, variant = 'message', className, isStreaming = false, documentPath, genui = false }) => {
+  ({ content, trust, variant = 'message', className, isStreaming = false, documentPath, genui = false, lineBreaks = 'commonmark' }) => {
     const tHardcodedUi = useTranslations('hardcodedUi');
     const { proxyUrl } = useSandboxProxy();
     const proxy = useCallback((url: string | undefined) => proxyUrl(url), [proxyUrl]);
@@ -725,12 +740,19 @@ export const UnifiedMarkdown = React.memo<UnifiedMarkdownProps>(
       if (documentBaseDir) {
         return [...REMARK_PLUGINS_WITH_SETUP_LINKS, [remarkWorkspaceFileLinks, { baseDir: documentBaseDir }]];
       }
+      if (variant === 'document' || lineBreaks !== 'chat') {
+        return effectivePolicy.fileLinks
+          ? REMARK_PLUGINS_WITH_FILE_LINKS
+          : policy.setupLinks
+            ? REMARK_PLUGINS_WITH_SETUP_LINKS
+            : katexRemarkPlugins;
+      }
       return effectivePolicy.fileLinks
-        ? REMARK_PLUGINS_WITH_FILE_LINKS
+        ? MESSAGE_REMARK_PLUGINS_WITH_FILE_LINKS
         : policy.setupLinks
-          ? REMARK_PLUGINS_WITH_SETUP_LINKS
-          : katexRemarkPlugins;
-    }, [documentBaseDir, effectivePolicy, policy.setupLinks]);
+          ? MESSAGE_REMARK_PLUGINS_WITH_SETUP_LINKS
+          : MESSAGE_REMARK_PLUGINS;
+    }, [documentBaseDir, effectivePolicy, policy.setupLinks, variant, lineBreaks]);
 
     // Streamdown renders streaming text block by block and settled text as one
     // document: two different React trees. Switching trees when the turn ends

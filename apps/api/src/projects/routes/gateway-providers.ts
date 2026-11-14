@@ -31,7 +31,7 @@ export function registerGatewayProvidersRoutes(): void {
         ...errors(403, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const providerId = c.req.param('providerId');
       const loaded = await loadProjectForUser(c, projectId, 'read');

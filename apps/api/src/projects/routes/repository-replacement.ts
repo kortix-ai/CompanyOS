@@ -38,7 +38,7 @@ export function registerRepositoryReplacementRoutes(): void {
       200: json(z.object({ project: ProjectSchema, git_connection: z.any() }), 'Updated project and Git connection'),
       ...errors(400, 403, 404, 409),
     },
-  }), async (c: any) => {
+  }), async (c) => {
     const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);

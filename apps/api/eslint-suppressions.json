@@ -1781,15 +1781,12 @@
       "count": 2
     },
     "no-restricted-syntax": {
-      "count": 4
+      "count": 1
     }
   },
   "src/projects/routes/agent-config.ts": {
     "no-restricted-imports": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 3
     }
   },
   "src/projects/routes/agent-scope.ts": {
@@ -1798,9 +1795,6 @@
     },
     "no-restricted-imports": {
       "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 3
     }
   },
   "src/projects/routes/approvals.ts": {
@@ -1808,7 +1802,7 @@
       "count": 2
     },
     "no-restricted-syntax": {
-      "count": 3
+      "count": 1
     }
   },
   "src/projects/routes/change-request-actions.ts": {
@@ -1816,7 +1810,7 @@
       "count": 3
     },
     "no-restricted-syntax": {
-      "count": 3
+      "count": 1
     }
   },
   "src/projects/routes/change-requests.ts": {
@@ -1827,27 +1821,17 @@
       "count": 2
     }
   },
-  "src/projects/routes/channel-bindings.ts": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "src/projects/routes/channel-email.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "src/projects/routes/channel-slack.ts": {
     "no-restricted-imports": {
       "count": 2
     },
     "no-restricted-syntax": {
-      "count": 8
+      "count": 1
     }
   },
   "src/projects/routes/channel-teams.ts": {
     "no-restricted-syntax": {
-      "count": 11
+      "count": 1
     }
   },
   "src/projects/routes/computers.ts": {
@@ -1863,7 +1847,7 @@
       "count": 2
     },
     "no-restricted-syntax": {
-      "count": 4
+      "count": 3
     }
   },
   "src/projects/routes/connections.ts": {
@@ -1871,47 +1855,21 @@
       "count": 2
     },
     "no-restricted-syntax": {
-      "count": 4
-    }
-  },
-  "src/projects/routes/gateway-keys.ts": {
-    "no-restricted-syntax": {
       "count": 3
     }
   },
   "src/projects/routes/gateway-logs.ts": {
     "no-restricted-imports": {
       "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
-  "src/projects/routes/gateway-playground.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "src/projects/routes/gateway-providers.ts": {
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "src/projects/routes/gateway-routing-policy.ts": {
     "no-restricted-syntax": {
-      "count": 4
+      "count": 1
     }
   },
   "src/projects/routes/gateway-spend.ts": {
     "no-restricted-imports": {
-      "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 6
-    }
-  },
-  "src/projects/routes/git-backend.ts": {
-    "no-restricted-syntax": {
       "count": 2
     }
   },
@@ -1920,22 +1878,12 @@
       "count": 2
     },
     "no-restricted-syntax": {
-      "count": 7
-    }
-  },
-  "src/projects/routes/github-repositories.ts": {
-    "no-restricted-syntax": {
       "count": 1
     }
   },
   "src/projects/routes/group-grants.ts": {
     "no-restricted-syntax": {
-      "count": 4
-    }
-  },
-  "src/projects/routes/manifest-validation.ts": {
-    "no-restricted-syntax": {
-      "count": 1
+      "count": 3
     }
   },
   "src/projects/routes/marketplace-install-session.ts": {
@@ -1948,7 +1896,7 @@
       "count": 2
     },
     "no-restricted-syntax": {
-      "count": 10
+      "count": 5
     }
   },
   "src/projects/routes/oauth2-connectors.ts": {
@@ -1958,7 +1906,7 @@
   },
   "src/projects/routes/project-access.ts": {
     "no-restricted-syntax": {
-      "count": 3
+      "count": 1
     }
   },
   "src/projects/routes/project-audit.ts": {
@@ -1975,11 +1923,6 @@
       "count": 3
     }
   },
-  "src/projects/routes/project-credentials.ts": {
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
   "src/projects/routes/project-detail.ts": {
     "no-console": {
       "count": 1
@@ -1993,7 +1936,7 @@
       "count": 3
     },
     "no-restricted-syntax": {
-      "count": 10
+      "count": 1
     }
   },
   "src/projects/routes/project-from-repository.ts": {
@@ -2004,11 +1947,6 @@
       "count": 2
     }
   },
-  "src/projects/routes/project-git.ts": {
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
   "src/projects/routes/project-invites.ts": {
     "no-console": {
       "count": 2
@@ -2017,7 +1955,7 @@
       "count": 2
     },
     "no-restricted-syntax": {
-      "count": 4
+      "count": 1
     }
   },
   "src/projects/routes/project-sessions.ts": {
@@ -2030,7 +1968,7 @@
       "count": 1
     },
     "no-restricted-syntax": {
-      "count": 5
+      "count": 2
     }
   },
   "src/projects/routes/projects.ts": {
@@ -2051,15 +1989,12 @@
       "count": 3
     },
     "no-restricted-syntax": {
-      "count": 4
+      "count": 1
     }
   },
   "src/projects/routes/provider-secret-pools.ts": {
     "no-restricted-imports": {
       "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 3
     }
   },
   "src/projects/routes/public-shares.ts": {
@@ -2070,9 +2005,6 @@
   "src/projects/routes/repository-replacement.ts": {
     "no-console": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "src/projects/routes/resource-grants.ts": {
@@ -2081,19 +2013,11 @@
     },
     "no-console": {
       "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
-  "src/projects/routes/review-items.ts": {
-    "no-restricted-syntax": {
-      "count": 5
     }
   },
   "src/projects/routes/sandbox-templates.ts": {
     "no-restricted-syntax": {
-      "count": 5
+      "count": 2
     }
   },
   "src/projects/routes/sandboxes.ts": {
@@ -2101,7 +2025,7 @@
       "count": 1
     },
     "no-restricted-syntax": {
-      "count": 5
+      "count": 3
     }
   },
   "src/projects/routes/secret-broker.ts": {
@@ -2112,9 +2036,6 @@
   "src/projects/routes/secret-delivery.ts": {
     "no-restricted-imports": {
       "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "src/projects/routes/secret-personal.ts": {
@@ -2128,16 +2049,10 @@
   "src/projects/routes/secret-relay.ts": {
     "no-console": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "src/projects/routes/secret-sync.ts": {
     "no-console": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
       "count": 1
     }
   },
@@ -2149,17 +2064,12 @@
       "count": 2
     },
     "no-restricted-syntax": {
-      "count": 3
+      "count": 1
     }
   },
   "src/projects/routes/session-attachments.ts": {
     "no-console": {
       "count": 2
-    }
-  },
-  "src/projects/routes/session-config.ts": {
-    "no-restricted-syntax": {
-      "count": 3
     }
   },
   "src/projects/routes/session-open-bundle.ts": {
@@ -2178,21 +2088,10 @@
   "src/projects/routes/session-scope.ts": {
     "no-restricted-imports": {
       "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 3
     }
   },
   "src/projects/routes/session-stream.ts": {
     "no-restricted-imports": {
-      "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "src/projects/routes/setup-links.ts": {
-    "no-restricted-syntax": {
       "count": 2
     }
   },
@@ -2220,9 +2119,6 @@
     },
     "no-restricted-imports": {
       "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 3
     }
   },
   "src/projects/routes/turn-stream-handlers.ts": {

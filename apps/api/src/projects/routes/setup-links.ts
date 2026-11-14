@@ -64,7 +64,7 @@ export function registerSetupLinksRoutes(): void {
         ...errors(400, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const body = await readJsonObject(c);
       // Floor 'read'; project.secret.write is the real gate — the same leaf as
@@ -173,10 +173,10 @@ export function registerSetupLinksRoutes(): void {
       },
       responses: {
         200: json(z.any(), 'A connect link'),
-        ...errors(400, 404, 409, 501),
+        ...errors(400, 403, 404, 409, 501),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const body = await readJsonObject(c);
       // Floor 'read'; project.connector.write is the real gate (minting a Pipedream

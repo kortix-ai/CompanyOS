@@ -531,7 +531,7 @@ export function registerConnectionActionsRoutes(): void {
           ...errors(400, 403, 404, 409, 501),
         },
       }),
-      async (c: any) => {
+      async (c) => {
         const projectId = workspaceIdParam(c);
         const connectionId = c.req.param('connectionId');
         const mutable = await loadMutableConnection(c, projectId, connectionId);

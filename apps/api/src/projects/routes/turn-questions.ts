@@ -62,7 +62,7 @@ export function registerTurnQuestionsRoutes(): void {
         ...errors(400, 403, 404, 409),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
 
       // The session this credential is BOUND to, when it is a sandbox token.
@@ -367,7 +367,7 @@ export function registerTurnQuestionsRoutes(): void {
       request: { params: z.object({ workspaceId: z.string(), sessionId: z.string() }) },
       responses: { 200: json(AnyObject, 'Open question, or null'), ...errors(404) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -407,9 +407,9 @@ export function registerTurnQuestionsRoutes(): void {
         params: z.object({ workspaceId: z.string(), sessionId: z.string() }),
         body: { content: { 'application/json': { schema: AnyObject } } },
       },
-      responses: { 200: json(AnyObject, 'Answer delivered'), ...errors(400, 404, 409) },
+      responses: { 200: json(AnyObject, 'Answer delivered'), ...errors(400, 403, 404, 409) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       // The `question` tool exists so the agent YIELDS TO A HUMAN. An

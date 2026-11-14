@@ -51,7 +51,7 @@ export function registerGitBackendRoutes(): void {
         ...errors(401),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const userId = c.get('userId') as string;
       const backend = resolveGitBackend();
       return c.json({
@@ -88,7 +88,7 @@ export function registerGitBackendRoutes(): void {
         ...errors(401, 403, 409, 502),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const userId = c.get('userId') as string;
       if (!(await isSelfHostOperator(userId))) {
         return c.json(

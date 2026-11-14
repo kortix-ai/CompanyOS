@@ -67,7 +67,7 @@ export function registerResourceGrantsRoutes(): void {
       request: { params: z.object({ workspaceId: z.string() }) },
       responses: { 200: json(z.any(), 'Resource grants + grantable resources'), ...errors(404) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const started = performance.now();
       const stages: Record<string, number> = {};
@@ -225,7 +225,7 @@ export function registerResourceGrantsRoutes(): void {
       },
       responses: { 201: json(z.any(), 'The created grant'), ...errors(400, 404) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -339,7 +339,7 @@ export function registerResourceGrantsRoutes(): void {
       request: { params: z.object({ workspaceId: z.string(), grantId: z.string() }) },
       responses: { 200: json(z.any(), 'OK'), ...errors(404) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const grantId = c.req.param('grantId');
       // grant_id is a uuid column — a malformed id is a clean 404 (same as missing),

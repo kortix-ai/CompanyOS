@@ -119,7 +119,7 @@ export function registerGatewayRoutingPolicyRoutes(): void {
       request: { params: z.object({ workspaceId: z.string() }) },
       responses: routingPolicyResponses,
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -247,7 +247,7 @@ export function registerGatewayRoutingPolicyRoutes(): void {
       request: { params: z.object({ workspaceId: z.string() }) },
       responses: routingPolicyResponses,
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -295,7 +295,7 @@ export function registerGatewayRoutingPolicyRoutes(): void {
       },
       responses: routingPolicyResponses,
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);

@@ -38,7 +38,7 @@ export function registerGatewaySpendRoutes(): void {
       },
       responses: { 200: json(z.any(), 'Gateway usage overview'), ...errors(404) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -100,7 +100,7 @@ export function registerGatewaySpendRoutes(): void {
       },
       responses: { 200: json(z.any(), 'Gateway daily usage series'), ...errors(404) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -170,7 +170,7 @@ export function registerGatewaySpendRoutes(): void {
       },
       responses: { 200: json(z.any(), 'Gateway spend by session'), ...errors(404) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -243,7 +243,7 @@ export function registerGatewaySpendRoutes(): void {
       },
       responses: { 200: json(z.any(), 'Gateway usage by model'), ...errors(404) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -367,7 +367,7 @@ export function registerGatewaySpendRoutes(): void {
       },
       responses: { 200: json(z.any(), 'Budget upserted'), ...errors(400, 403, 404) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -437,7 +437,7 @@ export function registerGatewaySpendRoutes(): void {
       },
       responses: { 200: json(z.any(), 'Budget removed'), ...errors(403, 404) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const budgetId = c.req.param('budgetId');
       const loaded = await loadProjectForUser(c, projectId, 'read');

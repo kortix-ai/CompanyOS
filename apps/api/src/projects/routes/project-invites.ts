@@ -252,7 +252,7 @@ export function registerProjectInvitesRoutes(): void {
           ...errors(404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -341,7 +341,7 @@ export function registerProjectInvitesRoutes(): void {
           ...errors(404, 409),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const inviteId = c.req.param('inviteId');
     const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -416,7 +416,7 @@ export function registerProjectInvitesRoutes(): void {
           ...errors(404, 409),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const inviteId = c.req.param('inviteId');
     const loaded = await loadProjectForUser(c, projectId, 'read');

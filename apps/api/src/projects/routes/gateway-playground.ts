@@ -85,7 +85,7 @@ export function registerGatewayPlaygroundRoutes(): void {
       },
       responses: { 200: json(z.any(), 'Playground results'), ...errors(400, 402, 404) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);

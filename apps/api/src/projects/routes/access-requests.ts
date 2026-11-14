@@ -175,7 +175,7 @@ export function registerAccessRequestsRoutes(): void {
           ...errors(404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     // Floor is 'read' (project membership); the real gate is the members.manage
     // leaf below, so a custom role granting ONLY members.manage (no project.write)
@@ -218,7 +218,7 @@ export function registerAccessRequestsRoutes(): void {
           ...errors(400, 404, 409),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const requestId = c.req.param('requestId');
     const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -311,7 +311,7 @@ export function registerAccessRequestsRoutes(): void {
           ...errors(404, 409),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const requestId = c.req.param('requestId');
     const loaded = await loadProjectForUser(c, projectId, 'read');

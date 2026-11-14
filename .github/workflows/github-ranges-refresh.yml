@@ -1,4 +1,4 @@
-name: zz-probe-139
+name: GitHub ranges refresh
 on:
   workflow_dispatch: {}
 permissions: {}

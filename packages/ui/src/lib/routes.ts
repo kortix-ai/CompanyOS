@@ -77,9 +77,8 @@ const DEFAULT_ROUTES = {
   channel: (p: string, slug: string) => `/workspaces/${p}/c/${slug}`,
   dm: (p: string, agentName: string) => `/workspaces/${p}/dm/${encodeURIComponent(agentName)}`,
   memory: (p: string) => `/workspaces/${p}/memory`,
-  // The workspace Inbox page IS the Review queue (KRTX-4799); the old
-  // `/workspaces/<id>/review` route redirects here.
-  review: (p: string) => `/workspaces/${p}/inbox?view=review`,
+  // The workspace Review queue has its own page.
+  review: (p: string) => `/workspaces/${p}/review`,
 };
 
 export const defaultUiRoutes: UiRoutes = DEFAULT_ROUTES;

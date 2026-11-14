@@ -63,13 +63,15 @@ export function createAgentPrompt(input: {
   if (input.start === 'blank') {
     return (
       `Create a new agent named "${input.name}" in kortix.yaml${desc ? ` with the description "${desc}"` : ''}, ` +
-      `no grants (write \`tools: none\`) and empty instructions. ${review}`
+      `no grants (write \`tools: none\`) and empty instructions. ` +
+      `Declare it a helper: \`mode: subagent\` and \`hidden: true\`, so it stays out of the pickers until I promote it. ${review}`
     );
   }
   return (
     `Create a new agent named "${input.name}" in kortix.yaml. What it does: ${desc || 'ask me.'} ` +
     `Write its instructions and give it only the tools, skills, connectors, secrets and permissions this work needs. ` +
-    `Always write its \`tools:\` key: a list of the tools it needs, or \`"*"\` (quoted) for every tool. ${review}`
+    `Always write its \`tools:\` key: a list of the tools it needs, or \`"*"\` (quoted) for every tool. ` +
+    `Declare it a helper: \`mode: subagent\` and \`hidden: true\`, so it stays out of the pickers until I promote it as a primary agent. ${review}`
   );
 }
 

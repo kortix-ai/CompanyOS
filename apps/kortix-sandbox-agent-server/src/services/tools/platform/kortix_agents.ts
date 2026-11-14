@@ -26,13 +26,13 @@ interface AgentConfig {
 }
 
 /** The settings a before → after row names, in the order a person reads them. */
-const SETTING_FIELDS = ['description', 'model', 'prompt', 'connectors', 'secrets', 'apps', 'skills', 'tools', 'kortix_permissions', 'space', 'enabled']
+const SETTING_FIELDS = ['description', 'model', 'prompt', 'mode', 'hidden', 'connectors', 'secrets', 'apps', 'skills', 'tools', 'kortix_permissions', 'space', 'enabled']
 
-/** One flat view of an agent block: `behavior.description`, `.prompt` and `.model` lifted to the top. */
+/** One flat view of an agent block: `behavior.description`, `.prompt`, `.model`, `.mode` and `.hidden` lifted to the top. */
 function flat(block: Record<string, unknown> | null | undefined): Record<string, unknown> {
   const b = block ?? {}
   const behavior = (b.behavior ?? {}) as Record<string, unknown>
-  return { ...b, description: behavior.description ?? b.description, prompt: behavior.prompt ?? b.prompt, model: behavior.model ?? b.model }
+  return { ...b, description: behavior.description ?? b.description, prompt: behavior.prompt ?? b.prompt, model: behavior.model ?? b.model, mode: behavior.mode, hidden: behavior.hidden }
 }
 
 /**
@@ -256,6 +256,7 @@ function blockFrom(args: Record<string, any>, base: Record<string, unknown>): Re
   if (typeof args.instructions === 'string') behavior.prompt = args.instructions
   if (typeof args.model === 'string') behavior.model = args.model
   if (typeof args.description === 'string') behavior.description = args.description
+  if (args.mode === 'primary' || args.mode === 'subagent' || args.mode === 'all') behavior.mode = args.mode
   if (Object.keys(behavior).length > 0) block.behavior = behavior
   for (const key of ['connectors', 'secrets', 'apps', 'skills', 'tools', 'kortix_permissions'] as const) {
     if (args[key] !== undefined) block[key] = args[key]
@@ -277,6 +278,17 @@ async function save(action: 'create' | 'update', name: string, args: Record<stri
   }
   const before = exists ? (current.value.block ?? {}) : {}
   const block = blockFrom(args, before)
+  if (action === 'create') {
+    // KRTX-4810: an agent created on the person's behalf is a helper, so it is declared a
+    // subagent and kept out of the pickers until the person promotes it (the agent
+    // properties' "Who can start it"). A `mode` here is the person's own ask.
+    const behavior = (block.behavior ?? {}) as Record<string, unknown>
+    if (!behavior.mode) {
+      behavior.mode = 'subagent'
+      behavior.hidden = true
+      block.behavior = behavior
+    }
+  }
   // The CLI reads the block from a file: its flag parser takes `-` for a missing value.
   const saved = await withJsonFile(block, (file) => cliJson<{ block?: Record<string, unknown> }>(['agents', 'config', name, '--file', file, '--json'], context))
   if ('error' in saved) return fail(TOOL, action, action === 'create' ? `Could not create ${name}` : `Could not change ${name}`, saved.error, context)
@@ -324,7 +336,7 @@ async function setAccess(name: string, args: Record<string, any>, context: Platf
 export default {
   description:
     "The project's agents: each one is a colleague with one job, its own instructions and model, and a limited set of connectors, secrets and apps it may use. " +
-    'Actions: `list`; `models` (the models a project agent, a hand-off or a workflow agent can run now: each `id` is the exact `model` value, with what it is good for; `offered` counts every model the workspace offers, and `not_runnable` names the offered ones that need a provider connected first); `get` (name); `create` (name, description, instructions, optional model, connectors, skills, tools); ' +
+    'Actions: `list`; `models` (the models a project agent, a hand-off or a workflow agent can run now: each `id` is the exact `model` value, with what it is good for; `offered` counts every model the workspace offers, and `not_runnable` names the offered ones that need a provider connected first); `get` (name); `create` (name, description, instructions, optional model, connectors, skills, tools; a created agent is a subagent kept out of the pickers until the person promotes it, unless the person asked for a primary agent — pass `mode` = primary then); ' +
     '`update` (name, plus only the fields to change); `set_access` (name, connectors / secrets / apps: a list, "all" or "none"). ' +
     'Before `set_access` or an `update` that gives an agent more access, show the person what changes and ask once. ' +
     'The result shows the person a card; tell them the outcome in plain words.',
@@ -336,6 +348,7 @@ export default {
       description: { type: 'string', description: 'One line: what this agent does.' },
       instructions: { type: 'string', description: "The agent's instructions: who it is, what it does, how it works." },
       model: { type: 'string', description: 'A model id exactly as `models` lists it, e.g. `kortix/<model>`; omit to follow the project default.' },
+      mode: { type: 'string', enum: ['primary', 'subagent', 'all'], description: "Who can start it. On create, omit it to declare the agent a subagent that stays out of the pickers until the person promotes it; pass 'primary' only when the person asks for one they start sessions with." },
       connectors: { description: 'Connector slugs it may use, "all" or "none".', anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }] },
       secrets: { description: 'Secret names it receives, "all" or "none".', anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }] },
       apps: { description: 'App slugs it may open, "all" or "none".', anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }] },

@@ -39,6 +39,7 @@ import { assertProjectCapability, loadProjectForUser } from '../lib/access';
 import { resourceDenierForRequest } from '../lib/project-resources';
 import { CommitSchema, projectsApp } from '../lib/app';
 import { isGitRefNotFoundError } from '../git/mirror';
+import { InvalidGitRefError } from '../git-ref';
 import { withProjectGitAuth } from '../lib/git';
 import { sessionReadRef } from '../lib/session-read-ref';
 import { projectReadView } from '../lib/project-read-view';
@@ -461,6 +462,7 @@ export function registerProjectFilesRoutes(): void {
       const revision = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
       return c.json({ path, ref, content: bytes.toString('utf8'), revision });
     } catch (error) {
+      if (error instanceof InvalidGitRefError) return c.json({ error: error.message }, 400);
       if (isGitRefNotFoundError(error)) return c.json({ error: 'ref not found' }, 404);
       if (isRepoContentTooLargeError(error)) return c.json({ error: error.message }, 413);
       // `readRepoFile` converts a `git show` "path does not exist" failure into a
@@ -535,6 +537,7 @@ export function registerProjectFilesRoutes(): void {
         },
       });
     } catch (error) {
+      if (error instanceof InvalidGitRefError) return c.json({ error: error.message }, 400);
       if (isGitRefNotFoundError(error)) return c.json({ error: 'ref not found' }, 404);
       if (isRepoContentTooLargeError(error)) return c.json({ error: error.message }, 413);
       if (isRepoFileNotFoundError(error) || isMissingGitPathError(error)) {

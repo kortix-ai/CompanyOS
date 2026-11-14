@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { act } from 'react';
 
 import { createKortix } from '@kortix/sdk';
@@ -12,7 +12,8 @@ import { LIVE_POLL_MS, useRefreshSessions, useSidebarSessions } from './use-side
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const PROJECT = 'P1';
-type Bucket = 'all' | 'me' | 'others' | 'automated';
+const BUCKETS = ['all', 'me', 'others', 'automated'] as const;
+type Bucket = (typeof BUCKETS)[number];
 
 /** Requests per list, keyed by the `started_by` they sent ('all' = none). */
 let requests: Record<Bucket, number>;
@@ -20,23 +21,28 @@ let statusOf: Partial<Record<Bucket, string>>;
 let refreshApp: () => Promise<unknown>;
 let refreshSidebar: () => Promise<unknown>;
 let destroy: () => void = () => {};
-const realFetch = globalThis.fetch;
 
-createKortix({ backendUrl: 'http://test.local', getToken: async () => 'token' });
+// A real local server, so the SDK's own requests are what the test counts.
+const server = Bun.serve({
+  port: 0,
+  fetch(request) {
+    const startedBy = new URL(request.url).searchParams.get('started_by') ?? 'all';
+    const bucket = BUCKETS.find((name) => name === startedBy) ?? 'all';
+    requests[bucket] += 1;
+    return Response.json([{ session_id: `S-${bucket}`, status: statusOf[bucket] ?? 'completed' }]);
+  },
+});
+createKortix({ backendUrl: `http://127.0.0.1:${server.port}/v1`, getToken: async () => 'token' });
 
 beforeEach(() => {
   requests = { all: 0, me: 0, others: 0, automated: 0 };
   statusOf = {};
-  globalThis.fetch = mock(async (url: unknown) => {
-    const bucket = (new URL(String(url)).searchParams.get('started_by') ?? 'all') as Bucket;
-    requests[bucket] += 1;
-    return Response.json([{ session_id: `S-${bucket}`, status: statusOf[bucket] ?? 'completed' }]);
-  }) as unknown as typeof fetch;
 });
+
+afterAll(() => server.stop(true));
 
 afterEach(() => {
   destroy();
-  globalThis.fetch = realFetch;
 });
 
 /** The app's unfiltered list and the sidebar's buckets, mounted together as in the TUI. */
@@ -56,14 +62,17 @@ async function mount() {
     { width: 20, height: 2 },
   );
   destroy = () => renderer.destroy();
-  await settle();
+  await settle(client);
   return client;
 }
 
-async function settle() {
-  await act(async () => {
-    for (let i = 0; i < 20; i++) await Promise.resolve();
-  });
+/** Wait until every request the hooks started has been answered. */
+async function settle(client: QueryClient) {
+  do {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  } while (client.isFetching() > 0);
 }
 
 describe('useSidebarSessions (KRTX-4898)', () => {
@@ -91,7 +100,7 @@ describe('useSidebarSessions (KRTX-4898)', () => {
     await act(async () => {
       pollDueQueries(client, Date.now() + LIVE_POLL_MS);
     });
-    await settle();
+    await settle(client);
     expect(requests).toEqual({ all: 1, me: 1, others: 2, automated: 2 });
   });
 });

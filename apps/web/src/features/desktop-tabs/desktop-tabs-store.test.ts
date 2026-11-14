@@ -161,22 +161,24 @@ describe('desktop tabs: navigation', () => {
   });
 });
 
-describe('desktop tabs: one tab, no session (the strip is hidden)', () => {
-  test('the tab follows every navigation, as the window did before tabs', () => {
+describe('desktop tabs: fresh start', () => {
+  test('the first page you open takes the blank tab; the next one opens a tab', () => {
     let s = nav(empty, home);
-    for (const to of [models, `${home}/admin/skills`, `${home}/goals`, home, `${home}/drive`]) {
-      s = nav(s, to);
-      expect(paths(s)).toEqual([to]);
-    }
+    s = nav(s, `${home}/goals`);
+    expect(paths(s)).toEqual([`${home}/goals`]);
+    s = nav(s, `${home}/drive`);
+    expect(paths(s)).toEqual([`${home}/goals`, `${home}/drive`]);
+    s = nav(s, `${home}/apps`);
+    s = nav(s, `${home}/artifacts`);
+    expect(paths(s)).toEqual([`${home}/goals`, `${home}/drive`, `${home}/apps`, `${home}/artifacts`]);
   });
 
-  test('tabs start with the first session, in that same tab', () => {
+  test('settings from a fresh start: the first section takes the blank tab', () => {
     let s = nav(empty, home);
     s = nav(s, models);
-    s = nav(s, s1);
-    expect(paths(s)).toEqual([s1]);
-    s = nav(s, models);
-    expect(paths(s)).toEqual([s1, models]);
+    expect(paths(s)).toEqual([models]);
+    s = nav(s, `${home}/drive`);
+    expect(paths(s)).toEqual([models, `${home}/drive`]);
   });
 });
 
@@ -306,13 +308,14 @@ describe('desktop tabs: settle', () => {
 
 describe('desktop tabs: when the strip shows', () => {
   const tab = (path: string) => ({ id: path, path });
-  test('a fresh start (one New session or one page tab) shows no strip', () => {
+  test('a fresh start (one blank New session tab) shows no strip', () => {
     expect(stripVisible([tab(home)], home, P)).toBe(false);
-    expect(stripVisible([tab(models)], models, P)).toBe(false);
+    expect(stripVisible([], home, P)).toBe(false);
   });
-  test('a session, or a second tab, shows it', () => {
+  test('any page open, or a second tab, shows it', () => {
     expect(stripVisible([tab(s1)], s1, P)).toBe(true);
-    expect(stripVisible([tab(home)], s1, P)).toBe(true);
+    expect(stripVisible([tab(models)], models, P)).toBe(true);
+    expect(stripVisible([tab(home)], `${home}/goals`, P)).toBe(true);
     expect(stripVisible([tab(home), tab(models)], models, P)).toBe(true);
   });
 });

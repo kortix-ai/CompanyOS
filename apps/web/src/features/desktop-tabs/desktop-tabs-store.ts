@@ -101,9 +101,6 @@ function capTabs(tabs: DesktopTab[], activeId: string | null): DesktopTab[] {
  *     settings does for a section the caller cannot open): the active tab's
  *     page is gone, so that tab moves, or closes when another tab already
  *     shows the destination.
- *  3. One tab that is not a session (the strip is hidden): it follows every
- *     navigation. Tabs start with the first session; until then the window
- *     behaves as it did before tabs.
  *  4. The active tab is the same destination (Goals → one goal, Agents → one
  *     agent): it navigates.
  *  5. Another tab shows the destination: that tab takes focus. A session or a
@@ -148,7 +145,6 @@ export function syncPath(
       owner,
     );
   }
-  if (active && state.tabs.length === 1 && !isSessionGroup(activeGroup)) return moveActive();
   if (active && activeGroup === group) return moveActive(active.preview);
   if (owner) return focusOwner(state.tabs, owner);
   const browsing = isDocumentGroup(group) && !isSessionGroup(group);

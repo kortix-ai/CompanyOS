@@ -198,11 +198,10 @@ export function pathGroup(path: string, projectId: string): string | null {
 }
 
 /**
- * Whether the strip shows. A fresh start (one tab that is not a session) has
- * nothing to switch between, so the title bar stays as it was. A session open,
- * or a second tab, earns the strip. `currentPath` counts too: the window can
- * be on a session before the store has caught up, and reading it here keeps
- * the strip from appearing a frame late.
+ * Whether the strip shows: always, except on a fresh start (one blank New
+ * session tab), which has nothing to switch between. The first page you open
+ * becomes that tab and the strip appears. `currentPath` counts too: the window
+ * can be on a page before the store has caught up.
  */
 export function stripVisible(
   tabs: readonly { path: string }[],
@@ -210,9 +209,11 @@ export function stripVisible(
   projectId: string,
 ): boolean {
   if (tabs.length > 1) return true;
-  const isSession = (path: string) =>
-    pathGroup(path, projectId)?.startsWith(SESSION_GROUP) ?? false;
-  return isSession(currentPath) || tabs.some((tab) => isSession(tab.path));
+  const isPage = (path: string) => {
+    const group = pathGroup(path, projectId);
+    return group !== null && group !== HOME_GROUP;
+  };
+  return isPage(currentPath) || tabs.some((tab) => isPage(tab.path));
 }
 
 /**

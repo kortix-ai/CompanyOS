@@ -1,9 +1,10 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 
 import { UiLink as Link } from '../../providers/ui-provider';
 import { AgentMarkGlyph, agentMarkVars } from '../../internal/components/agent-mark';
+import { plainTextFromMarkdown } from '../../markdown/inline-code-text';
 import { cn } from '../../internal/lib/utils';
 
 /**
@@ -35,6 +36,12 @@ export function AgentCoverCard({
    *  card's link, never inside it: a button may not sit in a link. */
   action?: ReactNode;
 }) {
+  // The link's name is the title alone; the summary is its description, not
+  // part of the name (same rule as `CatalogCard`).
+  const id = useId();
+  const titleId = `${id}-title`;
+  const descriptionId = `${id}-description`;
+  const summary = description ? plainTextFromMarkdown(description) : '';
   return (
     <div className="group/card relative flex">
       <Link
@@ -42,6 +49,8 @@ export function AgentCoverCard({
         prefetch
         onPointerEnter={onIntent}
         onFocus={onIntent}
+        aria-labelledby={titleId}
+        aria-describedby={summary ? descriptionId : undefined}
         style={agentMarkVars(slug)}
         className={cn(
           'group bg-card flex-1 border-border/60 flex flex-col overflow-hidden rounded-md border text-left',
@@ -59,12 +68,14 @@ export function AgentCoverCard({
         </span>
         <span className="flex min-w-0 flex-1 flex-col gap-1 px-3.5 pt-3 pb-3.5">
           <span className="flex items-center gap-1.5">
-            <span className="text-foreground truncate text-sm font-medium">{title}</span>
+            <span id={titleId} className="text-foreground truncate text-sm font-medium">
+              {title}
+            </span>
             {badges}
           </span>
-          {description ? (
-            <span className="text-muted-foreground line-clamp-2 text-xs text-pretty">
-              {description}
+          {summary ? (
+            <span id={descriptionId} className="text-muted-foreground line-clamp-2 text-xs text-pretty">
+              {summary}
             </span>
           ) : null}
           {meta ? (

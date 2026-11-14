@@ -206,7 +206,8 @@
     },
     "agentAccess": "Agentes: {agents}",
     "allAgents": "Todos los agentes",
-    "noAgents": "Ningún agente"
+    "noAgents": "Ningún agente",
+    "deliveredOnceSet": "Se entrega en cuanto se establece un valor"
   },
   "useCases": {
     "headline": "Los ciclos que hacen funcionar una empresa",
@@ -933,6 +934,7 @@
       "secretsCommand": "Comando de secretos",
       "ownClientTitle": "Usar tu propio cliente Git",
       "ownClientDescription": "Clona con <code>git</code> directamente en vez de usar la línea de comandos de Kortix.",
+      "ownClientHelp": "Clona desde esta dirección con cualquier cliente Git. Cuando git lo solicite, ingresa cualquier nombre de usuario y una clave API de Kortix como contraseña; la línea de comandos de Kortix lo hace por ti con su asistente de credenciales, <code>git</code> por sí solo no.",
       "cloneAddressDescription": "Clona desde esta dirección con cualquier cliente Git. Kortix firma la solicitud, por lo que no necesitas crear ni guardar un token de acceso.",
       "cloneAddress": "Dirección de clonación",
       "peopleTitle": "Personas con acceso",
@@ -1147,15 +1149,16 @@
         "startup": "Arranque"
       },
       "statuses": {
-        "ready": "listo",
-        "building": "creando",
-        "failed": "fallido"
+        "ready": "Listo",
+        "building": "Creando",
+        "failed": "Fallido"
       },
       "stale": {
         "superseded": "No terminó y una configuración más reciente lo reemplazó",
         "recovered": "No terminó, pero el entorno ya está listo",
         "retrying": "No terminó — hay un nuevo intento en curso"
       },
+      "supersededGroup": "{count, plural, one {# compilación anterior reemplazada} other {# compilaciones anteriores reemplazadas}}",
       "outcomes": {
         "ready": "Listo para sesiones nuevas",
         "building": "Preparándose ahora",
@@ -1708,6 +1711,9 @@
       "title": "{file} tiene {errors, plural, one {# error} other {# errores}} y {warnings, plural, one {# advertencia} other {# advertencias}}",
       "titleErrors": "{file} tiene {errors, plural, one {# error} other {# errores}}",
       "titleWarnings": "{file} tiene {warnings, plural, one {# advertencia} other {# advertencias}}",
+      "count": "{errors, plural, one {# error} other {# errores}} y {warnings, plural, one {# advertencia} other {# advertencias}}",
+      "countErrors": "{errors, plural, one {# error} other {# errores}}",
+      "countWarnings": "{warnings, plural, one {# advertencia} other {# advertencias}}",
       "errorsOff": "Los agentes y triggers con un error están desactivados hasta que se corrija.",
       "warningsOnly": "Todo sigue funcionando.",
       "error": "Error",
@@ -10427,6 +10433,7 @@
       "text38e64d6a8162": "Confirma un SKILL.md en la rama predeterminada del espacio de trabajo. No hace falta modelo ni chat.",
       "text39cfc32bd12c": "Texto pegado",
       "text23d0bb29fca0": "{count, plural, one {# palabra} other {# palabras}}",
+      "text3e310b75051c": "Ejecutar de nuevo",
       "text426699d5a8c0": "{count, plural, one {# carácter} other {# caracteres}}",
       "text40078a553439": "Bloque del archivo adjunto cargado",
       "text4c7f8000aabd": "Carga del archivo adjunto completada",
@@ -11994,7 +12001,6 @@
       "text2f6a48c637a9": "Webhook eliminado",
       "text2f6c00ce1d58": "Los grupos enviados desde OneLogin Rules se crean en Kortix con sus nombres de OneLogin.",
       "text2f6e9daec8e9": "Estados",
-      "text2f72fafe0ce1": "en lugar de la línea de comando de Kortix.",
       "text2f77668a9dfb": "Mensaje",
       "text2f77dafd3fcc": "conectar un proveedor",
       "text2f80158a9d89": "research/",
@@ -14476,7 +14482,6 @@
       "text7743ce348d92": "borrador",
       "text775ddc2119ab": "Copia el «Identifier (Entity ID)» y la «Reply URL (Assertion Consumer Service URL)» que aparecen abajo y pégalos en el panel «Basic SAML Configuration»; marca el Identifier como Default y establece «Sign on URL» en tu página de inicio de sesión de Kortix. Deja Relay State y Logout URL vacíos. Haz clic en «Save» y cierra el panel de edición.",
       "text775f96fcc9db": "Token revocado",
-      "text7760401b25c7": "Clonar con simple",
       "text7761b572aba8": "Notificaciones del navegador",
       "text77793c7508f1": "se restablecerá.",
       "text7779bc2ac4be": "skills/claims/SKILL.md",
@@ -16699,7 +16704,6 @@
       "textb7297226fd1f": "Guardar nombre",
       "textb7396994492d": "Agregar aplicación SAML personalizada → Mapeo de atributos",
       "textb73ce9104ddb": "No se pudo copiar; selecciónalo y cópialo manualmente",
-      "textb74106e21108": "no lo hace.",
       "textb7416a669c6b": "Retirado",
       "textb74399647bf0": "Ponle el nombre de la tarea que realiza, para que una línea de auditoría se identifique por sí sola.",
       "textb743a712efa8": "Un hilo es una sesión. Una, y solo una.",
@@ -18276,7 +18280,6 @@
       "texte3190ee3d8a8": "No se puede mostrar el libro",
       "texte31ab643c44f": "miembro",
       "texte31c7af1f424": "Cada miembro conecta su propia cuenta.",
-      "texte327e6c1348b": "Clona desde esta dirección con cualquier cliente Git. Cuando git lo solicite, ingrese cualquier nombre de usuario y una clave API de Kortix como contraseña; la línea de comando de Kortix lo hace por usted a través de su asistente de credenciales, simple",
       "texte3311b311078": "Quiere CSV además de xlsx",
       "texte335ed040bfe": "Un borrador en una rama, revisado como diff.",
       "texte339fc8e7d89": "Una respuesta de chat no se puede comprobar ni repetir. Por eso la sesión confirma su trabajo: la consulta, el script, el gráfico y una nota sobre lo que verificó.",
@@ -21808,11 +21811,14 @@
     "noCapUnlimited": "Sin límite · el gasto es ilimitado",
     "tokensSub": "{in} entrada · {out} salida",
     "unknownValue": "Desconocido",
-    "estimateCoverageUnavailable": "Cobertura de la estimación no disponible.",
     "estimatesSeparate": "El gasto real de arriba es aparte. Las estimaciones nunca se suman a los cargos.",
     "estimatedUsageValueLabel": "Valor de uso estimado del LLM (no es una factura):",
-    "pricedRequests": "{count} solicitudes con precio",
-    "unpricedRequests": "{count} solicitudes sin precio",
+    "pricedRequests": "{count, number} solicitudes con precio",
+    "unpricedRequests": "{count, number} solicitudes sin precio",
+    "failedRequests": "{count, number} solicitudes fallidas",
+    "estimateInfoLabel": "Acerca de esta estimación",
+    "estimateDetail": "Llamadas al modelo correctas valoradas a precios de lista públicos. Las solicitudes fallidas y los modelos sin precio conocido no tienen precio.",
+    "estimateRateVersion": "Tabla de precios: {version}",
     "llmEstimateLabel": "Estimación del LLM:"
   },
   "triggerComposer": {
@@ -26841,6 +26847,9 @@
       "personalKeysEmpty": "No hay claves personales. kortix login crea una; las claves para un script se crean en Configuración › Claves de API de un espacio de trabajo.",
       "securityDescription": "Reglas de inicio de sesión, quién puede abrir qué sesiones y las reglas de cada clave de API.",
       "rolesDescription": "Roles integrados y personalizados. Asígnalos desde Miembros.",
+      "builtInRoles": "Roles integrados",
+      "memberGroupsEnterprise": "Los grupos forman parte de Enterprise.",
+      "openGroups": "Abrir Grupos",
       "workspaceId": "ID del espacio de trabajo",
       "workspaceIdDescription": "Para la CLI, la API y el soporte.",
       "leaveWorkspace": "Salir del espacio de trabajo",

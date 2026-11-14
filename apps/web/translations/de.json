@@ -206,7 +206,8 @@
     },
     "agentAccess": "Agenten: {agents}",
     "allAgents": "Alle Agenten",
-    "noAgents": "Keine Agenten"
+    "noAgents": "Keine Agenten",
+    "deliveredOnceSet": "Wird zugestellt, sobald ein Wert gesetzt ist"
   },
   "useCases": {
     "headline": "Die Abläufe, die ein Unternehmen am Laufen halten",
@@ -933,6 +934,7 @@
       "secretsCommand": "Secrets-Befehl",
       "ownClientTitle": "Eigenen Git-Client verwenden",
       "ownClientDescription": "Mit normalem <code>git</code> statt der Kortix-Befehlszeile klonen.",
+      "ownClientHelp": "Klonen Sie von dieser Adresse mit einem beliebigen Git-Client. Wenn git danach fragt, geben Sie einen beliebigen Benutzernamen und einen Kortix-API-Schlüssel als Passwort ein – die Kortix-Befehlszeile erledigt das über ihren Credential-Helper für Sie, normales <code>git</code> nicht.",
       "cloneAddressDescription": "Klone diese Adresse mit einem beliebigen Git-Client. Kortix signiert die Anfrage, daher musst du kein Zugriffstoken erstellen oder speichern.",
       "cloneAddress": "Klonadresse",
       "peopleTitle": "Personen mit Zugriff",
@@ -1147,15 +1149,16 @@
         "startup": "Start"
       },
       "statuses": {
-        "ready": "bereit",
-        "building": "wird erstellt",
-        "failed": "fehlgeschlagen"
+        "ready": "Bereit",
+        "building": "Wird erstellt",
+        "failed": "Fehlgeschlagen"
       },
       "stale": {
         "superseded": "Nicht abgeschlossen; eine neuere Einrichtung hat diesen Versuch ersetzt",
         "recovered": "Nicht abgeschlossen; die Umgebung ist jetzt aber bereit",
         "retrying": "Nicht abgeschlossen — ein neuer Versuch läuft"
       },
+      "supersededGroup": "{count, plural, one {# ältere Erstellung ersetzt} other {# ältere Erstellungen ersetzt}}",
       "outcomes": {
         "ready": "Bereit für neue Sitzungen",
         "building": "Wird jetzt vorbereitet",
@@ -1708,6 +1711,9 @@
       "title": "{file} hat {errors, plural, one {# Fehler} other {# Fehler}} und {warnings, plural, one {# Warnung} other {# Warnungen}}",
       "titleErrors": "{file} hat {errors, plural, one {# Fehler} other {# Fehler}}",
       "titleWarnings": "{file} hat {warnings, plural, one {# Warnung} other {# Warnungen}}",
+      "count": "{errors, plural, one {# Fehler} other {# Fehler}} und {warnings, plural, one {# Warnung} other {# Warnungen}}",
+      "countErrors": "{errors, plural, one {# Fehler} other {# Fehler}}",
+      "countWarnings": "{warnings, plural, one {# Warnung} other {# Warnungen}}",
       "errorsOff": "Agenten und Trigger mit einem Fehler sind deaktiviert, bis er behoben ist.",
       "warningsOnly": "Alles läuft weiter.",
       "error": "Fehler",
@@ -10427,6 +10433,7 @@
       "text38e64d6a8162": "Schreibt eine SKILL.md auf den Standard-Branch des Workspace. Kein Modell oder Chat nötig.",
       "text39cfc32bd12c": "Eingefügter Text",
       "text23d0bb29fca0": "{count, plural, one {# Wort} other {# Wörter}}",
+      "text3e310b75051c": "Erneut ausführen",
       "text426699d5a8c0": "{count, plural, one {# Zeichen} other {# Zeichen}}",
       "text40078a553439": "Anhang-Block hochgeladen",
       "text4c7f8000aabd": "Anhang-Upload abgeschlossen",
@@ -11994,7 +12001,6 @@
       "text2f6a48c637a9": "Webhook entfernt",
       "text2f6c00ce1d58": "Über OneLogin Rules übertragene Gruppen werden in Kortix unter ihren OneLogin-Namen erstellt.",
       "text2f6e9daec8e9": "Zustände",
-      "text2f72fafe0ce1": "anstelle der Kortix-Befehlszeile.",
       "text2f77668a9dfb": "Nachricht",
       "text2f77dafd3fcc": "Provider verbinden",
       "text2f80158a9d89": "research/",
@@ -14476,7 +14482,6 @@
       "text7743ce348d92": "Entwurf",
       "text775ddc2119ab": "Kopieren Sie unten den „Identifier (Entity ID)“ und die „Reply URL (Assertion Consumer Service URL)“ und fügen Sie sie in den Bereich „Basic SAML Configuration“ ein – markieren Sie den Identifier als Standard und setzen Sie „Sign on URL“ auf Ihre Kortix-Anmeldeseite. Lassen Sie Relay State und Logout URL leer. Klicken Sie auf „Save“ und schließen Sie den Bearbeitungsbereich.",
       "text775f96fcc9db": "Token widerrufen",
-      "text7760401b25c7": "Mit Plain klonen",
       "text7761b572aba8": "Browser-Benachrichtigungen",
       "text77793c7508f1": "Einrichtung wird zurückgesetzt.",
       "text7779bc2ac4be": "skills/claims/SKILL.md",
@@ -16699,7 +16704,6 @@
       "textb7297226fd1f": "Namen speichern",
       "textb7396994492d": "Benutzerdefinierte SAML-App hinzufügen → Attributzuordnung",
       "textb73ce9104ddb": "Kopieren fehlgeschlagen – auswählen und manuell kopieren",
-      "textb74106e21108": "nicht.",
       "textb7416a669c6b": "Zurückgerufen",
       "textb74399647bf0": "Benenne es nach seiner Aufgabe, damit eine Audit-Zeile für sich selbst steht.",
       "textb743a712efa8": "Ein Thread ist eine Sitzung. Eine — und nur eine.",
@@ -18276,7 +18280,6 @@
       "texte3190ee3d8a8": "Arbeitsmappe konnte nicht angezeigt werden",
       "texte31ab643c44f": "Mitglied",
       "texte31c7af1f424": "Jeder verbindet sein eigenes Konto.",
-      "texte327e6c1348b": "Klonen Sie von dieser Adresse mit einem beliebigen Git-Client. Wenn Git Sie dazu auffordert, geben Sie einen beliebigen Benutzernamen und einen Kortix-API-Schlüssel als Passwort ein – die Kortix-Befehlszeile erledigt dies für Sie über ihren Credential-Helper, ganz einfach",
       "texte3311b311078": "Wünscht CSV zusätzlich zu xlsx",
       "texte335ed040bfe": "Ein Entwurf auf einem Branch, geprüft als Diff.",
       "texte339fc8e7d89": "Eine Chat-Antwort lässt sich weder prüfen noch wiederholen. Deshalb committet die Sitzung ihre Arbeit: Abfrage, Skript, Diagramm und eine Notiz darüber, was verifiziert wurde.",
@@ -21808,11 +21811,14 @@
     "noCapUnlimited": "Kein Limit · Ausgaben unbegrenzt",
     "tokensSub": "{in} ein · {out} aus",
     "unknownValue": "Unbekannt",
-    "estimateCoverageUnavailable": "Abdeckung der Schätzung nicht verfügbar.",
     "estimatesSeparate": "Die tatsächlichen Ausgaben oben werden getrennt geführt. Schätzungen werden nie zu den Kosten addiert.",
     "estimatedUsageValueLabel": "Geschätzter LLM-Nutzungswert (keine Rechnung):",
-    "pricedRequests": "{count} bepreiste Anfragen",
-    "unpricedRequests": "{count} nicht bepreiste Anfragen",
+    "pricedRequests": "{count, number} bepreiste Anfragen",
+    "unpricedRequests": "{count, number} nicht bepreiste Anfragen",
+    "failedRequests": "{count, number} fehlgeschlagene Anfragen",
+    "estimateInfoLabel": "Über diese Schätzung",
+    "estimateDetail": "Erfolgreiche Modellaufrufe zu öffentlichen Listenpreisen bewertet. Fehlgeschlagene Anfragen und Modelle ohne bekannten Preis werden nicht bepreist.",
+    "estimateRateVersion": "Preistabelle: {version}",
     "llmEstimateLabel": "LLM-Schätzung:"
   },
   "triggerComposer": {
@@ -26841,6 +26847,9 @@
       "personalKeysEmpty": "Keine persönlichen Schlüssel. kortix login erstellt einen; Schlüssel für ein Skript erstellst du in den Einstellungen eines Workspace › API-Schlüssel.",
       "securityDescription": "Anmelderegeln, wer welche Sitzungen öffnen darf, und die Regeln für jeden API-Schlüssel.",
       "rolesDescription": "Integrierte und eigene Rollen. Weise sie unter Mitglieder zu.",
+      "builtInRoles": "Integrierte Rollen",
+      "memberGroupsEnterprise": "Gruppen sind Teil von Enterprise.",
+      "openGroups": "Gruppen öffnen",
       "workspaceId": "Workspace-ID",
       "workspaceIdDescription": "Für die CLI, die API und den Support.",
       "leaveWorkspace": "Workspace verlassen",

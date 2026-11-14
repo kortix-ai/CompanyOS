@@ -199,7 +199,8 @@ const catalog = {
     },
     "agentAccess": "Agents: {agents}",
     "allAgents": "All agents",
-    "noAgents": "No agents"
+    "noAgents": "No agents",
+    "deliveredOnceSet": "Delivered once a value is set"
   },
   "common": {
     "cancel": "Cancel",
@@ -459,6 +460,7 @@ const catalog = {
       "secretsCommand": "Secrets command",
       "ownClientTitle": "Use your own Git client",
       "ownClientDescription": "Clone with plain <code>git</code> instead of the Kortix command line.",
+      "ownClientHelp": "Clone from this address with any Git client. When git asks, enter any username and a Kortix API key as the password — the Kortix command line does this for you through its credential helper; plain <code>git</code> does not.",
       "cloneAddressDescription": "Clone from this address with any Git client. Kortix signs the request for you, so there is no access token to create, paste, or keep on your machine.",
       "cloneAddress": "Clone address",
       "peopleTitle": "People with access",
@@ -673,15 +675,16 @@ const catalog = {
         "startup": "Startup"
       },
       "statuses": {
-        "ready": "ready",
-        "building": "building",
-        "failed": "failed"
+        "ready": "Ready",
+        "building": "Building",
+        "failed": "Failed"
       },
       "stale": {
         "superseded": "Didn’t finish, and a newer setup has replaced it",
         "recovered": "Didn’t finish, but the environment is ready now",
         "retrying": "Didn’t finish — a new attempt is running"
       },
+      "supersededGroup": "{count, plural, one {# older build replaced} other {# older builds replaced}}",
       "outcomes": {
         "ready": "Ready for new sessions",
         "building": "Being prepared now",
@@ -1202,6 +1205,9 @@ const catalog = {
       "title": "{file} has {errors, plural, one {# error} other {# errors}} and {warnings, plural, one {# warning} other {# warnings}}",
       "titleErrors": "{file} has {errors, plural, one {# error} other {# errors}}",
       "titleWarnings": "{file} has {warnings, plural, one {# warning} other {# warnings}}",
+      "count": "{errors, plural, one {# error} other {# errors}} and {warnings, plural, one {# warning} other {# warnings}}",
+      "countErrors": "{errors, plural, one {# error} other {# errors}}",
+      "countWarnings": "{warnings, plural, one {# warning} other {# warnings}}",
       "errorsOff": "Agents and triggers with an error are off until it is fixed.",
       "warningsOnly": "Everything still runs.",
       "error": "Error",
@@ -2730,6 +2736,7 @@ const catalog = {
       "text38e64d6a8162": "Commits a SKILL.md to the workspace's default branch. No model or chat needed.",
       "text39cfc32bd12c": "Pasted text",
       "text23d0bb29fca0": "{count, plural, one {# word} other {# words}}",
+      "text3e310b75051c": "Run again",
       "text426699d5a8c0": "{count, plural, one {# character} other {# characters}}",
       "text8782b778c202": "Delete {value0}",
       "text0005b85debac": "Sound pack played for session events.",
@@ -3260,7 +3267,6 @@ const catalog = {
       "text2f3263f5c933": "e.g. GMAPS-primary",
       "text2f485b9971df": "You're all caught up",
       "text2f5525e787a5": "Pick workspace members to add to this group.",
-      "text2f72fafe0ce1": "instead of the Kortix command line.",
       "text2f77668a9dfb": "Message",
       "text2f80158a9d89": "research/",
       "text2f883b75cd2d": "Search a URL or port",
@@ -4134,7 +4140,6 @@ const catalog = {
       "text76c02b7eddca": "Search skills",
       "text76f48924ee10": "The sandbox holds a handle under this key. Kortix swaps the real value in outside the sandbox, and only on a request to one of these hosts.",
       "text77184595bde3": "Ascending",
-      "text7760401b25c7": "Clone with plain",
       "text7761b572aba8": "Browser notifications",
       "text778ed69bedf7": "Preparing changes…",
       "text77a860cbc585": "Send to agent",
@@ -4888,7 +4893,6 @@ const catalog = {
       "textb6d85433a7ee": "Sessions could not be loaded",
       "textb70354a1faae": "Foo 7B",
       "textb728bd912cde": "Could not load the routing policy.",
-      "textb74106e21108": "does not.",
       "textb7416a669c6b": "Recalled",
       "textb7595e2a8639": "steps",
       "textb762cc8a7284": "Reflects on recent activity and curates .kortix/memory, opening a memory CR each run.",
@@ -5455,7 +5459,6 @@ const catalog = {
       "texte2d15fe36f4d": "Almost ready...",
       "texte2ee2909fe27": "Ctrl",
       "texte3190ee3d8a8": "Unable to display workbook",
-      "texte327e6c1348b": "Clone from this address with any Git client. When git asks, enter any username and a Kortix API key as the password — the Kortix command line does this for you through its credential helper, plain",
       "texte391550d9883": "No agent can receive this secret",
       "texte392a3891c07": "Suspended",
       "texte3ba17e32240": "30d",
@@ -6619,11 +6622,14 @@ const catalog = {
     "noCapUnlimited": "No cap · spend is unlimited",
     "tokensSub": "{in} in · {out} out",
     "unknownValue": "Unknown",
-    "estimateCoverageUnavailable": "Estimate coverage unavailable.",
     "estimatesSeparate": "Actual spend above is separate. Estimates are never added to charges.",
     "estimatedUsageValueLabel": "LLM estimated usage value (not a bill):",
-    "pricedRequests": "{count} priced requests",
-    "unpricedRequests": "{count} unpriced requests",
+    "pricedRequests": "{count, number} priced requests",
+    "unpricedRequests": "{count, number} unpriced requests",
+    "failedRequests": "{count, number} failed requests",
+    "estimateInfoLabel": "About this estimate",
+    "estimateDetail": "Successful model calls priced at public list rates. Failed requests and models without a known rate are not priced.",
+    "estimateRateVersion": "Rate table: {version}",
     "llmEstimateLabel": "LLM estimate:"
   },
   "triggerComposer": {
@@ -10129,6 +10135,9 @@ const catalog = {
       "personalKeysEmpty": "No personal keys. kortix login makes one; keys for a script are made in a workspace's Settings › API keys.",
       "securityDescription": "Sign-in rules, who may open whose sessions, and the rules every API key follows.",
       "rolesDescription": "Built-in and custom roles. Assign them from Members.",
+      "builtInRoles": "Built-in roles",
+      "memberGroupsEnterprise": "Groups are part of Enterprise.",
+      "openGroups": "Open Groups",
       "workspaceId": "Workspace ID",
       "workspaceIdDescription": "For the CLI, the API, and support.",
       "leaveWorkspace": "Leave workspace",

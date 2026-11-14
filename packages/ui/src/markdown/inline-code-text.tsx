@@ -27,6 +27,29 @@ export function splitInlineCode(input: string): InlineCodeSegment[] {
 }
 
 /**
+ * A markdown string as the plain words it shows, for one-line text that
+ * cannot hold markup: a card's summary, an accessible description, a link
+ * name. Code spans lose their backticks, links and images keep their text,
+ * emphasis markers go, and line breaks collapse to single spaces.
+ * `memory_reflector`-style identifiers keep their underscores.
+ */
+export function plainTextFromMarkdown(input: string): string {
+  return splitInlineCode(input)
+    .map((segment) =>
+      segment.kind === 'code'
+        ? segment.value
+        : segment.value
+            .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+            .replace(/(\*\*|__|~~)(?=\S)([\s\S]*?\S)\1/g, '$2')
+            .replace(/(^|[^\w*])\*(?=\S)([^*]*?\S)\*(?![\w*])/g, '$1$2')
+            .replace(/(^|[^\w])_(?=\S)([^_]*?\S)_(?!\w)/g, '$1$2'),
+    )
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * A short string an agent wrote (a goal criterion, an agent description) with
  * its `code spans` drawn as the chat's inline-code chip instead of literal
  * backticks. Inline only: no block elements and no links, so it is safe inside

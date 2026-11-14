@@ -206,7 +206,8 @@
     },
     "agentAccess": "Agenti: {agents}",
     "allAgents": "Svi agenti",
-    "noAgents": "Nema agenata"
+    "noAgents": "Nema agenata",
+    "deliveredOnceSet": "Isporučuje se kada se postavi vrednost"
   },
   "useCases": {
     "headline": "Циклуси који покрећу компанију",
@@ -933,6 +934,7 @@
       "secretsCommand": "Команда за тајне",
       "ownClientTitle": "Користите свој Git клијент",
       "ownClientDescription": "Клонирајте обичним <code>git</code>-ом уместо Kortix командном линијом.",
+      "ownClientHelp": "Клонирајте са ове адресе било којим Git клијентом. Када git затражи, унесите било које корисничко име и Kortix API кључ као лозинку — Kortix командна линија то ради уместо вас преко свог помоћника за акредитиве, обичан <code>git</code> не.",
       "cloneAddressDescription": "Клонирајте са ове адресе било којим Git клијентом. Kortix потписује захтев, па не морате да правите нити чувате приступни токен.",
       "cloneAddress": "Адреса за клонирање",
       "peopleTitle": "Особе са приступом",
@@ -1147,15 +1149,16 @@
         "startup": "Покретање"
       },
       "statuses": {
-        "ready": "спремно",
-        "building": "изградња",
-        "failed": "неуспело"
+        "ready": "Спремно",
+        "building": "Изградња",
+        "failed": "Неуспело"
       },
       "stale": {
         "superseded": "Није завршено, а новије подешавање га је заменило",
         "recovered": "Није завршено, али је окружење сада спремно",
         "retrying": "Није завршено — нови покушај је у току"
       },
+      "supersededGroup": "{count, plural, one {# старија изградња замењена} few {# старије изградње замењене} other {# старијих изградњи замењено}}",
       "outcomes": {
         "ready": "Спремно за нове сесије",
         "building": "Припрема је у току",
@@ -1708,6 +1711,9 @@
       "title": "{file} има {errors, plural, one {# грешку} few {# грешке} other {# грешака}} и {warnings, plural, one {# упозорење} few {# упозорења} other {# упозорења}}",
       "titleErrors": "{file} има {errors, plural, one {# грешку} few {# грешке} other {# грешака}}",
       "titleWarnings": "{file} има {warnings, plural, one {# упозорење} few {# упозорења} other {# упозорења}}",
+      "count": "{errors, plural, one {# грешка} few {# грешке} other {# грешака}} и {warnings, plural, one {# упозорење} few {# упозорења} other {# упозорења}}",
+      "countErrors": "{errors, plural, one {# грешка} few {# грешке} other {# грешака}}",
+      "countWarnings": "{warnings, plural, one {# упозорење} few {# упозорења} other {# упозорења}}",
       "errorsOff": "Агенти и окидачи са грешком су искључени док се она не исправи.",
       "warningsOnly": "Све и даље ради.",
       "error": "Грешка",
@@ -10427,6 +10433,7 @@
       "text38e64d6a8162": "Комитује SKILL.md на подразумевани грану радног простора. Није потребан модел ни ћаскање.",
       "text39cfc32bd12c": "Налепљени текст",
       "text23d0bb29fca0": "{count, plural, one {# реч} few {# речи} other {# речи}}",
+      "text3e310b75051c": "Покрени поново",
       "text426699d5a8c0": "{count, plural, one {# знак} few {# знака} other {# знакова}}",
       "text40078a553439": "Блок прилога је отпремљен",
       "text4c7f8000aabd": "Отпремање прилога је завршено",
@@ -11994,7 +12001,6 @@
       "text2f6a48c637a9": "Webhook је уклоњен",
       "text2f6c00ce1d58": "Групе послате из OneLogin Rules креирају се у Kortix-у под својим OneLogin називима.",
       "text2f6e9daec8e9": "Стања",
-      "text2f72fafe0ce1": "уместо командне линије Кортик.",
       "text2f77668a9dfb": "Порука",
       "text2f77dafd3fcc": "повежите провајдера",
       "text2f80158a9d89": "research/",
@@ -14476,7 +14482,6 @@
       "text7743ce348d92": "нацрт",
       "text775ddc2119ab": "Копирајте „Identifier (Entity ID)“ и „Reply URL (Assertion Consumer Service URL)“ испод и налепите их у панел „Basic SAML Configuration“ — означите Identifier као Default, а „Sign on URL“ подесите на Kortix страницу за пријављивање. Оставите Relay State и Logout URL празне. Кликните на „Save“ и затворите панел за измену.",
       "text775f96fcc9db": "Токен је опозван",
-      "text7760401b25c7": "Клон са обичним",
       "text7761b572aba8": "Обавештења претраживача",
       "text77793c7508f1": "биће ресетовано.",
       "text7779bc2ac4be": "skills/claims/SKILL.md",
@@ -16699,7 +16704,6 @@
       "textb7297226fd1f": "Сачувај назив",
       "textb7396994492d": "Додај прилагођену SAML апликацију → Мапирање атрибута",
       "textb73ce9104ddb": "Копирање није успело — изаберите и копирајте ручно",
-      "textb74106e21108": "не.",
       "textb7416a669c6b": "Опозвано",
       "textb74399647bf0": "Назовите га по послу који обавља, како би ред у евиденцији ревизије говорио сам за себе.",
       "textb743a712efa8": "Нит је сесија. Једна, и само једна.",
@@ -18276,7 +18280,6 @@
       "texte3190ee3d8a8": "Није могуће приказати радну свеску",
       "texte31ab643c44f": "члан",
       "texte31c7af1f424": "Свако повезује свој налог.",
-      "texte327e6c1348b": "Клонирајте са ове адресе са било којим Гит клијентом. Када гит затражи, унесите било које корисничко име и Кортик АПИ кључ као лозинку — Кортик командна линија то ради за вас преко свог помоћника акредитива, једноставно",
       "texte3311b311078": "Жели CSV поред xlsx формата",
       "texte335ed040bfe": "Нацрт на грани, прегледан као diff.",
       "texte339fc8e7d89": "Одговор у разговору не може да се провери или понови. Зато сесија предаје свој рад: упит, скрипту, графикон и белешку о ономе што је проверила.",
@@ -21808,11 +21811,14 @@
     "noCapUnlimited": "Без ограничења · потрошња је неограничена",
     "tokensSub": "{in} улаз · {out} излаз",
     "unknownValue": "Nepoznato",
-    "estimateCoverageUnavailable": "Pokrivenost procene nije dostupna.",
     "estimatesSeparate": "Stvarna potrošnja iznad je odvojena. Procene se nikada ne dodaju troškovima.",
     "estimatedUsageValueLabel": "Procenjena vrednost LLM upotrebe (nije račun):",
-    "pricedRequests": "{count} zahteva sa cenom",
-    "unpricedRequests": "{count} zahteva bez cene",
+    "pricedRequests": "{count, number} zahteva sa cenom",
+    "unpricedRequests": "{count, number} zahteva bez cene",
+    "failedRequests": "{count, number} neuspelih zahteva",
+    "estimateInfoLabel": "O ovoj proceni",
+    "estimateDetail": "Uspešni pozivi modela po javnim cenovnicima. Neuspeli zahtevi i modeli bez poznate cene nemaju cenu.",
+    "estimateRateVersion": "Cenovnik: {version}",
     "llmEstimateLabel": "LLM procena:"
   },
   "triggerComposer": {
@@ -26841,6 +26847,9 @@
       "personalKeysEmpty": "Нема личних кључева. kortix login прави један; кључеви за скрипту праве се у подешавањима радног простора › API кључеви.",
       "securityDescription": "Правила пријаве, ко сме да отвори чије сесије и правила за сваки API кључ.",
       "rolesDescription": "Уграђене и прилагођене улоге. Доделите их из Чланова.",
+      "builtInRoles": "Уграђене улоге",
+      "memberGroupsEnterprise": "Групе су део пакета Enterprise.",
+      "openGroups": "Отвори Групе",
       "workspaceId": "ID радног простора",
       "workspaceIdDescription": "За CLI, API и подршку.",
       "leaveWorkspace": "Напусти радни простор",

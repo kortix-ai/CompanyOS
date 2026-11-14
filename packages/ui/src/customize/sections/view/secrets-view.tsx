@@ -414,7 +414,7 @@ export function SecretsView({
               variant="popover"
               size="sm"
             />
-            <InputGroupSearchClear onClick={() => setQuery('')} />
+            {query ? <InputGroupSearchClear onClick={() => setQuery('')} /> : null}
           </InputGroupSearch>
         ) : undefined
       }
@@ -610,7 +610,7 @@ function SecretsAccessInfo({ showEnforced }: { showEnforced: boolean }) {
       </HoverCardTrigger>
       <HoverCardContent
         align="start"
-        className="max-h-[min(36rem,70vh)] w-[26rem] max-w-[calc(100vw-2rem)] space-y-3 overflow-y-auto p-4"
+        className="max-h-[min(36rem,var(--radix-hover-card-content-available-height))] w-[26rem] max-w-[calc(100vw-2rem)] space-y-3 overflow-y-auto p-4"
       >
         <p className="text-foreground text-sm font-medium">{heading}</p>
         <dl className="space-y-2.5">
@@ -878,7 +878,7 @@ function MissingSecretRow({
   );
 }
 
-function SecretTableRow({
+export function SecretTableRow({
   row,
   grantSwitch,
   canManage,
@@ -939,6 +939,14 @@ function SecretTableRow({
           />
         ) : row.undecryptable ? (
           <UndecryptableValue onAction={canManageShared ? onEdit : undefined} />
+        ) : !row.configured && canManageShared ? (
+          // An unset secret's one next step, on the row rather than only in the menu.
+          <span className="flex items-center gap-2">
+            {statusLabel(row)}
+            <Button variant="ghost" size="xs" onClick={onEdit}>
+              {tI18nComplete.raw('text58bf3410b028')}
+            </Button>
+          </span>
         ) : (
           statusLabel(row)
         )}
@@ -977,7 +985,15 @@ function SecretTableRow({
               <span className="text-muted-foreground text-xs">{tSharing('notSharedWithYou')}</span>
             )}
           </div>
-        ) : null}
+        ) : (
+          // No value, so nobody receives it yet: say so instead of a blank cell.
+          <Hint label={tSecrets('deliveredOnceSet')} side="top">
+            <span className="text-muted-foreground text-xs">
+              <span aria-hidden="true">—</span>
+              <span className="sr-only">{tSecrets('deliveredOnceSet')}</span>
+            </span>
+          </Hint>
+        )}
       </TableCell>
       {grantSwitch ? (
         <TableCell className="text-right align-middle">

@@ -866,6 +866,10 @@ const catalog = {
           "name": "Evals",
           "description": "Run your agents on a list of tasks and score the results. A task is an instruction, a sandbox and a test script that writes a score (the Harbor task format). Declare a set of tasks under `evals:` in kortix.yaml, run it against any agent and model, and compare runs to see whether a change made the agent better or worse."
         },
+        "desktop_tabs": {
+          "name": "Desktop tabs",
+          "description": "The desktop app shows browser-style tabs in the title bar: each session, artifact and page opens in its own tab, and ⌘T, ⌘W and ⌘1–9 work like a browser. The web app is unchanged."
+        },
         "calendar": {
           "name": "Calendar",
           "description": "A shared calendar for people and agents: items with a date, an owner and comments, beside the scheduled triggers and Loops. Mention someone with @ to notify them. Agents use `kortix calendar`."
@@ -1148,6 +1152,7 @@ const catalog = {
         "status": "Status",
         "subAgent": "Sub-agent",
         "spawned": "Spawned session",
+        "spawnedBy": "Spawned by {title}",
         "subAgentCount": "{count, plural, one {# sub-agent} other {# sub-agents}}",
         "spawnedCount": "{count, plural, one {# spawned session} other {# spawned sessions}}",
         "created": "Created",

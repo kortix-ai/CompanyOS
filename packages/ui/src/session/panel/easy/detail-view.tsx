@@ -264,6 +264,13 @@ function useDetailKeyboard(
         // (`session-chat.tsx`) skips a `defaultPrevented` Escape. Without it,
         // closing three full-screen images in a row stopped a running turn.
         event.preventDefault();
+        // Full screen is one level above the docked detail: the first Escape
+        // leaves it and keeps the same view docked; the next one closes (D-07).
+        const store = useKortixComputerStore.getState();
+        if (store.isExpanded) {
+          store.toggleExpanded();
+          return;
+        }
         onBack();
         return;
       }

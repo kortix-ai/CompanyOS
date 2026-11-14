@@ -166,6 +166,7 @@ function projectFixture(overrides: Record<string, unknown> = {}) {
       spaces_proactive: false,
       program_agents: false,
       evals: false,
+      desktop_tabs: false,
       calendar: false,
     },
     experimental_features: [],
@@ -902,6 +903,7 @@ describe('envelopes', () => {
       'spaces_proactive',
       'program_agents',
       'evals',
+      'desktop_tabs',
       'calendar',
     ]);
   });

@@ -480,6 +480,9 @@ const FileCard = memo(function FileCard({
           <FileThumbnail
             filePath={node.path}
             fileName={node.name}
+            // No preview until the server has the file: a read before the
+            // write lands is a 404 the card would keep (D-08).
+            deferPreview={uploading}
             onOpen={open}
             className={cn(
               'border-border h-[120px] rounded-lg border',

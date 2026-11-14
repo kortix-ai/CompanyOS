@@ -88,10 +88,10 @@ describe('capabilityTabHref', () => {
 describe('reviewHref', () => {
   test('Review is a tab of the Inbox', () => {
     // Since 2026-11-04 Review is a top-level page; `/customize/review` redirects to it.
-    expect(reviewHref('p1')).toBe('/workspaces/p1/inbox?view=review');
-    expect(capabilityTabHref('p1', 'review')).toBe('/workspaces/p1/inbox?view=review');
+    expect(reviewHref('p1')).toBe('/workspaces/p1/review');
+    expect(capabilityTabHref('p1', 'review')).toBe('/workspaces/p1/review');
     // The page draws no Customize bar, so it lights no Customize tab.
-    expect(activeCapabilityTab('/workspaces/p1/inbox?view=review')).toBeNull();
+    expect(activeCapabilityTab('/workspaces/p1/review')).toBeNull();
   });
 });
 

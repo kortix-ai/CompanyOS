@@ -124,23 +124,7 @@ export function EmailLinkStep({
           <FieldError id="code-error" message={errorMessage} />
         )}
 
-        <p className="text-muted-foreground mt-5 text-sm">
-          {confirmed ? t('link.confirmNotReceived') : t('link.notReceived')}{' '}
-          {resendIn > 0 ? (
-            <span className="tabular-nums">{t('link.resendIn', { seconds: resendIn })}</span>
-          ) : (
-            <button
-              type="button"
-              onClick={onResend}
-              disabled={pending}
-              className="text-foreground -my-2 py-2 disabled:opacity-50"
-            >
-              {pendingAction === 'resend' ? t('sending') : t('link.resend')}
-            </button>
-          )}
-        </p>
         <QuietLinks
-          className="mt-2"
           disabled={pending}
           links={[
             { key: 'email', label: t('useDifferentEmail'), onClick: onChangeEmail },
@@ -151,6 +135,14 @@ export function EmailLinkStep({
                   onClick: onPassword,
                 }
               : null,
+            // Plain text while the countdown runs, then the resend action.
+            resendIn > 0
+              ? { key: 'resend', label: t('link.resendIn', { seconds: resendIn }) }
+              : {
+                  key: 'resend',
+                  label: pendingAction === 'resend' ? t('sending') : t('link.resend'),
+                  onClick: onResend,
+                },
           ]}
         />
       </m.div>

@@ -3035,8 +3035,6 @@
         "confirmDescription": "确认我们发送到 <address>{email}</address> 的邮件以继续。",
         "unknownDescription": "输入发送到 <address>{email}</address> 的验证码。",
         "closedDescription": "如果 <address>{email}</address> 有账户，验证码已在发送途中。",
-        "notReceived": "没有收到邮件？",
-        "confirmNotReceived": "没有收到邮件？",
         "resendIn": "{seconds} 秒后重新发送",
         "resend": "重新发送"
       },
@@ -3064,10 +3062,6 @@
         "existingAccountWrongPassword": "此邮箱已有账户。请输入密码。",
         "confirmAccount": "请查看您的邮箱以确认账户",
         "invalidCode": "验证码无效或已过期"
-      },
-      "legal": {
-        "signup": "创建账户即表示您同意<termsOfService>服务条款</termsOfService>和<privacyPolicy>隐私政策</privacyPolicy>",
-        "default": "<termsOfService>服务条款</termsOfService>和<privacyPolicy>隐私政策</privacyPolicy>"
       },
       "or": "或"
     },

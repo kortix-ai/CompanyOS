@@ -112,7 +112,7 @@ export function StepHeader({
       )}
       <h1
         className={cn(
-          'text-foreground text-2xl font-medium tracking-tight md:mt-6',
+          'text-foreground text-2xl font-semibold tracking-tight text-balance md:mt-6',
           mark && markOnMobile && 'mt-6',
         )}
       >
@@ -139,7 +139,8 @@ export function OrDivider({ label }: { label: string }) {
 export type QuietLink = {
   key: string;
   label: React.ReactNode;
-  onClick: () => void;
+  /** Without it the entry is plain text in the row (a countdown). */
+  onClick?: () => void;
   disabled?: boolean;
   /** Muted text after the button, outside its accessible name (a countdown). */
   hint?: React.ReactNode;
@@ -161,40 +162,47 @@ export function QuietLinks({
 }) {
   const shown = links.filter(Boolean) as QuietLink[];
   if (shown.length === 0) return null;
+  // Every entry leads with its middot, and the row is pulled left by one
+  // middot's width and clipped: an entry that wraps to a new line starts
+  // clean, with no dot in front of it.
   return (
-    <p className={cn('text-muted-foreground mt-5 flex flex-wrap items-center gap-x-2 text-sm', className)}>
-      {shown.map((link, i) => (
-        <span key={link.key} className="flex items-center gap-x-2">
-          {i > 0 ? (
-            <span aria-hidden className="select-none">
+    <div className={cn('text-muted-foreground mt-5 overflow-x-clip text-sm', className)}>
+      <p className="-ml-4 flex flex-wrap items-center gap-x-2">
+        {shown.map((link) => (
+          <span key={link.key} className="flex items-center gap-x-2 whitespace-nowrap">
+            <span aria-hidden className="w-2 text-center select-none">
               ·
             </span>
-          ) : null}
-          <button
-            type="button"
-            onClick={link.onClick}
-            disabled={disabled || link.disabled}
-            className="hover:text-foreground -my-2 py-2 transition-colors disabled:opacity-50"
-          >
-            {link.label}
-          </button>
-          {link.hint ? (
-            <>
-              <span aria-hidden className="select-none">
-                ·
-              </span>
-              <span className="tabular-nums">{link.hint}</span>
-            </>
-          ) : null}
-        </span>
-      ))}
-    </p>
+            {link.onClick ? (
+              <button
+                type="button"
+                onClick={link.onClick}
+                disabled={disabled || link.disabled}
+                className="hover:text-foreground -my-2 py-2 transition-colors disabled:opacity-50"
+              >
+                {link.label}
+              </button>
+            ) : (
+              <span className="tabular-nums">{link.label}</span>
+            )}
+            {link.hint ? (
+              <>
+                <span aria-hidden className="select-none">
+                  ·
+                </span>
+                <span className="tabular-nums">{link.hint}</span>
+              </>
+            ) : null}
+          </span>
+        ))}
+      </p>
+    </div>
   );
 }
 
 export function FieldLabel({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) {
   return (
-    <label htmlFor={htmlFor} className="text-muted-foreground text-sm font-medium">
+    <label htmlFor={htmlFor} className="text-foreground text-sm font-medium">
       {children}
     </label>
   );

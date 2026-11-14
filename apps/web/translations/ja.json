@@ -3035,8 +3035,6 @@
         "confirmDescription": "<address>{email}</address> に送信したメールを確認して続行してください。",
         "unknownDescription": "<address>{email}</address> に送信したコードを入力してください。",
         "closedDescription": "<address>{email}</address> にアカウントがある場合、コードが届きます。",
-        "notReceived": "メールが届きませんか？",
-        "confirmNotReceived": "メールが届きませんか？",
         "resendIn": "{seconds}秒後に再送信",
         "resend": "再送信"
       },
@@ -3064,10 +3062,6 @@
         "existingAccountWrongPassword": "このメールアドレスにはアカウントがあります。パスワードを入力してください。",
         "confirmAccount": "メールを確認してアカウントを認証してください",
         "invalidCode": "コードが無効か、有効期限が切れています"
-      },
-      "legal": {
-        "signup": "アカウントを作成すると、<termsOfService>利用規約</termsOfService>および<privacyPolicy>プライバシーポリシー</privacyPolicy>に同意したものとみなされます",
-        "default": "<termsOfService>利用規約</termsOfService>および<privacyPolicy>プライバシーポリシー</privacyPolicy>"
       },
       "or": "または"
     },

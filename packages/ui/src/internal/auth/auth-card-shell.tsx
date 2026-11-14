@@ -21,11 +21,8 @@ import { openExternalRoute } from '../lib/desktop';
 // The phone-verification page builds its own frame around a sign-out control.
 export { AuthArt };
 
-/** Which sentence the legal line uses. */
-export type AuthLegalFooterVariant = 'default' | 'signup' | 'continue';
-
-/** Tiny legal line pinned to the bottom of every auth surface. */
-export function AuthLegalFooter({ variant = 'default' }: { variant?: AuthLegalFooterVariant }) {
+/** Tiny legal line pinned to the bottom of every auth surface: one sentence on every page. */
+export function AuthLegalFooter() {
   const t = useTranslations('auth');
   const onLegalClick = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     if (openExternalRoute(href)) event.preventDefault();
@@ -34,7 +31,7 @@ export function AuthLegalFooter({ variant = 'default' }: { variant?: AuthLegalFo
     <Link
       href="/legal/terms"
       onClick={(event) => onLegalClick(event, '/legal/terms')}
-      className="hover:text-foreground decoration-border underline underline-offset-2 transition-colors"
+      className="hover:text-foreground decoration-border whitespace-nowrap underline underline-offset-2 transition-colors"
     >
       {t('termsOfService')}
     </Link>
@@ -43,28 +40,20 @@ export function AuthLegalFooter({ variant = 'default' }: { variant?: AuthLegalFo
     <Link
       href="/legal?tab=privacy"
       onClick={(event) => onLegalClick(event, '/legal?tab=privacy')}
-      className="hover:text-foreground decoration-border underline underline-offset-2 transition-colors"
+      className="hover:text-foreground decoration-border whitespace-nowrap underline underline-offset-2 transition-colors"
     >
       {t('privacyPolicy')}
     </Link>
   );
 
   return (
-    <footer className="text-muted-foreground mx-auto w-full max-w-[428px] px-6 pb-8 text-xs text-balance">
-      {variant === 'continue'
-        ? t.rich('byContinuingYouAgree', {
-            termsOfService: () => terms,
-            privacyPolicy: () => privacy,
-          })
-        : variant === 'signup'
-          ? t.rich('unified.legal.signup', {
-              termsOfService: () => terms,
-              privacyPolicy: () => privacy,
-            })
-          : t.rich('unified.legal.default', {
-              termsOfService: () => terms,
-              privacyPolicy: () => privacy,
-            })}
+    // The same 380px column as the form, so the legal line shares its left
+    // edge. A link never breaks inside its name.
+    <footer className="text-muted-foreground mx-auto w-full max-w-[380px] pb-8 text-xs text-balance">
+      {t.rich('byContinuingYouAgree', {
+        termsOfService: () => terms,
+        privacyPolicy: () => privacy,
+      })}
     </footer>
   );
 }
@@ -79,7 +68,8 @@ export function AuthFrame({
   children,
   footerVariant = 'default',
   backHref,
-  art = true,
+  // Off for now: the pane comes back by passing `art`.
+  art = false,
 }: {
   children: React.ReactNode;
   /**
@@ -93,7 +83,7 @@ export function AuthFrame({
    * not an auth surface — on a real auth flow the footer stays pinned so the
    * page does not jump when the column above it swaps.
    */
-  footerVariant?: AuthLegalFooterVariant | 'none';
+  footerVariant?: 'default' | 'none';
   /**
    * Where Back goes, when the page knows where its flow started. Without it,
    * Back returns to the previous in-app page, else the app home.
@@ -103,12 +93,12 @@ export function AuthFrame({
   useDesktopBackTarget(backHref);
   return (
     <div className="bg-background flex min-h-svh">
-      <div className="relative flex min-h-svh flex-1 flex-col">
+      <div className="relative flex min-h-svh flex-1 flex-col px-6">
         <AuthMobileLogo />
-        <main className="flex flex-1 flex-col items-center justify-center px-6 py-24">
+        <main className="flex flex-1 flex-col items-center justify-center py-24">
           <div className="w-full max-w-[380px]">{children}</div>
         </main>
-        {footerVariant === 'none' ? null : <AuthLegalFooter variant={footerVariant} />}
+        {footerVariant === 'none' ? null : <AuthLegalFooter />}
       </div>
       {/* The art stays put while a long form scrolls beside it. */}
       {art ? <AuthArt className="sticky top-0 hidden h-svh w-1/2 shrink-0 lg:block" /> : null}

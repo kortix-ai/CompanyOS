@@ -1804,10 +1804,8 @@ const catalog = {
         "confirmDescription": "Confirm the email we sent to <address>{email}</address> to continue.",
         "unknownDescription": "Enter the code sent to <address>{email}</address>.",
         "closedDescription": "If <address>{email}</address> has an account, a code is on its way.",
-        "notReceived": "Didn't get the email?",
-        "confirmNotReceived": "Didn't get the email?",
         "resendIn": "Resend in {seconds}s",
-        "resend": "Resend"
+        "resend": "Resend code"
       },
       "credentials": {
         "signin": {
@@ -1833,10 +1831,6 @@ const catalog = {
         "existingAccountWrongPassword": "This email already has an account. Enter its password.",
         "confirmAccount": "Check your email to confirm your account",
         "invalidCode": "Invalid or expired code"
-      },
-      "legal": {
-        "signup": "By creating an account, you agree to the <termsOfService>Terms of Service</termsOfService> and <privacyPolicy>Privacy Policy</privacyPolicy>",
-        "default": "<termsOfService>Terms of Service</termsOfService> and <privacyPolicy>Privacy Policy</privacyPolicy>"
       },
       "or": "or"
     },

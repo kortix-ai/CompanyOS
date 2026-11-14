@@ -3035,8 +3035,6 @@
         "confirmDescription": "Confirmez l’e-mail envoyé à <address>{email}</address> pour continuer.",
         "unknownDescription": "Saisissez le code envoyé à <address>{email}</address>.",
         "closedDescription": "Si <address>{email}</address> a un compte, un code est en route.",
-        "notReceived": "Pas reçu l’e-mail ?",
-        "confirmNotReceived": "Pas reçu l’e-mail ?",
         "resendIn": "Renvoyer dans {seconds} s",
         "resend": "Renvoyer"
       },
@@ -3064,10 +3062,6 @@
         "existingAccountWrongPassword": "Cet e-mail a déjà un compte. Saisissez son mot de passe.",
         "confirmAccount": "Consultez votre boîte e-mail pour confirmer votre compte",
         "invalidCode": "Code invalide ou expiré"
-      },
-      "legal": {
-        "signup": "En créant un compte, vous acceptez les <termsOfService>Conditions d’utilisation</termsOfService> et la <privacyPolicy>Politique de confidentialité</privacyPolicy>",
-        "default": "<termsOfService>Conditions d’utilisation</termsOfService> et <privacyPolicy>Politique de confidentialité</privacyPolicy>"
       },
       "or": "ou"
     },

@@ -51,6 +51,26 @@ test('a failed resend remains visible beside the retry action', () => {
   expect(markup).toContain('Resend');
 });
 
+test('the resend countdown is plain text after "Use a password", then a button', () => {
+  const props = {
+    sentEmail: 'synthetic@example.test',
+    errorMessage: null,
+    info: null,
+    pending: false,
+    pendingAction: null,
+    passwordEnabled: true,
+    onResend: () => {},
+    onChangeEmail: () => {},
+    onPassword: () => {},
+  } as const;
+  const counting = renderToStaticMarkup(<EmailLinkStep {...props} resendIn={53} />);
+  expect(counting).not.toContain('Didn&#x27;t get the email?');
+  expect(counting.indexOf('Resend in 53s')).toBeGreaterThan(counting.indexOf('Use a password'));
+  expect(counting).not.toMatch(/<button[^>]*>Resend in 53s/);
+  const ready = renderToStaticMarkup(<EmailLinkStep {...props} resendIn={0} />);
+  expect(ready).toMatch(/<button[^>]*>Resend code<\/button>/);
+});
+
 const SIGN_IN_WORDING: Record<string, RegExp> = {
   en: /sign-in/i,
   de: /Anmeldelink/,
@@ -114,7 +134,7 @@ test('mode=signup: the copy names the confirmation email the mailbox actually re
     />,
   );
   expect(markup).toContain('Confirm the email we sent to');
-  expect(markup).toContain('Didn&#x27;t get the email?');
+  expect(markup).toContain('Resend code');
   expect(markup).not.toContain('Enter the code sent');
 });
 
@@ -136,7 +156,7 @@ test('modes without their own send knowledge keep the generic link copy (fail-op
       />,
     );
     expect(markup).toContain('Enter the code sent to');
-    expect(markup).toContain('Didn&#x27;t get the email?');
+    expect(markup).toContain('Resend code');
     expect(markup).not.toContain('Confirm the email');
   }
 });
@@ -196,7 +216,6 @@ test('every locale carries the confirmation copy with the address placeholder', 
     );
     const link = catalog.auth.unified.link;
     expect(link.confirmDescription.trim().length, locale).toBeGreaterThan(0);
-    expect(link.confirmNotReceived.trim().length, locale).toBeGreaterThan(0);
     expect(link.confirmDescription, locale).toContain('<address>{email}</address>');
     expect(link.confirmDescription, locale).not.toMatch(/\b(link|lien|enlace|リンク|链接|линк)/i);
     // The KRTX-3504 copies must render the address the mail names, in every

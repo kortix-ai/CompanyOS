@@ -3,7 +3,6 @@
 import { Button } from '@kortix/ui/button';
 import Loading from '@kortix/ui/loading';
 import { errorToast } from '@kortix/ui/toast';
-import { AuthArt } from '@kortix/ui/internal/auth/auth-card-shell';
 import { AuthMobileLogo, Rise, StepHeader, SuccessStrip } from '@kortix/ui/internal/auth/auth-primitives';
 import { OtpVerification } from '@/features/auth/phone-verification/otp-verification';
 import { PhoneInput } from '@/features/auth/phone-verification/phone-input';
@@ -260,8 +259,6 @@ export default function PhoneVerificationPage() {
           </div>
         </main>
       </div>
-      {/* The same split as AuthFrame: the art pane on wide screens. */}
-      <AuthArt className="sticky top-0 hidden h-svh w-1/2 shrink-0 lg:block" />
     </div>
   );
 }

@@ -3035,8 +3035,6 @@
         "confirmDescription": "Потврди имејл који смо послали на <address>{email}</address> да наставиш.",
         "unknownDescription": "Унеси код послат на <address>{email}</address>.",
         "closedDescription": "Ако <address>{email}</address> има налог, код стиже.",
-        "notReceived": "Ниси добио имејл?",
-        "confirmNotReceived": "Ниси добио имејл?",
         "resendIn": "Поново пошаљи за {seconds} s",
         "resend": "Пошаљи поново"
       },
@@ -3064,10 +3062,6 @@
         "existingAccountWrongPassword": "Овај имејл већ има налог. Унеси лозинку.",
         "confirmAccount": "Проверите имејл да бисте потврдили налог",
         "invalidCode": "Неважећи или истекао код"
-      },
-      "legal": {
-        "signup": "Креирањем налога прихватате <termsOfService>Услове коришћења</termsOfService> и <privacyPolicy>Политику приватности</privacyPolicy>",
-        "default": "<termsOfService>Услови коришћења</termsOfService> и <privacyPolicy>Политика приватности</privacyPolicy>"
       },
       "or": "или"
     },

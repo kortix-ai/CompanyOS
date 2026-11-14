@@ -3035,8 +3035,6 @@
         "confirmDescription": "Conferma l’email inviata a <address>{email}</address> per continuare.",
         "unknownDescription": "Inserisci il codice inviato a <address>{email}</address>.",
         "closedDescription": "Se <address>{email}</address> ha un account, il codice è in arrivo.",
-        "notReceived": "Email non ricevuta?",
-        "confirmNotReceived": "Email non ricevuta?",
         "resendIn": "Invia di nuovo tra {seconds} s",
         "resend": "Invia di nuovo"
       },
@@ -3064,10 +3062,6 @@
         "existingAccountWrongPassword": "Questa email ha già un account. Inserisci la password.",
         "confirmAccount": "Controlla la tua email per confermare l'account",
         "invalidCode": "Codice non valido o scaduto"
-      },
-      "legal": {
-        "signup": "Creando un account, accetti i <termsOfService>Termini di servizio</termsOfService> e la <privacyPolicy>Informativa sulla privacy</privacyPolicy>",
-        "default": "<termsOfService>Termini di servizio</termsOfService> e <privacyPolicy>Informativa sulla privacy</privacyPolicy>"
       },
       "or": "oppure"
     },

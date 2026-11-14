@@ -17,7 +17,7 @@ import { listProjectSessions, PROJECT_SESSION_NAME_LOOKUP_LIMIT } from '@kortix/
 import { contract, qk } from '@kortix/sdk/react';
 import { InfoIcon } from '@phosphor-icons/react';
 import { cn } from '../../../../internal/lib/utils';
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '../../../../primitives/hover-card';
+import { Popover, PopoverContent, PopoverTrigger } from '../../../../primitives/popover';
 
 import {
   CostPanel,
@@ -475,11 +475,14 @@ function Payee({ color, label, amount }: { color: string; label: string; amount:
   );
 }
 
-/** The estimate's one info icon: what is priced, what is not, the rate table. */
+/**
+ * The estimate's one info icon: what is priced, what is not, the rate table.
+ * A popover, not a hover card, so a tap opens it on touch screens.
+ */
 function EstimateInfo({ label, lines }: { label: string; lines: (string | null)[] }) {
   return (
-    <HoverCard openDelay={150}>
-      <HoverCardTrigger asChild>
+    <Popover>
+      <PopoverTrigger asChild>
         <button
           type="button"
           aria-label={label}
@@ -487,12 +490,12 @@ function EstimateInfo({ label, lines }: { label: string; lines: (string | null)[
         >
           <InfoIcon className="size-3.5" />
         </button>
-      </HoverCardTrigger>
-      <HoverCardContent className="text-muted-foreground w-72 space-y-1.5 text-xs">
+      </PopoverTrigger>
+      <PopoverContent className="text-muted-foreground space-y-1.5 text-xs">
         {lines.filter(Boolean).map((line) => (
           <p key={line}>{line}</p>
         ))}
-      </HoverCardContent>
-    </HoverCard>
+      </PopoverContent>
+    </Popover>
   );
 }

@@ -76,8 +76,9 @@ export function AgentCoverCard({
           {summary ? (
             <>
               <span className="text-muted-foreground line-clamp-2 text-xs text-pretty">{summary}</span>
-              {/* The description a Tab stop reads: one sentence, not the whole text the clamp hides. */}
-              <span id={descriptionId} className="sr-only">
+              {/* The description a Tab stop reads: one sentence, not the whole text the clamp hides.
+            Hidden from browse mode, which already reads the visible summary. */}
+              <span id={descriptionId} className="sr-only" aria-hidden>
                 {shortSummary(description ?? '')}
               </span>
             </>

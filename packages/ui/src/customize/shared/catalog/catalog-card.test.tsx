@@ -75,7 +75,7 @@ describe('CatalogCard accessible name', () => {
     const long = `Route code work to the right tool. ${'More detail. '.repeat(80)}`;
     const markup = renderToStaticMarkup(<CatalogCard title="coding" description={long} onClick={() => {}} />);
     const describedby = markup.match(/aria-describedby="([^"]+)"/)?.[1];
-    expect(markup).toContain(`id="${describedby}" class="sr-only">Route code work to the right tool.</span>`);
+    expect(markup).toContain(`id="${describedby}" class="sr-only" aria-hidden="true">Route code work to the right tool.</span>`);
   });
 
   test('a card without a summary points at no description', () => {

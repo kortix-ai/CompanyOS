@@ -78,6 +78,25 @@ in-box daemon. Two rules learned on 2026-11-13:
 Each tick also stops the sandbox of any ended trial that still runs (a
 cancel that landed during session create).
 
+Rules learned on 2026-11-14, running the My Kortix benchmark:
+- **Grade when the session is quiet**, not at the end of the first turn: an
+  agent that hands work off (My Kortix) answers after its colleagues report.
+  `colleaguesQuiet` waits until every descendant session has no open turn
+  and none is still starting, for 30 s, inside the agent timeout. Ending a
+  trial stops its colleagues' sandboxes too.
+- **Every trial is a top-level session.** A child session runs another
+  harness (no follow-through check, no goal mode), so a job an agent started
+  would score a harness nobody uses.
+- **A provider rate limit is not a trial failure.** Platinum answers `429`
+  above 20 writes a second per org; `box.ts` waits its `retry-after` up to 5
+  times. Ten trials starting at once hit it.
+- **A local runner loop compiles the My Kortix prompt** into each session it
+  creates, and it does not hot-reload: restart it after a prompt change, or
+  every trial runs the old prompt. (Deployed, the worker ships with the API.)
+- **Trials share the workspace.** A grader that reads workspace state sees
+  other trials' triggers and invites; read the trial session's own tool calls
+  (`kortix sessions log --json`, call inputs only).
+
 ## Verify a change locally
 
 1. `pnpm worktree start evals --no-web` (or your worktree). A worktree stack
@@ -121,6 +140,17 @@ evals:
 Built-in datasets are listed in `BUILTIN_DATASETS`
 (`apps/api/src/projects/evals/task-source.ts`); add one there for every
 folder of tasks Kortix ships.
+
+Each task tests a rule of My Kortix's prompt; the README table names it.
+Every judged task pins `KORTIX_EVAL_JUDGE_MODEL` in `[verifier.env]`. Every
+reference solution (`solution/solve.sh`) must score 1: run the dataset with
+`oracle` after any task change.
+
+Hill-climb record:
+- **Baseline, 2026-11-14:** 20 tasks × 3 attempts. DeepSeek V4.1 Flash and GLM 5.3 Flash both passed 41/60.
+- **The change:** the "ask, then stop" gate in the prompt's authority and automation rules.
+- **The targeted behavior:** acting before asking went from 8 of 12 trials to 0 of 12.
+- **The scores:** DeepSeek went to 47/60; GLM went to 37/60, then to the replication's result (see PR #12682).
 
 A task that needs a flag says so in `task.toml` `[metadata] requires_flags`.
 Judged criteria call `kortix evals judge`, so they need a sandbox image whose

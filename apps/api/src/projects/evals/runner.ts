@@ -441,19 +441,26 @@ async function colleaguesQuiet(ctx: TrialContext, trial: EvalTrialRow, state: Ru
 }
 
 /**
- * The agent's last reply, as text: the text blocks of the newest assistant
- * message of the session's main thread. Null when the log holds none yet.
+ * The agent's last reply, as text: every text block the agent wrote after the
+ * last message it received, in order. One turn often ends with two messages
+ * (the answer, then "⏳ I'll check in at 9:00"), and the grader judges both,
+ * as the person reads both. Null when the log holds no reply yet.
  */
 export async function finalReply(sessionId: string): Promise<string | null> {
-  const page = await readSessionLogPage({ sessionId, threadId: null, beforeSeq: null, limit: 50 }).catch(() => null);
+  const page = await readSessionLogPage({ sessionId, threadId: null, beforeSeq: null, limit: 100 }).catch(() => null);
   if (!page || page === 'unknown_thread') return null;
-  const messages = [...((page as { messages?: Array<{ role?: string; blocks?: Array<{ type?: string; text?: unknown }> }> }).messages ?? [])].reverse();
-  for (const message of messages) {
-    if (message.role !== 'assistant') continue;
+  const messages = (page as { messages?: Array<{ role?: string; blocks?: Array<{ type?: string; text?: unknown }> }> }).messages ?? [];
+  const texts: string[] = [];
+  for (const message of [...messages].reverse()) {
+    if (message.role !== 'assistant') {
+      // Tool results ride on their own messages: only something the agent was told ends its last reply.
+      if (message.role === 'user' && texts.length) break;
+      continue;
+    }
     const text = (message.blocks ?? []).filter((b) => b.type === 'text' && typeof b.text === 'string').map((b) => b.text as string).join('\n\n').trim();
-    if (text) return text;
+    if (text) texts.unshift(text);
   }
-  return null;
+  return texts.length ? texts.join('\n\n') : null;
 }
 
 /**

@@ -157,6 +157,13 @@ Pin the judge model (`--model <id>`, or `KORTIX_EVAL_JUDGE_MODEL` in
 `[verifier.env]`): scores from two judge models do not compare. Judge one
 property per criterion, say what earns 1.0, and run 3 attempts or more.
 
+Every trial of a job runs in the same workspace. A check of workspace state
+(triggers, invites, connectors, members) sees what other trials did, before and
+during this one. Check what this trial's session did instead:
+`kortix sessions log "$KORTIX_SESSION_ID" --json`, and read only the inputs of
+its tool calls, never their output (help text names commands too). Remove what
+a trial created in the verifier, after grading.
+
 Never write a 0 when the judge fails (`|| echo '{"accurate": 0}' > …`). A
 missing CLI or a model outage then reads as a worse agent. Let the verifier
 fail instead: `… --input <file> || { rm -f /logs/verifier/reward.json; exit 1; }`.
@@ -227,6 +234,14 @@ Harbor registry.
   overlap are not a clear change: add tasks or attempts before you call it.
 - A job's numbers are only comparable with a job of the same suite, at a
   commit whose tasks did not change, with the same judge model.
+- Two jobs compare only from the same starting state. A task that changes
+  the workspace (a connector, a trigger, an invite, a feature flag) leaves the
+  next job less to do. Run each variant, and each model, in its own fresh
+  workspace, or undo the changes between runs.
+- A mixed result (one model better, one worse, or a gain inside the ± interval)
+  is not a decision: run the same job again before you keep or drop the change.
+  A rule the change targets is measured on its own criterion, across every
+  attempt, not only on the task's pass/fail.
 </scoring>
 
 <commands>

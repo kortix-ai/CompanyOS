@@ -16,6 +16,7 @@ import type {
 import { lazy, Suspense, useContext, useMemo, useRef } from 'react';
 
 import { SpaceMentionContext } from './menus/space-mentions';
+import type { DriveMentionSource } from './menus/mention-menu';
 import { useFeatureFlag } from '@kortix/sdk/react';
 
 import { ModelConnectionLayoutContext } from '../models/model-connection-layout';
@@ -73,6 +74,8 @@ export interface ComposerCardDerived {
   attachedFiles: AttachedFile[];
   promptAttachmentItems: UsePromptAttachmentsResult['attachments'];
   removeAttachedFile: (index: number) => void;
+  /** The project's Drive files in the `@` menu; null where Drive is off. */
+  driveMentions: DriveMentionSource | null;
   retryAttachedFile: (id: string) => void;
   pastes: PastedContent[];
   removePaste: (id: string) => void;
@@ -128,6 +131,7 @@ export function ComposerCard({
   attachedFiles,
   promptAttachmentItems,
   removeAttachedFile,
+  driveMentions,
   retryAttachedFile,
   pastes,
   removePaste,
@@ -441,6 +445,7 @@ export function ComposerCard({
                 sessions={allSessions ?? []}
                 currentSessionId={sessionId}
                 spaceMentions={spaceMentions}
+                driveMentions={driveMentions}
                 commands={commands}
                 actions={slashActions}
                 files={slashFiles}

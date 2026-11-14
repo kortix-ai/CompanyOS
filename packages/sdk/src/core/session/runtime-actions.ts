@@ -8,6 +8,7 @@
 
 import { ApiError } from '../http/api/errors';
 import { authenticatedFetch } from '../http/auth';
+import { querySuffix } from '../http/url';
 import type { SessionLogPage } from '../session-log/source';
 import type { SessionLogMessage } from '../session-log/types';
 import { RuntimeNotReadyError } from '../runtime/runtime-not-ready-error';
@@ -118,9 +119,8 @@ export async function readRuntimeLogPage(
   const params = new URLSearchParams();
   if (query.thread) params.set('thread', query.thread);
   if (query.limit !== undefined) params.set('limit', String(query.limit));
-  const qs = params.toString();
   try {
-    const response = await fetch(new Request(`${runtimeUrl.replace(/\/$/, '')}/kortix/runtime/log${qs ? `?${qs}` : ''}`, { method: 'GET' }));
+    const response = await fetch(new Request(`${runtimeUrl.replace(/\/$/, '')}/kortix/runtime/log${querySuffix(params)}`, { method: 'GET' }));
     if (!response.ok) return null;
     const page = (await response.json()) as Partial<SessionLogPage> | null;
     const whole = !!page && typeof page.session === 'object' && page.session !== null && Array.isArray(page.threads)

@@ -10,6 +10,7 @@
  * runtime floor serves. `pending()` alone still reads the compatibility routes.
  */
 import { ApiError } from '../http/api/errors';
+import { querySuffix } from '../http/url';
 import { createRuntimeRestClient } from '../runtime/runtime-rest-client';
 import type {
   KortixMessage,
@@ -110,8 +111,7 @@ export function createRuntimeVerbs(input: RuntimeVerbsInput) {
         const query = new URLSearchParams();
         if (limit !== undefined) query.set('limit', String(limit));
         if (before) query.set('before', before);
-        const qs = query.toString();
-        const suffix = `/messages/${conversation}${qs ? `?${qs}` : ''}`;
+        const suffix = `/messages/${conversation}${querySuffix(query)}`;
         const read = (mount: string) =>
           input.fetch(
             new Request(`${base}${mount}${suffix}`, { method: 'GET', ...(options.signal ? { signal: options.signal } : {}) }),
@@ -164,8 +164,7 @@ export function createRuntimeVerbs(input: RuntimeVerbsInput) {
       if (query.thread) params.set('thread', query.thread);
       if (query.before_seq !== undefined) params.set('before_seq', String(query.before_seq));
       if (query.limit !== undefined) params.set('limit', String(query.limit));
-      const qs = params.toString();
-      return action<RuntimeLogPage>('GET', `/kortix/runtime/log${qs ? `?${qs}` : ''}`, undefined, 'Reading the session log failed');
+      return action<RuntimeLogPage>('GET', `/kortix/runtime/log${querySuffix(params)}`, undefined, 'Reading the session log failed');
     },
 
     /** Answer a permission request: allow this call, allow the capability for the session, or deny. */

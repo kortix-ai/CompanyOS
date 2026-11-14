@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { configureKortix } from '../../http/config';
-import { withSizelessURLSearchParams } from '../../test-fixtures';
 import { type SavedCopyStore, setSavedCopyStore } from '../../session-sync/saved-copy-store';
 import { clearSessionFresh, isSessionFresh } from '../../http/fresh-sessions';
 import { onSessionDeleted, onSessionStopped } from '../../http/session-stopped';
@@ -1806,6 +1805,27 @@ test('listProjectSessionsPage forwards parent, startedBy and q as parent, starte
   expect(new URL(last().url).searchParams.get('started_by')).toBe('humans');
 });
 
+// `react-native-url-polyfill` (Supabase's React Native setup; the Kortix mobile
+// app loads it) installs a URLSearchParams with no `size`. A `size` check sent
+// every mobile list request with no query: no filter, no search, no cursor.
+test('listProjectSessionsPage keeps its query under a URLSearchParams without size', async () => {
+  nextResponse = { status: 200, body: [] };
+  const native = globalThis.URLSearchParams;
+  class NoSize extends native {}
+  Object.defineProperty(NoSize.prototype, 'size', { get: () => undefined });
+  globalThis.URLSearchParams = NoSize;
+  try {
+    await listWorkspaceSessionsPage('P1', { parent: 'root', startedBy: 'humans', q: 'biomarkers', cursor: 'C1' });
+  } finally {
+    globalThis.URLSearchParams = native;
+  }
+  const url = new URL(last().url);
+  expect(url.searchParams.get('parent')).toBe('root');
+  expect(url.searchParams.get('started_by')).toBe('humans');
+  expect(url.searchParams.get('q')).toBe('biomarkers');
+  expect(url.searchParams.get('cursor')).toBe('C1');
+});
+
 test('listProjectSessions sends a child parent id and trims q', async () => {
   nextResponse = { status: 200, body: [] };
   await listWorkspaceSessions('P1', { parent: 'S9', q: '  hi  ' });
@@ -2063,14 +2083,4 @@ test('fork create retains saved history instead of mounting the empty fresh shel
   await createWorkspaceSession('synthetic-project', { fork_from_session_id: 'synthetic-source' });
   expect(calls[0]?.body).toEqual({ fork_from_session_id: 'synthetic-source' });
   expect(isSessionFresh('synthetic-fork')).toBe(false);
-});
-
-test('listProjectSessionsPage keeps its filters under the mobile URLSearchParams polyfill (KRTX-4898)', async () => {
-  nextResponse = { status: 200, body: [] };
-  await withSizelessURLSearchParams(() =>
-    listWorkspaceSessionsPage('P1', { parent: 'root', startedBy: 'me', limit: 20 }),
-  );
-  expect(last().url).toBe('http://test.local/workspaces/P1/sessions?limit=20&parent=root&started_by=me');
-  await withSizelessURLSearchParams(() => listWorkspaceSessionsPage('P1', { view: 'pinned' }));
-  expect(last().url).toBe('http://test.local/workspaces/P1/sessions?pinned=only');
 });

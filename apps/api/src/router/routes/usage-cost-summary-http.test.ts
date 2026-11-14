@@ -128,7 +128,6 @@ mock.module('../../shared/session-costs', () => ({
 }));
 
 const { usageApp } = await import('./usage');
-const { COST_READ_MAX_IN_FLIGHT } = await import('../../shared/cost-read-guard');
 
 function createTestApp() {
   const app = new Hono();
@@ -154,19 +153,17 @@ beforeEach(() => {
 });
 
 describe('GET /v1/usage/cost-summary read guard', () => {
-  test('answers 429 with Retry-After while the account already runs its cap of reads, then recovers', async () => {
+  test('answers 429 with Retry-After while another cost read runs on the replica, then recovers', async () => {
     let release!: () => void;
     summaryGate = new Promise<void>((resolve) => (release = resolve));
     const app = createTestApp();
-    const running = Array.from({ length: COST_READ_MAX_IN_FLIGHT }, () =>
-      app.request(`/v1/usage/cost-summary?account_id=${ACCOUNT_ID}`),
-    );
+    const running = [app.request(`/v1/usage/cost-summary?account_id=${ACCOUNT_ID}`)];
     await Promise.resolve();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const refused = await app.request(`/v1/usage/cost-summary?account_id=${ACCOUNT_ID}`);
     expect(refused.status).toBe(429);
-    expect(await refused.json()).toEqual({ error: 'Too many cost reads are running for this account. Retry shortly.' });
+    expect(await refused.json()).toEqual({ error: 'Another cost read is running on this server. Retry shortly.' });
 
     release();
     for (const response of await Promise.all(running)) expect(response.status).toBe(200);

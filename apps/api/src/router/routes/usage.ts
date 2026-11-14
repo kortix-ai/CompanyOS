@@ -586,7 +586,7 @@ usageApp.openapi(
       // Same filtered query as the JSON branch (accountId, projectId, ownerId,
       // window, sort) — only limit/offset differ, because a CSV export wants
       // up to CSV_ROW_CAP rows in one shot, not one paginated page of it.
-      const page = await withCostReadGuard(accountId, () =>
+      const page = await withCostReadGuard(() =>
         listSessionCosts({
           accountId,
           projectId,
@@ -634,7 +634,7 @@ usageApp.openapi(
     }
 
     return c.json(
-      await withCostReadGuard(accountId, () => listSessionCosts({ accountId, projectId, ownerId, ...parsed })),
+      await withCostReadGuard(() => listSessionCosts({ accountId, projectId, ownerId, ...parsed })),
     );
   },
 );
@@ -761,7 +761,7 @@ usageApp.openapi(
       // Same filtered query as the JSON branch (accountId, window, sort) —
       // only limit/offset differ, because a CSV export wants up to
       // CSV_ROW_CAP rows in one shot, not one paginated page of it.
-      const page = await withCostReadGuard(accountId, () =>
+      const page = await withCostReadGuard(() =>
         listCostByProject({
           accountId,
           projectId,
@@ -800,7 +800,7 @@ usageApp.openapi(
     }
 
     return c.json(
-      await withCostReadGuard(accountId, () =>
+      await withCostReadGuard(() =>
         listCostByProject({ accountId, projectId, visibleProjectIds, window, sort, limit, offset }),
       ),
     );
@@ -846,7 +846,7 @@ usageApp.openapi(
       }
       const window = parseCostWindow({ from: c.req.query('from'), to: c.req.query('to') });
       return c.json(
-        await withCostReadGuard(accountId, () =>
+        await withCostReadGuard(() =>
           getCostSummary({ accountId, projectId, sessionId: c.req.query('session_id') || undefined, window }),
         ),
       );

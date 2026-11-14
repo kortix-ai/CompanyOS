@@ -320,9 +320,17 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
   // the memoised tabs do not re-render on each navigation.
   // Mounted: the strip owns the tab shortcuts and links open tabs
   // (`desktopTabsMounted`). Before paint, so no keystroke falls between.
+  // The shell shows its tab menu items (New Tab, Mod+1…9) only while the
+  // strip is mounted; an older shell has no `setTabsActive`.
   useLayoutEffect(() => {
     document.documentElement.setAttribute(MOUNTED_ATTRIBUTE, '');
-    return () => document.documentElement.removeAttribute(MOUNTED_ATTRIBUTE);
+    const shell = (window as { kortixDesktop?: { setTabsActive?: (active: boolean) => void } })
+      .kortixDesktop;
+    shell?.setTabsActive?.(true);
+    return () => {
+      document.documentElement.removeAttribute(MOUNTED_ATTRIBUTE);
+      shell?.setTabsActive?.(false);
+    };
   }, []);
 
   const pathnameRef = useRef(pathname);

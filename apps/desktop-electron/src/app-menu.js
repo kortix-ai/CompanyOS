@@ -100,12 +100,18 @@ function buildAppMenuTemplate({ platform, appName, shortcuts, frontendMenu, quic
           // Tab items are native accelerators: an artifact or App frame holds
           // focus, and a keystroke there never reaches the page's handlers.
           id: 'kx-file-new-tab',
+          // Off until the page reports its tab strip (menu-state.js TAB_MENU_IDS).
+          enabled: false,
+          visible: false,
           label: 'New Tab',
           accelerator: 'CommandOrControl+T',
           click: () => on.command('new-tab'),
         },
         {
           id: 'kx-file-reopen-tab',
+          // Off until the page reports its tab strip (menu-state.js TAB_MENU_IDS).
+          enabled: false,
+          visible: false,
           label: 'Reopen Closed Tab',
           accelerator: 'CommandOrControl+Shift+T',
           click: () => on.command('reopen-tab'),
@@ -211,12 +217,18 @@ function buildAppMenuTemplate({ platform, appName, shortcuts, frontendMenu, quic
         { type: 'separator' },
         {
           id: 'kx-go-next-tab',
+          // Off until the page reports its tab strip (menu-state.js TAB_MENU_IDS).
+          enabled: false,
+          visible: false,
           label: 'Show Next Tab',
           accelerator: 'Control+Tab',
           click: () => on.command('next-tab'),
         },
         {
           id: 'kx-go-prev-tab',
+          // Off until the page reports its tab strip (menu-state.js TAB_MENU_IDS).
+          enabled: false,
+          visible: false,
           label: 'Show Previous Tab',
           accelerator: 'Control+Shift+Tab',
           click: () => on.command('prev-tab'),
@@ -228,6 +240,7 @@ function buildAppMenuTemplate({ platform, appName, shortcuts, frontendMenu, quic
           // Electron rejects an item with no label, role or type (hidden or not).
           label: index === 8 ? 'Show Last Tab' : `Show Tab ${index + 1}`,
           accelerator: `CommandOrControl+${index + 1}`,
+          enabled: false,
           visible: false,
           acceleratorWorksWhenHidden: true,
           click: () => on.command(`select-tab-${index + 1}`),

@@ -1,3 +1,4 @@
+const menuState = require('./menu-state');
 const { describe, expect, mock, test } = require('bun:test');
 
 const { buildAppMenuTemplate } = require('./app-menu');
@@ -151,6 +152,11 @@ describe('application menu: macOS', () => {
       visible: false,
       acceleratorWorksWhenHidden: true,
     });
+    // Off until the page reports its tab strip (the `desktop_tabs` flag):
+    // without tabs, Mod+1…9 and Ctrl+Tab stay the page's own keys.
+    for (const id of menuState.TAB_MENU_IDS) {
+      expect(byId(id)).toMatchObject({ enabled: false, visible: false });
+    }
     for (const id of ['kx-file-new-tab', 'kx-file-reopen-tab', 'kx-go-next-tab', 'kx-go-prev-tab', 'kx-go-tab-3']) {
       byId(id).click();
     }

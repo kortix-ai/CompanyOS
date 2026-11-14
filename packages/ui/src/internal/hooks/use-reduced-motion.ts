@@ -29,18 +29,30 @@ export const REDUCE_MOTION_ATTRIBUTE = 'data-reduce-motion';
 
 const SYSTEM_QUERY = '(prefers-reduced-motion: reduce)';
 
-// Child effects run before the parent's `ReduceMotionSync`, so a first mount
-// animation could start before it sets the flag. The pre-paint script has
-// already marked <html>; seed the flag from it when this module loads.
+// The pre-paint script has already marked <html>. Seed the flag from it when
+// this module loads, so Motion skips from the first mount animation on.
 if (typeof document !== 'undefined' && document.documentElement.hasAttribute(REDUCE_MOTION_ATTRIBUTE)) {
   MotionGlobalConfig.skipAnimations = true;
+}
+
+// One query object per page: `prefersReducedMotion()` runs on every layout
+// change while a turn streams (`use-auto-scroll.ts`).
+let systemQuery: MediaQueryList | null | undefined;
+function getSystemQuery(): MediaQueryList | null {
+  if (systemQuery === undefined) {
+    systemQuery =
+      typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+        ? window.matchMedia(SYSTEM_QUERY)
+        : null;
+  }
+  return systemQuery;
 }
 
 /** True when the OS asks for reduced motion or the person turned it on. Safe on the server (false). */
 export function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined') return false;
   if (document.documentElement.hasAttribute(REDUCE_MOTION_ATTRIBUTE)) return true;
-  return typeof window.matchMedia === 'function' && window.matchMedia(SYSTEM_QUERY).matches;
+  return getSystemQuery()?.matches ?? false;
 }
 
 /** Mirrors the "Reduce motion" switch onto `<html>` and into Motion's global config. */
@@ -52,15 +64,12 @@ export function applyReduceMotion(element: Element, reduce: boolean): void {
 
 /** The OS setting, live: Motion's own `useReducedMotion` reads it once and never updates. */
 function subscribeSystem(onChange: () => void): () => void {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return () => {};
-  const query = window.matchMedia(SYSTEM_QUERY);
+  const query = getSystemQuery();
+  if (!query) return () => {};
   query.addEventListener('change', onChange);
   return () => query.removeEventListener('change', onChange);
 }
-const systemSnapshot = (): boolean =>
-  typeof window !== 'undefined' &&
-  typeof window.matchMedia === 'function' &&
-  window.matchMedia(SYSTEM_QUERY).matches;
+const systemSnapshot = (): boolean => getSystemQuery()?.matches ?? false;
 const serverSnapshot = (): boolean => false;
 
 /** The person's "Reduce motion" switch alone. Legacy persisted preferences predate it: `false`. */

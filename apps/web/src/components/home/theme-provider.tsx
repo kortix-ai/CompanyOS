@@ -5,10 +5,7 @@ import {
   normalizeLightTheme,
   syncInterfaceThemes,
 } from '@/lib/interface-themes';
-import {
-  applyReduceMotion,
-  useReduceMotionSetting,
-} from '@kortix/ui/internal/hooks/use-reduced-motion';
+import { applyReduceMotion } from '@kortix/ui/internal/hooks/use-reduced-motion';
 import { useUserPreferencesStore } from '@kortix/ui/internal/stores/user-preferences-store';
 import { ThemeProvider as NextThemesProvider } from 'next-themes';
 import { usePathname } from 'next/navigation';
@@ -40,13 +37,21 @@ function ThemeChoiceSync() {
  * `data-reduce-motion`, on every route. `INTERFACE_THEME_INIT_SCRIPT` sets it
  * for the first paint; this keeps it current when the switch flips, in the
  * same frame.
+ *
+ * It reads the store directly, not through a hook: during hydration a
+ * persisted store's hook returns its default (`false`), and a layout effect
+ * driven by that value would strip the pre-paint attribute for a frame.
  */
 function ReduceMotionSync() {
-  const reduce = useReduceMotionSetting();
-
   React.useLayoutEffect(() => {
-    applyReduceMotion(document.documentElement, reduce);
-  }, [reduce]);
+    const apply = () =>
+      applyReduceMotion(
+        document.documentElement,
+        useUserPreferencesStore.getState().preferences.reduceMotion === true,
+      );
+    apply();
+    return useUserPreferencesStore.subscribe(apply);
+  }, []);
 
   return null;
 }

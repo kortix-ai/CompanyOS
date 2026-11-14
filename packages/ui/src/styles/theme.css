@@ -93,6 +93,12 @@
   animation-duration: 1s !important;
   animation-iteration-count: infinite !important;
 }
+/* `KortixLoader` spins through an inline `animation`; its duration rides in
+   `--kx-spin-duration` so this rule can give it back. */
+:root[data-reduce-motion] [data-kx-spinner] {
+  animation-duration: var(--kx-spin-duration, 1s) !important;
+  animation-iteration-count: infinite !important;
+}
 
 /* Host-neutral base rules. Every host gets them, so the page itself follows the
    tokens: the body paints --background and --foreground (a white-label

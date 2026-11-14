@@ -7,6 +7,7 @@ import {
 } from '@/lib/environment-protection';
 import { legalShortPathRedirectUrl, legalTermsRedirectUrl } from '@/lib/legal-terms-redirect';
 import { canonicalPublicPath } from '@/lib/canonical-public-path';
+import { staticRouteMethodNotAllowed } from '@/lib/static-route-method-guard';
 import { MAINTENANCE_BYPASS_COOKIE, verifyBypassToken } from '@/lib/maintenance-bypass';
 import { getMaintenanceConfig } from '@/lib/maintenance-store';
 import {
@@ -412,6 +413,9 @@ export async function middleware(request: NextRequest) {
     }
     return response;
   };
+
+  const methodNotAllowed = staticRouteMethodNotAllowed(request.method, pathname, request.headers);
+  if (methodNotAllowed) return finalizeEnvironmentAccess(methodNotAllowed);
 
   // Public HTML pages have canonical Markdown representations. Rewrite only
   // explicit Markdown requests. Browsers keep the normal HTML representation.

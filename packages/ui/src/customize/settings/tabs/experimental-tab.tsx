@@ -364,7 +364,7 @@ export function ExperimentalTabView({
               onChange={(e) => onQueryChange(e.target.value)}
               variant="popover"
             />
-            <InputGroupSearchClear onClick={() => onQueryChange('')} />
+            {query ? <InputGroupSearchClear onClick={() => onQueryChange('')} /> : null}
           </InputGroupSearch>
         ) : null}
 

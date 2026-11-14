@@ -71,6 +71,13 @@ describe('CatalogCard accessible name', () => {
     expect(markup).not.toContain('**');
   });
 
+  test('the description a Tab stop reads is one sentence, not the whole text', () => {
+    const long = `Route code work to the right tool. ${'More detail. '.repeat(80)}`;
+    const markup = renderToStaticMarkup(<CatalogCard title="coding" description={long} onClick={() => {}} />);
+    const describedby = markup.match(/aria-describedby="([^"]+)"/)?.[1];
+    expect(markup).toContain(`id="${describedby}" class="sr-only">Route code work to the right tool.</span>`);
+  });
+
   test('a card without a summary points at no description', () => {
     const markup = renderToStaticMarkup(<CatalogCard title="coding" onClick={() => {}} />);
     expect(markup).not.toContain('aria-describedby');

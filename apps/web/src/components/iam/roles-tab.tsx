@@ -143,7 +143,6 @@ export function BuiltInRolesList() {
   const tRoles = useTranslations('workspaces.roles');
   return (
     <div className="space-y-3">
-      <p className="text-muted-foreground text-xs">{tI18nComplete.raw('text019929eebb12')}</p>
       <AccessList header={{ title: tSettings('builtInRoles'), count: WORKSPACE_ROLE_LADDER.length }}>
         {WORKSPACE_ROLE_LADDER.map((role) => (
           <AccessRow

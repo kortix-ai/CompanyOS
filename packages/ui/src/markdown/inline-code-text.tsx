@@ -50,6 +50,18 @@ export function plainTextFromMarkdown(input: string): string {
 }
 
 /**
+ * The first sentence of `plainTextFromMarkdown(input)`, capped at `max`
+ * characters with an ellipsis: what a card's `aria-describedby` reads, so a
+ * Tab stop announces a summary instead of a whole SKILL.md description.
+ */
+export function shortSummary(input: string, max = 160): string {
+  const text = plainTextFromMarkdown(input);
+  const sentence = /^.+?[.!?](?=\s|$)/.exec(text)?.[0] ?? text;
+  if (sentence.length <= max) return sentence;
+  return `${sentence.slice(0, max - 1).trimEnd()}…`;
+}
+
+/**
  * A short string an agent wrote (a goal criterion, an agent description) with
  * its `code spans` drawn as the chat's inline-code chip instead of literal
  * backticks. Inline only: no block elements and no links, so it is safe inside

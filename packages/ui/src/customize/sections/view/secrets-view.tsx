@@ -617,7 +617,7 @@ function SecretsAccessInfo({ showEnforced }: { showEnforced: boolean }) {
           {secretDeliveryLegend(showEnforced, tI18nComplete).map((mode) => (
             <div key={mode.key} className="space-y-1">
               <dt>
-                <Badge variant={mode.tone} size="sm">
+                <Badge variant={mode.tone} size="sm" className="normal-case">
                   {mode.label}
                 </Badge>
               </dt>
@@ -953,7 +953,7 @@ export function SecretTableRow({
       </TableCell>
       <TableCell className="max-w-[220px] align-middle whitespace-normal">
         <div className="flex flex-col items-start gap-1">
-          <Badge variant={delivery.tone} size="sm">
+          <Badge variant={delivery.tone} size="sm" className="normal-case">
             {delivery.label}
           </Badge>
           {row.requiresRotation && (
@@ -1666,7 +1666,7 @@ function SecretDialog({
                     id="secret-dialog-delivery"
                     className="border-border bg-sidebar rounded-md border p-3"
                   >
-                    <Badge variant={selectedDelivery.tone} size="sm">
+                    <Badge variant={selectedDelivery.tone} size="sm" className="normal-case">
                       {selectedDelivery.label}
                     </Badge>
                     <p className="text-muted-foreground mt-2 text-xs text-pretty">

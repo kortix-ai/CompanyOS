@@ -22,10 +22,8 @@ const badgeVariants = cva(
         update:
           'bg-kortix-orange/15 text-foreground ring-1 ring-inset ring-kortix-orange/15 [&>svg]:text-kortix-orange',
         kortix: 'bg-foreground/10 text-foreground ring-1 ring-inset ring-foreground/10',
-        // Sentence case like the other tone labels (info, muted): the secrets
-        // Access legend sets warning beside secondary and info.
         warning:
-          'bg-kortix-orange/15 text-foreground ring-1 ring-inset ring-kortix-orange/15 normal-case [&>svg]:text-kortix-orange',
+          'bg-kortix-orange/15 text-foreground ring-1 ring-inset ring-kortix-orange/15 [&>svg]:text-kortix-orange',
         outline: 'bg-transparent text-foreground ring-1 ring-inset ring-border normal-case',
         new: 'bg-primary/10 text-primary ring-1 ring-inset ring-primary/10',
         beta: 'bg-primary/10 text-primary ring-1 ring-inset ring-primary/10',

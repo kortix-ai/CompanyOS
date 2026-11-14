@@ -11,7 +11,7 @@ import Loading from '../../primitives/loading';
 import { useTranslations as useI18nTranslations } from '../../i18n';
 import { CaretDownIcon, ChatCircleIcon, GearSixIcon, PlusIcon } from '@phosphor-icons/react';
 import { UiLink as Link } from '../../providers/ui-provider';
-import { useRef, type ComponentType } from 'react';
+import { useEffect, useRef, type ComponentType } from 'react';
 
 /**
  * One row of the New menu: icon, title, description (Paper "New menu" V03,
@@ -96,6 +96,13 @@ export function NewEntityMenu({
   const tI18nComplete = useI18nTranslations('hardcodedUi.i18nComplete');
   const triggerRef = useRef<HTMLButtonElement>(null);
   const pendingRef = useRef<(() => void) | null>(null);
+  const fallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (fallbackRef.current) clearTimeout(fallbackRef.current);
+    },
+    [],
+  );
   if (!manual) {
     return (
       <Button variant={variant} size={size} className="gap-1.5" disabled={pending} onClick={onChat}>
@@ -118,7 +125,9 @@ export function NewEntityMenu({
     pendingRef.current = open ?? null;
     // The close hook runs on the frame the menu closes. If it never runs, the
     // row still opens its dialog, with the old focus behavior.
-    setTimeout(() => {
+    if (fallbackRef.current) clearTimeout(fallbackRef.current);
+    fallbackRef.current = setTimeout(() => {
+      fallbackRef.current = null;
       if (pendingRef.current === open) runPending();
     }, 250);
   };

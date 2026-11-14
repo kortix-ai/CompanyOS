@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { InlineCodeText, plainTextFromMarkdown, splitInlineCode } from './inline-code-text';
+import { InlineCodeText, plainTextFromMarkdown, shortSummary, splitInlineCode } from './inline-code-text';
 
 describe('splitInlineCode', () => {
   test('splits text and code spans', () => {
@@ -68,5 +68,17 @@ describe('plainTextFromMarkdown', () => {
 
   test('collapses line breaks to one line', () => {
     expect(plainTextFromMarkdown('first line\n\nsecond   line ')).toBe('first line second line');
+  });
+});
+
+describe('shortSummary', () => {
+  test('keeps the first sentence only', () => {
+    expect(shortSummary('Route `code` work. Then a long second sentence.')).toBe('Route code work.');
+  });
+
+  test('caps a long first sentence with an ellipsis', () => {
+    const out = shortSummary('a'.repeat(400));
+    expect(out).toHaveLength(160);
+    expect(out.endsWith('…')).toBe(true);
   });
 });

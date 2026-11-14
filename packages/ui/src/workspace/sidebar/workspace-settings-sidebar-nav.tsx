@@ -478,7 +478,10 @@ function RailGroupsList({
     // browser clamps at the end, where the bottom fade is gone.
     const next = scrollTopToReveal(list.getBoundingClientRect(), row.getBoundingClientRect(), list.scrollTop, 32);
     if (next !== null) list.scrollTop = next;
-  }, [active, shown, rail]);
+    // Not on `rail`: a background refetch publishes a new rail object, and the
+    // list must not jump back after the person scrolled it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, shown]);
 
   return (
     <FadedScrollArea ref={listRef} rootClassName="min-h-0 flex-1" fadeSize="8">

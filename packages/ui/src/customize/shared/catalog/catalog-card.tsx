@@ -4,7 +4,7 @@ import { useId, type CSSProperties, type ReactNode } from 'react';
 
 import { HoverPrefetchLink } from '../../../internal/components/hover-prefetch-link';
 
-import { plainTextFromMarkdown } from '../../../markdown/inline-code-text';
+import { plainTextFromMarkdown, shortSummary } from '../../../markdown/inline-code-text';
 import { Checkbox } from '../../../primitives/checkbox';
 import { cn } from '../../../internal/lib/utils';
 
@@ -109,9 +109,13 @@ export function CatalogCard({
         </span>
         {subtitle ? <span className="flex flex-wrap items-center gap-1.5">{subtitle}</span> : null}
         {summary ? (
-          <span id={descriptionId} className="text-muted-foreground line-clamp-2 text-xs text-pretty">
-            {summary}
-          </span>
+          <>
+            <span className="text-muted-foreground line-clamp-2 text-xs text-pretty">{summary}</span>
+            {/* The description a Tab stop reads: one sentence, not the whole text the clamp hides. */}
+            <span id={descriptionId} className="sr-only">
+              {shortSummary(description ?? '')}
+            </span>
+          </>
         ) : null}
         {meta ? (
           <span className="text-muted-foreground/80 flex flex-wrap items-center gap-x-2 gap-y-0.5 pt-1 text-xs">

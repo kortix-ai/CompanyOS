@@ -27,6 +27,7 @@ export function projectConfigAgentsToRuntimeAgents(config: ProjectConfigSummary)
 function projectConfigAgentToRuntimeAgent(agent: ProjectConfigSummary['agents'][number]): Agent {
   return {
     name: agent.name,
+    ...(agent.title ? { title: agent.title } : {}),
     description: agent.description ?? undefined,
     mode: agent.mode ?? undefined,
     source: agent.source,

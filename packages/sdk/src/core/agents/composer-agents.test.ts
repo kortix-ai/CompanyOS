@@ -23,7 +23,7 @@ function agent(name: string, extra: Partial<Agent> = {}): Agent {
 function config(input: {
   default_agent?: string | null;
   open_code_default_agent?: string | null;
-  agents: Array<{ name: string; enabled?: boolean; mode?: string; run?: string | null }>;
+  agents: Array<{ name: string; enabled?: boolean; mode?: string; run?: string | null; title?: string | null }>;
 }): ProjectConfigSummary {
   return {
     open_code_default_agent: input.open_code_default_agent ?? null,
@@ -38,6 +38,14 @@ function config(input: {
 }
 
 describe('projectConfigAgentsToRuntimeAgents', () => {
+  test('carries the kortix.yaml title, so a picker names the agent as typed', () => {
+    const [reviewer, plain] = projectConfigAgentsToRuntimeAgents(
+      config({ agents: [{ name: 'github-pr-reviewer', title: 'GitHub PR Reviewer' }, { name: 'writer', title: null }] }),
+    );
+    expect(reviewer!.title).toBe('GitHub PR Reviewer');
+    expect(plain!.title).toBeUndefined();
+  });
+
   test('a program agent (`run`) names provider `program`: it has no model to pick', () => {
     const [janitor, writer] = projectConfigAgentsToRuntimeAgents(config({ agents: [{ name: 'janitor', run: 'node janitor.js' }, { name: 'writer' }] }));
     expect(janitor!.model).toEqual({ providerID: 'program', modelID: 'janitor' });

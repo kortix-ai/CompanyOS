@@ -360,6 +360,10 @@ export interface ProjectConfigSummary {
   agents: Array<{
     name: string;
     path: string;
+    /** `kortix.yaml` `agents.<name>.title`: the agent's name as people read it
+     *  ("GitHub PR reviewer"). `name` stays its id. Absent from an older API;
+     *  null when the manifest sets none. Pass it to `agentDisplayName`. */
+    title?: string | null;
     description: string | null;
     mode: string | null;
     /** Internal automation remains registered but is not offered by agent pickers. */

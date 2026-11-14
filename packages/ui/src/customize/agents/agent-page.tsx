@@ -254,10 +254,10 @@ export function AgentPage({
   // read-only page with no word on why: say what failed, offer the retry.
   if (canWrite && configQuery.isError) {
     return (
-      <AgentStatePage title={agentDisplayName(agent.name)}>
+      <AgentStatePage title={agentDisplayName(agent.name, agent.title)}>
         <ErrorState
           size="sm"
-          title={t('configLoadError', { name: agentDisplayName(agent.name) })}
+          title={t('configLoadError', { name: agentDisplayName(agent.name, agent.title) })}
           description={<ErrorDetails error={configQuery.error} />}
           action={
             <Button variant="outline" size="sm" onClick={() => void configQuery.refetch()}>
@@ -644,7 +644,7 @@ function AgentActions({
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" disabled={configure.pending} onSelect={() => setConfirm('delete')}>
               <TrashIcon className="size-4" />
-              {t('deleteAgent', { name: agentDisplayName(agent.name) })}
+              {t('deleteAgent', { name: agentDisplayName(agent.name, agent.title) })}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -655,7 +655,7 @@ function AgentActions({
       <ConfirmDialog
         open={confirm !== null}
         onOpenChange={(open) => (open ? undefined : setConfirm(null))}
-        title={confirm === 'delete' ? t('deleteTitle', { name: agentDisplayName(agent.name) }) : tI18nComplete.raw('text24ba36a8ec86')}
+        title={confirm === 'delete' ? t('deleteTitle', { name: agentDisplayName(agent.name, agent.title) }) : tI18nComplete.raw('text24ba36a8ec86')}
         description={
           confirm === 'delete'
             ? t('deleteBody')
@@ -777,7 +777,7 @@ function EditableAgentPage({
   const policySetControl = useAgentPolicySetControls(projectId, editor, policySetOptions);
   const surface = { kind: 'agent', agentName: agent.name } as const;
   const defaultAgent = config.default_agent;
-  const name = agentDisplayName(agent.name);
+  const name = agentDisplayName(agent.name, agent.title);
   const sourcePath = editor.draft.file ?? configEntitySourcePath(agent.path);
 
   const { draft, set } = editor;
@@ -1081,7 +1081,7 @@ function ReadOnlyAgentPage({
   const spacesOn = useSpacesEnabled(projectId);
   const canManageMembers = useCanManageMembers(projectId);
   const railGroups = useRailGroups(pathname, READ_ONLY_VIEWS, facts, canManageMembers ? () => share.setOpen(true) : undefined);
-  const name = agentDisplayName(agent.name);
+  const name = agentDisplayName(agent.name, agent.title);
   // A reader has a page for Kortix permissions and Model only. Every other
   // Access row shows its grant by name on the Overview and links nowhere.
   const banner = (

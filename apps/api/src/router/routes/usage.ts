@@ -549,7 +549,7 @@ usageApp.openapi(
           'text/csv': { schema: z.string() },
         },
       },
-      ...errors(400, 401, 403),
+      ...errors(400, 401, 403, 429),
     },
   }),
   async (c) => {
@@ -711,7 +711,7 @@ usageApp.openapi(
           'text/csv': { schema: z.string() },
         },
       },
-      ...errors(400, 401, 403),
+      ...errors(400, 401, 403, 429),
     },
   }),
   async (c) => {
@@ -834,7 +834,7 @@ usageApp.openapi(
         })
         .openapi('CostSummaryQuery'),
     },
-    responses: { 200: json(CostSummarySchema, 'Cost summary'), ...errors(400, 401, 403) },
+    responses: { 200: json(CostSummarySchema, 'Cost summary'), ...errors(400, 401, 403, 429) },
   }),
   async (c) => {
     try {

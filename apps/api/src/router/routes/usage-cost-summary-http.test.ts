@@ -154,7 +154,7 @@ beforeEach(() => {
 });
 
 describe('GET /v1/usage/cost-summary read guard', () => {
-  test('answers 429 with Retry-After once one read runs and the queue is full, then recovers', async () => {
+  test('answers 429 once one read runs and the queue is full, then recovers', async () => {
     let release!: () => void;
     summaryGate = new Promise<void>((resolve) => (release = resolve));
     const app = createTestApp();

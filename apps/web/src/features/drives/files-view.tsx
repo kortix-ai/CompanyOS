@@ -38,7 +38,7 @@ import { type Drive, getProjectDetail } from '@kortix/sdk';
 import { contract, qk } from '@kortix/sdk/react';
 import {
   FolderSimpleIcon,
-  HardDriveIcon,
+  HardDrivesIcon,
   LockSimpleIcon,
   ShareNetworkIcon,
   TerminalWindowIcon,
@@ -49,7 +49,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useDebounce } from '@kortix/ui';
-import { type ComponentType, type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ComponentType, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import { DriveConflictsBar } from './drive-conflicts-bar';
 import {
@@ -59,19 +59,20 @@ import {
   toDrivePath,
 } from './drive-explorer-source';
 import { useBoxPaths } from './drive-box-path';
-import { DriveFolderTree } from './drive-folder-tree';
+import { DriveFolderTree, placeIcon, useDriveNav } from './drive-folder-tree';
+import { type DriveNav, type DrivePlace, PEOPLE_ROOT, within } from './drive-places';
 import { FolderAccessDialog } from './folder-access-dialog';
 import { FolderAccessPanel } from './folder-access-panel';
 import { folderAudience } from './folder-audience';
 
 /**
  * /workspaces/[id]/drive — the project's Drive: one folder tree, stored as one
- * volume, that everyone in the project works in. The top is the project
- * itself; under it the folders as they are stored (Company, Users, Channels,
- * team folders), each opening for whoever may open it. A folder tree beside
- * the grid or list moves through it. A folder's header names who can open it
- * and where sessions see it. A person's own folder (`Users/<name>`) opens for
- * its owner and the project's admins; each admin open is recorded for the owner.
+ * volume, that everyone in the project works in. People move through places,
+ * not storage paths: their own desktop (`Users/<name>`), the drives (Company,
+ * then each team drive), and the other members' desktops the API lists to
+ * them. Admins also reach All drives, the top, where a new drive is made. A
+ * folder's header names who can open it and where sessions see it; each admin
+ * open of a person's own folder is recorded for its owner.
  */
 export function FilesView({ projectId }: { projectId: string }) {
   const t = useTranslations('drives');
@@ -115,13 +116,13 @@ export function FilesView({ projectId }: { projectId: string }) {
       />
     );
   } else {
-    body = <FilesBrowser drive={drive.data} projectId={projectId} projectName={detail.data?.project.name ?? t('driveLabel')} />;
+    body = <FilesBrowser drive={drive.data} projectId={projectId} />;
   }
 
   return <div className="bg-background flex h-full min-h-0 flex-1 flex-col">{body}</div>;
 }
 
-function FilesBrowser({ drive, projectId, projectName }: { drive: Drive; projectId: string; projectName: string }) {
+function FilesBrowser({ drive, projectId }: { drive: Drive; projectId: string }) {
   const { user } = useAuth();
   const searchParams = useSearchParams();
   // Read once: the URL picks the folder to open; after that the store leads.
@@ -141,7 +142,7 @@ function FilesBrowser({ drive, projectId, projectName }: { drive: Drive; project
     <DriveFilesProvider driveId={drive.driveId} userId={user?.id} personalFolder={drive.personalFolder}>
       <FilesStoreProvider store={store}>
         <DrivePathInUrl personal={drive.personalFolder} />
-        <FilesExplorer drive={drive} projectId={projectId} projectName={projectName} />
+        <FilesExplorer drive={drive} projectId={projectId} />
       </FilesStoreProvider>
     </DriveFilesProvider>
   );
@@ -152,15 +153,19 @@ function FilesBrowser({ drive, projectId, projectName }: { drive: Drive; project
  * reload or a shared link opens it, and the sidebar marks the place. 300 ms
  * after the last move, through `history.replaceState`: no history entry per folder.
  */
-function DrivePathInUrl({ personal }: { personal: string | null }) {
+export function DrivePathInUrl({ personal }: { personal: string | null }) {
   const currentPath = useFilesStore((s) => s.currentPath);
   const navigateToPath = useFilesStore((s) => s.navigateToPath);
   const store = useFilesStoreApi();
   // And the other way: a link to `?path=` while Drive is open (the upload
   // toast's "Open folder") moves the view. Our own writes land here too and
-  // match the store, so they do nothing.
+  // match the store, so they do nothing. Only a change moves it: the value
+  // Drive opened with is `FilesBrowser`'s, where none opens My desktop.
   const param = useSearchParams().get('path');
+  const last = useRef(param);
   useEffect(() => {
+    if (param === last.current) return;
+    last.current = param;
     const want = drivePathFromParam(param, personal);
     if (want !== store.getState().currentPath) navigateToPath(want);
   }, [param, personal, store, navigateToPath]);
@@ -176,7 +181,7 @@ function DrivePathInUrl({ personal }: { personal: string | null }) {
   return null;
 }
 
-function FilesExplorer({ drive, projectId, projectName }: { drive: Drive; projectId: string; projectName: string }) {
+function FilesExplorer({ drive, projectId }: { drive: Drive; projectId: string }) {
   const router = useRouter();
   const t = useTranslations('drives');
   const currentPath = useFilesStore((s) => s.currentPath);
@@ -213,13 +218,11 @@ function FilesExplorer({ drive, projectId, projectName }: { drive: Drive; projec
   );
   const open = (p: string) => navigateToPath(p.replace(/^\//, '') || '/');
   const boxPath = useBoxPaths(drive)(path);
-  // People's own folders list under their names (`/Users/ana.lima` → "Ana Lima").
-  const people = useDriveFolder(drive.driveId, PEOPLE_ROOT);
-  const personNames = new Map((people.data?.entries ?? []).map((e) => [e.path, e.name] as const));
-  const here = locateInDrive(path, drive, t, projectName, personNames);
+  const nav = useDriveNav(drive);
+  const here = locateInDrive(path, drive, t, nav.places, nav.personNames);
   const HereGlyph = here.icon;
-  // My files or a shared folder reads as its own root: `Users/<name>` and the
-  // folders above a share are storage paths, not places people go.
+  // My desktop, a drive or a member's desktop reads as its own root: `Users/<name>`
+  // and the folders above a share are storage paths, not places people go.
   const base = here.base ? { path: here.base, label: here.label, icon: <HereGlyph /> } : undefined;
   const location = {
     icon: <HereGlyph />,
@@ -236,8 +239,8 @@ function FilesExplorer({ drive, projectId, projectName }: { drive: Drive; projec
   // folder with who can open it.
   const leading = (
     <div className="flex min-w-0 items-center gap-1">
-      <DriveJump drive={drive} projectName={projectName} onOpen={open} />
-      {path === '/' ? <PlaceTitle icon={HardDriveIcon} title={projectName} /> : <FolderTitle drive={drive} path={path} label={nameOfPath(path, here)} />}
+      <DriveJump drive={drive} nav={nav} onOpen={open} />
+      {path === '/' ? <PlaceTitle icon={HardDrivesIcon} title={t('allDrives')} /> : <FolderTitle drive={drive} path={path} label={nameOfPath(path, here)} icon={here.base === path ? HereGlyph : undefined} />}
     </div>
   );
   // Where sessions see the folder, then Share. A folder the caller only
@@ -274,13 +277,13 @@ function FilesExplorer({ drive, projectId, projectName }: { drive: Drive; projec
   return (
     <FileExplorerSourceProvider value={source}>
       <div className="flex min-h-0 min-w-0 flex-1">
-      <DriveFolderTree drive={drive} rootLabel={projectName} path={path} onOpen={open} />
+      <DriveFolderTree drive={drive} nav={nav} path={path} onOpen={open} />
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <DriveExplorer
           leading={leading}
           trailing={trailing}
-          rootLabel={projectName}
-          rootIcon={<HardDriveIcon className="text-muted-foreground" />}
+          rootLabel={t('allDrives')}
+          rootIcon={<HardDrivesIcon className="text-muted-foreground" />}
           location={location}
           pathBase={base}
           onTeamFolderCreated={
@@ -316,40 +319,33 @@ function FilesExplorer({ drive, projectId, projectName }: { drive: Drive; projec
   );
 }
 
-const PEOPLE_ROOT = '/Users';
-
 /** `/Users/<name>` for any path inside a person's own folder, else null. */
 function personFolderOf(path: string): string | null {
   const parts = path.split('/').filter(Boolean);
   return parts.length >= 2 && `/${parts[0]}` === PEOPLE_ROOT ? `/${parts[0]}/${parts[1]}` : null;
 }
 
-function isUnder(path: string, root: string): boolean {
-  return path === root || path.startsWith(`${root}/`);
-}
-
 type DriveGlyph = ComponentType<{ className?: string }>;
 
 /**
- * Where a path is: My files, a shared Drive, or a folder of the tree.
- * `base` is the folder that reads as the root there (My files, a shared
- * Drive), so `Users/<name>` never shows as a crumb.
+ * Where a path is: My desktop, one of the drives, a member's desktop, or the
+ * top of the tree. `base` is the folder that reads as the root there, so
+ * `Users/<name>` or `Company` never shows twice in the breadcrumb.
  */
 function locateInDrive(
   path: string,
   drive: Drive,
   t: ReturnType<typeof useTranslations>,
-  projectName: string,
+  places: readonly DrivePlace[],
   personNames: ReadonlyMap<string, string>,
 ): { icon: DriveGlyph; label: string; base?: string } {
   const personal = drive.personalFolder;
   const person = personFolderOf(path);
-  const nameOf = (folder: string) => personNames.get(folder) ?? folder.split('/').pop() ?? folder;
   if (person && person === personal) return { icon: Home, label: t('myDrive'), base: person };
-  const shared = (drive.sharedWithMe ?? []).find((f) => isUnder(path, f.path));
-  if (shared) return { icon: HardDriveIcon, label: shared.path.split('/').filter(Boolean).pop() ?? shared.path, base: shared.path };
-  if (person) return { icon: UserIcon, label: nameOf(person), base: person };
-  return { icon: HardDriveIcon, label: projectName };
+  const place = places.find((p) => within(path, p.path));
+  if (place) return { icon: placeIcon(place.path), label: place.name, base: place.path };
+  if (person) return { icon: UserIcon, label: personNames.get(person) ?? person.split('/').pop() ?? person, base: person };
+  return { icon: HardDrivesIcon, label: t('allDrives') };
 }
 
 function nameOfPath(path: string, here: { label: string; base?: string }): string {
@@ -358,13 +354,13 @@ function nameOfPath(path: string, here: { label: string; base?: string }): strin
 }
 
 /**
- * Small screens have no folder tree: one menu jumps to My files and, with
- * `shared_drives` on, the shared Drives the caller reaches and (an admin) the
- * top of the Drive.
+ * Small screens have no folder tree: one menu jumps to My desktop, each drive
+ * and each member's desktop the API lists to the caller.
  */
-function DriveJump({ drive, projectName, onOpen }: { drive: Drive; projectName: string; onOpen: (path: string) => void }) {
+function DriveJump({ drive, nav, onOpen }: { drive: Drive; nav: DriveNav; onOpen: (path: string) => void }) {
   const t = useTranslations('drives');
-  const shared = drive.sharedDrives ? (drive.sharedWithMe ?? []) : [];
+  const personal = drive.personalFolder;
+  const admin = !!drive.sharedDrives && drive.access === 'manage';
   return (
     <div className="md:hidden">
       <DropdownMenu>
@@ -374,26 +370,36 @@ function DriveJump({ drive, projectName, onOpen }: { drive: Drive; projectName: 
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64">
-          {drive.personalFolder ? (
-            <DropdownMenuItem onSelect={() => onOpen(drive.personalFolder!)}>
+          {personal ? (
+            <DropdownMenuItem onSelect={() => onOpen(personal)}>
               <Home className="size-4 shrink-0" />
               {t('myDrive')}
             </DropdownMenuItem>
           ) : null}
-          {drive.sharedDrives && drive.access === 'manage' ? (
+          {personal && (nav.places.length > 0 || admin) ? <DropdownMenuSeparator /> : null}
+          {nav.places.map((p) => {
+            const Glyph = placeIcon(p.path);
+            return (
+              <DropdownMenuItem key={p.path} onSelect={() => onOpen(p.path)}>
+                <Glyph className="size-4 shrink-0" />
+                <span className="truncate">{p.name}</span>
+              </DropdownMenuItem>
+            );
+          })}
+          {admin ? (
             <DropdownMenuItem onSelect={() => onOpen('/')}>
-              <HardDriveIcon className="size-4 shrink-0" />
-              <span className="truncate">{projectName}</span>
+              <HardDrivesIcon className="size-4 shrink-0" />
+              {t('allDrives')}
             </DropdownMenuItem>
           ) : null}
-          {shared.length > 0 ? (
+          {nav.members.length > 0 ? (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">{t('drivesSection')}</DropdownMenuLabel>
-              {shared.map((f) => (
-                <DropdownMenuItem key={f.path} onSelect={() => onOpen(f.path)}>
-                  <HardDriveIcon className="size-4 shrink-0" />
-                  <span className="truncate">{f.path.split('/').filter(Boolean).pop() ?? f.path}</span>
+              <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">{t('membersSection')}</DropdownMenuLabel>
+              {nav.members.map((m) => (
+                <DropdownMenuItem key={m.path} onSelect={() => onOpen(m.path)}>
+                  <UserIcon className="size-4 shrink-0" />
+                  <span className="truncate">{m.name}</span>
                 </DropdownMenuItem>
               ))}
             </>
@@ -414,16 +420,16 @@ function PlaceTitle({ icon: Glyph, title, meta }: { icon: DriveGlyph; title: str
   );
 }
 
-/** A folder's name and who can open it: Everyone, Admins only, how many people, or its owner. */
-function FolderTitle({ drive, path, label }: { drive: Drive; path: string; label: string }) {
+/** A folder's name (with the glyph of the place it roots) and who can open it: Everyone, Admins only, how many people, or its owner. */
+function FolderTitle({ drive, path, label, icon }: { drive: Drive; path: string; label: string; icon?: DriveGlyph }) {
   const t = useTranslations('drives');
   const access = useFolderAccess(drive.driveId, path);
   const audience = access.data ? folderAudience(access.data.grants) : null;
   const personal = drive.personalFolder;
-  const inPeople = isUnder(path, PEOPLE_ROOT);
+  const inPeople = within(path, PEOPLE_ROOT);
   let meta: ReactNode = null;
-  if (path === PEOPLE_ROOT) return <PlaceTitle icon={UsersIcon} title={label} />;
-  if (personal && isUnder(path, personal)) meta = t('folderInfo.audienceYouAndAdmins');
+  if (path === PEOPLE_ROOT) return <PlaceTitle icon={UsersIcon} title={t('membersSection')} />;
+  if (personal && within(path, personal)) meta = t('folderInfo.audienceYouAndAdmins');
   else if (audience?.mode === 'specific' && audience.named.length > 0)
     meta = t('folderInfo.audienceAgentUsers', { agent: audience.named.map((n) => n.label).join(', ') });
   else if (inPeople) meta = (
@@ -438,7 +444,7 @@ function FolderTitle({ drive, path, label }: { drive: Drive; path: string; label
       {t('audienceAdmins')}
     </>
   );
-  const glyph = personal && path === personal ? Home : inPeople ? UserIcon : FolderSimpleIcon;
+  const glyph = icon ?? (inPeople ? UserIcon : FolderSimpleIcon);
   return <PlaceTitle icon={glyph} title={label} meta={meta} />;
 }
 

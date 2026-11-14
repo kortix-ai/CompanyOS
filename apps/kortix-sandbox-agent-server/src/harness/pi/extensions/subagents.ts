@@ -368,7 +368,7 @@ const parametersFor = (defaultGeneral: boolean) => Type.Object({
   subagent_type: Type.Optional(
     Type.String({
       description: `The named agent to use for this task. ${
-        defaultGeneral ? 'Omitted: the general-purpose agent `general`, which runs with your own access; My Kortix must always name it.' : 'Use only a name the tool description lists; omit it and pass an inline `agent` spec when it lists none.'
+        defaultGeneral ? 'Omitted: the general-purpose agent `general`, which runs with your own access; My Kortix must always name it.' : 'Use only a name the tool description lists. When it lists none, omit it: the subagent runs as a general-purpose inline agent with your own access.'
       } Mutually exclusive with an inline \`agent\` spec: a call carrying both is refused.`,
     }),
   ),
@@ -490,7 +490,8 @@ export const CONTINUED_NOTE = (taskId: string, name?: string) =>
 export const SUBAGENT_SPEC_REQUIRED = 'Set subagent_type to a named agent, or pass an inline `agent` spec.'
 
 /** The roster line, and the refusal, when this session may start no named subagent type. */
-const NO_SUBAGENT_TYPES = 'This session can start no named subagent type: omit subagent_type and pass an inline `agent: { instructions }` spec.'
+const NO_SUBAGENT_TYPES =
+  'This session can start no named subagent type. Omit subagent_type: the subagent runs as a general-purpose inline agent with your own access. Pass an inline `agent: { instructions }` spec to give it its own instructions.'
 
 /** The child agent name an inline ephemeral spec runs under; labels the child's messages. */
 export const INLINE_AGENT = 'inline'
@@ -744,7 +745,10 @@ function resolveSpec(params: SubagentParams, host: KortixHost): Omit<SpawnSessio
     }
     // No type named: the general-purpose agent, where this session may start it.
     if (types.has('general')) return resolveSpec({ ...params, subagent_type: 'general' }, host)
-    throw new Error(types.size === 0 ? `${NO_SUBAGENT_TYPES} Nothing was started.` : SUBAGENT_SPEC_REQUIRED)
+    // No named type exists here: the call runs as an inline agent with the default prompt and this
+    // session's own access, the same as an explicit inline spec. Refusing it cost every hand-off a failed call.
+    if (types.size === 0) return { title: `${params.description} (inline agent)`, agent: INLINE_AGENT, systemPrompt: SUBAGENT_PROMPT }
+    throw new Error(SUBAGENT_SPEC_REQUIRED)
   }
   // The title is the task alone: the child carries its agent as `agent_name`, and every list shows it from there.
   const type = types.get(params.subagent_type)

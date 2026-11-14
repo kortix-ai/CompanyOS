@@ -6088,10 +6088,10 @@ describe('kortix.yaml on pi', () => {
     expect(toolParts(page, 'task')[0]!.state.error).toBe('Unknown subagent_type "general". Available: reviewer.')
   })
 
-  test('a kortix.yaml set with only primary agents offers the inline spec, never an absent general', async () => {
+  test('a kortix.yaml set with only primary agents runs an untyped call inline, never an absent general', async () => {
     const set = v3({ agent: { kortix: { mode: 'primary', permission: 'allow' }, 'memory-reflector': { mode: 'primary', permission: 'allow' } } })
     const untyped = { tool: 'task', args: { description: 'Delegate', prompt: 'do it' } }
-    const r = await boot({ script: [untyped, TASK('general'), { text: 'done' }], env: { KORTIX_COMPILED_AGENT_CONFIG: set } })
+    const r = await boot({ script: [untyped, { text: 'child done' }, TASK('general'), { text: 'done' }], env: { KORTIX_COMPILED_AGENT_CONFIG: set } })
     const tool = taskTool(r)
     expect(tool.description).not.toContain('omitted: general')
     expect(tool.description).not.toContain('Available agent types:')
@@ -6102,12 +6102,25 @@ describe('kortix.yaml on pi', () => {
 
     await promptAndSettle(r, 'delegate')
     const page = (await r.bearer(`/kortix/runtime/messages/${r.service.runtime()!.rootId}`).then((res) => res.json())) as WirePage
-    const [missing, general] = toolParts(page, 'task')
-    for (const part of [missing!, general!]) {
-      expect(part.state.status).toBe('error')
-      expect(String(part.state.error)).toContain('inline `agent: { instructions }` spec')
-      expect(String(part.state.error)).not.toContain('Available: .')
-    }
+    const [first, general] = toolParts(page, 'task')
+    // The first call names nothing and still works: one hand-off, no failed row.
+    expect(first!.state.status).toBe('completed')
+    expect(JSON.stringify(first!.state)).toContain('child done')
+    expect((await children(r)).length).toBe(1)
+    // A name that does not exist is still refused, with the way out instead of an empty roster.
+    expect(general!.state.status).toBe('error')
+    expect(String(general!.state.error)).toContain('Omit subagent_type')
+    expect(String(general!.state.error)).not.toContain('Available: .')
+  })
+
+  test('an untyped call stays refused when the permission rules deny task', async () => {
+    const set = v3({ agent: { kortix: { mode: 'primary', permission: { '*': 'allow', task: 'deny' } } } })
+    const untyped = { tool: 'task', args: { description: 'Delegate', prompt: 'do it' } }
+    const r = await boot({ script: [untyped, { text: 'done' }], env: { KORTIX_COMPILED_AGENT_CONFIG: set } })
+    await promptAndSettle(r, 'delegate')
+    const page = (await r.bearer(`/kortix/runtime/messages/${r.service.runtime()!.rootId}`).then((res) => res.json())) as WirePage
+    expect(toolParts(page, 'task')[0]!.state.status).toBe('error')
+    expect((await children(r)).length).toBe(0)
   })
 
   test('a set without schema: 3 keeps the built-in general and explore subagents', async () => {

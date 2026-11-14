@@ -34,6 +34,15 @@ const kortix = createKortix({
 await kortix.workspaces.list();
 ```
 
+Inside a Kortix sandbox (a session, or a program agent's turn), call
+`createKortix()` with no options. It reads the sandbox's own `KORTIX_API_URL`
+and `KORTIX_TOKEN`, so every call acts as the session's agent:
+
+```ts
+const kortix = createKortix();
+await kortix.project(process.env.KORTIX_PROJECT_ID!).sessions.list();
+```
+
 ### Call external systems through Connectors
 
 Use one data plane for every Connector provider. A user token binds

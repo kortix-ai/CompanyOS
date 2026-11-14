@@ -98,9 +98,10 @@ function workspaceRedirectTable(locales: readonly string[]): Redirect[] {
       // top-level segments were shared in Slack, saved as bookmarks and baked
       // into agent transcripts, so every one keeps resolving. `agent` became
       // `agents`, `config` became `settings`; the rest kept their names.
-      // Review is the Inbox's Review tab (2026-11-08). Its old addresses
-      // (`/review`, its own page from 2026-11-04, and `/customize/review`)
-      // land there in one hop; `?id=` rides along and opens the item.
+      // Review is the workspace Inbox page itself (KRTX-4799; it was a tab
+      // there on 2026-11-08 and its own page from 2026-11-04). Its old
+      // addresses (`/review`, `/customize/review`) land there in one hop;
+      // `?id=` rides along and opens the item.
       {
         source: `${prefix}/:id/:old(review|customize/review)`,
         destination: '/workspaces/:id/inbox?view=review',

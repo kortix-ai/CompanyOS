@@ -638,6 +638,14 @@
     color: var(--foreground);
   }
 
+  /* The one accent action of a page, in the brand blue, in both themes. */
+  .kx-button[data-variant='accent'],
+  .dark .kx-button[data-variant='accent'] {
+    --kx-btn-deep: color-mix(in oklch, var(--kortix-base) 84%, var(--kx-btn-shade));
+    --kx-btn-light: var(--kortix-base);
+    color: oklch(1 0 0);
+  }
+
   .dark .kx-button {
     --kx-btn-hi: color-mix(in oklch, var(--foreground) 10%, transparent);
     --kx-btn-ring: color-mix(in oklch, var(--background) 8%, transparent);

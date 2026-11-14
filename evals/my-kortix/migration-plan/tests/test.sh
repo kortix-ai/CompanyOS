@@ -9,4 +9,4 @@ kortix evals judge \
   --criterion phases="The plan has phases on a week-by-week timeline, each with an owner role." \
   --criterion scope="The plan says what moves to Linear (such as open cards, labels, members) and what does not (such as archived boards)." \
   --criterion risks="The plan names three risks, each with a concrete way to reduce it." \
-  --input "$f" || echo '{"exists": 1, "phases": 0, "scope": 0, "risks": 0}' > /logs/verifier/reward.json
+  --input "$f" || { echo "kortix evals judge failed: no reward, so the trial counts as an error, not a 0"; rm -f /logs/verifier/reward.json; exit 1; }

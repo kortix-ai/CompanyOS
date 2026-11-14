@@ -38,7 +38,9 @@ evals:
 | `schedule-weekly-review` | automation | Creates the Monday 09:00 Berlin Loop (needs `reminders`). |
 
 Rewards are per criterion (`reward.json` with one key each). A task passes when
-every key is 1.
+every key is 1. A judged grader that cannot reach `kortix evals judge` writes no
+reward and exits 1: the trial counts as an error, never as a 0, so a missing
+CLI or a model outage cannot lower the score.
 
 `schedule-weekly-review` needs the `reminders` flag. Add a task for every
 behavior My Kortix must keep, and for every bug fixed in it.

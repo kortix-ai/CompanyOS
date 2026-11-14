@@ -17,4 +17,4 @@ json.dump({'owners': owners, 'dues': dues}, open('/logs/verifier/reward.json', '
 PY
 kortix evals judge \
   --criterion tasks="Each item's task says what the notes say that owner will do (pricing page copy, onboarding email, user interviews), without adding work the notes do not name." \
-  --input /workspace/actions.json || python3 -c 'import json; r=json.load(open("/logs/verifier/reward.json")); r["tasks"]=0; json.dump(r, open("/logs/verifier/reward.json","w"))'
+  --input /workspace/actions.json || { echo "kortix evals judge failed: no reward, so the trial counts as an error, not a 0"; rm -f /logs/verifier/reward.json; exit 1; }

@@ -157,6 +157,13 @@ Pin the judge model (`--model <id>`, or `KORTIX_EVAL_JUDGE_MODEL` in
 `[verifier.env]`): scores from two judge models do not compare. Judge one
 property per criterion, say what earns 1.0, and run 3 attempts or more.
 
+Never write a 0 when the judge fails (`|| echo '{"accurate": 0}' > …`). A
+missing CLI or a model outage then reads as a worse agent. Let the verifier
+fail instead: `… --input <file> || { rm -f /logs/verifier/reward.json; exit 1; }`.
+With no reward the trial counts as an error, not as a score. A judge also
+grades from what it knows: when a fact can change (a version, a price, a
+date), tell it not to rule on whether the fact is current.
+
 Agent judge: start a session of a judge agent from the verifier with `kortix
 sessions`, give it the result and the rubric, and have it write the scores to
 a file the verifier copies into `reward.json`.

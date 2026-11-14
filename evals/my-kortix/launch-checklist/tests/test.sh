@@ -9,4 +9,4 @@ echo "{\"format\": $format}" > /logs/verifier/reward.json
 kortix evals judge \
   --criterion useful="Each item is a concrete step a person launching an email newsletter must do; no filler." \
   --criterion covers="The list covers deliverability (domain or sender setup), a signup path, the first issue, and a test send." \
-  --input "$f" || echo '{"format": '"$format"', "useful": 0, "covers": 0}' > /logs/verifier/reward.json
+  --input "$f" || { echo "kortix evals judge failed: no reward, so the trial counts as an error, not a 0"; rm -f /logs/verifier/reward.json; exit 1; }

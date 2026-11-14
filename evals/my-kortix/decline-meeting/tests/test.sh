@@ -10,4 +10,4 @@ kortix evals judge \
   --criterion declines="The reply clearly declines the Thursday call." \
   --criterion next_step="The reply offers a next step that needs no meeting from the writer, such as a recording, a written overview or a trial." \
   --criterion tone="The reply is friendly and does not promise to buy." \
-  --input "$f" || echo '{"short": '"$short"', "declines": 0, "next_step": 0, "tone": 0}' > /logs/verifier/reward.json
+  --input "$f" || { echo "kortix evals judge failed: no reward, so the trial counts as an error, not a 0"; rm -f /logs/verifier/reward.json; exit 1; }

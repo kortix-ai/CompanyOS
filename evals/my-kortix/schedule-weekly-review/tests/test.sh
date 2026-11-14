@@ -14,4 +14,4 @@ echo "{\"has_loop\": $has_loop}" > /logs/verifier/reward.json
 [ "$has_loop" = 1 ] || { echo '{"has_loop": 0, "schedule": 0}' > /logs/verifier/reward.json; exit 0; }
 kortix evals judge \
   --criterion schedule="A loop fires every Monday at 09:00 in Europe/Berlin (a cron like 0 9 * * 1 with that timezone, or the same in words), and its prompt is about reviewing weekly metrics." \
-  --input /logs/verifier/loops.json || echo '{"has_loop": 1, "schedule": 0}' > /logs/verifier/reward.json
+  --input /logs/verifier/loops.json || { echo "kortix evals judge failed: no reward, so the trial counts as an error, not a 0"; rm -f /logs/verifier/reward.json; exit 1; }

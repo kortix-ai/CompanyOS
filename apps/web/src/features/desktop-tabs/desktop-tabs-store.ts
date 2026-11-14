@@ -7,7 +7,7 @@ import {
 } from '@kortix/ui/internal/stores/persisted-store-registry';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { HOME_GROUP, isDocumentGroup, tabRoute } from './tab-route';
+import { HOME_GROUP, isDocumentGroup, isSessionGroup, tabRoute } from './tab-route';
 
 /**
  * The desktop window's tab strip, per project.
@@ -27,10 +27,12 @@ export interface DesktopTab {
   path: string;
   pinned?: boolean;
   /**
-   * The preview tab: a session or artifact opened by a plain click. The next
-   * plain click on another one replaces it instead of adding a tab. It becomes
-   * a normal tab once you work in it (type in the page), double-click it, pin
-   * it or drag it. At most one tab is a preview.
+   * The tab you are browsing in: a session, an artifact or a settings section
+   * opened by a plain click. The next plain click on another one replaces it
+   * instead of adding a tab. It becomes a normal tab once you work in it (type
+   * or press a control in the page), double-click it, pin it, drag it, or
+   * switch to another tab: a tab you leave stays. Only the active tab can be
+   * a preview (`settle`).
    */
   preview?: boolean;
   /** Closed tabs only: where it stood, so reopening puts it back there. */
@@ -42,6 +44,8 @@ export interface ProjectTabs {
   activeId: string | null;
   /** Closed tabs, most recent last, for Mod+Shift+T. */
   closed: DesktopTab[];
+  /** Tab ids in the order they were last in front, most recent last (`settle`). */
+  recent?: string[];
 }
 
 export const MAX_TABS = 24;
@@ -93,27 +97,32 @@ function capTabs(tabs: DesktopTab[], activeId: string | null): DesktopTab[] {
 /**
  * The window moved to `path`. Where it lands, in order:
  *  1. The active tab is already there: nothing changes.
- *  2. The active tab is the same destination (Customize → Triggers, Goals →
- *     one goal): it navigates. A second Customize tab never steals focus from
- *     the one you are clicking in.
- *  3. Another tab shows the same destination (`destinationOf`: a session,
- *     an artifact, a section; one Customize section): that tab takes focus
- *     and moves to `path`. A session that has a tab, Back across a tab switch,
- *     the Customize rail's Back link to a session: none of them closes or
- *     rewrites the tab you came from, and none opens a page twice.
- *  3b. The active tab is a blank New session tab: it navigates. This is how a
- *     new session starts in place.
- *  4. A session or an artifact: it opens in the preview tab, which replaces
- *     the previous preview. Clicking through ten sessions leaves one tab.
- *  5. Anything else opens in a new tab beside the active one.
+ *  2. A redirect (`replaced`: the page rewrote its own address, as Workspace
+ *     settings does for a section the caller cannot open): the active tab's
+ *     page is gone, so that tab moves, or closes when another tab already
+ *     shows the destination.
+ *  3. One tab that is not a session (the strip is hidden): it follows every
+ *     navigation. Tabs start with the first session; until then the window
+ *     behaves as it did before tabs.
+ *  4. The active tab is the same destination (Goals → one goal, Agents → one
+ *     agent): it navigates.
+ *  5. Another tab shows the destination: that tab takes focus. A session or a
+ *     settings section that has a tab is never opened twice, and never
+ *     rewrites the tab you came from.
+ *  6. The active tab is a blank New session tab: it navigates. A session it
+ *     becomes is the person's own, never a preview.
+ *  7. A document (a session, an artifact, a settings section): the tab you are
+ *     browsing in (an active preview) shows it; else it opens in a new preview
+ *     tab. Clicking through ten rows leaves one tab.
+ *  8. Anything else opens in a new tab beside the active one.
  * A path outside the project (`groupOf` returns null) changes nothing.
  */
 export function syncPath(
   state: ProjectTabs,
   path: string,
   groupOf: (path: string) => string | null,
-  /** The exact page, for rule 3 (a Customize section). Defaults to `groupOf`. */
-  destinationOf: (path: string) => string | null = groupOf,
+  /** The navigation replaced the history entry: a redirect, not a click. */
+  replaced = false,
 ): ProjectTabs {
   const group = groupOf(path);
   if (group === null) return state;
@@ -126,38 +135,53 @@ export function syncPath(
       t.id === active?.id ? { id: t.id, path, pinned: t.pinned, preview } : t,
     ),
   });
-  if (active && activeGroup === group) return moveActive(active.preview);
-  const destination = destinationOf(path);
-  const owner = state.tabs.find(
-    (t) => t.id !== active?.id && destinationOf(t.path) === destination,
-  );
-  // A blank tab takes the destination only when no tab has it: a session
-  // that is already open is focused, never opened twice. The session it
-  // becomes is the person's own, so never a preview.
-  if (active && !owner && activeGroup === HOME_GROUP) return moveActive();
-  if (owner) {
-    return {
-      ...state,
-      activeId: owner.id,
-      tabs:
-        owner.path === path
-          ? state.tabs
-          : state.tabs.map((t) => (t.id === owner.id ? { ...t, path } : t)),
-    };
+  const owner = state.tabs.find((t) => t.id !== active?.id && groupOf(t.path) === group);
+  const focusOwner = (tabs: DesktopTab[], to: DesktopTab): ProjectTabs => ({
+    ...state,
+    activeId: to.id,
+    tabs: to.path === path ? tabs : tabs.map((t) => (t.id === to.id ? { ...t, path } : t)),
+  });
+  if (active && replaced) {
+    if (!owner || activeGroup === group) return moveActive(active.preview);
+    return focusOwner(
+      state.tabs.filter((t) => t.id !== active.id),
+      owner,
+    );
   }
+  if (active && state.tabs.length === 1 && !isSessionGroup(activeGroup)) return moveActive();
+  if (active && activeGroup === group) return moveActive(active.preview);
+  if (owner) return focusOwner(state.tabs, owner);
+  const browsing = isDocumentGroup(group) && !isSessionGroup(group);
+  if (active && activeGroup === HOME_GROUP) return moveActive(browsing || undefined);
   // The window's first tab is the one you work in, never a preview.
   if (isDocumentGroup(group) && state.tabs.length > 0) {
-    const preview = state.tabs.find((t) => t.preview && !t.pinned);
-    if (preview) {
-      return {
-        ...state,
-        activeId: preview.id,
-        tabs: state.tabs.map((t) => (t.id === preview.id ? { id: t.id, path, preview: true } : t)),
-      };
-    }
+    if (active?.preview && !active.pinned) return moveActive(true);
     return openTab(state, path, null, false, true);
   }
   return openTab(state, path);
+}
+
+/**
+ * What every change to the tabs goes through (the store's `update`):
+ *  - a preview tab you switch away from becomes a normal tab, so only the
+ *    active tab is ever a preview;
+ *  - `recent` records the order tabs were last in front, for `closeTab`.
+ */
+export function settle(prev: ProjectTabs, next: ProjectTabs): ProjectTabs {
+  if (next === prev) return next;
+  const tabs = next.tabs.some((t) => t.preview && t.id !== next.activeId)
+    ? next.tabs.map((t) =>
+        t.preview && t.id !== next.activeId ? { id: t.id, path: t.path, pinned: t.pinned } : t,
+      )
+    : next.tabs;
+  const open = new Set(tabs.map((t) => t.id));
+  const before = next.recent ?? prev.recent ?? [];
+  const kept = before.filter((id) => open.has(id) && id !== next.activeId);
+  const recent = next.activeId && open.has(next.activeId) ? [...kept, next.activeId] : kept;
+  const sameRecent =
+    recent.length === before.length && recent.every((id, i) => id === before[i]);
+  if (tabs === next.tabs && sameRecent && next.recent) return next;
+  return { ...next, tabs, recent: sameRecent ? before : recent };
 }
 
 /**
@@ -208,9 +232,11 @@ export function openTab(
 }
 
 /**
- * Close one tab. Closing the active tab focuses its right neighbour, or the
- * left one when it was last — the browser rule. Returns the next state and the
- * path the window must show, or null when the active tab did not change.
+ * Close one tab. Closing the active tab goes back to the tab that was in front
+ * before it (`recent`): close Settings and you are in the session you opened
+ * it from. With no history, the right neighbour, or the left one when it was
+ * last. Returns the next state and the path the window must show, or null when
+ * the active tab did not change.
  */
 export function closeTab(
   state: ProjectTabs,
@@ -227,9 +253,13 @@ export function closeTab(
   if (state.activeId !== id) {
     return { state: { ...state, tabs, closed }, navigateTo: null };
   }
-  const next = tabs[idx] ?? tabs[idx - 1] ?? null;
+  const previous = [...(state.recent ?? [])]
+    .reverse()
+    .map((recentId) => tabs.find((t) => t.id === recentId))
+    .find((t) => t !== undefined);
+  const next = previous ?? tabs[idx] ?? tabs[idx - 1] ?? null;
   return {
-    state: { tabs, closed, activeId: next?.id ?? null },
+    state: { ...state, tabs, closed, activeId: next?.id ?? null },
     navigateTo: next?.path ?? null,
   };
 }
@@ -326,7 +356,7 @@ export function sanitizePersisted(value: unknown): { byProject: Record<string, P
   for (const [projectId, entry] of Object.entries(raw)) {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
     const { tabs: rawTabs, activeId, closed } = entry as Record<string, unknown>;
-    // At most one preview tab: a stored second one is an ordinary tab.
+    // Only the active tab can be a preview (checked below, once it is known).
     let seenPreview = false;
     // Only pages of this project: a stored `javascript:` URL or another
     // project's path would otherwise be an empty "Page" tab.
@@ -336,11 +366,18 @@ export function sanitizePersisted(value: unknown): { byProject: Record<string, P
       if (!seenPreview) return (seenPreview = true), tab;
       return { id: tab.id, path: tab.path };
     });
+    const active =
+      typeof activeId === 'string' && tabs.some((t) => t.id === activeId) ? activeId : null;
+    const { recent } = entry as Record<string, unknown>;
     byProject[projectId] = {
-      tabs,
-      activeId:
-        typeof activeId === 'string' && tabs.some((t) => t.id === activeId) ? activeId : null,
+      tabs: tabs.map((tab) =>
+        tab.preview && tab.id !== active ? { id: tab.id, path: tab.path } : tab,
+      ),
+      activeId: active,
       closed: cleanTabs(closed).filter(routable),
+      recent: Array.isArray(recent)
+        ? recent.filter((id): id is string => typeof id === 'string' && tabs.some((t) => t.id === id))
+        : [],
     };
   }
   return { byProject };
@@ -369,7 +406,7 @@ export const useDesktopTabsStore = create<Store>()(
       byProject: {},
       update: (projectId, fn) => {
         const current = get().byProject[projectId] ?? EMPTY;
-        const next = fn(current);
+        const next = settle(current, fn(current));
         if (next === current) return;
         // Re-insert the key last: map order is the recency order pruning keeps.
         const { [projectId]: _drop, ...rest } = get().byProject;

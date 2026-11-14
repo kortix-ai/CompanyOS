@@ -99,7 +99,7 @@ import {
 
 import { useTranslations } from '@/i18n/use-translations';
 
-import { MOUNTED_ATTRIBUTE } from './desktop-tabs-gate';
+import { MOUNTED_ATTRIBUTE, SETTINGS_ENTRY_ATTRIBUTE } from './desktop-tabs-gate';
 import {
   closeOthers,
   closeTab,
@@ -120,7 +120,7 @@ import {
   isPrototypeKey,
   newTabPath,
   ownEntry,
-  pathDestination,
+  isSettingsGroup,
   pathGroup,
   stripVisible,
   tabRoute,
@@ -208,6 +208,28 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
   // opens a tab before it lands, that navigation belongs to the tab it started
   // in, not to the tab now in front — the browser rule. `inFlight` is the
   // pending link; `handoff` is the tab switch that overtook it.
+  // How the window got to its current address: a pushed entry (a click) or a
+  // replaced one (a redirect). The Navigation API reports it as the history
+  // call is made, before React commits the new path. Only a change of path
+  // counts: Next also replaces the entry in place to save its own state.
+  const lastNavigation = useRef<{ type: string; path: string } | null>(null);
+  useEffect(() => {
+    const navigation = (window as { navigation?: EventTarget }).navigation;
+    if (!navigation) return;
+    const onNavigate = (event: Event) => {
+      const { navigationType, destination } = event as Event & {
+        navigationType?: string;
+        destination?: { url?: string };
+      };
+      if (!destination?.url) return;
+      const to = new URL(destination.url, window.location.href).pathname;
+      if (to === window.location.pathname) return;
+      lastNavigation.current = { type: navigationType ?? 'push', path: to };
+    };
+    navigation.addEventListener('navigate', onNavigate);
+    return () => navigation.removeEventListener('navigate', onNavigate);
+  }, []);
+
   const inFlight = useRef<string | null>(null);
   const handoff = useRef<{ stalePath: string; fromId: string | null; toPath: string } | null>(null);
   useEffect(() => {
@@ -272,15 +294,13 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
     // Any arrival settles the pending link: it landed, or a newer one won.
     inFlight.current = null;
     if (!tabRoute(pathname, projectId)) return;
-    update(projectId, (s) =>
-      syncPath(
-        s,
-        pathname,
-        (p) => pathGroup(p, projectId),
-        (p) => pathDestination(p, projectId),
-      ),
-    );
-  }, [pathname, projectId, router, update]);
+    // A redirect (the page replaced its own address) belongs to the tab it
+    // happened in; a click (a pushed entry) goes through the tab rules.
+    const redirect = lastNavigation.current;
+    lastNavigation.current = null;
+    const replaced = redirect?.type === 'replace' && redirect.path === path;
+    update(projectId, (s) => syncPath(s, pathname, (p) => pathGroup(p, projectId), replaced));
+  }, [path, pathname, projectId, router, update]);
 
   // Warm every background tab's route: a click is a client transition, never a
   // cold load. Keyed on the inactive tabs, so a navigation in the active tab
@@ -340,6 +360,29 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
     },
     [go, projectId, update],
   );
+
+  // The sidebar's Customize row goes back to the settings tab you were last
+  // in, as you left it. Its link names the landing section (Agents) only for
+  // a window with no settings tab; following it otherwise would open Agents
+  // again each time you return to settings.
+  useEffect(() => {
+    const onSettingsEntry = (e: MouseEvent) => {
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const entry = (e.target as Element | null)?.closest?.(`a[${SETTINGS_ENTRY_ATTRIBUTE}]`);
+      if (!entry) return;
+      const { tabs, recent = [] } = readProjectTabs(projectId);
+      const settings = tabs.filter((tab) => isSettingsGroup(pathGroup(tab.path, projectId)));
+      const last =
+        [...recent].reverse().flatMap((id) => settings.filter((tab) => tab.id === id))[0] ??
+        settings.at(-1);
+      if (!last) return;
+      // Stops the link (Next's and the sidebar's handlers check this).
+      e.preventDefault();
+      activate(last.id);
+    };
+    document.addEventListener('click', onSettingsEntry, { capture: true });
+    return () => document.removeEventListener('click', onSettingsEntry, { capture: true });
+  }, [activate, projectId]);
 
   const close = useCallback(
     (id: string) => {

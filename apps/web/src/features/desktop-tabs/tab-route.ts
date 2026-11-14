@@ -127,10 +127,13 @@ export function tabRoute(path: string, projectId: string): TabRoute | null {
 }
 
 /**
- * The destination a path belongs to, which decides the tab it opens in. Each
- * session is its own destination; every other page belongs to its section, so
- * moving inside a section (Customize → Triggers, Goals → one goal) stays in
- * one tab, and leaving it (a session → Goals) keeps the tab you left.
+ * The destination a path belongs to, which decides the tab it opens in.
+ *
+ * A session, an artifact and a Workspace settings section are documents: each
+ * has its own tab, and a plain click on one opens it in the tab you are
+ * browsing in (`syncPath`). A page below a settings section (one agent, one
+ * connector, one eval job) belongs to that section's tab. Every other page
+ * belongs to its area (Goals and one goal, Apps and one App), one tab each.
  */
 export function tabGroup(route: TabRoute): string {
   switch (route.kind) {
@@ -138,16 +141,17 @@ export function tabGroup(route: TabRoute): string {
       return HOME_GROUP;
     case 'session':
       return `${SESSION_GROUP}${route.sessionId}`;
-    // One artifact is a document you keep open beside others, like a session.
     case 'artifact':
       return `artifact:${route.artifactId}`;
     case 'artifacts':
       return 'artifacts';
     case 'agent':
+      return `${SETTINGS_GROUP}agents`;
     case 'admin':
     case 'customize':
+      return `${SETTINGS_GROUP}${settingsSection(route.section)}`;
     case 'settings':
-      return 'customize';
+      return `${SETTINGS_GROUP}general`;
     case 'goal':
       return 'goals';
     case 'channel':
@@ -167,36 +171,25 @@ export function tabGroup(route: TabRoute): string {
   }
 }
 
-/**
- * The exact page a tab shows, for focusing a tab that is already there. Finer
- * than `tabGroup` for Customize only: each Customize section is its own
- * destination. Moving inside the Customize tab stays in it (same group), but
- * clicking Security from another tab opens a Security tab instead of
- * rewriting an open Secrets tab.
- */
-export function tabDestination(route: TabRoute): string {
-  switch (route.kind) {
-    case 'agent':
-      return `customize:agent:${route.name}`;
-    case 'admin':
-    case 'customize':
-      return `customize:${route.section ?? ''}`;
-    case 'settings':
-      return 'customize:general';
-    default:
-      return tabGroup(route);
-  }
-}
-
-/** `tabDestination` for a path, or null when the path is not a page of the project. */
-export function pathDestination(path: string, projectId: string): string | null {
-  const route = tabRoute(path, projectId);
-  return route ? tabDestination(route) : null;
+/** The settings section a URL segment belongs to: the eval pages are one section. */
+function settingsSection(section: string | null): string {
+  if (!section) return '';
+  return section.startsWith('eval') ? 'evals' : section;
 }
 
 /** The project's home: a blank New session, which the next destination replaces. */
 export const HOME_GROUP = 'home';
 const SESSION_GROUP = 'session:';
+const SETTINGS_GROUP = 'customize:';
+
+export function isSessionGroup(group: string | null): boolean {
+  return !!group && group.startsWith(SESSION_GROUP);
+}
+
+/** A Workspace settings section (Customize): Agents, Skills, Security, … */
+export function isSettingsGroup(group: string | null): boolean {
+  return !!group && group.startsWith(SETTINGS_GROUP);
+}
 
 /** `tabGroup` for a path, or null when the path is not a page of the project. */
 export function pathGroup(path: string, projectId: string): string | null {
@@ -223,11 +216,17 @@ export function stripVisible(
 }
 
 /**
- * A document destination: one session or one artifact. A plain click on one
- * opens it in the preview tab (`syncPath`), so browsing does not pile up tabs.
+ * A document destination: one session, one artifact or one settings section.
+ * A plain click on one opens it in the tab you are browsing in (`syncPath`),
+ * so clicking through a list does not pile up tabs.
  */
 export function isDocumentGroup(group: string | null): boolean {
-  return !!group && (group.startsWith(SESSION_GROUP) || group.startsWith('artifact:'));
+  return (
+    !!group &&
+    (group.startsWith(SESSION_GROUP) ||
+      group.startsWith('artifact:') ||
+      group.startsWith(SETTINGS_GROUP))
+  );
 }
 
 /** The path a new tab opens on: the project's home, where a new session starts. */

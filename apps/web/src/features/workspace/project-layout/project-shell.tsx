@@ -329,6 +329,10 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
   );
 }
 
+/** A control of the page (not a link): pressing one is working in the page. */
+const PAGE_CONTROLS =
+  'button, input, select, textarea, summary, [role="switch"], [role="checkbox"], [role="radio"], [role="tab"], [role="combobox"], [role="menuitem"]';
+
 const ProjectSheelLayout = ({
   projectId,
   children,
@@ -358,8 +362,18 @@ const ProjectSheelLayout = ({
     <div
       // The page's own header moves below the strip only while the strip shows.
       data-kx-desktop-tabs-on={tabs && tabsVisible ? '' : undefined}
-      // Typing in the page is working in it: the preview tab becomes a kept tab.
+      // Typing in the page, or pressing one of its controls, is working in it:
+      // the preview tab becomes a kept tab. A link is not: it navigates.
       onInputCapture={tabs ? () => keepActivePreview(projectId) : undefined}
+      onClickCapture={
+        tabs
+          ? (event) => {
+              const target = event.target as Element;
+              if (target.closest('[data-kx-desktop-tabs]')) return;
+              if (target.closest(PAGE_CONTROLS)) keepActivePreview(projectId);
+            }
+          : undefined
+      }
       className={cn(
         'bg-background relative flex min-h-0 flex-1 flex-col overflow-hidden',
         isExpanded && 'border-border border-l',

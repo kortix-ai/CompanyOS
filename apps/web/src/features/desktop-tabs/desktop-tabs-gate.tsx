@@ -22,6 +22,13 @@ export function useDesktopTabsEnabled(projectId: string): boolean {
  */
 export const MOUNTED_ATTRIBUTE = 'data-kx-desktop-tabs-mounted';
 
+/**
+ * On the sidebar's Customize link (packages/ui, project-nav-items.tsx): the
+ * way into Workspace settings that names no section of its own. The strip
+ * sends it to the settings tab you were last in.
+ */
+export const SETTINGS_ENTRY_ATTRIBUTE = 'data-kx-settings-entry';
+
 export function desktopTabsMounted(): boolean {
   return typeof document !== 'undefined' && document.documentElement.hasAttribute(MOUNTED_ATTRIBUTE);
 }

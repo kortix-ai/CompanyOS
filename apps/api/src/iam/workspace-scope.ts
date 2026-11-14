@@ -17,7 +17,7 @@
  * ambiguity. Today no row has the workspace form: each predicate below is the
  * old one OR a disjunct that is false for every existing row, so no verdict
  * changes before R2b. The same predicates are in the views
- * (`20261111225252914_role_assignments_workspace_scope.sql`).
+ * (`20261114162256000_role_assignments_workspace_scope.sql`).
  *
  * A stored action string is read through `storedAction` (`toLegacyAction`), so a
  * renamed `workspace.*` row equals the legacy name the engine compares.

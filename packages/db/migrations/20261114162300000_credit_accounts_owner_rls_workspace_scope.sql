@@ -3,7 +3,7 @@
 -- Workspaces Release 2a, step 7: the RLS policy that lets an account owner
 -- read and manage its wallet row through PostgREST reads the owner grant in
 -- the workspace form too (`scope_type = 'workspace'`, see
--- 20261111225252914_role_assignments_workspace_scope). The policy already
+-- 20261114162256000_role_assignments_workspace_scope). The policy already
 -- requires the role's own scope to be 'account' and no object, so the rule
 -- reduces to accepting 'workspace'. Its own file: credit_accounts is hot, and
 -- ALTER POLICY takes a short ACCESS EXCLUSIVE lock on it.

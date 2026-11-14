@@ -259,6 +259,9 @@ const envSchema = z.object({
   KORTIX_MODEL_CATALOG_LIVE_ENABLED: optStr,
   // /health/live answers 503 above this event-loop lag.
   HEALTH_MAX_EVENT_LOOP_LAG_MS: optInt(5000),
+  // How long a session-cost list waits for the per-task query slot before a 429
+  // (sessionCostListSlots in router/routes/usage.ts, KRTX-4372).
+  KORTIX_SESSION_COSTS_SLOT_WAIT_MS: optInt(5000),
   // The space watcher (flag `spaces_proactive`, projects/lib/space-watch/):
   // how long an ask stays open before it wakes the watcher, and the least time
   // between two wakes of one space. Local verification shortens them.
@@ -1501,6 +1504,7 @@ export const config = {
   KORTIX_MODEL_PRICING_LIVE_ENABLED: env.KORTIX_MODEL_PRICING_LIVE_ENABLED,
   KORTIX_MODEL_CATALOG_LIVE_ENABLED: env.KORTIX_MODEL_CATALOG_LIVE_ENABLED,
   HEALTH_MAX_EVENT_LOOP_LAG_MS: env.HEALTH_MAX_EVENT_LOOP_LAG_MS,
+  KORTIX_SESSION_COSTS_SLOT_WAIT_MS: env.KORTIX_SESSION_COSTS_SLOT_WAIT_MS,
   KORTIX_JOB_WORKER_ENABLED: env.KORTIX_JOB_WORKER_ENABLED,
   KORTIX_SPACE_WATCH_ASK_OVERDUE_MS: Math.max(60_000, env.KORTIX_SPACE_WATCH_ASK_OVERDUE_MS),
   KORTIX_SPACE_WATCH_DEBOUNCE_MS: Math.max(60_000, env.KORTIX_SPACE_WATCH_DEBOUNCE_MS),

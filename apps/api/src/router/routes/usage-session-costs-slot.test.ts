@@ -1,21 +1,18 @@
 /**
- * KRTX-4372: `GET /v1/usage/session-costs` answers 429 (with `Retry-After`) once
- * one caller passes `KORTIX_SESSION_COSTS_READS_PER_MIN`, before any account
- * resolution or query, and another caller keeps reading. It also runs one list
- * query at a time per process: a second concurrent list waits for the slot and
- * answers 429 after `KORTIX_SESSION_COSTS_SLOT_WAIT_MS` instead of queueing more
- * queries into the 6-connection pool.
+ * KRTX-4372: `GET /v1/usage/session-costs` runs one list query at a time per
+ * process. A second concurrent list waits for the slot and answers 429 (with
+ * `Retry-After`) after `KORTIX_SESSION_COSTS_SLOT_WAIT_MS`, instead of queueing
+ * four more queries into the 6-connection pool.
  *
- * Prod 2026-11-13 22:10 UTC: one CLI client sent about 140 requests in three
- * minutes; each ran four aggregate queries, starved the DB pool for the 25 s
- * request deadline and produced 276 5xx on the route plus 5xx on unrelated routes.
+ * Prod 2026-11-13 22:09:45-22:12:30 UTC: one CLI client sent waves of ~20
+ * concurrent lists; the pools starved for the 25 s deadline and about 100
+ * routes answered 503.
  */
 import { describe, expect, mock, test } from 'bun:test';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 
 // Read at config load: must be set before usage.ts is imported.
-process.env.KORTIX_SESSION_COSTS_READS_PER_MIN = '3';
 process.env.KORTIX_SESSION_COSTS_SLOT_WAIT_MS = '50';
 
 const realAuthorize = await import('../../iam/authorize');
@@ -62,28 +59,6 @@ app.route('/v1/usage', usageApp);
 app.onError((error, c) => {
   if (error instanceof HTTPException) return c.json({ error: error.message }, error.status);
   throw error;
-});
-
-describe('GET /v1/usage/session-costs per-caller read ceiling', () => {
-  test('answers 429 with Retry-After past the limit, before querying, and spares other callers', async () => {
-    callerId = 'user-a';
-    for (let i = 0; i < 3; i++) {
-      expect((await app.request('/v1/usage/session-costs')).status).toBe(200);
-    }
-    expect(listCalls).toBe(3);
-
-    const denied = await app.request('/v1/usage/session-costs?format=csv');
-    expect(denied.status).toBe(429);
-    expect(Number(denied.headers.get('retry-after'))).toBeGreaterThan(0);
-    const body = (await denied.json()) as { error: string; retry_after_seconds: number };
-    expect(body.error).toBe('rate_limit_exceeded');
-    expect(body.retry_after_seconds).toBeGreaterThan(0);
-    expect(listCalls).toBe(3);
-
-    callerId = 'user-b';
-    expect((await app.request('/v1/usage/session-costs')).status).toBe(200);
-    expect(listCalls).toBe(4);
-  });
 });
 
 describe('GET /v1/usage/session-costs per-process query slot', () => {

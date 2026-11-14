@@ -22,7 +22,6 @@ import {
   parseCostWindow,
 } from '../../shared/cost-window';
 import { db } from '../../shared/db';
-import { sessionCostsReadDenial } from '../../middleware/rate-limit';
 import { config } from '../../config';
 import { createHolderSlots } from '../../shared/holder-slots';
 import { resolveScopedAccountId } from '../../middleware/resolve-account';
@@ -585,10 +584,6 @@ usageApp.openapi(
     },
   }),
   async (c) => {
-    // Front door, before auth and any query: see sessionCostsReadLimiter (KRTX-4372).
-    const denied = sessionCostsReadDenial(c);
-    if (denied) return c.json(denied.body, 429, { 'Retry-After': denied.retryAfter });
-
     let parsed: {
       window: CostWindow;
       sort: CostSort;

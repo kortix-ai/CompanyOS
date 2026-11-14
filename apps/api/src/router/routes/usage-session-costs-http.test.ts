@@ -2,15 +2,9 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-
-// The per-caller read ceiling (KRTX-4372) is exercised in usage-session-costs-rate-limit.test.ts;
-// this file calls the route far more than its default budget. Read at config load.
-process.env.KORTIX_SESSION_COSTS_READS_PER_MIN = '100000';
-
-// Dynamic: a static import would load config before the env above is set.
-const realAccess = await import('../../projects/lib/access');
-const realAuthorize = await import('../../iam/authorize');
-const realDirectoryVisibility = await import('../../iam/directory-visibility');
+import * as realAccess from '../../projects/lib/access';
+import * as realAuthorize from '../../iam/authorize';
+import * as realDirectoryVisibility from '../../iam/directory-visibility';
 
 const ACCOUNT_ID = '00000000-0000-4000-a000-000000000001';
 const PROJECT_ID = '00000000-0000-4000-a000-000000000002';

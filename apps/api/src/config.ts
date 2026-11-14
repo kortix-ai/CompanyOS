@@ -1010,9 +1010,6 @@ const envSchema = z.object({
   // Per-session ceiling on stored-log reads (GET /v1/workspaces/:id/sessions/:id/log);
   // why and how it sits: the sessionLogReadLimiter in middleware/rate-limit.ts (KRTX-4696).
   KORTIX_SESSION_LOG_READS_PER_MIN: optInt(300),
-  // Per-caller ceiling on GET /v1/usage/session-costs; why: sessionCostsReadLimiter in
-  // middleware/rate-limit.ts (KRTX-4372).
-  KORTIX_SESSION_COSTS_READS_PER_MIN: optInt(12),
   // How long a session-cost list waits for the per-task query slot before a 429
   // (sessionCostListSlots in router/routes/usage.ts, KRTX-4372).
   KORTIX_SESSION_COSTS_SLOT_WAIT_MS: optInt(5000),
@@ -1814,7 +1811,6 @@ export const config = {
   KORTIX_LLM_GATEWAY_REQS_PER_MIN: env.KORTIX_LLM_GATEWAY_REQS_PER_MIN,
   KORTIX_PROXY_REQS_PER_MIN: env.KORTIX_PROXY_REQS_PER_MIN,
   KORTIX_SESSION_LOG_READS_PER_MIN: env.KORTIX_SESSION_LOG_READS_PER_MIN,
-  KORTIX_SESSION_COSTS_READS_PER_MIN: env.KORTIX_SESSION_COSTS_READS_PER_MIN,
   KORTIX_SESSION_COSTS_SLOT_WAIT_MS: env.KORTIX_SESSION_COSTS_SLOT_WAIT_MS,
   KORTIX_TRUSTED_PROXY_HOPS: env.KORTIX_TRUSTED_PROXY_HOPS,
   KORTIX_UNKNOWN_TOKEN_ATTEMPTS_PER_MIN: env.KORTIX_UNKNOWN_TOKEN_ATTEMPTS_PER_MIN,

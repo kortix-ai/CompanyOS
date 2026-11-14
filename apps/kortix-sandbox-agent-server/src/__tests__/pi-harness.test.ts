@@ -292,7 +292,7 @@ async function boot(input: {
 }
 
 /** The root agent's tools, as the model is offered them. */
-const rootTools = (r: Rig) => (r.service.runtime() as unknown as { agent: { state: { tools: Array<{ name: string; description: string }> } } }).agent.state.tools
+const rootTools = (r: Rig) => (r.service.runtime() as unknown as { agent: { state: { tools: Array<{ name: string; description: string; parameters?: unknown }> } } }).agent.state.tools
 const toolIds = (r: Rig) => rootTools(r).map((tool) => tool.name)
 const taskTool = (r: Rig) => rootTools(r).find((tool) => tool.name === 'task')!
 const skillList = (r: Rig) => r.service.runtime()!.skillList()
@@ -6086,6 +6086,28 @@ describe('kortix.yaml on pi', () => {
     await promptAndSettle(r, 'delegate')
     const page = (await r.bearer(`/kortix/runtime/messages/${r.service.runtime()!.rootId}`).then((res) => res.json())) as WirePage
     expect(toolParts(page, 'task')[0]!.state.error).toBe('Unknown subagent_type "general". Available: reviewer.')
+  })
+
+  test('a kortix.yaml set with only primary agents offers the inline spec, never an absent general', async () => {
+    const set = v3({ agent: { kortix: { mode: 'primary', permission: 'allow' }, 'memory-reflector': { mode: 'primary', permission: 'allow' } } })
+    const untyped = { tool: 'task', args: { description: 'Delegate', prompt: 'do it' } }
+    const r = await boot({ script: [untyped, TASK('general'), { text: 'done' }], env: { KORTIX_COMPILED_AGENT_CONFIG: set } })
+    const tool = taskTool(r)
+    expect(tool.description).not.toContain('omitted: general')
+    expect(tool.description).not.toContain('Available agent types:')
+    expect(tool.description).toContain('can start no named subagent type')
+    expect(tool.description).toContain('Define an inline ephemeral agent in the call.')
+    expect(tool.description).not.toContain('Pick a named agent type below')
+    expect(JSON.stringify(tool.parameters)).not.toContain('Omitted: the general-purpose agent')
+
+    await promptAndSettle(r, 'delegate')
+    const page = (await r.bearer(`/kortix/runtime/messages/${r.service.runtime()!.rootId}`).then((res) => res.json())) as WirePage
+    const [missing, general] = toolParts(page, 'task')
+    for (const part of [missing!, general!]) {
+      expect(part.state.status).toBe('error')
+      expect(String(part.state.error)).toContain('inline `agent: { instructions }` spec')
+      expect(String(part.state.error)).not.toContain('Available: .')
+    }
   })
 
   test('a set without schema: 3 keeps the built-in general and explore subagents', async () => {

@@ -1308,7 +1308,9 @@ export function CommandPalette() {
     const q = query.trim().toLowerCase();
     return agents.filter(
       (a) =>
-        (a.name || '').toLowerCase().includes(q) || (a.description || '').toLowerCase().includes(q),
+        (a.name || '').toLowerCase().includes(q) ||
+        (a.title || '').toLowerCase().includes(q) ||
+        (a.description || '').toLowerCase().includes(q),
     );
   }, [agents, query]);
 
@@ -2921,7 +2923,7 @@ export function CommandPalette() {
                         <CommandItem
                           key={agent.name}
                           value={sanitizeCmdkValue(
-                            `agent ${agent.name} ${agent.description || ''}`,
+                            `agent ${agent.name} ${agent.title || ''} ${agent.description || ''}`,
                           )}
                           onSelect={() => handleSelectAgent(agent.name)}
                         >

@@ -480,7 +480,6 @@ function RailGroupsList({
     if (next !== null) list.scrollTop = next;
     // Not on `rail`: a background refetch publishes a new rail object, and the
     // list must not jump back after the person scrolled it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, shown]);
 
   return (

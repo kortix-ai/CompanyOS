@@ -51,6 +51,9 @@ describe('shouldInjectPreviewBridge', () => {
     for (const status of [101, 204, 206, 304]) expect(gate({ status })).toBe(false);
     expect(gate({ responseHeaders: new Headers({ 'content-type': 'application/json' }) })).toBe(false);
     expect(gate({ responseHeaders: htmlResponse({ 'content-encoding': 'gzip' }) })).toBe(false);
+    // A download keeps its exact bytes; `inline` is still a page.
+    expect(gate({ responseHeaders: htmlResponse({ 'content-disposition': 'attachment; filename="r.html"' }) })).toBe(false);
+    expect(gate({ responseHeaders: htmlResponse({ 'content-disposition': 'inline' }) })).toBe(true);
     expect(gate({ responseHeaders: new Headers({ 'content-type': 'text/html; charset=shift_jis' }) })).toBe(false);
   });
 

@@ -13,7 +13,8 @@
  * reloads the frame at the remembered address.
  *
  * Blast radius, all gates required (`shouldInjectPreviewBridge`):
- *   - a `GET` that answered `200 text/html`, UTF-8 or no charset, not encoded;
+ *   - a `GET` that answered `text/html` with a body, UTF-8 or no charset, not
+ *     encoded, and not a download (`Content-Disposition: attachment`);
  *   - `Sec-Fetch-Dest: iframe` — a top-level tab is never rewritten;
  *   - no CSP that governs scripts, so the script never causes a CSP violation
  *     and no app header is changed;
@@ -61,6 +62,8 @@ export function shouldInjectPreviewBridge(input: {
   if (!type.startsWith('text/html')) return false;
   const charset = /charset\s*=\s*"?([^";\s]+)/.exec(type)?.[1];
   if (charset && charset !== 'utf-8' && charset !== 'utf8') return false;
+  // A download is saved, not shown: its bytes must stay the app's own.
+  if (/^\s*attachment/i.test(responseHeaders.get('content-disposition') || '')) return false;
   const encoding = (responseHeaders.get('content-encoding') || '').trim().toLowerCase();
   if (encoding && encoding !== 'identity') return false;
   for (const key of ['content-security-policy', 'content-security-policy-report-only']) {

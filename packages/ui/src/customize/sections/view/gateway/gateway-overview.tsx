@@ -491,7 +491,7 @@ function EstimateInfo({ label, lines }: { label: string; lines: (string | null)[
           <InfoIcon className="size-3.5" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="text-muted-foreground space-y-1.5 text-xs">
+      <PopoverContent aria-label={label} className="text-muted-foreground space-y-1.5 text-xs">
         {lines.filter(Boolean).map((line) => (
           <p key={line}>{line}</p>
         ))}

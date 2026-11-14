@@ -1343,6 +1343,10 @@
         "desktop_tabs": {
           "name": "Onglets du bureau",
           "description": "L'app de bureau affiche des onglets comme ceux d'un navigateur dans la barre de titre : chaque session, artefact et page s'ouvre dans son propre onglet, et ⌘T, ⌘W et ⌘1–9 fonctionnent comme dans un navigateur. L'app web ne change pas."
+        },
+        "calendar": {
+          "name": "Calendrier",
+          "description": "Un calendrier partagé pour les personnes et les agents : des éléments avec une date, un responsable et des commentaires, à côté des déclencheurs et Loops planifiés. Mentionnez quelqu’un avec @ pour le notifier. Les agents utilisent `kortix calendar`."
         }
       },
       "channelsSwitch": {
@@ -1883,7 +1887,8 @@
       "private": "Privé",
       "noMessages": "Aucun message pour l’instant",
       "more": "Plus"
-    }
+    },
+    "calendar": "Calendrier"
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -3420,7 +3425,8 @@
       "automation_failed": "Alerte d'échec",
       "automation_recovered": "Alerte de rétablissement",
       "capture_device_down": "Ordinateur Capture arrêté",
-      "capture_device_recovered": "Ordinateur Capture à nouveau en marche"
+      "capture_device_recovered": "Ordinateur Capture à nouveau en marche",
+      "mention": "Mentions"
     },
     "kindDescription": {
       "turn_done": "Un tour se termine.",
@@ -3431,7 +3437,8 @@
       "automation_failed": "Un déclencheur ou une boucle commence à échouer.",
       "automation_recovered": "Un déclencheur ou une boucle en échec fonctionne de nouveau.",
       "capture_device_down": "Un ordinateur Kortix Capture n’enregistre pas. Envoyé aux personnes qui gèrent Capture.",
-      "capture_device_recovered": "Un ordinateur Kortix Capture arrêté enregistre à nouveau."
+      "capture_device_recovered": "Un ordinateur Kortix Capture arrêté enregistre à nouveau.",
+      "mention": "Quelqu’un d’autre vous mentionne ou vous assigne un élément du calendrier."
     },
     "inbox": {
       "title": "Boîte de réception",
@@ -21372,7 +21379,15 @@
       "text458ceb31019b": "Déclencheurs d’événements de connecteur",
       "text27ca9df9dbaa": "Les déclencheurs d’événements de connecteur sont désactivés",
       "textfff553f218c7": "Evals",
-      "textd5b5d846044e": "evals eval benchmark score harbor terminal-bench tâches classement"
+      "textd5b5d846044e": "evals eval benchmark score harbor terminal-bench tâches classement",
+      "textdb6ee6610b15": "calendrier agenda planning semaine mois échéance délai éléments déclencheurs",
+      "text9b041fd0dfb7": "Éléments du calendrier listés",
+      "text968ff709bd3d": "Élément du calendrier créé",
+      "textd115ffd5e3a4": "Personnes du calendrier listées",
+      "texta268bab502cf": "Élément du calendrier consulté",
+      "text16d71c4d10a2": "Élément du calendrier modifié",
+      "text14580c9900ac": "Élément du calendrier supprimé",
+      "text96386c724e21": "A commenté un élément du calendrier"
     },
     "publicShareConfirm": {
       "title": "Créer un lien public ?",
@@ -24679,6 +24694,86 @@
     "waitingOnPerson": "En attente de {person}",
     "waitNoCost": "Aucune vérification ne tourne tant qu'il attend une réponse.",
     "chaseAt": "Relance {time}"
+  },
+  "calendar": {
+    "title": "Calendrier",
+    "gateDescription": "Un calendrier partagé pour les personnes et les agents : des éléments avec une date, un responsable et des commentaires, à côté de vos déclencheurs et Loops planifiés.",
+    "newItem": "Nouvel élément",
+    "today": "Aujourd’hui",
+    "previousWeek": "Semaine précédente",
+    "nextWeek": "Semaine suivante",
+    "previousMonth": "Mois précédent",
+    "nextMonth": "Mois suivant",
+    "week": "Semaine",
+    "month": "Mois",
+    "view": "Vue",
+    "triggers": "Déclencheurs",
+    "filter": {
+      "everyone": "Tout le monde",
+      "me": "Les miens"
+    },
+    "people": "Personnes",
+    "agents": "Agents",
+    "noDate": "Sans date",
+    "noDateHint": "Les éléments sans date attendent ici.",
+    "allDay": "Toute la journée",
+    "overdue": "En retard",
+    "status": {
+      "open": "Ouvert",
+      "done": "Terminé"
+    },
+    "comments": "{count, plural, one {# commentaire} other {# commentaires}}",
+    "formerMember": "Ancien membre",
+    "lastRun": "Dernière exécution",
+    "lastRunFailed": "Dernière exécution en échec",
+    "loop": "Loop",
+    "trigger": "Déclencheur",
+    "addOn": "Nouvel élément le {day}",
+    "dayEntries": "{day}, {count, plural, one {# entrée} other {# entrées}}",
+    "showWeekOf": "Afficher la semaine du {day}",
+    "more": "{count} de plus",
+    "nobody": "Personne",
+    "when": "Quand",
+    "owner": "Responsable",
+    "created": "Créé",
+    "clearDate": "Retirer la date",
+    "saveFailed": "La modification n’a pas été enregistrée.",
+    "close": "Fermer",
+    "goneTitle": "Élément supprimé",
+    "goneBody": "Cet élément n’existe plus.",
+    "loadFailed": "Le calendrier ne s’est pas chargé.",
+    "itemLoadFailed": "Cet élément ne s’est pas chargé.",
+    "tryAgain": "Réessayer",
+    "commentFailed": "Le commentaire n’a pas été ajouté.",
+    "reopen": "Rouvrir",
+    "markDone": "Marquer comme terminé",
+    "moreActions": "Plus d’actions",
+    "delete": "Supprimer",
+    "deleteTitle": "Supprimer cet élément ?",
+    "deleteBody": "« {title} » et ses commentaires sont supprimés pour tout le monde.",
+    "deleteFailed": "L’élément n’a pas été supprimé.",
+    "titleLabel": "Titre",
+    "titlePlaceholder": "Ce qui doit se passer",
+    "openSession": "Ouvrir la session",
+    "notes": "Notes",
+    "notesPlaceholder": "Ajoutez des détails. Tapez @ pour mentionner quelqu’un.",
+    "commentsTitle": "Commentaires",
+    "commentLabel": "Commentaire",
+    "commentPlaceholder": "Écrivez un commentaire. Tapez @ pour mentionner quelqu’un.",
+    "comment": "Commenter",
+    "kind": "Type",
+    "target": "Exécute",
+    "session": "Session",
+    "schedule": "Planification",
+    "thisDay": "Ce jour",
+    "nextRun": "Prochaine exécution",
+    "failed": "en échec",
+    "succeeded": "réussie",
+    "prompt": "Prompt",
+    "openTriggers": "Ouvrir dans Déclencheurs",
+    "cancel": "Annuler",
+    "create": "Créer",
+    "runs": "{capped, select, yes {{count}+ exécutions} other {{count, plural, one {# exécution} other {# exécutions}}}}"
   },
   "agentEditor": {
     "manage": "Gérer",

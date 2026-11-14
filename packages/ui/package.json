@@ -528,6 +528,7 @@
     "./wallpaper-shaders": "./src/primitives/wallpaper-shaders.tsx",
     "./workspace": "./src/workspace/index.ts",
     "./workspace/admin/project-admin-dashboard": "./src/workspace/admin/project-admin-dashboard.tsx",
+    "./workspace/calendar/calendar-page": "./src/workspace/calendar/calendar-page.tsx",
     "./workspace/home/access-requests-bell": "./src/workspace/home/access-requests-bell.tsx",
     "./workspace/home/first-chat": "./src/workspace/home/first-chat.tsx",
     "./workspace/home/mobile-app-promo": "./src/workspace/home/mobile-app-promo.tsx",
@@ -2574,6 +2575,10 @@
         "types": "./dist/workspace/admin/project-admin-dashboard.d.ts",
         "import": "./dist/workspace/admin/project-admin-dashboard.js"
       },
+      "./workspace/calendar/calendar-page": {
+        "types": "./dist/workspace/calendar/calendar-page.d.ts",
+        "import": "./dist/workspace/calendar/calendar-page.js"
+      },
       "./workspace/home/access-requests-bell": {
         "types": "./dist/workspace/home/access-requests-bell.d.ts",
         "import": "./dist/workspace/home/access-requests-bell.js"
@@ -2849,6 +2854,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "color-bits": "^1.1.0",
+    "croner": "^9.1.0",
     "date-fns": "^3.6.0",
     "diff": "^8.0.3",
     "frimousse": "^0.3.0",

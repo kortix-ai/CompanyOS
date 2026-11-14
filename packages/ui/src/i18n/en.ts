@@ -869,6 +869,10 @@ const catalog = {
         "desktop_tabs": {
           "name": "Desktop tabs",
           "description": "The desktop app shows browser-style tabs in the title bar: each session, artifact and page opens in its own tab, and ⌘T, ⌘W and ⌘1–9 work like a browser. The web app is unchanged."
+        },
+        "calendar": {
+          "name": "Calendar",
+          "description": "A shared calendar for people and agents: items with a date, an owner and comments, beside the scheduled triggers and Loops. Mention someone with @ to notify them. Agents use `kortix calendar`."
         }
       },
       "channelsSwitch": {
@@ -1377,7 +1381,8 @@ const catalog = {
       "private": "Private",
       "noMessages": "No messages yet",
       "more": "More"
-    }
+    },
+    "calendar": "Calendar"
   },
   "sessionPage": {
     "backToProject": "Back to workspace",
@@ -2175,7 +2180,8 @@ const catalog = {
       "automation_failed": "Failure alert",
       "automation_recovered": "Recovery alert",
       "capture_device_down": "Capture computer stopped",
-      "capture_device_recovered": "Capture computer recording again"
+      "capture_device_recovered": "Capture computer recording again",
+      "mention": "Mentions"
     },
     "kindDescription": {
       "turn_done": "A turn ends.",
@@ -2186,7 +2192,8 @@ const catalog = {
       "automation_failed": "A trigger or a loop starts failing.",
       "automation_recovered": "A failing trigger or loop works again.",
       "capture_device_down": "A Kortix Capture computer is not recording. Sent to people who manage Capture.",
-      "capture_device_recovered": "A Kortix Capture computer that stopped records again."
+      "capture_device_recovered": "A Kortix Capture computer that stopped records again.",
+      "mention": "Someone else mentions you or assigns you an item on the calendar."
     },
     "inbox": {
       "title": "Inbox",
@@ -7991,6 +7998,86 @@ const catalog = {
       "flag_off": "Turn on Goals for this workspace, then resume it.",
       "setup": "This finishes by itself within a minute."
     }
+  },
+  "calendar": {
+    "title": "Calendar",
+    "gateDescription": "A shared calendar for people and agents: items with a date, an owner and comments, beside your scheduled triggers and Loops.",
+    "newItem": "New item",
+    "today": "Today",
+    "previousWeek": "Previous week",
+    "nextWeek": "Next week",
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month",
+    "week": "Week",
+    "month": "Month",
+    "view": "View",
+    "triggers": "Triggers",
+    "filter": {
+      "everyone": "Everyone",
+      "me": "Mine"
+    },
+    "people": "People",
+    "agents": "Agents",
+    "noDate": "No date",
+    "noDateHint": "Items without a date wait here.",
+    "allDay": "All day",
+    "overdue": "Overdue",
+    "status": {
+      "open": "Open",
+      "done": "Done"
+    },
+    "comments": "{count, plural, one {# comment} other {# comments}}",
+    "formerMember": "Former member",
+    "lastRun": "Last run",
+    "lastRunFailed": "Last run failed",
+    "loop": "Loop",
+    "trigger": "Trigger",
+    "addOn": "New item on {day}",
+    "dayEntries": "{day}, {count, plural, one {# entry} other {# entries}}",
+    "showWeekOf": "Show the week of {day}",
+    "more": "{count} more",
+    "nobody": "Nobody",
+    "when": "When",
+    "owner": "Owner",
+    "created": "Created",
+    "clearDate": "Remove date",
+    "saveFailed": "The change was not saved.",
+    "close": "Close",
+    "goneTitle": "Item deleted",
+    "goneBody": "This item no longer exists.",
+    "loadFailed": "The calendar did not load.",
+    "itemLoadFailed": "This item did not load.",
+    "tryAgain": "Try again",
+    "commentFailed": "The comment was not added.",
+    "reopen": "Reopen",
+    "markDone": "Mark done",
+    "moreActions": "More actions",
+    "delete": "Delete",
+    "deleteTitle": "Delete this item?",
+    "deleteBody": "“{title}” and its comments are deleted for everyone.",
+    "deleteFailed": "The item was not deleted.",
+    "titleLabel": "Title",
+    "titlePlaceholder": "What needs to happen",
+    "openSession": "Open session",
+    "notes": "Notes",
+    "notesPlaceholder": "Add details. Type @ to mention someone.",
+    "commentsTitle": "Comments",
+    "commentLabel": "Comment",
+    "commentPlaceholder": "Write a comment. Type @ to mention someone.",
+    "comment": "Comment",
+    "kind": "Kind",
+    "target": "Runs",
+    "session": "Session",
+    "schedule": "Schedule",
+    "thisDay": "This day",
+    "nextRun": "Next run",
+    "failed": "failed",
+    "succeeded": "succeeded",
+    "prompt": "Prompt",
+    "openTriggers": "Open in Triggers",
+    "cancel": "Cancel",
+    "create": "Create",
+    "runs": "{capped, select, yes {{count}+ runs} other {{count, plural, one {# run} other {# runs}}}}"
   },
   "agentEditor": {
     "manage": "Manage",

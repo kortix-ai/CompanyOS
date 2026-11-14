@@ -1343,6 +1343,10 @@
         "desktop_tabs": {
           "name": "Kartice na desktopu",
           "description": "Desktop aplikacija prikazuje kartice kao u pregledaču na naslovnoj traci: svaka sesija, artefakt i stranica otvara se u svojoj kartici, a ⌘T, ⌘W i ⌘1–9 rade kao u pregledaču. Veb aplikacija se ne menja."
+        },
+        "calendar": {
+          "name": "Kalendar",
+          "description": "Zajednički kalendar za ljude i agente: stavke sa datumom, odgovornim i komentarima, pored zakazanih okidača i petlji. Pomeni nekoga sa @ da ga obavestiš. Agenti koriste `kortix calendar`."
         }
       },
       "channelsSwitch": {
@@ -1883,7 +1887,8 @@
       "private": "Приватно",
       "noMessages": "Још нема порука",
       "more": "Још"
-    }
+    },
+    "calendar": "Kalendar"
   },
   "dashboard": {
     "title": "Контролна табла",
@@ -3420,7 +3425,8 @@
       "automation_failed": "Упозорење о грешци",
       "automation_recovered": "Обавештење о опоравку",
       "capture_device_down": "Capture рачунар је стао",
-      "capture_device_recovered": "Capture рачунар поново снима"
+      "capture_device_recovered": "Capture рачунар поново снима",
+      "mention": "Pominjanja"
     },
     "kindDescription": {
       "turn_done": "Потез се завршава.",
@@ -3431,7 +3437,8 @@
       "automation_failed": "Окидач или петља почиње да не успева.",
       "automation_recovered": "Окидач или петља који нису успевали поново раде.",
       "capture_device_down": "Kortix Capture рачунар не снима. Шаље се људима који управљају Capture-ом.",
-      "capture_device_recovered": "Kortix Capture рачунар који је стао поново снима."
+      "capture_device_recovered": "Kortix Capture рачунар који је стао поново снима.",
+      "mention": "Neko drugi te pomene ili ti dodeli stavku u kalendaru."
     },
     "inbox": {
       "title": "Пријемно сандуче",
@@ -21372,7 +21379,15 @@
       "text458ceb31019b": "Okidači događaja konektora",
       "text27ca9df9dbaa": "Okidači događaja konektora su isključeni",
       "textfff553f218c7": "Evals",
-      "textd5b5d846044e": "evals eval бенчмарк оцена harbor terminal-bench задаци ранг-листа"
+      "textd5b5d846044e": "evals eval бенчмарк оцена harbor terminal-bench задаци ранг-листа",
+      "textdb6ee6610b15": "kalendar raspored agenda nedelja mesec rok stavke okidači",
+      "text9b041fd0dfb7": "Izlistane stavke kalendara",
+      "text968ff709bd3d": "Napravljena stavka kalendara",
+      "textd115ffd5e3a4": "Izlistani ljudi kalendara",
+      "texta268bab502cf": "Pregledana stavka kalendara",
+      "text16d71c4d10a2": "Izmenjena stavka kalendara",
+      "text14580c9900ac": "Obrisana stavka kalendara",
+      "text96386c724e21": "Komentarisana stavka kalendara"
     },
     "publicShareConfirm": {
       "title": "Направити јавни линк?",
@@ -24679,6 +24694,86 @@
     "waitingOnPerson": "Čeka na {person}",
     "waitNoCost": "Dok čeka odgovor, nijedna provera se ne pokreće.",
     "chaseAt": "Proverava ponovo {time}"
+  },
+  "calendar": {
+    "title": "Kalendar",
+    "gateDescription": "Zajednički kalendar za ljude i agente: stavke sa datumom, odgovornim i komentarima, pored zakazanih okidača i petlji.",
+    "newItem": "Nova stavka",
+    "today": "Danas",
+    "previousWeek": "Prethodna nedelja",
+    "nextWeek": "Sledeća nedelja",
+    "previousMonth": "Prethodni mesec",
+    "nextMonth": "Sledeći mesec",
+    "week": "Nedelja",
+    "month": "Mesec",
+    "view": "Prikaz",
+    "triggers": "Okidači",
+    "filter": {
+      "everyone": "Svi",
+      "me": "Moje"
+    },
+    "people": "Ljudi",
+    "agents": "Agenti",
+    "noDate": "Bez datuma",
+    "noDateHint": "Stavke bez datuma čekaju ovde.",
+    "allDay": "Ceo dan",
+    "overdue": "Kasni",
+    "status": {
+      "open": "Otvoreno",
+      "done": "Završeno"
+    },
+    "comments": "{count, plural, one {# komentar} few {# komentara} other {# komentara}}",
+    "formerMember": "Bivši član",
+    "lastRun": "Poslednje pokretanje",
+    "lastRunFailed": "Poslednje pokretanje nije uspelo",
+    "loop": "Petlja",
+    "trigger": "Okidač",
+    "addOn": "Nova stavka za {day}",
+    "dayEntries": "{day}, {count, plural, one {# stavka} few {# stavke} other {# stavki}}",
+    "showWeekOf": "Prikaži nedelju od {day}",
+    "more": "još {count}",
+    "nobody": "Niko",
+    "when": "Kada",
+    "owner": "Odgovoran",
+    "created": "Napravljeno",
+    "clearDate": "Ukloni datum",
+    "saveFailed": "Izmena nije sačuvana.",
+    "close": "Zatvori",
+    "goneTitle": "Stavka obrisana",
+    "goneBody": "Ova stavka više ne postoji.",
+    "loadFailed": "Kalendar se nije učitao.",
+    "itemLoadFailed": "Ova stavka se nije učitala.",
+    "tryAgain": "Pokušaj ponovo",
+    "commentFailed": "Komentar nije dodat.",
+    "reopen": "Ponovo otvori",
+    "markDone": "Označi kao završeno",
+    "moreActions": "Još radnji",
+    "delete": "Obriši",
+    "deleteTitle": "Obrisati ovu stavku?",
+    "deleteBody": "„{title}“ i njeni komentari se brišu za sve.",
+    "deleteFailed": "Stavka nije obrisana.",
+    "titleLabel": "Naslov",
+    "titlePlaceholder": "Šta treba da se desi",
+    "openSession": "Otvori sesiju",
+    "notes": "Beleške",
+    "notesPlaceholder": "Dodaj detalje. Ukucaj @ da pomeneš nekoga.",
+    "commentsTitle": "Komentari",
+    "commentLabel": "Komentar",
+    "commentPlaceholder": "Napiši komentar. Ukucaj @ da pomeneš nekoga.",
+    "comment": "Komentariši",
+    "kind": "Vrsta",
+    "target": "Pokreće",
+    "session": "Sesija",
+    "schedule": "Raspored",
+    "thisDay": "Ovog dana",
+    "nextRun": "Sledeće pokretanje",
+    "failed": "nije uspelo",
+    "succeeded": "uspelo",
+    "prompt": "Prompt",
+    "openTriggers": "Otvori u Okidačima",
+    "cancel": "Otkaži",
+    "create": "Napravi",
+    "runs": "{capped, select, yes {{count}+ pokretanja} other {{count, plural, one {# pokretanje} few {# pokretanja} other {# pokretanja}}}}"
   },
   "agentEditor": {
     "manage": "Upravljaj",

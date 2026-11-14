@@ -1343,6 +1343,10 @@
         "desktop_tabs": {
           "name": "Schede desktop",
           "description": "L'app desktop mostra schede come quelle di un browser nella barra del titolo: ogni sessione, artefatto e pagina si apre nella propria scheda, e ⌘T, ⌘W e ⌘1–9 funzionano come in un browser. L'app web non cambia."
+        },
+        "calendar": {
+          "name": "Calendario",
+          "description": "Un calendario condiviso per persone e agenti: elementi con una data, un responsabile e commenti, accanto ai trigger e ai Loop pianificati. Menziona qualcuno con @ per avvisarlo. Gli agenti usano `kortix calendar`."
         }
       },
       "channelsSwitch": {
@@ -1883,7 +1887,8 @@
       "private": "Privato",
       "noMessages": "Ancora nessun messaggio",
       "more": "Altro"
-    }
+    },
+    "calendar": "Calendario"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -3420,7 +3425,8 @@
       "automation_failed": "Avviso di errore",
       "automation_recovered": "Avviso di ripristino",
       "capture_device_down": "Computer Capture fermo",
-      "capture_device_recovered": "Computer Capture di nuovo in registrazione"
+      "capture_device_recovered": "Computer Capture di nuovo in registrazione",
+      "mention": "Menzioni"
     },
     "kindDescription": {
       "turn_done": "Un turno termina.",
@@ -3431,7 +3437,8 @@
       "automation_failed": "Un trigger o un ciclo inizia a fallire.",
       "automation_recovered": "Un trigger o un ciclo che falliva torna a funzionare.",
       "capture_device_down": "Un computer Kortix Capture non registra. Inviato a chi gestisce Capture.",
-      "capture_device_recovered": "Un computer Kortix Capture che si era fermato registra di nuovo."
+      "capture_device_recovered": "Un computer Kortix Capture che si era fermato registra di nuovo.",
+      "mention": "Qualcun altro ti menziona o ti assegna un elemento del calendario."
     },
     "inbox": {
       "title": "Posta in arrivo",
@@ -21372,7 +21379,15 @@
       "text458ceb31019b": "Trigger di eventi del connettore",
       "text27ca9df9dbaa": "I trigger di eventi del connettore sono disattivati",
       "textfff553f218c7": "Evals",
-      "textd5b5d846044e": "evals eval benchmark punteggio harbor terminal-bench attività classifica"
+      "textd5b5d846044e": "evals eval benchmark punteggio harbor terminal-bench attività classifica",
+      "textdb6ee6610b15": "calendario agenda pianificazione settimana mese scadenza elementi trigger",
+      "text9b041fd0dfb7": "Elementi del calendario elencati",
+      "text968ff709bd3d": "Elemento del calendario creato",
+      "textd115ffd5e3a4": "Persone del calendario elencate",
+      "texta268bab502cf": "Elemento del calendario visualizzato",
+      "text16d71c4d10a2": "Elemento del calendario modificato",
+      "text14580c9900ac": "Elemento del calendario eliminato",
+      "text96386c724e21": "Ha commentato un elemento del calendario"
     },
     "publicShareConfirm": {
       "title": "Creare un link pubblico?",
@@ -24679,6 +24694,86 @@
     "waitingOnPerson": "In attesa di {person}",
     "waitNoCost": "Nessun controllo viene eseguito mentre attende una risposta.",
     "chaseAt": "Sollecita {time}"
+  },
+  "calendar": {
+    "title": "Calendario",
+    "gateDescription": "Un calendario condiviso per persone e agenti: elementi con una data, un responsabile e commenti, accanto ai tuoi trigger e Loop pianificati.",
+    "newItem": "Nuovo elemento",
+    "today": "Oggi",
+    "previousWeek": "Settimana precedente",
+    "nextWeek": "Settimana successiva",
+    "previousMonth": "Mese precedente",
+    "nextMonth": "Mese successivo",
+    "week": "Settimana",
+    "month": "Mese",
+    "view": "Vista",
+    "triggers": "Trigger",
+    "filter": {
+      "everyone": "Tutti",
+      "me": "Miei"
+    },
+    "people": "Persone",
+    "agents": "Agenti",
+    "noDate": "Senza data",
+    "noDateHint": "Gli elementi senza data aspettano qui.",
+    "allDay": "Tutto il giorno",
+    "overdue": "In ritardo",
+    "status": {
+      "open": "Aperto",
+      "done": "Fatto"
+    },
+    "comments": "{count, plural, one {# commento} other {# commenti}}",
+    "formerMember": "Ex membro",
+    "lastRun": "Ultima esecuzione",
+    "lastRunFailed": "Ultima esecuzione non riuscita",
+    "loop": "Loop",
+    "trigger": "Trigger",
+    "addOn": "Nuovo elemento il {day}",
+    "dayEntries": "{day}, {count, plural, one {# voce} other {# voci}}",
+    "showWeekOf": "Mostra la settimana del {day}",
+    "more": "altri {count}",
+    "nobody": "Nessuno",
+    "when": "Quando",
+    "owner": "Responsabile",
+    "created": "Creato",
+    "clearDate": "Rimuovi data",
+    "saveFailed": "La modifica non è stata salvata.",
+    "close": "Chiudi",
+    "goneTitle": "Elemento eliminato",
+    "goneBody": "Questo elemento non esiste più.",
+    "loadFailed": "Il calendario non è stato caricato.",
+    "itemLoadFailed": "Questo elemento non è stato caricato.",
+    "tryAgain": "Riprova",
+    "commentFailed": "Il commento non è stato aggiunto.",
+    "reopen": "Riapri",
+    "markDone": "Segna come fatto",
+    "moreActions": "Altre azioni",
+    "delete": "Elimina",
+    "deleteTitle": "Eliminare questo elemento?",
+    "deleteBody": "«{title}» e i suoi commenti vengono eliminati per tutti.",
+    "deleteFailed": "L'elemento non è stato eliminato.",
+    "titleLabel": "Titolo",
+    "titlePlaceholder": "Cosa deve succedere",
+    "openSession": "Apri sessione",
+    "notes": "Note",
+    "notesPlaceholder": "Aggiungi dettagli. Digita @ per menzionare qualcuno.",
+    "commentsTitle": "Commenti",
+    "commentLabel": "Commento",
+    "commentPlaceholder": "Scrivi un commento. Digita @ per menzionare qualcuno.",
+    "comment": "Commenta",
+    "kind": "Tipo",
+    "target": "Esegue",
+    "session": "Sessione",
+    "schedule": "Pianificazione",
+    "thisDay": "Questo giorno",
+    "nextRun": "Prossima esecuzione",
+    "failed": "non riuscita",
+    "succeeded": "riuscita",
+    "prompt": "Prompt",
+    "openTriggers": "Apri in Trigger",
+    "cancel": "Annulla",
+    "create": "Crea",
+    "runs": "{capped, select, yes {{count}+ esecuzioni} other {{count, plural, one {# esecuzione} other {# esecuzioni}}}}"
   },
   "agentEditor": {
     "manage": "Gestisci",

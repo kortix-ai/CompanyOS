@@ -1343,6 +1343,10 @@
         "desktop_tabs": {
           "name": "デスクトップのタブ",
           "description": "デスクトップアプリのタイトルバーにブラウザのようなタブを表示します。セッション、アーティファクト、ページはそれぞれ専用のタブで開き、⌘T、⌘W、⌘1〜9 はブラウザと同じように動作します。Web アプリは変わりません。"
+        },
+        "calendar": {
+          "name": "カレンダー",
+          "description": "人とエージェントの共有カレンダー：日付・担当者・コメント付きの項目を、スケジュール済みのトリガーとループと並べて表示します。@ でメンションすると通知されます。エージェントは `kortix calendar` を使います。"
         }
       },
       "channelsSwitch": {
@@ -1883,7 +1887,8 @@
       "private": "非公開",
       "noMessages": "まだメッセージはありません",
       "more": "その他"
-    }
+    },
+    "calendar": "カレンダー"
   },
   "dashboard": {
     "title": "ダッシュボード",
@@ -3420,7 +3425,8 @@
       "automation_failed": "失敗アラート",
       "automation_recovered": "復旧アラート",
       "capture_device_down": "Capture のコンピューターが停止",
-      "capture_device_recovered": "Capture のコンピューターが復旧"
+      "capture_device_recovered": "Capture のコンピューターが復旧",
+      "mention": "メンション"
     },
     "kindDescription": {
       "turn_done": "ターンが終了します。",
@@ -3431,7 +3437,8 @@
       "automation_failed": "トリガーまたはループが失敗し始めます。",
       "automation_recovered": "失敗していたトリガーまたはループが再び動作します。",
       "capture_device_down": "Kortix Capture のコンピューターが記録していません。Capture の管理者に送られます。",
-      "capture_device_recovered": "停止していた Kortix Capture のコンピューターが再び記録しています。"
+      "capture_device_recovered": "停止していた Kortix Capture のコンピューターが再び記録しています。",
+      "mention": "他の人があなたをメンションするか、カレンダーの項目をあなたに割り当てたとき。"
     },
     "inbox": {
       "title": "受信トレイ",
@@ -21372,7 +21379,15 @@
       "text458ceb31019b": "コネクタイベントのトリガー",
       "text27ca9df9dbaa": "コネクタイベントのトリガーはオフです",
       "textfff553f218c7": "Evals",
-      "textd5b5d846044e": "evals eval ベンチマーク スコア harbor terminal-bench タスク リーダーボード"
+      "textd5b5d846044e": "evals eval ベンチマーク スコア harbor terminal-bench タスク リーダーボード",
+      "textdb6ee6610b15": "カレンダー 予定 スケジュール 週 月 期限 締め切り 項目 トリガー",
+      "text9b041fd0dfb7": "カレンダーの項目を一覧表示",
+      "text968ff709bd3d": "カレンダーの項目を作成",
+      "textd115ffd5e3a4": "カレンダーのメンバーを一覧表示",
+      "texta268bab502cf": "カレンダーの項目を表示",
+      "text16d71c4d10a2": "カレンダーの項目を編集",
+      "text14580c9900ac": "カレンダーの項目を削除",
+      "text96386c724e21": "カレンダーの項目にコメント"
     },
     "publicShareConfirm": {
       "title": "公開リンクを作成しますか？",
@@ -24679,6 +24694,86 @@
     "waitingOnPerson": "{person} の回答待ち",
     "waitNoCost": "回答を待っている間はチェックは実行されません。",
     "chaseAt": "{time} にフォローアップ"
+  },
+  "calendar": {
+    "title": "カレンダー",
+    "gateDescription": "人とエージェントの共有カレンダー：日付・担当者・コメント付きの項目を、スケジュール済みのトリガーとループと並べて表示します。",
+    "newItem": "新しい項目",
+    "today": "今日",
+    "previousWeek": "前の週",
+    "nextWeek": "次の週",
+    "previousMonth": "前の月",
+    "nextMonth": "次の月",
+    "week": "週",
+    "month": "月",
+    "view": "表示",
+    "triggers": "トリガー",
+    "filter": {
+      "everyone": "全員",
+      "me": "自分"
+    },
+    "people": "メンバー",
+    "agents": "エージェント",
+    "noDate": "日付なし",
+    "noDateHint": "日付のない項目はここに表示されます。",
+    "allDay": "終日",
+    "overdue": "期限切れ",
+    "status": {
+      "open": "未完了",
+      "done": "完了"
+    },
+    "comments": "{count, plural, other {# 件のコメント}}",
+    "formerMember": "元メンバー",
+    "lastRun": "前回の実行",
+    "lastRunFailed": "前回の実行は失敗",
+    "loop": "ループ",
+    "trigger": "トリガー",
+    "addOn": "{day} に新しい項目",
+    "dayEntries": "{day}、{count, plural, other {# 件}}",
+    "showWeekOf": "{day} の週を表示",
+    "more": "ほか {count} 件",
+    "nobody": "担当なし",
+    "when": "日時",
+    "owner": "担当",
+    "created": "作成",
+    "clearDate": "日付を削除",
+    "saveFailed": "変更は保存されませんでした。",
+    "close": "閉じる",
+    "goneTitle": "項目は削除されました",
+    "goneBody": "この項目はもう存在しません。",
+    "loadFailed": "カレンダーを読み込めませんでした。",
+    "itemLoadFailed": "この項目を読み込めませんでした。",
+    "tryAgain": "再試行",
+    "commentFailed": "コメントは追加されませんでした。",
+    "reopen": "再開",
+    "markDone": "完了にする",
+    "moreActions": "その他の操作",
+    "delete": "削除",
+    "deleteTitle": "この項目を削除しますか？",
+    "deleteBody": "「{title}」とそのコメントは全員に対して削除されます。",
+    "deleteFailed": "項目は削除されませんでした。",
+    "titleLabel": "タイトル",
+    "titlePlaceholder": "何をするか",
+    "openSession": "セッションを開く",
+    "notes": "メモ",
+    "notesPlaceholder": "詳細を追加。@ でメンションできます。",
+    "commentsTitle": "コメント",
+    "commentLabel": "コメント",
+    "commentPlaceholder": "コメントを書く。@ でメンションできます。",
+    "comment": "コメント",
+    "kind": "種類",
+    "target": "実行先",
+    "session": "セッション",
+    "schedule": "スケジュール",
+    "thisDay": "この日",
+    "nextRun": "次回の実行",
+    "failed": "失敗",
+    "succeeded": "成功",
+    "prompt": "プロンプト",
+    "openTriggers": "トリガーで開く",
+    "cancel": "キャンセル",
+    "create": "作成",
+    "runs": "{capped, select, yes {{count}+ 回実行} other {{count, plural, other {# 回実行}}}}"
   },
   "agentEditor": {
     "manage": "管理",

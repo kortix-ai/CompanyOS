@@ -43,6 +43,8 @@ export type SessionInvocationSource =
   | 'system:goal'
   /** The eval runner (`projects/evals/`, flag `evals`): one session per trial. */
   | 'system:eval'
+  /** A person's reply on a calendar item an agent session created (`projects/calendar/`, flag `calendar`). */
+  | 'system:calendar'
   | 'admin';
 
 /** `on_backpressure` is for trigger fires only; see `backpressure.ts`. */

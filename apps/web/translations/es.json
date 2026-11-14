@@ -1343,6 +1343,10 @@
         "desktop_tabs": {
           "name": "Pestañas de escritorio",
           "description": "La app de escritorio muestra pestañas como las de un navegador en la barra de título: cada sesión, artefacto y página se abre en su propia pestaña, y ⌘T, ⌘W y ⌘1–9 funcionan como en un navegador. La app web no cambia."
+        },
+        "calendar": {
+          "name": "Calendario",
+          "description": "Un calendario compartido para personas y agentes: elementos con fecha, responsable y comentarios, junto a los disparadores y Loops programados. Menciona a alguien con @ para avisarle. Los agentes usan `kortix calendar`."
         }
       },
       "channelsSwitch": {
@@ -1883,7 +1887,8 @@
       "private": "Privado",
       "noMessages": "Aún no hay mensajes",
       "more": "Más"
-    }
+    },
+    "calendar": "Calendario"
   },
   "dashboard": {
     "title": "Panel",
@@ -3420,7 +3425,8 @@
       "automation_failed": "Alerta de fallo",
       "automation_recovered": "Alerta de recuperación",
       "capture_device_down": "Ordenador de Capture detenido",
-      "capture_device_recovered": "Ordenador de Capture graba de nuevo"
+      "capture_device_recovered": "Ordenador de Capture graba de nuevo",
+      "mention": "Menciones"
     },
     "kindDescription": {
       "turn_done": "Un turno termina.",
@@ -3431,7 +3437,8 @@
       "automation_failed": "Un trigger o un bucle empieza a fallar.",
       "automation_recovered": "Un trigger o bucle que fallaba vuelve a funcionar.",
       "capture_device_down": "Un ordenador de Kortix Capture no graba. Se envía a quien administra Capture.",
-      "capture_device_recovered": "Un ordenador de Kortix Capture que se detuvo vuelve a grabar."
+      "capture_device_recovered": "Un ordenador de Kortix Capture que se detuvo vuelve a grabar.",
+      "mention": "Otra persona te menciona o te asigna un elemento del calendario."
     },
     "inbox": {
       "title": "Bandeja de entrada",
@@ -21372,7 +21379,15 @@
       "text458ceb31019b": "Triggers de eventos de conector",
       "text27ca9df9dbaa": "Los triggers de eventos de conector están desactivados",
       "textfff553f218c7": "Evals",
-      "textd5b5d846044e": "evals eval benchmark puntuación harbor terminal-bench tareas clasificación"
+      "textd5b5d846044e": "evals eval benchmark puntuación harbor terminal-bench tareas clasificación",
+      "textdb6ee6610b15": "calendario agenda programación semana mes vencimiento plazo elementos disparadores",
+      "text9b041fd0dfb7": "Elementos del calendario listados",
+      "text968ff709bd3d": "Elemento del calendario creado",
+      "textd115ffd5e3a4": "Personas del calendario listadas",
+      "texta268bab502cf": "Elemento del calendario visto",
+      "text16d71c4d10a2": "Elemento del calendario editado",
+      "text14580c9900ac": "Elemento del calendario eliminado",
+      "text96386c724e21": "Comentó un elemento del calendario"
     },
     "publicShareConfirm": {
       "title": "¿Crear un enlace público?",
@@ -24679,6 +24694,86 @@
     "waitingOnPerson": "Esperando a {person}",
     "waitNoCost": "No se ejecutan comprobaciones mientras espera una respuesta.",
     "chaseAt": "Hace seguimiento {time}"
+  },
+  "calendar": {
+    "title": "Calendario",
+    "gateDescription": "Un calendario compartido para personas y agentes: elementos con fecha, responsable y comentarios, junto a tus disparadores y Loops programados.",
+    "newItem": "Nuevo elemento",
+    "today": "Hoy",
+    "previousWeek": "Semana anterior",
+    "nextWeek": "Semana siguiente",
+    "previousMonth": "Mes anterior",
+    "nextMonth": "Mes siguiente",
+    "week": "Semana",
+    "month": "Mes",
+    "view": "Vista",
+    "triggers": "Disparadores",
+    "filter": {
+      "everyone": "Todos",
+      "me": "Míos"
+    },
+    "people": "Personas",
+    "agents": "Agentes",
+    "noDate": "Sin fecha",
+    "noDateHint": "Los elementos sin fecha esperan aquí.",
+    "allDay": "Todo el día",
+    "overdue": "Vencido",
+    "status": {
+      "open": "Abierto",
+      "done": "Hecho"
+    },
+    "comments": "{count, plural, one {# comentario} other {# comentarios}}",
+    "formerMember": "Antiguo miembro",
+    "lastRun": "Última ejecución",
+    "lastRunFailed": "La última ejecución falló",
+    "loop": "Loop",
+    "trigger": "Disparador",
+    "addOn": "Nuevo elemento el {day}",
+    "dayEntries": "{day}, {count, plural, one {# entrada} other {# entradas}}",
+    "showWeekOf": "Ver la semana del {day}",
+    "more": "{count} más",
+    "nobody": "Nadie",
+    "when": "Cuándo",
+    "owner": "Responsable",
+    "created": "Creado",
+    "clearDate": "Quitar fecha",
+    "saveFailed": "El cambio no se guardó.",
+    "close": "Cerrar",
+    "goneTitle": "Elemento eliminado",
+    "goneBody": "Este elemento ya no existe.",
+    "loadFailed": "El calendario no se cargó.",
+    "itemLoadFailed": "Este elemento no se cargó.",
+    "tryAgain": "Reintentar",
+    "commentFailed": "El comentario no se añadió.",
+    "reopen": "Reabrir",
+    "markDone": "Marcar como hecho",
+    "moreActions": "Más acciones",
+    "delete": "Eliminar",
+    "deleteTitle": "¿Eliminar este elemento?",
+    "deleteBody": "«{title}» y sus comentarios se eliminan para todos.",
+    "deleteFailed": "El elemento no se eliminó.",
+    "titleLabel": "Título",
+    "titlePlaceholder": "Qué tiene que pasar",
+    "openSession": "Abrir sesión",
+    "notes": "Notas",
+    "notesPlaceholder": "Añade detalles. Escribe @ para mencionar a alguien.",
+    "commentsTitle": "Comentarios",
+    "commentLabel": "Comentario",
+    "commentPlaceholder": "Escribe un comentario. Escribe @ para mencionar a alguien.",
+    "comment": "Comentar",
+    "kind": "Tipo",
+    "target": "Ejecuta",
+    "session": "Sesión",
+    "schedule": "Programación",
+    "thisDay": "Este día",
+    "nextRun": "Próxima ejecución",
+    "failed": "falló",
+    "succeeded": "correcta",
+    "prompt": "Prompt",
+    "openTriggers": "Abrir en Disparadores",
+    "cancel": "Cancelar",
+    "create": "Crear",
+    "runs": "{capped, select, yes {{count}+ ejecuciones} other {{count, plural, one {# ejecución} other {# ejecuciones}}}}"
   },
   "agentEditor": {
     "manage": "Gestionar",

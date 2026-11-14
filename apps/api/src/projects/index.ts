@@ -92,6 +92,7 @@ import { registerLinkPreviewRoutes } from './routes/link-preview';
 import { registerSessionRemindersRoutes } from './routes/session-reminders';
 import { registerGoalRoutes } from './routes/goals';
 import { registerEvalRoutes } from './routes/evals';
+import { registerCalendarRoutes } from './routes/calendar';
 import { registerRuntimeTriggersRoutes } from './routes/runtime-triggers';
 import { registerProjectSpacesRoutes } from './routes/project-spaces';
 import { registerProjectMemoryRoutes } from './routes/project-memory';
@@ -198,6 +199,7 @@ export function registerAllProjectRoutes(): void {
   registerSessionRemindersRoutes();
   registerGoalRoutes();
   registerEvalRoutes();
+  registerCalendarRoutes();
   registerRuntimeTriggersRoutes();
   registerProjectSpacesRoutes();
   registerProjectMemoryRoutes();

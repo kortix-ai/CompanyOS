@@ -139,6 +139,8 @@ export type FeatureFlagKey =
   | 'evals'
   /** Desktop tabs: the desktop app shows browser-style tabs in the title bar for this project's pages. Client-only, off by default. */
   | 'desktop_tabs'
+  /** Calendar: a shared calendar of dated items with an owner and comments, plus the project's scheduled triggers (`kortix calendar`). Experimental, off by default. */
+  | 'calendar'
   /** @deprecated Withdrawn — agents messaging people left the product. The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'human_messaging';
 
@@ -202,6 +204,7 @@ export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'program_agents',
   'evals',
   'desktop_tabs',
+  'calendar',
 ] as const;
 
 /**

@@ -108,6 +108,8 @@ export {
   projectGoals,
   evalJobs,
   evalTrials,
+  calendarItems,
+  calendarComments,
   projectGoalEvents,
   projectSpaceKindEnum,
   projectSpaceVisibilityEnum,

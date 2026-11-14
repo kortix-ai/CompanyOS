@@ -167,6 +167,7 @@ function projectFixture(overrides: Record<string, unknown> = {}) {
       program_agents: false,
       evals: false,
       desktop_tabs: false,
+      calendar: false,
     },
     experimental_features: [],
     default_sandbox_provider: null,
@@ -903,6 +904,7 @@ describe('envelopes', () => {
       'program_agents',
       'evals',
       'desktop_tabs',
+      'calendar',
     ]);
   });
 

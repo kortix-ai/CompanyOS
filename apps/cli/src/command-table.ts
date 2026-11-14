@@ -275,6 +275,12 @@ export const TIERS: readonly CommandTier[] = [
             featureFlag: 'evals',
           },
           {
+            name: 'calendar',
+            args: '<subcommand>',
+            blurb: 'The shared calendar: dated items with an owner and comments; @mention a person to ask them: ls, add, show, edit, done, comment, rm',
+            featureFlag: 'calendar',
+          },
+          {
             name: 'artifacts',
             args: '<subcommand>',
             blurb: 'Share docs and pages: publish, ls, share, versions, pull',

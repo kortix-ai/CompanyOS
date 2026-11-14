@@ -1343,6 +1343,10 @@
         "desktop_tabs": {
           "name": "桌面标签页",
           "description": "桌面应用在标题栏中显示类似浏览器的标签页：每个会话、工件和页面都在各自的标签页中打开，⌘T、⌘W 和 ⌘1–9 的用法与浏览器相同。网页版保持不变。"
+        },
+        "calendar": {
+          "name": "日历",
+          "description": "人与智能体共享的日历：带日期、负责人和评论的事项，与已排程的触发器和循环并列显示。用 @ 提及某人即可通知对方。智能体使用 `kortix calendar`。"
         }
       },
       "channelsSwitch": {
@@ -1883,7 +1887,8 @@
       "private": "私密",
       "noMessages": "还没有消息",
       "more": "更多"
-    }
+    },
+    "calendar": "日历"
   },
   "dashboard": {
     "title": "仪表板",
@@ -3420,7 +3425,8 @@
       "automation_failed": "失败提醒",
       "automation_recovered": "恢复提醒",
       "capture_device_down": "Capture 电脑已停止",
-      "capture_device_recovered": "Capture 电脑恢复录制"
+      "capture_device_recovered": "Capture 电脑恢复录制",
+      "mention": "提及"
     },
     "kindDescription": {
       "turn_done": "一轮结束。",
@@ -3431,7 +3437,8 @@
       "automation_failed": "触发器或循环开始失败。",
       "automation_recovered": "失败的触发器或循环恢复正常。",
       "capture_device_down": "有一台 Kortix Capture 电脑未在录制。发送给管理 Capture 的人员。",
-      "capture_device_recovered": "停止的 Kortix Capture 电脑已重新录制。"
+      "capture_device_recovered": "停止的 Kortix Capture 电脑已重新录制。",
+      "mention": "其他人提及你，或把日历中的事项分配给你。"
     },
     "inbox": {
       "title": "收件箱",
@@ -21372,7 +21379,15 @@
       "text458ceb31019b": "连接器事件触发器",
       "text27ca9df9dbaa": "连接器事件触发器已关闭",
       "textfff553f218c7": "Evals",
-      "textd5b5d846044e": "evals eval 基准 评分 harbor terminal-bench 任务 排行榜"
+      "textd5b5d846044e": "evals eval 基准 评分 harbor terminal-bench 任务 排行榜",
+      "textdb6ee6610b15": "日历 日程 排程 周 月 到期 截止 事项 触发器",
+      "text9b041fd0dfb7": "列出了日历事项",
+      "text968ff709bd3d": "创建了日历事项",
+      "textd115ffd5e3a4": "列出了日历成员",
+      "texta268bab502cf": "查看了日历事项",
+      "text16d71c4d10a2": "编辑了日历事项",
+      "text14580c9900ac": "删除了日历事项",
+      "text96386c724e21": "评论了日历事项"
     },
     "publicShareConfirm": {
       "title": "创建公开链接？",
@@ -24679,6 +24694,86 @@
     "waitingOnPerson": "等待 {person}",
     "waitNoCost": "等待回答期间不会运行检查。",
     "chaseAt": "{time} 跟进"
+  },
+  "calendar": {
+    "title": "日历",
+    "gateDescription": "人与智能体共享的日历：带日期、负责人和评论的事项，与已排程的触发器和循环并列显示。",
+    "newItem": "新建事项",
+    "today": "今天",
+    "previousWeek": "上一周",
+    "nextWeek": "下一周",
+    "previousMonth": "上个月",
+    "nextMonth": "下个月",
+    "week": "周",
+    "month": "月",
+    "view": "视图",
+    "triggers": "触发器",
+    "filter": {
+      "everyone": "所有人",
+      "me": "我的"
+    },
+    "people": "成员",
+    "agents": "智能体",
+    "noDate": "无日期",
+    "noDateHint": "没有日期的事项在这里等候。",
+    "allDay": "全天",
+    "overdue": "已逾期",
+    "status": {
+      "open": "未完成",
+      "done": "已完成"
+    },
+    "comments": "{count, plural, other {# 条评论}}",
+    "formerMember": "前成员",
+    "lastRun": "上次运行",
+    "lastRunFailed": "上次运行失败",
+    "loop": "循环",
+    "trigger": "触发器",
+    "addOn": "在 {day} 新建事项",
+    "dayEntries": "{day}，{count, plural, other {# 项}}",
+    "showWeekOf": "显示 {day} 所在的周",
+    "more": "另外 {count} 项",
+    "nobody": "无人",
+    "when": "时间",
+    "owner": "负责人",
+    "created": "创建",
+    "clearDate": "移除日期",
+    "saveFailed": "更改未保存。",
+    "close": "关闭",
+    "goneTitle": "事项已删除",
+    "goneBody": "此事项已不存在。",
+    "loadFailed": "日历未加载。",
+    "itemLoadFailed": "此事项未加载。",
+    "tryAgain": "重试",
+    "commentFailed": "评论未添加。",
+    "reopen": "重新打开",
+    "markDone": "标记为完成",
+    "moreActions": "更多操作",
+    "delete": "删除",
+    "deleteTitle": "删除此事项？",
+    "deleteBody": "“{title}”及其评论将为所有人删除。",
+    "deleteFailed": "事项未删除。",
+    "titleLabel": "标题",
+    "titlePlaceholder": "需要发生什么",
+    "openSession": "打开会话",
+    "notes": "备注",
+    "notesPlaceholder": "添加详情。输入 @ 提及某人。",
+    "commentsTitle": "评论",
+    "commentLabel": "评论",
+    "commentPlaceholder": "写评论。输入 @ 提及某人。",
+    "comment": "评论",
+    "kind": "类型",
+    "target": "运行",
+    "session": "会话",
+    "schedule": "排程",
+    "thisDay": "当天",
+    "nextRun": "下次运行",
+    "failed": "失败",
+    "succeeded": "成功",
+    "prompt": "提示词",
+    "openTriggers": "在触发器中打开",
+    "cancel": "取消",
+    "create": "创建",
+    "runs": "{capped, select, yes {{count}+ 次运行} other {{count, plural, other {# 次运行}}}}"
   },
   "agentEditor": {
     "manage": "管理",

@@ -1343,6 +1343,10 @@
         "desktop_tabs": {
           "name": "Abas no desktop",
           "description": "O app de desktop mostra abas como as de um navegador na barra de título: cada sessão, artefato e página abre em sua própria aba, e ⌘T, ⌘W e ⌘1–9 funcionam como em um navegador. O app web não muda."
+        },
+        "calendar": {
+          "name": "Calendário",
+          "description": "Um calendário compartilhado para pessoas e agentes: itens com data, responsável e comentários, ao lado dos gatilhos e Loops agendados. Mencione alguém com @ para notificá-lo. Os agentes usam `kortix calendar`."
         }
       },
       "channelsSwitch": {
@@ -1883,7 +1887,8 @@
       "private": "Privado",
       "noMessages": "Nenhuma mensagem ainda",
       "more": "Mais"
-    }
+    },
+    "calendar": "Calendário"
   },
   "dashboard": {
     "title": "Painel",
@@ -3420,7 +3425,8 @@
       "automation_failed": "Alerta de falha",
       "automation_recovered": "Alerta de recuperação",
       "capture_device_down": "Computador do Capture parado",
-      "capture_device_recovered": "Computador do Capture gravando de novo"
+      "capture_device_recovered": "Computador do Capture gravando de novo",
+      "mention": "Menções"
     },
     "kindDescription": {
       "turn_done": "Um turno termina.",
@@ -3431,7 +3437,8 @@
       "automation_failed": "Um trigger ou ciclo começa a falhar.",
       "automation_recovered": "Um trigger ou ciclo que falhava volta a funcionar.",
       "capture_device_down": "Um computador do Kortix Capture não está gravando. Enviado a quem gerencia o Capture.",
-      "capture_device_recovered": "Um computador do Kortix Capture que parou voltou a gravar."
+      "capture_device_recovered": "Um computador do Kortix Capture que parou voltou a gravar.",
+      "mention": "Outra pessoa menciona você ou atribui a você um item do calendário."
     },
     "inbox": {
       "title": "Caixa de entrada",
@@ -21372,7 +21379,15 @@
       "text458ceb31019b": "Gatilhos de eventos de conector",
       "text27ca9df9dbaa": "Os gatilhos de eventos de conector estão desativados",
       "textfff553f218c7": "Evals",
-      "textd5b5d846044e": "evals eval benchmark pontuação harbor terminal-bench tarefas classificação"
+      "textd5b5d846044e": "evals eval benchmark pontuação harbor terminal-bench tarefas classificação",
+      "textdb6ee6610b15": "calendário agenda programação semana mês prazo vencimento itens gatilhos",
+      "text9b041fd0dfb7": "Itens do calendário listados",
+      "text968ff709bd3d": "Item do calendário criado",
+      "textd115ffd5e3a4": "Pessoas do calendário listadas",
+      "texta268bab502cf": "Item do calendário visualizado",
+      "text16d71c4d10a2": "Item do calendário editado",
+      "text14580c9900ac": "Item do calendário excluído",
+      "text96386c724e21": "Comentou um item do calendário"
     },
     "publicShareConfirm": {
       "title": "Criar um link público?",
@@ -24679,6 +24694,86 @@
     "waitingOnPerson": "Aguardando {person}",
     "waitNoCost": "Nenhuma verificação roda enquanto ela aguarda uma resposta.",
     "chaseAt": "Faz o acompanhamento {time}"
+  },
+  "calendar": {
+    "title": "Calendário",
+    "gateDescription": "Um calendário compartilhado para pessoas e agentes: itens com data, responsável e comentários, ao lado dos seus gatilhos e Loops agendados.",
+    "newItem": "Novo item",
+    "today": "Hoje",
+    "previousWeek": "Semana anterior",
+    "nextWeek": "Próxima semana",
+    "previousMonth": "Mês anterior",
+    "nextMonth": "Próximo mês",
+    "week": "Semana",
+    "month": "Mês",
+    "view": "Visualização",
+    "triggers": "Gatilhos",
+    "filter": {
+      "everyone": "Todos",
+      "me": "Meus"
+    },
+    "people": "Pessoas",
+    "agents": "Agentes",
+    "noDate": "Sem data",
+    "noDateHint": "Itens sem data esperam aqui.",
+    "allDay": "Dia inteiro",
+    "overdue": "Atrasado",
+    "status": {
+      "open": "Aberto",
+      "done": "Concluído"
+    },
+    "comments": "{count, plural, one {# comentário} other {# comentários}}",
+    "formerMember": "Ex-membro",
+    "lastRun": "Última execução",
+    "lastRunFailed": "A última execução falhou",
+    "loop": "Loop",
+    "trigger": "Gatilho",
+    "addOn": "Novo item em {day}",
+    "dayEntries": "{day}, {count, plural, one {# entrada} other {# entradas}}",
+    "showWeekOf": "Mostrar a semana de {day}",
+    "more": "mais {count}",
+    "nobody": "Ninguém",
+    "when": "Quando",
+    "owner": "Responsável",
+    "created": "Criado",
+    "clearDate": "Remover data",
+    "saveFailed": "A alteração não foi salva.",
+    "close": "Fechar",
+    "goneTitle": "Item excluído",
+    "goneBody": "Este item não existe mais.",
+    "loadFailed": "O calendário não carregou.",
+    "itemLoadFailed": "Este item não carregou.",
+    "tryAgain": "Tentar novamente",
+    "commentFailed": "O comentário não foi adicionado.",
+    "reopen": "Reabrir",
+    "markDone": "Marcar como concluído",
+    "moreActions": "Mais ações",
+    "delete": "Excluir",
+    "deleteTitle": "Excluir este item?",
+    "deleteBody": "“{title}” e seus comentários são excluídos para todos.",
+    "deleteFailed": "O item não foi excluído.",
+    "titleLabel": "Título",
+    "titlePlaceholder": "O que precisa acontecer",
+    "openSession": "Abrir sessão",
+    "notes": "Notas",
+    "notesPlaceholder": "Adicione detalhes. Digite @ para mencionar alguém.",
+    "commentsTitle": "Comentários",
+    "commentLabel": "Comentário",
+    "commentPlaceholder": "Escreva um comentário. Digite @ para mencionar alguém.",
+    "comment": "Comentar",
+    "kind": "Tipo",
+    "target": "Executa",
+    "session": "Sessão",
+    "schedule": "Agendamento",
+    "thisDay": "Neste dia",
+    "nextRun": "Próxima execução",
+    "failed": "falhou",
+    "succeeded": "concluída",
+    "prompt": "Prompt",
+    "openTriggers": "Abrir em Gatilhos",
+    "cancel": "Cancelar",
+    "create": "Criar",
+    "runs": "{capped, select, yes {{count}+ execuções} other {{count, plural, one {# execução} other {# execuções}}}}"
   },
   "agentEditor": {
     "manage": "Gerenciar",

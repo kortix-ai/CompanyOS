@@ -313,6 +313,7 @@ describe('useFeatureFlags', () => {
     'program_agents',
     'evals',
     'desktop_tabs',
+    'calendar',
     'volumes',
     'drives',
     'artifacts',

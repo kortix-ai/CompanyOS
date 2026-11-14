@@ -17,7 +17,8 @@ import { useUiHostConfig } from '../../providers/ui-provider';
 import { cn } from '../../lib/utils';
 import { TRIGGER_CARET_CLASS, triggerVariants } from '../../primitives/trigger-variants';
 import type { Agent } from '@kortix/sdk/react';
-import { capitalizeWords, isMyKortixAgentName, MY_KORTIX_DISPLAY_NAME } from '@kortix/shared';
+import { agentDisplayName, isMyKortixAgentName } from '@kortix/shared';
+import { InlineCodeText } from '../../markdown/inline-code-text';
 import { CaretDownIcon, CheckIcon } from '@phosphor-icons/react';
 import { AgentMark } from '../../internal/components/agent-mark';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
@@ -64,7 +65,7 @@ export function resolveProgramAgent(primaryAgents: Agent[], selectedAgent: strin
 export function agentDisplayLabel(agents: Agent[], selectedAgent: string | null): string {
   const name = resolveDisplayedAgentName(composerSelectableAgents(agents), selectedAgent);
   if (!name) return 'Agent';
-  return isMyKortixAgentName(name) ? MY_KORTIX_DISPLAY_NAME : capitalizeWords(name);
+  return agentDisplayName(name);
 }
 
 /**
@@ -85,7 +86,7 @@ export function useComposerAgentChoices(agents: Agent[]) {
   const primaryAgents = useMemo(() => composerSelectableAgents(offered), [offered]);
   const label = useCallback(
     (name: string) =>
-      agentLabels?.[name] ?? (isMyKortixAgentName(name) ? MY_KORTIX_DISPLAY_NAME : capitalizeWords(name)),
+      agentLabels?.[name] ?? agentDisplayName(name),
     [agentLabels],
   );
   return { offered, primaryAgents, label, agentLabels };
@@ -252,7 +253,9 @@ export function AgentSelector({
           {meta ? (
             <p className="text-muted-foreground text-xs">{t('myKortixRoutes')}</p>
           ) : agent.description ? (
-            <p className="text-muted-foreground line-clamp-2 text-xs text-pretty">{agent.description}</p>
+            <p className="text-muted-foreground line-clamp-2 text-xs text-pretty">
+              <InlineCodeText text={agent.description} />
+            </p>
           ) : null}
         </div>
         {isSelected && (

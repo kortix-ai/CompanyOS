@@ -26,6 +26,7 @@ import { logger } from '../../lib/logger';
 import { mayPromptSessions, filterProjectRecipients } from '../../notifications/access';
 import { deliver } from '../../notifications/notifier';
 import { errorMessage } from '../../shared/error-message';
+import { isUuid } from '../../shared/validate';
 import { loadProjectAgents } from '../agents';
 import { mentionTokens } from '../lib/mentions';
 import { projectMentionCandidates, resolveMentions, type MentionCandidate } from '../lib/space-posts';
@@ -180,6 +181,7 @@ export async function listItems(ctx: CalendarContext, query: CalendarListQuery):
   if (query.assignee === 'me') {
     assignee = ctx.actor.kind === 'person' ? { userId: ctx.actor.userId } : { agent: ctx.actor.agent };
   } else if (query.assignee?.startsWith('user:')) {
+    if (!isUuid(query.assignee.slice(5))) throw invalid('assignee: user:<id> takes a user id.');
     assignee = { userId: query.assignee.slice(5) };
   } else if (query.assignee?.startsWith('agent:')) {
     assignee = { agent: query.assignee.slice(6) };
@@ -290,7 +292,7 @@ export async function updateItem(ctx: CalendarContext, itemId: string, body: Upd
     excerpt: row.notes,
   });
   if (patch.status) {
-    await wakeCreatorSession(ctx, row, `${await actorName(ctx)} marked “${row.title}” ${row.status === 'done' ? 'done' : 'open again'}.`, `status:${row.updatedAt.getTime()}`);
+    await wakeCreatorSession(ctx, row, async () => `${await actorName(ctx)} marked “${row.title}” ${row.status === 'done' ? 'done' : 'open again'}.`, `status:${row.updatedAt.getTime()}`);
   }
   const counts = await store.calendarCommentCounts([row.itemId]);
   return serializeCalendarItem(row, counts.get(row.itemId) ?? 0);
@@ -319,12 +321,7 @@ export async function addComment(ctx: CalendarContext, itemId: string, body: str
     excerpt: row.body,
     comment: true,
   });
-  await wakeCreatorSession(
-    ctx,
-    item,
-    `${await actorName(ctx)} commented on “${item.title}”:\n\n${row.body}`,
-    `comment:${row.commentId}`,
-  );
+  await wakeCreatorSession(ctx, item, async () => `${await actorName(ctx)} commented on “${item.title}”:\n\n${row.body}`, `comment:${row.commentId}`);
   return serializeCalendarComment(row);
 }
 
@@ -406,7 +403,7 @@ async function notifyPeople(
  * the agent continues. Only a person wakes it, and only one who may prompt
  * that session. Never throws.
  */
-async function wakeCreatorSession(ctx: CalendarContext, item: store.CalendarItemRow, text: string, key: string): Promise<void> {
+async function wakeCreatorSession(ctx: CalendarContext, item: store.CalendarItemRow, message: () => Promise<string>, key: string): Promise<void> {
   const actor = ctx.actor;
   const sessionId = item.createdBySessionId;
   if (actor.kind !== 'person' || !sessionId || !item.createdByAgent) return;
@@ -420,7 +417,7 @@ async function wakeCreatorSession(ctx: CalendarContext, item: store.CalendarItem
         sessionId,
         userId: actor.userId,
         bindTurnIdentity: true,
-        text: `[Calendar · ${item.itemId}] ${text}\n\nRead it with \`kortix calendar show ${item.itemId}\`; answer with \`kortix calendar comment ${item.itemId} "…"\`.`,
+        text: `[Calendar · ${item.itemId}] ${await message()}\n\nRead it with \`kortix calendar show ${item.itemId}\`; answer with \`kortix calendar comment ${item.itemId} "…"\`.`,
         idempotencyKey: `calendar:${item.itemId}:${key}`,
       },
       { wait: false },

@@ -256,7 +256,7 @@ export function MonthView(props: ViewProps & { anchor: Date; onShowDay: (day: Da
   return (
     <div className="grid min-h-full grid-cols-7 auto-rows-[minmax(7rem,1fr)] grid-rows-[auto]" role="grid" aria-label={t('month')}>
       {weeks[0]!.map((day) => (
-        <span key={day.getDay()} role="columnheader" className="text-muted-foreground border-border border-r border-b px-3 py-2 text-xs last:border-r-0">
+        <span key={day.getDay()} role="columnheader" className="text-muted-foreground border-border border-r border-b px-3 py-2 text-xs [&:nth-child(7n)]:border-r-0">
           {weekday.format(day)}
         </span>
       ))}

@@ -19,14 +19,14 @@ import { qk } from './query-keys';
 const inventory = contract('inventory');
 const config = contract('config');
 
-/** People and agents write items from other tabs and sessions: a mounted calendar re-reads every 20 seconds while visible. */
-const calendarRefetch = {
+/** People and agents write items from other tabs and sessions: a mounted calendar re-reads while the tab is visible. */
+const calendarRefetch = (everyMs: number) => ({
   refetchInterval: <T>(query: T) => {
     const heal = typeof inventory.refetchInterval === 'function' ? inventory.refetchInterval(query as never) : false;
-    return heal || 20_000;
+    return heal || everyMs;
   },
   refetchIntervalInBackground: false,
-} as const;
+});
 
 const queryKeyOf = (query: CalendarListQuery) =>
   JSON.stringify([query.from ?? '', query.to ?? '', query.assignee ?? '', query.status ?? '', query.undated === false ? 0 : 1]);
@@ -34,16 +34,21 @@ const queryKeyOf = (query: CalendarListQuery) =>
 /**
  * The calendar items of one window and filter
  * (`GET /workspaces/:id/calendar`). Pass `null` while the `calendar` flag is
- * off: nothing loads. A mounted list re-reads every 20 seconds.
+ * off: nothing loads. A mounted list re-reads every `refetchMs` (default 20
+ * seconds) while the tab is visible.
  */
-export function useWorkspaceCalendarItems(projectId: string | null | undefined, query: CalendarListQuery = {}) {
+export function useWorkspaceCalendarItems(
+  projectId: string | null | undefined,
+  query: CalendarListQuery = {},
+  options: { refetchMs?: number } = {},
+) {
   return useQuery({
     queryKey: qk.project.calendarItems(projectId ?? '', queryKeyOf(query)),
     queryFn: () => listWorkspaceCalendarItems(projectId as string, query),
     enabled: !!projectId,
     placeholderData: (previous) => previous,
     ...inventory,
-    ...calendarRefetch,
+    ...calendarRefetch(options.refetchMs ?? 20_000),
   });
 }
 
@@ -54,7 +59,7 @@ export function useWorkspaceCalendarItem(projectId: string | null | undefined, i
     queryFn: () => getWorkspaceCalendarItem(projectId as string, itemId as string),
     enabled: !!projectId && !!itemId,
     ...inventory,
-    ...calendarRefetch,
+    ...calendarRefetch(20_000),
   });
 }
 

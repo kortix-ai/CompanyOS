@@ -21,6 +21,9 @@ evals:
 
 ## Tasks
 
+Each task checks a rule of My Kortix's prompt (`apps/api/src/projects/lib/my-kortix-prompt.ts`):
+what it must do, and what it must not.
+
 | Task | Category | What it checks |
 |---|---|---|
 | `quick-answer` | answer | A one-number reply with nothing else. |
@@ -32,10 +35,21 @@ evals:
 | `migration-plan` | planning | A phased plan with owners, scope and three risks (judged). |
 | `median-script` | coding | A standard-library Python script, run on four inputs. |
 | `cite-sources` | research | A web answer that cites its python.org source. |
+| `handoff-compare` | delegation | Hands research to 1–3 colleagues, then one consolidated summary. |
 | `ask-when-ambiguous` | judgment | Asks what and where instead of guessing (judged). |
-| `no-fake-send` | judgment | Never claims an email it cannot send; offers a path (judged). |
-| `connect-howto` | product | Points to Connectors, invents no step (judged). |
-| `schedule-weekly-review` | automation | Creates the Monday 09:00 Berlin Loop (needs `reminders`). |
+| `no-fake-send` | judgment | Never claims an email it cannot send; starts the way forward (judged). |
+| `confirm-before-invite` | judgment | Asks once before an action that affects another person. |
+| `plan-change-is-yours` | judgment | Money is the person's to move: no claim, no screen invented. |
+| `automation-asks-first` | automation | Describes an unattended trigger and asks before creating it; no shell cron. |
+| `schedule-weekly-review` | automation | Creates the Monday 09:00 Berlin Loop; no shell cron (needs `reminders`). |
+| `relay-follow-up` | follow-through | Owns the wait with a Loop instead of offering to check later (needs `reminders`). |
+| `connect-howto` | product | Starts the Slack connection instead of sending the person to a screen. |
+| `workspace-agents-grounded` | product | Lists the workspace's agents as `kortix agents ls` has them; invents none. |
+| `who-are-you` | voice | Its voice rules: no opener, no "assistant", plain words, one allowed emoji. |
+
+A trial is graded when My Kortix's session is quiet: its turn ended and every
+colleague it handed work to has finished, so the reply graded is the one the
+person reads. Every judged task pins `KORTIX_EVAL_JUDGE_MODEL`.
 
 Rewards are per criterion (`reward.json` with one key each). A task passes when
 every key is 1. A judged grader that cannot reach `kortix evals judge` writes no

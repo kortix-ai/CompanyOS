@@ -21,7 +21,7 @@
 import { randomUUID } from 'node:crypto';
 import { gatewayRequestLogs, projectSessions, sessionTurns } from '@kortix/db';
 import { EVAL_LIMITS, isEvalBuiltinAgent, type EvalException, type EvalJobConfig, type EvalRewards } from '@kortix/api-contract';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { checkBillingAdmission } from '../../billing/services/billing-gate';
 import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { logger } from '../../lib/logger';
@@ -73,6 +73,16 @@ const ENVIRONMENT_START_MARGIN_MS = 10 * 60_000;
 const TURN_START_MAX_MS = 10 * 60_000;
 /** After the runner aborts a turn, how long it waits for the turn to end before it grades anyway. */
 const ABORT_SETTLE_MS = 60_000;
+/**
+ * An agent that hands work off (My Kortix's prompt: "every piece of real work
+ * goes to the agent made for it") answers once its colleagues report. Its
+ * trial is graded after its turn ended and every session it started has been
+ * idle this long: the report's notice reaches it, and its answer turn opens,
+ * well inside this window.
+ */
+const QUIET_MS = 30_000;
+/** A colleague with no turn yet is still starting, for at most this long. */
+const COLLEAGUE_START_MAX_MS = 10 * 60_000;
 /** Kept alive this long past each tick while the runner, not a turn, uses the sandbox. */
 const RUNNER_DEADLINE_GRANT_MS = 10 * 60_000;
 const VERIFIER_FILES_MAX = 20;
@@ -89,6 +99,8 @@ interface RunState {
   aborted_at?: string;
   /** When the runner last read the session's token use. */
   usage_at?: string;
+  /** Since when the agent's turn has ended and no colleague it started is working. */
+  quiet_since?: string;
 }
 
 const runState = (trial: EvalTrialRow): RunState => (trial.runState ?? {}) as RunState;
@@ -228,7 +240,9 @@ async function startTrial(ctx: TrialContext, trial: EvalTrialRow): Promise<void>
   if (!(await sessionExists(trial.sessionId!))) {
     const { task } = await loadTrialTask(ctx, trial);
     const builtin = isEvalBuiltinAgent(trial.agent);
-    // The session runs as whoever started the job: a service account stays one, and an agent's token makes the trial its child session.
+    // The session runs as whoever started the job, with that principal's grants. It is always a top-level session, never the
+    // caller's child: a child runs another harness (no follow-through check, no goal mode), so a job an agent starts would
+    // score a harness nobody uses.
     const startedBy = startedByOf(ctx.job);
     const result = await createSession({
       source: EVAL_SESSION_SOURCE,
@@ -238,7 +252,7 @@ async function startTrial(ctx: TrialContext, trial: EvalTrialRow): Promise<void>
       authType: startedBy?.auth_type ?? null,
       apiKeyType: startedBy?.api_key_type ?? null,
       inSession: startedBy?.in_session ?? false,
-      callerSessionId: startedBy?.caller_session_id ?? null,
+      callerSessionId: null,
       body: {
         session_id: trial.sessionId,
         name: `Eval: ${trial.taskName} · ${trial.agent}`.slice(0, 120),
@@ -364,18 +378,66 @@ async function awaitAgent(ctx: TrialContext, trial: EvalTrialRow): Promise<void>
     return;
   }
   if (turn.state !== 'ended') {
+    if (state.quiet_since) await updateTrial(trial, { runState: { ...state, quiet_since: undefined } as Record<string, unknown> });
     if (ranMs <= timeoutMs) return;
     await abortRuntimeTurn(trial.sessionId!, { requestedStop: true, stoppedBy: null }).catch(() => false);
     await updateTrial(trial, { runState: { ...state, aborted_at: ctx.now.toISOString() } as Record<string, unknown> });
     return;
   }
-  if (turn.endReason === 'completed') return agentEnded(ctx, trial, found?.box ?? null, null);
+  if (turn.endReason === 'completed') {
+    const quiet = await colleaguesQuiet(ctx, trial, state);
+    if (quiet === 'quiet') return agentEnded(ctx, trial, found?.box ?? null, null);
+    if (ranMs > timeoutMs) return agentEnded(ctx, trial, found?.box ?? null, new EvalTrialError('AgentTimeoutError', `The agent's colleagues ran past ${Math.round(timeoutMs / 1000)} s.`));
+    return;
+  }
   if (turn.endReason === 'runtime_gone') throw new EvalTrialError('SandboxGoneError', 'The sandbox stopped before the agent finished.');
   if (turn.endReason === 'failed') {
     const reason = turn.endError?.message?.trim() || turn.endError?.name || 'The turn failed and reported no reason.';
     return agentEnded(ctx, trial, found?.box ?? null, new EvalTrialError(turnFailureType(turn.endError), reason));
   }
   throw new EvalTrialError('AgentTurnFailedError', 'The instruction never reached the agent.');
+}
+
+/** Every session the trial session started, at any depth: hand-offs, workflow agents, teammates. */
+async function descendantSessions(sessionId: string): Promise<Array<{ sessionId: string; createdAt: Date }>> {
+  const result = await db.execute(sql`
+    WITH RECURSIVE tree AS (
+      SELECT session_id, created_at FROM kortix.project_sessions WHERE parent_session_id = ${sessionId}
+      UNION
+      SELECT s.session_id, s.created_at FROM kortix.project_sessions s JOIN tree t ON s.parent_session_id = t.session_id
+    )
+    SELECT session_id, created_at FROM tree LIMIT 500`);
+  const rows = (Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? [])) as Array<{ session_id: string; created_at: Date | string }>;
+  return rows.map((row) => ({ sessionId: row.session_id, createdAt: new Date(row.created_at) }));
+}
+
+/**
+ * `quiet` when the agent started no colleague, or when every colleague has been
+ * idle for {@link QUIET_MS}: no open turn, and none still starting. The clock
+ * starts on the first quiet tick and restarts when any session works again.
+ */
+async function colleaguesQuiet(ctx: TrialContext, trial: EvalTrialRow, state: RunState): Promise<'quiet' | 'busy'> {
+  const colleagues = await descendantSessions(trial.sessionId!);
+  if (colleagues.length === 0) return 'quiet';
+  const ids = colleagues.map((c) => c.sessionId);
+  const turns = await db
+    .select({ sessionId: sessionTurns.sessionId, open: sql<boolean>`bool_or(${sessionTurns.state} <> 'ended')` })
+    .from(sessionTurns)
+    .where(inArray(sessionTurns.sessionId, ids))
+    .groupBy(sessionTurns.sessionId);
+  const ran = new Map(turns.map((row) => [row.sessionId, row.open]));
+  const busy = colleagues.some((c) =>
+    ran.has(c.sessionId) ? ran.get(c.sessionId) === true : ctx.now.getTime() - c.createdAt.getTime() < COLLEAGUE_START_MAX_MS,
+  );
+  if (busy) {
+    if (state.quiet_since) await updateTrial(trial, { runState: { ...state, quiet_since: undefined } as Record<string, unknown> });
+    return 'busy';
+  }
+  if (!state.quiet_since) {
+    await updateTrial(trial, { runState: { ...state, quiet_since: ctx.now.toISOString() } as Record<string, unknown> });
+    return 'busy';
+  }
+  return ctx.now.getTime() - Date.parse(state.quiet_since) >= QUIET_MS ? 'quiet' : 'busy';
 }
 
 /**
@@ -567,6 +629,13 @@ async function finishTrial(ctx: TrialContext, trial: EvalTrialRow, rewards: Eval
 }
 
 export async function stopTrialSandbox(job: EvalJobRow, sessionId: string): Promise<void> {
+  // The colleagues the trial's agent started stop with it: their sandboxes bill like the trial's own.
+  const colleagues = await descendantSessions(sessionId).catch(() => []);
+  await Promise.all(colleagues.map((c) => stopOne(job, c.sessionId)));
+  await stopOne(job, sessionId);
+}
+
+async function stopOne(job: EvalJobRow, sessionId: string): Promise<void> {
   await abortRuntimeTurn(sessionId, { requestedStop: true, stoppedBy: null }).catch(() => false);
   await stopSession({ projectId: job.projectId, sessionId, accountId: job.accountId, userId: job.createdBy ?? job.accountId, stoppedBy: null }).catch((err) =>
     logger.warn('[evals] trial sandbox not stopped', { session_id: sessionId, error: String(err) }),

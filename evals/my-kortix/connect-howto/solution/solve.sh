@@ -1,3 +1,4 @@
 #!/bin/bash
 mkdir -p /logs/agent
-echo "Open Customize → Connectors, find Slack and click Connect, then sign in to Slack and approve access. I can also start the connection for you now: say yes and I will send you the sign-in link." > /logs/agent/response.md
+link=$(kortix channels connect 2>&1 | grep -oE 'https://[^ ]+' | head -1)
+echo "🔒 Open this link to add Kortix to your Slack workspace, then approve access: ${link:-https://slack.com/oauth/v2/authorize}. Once it's in, mention @Kortix in any channel." > /logs/agent/response.md

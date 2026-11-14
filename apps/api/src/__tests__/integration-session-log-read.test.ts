@@ -192,6 +192,16 @@ describe('the v1 reads answer from the log', () => {
     expect(child.messages.every((m) => m.info.sessionID === CHILD)).toBe(true);
   });
 
+  // Supabase's postgres runs with `extra_float_digits = 0`: a float8 epoch keeps 15 digits there, so a
+  // write at .405999 read back as .406, a millisecond after the log's last write (release run 43543224012).
+  test('captured_at is the last write truncated to the millisecond, also in its last microsecond', async () => {
+    const at = '2026-11-14T02:16:04.405999Z';
+    await db.execute(sql`update kortix.session_log_messages set updated_at = ${at}::timestamptz where session_id = ${nativeSession}`);
+    await db.update(sessionLogs).set({ updatedAt: new Date('2026-11-14T02:16:00.000Z') }).where(eq(sessionLogs.sessionId, nativeSession));
+    const body = (await (await get(`${base(nativeSession)}/transcript?shape=sync`)).json()) as { captured_at: string };
+    expect(body.captured_at).toBe('2026-11-14T02:16:04.405Z');
+  });
+
 });
 
 describe('GET .../log', () => {

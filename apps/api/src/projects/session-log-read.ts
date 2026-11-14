@@ -313,7 +313,9 @@ export async function readStoredTranscriptWindow(input: WindowInput): Promise<Mi
         total: sql<number>`(count(*) + count(*) FILTER (WHERE CASE WHEN ${sessionLogMessages.kind} = 'compaction'
           THEN coalesce(jsonb_typeof(jsonb_path_query_first(${sessionLogMessages.record}, '$.blocks[*] ? (@.type == "compaction")') -> 'summary') <> 'null', false)
           ELSE false END))::int`,
-        writtenMs: sql<number | null>`(extract(epoch from max(${sessionLogMessages.updatedAt})) * 1000)::float8`,
+        // Whole milliseconds, truncated in SQL like `new Date(<timestamptz>)`. Not `::float8`: with
+        // `extra_float_digits = 0` its text keeps 15 digits, so 1794622564405.999 reads as …406.
+        writtenMs: sql<string | null>`floor(extract(epoch from max(${sessionLogMessages.updatedAt})) * 1000)::bigint`,
       })
       .from(sessionLogMessages)
       .where(scope);
@@ -350,7 +352,7 @@ export async function readStoredTranscriptWindow(input: WindowInput): Promise<Mi
   return {
     runtime_session_id: target,
     root_runtime_session_id: rootId,
-    captured_at: new Date(Math.max(new Date(log.updatedAt).getTime(), Math.floor(totals.writtenMs ?? 0))).toISOString(),
+    captured_at: new Date(Math.max(new Date(log.updatedAt).getTime(), Number(totals.writtenMs ?? 0))).toISOString(),
     total: totals.total,
     head_complete: true,
     next_cursor: rows.length > input.limit ? idOf(kept.at(-1)!) : null,

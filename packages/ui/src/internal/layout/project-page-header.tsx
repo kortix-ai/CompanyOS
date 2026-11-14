@@ -30,8 +30,8 @@ export function ProjectPageHeader({
 }) {
   const sidebar = useOptionalSidebar();
   // Inside Workspace settings (Repository) the settings page header above is
-  // the page's h1; this row is the browser's toolbar and its title a label.
-  const Title = useSettingsPageTitle() === null ? 'h1' : 'p';
+  // the page's h1 and names the page: this row is only the browser's toolbar.
+  const inSettings = useSettingsPageTitle() !== null;
   return (
     <div
       className="kx-titlebar-row kx-capability-titlebar relative flex shrink-0 items-center gap-1 border-b px-2"
@@ -40,7 +40,7 @@ export function ProjectPageHeader({
       <SidebarToggle />
       <div className="kx-titlebar-tabs flex h-10 min-w-0 flex-1 items-center gap-1.5 px-3">
         {breadcrumb}
-        <Title className="text-foreground truncate text-sm font-medium">{title}</Title>
+        {inSettings ? null : <h1 className="text-foreground truncate text-sm font-medium">{title}</h1>}
         {titleAccessory}
       </div>
       {children ? <div className="flex shrink-0 items-center gap-1">{children}</div> : null}

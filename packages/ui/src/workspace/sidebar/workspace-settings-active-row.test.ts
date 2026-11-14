@@ -19,6 +19,13 @@ describe('scrollTopToReveal', () => {
     expect(scrollTopToReveal(LIST, { top: 100, bottom: 129 }, 200)).toBe(182);
   });
 
+  test('a margin keeps the revealed row clear of the edge fade', () => {
+    // Feature flags at 826-855 sits inside the list but under its bottom fade.
+    expect(scrollTopToReveal(LIST, { top: 826, bottom: 855 }, 0)).toBeNull();
+    expect(scrollTopToReveal(LIST, { top: 826, bottom: 855 }, 0, 32)).toBe(32);
+    expect(scrollTopToReveal(LIST, { top: 969, bottom: 998 }, 0, 32)).toBe(175);
+  });
+
   test('a row taller than the list shows its top', () => {
     expect(scrollTopToReveal(LIST, { top: 200, bottom: 1200 }, 0)).toBe(82);
   });

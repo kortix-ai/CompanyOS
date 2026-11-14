@@ -123,12 +123,15 @@ const LIST_SCROLL_CLASS =
  * little as possible (`block: 'nearest'`), or `null` when the row is already
  * in view. Rects are viewport boxes. Only the list moves: `scrollIntoView`
  * would also scroll every ancestor, and the page must stay where it is.
+ * `margin` keeps the row clear of the list's edge fades.
  */
 export function scrollTopToReveal(
-  list: { top: number; bottom: number },
+  outer: { top: number; bottom: number },
   row: { top: number; bottom: number },
   scrollTop: number,
+  margin = 0,
 ): number | null {
+  const list = { top: outer.top + margin, bottom: outer.bottom - margin };
   if (row.top < list.top) return scrollTop - (list.top - row.top);
   if (row.bottom > list.bottom) {
     // A row taller than the list shows its top, as `nearest` does.
@@ -471,7 +474,9 @@ function RailGroupsList({
     if (!shown || !list || !active) return;
     const row = list.querySelector<HTMLElement>('[aria-current="page"]');
     if (!row) return;
-    const next = scrollTopToReveal(list.getBoundingClientRect(), row.getBoundingClientRect(), list.scrollTop);
+    // The fades are `fadeSize="8"` (~29 px): reveal the row clear of them. The
+    // browser clamps at the end, where the bottom fade is gone.
+    const next = scrollTopToReveal(list.getBoundingClientRect(), row.getBoundingClientRect(), list.scrollTop, 32);
     if (next !== null) list.scrollTop = next;
   }, [active, shown, rail]);
 

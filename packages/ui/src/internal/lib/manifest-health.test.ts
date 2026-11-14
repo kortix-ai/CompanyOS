@@ -65,4 +65,9 @@ describe('manifestLspDiagnostics', () => {
       expect.objectContaining({ line: 3, column: 2, severity: 1 }),
     ]);
   });
+  test('a Repository view path under /workspace matches the root manifest', () => {
+    expect(manifestIssuesForFile(HEALTH, '/workspace/kortix.yaml')).toHaveLength(1);
+    expect(manifestIssuesForFile(HEALTH, '/workspace/docs/kortix.yaml')).toHaveLength(0);
+    expect(manifestIssuesForFile(HEALTH, '/workspaces/kortix.yaml')).toHaveLength(0);
+  });
 });

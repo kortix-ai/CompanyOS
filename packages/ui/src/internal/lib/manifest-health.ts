@@ -42,9 +42,15 @@ export function attentionHealth(health: ProjectManifestHealth | undefined): Proj
   return { ...health, state: health.errors + warnings > 0 ? 'issues' : 'ok', issues, warnings };
 }
 
-/** A repository path compared without a leading `./` or `/`. */
+/**
+ * A repository path compared without a leading `./` or `/`, and without the
+ * `/workspace` root the Repository view's file paths carry.
+ */
 function repoPath(path: string): string {
-  return path.trim().replace(/^(\.\/|\/)+/, '');
+  return path
+    .trim()
+    .replace(/^\/workspace(?=\/|$)/, '')
+    .replace(/^(\.\/|\/)+/, '');
 }
 
 /**

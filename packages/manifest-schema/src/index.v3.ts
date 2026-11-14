@@ -76,6 +76,7 @@ import {
   validateTriggerAgentRefsV2,
 } from './index.v2';
 import { safeAgentFile, safeRepoPath, safeToolFile } from './layout';
+import { validateEvals } from './evals';
 import { BUILTIN_AGENT_KEYS, BUILTIN_AGENTS, LEGACY_MY_KORTIX_AGENT_NAME, type BuiltinAgentKey } from '@kortix/shared/my-kortix-agent';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -404,6 +405,8 @@ export interface ManifestV3 {
   approvals?: { ttl?: string };
   /** Spaces (channels): slug → label, description, header and tabs. */
   spaces?: Record<string, SpaceV3>;
+  /** Eval suites: name → a Harbor-style job config, or `config: <path>` to one (`./evals.ts`). */
+  evals?: Record<string, Record<string, unknown>>;
   /** Built-in agents the platform injects, keyed by built-in (`my_kortix`). `true` adds it to the project; absent or `false` = off. */
   builtin_agents?: Partial<Record<BuiltinAgentKey, boolean>>;
   agents: Record<string, AgentBlockV3>;
@@ -430,6 +433,7 @@ const TOP_LEVEL_KEYS_V3 = [
   'policies',
   'approvals',
   'spaces',
+  'evals',
   'builtin_agents',
   'agents',
 ] as const;
@@ -549,6 +553,7 @@ export function validateManifestBody(parsed: Record<string, unknown>, issues: Ma
   validateDefaultAgentV3(parsed.default_agent, 'default_agent', agents, myKortixDeclaredOn(parsed.builtin_agents), issues);
   validateTriggerAgentRefsV2(parsed.triggers, 'triggers', [...agents.keys()], issues);
   validateAgentPolicySetRefs(parsed.agents, parsed.connectors, 'agents', issues);
+  validateEvals(parsed.evals, 'evals', issues, [...agents.keys()]);
 }
 
 /**

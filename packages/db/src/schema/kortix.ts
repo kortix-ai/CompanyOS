@@ -10408,3 +10408,97 @@ export const creditCodeRedemptions = kortixSchema.table('credit_code_redemptions
   uniqueIndex('uniq_credit_code_redemptions_code_account').on(table.codeId, table.accountId),
   index('idx_credit_code_redemptions_account').on(table.accountId),
 ]).enableRLS();
+
+// ── Evals (`apps/api/src/projects/evals/`, flag `evals`) ─────────────────────
+// A job is a set of trials: tasks × agents × attempts, in Harbor's task format.
+// The job folder in the project's Files holds the content (config, results,
+// verifier output). These rows are its index and the runner's queue state.
+export const evalJobs = kortixSchema.table('eval_jobs', {
+  jobId: uuid('job_id').defaultRandom().primaryKey(),
+  projectId: uuid('project_id')
+    .notNull()
+    .references(() => projects.projectId, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').notNull(),
+  /** The `evals:` suite of kortix.yaml the job ran; null for an ad-hoc config. */
+  suite: text('suite'),
+  jobName: text('job_name').notNull(),
+  status: text('status').$type<'queued' | 'running' | 'completed' | 'cancelled'>().default('queued').notNull(),
+  /** The commit the config and the tasks were read at. */
+  commitSha: text('commit_sha'),
+  ref: text('ref'),
+  /** The resolved job config (`EvalJobConfig` of @kortix/api-contract). */
+  config: jsonb('config').$type<Record<string, unknown>>().notNull(),
+  /** `EvalJobStats`, recomputed whenever a trial ends. */
+  stats: jsonb('stats').$type<Record<string, unknown>>().default({}).notNull(),
+  rerunOf: uuid('rerun_of'),
+  driveId: uuid('drive_id'),
+  /** Files path of the job folder, `/Evals/<job_name>`. */
+  folder: text('folder').notNull(),
+  createdBy: uuid('created_by'),
+  /**
+   * Who started the job, as the session create needs it: principal type,
+   * token kind and the session the token acts from. Trial sessions are
+   * created as this principal. Null on jobs from before the column.
+   */
+  startedBy: jsonb('started_by').$type<Record<string, unknown>>(),
+  /** `Idempotency-Key` of the POST that created the job, and a hash of its body. */
+  idempotencyKey: text('idempotency_key'),
+  requestHash: text('request_hash'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_eval_jobs_project_created').on(table.projectId, table.createdAt),
+  uniqueIndex('uniq_eval_jobs_project_name').on(table.projectId, table.jobName),
+  index('idx_eval_jobs_active').on(table.status).where(sql`${table.status} in ('queued', 'running')`),
+  check('eval_jobs_status_check', sql`${table.status} in ('queued', 'running', 'completed', 'cancelled')`),
+]).enableRLS();
+
+export const evalTrials = kortixSchema.table('eval_trials', {
+  trialId: uuid('trial_id').defaultRandom().primaryKey(),
+  jobId: uuid('job_id')
+    .notNull()
+    .references(() => evalJobs.jobId, { onDelete: 'cascade' }),
+  projectId: uuid('project_id').notNull(),
+  /** `<task>__<agent>__<attempt>`; a retry appends `__r<n>`. The trial's folder name. */
+  trialName: text('trial_name').notNull(),
+  taskName: text('task_name').notNull(),
+  /** Where the task is read from (`EvalTaskRef`): a repository path, or a git url and commit. */
+  taskRef: jsonb('task_ref').$type<Record<string, unknown>>().notNull(),
+  agent: text('agent').notNull(),
+  model: text('model'),
+  attempt: integer('attempt').notNull(),
+  retry: integer('retry').default(0).notNull(),
+  status: text('status')
+    .$type<'queued' | 'starting' | 'agent_running' | 'verifying' | 'completed' | 'errored' | 'cancelled'>()
+    .default('queued')
+    .notNull(),
+  sessionId: text('session_id'),
+  /** The verifier's reward: `{ reward: 1 }` or one number per key. */
+  rewards: jsonb('rewards').$type<Record<string, number>>(),
+  rewardValid: boolean('reward_valid').default(false).notNull(),
+  /** `EvalException`: the first error of the trial, with its policy. */
+  exception: jsonb('exception').$type<Record<string, unknown>>(),
+  /** The runner's working state for the current phase (deadlines, the in-sandbox job). Not part of the result. */
+  runState: jsonb('run_state').$type<Record<string, unknown>>().default({}).notNull(),
+  usage: jsonb('usage').$type<Record<string, number>>(),
+  environmentStartedAt: timestamp('environment_started_at', { withTimezone: true }),
+  environmentFinishedAt: timestamp('environment_finished_at', { withTimezone: true }),
+  agentStartedAt: timestamp('agent_started_at', { withTimezone: true }),
+  agentFinishedAt: timestamp('agent_finished_at', { withTimezone: true }),
+  verifierStartedAt: timestamp('verifier_started_at', { withTimezone: true }),
+  verifierFinishedAt: timestamp('verifier_finished_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_eval_trials_job').on(table.jobId, table.taskName, table.agent, table.attempt),
+  uniqueIndex('uniq_eval_trials_job_name').on(table.jobId, table.trialName),
+  index('idx_eval_trials_session').on(table.sessionId).where(sql`${table.sessionId} is not null`),
+  check(
+    'eval_trials_status_check',
+    sql`${table.status} in ('queued', 'starting', 'agent_running', 'verifying', 'completed', 'errored', 'cancelled')`,
+  ),
+]).enableRLS();

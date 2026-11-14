@@ -41,6 +41,8 @@ export type SessionInvocationSource =
   | 'system:space-watcher'
   /** The goal engine (`projects/goals/`, flag `goals`): owner and verifier sessions and their prompts. */
   | 'system:goal'
+  /** The eval runner (`projects/evals/`, flag `evals`): one session per trial. */
+  | 'system:eval'
   | 'admin';
 
 /** `on_backpressure` is for trigger fires only; see `backpressure.ts`. */

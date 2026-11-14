@@ -27,6 +27,7 @@
  */
 
 import { useTranslations } from '@/i18n/use-translations';
+import { useSearchParams as usePageSearchParams } from 'next/navigation';
 import { invalidatePermissionProbes, qk, useWorkspace } from '@kortix/sdk/react';
 import {
   ArrowSquareOutIcon as ExternalLink,
@@ -88,7 +89,6 @@ import { BillingTab } from '@/features/accounts/settings/billing-tab';
 import { BrandingTab } from '@/features/accounts/settings/branding-tab';
 import { TransactionsTab } from '@/features/accounts/settings/transactions-tab';
 import { ALL_PROJECTS } from '@/features/billing/cost-explorer/cost-explorer';
-import { useSearchParams as usePageSearchParams } from 'next/navigation';
 import { GlobalUpgradeModal } from '@/features/billing/global-upgrade-modal';
 import { useBrandingScope } from '@kortix/ui/internal/branding/branding-provider';
 import { Close } from '@kortix/ui/icons';

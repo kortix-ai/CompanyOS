@@ -63,7 +63,7 @@ export function ParticipantMark({
 }) {
   const t = useTranslations('calendar');
   if (who.kind === 'agent') {
-    return <AgentMark slug={who.agent} size={14} tile={AGENT_TILE[size]} label={agentDisplayName(who.agent)} className={cn(ring && 'ring-background ring-2')} />;
+    return <AgentMark slug={who.agent} size={14} tile={AGENT_TILE[size]} label={agentDisplayName(who.agent)} className={cn(ring && 'ring-background relative ring-2')} />;
   }
   const person = directory.person(who.user_id);
   const name = personName(person, t('formerMember'));

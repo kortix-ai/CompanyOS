@@ -110,8 +110,8 @@ export async function listAccountTokens(
   const params = new URLSearchParams();
   if (accountId) params.set('account_id', accountId);
   if (options?.mine) params.set('mine', 'true');
-  const qs = params.size > 0 ? `?${params.toString()}` : '';
-  return unwrap(await backendApi.get<AccountToken[]>(`/accounts/tokens${qs}`));
+  const qs = params.toString();
+  return unwrap(await backendApi.get<AccountToken[]>(`/accounts/tokens${qs ? `?${qs}` : ''}`));
 }
 
 /** Approve a CLI device login (`kortix login` on a machine with no browser
@@ -173,10 +173,10 @@ export async function revokeAccountToken(
   const params = new URLSearchParams();
   if (accountId) params.set('account_id', accountId);
   if (options?.deleteRevoked) params.set('delete_revoked', 'true');
-  const qs = params.size > 0 ? `?${params.toString()}` : '';
+  const qs = params.toString();
   return unwrap(
     await backendApi.delete<{ ok: boolean; deleted?: boolean }>(
-      `/accounts/tokens/${encodeURIComponent(tokenId)}${qs}`,
+      `/accounts/tokens/${encodeURIComponent(tokenId)}${qs ? `?${qs}` : ''}`,
     ),
   );
 }

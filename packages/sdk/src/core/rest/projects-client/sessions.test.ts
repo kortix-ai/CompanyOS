@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { configureKortix } from '../../http/config';
+import { withSizelessURLSearchParams } from '../../test-fixtures';
 import { type SavedCopyStore, setSavedCopyStore } from '../../session-sync/saved-copy-store';
 import { clearSessionFresh, isSessionFresh } from '../../http/fresh-sessions';
 import { onSessionDeleted, onSessionStopped } from '../../http/session-stopped';
@@ -2062,4 +2063,14 @@ test('fork create retains saved history instead of mounting the empty fresh shel
   await createWorkspaceSession('synthetic-project', { fork_from_session_id: 'synthetic-source' });
   expect(calls[0]?.body).toEqual({ fork_from_session_id: 'synthetic-source' });
   expect(isSessionFresh('synthetic-fork')).toBe(false);
+});
+
+test('listProjectSessionsPage keeps its filters under the mobile URLSearchParams polyfill (KRTX-4898)', async () => {
+  nextResponse = { status: 200, body: [] };
+  await withSizelessURLSearchParams(() =>
+    listWorkspaceSessionsPage('P1', { parent: 'root', startedBy: 'me', limit: 20 }),
+  );
+  expect(last().url).toBe('http://test.local/workspaces/P1/sessions?limit=20&parent=root&started_by=me');
+  await withSizelessURLSearchParams(() => listWorkspaceSessionsPage('P1', { view: 'pinned' }));
+  expect(last().url).toBe('http://test.local/workspaces/P1/sessions?pinned=only');
 });

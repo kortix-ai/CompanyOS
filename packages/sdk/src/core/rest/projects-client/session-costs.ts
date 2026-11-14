@@ -184,7 +184,8 @@ function appendWindow(query: URLSearchParams, options: CostWindowOptions): void 
 /** `?<query>` when non-empty, else `''` — shared by every list/get below so
  *  the empty-query case (no trailing `?`) is expressed exactly once. */
 function suffix(query: URLSearchParams): string {
-  return query.size > 0 ? `?${query}` : '';
+  const qs = query.toString();
+  return qs ? `?${qs}` : '';
 }
 
 export async function listSessionCosts(

@@ -118,8 +118,9 @@ export async function readRuntimeLogPage(
   const params = new URLSearchParams();
   if (query.thread) params.set('thread', query.thread);
   if (query.limit !== undefined) params.set('limit', String(query.limit));
+  const qs = params.toString();
   try {
-    const response = await fetch(new Request(`${runtimeUrl.replace(/\/$/, '')}/kortix/runtime/log${params.size ? `?${params}` : ''}`, { method: 'GET' }));
+    const response = await fetch(new Request(`${runtimeUrl.replace(/\/$/, '')}/kortix/runtime/log${qs ? `?${qs}` : ''}`, { method: 'GET' }));
     if (!response.ok) return null;
     const page = (await response.json()) as Partial<SessionLogPage> | null;
     const whole = !!page && typeof page.session === 'object' && page.session !== null && Array.isArray(page.threads)

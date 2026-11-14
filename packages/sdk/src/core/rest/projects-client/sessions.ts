@@ -527,7 +527,8 @@ function projectSessionListQuery(options?: ListProjectSessionsOptions): string {
   if (options?.agent) params.set('agent', options.agent);
   if (options?.updatedAfter) params.set('updated_after', options.updatedAfter);
   if (options?.teamLead) params.set('team_lead', options.teamLead);
-  return params.size > 0 ? `?${params}` : '';
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
 }
 
 /**

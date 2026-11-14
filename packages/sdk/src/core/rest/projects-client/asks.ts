@@ -79,8 +79,8 @@ export async function listSessionAsks(
   const query = new URLSearchParams();
   if (options.surfaceSessionId) query.set('surface_session_id', options.surfaceSessionId);
   if (options.limit) query.set('limit', String(options.limit));
-  const suffix = query.size ? `?${query.toString()}` : '';
-  return unwrap(await backendApi.get<SessionAsksResponse>(`/workspaces/${projectId}/asks${suffix}`));
+  const qs = query.toString();
+  return unwrap(await backendApi.get<SessionAsksResponse>(`/workspaces/${projectId}/asks${qs ? `?${qs}` : ''}`));
 }
 
 /** Answer a question, or decide a permission or colleague access ask. Throws on a refusal, including an ask already decided (409). */

@@ -110,7 +110,8 @@ export function createRuntimeVerbs(input: RuntimeVerbsInput) {
         const query = new URLSearchParams();
         if (limit !== undefined) query.set('limit', String(limit));
         if (before) query.set('before', before);
-        const suffix = `/messages/${conversation}${query.size ? `?${query}` : ''}`;
+        const qs = query.toString();
+        const suffix = `/messages/${conversation}${qs ? `?${qs}` : ''}`;
         const read = (mount: string) =>
           input.fetch(
             new Request(`${base}${mount}${suffix}`, { method: 'GET', ...(options.signal ? { signal: options.signal } : {}) }),
@@ -163,8 +164,8 @@ export function createRuntimeVerbs(input: RuntimeVerbsInput) {
       if (query.thread) params.set('thread', query.thread);
       if (query.before_seq !== undefined) params.set('before_seq', String(query.before_seq));
       if (query.limit !== undefined) params.set('limit', String(query.limit));
-      const suffix = params.size ? `?${params}` : '';
-      return action<RuntimeLogPage>('GET', `/kortix/runtime/log${suffix}`, undefined, 'Reading the session log failed');
+      const qs = params.toString();
+      return action<RuntimeLogPage>('GET', `/kortix/runtime/log${qs ? `?${qs}` : ''}`, undefined, 'Reading the session log failed');
     },
 
     /** Answer a permission request: allow this call, allow the capability for the session, or deny. */

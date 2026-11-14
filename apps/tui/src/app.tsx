@@ -327,8 +327,8 @@ export function App({
 
   // ── what is open: names for the splash, the tray and the header ─────────
 
-  // These lists are already in the query cache for the sidebar and the
-  // `/sessions` panel; reading them here costs no extra request.
+  // The `/sessions` panel reads this same list (every starter), and the
+  // sidebar these projects: one request each for all of them.
   const sessions = useProjectSessions(projectId ?? '', { enabled: Boolean(projectId) });
   const projects = useProjects(accountId ?? undefined);
   const sessionRow = useMemo(

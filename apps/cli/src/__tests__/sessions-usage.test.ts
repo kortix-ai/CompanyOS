@@ -230,6 +230,24 @@ describe('kortix sessions usage (real process)', () => {
     expect(r.out).toContain('totals are partial');
   });
 
+  test('a member-set title or agent name cannot inject terminal escapes into the table', async () => {
+    const sessions = tree.sessions as Array<Record<string, unknown>>;
+    sessions[1] = {
+      ...sessions[1],
+      title: 'evil\x1b[2J\x1b[1;1Hforged\u202e',
+      agent_name: 'bad\x07agent',
+    };
+    const config = writeConfig(startServer());
+    const r = await runCli(['sessions', 'usage', ROOT, ...P], config);
+    expect(r.code).toBe(0);
+    expect(r.stdout).not.toContain('\x1b[2J');
+    expect(r.stdout).not.toContain('\x1b[1;1H');
+    expect(r.stdout).not.toContain('\u202e');
+    expect(r.stdout).not.toContain('\x07');
+    expect(r.stdout).toContain('evilforged?');
+    expect(r.stdout).toContain('bad?agent');
+  });
+
   test('a refused read exits non-zero with the API error', async () => {
     usageStatus = 403;
     const config = writeConfig(startServer());

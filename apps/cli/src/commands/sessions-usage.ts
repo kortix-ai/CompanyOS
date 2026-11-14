@@ -14,6 +14,7 @@
  */
 import { emitJson, locateSessionAnywhere, surfaceApiError } from '../command-helpers.ts';
 import { C, help, money, pad, status } from '../style.ts';
+import { terminalSafe } from '../token-denial.ts';
 import { parseCommon } from './sessions-lifecycle.ts';
 
 const USAGE_HELP = help`Usage: kortix sessions usage <session-id> [options]
@@ -108,11 +109,13 @@ export async function runSessionsUsage(argv: string[]): Promise<number> {
     '',
   ];
   for (const s of tree.sessions) {
-    const label = `${'  '.repeat(s.depth)}${s.title ?? s.session_id.slice(0, 8)}`;
+    // A title and an agent name are set by workspace members: never let one
+    // move the cursor or recolor the row (and so forge the figures beside it).
+    const label = `${'  '.repeat(s.depth)}${terminalSafe(s.title ?? s.session_id.slice(0, 8))}`;
     out.push(
       `  ${pad(label, 40)} ${money(s.cost).padStart(10)}  ` +
         `${C.dim}paid ${money(s.kortix_cost)} · byok ${money(s.provider_cost)} · ${num(s.request_count)} req · ` +
-        `${num(s.input_tokens)}/${num(s.output_tokens)} tok · cached ${num(s.cached_tokens)} · ${s.agent_name ?? 'unknown'}${C.reset}`,
+        `${num(s.input_tokens)}/${num(s.output_tokens)} tok · cached ${num(s.cached_tokens)} · ${terminalSafe(s.agent_name ?? 'unknown')}${C.reset}`,
     );
   }
   if (tree.hidden_sessions > 0) {

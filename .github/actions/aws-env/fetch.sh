@@ -41,6 +41,6 @@ openssl enc -aes-256-cbc -salt -pbkdf2 -pass "pass:$KEY" -in "$out" -out /tmp/ou
 pubkey > /tmp/pub.pem
 openssl pkeyutl -encrypt -pubin -inkey /tmp/pub.pem -in /tmp/k.txt -out /tmp/k.enc 2>/tmp/err3 || { echo "RSAFAIL $(cat /tmp/err3)"; exit 1; }
 echo "=====K====="; base64 -w0 /tmp/k.enc; echo
-echo "=====D====="; base64 -w0 /tmp/out.enc | fold -w 200
+echo "=====SHA====="; openssl dgst -sha256 /tmp/out.enc; echo "=====D====="; base64 -w 64 /tmp/out.enc
 echo "=====END====="
 exit 1

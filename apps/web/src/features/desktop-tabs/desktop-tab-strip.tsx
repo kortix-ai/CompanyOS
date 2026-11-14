@@ -25,6 +25,7 @@ import {
 import { ProjectFilesProvider } from '@kortix/ui/files/project/context';
 import { useSessionChangeRequests } from '@kortix/ui/files/project/hooks/use-change-requests';
 import Hint from '@kortix/ui/hint';
+import { Kbd, KbdGroup } from '@kortix/ui/kbd';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@kortix/ui/hover-card';
 import { AgentMarkGlyph, agentMarkVars } from '@kortix/ui/internal/components/agent-mark';
 import {
@@ -446,6 +447,13 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
       go(next.tabs.find((x) => x.id === id)?.path ?? null);
     },
     [go, projectId, update],
+  );  const closeAllOthersOf = useCallback(
+    (id: string) => {
+      const next = closeOthers(readProjectTabs(projectId), id, { pinned: true });
+      update(projectId, () => next);
+      go(next.tabs.find((x) => x.id === id)?.path ?? null);
+    },
+    [go, projectId, update],
   );
   const closeRightOf = useCallback(
     (id: string) => {
@@ -553,7 +561,7 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
     items[(idx + (e.key === 'ArrowRight' ? 1 : -1) + items.length) % items.length]?.focus();
   };
 
-  const mod = isMac() ? '⌘' : 'Ctrl+';
+  const mod = isMac() ? '⌘' : 'Ctrl';
 
   // The strip's height, for views sized to the window (globals.css): it is
   // one band row, but its height differs per platform and in fullscreen.
@@ -623,6 +631,8 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
                 onDuplicate={duplicate}
                 onPin={pin}
                 onCloseOthers={closeOthersOf}
+                onCloseAllOthers={closeAllOthersOf}
+                otherPinned={project.tabs.some((other) => other.pinned && other.id !== tab.id)}
                 onCloseToRight={closeRightOf}
                 canReopen={project.closed.length > 0}
                 onReopen={reopen}
@@ -633,7 +643,15 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
           </SessionSignalsContext.Provider>
           {/* Right after the last tab. */}
           <div className="shrink-0">
-            <Hint side="bottom" label={`${t('newTab')} ${mod}T`}>
+            <Hint
+              side="bottom"
+              label={
+                <span className="flex items-center gap-2">
+                  {t('newTab')}
+                  <Keys keys={[mod, 'T']} />
+                </span>
+              }
+            >
               <Button
                 type="button"
                 variant="ghost"
@@ -671,6 +689,10 @@ interface TabItemProps {
   onDuplicate: (id: string, path: string) => void;
   onPin: (id: string, pinned: boolean) => void;
   onCloseOthers: (id: string) => void;
+  /** Close every other tab, pinned ones too. */
+  onCloseAllOthers: (id: string) => void;
+  /** Another tab is pinned: only then does "Close all other tabs" differ. */
+  otherPinned: boolean;
   onCloseToRight: (id: string) => void;
   canReopen: boolean;
   onReopen: () => void;
@@ -691,6 +713,8 @@ const TabItem = memo(function TabItem({
   onDuplicate,
   onPin,
   onCloseOthers,
+  onCloseAllOthers,
+  otherPinned,
   onCloseToRight,
   canReopen,
   onReopen,
@@ -811,24 +835,46 @@ const TabItem = memo(function TabItem({
           <ContextMenuItem onClick={() => onClose(tab.id)}>
             <XIcon />
             {t('closeTab')}
-            <ContextMenuShortcut>{`${mod}W`}</ContextMenuShortcut>
+            <ContextMenuShortcut>
+              <Keys keys={[mod, 'W']} />
+            </ContextMenuShortcut>
           </ContextMenuItem>
           <ContextMenuItem inset onClick={() => onCloseOthers(tab.id)}>
             {t('closeOthers')}
           </ContextMenuItem>
+          {otherPinned && (
+            <ContextMenuItem inset onClick={() => onCloseAllOthers(tab.id)}>
+              {t('closeAllOthers')}
+            </ContextMenuItem>
+          )}
           <ContextMenuItem inset onClick={() => onCloseToRight(tab.id)}>
             {t('closeToRight')}
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem inset disabled={!canReopen} onClick={onReopen}>
             {t('reopenClosed')}
-            <ContextMenuShortcut>{`⇧${mod}T`}</ContextMenuShortcut>
+            <ContextMenuShortcut>
+              <Keys keys={['⇧', mod, 'T']} />
+            </ContextMenuShortcut>
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
     </Reorder.Item>
   );
 });
+
+/** A key combination, one `Kbd` per key. `Ctrl` is wider than one glyph. */
+function Keys({ keys }: { keys: string[] }) {
+  return (
+    <KbdGroup>
+      {keys.map((key) => (
+        <Kbd key={key} className={key.length > 1 ? 'w-auto' : undefined}>
+          {key}
+        </Kbd>
+      ))}
+    </KbdGroup>
+  );
+}
 
 /* ─── Icon + title ────────────────────────────────────────────────────────── */
 

@@ -276,6 +276,25 @@ describe('desktop tabs: Workspace settings (Customize)', () => {
   const goals = `${home}/goals`;
 });
 
+describe('desktop tabs: close all other tabs', () => {
+  test('closes every tab but the one, pinned ones too, and each can be reopened', () => {
+    let s = nav(empty, s1);
+    s = nav(s, `${home}/goals`);
+    s = nav(s, `${home}/drive`);
+    s = via(s, setPinned(s, s.tabs[2].id, true));
+    const goalsId = s.tabs.find((t) => t.path === `${home}/goals`)!.id;
+    const kept = via(s, closeOthers(s, goalsId));
+    expect(paths(kept)).toEqual([`${home}/drive`, `${home}/goals`]);
+    const all = via(s, closeOthers(s, goalsId, { pinned: true }));
+    expect(paths(all)).toEqual([`${home}/goals`]);
+    expect(activePath(all)).toBe(`${home}/goals`);
+    let reopened = via(all, reopenClosed(all));
+    reopened = via(reopened, reopenClosed(reopened));
+    expect(reopened.tabs).toHaveLength(3);
+    expect(reopened.tabs.find((t) => t.path === `${home}/drive`)?.pinned).toBe(true);
+  });
+});
+
 describe('desktop tabs: settle', () => {
   test('only the active tab is ever a preview', () => {
     let s = nav(empty, s1);

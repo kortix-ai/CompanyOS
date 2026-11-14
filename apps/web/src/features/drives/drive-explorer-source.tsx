@@ -30,22 +30,30 @@ import { ScopedCache } from '@kortix/ui/internal/lib/storage/managed-storage';
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-const DriveFilesContext = createContext<{ driveId: string; userId?: string; personalFolder: string | null } | null>(null);
+import { hiddenMemberPath } from './drive-places';
+
+const DriveFilesContext = createContext<{ driveId: string; userId?: string; personalFolder: string | null; hideMemberDrives: boolean } | null>(null);
 
 /** `userId` turns on the saved listings below; they are kept per person. */
 export function DriveFilesProvider({
   driveId,
   userId,
   personalFolder,
+  hideMemberDrives = false,
   children,
 }: {
   driveId: string;
   userId?: string;
   /** The caller's own folder, listed with "(You)". */
   personalFolder?: string | null;
+  /** Drive's own page: `/Users` and other members' desktops stay out of listings ({@link hiddenMemberPath}). */
+  hideMemberDrives?: boolean;
   children: ReactNode;
 }) {
-  const value = useMemo(() => ({ driveId, userId, personalFolder: personalFolder ?? null }), [driveId, userId, personalFolder]);
+  const value = useMemo(
+    () => ({ driveId, userId, personalFolder: personalFolder ?? null, hideMemberDrives }),
+    [driveId, userId, personalFolder, hideMemberDrives],
+  );
   return <DriveFilesContext.Provider value={value}>{children}</DriveFilesContext.Provider>;
 }
 
@@ -93,7 +101,7 @@ const idle = <T,>(): ExplorerQueryResult<T> => ({
 });
 
 function useDriveFileList(dirPath: string): ExplorerQueryResult<FileNode[]> {
-  const { driveId, userId, personalFolder } = useDriveFilesContext();
+  const { driveId, userId, personalFolder, hideMemberDrives } = useDriveFilesContext();
   const t = useTranslations('drives');
   const path = toDrivePath(dirPath);
   const scope = userId ? `${userId}:${driveId}:${path}` : null;
@@ -111,7 +119,7 @@ function useDriveFileList(dirPath: string): ExplorerQueryResult<FileNode[]> {
   const data = useMemo<FileNode[] | undefined>(
     () =>
       query.data?.entries
-        .filter((e) => e.type !== 'symlink')
+        .filter((e) => e.type !== 'symlink' && !hiddenMemberPath(e.path, personalFolder, !hideMemberDrives))
         .map((e) => ({
           name: e.path === personalFolder ? t('treeYou', { name: e.name }) : e.name,
           path: fromDrivePath(e.path),
@@ -119,7 +127,7 @@ function useDriveFileList(dirPath: string): ExplorerQueryResult<FileNode[]> {
           type: e.type === 'dir' ? 'directory' : 'file',
           ignored: false,
         })),
-    [query.data, personalFolder, t],
+    [query.data, personalFolder, hideMemberDrives, t],
   );
   return { data, isLoading: query.isLoading, isFetching: query.isFetching, error: query.error, refetch: query.refetch };
 }

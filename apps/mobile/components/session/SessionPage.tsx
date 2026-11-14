@@ -147,6 +147,7 @@ import {
   anchorSpan,
   chevronVisible,
   distanceFromEnd,
+  extentShortfall,
   isAtEnd,
   momentumFollows,
   nextFollow,
@@ -1322,6 +1323,14 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
   const [room, setRoom] = useState(0);
   const roomRef = useRef(0);
   const renderedRoomRef = useRef(0);
+  // iOS (KRTX-4899): the native scroll extent (scroll events' `contentSize`)
+  // can end short of the laid-out content (`onContentSizeChange`). The list
+  // then rests with the newest answer's tail under the composer, and a swipe
+  // to it springs back. The gap pads the list's native bottom inset until the
+  // native extent catches up.
+  const [extentInset, setExtentInset] = useState(0);
+  const extentInsetRef = useRef(0);
+  const extentContentInset = useMemo(() => ({ bottom: extentInset }), [extentInset]);
   // The last room handed to `setRoom`. While the keyboard moves, the list's
   // height changes every frame (the page's `keyboardInset` padding), and a
   // room per frame is a page render per frame. A room that shrinks is blank
@@ -1508,6 +1517,26 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
       settleRef.current();
     });
   }, []);
+
+  /** Compare the native extent of a scroll event with the layout (iOS). */
+  const checkExtent = useCallback((nativeHeight: number) => {
+    if (Platform.OS !== 'ios') return;
+    const next = extentShortfall({ laidOutHeight: contentHeightRef.current, nativeHeight });
+    if (next === extentInsetRef.current) return;
+    extentInsetRef.current = next;
+    setExtentInset(next);
+    if (next > 0) {
+      log.error('[SessionPage] native scroll extent short of layout', {
+        laidOutHeight: contentHeightRef.current,
+        nativeHeight,
+        shortfall: next,
+      });
+    }
+  }, []);
+  // Once the inset is on screen, a following list moves to the laid-out end.
+  useEffect(() => {
+    if (extentInset > 0) scheduleSettle();
+  }, [extentInset, scheduleSettle]);
 
   // A taller or shorter composer moves the end padding: settle once, like any layout change.
   const handleComposerAreaLayout = useCallback(
@@ -1757,9 +1786,10 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
       const offset = Math.max(0, contentOffset.y || 0);
       currentOffsetRef.current = offset;
+      checkExtent(contentSize.height);
       const distance = distanceFromEnd({
         offset,
-        contentHeight: contentSize.height,
+        contentHeight: contentSize.height + extentInsetRef.current,
         viewportHeight: layoutMeasurement.height,
       });
       if (!isOwnScroll()) settledAtEndRef.current = isAtEnd(distance);
@@ -1768,7 +1798,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
       updateScrollButton(distance);
       persistScrollOffset(sessionId, offset);
     },
-    [sessionId, persistScrollOffset, isOwnScroll, setFollow, updateScrollButton],
+    [sessionId, persistScrollOffset, isOwnScroll, setFollow, updateScrollButton, checkExtent],
   );
 
   const handleScrollEndDrag = useCallback(
@@ -1832,11 +1862,16 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
       const geometryChanged =
         contentSize.height !== last.contentHeight || layoutMeasurement.height !== last.viewportHeight;
       scrollGeometryRef.current = { contentHeight: contentSize.height, viewportHeight: layoutMeasurement.height };
-      const distance = distanceFromEnd({
+      // At the native end with no finger down: is that the laid-out end too?
+      const nativeDistance = distanceFromEnd({
         offset,
         contentHeight: contentSize.height,
         viewportHeight: layoutMeasurement.height,
       });
+      if (!draggingRef.current && (extentInsetRef.current > 0 || isAtEnd(nativeDistance))) {
+        checkExtent(contentSize.height);
+      }
+      const distance = nativeDistance + extentInsetRef.current;
 
       const wasFollowing = followRef.current;
       const next = nextFollow(wasFollowing, {
@@ -1867,7 +1902,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
         }
       }
     },
-    [isOwnScroll, setFollow, updateScrollButton, endGlide],
+    [isOwnScroll, setFollow, updateScrollButton, endGlide, checkExtent],
   );
 
   const handleContentSizeChange = useCallback(
@@ -2271,6 +2306,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
         <FlatList
           ref={flatListRef}
           style={LIST_DRAWS_UNDER_KEYBOARD}
+          contentInset={extentContentInset}
           data={turns}
           renderItem={renderTurn}
           keyExtractor={keyExtractor}

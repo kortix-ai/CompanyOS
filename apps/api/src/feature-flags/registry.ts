@@ -583,6 +583,23 @@ const FLAGS: readonly FeatureFlagDef[] = [
       'BOX: the API lists the flag in KORTIX_FEATURE_FLAGS (projects/lib/feature-flag-env.ts); pi reads the compiled agent `run` and, only with the flag, ' +
       'runs it per turn in place of the model step (harness/pi/program.ts). WEB: the agent page shows the command in place of the model.',
   },
+  {
+    key: 'evals',
+    name: 'Evals',
+    description:
+      'Run your agents on a list of tasks and score the results. A task is an instruction, a sandbox and a test script that writes a score (the Harbor task format). Declare a set of tasks under `evals:` in kortix.yaml, run it against any agent and model, and compare runs to see whether a change made the agent better or worse.',
+    stability: 'experimental',
+    // A job keeps its results in Files, and every drive is a Platinum volume.
+    available: () => Boolean(config.PLATINUM_API_KEY),
+    platformDefault: () => false,
+    enforcement: 'routes',
+    enforcementNote:
+      'ROUTES: every /v1/workspaces/:id/evals* route answers 403 `feature_disabled` when off (projects/routes/evals.ts). ' +
+      'The `eval-runner` worker job (worker/jobs/eval-runner.ts) starts no trial of a project whose flag is off: its queued trials ' +
+      'wait, and its running trials finish. BOX: off, a session box has no kortix-evals skill and its CLI hides `kortix evals` ' +
+      '(KORTIX_FEATURE_FLAGS → kortixd). The `evals:` section of kortix.yaml stays valid either way. The eval_jobs and eval_trials ' +
+      'rows and the Evals folder in Files stay.',
+  },
 ];
 
 const FLAG_BY_KEY: Record<FeatureFlagKey, FeatureFlagDef> = Object.fromEntries(

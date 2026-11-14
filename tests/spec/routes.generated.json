@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1761,
-  "aliases": 678,
+  "count": 1763,
+  "aliases": 679,
   "routes": [
     {
       "method": "GET",
@@ -3647,6 +3647,11 @@
       "aliasOf": "/v1/workspaces/:workspaceId/gateway/sources"
     },
     {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/gateway/usage",
+      "aliasOf": "/v1/workspaces/:workspaceId/gateway/usage"
+    },
+    {
       "method": "PUT",
       "path": "/v1/projects/:workspaceId/git-credential",
       "aliasOf": "/v1/workspaces/:workspaceId/git-credential"
@@ -6344,6 +6349,10 @@
     {
       "method": "GET",
       "path": "/v1/workspaces/:workspaceId/gateway/sources"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/gateway/usage"
     },
     {
       "method": "PUT",

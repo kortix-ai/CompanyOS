@@ -140,6 +140,8 @@ export type FeatureFlagKey =
   | 'program_agents'
   /** Evals: run agents on Harbor-format tasks and score them (`evals:` in kortix.yaml, `kortix evals`). Experimental, off by default. */
   | 'evals'
+  /** Calendar: a shared calendar of dated items with an owner and comments, plus the project's scheduled triggers (`kortix calendar`). Experimental, off by default. */
+  | 'calendar'
   /** @deprecated Withdrawn — agents messaging people left the product. The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'human_messaging';
 
@@ -203,6 +205,7 @@ export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'spaces_proactive',
   'program_agents',
   'evals',
+  'calendar',
 ] as const;
 
 /**

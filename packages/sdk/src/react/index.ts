@@ -192,6 +192,12 @@ export {
   useWorkspaceEvalTrial,
   useWorkspaceEvalTrialFile,
 } from './use-evals';
+export {
+  useWorkspaceCalendarActions,
+  useWorkspaceCalendarItem,
+  useWorkspaceCalendarItems,
+  useWorkspaceCalendarPeople,
+} from './use-calendar';
 export { useRoom, useRoomConversations, useRoomMessages, useRoomThread, useRooms, useSpaceRoom } from './use-rooms';
 export { usePeerMessages, useReachableAgents, useSessionWorkflows, useTeamTasks, useTeammates } from './use-multi-agent';
 export { prefetchArtifact, useArtifact, useArtifactMutations, useArtifactText, useArtifactTypes, useArtifactVersions, useArtifacts } from './use-artifacts';

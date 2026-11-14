@@ -600,6 +600,23 @@ const FLAGS: readonly FeatureFlagDef[] = [
       '(KORTIX_FEATURE_FLAGS → kortixd). The `evals:` section of kortix.yaml stays valid either way. The eval_jobs and eval_trials ' +
       'rows and the Evals folder in Files stay.',
   },
+  {
+    key: 'calendar',
+    name: 'Calendar',
+    description:
+      'A shared calendar for people and agents: items with a date, an owner and comments, beside the scheduled triggers and Loops. Mention someone with @ to notify them. Agents use `kortix calendar`.',
+    stability: 'experimental',
+    available: () => true,
+    platformDefault: () => false,
+    enforcement: 'routes',
+    enforcementNote:
+      'ROUTES: every /v1/workspaces/:id/calendar* route answers 403 `feature_disabled` when off (projects/routes/calendar.ts). ' +
+      'Nothing runs while it is off: no worker job, no hook on another write; the scheduled triggers on the page are computed in the browser ' +
+      'from GET /triggers/all. NOTIFICATIONS: only a calendar write sends the `mention` kind. Its settings row shows for everyone: ' +
+      'hiding it would cost a query on every preferences read (the web reads them on every page load), and the kind is generic. BOX: off, a session box has no kortix-calendar skill and its CLI hides `kortix calendar` ' +
+      '(KORTIX_FEATURE_FLAGS → kortixd). WEB: no Calendar row and no palette entry; /workspaces/:id/calendar renders FeatureGateScreen. ' +
+      'The calendar_items and calendar_comments rows stay.',
+  },
 ];
 
 const FLAG_BY_KEY: Record<FeatureFlagKey, FeatureFlagDef> = Object.fromEntries(

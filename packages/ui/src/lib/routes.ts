@@ -28,6 +28,8 @@ export interface UiRoutes {
   goals: (projectId: string) => string | null;
   /** The project's artifacts (flag `artifacts`); one is `<artifacts>/<artifact_id>`. */
   artifacts: (projectId: string) => string | null;
+  /** The workspace calendar (flag `calendar`); `?item=<id>` opens one item. Absent: the host has no calendar route. */
+  calendar?: (projectId: string) => string | null;
   /** One space: a channel and its tabs (`?tab=` opens one). */
   space: (projectId: string, slug: string) => string | null;
   members: (projectId: string) => string | null;
@@ -69,6 +71,7 @@ const DEFAULT_ROUTES = {
   apps: (p: string) => `/workspaces/${p}/apps`,
   goals: (p: string) => `/workspaces/${p}/goals`,
   artifacts: (p: string) => `/workspaces/${p}/artifacts`,
+  calendar: (p: string) => `/workspaces/${p}/calendar`,
   space: (p: string, slug: string) => `/workspaces/${p}/spaces/${encodeURIComponent(slug)}`,
   members: (p: string) => `/workspaces/${p}/members`,
   sandboxSettings: (p: string) => `/workspaces/${p}/admin/sandbox`,

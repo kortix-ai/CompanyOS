@@ -66,6 +66,7 @@ import {
   SlidersHorizontalIcon as SlidersHorizontal,
   TargetIcon as Target,
   ChartBarIcon as ChartBar,
+  CalendarBlankIcon as CalendarBlank,
   TerminalIcon as Terminal,
   TextAlignLeftIcon as TextAlignLeft,
   TrayIcon as Tray,
@@ -767,6 +768,20 @@ export const menuRegistry: MenuItemDef[] = [
     requiresProject: true,
     requiresFlag: 'goals',
     keywords: 'goals goal objectives outcomes',
+  },
+  {
+    // The workspace calendar (flag `calendar`): the sidebar Calendar row
+    // (`project-calendar-nav.tsx`), same icon, same route, same gate.
+    id: 'proj-calendar',
+    label: 'Calendar',
+    icon: CalendarBlank,
+    group: 'navigation',
+    showIn: ['commandPalette'],
+    kind: 'navigate',
+    href: '/workspaces/{projectId}/calendar',
+    requiresProject: true,
+    requiresFlag: 'calendar',
+    keywords: 'calendar schedule agenda week month due deadline items triggers',
   },
   {
     // The project's evals (flag `evals`): Customize → Evals.

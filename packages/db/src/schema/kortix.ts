@@ -9592,6 +9592,8 @@ export const notifications = kortixSchema.table('notifications', {
   roomThreadSeq: bigint('room_thread_seq', { mode: 'number' }),
   artifactId: uuid('artifact_id'),
   artifactThreadId: uuid('artifact_thread_id'),
+  // A `mention` row's calendar item (flag `calendar`). No FK: the read filter hides a row whose item is gone.
+  calendarItemId: uuid('calendar_item_id'),
   kind: text('kind').notNull(),
   title: text('title').notNull(),
   body: text('body').default('').notNull(),
@@ -9618,7 +9620,7 @@ export const notifications = kortixSchema.table('notifications', {
   index('idx_notifications_artifact').on(table.artifactId).where(sql`${table.artifactId} IS NOT NULL`),
   index('idx_notifications_artifact_thread').on(table.artifactThreadId).where(sql`${table.artifactThreadId} IS NOT NULL`),
   index('idx_notifications_created').on(table.createdAt),
-  check('notifications_kind', sql`${table.kind} IN ('turn_done', 'turn_error', 'question', 'permission', 'shared', 'automation_failed', 'automation_recovered', 'capture_device_down', 'capture_device_recovered', 'message', 'artifact_comment')`), // 'message': retired with Rooms; old rows age out
+  check('notifications_kind', sql`${table.kind} IN ('turn_done', 'turn_error', 'question', 'permission', 'shared', 'automation_failed', 'automation_recovered', 'capture_device_down', 'capture_device_recovered', 'mention', 'message', 'artifact_comment')`), // 'message': retired with Rooms; old rows age out
 ]);
 
 /** One record per user: partial overrides of the default notification preferences. */
@@ -10501,4 +10503,54 @@ export const evalTrials = kortixSchema.table('eval_trials', {
     'eval_trials_status_check',
     sql`${table.status} in ('queued', 'starting', 'agent_running', 'verifying', 'completed', 'errored', 'cancelled')`,
   ),
+]).enableRLS();
+
+// ─── Calendar (flag `calendar`) ─────────────────────────────────────────────
+// A workspace's shared calendar: dated items with an owner and comments.
+// Scheduled triggers and Loops are not stored here; the clients compute their
+// fires from the trigger list. Every member who can open the workspace reads
+// and writes every item (projects/calendar/).
+
+export const calendarItems = kortixSchema.table('calendar_items', {
+  itemId: uuid('item_id').default(sql`kortix.uuid_v7()`).primaryKey(),
+  projectId: uuid('project_id')
+    .notNull()
+    .references(() => projects.projectId, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  notes: text('notes').default('').notNull(),
+  /** Null: the item has no date ("No date"). With `all_day`, UTC midnight of the date. */
+  startsAt: timestamp('starts_at', { withTimezone: true }),
+  allDay: boolean('all_day').default(false).notNull(),
+  status: text('status').$type<'open' | 'done'>().default('open').notNull(),
+  /** The owner: one person, one agent (its kortix.yaml name), or nobody. */
+  assigneeUserId: uuid('assignee_user_id'),
+  assigneeAgent: text('assignee_agent'),
+  /** Who created it: a person, or an agent session (agent name plus session id). */
+  createdByUserId: uuid('created_by_user_id'),
+  createdByAgent: text('created_by_agent'),
+  /** No FK: a deleted session keeps its items; a reply then wakes nothing. */
+  createdBySessionId: text('created_by_session_id'),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_calendar_items_project_starts').on(table.projectId, table.startsAt),
+  index('idx_calendar_items_project_assignee').on(table.projectId, table.assigneeUserId).where(sql`${table.status} = 'open'`),
+  check('calendar_items_status_check', sql`${table.status} in ('open', 'done')`),
+  check('calendar_items_one_assignee', sql`${table.assigneeUserId} IS NULL OR ${table.assigneeAgent} IS NULL`),
+]).enableRLS();
+
+export const calendarComments = kortixSchema.table('calendar_comments', {
+  commentId: uuid('comment_id').default(sql`kortix.uuid_v7()`).primaryKey(),
+  itemId: uuid('item_id')
+    .notNull()
+    .references(() => calendarItems.itemId, { onDelete: 'cascade' }),
+  projectId: uuid('project_id').notNull(),
+  body: text('body').notNull(),
+  authorUserId: uuid('author_user_id'),
+  authorAgent: text('author_agent'),
+  authorSessionId: text('author_session_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_calendar_comments_item').on(table.itemId, table.commentId),
 ]).enableRLS();

@@ -152,6 +152,45 @@ export function storedLogReadDenial(c: Context, sessionId: string): StoredLogRea
   };
 }
 
+const usageRollupLimiter = new TokenBucketRateLimiter('usage_rollup');
+
+/**
+ * Per-caller ceiling on the account-wide cost rollups (`GET /v1/usage/session-costs`,
+ * `/cost-by-project`, `/cost-summary`; `KORTIX_USAGE_ROLLUPS_PER_MIN`, 60 per
+ * route). INCIDENT 2026-11-13 22:09 UTC (KRTX-4895): one CLI client sent
+ * ~500–800 req/min for four minutes, 368 of them `GET /v1/usage/session-costs`.
+ * Each rollup is a heavy aggregation that holds a DB pool connection until the
+ * 25 s request deadline, so ~140 concurrent callers drained the pool; every other
+ * route (about 40, `GET /v1/notifications` among them) then waited in the auth
+ * lookup for a connection and answered 503 at 25 s (348 5xx of 4955 requests in
+ * one 5-min bucket). The bucket is keyed on (caller, route): a caller only spends
+ * their own budget. 60/min per route keeps every real dashboard, export and CLI
+ * report unthrottled. Replica-local, like every limiter here. Runs after auth, so
+ * the caller is the authenticated user id (else the client key); the 429 carries
+ * `Retry-After` and writes no audit row (a flood must not become an audit flood).
+ */
+export function createUsageRollupRateLimitMiddleware() {
+  return async (c: Context, next: Next) => {
+    const userId = c.get('userId');
+    const caller = typeof userId === 'string' && userId ? userId : requestClientKey(c);
+    const result = usageRollupLimiter.check(`${caller}:${c.req.path}`, {
+      limit: positiveInt(config.KORTIX_USAGE_ROLLUPS_PER_MIN, 60),
+      windowMs: 60_000,
+    });
+    if (result.allowed) return next();
+    const retryAfterSeconds = Math.ceil((result.retryAfterMs ?? result.resetMs) / 1000);
+    return c.json(
+      {
+        error: 'rate_limit_exceeded',
+        message: 'Cost rollups are being requested faster than the limit. Slow the polling or honor Retry-After.',
+        retry_after_seconds: retryAfterSeconds,
+      },
+      429,
+      { 'Retry-After': String(retryAfterSeconds) },
+    );
+  };
+}
+
 /**
  * Per-project budget on secret WRITES (POST/PUT/PATCH/DELETE under
  * /:projectId/secrets*). Reads pass untouched.

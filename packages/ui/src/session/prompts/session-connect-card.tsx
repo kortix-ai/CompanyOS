@@ -1,32 +1,39 @@
 'use client';
 
 /**
- * In-session Connect card, docked above the composer beside
- * `SessionApprovalPrompt` and `SessionAccessPrompt`.
+ * The Connect card of a connector sign-in the agent started, drawn in the
+ * transcript under the call that started it: `kortix connectors connect <app>`
+ * in the shell, or the `kortix_connectors` tool's `connect` (the SDK reads
+ * both, `connectorSignInCalls`). The SDK keeps that call out of every fold, so
+ * the card stays in view the way a pasted `/connect/<token>` link did.
  *
- * An agent runs `kortix connectors connect <app>` and stops: the sign-in it
- * started is a raw provider link, and nothing in Kortix finished the
- * connection when the person came back (2026-11-11). The API records which
- * session asked on the account row (`requesting_session_id`); this card reads
- * those rows (`listSessionConnectRequests`) and finishes each one through
+ * #12500 (2026-11-12) docked this card above the composer. A sign-in the
+ * person never finished stayed docked for the life of the session: a person
+ * who connected the app another way (the native Supabase connector instead of
+ * the Composio toolkit the agent picked) kept the card over the input, with
+ * nothing to dismiss it (2026-11-13). In the transcript it stays where the
+ * agent asked, scrolls away with its turn, and reads "Connected as …" once done.
+ *
+ * The API records which session asked on the account row
+ * (`requesting_session_id`). `SessionConnectRequestsProvider` reads those rows
+ * once per session (`listSessionConnectRequests`); each card picks the ones its
+ * call names (`connectorSignInRequests`) and finishes each through
  * `connectionSignInSteps`: the window opens inside the click, the first request
  * records a sign-in that already finished at the provider, and only an
  * unfinished one goes to a new sign-in page. Finalize tells the session that
  * asked, so the agent continues on its own.
- *
- * Shown: every request still to sign in, and each one that connected while
- * this page was open ("Connected as …"). A request that was connected before
- * the page loaded is history and stays hidden.
  */
 
 import {
   connectionSignInSteps,
+  connectorSignInRequests,
   listSessionConnectRequests,
+  type ConnectorSignInCall,
   type SessionConnectRequest,
 } from '@kortix/sdk';
 import { CheckIcon, PlugsConnectedIcon } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from '../../i18n';
 import { cn } from '../../lib/utils';
 import { runConnectLinkFlow } from '../../internal/hooks/connectors/use-connect-link';
@@ -40,42 +47,43 @@ const BUSY_POLL_MS = 8_000;
 /** A card whose sign-in the person may finish in another tab. */
 const PENDING_POLL_MS = 10_000;
 
+const NO_REQUESTS: readonly SessionConnectRequest[] = Object.freeze([]);
+
 /** Stable id of one request: its account row, or the connector on an older server. */
 export function sessionConnectRequestKey(request: SessionConnectRequest): string {
   return request.connection_id ?? request.slug;
 }
 
-/**
- * The requests on screen: every pending one, plus those that connected after
- * `seenPending` first saw them pending. Pure; exported for tests.
- */
-export function sessionConnectRequestsOnScreen(
-  requests: readonly SessionConnectRequest[],
-  seenPending: ReadonlySet<string>,
-): SessionConnectRequest[] {
-  return requests.filter(
-    (request) => !request.connected || seenPending.has(sessionConnectRequestKey(request)),
-  );
+interface SessionConnectRequests {
+  projectId: string;
+  requests: readonly SessionConnectRequest[];
+  refetch: () => void;
 }
 
-export function SessionConnectPrompt({
+const SessionConnectRequestsContext = createContext<SessionConnectRequests | null>(null);
+
+/**
+ * The session's connect requests, read once for every card in its transcript.
+ * Without a project and session (a read-only view) it provides nothing, and no
+ * call draws a card.
+ */
+export function SessionConnectRequestsProvider({
   projectId,
   sessionId,
   busy,
-  onDockedChange,
+  children,
 }: {
-  projectId: string;
-  sessionId: string;
+  projectId: string | null | undefined;
+  sessionId: string | null | undefined;
   /** The agent is running: poll faster, and read again when it stops. */
   busy: boolean;
-  /** True while a card is on screen: the composer docks onto it. */
-  onDockedChange?: (docked: boolean) => void;
+  children: ReactNode;
 }) {
-  const seenPending = useRef(new Set<string>());
+  const enabled = Boolean(projectId && sessionId);
   const query = useQuery({
     queryKey: ['session-connect-requests', projectId, sessionId],
-    queryFn: () => listSessionConnectRequests(projectId, sessionId),
-    enabled: Boolean(projectId && sessionId),
+    queryFn: () => listSessionConnectRequests(projectId!, sessionId!),
+    enabled,
     staleTime: 2_000,
     retry: false,
     refetchOnWindowFocus: true,
@@ -86,57 +94,78 @@ export function SessionConnectPrompt({
           ? PENDING_POLL_MS
           : false,
   });
-  const { refetch } = query;
+  const { refetch, data } = query;
   // The agent stops right after it starts a sign-in: read once more then.
   const wasBusy = useRef(busy);
   useEffect(() => {
-    if (wasBusy.current && !busy) void refetch();
+    if (enabled && wasBusy.current && !busy) void refetch();
     wasBusy.current = busy;
-  }, [busy, refetch]);
+  }, [busy, enabled, refetch]);
 
-  const requests = query.data ?? [];
-  for (const request of requests) {
-    if (!request.connected) seenPending.current.add(sessionConnectRequestKey(request));
-  }
-  const shown = sessionConnectRequestsOnScreen(requests, seenPending.current);
-  const docked = shown.length > 0;
-  useEffect(() => {
-    onDockedChange?.(docked);
-  }, [docked, onDockedChange]);
-  useEffect(() => () => onDockedChange?.(false), [onDockedChange]);
+  const value = useMemo<SessionConnectRequests | null>(
+    () =>
+      enabled && projectId
+        ? { projectId, requests: data ?? NO_REQUESTS, refetch: () => void refetch() }
+        : null,
+    [enabled, projectId, data, refetch],
+  );
+  return <SessionConnectRequestsContext.Provider value={value}>{children}</SessionConnectRequestsContext.Provider>;
+}
 
-  if (!docked) return null;
+/** The session's connect requests, or null outside a session that can finish them. */
+export function useSessionConnectRequests(): SessionConnectRequests | null {
+  return useContext(SessionConnectRequestsContext);
+}
+
+/**
+ * The Connect card under a call that started connector sign-ins: one row per
+ * request the call names. Nothing when the session holds no such request
+ * (another member's private sign-in, an account removed since).
+ */
+export function SessionConnectCard({
+  calls,
+  className,
+}: {
+  calls: readonly ConnectorSignInCall[];
+  className?: string;
+}) {
+  const context = useSessionConnectRequests();
+  if (!context || calls.length === 0) return null;
+  const requests = connectorSignInRequests(context.requests, calls);
+  if (requests.length === 0) return null;
   return (
     <SessionConnectNotice
-      requests={shown}
-      projectId={projectId}
-      onSettled={() => void refetch()}
+      requests={requests}
+      projectId={context.projectId}
+      onSettled={context.refetch}
+      className={className}
     />
   );
 }
 
-/** The card itself: one row per request. */
+/** The card itself: a headline, then one row per request. */
 export function SessionConnectNotice({
   requests,
   projectId,
   onSettled,
+  className,
 }: {
   requests: readonly SessionConnectRequest[];
   projectId: string;
   onSettled: () => void;
+  className?: string;
 }) {
   const t = useTranslations('connectSignIn');
   const allConnected = requests.every((request) => request.connected);
   return (
-    // `w-full`, or the composer's `items-center` strip shrinks this to its content width.
-    <div className="relative isolate z-10 w-full" data-testid="session-connect-prompt">
-      <div className="text-muted-foreground flex min-h-6 items-center gap-1.5 px-3 py-1 text-xs">
+    <div className={cn('w-full', className)} data-testid="session-connect-card">
+      <div className="text-muted-foreground flex min-h-6 items-center gap-1.5 py-1 text-xs">
         <PlugsConnectedIcon
           className={cn('size-3.5 shrink-0', allConnected ? 'text-kortix-green' : 'text-kortix-orange')}
         />
         <span className="min-w-0 truncate">{allConnected ? t('signInFinished') : t('cardHeadline')}</span>
       </div>
-      <ul className="flex flex-col gap-1 px-3 pt-0.5 pb-2.5">
+      <ul className="flex flex-col gap-1 pt-0.5">
         {requests.map((request) => (
           <SessionConnectRow
             key={sessionConnectRequestKey(request)}

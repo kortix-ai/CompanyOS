@@ -123,6 +123,7 @@ export function ComposerChatInput({
     id: number;
     files?: AttachedFile[];
     mode?: 'replace' | 'merge';
+    restoreDraft?: boolean;
     options?: SessionPromptOverrides | null;
     submit?: boolean | 'when-ready';
   } | null;

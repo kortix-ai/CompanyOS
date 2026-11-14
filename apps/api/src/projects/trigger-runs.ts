@@ -56,10 +56,9 @@ const runColumns = {
   row: t,
   // Full microsecond precision: a JS Date would truncate it and break the cursor.
   createdAtText: sql<string>`${t.createdAt}::text`,
-  costUsd: costSql,
 };
 
-type RunRow = { row: typeof t.$inferSelect; createdAtText: string; costUsd: number | null };
+type RunRow = { row: typeof t.$inferSelect; createdAtText: string };
 
 function encodeCursor(row: RunRow | { createdAt: string; executionId: string }): string {
   const key = 'row' in row ? [row.createdAtText, row.row.executionId] : [row.createdAt, row.executionId];
@@ -107,7 +106,7 @@ export function redactRunPayload(value: unknown): unknown {
   );
 }
 
-export function serializeTriggerRun({ row, costUsd }: Pick<RunRow, 'row' | 'costUsd'>): TriggerRun {
+export function serializeTriggerRun({ row }: Pick<RunRow, 'row'>, costUsd: number | null | undefined): TriggerRun {
   const status = triggerRunApiStatus(row.status);
   const startedAt = row.claimedAt ?? row.createdAt;
   // A run is open while it waits, runs, or its session's turn is still going.
@@ -131,7 +130,7 @@ export function serializeTriggerRun({ row, costUsd }: Pick<RunRow, 'row' | 'cost
     started_at: startedAt.toISOString(),
     ended_at: endedAt?.toISOString() ?? null,
     duration_ms: endedAt ? Math.max(0, endedAt.getTime() - startedAt.getTime()) : null,
-    cost_usd: costUsd === null || costUsd === undefined ? null : Number(costUsd),
+    cost_usd: costUsd ?? null,
   };
 }
 
@@ -139,15 +138,12 @@ export function serializeTriggerRun({ row, costUsd }: Pick<RunRow, 'row' | 'cost
 const MAX_SCAN_PAGES = 5;
 
 /**
- * One page of the runs list, newest first, each run carrying its LLM spend as
- * a correlated aggregate over `gateway_request_logs`. Named and exported so
- * the covering-index DB suite can EXPLAIN the exact statement the route runs
- * (KRTX-4795): the spend read must stay index-only on a covering index of
- * `gateway_request_logs` — the same contract KRTX-4022 and KRTX-4638 pinned
- * for the other gateway-log readers. A column read that drifts out of every
- * covering index's INCLUDE turns the scan into per-row heap fetches of the
- * wide (request/response jsonb) rows, and a page of runs pays that once per
- * row.
+ * One page of the runs list, newest first. It reads no spend: the visibility
+ * scan below discards rows the caller may not open, and a spend aggregate over
+ * `gateway_request_logs` computed for a discarded row is pure waste (KRTX-4854:
+ * one project whose runs are mostly hidden paid up to 5 scanned pages x 26
+ * aggregates and hit the 25 s request deadline). Spend is read once, for the
+ * runs that are returned, by `triggerRunCostsQuery`.
  */
 export function triggerRunsPageQuery(input: {
   projectId: string;
@@ -175,6 +171,30 @@ export function triggerRunsPageQuery(input: {
 }
 
 /**
+ * LLM spend of each given run (ruling 4), as a correlated aggregate over
+ * `gateway_request_logs`. Named and exported so the covering-index DB suite can
+ * EXPLAIN the exact statement the route runs (KRTX-4795): the spend read must
+ * stay index-only on a covering index of `gateway_request_logs` — the same
+ * contract KRTX-4022 and KRTX-4638 pinned for the other gateway-log readers. A
+ * column read that drifts out of every covering index's INCLUDE turns the scan
+ * into per-row heap fetches of the wide (request/response jsonb) rows, and a
+ * page of runs pays that once per row.
+ */
+export function triggerRunCostsQuery(projectId: string, executionIds: readonly string[]) {
+  return db
+    .select({ executionId: t.executionId, costUsd: costSql })
+    .from(t)
+    .where(and(eq(t.projectId, projectId), inArray(t.executionId, [...executionIds])));
+}
+
+/** Spend by run id for the returned runs; a run with no session maps to null. */
+async function triggerRunCosts(projectId: string, executionIds: readonly string[]): Promise<Map<string, number | null>> {
+  if (executionIds.length === 0) return new Map();
+  const rows = await triggerRunCostsQuery(projectId, executionIds);
+  return new Map(rows.map((r) => [r.executionId, r.costUsd === null ? null : Number(r.costUsd)]));
+}
+
+/**
  * Runs newest first, keyset-paged on `(created_at, execution_id)`. A run with a
  * session is listed only when the caller may open that session (ruling 6).
  */
@@ -186,7 +206,11 @@ export async function listVisibleTriggerRuns(input: {
   limit: number;
   cursor: { createdAt: string; executionId: string } | null;
 }): Promise<{ runs: TriggerRun[]; next_cursor: string | null }> {
-  const runs: TriggerRun[] = [];
+  const kept: RunRow[] = [];
+  const finish = async (nextCursor: string | null) => {
+    const costs = await triggerRunCosts(input.loaded.row.projectId, kept.map((r) => r.row.executionId));
+    return { runs: kept.map((r) => serializeTriggerRun(r, costs.get(r.row.executionId))), next_cursor: nextCursor };
+  };
   let cursor = input.cursor;
   for (let page = 0; page < MAX_SCAN_PAGES; page += 1) {
     const rows: RunRow[] = await triggerRunsPageQuery({
@@ -202,17 +226,17 @@ export async function listVisibleTriggerRuns(input: {
     const visible = await loadVisibleSessionsForList(input.loaded, sessionIds, input.binding, input.binding);
     for (const [index, r] of batch.entries()) {
       if (r.row.sessionId && !visible.has(r.row.sessionId)) continue;
-      runs.push(serializeTriggerRun(r));
-      if (runs.length === input.limit) {
-        return { runs, next_cursor: more || index + 1 < batch.length ? encodeCursor(r) : null };
+      kept.push(r);
+      if (kept.length === input.limit) {
+        return finish(more || index + 1 < batch.length ? encodeCursor(r) : null);
       }
     }
-    if (!more) return { runs, next_cursor: null };
+    if (!more) return finish(null);
     const last = batch[batch.length - 1]!;
     cursor = { createdAt: last.createdAtText, executionId: last.row.executionId };
   }
   // The scan budget ran out on hidden rows: a short page that continues after the last scanned row.
-  return { runs, next_cursor: cursor ? encodeCursor(cursor) : null };
+  return finish(cursor ? encodeCursor(cursor) : null);
 }
 
 /** One run of one trigger, unredacted, for replay. Null when it is not that trigger's. */

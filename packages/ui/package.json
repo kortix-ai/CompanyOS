@@ -70,6 +70,11 @@
     "./customize/connectors/connectors-app-return-bar": "./src/customize/connectors/connectors-app-return-bar.tsx",
     "./customize/connectors/detail/app-page": "./src/customize/connectors/detail/app-page.tsx",
     "./customize/connectors/detail/connector-page": "./src/customize/connectors/detail/connector-page.tsx",
+    "./customize/evals/eval-compare-view": "./src/customize/evals/eval-compare-view.tsx",
+    "./customize/evals/eval-dataset-view": "./src/customize/evals/eval-dataset-view.tsx",
+    "./customize/evals/eval-job-view": "./src/customize/evals/eval-job-view.tsx",
+    "./customize/evals/eval-meta": "./src/customize/evals/eval-meta.ts",
+    "./customize/evals/eval-task-view": "./src/customize/evals/eval-task-view.tsx",
     "./customize/sections/add-account-fields": "./src/customize/sections/add-account-fields.tsx",
     "./customize/sections/component/email-connect-form": "./src/customize/sections/component/email-connect-form.tsx",
     "./customize/sections/component/manifest-copy-block": "./src/customize/sections/component/manifest-copy-block.tsx",
@@ -271,6 +276,7 @@
     "./internal/hooks/use-debounced-value": "./src/internal/hooks/use-debounced-value.ts",
     "./internal/hooks/use-slash-focus": "./src/internal/hooks/use-slash-focus.ts",
     "./internal/icons/claude": "./src/internal/icons/claude.tsx",
+    "./internal/icons/codex": "./src/internal/icons/codex.tsx",
     "./internal/icons/discord": "./src/internal/icons/discord.tsx",
     "./internal/icons/download": "./src/internal/icons/download.tsx",
     "./internal/icons/edge": "./src/internal/icons/edge.tsx",
@@ -436,9 +442,11 @@
     "./session/composer/queue-projection": "./src/session/composer/queue-projection.ts",
     "./session/composer/session-chat-input": "./src/session/composer/session-chat-input.tsx",
     "./session/models/ask-owner-for-credits-button": "./src/session/models/ask-owner-for-credits-button.tsx",
+    "./session/models/connect-model-step": "./src/session/models/connect-model-step.tsx",
     "./session/models/model-grouping": "./src/session/models/model-grouping.ts",
     "./session/models/model-search-empty": "./src/session/models/model-search-empty.tsx",
     "./session/models/model-selector": "./src/session/models/model-selector.tsx",
+    "./session/models/use-workspace-model-gate": "./src/session/models/use-workspace-model-gate.ts",
     "./session/panel/audit/audit-credential-label": "./src/session/panel/audit/audit-credential-label.ts",
     "./session/panel/easy/detail-view": "./src/session/panel/easy/detail-view.tsx",
     "./session/participants/session-participants": "./src/session/participants/session-participants.tsx",
@@ -752,6 +760,26 @@
       "./customize/connectors/detail/connector-page": {
         "types": "./dist/customize/connectors/detail/connector-page.d.ts",
         "import": "./dist/customize/connectors/detail/connector-page.js"
+      },
+      "./customize/evals/eval-compare-view": {
+        "types": "./dist/customize/evals/eval-compare-view.d.ts",
+        "import": "./dist/customize/evals/eval-compare-view.js"
+      },
+      "./customize/evals/eval-dataset-view": {
+        "types": "./dist/customize/evals/eval-dataset-view.d.ts",
+        "import": "./dist/customize/evals/eval-dataset-view.js"
+      },
+      "./customize/evals/eval-job-view": {
+        "types": "./dist/customize/evals/eval-job-view.d.ts",
+        "import": "./dist/customize/evals/eval-job-view.js"
+      },
+      "./customize/evals/eval-meta": {
+        "types": "./dist/customize/evals/eval-meta.d.ts",
+        "import": "./dist/customize/evals/eval-meta.js"
+      },
+      "./customize/evals/eval-task-view": {
+        "types": "./dist/customize/evals/eval-task-view.d.ts",
+        "import": "./dist/customize/evals/eval-task-view.js"
       },
       "./customize/sections/add-account-fields": {
         "types": "./dist/customize/sections/add-account-fields.d.ts",
@@ -1551,6 +1579,10 @@
         "types": "./dist/internal/icons/claude.d.ts",
         "import": "./dist/internal/icons/claude.js"
       },
+      "./internal/icons/codex": {
+        "types": "./dist/internal/icons/codex.d.ts",
+        "import": "./dist/internal/icons/codex.js"
+      },
       "./internal/icons/discord": {
         "types": "./dist/internal/icons/discord.d.ts",
         "import": "./dist/internal/icons/discord.js"
@@ -2205,6 +2237,10 @@
         "types": "./dist/session/models/ask-owner-for-credits-button.d.ts",
         "import": "./dist/session/models/ask-owner-for-credits-button.js"
       },
+      "./session/models/connect-model-step": {
+        "types": "./dist/session/models/connect-model-step.d.ts",
+        "import": "./dist/session/models/connect-model-step.js"
+      },
       "./session/models/model-grouping": {
         "types": "./dist/session/models/model-grouping.d.ts",
         "import": "./dist/session/models/model-grouping.js"
@@ -2216,6 +2252,10 @@
       "./session/models/model-selector": {
         "types": "./dist/session/models/model-selector.d.ts",
         "import": "./dist/session/models/model-selector.js"
+      },
+      "./session/models/use-workspace-model-gate": {
+        "types": "./dist/session/models/use-workspace-model-gate.d.ts",
+        "import": "./dist/session/models/use-workspace-model-gate.js"
       },
       "./session/panel/audit/audit-credential-label": {
         "types": "./dist/session/panel/audit/audit-credential-label.d.ts",

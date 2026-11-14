@@ -569,6 +569,37 @@ const FLAGS: readonly FeatureFlagDef[] = [
       '(harness/pi/watcher.ts); its answer is one JSON decision that the API carries out at turn end through the space post ' +
       'path, in that space only, with the owner\'s rights. WEB: the Proactive and Daily brief rows in Space details.',
   },
+  {
+    key: 'program_agents',
+    name: 'Program agents',
+    description:
+      'An agent that runs your code instead of a model. Give an agent `run: <command>` in kortix.yaml: each turn runs that command in the session\'s sandbox, with the agent\'s workspace, secrets and access. The message or trigger payload is the input, and what the command prints is the reply. Triggers, chat and Spaces start it like any other agent.',
+    stability: 'experimental',
+    available: () => true,
+    platformDefault: () => false,
+    enforcement: 'behavioral',
+    enforcementNote:
+      'Off ⇒ a turn of an agent with `run` fails with "Program agents are off for this workspace" and runs nothing: no model call, no command. ' +
+      'BOX: the API lists the flag in KORTIX_FEATURE_FLAGS (projects/lib/feature-flag-env.ts); pi reads the compiled agent `run` and, only with the flag, ' +
+      'runs it per turn in place of the model step (harness/pi/program.ts). WEB: the agent page shows the command in place of the model.',
+  },
+  {
+    key: 'evals',
+    name: 'Evals',
+    description:
+      'Run your agents on a list of tasks and score the results. A task is an instruction, a sandbox and a test script that writes a score (the Harbor task format). Declare a set of tasks under `evals:` in kortix.yaml, run it against any agent and model, and compare runs to see whether a change made the agent better or worse.',
+    stability: 'experimental',
+    // A job keeps its results in Files, and every drive is a Platinum volume.
+    available: () => Boolean(config.PLATINUM_API_KEY),
+    platformDefault: () => false,
+    enforcement: 'routes',
+    enforcementNote:
+      'ROUTES: every /v1/workspaces/:id/evals* route answers 403 `feature_disabled` when off (projects/routes/evals.ts). ' +
+      'The `eval-runner` worker job (worker/jobs/eval-runner.ts) starts no trial of a project whose flag is off: its queued trials ' +
+      'wait, and its running trials finish. BOX: off, a session box has no kortix-evals skill and its CLI hides `kortix evals` ' +
+      '(KORTIX_FEATURE_FLAGS → kortixd). The `evals:` section of kortix.yaml stays valid either way. The eval_jobs and eval_trials ' +
+      'rows and the Evals folder in Files stay.',
+  },
 ];
 
 const FLAG_BY_KEY: Record<FeatureFlagKey, FeatureFlagDef> = Object.fromEntries(
@@ -646,6 +677,8 @@ export interface FeatureFlagView {
   enabled: boolean;
   /** True when this project set an explicit choice (vs inheriting the default). */
   overridden: boolean;
+  /** What the flag resolves to without this project's choice: the state a reset returns it to. */
+  default_enabled: boolean;
   /** A `catalogHidden` flag: listed only while on, writable only by a platform operator. */
   operator_only: boolean;
   /** Work in progress: not recommended yet. */
@@ -674,6 +707,7 @@ export function buildFeatureFlagCatalog(metadata: unknown): FeatureFlagView[] {
       available: f.available(),
       enabled,
       overridden: explicitOverride(metadata, f.key) !== undefined,
+      default_enabled: resolveFeatureFlag(null, f.key),
       operator_only: isOperatorOnlyFeatureFlag(f.key),
       wip: f.wip === true,
       scope: 'project' as const,

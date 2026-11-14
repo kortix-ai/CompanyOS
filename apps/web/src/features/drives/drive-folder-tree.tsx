@@ -8,12 +8,12 @@ import { Button } from '@kortix/ui/button';
 import { Home } from '@kortix/ui/internal/icons/home';
 import { Skeleton } from '@kortix/ui/skeleton';
 import { cn } from '@kortix/ui';
-import { BuildingsIcon, CaretRightIcon, FolderSimpleIcon, HardDrivesIcon, HashIcon, UserIcon, UsersThreeIcon } from '@phosphor-icons/react';
+import { BuildingsIcon, CaretRightIcon, FolderSimpleIcon, HardDrivesIcon, HashIcon, ShieldCheckIcon, UserIcon, UsersThreeIcon } from '@phosphor-icons/react';
 import { type ComponentType, type ReactNode, useCallback, useEffect, useId, useState } from 'react';
 
 import { useTranslations } from '@/i18n/use-translations';
 
-import { COMPANY_ROOT, type DriveNav, PEOPLE_ROOT, drivePlaces, within } from './drive-places';
+import { COMPANY_ROOT, type DriveNav, type DriveWithMemberAccess, PEOPLE_ROOT, drivePlaces, memberDrivesShown, within } from './drive-places';
 
 type Glyph = ComponentType<{ className?: string }>;
 
@@ -22,7 +22,7 @@ type Glyph = ComponentType<{ className?: string }>;
  * desktops the API lists to them. Both exist only with `shared_drives` on;
  * off, Drive is the caller's own desktop alone.
  */
-export function useDriveNav(drive: Drive): DriveNav {
+export function useDriveNav(drive: DriveWithMemberAccess): DriveNav {
   const on = !!drive.sharedDrives;
   const root = useDriveFolder(on ? drive.driveId : null, '/');
   const people = useDriveFolder(drive.driveId, PEOPLE_ROOT);
@@ -33,7 +33,7 @@ export function useDriveNav(drive: Drive): DriveNav {
     retryPlaces: () => void root.refetch(),
     places: on ? drivePlaces(root.data?.entries ?? [], drive.sharedWithMe ?? []) : [],
     /** Other people's desktops, only as far as the API lists them to the caller. */
-    members: on ? peopleEntries.filter((e) => e.type === 'dir' && e.path !== drive.personalFolder) : [],
+    members: on && memberDrivesShown(drive) ? peopleEntries.filter((e) => e.type === 'dir' && e.path !== drive.personalFolder) : [],
     /** `/Users/ana.lima` → "Ana Lima". */
     personNames: new Map(peopleEntries.map((e) => [e.path, e.name] as const)),
   };
@@ -160,8 +160,9 @@ export function DriveFolderTree({
       ) : null}
       {nav.members.length > 0 ? (
         <section aria-labelledby={membersId} className="border-border space-y-1 border-t pt-3">
-          <h2 id={membersId} className="text-muted-foreground px-2 text-xs font-normal">
-            {t('membersSection')}
+          <h2 id={membersId} className="text-muted-foreground flex items-center gap-1.5 px-2 text-xs font-normal">
+            <ShieldCheckIcon className="size-3.5 shrink-0" />
+            {t('adminMemberDrives')}
           </h2>
           <ul className="space-y-0.5">
             {nav.members.map((m) => (

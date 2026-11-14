@@ -23046,6 +23046,7 @@
     "personalSection": "個人",
     "drivesSection": "共有ドライブ",
     "membersSection": "メンバー",
+    "adminMemberDrives": "管理者: メンバーのドライブ",
     "allDrives": "すべてのドライブ",
     "volumeHint": "A separate volume. Sessions mount each one on its own under /drives.",
     "teamFolders": "Team folders",

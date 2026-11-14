@@ -23046,6 +23046,7 @@
     "personalSection": "Лично",
     "drivesSection": "Дељени дискови",
     "membersSection": "Чланови",
+    "adminMemberDrives": "Админ: дискови чланова",
     "allDrives": "Сви дискови",
     "volumeHint": "A separate volume. Sessions mount each one on its own under /drives.",
     "teamFolders": "Team folders",

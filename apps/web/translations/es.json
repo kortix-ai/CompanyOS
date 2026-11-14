@@ -23046,6 +23046,7 @@
     "personalSection": "Personal",
     "drivesSection": "Unidades compartidas",
     "membersSection": "Miembros",
+    "adminMemberDrives": "Admin: unidades de miembros",
     "allDrives": "Todas las unidades",
     "volumeHint": "A separate volume. Sessions mount each one on its own under /drives.",
     "teamFolders": "Team folders",

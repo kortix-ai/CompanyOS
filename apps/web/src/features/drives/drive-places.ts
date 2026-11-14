@@ -1,4 +1,4 @@
-import type { DriveEntry } from '@kortix/sdk';
+import type { Drive, DriveEntry } from '@kortix/sdk';
 
 /** Holds every person's own folder (`/Users/<name>`): never a drive of its own. */
 export const PEOPLE_ROOT = '/Users';
@@ -12,6 +12,25 @@ export interface DrivePlace {
 }
 
 export const within = (path: string, folder: string) => path === folder || path.startsWith(`${folder}/`);
+
+/**
+ * A Drive as `GET /drives` sends it once KRTX-4906 lands: with the workspace's
+ * "Admins can open users' drives" setting. Every API before it omits the
+ * field, which reads as off.
+ */
+export type DriveWithMemberAccess = Drive & { adminsOpenUserDrives?: boolean };
+
+/**
+ * Other members' desktops are part of navigation only for an admin, and only
+ * with the workspace setting on. ponytail: navigation only, not access control;
+ * the API decides who may open a folder (KRTX-4906).
+ */
+export const memberDrivesShown = (drive: DriveWithMemberAccess) =>
+  drive.access === 'manage' && drive.adminsOpenUserDrives === true;
+
+/** `/Users` itself or another member's desktop: kept out of navigation while member drives are hidden. */
+export const hiddenMemberPath = (path: string, personal: string | null, shown: boolean) =>
+  !shown && within(path, PEOPLE_ROOT) && !(personal && within(path, personal));
 const nameOf = (path: string) => path.split('/').filter(Boolean).pop() ?? path;
 
 /**

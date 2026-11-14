@@ -95,11 +95,11 @@ test('My desktop sits apart, above Company and each team drive by name, with no 
   expect(nav?.querySelector('h2')).toBeNull();
 });
 
-test('other members\' desktops get their own labelled group only when the API lists them', async () => {
+test('member desktops passed in get their own labelled admin group', async () => {
   const member: DriveEntry = { name: 'Ana Lima', path: '/Users/ana.lima', type: 'dir', size: 0, mtime: 0, access: 'manage' };
   await render([], status, { nav: { ...baseNav, members: [member] } });
   const heading = document.querySelector('nav h2');
-  expect(heading?.textContent).toBe('Members');
+  expect(heading?.textContent).toBe('Admin: member drives');
   const group = document.querySelector(`section[aria-labelledby="${heading?.id}"] ul`);
   expect(rowNames(group)).toEqual(['Ana Lima']);
   expect(rowNames(document.querySelector('ul[aria-label="Shared drives"]'))).not.toContain('Ana Lima');

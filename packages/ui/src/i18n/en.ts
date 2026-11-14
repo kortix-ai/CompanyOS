@@ -7769,6 +7769,7 @@ const catalog = {
     "personalSection": "Personal",
     "drivesSection": "Shared drives",
     "membersSection": "Members",
+    "adminMemberDrives": "Admin: member drives",
     "allDrives": "All drives",
     "volumeHint": "A separate volume. Sessions mount each one on its own under /drives.",
     "teamFolders": "Team folders",

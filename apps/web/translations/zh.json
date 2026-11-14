@@ -23046,6 +23046,7 @@
     "personalSection": "个人",
     "drivesSection": "共享云盘",
     "membersSection": "成员",
+    "adminMemberDrives": "管理员：成员云盘",
     "allDrives": "所有云盘",
     "volumeHint": "A separate volume. Sessions mount each one on its own under /drives.",
     "teamFolders": "Team folders",

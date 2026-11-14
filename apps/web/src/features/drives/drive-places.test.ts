@@ -1,7 +1,7 @@
 import type { DriveEntry, FolderAccess } from '@kortix/sdk';
 import { expect, test } from 'bun:test';
 
-import { drivePlaces } from './drive-places';
+import { type DriveWithMemberAccess, drivePlaces, hiddenMemberPath, memberDrivesShown } from './drive-places';
 
 function dir(path: string, access: FolderAccess = 'manage'): DriveEntry {
   return { path, name: path.split('/').pop() ?? path, type: 'dir', size: 0, mtime: 0, access };
@@ -29,4 +29,39 @@ test('files and hidden folders at the top are not drives', () => {
 
 test('nothing to open lists no drive', () => {
   expect(drivePlaces([], [])).toEqual([]);
+});
+
+test('member drives show only for an admin with the workspace setting on; absent reads as off', () => {
+  const drive = (access: FolderAccess, adminsOpenUserDrives?: boolean): DriveWithMemberAccess => ({
+    driveId: 'synthetic-drive',
+    accountId: 'synthetic-account',
+    projectId: 'synthetic-project',
+    kind: 'project',
+    name: 'Test drive',
+    sizeBytes: 0,
+    sizeLimitBytes: null,
+    fileCount: 0,
+    lastChangeAt: null,
+    createdAt: '',
+    updatedAt: '',
+    access,
+    personalFolder: '/Users/you',
+    adminsOpenUserDrives,
+  });
+  expect(memberDrivesShown(drive('manage', true))).toBe(true);
+  expect(memberDrivesShown(drive('manage', false))).toBe(false);
+  expect(memberDrivesShown(drive('manage'))).toBe(false);
+  expect(memberDrivesShown(drive('write', true))).toBe(false);
+});
+
+test('while hidden, /Users and other desktops leave navigation; your own desktop and drives stay', () => {
+  const me = '/Users/you';
+  expect(hiddenMemberPath('/Users', me, false)).toBe(true);
+  expect(hiddenMemberPath('/Users/ana.lima', me, false)).toBe(true);
+  expect(hiddenMemberPath('/Users/ana.lima/Notes', me, false)).toBe(true);
+  expect(hiddenMemberPath('/Users/you', me, false)).toBe(false);
+  expect(hiddenMemberPath('/Users/you/Notes', me, false)).toBe(false);
+  expect(hiddenMemberPath('/Users/youth', me, false)).toBe(true);
+  expect(hiddenMemberPath('/Company', me, false)).toBe(false);
+  expect(hiddenMemberPath('/Users/ana.lima', me, true)).toBe(false);
 });

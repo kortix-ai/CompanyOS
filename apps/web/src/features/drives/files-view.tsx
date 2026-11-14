@@ -39,6 +39,7 @@ import { contract, qk } from '@kortix/sdk/react';
 import {
   FolderSimpleIcon,
   HardDrivesIcon,
+  ShieldCheckIcon,
   LockSimpleIcon,
   ShareNetworkIcon,
   TerminalWindowIcon,
@@ -60,7 +61,7 @@ import {
 } from './drive-explorer-source';
 import { useBoxPaths } from './drive-box-path';
 import { DriveFolderTree, placeIcon, useDriveNav } from './drive-folder-tree';
-import { type DriveNav, type DrivePlace, PEOPLE_ROOT, within } from './drive-places';
+import { type DriveNav, type DrivePlace, PEOPLE_ROOT, memberDrivesShown, within } from './drive-places';
 import { FolderAccessDialog } from './folder-access-dialog';
 import { FolderAccessPanel } from './folder-access-panel';
 import { folderAudience } from './folder-audience';
@@ -139,7 +140,7 @@ function FilesBrowser({ drive, projectId }: { drive: Drive; projectId: string })
     return s;
   }, [openAt]);
   return (
-    <DriveFilesProvider driveId={drive.driveId} userId={user?.id} personalFolder={drive.personalFolder}>
+    <DriveFilesProvider driveId={drive.driveId} userId={user?.id} personalFolder={drive.personalFolder} hideMemberDrives={!memberDrivesShown(drive)}>
       <FilesStoreProvider store={store}>
         <DrivePathInUrl personal={drive.personalFolder} />
         <FilesExplorer drive={drive} projectId={projectId} />
@@ -357,7 +358,7 @@ function nameOfPath(path: string, here: { label: string; base?: string }): strin
  * Small screens have no folder tree: one menu jumps to My desktop, each drive
  * and each member's desktop the API lists to the caller.
  */
-function DriveJump({ drive, nav, onOpen }: { drive: Drive; nav: DriveNav; onOpen: (path: string) => void }) {
+export function DriveJump({ drive, nav, onOpen }: { drive: Drive; nav: DriveNav; onOpen: (path: string) => void }) {
   const t = useTranslations('drives');
   const personal = drive.personalFolder;
   const admin = !!drive.sharedDrives && drive.access === 'manage';
@@ -395,7 +396,10 @@ function DriveJump({ drive, nav, onOpen }: { drive: Drive; nav: DriveNav; onOpen
           {nav.members.length > 0 ? (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">{t('membersSection')}</DropdownMenuLabel>
+              <DropdownMenuLabel className="text-muted-foreground flex items-center gap-1.5 text-xs font-normal">
+                <ShieldCheckIcon className="size-3.5 shrink-0" />
+                {t('adminMemberDrives')}
+              </DropdownMenuLabel>
               {nav.members.map((m) => (
                 <DropdownMenuItem key={m.path} onSelect={() => onOpen(m.path)}>
                   <UserIcon className="size-4 shrink-0" />

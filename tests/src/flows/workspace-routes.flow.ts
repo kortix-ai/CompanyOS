@@ -328,12 +328,11 @@ flow(
       for (const [index, ws] of workspaces.entries()) {
         const row = legacy.find((r) => r.project_id === ws.id);
         if (!row) throw new Error(`project of account ${index + 1} of 3 missing from GET /v1/projects`);
-        if (row.account_id !== teams[index]!.id) throw new Error(`row ${index + 1}: account_id ${row.account_id}`);
+        if (row.account_id !== teams[index]?.id) throw new Error(`row ${index + 1}: account_id ${row.account_id}`);
       }
-      const updated = legacy.map((r) => Date.parse(r.updated_at));
-      for (let i = 1; i < updated.length; i += 1) {
-        if (updated[i - 1]! < updated[i]!) throw new Error(`list not most-recently-updated-first at ${i}`);
-      }
+      // `updated_at` is ISO-8601 UTC: text order is time order.
+      const updated = legacy.map((r) => r.updated_at);
+      if (updated.join() !== [...updated].sort().reverse().join()) throw new Error(`list not most-recently-updated-first: ${updated.join()}`);
     });
 
     await ctx.step('the legacy GET /v1/projects?account_id= lists one account only', async () => {

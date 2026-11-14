@@ -168,7 +168,7 @@ API serves permanently.
 
 | Module | Callback |
 | --- | --- |
-| `shared/turn-relay.ts` | `POST /workspaces/:id/turn-stream` (initial-turn claim, `turn_accepted`, `turn_abandoned`, `runtime_session` pin, `turn_begin`, `end`, `steer_read`, memory-guard end), `/turn-question`, `/turn-permission` |
+| `shared/turn-relay.ts` | `POST /workspaces/:id/turn-stream` (initial-turn claim, `turn_accepted`, `turn_abandoned`, `runtime_session` pin, `turn_begin`, `end`, `steer_read`, `steer_dropped`, memory-guard end), `/turn-question`, `/turn-permission` |
 | `shared/projection-relay.ts` | `POST /platform/runtime-projection`; the adapter registers its state reader |
 | `shared/audit-relay.ts` | `POST /workspaces/:id/sessions/:id/audit/events`: sanitize, batch, spool; batches carry `source: 'runtime'` and the harness id. pi feeds it every frame it publishes (`PiRuntimeHooks.onFrame`), so pi sessions have a tool audit trail |
 | `shared/boot-timeline-relay.ts` | `POST /platform/boot-timeline` |
@@ -864,7 +864,10 @@ end.
 - **Leftovers.** A turn that ends on its own with unread steered messages
   starts the next turn with them, in the same queue slot: the first is its
   prompt, the rest are read before its first model call. A stopped turn (Stop,
-  Quick Queue, the no-progress watchdog) drops them.
+  the no-progress watchdog, an abandoned stop) drops them and relays
+  `steer_dropped` once per id before its `end`; apps/api puts each prompt back
+  on its queue for the next turn. A steer the API's Stop settle withdrew first
+  is not reported.
 - **Gaps.** A steered message keeps the turn's model, agent and variant. It
   does not run extension `input` handlers, `/skill:` or prompt-template
   expansion (a prompt does). Unread steered messages live in memory: a daemon

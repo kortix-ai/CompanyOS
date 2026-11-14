@@ -83,6 +83,12 @@ export type ConnectorDenialReason =
   | 'connector_not_assigned'
   | 'connector_not_found'
   | 'connector_not_connected'
+  /**
+   * An account on the connector is signed in, but this caller (its agent, its
+   * session) cannot reach it. Not `connector_not_connected`: a new sign-in
+   * would only add a duplicate account. The account's owner shares it.
+   */
+  | 'connector_not_shared'
   | 'connector_disabled'
   | 'action_not_found'
   /**
@@ -121,6 +127,8 @@ export function connectorDenialBody(
     requestedAccount?: string | null;
     /** The account names that WERE available, so the retry can be right. */
     availableAccounts?: readonly string[];
+    /** `action_not_found`: the connector's closest action paths, best first. */
+    suggestions?: readonly string[];
   },
 ): Record<string, unknown> {
   const grant = input.principal?.agentGrant ?? null;
@@ -171,6 +179,21 @@ export function connectorDenialBody(
           : `Connector "${input.connector}" exists in this project but has no usable connection for this session: no credential is stored, or the app was never authorized. Run \`kortix connectors connect ${input.connector}\` or add its credential, then retry.`,
       };
     }
+    case 'connector_not_shared': {
+      // No `connect_url`: a sign-in here only adds a duplicate account.
+      const agent = grant?.agent ?? null;
+      // My Kortix acts as the person, so the person is who it is shared with.
+      const audience = agent && !isMyKortixAgentName(agent) ? `agent "${agent}"` : 'this session';
+      const target = agent && !isMyKortixAgentName(agent) ? `agent "${agent}"` : 'you';
+      return {
+        ...base,
+        ...(input.requestedAccount?.trim() ? { requested_account: input.requestedAccount.trim() } : {}),
+        hint:
+          `Connector "${input.connector}" has a signed-in account, but it is not shared with ${audience}. ` +
+          `Ask the account's owner (a workspace admin for a shared account) to share it with ${target} or the workspace ` +
+          `in Settings → Connectors → ${input.connector}, then retry. Do not start a new sign-in: it adds a duplicate account.`,
+      };
+    }
     case 'account_required':
       return {
         ...base,
@@ -191,10 +214,19 @@ export function connectorDenialBody(
         ...base,
         hint: `No connector "${input.connector}" is declared in this project's kortix.yaml. Run \`kortix connectors ls\` to see what exists, or \`kortix connectors add\` to declare it.`,
       };
-    case 'action_not_found':
+    case 'action_not_found': {
+      const suggestions = input.suggestions ?? [];
+      const list = `Run \`kortix connectors show ${input.connector}\` to list its actions.`;
       return {
         ...base,
-        hint: `Connector "${input.connector}" has no action "${input.action ?? ''}". Run \`kortix connectors show ${input.connector}\` to list its actions.`,
+        ...(suggestions.length > 0 ? { did_you_mean: [...suggestions] } : {}),
+        hint:
+          suggestions.length > 0
+            ? `Unknown action ${input.action ?? ''} on connector "${input.connector}". Did you mean ` +
+              `${suggestions.map((path) => `${input.connector}.${path}`).join(', ')}? ` +
+              `Call it as \`kortix connectors call ${input.connector} ${suggestions[0]}\`. ${list}`
+            : `Connector "${input.connector}" has no action "${input.action ?? ''}". ${list}`,
       };
+    }
   }
 }

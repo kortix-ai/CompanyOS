@@ -459,12 +459,14 @@ export function createDeviceTokenReleaseRateLimitMiddleware() {
 /**
  * A webhook delivery rejected before authentication is stored as a run, so
  * the owner can see it and replay it. Anyone holding the URL can send them,
- * so at most one is recorded per trigger per 10 s per replica: a request
- * flood never becomes a database-write flood. Over budget, the route still
+ * so at most one is recorded per trigger and reason per 10 s per replica: a
+ * request flood never becomes a database-write flood. The reason is part of
+ * the key (a closed set of about ten codes), so a bad signature does not hide
+ * the expired timestamp sent a second later. Over budget, the route still
  * answers 401; it only skips the write.
  */
-export function consumeProjectWebhookRejectedRunBudget(projectId: string, slug: string): boolean {
-  return projectWebhookRejectedRunLimiter.check(`${projectId}:${slug}`, {
+export function consumeProjectWebhookRejectedRunBudget(projectId: string, slug: string, reason: string): boolean {
+  return projectWebhookRejectedRunLimiter.check(`${projectId}:${slug}:${reason}`, {
     limit: 1,
     windowMs: 10_000,
   }).allowed;

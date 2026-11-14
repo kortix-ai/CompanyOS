@@ -39,6 +39,10 @@ import { writeLastProjectId } from '@kortix/ui/internal/lib/onboarding/last-proj
 import { cn, uiRoutes } from '@kortix/ui';
 import { BillingAccountProvider } from '@kortix/ui/internal/stores/billing-account-context';
 import { useProjectSessionTabsStore } from '@/stores/project-session-tabs-store';
+import { GlobalUpgradeModal } from '@/features/billing/global-upgrade-modal';
+import { isBillingEnabled } from '@/lib/config';
+import { ConnectModelStep } from '@kortix/ui/session/models/connect-model-step';
+import { useWorkspaceModelGate } from '@kortix/ui/session/models/use-workspace-model-gate';
 import { getProject, getProjectDetail } from '@kortix/sdk';
 import {
   contract,
@@ -47,6 +51,15 @@ import {
   useGatewayCatalogSync,
 } from '@kortix/sdk/react';
 import { SidebarGlyph as PanelLeft } from '@kortix/ui/icons';
+import {
+  DesktopTabStrip,
+  useDesktopTabsVisible,
+} from '@/features/desktop-tabs/desktop-tab-strip';
+import {
+  DesktopTabsBoundary,
+  useDesktopTabsEnabled,
+} from '@/features/desktop-tabs/desktop-tabs-gate';
+import { keepActivePreview } from '@/features/desktop-tabs/desktop-tabs-store';
 
 const CommandPalette = lazy(() =>
   import('@/features/workspace/command-palette').then((mod) => ({
@@ -226,6 +239,12 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
 
   const openTab = useProjectSessionTabsStore((s) => s.openTab);
 
+  // No workspace page opens until the viewer can run a model: a new workspace
+  // lands on "Connect a model" right after setup, and so does any workspace
+  // whose models are all gone (Free plan, nothing connected). Paid plans run
+  // on Kortix models and pass.
+  const modelGate = useWorkspaceModelGate(projectId);
+
   useLayoutEffect(() => {
     if (activeSessionId) openTab(projectId, activeSessionId);
   }, [projectId, activeSessionId, openTab]);
@@ -234,6 +253,20 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
 
   if (authLoading || !user) {
     return <div className="bg-background min-h-screen" />;
+  }
+
+  // The same frame the access check and the route loaders paint, so a
+  // workspace that waits for its model answer shows one continuous screen.
+  if (modelGate === 'pending') return <ProjectPendingScreen />;
+
+  if (modelGate === 'blocked') {
+    return (
+      // The account the upgrade dialog and the plan check read: this workspace's.
+      <BillingAccountProvider accountId={projectAccountId ?? null} resolved={!!projectAccountId}>
+        <ConnectModelStep projectId={projectId} workspaceName={projectRow?.name} />
+        {isBillingEnabled() && <GlobalUpgradeModal />}
+      </BillingAccountProvider>
+    );
   }
 
   return (
@@ -263,7 +296,7 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
             <CommandPalette />
           </CommandPaletteBoundary>
 
-          <ProjectSheelLayout>{children}</ProjectSheelLayout>
+          <ProjectSheelLayout projectId={projectId}>{children}</ProjectSheelLayout>
         </div>
 
         <SettingsPanel projectId={projectId} />
@@ -296,7 +329,17 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
   );
 }
 
-const ProjectSheelLayout = ({ children }: { children: React.ReactNode }) => {
+/** A control of the page (not a link): pressing one is working in the page. */
+const PAGE_CONTROLS =
+  'button, input, select, textarea, summary, [role="switch"], [role="checkbox"], [role="radio"], [role="tab"], [role="combobox"], [role="menuitem"]';
+
+const ProjectSheelLayout = ({
+  projectId,
+  children,
+}: {
+  projectId: string;
+  children: React.ReactNode;
+}) => {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const { state, isMobile, toggleSidebar, peek, peekEnter, peekLeave } = useSidebar();
   const isExpanded = !isMobile && state === 'expanded';
@@ -306,8 +349,31 @@ const ProjectSheelLayout = ({ children }: { children: React.ReactNode }) => {
   // OS title-bar band; on the web each view draws its own. Shared gate so the
   // two can never both render — see sidebar-opener.ts.
   const desktopShell = useDesktopShell();
+  // The desktop window's tab strip owns the title-bar band; every project view
+  // renders below it. Every window width, down to the 720 × 480 minimum (where
+  // the sidebar is a sheet and the shell's toggle still opens it).
+  // Behind the project's `desktop_tabs` flag. A strip that throws turns
+  // itself off for this window (`stripFailed`), and the title bar is back.
+  const [stripFailed, setStripFailed] = useState(false);
+  const tabsEnabled = useDesktopTabsEnabled(projectId);
+  const tabs = !!desktopShell && tabsEnabled && !stripFailed;
+  const tabsVisible = useDesktopTabsVisible(projectId);
   return (
     <div
+      // The page's own header moves below the strip only while the strip shows.
+      data-kx-desktop-tabs-on={tabs && tabsVisible ? '' : undefined}
+      // Typing in the page, or pressing one of its controls, is working in it:
+      // the preview tab becomes a kept tab. A link is not: it navigates.
+      onInputCapture={tabs ? () => keepActivePreview(projectId) : undefined}
+      onClickCapture={
+        tabs
+          ? (event) => {
+              const target = event.target as Element;
+              if (target.closest('[data-kx-desktop-tabs]')) return;
+              if (target.closest(PAGE_CONTROLS)) keepActivePreview(projectId);
+            }
+          : undefined
+      }
       className={cn(
         'bg-background relative flex min-h-0 flex-1 flex-col overflow-hidden',
         isExpanded && 'border-border border-l',
@@ -324,6 +390,11 @@ const ProjectSheelLayout = ({ children }: { children: React.ReactNode }) => {
           views that already own the band. CSS disables this fallback whenever
           the active view contains `.kx-titlebar-row`. */}
       <div aria-hidden="true" className="kx-project-shell-drag-region" />
+      {tabs && (
+        <DesktopTabsBoundary onError={() => setStripFailed(true)}>
+          <DesktopTabStrip projectId={projectId} />
+        </DesktopTabsBoundary>
+      )}
       {/* Mobile: the sidebar is a sheet with no docked affordance, and view
           headers come and go (sessions render theirs only once booted) — so
           the opener lives here, always mounted, on every project view. The

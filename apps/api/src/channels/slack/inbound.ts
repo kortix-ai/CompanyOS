@@ -63,38 +63,6 @@ export async function provenSlackWorkspaces(projectId: string): Promise<string[]
 }
 
 /**
- * The projects with Slack installed for ONE Kortix workspace, as their ids.
- * `activeOnly` keeps the shared-app resolution able to pick (or offer) a Kortix
- * workspace the account still uses: an archived project's install row stays
- * behind after a workspace was archived, and a picker or auto-bind it offered
- * would dead-end on a workspace no one can open.
- */
-export async function slackInstalledProjectIds(
-  teamId: string,
-  opts?: { activeOnly?: boolean },
-): Promise<string[]> {
-  if (!opts?.activeOnly) {
-    const rows = await db
-      .select({ projectId: chatInstalls.projectId })
-      .from(chatInstalls)
-      .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.platformTeamId, teamId)));
-    return rows.map((r) => r.projectId);
-  }
-  const rows = await db
-    .select({ projectId: chatInstalls.projectId })
-    .from(chatInstalls)
-    .innerJoin(
-      projectsView,
-      and(
-        eq(projectsView.projectId, chatInstalls.projectId),
-        eq(projectsView.status, 'active'),
-      ),
-    )
-    .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.platformTeamId, teamId)));
-  return rows.map((r) => r.projectId);
-}
-
-/**
  * Confine a per-project request to its proven workspace. Returns the inbound
  * scope when `bodyTeamId` is one of the workspaces the install proved, else
  * null (the caller refuses the request).

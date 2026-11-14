@@ -189,12 +189,24 @@ export function hasOpenNestedDialog(): boolean {
  * `floatingZ(0)`, above every top-level dialog, so a popover still open when
  * one of those opens would float over it; popovers use this to step aside.
  */
-export function foreignDialogOpen(panel: HTMLElement | null): boolean {
-  for (const dialog of document.querySelectorAll<HTMLElement>(
-    '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
-  )) {
+export function foreignDialogOpen(
+  panel: HTMLElement | null,
+  /** Dialogs open before the panel opened (its host modal): never foreign. */
+  except?: ReadonlySet<Element>,
+): boolean {
+  for (const dialog of openDialogs()) {
+    if (except?.has(dialog)) continue;
     if (!panel || (dialog !== panel && !panel.contains(dialog) && !dialog.contains(panel)))
       return true;
   }
   return false;
+}
+
+/** Every open dialog and alert dialog in the document. */
+export function openDialogs(): HTMLElement[] {
+  return [
+    ...document.querySelectorAll<HTMLElement>(
+      '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
+    ),
+  ];
 }

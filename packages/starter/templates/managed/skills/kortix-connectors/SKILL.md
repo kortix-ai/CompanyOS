@@ -42,6 +42,9 @@ audits it. The sandbox carries only `KORTIX_TOKEN`.
    Exit 3 means the app is already installed: use that slug. When the human
    finishes signing in, Kortix tells you; do not mint a second link.
    For an account the whole workspace uses, `connect <slug> --owner workspace`.
+   A trigger or automation runs only on that shared account: for one, mint
+   the `--owner workspace` link (tool: `for_trigger=true`) and only that one.
+   Never post a private link first and a shared one after it.
    You act with your person's rights: it works when they may manage the
    workspace's connections (an owner, admin or manager) and your grant
    includes it. A refusal names the missing permission and who holds it.

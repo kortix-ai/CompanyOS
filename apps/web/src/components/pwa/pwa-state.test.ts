@@ -7,6 +7,7 @@ import {
   dismissed,
   isIosWithoutInstallPrompt,
   isStandalone,
+  offersInstallCard,
 } from './pwa-state';
 
 const storage = (values: Record<string, string> = {}) => ({
@@ -71,5 +72,15 @@ describe('dismissed / dismiss', () => {
     };
     expect(dismissed(throwing, INSTALL_DISMISSED_KEY)).toBe(false);
     expect(() => dismiss(throwing, INSTALL_DISMISSED_KEY)).not.toThrow();
+  });
+});
+
+describe('offersInstallCard', () => {
+  test('a touch-first device (phone, tablet) gets the floating install card', () => {
+    expect(offersInstallCard(true)).toBe(true);
+  });
+
+  test('a desktop with a mouse never gets it: the card covered app controls, and the address bar has its own Install button', () => {
+    expect(offersInstallCard(false)).toBe(false);
   });
 });

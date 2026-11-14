@@ -685,6 +685,13 @@ mock.module('../llm-gateway/resolution/default-model', () => ({
   isModelServableForAccount: async () => true,
 }));
 
+// A Free-tier fixture has no default model; a non-empty catalog lets pi pick one.
+const realServableCatalog = await import('../llm-gateway/models/servable-catalog');
+mock.module('../llm-gateway/models/servable-catalog', () => ({
+  ...realServableCatalog,
+  servableProjectCatalog: async () => ({ models: { 'stub/model': {} } }),
+}));
+
 mock.module('../shared/supabase', () => ({
   getSupabase: () => ({
     auth: {

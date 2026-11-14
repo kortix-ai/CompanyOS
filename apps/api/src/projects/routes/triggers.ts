@@ -35,7 +35,8 @@ import {
   mergeTriggerPayload,
   parseTriggerDraft,
   removeTriggerFromManifest,
-  renderPromptTemplate,
+  renderTriggerInput,
+  triggerInputPreamble,
   renderSessionKey,
   specToBody,
   triggerFilterMatches,
@@ -44,6 +45,7 @@ import {
   validateAppTriggerTarget,
 } from '../lib/triggers';
 import { clearTriggerAutoPause } from '../lib/trigger-run-caps';
+import { gateTriggerSetup } from '../lib/trigger-setup-pause';
 // From the leaf, not the barrel: suites that stub '../lib/triggers' by listing
 // its exports would otherwise lose this name.
 import { ACCOUNT_STATE_FIRE_CODES, markGitTriggerAttemptFailed } from '../lib/trigger-fire';
@@ -485,6 +487,9 @@ export function registerTriggersRoutes(): void {
             };
           }
           const next = upsertTriggerInManifest(manifest, draftToSpec(draft, manifest.path));
+          // An empty prompt is a program agent's payload input; any other agent needs one (extractTriggers knows the agents).
+          const refused = extractTriggers({ ...manifest, raw: next.raw }).errors.find((e) => e.slug === draft.slug);
+          if (refused) return { ok: false, error: refused.error, status: 400 };
           manifest.raw = next.raw;
           committedManifest = manifest;
           return { ok: true, commitMessage: `chore: add trigger ${draft.slug}` };
@@ -505,6 +510,9 @@ export function registerTriggersRoutes(): void {
         access,
         pinnedSessionId: draft.pinnedSessionId,
       });
+      // A trigger the account has no model for pauses with the reason now,
+      // not at its first fire (trigger-setup-pause.ts). The save stands.
+      await gateTriggerSetup({ projectId, accountId: loaded.row.accountId, specs: createdSpecs.filter((s) => s.slug === draft.slug) });
       await followTrigger(c, loaded.row, projectId, draft.slug);
       capturePersonEvent(c, loaded, projectId, 'trigger_created', { type: draft.type });
 
@@ -719,6 +727,9 @@ export function registerTriggersRoutes(): void {
           }
 
           const next = upsertTriggerInManifest(manifest, draftToSpec(draft, manifest.path));
+          // An empty prompt is a program agent's payload input; any other agent needs one (extractTriggers knows the agents).
+          const refused = extractTriggers({ ...manifest, raw: next.raw }).errors.find((e) => e.slug === draft.slug);
+          if (refused) return { ok: false, error: refused.error, status: 400 };
           manifest.raw = next.raw;
           committedManifest = manifest;
           return { ok: true, commitMessage: `chore: update trigger ${slug}` };
@@ -735,9 +746,10 @@ export function registerTriggersRoutes(): void {
           result.status as 400 | 404 | 409 | 502,
         );
       }
+      let updatedSpecs: ReturnType<typeof extractTriggers>['specs'] | null = null;
       if (touchesManifest) {
         if (!committedManifest) throw new Error('trigger update completed without a manifest');
-        const updatedSpecs = extractTriggers(committedManifest).specs;
+        updatedSpecs = extractTriggers(committedManifest).specs;
         await reconcileProjectTriggerRuntime(projectId, updatedSpecs);
         await reconcileEventSubscriptions(projectId, loaded.row.accountId, updatedSpecs);
       }
@@ -755,6 +767,9 @@ export function registerTriggersRoutes(): void {
       // Turning a trigger on also resumes it from an auto-pause (KRTX-1721):
       // the same Resume control and `kortix triggers enable` clear both.
       if (body.enabled === true) await clearTriggerAutoPause(projectId, slug);
+      // After the resume: a trigger still on and still without a model pauses
+      // again with the reason (trigger-setup-pause.ts). The save stands.
+      if (updatedSpecs) await gateTriggerSetup({ projectId, accountId: loaded.row.accountId, specs: updatedSpecs.filter((s) => s.slug === slug) });
       await followTrigger(c, loaded.row, projectId, slug);
 
       return c.json(await loadTriggersForResponse(projectId, loaded.row, { userId: loaded.userId, bound: callerKortixSessionId(c) }));
@@ -872,7 +887,7 @@ export function registerTriggersRoutes(): void {
       const payload = override
         ? { ...mergeTriggerPayload(base, override as Record<string, unknown>), source: base.source, actor: base.actor }
         : base;
-      const renderedPrompt = renderPromptTemplate(target.spec.promptTemplate, payload);
+      const renderedPrompt = renderTriggerInput(target.spec, payload);
       if (body.dry_run === true) {
         // The request's audit row keeps `trigger.fire`; this marks it as nothing fired.
         annotateAuditEvent({ metadata: { dry_run: true } });
@@ -982,10 +997,10 @@ export function registerTriggersRoutes(): void {
         return c.json({ error: 'This payload\'s webhook signature never verified. Send confirm_unverified: true to replay it', code: 'payload_unverified' }, 409);
       }
       const source = run.source as TriggerFireSource;
-      const template = renderPromptTemplate(target.spec.promptTemplate, run.payload);
+      const template = renderTriggerInput(target.spec, run.payload);
       const renderedPrompt =
-        source === 'event' ? `${eventPromptPreamble(target.spec, ((run.payload as { event?: { provider?: string } } | null)?.event?.provider) ?? null)}${template}`
-          : source === 'app' ? `${appEventPromptPreamble((run.payload as { event?: unknown } | null)?.event)}${template}`
+        source === 'event' ? `${triggerInputPreamble(target.spec, eventPromptPreamble(target.spec, ((run.payload as { event?: { provider?: string } } | null)?.event?.provider) ?? null))}${template}`
+          : source === 'app' ? `${triggerInputPreamble(target.spec, appEventPromptPreamble((run.payload as { event?: unknown } | null)?.event))}${template}`
             : template;
       return fireAndAnswer(c, target, {
         payload: run.payload,

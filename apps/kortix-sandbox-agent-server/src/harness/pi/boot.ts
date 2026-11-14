@@ -146,12 +146,12 @@ export async function runPi(context: HarnessBootContext & { cfg: PiConfig; bootS
     onTurnBegin: ({ rootId, messageId }) => {
       turnOrder.begin(messageId, relayTurnBegin(rootId, messageId))
     },
-    onTurnEnd: ({ rootId, messageId, status, error }) => {
+    onTurnEnd: ({ rootId, messageId, status, error, finalText }) => {
       assetsGate.turnEnded()
       kortixEventBus().publishDaemon('kortix.turn', { runtime_session_id: rootId, verdict: status, error: error ?? null }, rootId)
       const begun = turnOrder.end(messageId)
       if (relayedTurnEnds.has(messageId)) return
-      void begun.then(() => relayTurnEnd({ runtimeSessionId: rootId, messageId, status, error })).then((settled) => {
+      void begun.then(() => relayTurnEnd({ runtimeSessionId: rootId, messageId, status, error, finalText })).then((settled) => {
         if (settled) relayedTurnEnds.add(messageId)
       })
     },

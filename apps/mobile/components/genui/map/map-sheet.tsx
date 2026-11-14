@@ -13,8 +13,6 @@
  * back button (`onRequestClose`), then closes the popup and frames every place again; with nothing selected they
  * close the map. Close always closes the map.
  */
-import { Asset } from 'expo-asset';
-import { File } from 'expo-file-system';
 import { useEffect, useRef, useState, type ComponentRef, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AccessibilityInfo, Modal, ScrollView, useWindowDimensions, View } from 'react-native';
@@ -31,6 +29,7 @@ import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { CaretLeftIcon, XIcon, type AppIcon } from '@/lib/icons';
 import { decidePreviewNavigation } from '@/lib/utils/html-embed';
+import { loadBundledText } from '@/lib/utils/asset-text';
 import { THEME, withAlpha } from '@/lib/utils/theme';
 
 import type { MapPlace, PlaceAction } from '@/lib/genui/map-geo';
@@ -96,21 +95,9 @@ function pageMessage(
   if (place && action) openPlaceAction(place, action);
 }
 
-async function readText(moduleId: number): Promise<string> {
-  const asset = await Asset.fromModule(moduleId).downloadAsync();
-  return new File(asset.localUri ?? asset.uri).text();
-}
-
-let bundle: Promise<{ script: string; css: string }> | null = null;
-/** MapLibre's script and stylesheet, read once per app run; a failed read retries on the next open. */
+/** MapLibre's script and stylesheet: the shared bundled-asset reader (lib/utils/asset-text.ts) reads each once per app run and retries a failed read on the next open. */
 function loadBundle() {
-  bundle ??= Promise.all([readText(SCRIPT), readText(CSS)])
-    .then(([script, css]) => ({ script, css }))
-    .catch((error: unknown) => {
-      bundle = null;
-      throw error;
-    });
-  return bundle;
+  return Promise.all([loadBundledText(SCRIPT), loadBundledText(CSS)]).then(([script, css]) => ({ script, css }));
 }
 
 export type MapSheetData = Omit<MapDocumentInput, 'markers' | 'script' | 'css' | 'background' | 'routeColor' | 'pin' | 'labels' | 'interactive' | 'chrome'> & {

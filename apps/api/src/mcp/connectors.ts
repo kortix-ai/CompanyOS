@@ -107,7 +107,7 @@ export const CONNECTOR_TOOLS = [
     name: 'call_connector',
     title: 'Call a connector action',
     description:
-      'Run one connector action as the signed-in user. Kortix adds the credential server-side, applies the project\'s policies and records an audit entry. `args` must match describe_connector_action. Results: (1) success: `{ok:true, account, risk, data}`, where `account` is the connected account that ran it (say which one you used); (2) `pending_approval`: a policy holds the call for a human. Give the human `approval_url` (and `approval_summary`), and stop. When `runs_on_approval` is true, Kortix runs the call once after approval: do not call again; `next` says where the outcome appears. Otherwise wait for them to approve, then call again with the SAME tool, args and account within 15 minutes: the approved call then runs once. (3) `denied`: `reason` says why (`policy_block` = the project blocks this action, do not retry; `connector_not_connected` = call connect_connector; `account_required` = several accounts and no default, retry with `account` set to one of `available_accounts`). ALWAYS pass `reason` for a write whose args are only ids (send_draft, delete, update by id): say what it does, e.g. who a draft goes to and what it says. The approver sees it, labelled as your description, next to the real args. Data over ~40 000 characters comes back cut, marked `data_truncated`, with a preview: narrow the args (fields, filters, page size) and call again. To attach a file, stage it with upload_connector_attachment and put the returned ref in `args`; never paste base64 into `args`.',
+      'Run one connector action as the signed-in user. Kortix adds the credential server-side, applies the project\'s policies and records an audit entry. `args` must match describe_connector_action. Results: (1) success: `{ok:true, account, risk, data}`, where `account` is the connected account that ran it (say which one you used); (2) `pending_approval`: a policy holds the call for a human. Give the human `approval_url` (and `approval_summary`), and stop. When `runs_on_approval` is true, Kortix runs the call once after approval: do not call again; `next` says where the outcome appears. Otherwise wait for them to approve, then call again with the SAME tool, args and account within 15 minutes: the approved call then runs once. (3) `denied`: `reason` says why (`policy_block` = the project blocks this action, do not retry; `connector_not_connected` = call connect_connector; `connector_not_shared` = an account exists but is not shared with you: give the human `hint`, do not connect another; `account_required` = several accounts and no default, retry with `account` set to one of `available_accounts`). ALWAYS pass `reason` for a write whose args are only ids (send_draft, delete, update by id): say what it does, e.g. who a draft goes to and what it says. The approver sees it, labelled as your description, next to the real args. Data over ~40 000 characters comes back cut, marked `data_truncated`, with a preview: narrow the args (fields, filters, page size) and call again. To attach a file, stage it with upload_connector_attachment and put the returned ref in `args`; never paste base64 into `args`.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -327,6 +327,8 @@ export function denialNext(reason: string, body: any): string | undefined {
       return body?.available_accounts?.length
         ? 'Retry with `account` set to one of available_accounts, or omit it for the default.'
         : 'Call connect_connector for this connector, give the human the url, then list_connectors to confirm.';
+    case 'connector_not_shared':
+      return 'An account exists but is not shared with this agent or session. Do not call connect_connector: it adds a duplicate account. Give the human the hint: the account owner shares it in Settings → Connectors.';
     case 'account_required':
       return 'Several accounts are connected and none is the default: retry with `account` set to one of available_accounts (or ask the human which).';
     case 'connector_not_assigned':
@@ -334,7 +336,9 @@ export function denialNext(reason: string, body: any): string | undefined {
     case 'connector_not_found':
       return 'No such connector in this project: list_connectors shows the slugs, add_connector adds one.';
     case 'action_not_found':
-      return 'No such action: search_connector_actions finds the right `tool` id.';
+      return Array.isArray(body?.did_you_mean) && body.did_you_mean.length > 0
+        ? `No such action. Did you mean ${body.did_you_mean.join(', ')}? Call it with that \`tool\`, or search_connector_actions to find another.`
+        : 'No such action: search_connector_actions finds the right `tool` id.';
     default:
       return undefined;
   }

@@ -276,7 +276,8 @@ const SLACK_ACTIONS: ChannelActionDef[] = [
     method: 'conversations.join',
     verb: 'POST',
     name: 'Join channel',
-    description: 'Join a public channel so the bot can post in it. Requires `channel`.',
+    description:
+      'Join a public channel so the bot can post in it. Requires `channel`. Not needed to read: a read of a public channel the bot is not in joins it by itself. A private channel needs a person to invite the bot.',
     risk: 'write',
     properties: {
       channel: { type: 'string', description: 'Channel ID to join.' },

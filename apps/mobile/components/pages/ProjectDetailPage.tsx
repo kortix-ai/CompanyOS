@@ -432,7 +432,6 @@ export function ProjectDetailPage({
   const {
     data: files,
     isLoading: filesLoading,
-    refetch: refetchFiles,
   } = useSandboxFiles(hasFiles && tab === 'files' ? sandboxUrl : undefined, filePath);
   const [viewerFile, setViewerFile] = useState<SandboxFile | null>(null);
   const [viewerVisible, setViewerVisible] = useState(false);
@@ -809,7 +808,6 @@ export function ProjectDetailPage({
                 loading={statsLoading}
                 isDark={isDark}
                 fg={fg}
-                muted={muted}
                 cardBg={cardBg}
                 border={border}
               />
@@ -2331,7 +2329,6 @@ function ProjectTotalsCard({
   loading,
   isDark,
   fg,
-  muted,
   cardBg,
   border,
 }: {
@@ -2342,7 +2339,6 @@ function ProjectTotalsCard({
   loading: boolean;
   isDark: boolean;
   fg: string;
-  muted: string;
   cardBg: string;
   border: string;
 }) {

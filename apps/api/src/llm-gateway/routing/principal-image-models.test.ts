@@ -2,16 +2,14 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { type AuthedPrincipal, GatewayResolutionError } from '@kortix/llm-gateway';
 
 // Which credentials make which image models reachable for `auto`: the project
-// secret names the principal may use, plus the pooled keys granted to it when
-// the project turns pooled keys on. The three DB reads are stubbed (the rest of
+// secret names the principal may use, plus the pooled keys granted to it. The three DB reads are stubbed (the rest of
 // each module stays real, for its other importers); the catalog and the plan
 // are real.
 let access = { disabledProviders: [] as string[], disabledModels: [] as string[] };
-let pooledEnabled = false;
 let projectNames: string[] = [];
 let pooledNames: string[] = [];
 
-const getProjectGatewayResolution = mock(async (_projectId: string) => ({ access, pooledEnabled, customProviders: [] }));
+const getProjectGatewayResolution = mock(async (_projectId: string) => ({ access, customProviders: [] }));
 const realAccess = await import('../../repositories/project-model-access');
 mock.module('../../repositories/project-model-access', () => ({ ...realAccess, getProjectGatewayResolution }));
 
@@ -38,7 +36,6 @@ async function planned(principal: AuthedPrincipal): Promise<string[]> {
 describe('the image models a principal reaches', () => {
   beforeEach(() => {
     access = { disabledProviders: [], disabledModels: [] };
-    pooledEnabled = false;
     projectNames = [];
     pooledNames = [];
     getProjectGatewayResolution.mockClear();
@@ -46,17 +43,16 @@ describe('the image models a principal reaches', () => {
     listGrantedGatewaySecretNames.mockClear();
   });
 
-  test('a session reaches its project secrets; with pooled keys off no grant is read', async () => {
+  test('a session reaches its project secrets and its granted keys', async () => {
     projectNames = ['CODEX_AUTH_JSON', 'GOOGLE_GENERATIVE_AI_API_KEY'];
     expect(await planned(session)).toEqual(['codex/gpt-image-2', 'google/gemini-2.5-flash-image']);
     expect(listProjectSecretNamesForConsumer).toHaveBeenCalledWith({
       projectId: 'proj-1', principalUserId: 'user-1', consumer: 'llm_gateway',
     });
-    expect(listGrantedGatewaySecretNames).not.toHaveBeenCalled();
+    expect(listGrantedGatewaySecretNames).toHaveBeenCalledWith('acct-1', 'proj-1', 'user-1', 'user-1');
   });
 
-  test('with pooled keys on, a session also reaches the keys granted to it', async () => {
-    pooledEnabled = true;
+  test('a session also reaches the pooled keys granted to it', async () => {
     projectNames = ['OPENAI_API_KEY'];
     pooledNames = ['CODEX_AUTH_JSON', 'XAI_API_KEY'];
     expect(await planned(session)).toEqual(['codex/gpt-image-2', 'openai/gpt-image-1.5', 'xai/grok-imagine-image']);
@@ -64,14 +60,12 @@ describe('the image models a principal reaches', () => {
   });
 
   test('a gateway API key reaches only pooled keys shared with the whole project', async () => {
-    pooledEnabled = true;
     pooledNames = ['XAI_API_KEY'];
     expect(await planned({ ...session, keyId: 'key-1' })).toEqual(['xai/grok-imagine-image']);
     expect(listGrantedGatewaySecretNames).toHaveBeenCalledWith('acct-1', 'proj-1', 'user-1', null);
   });
 
   test('a principal with no personal owner reads no personal secret or grant', async () => {
-    pooledEnabled = true;
     projectNames = ['CODEX_AUTH_JSON'];
     expect(await planned({ ...session, personalUserId: null })).toEqual(['codex/gpt-image-2']);
     expect(listProjectSecretNamesForConsumer).toHaveBeenCalledWith({

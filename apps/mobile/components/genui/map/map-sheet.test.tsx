@@ -168,13 +168,16 @@ describe('MapSheet', () => {
   });
 
   test('the asset is read once per app run', async () => {
-    // A fresh module instance starts with an empty cache, whatever ran before this test.
+    // The read-once cache lives in lib/utils/asset-text.ts now, app-global: a fresh MapSheet module
+    // instance reads nothing again, whatever ran before this test. One app run reads each asset at
+    // most once (pinned in lib/utils/asset-text.test.ts); two opens of one still draw the map.
     const cold: string = './map-sheet?cold';
     const { MapSheet: Cold } = (await import(cold)) as typeof import('./map-sheet');
     await open(Cold);
     act(() => tree!.unmount());
     const root = await open(Cold);
-    expect(files.reads).toEqual(['file:///script-asset', 'file:///css-asset']);
+    const seen = new Set<string>();
+    expect(files.reads.filter((uri) => (seen.has(uri) ? true : (seen.add(uri), false)))).toEqual([]);
     expect(all(root, 'webview')).toHaveLength(1);
   });
 

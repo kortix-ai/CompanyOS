@@ -17,7 +17,7 @@ import {
 import type { ConnectorAttachmentStore } from './attachments';
 import type { ChannelReadGate, ChannelReadInput } from './channel-read-scope';
 import type { ChannelWriteGate } from './channel-write-scope';
-import { executeComposio } from './composio';
+import { COMPOSIO_UPSTREAM_UNAVAILABLE, executeComposio } from './composio';
 import { createdDraftId, toResendEmailArgs } from './email-resend-args';
 import {
   EMAIL_CHANNEL_CONNECTOR_SLUG,
@@ -190,6 +190,7 @@ export interface GatewayDeps {
   ): Promise<
     | 'connector_not_found'
     | 'connector_not_connected'
+    | 'connector_not_shared'
     | 'connector_disabled'
     | 'account_required'
     | 'computer_unpaired'
@@ -210,6 +211,8 @@ export interface GatewayDeps {
    *  in hand (the call path does), so the store skips its duplicate read of
    *  the `connectors` row. */
   loadAction(connectorId: string, relPath: string, providerType: string): Promise<GatewayAction | null>;
+  /** Up to 3 action paths of the connector closest to `relPath`, for an `action_not_found` denial. */
+  suggestActions?(connectorId: string, relPath: string, providerType: string): Promise<string[]>;
   /**
    * Resolve the credential value/binding for a connector. `userId=null` = shared;
    * set = that member's own. Receives the loaded connector so the resolver can
@@ -217,6 +220,17 @@ export interface GatewayDeps {
    * install token) without re-querying.
    */
   resolveCredential(connector: GatewayConnector, userId: string | null): Promise<string | null>;
+  /**
+   * A Composio account whose sign-in started (its row holds a Composio
+   * `session_id`) but whose account no finalize recorded. Asks Composio once
+   * and records the account when Composio reports it active. Returns the
+   * row's new metadata, or null when the account is not usable yet. Absent:
+   * such an account answers `needs_auth` without asking.
+   */
+  completeComposioAuthorization?(input: {
+    projectId: string;
+    connector: GatewayConnector;
+  }): Promise<Record<string, unknown> | null>;
   /** Email-originated sessions pin native Email channel calls to the inbound inbox/thread. */
   loadEmailSessionContext?(
     projectId: string,
@@ -254,6 +268,12 @@ export interface GatewayDeps {
    * Absent = unconfined: production always wires it (db-deps.ts).
    */
   gateChannelWrite?(input: ChannelReadInput): Promise<ChannelWriteGate>;
+  /**
+   * The author a session's Slack post shows: its agent's name and face
+   * (channels/slack/persona.ts). Set here, after the argument check, so an
+   * agent cannot post under another agent's name. Null: the app's own name.
+   */
+  slackAuthor?(input: { projectId: string; sessionId: string; token: string }): Promise<{ username: string; icon_url?: string } | null>;
   /** Email connections represent one installed email (Resend) inbox. */
   loadEmailConnectorContext?(
     projectId: string,
@@ -504,7 +524,15 @@ export type CallResult =
       upstreamError?: string;
     }
   /** `message`: the sentence the agent reads, for a denial whose fix is not in `reason` alone. */
-  | { status: 'denied'; reason: string; message?: string; policySet?: string; agent?: string }
+  | {
+      status: 'denied';
+      reason: string;
+      message?: string;
+      policySet?: string;
+      agent?: string;
+      /** `action_not_found`: the connector's closest action paths, best first. */
+      suggestions?: string[];
+    }
   | {
       status: 'pending_approval';
       reason: string;
@@ -559,17 +587,28 @@ export const UPSTREAM_TIMEOUT = 'upstream_timeout';
  * still returns its `reason` and writes its own audit row.
  */
 const UPSTREAM_WARN_INTERVAL_MS = 60_000;
+/**
+ * A Composio-edge 403 block is deterministic: the same arguments are refused
+ * again and the SDK no longer retries it, so only a caller that keeps sending
+ * the blocked payload repeats it (about 3 an hour in prod after KRTX-4722's
+ * first fix, against a 1.71 an hour baseline). One warn an hour per call path
+ * names the block; the audit row of every refusal stays. The call is NOT
+ * refused locally: the WAF matches the payload, so a per-path circuit breaker
+ * would also refuse the same path's calls the edge lets through.
+ */
+const EDGE_REFUSED_WARN_INTERVAL_MS = 3_600_000;
 const UPSTREAM_WARN_MAX_PATHS = 128;
 // replica-local: per-process warn throttle. A throttle shared across replicas would
 // either need a database round-trip per failure or leave one window open, and
 // a per-replica window can only over-report by one line per replica per interval.
-const lastUpstreamWarnAt = new Map<string, number>();
+const lastUpstreamWarnAt = new Map<string, number>(); // key -> suppressed until (ms epoch)
 
-function shouldLogUpstreamWarn(path: string): boolean {
+/** `key` is the call path, suffixed per failure class; the map holds when each key may warn next. */
+function shouldLogUpstreamWarn(key: string, intervalMs: number): boolean {
   const now = Date.now();
-  if (lastUpstreamWarnAt.size >= UPSTREAM_WARN_MAX_PATHS && !lastUpstreamWarnAt.has(path)) {
-    for (const [key, at] of lastUpstreamWarnAt) {
-      if (now - at >= UPSTREAM_WARN_INTERVAL_MS) lastUpstreamWarnAt.delete(key);
+  if (lastUpstreamWarnAt.size >= UPSTREAM_WARN_MAX_PATHS && !lastUpstreamWarnAt.has(key)) {
+    for (const [k, until] of lastUpstreamWarnAt) {
+      if (until <= now) lastUpstreamWarnAt.delete(k);
       if (lastUpstreamWarnAt.size < UPSTREAM_WARN_MAX_PATHS) break;
     }
     if (lastUpstreamWarnAt.size >= UPSTREAM_WARN_MAX_PATHS) {
@@ -580,9 +619,9 @@ function shouldLogUpstreamWarn(path: string): boolean {
       if (oldest !== undefined) lastUpstreamWarnAt.delete(oldest);
     }
   }
-  const last = lastUpstreamWarnAt.get(path);
-  if (last !== undefined && now - last < UPSTREAM_WARN_INTERVAL_MS) return false;
-  lastUpstreamWarnAt.set(path, now);
+  const until = lastUpstreamWarnAt.get(key);
+  if (until !== undefined && now < until) return false;
+  lastUpstreamWarnAt.set(key, now + intervalMs);
   return true;
 }
 
@@ -741,7 +780,7 @@ function gatewayConnectorAccount(connector: GatewayConnector): CallResultAccount
 async function connectorUsable(
   deps: GatewayDeps,
   connector: GatewayConnector,
-  _input: CallInput,
+  input: CallInput,
   credentialOverride?: string | null,
 ): Promise<{ ok: true; secret: string | null } | { ok: false; reason: string }> {
   // Composio never uses connector credentials. Its account binding and session
@@ -752,9 +791,15 @@ async function connectorUsable(
     if (!connector.hasAuth || connector.connectionMetadata?.is_no_auth === true) {
       return { ok: true, secret: null };
     }
-    return typeof connector.connectionMetadata?.connected_account_id === 'string'
-      ? { ok: true, secret: null }
-      : { ok: false, reason: 'needs_auth' };
+    if (typeof connector.connectionMetadata?.connected_account_id === 'string') {
+      return { ok: true, secret: null };
+    }
+    // The person may have finished the sign-in at Composio with no finalize
+    // to record it. The execution below reads the recorded account.
+    const recorded = await finishedComposioAuthorization(deps, connector, input.projectId);
+    if (!recorded) return { ok: false, reason: 'needs_auth' };
+    connector.connectionMetadata = recorded;
+    return { ok: true, secret: null };
   }
   // Credential — none needed (public), or the one shared project credential.
   // (`per_user` — each member's own — was removed 2026-07-05; every connector
@@ -764,6 +809,28 @@ async function connectorUsable(
   const secret = await deps.resolveCredential(connector, null);
   if (secret == null) return { ok: false, reason: 'needs_auth' };
   return { ok: true, secret };
+}
+
+/**
+ * The account a started Composio sign-in landed, recorded now, or null. Only a
+ * row that holds a Composio `session_id` is asked about. A failed lookup is
+ * not a verdict: the call fails closed with `needs_auth`, as it did before
+ * the lookup existed.
+ */
+async function finishedComposioAuthorization(
+  deps: GatewayDeps,
+  connector: GatewayConnector,
+  projectId: string,
+): Promise<Record<string, unknown> | null> {
+  if (!deps.completeComposioAuthorization) return null;
+  if (typeof connector.connectionMetadata?.session_id !== 'string') return null;
+  try {
+    const metadata = await deps.completeComposioAuthorization({ projectId, connector });
+    if (!metadata) return null;
+    return typeof metadata.connected_account_id === 'string' || metadata.is_no_auth === true ? metadata : null;
+  } catch {
+    return null;
+  }
 }
 
 async function resolveEmailExecutionContext(
@@ -912,10 +979,14 @@ export async function handleCall(deps: GatewayDeps, input: CallInput): Promise<C
 
   const action = await deps.loadAction(connector.connectorId, input.actionPath, connector.provider);
   if (!action) {
+    const suggestions = deps.suggestActions
+      ? await deps.suggestActions(connector.connectorId, input.actionPath, connector.provider).catch(() => [])
+      : [];
     await audit(deps, input, connector, 'denied', null, {
       reason: 'action_not_found',
+      ...(suggestions.length > 0 ? { suggestions } : {}),
     });
-    return { status: 'denied', reason: 'action_not_found' };
+    return { status: 'denied', reason: 'action_not_found', ...(suggestions.length > 0 ? { suggestions } : {}) };
   }
 
   // A channel call carries only the arguments its action declares: the gates
@@ -961,6 +1032,7 @@ export async function handleCall(deps: GatewayDeps, input: CallInput): Promise<C
   const channelInput: ChannelReadInput = {
     projectId: input.projectId,
     sessionId: input.sessionId ?? null,
+    userId: input.subject.userId,
     platform: connector.platform ?? null,
     actionPath: input.actionPath,
     args: input.args ?? {},
@@ -1458,6 +1530,19 @@ async function runConnectorAction(
         connector.provider === 'channel'
           ? withChannelDefaults(connector.platform ?? '', input.actionPath, executionArgs)
           : executionArgs;
+      if (
+        connector.provider === 'channel' &&
+        connector.platform === 'slack' &&
+        input.actionPath === 'send_message' &&
+        input.sessionId &&
+        typeof executionSecret === 'string' &&
+        deps.slackAuthor
+      ) {
+        const author = await deps
+          .slackAuthor({ projectId: input.projectId, sessionId: input.sessionId, token: executionSecret })
+          .catch(() => null);
+        if (author) providerArgs = { ...providerArgs, ...author };
+      }
       const scope = {
         accountId: input.accountId,
         projectId: input.projectId,
@@ -1500,19 +1585,47 @@ async function runConnectorAction(
         );
       }
       const appAuthorization = await appAuthorizationForCall(deps, input, connector, action.binding);
-      result = await withDeadline(
-        executeCall({
-          binding: action.binding,
-          baseUrl: connector.baseUrl,
-          auth: connector.auth,
-          headers: connector.headers,
-          secret: executionSecret,
-          args: providerArgs,
-          paramHints: paramHintsFromSchema(action.inputSchema),
-          appAuthorization,
-          fetchImpl: (url, init) => deps.fetchImpl(url, { ...init, signal, maxResponseBytes: MAX_UPSTREAM_RESPONSE_BYTES }),
-        }),
-      );
+      const runAction = () =>
+        withDeadline(
+          executeCall({
+            binding: action.binding,
+            baseUrl: connector.baseUrl,
+            auth: connector.auth,
+            headers: connector.headers,
+            secret: executionSecret,
+            args: providerArgs,
+            paramHints: paramHintsFromSchema(action.inputSchema),
+            appAuthorization,
+            fetchImpl: (url, init) => deps.fetchImpl(url, { ...init, signal, maxResponseBytes: MAX_UPSTREAM_RESPONSE_BYTES }),
+          }),
+        );
+      result = await runAction();
+      // A read of a public channel the bot is not in: join it, then read
+      // again, once. The join is its own call through this whole gateway: the
+      // write gate (never another workspace's channel), this agent's rules for
+      // `join_channel` (allow runs it, ask returns the approval, block
+      // refuses) and its own audit row. The read repeats only after a join
+      // that ran. A private channel answers `channel_not_found` and stays
+      // closed until a person invites the bot.
+      if (
+        connector.provider === 'channel' &&
+        connector.platform === 'slack' &&
+        action.risk === 'read' &&
+        slackError(result.data) === 'not_in_channel' &&
+        typeof providerArgs.channel === 'string'
+      ) {
+        const joined = await handleCall(deps, {
+          ...input,
+          actionPath: 'join_channel',
+          args: { channel: providerArgs.channel },
+          // The read's own approval and held run name the read, not the join.
+          approvalExecutionId: null,
+          heldApproval: null,
+          approvalContext: `Join the channel to read it (${input.actionPath}).`,
+        });
+        if (joined.status === 'ok') result = await runAction();
+        else if (joined.status === 'pending_approval') return joined;
+      }
       // Email `send_message` created a draft: send it now, as one action.
       const draftId =
         result.ok && isEmailChannel && input.actionPath === 'send_message' ? createdDraftId(result.data) : null;
@@ -1621,12 +1734,28 @@ async function runConnectorAction(
       ...(credentialRejected ? { error_code: CREDENTIAL_REJECTED } : {}),
       reason: reason.slice(0, 500),
     });
-    const message = `[connector] ${fullPath} failed (upstream ${result.status}): ${reason.slice(0, 500)}`;
-    if (connector.provider === 'composio' && result.status === 400) logger.debug(message);
-    else if (shouldLogUpstreamWarn(fullPath)) logger.warn(message);
+    // The message carries no per-call identifier: the sweep's `infra:log` key
+    // hashes the normalized message, so an action path in the text split one
+    // provider-side failure class (a Composio-edge WAF block) into one key —
+    // and one Linear issue — per action variant (KRTX-4512/KRTX-4722/KRTX-4759).
+    // The path rides in the `connector_action` field instead, still queryable
+    // in Better Stack (`JSONExtractString(raw,'connector_action')`).
+    const message = `[connector] call failed (upstream ${result.status}): ${reason.slice(0, 500)}`;
+    const logContext = { connector_action: fullPath };
+    const edgeRefused =
+      connector.provider === 'composio' &&
+      result.status === 403 &&
+      typeof result.data === 'string' &&
+      result.data.startsWith(COMPOSIO_UPSTREAM_UNAVAILABLE);
+    if (connector.provider === 'composio' && result.status === 400) logger.debug(message, logContext);
+    else if (
+      edgeRefused
+        ? shouldLogUpstreamWarn(`${fullPath}#edge-refused`, EDGE_REFUSED_WARN_INTERVAL_MS)
+        : shouldLogUpstreamWarn(fullPath, UPSTREAM_WARN_INTERVAL_MS)
+    ) logger.warn(message, logContext);
     // A suppressed repeat still lands at debug: prod (LOG_LEVEL=info) never
     // ships it, a developer debugging the retry path still sees every failure.
-    else logger.debug(message);
+    else logger.debug(message, logContext);
     return {
       status: 'error',
       reason,
@@ -1895,6 +2024,14 @@ async function withSlackAuthorNames(
  * real outcome in `{ ok: boolean, error? }`. Map `ok:false` to a failed
  * ExecResult so the gateway's normal error path surfaces the cause.
  */
+/** A Slack `{ ok:false, error }` answer's error code; null for a success or another shape. */
+function slackError(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null;
+  const body = data as { ok?: unknown; error?: unknown };
+  if (body.ok !== false) return null;
+  return typeof body.error === 'string' ? body.error : 'unknown_error';
+}
+
 function mapChannelEnvelope(result: ExecResult): ExecResult {
   const data = result.data as { ok?: unknown } | null;
   if (result.ok && data && typeof data === 'object' && data.ok === false) {

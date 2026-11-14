@@ -85,6 +85,8 @@ export function LiquidGlass({
   );
 }
 
+const ROW: ViewStyle = { flexDirection: 'row', alignItems: 'center' };
+
 const FILL_CENTER: StyleProp<ViewStyle> = [StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }];
 
 /**
@@ -140,9 +142,12 @@ export function GlassButtons({
   tintColor?: string;
 }) {
   const tinted = React.useMemo(() => (tintColor ? glassContent(tintColor) : ownGlass), [tintColor]);
-  if (!LIQUID_GLASS_AVAILABLE) return <>{children}</>;
+  // A group stays one row without glass too: in a column slot (a sheet title
+  // row's trailing slot) its buttons would stack (the Android workspace
+  // switcher's gear and plus).
+  if (!LIQUID_GLASS_AVAILABLE) return shared ? <View style={ROW}>{children}</View> : <>{children}</>;
   const provided = (
     <GlassButtonContext.Provider value={shared ? sharedGlass : tinted}>{children}</GlassButtonContext.Provider>
   );
-  return shared ? <LiquidGlass style={{ flexDirection: 'row', alignItems: 'center' }}>{provided}</LiquidGlass> : provided;
+  return shared ? <LiquidGlass style={ROW}>{provided}</LiquidGlass> : provided;
 }

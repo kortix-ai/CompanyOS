@@ -3,14 +3,15 @@ import { CANONICAL_ORIGIN } from '@kortix/ui/internal/lib/site-metadata';
 const CANONICAL_HOSTS = new Set(['kortix.com', 'www.kortix.com']);
 
 // Local dev serves the production robots policy so the local crawl-verification
-// harness exercises exactly what kortix.com ships.
+// harness exercises exactly what kortix.com ships. An IPv6 host keeps its
+// brackets: `[::1]:3000` has the hostname `[::1]`.
 function isLocalHost(hostname: string): boolean {
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
 }
 
 export function isCanonicalRobotsHost(host: string | null): boolean {
   if (!host) return false;
-  const hostname = host.split(':')[0].toLowerCase();
+  const hostname = host.replace(/:\d*$/, '').toLowerCase();
   return CANONICAL_HOSTS.has(hostname) || isLocalHost(hostname);
 }
 

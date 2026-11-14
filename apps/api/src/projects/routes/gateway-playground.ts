@@ -3,6 +3,7 @@ import { publicGatewayBaseUrl } from '../../llm-gateway/public-url';
 import {
   calculateCost,
   GatewayResolutionError,
+  UpstreamHttpError,
   callUpstream,
   publicPayload,
   publicUpstreamError,
@@ -154,7 +155,10 @@ export function registerGatewayPlaygroundRoutes(): void {
             }
             const descriptor = candidates[0]!;
             const start = Date.now();
-            const res = await callUpstream(request, descriptor).catch(() => null);
+            // A provider's refusal (a rejected key, a quota) is the answer the
+            // person tests for: kept as a response, so its message and trace stay.
+            const res = await callUpstream(request, descriptor).catch((err) =>
+              err instanceof UpstreamHttpError ? new Response(err.body, { status: err.status }) : null);
             const tried = [shownProvider(descriptor)];
             if (!res) throw new Error('Request failed');
             const latencyMs = Date.now() - start;

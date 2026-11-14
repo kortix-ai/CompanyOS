@@ -2,10 +2,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { join, resolve } from 'node:path';
 
 /**
- * `kortix providers set | rm | ls` and provider keys (named accounts). With the
- * workspace flag `pooled_provider_secrets` on, a key lands where the web Models
- * panel lists it (`/secret-resources`); with it off, in the legacy workspace
- * secrets. Driven black-box through the real CLI process against a stub API:
+ * `kortix providers set | rm | ls` and provider keys (named accounts): a key
+ * lands where the web Models panel lists it (`/secret-resources`). Driven black-box through the real CLI process against a stub API:
  * what is pinned is the request that leaves the CLI and what it prints.
  */
 
@@ -25,6 +23,7 @@ interface Row {
   access_mode: 'project' | 'members';
   created_by: string;
   granted_user_ids: string[];
+  verification?: { status: 'verified' | 'invalid' | 'unknown'; message: string; checked_at: string } | null;
 }
 
 interface Call { method: string; path: string; search: string; body: Record<string, unknown> }
@@ -32,10 +31,11 @@ interface Call { method: string; path: string; search: string; body: Record<stri
 let server: ReturnType<typeof Bun.serve>;
 let calls: Call[] = [];
 // Per-test stub state, reset in beforeEach.
-let flagOn = true;
 let rows: Row[] = [];
 let legacy: string[] = [];
 let createStatus = 201;
+/** The check the API answers on create, as `secret-resources.ts` runs it. */
+let createVerification: Row['verification'] = null;
 
 function json(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json' } });
@@ -61,7 +61,7 @@ beforeAll(() => {
       calls.push({ method: req.method, path: url.pathname, search: url.search, body });
       const { pathname: path } = url;
       if (path === BASE && req.method === 'GET') {
-        return json({ project_id: PROJECT_ID, account_id: 'acc-1', experimental: { pooled_provider_secrets: flagOn } });
+        return json({ project_id: PROJECT_ID, account_id: 'acc-1', experimental: {} });
       }
       if (path === '/v1/me') return json({ user_id: ME, email: 'me@example.test', accounts: [] });
       if (path === KEYS && req.method === 'GET') return json({ secrets: rows });
@@ -77,6 +77,7 @@ beforeAll(() => {
           name: String(body.name),
           access_mode: body.access_mode as Row['access_mode'],
           granted_user_ids: [ME, ...((body.user_ids as string[]) ?? [])],
+          verification: createVerification,
         });
         rows.push(created);
         return json(created, 201);
@@ -106,10 +107,10 @@ beforeAll(() => {
 afterAll(() => server.stop(true));
 
 beforeEach(() => {
-  flagOn = true;
   rows = [];
   legacy = [];
   createStatus = 201;
+  createVerification = null;
 });
 
 async function runCli(args: string[]) {
@@ -141,7 +142,7 @@ async function runCli(args: string[]) {
   return { code, stdout, stderr, writes };
 }
 
-describe('providers set — flag on: a provider key under Models → Providers', () => {
+describe('providers set — a provider key under Models → Providers', () => {
   test('a new key is shared with everyone in the workspace by default', async () => {
     const r = await runCli(['set', 'anthropic', 'sk-ant-synthetic']);
     expect(r.code).toBe(0);
@@ -161,6 +162,23 @@ describe('providers set — flag on: a provider key under Models → Providers',
     expect(r.stdout).toContain('Saved "Anthropic key" (ANTHROPIC_API_KEY) for anthropic');
     expect(r.stdout).toContain('Shared with everyone in this workspace.');
     expect(r.stdout).toContain('Models → Providers');
+  });
+
+  test('a key the provider refused stays saved, and the output says what the provider said', async () => {
+    createVerification = { status: 'invalid', message: 'invalid x-api-key', checked_at: '2026-11-11T12:00:00.000Z' };
+    const r = await runCli(['set', 'anthropic', 'sk-ant-synthetic']);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain('Saved "Anthropic key"');
+    expect(r.stdout).toContain('anthropic refused the key: invalid x-api-key');
+    expect(r.stdout).toContain('kortix providers set anthropic');
+  });
+
+  test('a key the provider accepted says so; an unanswered check says it is not verified', async () => {
+    createVerification = { status: 'verified', message: 'The provider accepted the key.', checked_at: '2026-11-11T12:00:00.000Z' };
+    expect((await runCli(['set', 'anthropic', 'sk-ant-synthetic'])).stdout).toContain('anthropic accepted the key.');
+    rows = [];
+    createVerification = { status: 'unknown', message: 'Verification timed out', checked_at: '2026-11-11T12:00:00.000Z' };
+    expect((await runCli(['set', 'anthropic', 'sk-ant-synthetic', '--label', 'Other'])).stdout).toContain('Not verified: Verification timed out');
   });
 
   test('--private sends only-me access (members, no other user) and --label names it', async () => {
@@ -231,27 +249,6 @@ describe('providers set — flag on: a provider key under Models → Providers',
   });
 });
 
-describe('providers set — flag off: the legacy workspace secret, unchanged', () => {
-  test('POST /secrets with the same body as before', async () => {
-    flagOn = false;
-    const r = await runCli(['set', 'anthropic', 'sk-ant-synthetic']);
-    expect(r.code).toBe(0);
-    expect(r.writes).toEqual([
-      ['POST', `${BASE}/secrets`, { name: 'ANTHROPIC_API_KEY', value: 'sk-ant-synthetic', strategy: 'broker', consumer: 'llm_gateway' }],
-    ]);
-    expect(r.stdout).toContain('Saved ANTHROPIC_API_KEY for anthropic');
-    expect(r.stdout).toContain('shared with everyone in this workspace');
-  });
-
-  test('--private is refused: a workspace secret would widen it to everyone', async () => {
-    flagOn = false;
-    const r = await runCli(['set', 'anthropic', 'sk-ant-synthetic', '--private']);
-    expect(r.code).toBe(2);
-    expect(r.stderr).toContain('--private and --label do not apply');
-    expect(r.writes).toEqual([]);
-  });
-});
-
 describe('providers rm and ls — provider keys', () => {
   const mine = row({ secret_id: 'key-mine', label: 'Anthropic key' });
   const team = row({ secret_id: 'key-team', label: 'Team key', created_by: TEAMMATE, granted_user_ids: [TEAMMATE, ME], access_mode: 'members' });
@@ -295,13 +292,6 @@ describe('providers rm and ls — provider keys', () => {
     expect(r.writes).toEqual([]);
   });
 
-  test('rm with the flag off keeps the legacy removal unchanged', async () => {
-    flagOn = false;
-    const r = await runCli(['rm', 'anthropic']);
-    expect(r.code).toBe(0);
-    expect(r.writes.map(([m, p]) => [m, p])).toEqual([['DELETE', `${BASE}/secrets/ANTHROPIC_API_KEY`]]);
-  });
-
   test('ls lists each provider key with who can use it; --json carries them as accounts', async () => {
     rows = [mine, team, privateOne];
     const r = await runCli(['ls']);
@@ -315,13 +305,13 @@ describe('providers rm and ls — provider keys', () => {
     expect((JSON.parse(j.stdout) as { accounts: Row[] }).accounts.map((a) => a.secret_id)).toEqual(['key-mine', 'key-team', 'key-priv']);
   });
 
-  test('ls with the flag off reads no provider keys', async () => {
-    flagOn = false;
+  // `set`, `rm` and `ls` read no project flag: provider keys are always named accounts.
+  test('set, rm and ls never read a project flag', async () => {
     rows = [mine];
-    const r = await runCli(['ls', '--json']);
-    expect(r.code).toBe(0);
-    expect(JSON.parse(r.stdout)).toMatchObject({ accounts: [] });
-    expect(calls.some((c) => c.path === KEYS)).toBe(false);
+    for (const argv of [['set', 'anthropic', 'sk-ant-synthetic'], ['rm', 'anthropic'], ['ls']]) {
+      expect((await runCli(argv)).code).toBe(0);
+    }
+    expect(calls.some((c) => c.path === BASE && c.method === 'GET')).toBe(false);
   });
 });
 

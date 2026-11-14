@@ -89,7 +89,7 @@ import {
   useLlmProviderCatalogRevision,
 } from '../sections/llm-provider/use-live-catalog';
 import { orderProviderRows } from '../sections/llm-provider/utils';
-import { AccountSecretResourcesPanel } from '../sections/view/account-secret-resources-panel';
+import { AccountSecretResourcesPanel, PooledProvidersNote } from '../sections/view/account-secret-resources-panel';
 import { LegacyChatGptUsage, SubscriptionUsageSection } from '../sections/view/subscription-usage';
 import { useTranslations } from '../../i18n';
 import { LLM_PROVIDERS, LLM_PROVIDER_BY_ID, type LlmProviderEntry } from '../../internal/lib/llm-providers';
@@ -650,7 +650,7 @@ function ExpandedBody({
     content = (
       <AccordionSubRow>{entry.hint}</AccordionSubRow>
     );
-  } else if (pooled.pooledSecretsEnabled && pooled.accountId && entry.id === 'openai') {
+  } else if (pooled.accountId && entry.id === 'openai') {
     content = (
       <div className="border-border space-y-3 border-t py-3">
         <SubscriptionUsageSection accountId={pooled.accountId} projectId={projectId} providerId="codex" compact />
@@ -665,9 +665,19 @@ function ExpandedBody({
           oauth={{ projectId, onConnected: () => undefined }}
         />
         <ChatGptSubscriptionConnect projectId={projectId} onConnected={() => undefined} legacyOnly usageSlot={<LegacyChatGptUsage accountId={pooled.accountId} projectId={projectId} />} />
+        {/* OpenAI API keys below the ChatGPT accounts, as Anthropic lists its keys below Claude accounts. */}
+        <p className="text-foreground pt-3 text-xs font-medium">{tPooled('providerKeysFor', { provider: entry.label })}</p>
+        <AccountSecretResourcesPanel
+          accountId={pooled.accountId}
+          projectId={projectId}
+          providerId={entry.id}
+          providerName={entry.label}
+          envVar={entry.envVars[0]!}
+          canWrite
+        />
       </div>
     );
-  } else if (pooled.pooledSecretsEnabled && pooled.accountId && entry.id === 'anthropic') {
+  } else if (pooled.accountId && entry.id === 'anthropic') {
     // Claude accounts, exactly as OpenAI lists ChatGPT accounts; Anthropic API keys below them.
     content = (
       <>
@@ -696,7 +706,7 @@ function ExpandedBody({
         </div>
       </>
     );
-  } else if (pooled.pooledSecretsEnabled && pooled.accountId && supportsPooledProviderKey(entry)) {
+  } else if (pooled.accountId && supportsPooledProviderKey(entry)) {
     content = (
       <>
       {SUBSCRIPTION_BY_PROVIDER[entry.id] ? <SignInSubRows projectId={projectId} entry={entry} canWrite={canWrite} /> : null}
@@ -877,8 +887,9 @@ export function ProviderAccordion({
     const singleKey =
       entry.envVars.length === 1 &&
       !SUBSCRIPTION_BY_PROVIDER[entry.id] &&
-      !(pooled.pooledSecretsEnabled && supportsPooledProviderKey(entry));
-    const keyConnected = connectedIds.has(entry.id);
+      !supportsPooledProviderKey(entry);
+    // A key saved through the form lands in the named store ("Workspace key").
+    const keyConnected = connectedIds.has(entry.id) || pooled.pooledProviderIds.has(entry.id);
 
     if (addingId === row.id && singleKey && canWrite) {
       return (
@@ -989,11 +1000,7 @@ export function ProviderAccordion({
         </div>
       ) : null}
 
-      {pooled.pooledSecretsEnabled || !canWrite ? (
-        <p className="text-muted-foreground px-1 pb-2 text-xs text-pretty">
-          {pooled.pooledSecretsEnabled ? tPooled('sharedDescription') : t('readOnly')}
-        </p>
-      ) : null}
+      <PooledProvidersNote projectId={projectId} className="text-muted-foreground px-1 pb-2 text-xs text-pretty" />
 
       {empty ? (
         <EmptyState size="sm" title={t('noMatch', { query: search.trim() })} />

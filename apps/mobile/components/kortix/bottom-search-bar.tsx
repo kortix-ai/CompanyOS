@@ -285,7 +285,13 @@ export function GlassSearchField({
 }) {
   const [focused, setFocused] = React.useState(false);
   if (!usesBottomSearch()) {
-    return <SearchPill value={value} onChangeText={onChangeText} placeholder={placeholder} inputProps={{ accessibilityLabel: searchLabel }} />;
+    // `SearchPill` is `flex-1` for a row: in the caller's column it would
+    // shrink to a sliver under the list (the Android workspace switcher).
+    return (
+      <View className="flex-row items-center">
+        <SearchPill value={value} onChangeText={onChangeText} placeholder={placeholder} inputProps={{ accessibilityLabel: searchLabel }} />
+      </View>
+    );
   }
   const glassy = LIQUID_GLASS_AVAILABLE;
   const field = (

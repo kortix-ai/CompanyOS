@@ -27,13 +27,24 @@
  * full scans (credit_ledger ~8.6M rows). Run them off-peak, read-only.
  */
 import { checkWorkspaceInvariants } from '../src/workspaces/split/invariants';
+import { isUuid } from '../src/shared/validate';
 
 const runIds: string[] = [];
 const accountIds: string[] = [];
+
+/** A junk id reaches Postgres as SQLSTATE 22P02 and kills the run: fail here, at the CLI. */
+function checkUuid(flag: string, value: string): string {
+  if (!isUuid(value)) {
+    console.error(`${flag}: not a uuid: ${value}`);
+    process.exit(2);
+  }
+  return value;
+}
+
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i += 1) {
-  if (argv[i] === '--run' && argv[i + 1]) runIds.push(argv[(i += 1)]!);
-  else if (argv[i] === '--account' && argv[i + 1]) accountIds.push(argv[(i += 1)]!);
+  if (argv[i] === '--run' && argv[i + 1]) runIds.push(checkUuid('--run', argv[(i += 1)]!));
+  else if (argv[i] === '--account' && argv[i + 1]) accountIds.push(checkUuid('--account', argv[(i += 1)]!));
   else {
     console.error(`unknown argument: ${argv[i]}`);
     process.exit(2);

@@ -140,6 +140,7 @@ mock.module('react-native-reanimated', () => ({
   // `SHEET_MOTION.close` builds its curve at module load.
   Easing: { bezier: () => (t: number) => t },
   useSharedValue: <T,>(value: T) => React.useRef(shared(value)).current,
+  useReducedMotion: () => false,
   // Registers with its output: sorted before every mapper that reads it.
   useDerivedValue: <T,>(updater: () => T, deps: unknown[] = []) => {
     const ref = React.useRef<Shared<T> | null>(null);

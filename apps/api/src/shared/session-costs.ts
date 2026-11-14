@@ -29,6 +29,28 @@ import {
   totalSpendSql,
 } from './llm-spend';
 import { projectsView } from '../workspaces/rows';
+import {
+  type SessionCostComputeLedgerEntry,
+  type SessionCostDetail,
+  type SessionCostLlmLedgerEntry,
+  type SessionCostLedgerEntry,
+  type SessionCostModelUsage,
+  type SessionCostReconciliation,
+  type SessionCostSummary,
+} from '@kortix/sdk';
+
+// The session-cost wire records live in @kortix/sdk, the source of truth for
+// wire types. Re-exported so the API's session-cost surface keeps its names
+// from one definition instead of a hand-copied set that drifts.
+export type {
+  SessionCostComputeLedgerEntry,
+  SessionCostDetail,
+  SessionCostLlmLedgerEntry,
+  SessionCostLedgerEntry,
+  SessionCostModelUsage,
+  SessionCostReconciliation,
+  SessionCostSummary,
+};
 
 type ProjectSessionStatus = typeof projectSessions.$inferSelect.status;
 
@@ -37,105 +59,6 @@ export class InvalidSessionCostQueryError extends Error {
     super(message);
     this.name = 'InvalidSessionCostQueryError';
   }
-}
-
-export interface SessionCostSummary {
-  session_id: string;
-  project_id: string;
-  project_name: string;
-  owner_id: string | null;
-  owner_type: 'user' | 'service_account' | 'unknown' | null;
-  owner_name: string | null;
-  owner_email: string | null;
-  status: ProjectSessionStatus;
-  created_at: string;
-  updated_at: string;
-  last_activity_at: string | null;
-  /** LLM charges debited from the Kortix wallet. Excludes provider-side BYOK spend. */
-  llm_cost: number;
-  /** Alias of `llm_cost`, retained for the additive payee breakdown. */
-  llm_kortix_cost: number;
-  /** Provider-side BYOK spend. Excluded from `llm_cost` and `total_cost`. */
-  llm_provider_cost: number;
-  compute_cost: number;
-  total_cost: number;
-  request_count: number;
-  error_count: number;
-  input_tokens: number;
-  output_tokens: number;
-  cached_tokens: number;
-  cache_write_tokens: number;
-  model_count: number;
-  compute_seconds: number;
-}
-
-export interface SessionCostModelUsage {
-  provider: string;
-  model: string;
-  request_count: number;
-  error_count: number;
-  input_tokens: number;
-  output_tokens: number;
-  cached_tokens: number;
-  cache_write_tokens: number;
-  cost: number;
-  last_at: string;
-}
-
-export interface SessionCostLlmLedgerEntry {
-  kind: 'llm';
-  id: string;
-  occurred_at: string;
-  cost: number;
-  provider: string;
-  model: string;
-  request_id: string;
-  status: number;
-  ok: boolean;
-  input_tokens: number;
-  output_tokens: number;
-  cached_tokens: number;
-  cache_write_tokens: number;
-  /** True when another workspace paid for this row: the request ran before the
-   *  session's project moved to this workspace. Absent from an older API. */
-  billed_elsewhere?: boolean;
-}
-
-export interface SessionCostComputeLedgerEntry {
-  kind: 'compute';
-  id: string;
-  started_at: string;
-  ended_at: string | null;
-  billed_through_at: string;
-  cost: number;
-  provider: string;
-  state: string;
-  compute_seconds: number;
-  cpu_cores: number;
-  memory_gb: number;
-  disk_gb: number;
-  gpu_count: number;
-  /** True when another workspace paid for this row (see the LLM entry). */
-  billed_elsewhere?: boolean;
-}
-
-export type SessionCostLedgerEntry = SessionCostLlmLedgerEntry | SessionCostComputeLedgerEntry;
-
-export interface SessionCostDetail extends SessionCostSummary {
-  model_usage: SessionCostModelUsage[];
-  ledger_entries: SessionCostLedgerEntry[];
-  /** The part of `total_cost` another workspace paid for: the session ran
-   *  before its project moved here. 0 when it all billed here. */
-  billed_elsewhere_cost?: number;
-}
-
-export interface SessionCostReconciliation {
-  llm_cost: number;
-  compute_cost: number;
-  total_cost: number;
-  request_count: number;
-  compute_window_count: number;
-  compute_seconds: number;
 }
 
 export interface SessionCostListResponse {
@@ -1072,6 +995,76 @@ const SOURCE_WINDOW_MAX_HOURS = 720;
  * session started (its `parent_session_id`) is billed to that trigger, so a
  * factory's fan-out shows up under the trigger that caused it.
  */
+export function gatewaySourceSpendQuery(input: { accountId: string; projectId: string }, hours: number) {
+  const parent = alias(projectSessions, 'parent_session');
+
+  // Aggregate the window's log rows per session first, so the two session
+  // joins below run once per distinct session instead of once per request
+  // (and the planner no longer hash-joins every session the project ever had
+  // against the window's rows: KRTX-4869).
+  const perSession = db
+    .select({
+      sessionId: gatewayRequestLogs.sessionId,
+      value: llmValueFields.estimated_usage_value.as('value'),
+      priced: llmValueFields.priced_requests.as('priced'),
+      unpriced: llmValueFields.unpriced_requests.as('unpriced'),
+      requests: sql<number>`count(*)::int`.as('requests'),
+      errors: sql<number>`count(*) filter (where not ${gatewayRequestLogs.ok})::int`.as('errors'),
+      cost: totalSpendSql.as('cost'),
+      kortixCost: kortixBilledSpendSql.as('kortix_cost'),
+      inputTokens: sql<number>`coalesce(sum(${gatewayRequestLogs.inputTokens}), 0)::float8`.as('input_tokens'),
+      cachedTokens: sql<number>`coalesce(sum(${gatewayRequestLogs.cachedTokens}), 0)::float8`.as('cached_tokens'),
+      outputTokens: sql<number>`coalesce(sum(${gatewayRequestLogs.outputTokens}), 0)::float8`.as('output_tokens'),
+      lastAt: sql<Date | null>`max(${gatewayRequestLogs.createdAt})`.as('last_at'),
+    })
+    .from(gatewayRequestLogs)
+    .where(
+      and(
+        // By project, wherever it was billed (CostScope).
+        projectRowsLlm(input.accountId, input.projectId),
+        sql`${gatewayRequestLogs.createdAt} >= now() - make_interval(hours => ${hours})`,
+      ),
+    )
+    .groupBy(gatewayRequestLogs.sessionId)
+    .as('per_session');
+
+  const sourceSql = sql<string>`coalesce(
+    case when ${projectSessions.initiatorType} = 'trigger' then ${projectSessions.initiatorId} end,
+    case when ${parent.initiatorType} = 'trigger' then ${parent.initiatorId} end,
+    ${projectSessions.initiatorType}::text,
+    case when ${perSession.sessionId} is null then 'unattributed' end,
+    'unknown'
+  )`;
+
+  return db
+    .select({
+      source: sourceSql,
+      estimated_usage_value: sql<number | null>`sum(${perSession.value})::float8`,
+      priced_requests: sql<number>`coalesce(sum(${perSession.priced}), 0)::int`,
+      unpriced_requests: sql<number>`coalesce(sum(${perSession.unpriced}), 0)::int`,
+      // The null-session group is one row and is no session.
+      sessions: sql<number>`count(${perSession.sessionId})::int`,
+      requests: sql<number>`coalesce(sum(${perSession.requests}), 0)::int`,
+      errors: sql<number>`coalesce(sum(${perSession.errors}), 0)::int`,
+      cost: sql<number>`coalesce(sum(${perSession.cost}), 0)::float8`,
+      kortixCost: sql<number>`coalesce(sum(${perSession.kortixCost}), 0)::float8`,
+      inputTokens: sql<number>`coalesce(sum(${perSession.inputTokens}), 0)::float8`,
+      cachedTokens: sql<number>`coalesce(sum(${perSession.cachedTokens}), 0)::float8`,
+      outputTokens: sql<number>`coalesce(sum(${perSession.outputTokens}), 0)::float8`,
+      lastAt: sql<Date | null>`max(${perSession.lastAt})`,
+    })
+    .from(perSession)
+    .leftJoin(
+      projectSessions,
+      and(
+        eq(projectSessions.sessionId, perSession.sessionId),
+        eq(projectSessions.projectId, input.projectId),
+      ),
+    )
+    .leftJoin(parent, eq(parent.sessionId, projectSessions.parentSessionId))
+    .groupBy(sourceSql);
+}
+
 export async function listProjectGatewaySourceSpend(input: {
   accountId: string;
   projectId: string;
@@ -1081,46 +1074,7 @@ export async function listProjectGatewaySourceSpend(input: {
     Math.max(Math.trunc(Number(input.hours) || 0), 1),
     SOURCE_WINDOW_MAX_HOURS,
   );
-  const parent = alias(projectSessions, 'parent_session');
-  const sourceSql = sql<string>`coalesce(
-    case when ${projectSessions.initiatorType} = 'trigger' then ${projectSessions.initiatorId} end,
-    case when ${parent.initiatorType} = 'trigger' then ${parent.initiatorId} end,
-    ${projectSessions.initiatorType}::text,
-    case when ${gatewayRequestLogs.sessionId} is null then 'unattributed' end,
-    'unknown'
-  )`;
-
-  const rows = await db
-    .select({
-      ...llmValueFields,
-      source: sourceSql,
-      sessions: sql<number>`count(distinct ${gatewayRequestLogs.sessionId})::int`,
-      requests: sql<number>`count(*)::int`,
-      errors: sql<number>`count(*) filter (where not ${gatewayRequestLogs.ok})::int`,
-      cost: totalSpendSql,
-      kortixCost: kortixBilledSpendSql,
-      inputTokens: sql<number>`coalesce(sum(${gatewayRequestLogs.inputTokens}), 0)::float8`,
-      cachedTokens: sql<number>`coalesce(sum(${gatewayRequestLogs.cachedTokens}), 0)::float8`,
-      outputTokens: sql<number>`coalesce(sum(${gatewayRequestLogs.outputTokens}), 0)::float8`,
-      lastAt: sql<Date | null>`max(${gatewayRequestLogs.createdAt})`,
-    })
-    .from(gatewayRequestLogs)
-    .leftJoin(
-      projectSessions,
-      and(
-        eq(projectSessions.sessionId, gatewayRequestLogs.sessionId),
-        eq(projectSessions.projectId, gatewayRequestLogs.projectId),
-      ),
-    )
-    .leftJoin(parent, eq(parent.sessionId, projectSessions.parentSessionId))
-    .where(
-      and(
-        // By project, wherever it was billed (CostScope).
-        projectRowsLlm(input.accountId, input.projectId),
-        sql`${gatewayRequestLogs.createdAt} >= now() - make_interval(hours => ${hours})`,
-      ),
-    )
-    .groupBy(sourceSql);
+  const rows = await gatewaySourceSpendQuery(input, hours);
 
   const sources: GatewaySourceSpendRow[] = rows
     .map((row) => {

@@ -54,7 +54,7 @@ export function registerProjectCredentialsRoutes(): void {
           ...errors(403, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     // The list names every member's project keys: it needs the leaf that
     // issues and revokes them (`project.credentials.issue`), not project.read.
@@ -108,7 +108,7 @@ export function registerProjectCredentialsRoutes(): void {
           ...errors(400, 403, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     // A connected app's revocable `kortix_oat_` token must not mint a durable one.
     if (c.get('authType') === 'oauth') {
       return c.json({ error: 'Connected apps cannot mint project tokens.' }, 403);
@@ -206,7 +206,7 @@ export function registerProjectCredentialsRoutes(): void {
           ...errors(404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const tokenId = c.req.param('tokenId');
     const loaded = await loadProjectForUser(c, projectId, 'credentials');
@@ -249,7 +249,7 @@ export function registerProjectCredentialsRoutes(): void {
           ...errors(400, 404, 409),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const body = await readJsonObject(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');

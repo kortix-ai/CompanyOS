@@ -219,7 +219,7 @@ export function registerGatewayLogsRoutes(): void {
       },
       responses: { 200: json(z.any(), 'Gateway request logs'), ...errors(400, 404) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -369,7 +369,7 @@ export function registerGatewayLogsRoutes(): void {
       request: { params: z.object({ workspaceId: z.string(), logId: z.string() }) },
       responses: { 200: json(z.any(), 'Gateway request log detail'), ...errors(400, 404) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const logReference = c.req.param('logId');
       const referenceKind = classifyGatewayLogReference(logReference);
@@ -433,7 +433,7 @@ export function registerGatewayLogsRoutes(): void {
       },
       responses: { 200: json(z.any(), 'Gateway error breakdown'), ...errors(404) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);

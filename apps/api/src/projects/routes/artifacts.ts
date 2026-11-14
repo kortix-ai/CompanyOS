@@ -244,7 +244,8 @@ async function detail(row: ArtifactRow, viewer: Viewer, at?: string) {
   };
 }
 
-const PUBLISH_LIMIT = bodyLimit({ maxSize: 48 * 1024 * 1024, onError: (c) => c.json({ error: 'One publish carries at most 32 MB', code: 'publish_too_large' }, 413) });
+const PUBLISH_MAX_BYTES = 48 * 1024 * 1024;
+const PUBLISH_LIMIT = bodyLimit({ maxSize: PUBLISH_MAX_BYTES, onError: (c) => c.json({ error: `One publish carries at most ${PUBLISH_MAX_BYTES / 1024 / 1024} MB`, code: 'publish_too_large' }, 413) });
 
 export function registerArtifactRoutes(): void {
   projectsApp.openapi(createRoute({

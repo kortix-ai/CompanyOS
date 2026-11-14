@@ -75,7 +75,7 @@ export function registerProjectAccessRoutes(): void {
           ...errors(400, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const targetUserId = c.req.param('userId');
     const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -150,7 +150,7 @@ export function registerProjectAccessRoutes(): void {
           ...errors(404, 409),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const targetUserId = c.req.param('userId');
     const loaded = await loadProjectForUser(c, projectId, 'read');

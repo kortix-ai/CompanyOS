@@ -236,7 +236,7 @@ export function registerChannelBindingsRoutes(): void {
       request: { params: z.object({ workspaceId: z.string() }) },
       responses: { 200: json(z.any(), "OK"), ...errors(404) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, "read");
       if (!loaded) return c.json({ error: "Not found" }, 404);
@@ -339,7 +339,7 @@ export function registerChannelBindingsRoutes(): void {
       },
       responses: { 200: json(z.any(), "OK"), ...errors(400, 403, 404, 409) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const bindingId = c.req.param("bindingId");
       // Floor 'read'; project.connector.write below is the real gate (was 'manage'

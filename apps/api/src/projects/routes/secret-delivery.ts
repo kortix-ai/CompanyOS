@@ -50,7 +50,7 @@ export function registerSecretDeliveryRoutes(): void {
         ...errors(400, 403, 404, 409),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const identifier = c.req.param('identifier')?.trim();
       const parsed = UpdateSecretStrategyInputSchema.safeParse(await readJsonObject(c));

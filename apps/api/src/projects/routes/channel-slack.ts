@@ -54,7 +54,7 @@ export function registerChannelSlackRoutes(): void {
         ...errors(404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -83,7 +83,7 @@ export function registerChannelSlackRoutes(): void {
         ...errors(404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -178,7 +178,7 @@ export function registerChannelSlackRoutes(): void {
         ...errors(400, 403, 404, 503),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -226,7 +226,7 @@ export function registerChannelSlackRoutes(): void {
         ...errors(400, 404, 502),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -311,7 +311,7 @@ export function registerChannelSlackRoutes(): void {
         ...errors(404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -388,7 +388,7 @@ export function registerChannelSlackRoutes(): void {
         ...errors(400, 403, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -461,7 +461,7 @@ export function registerChannelSlackRoutes(): void {
         ...errors(400, 403, 404, 409),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       // Same dual auth as turn-stream: the in-sandbox agent's sandbox token (scoped
       // back to this project) or a project/session-scoped user PAT.

@@ -188,7 +188,7 @@ export function registerGithubInstallationsRoutes(): void {
         ...errors(400, 403, 502),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const body = await readJsonObject(c);
       const scope = await resolveProjectAccount(c, body);
       await assertAuthorized(await actorOf(c, scope.accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE);
@@ -260,7 +260,7 @@ export function registerGithubInstallationsRoutes(): void {
         ...errors(400, 403, 502),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const body = await readJsonObject(c);
       const scope = await resolveProjectAccount(c, body);
       await assertAuthorized(await actorOf(c, scope.accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE);
@@ -339,7 +339,7 @@ export function registerGithubInstallationsRoutes(): void {
           ...errors(400, 403, 502),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const body = await readJsonObject(c);
     const state = normalizeString(body.state);
     if (!state) return c.json({ error: 'state is required' }, 400);
@@ -427,7 +427,7 @@ export function registerGithubInstallationsRoutes(): void {
           200: json(z.any(), 'OK'),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const scope = await resolveProjectAccount(c);
     await assertAuthorized(await actorOf(c, scope.accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE);
     const installationId = normalizeString(c.req.query('installation_id') ?? c.req.query('installationId'));
@@ -467,7 +467,7 @@ export function registerGithubInstallationsRoutes(): void {
           200: json(z.any(), 'OK'),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const scope = await resolveProjectAccount(c);
     await assertAuthorized(await actorOf(c, scope.accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE);
     const installationId = c.req.param('installationId');
@@ -510,7 +510,7 @@ export function registerGithubInstallationsRoutes(): void {
         ...errors(400, 403, 502),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const body = await readJsonObject(c);
       const scope = await resolveProjectAccount(c, body);
       await assertAuthorized(await actorOf(c, scope.accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE);

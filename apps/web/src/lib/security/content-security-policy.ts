@@ -2,15 +2,12 @@
  * Content-Security-Policy for every web response (see `headers()` in
  * next.config.ts).
  *
- * Two headers, on purpose:
- *
- * - `Content-Security-Policy` (enforced) holds `frame-ancestors` (this origin
- *   and the Kortix extension, whose side panel frames the app),
- *   `object-src 'none'`, `base-uri 'self'` and the `script-src` allowlist.
- *
- * - `Content-Security-Policy-Report-Only` carries the same `script-src`
- *   allowlist plus `report-uri`, so a host that a page needs but the allowlist
- *   misses still lands in `/api/csp-report` instead of failing silently.
+ * One enforced `Content-Security-Policy` header: `frame-ancestors` (this
+ * origin and the Kortix extension, whose side panel frames the app),
+ * `object-src 'none'`, `base-uri 'self'`, the `script-src` allowlist and
+ * `report-uri`. Every block lands in `/api/csp-report`, so a host that a page
+ * needs but the allowlist misses shows in the Vercel logs as a `[csp-report]`
+ * warning instead of failing silently.
  *
  * `script-src` was report-only for one release cycle so the reports could
  * prove the allowlist complete. A pentest (2026-10-22) pointed out the cost of
@@ -20,6 +17,11 @@
  * is still required by the root layout's inline bootstrap, so this does not
  * yet protect against injected inline script, only against unlisted hosts.
  * Moving to nonces is the next step.
+ *
+ * The report-only copy of this policy was removed on 2026-11-12. It was
+ * identical to the enforced one, so each block was reported twice. Add a
+ * `Content-Security-Policy-Report-Only` header back only to trial a stricter
+ * policy than the enforced one.
  *
  * `next dev` alone adds `'unsafe-eval'`: React rebuilds the call stacks of
  * development errors with eval(), and without it every page logs "eval() is
@@ -45,8 +47,8 @@ export const SCRIPT_SRC_HOSTS = [
   // Consent banner and Meta pixel, both loaded by GTM.
   'https://cdn-cookieyes.com',
   'https://connect.facebook.net',
-  // Visitor pixel (components/analytics/visitor-pixel.tsx).
-  'https://d2mvefebd70kbz.cloudfront.net',
+  // Cal.com booking embed in the demo modal (features/contact/demo-qualifier-modal.tsx).
+  'https://app.cal.com',
   // Embedded checkout (app/[locale]/(app)/checkout).
   'https://js.stripe.com',
   // Vercel Analytics / Speed Insights / toolbar.
@@ -54,12 +56,12 @@ export const SCRIPT_SRC_HOSTS = [
   'https://vercel.live',
 ] as const;
 
-/** This origin and the Kortix extension's side panel, shared by both headers. */
+/** This origin and the Kortix extension's side panel. */
 function frameAncestorsDirective(): string {
   return `frame-ancestors 'self' chrome-extension://${KORTIX_EXTENSION_ID}`;
 }
 
-/** The complete `script-src` value, shared by the enforced and report-only headers. */
+/** The complete `script-src` value. */
 function scriptSourceDirective(): string {
   const scriptSrc = [
     "'self'",
@@ -97,18 +99,6 @@ export function embedContentSecurityPolicy(): string {
       "frame-ancestors 'self' https://kortix.com https://*.kortix.com",
       "object-src 'none'",
       "base-uri 'self'",
-    ].join('; ') + ';'
-  );
-}
-
-export function reportOnlyContentSecurityPolicy(): string {
-  return (
-    [
-      scriptSourceDirective(),
-      frameAncestorsDirective(),
-      "object-src 'none'",
-      "base-uri 'self'",
-      `report-uri ${CSP_REPORT_PATH}`,
     ].join('; ') + ';'
   );
 }

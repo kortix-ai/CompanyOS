@@ -8,6 +8,7 @@ import {
   connectorCalls,
   connectorHeldCalls,
   connectorProjectSettings,
+  projectSessions,
 } from '@kortix/db';
 import { appAuthorizationForConnectorCall } from '../apps/connector-assertion';
 import { and, desc, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm';
@@ -37,6 +38,7 @@ import {
 } from '../projects/secrets';
 import {
   canonicalConnectorAlias,
+  listEntitledConnectorConnections,
   resolveSessionConnectorConnectionOutcome,
 } from '../projects/lib/session-connector-bindings';
 import { db } from '../shared/db';
@@ -46,7 +48,12 @@ import { APPROVAL_RERUN_WINDOW_MS, DEFAULT_APPROVAL_TTL_SECONDS, approvalNotExpi
 import { connectorAttachmentStore } from './attachments';
 import { gateChannelRead } from './channel-read-scope';
 import { gateChannelWrite } from './channel-write-scope';
-import { resolveCredentialValue, resolveConnectionCredentialValue } from './credentials';
+import {
+  connectionIdsWithCredentials,
+  connectionSignedIn,
+  resolveCredentialValue,
+  resolveConnectionCredentialValue,
+} from './credentials';
 import { recordFinishedComposioAuthorization } from './db-deps-connect';
 import { connectorEgressFetch } from './egress';
 import { CredentialNotSharedError } from './gateway';
@@ -548,6 +555,65 @@ export function makeDbGatewayDeps(principal: ConnectorPrincipal): GatewayDeps {
           )
           .limit(1);
         if (unpaired) return 'computer_unpaired';
+      }
+      // A signed-in account exists that this caller cannot reach (another
+      // member's, a shared one narrowed away from this agent, or one this
+      // session may not enter). A sign-in would only add a duplicate account:
+      // its owner shares it instead. A channel's credential is its install, so
+      // it is never "not shared".
+      if (row.providerType !== 'channel') {
+        const named = principal.requestedConnectorAccount?.trim().toLowerCase();
+        const live = await db
+          .select({
+            connectionId: connectorConnections.connectionId,
+            label: connectorConnections.label,
+            metadata: connectorConnections.metadata,
+          })
+          .from(connectorConnections)
+          .where(
+            and(
+              eq(connectorConnections.connectorId, row.connectorId),
+              eq(connectorConnections.status, 'active'),
+              or(eq(connectorConnections.ownerType, 'project'), eq(connectorConnections.ownerType, 'member')),
+            ),
+          );
+        const candidates = named
+          ? live.filter(
+              (connection) =>
+                connection.connectionId.toLowerCase() === named ||
+                connection.label.trim().toLowerCase() === named,
+            )
+          : live;
+        if (candidates.length > 0) {
+          const credentialed = await connectionIdsWithCredentials(candidates.map((connection) => connection.connectionId));
+          const signedIn = candidates.filter((connection) =>
+            connectionSignedIn(connection.metadata ?? {}, credentialed.has(connection.connectionId)),
+          );
+          if (signedIn.length > 0) {
+            // Reachable under the owner/audience and visibility rules, so only
+            // the session's own connector scope left it out: that is a session
+            // started without it, not an unshared account.
+            const [session] = principal.sessionId
+              ? await db
+                  .select({ visibility: projectSessions.visibility })
+                  .from(projectSessions)
+                  .where(eq(projectSessions.sessionId, principal.sessionId))
+                  .limit(1)
+              : [];
+            const reachable = await listEntitledConnectorConnections({
+              accountId: principal.accountId,
+              projectId,
+              alias: slug,
+              actingUserId: principal.userId,
+              visibility: session?.visibility ?? (principal.agentPrincipal ? 'project' : 'private'),
+              agentPrincipal: principal.agentPrincipal ?? null,
+            });
+            const reachableIds = new Set(reachable.map((connection) => connection.connectionId));
+            if (!signedIn.some((connection) => reachableIds.has(connection.connectionId))) {
+              return 'connector_not_shared';
+            }
+          }
+        }
       }
       return 'connector_not_connected';
     },

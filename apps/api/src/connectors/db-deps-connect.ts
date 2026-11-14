@@ -32,7 +32,10 @@ export function composioConnectionMetadata(input: {
     auth_request_id: input.authRequestId ?? null,
     connected_account_id: input.connectedAccountId ?? null,
     is_no_auth: input.isNoAuth,
-    requesting_session_id: input.requestingSessionId ?? null,
+    // A start with no session behind it (a person clicking Connect on the
+    // session's card or in settings) keeps the session that asked, so its
+    // finalize still tells that session. Notification is idempotent per session.
+    requesting_session_id: input.requestingSessionId ?? readRequestingSessionId(input.previous),
     ...(input.connectedAs ? { [CONNECTED_AS_KEY]: input.connectedAs } : {}),
   };
 }
@@ -70,6 +73,24 @@ export async function mergeRequestingSession(
       updatedAt: sql`now()`,
     })
     .where(eq(connectorConnections.connectionId, connectionId));
+}
+
+/**
+ * Clear the session waiting on this connection and return it, in one
+ * statement: only the caller that clears it notifies, so the finalize poll,
+ * the completion watch and the OAuth callback tell the agent once between them.
+ */
+export async function takeRequestingSession(connectionId: string): Promise<string | null> {
+  const rows = (await db.execute(sql`
+    update kortix.connector_connections c
+       set metadata = c.metadata - 'requesting_session_id'
+      from (select connection_id, metadata->>'requesting_session_id' as waiting
+              from kortix.connector_connections
+             where connection_id = ${connectionId}
+               for update) old
+     where c.connection_id = old.connection_id and old.waiting is not null
+    returning old.waiting as waiting`)) as unknown as Array<{ waiting: string }>;
+  return rows[0]?.waiting ?? null;
 }
 
 /** Load a pipedream connector's app slug + id (verifies provider). */

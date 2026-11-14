@@ -14,7 +14,8 @@ for (const key of ['window', 'document', 'navigator', 'KeyboardEvent', 'Mutation
 }
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
 
-const { CommandRoot, CommandInputCore, CommandListCore, CommandItemCore } = await import('./command-core');
+const { CommandRoot, CommandInputCore, CommandListCore, CommandGroupCore, CommandItemCore } =
+  await import('./command-core');
 
 const cleanups: (() => void)[] = [];
 afterEach(() => cleanups.splice(0).forEach((cleanup) => cleanup()));
@@ -175,4 +176,75 @@ test('rows that arrive above the first pick take the selection; a row the user p
   await act(async () => showEarly(true));
   await settle();
   expect(selected(host)).toBe('Settings late');
+});
+
+test('a group whose rows key off a debounced search ends with the pick on the visually-first row', async () => {
+  // The command palette keys its Navigation rows off a DEBOUNCED copy of the
+  // search and its settings rows off the immediate one, so after a keystroke
+  // the settings rows mount first and the auto-pick lands on `Profile`; a
+  // beat later the debounced Navigation row (`Workspace settings`) mounts
+  // ABOVE it. The pick must follow. On the cmdk 0.2.1 core this failed: its
+  // registration flush re-picked only when the selection was empty
+  // (`a.current.value || j()`), so the pick made during the debounce window
+  // survived and Enter navigated to `Profile` instead of the first visible
+  // row (KRTX-4786, dogfood:acct-keyboard-shortcuts).
+  let setQuery: (query: string) => void = () => {};
+  function Shell() {
+    const [query, set] = React.useState('');
+    setQuery = set;
+    const [debounced, setDebounced] = React.useState('');
+    React.useEffect(() => {
+      const timer = setTimeout(() => setDebounced(query.trim()), 25);
+      return () => clearTimeout(timer);
+    }, [query]);
+    const hasQuery = query.trim().length > 0;
+    const navMounted = hasQuery && debounced === 'settings';
+    return (
+      <>
+        <CommandInputCore value={query} onValueChange={set} />
+        <CommandListCore>
+          <CommandGroupCore heading="Navigation" forceMount>
+            {navMounted ? (
+              <CommandItemCore value="workspace settings organizations teams manage">
+                Workspace settings
+              </CommandItemCore>
+            ) : null}
+          </CommandGroupCore>
+          {hasQuery && (
+            <CommandGroupCore heading="Preferences · Personal" forceMount>
+              <CommandItemCore value="settings profile personal account">Profile</CommandItemCore>
+            </CommandGroupCore>
+          )}
+        </CommandListCore>
+      </>
+    );
+  }
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  act(() =>
+    root.render(
+      <CommandRoot>
+        <Shell />
+      </CommandRoot>,
+    ),
+  );
+  cleanups.push(() => {
+    act(() => root.unmount());
+    host.remove();
+  });
+  await settle();
+
+  // One controlled update, as one paste or fast typing produces it. While the
+  // debounce runs, only the settings row is mounted and the auto-pick lands
+  // on it; when the debounce fires, `Workspace settings` mounts ABOVE the
+  // pick. The pick must follow the list: the highlight is the visually-first
+  // row, and Enter picks exactly it.
+  await act(async () => setQuery('settings'));
+  // Two flushes: the 25ms debounce fires inside the first 30ms window.
+  await settle();
+  await settle();
+  const rows = [...host.querySelectorAll('[cmdk-item]')].map((row) => row.textContent);
+  expect(rows).toEqual(['Workspace settings', 'Profile']);
+  expect(selected(host)).toBe('Workspace settings');
 });

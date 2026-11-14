@@ -9,6 +9,7 @@
  * Pure data and pure functions only: `bun test` cannot load native modules.
  */
 import { sessionParentId } from '@kortix/sdk';
+import { classifySessionStarter } from '@kortix/shared/session/session-starter';
 
 import type { ProjectSession } from '@/lib/projects/projects-client';
 
@@ -83,9 +84,10 @@ export function sessionsPageRows(rows: readonly ProjectSession[], archived: bool
   return archived ? sessionsInView(rows, 'archived') : rootRowsOnly(rows);
 }
 
-/** The server rejects a `q` over 200 characters and an empty one: send neither. */
-export function searchQueryParam(text: string): string | undefined {
-  const q = text.trim();
+/** The server rejects a `q` over 200 characters and an empty one: send neither.
+ *  A null (a native input's clear on some runtimes hands null through) reads as empty. */
+export function searchQueryParam(text: string | null | undefined): string | undefined {
+  const q = typeof text === 'string' ? text.trim() : '';
   return q ? q.slice(0, 200) : undefined;
 }
 
@@ -153,26 +155,26 @@ const CHANNEL_ICONS: Record<string, StarterIcon> = {
 };
 
 /**
- * Who started the run, from `initiator`. `null` initiator counts as a member
- * (the backfill could not classify it). "You" only when the member is the
- * viewer; an unnamed member of another account shows "Member".
+ * Who started the run, from `initiator`. The classification is shared
+ * (`@kortix/shared/session/session-starter`); this host keeps its icon table
+ * and wording. `null` initiator counts as a member (the backfill could not
+ * classify it). "You" only when the member is the viewer; an unnamed member
+ * of another account shows "Member".
  */
 export function sessionStarter(session: ProjectSession, viewerId: string | null | undefined): SessionStarter {
-  const initiator = session.initiator ?? null;
-  if (!initiator || initiator.type === 'member') {
-    const id = initiator ? initiator.id : (session.created_by ?? null);
-    if (viewerId && id === viewerId) return { type: 'member', label: 'You', icon: null };
-    return { type: 'member', label: initiator?.label?.trim() || 'Member', icon: null };
+  const core = classifySessionStarter(session, viewerId);
+  if (core.type === 'member') {
+    return { type: 'member', label: core.isViewer ? 'You' : core.label?.trim() || 'Member', icon: null };
   }
-  const label = initiator.label?.trim() || initiator.id || 'Kortix';
-  switch (initiator.type) {
+  const label = core.label?.trim() || core.id || 'Kortix';
+  switch (core.type) {
     case 'trigger': {
       const source = typeof session.metadata?.source === 'string' ? session.metadata.source : '';
       const icon: StarterIcon = source.includes('cron') ? 'clock' : source.includes('webhook') ? 'webhook' : 'lightning';
       return { type: 'trigger', label, icon };
     }
     case 'channel':
-      return { type: 'channel', label, icon: CHANNEL_ICONS[initiator.id ?? ''] ?? 'chat' };
+      return { type: 'channel', label, icon: CHANNEL_ICONS[core.id ?? ''] ?? 'chat' };
     case 'api':
       return { type: 'api', label, icon: 'key' };
     default:
@@ -190,10 +192,8 @@ export interface DrawerSectionInput {
   title: string;
   /** Rows already loaded for this section, in server order: top-level rows, every pinned row in Pinned. */
   rows: readonly ProjectSession[];
-  /** Rows show only while open; the header always shows unless `hidden`. */
+  /** Rows show only while open. A section with no row to show has no header at all. */
   open: boolean;
-  /** "Shared" with no rows: no header at all. */
-  hidden: boolean;
   /** The section has another page ("Show more"). */
   hasMore: boolean;
 }
@@ -221,13 +221,15 @@ export function buildDrawerItems(
   const items: DrawerItem[] = [];
   const shown = new Set<string>();
   for (const section of sections) {
-    if (section.hidden) continue;
-    items.push({ kind: 'header', section: section.id, title: section.title, open: section.open });
     const rows = (section.id === 'pinned' ? section.rows : rootRowsOnly(section.rows)).filter((session) => {
       if (shown.has(session.session_id)) return false;
       shown.add(session.session_id);
       return true;
     });
+    // No bare header, and no "Show more", over a section with no row: a next
+    // page alone does not show a section (the hook reads past empty pages).
+    if (rows.length === 0) continue;
+    items.push({ kind: 'header', section: section.id, title: section.title, open: section.open });
     if (!section.open) continue;
     for (const session of rows) {
       items.push({ kind: 'root', section: section.id, session });

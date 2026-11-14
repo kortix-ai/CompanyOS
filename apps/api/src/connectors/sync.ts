@@ -35,7 +35,7 @@ import { SecretUndecryptableError } from '../secrets/undecryptable';
 import { type GitTriggerSpec, extractTriggers, readManifest, runtimeManifest } from '../projects/triggers';
 import { syncDeclaredApps } from '../apps/app-manifest';
 import { reconcileProjectTriggerRuntime } from '../projects/trigger-runtime-catalog';
-import { reconcileEventSubscriptions } from '../projects/surface';
+import { gateTriggerSetup, reconcileEventSubscriptions } from '../projects/surface';
 import { db } from '../shared/db';
 import { isUniqueViolation } from '../shared/postgres-errors';
 import { ensureChannelConnectorDeclared, removeChannelConnectorDeclared } from './channel-manifest';
@@ -154,6 +154,25 @@ export async function rematerializeCatalogAfterCredentialUpdate(
     // A member's update refreshes only its own connector.
     ...(!projectDefault && input.connectorId ? { onlyConnectorId: input.connectorId } : {}),
   });
+}
+
+/**
+ * A catalog fetch that only shows nobody signed in yet: an MCP connector that
+ * declares auth, fetched with no credential, answered HTTP 401 or 403.
+ *
+ * Prod audit, 2026-11-11: 28 accounts added an MCP server and never finished
+ * the sign-in. The sync called `tools/list` without a credential, got 401, and
+ * stored the connector as `error`, which outranks `needs_auth`: the list showed
+ * Error instead of Sign in. A 401 to a stored credential stays an error: the
+ * credential was rejected, and the gateway names that fix.
+ */
+export function mcpCatalogAwaitsSignIn(
+  spec: Pick<ConnectorSpec, 'provider' | 'auth'>,
+  credential: string | null | undefined,
+  error: unknown,
+): boolean {
+  if (spec.provider !== 'mcp' || spec.auth.type === 'none' || credential) return false;
+  return /^MCP tools\/list failed: HTTP 40[13]$/.test(error instanceof Error ? error.message : '');
 }
 
 export function catalogPersistenceState(
@@ -456,6 +475,13 @@ const SYNC_CONCURRENCY = 4;
 
 interface ResolvedCatalog {
   actions: NormalizedAction[];
+  /**
+   * An MCP server that signs in (auth declared) answered 401/403 to a
+   * catalog fetch with no credential: nobody has signed in yet. Not an error:
+   * the connector lists as `needs_auth` with its Sign in action, and the
+   * sign-in re-fetches the catalog (oauth2-rematerialize.ts).
+   */
+  awaitsSignIn?: boolean;
   /** Fetched with a member's personal credential (`resolveMcpCatalogCredential`). */
   memberPublished?: boolean;
   /** OpenAPI server discovered from the doc (folded into config). */
@@ -536,6 +562,9 @@ async function syncProjectConnectorsFenced(
     const triggers = extractTriggers(runtimeManifest(manifest));
     triggerSpecs = triggers.specs;
     await reconcileProjectTriggerRuntime(projectId, triggers.specs);
+    // A kortix.yaml edit that turns on a trigger the account has no model for
+    // pauses it with the reason; one that brings a model resumes it.
+    await gateTriggerSetup({ projectId, accountId, specs: triggers.specs });
     errors.push(...triggers.errors.map((e) => ({ slug: e.slug, error: e.error })));
 
     const parsed = extractConnectors(manifest);
@@ -1092,8 +1121,14 @@ async function upsertConnector(
  * account, because it is not empty: a channel connector (the install token is
  * the project's own identity) and a server with no auth (a public MCP server
  * such as DeepWiki: the account is the whole connection).
+ *
+ * A Composio or Pipedream connector always parses with `auth.type: 'none'`
+ * (its connected account is the auth), so the no-auth rule must not reach it:
+ * it seeded a shared account that no sign-in ever finished, beside the
+ * member's own account a chat Connect card created.
  */
 export function skipsEmptyProjectAccount(spec: ConnectorSpec): boolean {
+  if (spec.provider === 'composio' || spec.provider === 'pipedream') return true;
   return !(spec.provider === 'channel' || spec.auth?.type === 'none');
 }
 
@@ -1404,14 +1439,20 @@ export async function resolveCatalog(
       }
       case 'mcp': {
         assertAllowedEndpointUrl(spec.url!);
-        const tools = await listMcpTools({
-          url: spec.url!,
-          auth: spec.auth,
-          headers: spec.headers,
-          secret: options.credential ?? null,
-          fetchImpl: options.mcpFetchImpl ?? connectorEgressFetch,
-        });
-        return { actions: normalizeMcp(tools), server: spec.url };
+        let tools: unknown[];
+        try {
+          tools = await listMcpTools({
+            url: spec.url!,
+            auth: spec.auth,
+            headers: spec.headers,
+            secret: options.credential ?? null,
+            fetchImpl: options.mcpFetchImpl ?? connectorEgressFetch,
+          });
+        } catch (e) {
+          if (mcpCatalogAwaitsSignIn(spec, options.credential, e)) return { actions: [], server: spec.url, awaitsSignIn: true };
+          throw e;
+        }
+        return { actions: normalizeMcp(tools as any[]), server: spec.url };
       }
       case 'pipedream': {
         if (!pipedreamConfigured() || !spec.app) return { actions: [], server: null };

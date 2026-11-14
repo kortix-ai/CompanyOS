@@ -51,6 +51,7 @@ let slowDispatchMs = 0;
 let dispatchFails = false;
 const slashCalls: unknown[] = [];
 const realDispatch = await import('../channels/slack/dispatch');
+const realLink = await import('../channels/slack/link');
 mock.module('../channels/slack/dispatch', () => ({
   ...realDispatch,
   maybeHandleDmCommand: async () => false,
@@ -59,7 +60,13 @@ mock.module('../channels/slack/dispatch', () => ({
     if (dispatchFails) throw new Error('dispatch failed');
     dispatchedEvents.push({ projectId, envelope, opts });
   },
-  ensureProjectChannelBinding: async () => {},
+}));
+/** Whether this project still holds the Slack workspace its own app proved. */
+let holdsWorkspace = true;
+mock.module('../channels/slack/link', () => ({
+  ...realLink,
+  recordSlackChannel: async () => {},
+  holdsSlackWorkspace: async () => holdsWorkspace,
 }));
 // The durable redelivery inbox: a post-ack failure must enqueue the event here
 // (the job queue retries it), a pre-ack failure must not (Slack retries a 5xx).
@@ -113,6 +120,7 @@ afterAll(() => {
 });
 
 beforeEach(() => {
+  holdsWorkspace = true;
   loadSigningSecretCalls = 0;
   projectSigningSecret = null;
   handledBlockActions.length = 0;
@@ -165,6 +173,16 @@ describe('a per-project Slack app reaches only the workspace its install proved'
     const res = await slackWebhookApp.request('/3f1c2b7e-0000-4000-8000-000000000001/interactivity', signed(body, 'application/x-www-form-urlencoded'));
     expect(res.status).toBe(200);
     expect(handledInbound).toEqual([{ kind: 'project', projectId: '3f1c2b7e-0000-4000-8000-000000000001', teamId: 'T1' }]);
+  });
+
+  test('a project that no longer holds the proven workspace refuses its interactivity', async () => {
+    projectSigningSecret = 'signing-secret';
+    holdsWorkspace = false;
+    const payload = { ...foreignPayload, team: { id: 'T1' } };
+    const body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
+    const res = await slackWebhookApp.request('/3f1c2b7e-0000-4000-8000-000000000001/interactivity', signed(body, 'application/x-www-form-urlencoded'));
+    expect(res.status).toBe(403);
+    expect(handledInbound).toEqual([]);
   });
 
   test('a slash command naming another workspace is refused and never run', async () => {

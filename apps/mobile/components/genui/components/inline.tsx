@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { GenuiComponentProps } from '@kortix/sdk/genui/react';
 
 import { MarkdownImage, type MarkdownImageLook } from '@/components/markdown/markdown-image';
+import { GALLERY_PAGE_HEIGHT } from '@/components/kortix/paged-gallery';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
@@ -72,9 +73,6 @@ export function GenuiImageView({ src, alt, fixedHeight, look }: { src: string; a
 
 /** Set inside an image gallery (layout.tsx): each `page` fits the gallery's fixed page height. */
 export const GenuiImageGridContext = createContext<false | 'page'>(false);
-
-/** Every gallery page is this tall, as the markdown gallery's (`markdown-image.tsx`); each image fits inside it. */
-export const GALLERY_PAGE_HEIGHT = 280;
 
 /** The picture of an Image with text is this wide, at 4:3; the text takes the rest of the row. */
 const FIGURE_WIDTH = 112;

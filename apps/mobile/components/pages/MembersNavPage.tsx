@@ -46,7 +46,6 @@ import { useConfirmDialog, type ConfirmRequest } from '@/components/kortix/confi
 import { KortixBottomSheetModal } from '@/components/kortix/sheet';
 import { THEME } from '@/lib/utils/theme';
 import {
-  useProject,
   useProjectAccess,
   usePendingProjectInvites,
   useInviteWorkspaceMember,
@@ -368,9 +367,7 @@ export function MembersNavPage({
   const isDark = colorScheme === 'dark';
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
 
-  const projectQuery = useProject(projectId);
   const accessQuery = useProjectAccess(projectId);
-  const project = projectQuery.data;
   const canManage = useCan({ projectId }, PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE).allowed;
   const invitesQuery = usePendingProjectInvites(projectId, canManage);
 

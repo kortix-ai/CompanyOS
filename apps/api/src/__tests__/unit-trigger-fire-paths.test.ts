@@ -367,6 +367,16 @@ mock.module('../platform/services/provider-balancer', () => ({
 // than served by the db shim: the gate's contract is the catalog's `enabled`
 // stamps, not the read models beneath them.
 const realServableCatalog = await import('../llm-gateway/models/servable-catalog');
+// The fire's model gate also asks for a Claude subscription account
+// (trigger-model-gate.ts). No trigger here has one, and the hermetic db shim
+// cannot run that query.
+const realClaudeAccounts = await import('../claude-subscription/accounts');
+mock.module('../claude-subscription/accounts', () => ({
+  ...realClaudeAccounts,
+  hasClaudeCredential: async () => false,
+  countUsableClaudeAccounts: async () => 0,
+}));
+
 mock.module('../llm-gateway/models/servable-catalog', () => ({
   ...realServableCatalog,
   servableProjectCatalog: async (input: Record<string, unknown>) => {
@@ -1235,23 +1245,23 @@ describe('git-backed triggers — runtime fire paths', () => {
     ]);
   });
 
-  test('a failed attempt the cron retries raises nothing; the fifth dead-letters and raises once', async () => {
+  // isTerminalFireFailure (#12645): a fire that says `retryable: false` is final on its
+  // first attempt. The five-attempt retry budget itself is trigger-execution-store's
+  // (trigger-execution-store.integration.test.ts).
+  test('a fire with no account owner to run as dead-letters on its first attempt and raises once', async () => {
     seedManifest(cronEntry({ slug: 'flaky', name: 'Flaky', cron: '* * * * * *', prompt: 'Report' }));
     const slot = new Date('2026-01-01T00:00:30Z');
     seedRuntimeCron({ slug: 'flaky', prompt: 'Report', nextFireAt: slot });
-    // No owner to run as: a failure with no permanent code, so it retries.
+    // No owner to run as: no retry can find one.
     automationActor = null;
 
     await runProjectTriggerSweep(slot);
-    expect(await drainTriggerExecutionQueue(slot)).toMatchObject({ queued: 1, failed: 0 });
+    expect(await drainTriggerExecutionQueue(slot)).toMatchObject({ queued: 0, failed: 1 });
     expect(runtimeRows[0]).toMatchObject({ lastStatus: 'failed' });
-    expect(alertCalls).toEqual([]);
-
-    // Each retry is due 2 s after its failure; claim each one well after that.
-    for (let attempt = 2; attempt <= 5; attempt += 1) {
-      await drainTriggerExecutionQueue(new Date(Date.now() + attempt * 60_000));
-    }
-    expect(triggerExecutionRows[0]).toMatchObject({ status: 'dead_lettered', attempts: 5 });
+    expect(triggerExecutionRows[0]).toMatchObject({ status: 'dead_lettered', attempts: 1 });
+    // A later drain claims nothing and raises nothing more.
+    await drainTriggerExecutionQueue(new Date(Date.now() + 5 * 60_000));
+    expect(triggerExecutionRows[0]).toMatchObject({ status: 'dead_lettered', attempts: 1 });
     expect(alertCalls).toEqual([
       {
         kind: 'raise',

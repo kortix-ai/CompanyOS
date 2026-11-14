@@ -80,7 +80,7 @@ export function isTeamTaskCall(call: ToolProps['call']): boolean {
   return looksLikeTeamTaskInput(partInput(call));
 }
 
-export function MultiAgentToolCard({ call, forceOpen }: ToolProps) {
+function MultiAgentToolCard({ call, forceOpen }: ToolProps) {
   const tool = multiAgentTool(call.name);
   const status = partStatus(call);
   const settled = status === 'completed' || status === 'error';

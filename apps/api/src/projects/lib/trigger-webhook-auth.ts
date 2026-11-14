@@ -32,6 +32,21 @@ export function webhookTimestampFresh(timestamp: string | null | undefined, nowM
 }
 
 /**
+ * Why `X-Kortix-Timestamp` is refused, or null when it is fresh: `expired`
+ * (more than the tolerance old, the replay case) or `out_of_tolerance` (ahead
+ * of now, or not a number). Callers record the reason on the rejected run.
+ */
+export function webhookTimestampProblem(
+  timestamp: string | null | undefined,
+  nowMs = Date.now(),
+): 'missing' | 'expired' | 'out_of_tolerance' | null {
+  if (!timestamp || !timestamp.trim()) return 'missing';
+  if (webhookTimestampFresh(timestamp, nowMs)) return null;
+  const seconds = Number(timestamp);
+  return Number.isFinite(seconds) && seconds < nowMs / 1000 ? 'expired' : 'out_of_tolerance';
+}
+
+/**
  * HMAC-SHA256 of `<timestamp>.<body>`: the signature covers the freshness
  * stamp, so a captured signature cannot be paired with a newer timestamp.
  */
@@ -50,6 +65,33 @@ export function verifyWebhookSignature(
   const expectedBuffer = Buffer.from(expected, 'hex');
   if (actualBuffer.length !== expectedBuffer.length) return false;
   return timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
+/**
+ * A delivery from a GitHub repository or App webhook: GitHub signs the raw
+ * body alone (X-Hub-Signature-256) and sends no X-Kortix-Timestamp. A request
+ * that carries any Kortix signing header is a Kortix delivery, never this.
+ */
+export function githubNativeDelivery(header: (name: string) => string | undefined): boolean {
+  return Boolean(
+    header('x-hub-signature-256')?.trim() &&
+      header('x-github-event')?.trim() &&
+      header('x-github-delivery')?.trim() &&
+      !header('x-kortix-timestamp')?.trim() &&
+      !header('x-kortix-signature')?.trim(),
+  );
+}
+
+/**
+ * GitHub's scheme: HMAC-SHA256 of the raw body. It has no freshness stamp,
+ * so the route keys the delivery on this signature and never frees the key
+ * (webhook-delivery.ts): a captured delivery runs once, ever (KRTX-4098).
+ */
+export function verifyGithubWebhookSignature(rawBody: string, secret: string, signatureHeader: string | null): boolean {
+  const signature = normalizeSignatureHeader(signatureHeader);
+  if (!signature || !/^[a-f0-9]{64}$/i.test(signature)) return false;
+  const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
+  return timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'));
 }
 
 // Pull a static shared-secret token from a webhook request's headers, for
@@ -109,6 +151,8 @@ export function webhookPayload(header: (name: string) => string | undefined, raw
       content_type: header('content-type') ?? null,
       user_agent: header('user-agent') ?? null,
       forwarded_for: header('x-forwarded-for') ?? null,
+      // GitHub names the event in a header (`issues`, `pull_request`), not the body.
+      github_event: header('x-github-event') ?? null,
     },
   };
 }

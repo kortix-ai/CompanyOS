@@ -18,7 +18,7 @@ import { resolveCandidates } from './resolve-candidates';
 import { checkClaudeAgentRef, isClaudeAgentModelRef } from './claude-agent';
 import { CLAUDE_AGENT_DEFAULT_MODEL, CLAUDE_AGENT_PROVIDER_ID } from '@kortix/api-contract/claude-agent';
 import { hasClaudeCredential } from '../../claude-subscription/accounts';
-import { connectedGatewayKeyNames } from '../credentials/gateway-keys';
+import { defaultableGatewayKeyNames } from '../credentials/gateway-keys';
 import { getProjectGatewayResolution } from '../../repositories/project-model-access';
 import { modelAccessAllows } from '../model-access';
 import { runtimeModelCatalog } from '../models/runtime-catalog';
@@ -105,6 +105,8 @@ export function invalidateAccountModelDefaults(accountId: string): void {
  * connected provider, never get stuck pointing at a provider it never
  * connected. Returns null (→ the caller's unmodified platform default) when
  * the project has no BYOK key connected at all, or has no project context.
+ * A provider whose every key the provider refused at its last check does not
+ * count (`defaultableGatewayKeyNames`).
  */
 async function connectedByokFallback(
   projectId: string | undefined,
@@ -113,7 +115,9 @@ async function connectedByokFallback(
 ): Promise<string | null> {
   if (!projectId) return null;
   try {
-    const connected = await connectedGatewayKeyNames({
+    // A provider whose every key the provider refused is no default: a
+    // session on it could only fail on the provider's 401.
+    const connected = await defaultableGatewayKeyNames({
       accountId: member?.accountId ?? '', projectId,
       // No member: no named key is reachable, as before.
       userId: member?.userId, grantUserId: member?.grantUserId ?? null,

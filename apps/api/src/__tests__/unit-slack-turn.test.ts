@@ -600,28 +600,20 @@ describe('relayTurnStep: mentions in a step', () => {
 
 describe('answerFooter', () => {
   const persona = { username: 'My Kortix', icon_url: 'https://api.example.com/v1/agent-marks/mykortix.png?v=1' };
-  const turn = (event: Record<string, unknown>, channel = 'C1') =>
-    ({ channel, projectId: 'proj-1', sessionId: 'sess-1', originatingEvent: { channel, ts: '10.10', ...event } }) as any;
+  const turn = { channel: 'C1', projectId: 'proj-1', sessionId: 'sess-1' };
 
-  test('the first answer of a new thread names the agent the channel picked, with its face', () => {
-    const [named, controls] = answerFooter(turn({}), persona) as any[];
-    expect(named.type).toBe('context');
-    expect(named.elements[0]).toEqual({ type: 'image', image_url: persona.icon_url, alt_text: 'My Kortix' });
-    expect(named.elements[1].text).toBe('Auto-selected *My Kortix* for this channel');
-    expect(controls.elements.map((e: any) => [e.action_id, e.text.text])).toEqual([
+  test('every answer ends with Switch agent and Open in Kortix; the author already names the agent', () => {
+    const blocks = answerFooter(turn, persona) as any[];
+    expect(blocks.map((b) => b.type)).toEqual(['actions']);
+    expect(blocks[0].elements.map((e: any) => [e.action_id, e.text.text])).toEqual([
       ['answer_switch_agent', 'Switch agent'],
       ['session_open', 'Open in Kortix ↗'],
     ]);
-  });
-
-  test('a DM says this DM; a follow-up in a thread carries only the controls', () => {
-    expect((answerFooter(turn({}, 'D1'), persona)[0] as any).elements[1].text).toBe('Auto-selected *My Kortix* for this DM');
-    expect(answerFooter(turn({ thread_ts: '9.9' }), persona).map((b) => b.type)).toEqual(['actions']);
+    expect(JSON.stringify(blocks)).not.toContain('Auto-selected');
   });
 
   test('without an agent author there is nothing to switch: only Open in Kortix', () => {
-    const blocks = answerFooter(turn({}), null) as any[];
-    expect(blocks.map((b) => b.type)).toEqual(['actions']);
+    const blocks = answerFooter(turn, null) as any[];
     expect(blocks[0].elements.map((e: any) => e.action_id)).toEqual(['session_open']);
   });
 });

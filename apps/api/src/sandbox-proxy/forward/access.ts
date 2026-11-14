@@ -1,5 +1,8 @@
 import { HTTPException } from 'hono/http-exception';
-import { DEAD_CREDENTIAL_BURST_SUPPRESSED } from '../../shared/dead-credential-log';
+import {
+  DEAD_CREDENTIAL_BURST_SUPPRESSED,
+  PREVIEW_SANDBOX_DENIED_MESSAGE,
+} from '../../shared/dead-credential-log';
 import { logWindowDecision, logWindowWarnDecision } from '../../shared/log-window';
 import { PROJECT_ACTIONS, authorize } from '../../iam';
 import { actorForUser } from '../../iam/actor';
@@ -103,7 +106,7 @@ export async function assertPreviewSandboxAccess(
     }))
   ) {
     throw new HTTPException(403, {
-      message: `Not authorized to access this sandbox, userId: ${userId}, sandboxId: ${sandboxId}`,
+      message: `${PREVIEW_SANDBOX_DENIED_MESSAGE}, userId: ${userId}, sandboxId: ${sandboxId}`,
     });
   }
 }

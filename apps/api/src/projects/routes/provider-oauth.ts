@@ -25,7 +25,7 @@ import { isGatewayManagedEnv } from '../../llm-gateway/sandbox-credentials';
 import { createRoute, z } from '@hono/zod-openapi';
 import { accountSecretGrants } from '@kortix/db';
 import { reconnectProviderAccount, writeProviderAccount } from '../../secrets/provider-accounts';
-import { resolveFeatureFlag } from '../../feature-flags/registry';
+import { deleteNamedCopiesOfLegacySecrets } from '../../secrets/llm-credential-ledger';
 import { projectSecrets } from '@kortix/db';
 import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import {
@@ -304,9 +304,6 @@ export function registerProviderOauthRoutes(): void {
     }
 
     if (state.rc && state.rid) {
-      if (!resolveFeatureFlag(loaded.row.metadata, 'pooled_provider_secrets')) {
-        return c.json({ status: 'failed', error: 'Pooled OAuth connections are disabled for this workspace' });
-      }
       const reconnected = await reconnectProviderAccount({
         secretId: state.rid, accountId: loaded.row.accountId, userId: loaded.userId,
         projectId, value: result.authJson, kind: accountKind(cfg),
@@ -324,9 +321,6 @@ export function registerProviderOauthRoutes(): void {
     // The sealed resource id makes a completed device flow idempotent. A new
     // device flow gets a new resource; it never overwrites another user's login.
     if (state.l && state.rid) {
-      if (!resolveFeatureFlag(loaded.row.metadata, 'pooled_provider_secrets')) {
-        return c.json({ status: 'failed', error: 'Pooled OAuth connections are disabled for this workspace' });
-      }
       const secretId = await writeProviderAccount({
         secretId: state.rid, accountId: loaded.row.accountId, userId: loaded.userId,
         label: state.l, value: result.authJson, projectId, kind: accountKind(cfg),
@@ -444,7 +438,7 @@ export function registerProviderOauthRoutes(): void {
 
     await runAuditedTransaction(
       async (tx) => {
-        await tx
+        const removed = await tx
           .delete(projectSecrets)
           .where(
             and(
@@ -452,7 +446,11 @@ export function registerProviderOauthRoutes(): void {
               eq(projectSecrets.name, cfg.secretName),
               canManageShared ? or(ownPrivate, isNull(projectSecrets.ownerUserId)) : ownPrivate,
             ),
-          );
+          )
+          .returning({ secretId: projectSecrets.secretId });
+        // A login the backfill moved lives on as a named account: disconnect
+        // that copy too, or the old client's disconnect changes nothing.
+        await deleteNamedCopiesOfLegacySecrets(tx, loaded.row.accountId, removed.map((row) => row.secretId));
       },
       () => ({
         accountId: loaded.row.accountId,

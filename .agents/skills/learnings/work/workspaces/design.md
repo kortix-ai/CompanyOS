@@ -983,7 +983,7 @@ the gate at runtime: one that skips itself is recorded as applied and never runs
 | R2a-0 | The reconcile keeps rows in place (`20261111135934314_workspaces_reconcile_in_place.sql`). The R1 body deleted and re-inserted a row on every change (a rename, an open, a settings write, an archive) and deleted a moved project's row when the source was reconciled first; with step 4's foreign keys that cascades into, or is refused by, every referencing row. Proof: `reconcile-in-place.integration.test.ts` (a canary table references each row `ON DELETE CASCADE`). | any time |
 | R2a-1 | 8a: the account-of-project lookups through one store function | any time |
 | R2a-2 | 7: the engine reads `scope_type = 'workspace'` and the `workspace.*` names | any time |
-| R2a-3a | 4, project side: the 74 twins into `workspaces(workspace_id)` (`NOT VALID`, `NO ACTION`, deferred), and the reconcile of an account with no row (`20261111225900000`, `20261111230000000`–`…230021000`). Proof: `workspaces-twin-foreign-keys.integration.test.ts` | any time: no file references `workspaces(legacy_account_id)` |
+| R2a-3a | 4, project side: the 78 twins into `workspaces(workspace_id)` (`NOT VALID`, `NO ACTION`, deferred), and the reconcile of an account with no row (`20261114163000000`, `20261114163001000`–`…163024000`; re-dated after dev's newest on 2026-11-14, when dev had added 3 more keys into `projects`). Proof: `workspaces-twin-foreign-keys.integration.test.ts` | any time: no file references `workspaces(legacy_account_id)` |
 | R2a-3b | 1 (unique index), 4 account side (the 52 twins into `workspaces(legacy_account_id)`), the fixture rewrite (below), 2–3 (the store writes `workspaces` first, the mirror trigger), 6 (fill), 8 (flip) | on branch `workspaces-r2a`; merged into `dev` once dev, staging and prod have 0 `split_pending` rows (step 1 refuses to build before, on purpose) |
 
 **Step 1 retires multi-project accounts in the database (found 2026-11-11).** With a full unique
@@ -1026,7 +1026,7 @@ Step 9 (the Drizzle property codemod) leaves R2a: §5 "API-internal names follow
    `legacy_account_id` would delete every account-keyed row of the workspace there; a non-deferred
    one would refuse the transfer. A deferred `NO ACTION` twin checks at commit, when the
    replacement row exists. The tombstone key (`former_account_id → workspaces(legacy_account_id)`)
-   moves to R2b step 10b for the same reason. 74 keys into `projects`, 52 into `accounts` once
+   moves to R2b step 10b for the same reason. 74 keys into `projects` (78 on 2026-11-14), 52 into `accounts` once
    `projects.account_id` (the old store's own key) is left out (catalog, 2026-11-11).
 5. **Moved to R2b step 10b (2026-11-11).** A `VALIDATE` in R2a is wasted: R2b re-creates every
    twin with its final action (an FK's action cannot be altered in place) and validates it then.

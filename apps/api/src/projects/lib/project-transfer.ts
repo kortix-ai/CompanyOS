@@ -25,7 +25,7 @@
  */
 import { and, eq, getTableName, inArray, sql } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
-import { artifacts, projectGoals, sessionSandboxIdentities, projectSessionGroups, projectSpaces, rooms, sessionIdleWatches, accountModelPreferences, accountSecretResources, accountSecretGrants, accountTokens, appArtifacts, apps, changeRequests, connectorAttachments, connectorCalls, connectorHeldCalls, connectorConnections, connectionOAuthApplications, connectionOAuthSessions, connectors, drives, gatewayApiKeys, projectAccessRequests, projectGitConnections, projectGitCredentials, projectMonitorBoxes, projectSessionConnectorBindings, projectSessionPublicShares, projectSessions, projectSnapshotBuilds, projectTriggerEventSubscriptions, projectTriggerEventPolls, iamRoles, promptAttachments, providerTransitions, reviewItems, roleAssignments, sandboxTemplates, serviceAccounts, sessionColleagueAccess, sessionContentPurges, sessionLifecycleCommands, sessionLogs, sessionPendingPermissions, sessionPendingQuestions, sessionRuntimeProjections, sessionSandboxes, sessionTurns } from '@kortix/db';
+import { artifacts, evalJobs, projectGoals, sessionSandboxIdentities, projectSessionGroups, projectSpaces, rooms, sessionIdleWatches, accountModelPreferences, accountSecretResources, accountSecretGrants, accountTokens, appArtifacts, apps, changeRequests, connectorAttachments, connectorCalls, connectorHeldCalls, connectorConnections, connectionOAuthApplications, connectionOAuthSessions, connectors, drives, gatewayApiKeys, projectAccessRequests, projectGitConnections, projectGitCredentials, projectMonitorBoxes, projectSessionConnectorBindings, projectSessionPublicShares, projectSessions, projectSnapshotBuilds, projectTriggerEventSubscriptions, projectTriggerEventPolls, iamRoles, promptAttachments, providerTransitions, reviewItems, roleAssignments, sandboxTemplates, serviceAccounts, sessionColleagueAccess, sessionContentPurges, sessionLifecycleCommands, sessionLogs, sessionPendingPermissions, sessionPendingQuestions, sessionRuntimeProjections, sessionSandboxes, sessionTurns } from '@kortix/db';
 import { db } from '../../shared/db';
 import { logger } from '../../lib/logger';
 import { decryptAccountSecret, encryptAccountSecret } from '../../secrets/account-resource';
@@ -98,6 +98,8 @@ export const PROJECT_TRANSFER_TABLES: readonly PgTable[] = [
   // A goal belongs to the project (its folder is in the project drive). Its
   // event log carries project_id only and needs no move.
   projectGoals,
+  // An eval job and its scores belong to the project; its results live in the project's Files.
+  evalJobs,
 ];
 
 /**
@@ -136,6 +138,13 @@ export const PROJECT_TRANSFER_LEAVE_TABLES: Readonly<Record<string, string>> = {
   // Completed one-off migration runs — operations history, not live state.
   legacy_sandbox_migrations: 'completed ops migration run record',
   suna_account_migrations: 'completed ops migration run record',
+  // The LLM credential move ledger: the row records that the SOURCE account's
+  // backfill copied a legacy secret into its named store. The legacy read gate
+  // (`legacySecretNotMoved`) joins the row by `legacy_secret_id` with no
+  // account filter, so the moved project's secret still resolves through the
+  // row left behind. Re-pointing `account_id` would claim the target account
+  // made the copy.
+  llm_credential_backfill: 'credential move ledger — the record of a copy into the source account\'s named store stays with the account that made it',
 };
 
 /**

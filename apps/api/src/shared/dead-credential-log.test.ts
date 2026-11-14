@@ -38,9 +38,12 @@ const {
   isCredentialFenceDenial,
   isDeadCredential,
   isAgentGrantDenial,
+  isAgentAccessDenial,
   markCredentialFenceDenial,
   markDeadCredential,
   markAgentGrantDenial,
+  markAgentAccessDenial,
+  PREVIEW_SANDBOX_DENIED_MESSAGE,
 } = await import('./dead-credential-log');
 const { logWindowDecision, logWindowWarnDecision, resetLogWindowsForTests } = await import('./log-window');
 const { installHttpErrors } = await import('../http-errors');
@@ -540,5 +543,263 @@ describe('credential-fence refusals are throttled at the error handler (KRTX-473
     markCredentialFenceDenial(marked);
     expect(isCredentialFenceDenial(marked)).toBe(true);
     expect(isCredentialFenceDenial(plain)).toBe(false);
+  });
+});
+
+describe('preview sandbox denial warn is throttled at the error handler (KRTX-4768)', () => {
+  // What combinedAuth throws when a valid caller is refused a sandbox proxy
+  // route: the sandbox row is gone (the session stop deleted it) or the
+  // caller lost access. The web client's workflow poll keeps hitting the
+  // dead box's route every 5 s while its tab stays open, and per-request
+  // logging turned that poll into a warn storm (89 lines in one hour
+  // against a 1.58/h baseline, one tab on one dead box).
+  function appWithPreviewSandboxDenial(): OpenAPIHono {
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.get('/v1/p/:sandboxId/:port/kortix/runtime/workflows', () => {
+      throw new HTTPException(403, { message: PREVIEW_SANDBOX_DENIED_MESSAGE });
+    });
+    return app;
+  }
+
+  test('the first refusal logs one info line; repeats inside the window are suppressed and the body is untouched', async () => {
+    resetLogWindowsForTests();
+    const app = appWithPreviewSandboxDenial();
+    const before = logged.length;
+    let lastBody = '';
+    for (let i = 0; i < 5; i += 1) {
+      const res = await app.request('/v1/p/sbx_01M768H27CG7KMXCPE764BX4KC/8000/kortix/runtime/workflows');
+      expect(res.status).toBe(403);
+      lastBody = await res.text();
+    }
+    expect(JSON.parse(lastBody)).toEqual({
+      error: true,
+      message: PREVIEW_SANDBOX_DENIED_MESSAGE,
+      status: 403,
+    });
+    const warns = logged.slice(before).filter((l) => l.level === 'warn');
+    expect(warns).toHaveLength(0);
+    const infos = logged.slice(before).filter((l) => l.level === 'info');
+    expect(infos).toHaveLength(1);
+    expect(infos[0]?.message).toContain(`-> 403 [HTTPException] ${PREVIEW_SANDBOX_DENIED_MESSAGE}`);
+    expect(infos[0]?.context?.suppressed).toBe(0);
+  });
+
+  test('distinct sandbox paths and the route-level suffixed variant share one window', async () => {
+    // The bucket key must normalize the sandbox id out of the path, or every
+    // polled box opens its own bucket and the throttle stops bounding the
+    // warn lines across a fleet (the UUID treatment of KRTX-1564).
+    resetLogWindowsForTests();
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.get('/v1/p/:sandboxId/:port/kortix/runtime/workflows', (c) => {
+      throw new HTTPException(403, { message: PREVIEW_SANDBOX_DENIED_MESSAGE });
+    });
+    app.get('/v1/p/:sandboxId/:port/kortix/session/state', (c) => {
+      // What assertPreviewSandboxAccess throws at the proxy route.
+      throw new HTTPException(403, {
+        message: `${PREVIEW_SANDBOX_DENIED_MESSAGE}, userId: ${crypto.randomUUID()}, sandboxId: ${c.req.param('sandboxId')}`,
+      });
+    });
+    const before = logged.length;
+    for (const id of ['sbx_01M768H27CG7KMXCPE764BX4KC', 'sbx_01M764P1WMZFH1ANREWF3ZGT90']) {
+      const res = await app.request(`/v1/p/${id}/8000/kortix/runtime/workflows`);
+      expect(res.status).toBe(403);
+    }
+    const res = await app.request('/v1/p/sbx_01M75P8WFTDNS1RP08M2RHV6Z4/8000/kortix/session/state');
+    expect(res.status).toBe(403);
+    expect(logged.slice(before).filter((l) => l.level === 'warn')).toHaveLength(0);
+    // Two sandbox paths on one route share one window; the suffixed variant
+    // lives on its own route and gets its own window — one line per route.
+    expect(logged.slice(before).filter((l) => l.level === 'info')).toHaveLength(2);
+  });
+
+  test('a 403 with a different reason still logs one warn per refusal', async () => {
+    resetLogWindowsForTests();
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.get('/v1/p/:sandboxId/:port/kortix/runtime/workflows', () => {
+      throw new HTTPException(403, { message: 'This sandbox is suspended' });
+    });
+    const before = logged.length;
+    for (let i = 0; i < 3; i += 1) {
+      const res = await app.request('/v1/p/sbx_01M768H27CG7KMXCPE764BX4KC/8000/kortix/runtime/workflows');
+      expect(res.status).toBe(403);
+    }
+    const warns = logged.slice(before).filter((l) => l.level === 'warn');
+    expect(warns).toHaveLength(3);
+  });
+});
+
+describe('person role denial warns are throttled at the error handler (KRTX-4801)', () => {
+  // The route throws what assertAuthorized throws for a person whose role
+  // lacks the action — the #12240 assert-form gates (`resolveAdmin` and
+  // siblings). A host that renders the connect button polls
+  // GET .../connect-requests for every session it shows, and a caller whose
+  // role cannot ever act on the permission receives the same typed 403 on
+  // every poll: prod 2026-11-12, 22 warn lines in one hour on that route,
+  // 0 in the 24 h before. The mark routes the LINE through the shared window
+  // throttle; the typed 403 body — the reason, the action, and (for the
+  // role-shaped reasons) who grants it — ships untouched every time.
+  function appWithRoleDenial(): OpenAPIHono {
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.get('/v1/connectors/workspaces/:workspaceId/sessions/:sessionId/connect-requests', () => {
+      throw buildDenialError('project.connector.write', 'role');
+    });
+    return app;
+  }
+
+  test('five identical role denials log one info line; the typed 403 body names the permission every time', async () => {
+    resetLogWindowsForTests();
+    const app = appWithRoleDenial();
+    const before = logged.length;
+    let lastBody = '';
+    for (let i = 0; i < 5; i += 1) {
+      const res = await app.request('/v1/connectors/workspaces/w/sessions/s/connect-requests');
+      expect(res.status).toBe(403);
+      lastBody = await res.text();
+    }
+    expect(JSON.parse(lastBody)).toMatchObject({
+      code: 'role',
+      action: 'project.connector.write',
+      workspace_action: 'workspace.connector.write',
+    });
+    expect(logged.slice(before).filter((l) => l.level === 'warn')).toHaveLength(0);
+    const infos = logged.slice(before).filter((l) => l.level === 'info');
+    expect(infos).toHaveLength(1);
+    const first = infos[0];
+    if (!first) throw new Error('expected the first denial line');
+    expect(first.message).toContain(
+      '-> 403 [HTTPException] You don\'t have permission to perform this action (workspace.connector.write).',
+    );
+    expect(first.context?.suppressed).toBe(0);
+  });
+
+  test('role-shaped reasons the wording branch names keep their remedy in the body and join the same throttle', async () => {
+    resetLogWindowsForTests();
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.get('/v1/connectors/workspaces/:workspaceId/sessions/:sessionId/connect-requests', () => {
+      throw buildDenialError('project.connector.write', 'project_role_insufficient');
+    });
+    const before = logged.length;
+    const res = await app.request('/v1/connectors/workspaces/w/sessions/s/connect-requests');
+    expect(res.status).toBe(403);
+    expect(JSON.parse(await res.text()).message).toContain('A workspace owner or admin grants');
+    expect(logged.slice(before).filter((l) => l.level === 'warn')).toHaveLength(0);
+    expect(logged.slice(before).filter((l) => l.level === 'info')).toHaveLength(1);
+  });
+
+  test('a denial whose constraint clears in-session stays per-request (sso_required)', async () => {
+    // The doctrine boundary (denial-message.ts): a remedy a caller can act on
+    // in-session — one redirect — keeps its per-request warn line.
+    resetLogWindowsForTests();
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.get('/v1/plain', () => {
+      throw buildDenialError('project.connector.write', 'sso_required');
+    });
+    const before = logged.length;
+    for (let i = 0; i < 3; i += 1) await app.request('/v1/plain');
+    const warns = logged.slice(before).filter((l) => l.level === 'warn');
+    expect(warns).toHaveLength(3);
+  });
+});
+
+describe('agent-access denials are throttled at the error handler (KRTX-4800)', () => {
+  // What projects/lib/agent-access.ts `denial()` throws for a caller whose
+  // session's agent is not theirs: the typed 403 (`no_agent_access` or
+  // `agent_not_accessible`), marked. The gate-level pin that the constructor
+  // itself marks lives in __tests__/unit-agent-access-denial-mark.test.ts;
+  // this file pins what the mark does at the error handler.
+  function agentAccessDenialLike(
+    message = "You don't have access to any agent in this project. Ask a manager to grant you one.",
+  ): HTTPException {
+    const err = new HTTPException(403, {
+      message,
+      res: new Response(
+        JSON.stringify({ error: message, message, code: 'no_agent_access', action: 'project.session.start', accessible_agents: [] }),
+        { status: 403, headers: { 'content-type': 'application/json' } },
+      ),
+    });
+    markAgentAccessDenial(err);
+    return err;
+  }
+
+  function appWithAgentAccessDenial(): OpenAPIHono {
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.post('/v1/workspaces/:workspaceId/sessions/:sessionId/start', () => {
+      throw agentAccessDenialLike();
+    });
+    app.post('/v1/unmarked-start', () => {
+      throw new HTTPException(403, { message: 'no access' });
+    });
+    return app;
+  }
+
+  test('an unmarked 403 still logs one warn line per refusal', () => {
+    const app = appWithAgentAccessDenial();
+    const before = logged.length;
+    for (let i = 0; i < 3; i += 1) app.request('/v1/unmarked-start', { method: 'POST' });
+    const warns = logged.slice(before).filter((l) => l.level === 'warn');
+    expect(warns).toHaveLength(3);
+    for (const warn of warns) {
+      expect(warn.message).toContain('-> 403 [HTTPException] no access');
+      expect(warn.context?.suppressed).toBeUndefined();
+    }
+  });
+
+  test('five identical agent-access refusals log one info line and ship the typed body verbatim', async () => {
+    resetLogWindowsForTests();
+    const app = appWithAgentAccessDenial();
+    const before = logged.length;
+    let lastBody = '';
+    for (let i = 0; i < 5; i += 1) {
+      const res = await app.request('/v1/workspaces/w/sessions/s/start', { method: 'POST' });
+      expect(res.status).toBe(403);
+      lastBody = await res.text();
+    }
+    expect(JSON.parse(lastBody)).toEqual({
+      error: "You don't have access to any agent in this project. Ask a manager to grant you one.",
+      message: "You don't have access to any agent in this project. Ask a manager to grant you one.",
+      code: 'no_agent_access',
+      action: 'project.session.start',
+      accessible_agents: [],
+    });
+    const warns = logged.slice(before).filter((l) => l.level === 'warn');
+    expect(warns).toHaveLength(0);
+    const infos = logged.slice(before).filter((l) => l.level === 'info');
+    expect(infos).toHaveLength(1);
+    const first = infos[0];
+    if (!first) throw new Error('expected the first refusal line');
+    expect(first.message).toContain(
+      '-> 403 [HTTPException] You don\'t have access to any agent in this project. Ask a manager to grant you one.',
+    );
+    expect(first.context?.suppressed).toBe(0);
+    expect(first.context?.reason).toContain('agent in this project');
+  });
+
+  test('the named-agent form (agent_not_accessible) joins the same throttle family', async () => {
+    resetLogWindowsForTests();
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.post('/v1/workspaces/:workspaceId/sessions/:sessionId/start', () => {
+      const err = agentAccessDenialLike(
+        "You don't have access to the legal agent — pick one of: sales.",
+      );
+      // The named-agent refusal carries code agent_not_accessible; the mark is
+      // what throttles it, so the bucket here follows the mark, not the code.
+      expect(isAgentAccessDenial(err)).toBe(true);
+      throw err;
+    });
+    const before = logged.length;
+    for (let i = 0; i < 4; i += 1) {
+      const res = await app.request('/v1/workspaces/w/sessions/s/start', { method: 'POST' });
+      expect(res.status).toBe(403);
+    }
+    expect(logged.slice(before).filter((l) => l.level === 'warn')).toHaveLength(0);
+    expect(logged.slice(before).filter((l) => l.level === 'info')).toHaveLength(1);
   });
 });

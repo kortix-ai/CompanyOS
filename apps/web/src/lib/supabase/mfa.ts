@@ -185,15 +185,19 @@ function toFactorInfo(factor: {
   };
 }
 
-/** The verdict per `current -> next` AAL combination, as the AAL gate reports it. */
-const AAL_VERDICTS: Record<string, { actionRequired: string; message: string }> = {
-  'aal1 -> aal1': { actionRequired: 'none', message: 'MFA is not enrolled for this account' },
+/**
+ * The verdict per `current -> next` AAL combination, as the AAL gate reports it.
+ * `diagnostic` is the status's `message`: a log line for support, never shown in
+ * the UI (no surface renders `MFAStatus.message`), so it is not translated.
+ */
+const AAL_VERDICTS: Record<string, { actionRequired: string; diagnostic: string }> = {
+  'aal1 -> aal1': { actionRequired: 'none', diagnostic: 'MFA is not enrolled for this account' },
   'aal1 -> aal2': {
     actionRequired: 'verify_mfa',
-    message: 'MFA verification required to access full features',
+    diagnostic: 'MFA verification required to access full features',
   },
-  'aal2 -> aal2': { actionRequired: 'none', message: 'MFA is verified and active' },
-  'aal2 -> aal1': { actionRequired: 'reauthenticate', message: 'Session needs refresh due to MFA changes' },
+  'aal2 -> aal2': { actionRequired: 'none', diagnostic: 'MFA is verified and active' },
+  'aal2 -> aal1': { actionRequired: 'reauthenticate', diagnostic: 'Session needs refresh due to MFA changes' },
 };
 
 export const supabaseMFAService = {
@@ -467,9 +471,9 @@ export const supabaseMFAService = {
       const current = aalResponse.data?.currentLevel;
       const nextLevel = aalResponse.data?.nextLevel;
 
-      const { actionRequired, message } = AAL_VERDICTS[`${current} -> ${nextLevel}`] ?? {
+      const { actionRequired, diagnostic: message } = AAL_VERDICTS[`${current} -> ${nextLevel}`] ?? {
         actionRequired: 'unknown',
-        message: `Unknown AAL combination: ${current} -> ${nextLevel}`,
+        diagnostic: `Unknown AAL combination: ${current} -> ${nextLevel}`,
       };
 
       // A new user whose first session starts below aal2, or any session the

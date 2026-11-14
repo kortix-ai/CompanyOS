@@ -15,7 +15,8 @@
  * starts a new 24 hours.
  *
  * Deliberately NOT a reason to pause:
- * - credits: a top-up must bring the trigger back without a person resuming it;
+ * - credits, and no usable model at all: those pause at the first refused
+ *   fire and resume by themselves (trigger-setup-pause.ts);
  * - any platform fault (a git clone timeout, a box that never came up): the
  *   platform recovers, and the owner must not have to resume every trigger.
  *

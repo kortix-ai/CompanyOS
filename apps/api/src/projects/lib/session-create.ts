@@ -1,5 +1,6 @@
 import { copySessionLog, withForkAttachmentCleanup } from '../session-log-fork';
 import { platformDefaultModelId } from '../../llm-gateway/models/served-managed-models';
+import { servableProjectCatalog } from '../../llm-gateway/models/servable-catalog';
 import { randomUUID } from 'node:crypto';
 import { SESSION_INITIAL_CONTEXT_MAX_CHARS, SessionCreateInputSchema } from '@kortix/api-contract';
 import { projectSessionConnectorBindings, projectSessionGrants, projectSessionRuntimeContexts, projectSessions, sessionLifecycleCommands, sessionProviderSecretPools } from '@kortix/db';
@@ -103,9 +104,8 @@ import {
 
 import { buildSessionSandboxEnvVars } from './session-sandbox-env-build';
 import { sandboxCallbackUnreachableReason, sandboxCallbackDeadTunnelReason } from './session-callback-probe';
-import { actorForUser, type Actor } from '../../iam/actor';
-import { PROJECT_ACTIONS } from '../../iam/actions';
-import { authorize } from '../../iam/authorize';
+import type { Actor } from '../../iam/actor';
+import { launcherMayReadRepository } from './launcher-repository-access';
 import { loadVisibleSession, sessionIsTombstoned } from './session-visibility';
 import { HUMAN_SESSION_SURFACES } from './session-surface';
 import { isWorkflowRunnerContext, sessionIsWorkflowRunner } from './workflow-runner';
@@ -714,10 +714,7 @@ async function resolveSessionAgent(params: {
   const repositoryAccess =
     agentGrantAllowsRepository(agentName, loadedAgents) &&
     (input.requestingPrincipalType === 'service_account' ||
-      (await authorize(actorForUser(input.userId, project.accountId), PROJECT_ACTIONS.PROJECT_FILE_READ, {
-        type: 'project',
-        id: projectId,
-      })).allowed);
+      (await launcherMayReadRepository(input.userId, project.accountId, projectId)));
 
   return { loadedAgents, projectDefaultAgent, agentName, platformMetaAgent, repositoryAccess, myKortixColleague };
 }
@@ -830,6 +827,36 @@ function parentTurnModel(runtimeContext: unknown): string | null {
  * Resolve and validate the session model, and the provider key selection a
  * pooled-key model needs. Runs before the billing hold.
  */
+/** The session-create refusal when no model can run the session. */
+export function noModelAvailableBody(freeModelsOnly: boolean): { error: string; code: 'no_model_available'; plan_upgrade: boolean } {
+  return {
+    error: freeModelsOnly
+      ? 'No model: upgrade to the Credits plan or add your own provider key.'
+      : 'No model: add a provider key or turn on Kortix Managed Models in Models.',
+    code: 'no_model_available',
+    // The Free plan has no managed models; upgrading is one of the two fixes.
+    plan_upgrade: freeModelsOnly,
+  };
+}
+
+/** True when the project's servable catalog (what the box registers at boot) is empty, refused keys not counted. */
+async function projectHasNoServableModel(input: {
+  projectId: string;
+  accountId: string;
+  userId: string;
+  personalUserId: string | null | undefined;
+}): Promise<boolean> {
+  const catalog = await servableProjectCatalog({
+    projectId: input.projectId,
+    accountId: input.accountId,
+    principalUserId: input.userId,
+    ...(input.personalUserId !== undefined ? { personalUserId: input.personalUserId } : {}),
+    // pi would select a model of a refused key and die on the provider's 401.
+    withoutRefusedKeys: true,
+  });
+  return Object.keys(catalog.models ?? {}).length === 0;
+}
+
 async function resolveSessionModel(params: {
   input: CreateProjectSessionInput;
   accountId: string;
@@ -848,10 +875,6 @@ async function resolveSessionModel(params: {
   const { input, accountId, projectId, agentName, loadedAgents, visibility, origin } = params;
   const { project, userId, body } = input;
   const freeModelsOnly = !(await accountMayUseManagedModels(accountId));
-  const pooledProviderSecrets = resolveFeatureFlag(project.metadata, 'pooled_provider_secrets');
-  if (body.provider_secret_pools !== undefined && !pooledProviderSecrets) {
-    return { error: { status: 403, body: { error: 'Provider secret pools are unavailable' } } };
-  }
   // The key selection this session starts with: the caller's, else none, and
   // the gateway uses every key the session may use when it runs.
   const providerSecretPools = body.provider_secret_pools as Record<string, string[]> | undefined;
@@ -974,6 +997,12 @@ async function resolveSessionModel(params: {
         if (picked && (await isModelServableForAccount({ userId, accountId, projectId, freeModelsOnly, model: picked, providerSecretPools, ...scope }))) {
           sessionModel = toSessionModelRef(picked);
           sessionModelSource = 'explicit';
+        } else if (await projectHasNoServableModel({ projectId, accountId, userId, personalUserId: scope.personalUserId })) {
+          // No KORTIX_MODEL and an empty catalog is exactly the box that never
+          // boots ("pi harness has no model", harness/pi/model.ts). Refuse
+          // before a sandbox, a billing hold or a row exists. A non-empty
+          // catalog is fine: pi selects its first model.
+          return { error: { status: 409, body: noModelAvailableBody(freeModelsOnly) } };
         }
       }
     } catch (error) {

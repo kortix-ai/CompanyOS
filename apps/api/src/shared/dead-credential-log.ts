@@ -31,6 +31,12 @@ export const DEAD_CREDENTIAL_BURST_SUPPRESSED = 10;
 
 const UUID_PATTERN = /[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/gi;
 
+/** Same treatment as UUID_PATTERN: a sandbox proxy path carries the box's
+ *  `sbx_` external id, and one box per bucket would shard a fleet-wide grind
+ *  (or every polled dead box) into a warn line per box (KRTX-4768). The
+ *  printed line keeps the id. */
+const SANDBOX_EXTERNAL_ID_PATTERN = /sbx_[0-9a-z]+/gi;
+
 /**
  * The throttle bucket key for a dead-credential refusal: method, route,
  * status and a reason with every token id normalized OUT. KRTX-1564 named the
@@ -41,7 +47,9 @@ const UUID_PATTERN = /[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/gi;
  * key hides it.
  */
 export function deadCredentialLogKey(method: string, path: string, status: number, reason: string): string {
-  return `${method} ${path} ${status} ${reason}`.replace(UUID_PATTERN, ':id');
+  return `${method} ${path} ${status} ${reason}`
+    .replace(UUID_PATTERN, ':id')
+    .replace(SANDBOX_EXTERNAL_ID_PATTERN, ':sandbox');
 }
 
 const deadCredentials = new WeakSet<HTTPException>();
@@ -186,6 +194,82 @@ export function markCredentialFenceDenial(err: HTTPException): void {
 /** True for an exception `markCredentialFenceDenial` marked. */
 export function isCredentialFenceDenial(err: HTTPException): boolean {
   return credentialFenceDenials.has(err);
+}
+
+// KRTX-4801: a person whose workspace role or membership lacks the action is
+// refused with the SAME typed 403 on every call — the constraint changes only
+// when a human edits their role or membership, and the body already names the
+// permission and (for the role-shaped reasons) who grants it. The #12240
+// assert-form gates (`resolveAdmin` and siblings) made exactly that refusal
+// log per request, and a host that renders the connect button polls
+// GET .../connect-requests for every session it shows: 22 warn lines in one
+// prod hour on that route, 0 in the 24 h before, forever while the caller
+// polls. The mark routes the LINE through the shared window throttle
+// without touching the response, exactly as markAgentGrantDenial does.
+const personRoleDenials = new WeakSet<HTTPException>();
+
+/**
+ * Mark an exception as a person role/membership denial: the caller's standing
+ * role or membership in the workspace lacks the action. Called by
+ * `buildDenialError`, the one constructor every such refusal throws.
+ */
+export function markPersonRoleDenial(err: HTTPException): void {
+  personRoleDenials.add(err);
+}
+
+/** True for an exception `markPersonRoleDenial` marked. */
+export function isPersonRoleDenial(err: HTTPException): boolean {
+  return personRoleDenials.has(err);
+}
+
+// KRTX-4800: the agent-access gate (projects/lib/agent-access.ts) refuses a
+// caller whose session's agent is not theirs with the SAME typed 403 on every
+// call — the state changes only when a manager grants the agent, and the body
+// already names the remedy ("ask a manager to grant you one") plus the agents
+// the caller could run instead. Two people of one workspace kept retrying the
+// start of one such session: 29 warn lines in one prod hour against a 0
+// baseline, every line repeating what the response had just said. The mark
+// routes the LINE through the shared window throttle without touching the
+// response, exactly as markAgentGrantDenial does — that one is the sibling
+// family for the agent principal's own kortix_permissions refusals.
+const agentAccessDenials = new WeakSet<HTTPException>();
+
+/**
+ * Mark an exception as an agent-access denial: the deny-by-default agent gate
+ * refused the agent this caller's session resolves to. Called by the gate's
+ * `denial()` constructor, the one constructor every such refusal throws
+ * (`no_agent_access` and `agent_not_accessible`, human and agent-delegation
+ * paths alike).
+ */
+export function markAgentAccessDenial(err: HTTPException): void {
+  agentAccessDenials.add(err);
+}
+
+/** True for an exception `markAgentAccessDenial` marked. */
+export function isAgentAccessDenial(err: HTTPException): boolean {
+  return agentAccessDenials.has(err);
+}
+
+/**
+ * The 403 message `combinedAuth` throws when a valid caller is refused a
+ * preview sandbox proxy route: the sandbox's `session_sandboxes` row is gone
+ * (every session stop deletes it) or the caller is not a member of the box's
+ * account. `assertPreviewSandboxAccess` at the proxy route throws the same
+ * message with a `, userId: …, sandboxId: …` suffix, so the family matches
+ * the prefix. The web client polls the runtime surface of the session it has
+ * open every 5 s, and a box that died while its session row still reads
+ * `running` is refused forever — per-request logging turned one open tab on
+ * one dead box into 89 warn lines in an hour against a 1.58/h baseline
+ * (KRTX-4768). The response stays a plain untyped 403: the refusal is
+ * correct, and unlike a dead credential the state CAN come back (a new box
+ * on the next session open), so there is no typed stop code to add — only
+ * the line is throttled.
+ */
+export const PREVIEW_SANDBOX_DENIED_MESSAGE = 'Not authorized to access this sandbox';
+
+/** True for the plain and the route-level suffixed form of the message. */
+export function isPreviewSandboxDenied(status: number, reason: string): boolean {
+  return status === 403 && reason.startsWith(PREVIEW_SANDBOX_DENIED_MESSAGE);
 }
 
 /**

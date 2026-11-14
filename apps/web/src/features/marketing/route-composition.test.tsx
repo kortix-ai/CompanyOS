@@ -2,6 +2,25 @@ import { describe, expect, mock, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Window } from 'happy-dom';
 import type { Element as HappyElement, HTMLPreElement } from 'happy-dom';
+// The home route now carries the landing's signed-in gate
+// (LandingAuthGate), a client component that requires the app's providers.
+// SSR renders the gate's signed-out output (the landing, unchanged); supply
+// the provider boundary the same way `home-auth-redirect.test.tsx` does.
+mock.module('@/features/providers/auth-provider', () => ({
+  useAuth: () => ({
+    user: null,
+    isLoading: false,
+    supabase: {},
+    bootstrapError: null,
+    retryAuth: () => undefined,
+    signOut: () => Promise.resolve(),
+  }),
+}));
+mock.module('next/navigation', () => ({
+  useRouter: () => ({ replace: () => undefined, push: () => undefined }),
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
+}));
 // Bun does not compile MDX frontmatter. Supply the content boundary, not a page
 // or section mock, so the actual shipped composition still renders end to end.
 mock.module('@/lib/use-cases-source', () => ({

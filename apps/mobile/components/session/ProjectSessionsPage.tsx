@@ -115,6 +115,7 @@ import {
   sessionsPageRows,
 } from '@/lib/session/session-tree';
 import { useAuthContext } from '@/contexts';
+import { useDebouncedValue } from '@/lib/ui/use-debounced-value';
 import { parentKey, useSessionTreeStore } from '@/stores/session-tree-store';
 import { needsYouBySession, type NeedsYouWaitingOn } from '@/lib/session/needs-you';
 import { useReviewNeedsYou } from '@/lib/review/use-review';
@@ -152,16 +153,6 @@ const sessionListItemKey = (item: SessionListItem) => item.key;
 
 /** The search field waits this long after the last keystroke before it asks the server. */
 const SEARCH_DEBOUNCE_MS = 250;
-
-/** `value`, `delayMs` after it last changed. */
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = React.useState(value);
-  React.useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(id);
-  }, [value, delayMs]);
-  return debounced;
-}
 
 /** Space between two groups: the settings screens' 18pt. */
 const GROUP_GAP = 18;

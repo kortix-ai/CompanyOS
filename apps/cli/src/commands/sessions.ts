@@ -1,4 +1,5 @@
 import { ApiError } from '../api/client.ts';
+import { splitHelp } from '../command-argv.ts';
 import {
   describeConfigStatus,
   describeReloadOutcome,
@@ -13,6 +14,7 @@ import {
   expandSessionIdPrefix,
   locateSessionAnywhere,
   resolveProjectContext,
+  sessionIdArgs,
   surfaceApiError,
   takeFlagBool,
   takeFlagValue,
@@ -65,6 +67,7 @@ import {
   runSessionsStop,
 } from './sessions-lifecycle.ts';
 import { runSessionsQueue, wireMessageId } from './sessions-queue.ts';
+import { runSessionsUsage } from './sessions-usage.ts';
 import { runSessionsAttachments } from './sessions-attachments.ts';
 import { sessionListQuery, startedByLabel, takeSessionListFlags, type SessionListFlags } from './sessions-list.ts';
 import { runSessionsListState } from './sessions-pin.ts';
@@ -228,6 +231,9 @@ Subcommands:
   files <session-id> <sub>          The sandbox's LIVE workspace: ls, status,
                                     find, write, touch, mkdir, mv, rm. --json.
   info <session-id>                 Show one session. --json.
+  usage <session-id>                What the session and the sessions it started
+                                    cost and consumed: paid wallet, BYOK
+                                    provider and total, tokens and cache. --json.
   scope <session-id>                Read or replace the session's secret and
                                     connector access. Changes apply to the next
                                     prompt. --secret, --no-secrets,
@@ -404,6 +410,9 @@ export async function runSessions(argv: string[]): Promise<number> {
   if (sub === 'model') {
     return runSessionsModel(argv.slice(1));
   }
+  if (sub === 'usage' || sub === 'cost') {
+    return runSessionsUsage(argv.slice(1));
+  }
   if (sub === 'compact' || sub === 'summarize') {
     return runSessionsCompact(argv.slice(1));
   }
@@ -416,10 +425,8 @@ export async function runSessions(argv: string[]): Promise<number> {
   // this a bare `--help` falls through as an ordinary positional arg — e.g.
   // `sessions info --help` would try to look up a session literally named
   // "--help" instead of showing usage.
-  if (rest.includes('-h') || rest.includes('--help')) {
-    process.stdout.write(HELP);
-    return 0;
-  }
+  const helped = splitHelp(argv, HELP);
+  if (helped !== null) return helped;
   const json = takeFlagBool(rest, ['--json']);
   const wait = takeFlagBool(rest, ['--wait']);
   const listPreviews = takeFlagBool(rest, ['--list']);
@@ -1292,7 +1299,7 @@ async function sessionsRm(
   opts: CtxOpts,
   json = false,
 ): Promise<number> {
-  const ids = sessionIds.filter((a) => !a.startsWith('-'));
+  const ids = sessionIdArgs(sessionIds);
   if (ids.length === 0) {
     process.stderr.write(`${status.err('Pass a session id.')}\n`);
     return 2;

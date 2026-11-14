@@ -33,6 +33,18 @@ export function isIosWithoutInstallPrompt(
   return /iP(hone|ad|od)/.test(userAgent) || (userAgent.includes('Macintosh') && maxTouchPoints > 1);
 }
 
+/** A touch-first device: no fine pointer. Phones and tablets match; a laptop with a trackpad does not. */
+export const COARSE_POINTER_QUERY = '(pointer: coarse)';
+
+/**
+ * The floating install card is for touch devices only. On a desktop it sat
+ * over the bottom-right of the app (the trigger detail panel's controls), and
+ * Chromium's address bar already offers Install there.
+ */
+export function offersInstallCard(coarsePointer: boolean): boolean {
+  return coarsePointer;
+}
+
 /** Dismissed state. Storage can throw (Safari private mode): absent, not blocked. */
 export function dismissed(storage: StorageReader, key: string): boolean {
   try {

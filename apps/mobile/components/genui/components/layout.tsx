@@ -6,6 +6,7 @@ import type { GenuiComponentProps } from '@kortix/sdk/genui/react';
 import { CARD_TEXT_RATIO, cardImageShape, cardListLayout, type CardShape, masonryColumns, UNKNOWN_RATIO } from '@kortix/shared/genui-layout';
 import { useTranslation } from 'react-i18next';
 
+import { PagedGallery } from '@/components/kortix/paged-gallery';
 import type { MarkdownImageLook } from '@/components/markdown/markdown-image';
 import { Icon } from '@/components/ui/icon';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -13,54 +14,30 @@ import { Text } from '@/components/ui/text';
 import { StarIcon } from '@/lib/icons';
 
 import { cardBadgePlacement } from './card-badges';
-import { badgeTone, GALLERY_PAGE_HEIGHT, GenuiImageGridContext, GenuiImageView } from './inline';
+import { badgeTone, GenuiImageGridContext, GenuiImageView } from './inline';
 import { openGenuiLink } from './open-link';
 
 export const kids = (value: unknown): GenuiNode[] => (Array.isArray(value) ? (value as GenuiNode[]) : []);
 
-/**
- * Two or more images: one per page, swiped sideways with native paging (each swipe snaps to the next
- * image), and a "2 / 5" counter under the page, as the markdown image gallery. Every page keeps its caption.
- */
-function GenuiGallery({ images, renderChild }: { images: GenuiNode[]; renderChild: GenuiComponentProps['renderChild'] }) {
-  const { t } = useTranslation();
-  const [width, setWidth] = useState(0);
-  const [page, setPage] = useState(0);
-  return (
-    <View
-      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-      accessibilityLabel={t('genui.imageCount', { defaultValue: '{{count}} images', count: images.length })}
-    >
-      {width > 0 ? (
-        <ScrollView
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          decelerationRate="fast"
-          onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
-        >
-          {images.map((image) => (
-            <View key={image.id} style={{ width }}>
-              <GenuiImageGridContext.Provider value="page">{renderChild(image)}</GenuiImageGridContext.Provider>
-            </View>
-          ))}
-        </ScrollView>
-      ) : (
-        <View style={{ height: GALLERY_PAGE_HEIGHT }} />
-      )}
-      <Text variant="muted" className="mt-2 self-end tabular-nums">
-        {`${page + 1} / ${images.length}`}
-      </Text>
-    </View>
-  );
-}
-
 /** Phones are narrow: a Stack is always a column on mobile; StatRow handles its own grid. */
 export function GenuiStack({ props, renderChild }: GenuiComponentProps) {
+  const { t } = useTranslation();
   const children = kids(props.children);
-  // Two or more images and nothing else read as one gallery, as on web.
+  // Two or more images and nothing else read as one gallery, as on web: one page per image, swiped
+  // sideways with native paging and a "2 / 5" counter under the page, as the markdown image gallery.
+  // Every page keeps its caption.
   if (children.length > 1 && children.every((child) => child.type === 'Image')) {
-    return <GenuiGallery images={children} renderChild={renderChild} />;
+    return (
+      <PagedGallery
+        count={children.length}
+        accessibilityLabel={t('genui.imageCount', { defaultValue: '{{count}} images', count: children.length })}
+        renderPage={(index, width) => (
+          <View key={children[index].id} style={{ width }}>
+            <GenuiImageGridContext.Provider value="page">{renderChild(children[index])}</GenuiImageGridContext.Provider>
+          </View>
+        )}
+      />
+    );
   }
   // Two or more Cards and nothing else read as one list or grid, as on web.
   if (children.length > 1 && children.every((child) => child.type === 'Card')) {

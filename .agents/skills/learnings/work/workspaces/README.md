@@ -1,8 +1,8 @@
 ---
 title: Workspaces — one account, one project, one concept (the Slack model)
-status: Release 1 LIVE on prod (v0.15.3, 2026-11-10); Release 2 and 3 specified in design.md, not built; the split runs in dry_run until the sandbox-key fix is released
+status: Release 1 LIVE on prod (v0.15.3, 2026-11-10); the legacy split DONE on prod (2026-11-12, 635 moves, 0 split_pending); Release 2a in progress (R2a-0, R2a-1 live; R2a-2 #12489 and R2a-3a #12487 landing; R2a-3b unblocked); Release 3 not built
 owner: dimitrije (from marko, 2026-11-10)
-updated: 2026-11-11
+updated: 2026-11-14
 ---
 
 # Workspaces
@@ -135,6 +135,33 @@ Each stage is its own PR on branch `workspaces` or a sub-branch merged back.
 10. **Later, separate initiative:** code repos as connected resources of a
     workspace, so a developer with 5 repos has 1 workspace, not 5.
 
+## Status (2026-11-14): the legacy split is done
+
+Prod, read-only, aggregates only. Prod runs v0.15.11.
+
+| Item | Prod now |
+|---|---|
+| Split mode | `apply` since 2026-11-12 13:01 UTC (D13: no owner email; the `split_notice` banner only). The worker picked it up at 13:52 UTC |
+| Runs | 635 `done`, 1 `skipped`, 0 `failed`, 0 `held`. Every `done` run has `repaired_at`, `billing` and `account_finished_at`. Last move 18:48 UTC |
+| `split_pending` | 0 projects. 0 accounts with 2 or more active projects (the accounts with more than one project row hold archived ones only) |
+| New accounts since the split | every one has its `kortix.workspaces` row |
+| Invariants over the 635 runs | I1, I2, I3, I5, I7, I8, I9, I10, I12: 0 |
+| Invariants, global | I4 9, I6 1, I11 1 (all from before the split, see below). I9/I12: the one account with no row, which `20261114163000000` reconciles. I10: rows of erased accounts, which this branch stops counting |
+
+The split stalled once (2026-11-12, 16:43–18:45 UTC). `finishAccountIfLast` re-stamps a
+keeper account's expand rows with one `UPDATE` per table (`kortix.workspace_fill_account`).
+For a keeper with 397k and one with 5.57M `credit_ledger` rows that statement passed the
+API's 25 s `statement_timeout`. The throw in `finishDoneRuns` ends the tick before the apply
+loop, so no move ran until the fill finished. The operator filled both accounts in keyset
+batches of 20k rows (the split paused to `dry_run` 18:49–19:12 UTC for the second) and
+repaired the last 7 runs with `workspace-split.ts repair`. Open fix: `finishDoneRuns` handles
+each run on its own, and the account fill runs in batches that cannot hit the timeout. It
+matters again only for `reverse` or a re-split of a large account.
+
+R2a order now: R2a-2 (#12489) and R2a-3a (#12487) land on `dev`; then R2a-3b (branch
+`workspaces-r2a-gated`: step 1's unique index, the account-side twins, the store flip), which
+the split no longer blocks. Open before the Release 2 gate: I4, I6, I11.
+
 ## Status (2026-11-11, night): the Release 2 gate re-measured
 
 Prod, read-only, 2026-11-11 22:30–23:00 UTC, aggregates only. Prod runs v0.15.7
@@ -153,7 +180,7 @@ R2a-0 migration ran at 18:14 UTC. Step 1 of the order below is done.
 What the invariant failures are:
 
 - I10 57: rows of accounts the deletion sweep erased after the fill stamped them. A false positive, fixed on branch `workspaces-r2a`.
-- I9 1 and I12 1: one account (created 2026-04, no project row, no member) has no `kortix.workspaces` row. `20261111225900000` reconciles it.
+- I9 1 and I12 1: one account (created 2026-04, no project row, no member) has no `kortix.workspaces` row. `20261114163000000` reconciles it.
 - I4 9: project-scope grants held by users who are not members of the account (7 Manager grants from 2026-11-03, 2 "Folder: manage" from 2026-10-30 to 2026-11-11). Not a split artifact. Open: which write path grants a project role to a non-member.
 - I6 1: one 1:1 account whose name differs from its project's (the project was created 2026-11-10). Open.
 - I11 1: the known shared Stripe subscription id (design.md §3.3). It needs the owner-confirmed billing review before the gate can be met.

@@ -1,27 +1,31 @@
 import { describe, expect, test } from 'bun:test';
-import { metaString } from './session-board';
-import { oneLine } from './session-where';
-import { stringOrNull } from './runtime-session-snapshot';
+import { sessionAgentHandle } from './session-board';
+import { privateSpaceText } from './session-where';
+import { normalizeRuntimeSessionSnapshot } from './runtime-session-snapshot';
 
-describe('shared string helpers', () => {
-  test('oneLine collapses whitespace and ellipsizes at max', () => {
-    expect(oneLine('  a \n\t b  ', 20)).toBe('a b');
-    expect(oneLine('abcdefghij', 5)).toBe('abcd…');
-    expect(oneLine('abcde', 5)).toBe('abcde');
+// Pins the behavior of the three string helpers through boundaries that
+// already existed before they were shared, so the test passes before and after.
+describe('shared string helpers, through their existing callers', () => {
+  test('oneLine (via privateSpaceText) collapses whitespace and ellipsizes at 40', () => {
+    expect(privateSpaceText('  Sales \n\t Bot  ')).toBe("the person's private space with Sales Bot");
+    expect(privateSpaceText('x'.repeat(41))).toBe(`the person's private space with ${'x'.repeat(39)}…`);
+    expect(privateSpaceText('x'.repeat(40))).toBe(`the person's private space with ${'x'.repeat(40)}`);
   });
 
-  test('metaString reads a non-empty string metadata key and returns it as stored', () => {
-    expect(metaString({ k: ' v ' }, 'k')).toBe(' v ');
-    expect(metaString({ k: '   ' }, 'k')).toBeNull();
-    expect(metaString({ k: 3 }, 'k')).toBeNull();
-    expect(metaString(null, 'k')).toBeNull();
+  test('metaString (via sessionAgentHandle) returns a non-empty string as stored', () => {
+    expect(sessionAgentHandle({ agent_handle: ' v ' })).toBe(' v ');
+    expect(sessionAgentHandle({ agent_handle: '   ' })).toBeNull();
+    expect(sessionAgentHandle({ agent_handle: 3 })).toBeNull();
+    expect(sessionAgentHandle(null)).toBeNull();
   });
 
-  test('stringOrNull trims, and blank or non-strings are null', () => {
-    expect(stringOrNull(' x ')).toBe('x');
-    expect(stringOrNull('   ')).toBeNull();
-    expect(stringOrNull('')).toBeNull();
-    expect(stringOrNull(4)).toBeNull();
-    expect(stringOrNull(undefined)).toBeNull();
+  test('stringOrNull (via normalizeRuntimeSessionSnapshot) trims; blank or non-strings are null', () => {
+    expect(normalizeRuntimeSessionSnapshot({ id: ' s1 ', title: ' T ', parent_id: '   ', project_id: 4 })).toMatchObject({
+      id: 's1',
+      title: 'T',
+      parent_id: null,
+      project_id: null,
+    });
+    expect(normalizeRuntimeSessionSnapshot({ id: '   ' })).toBeNull();
   });
 });

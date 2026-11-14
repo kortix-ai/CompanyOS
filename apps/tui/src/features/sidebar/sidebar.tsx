@@ -7,7 +7,7 @@
  * keys and knows nothing about the SDK.
  */
 
-import { useChangeRequests, useProjectSessions } from '@kortix/sdk/react';
+import { useChangeRequests } from '@kortix/sdk/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { ResolvedHost } from '../../auth/hosts.ts';
@@ -15,6 +15,7 @@ import { kortix } from '../../kortix.ts';
 import { filterSessionsByTitle, groupSessionsBySection } from '../../lib/session-groups.ts';
 import { NO_WORKSPACE_TEXT, useWorkspaces } from '../../lib/workspaces.ts';
 import { ColumnPicker } from './column-picker.tsx';
+import { useSidebarSessions } from './use-sidebar-sessions.ts';
 import { useScreenAction } from '../../ui/index.ts';
 import { type SidebarNavItem, type SidebarScreen, SidebarView } from './sidebar-view.tsx';
 
@@ -53,11 +54,6 @@ export interface SidebarProps {
   onToast?(message: string, kind?: 'info' | 'error'): void;
 }
 
-/** Statuses that mean the row is still moving, so the list is worth polling. */
-const LIVE_STATUSES = new Set(['queued', 'branching', 'provisioning', 'running']);
-const LIVE_POLL_MS = 5000;
-/** Rows a page of the Shared and Automated sections reads (web's side sections). */
-const SIDE_SECTION_PAGE_SIZE = 20;
 /** How often the age column is recomputed. A minute is the smallest unit it
  *  prints, so anything faster only spends renders. */
 const CLOCK_TICK_MS = 30_000;
@@ -97,33 +93,8 @@ export function Sidebar({
 
   const effectiveAccountId = accountId ?? (host.accountId || null);
 
-  // Web's split (KRTX-4898): the server buckets runs by who started them. Each
-  // bucket also holds its runs' children, which nest under their parent below.
-  const sessionsQuery = useProjectSessions(projectId ?? '', {
-    startedBy: 'me',
-    enabled: Boolean(projectId),
-    // Poll only while a row is still provisioning — the same bound `apps/web`
-    // uses. A settled project costs one request per mount.
-    refetchInterval: (sessions) =>
-      sessions.some((session) => LIVE_STATUSES.has(session.status)) ? LIVE_POLL_MS : false,
-  });
-  const sharedQuery = useProjectSessions(projectId ?? '', {
-    startedBy: 'others',
-    limit: SIDE_SECTION_PAGE_SIZE,
-    enabled: Boolean(projectId),
-  });
-  const automatedQuery = useProjectSessions(projectId ?? '', {
-    startedBy: 'automated',
-    limit: SIDE_SECTION_PAGE_SIZE,
-    enabled: Boolean(projectId),
-  });
-  const refetchMine = sessionsQuery.refetch;
-  const refetchShared = sharedQuery.refetch;
-  const refetchAutomated = automatedQuery.refetch;
-  const refetchSessions = useCallback(
-    () => Promise.all([refetchMine(), refetchShared(), refetchAutomated()]),
-    [refetchMine, refetchShared, refetchAutomated],
-  );
+  const { mine: sessionsQuery, shared: sharedQuery, automated: automatedQuery, refresh: refetchSessions } =
+    useSidebarSessions(projectId);
 
   // The SDK owns the lists (`useWorkspaces` reads `useAccounts` and the
   // per-account project lists through `projectsQueryOptions`), so the sidebar, the
@@ -244,7 +215,8 @@ export function Sidebar({
     [workspaces.rows, projectId],
   );
 
-  const listError = sessionsQuery.isError ? errorText(sessionsQuery.error) : authError;
+  const failedQuery = [sessionsQuery, sharedQuery, automatedQuery].find((query) => query.isError);
+  const listError = failedQuery ? errorText(failedQuery.error) : authError;
   const loadingMore = [sessionsQuery, sharedQuery, automatedQuery].some(
     (query) => query.isFetchingNextPage,
   );

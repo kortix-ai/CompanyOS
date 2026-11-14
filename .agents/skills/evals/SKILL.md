@@ -146,11 +146,21 @@ Every judged task pins `KORTIX_EVAL_JUDGE_MODEL` in `[verifier.env]`. Every
 reference solution (`solution/solve.sh`) must score 1: run the dataset with
 `oracle` after any task change.
 
-Hill-climb record:
-- **Baseline, 2026-11-14:** 20 tasks × 3 attempts. DeepSeek V4.1 Flash and GLM 5.3 Flash both passed 41/60.
-- **The change:** the "ask, then stop" gate in the prompt's authority and automation rules.
-- **The targeted behavior:** acting before asking went from 8 of 12 trials to 0 of 12.
-- **The scores:** DeepSeek went to 47/60; GLM went to 37/60, then to the replication's result (see PR #12682).
+Hill-climb record (2026-11-14), 20 tasks × 3 attempts, each model and variant in its own fresh workspace:
+- **The change:** "ask, then stop" in the prompt's authority and automation rules. The prompt describes the action, asks once, and calls no creating tool until the person says yes.
+- **Acting before asking** (invite or automation created, 6 trials per model): DeepSeek 4 → 0, GLM 4 → 0.
+- **Tasks passed:**
+  - DeepSeek V4.1 Flash: 41 → 43/60, mean 0.901 → 0.904.
+  - GLM 5.3 Flash: 38 → 46/60, mean 0.881 → 0.942. The baseline had 4 sandboxes fail to start, so it is 38/56 on valid trials.
+- **Decision:** kept.
+- **Two earlier attempts were void:**
+  - the local runner loop still ran the old prompt;
+  - the shared workspace kept the connectors and triggers that earlier trials made.
+- **Still failing on both models:**
+  - `handoff-compare`: My Kortix researches itself instead of handing off.
+  - `meeting-actions`: wording.
+  - `confirm-before-invite`: it claims an invite cannot grant admin, though `kortix members invite --role admin` works.
+  - `automation-asks-first`: its reply misses what the automation needs.
 
 A task that needs a flag says so in `task.toml` `[metadata] requires_flags`.
 Judged criteria call `kortix evals judge`, so they need a sandbox image whose

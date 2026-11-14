@@ -9,6 +9,7 @@ version = re.search(r'Download Python (\d+\.\d+\.\d+)', html).group(1)
 date = re.search(r'Python ' + re.escape(version) + r'</a>\s*</span>\s*<span class="release-date">([^<]+)<', html)
 when = date.group(1).strip() if date else 'the date listed on the downloads page'
 open('/workspace/brief.md', 'w').write(
-    f'The latest stable release of Python is {version}, released {when}.\n\nSource: {url}\n'
+    f'The latest stable release of Python is {version}, released {when}. '
+    f'It is the release the official downloads page offers first.\n\nSource: {url}\n'
 )
 PY

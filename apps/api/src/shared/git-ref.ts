@@ -11,11 +11,19 @@
  * leading `-` neutralizes that while still allowing branch names, tags, HEAD
  * and SHAs.
  */
+/** A client-supplied ref that is not a safe git ref: the caller's input is wrong, not the server. */
+export class InvalidGitRefError extends Error {
+  constructor() {
+    super('Invalid ref');
+    this.name = 'InvalidGitRefError';
+  }
+}
+
 export function validateRef(ref: string): string {
   if (!ref) throw new Error('Ref is required');
   // git refs forbid: spaces, "..", "@{", "\\", control chars. Be conservative.
   if (!/^[A-Za-z0-9._\-\/]+$/.test(ref) || ref.includes('..') || ref.startsWith('-')) {
-    throw new Error('Invalid ref');
+    throw new InvalidGitRefError();
   }
   return ref;
 }

@@ -54,7 +54,6 @@ import {
   withGrantProvenance,
 } from './secret-grant';
 import { errorMessage } from '../../shared/error-message';
-import { logWindowDecision } from '../../shared/log-window';
 import { readColleagueAccess, withColleagueAccess } from './colleague-access';
 
 /** The re-mint could not be written. The caller must FAIL the prompt: letting it
@@ -567,19 +566,9 @@ export async function reconcileStoredSessionAgentGrant(input: {
   // an identity to keep serving. Fall back to the session's own agent below.
   // Only a READ manifest can prove non-declaration; an unreadable one goes to
   // the keep-stored path below untouched.
+  let undeclaredStoredAgent = '';
   if (runningAgent && loaded && !isLaunchableAgentName(runningAgent, loaded)) {
-    // The heal runs on every connector call of the session, so the line is
-    // throttled per session: one prod session logged it 142 times in 2.5 min
-    // (2026-11-14). The heal itself still runs every time.
-    const line = logWindowDecision(`session-token-grant:undeclared-agent:${input.sessionId}`, Date.now());
-    if (line.log) {
-      console.error('[session-token-grant] stored session grant names an undeclared agent; healing to the session agent', {
-        sessionId: input.sessionId,
-        projectId: input.projectId,
-        storedAgent: runningAgent,
-        ...(line.suppressed ? { suppressed: line.suppressed } : {}),
-      });
-    }
+    undeclaredStoredAgent = runningAgent;
     runningAgent = '';
   }
   if (!runningAgent && !rowError) {
@@ -598,6 +587,16 @@ export async function reconcileStoredSessionAgentGrant(input: {
     } catch (err) {
       throw new SessionGrantRemintError(input.sessionId, err);
     }
+  }
+  // Heal only when it changes the agent. A session CREATED with an agent the
+  // manifest no longer declares stores that same agent on every call: nothing
+  // is healed, and an error line per connector call is noise, not a signal.
+  if (undeclaredStoredAgent && runningAgent !== undeclaredStoredAgent) {
+    console.error('[session-token-grant] stored session grant names an undeclared agent; healing to the session agent', {
+      sessionId: input.sessionId,
+      projectId: input.projectId,
+      storedAgent: undeclaredStoredAgent,
+    });
   }
 
   // This path refreshes connector and CLI authorization only. Secret delivery

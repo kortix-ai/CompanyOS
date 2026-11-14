@@ -16,6 +16,7 @@ import {
   listWorkspaceCalendarItems,
   listWorkspaceCalendarPeople,
   updateWorkspaceCalendarItem,
+  validateToken,
   type CalendarParticipant,
   type CalendarParticipantInput,
   type CalendarItem,
@@ -361,6 +362,19 @@ async function show(ctx: Ctx, itemId: string | undefined, json: boolean): Promis
   return 0;
 }
 
+/**
+ * "me" on `--add` / `--remove`: this session's agent, else the signed-in
+ * person. A token from KORTIX_TOKEN stores no identity, so the server says who
+ * it is (`GET /accounts/me`).
+ */
+async function whoAmI(ctx: Ctx): Promise<CalendarParticipant | null> {
+  if (process.env.KORTIX_SESSION_ID && process.env.KORTIX_AGENT_NAME) return { kind: 'agent', agent: process.env.KORTIX_AGENT_NAME };
+  if (ctx.auth.user_id) return { kind: 'person', user_id: ctx.auth.user_id };
+  const { identity } = await withCliErrors(ctx.auth, () => validateToken());
+  if (identity?.token_context?.agent) return { kind: 'agent', agent: identity.token_context.agent };
+  return identity?.user_id ? { kind: 'person', user_id: identity.user_id } : null;
+}
+
 async function edit(ctx: Ctx, itemId: string | undefined, argv: string[], json: boolean, fixed: UpdateCalendarItemInput = {}): Promise<number> {
   if (!itemId) return missing('an item id');
   const dates = dateFields(argv);
@@ -372,9 +386,8 @@ async function edit(ctx: Ctx, itemId: string | undefined, argv: string[], json: 
   let peopleInput: CalendarParticipantInput[] | undefined;
   if (adds.length > 0 || removes.length > 0) {
     const [directory, detail] = await Promise.all([people(ctx), withCliErrors(ctx.auth, () => getWorkspaceCalendarItem(ctx.projectId, itemId))]);
-    const me: CalendarParticipant | null = process.env.KORTIX_SESSION_ID && process.env.KORTIX_AGENT_NAME
-      ? { kind: 'agent', agent: process.env.KORTIX_AGENT_NAME }
-      : ctx.auth.user_id ? { kind: 'person', user_id: ctx.auth.user_id } : null;
+    const named = [...adds, ...removes];
+    const me = parseWhoList(named, directory).some((input) => 'me' in input) ? await whoAmI(ctx) : null;
     const resolve = (values: string[]) => parseWhoList(values, directory).map((input) => {
       const found = participantOf(input, directory, me);
       if (!found) throw new Error(`"${JSON.stringify(input)}" names nobody in this workspace.`);

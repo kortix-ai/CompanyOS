@@ -53,7 +53,7 @@ usageApp.use('*', rejectSandboxTokens);
 // one flooding caller must not drain the pool for every other route (KRTX-4895).
 // `/session-costs/{sessionId}` is a cheap single-record read and stays unguarded.
 const usageRollupGuard = createUsageRollupRateLimitMiddleware();
-for (const path of ['/session-costs', '/cost-by-project', '/cost-summary']) {
+for (const path of ['/', '/session-costs', '/cost-by-project', '/cost-summary']) {
   usageApp.use(path, usageRollupGuard);
 }
 

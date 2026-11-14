@@ -57,14 +57,26 @@ mock.module('../../projects/lib/access', () => ({ ...realAccess }));
 mock.module('../../iam/directory-visibility', () => ({
   visibleDirectory: async () => ({ userIds: null, groupIds: null, projectIds: null }),
 }));
+let holdRollups: Promise<void> | null = null;
+// Every drizzle builder step returns the same chain; awaiting it yields no rows.
+const emptyQuery: object = new Proxy(() => emptyQuery, {
+  get: (_target, prop) => (prop === 'then' ? (resolve: (rows: unknown[]) => void) => resolve([]) : emptyQuery),
+});
+mock.module('../../shared/db', () => ({ db: emptyQuery }));
 mock.module('../../shared/session-costs', () => ({
-  listSessionCosts: async () => ({ sessions: [], total: 0, limit: 50, offset: 0, next_offset: null }),
+  listSessionCosts: async () => {
+    await holdRollups;
+    return { sessions: [], total: 0, limit: 50, offset: 0, next_offset: null };
+  },
   getSessionCostRecord: async () => null,
   billedComputeSecondsExpression: 0,
 }));
 mock.module('../../shared/cost-rollups', () => ({
   listCostByProject: async () => ({ projects: [], total: 0, limit: 50, offset: 0, next_offset: null }),
-  getCostSummary: async () => ({ totals: {}, previous: {}, series: [], models: [] }),
+  getCostSummary: async () => {
+    await holdRollups;
+    return { totals: {}, previous: {}, series: [], models: [] };
+  },
 }));
 
 const { usageApp } = await import('./usage');
@@ -120,6 +132,37 @@ describe('usage cost rollups under the per-caller guard', () => {
       expect(statuses.slice(0, 3).every((s) => s !== 429)).toBe(true);
       expect(statuses[3]).toBe(429);
     }
+  });
+
+  test('GET /v1/usage is guarded too', async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      const res = await get('', '00000000-0000-4000-a000-0000000000f3');
+      statuses.push(res.status);
+      await res.text();
+    }
+    expect(statuses.slice(0, 3).every((s) => s !== 429)).toBe(true);
+    expect(statuses[3]).toBe(429);
+  });
+
+  test('one caller cannot hold more than 2 rollups in flight, others are unaffected', async () => {
+    const user = '00000000-0000-4000-a000-0000000000f4';
+    let release = () => {};
+    holdRollups = new Promise<void>((resolve) => { release = resolve; });
+    const parked = [get('/session-costs', user), get('/cost-summary?x=1', user)];
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const refused = await get('/cost-by-project', user);
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get('retry-after')).toBe('1');
+    await refused.text();
+    const other = get('/session-costs', OTHER_USER);
+    release();
+    holdRollups = null;
+    expect((await other).status).toBe(200);
+    for (const res of await Promise.all(parked)) await res.text();
+    const after = await get('/session-costs', user);
+    expect(after.status).not.toBe(429);
+    await after.text();
   });
 
   test('the cheap single-session cost record is not guarded', async () => {

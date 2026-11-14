@@ -153,9 +153,13 @@ export function storedLogReadDenial(c: Context, sessionId: string): StoredLogRea
 }
 
 const usageRollupLimiter = new TokenBucketRateLimiter('usage_rollup');
+/** Concurrent rollups one caller may hold; the DB pool is 6 connections (DEFAULT_DB_POOL_MAX). */
+const USAGE_ROLLUPS_IN_FLIGHT_PER_CALLER = 2;
+// replica-local: the pool this guards is per replica too, so each replica counts its own in-flight rollups.
+const usageRollupInFlight = new Map<string, number>();
 
 /**
- * Per-caller ceiling on the account-wide cost rollups (`GET /v1/usage/session-costs`,
+ * Per-caller ceiling on the account-wide cost rollups (`GET /v1/usage`, `/session-costs`,
  * `/cost-by-project`, `/cost-summary`; `KORTIX_USAGE_ROLLUPS_PER_MIN`, 60 per
  * route). INCIDENT 2026-11-13 22:09 UTC (KRTX-4895): one CLI client sent
  * ~500–800 req/min for four minutes, 368 of them `GET /v1/usage/session-costs`.
@@ -170,16 +174,8 @@ const usageRollupLimiter = new TokenBucketRateLimiter('usage_rollup');
  * `Retry-After` and writes no audit row (a flood must not become an audit flood).
  */
 export function createUsageRollupRateLimitMiddleware() {
-  return async (c: Context, next: Next) => {
-    const userId = c.get('userId');
-    const caller = typeof userId === 'string' && userId ? userId : requestClientKey(c);
-    const result = usageRollupLimiter.check(`${caller}:${c.req.path}`, {
-      limit: positiveInt(config.KORTIX_USAGE_ROLLUPS_PER_MIN, 60),
-      windowMs: 60_000,
-    });
-    if (result.allowed) return next();
-    const retryAfterSeconds = Math.ceil((result.retryAfterMs ?? result.resetMs) / 1000);
-    return c.json(
+  const deny = (c: Context, retryAfterSeconds: number) =>
+    c.json(
       {
         error: 'rate_limit_exceeded',
         message: 'Cost rollups are being requested faster than the limit. Slow the polling or honor Retry-After.',
@@ -188,6 +184,27 @@ export function createUsageRollupRateLimitMiddleware() {
       429,
       { 'Retry-After': String(retryAfterSeconds) },
     );
+  return async (c: Context, next: Next) => {
+    const userId = c.get('userId');
+    const caller = typeof userId === 'string' && userId ? userId : requestClientKey(c);
+    // The bucket bounds requests per minute, not connections held: it starts full,
+    // so 60 simultaneous rollups would still park the whole pool until the 25 s
+    // deadline. Cap what one caller may have in flight across every rollup route.
+    const inFlight = usageRollupInFlight.get(caller) ?? 0;
+    if (inFlight >= USAGE_ROLLUPS_IN_FLIGHT_PER_CALLER) return deny(c, 1);
+    const result = usageRollupLimiter.check(`${caller}:${c.req.path}`, {
+      limit: positiveInt(config.KORTIX_USAGE_ROLLUPS_PER_MIN, 60),
+      windowMs: 60_000,
+    });
+    if (!result.allowed) return deny(c, Math.ceil((result.retryAfterMs ?? result.resetMs) / 1000));
+    usageRollupInFlight.set(caller, inFlight + 1);
+    try {
+      return await next();
+    } finally {
+      const left = (usageRollupInFlight.get(caller) ?? 1) - 1;
+      if (left <= 0) usageRollupInFlight.delete(caller);
+      else usageRollupInFlight.set(caller, left);
+    }
   };
 }
 

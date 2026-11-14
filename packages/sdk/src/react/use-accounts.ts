@@ -104,15 +104,16 @@ export interface UseProjectsOptions {
 }
 
 /**
- * `GET /projects[?account_id=…]` — one account's projects.
+ * `GET /projects[?account_id=…]` — with `accountId`, that account's projects.
  *
- * Omitting `accountId` is NOT "every project": the API resolves an unscoped
- * read to ONE default account server-side (`resolveProjectAccount`). That is
- * why `qk.projects.list()` and `qk.projects.list(accountId)` are siblings in
- * the key factory rather than a parent and a child, and why a host that wants
- * every account's projects issues one query per account.
+ * Omitting `accountId` lists, for a person (a session or an unscoped personal
+ * access token), the projects of every account they belong to; a credential
+ * bound to one account (a workspace key, an account API key) gets that one.
+ * The two reads return different sets, which is why `qk.projects.list()` and
+ * `qk.projects.list(accountId)` are siblings in the key factory rather than a
+ * parent and a child.
  *
- * @deprecated Use `useWorkspaces`: every workspace of the caller, across accounts. This lists one account's projects. Kept permanently.
+ * @deprecated Use `useWorkspaces`: every workspace of the caller, across accounts. Kept permanently.
  */
 export function useProjects(accountId?: string, options: UseProjectsOptions = {}) {
   return useQuery<KortixProject[]>({

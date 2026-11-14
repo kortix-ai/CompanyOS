@@ -321,10 +321,15 @@ export function AccountHubContent({
                 title: localizedAccountPaneMeta(tI18nComplete).transactions?.title ?? '',
                 // Session costs follow the open workspace; credits are one
                 // wallet for all workspaces, so the copy says which is which.
-                description:
-                  workspaceId && searchParams.get('project') !== ALL_PROJECTS
-                    ? tCosts('usageDescriptionWorkspace')
-                    : tCosts('usageDescriptionAll'),
+                // The explorer's own level: `project` on the URL wins, else
+                // the open workspace (`parseExplorerState`'s default).
+                description: (
+                  searchParams.get('project')
+                    ? searchParams.get('project') !== ALL_PROJECTS
+                    : !!workspaceId
+                )
+                  ? tCosts('usageDescriptionWorkspace')
+                  : tCosts('usageDescriptionAll'),
               }
           : activeSection === 'billing'
             ? {

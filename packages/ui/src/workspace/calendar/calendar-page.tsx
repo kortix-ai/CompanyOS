@@ -27,7 +27,6 @@ import { ErrorState } from '../../primitives/error-state';
 import { Hint } from '../../primitives/hint';
 import { Skeleton } from '../../primitives/skeleton';
 import { SplitSheet, SplitSheetContent, SplitSheetMain } from '../../primitives/split-sheet';
-import { Switch } from '../../primitives/switch';
 import { Tabs, TabsList, TabsTrigger } from '../../primitives/tabs';
 import { errorToast } from '../../primitives/toast';
 import { useUiPathname, useUiSearchParams, useUiShallowNavigate, useUiViewerId } from '../../providers/ui-provider';
@@ -42,16 +41,7 @@ type Mode = 'week' | 'month';
 /** `all`, `me`, `user:<id>` or `agent:<name>`: who the items are with (the API's `with` filter). */
 type WithFilter = string;
 
-const TRIGGERS_KEY = 'kortix.calendar.showTriggers';
 const ITEM_ID = /^[0-9a-f-]{36}$/i;
-
-function readShowTriggers(): boolean {
-  try {
-    return window.localStorage.getItem(TRIGGERS_KEY) !== '0';
-  } catch {
-    return true;
-  }
-}
 
 /** The current minute, so "today" and "overdue" move without a reload. */
 function useNow(): Date {
@@ -77,7 +67,6 @@ export function CalendarPage({ projectId }: { projectId: string }) {
   const [mode, setMode] = useState<Mode>('week');
   const [anchor, setAnchor] = useState(() => weekStart(new Date()));
   const [filter, setFilter] = useState<WithFilter>('all');
-  const [showTriggers, setShowTriggers] = useState(readShowTriggers);
   const [fireId, setFireId] = useState<string | null>(null);
   const [creating, setCreating] = useState<{ open: boolean; day: string | null; n: number }>({ open: false, day: null, n: 0 });
   /** Items moved by a drag, shown on their new day until the list reads them back. */
@@ -93,17 +82,18 @@ export function CalendarPage({ projectId }: { projectId: string }) {
     to: range.to.toISOString(),
     with: filter === 'all' ? undefined : filter,
   });
-  const triggers = useUnifiedTriggers(showTriggers ? projectId : null);
+  // Scheduled triggers and Loops always show: everyone, or the picked agent's own.
+  const triggers = useUnifiedTriggers(projectId);
 
   const shownItems = useMemo(
     () => (items.data ?? []).map((item) => (moved[item.item_id] ? { ...item, ...moved[item.item_id] } : item)),
     [items.data, moved],
   );
   const fires = useMemo(() => {
-    if (!showTriggers || filter === 'me' || filter.startsWith('user:')) return [];
+    if (filter === 'me' || filter.startsWith('user:')) return [];
     const all = scheduledFires(triggers.data, range, now);
     return filter.startsWith('agent:') ? all.filter((fire) => fire.trigger.agent === filter.slice(6)) : all;
-  }, [showTriggers, filter, triggers.data, range, now]);
+  }, [filter, triggers.data, range, now]);
   const openFire = fireId ? fires.find((fire) => fire.id === fireId) ?? null : null;
 
   const setItemParam = (id: string | null) => {
@@ -151,15 +141,6 @@ export function CalendarPage({ projectId }: { projectId: string }) {
     setAnchor(next === 'week' ? weekStart(anchor) : addDays(anchor, 3));
     setMode(next);
   };
-  const changeShowTriggers = (next: boolean) => {
-    setShowTriggers(next);
-    try {
-      window.localStorage.setItem(TRIGGERS_KEY, next ? '1' : '0');
-    } catch {
-      // A private window keeps the choice for this visit only.
-    }
-  };
-
   const label =
     mode === 'week'
       ? new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric' }).formatRange(range.from, addDays(range.to, -1))
@@ -255,10 +236,6 @@ export function CalendarPage({ projectId }: { projectId: string }) {
                   </DropdownMenuRadioGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <label className="text-muted-foreground flex cursor-pointer items-center gap-2 px-2 text-xs">
-                <Switch checked={showTriggers} aria-label={t('triggers')} onCheckedChange={changeShowTriggers} />
-                {t('triggers')}
-              </label>
               <Tabs value={mode} onValueChange={(value) => switchMode(value as Mode)}>
                 <TabsList size="xs" aria-label={t('view')}>
                   <TabsTrigger value="week">{t('week')}</TabsTrigger>

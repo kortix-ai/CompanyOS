@@ -11,7 +11,8 @@ import { useTranslations } from '../../i18n';
  */
 
 import { CaretLeftIcon as ChevronLeft } from '@phosphor-icons/react';
-import { m, useReducedMotion } from 'motion/react';
+import { m } from 'motion/react';
+import { useReducedMotion } from '../hooks/use-reduced-motion';
 import { UiLink as Link } from '../../providers/ui-provider';
 
 import { useDesktopBackTarget } from '../desktop/desktop-back-button';

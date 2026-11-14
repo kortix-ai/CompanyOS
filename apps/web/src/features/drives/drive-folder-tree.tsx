@@ -18,14 +18,17 @@ import { COMPANY_ROOT, type DriveNav, type DriveWithMemberAccess, PEOPLE_ROOT, d
 type Glyph = ComponentType<{ className?: string }>;
 
 /**
- * Where Drive navigation goes: the caller's drives and the other members'
- * desktops the API lists to them. Both exist only with `shared_drives` on;
- * off, Drive is the caller's own desktop alone.
+ * Where Drive navigation goes: the caller's drives and, for an admin with
+ * "Admins can open users' drives" on ({@link memberDrivesShown}), the other
+ * members' desktops. Both exist only with `shared_drives` on; off, Drive is
+ * the caller's own desktop alone.
  */
 export function useDriveNav(drive: DriveWithMemberAccess): DriveNav {
   const on = !!drive.sharedDrives;
   const root = useDriveFolder(on ? drive.driveId : null, '/');
-  const people = useDriveFolder(drive.driveId, PEOPLE_ROOT);
+  const shown = on && memberDrivesShown(drive);
+  // Hidden: other members' names are never fetched, not only never drawn.
+  const people = useDriveFolder(shown ? drive.driveId : null, PEOPLE_ROOT);
   const peopleEntries = people.data?.entries ?? [];
   return {
     placesLoading: on && root.isLoading,
@@ -33,7 +36,7 @@ export function useDriveNav(drive: DriveWithMemberAccess): DriveNav {
     retryPlaces: () => void root.refetch(),
     places: on ? drivePlaces(root.data?.entries ?? [], drive.sharedWithMe ?? []) : [],
     /** Other people's desktops, only as far as the API lists them to the caller. */
-    members: on && memberDrivesShown(drive) ? peopleEntries.filter((e) => e.type === 'dir' && e.path !== drive.personalFolder) : [],
+    members: shown ? peopleEntries.filter((e) => e.type === 'dir' && e.path !== drive.personalFolder) : [],
     /** `/Users/ana.lima` → "Ana Lima". */
     personNames: new Map(peopleEntries.map((e) => [e.path, e.name] as const)),
   };

@@ -88,6 +88,7 @@ import { BillingTab } from '@/features/accounts/settings/billing-tab';
 import { BrandingTab } from '@/features/accounts/settings/branding-tab';
 import { TransactionsTab } from '@/features/accounts/settings/transactions-tab';
 import { ALL_PROJECTS } from '@/features/billing/cost-explorer/cost-explorer';
+import { useSearchParams as usePageSearchParams } from 'next/navigation';
 import { GlobalUpgradeModal } from '@/features/billing/global-upgrade-modal';
 import { useBrandingScope } from '@kortix/ui/internal/branding/branding-provider';
 import { Close } from '@kortix/ui/icons';
@@ -189,6 +190,8 @@ export function AccountHubContent({
   // onto the page it floats over. See `account-hub-location.tsx`.
   const accountId = useAccountPanelId();
   const searchParams = useHubSearchParams();
+  // The cost explorer keeps its level in the page's own `project` param.
+  const explorerProject = usePageSearchParams()?.get('project') ?? null;
   const queryClient = useQueryClient();
   const { user, isLoading: authLoading } = useAuth();
 
@@ -321,12 +324,11 @@ export function AccountHubContent({
                 title: localizedAccountPaneMeta(tI18nComplete).transactions?.title ?? '',
                 // Session costs follow the open workspace; credits are one
                 // wallet for all workspaces, so the copy says which is which.
-                // The explorer's own level: `project` on the URL wins, else
-                // the open workspace (`parseExplorerState`'s default).
+                // The explorer's own level: its raw `project` page param (not
+                // the hub's aliased `accountProject`) wins, else the open
+                // workspace (`parseExplorerState`'s default).
                 description: (
-                  searchParams.get('project')
-                    ? searchParams.get('project') !== ALL_PROJECTS
-                    : !!workspaceId
+                  explorerProject ? explorerProject !== ALL_PROJECTS : !!workspaceId
                 )
                   ? tCosts('usageDescriptionWorkspace')
                   : tCosts('usageDescriptionAll'),

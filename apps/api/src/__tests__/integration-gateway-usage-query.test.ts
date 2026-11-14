@@ -236,6 +236,22 @@ describe('runGatewayUsageQuery — grouping and honesty', () => {
     expect(res.next_cursor).toBeNull();
   });
 
+  test('a rolling days window is resolved to ABSOLUTE bounds in the response (so a drain can freeze it)', async () => {
+    const before = Date.now();
+    const res = await run({ days: '7', group_by: 'model' });
+    const after = Date.now();
+    // until is concrete (request time), never null, for a rolling window.
+    expect(res.window.until).not.toBeNull();
+    const until = Date.parse(res.window.until!);
+    expect(until).toBeGreaterThanOrEqual(before - 1000);
+    expect(until).toBeLessThanOrEqual(after + 1000);
+    // since is until - 7 days, concrete.
+    expect(res.window.since).not.toBeNull();
+    const since = Date.parse(res.window.since!);
+    expect(until - since).toBe(7 * 86_400_000);
+    expect(res.window.days).toBe(7);
+  });
+
   test('caller visibility filters session-level groups but model groups stay project-wide', async () => {
     const visibleOnly: GatewayUsageVisibility = {
       sessionFilter: inArray(gatewayRequestLogs.sessionId, [sid('seo')]),

@@ -179,13 +179,30 @@ function needsSessionJoin(groupBy: UsageDimension[]): boolean {
   return groupBy.includes('agent') || groupBy.includes('source');
 }
 
-function timeWindowSql(query: GatewayUsageQuery): SQL {
-  const clauses: SQL[] = [];
-  if (query.days !== undefined)
-    clauses.push(sql`${logs.createdAt} >= now() - make_interval(days => ${query.days})`);
-  if (query.since) clauses.push(sql`${logs.createdAt} >= ${query.since.toISOString()}`);
-  if (query.until) clauses.push(sql`${logs.createdAt} < ${query.until.toISOString()}`);
-  // The parser guarantees at least one of days / since / until.
+/**
+ * Resolve the query's window to ABSOLUTE bounds, evaluated once per call.
+ *
+ * A rolling `days` window is pinned to `[now - days, now]` here, not left as a
+ * SQL `now()` the database re-evaluates — so when a caller pages a drain, it
+ * reads these resolved bounds from the response and passes them back verbatim,
+ * and every page scans the identical window. A SQL `now()` per page would let
+ * rows age past the lower bound mid-drain and shift group costs and cursor
+ * positions, dropping or duplicating groups across pages.
+ *
+ * `since` is null only for a lone-`until` query (an open lower bound); `until`
+ * is always concrete (the request time when the caller gave none).
+ */
+function resolveWindow(query: GatewayUsageQuery): { since: Date | null; until: Date } {
+  const until = query.until ?? new Date();
+  const since =
+    query.since ??
+    (query.days !== undefined ? new Date(until.getTime() - query.days * 86_400_000) : null);
+  return { since, until };
+}
+
+function timeWindowSql(window: { since: Date | null; until: Date }): SQL {
+  const clauses: SQL[] = [sql`${logs.createdAt} < ${window.until.toISOString()}`];
+  if (window.since) clauses.push(sql`${logs.createdAt} >= ${window.since.toISOString()}`);
   return and(...clauses)!;
 }
 
@@ -216,9 +233,10 @@ export async function runGatewayUsageQuery(input: {
   // gateway overview/breakdown/sources. Applied to BOTH groups and totals so
   // one response's groups always sum consistently with its totals.
   const exposesSessions = query.groupBy.includes('session');
+  const resolvedWindow = resolveWindow(query);
   const whereSql = and(
     projectScopeSql(accountId, projectId),
-    timeWindowSql(query),
+    timeWindowSql(resolvedWindow),
     exposesSessions ? visibility.sessionFilter : undefined,
   )!;
 
@@ -237,9 +255,11 @@ export async function runGatewayUsageQuery(input: {
     return q.where(whereSql);
   };
 
+  // The ABSOLUTE window actually scanned. A drain pages against these exact
+  // bounds (not the original `days`), so every page reads the same window.
   const window = {
-    since: query.since ? query.since.toISOString() : null,
-    until: query.until ? query.until.toISOString() : null,
+    since: resolvedWindow.since ? resolvedWindow.since.toISOString() : null,
+    until: resolvedWindow.until.toISOString(),
     days: query.days ?? null,
   };
 

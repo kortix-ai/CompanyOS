@@ -305,6 +305,139 @@ describe('kortix gateway usage (real process)', () => {
     }
   });
 
+  test('--all freezes the window: a rolling --days page-1 becomes absolute since/until on every later page', async () => {
+    // The window the server resolved from --days 7, echoed back on page 1.
+    const WIN = { since: '2026-11-06T12:00:00.000Z', until: '2026-11-13T12:00:00.000Z', days: 7 };
+    const page = (model: string, next: string | null) => ({
+      group_by: ['model'],
+      window: WIN,
+      valuation: { coverage: 'c' },
+      groups: [
+        {
+          model,
+          kortix_cost: 1,
+          provider_cost: 0,
+          total_cost: 1,
+          requests: 1,
+          errors: 0,
+          input_tokens: 0,
+          output_tokens: 0,
+          cached_tokens: 0,
+          cache_write_tokens: 0,
+          estimated_usage_value: null,
+          priced_requests: 0,
+          unpriced_requests: 0,
+          last_at: null,
+        },
+      ],
+      totals: {
+        kortix_cost: 3,
+        provider_cost: 0,
+        total_cost: 3,
+        requests: 3,
+        errors: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+        cached_tokens: 0,
+        cache_write_tokens: 0,
+        estimated_usage_value: null,
+        priced_requests: 0,
+        unpriced_requests: 0,
+        groups: 3,
+      },
+      next_cursor: next,
+    });
+    const fake = fakeApi([page('a', '1'), page('b', '2'), page('c', null)]);
+    try {
+      const r = await cli(fake, ['usage', '--group-by', 'model', '--days', '7', '--all', '--json']);
+      expect(r.code).toBe(0);
+      const usageCalls = fake.requests.filter((x) => x.path.endsWith('/gateway/usage'));
+      expect(usageCalls).toHaveLength(3);
+      // Page 1 used the rolling window.
+      expect(usageCalls[0].query.get('days')).toBe('7');
+      expect(usageCalls[0].query.get('since')).toBeNull();
+      // Every later page is pinned to the ABSOLUTE window page 1 resolved, and
+      // never re-sends the rolling `days` (which would drift under pagination).
+      for (const call of usageCalls.slice(1)) {
+        expect(call.query.get('days')).toBeNull();
+        expect(call.query.get('since')).toBe(WIN.since);
+        expect(call.query.get('until')).toBe(WIN.until);
+      }
+    } finally {
+      fake.stop();
+    }
+  });
+
+  test('--all refuses a repeating cursor instead of looping or truncating silently', async () => {
+    // A buggy server that hands back the SAME cursor forever.
+    const loop = {
+      group_by: ['model'],
+      window: { since: '2026-11-06T12:00:00.000Z', until: '2026-11-13T12:00:00.000Z', days: null },
+      valuation: { coverage: 'c' },
+      groups: [
+        {
+          model: 'a',
+          kortix_cost: 1,
+          provider_cost: 0,
+          total_cost: 1,
+          requests: 1,
+          errors: 0,
+          input_tokens: 0,
+          output_tokens: 0,
+          cached_tokens: 0,
+          cache_write_tokens: 0,
+          estimated_usage_value: null,
+          priced_requests: 0,
+          unpriced_requests: 0,
+          last_at: null,
+        },
+      ],
+      totals: {
+        kortix_cost: 1,
+        provider_cost: 0,
+        total_cost: 1,
+        requests: 1,
+        errors: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+        cached_tokens: 0,
+        cache_write_tokens: 0,
+        estimated_usage_value: null,
+        priced_requests: 0,
+        unpriced_requests: 0,
+        groups: 1,
+      },
+      next_cursor: 'LOOP',
+    };
+    const server = Bun.serve({
+      port: 0,
+      fetch: () =>
+        new Response(JSON.stringify(loop), { headers: { 'content-type': 'application/json' } }),
+    });
+    const fake: Fake = {
+      url: `http://127.0.0.1:${server.port}/v1`,
+      requests: [],
+      stop: () => server.stop(true),
+    };
+    try {
+      const r = await cli(fake, [
+        'usage',
+        '--since',
+        '2026-11-06T12:00:00Z',
+        '--until',
+        '2026-11-13T12:00:00Z',
+        '--group-by',
+        'model',
+        '--all',
+        '--json',
+      ]);
+      expect(r.code).not.toBe(0);
+      expect(r.out).toContain('repeating cursor');
+    } finally {
+      fake.stop();
+    }
+  });
+
   test('--all cannot be combined with --cursor', async () => {
     const fake = fakeApi();
     try {

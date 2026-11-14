@@ -109,19 +109,44 @@ export async function gatewayUsageQuery(
   let result: UsageResult;
   try {
     result = await fetchPage(cursor);
-    if (all) {
-      // Drain the fixed window. A cap guards against a server that keeps
-      // handing back a cursor (far beyond any real group count).
-      let next = result.next_cursor;
-      for (let page = 0; next && page < 10_000; page += 1) {
-        const more = await fetchPage(next);
+  } catch (err) {
+    return surfaceApiError(err);
+  }
+
+  if (all && result.next_cursor) {
+    // Drain the window. Page 1 may have used a rolling `--days`/`--since`
+    // window; from here on we page against the ABSOLUTE bounds the server
+    // resolved and echoed (result.window), so every page scans the identical
+    // window and the keyset order cannot shift under us. We also refuse a
+    // repeating cursor (a server bug) instead of looping or silently cutting
+    // the drain short.
+    const frozen = new URLSearchParams();
+    if (result.window.since) frozen.set('since', result.window.since);
+    if (result.window.until) frozen.set('until', result.window.until);
+    if (groupBy.length) frozen.set('group_by', groupBy.join(','));
+    if (limit) frozen.set('limit', limit);
+    const seen = new Set<string>();
+    let next: string | null = result.next_cursor;
+    try {
+      while (next) {
+        if (seen.has(next)) {
+          return fail(
+            'gateway returned a repeating cursor; aborting the drain so partial data is never reported as complete (server bug)',
+          );
+        }
+        seen.add(next);
+        const params = new URLSearchParams(frozen);
+        params.set('cursor', next);
+        const more: UsageResult = await ctx.client.get<UsageResult>(
+          `/workspaces/${ctx.projectId}/gateway/usage?${params.toString()}`,
+        );
         result.groups.push(...more.groups);
         next = more.next_cursor;
       }
-      result.next_cursor = null;
+    } catch (err) {
+      return surfaceApiError(err);
     }
-  } catch (err) {
-    return surfaceApiError(err);
+    result.next_cursor = null;
   }
 
   if (json) {

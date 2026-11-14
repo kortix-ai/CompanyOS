@@ -4376,6 +4376,116 @@ describe('pi steering', () => {
   })
 })
 
+describe('pi runs an extension starts', () => {
+  const post = (r: Rig, path: string, body: unknown) =>
+    r.user(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+  const service = (r: Rig, path: string, body: unknown) =>
+    r.bearer(path, { method: 'POST', headers: { 'content-type': 'application/json', 'X-Kortix-Service-Call': '1' }, body: JSON.stringify(body) })
+  const page = async (r: Rig) =>
+    (await r.bearer(`/kortix/runtime/messages/${r.service.runtime()!.rootId}`).then((res) => res.json())) as WirePage
+  /** An id the client mints at send time: above every id it has seen, as the SDK does. */
+  const sendTimeId = async (r: Rig) => {
+    const clock = new MessageIdClock()
+    for (const message of (await page(r)).messages) clock.observe(String(message.info.id))
+    return clock.mint(Date.now())
+  }
+  // prod 2026-11-14: a project extension checked its status after `agent_settled` and then posted a
+  // heartbeat, without returning that work to the handler. pi was idle by then, so the heartbeat
+  // started a run kortixd never admitted, and the next prompt (a 5-minute cron tick) failed "Agent is
+  // already processing" in 299 of ~1,200 runs. A send inside the handler is deferred into the
+  // settling run by pi itself; the gap after the handler returns is what this extension models.
+  const HEARTBEAT = `export default function (pi) {
+  let sent = false
+  pi.on('agent_settled', () => {
+    if (sent) return
+    sent = true
+    void (async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      await pi.sendUserMessage('HEARTBEAT-TICK')
+    })()
+  })
+}
+`
+
+  test('a prompt that arrives while an extension run is going waits for it, then runs as its own turn', async () => {
+    const ends: Array<{ messageId: string; status: string; error?: { message?: string } }> = []
+    const begins: string[] = []
+    const r = await boot({
+      script: [
+        { text: 'first reply' },
+        { tool: 'bash', args: { command: 'sleep 0.8; echo heartbeat-done' } },
+        { text: 'heartbeat reply' },
+        { text: 'second reply' },
+      ],
+      hooks: {
+        onTurnBegin: ({ messageId }) => void begins.push(messageId),
+        onTurnEnd: ({ messageId, status, error }) => void ends.push({ messageId, status, ...(error ? { error } : {}) }),
+      },
+      env: repoPackages('heartbeat'),
+      prepare: (workspace) => void repoExtension(workspace, 'heartbeat', HEARTBEAT),
+    })
+    const rt = r.service.runtime()!
+    const before = gateway.sent.length
+    const first = await sendTimeId(r)
+    expect((await post(r, `/kortix/runtime/sessions/${rt.rootId}/prompt`, { message_id: first, parts: [{ type: 'text', text: 'FIRST-GO' }] })).status).toBe(202)
+    await waitFor(() => ends.length === 1)
+    // The extension's run started as the first turn ended: its bash step runs now.
+    await waitFor(() => JSON.stringify(gateway.sent.slice(before)).includes('HEARTBEAT-TICK'))
+
+    const second = await sendTimeId(r)
+    expect((await post(r, `/kortix/runtime/sessions/${rt.rootId}/prompt`, { message_id: second, parts: [{ type: 'text', text: 'SECOND-GO' }] })).status).toBe(202)
+    await Bun.sleep(100)
+    // Still queued behind the extension's run: in flight for the reaper, and not a turn a steer joins
+    // (apps/api then queues the steer as a prompt instead of handing it to the extension's run).
+    expect(rt.turnProbe(second)).toEqual({ inFlight: true, end: null, orphanedPrompt: false })
+    expect(begins).toEqual([first])
+    const steer = await service(r, `/kortix/runtime/sessions/${rt.rootId}/steer`, { message_id: await sendTimeId(r), parts: [{ type: 'text', text: 'late' }] })
+    expect(steer.status).toBe(409)
+
+    await waitFor(() => ends.length === 2, 8_000)
+    expect(ends).toEqual([
+      { messageId: first, status: 'idle' },
+      { messageId: second, status: 'idle' },
+    ])
+    expect(begins).toEqual([first, second])
+    // The second prompt reached the model after the extension's run ended, in a model call of its own.
+    const sent = gateway.sent.slice(before).map((messages) => JSON.stringify(messages.at(-1)))
+    expect(sent.findIndex((last) => last.includes('SECOND-GO'))).toBe(3)
+    expect(rt.turnProbe(second)).toEqual({ inFlight: false, end: 'completed', orphanedPrompt: false })
+  })
+
+  test('a run an extension starts inside the prompt gap makes the turn wait and send again, not fail', async () => {
+    const ends: Array<{ messageId: string; status: string; error?: { message?: string } }> = []
+    // Starts its own run while pi handles the turn's prompt, after the turn's idle wait: pi then
+    // refuses that prompt as busy.
+    const GAP = `export default function (pi) {
+  let sent = false
+  pi.on('input', async (event) => {
+    if (sent || !String(event.text).includes('GO-NOW')) return
+    sent = true
+    void pi.sendUserMessage('GAP-RUN')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  })
+}
+`
+    const r = await boot({
+      script: [{ tool: 'bash', args: { command: 'sleep 0.5; echo gap-done' } }, { text: 'gap reply' }, { text: 'turn reply' }],
+      hooks: { onTurnEnd: ({ messageId, status, error }) => void ends.push({ messageId, status, ...(error ? { error } : {}) }) },
+      env: repoPackages('gap'),
+      prepare: (workspace) => void repoExtension(workspace, 'gap', GAP),
+    })
+    const rt = r.service.runtime()!
+    const before = gateway.sent.length
+    const turn = await sendTimeId(r)
+    expect((await post(r, `/kortix/runtime/sessions/${rt.rootId}/prompt`, { message_id: turn, parts: [{ type: 'text', text: 'GO-NOW' }] })).status).toBe(202)
+    await waitFor(() => ends.length === 1, 8_000)
+    expect(ends).toEqual([{ messageId: turn, status: 'idle' }])
+    const sent = gateway.sent.slice(before).map((messages) => JSON.stringify(messages.at(-1)))
+    expect(sent[0]).toContain('GAP-RUN')
+    expect(sent.findIndex((last) => last.includes('GO-NOW'))).toBe(2)
+  })
+})
+
 describe('pi retract (R7.1)', () => {
   const post = (r: Rig, path: string, body: unknown) =>
     r.user(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })

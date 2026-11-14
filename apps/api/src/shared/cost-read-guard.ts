@@ -6,8 +6,9 @@ import { HTTPException } from 'hono/http-exception';
 // (cost-rollups.ts), against a pool of DEFAULT_DB_POOL_MAX = 6 connections. A
 // single read can therefore fill the pool, so the bound is per replica, not per
 // account: reads run one after another, up to COST_READ_MAX_WAITING queue behind
-// the running one (the cost explorer UI issues 2 to 3 at once) and any further
-// read is refused at once. Waiting reads hold no connection. On
+// the running one and any further read is refused at once with a retryable 429
+// (the workspace heatmap issues up to 25 summary reads together; the UI retries
+// the 429 itself, see retryCostReadBusy in packages/ui). Waiting reads hold no connection. On
 // 2026-11-13 one caller sent 149 session-costs reads in under six minutes; the
 // SDK retried every 503 twice, the pool saturated and unrelated routes missed
 // the 25 s request deadline (a 3 minute API-wide brownout).

@@ -20,6 +20,7 @@ const capabilityActions: string[] = [];
 let accessibleProjects: realAuthorize.Accessible = { mode: 'all' };
 // While set, the aggregation parks on it, so a test can hold queries in flight.
 let queryGate: Promise<void> | null = null;
+let queryCalls = 0;
 
 interface TestContext {
   set(key: string, value: unknown): void;
@@ -96,6 +97,7 @@ mock.module('../../projects/lib/access', () => ({
 mock.module('../../shared/cost-rollups', () => ({
   listCostByProject: async (input: Record<string, unknown>) => {
     listInput = input;
+    queryCalls++;
     await queryGate;
     return {
       projects: projectsToReturn,
@@ -152,6 +154,7 @@ beforeEach(() => {
   projectsToReturn = [project];
   accessibleProjects = { mode: 'all' };
   queryGate = null;
+  queryCalls = 0;
 });
 
 describe('GET /v1/usage/cost-by-project', () => {
@@ -430,7 +433,7 @@ describe('GET /v1/usage/cost-by-project?format=csv', () => {
 
 describe('cost-by-project in-flight cap (KRTX-4891)', () => {
   for (const [name, query] of [['JSON', ''], ['CSV', '&format=csv']] as const) {
-    test(`${name}: a second concurrent report on the replica is a 429, and a slot frees when one settles`, async () => {
+    test(`${name}: a second concurrent report on the replica queues behind the first and both succeed`, async () => {
       let release!: () => void;
       queryGate = new Promise<void>((resolve) => {
         release = resolve;
@@ -440,8 +443,9 @@ describe('cost-by-project in-flight cap (KRTX-4891)', () => {
       const running = [app.request(url)];
       await Promise.resolve();
 
-      const refused = await app.request(url);
-      expect(refused.status).toBe(429);
+      running.push(app.request(url));
+      await Bun.sleep(5);
+      expect(queryCalls).toBe(1);
 
       release();
       for (const response of await Promise.all(running)) expect(response.status).toBe(200);

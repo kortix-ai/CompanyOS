@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { DEFAULT_DB_POOL_MAX } from '@kortix/db/connection-defaults';
 import { HTTPException } from 'hono/http-exception';
-import { MAX_COST_REPORTS_PER_REPLICA, withCostReportSlot } from './cost-report-slots';
+import { MAX_COST_REPORTS_PER_REPLICA, MAX_SLOT_WAIT_MS, withCostReportSlot } from './cost-report-slots';
 
 function gate() {
   let open!: () => void;
@@ -12,15 +12,38 @@ function gate() {
 }
 
 describe('withCostReportSlot', () => {
-  test('refuses a report past the per-replica cap with a 429 and Retry-After', async () => {
+  test('reports past the cap wait in FIFO order and all succeed', async () => {
     const g = gate();
-    const held = Array.from({ length: MAX_COST_REPORTS_PER_REPLICA }, () => withCostReportSlot(() => g.opened));
-    const refused = await withCostReportSlot(async () => 'ran').catch((e) => e);
+    const order: number[] = [];
+    const calls = Array.from({ length: 5 }, (_, i) =>
+      withCostReportSlot(async () => {
+        order.push(i);
+        if (i === 0) await g.opened;
+        return 200;
+      }),
+    );
+    await Bun.sleep(5);
+    expect(order).toEqual([0]);
+    g.open();
+    expect(await Promise.all(calls)).toEqual([200, 200, 200, 200, 200]);
+    expect(order).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  test('a wait past the budget is a 429 with Retry-After, and the timed-out waiter is dropped', async () => {
+    const g = gate();
+    const held = withCostReportSlot(() => g.opened);
+    const refused = await withCostReportSlot(async () => 'ran', 10).catch((e) => e);
     expect(refused).toBeInstanceOf(HTTPException);
     expect((refused as HTTPException).status).toBe(429);
     expect((refused as HTTPException).getResponse().headers.get('Retry-After')).toBe('5');
+    const after = withCostReportSlot(async () => 'after');
     g.open();
-    await Promise.all(held);
+    await held;
+    expect(await after).toBe('after');
+  });
+
+  test('the wait budget stays below the 25 s request deadline', () => {
+    expect(MAX_SLOT_WAIT_MS).toBeLessThan(25_000);
   });
 
   test('the cap fits the connection pool: one report fans out to 4 queries, the pool is 6', () => {

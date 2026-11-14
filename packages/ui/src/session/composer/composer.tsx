@@ -1602,7 +1602,7 @@ function ComposerImpl(props: SessionChatInputProps) {
     return available.map((action) => {
       if (action.id === 'switch-agent' && selectedAgent) {
         // The name the agent chip shows, not the slug.
-        return { ...action, value: agentLabels?.[selectedAgent] ?? agentDisplayName(selectedAgent) };
+        return { ...action, value: agentLabels?.[selectedAgent] ?? agentDisplayName(selectedAgent, agents.find((a) => a.name === selectedAgent)?.title) };
       }
       // The ring icon (via `context`) plus the reading as the row's
       // "current setting" text — same grammar as the agent row's value.
@@ -1612,7 +1612,7 @@ function ComposerImpl(props: SessionChatInputProps) {
       return action;
     }).concat(hostSlashActions(hostSlashRows));
   }, [
-    selectedAgent, agentLabels, canSwitchAgent, onCompactClick, onContextClick, contextUsage, tI18nComplete,
+    selectedAgent, agents, agentLabels, canSwitchAgent, onCompactClick, onContextClick, contextUsage, tI18nComplete,
     modelPickerEnabled, contextMeterEnabled, runtimeSlashEnabled, hostSlashRows,
   ]);
 

@@ -467,6 +467,6 @@ export function LeaveDialog({
 }
 
 /** The agent's display name, for header titles. */
-export function agentTitle(slug: string): string {
-  return agentDisplayName(slug);
+export function agentTitle(slug: string, title?: string | null): string {
+  return agentDisplayName(slug, title);
 }

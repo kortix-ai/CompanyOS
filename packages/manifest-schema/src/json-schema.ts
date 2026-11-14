@@ -1254,6 +1254,12 @@ function agentBlockV3Schema(): JsonSchemaFragment {
   return {
     type: 'object',
     properties: {
+      title: {
+        type: 'string',
+        pattern: '\\S',
+        maxLength: 80,
+        description: 'The agent\'s name as people read it, e.g. "GitHub PR reviewer". The key under `agents` stays its id: sessions, triggers and @-mentions use the key. Default: the key in sentence case.',
+      },
       ...behavior,
       permission: {
         ...permission,

@@ -1133,6 +1133,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
+| `title` | string | the key in sentence case | The agent's name as people read it, e.g. "GitHub PR reviewer". The key under `agents` stays its id: sessions, triggers and @-mentions use the key. |
 | `description` | string | — | What the agent does. An agent that may start it as a subagent reads it to choose. |
 | `model` | string | the project default | `provider/model`. See [Models](/docs/guide#models). |
 | `mode` | `primary`, `subagent`, `all` | `all` | `primary`: people and triggers run it; no agent starts it. `subagent`: only another agent starts it; agent pickers hide it. `all`: both. |

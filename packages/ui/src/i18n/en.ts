@@ -7124,7 +7124,9 @@ const catalog = {
     "areaDescription": "Connect apps and channels to your agents, and decide what they may do.",
     "wayMoreNamed": "More for {name}",
     "otherWaysLead": "Other ways:",
-    "typeFilterKortix": "Kortix"
+    "typeFilterKortix": "Kortix",
+    "scopeAll": "All",
+    "scopeAdded": "Added"
   },
   "connectMcp": {
     "title": "Connect Kortix over MCP",
@@ -8236,7 +8238,7 @@ const catalog = {
       "newAgent": "New agent",
       "newAgentHelp": "My Kortix writes the agent into kortix.yaml and opens a change request.",
       "name": "Name",
-      "namePlaceholder": "market-scan",
+      "namePlaceholder": "Market scan",
       "nameHelp": "Lowercase letters, digits and dashes. Saved as <slug></slug>.",
       "nameTaken": "An agent with this name already exists.",
       "howToStart": "How to start",
@@ -10139,7 +10141,7 @@ const catalog = {
       "apiKeysDescription": "Keys for scripts, CI and integrations. A key acts as you, an agent or a bot. The rules every key follows are in Security.",
       "keys": {
         "title": "API keys",
-        "description": "Keys for scripts, CI and integrations. A key acts as you, an agent or a bot; Works in sets which workspaces it reaches.",
+        "description": "Keys for scripts, CI and integrations. A key acts as you, an agent or a bot. It works in this workspace unless you pick all your workspaces.",
         "newKey": "New key",
         "count": "{count, plural, one {# key} other {# keys}}",
         "emptyTitle": "No API keys",

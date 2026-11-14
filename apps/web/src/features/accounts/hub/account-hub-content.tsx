@@ -183,6 +183,7 @@ export function AccountHubContent({
 } = {}) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const tSettings = useTranslations('workspaces.settings');
+  const tCosts = useTranslations('billing.costs');
   // `?accountId=` and the hub's own params, both off the URL the modal writes
   // onto the page it floats over. See `account-hub-location.tsx`.
   const accountId = useAccountPanelId();
@@ -314,6 +315,18 @@ export function AccountHubContent({
           ? { title: tSettings('sections.roles'), description: tSettings('rolesDescription') }
           : activeSection === 'tokens'
             ? { title: tSettings('sections.apiKeys'), description: tSettings('apiKeysDescription') }
+          : activeSection === 'transactions'
+            ? {
+                title: localizedAccountPaneMeta(tI18nComplete).transactions?.title ?? '',
+                // Session costs follow the open workspace; credits are one
+                // wallet for all workspaces, so the copy says which is which.
+                description: workspaceId ? tCosts('usageDescriptionWorkspace') : tCosts('usageDescriptionAll'),
+              }
+          : activeSection === 'billing'
+            ? {
+                title: localizedAccountPaneMeta(tI18nComplete).billing?.title ?? '',
+                description: tCosts('planDescriptionAll'),
+              }
           : localizedAccountPaneMeta(tI18nComplete)[activeSection];
   // `project` / `group` / `member` carry the open detail entity onto the URL
   // (`?tab=groups&group=<id>`) — omit one (or pass null) to drop the param,
@@ -444,7 +457,7 @@ export function AccountHubContent({
 
           {activeSection === 'transactions' && sectionVisible.transactions ? (
             <BillingAccountProvider accountId={account.account_id}>
-              <TransactionsTab />
+              <TransactionsTab workspaceId={workspaceId} />
             </BillingAccountProvider>
           ) : null}
 

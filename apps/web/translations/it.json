@@ -2896,7 +2896,7 @@
       "featuresGrace": "SSO e SCIM restano attivi fino al {date}. Parla con le vendite per mantenere Enterprise.",
       "featuresOn": "Attivo",
       "featuresOff": "Disattivato",
-      "featuresOffDescription": "SSO, SCIM, ruoli avanzati, log di audit e branding.",
+      "featuresOffDescription": "SSO, SCIM, ruoli avanzati e log di audit.",
       "featuresDemo": "Attivo come demo. Parla con le vendite per una licenza.",
       "featuresLicensed": "Con licenza",
       "featuresLicensedRenews": "Con licenza · si rinnova il {date}",
@@ -2921,7 +2921,11 @@
       "action": "Aggiungi crediti o scegli un piano per avviare sessioni qui."
     },
     "costs": {
-      "billedElsewhere": "{amount} crediti di questo costo sono stati addebitati al workspace da cui è stato spostato."
+      "billedElsewhere": "{amount} crediti di questo costo sono stati addebitati al workspace da cui è stato spostato.",
+      "allWorkspaces": "Tutti i workspace",
+      "usageDescriptionWorkspace": "Addebiti Kortix di questo workspace. I crediti sono un unico saldo per tutti i workspace.",
+      "usageDescriptionAll": "Addebiti Kortix e registro dei crediti di tutti i workspace.",
+      "planDescriptionAll": "Piano, saldo e spesa di tutti i workspace."
     }
   },
   "ssoRequired": {
@@ -22381,7 +22385,9 @@
     "areaDescription": "Collega app e canali ai tuoi agenti e decidi cosa possono fare.",
     "wayMoreNamed": "Altro per {name}",
     "otherWaysLead": "Altri modi:",
-    "typeFilterKortix": "Kortix"
+    "typeFilterKortix": "Kortix",
+    "scopeAll": "Tutti",
+    "scopeAdded": "Aggiunti"
   },
   "connectMcp": {
     "title": "Collega Kortix tramite MCP",
@@ -24931,7 +24937,7 @@
       "newAgent": "New agent",
       "newAgentHelp": "My Kortix scrive l’agente in kortix.yaml e apre una richiesta di modifica.",
       "name": "Name",
-      "namePlaceholder": "market-scan",
+      "namePlaceholder": "Analisi di mercato",
       "nameHelp": "Lowercase letters, digits and dashes. Saved as <slug></slug>.",
       "nameTaken": "Esiste già un agente con questo nome.",
       "howToStart": "How to start",
@@ -26847,7 +26853,7 @@
       "apiKeysDescription": "Chiavi per script, CI e integrazioni. Una chiave agisce come te, come un agente o come un bot. Le regole di ogni chiave sono in Sicurezza.",
       "keys": {
         "title": "Chiavi API",
-        "description": "Chiavi per script, CI e integrazioni. Una chiave agisce come te, un agente o un bot; «Funziona in» definisce quali spazi di lavoro raggiunge.",
+        "description": "Chiavi per script, CI e integrazioni. Una chiave agisce come te, come un agente o come un bot. Funziona in questo workspace, a meno che tu non scelga tutti i tuoi workspace.",
         "newKey": "Nuova chiave",
         "count": "{count, plural, one {# chiave} other {# chiavi}}",
         "emptyTitle": "Nessuna chiave API",

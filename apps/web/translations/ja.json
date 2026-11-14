@@ -2896,7 +2896,7 @@
       "featuresGrace": "SSO と SCIM は {date} まで有効のままです。エンタープライズを続けるには営業にお問い合わせください。",
       "featuresOn": "オン",
       "featuresOff": "オフ",
-      "featuresOffDescription": "SSO、SCIM、高度なロール、監査ログ、ブランディング。",
+      "featuresOffDescription": "SSO、SCIM、高度なロール、監査ログ。",
       "featuresDemo": "デモとしてオンです。ライセンスは営業にお問い合わせください。",
       "featuresLicensed": "ライセンス済み",
       "featuresLicensedRenews": "ライセンス済み · {date} に更新",
@@ -2921,7 +2921,11 @@
       "action": "ここでセッションを実行するには、クレジットを追加するかプランを選んでください。"
     },
     "costs": {
-      "billedElsewhere": "このコストのうち {amount} クレジットは、移動元のワークスペースに請求されました。"
+      "billedElsewhere": "このコストのうち {amount} クレジットは、移動元のワークスペースに請求されました。",
+      "allWorkspaces": "すべてのワークスペース",
+      "usageDescriptionWorkspace": "このワークスペースの Kortix 料金。クレジットはすべてのワークスペースで共通の残高です。",
+      "usageDescriptionAll": "すべてのワークスペースの Kortix 料金とクレジット台帳。",
+      "planDescriptionAll": "すべてのワークスペースのプラン、ウォレット、利用額。"
     }
   },
   "ssoRequired": {
@@ -22381,7 +22385,9 @@
     "areaDescription": "アプリとチャネルをエージェントに接続し、できることを決めます。",
     "wayMoreNamed": "{name} のその他",
     "otherWaysLead": "その他の方法：",
-    "typeFilterKortix": "Kortix"
+    "typeFilterKortix": "Kortix",
+    "scopeAll": "すべて",
+    "scopeAdded": "追加済み"
   },
   "connectMcp": {
     "title": "MCP で Kortix に接続",
@@ -24931,7 +24937,7 @@
       "newAgent": "New agent",
       "newAgentHelp": "My Kortix がエージェントを kortix.yaml に記述し、変更リクエストを作成します。",
       "name": "Name",
-      "namePlaceholder": "market-scan",
+      "namePlaceholder": "市場調査",
       "nameHelp": "Lowercase letters, digits and dashes. Saved as <slug></slug>.",
       "nameTaken": "この名前のエージェントはすでに存在します。",
       "howToStart": "How to start",
@@ -26847,7 +26853,7 @@
       "apiKeysDescription": "スクリプト、CI、連携用のキーです。キーはあなた、エージェント、またはボットとして動作します。すべてのキーに適用されるルールはセキュリティにあります。",
       "keys": {
         "title": "API キー",
-        "description": "スクリプト・CI・連携用のキーです。キーはあなた・エージェント・ボットとして動作し、「適用範囲」でどのワークスペースに届くかを決めます。",
+        "description": "スクリプト、CI、連携用のキー。キーはあなた、エージェント、またはボットとして動作します。すべてのワークスペースを選ばない限り、このワークスペースでのみ使えます。",
         "newKey": "新しいキー",
         "count": "{count, plural, other {# 個のキー}}",
         "emptyTitle": "API キーがありません",

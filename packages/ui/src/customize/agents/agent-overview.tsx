@@ -422,7 +422,7 @@ function OverviewSettings({
   return (
     <>
       <EditorSection title={t('properties')}>
-        <SettingRow label={t('enabled')} help={t('enabledHelp', { name: agentDisplayName(agent.name) })}>
+        <SettingRow label={t('enabled')} help={t('enabledHelp', { name: agentDisplayName(agent.name, agent.title) })}>
           <div className="flex sm:justify-end">
             {editor ? (
               <Switch aria-label={t('enabled')} checked={enabled} onCheckedChange={(v) => editor.set('enabled', v ? undefined : false)} />

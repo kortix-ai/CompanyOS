@@ -2896,7 +2896,7 @@
       "featuresGrace": "SSO и SCIM остају укључени до {date}. Разговарајте са продајом да задржите Enterprise.",
       "featuresOn": "Укључено",
       "featuresOff": "Искључено",
-      "featuresOffDescription": "SSO, SCIM, напредне улоге, евиденције ревизије и брендирање.",
+      "featuresOffDescription": "SSO, SCIM, напредне улоге и евиденције ревизије.",
       "featuresDemo": "Укључено као демо. Разговарајте са продајом о лиценци.",
       "featuresLicensed": "Лиценцирано",
       "featuresLicensedRenews": "Лиценцирано · обнавља се {date}",
@@ -2921,7 +2921,11 @@
       "action": "Додај кредите или изабери план да би овде покретао сесије."
     },
     "costs": {
-      "billedElsewhere": "{amount} кредита овог трошка наплаћено је радном простору из ког је премештен."
+      "billedElsewhere": "{amount} кредита овог трошка наплаћено је радном простору из ког је премештен.",
+      "allWorkspaces": "Сви workspace-ови",
+      "usageDescriptionWorkspace": "Kortix трошкови за овај workspace. Кредити су једно стање за све workspace-ове.",
+      "usageDescriptionAll": "Kortix трошкови и књига кредита за све workspace-ове.",
+      "planDescriptionAll": "План, новчаник и потрошња за све workspace-ове."
     }
   },
   "ssoRequired": {
@@ -22381,7 +22385,9 @@
     "areaDescription": "Повежите апликације и канале са агентима и одредите шта смеју да раде.",
     "wayMoreNamed": "Још за {name}",
     "otherWaysLead": "Други начини:",
-    "typeFilterKortix": "Kortix"
+    "typeFilterKortix": "Kortix",
+    "scopeAll": "Сви",
+    "scopeAdded": "Додати"
   },
   "connectMcp": {
     "title": "Povežite Kortix preko MCP-a",
@@ -24931,7 +24937,7 @@
       "newAgent": "New agent",
       "newAgentHelp": "My Kortix уписује агента у kortix.yaml и отвара захтев за измену.",
       "name": "Name",
-      "namePlaceholder": "market-scan",
+      "namePlaceholder": "Анализа тржишта",
       "nameHelp": "Lowercase letters, digits and dashes. Saved as <slug></slug>.",
       "nameTaken": "Агент са овим именом већ постоји.",
       "howToStart": "How to start",
@@ -26847,7 +26853,7 @@
       "apiKeysDescription": "Кључеви за скрипте, CI и интеграције. Кључ делује као ви, као агент или као бот. Правила за сваки кључ су у Безбедности.",
       "keys": {
         "title": "API кључеви",
-        "description": "Ključevi za skripte, CI i integracije. Ključ deluje kao ti, agent ili bot; „Važi za“ određuje koje radne prostore doseže.",
+        "description": "Кључеви за скрипте, CI и интеграције. Кључ делује као ти, агент или бот. Ради у овом workspace-у, осим ако не изабереш све своје workspace-ове.",
         "newKey": "Нови кључ",
         "count": "{count, plural, one {# кључ} few {# кључа} other {# кључева}}",
         "emptyTitle": "Нема API кључева",

@@ -4177,11 +4177,12 @@ describe('pi steering', () => {
   const sentText = (index: number) => JSON.stringify(gateway.sent[index])
   /** Hooks that record the turn and steer relays the boot would send. */
   const relays = () => {
-    const seen = { begins: [] as string[], ends: [] as string[], reads: [] as string[] }
+    const seen = { begins: [] as string[], ends: [] as string[], reads: [] as string[], drops: [] as string[] }
     const hooks: PiRuntimeHooks = {
       onTurnBegin: ({ messageId }) => void seen.begins.push(messageId),
       onTurnEnd: ({ messageId }) => void seen.ends.push(messageId),
       onSteerRead: ({ messageId }) => void seen.reads.push(messageId),
+      onSteerDropped: ({ messageId }) => void seen.drops.push(messageId),
     }
     return { seen, hooks }
   }
@@ -4304,6 +4305,8 @@ describe('pi steering', () => {
     expect(seen.begins).toEqual([TURN, late])
     expect(seen.ends).toEqual([TURN, late])
     expect(seen.reads).toEqual([late])
+    // A turn that ends on its own drops nothing: the steer starts the next turn.
+    expect(seen.drops).toEqual([])
     expect(gateway.sent.length - before).toBe(2)
     expect(sentText(before + 1)).toContain('STEER-LATE')
     const messages = (await page(r)).messages
@@ -4316,7 +4319,7 @@ describe('pi steering', () => {
     expect(messages[2]!.info.id).toBe(late)
   })
 
-  test('a stopped turn drops its unread steered messages and starts nothing', async () => {
+  test('a stopped turn drops its unread steered messages, reports each one before its end, and starts nothing', async () => {
     const { seen, hooks } = relays()
     const r = await boot({ script: [{ tool: 'bash', args: { command: 'sleep 20' } }, { text: 'unreachable' }, { text: 'next turn' }], hooks })
     const root = r.service.runtime()!.rootId
@@ -4326,9 +4329,12 @@ describe('pi steering', () => {
     expect((await steer(r, dropped, 'STEER-DROPPED')).status).toBe(202)
     expect((await post(r, `/kortix/runtime/sessions/${root}/abort`, {})).status).toBe(200)
     await waitFor(() => seen.ends.length === 1)
+    // Reported by the time the end is: apps/api puts its prompt back on the queue for the next turn.
+    expect(seen.drops).toEqual([dropped])
     await Bun.sleep(150)
     expect(seen.begins).toEqual([TURN])
     expect(seen.reads).toEqual([])
+    expect(seen.drops).toEqual([dropped])
     expect((await page(r)).messages.some((m) => m.info.id === dropped)).toBe(false)
     // Nothing is left in pi's queue: the next turn's model does not get it.
     const before = gateway.sent.length

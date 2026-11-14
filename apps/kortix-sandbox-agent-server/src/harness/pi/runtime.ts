@@ -339,6 +339,15 @@ const PARALLEL_TOOLS: readonly string[] = ['image_gen']
  * these two messages). Exact strings: a pi bump that rewords them fails the pi-harness tests.
  */
 const PI_COMPACTION_REFUSALS = new Set(['Compaction failed: Nothing to compact (session too small)', 'Compaction failed: Already compacted'])
+/**
+ * How `AgentSession.prompt()` refuses while pi runs work of its own (pi 1.4.0 gives no code): a
+ * run an extension started, or a compaction. Both throw before any model call. A pi bump that
+ * rewords them fails the "pi runs an extension starts" pi-harness test.
+ */
+const PI_BUSY_REFUSALS = ['Agent is already processing', 'Cannot submit a prompt while compaction is in progress']
+/** Prompt attempts a turn makes when pi starts work of its own between its idle check and the prompt. */
+const PI_BUSY_PROMPT_ATTEMPTS = 3
+const piRefusedBusy = (err: unknown) => err instanceof Error && PI_BUSY_REFUSALS.some((text) => err.message.startsWith(text))
 
 export interface TurnEnd {
   messageId: string
@@ -373,6 +382,8 @@ export interface PiRuntimeHooks {
   onFrame?: (frame: RuntimeFrame) => void
   /** A turn read a steered message: it is on the wire and in the model's context. */
   onSteerRead?: (read: { rootId: string; messageId: string }) => void
+  /** A stopped turn dropped a steered message it never read: apps/api sends it again as the next turn. */
+  onSteerDropped?: (drop: { rootId: string; messageId: string }) => void
 }
 
 export interface PiRuntimeOptions {
@@ -620,6 +631,8 @@ export class PiRuntime {
   private summarizeMarker: string | null = null
   /** Each Stop counts here; a `/summarize` queued before a Stop does not run. */
   private stops = 0
+  /** Each forced abandon ({@link abandonWork}) counts here; a turn that waited on pi across one does not run. */
+  private abandons = 0
   private resetProgressWatchdog: (() => void) | null = null
   /**
    * The Kortix message id of each pi message object (root and children): pi
@@ -942,6 +955,8 @@ export class PiRuntime {
   async stop(): Promise<void> {
     if (this.state === 'down') return
     await this.abort()
+    // A run an extension started is no turn `abort` stops; a turn queued behind it waits for it.
+    if (this.pi && !this.pi.session.isIdle) this.stopPi()
     if (!(await settlesWithin(this.queue.catch(() => {}), this.cfg.piStopSettleMs))) this.abandonWork()
     const runner = this.runner.current
     if (runner?.hasHandlers('session_shutdown')) await runner.emit({ type: 'session_shutdown', reason: 'quit' }).catch(() => {})
@@ -1405,10 +1420,12 @@ export class PiRuntime {
    */
   private abandonWork(): void {
     logger.warn('[pi] work did not settle after Stop; the runtime abandons it', { messageId: this.active?.messageId ?? null, queued: this.work.size })
+    this.abandons += 1
     const turn = this.active
     if (turn) {
       this.clearActiveTurn()
       this.completedTurns.set(turn.messageId, 'idle')
+      this.dropUnreadSteers()
       this.hooks.onTurnEnd?.({ rootId: this.rootId, messageId: turn.messageId, status: 'idle' })
     }
     for (const item of [turn, ...this.work]) (item as Turn | null)?.resolve?.('aborted')
@@ -1428,7 +1445,61 @@ export class PiRuntime {
     this.pi?.session.abort().catch((err) => logger.warn('[pi] abort failed', { err: err instanceof Error ? err.message : String(err) }))
   }
 
+  /**
+   * Wait until pi runs nothing of its own. An extension can start a run that kortixd never
+   * admitted: `sendUserMessage`, or `sendMessage` with `triggerTurn`, after a turn settled. pi
+   * refuses a prompt while it runs ("Agent is already processing"; prod 2026-11-14: 299 of
+   * ~1,200 cron runs of one pinned trigger failed so), and refuses one during a compaction.
+   */
+  private async piIdle(): Promise<void> {
+    const session = this.pi?.session
+    if (session && !session.isIdle) await session.waitForIdle()
+  }
+
+  /**
+   * The turn's prompt. When pi started work of its own between {@link runTurn}'s idle wait and
+   * here, it refuses before any model call: wait for that work and send again, a bounded number
+   * of times. A turn stopped while it waited sends nothing.
+   */
+  private async promptWhenIdle(turn: Turn, text: string, options: Parameters<PiSession['session']['prompt']>[1]): Promise<void> {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await this.pi!.session.prompt(text, options)
+        return
+      } catch (err) {
+        if (attempt >= PI_BUSY_PROMPT_ATTEMPTS || !piRefusedBusy(err)) throw err
+        logger.warn('[pi] pi runs work of its own; the turn waits for it', { messageId: turn.messageId, attempt })
+        await this.piIdle()
+        if (turn.stopRequested || !this.pi) return
+      }
+    }
+  }
+
+  /**
+   * A stopped turn's end: every steered message it did not read is dropped and
+   * reported (`onSteerDropped`), before the turn's end is. The steer was
+   * accepted (202), so apps/api holds its row as forwarded; without the report
+   * nothing ever sends it. A steer the API's Stop settle withdrew first
+   * (`withdrawSteer`) is no longer listed.
+   */
+  private dropUnreadSteers(): void {
+    const dropped = this.steered
+    this.steered = []
+    this.agent?.clearSteeringQueue()
+    for (const entry of dropped) this.hooks.onSteerDropped?.({ rootId: this.rootId, messageId: entry.messageId })
+  }
+
   private async runTurn(turn: Turn): Promise<void> {
+    // Still queued while pi runs work of its own: the reaper's probe reads the turn in flight,
+    // a retract or a Stop takes it back, and a steer finds no turn and is queued as a prompt
+    // instead of joining the extension's run.
+    const abandons = this.abandons
+    if (this.pi && !this.pi.session.isIdle) logger.info('[pi] the turn waits for a run pi started on its own', { messageId: turn.messageId })
+    await this.piIdle()
+    if (this.abandons !== abandons || !this.pi) {
+      turn.resolve('aborted')
+      return
+    }
     if (this.waiting.get(turn.messageId) === turn) this.waiting.delete(turn.messageId)
     if (turn.retracted) {
       turn.resolve('aborted')
@@ -1491,7 +1562,7 @@ export class PiRuntime {
       const images = await this.images(turn.input)
       // A transient model error continues the turn at the settle boundary (`turnExtension`).
       armWatchdog()
-      await this.pi!.session.prompt(turn.input.text || '(attachment)', { source: 'rpc', ...(images.length ? { images } : {}) })
+      await this.promptWhenIdle(turn, turn.input.text || '(attachment)', { source: 'rpc', ...(images.length ? { images } : {}) })
       for (const frame of this.adapter!.settleRetry()) this.publish(frame)
       if (timedOut) {
         outcome = 'error'
@@ -1539,6 +1610,7 @@ export class PiRuntime {
       if (!abandoned) claudeSessions()?.settle(this.rootId)
       // `abandonWork` already reported the abandoned turn's end.
       const finalText = outcome === 'completed' ? assistantFinalText(this.turnAssistant) : ''
+      if (!abandoned && turn.stopRequested) this.dropUnreadSteers()
       if (!abandoned)
         this.hooks.onTurnEnd?.({
           rootId: this.rootId,
@@ -1551,11 +1623,11 @@ export class PiRuntime {
     if (abandoned) return
     // Started while the live model list was down: fetch it again, so the next turn runs on real limits.
     if (this.models?.live === false) this.refreshModelsSoon()
-    // Steered messages the turn did not read. A stopped turn drops them (the
-    // API's Stop path owns them). Otherwise they start the next turn: the first
-    // is its prompt, the rest are read before its first model call. Same queue
-    // slot, so no prompt admitted meanwhile runs before them.
-    const [next, ...rest] = turn.stopRequested ? [] : this.steered
+    // Steered messages the turn did not read. A stopped turn dropped and
+    // reported them above (`dropUnreadSteers`). Otherwise they start the next
+    // turn: the first is its prompt, the rest are read before its first model
+    // call. Same queue slot, so no prompt admitted meanwhile runs before them.
+    const [next, ...rest] = this.steered
     this.steered = rest
     agent.clearSteeringQueue()
     if (!next) return

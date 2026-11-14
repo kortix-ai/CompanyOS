@@ -12,10 +12,10 @@ import { contract, qk } from '@kortix/sdk/react';
  * whatever this returns). Lists the caller's projects under one query key.
  *
  * Fetches with no account_id, so this is the ONE real reader of
- * `qk.projects.list()` — the API resolves that to the caller's primary
- * (earliest-joined) account. Every mutation that invalidates the shared
- * `['kx', 'projects']` prefix reaches this entry too, keeping it out of the
- * stale trap a private key would fall into.
+ * `qk.projects.list()` — for a signed-in person the API lists the projects
+ * of every account they belong to, newest first. Every mutation that
+ * invalidates the shared `['kx', 'projects']` prefix reaches this entry too,
+ * keeping it out of the stale trap a private key would fall into.
  */
 export function useProjectPicker({
   open,

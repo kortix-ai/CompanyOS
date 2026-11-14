@@ -681,7 +681,7 @@ export interface RepoCollaboratorInvite {
 }
 
 /**
- * @deprecated Use `listWorkspaces`: every workspace of the caller, across accounts. This lists one account's projects. Kept permanently.
+ * @deprecated Use `listWorkspaces`: every workspace of the caller, across accounts. For a person (a session or an unscoped personal access token) this lists the projects of every account they belong to; a credential bound to one account (a workspace key, an account API key) lists that account's. Kept permanently.
  */
 export async function listProjects() {
   return unwrap(await backendApi.get<KortixProject[]>('/projects'));

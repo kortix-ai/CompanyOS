@@ -954,8 +954,8 @@ function requireAuth() {
 }
 
 /** The account `projects ls` should be scoped to: the active account, falling
- *  back to the host's stored account id. Undefined lets the server pick its
- *  earliest-joined-account default (pre-feature behavior). */
+ *  back to the host's stored account id. Undefined sends no account_id: the
+ *  server then lists every account of a person (one for a bound key). */
 function scopeAccountId(auth: Auth): string | undefined {
   return activeAccount()?.id ?? auth.account_id ?? undefined;
 }
@@ -1160,7 +1160,7 @@ async function projectsLsOlder(
   if (all) return projectsLsAll(auth, json, query, true);
 
   // Scope to the active account so this lists exactly that account's projects
-  // (not the server's earliest-joined-account default).
+  // (not every account, which an unscoped read returns).
   // --host: that host's own stored account (never the global active one).
   const accountId = accountArg || (hostArg ? auth.account_id || undefined : scopeAccountId(auth));
   const client = clientFromAuth(auth, { accountId });

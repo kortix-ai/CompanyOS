@@ -8,7 +8,8 @@
  *
  * Mounted on `/v1/workspaces` BEFORE the project-route alias
  * (`workspaceProjectsApp`), which leaves these four out. The legacy names keep
- * their old meaning: `GET /v1/projects` lists one account,
+ * their old meaning: `GET /v1/projects` lists the bare project records (every
+ * account of a person, one account with `?account_id=`),
  * `POST /v1/projects/provision` takes `new_workspace`, `GET /v1/projects/:id`
  * is the bare project record. The handlers live in
  * `projects/routes/workspace-records.ts`.
@@ -132,7 +133,7 @@ export function registerWorkspaceRootRoutes(): void {
       tags: ['workspaces'],
       summary: 'List workspaces',
       description:
-        'Every workspace the caller may open, across every account, in one request: most recently opened first, then by name. A workspace-bound key lists its one workspace. The legacy `GET /v1/projects` keeps its old meaning (one account, `?account_id=`).',
+        'Every workspace the caller may open, across every account, in one request: most recently opened first, then by name. A workspace-bound key lists its one workspace. The legacy `GET /v1/projects` lists the bare project records: every account of a person, one account with `?account_id=`.',
       ...auth,
       middleware: [supabaseAuth] as const,
       responses: { 200: json(z.array(WorkspaceSummarySchema), 'The caller’s workspaces'), ...errors(401) },

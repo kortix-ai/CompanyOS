@@ -65,6 +65,11 @@ export function SidebarDrill({
   // path changes; a click that opens a new tab (modifier keys, middle
   // button) is not a drill.
   const [intent, setIntent] = useState<{ at: string; drilled: boolean } | null>(null);
+  // Once the route leaves `at`, the route is the state again. A kept intent
+  // revived on a later return to `at`: Back from settings, then Workspace
+  // settings in the switcher (outside both layers, so no new intent), showed
+  // the main nav on the settings page.
+  if (intent && intent.at !== pathname) setIntent(null);
   const drilled = intent && intent.at === pathname ? intent.drilled : isProjectAdminPath(pathname);
   const drillOnClick = (to: boolean) => (event: MouseEvent<HTMLDivElement>) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;

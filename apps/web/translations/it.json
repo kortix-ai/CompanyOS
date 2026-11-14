@@ -26805,7 +26805,8 @@
         "dangerZone": "Zona pericolosa",
         "evalDatasets": "Dataset",
         "evalTasks": "Attività",
-        "evalJobs": "Job"
+        "evalJobs": "Job",
+        "evalTrials": "Prove"
       },
       "accessTitle": "Accesso",
       "accessDescription": "Chi può aprire questo workspace e con quale ruolo.",
@@ -27056,7 +27057,9 @@
       "queued": "In coda",
       "running": "In esecuzione",
       "completed": "Completato",
-      "cancelled": "Annullato"
+      "cancelled": "Annullato",
+      "paused": "In pausa",
+      "cancelling": "Annullamento in corso"
     },
     "trialStatus": {
       "queued": "In coda",
@@ -27065,7 +27068,8 @@
       "verifying": "Verifica",
       "completed": "Completata",
       "errored": "Con errore",
-      "cancelled": "Annullata"
+      "cancelled": "Annullata",
+      "paused": "In pausa"
     },
     "rerunFailed": "Riesegui le non riuscite",
     "rerunAll": "Riesegui tutto",
@@ -27122,7 +27126,8 @@
       "error": "Errore",
       "running": "In corso",
       "queued": "In coda",
-      "cancelled": "Annullata"
+      "cancelled": "Annullata",
+      "paused": "In pausa"
     },
     "colMeanScore": "Punteggio medio",
     "metricsHint": "Il punteggio di una prova è la media delle sue ricompense; questa è la loro media. Metriche Harbor per chiave: {metrics}",
@@ -27226,7 +27231,7 @@
     "progressLabel": "Avanzamento",
     "ranFor": "Durata {time}",
     "recentJobs": "Job recenti",
-    "registryGroup": "Registry Harbor",
+    "registryGroup": "Harbor",
     "registryTasksHint": "I dataset del registry Harbor elencano le loro attività nella propria pagina",
     "registryUnavailable": "Impossibile leggere il registry Harbor ({reason}). Sono elencati le tue suite e i dataset integrati.",
     "retryN": "nuovo tentativo {n}",
@@ -27300,7 +27305,7 @@
       "all": "Tutti",
       "suite": "Tuoi",
       "builtin": "Integrati",
-      "registry": "Registry Harbor"
+      "registry": "Harbor"
     },
     "taskTab": {
       "instruction": "Istruzione",
@@ -27308,7 +27313,49 @@
       "files": "File",
       "results": "Risultati"
     },
-    "colTaskCount": "Attività"
+    "colTaskCount": "Attività",
+    "pause": "Metti in pausa",
+    "resume": "Riprendi",
+    "paused": "Job in pausa",
+    "resumed": "Job ripreso",
+    "cancelNow": "Ferma ora",
+    "cancelNowHint": "Le prove in corso si fermano e il job termina.",
+    "cancelDrain": "Lascia finire le prove in corso",
+    "cancelDrainHint": "Non parte né si ripete nulla di nuovo. Il job termina dopo le prove in corso.",
+    "cancelDrainStarted": "Il job termina dopo le prove in corso",
+    "trialsTitle": "Prove",
+    "trialsDescription": "Ogni prova di ogni job, filtrata sul server.",
+    "trialsInfo": "Ogni filtro elenca i suoi valori con quante prove li hanno, contate tra quelle che gli altri filtri tengono. Una riga apre la prova accanto al suo job.",
+    "searchTrials": "Cerca prove",
+    "sortLabel": "Ordina",
+    "trialSort": {
+      "desc_created_at": "Più recenti",
+      "created_at": "Meno recenti",
+      "desc_finished_at": "Finite per ultime",
+      "desc_reward": "Ricompensa più alta",
+      "reward": "Ricompensa più bassa",
+      "task": "Attività A–Z"
+    },
+    "trialFacet": {
+      "status": "Stato",
+      "job": "Job",
+      "task": "Attività",
+      "agent": "Agente",
+      "model": "Modello",
+      "exception_type": "Errore"
+    },
+    "trialFacetAny": {
+      "status": "Qualsiasi stato",
+      "job": "Tutti i job",
+      "task": "Tutte le attività",
+      "agent": "Qualsiasi agente",
+      "model": "Qualsiasi modello",
+      "exception_type": "Qualsiasi errore"
+    },
+    "noTrialsYet": "Ancora nessuna prova",
+    "displayingRange": "{from}–{to} di {total} prove",
+    "previousPage": "Pagina precedente",
+    "nextPage": "Pagina successiva"
   },
   "desktopTabs": {
     "tabs": "Schede aperte",

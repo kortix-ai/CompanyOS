@@ -26805,7 +26805,8 @@
         "dangerZone": "Zona de peligro",
         "evalDatasets": "Conjuntos de datos",
         "evalTasks": "Tareas",
-        "evalJobs": "Trabajos"
+        "evalJobs": "Trabajos",
+        "evalTrials": "Ejecuciones"
       },
       "accessTitle": "Acceso",
       "accessDescription": "Quién puede abrir este espacio de trabajo y con qué rol.",
@@ -27056,7 +27057,9 @@
       "queued": "En cola",
       "running": "En ejecución",
       "completed": "Completado",
-      "cancelled": "Cancelado"
+      "cancelled": "Cancelado",
+      "paused": "En pausa",
+      "cancelling": "Cancelando"
     },
     "trialStatus": {
       "queued": "En cola",
@@ -27065,7 +27068,8 @@
       "verifying": "Verificando",
       "completed": "Completada",
       "errored": "Con error",
-      "cancelled": "Cancelada"
+      "cancelled": "Cancelada",
+      "paused": "En pausa"
     },
     "rerunFailed": "Repetir las fallidas",
     "rerunAll": "Repetir todas",
@@ -27122,7 +27126,8 @@
       "error": "Error",
       "running": "En curso",
       "queued": "En cola",
-      "cancelled": "Cancelada"
+      "cancelled": "Cancelada",
+      "paused": "En pausa"
     },
     "colMeanScore": "Puntuación media",
     "metricsHint": "La puntuación de cada ejecución es la media de sus recompensas; esta es su media. Métricas de Harbor por clave: {metrics}",
@@ -27226,7 +27231,7 @@
     "progressLabel": "Progreso",
     "ranFor": "Se ejecutó durante {time}",
     "recentJobs": "Trabajos recientes",
-    "registryGroup": "Registro de Harbor",
+    "registryGroup": "Harbor",
     "registryTasksHint": "Los conjuntos de datos del registro de Harbor muestran sus tareas en su propia página",
     "registryUnavailable": "No se pudo leer el registro de Harbor ({reason}). Se muestran tus suites y los conjuntos de datos integrados.",
     "retryN": "reintento {n}",
@@ -27300,7 +27305,7 @@
       "all": "Todos",
       "suite": "Tuyos",
       "builtin": "Integrados",
-      "registry": "Registro de Harbor"
+      "registry": "Harbor"
     },
     "taskTab": {
       "instruction": "Instrucción",
@@ -27308,7 +27313,49 @@
       "files": "Archivos",
       "results": "Resultados"
     },
-    "colTaskCount": "Tareas"
+    "colTaskCount": "Tareas",
+    "pause": "Pausar",
+    "resume": "Reanudar",
+    "paused": "Job en pausa",
+    "resumed": "Job reanudado",
+    "cancelNow": "Detener ahora",
+    "cancelNowHint": "Las ejecuciones en curso se detienen y el job termina.",
+    "cancelDrain": "Dejar terminar las ejecuciones en curso",
+    "cancelDrainHint": "No empieza ni se reintenta nada nuevo. El job termina tras sus ejecuciones en curso.",
+    "cancelDrainStarted": "El job termina tras sus ejecuciones en curso",
+    "trialsTitle": "Ejecuciones",
+    "trialsDescription": "Todas las ejecuciones de todos los jobs, filtradas en el servidor.",
+    "trialsInfo": "Cada filtro lista sus valores con cuántas ejecuciones los tienen, contadas entre las que dejan los demás filtros. Una fila abre la ejecución junto a su job.",
+    "searchTrials": "Buscar ejecuciones",
+    "sortLabel": "Ordenar",
+    "trialSort": {
+      "desc_created_at": "Más recientes",
+      "created_at": "Más antiguas",
+      "desc_finished_at": "Terminadas al final",
+      "desc_reward": "Mayor recompensa",
+      "reward": "Menor recompensa",
+      "task": "Tarea A–Z"
+    },
+    "trialFacet": {
+      "status": "Estado",
+      "job": "Job",
+      "task": "Tarea",
+      "agent": "Agente",
+      "model": "Modelo",
+      "exception_type": "Error"
+    },
+    "trialFacetAny": {
+      "status": "Cualquier estado",
+      "job": "Todos los jobs",
+      "task": "Todas las tareas",
+      "agent": "Cualquier agente",
+      "model": "Cualquier modelo",
+      "exception_type": "Cualquier error"
+    },
+    "noTrialsYet": "Aún no hay ejecuciones",
+    "displayingRange": "{from}–{to} de {total} ejecuciones",
+    "previousPage": "Página anterior",
+    "nextPage": "Página siguiente"
   },
   "desktopTabs": {
     "tabs": "Pestañas abiertas",

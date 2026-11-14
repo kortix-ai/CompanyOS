@@ -26805,7 +26805,8 @@
         "dangerZone": "Zone de danger",
         "evalDatasets": "Jeux de données",
         "evalTasks": "Tâches",
-        "evalJobs": "Jobs"
+        "evalJobs": "Jobs",
+        "evalTrials": "Essais"
       },
       "accessTitle": "Accès",
       "accessDescription": "Qui peut ouvrir cet espace de travail, et avec quel rôle.",
@@ -27056,7 +27057,9 @@
       "queued": "En file d’attente",
       "running": "En cours",
       "completed": "Terminé",
-      "cancelled": "Annulé"
+      "cancelled": "Annulé",
+      "paused": "En pause",
+      "cancelling": "Annulation en cours"
     },
     "trialStatus": {
       "queued": "En file d’attente",
@@ -27065,7 +27068,8 @@
       "verifying": "Vérification",
       "completed": "Terminé",
       "errored": "En erreur",
-      "cancelled": "Annulé"
+      "cancelled": "Annulé",
+      "paused": "En pause"
     },
     "rerunFailed": "Relancer les échecs",
     "rerunAll": "Tout relancer",
@@ -27122,7 +27126,8 @@
       "error": "Erreur",
       "running": "En cours",
       "queued": "En attente",
-      "cancelled": "Annulée"
+      "cancelled": "Annulée",
+      "paused": "En pause"
     },
     "colMeanScore": "Score moyen",
     "metricsHint": "Le score d’un essai est la moyenne de ses récompenses ; voici leur moyenne. Métriques Harbor par clé : {metrics}",
@@ -27226,7 +27231,7 @@
     "progressLabel": "Progression",
     "ranFor": "A duré {time}",
     "recentJobs": "Jobs récents",
-    "registryGroup": "Registre Harbor",
+    "registryGroup": "Harbor",
     "registryTasksHint": "Les jeux de données du registre Harbor listent leurs tâches sur leur propre page",
     "registryUnavailable": "Impossible de lire le registre Harbor ({reason}). Vos suites et les jeux de données intégrés sont listés.",
     "retryN": "nouvel essai {n}",
@@ -27300,7 +27305,7 @@
       "all": "Tous",
       "suite": "Les vôtres",
       "builtin": "Intégrés",
-      "registry": "Registre Harbor"
+      "registry": "Harbor"
     },
     "taskTab": {
       "instruction": "Instruction",
@@ -27308,7 +27313,49 @@
       "files": "Fichiers",
       "results": "Résultats"
     },
-    "colTaskCount": "Tâches"
+    "colTaskCount": "Tâches",
+    "pause": "Mettre en pause",
+    "resume": "Reprendre",
+    "paused": "Job en pause",
+    "resumed": "Job repris",
+    "cancelNow": "Arrêter maintenant",
+    "cancelNowHint": "Les essais en cours s’arrêtent et le job se termine.",
+    "cancelDrain": "Laisser finir les essais en cours",
+    "cancelDrainHint": "Rien de nouveau ne démarre ni n’est relancé. Le job se termine après ses essais en cours.",
+    "cancelDrainStarted": "Le job se termine après ses essais en cours",
+    "trialsTitle": "Essais",
+    "trialsDescription": "Chaque essai de chaque job, filtré sur le serveur.",
+    "trialsInfo": "Chaque filtre liste ses valeurs avec le nombre d’essais qui les ont, comptés parmi ceux que gardent les autres filtres. Une ligne ouvre l’essai à côté de son job.",
+    "searchTrials": "Rechercher des essais",
+    "sortLabel": "Trier",
+    "trialSort": {
+      "desc_created_at": "Plus récents",
+      "created_at": "Plus anciens",
+      "desc_finished_at": "Terminés en dernier",
+      "desc_reward": "Récompense la plus haute",
+      "reward": "Récompense la plus basse",
+      "task": "Tâche A–Z"
+    },
+    "trialFacet": {
+      "status": "Statut",
+      "job": "Job",
+      "task": "Tâche",
+      "agent": "Agent",
+      "model": "Modèle",
+      "exception_type": "Erreur"
+    },
+    "trialFacetAny": {
+      "status": "Tout statut",
+      "job": "Tous les jobs",
+      "task": "Toutes les tâches",
+      "agent": "Tout agent",
+      "model": "Tout modèle",
+      "exception_type": "Toute erreur"
+    },
+    "noTrialsYet": "Aucun essai pour l’instant",
+    "displayingRange": "{from}–{to} sur {total} essais",
+    "previousPage": "Page précédente",
+    "nextPage": "Page suivante"
   },
   "desktopTabs": {
     "tabs": "Onglets ouverts",

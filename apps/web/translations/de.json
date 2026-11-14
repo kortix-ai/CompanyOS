@@ -26805,7 +26805,8 @@
         "dangerZone": "Gefahrenzone",
         "evalDatasets": "Datensätze",
         "evalTasks": "Aufgaben",
-        "evalJobs": "Jobs"
+        "evalJobs": "Jobs",
+        "evalTrials": "Durchläufe"
       },
       "accessTitle": "Zugriff",
       "accessDescription": "Wer diesen Workspace öffnen kann, und mit welcher Rolle.",
@@ -27056,7 +27057,9 @@
       "queued": "In Warteschlange",
       "running": "Läuft",
       "completed": "Abgeschlossen",
-      "cancelled": "Abgebrochen"
+      "cancelled": "Abgebrochen",
+      "paused": "Pausiert",
+      "cancelling": "Wird abgebrochen"
     },
     "trialStatus": {
       "queued": "In Warteschlange",
@@ -27065,7 +27068,8 @@
       "verifying": "Wird geprüft",
       "completed": "Abgeschlossen",
       "errored": "Fehlgeschlagen",
-      "cancelled": "Abgebrochen"
+      "cancelled": "Abgebrochen",
+      "paused": "Pausiert"
     },
     "rerunFailed": "Fehlgeschlagene erneut ausführen",
     "rerunAll": "Alle erneut ausführen",
@@ -27122,7 +27126,8 @@
       "error": "Fehler",
       "running": "Läuft",
       "queued": "Wartet",
-      "cancelled": "Abgebrochen"
+      "cancelled": "Abgebrochen",
+      "paused": "Pausiert"
     },
     "colMeanScore": "Mittlere Punktzahl",
     "metricsHint": "Die Punktzahl eines Durchlaufs ist der Mittelwert seiner Bewertungen; dies ist deren Mittelwert. Harbors Metriken je Bewertungsschlüssel: {metrics}",
@@ -27226,7 +27231,7 @@
     "progressLabel": "Fortschritt",
     "ranFor": "Lief {time}",
     "recentJobs": "Letzte Jobs",
-    "registryGroup": "Harbor-Registry",
+    "registryGroup": "Harbor",
     "registryTasksHint": "Datensätze der Harbor-Registry listen ihre Aufgaben auf einer eigenen Seite auf",
     "registryUnavailable": "Die Harbor-Registry konnte nicht gelesen werden ({reason}). Deine Suites und die integrierten Datensätze werden angezeigt.",
     "retryN": "Wiederholung {n}",
@@ -27300,7 +27305,7 @@
       "all": "Alle",
       "suite": "Deine",
       "builtin": "Integriert",
-      "registry": "Harbor-Registry"
+      "registry": "Harbor"
     },
     "taskTab": {
       "instruction": "Anweisung",
@@ -27308,7 +27313,49 @@
       "files": "Dateien",
       "results": "Ergebnisse"
     },
-    "colTaskCount": "Aufgaben"
+    "colTaskCount": "Aufgaben",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "paused": "Job pausiert",
+    "resumed": "Job fortgesetzt",
+    "cancelNow": "Sofort stoppen",
+    "cancelNowHint": "Laufende Durchläufe stoppen und der Job endet.",
+    "cancelDrain": "Laufende Durchläufe beenden lassen",
+    "cancelDrainHint": "Nichts Neues startet oder wird wiederholt. Der Job endet nach seinen laufenden Durchläufen.",
+    "cancelDrainStarted": "Der Job endet nach seinen laufenden Durchläufen",
+    "trialsTitle": "Durchläufe",
+    "trialsDescription": "Jeder Durchlauf jedes Jobs, auf dem Server gefiltert.",
+    "trialsInfo": "Jeder Filter listet seine Werte mit der Zahl der Durchläufe, gezählt unter den Durchläufen, die die anderen Filter behalten. Eine Zeile öffnet den Durchlauf neben seinem Job.",
+    "searchTrials": "Durchläufe suchen",
+    "sortLabel": "Sortieren",
+    "trialSort": {
+      "desc_created_at": "Neueste zuerst",
+      "created_at": "Älteste zuerst",
+      "desc_finished_at": "Zuletzt beendet",
+      "desc_reward": "Höchste Belohnung",
+      "reward": "Niedrigste Belohnung",
+      "task": "Aufgabe A–Z"
+    },
+    "trialFacet": {
+      "status": "Status",
+      "job": "Job",
+      "task": "Aufgabe",
+      "agent": "Agent",
+      "model": "Modell",
+      "exception_type": "Fehler"
+    },
+    "trialFacetAny": {
+      "status": "Jeder Status",
+      "job": "Alle Jobs",
+      "task": "Alle Aufgaben",
+      "agent": "Jeder Agent",
+      "model": "Jedes Modell",
+      "exception_type": "Jeder Fehler"
+    },
+    "noTrialsYet": "Noch kein Durchlauf",
+    "displayingRange": "{from}–{to} von {total} Durchläufen",
+    "previousPage": "Vorherige Seite",
+    "nextPage": "Nächste Seite"
   },
   "desktopTabs": {
     "tabs": "Offene Tabs",

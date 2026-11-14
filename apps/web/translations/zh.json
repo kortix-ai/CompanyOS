@@ -26805,7 +26805,8 @@
         "dangerZone": "危险区域",
         "evalDatasets": "数据集",
         "evalTasks": "任务",
-        "evalJobs": "作业"
+        "evalJobs": "作业",
+        "evalTrials": "试验"
       },
       "accessTitle": "访问权限",
       "accessDescription": "谁可以打开此工作区，以及使用哪个角色。",
@@ -27056,7 +27057,9 @@
       "queued": "排队中",
       "running": "运行中",
       "completed": "已完成",
-      "cancelled": "已取消"
+      "cancelled": "已取消",
+      "paused": "已暂停",
+      "cancelling": "正在取消"
     },
     "trialStatus": {
       "queued": "排队中",
@@ -27065,7 +27068,8 @@
       "verifying": "验证中",
       "completed": "已完成",
       "errored": "出错",
-      "cancelled": "已取消"
+      "cancelled": "已取消",
+      "paused": "已暂停"
     },
     "rerunFailed": "重新运行失败项",
     "rerunAll": "全部重新运行",
@@ -27122,7 +27126,8 @@
       "error": "错误",
       "running": "运行中",
       "queued": "排队中",
-      "cancelled": "已取消"
+      "cancelled": "已取消",
+      "paused": "已暂停"
     },
     "colMeanScore": "平均分",
     "metricsHint": "每次试验的分数是其奖励的平均值；这里是它们的平均值。Harbor 各奖励键指标：{metrics}",
@@ -27226,7 +27231,7 @@
     "progressLabel": "进度",
     "ranFor": "运行了 {time}",
     "recentJobs": "最近的作业",
-    "registryGroup": "Harbor 注册表",
+    "registryGroup": "Harbor",
     "registryTasksHint": "Harbor 注册表中的数据集在各自页面列出任务",
     "registryUnavailable": "无法读取 Harbor 注册表（{reason}）。已列出你的套件和内置数据集。",
     "retryN": "重试 {n}",
@@ -27300,7 +27305,7 @@
       "all": "全部",
       "suite": "你的",
       "builtin": "内置",
-      "registry": "Harbor 注册表"
+      "registry": "Harbor"
     },
     "taskTab": {
       "instruction": "指令",
@@ -27308,7 +27313,49 @@
       "files": "文件",
       "results": "结果"
     },
-    "colTaskCount": "任务"
+    "colTaskCount": "任务",
+    "pause": "暂停",
+    "resume": "继续",
+    "paused": "作业已暂停",
+    "resumed": "作业已继续",
+    "cancelNow": "立即停止",
+    "cancelNowHint": "正在运行的试验会停止，作业随即结束。",
+    "cancelDrain": "让正在运行的试验完成",
+    "cancelDrainHint": "不再开始或重试任何试验。正在运行的试验完成后作业结束。",
+    "cancelDrainStarted": "正在运行的试验完成后作业结束",
+    "trialsTitle": "试验",
+    "trialsDescription": "所有作业的所有试验，在服务器端筛选。",
+    "trialsInfo": "每个筛选器列出其取值及对应的试验数，只统计其他筛选器保留的试验。点击一行，会在作业旁打开该试验。",
+    "searchTrials": "搜索试验",
+    "sortLabel": "排序",
+    "trialSort": {
+      "desc_created_at": "最新优先",
+      "created_at": "最早优先",
+      "desc_finished_at": "最后完成",
+      "desc_reward": "奖励最高",
+      "reward": "奖励最低",
+      "task": "按任务名称"
+    },
+    "trialFacet": {
+      "status": "状态",
+      "job": "作业",
+      "task": "任务",
+      "agent": "智能体",
+      "model": "模型",
+      "exception_type": "错误"
+    },
+    "trialFacetAny": {
+      "status": "任意状态",
+      "job": "所有作业",
+      "task": "所有任务",
+      "agent": "任意智能体",
+      "model": "任意模型",
+      "exception_type": "任意错误"
+    },
+    "noTrialsYet": "还没有试验",
+    "displayingRange": "第 {from}–{to} 条，共 {total} 条试验",
+    "previousPage": "上一页",
+    "nextPage": "下一页"
   },
   "desktopTabs": {
     "tabs": "已打开的标签页",

@@ -26805,7 +26805,8 @@
         "dangerZone": "Опасна зона",
         "evalDatasets": "Скупови података",
         "evalTasks": "Задаци",
-        "evalJobs": "Послови"
+        "evalJobs": "Послови",
+        "evalTrials": "Pokretanja"
       },
       "accessTitle": "Приступ",
       "accessDescription": "Ко може да отвори овај радни простор и са којом улогом.",
@@ -27056,7 +27057,9 @@
       "queued": "У реду чекања",
       "running": "Ради",
       "completed": "Завршено",
-      "cancelled": "Отказано"
+      "cancelled": "Отказано",
+      "paused": "Pauzirano",
+      "cancelling": "Otkazuje se"
     },
     "trialStatus": {
       "queued": "У реду чекања",
@@ -27065,7 +27068,8 @@
       "verifying": "Провера",
       "completed": "Завршено",
       "errored": "Грешка",
-      "cancelled": "Отказано"
+      "cancelled": "Отказано",
+      "paused": "Pauzirano"
     },
     "rerunFailed": "Поново покрени неуспеле",
     "rerunAll": "Поново покрени све",
@@ -27122,7 +27126,8 @@
       "error": "Грешка",
       "running": "У току",
       "queued": "На чекању",
-      "cancelled": "Отказано"
+      "cancelled": "Отказано",
+      "paused": "Pauzirano"
     },
     "colMeanScore": "Просечна оцена",
     "metricsHint": "Оцена пробе је просек њених награда; ово је њихов просек. Harbor метрике по кључу: {metrics}",
@@ -27226,7 +27231,7 @@
     "progressLabel": "Напредак",
     "ranFor": "Трајало {time}",
     "recentJobs": "Недавни послови",
-    "registryGroup": "Harbor регистар",
+    "registryGroup": "Harbor",
     "registryTasksHint": "Скупови података из Harbor регистра приказују своје задатке на сопственој страници",
     "registryUnavailable": "Harbor регистар није прочитан ({reason}). Приказани су ваши скупови и уграђени скупови података.",
     "retryN": "поновни покушај {n}",
@@ -27300,7 +27305,7 @@
       "all": "Сви",
       "suite": "Ваши",
       "builtin": "Уграђени",
-      "registry": "Harbor регистар"
+      "registry": "Harbor"
     },
     "taskTab": {
       "instruction": "Упутство",
@@ -27308,7 +27313,49 @@
       "files": "Датотеке",
       "results": "Резултати"
     },
-    "colTaskCount": "Задаци"
+    "colTaskCount": "Задаци",
+    "pause": "Pauziraj",
+    "resume": "Nastavi",
+    "paused": "Posao je pauziran",
+    "resumed": "Posao je nastavljen",
+    "cancelNow": "Zaustavi odmah",
+    "cancelNowHint": "Pokretanja u toku se zaustavljaju i posao se završava.",
+    "cancelDrain": "Pusti pokretanja u toku da se završe",
+    "cancelDrainHint": "Ništa novo ne počinje niti se ponavlja. Posao se završava posle pokretanja u toku.",
+    "cancelDrainStarted": "Posao se završava posle pokretanja u toku",
+    "trialsTitle": "Pokretanja",
+    "trialsDescription": "Svako pokretanje svakog posla, filtrirano na serveru.",
+    "trialsInfo": "Svaki filter prikazuje svoje vrednosti i koliko pokretanja ih ima, među pokretanjima koja ostali filteri zadržavaju. Red otvara pokretanje pored njegovog posla.",
+    "searchTrials": "Pretraži pokretanja",
+    "sortLabel": "Sortiraj",
+    "trialSort": {
+      "desc_created_at": "Najnovija prvo",
+      "created_at": "Najstarija prvo",
+      "desc_finished_at": "Poslednja završena",
+      "desc_reward": "Najveća nagrada",
+      "reward": "Najmanja nagrada",
+      "task": "Zadatak A–Z"
+    },
+    "trialFacet": {
+      "status": "Status",
+      "job": "Posao",
+      "task": "Zadatak",
+      "agent": "Agent",
+      "model": "Model",
+      "exception_type": "Greška"
+    },
+    "trialFacetAny": {
+      "status": "Bilo koji status",
+      "job": "Svi poslovi",
+      "task": "Svi zadaci",
+      "agent": "Bilo koji agent",
+      "model": "Bilo koji model",
+      "exception_type": "Bilo koja greška"
+    },
+    "noTrialsYet": "Još nema pokretanja",
+    "displayingRange": "{from}–{to} od {total} pokretanja",
+    "previousPage": "Prethodna stranica",
+    "nextPage": "Sledeća stranica"
   },
   "desktopTabs": {
     "tabs": "Otvorene kartice",

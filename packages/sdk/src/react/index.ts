@@ -180,6 +180,7 @@ export {
   useWorkspaceEvalActions,
   useWorkspaceEvalCompare,
   useWorkspaceEvalDatasets,
+  useWorkspaceEvalFilterValues,
   useWorkspaceEvalJob,
   useWorkspaceEvalJobs,
   useWorkspaceEvalSuites,
@@ -191,6 +192,7 @@ export {
   type WorkspaceEvalTaskSource,
   useWorkspaceEvalTrial,
   useWorkspaceEvalTrialFile,
+  useWorkspaceEvalTrialsAcrossJobs,
 } from './use-evals';
 export {
   useWorkspaceCalendarActions,

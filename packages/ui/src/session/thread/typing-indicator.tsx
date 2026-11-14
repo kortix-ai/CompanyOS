@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 
 import { useTranslations } from '../../i18n';
 import { cn } from '../../lib/utils';
+import { useReducedMotion } from '../../internal/hooks/use-reduced-motion';
 
 /** The clock of a wait since `sinceIso` ("0:42"), ticking each second; null without a start. */
 export function useElapsedLabel(sinceIso: string | null | undefined, format: (ms: number) => string): string | null {
@@ -25,8 +26,8 @@ const DOTS = [0, 1, 2] as const;
 /**
  * The agent's busy line in a messages-only thread (`TranscriptRows.messagesOnly`):
  * three dots that pulse one after another under the agent's name, the way a
- * person's chat reads; "Kortix is typing…" is only its accessible label. It never names a tool or a step. Opacity only, so the
- * reduced-motion variant is the same animation (`kortix-brand` motion.md).
+ * person's chat reads; "Kortix is typing…" is only its accessible label. It never names a tool or a step. Opacity only
+ * (`kortix-brand` motion.md); reduced motion holds the dots still.
  * The offset between dots is a loader's wave, not an entrance stagger: it
  * delays no content, and the three dots read as one moving thing.
  */
@@ -47,6 +48,9 @@ export function TypingIndicator({
   detailDelayMs?: number;
 }) {
   const t = useTranslations('sessionUi.turn');
+  // An infinite Motion loop already running ignores `skipAnimations`, so the
+  // dots stop here: reduced motion holds them still at a mid opacity.
+  const reduceMotion = useReducedMotion();
   const label = t('typing', { name });
   const [late, setLate] = useState(detailDelayMs <= 0);
   useEffect(() => {
@@ -70,8 +74,12 @@ export function TypingIndicator({
             key={dot}
             className="bg-muted-foreground size-1 rounded-full"
             initial={{ opacity: 0.3 }}
-            animate={{ opacity: [0.3, 1, 0.3] }}
-            transition={{ duration: DOT_CYCLE_S, repeat: Infinity, ease: 'easeInOut', delay: (dot * DOT_CYCLE_S) / 3 }}
+            animate={reduceMotion ? { opacity: 0.6 } : { opacity: [0.3, 1, 0.3] }}
+            transition={
+              reduceMotion
+                ? { duration: 0 }
+                : { duration: DOT_CYCLE_S, repeat: Infinity, ease: 'easeInOut', delay: (dot * DOT_CYCLE_S) / 3 }
+            }
           />
         ))}
       </span>

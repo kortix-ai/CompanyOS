@@ -438,6 +438,19 @@ describe('kortix gateway usage (real process)', () => {
     }
   });
 
+  test('the --group alias also engages the query path (never a silent legacy fallback)', async () => {
+    const fake = fakeApi();
+    try {
+      const r = await cli(fake, ['usage', '--group', 'model', '--json']);
+      expect(r.code).toBe(0);
+      const call = fake.requests.find((x) => x.path.endsWith('/gateway/usage'));
+      expect(call?.query.get('group_by')).toBe('model');
+      expect(fake.requests.some((x) => x.path.endsWith('/gateway/overview'))).toBe(false);
+    } finally {
+      fake.stop();
+    }
+  });
+
   test('--all cannot be combined with --cursor', async () => {
     const fake = fakeApi();
     try {

@@ -449,6 +449,8 @@ async function gatewayUsage(rest: string[], opts: CtxOpts, json: boolean): Promi
       (a) =>
         a === '--group-by' ||
         a.startsWith('--group-by=') ||
+        a === '--group' ||
+        a.startsWith('--group=') ||
         a === '--since' ||
         a.startsWith('--since=') ||
         a === '--until' ||

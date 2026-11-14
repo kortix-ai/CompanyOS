@@ -14,7 +14,7 @@ import { getSessionLogPage } from '../../core/rest/projects-client/sessions';
 import { EMPTY_SESSION_LOG_STATE, applySessionLogPage, type SessionLogState } from '../../core/session-log/store';
 import { loadSessionLogPage, readSessionLogAnswer } from '../../core/session-log/source';
 import { sessionLogRowsFor, sessionLogThreadIdOf } from '../../core/session-log/v1-view';
-import { parseKortixSessionScope } from './server-transcript-mirror';
+import { parseKortixSessionScope } from './session-scope';
 
 interface MessagesResponse {
   data?: Array<{ info: Message; parts: Part[] }>;
@@ -419,8 +419,8 @@ export async function loadSessionRuntimeStatus(
   return result.data[sessionId] ?? ({ type: 'idle' } as SessionStatus);
 }
 
-/** @deprecated Reads the runtime's v1 messages. Use `loadSessionExportMessages` (the session log first) or `getSessionLogPage`. Removed in the next major. */
-export function loadSessionTranscriptMessages(
+/** Every message the runtime holds for `sessionId`, oldest first: the export's read while the computer runs. */
+function loadRuntimeHistory(
   sessionId: string,
 ): Promise<SessionSyncPage['messages']> {
   return loadCompleteSessionHistory((request) =>
@@ -484,7 +484,7 @@ export async function loadSessionExportMessages(
   if (saved && log) return loadSessionLogExportRows(saved.projectId, saved.sessionId, sessionId, log);
   let live: SessionSyncPage['messages'] = [];
   try {
-    live = await loadSessionTranscriptMessages(sessionId);
+    live = await loadRuntimeHistory(sessionId);
   } catch (error) {
     if (!saved) throw error;
   }

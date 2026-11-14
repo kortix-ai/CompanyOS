@@ -18,7 +18,7 @@ const fake = vi.hoisted(() => {
     onSend: (_s: Session, _text: string) => {},
     turn: (_s: Session): { turns: unknown[]; last_ended?: { ended_at: string; end_reason: string; error?: { name: string; message: string } } } =>
       ({ turns: [{}] }),
-    /** The live transcript tail. Null = not available (Lumen never reads the turn as stalled). */
+    /** The session log's newest messages (`GET …/log?limit=3`). Null = no stored log yet, a 404 (Lumen never reads the turn as stalled). */
     transcript: (_s: Session): unknown[] | null => null,
   };
   const aborted: string[] = [];
@@ -40,9 +40,11 @@ vi.mock('@kortix/sdk', () => ({
     return { session_id: s.id };
   },
   getSessionTurn: async (_pid: string, sid: string) => fake.script.turn(fake.sessions.find((s) => s.id === sid)!),
-  getSessionTranscript: async (_pid: string, sid: string) => {
+  getSessionLogPage: async (_pid: string, sid: string, query: { limit?: number }) => {
+    expect(query).toEqual({ limit: 3 });
     const messages = fake.script.transcript(fake.sessions.find((s) => s.id === sid)!);
-    return messages ? { available: true, message_count: messages.length, messages } : { available: false, message_count: 0, messages: [] };
+    // `getSessionLogPage` answers null on a 404: the session has no stored log yet.
+    return messages ? { session: {}, generation: 1, threads: [], thread_id: 'thr_root', messages, has_more: false } : null;
   },
   makeDriveFolder: async (_d: string, path: string) => ({ path }),
   uploadDriveFile: async (_d: string, path: string, body: Uint8Array) => {
@@ -162,6 +164,16 @@ async function startReview(t: T, matterId: Id<'matters'>, docs: Id<'documents'>[
   return t.mutation(internal.runs.startReviewAsOwner, { matterId });
 }
 
+/** A streaming assistant message of the session log with `calls` finished tool calls. */
+const logMessage = (calls: number) => ({
+  message_id: 'msg_1',
+  status: 'streaming',
+  blocks: [
+    { id: 'blk_text', type: 'text', text: 'Reading the documents.' },
+    ...Array.from({ length: calls }, (_, i) => ({ id: `blk_${i}`, type: 'tool_call', status: 'complete' })),
+  ],
+});
+
 const idleNow = () => ({ turns: [], last_ended: { ended_at: new Date(Date.now()).toISOString(), end_reason: 'completed' } });
 
 async function finish(t: T) {
@@ -255,7 +267,7 @@ describe('run engine: fan-out, validation, repair, nudge, relaunch, limits', () 
   test('an open turn whose transcript stops changing for 5 min is aborted and prompted again, then finishes', async () => {
     const { t, matterId, docs } = await world(1);
     // The agent made a few tool calls, then its next message never moved.
-    fake.script.transcript = () => [{ role: 'assistant', created: 't0', completed: null, text: '', tools: [{ tool: 'bash', status: 'completed' }] }];
+    fake.script.transcript = () => [logMessage(1)];
     fake.script.onSend = (s) => {
       if (!s.sends.at(-1)!.includes('stopped responding')) return;
       fake.script.turn = idleNow;
@@ -277,13 +289,25 @@ describe('run engine: fan-out, validation, repair, nudge, relaunch, limits', () 
     const { t, matterId, docs } = await world(1);
     let tick = 0;
     // Moves for the first 3 minutes (one new tool call per poll), then freezes for good.
-    fake.script.transcript = () => [{ role: 'assistant', created: 't0', completed: null, text: '', tools: Array.from({ length: Math.min(++tick, 30) }, () => ({ tool: 'bash', status: 'completed' })) }];
+    fake.script.transcript = () => [logMessage(Math.min(++tick, 30))];
     const { runId } = await startReview(t, matterId, docs);
     await finish(t);
     const batch = await t.run((ctx) => ctx.db.query('runBatches').withIndex('by_run', (q) => q.eq('runId', runId)).first());
     expect(batch).toMatchObject({ status: 'failed', error: 'The agent stopped responding twice', attempts: { relaunch: 1 } });
     const events = await t.run((ctx) => ctx.db.query('runEvents').withIndex('by_run', (q) => q.eq('runId', runId)).collect());
     expect(events.some((e) => e.detail === 'Batch 1: the agent is still working')).toBe(true);
+  });
+
+  test('an open turn whose session has no stored log (404) is never read as stalled: no relaunch, only the no-progress limit', async () => {
+    const { t, matterId, docs } = await world(1);
+    const { runId } = await startReview(t, matterId, docs);
+    await finish(t);
+    const batch = await t.run((ctx) => ctx.db.query('runBatches').withIndex('by_run', (q) => q.eq('runId', runId)).first());
+    expect(batch).toMatchObject({ status: 'failed', error: 'No progress for 20 minutes', attempts: { relaunch: 0 } });
+    // The stall path aborts and prompts "stopped responding"; `stop()` at the failure aborts once.
+    expect(fake.sessions[0].sends.some((text) => text.includes('stopped responding'))).toBe(false);
+    const events = await t.run((ctx) => ctx.db.query('runEvents').withIndex('by_run', (q) => q.eq('runId', runId)).collect());
+    expect(events.some((e) => e.type === 'relaunch')).toBe(false);
   });
 
   test('a failed session is replaced once by a new session', async () => {

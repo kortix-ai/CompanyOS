@@ -104,7 +104,7 @@ const feedbackLimiter = new TokenBucketRateLimiter('feedback');
 const deviceTokenReleaseLimiter = new TokenBucketRateLimiter('device_token_release');
 
 /**
- * Per-session ceiling on the stored-log reads (`GET …/log`, `GET …/transcript`,
+ * Per-session ceiling on the stored-log reads (`GET …/log`,
  * `GET …/snapshot` and its `/open-bundle` alias, `KORTIX_SESSION_LOG_READS_PER_MIN`,
  * 300). INCIDENT 2026-11-10 23:38 UTC (KRTX-4696): one CLI client polled the stored
  * log of ONE session in waves that peaked near 24 requests/s for minutes (about 50k

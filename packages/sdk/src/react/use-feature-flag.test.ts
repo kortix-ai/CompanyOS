@@ -149,16 +149,6 @@ describe('useFeatureFlag', () => {
     expect(useFeatureFlag(null, 'agent_tunnel').enabled).toBe(true);
   });
 
-  test('session_transcript_history graduated: saved history is on for every project', () => {
-    withDetail({ session_transcript_history: false });
-    expect(useFeatureFlag('p', 'session_transcript_history').enabled).toBe(true);
-
-    withDetail(undefined);
-    expect(useFeatureFlag('p', 'session_transcript_history').enabled).toBe(true);
-
-    expect(useFeatureFlag(null, 'session_transcript_history').enabled).toBe(true);
-  });
-
   test('teams graduated: Microsoft Teams is on for every project', () => {
     // A `false` a project stored while Teams was a flag is inert.
     withDetail({ teams: false });

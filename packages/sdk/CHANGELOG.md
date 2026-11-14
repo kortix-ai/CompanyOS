@@ -5,6 +5,36 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Removed (breaking: the v1 transcript, session-log major P8.4)
+The API serves no `GET /v1/{workspaces|projects}/:id/sessions/:sid/transcript` and no
+`/v1/public/session-shares/**`. The session log (`kortix.session/2`, `GET …/log`) is every
+session's saved history. A release with this entry is a major. Each removed name and its
+replacement:
+
+| Removed | Replacement |
+|---|---|
+| `getSessionTranscript`, `getSessionTranscriptSync` | `getSessionLogPage(projectId, sessionId, query)` |
+| `session(p, s).transcript()`, `session(p, s).transcriptSync()` | `session(p, s).log(query)` |
+| types `SessionTranscript`, `SessionTranscriptMessage`, `SessionTranscriptToolCall`, `SessionTranscriptSource`, `SessionTranscriptSyncEnvelope`, `SessionTranscriptSyncMessage` | `SessionLogPage`, `SessionLogMessage`, `SessionLogBlock` |
+| `loadSessionTranscriptMessages` (`@kortix/sdk/react`) | `loadSessionExportMessages(sessionId, kortixSessionScope?)`: the session log first, else the runtime |
+| `isPaintableSavedCopy`, `savedCopyEmptyRoot` | None. The saved copy is a session-log page; `readSavedSessionCopy` returns `empty` |
+| `findActiveTranscriptShare`, `getPublicSessionShare`, `getPublicSessionShareMessages`, `PublicSessionShareError`, types `PublicSessionShareMeta`, `PublicSessionTranscript`, `PublicSessionTranscriptMessage`, `PublicSessionTranscriptToolCall` | None. The API removed public transcript sharing (KRTX-2358) |
+| `saveSessionToIDB`, `flushIDBWrites`, `loadSessionFromIDB`, `loadAllSessionIdsFromIDB`, `pruneIDBCache` (`@kortix/sdk/internal/idb-sync-cache`) | None. They stored nothing since the transcript mirror was retired |
+| `FeatureFlagKey` member `session_transcript_history` | None. The flag graduated; the session log replaced the mirror it gated |
+
+Changed shapes (same names):
+- `SessionOpenBundleTranscript` is `{ known: true; requested: false } | SessionOpenBundleUnknown`:
+  the pointer only. `getSessionOpenBundle` always sends `?transcript=0` and takes no `transcript`
+  option.
+- `SavedCopyStore.read` / `write` take and return a `SessionLogPage` (was a v1 envelope).
+  `keyFor` names `<namespace>.log:<user>:<project>/<session>`. `createSavedCopyStore` deletes the
+  v1 copy an older SDK kept under `<namespace>:` when that session is written or removed, and on
+  `clear()`; it never paints one.
+- `SavedSessionCopy` has no `envelope` field; `readSavedSessionCopy` takes no `sessionLog` input.
+- `useSessionSync`'s `mirror` option accepts only `null` (the host reads the saved history
+  itself). Omitting it reads the session log, as before. The hook paints no v1 copy from the
+  device.
+
 ### Changed (provider keys need no flag)
 - The `pooled_provider_secrets` project flag graduated (2026-11-12): every project has named
   provider keys with sharing, per-session key selection and named ChatGPT/Claude sign-ins.

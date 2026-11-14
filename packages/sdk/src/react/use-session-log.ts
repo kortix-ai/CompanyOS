@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { onTabVisible } from '../browser/session-sync/visibility';
 import { useSyncStore } from '../browser/stores/sync-store';
 import { openSessionStream, type SessionControlStreamOptions } from '../core/session/control-stream';
-import { savedSessionLogCopies } from '../core/session-log/saved-log';
 import { sessionLogOfV1Rows, sessionLogThreadWithV1Rows } from '../core/session-log/v1-view';
 import { sessionLogThreadWithPrompts } from '../core/session-log/prompts-view';
 import type { SessionPrompt, SessionSentPrompt } from '../core/rest/projects-client/sessions';
@@ -309,7 +308,7 @@ export function useSessionLogSync(
     if (negotiated !== 'v2' || !loader) return;
     const controller = new AbortController();
     const store = useSyncStore.getState;
-    const copies = savedSessionLogCopies(currentSavedCopyStore());
+    const copies = currentSavedCopyStore();
     let stream: { close: () => void } | null = null;
     let stopped = false;
     let busy = false;

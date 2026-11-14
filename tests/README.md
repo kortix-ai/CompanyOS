@@ -453,7 +453,7 @@ Drive these flows through `src/fixtures/session-run.ts`, which speaks only the
 Kortix session routes: `bootSession` (boot, prove the harness from
 `/kortix/health`, wait for the boot prompt's turn to end), `sendPrompt`
 (`POST /prompts`), `waitForTurn` (`GET /turn`), `readTranscript` and
-`waitForAssistantText` (`GET /transcript`), and `watchSessionEvents`
+`waitForAssistantText` (the stored session log, `GET /log`), and `watchSessionEvents`
 (`GET /events`). Never call a harness's own REST API from a flow. The one
 exception is `abortTurn`, the Stop the web sends, until a Kortix abort route
 exists.

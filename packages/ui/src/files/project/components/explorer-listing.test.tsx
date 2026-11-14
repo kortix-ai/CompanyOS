@@ -31,7 +31,9 @@ for (const [key, value] of Object.entries({
 const node = (name: string, type: FileNode['type']): FileNode => ({
   name,
   path: `/workspace/${name}`,
+  absolute: `/workspace/${name}`,
   type,
+  ignored: false,
 });
 
 /** The server's order: by name within a page, here deliberately unsorted. */

@@ -22,6 +22,12 @@ export type TabRoute =
   | { kind: 'settings' }
   /** The Apps page with one App open (`?app=`). */
   | { kind: 'app'; appId: string }
+  /**
+   * A project page this table does not name yet. It still gets a tab (one per
+   * first segment, titled "Page"), so a new route never leaves the strip on
+   * the tab you came from. `tab-route.test.ts` fails until it is named.
+   */
+  | { kind: 'section'; name: string }
   | {
       kind: 'page';
       page:
@@ -32,9 +38,7 @@ export type TabRoute =
         | 'goals'
         | 'inbox'
         | 'memory'
-        | 'members'
-        | 'channels'
-        | 'reminders';
+        | 'members';
     };
 
 const PAGES = new Set([
@@ -46,8 +50,6 @@ const PAGES = new Set([
   'inbox',
   'memory',
   'members',
-  'channels',
-  'reminders',
 ]);
 
 // A real app path is percent-encoded; a raw control character (a newline)
@@ -104,6 +106,15 @@ export function tabRoute(path: string, projectId: string): TabRoute | null {
       return b ? { kind: 'space', slug: decode(b) } : { kind: 'home' };
     case 'settings':
       return { kind: 'settings' };
+    // Old addresses that redirect into Customize. They resolve to the section
+    // they land on, so the redirect stays in the Customize tab instead of
+    // leaving a tab behind for an address nobody sees.
+    case 'evals':
+      return { kind: 'admin', section: b === 'jobs' ? 'eval-jobs' : 'evals' };
+    case 'reminders':
+      return { kind: 'admin', section: 'reminders' };
+    case 'channels':
+      return { kind: 'admin', section: 'connectors' };
     case 'apps': {
       const appId = new URLSearchParams(path.split('?')[1]?.split('#')[0] ?? '').get('app');
       return appId ? { kind: 'app', appId } : { kind: 'page', page: 'apps' };
@@ -111,7 +122,7 @@ export function tabRoute(path: string, projectId: string): TabRoute | null {
     default:
       if (PAGES.has(a))
         return { kind: 'page', page: a as Extract<TabRoute, { kind: 'page' }>['page'] };
-      return null;
+      return { kind: 'section', name: a };
   }
 }
 
@@ -151,6 +162,8 @@ export function tabGroup(route: TabRoute): string {
       return 'apps';
     case 'page':
       return route.page;
+    case 'section':
+      return `section:${route.name}`;
   }
 }
 
@@ -180,6 +193,14 @@ export function stripVisible(
   const isSession = (path: string) =>
     pathGroup(path, projectId)?.startsWith(SESSION_GROUP) ?? false;
   return isSession(currentPath) || tabs.some((tab) => isSession(tab.path));
+}
+
+/**
+ * A document destination: one session or one artifact. A plain click on one
+ * opens it in the preview tab (`syncPath`), so browsing does not pile up tabs.
+ */
+export function isDocumentGroup(group: string | null): boolean {
+  return !!group && (group.startsWith(SESSION_GROUP) || group.startsWith('artifact:'));
 }
 
 /** The path a new tab opens on: the project's home, where a new session starts. */

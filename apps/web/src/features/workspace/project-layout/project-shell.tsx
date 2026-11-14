@@ -55,6 +55,11 @@ import {
   DesktopTabStrip,
   useDesktopTabsVisible,
 } from '@/features/desktop-tabs/desktop-tab-strip';
+import {
+  DesktopTabsBoundary,
+  useDesktopTabsEnabled,
+} from '@/features/desktop-tabs/desktop-tabs-gate';
+import { keepActivePreview } from '@/features/desktop-tabs/desktop-tabs-store';
 
 const CommandPalette = lazy(() =>
   import('@/features/workspace/command-palette').then((mod) => ({
@@ -343,12 +348,18 @@ const ProjectSheelLayout = ({
   // The desktop window's tab strip owns the title-bar band; every project view
   // renders below it. Every window width, down to the 720 × 480 minimum (where
   // the sidebar is a sheet and the shell's toggle still opens it).
+  // Behind the project's `desktop_tabs` flag. A strip that throws turns
+  // itself off for this window (`stripFailed`), and the title bar is back.
+  const [stripFailed, setStripFailed] = useState(false);
+  const tabsEnabled = useDesktopTabsEnabled(projectId);
+  const tabs = !!desktopShell && tabsEnabled && !stripFailed;
   const tabsVisible = useDesktopTabsVisible(projectId);
-  const tabs = !!desktopShell;
   return (
     <div
       // The page's own header moves below the strip only while the strip shows.
       data-kx-desktop-tabs-on={tabs && tabsVisible ? '' : undefined}
+      // Typing in the page is working in it: the preview tab becomes a kept tab.
+      onInputCapture={tabs ? () => keepActivePreview(projectId) : undefined}
       className={cn(
         'bg-background relative flex min-h-0 flex-1 flex-col overflow-hidden',
         isExpanded && 'border-border border-l',
@@ -365,7 +376,11 @@ const ProjectSheelLayout = ({
           views that already own the band. CSS disables this fallback whenever
           the active view contains `.kx-titlebar-row`. */}
       <div aria-hidden="true" className="kx-project-shell-drag-region" />
-      {tabs && <DesktopTabStrip projectId={projectId} />}
+      {tabs && (
+        <DesktopTabsBoundary onError={() => setStripFailed(true)}>
+          <DesktopTabStrip projectId={projectId} />
+        </DesktopTabsBoundary>
+      )}
       {/* Mobile: the sidebar is a sheet with no docked affordance, and view
           headers come and go (sessions render theirs only once booted) — so
           the opener lives here, always mounted, on every project view. The

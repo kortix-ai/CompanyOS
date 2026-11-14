@@ -46,7 +46,7 @@ import {
 } from '@kortix/ui/apps';
 import { APP_GRID_CONTAINER, APP_GRID_COLUMN_OPTIONS, AppGridColumnsControl, useAppGridColumns, type AppGridColumns } from './app-density';
 import { AppDetailModal } from './app-detail';
-import { isDesktop } from '@kortix/ui/internal/lib/desktop';
+import { useDesktopTabsEnabled } from '@/features/desktop-tabs/desktop-tabs-gate';
 import { BackgroundApps } from './app-background-list';
 export { DEPLOYMENT_COPY, deployNotice, appHost } from '@kortix/ui/apps';
 export { AppPreview, AppPreviewOverlay, PREVIEW_SPINNER_DELAY_MS, scheduleSlowPreview, PREVIEW_VIEWPORT_WIDTH, PREVIEW_VIEWPORT_HEIGHT, PREVIEW_TILE_ASPECT, previewScale } from '@kortix/ui/apps';
@@ -120,8 +120,8 @@ export function AppsView({
   // opens one on arrival: the links the CLI prints and the retired
   // `/backends/<id>` routes land here.
   const [openAppId, setOpenAppId] = useState<string | null>(() => searchParams.get('app'));
-  // Read once: the desktop shell cannot change mid-session.
-  const [inlineApp] = useState(() => isDesktop());
+  // An App opens in its tab only where there are tabs (desktop, flag on).
+  const inlineApp = useDesktopTabsEnabled(projectId);
   // A link to `?app=<id>` followed while this page is open (the sidebar Apps
   // card) does not remount it, so the initializer above never sees it. Only a
   // new id opens: the mirror below writes the same key back, and removing it

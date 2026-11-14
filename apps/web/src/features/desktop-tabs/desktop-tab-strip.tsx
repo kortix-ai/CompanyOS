@@ -99,11 +99,14 @@ import {
 
 import { useTranslations } from '@/i18n/use-translations';
 
+import { MOUNTED_ATTRIBUTE } from './desktop-tabs-gate';
 import {
   closeOthers,
   closeTab,
   closeToRight,
   EMPTY_PROJECT_TABS,
+  keepTab,
+  openBlankTab,
   openTab,
   readProjectTabs,
   reopenClosed,
@@ -287,6 +290,13 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
 
   // Read through a ref so every handler below stays referentially stable and
   // the memoised tabs do not re-render on each navigation.
+  // Mounted: the strip owns the tab shortcuts and links open tabs
+  // (`desktopTabsMounted`). Before paint, so no keystroke falls between.
+  useLayoutEffect(() => {
+    document.documentElement.setAttribute(MOUNTED_ATTRIBUTE, '');
+    return () => document.documentElement.removeAttribute(MOUNTED_ATTRIBUTE);
+  }, []);
+
   const pathnameRef = useRef(pathname);
   useLayoutEffect(() => {
     pathnameRef.current = pathname;
@@ -341,7 +351,13 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
   const openNew = useCallback(
     (afterId?: string, path = newTabPath(projectId)) => {
       const from = readProjectTabs(projectId).activeId;
-      update(projectId, (s) => openTab(s, path, afterId));
+      // A blank tab is only ever one: `+` again focuses it. Duplicate (an
+      // explicit path) always opens a copy.
+      update(projectId, (s) =>
+        path === newTabPath(projectId)
+          ? openBlankTab(s, path, (p) => pathGroup(p, projectId), afterId)
+          : openTab(s, path, afterId),
+      );
       // Same path (already home): the tab still opens; nothing to navigate.
       go(path, from);
     },
@@ -356,6 +372,10 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
 
   const newToRight = useCallback((id: string) => openNew(id), [openNew]);
   const duplicate = useCallback((id: string, path: string) => openNew(id, path), [openNew]);
+  const keep = useCallback(
+    (id: string) => update(projectId, (s) => keepTab(s, id)),
+    [projectId, update],
+  );
   const pin = useCallback(
     (id: string, pinned: boolean) => update(projectId, (s) => setPinned(s, id, pinned)),
     [projectId, update],
@@ -518,6 +538,7 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
                 dragging={dragging}
                 onDragging={setDragging}
                 onActivate={activate}
+                onKeep={keep}
                 onClose={close}
                 onNewToRight={newToRight}
                 onDuplicate={duplicate}
@@ -564,6 +585,8 @@ interface TabItemProps {
   dragging: boolean;
   onDragging: (dragging: boolean) => void;
   onActivate: (id: string) => void;
+  /** The preview tab becomes a normal tab. */
+  onKeep: (id: string) => void;
   onClose: (id: string) => void;
   onNewToRight: (id: string) => void;
   onDuplicate: (id: string, path: string) => void;
@@ -583,6 +606,7 @@ const TabItem = memo(function TabItem({
   dragging,
   onDragging,
   onActivate,
+  onKeep,
   onClose,
   onNewToRight,
   onDuplicate,
@@ -603,7 +627,11 @@ const TabItem = memo(function TabItem({
       value={tab.id}
       layout="position"
       transition={dragging ? DRAG_SHIFT : NO_MOTION}
-      onDragStart={() => onDragging(true)}
+      onDragStart={() => {
+        onDragging(true);
+        // Moving a tab is choosing to keep it.
+        onKeep(tab.id);
+      }}
       onDragEnd={() => onDragging(false)}
       whileDrag={{ zIndex: 1 }}
       className={cn(
@@ -626,6 +654,8 @@ const TabItem = memo(function TabItem({
               if (e.button !== 0 || e.ctrlKey) return;
               if (!active) onActivate(tab.id);
             }}
+            // Double-click keeps the preview tab, like an editor's.
+            onDoubleClick={() => onKeep(tab.id)}
             onAuxClick={(e) => {
               if (e.button === 1 && !pinned) {
                 e.preventDefault();
@@ -652,7 +682,13 @@ const TabItem = memo(function TabItem({
                 : 'bg-hover text-muted-foreground hover:bg-active hover:text-foreground',
             )}
           >
-            <TabLabel route={route} projectId={projectId} pinned={pinned} t={t} />
+            <TabLabel
+              route={route}
+              projectId={projectId}
+              pinned={pinned}
+              preview={!!tab.preview}
+              t={t}
+            />
             {!pinned && (
               <button
                 type="button"
@@ -718,6 +754,27 @@ const TabItem = memo(function TabItem({
 /* ─── Icon + title ────────────────────────────────────────────────────────── */
 
 function TabLabel({
+  route,
+  projectId,
+  pinned,
+  preview,
+  t,
+}: {
+  route: TabRoute | null;
+  projectId: string;
+  pinned: boolean;
+  /** The preview tab: its title is italic, the editor convention. */
+  preview: boolean;
+  t: Translate;
+}) {
+  return (
+    <span className={cn('flex min-w-0 flex-1 self-stretch', preview && 'italic')}>
+      <TabLabelBody route={route} projectId={projectId} pinned={pinned} t={t} />
+    </span>
+  );
+}
+
+function TabLabelBody({
   route,
   projectId,
   pinned,
@@ -1102,6 +1159,10 @@ const ADMIN_ICONS: Record<string, Icon> = {
   help: QuestionIcon,
   plan: CreditCardIcon,
   usage: ChartBarIcon,
+  evals: ChartBarIcon,
+  'eval-jobs': ChartBarIcon,
+  'eval-tasks': ChartBarIcon,
+  'eval-datasets': ChartBarIcon,
   settings: GearSixIcon,
 };
 
@@ -1168,11 +1229,11 @@ function staticLabel(
         inbox: TrayIcon,
         memory: BrainIcon,
         members: UsersIcon,
-        channels: HashIcon,
-        reminders: RepeatIcon,
       };
       return { icon: icons[route.page], title: t(`pages.${route.page}`) };
     }
+    case 'section':
+      return { icon: BrowserIcon, title: t('page') };
   }
   return { icon: BrowserIcon, title: t('page') };
 }

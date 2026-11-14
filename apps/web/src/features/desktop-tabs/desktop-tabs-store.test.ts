@@ -4,7 +4,9 @@ import {
   closeOthers,
   closeTab,
   closeToRight,
+  keepTab,
   MAX_TABS,
+  openBlankTab,
   openTab,
   reopenClosed,
   reorder,
@@ -69,15 +71,28 @@ describe('desktop tabs: navigation', () => {
     expect(activePath(s)).toBe(goal);
   });
 
-  test('an artifact opened from a session gets its own tab, and so does the next one', () => {
+  test('an artifact opened from a session opens in the preview tab; the next one replaces it', () => {
     const a1 = `/workspaces/${P}/artifacts/a1`;
     const a2 = `/workspaces/${P}/artifacts/a2`;
     let s = syncPath(empty, s1, g);
     s = syncPath(s, a1, g);
     expect(paths(s)).toEqual([s1, a1]);
+    expect(s.tabs[1].preview).toBe(true);
     s = syncPath(s, s1, g);
     s = syncPath(s, a2, g);
-    expect(paths(s)).toEqual([s1, a2, a1]);
+    expect(paths(s)).toEqual([s1, a2]);
+    expect(activePath(s)).toBe(a2);
+  });
+
+  test('a kept artifact tab stays; the next one opens a new preview', () => {
+    const a1 = `/workspaces/${P}/artifacts/a1`;
+    const a2 = `/workspaces/${P}/artifacts/a2`;
+    let s = syncPath(empty, s1, g);
+    s = syncPath(s, a1, g);
+    s = keepTab(s, s.activeId);
+    s = syncPath(s, a2, g);
+    expect(paths(s)).toEqual([s1, a1, a2]);
+    expect(s.tabs.map((t) => !!t.preview)).toEqual([false, false, true]);
   });
 
   test('an App opened from a session opens in the Apps tab, not over the session', () => {
@@ -87,10 +102,91 @@ describe('desktop tabs: navigation', () => {
     expect(paths(s)).toEqual([s1, app]);
   });
 
-  test('every session gets its own tab', () => {
+  test('clicking through sessions reuses one preview tab', () => {
+    let s = syncPath(empty, s1, g);
+    for (const id of ['s2', 's3', 's4']) s = syncPath(s, `${home}/sessions/${id}`, g);
+    expect(paths(s)).toEqual([s1, `${home}/sessions/s4`]);
+    expect(s.tabs.filter((t) => t.preview)).toHaveLength(1);
+  });
+
+  test('the first session, started in the blank tab, is a normal tab', () => {
+    let s = syncPath(empty, home, g);
+    s = syncPath(s, s1, g);
+    expect(s.tabs[0].preview).toBeUndefined();
+  });
+
+  test('working in a preview, pinning it, or a session that has a tab: never replaced', () => {
     let s = syncPath(empty, s1, g);
     s = syncPath(s, s2, g);
-    expect(paths(s)).toEqual([s1, s2]);
+    s = keepTab(s, s.activeId);
+    s = syncPath(s, `${home}/sessions/s3`, g);
+    expect(paths(s)).toEqual([s1, s2, `${home}/sessions/s3`]);
+    s = setPinned(s, s.activeId!, true);
+    expect(s.tabs[0].preview).toBeUndefined();
+    s = syncPath(s, `${home}/sessions/s4`, g);
+    expect(paths(s)).toContain(`${home}/sessions/s3`);
+    // A session that already has a tab focuses it, preview or not.
+    s = syncPath(s, s2, g);
+    expect(activePath(s)).toBe(s2);
+    expect(s.tabs).toHaveLength(4);
+  });
+
+  test('a page with its own section (Goals) opens a normal tab, never the preview', () => {
+    let s = syncPath(empty, s1, g);
+    s = syncPath(s, s2, g);
+    s = syncPath(s, `${home}/goals`, g);
+    expect(s.tabs.map((t) => !!t.preview)).toEqual([false, true, false]);
+  });
+
+  test('a closed preview reopens as a normal tab', () => {
+    let s = syncPath(empty, s1, g);
+    s = syncPath(s, s2, g);
+    s = closeTab(s, s.activeId!).state;
+    s = reopenClosed(s);
+    expect(s.tabs.every((t) => !t.preview)).toBe(true);
+  });
+
+  test('navigating inside the active section stays there with two tabs of it open', () => {
+    const triggers = `/workspaces/${P}/admin/triggers`;
+    let s = syncPath(empty, models, g);
+    s = openTab(s, models); // Duplicate
+    const clicked = s.activeId;
+    s = syncPath(s, triggers, g);
+    expect(s.activeId).toBe(clicked);
+    expect(paths(s)).toEqual([models, triggers]);
+  });
+
+  test('from a blank tab, a session that already has a tab is focused, not opened twice', () => {
+    let s = syncPath(empty, s1, g);
+    s = openBlankTab(s, home, g);
+    s = syncPath(s, s1, g);
+    expect(paths(s)).toEqual([s1, home]);
+    expect(activePath(s)).toBe(s1);
+  });
+
+  test('a redirect into Customize lands in the Customize tab (/evals → admin/evals)', () => {
+    let s = syncPath(empty, s1, g);
+    s = syncPath(s, models, g);
+    s = syncPath(s, s1, g);
+    s = openBlankTab(s, home, g);
+    s = syncPath(s, `${home}/evals`, g);
+    s = syncPath(s, `${home}/admin/evals`, g);
+    expect(paths(s)).toEqual([s1, home, `${home}/admin/evals`]);
+    expect(activePath(s)).toBe(`${home}/admin/evals`);
+  });
+
+  test('only one blank tab: + focuses the open one', () => {
+    let s = openBlankTab(empty, home, g);
+    s = syncPath(s, s1, g);
+    s = openBlankTab(s, home, g);
+    const blank = s.activeId;
+    s = openBlankTab(s, home, g);
+    expect(s.tabs).toHaveLength(2);
+    expect(s.activeId).toBe(blank);
+    s = syncPath(s, models, g);
+    // From another tab, + goes back to the blank one.
+    s = openBlankTab(s, home, g);
+    expect(activePath(s)).toBe(home);
   });
 
   test('a blank New session tab is replaced by wherever you go next', () => {
@@ -291,7 +387,17 @@ describe('tabRoute', () => {
   test('ignores paths outside the project', () => {
     expect(tabRoute('/workspaces/other/sessions/s1', P)).toBeNull();
     expect(tabRoute('/settings', P)).toBeNull();
-    expect(tabRoute(`/workspaces/${P}/unknown`, P)).toBeNull();
+  });
+
+  test('a project page the table does not name still gets its own tab', () => {
+    expect(tabRoute(`/workspaces/${P}/unknown/x`, P)).toEqual({ kind: 'section', name: 'unknown' });
+    expect(pathGroup(`/workspaces/${P}/unknown/x`, P)).toBe('section:unknown');
+  });
+
+  test('old addresses that redirect into Customize belong to the Customize tab', () => {
+    for (const old of ['evals', 'evals/jobs/j1', 'reminders', 'channels', 'settings/x']) {
+      expect(pathGroup(`/workspaces/${P}/${old}`, P)).toBe('customize');
+    }
   });
 });
 
@@ -335,6 +441,29 @@ describe('sanitizePersisted', () => {
       activeId: null,
       closed: [],
     });
+  });
+
+  test('drops stored tabs that are no page of the project, and keeps one preview', () => {
+    const ok = `/workspaces/${P}/sessions/s1`;
+    const out = sanitizePersisted({
+      byProject: {
+        [P]: {
+          tabs: [
+            { id: 'a', path: 'javascript:alert(1)' },
+            { id: 'b', path: '/workspaces/other/sessions/s1' },
+            { id: 'c', path: ok, preview: true },
+            { id: 'd', path: `${home}/sessions/s2`, preview: true },
+          ],
+          activeId: 'a',
+          closed: [{ id: 'e', path: '//evil.example' }],
+        },
+      },
+    });
+    const p = out.byProject[P];
+    expect(p.tabs.map((t) => t.id)).toEqual(['c', 'd']);
+    expect(p.tabs.map((t) => !!t.preview)).toEqual([true, false]);
+    expect(p.activeId).toBeNull();
+    expect(p.closed).toEqual([]);
   });
 
   test('anything that is not the stored shape becomes empty', () => {

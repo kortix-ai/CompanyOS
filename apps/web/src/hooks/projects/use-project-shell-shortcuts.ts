@@ -2,6 +2,7 @@
 
 import { useCloseProjectTab } from '@/hooks/projects/use-close-project-tab';
 import { isDesktop } from '@kortix/ui/internal/lib/desktop';
+import { desktopTabsMounted } from '@/features/desktop-tabs/desktop-tabs-gate';
 import { CUSTOMIZE_TAB_ID, useProjectSessionTabsStore } from '@/stores/project-session-tabs-store';
 import { useUserPreferencesStore } from '@kortix/ui/internal/stores/user-preferences-store';
 import { usePathname, useRouter } from 'next/navigation';
@@ -23,9 +24,9 @@ function hrefForTab(projectId: string, id: string) {
  * session-tab shortcuts are the web's, and step aside on the desktop shell.
  */
 function desktopStripOwnsTabs(): boolean {
-  // The strip is mounted on every desktop project page, also while it draws
-  // nothing (a fresh start), so the desktop shell itself is the signal.
-  return isDesktop();
+  // Mounted also while it draws nothing (a fresh start). Off (the project's
+  // `desktop_tabs` flag, or a strip that failed), these shortcuts are back.
+  return desktopTabsMounted();
 }
 
 /**

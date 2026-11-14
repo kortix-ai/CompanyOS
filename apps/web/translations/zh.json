@@ -1339,6 +1339,10 @@
         "evals": {
           "name": "Evals",
           "description": "Run your agents on a list of tasks and score the results. A task is an instruction, a sandbox and a test script that writes a score (the Harbor task format). Declare a set of tasks under `evals:` in kortix.yaml, run it against any agent and model, and compare runs to see whether a change made the agent better or worse."
+        },
+        "desktop_tabs": {
+          "name": "桌面标签页",
+          "description": "桌面应用在标题栏中显示类似浏览器的标签页：每个会话、工件和页面都在各自的标签页中打开，⌘T、⌘W 和 ⌘1–9 的用法与浏览器相同。网页版保持不变。"
         }
       },
       "channelsSwitch": {
@@ -27240,9 +27244,7 @@
       "goals": "目标",
       "inbox": "收件箱",
       "memory": "记忆",
-      "members": "成员",
-      "channels": "频道",
-      "reminders": "循环"
+      "members": "成员"
     },
     "sections": {
       "agents": "智能体",

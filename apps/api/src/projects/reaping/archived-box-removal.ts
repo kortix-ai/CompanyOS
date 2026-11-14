@@ -140,10 +140,21 @@ export async function attemptArchivedBoxRemoval(
     return 'failed';
   }
   // A remove that fails because the box is already gone is a success.
-  const { removed, error: removeError } = await removeProviderBox(provider, row.externalId);
+  const { removed, error: firstError } = await removeProviderBox(provider, row.externalId);
+  let removeError = firstError;
   if (removed) {
-    await markRemoved(row.sandboxId, now);
-    return 'removed';
+    try {
+      await markRemoved(row.sandboxId, now);
+      return 'removed';
+    } catch (stampError) {
+      // A failed stamp is a failed attempt: re-check the box, else record the failure and retry later.
+      removeError = stampError;
+      const status = await provider.getStatus(row.externalId).catch(() => 'unknown' as const);
+      if (status === 'removed') {
+        await markRemoved(row.sandboxId, now);
+        return 'removed';
+      }
+    }
   }
   await markRemovalFailed(row.sandboxId, attempts + 1, removeError, now).catch(() => undefined);
   console.warn(

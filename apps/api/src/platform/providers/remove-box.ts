@@ -10,7 +10,7 @@ import type { SandboxProvider, SandboxStatus } from './contract';
  * a `getProvider`-only mock, which would strip this export from every importer.
  */
 export async function removeProviderBox(
-  provider: SandboxProvider,
+  provider: Pick<SandboxProvider, 'remove' | 'getStatus'>,
   externalId: string,
 ): Promise<{ removed: boolean; status: SandboxStatus; error?: unknown }> {
   try {

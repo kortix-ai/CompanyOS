@@ -1,10 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import type { SandboxProvider } from './contract';
+import type { SandboxProvider, SandboxStatus } from './contract';
 import { removeProviderBox } from './remove-box';
 
 /** A provider stub exposing only the two members `removeProviderBox` touches. */
-function stub(remove: () => Promise<void>, getStatus: () => Promise<string>): SandboxProvider {
-  return { remove, getStatus } as unknown as SandboxProvider;
+function stub(
+  remove: () => Promise<void>,
+  getStatus: () => Promise<SandboxStatus>,
+): Pick<SandboxProvider, 'remove' | 'getStatus'> {
+  return { remove, getStatus };
 }
 
 describe('removeProviderBox', () => {

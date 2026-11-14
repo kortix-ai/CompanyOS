@@ -4,6 +4,7 @@
  * before and after the shared delete tail and `fireAndForget` helper.
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { ResolvedTemplate } from './templates';
 
 let state: 'active' | 'building' | 'missing' = 'active';
 const calls: string[] = [];
@@ -44,7 +45,29 @@ mock.module('./templates', () => ({
 const { deleteSandboxImage, kickPreBuild } = await import('./template-prebuilds');
 
 const project = { projectId: 'proj_1', repoUrl: '', defaultBranch: 'main', manifestPath: 'kortix.yaml' };
-const template = (templateId: string | null) => ({ templateId, slug: 'web', provider: 'platinum' }) as never;
+const template = (templateId: string | null): ResolvedTemplate => ({
+  templateId,
+  projectId: 'proj_1',
+  slug: 'web',
+  name: 'web',
+  isShared: false,
+  source: 'toml',
+  provider: 'platinum',
+  image: null,
+  dockerfilePath: null,
+  entrypoint: null,
+  cpu: 1,
+  memoryGb: 1,
+  diskGb: 1,
+  containerRuntime: false,
+  residentialProxy: null,
+  providerState: 'active',
+  providerSnapshotName: null,
+  contentHash: null,
+  builtFromCommit: null,
+  swapKey: null,
+  lastReady: {},
+});
 
 beforeEach(() => {
   state = 'active';
@@ -103,7 +126,7 @@ describe('kickPreBuild', () => {
     const original = console.warn;
     console.warn = (...args: unknown[]) => void warns.push(args);
     try {
-      kickPreBuild(project as never, { slug: 'web', accountId: 'a', source: 'project-create' as never });
+      kickPreBuild(project, { slug: 'web', accountId: 'a', source: 'project-create' });
       await new Promise((resolve) => setTimeout(resolve, 5));
     } finally {
       console.warn = original;

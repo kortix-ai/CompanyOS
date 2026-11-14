@@ -10,6 +10,7 @@ let removeError: Error | null = null;
 let statusResult: string | Error = 'running';
 const providerCalls: string[] = [];
 let updates = 0;
+let failFirstUpdate = false;
 
 mock.module('../../platform/providers', () => ({
   isProviderName: () => true,
@@ -30,7 +31,12 @@ const updateChain: Record<string, unknown> = {};
 const chain = () =>
   new Proxy(updateChain, {
     get: (_t, prop) => {
-      if (prop === 'then') return (resolve: (v: unknown) => void) => resolve(undefined);
+      if (prop === 'then') {
+        return (resolve: (v: unknown) => void, reject: (e: unknown) => void) => {
+          if (failFirstUpdate && updates === 1) reject(new Error('db down'));
+          else resolve(undefined);
+        };
+      }
       return () => chain();
     },
   });
@@ -54,9 +60,17 @@ beforeEach(() => {
   statusResult = 'running';
   providerCalls.length = 0;
   updates = 0;
+  failFirstUpdate = false;
 });
 
 describe('attemptArchivedBoxRemoval', () => {
+  test('a stamp failure after a clean remove is a failed attempt, not a rejection', async () => {
+    failFirstUpdate = true;
+    expect(await attemptArchivedBoxRemoval(row)).toBe('failed');
+    expect(providerCalls).toEqual(['remove:ext-1', 'status:ext-1']);
+    expect(updates).toBe(2);
+  });
+
   test('a clean remove stamps the row removed and never asks for status', async () => {
     expect(await attemptArchivedBoxRemoval(row)).toBe('removed');
     expect(providerCalls).toEqual(['remove:ext-1']);

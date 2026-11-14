@@ -46,13 +46,32 @@ const liveOps: BoxOps = {
     if (!isProviderName(box.provider)) throw new EvalTrialError('RuntimeRequestError', `Sandbox provider ${box.provider} is not supported.`);
     const provider = getProvider(box.provider);
     if (!provider.exec) throw new EvalTrialError('RuntimeRequestError', `Sandbox provider ${box.provider} cannot run commands.`);
-    try {
-      return await provider.exec(box.externalId, ['bash', '-c', asRoot(script)], { timeoutMs });
-    } catch (err) {
-      throw new EvalTrialError('RuntimeRequestError', `The sandbox did not run the command: ${err instanceof Error ? err.message.slice(0, 300) : String(err)}`);
+    // A rate limit of the provider (Platinum answers `429 rate_limited` above 20 writes a second per org, and a job starts
+    // many trials at once) is not a trial failure: wait its `retry-after`, a few times, before the trial errors.
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await provider.exec(box.externalId, ['bash', '-c', asRoot(script)], { timeoutMs });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const wait = rateLimitWaitMs(message);
+        if (wait !== null && attempt < EXEC_RATE_LIMIT_ATTEMPTS) {
+          await new Promise((resolve) => setTimeout(resolve, wait));
+          continue;
+        }
+        throw new EvalTrialError('RuntimeRequestError', `The sandbox did not run the command: ${message.slice(0, 300)}`);
+      }
     }
   },
 };
+
+const EXEC_RATE_LIMIT_ATTEMPTS = 5;
+
+/** The wait a provider's rate-limit error asks for (`429` … `retry-after=2`), with jitter; null for any other error. */
+export function rateLimitWaitMs(message: string): number | null {
+  if (!/\b429\b|rate_limited|too many/i.test(message)) return null;
+  const seconds = Number(/retry-after=(\d+(?:\.\d+)?)/i.exec(message)?.[1] ?? 1);
+  return Math.min(10_000, Math.max(250, seconds * 1000)) + Math.floor(Math.random() * 500);
+}
 
 let ops: BoxOps = liveOps;
 export const boxOps = (): BoxOps => ops;

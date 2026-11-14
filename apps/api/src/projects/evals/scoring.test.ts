@@ -209,3 +209,13 @@ describe('trial plan', () => {
     expect(() => planTrials(config, Array.from({ length: 21 }, (_, i) => task(`t${i}`)))).toThrow('The limit is 2000');
   });
 });
+
+describe('provider rate limits', () => {
+  test('a 429 with retry-after waits that long; any other error is not a rate limit', async () => {
+    const { rateLimitWaitMs } = await import('./box');
+    const wait = rateLimitWaitMs('platinum POST /v1/sandboxes/x/exec -> 429 {"code":"rate_limited"} retry-after=2');
+    expect(wait).toBeGreaterThanOrEqual(2000);
+    expect(wait).toBeLessThan(2500);
+    expect(rateLimitWaitMs('exec -> 500 internal')).toBeNull();
+  });
+});

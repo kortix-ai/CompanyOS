@@ -148,8 +148,8 @@ const gb = (mb: number | null): number | undefined => (mb ? Math.max(1, Math.cei
  * project repository, gets a template of its own, made on first use and shared
  * by every later trial of the same image and size.
  */
-async function sandboxSlugFor(ctx: TrialContext, task: HarborTask, ref: EvalTaskRef): Promise<string | null> {
-  if (ctx.config.environment.sandbox) return ctx.config.environment.sandbox;
+/** The project sandbox template a task's custom environment needs, or null for the default sandbox. Pure: the job start checks it too. */
+export function templateNeedFor(task: HarborTask, ref: EvalTaskRef): { slug: string; image: string | null; dockerfilePath: string | null; spec: { cpu?: number; memoryGb?: number; diskGb?: number } } | null {
   const dockerfilePath = !task.dockerImage && task.hasDockerfile && ref.kind === 'repo' ? `${ref.path}/environment/Dockerfile` : null;
   if (!task.dockerImage && !dockerfilePath) {
     if (task.hasDockerfile) {
@@ -159,10 +159,25 @@ async function sandboxSlugFor(ctx: TrialContext, task: HarborTask, ref: EvalTask
   }
   const spec = { cpu: task.cpus ? Math.ceil(task.cpus) : undefined, memoryGb: gb(task.memoryMb), diskGb: gb(task.storageMb) };
   const identity = JSON.stringify([task.dockerImage ?? dockerfilePath, spec.cpu ?? 0, spec.memoryGb ?? 0, spec.diskGb ?? 0]);
-  const slug = `eval-${new Bun.CryptoHasher('sha256').update(identity).digest('hex').slice(0, 16)}`;
+  return { slug: `eval-${new Bun.CryptoHasher('sha256').update(identity).digest('hex').slice(0, 16)}`, image: task.dockerImage ?? null, dockerfilePath, spec };
+}
+
+async function sandboxSlugFor(ctx: TrialContext, task: HarborTask, ref: EvalTaskRef): Promise<string | null> {
+  if (ctx.config.environment.sandbox) return ctx.config.environment.sandbox;
+  const need = templateNeedFor(task, ref);
+  if (!need) return null;
+  const { slug, dockerfilePath, spec } = need;
   const gitProject = await withProjectGitAuth(ctx.project);
   const existing = (await listTemplatesForProject(gitProject)).find((template) => template.slug === slug);
   if (existing) return slug;
+  // A sandbox template is project infrastructure (POST /sandbox-templates needs project.sandbox.write): a job creates
+  // one only when whoever started it holds that capability.
+  if (startedByOf(ctx.job)?.may_create_templates !== true) {
+    throw new EvalTrialError(
+      'SandboxBuildFailedError',
+      `This task needs a sandbox template for ${task.dockerImage ?? dockerfilePath}, which this project does not have, and whoever started the job may not create one (project.sandbox.write).`,
+    );
+  }
   try {
     await createTemplate({
       projectId: ctx.project.projectId,

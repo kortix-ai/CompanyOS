@@ -103,6 +103,12 @@ export interface StartedBy {
   api_key_type: string | null;
   in_session: boolean;
   caller_session_id: string | null;
+  /**
+   * The starter holds `project.sandbox.write`: a task's custom environment may
+   * become a new project sandbox template. Without it, a job runs only on
+   * templates the project already has.
+   */
+  may_create_templates?: boolean;
 }
 
 export const startedByOf = (job: EvalJobRow): StartedBy | null => (job.startedBy as unknown as StartedBy | null) ?? null;

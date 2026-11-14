@@ -525,7 +525,7 @@ export const RerunEvalJobRequestSchema = z
 export type RerunEvalJobRequest = z.input<typeof RerunEvalJobRequestSchema>;
 
 export const EvalErrorSchema = z.object({
-  error: z.enum(['eval_not_found', 'eval_invalid', 'eval_conflict', 'feature_disabled', 'eval_unavailable']),
+  error: z.enum(['eval_not_found', 'eval_invalid', 'eval_conflict', 'eval_forbidden', 'feature_disabled', 'eval_unavailable']),
   message: z.string(),
   violations: z.array(z.string()).optional(),
 });

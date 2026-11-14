@@ -102,8 +102,9 @@ function idempotencyKeyOf(c: EvalContextC): string | null | Response {
 }
 
 /** The caller as the job row keeps it: trial sessions are created as this principal. */
-function requesterOf(c: EvalContextC, loaded: Loaded, idempotencyKey: string | null): evals.JobRequester {
+async function requesterOf(c: EvalContextC, loaded: Loaded, idempotencyKey: string | null): Promise<evals.JobRequester> {
   const authType = (c.get('authType') as string | undefined) ?? null;
+  const mayCreateTemplates = await projectCapabilityAllowed(c, loaded.userId, loaded.row.accountId, loaded.row.projectId, PROJECT_ACTIONS.PROJECT_SANDBOX_WRITE);
   return {
     userId: loaded.userId,
     idempotencyKey,
@@ -113,6 +114,7 @@ function requesterOf(c: EvalContextC, loaded: Loaded, idempotencyKey: string | n
       api_key_type: (c.get('apiKeyType') as string | undefined) ?? null,
       in_session: isProjectSessionPrincipal(c),
       caller_session_id: callerKortixSessionId(c),
+      may_create_templates: mayCreateTemplates,
     },
   };
 }
@@ -121,6 +123,7 @@ function requesterOf(c: EvalContextC, loaded: Loaded, idempotencyKey: string | n
 function errorResponse(c: EvalContextC, error: unknown): Response {
   if (error instanceof EvalConfigError) return c.json({ error: 'eval_invalid' as const, message: error.message, violations: error.violations }, 422);
   if (error instanceof evals.EvalNotFoundError) return notFound(c);
+  if (error instanceof evals.EvalForbiddenError) return c.json({ error: 'eval_forbidden' as const, message: error.message }, 403);
   if (error instanceof evals.EvalConflictError) return c.json({ error: 'eval_conflict' as const, message: error.message, ...(error.jobId ? { job_id: error.jobId } : {}) }, 409);
   throw error;
 }
@@ -400,7 +403,7 @@ export function registerEvalRoutes(): void {
         if (!driveStorageAvailable()) return c.json({ error: 'eval_unavailable' as const, message: 'Evals keep their results in Files, and this deployment has no Files storage.' }, 503);
         const key = idempotencyKeyOf(c);
         if (key instanceof Response) return key;
-        const created = await evals.createJob(loaded.row, requesterOf(c, loaded, key), body);
+        const created = await evals.createJob(loaded.row, await requesterOf(c, loaded, key), body);
         return c.json({ job: serializeJob(created.job), warnings: created.warnings }, created.replayed ? 200 : 201);
       } catch (error) {
         return errorResponse(c, error);
@@ -537,7 +540,7 @@ export function registerEvalRoutes(): void {
       const key = idempotencyKeyOf(c);
       if (key instanceof Response) return key;
       try {
-        const rerun = await evals.rerunJob(loaded.row, requesterOf(c, loaded, key), c.req.param('jobId') ?? '', body);
+        const rerun = await evals.rerunJob(loaded.row, await requesterOf(c, loaded, key), c.req.param('jobId') ?? '', body);
         return c.json({ job: serializeJob(rerun.job) }, rerun.replayed ? 200 : 201);
       } catch (error) {
         return errorResponse(c, error);

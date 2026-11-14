@@ -22,7 +22,8 @@ import { resolveCommitSha } from '../git';
 import { withProjectGitAuth } from '../lib/git';
 import type { ProjectRow } from '../lib/serializers';
 import { EvalConfigError, planTasks, planTrials, readManifestEvals, resolveSuite, unknownAgents, type PlannedTrial, type ResolvedSuite } from './config';
-import { stopTrialSandbox } from './runner';
+import { stopTrialSandbox, templateNeedFor } from './runner';
+import { listTemplatesForProject } from '../../snapshots/templates';
 import { redactedConfig, serializeJob, serializeTrial } from './serialize';
 import { evalsDrive, jobFolder, json, listEvalFiles, removeEvalFolder, trialFolder, writeEvalFiles } from './storage';
 import {
@@ -51,6 +52,8 @@ import type { HarborTask } from './harbor-task';
 import type { PlannedTask } from './config';
 
 export class EvalNotFoundError extends Error {}
+/** The caller lacks a capability the job needs beyond starting sessions. */
+export class EvalForbiddenError extends Error {}
 export class EvalConflictError extends Error {
   constructor(
     message: string,
@@ -380,9 +383,39 @@ export async function createJob(project: ProjectRow, requester: JobRequester, re
   const replay = await replayOf(project, requester, hash);
   if (replay) return { job: replay, replayed: true, warnings: [] };
   const plan = await planRequest(project, request);
+  await assertTemplatesAllowed(project, requester, plan.config, plan.tasks);
   const baseName = safeName(plan.config.job_name ?? `${request.suite ?? 'eval'}-${stamp(now)}`);
   const inserted = await insertNamedJob(project, requester, { suite: request.suite ?? null, baseName, commit: plan.commit, ref: request.ref ?? null, config: plan.config, trials: plan.trials, rerunOf: null, requestHash: hash });
   return { ...inserted, warnings: inserted.replayed ? [] : plan.warnings };
+}
+
+/**
+ * A task with its own environment runs on a project sandbox template; the
+ * runner makes a missing one. Making one is project infrastructure
+ * (`project.sandbox.write`), so a caller without it may start only jobs whose
+ * templates the project already has.
+ */
+async function assertTemplatesAllowed(project: ProjectRow, requester: JobRequester, config: EvalJobConfig, tasks: PlannedTask[]): Promise<void> {
+  if (requester.startedBy.may_create_templates || config.environment.sandbox) return;
+  const needed = new Map<string, string>();
+  for (const planned of tasks) {
+    const need = (() => {
+      try {
+        return templateNeedFor(planned.task, planned.ref);
+      } catch {
+        return null;
+      }
+    })();
+    if (need) needed.set(need.slug, need.image ?? need.dockerfilePath ?? planned.name);
+  }
+  if (needed.size === 0) return;
+  const have = new Set((await listTemplatesForProject(await withProjectGitAuth(project))).map((template) => template.slug));
+  const missing = [...needed].filter(([slug]) => !have.has(slug)).map(([, what]) => what);
+  if (missing.length) {
+    throw new EvalForbiddenError(
+      `These tasks need sandbox templates this workspace does not have yet (${missing.slice(0, 3).join(', ')}${missing.length > 3 ? ', …' : ''}). Making one needs project.sandbox.write: ask someone who has it to start the job once.`,
+    );
+  }
 }
 
 /** A reward below 1, or none. */

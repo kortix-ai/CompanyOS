@@ -59,7 +59,16 @@ evals:
   broken:
     tasks: evals/missing
     agents: [kortix]
+  image:
+    tasks: evals/images
+    agents: [oracle]
 `;
+// A task with its own image: the first job that runs it makes a project sandbox template.
+const IMAGE_TASK = {
+  'evals/images/pinned/task.toml': `${TASK_TOML}\n[environment]\ndocker_image = "ubuntu:24.04"\n`,
+  'evals/images/pinned/instruction.md': 'Create /var/tmp/pinned.txt.\n',
+  'evals/images/pinned/tests/test.sh': '#!/bin/bash\necho 1 > /logs/verifier/reward.txt\n',
+};
 const HARBOR_CONFIG = 'jobs_dir: jobs\nn_attempts: 1\nenvironment:\n  type: docker\nagents:\n  - name: kortix\ndatasets:\n  - path: evals/tasks\n';
 
 interface Job {
@@ -79,7 +88,7 @@ async function openWorld(ctx: FlowContext) {
   const project = await team.project({ managedGit: true });
   const world = await AgentPrincipalsWorld.open(ctx, { accountId: team.id, projectId: project.id });
   await world.commitToMain(
-    { 'kortix.yaml': MANIFEST, 'evals/harbor.yaml': HARBOR_CONFIG, ...task('alpha'), ...task('beta'), 'evals/tasks/not-a-task/README.md': 'no task.toml here\n' },
+    { 'kortix.yaml': MANIFEST, 'evals/harbor.yaml': HARBOR_CONFIG, ...task('alpha'), ...task('beta'), ...IMAGE_TASK, 'evals/tasks/not-a-task/README.md': 'no task.toml here\n' },
     'ke2e: eval tasks',
   );
   await world.setFeature('evals', true);
@@ -174,6 +183,13 @@ flow(
       (await member.get(R.task, { params: { ...params, taskId } })).status(403);
       (await member.get(R.taskFile, { params: { ...params, taskId }, query: { path: 'tests/test.sh' } })).status(403);
       (await member.get(R.taskResults, { params: { ...params, taskId } })).status(403);
+    });
+
+    await ctx.step('a member without project.sandbox.write starts a task whose image has no template yet → 403 eval_forbidden, no job', async () => {
+      const before = (await owner.get(R.jobs, { params })).status(200).json<{ total: number }>().total;
+      expectError(await member.post(R.jobs, { suite: 'image' }, { params }), 403, 'eval_forbidden');
+      const after = (await owner.get(R.jobs, { params })).status(200).json<{ total: number }>().total;
+      if (after !== before) throw new Error(`a refused start created a job: ${before} → ${after}`);
     });
 
     await ctx.step('the dataset catalog lists the built-in dataset first, with its kind and versions', async () => {

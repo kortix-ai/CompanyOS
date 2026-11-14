@@ -22,7 +22,7 @@ export function ProjectCalendarNavItem({ projectId }: { projectId: string }) {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
   }, []);
-  const due = useWorkspaceCalendarItems(visible ? projectId : null, { assignee: 'me', status: 'open', to: endOfToday, undated: false }, { refetchMs: 60_000 });
+  const due = useWorkspaceCalendarItems(visible ? projectId : null, { with: 'me', status: 'open', to: endOfToday, undated: false }, { refetchMs: 60_000 });
   const href = uiRoutes().calendar?.(projectId) ?? null;
   if (!href || !visible) return null;
   const count = due.data?.length ?? 0;

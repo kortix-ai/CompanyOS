@@ -617,7 +617,7 @@ const FLAGS: readonly FeatureFlagDef[] = [
     key: 'calendar',
     name: 'Calendar',
     description:
-      'A shared calendar for people and agents: items with a date, an owner and comments, beside the scheduled triggers and Loops. Mention someone with @ to notify them. Agents use `kortix calendar`.',
+      'A shared calendar for people and agents: dated items with the people on them and comments, beside the scheduled triggers and Loops. Mention someone with @ to notify them. Agents use `kortix calendar`.',
     stability: 'experimental',
     available: () => true,
     platformDefault: () => false,

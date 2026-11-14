@@ -1346,7 +1346,7 @@
         },
         "calendar": {
           "name": "カレンダー",
-          "description": "人とエージェントの共有カレンダー：日付・担当者・コメント付きの項目を、スケジュール済みのトリガーとループと並べて表示します。@ でメンションすると通知されます。エージェントは `kortix calendar` を使います。"
+          "description": "人とエージェントの共有カレンダー：日付・参加者・コメント付きの項目を、スケジュール済みのトリガーとループと並べて表示します。@ でメンションすると通知されます。エージェントは `kortix calendar` を使います。"
         }
       },
       "channelsSwitch": {
@@ -3438,7 +3438,7 @@
       "automation_recovered": "失敗していたトリガーまたはループが再び動作します。",
       "capture_device_down": "Kortix Capture のコンピューターが記録していません。Capture の管理者に送られます。",
       "capture_device_recovered": "停止していた Kortix Capture のコンピューターが再び記録しています。",
-      "mention": "他の人があなたをメンションするか、カレンダーの項目をあなたに割り当てたとき。"
+      "mention": "他の人があなたをメンションするか、カレンダーの項目にあなたを追加したとき。"
     },
     "inbox": {
       "title": "受信トレイ",
@@ -24697,7 +24697,7 @@
   },
   "calendar": {
     "title": "カレンダー",
-    "gateDescription": "人とエージェントの共有カレンダー：日付・担当者・コメント付きの項目を、スケジュール済みのトリガーとループと並べて表示します。",
+    "gateDescription": "人とエージェントの共有カレンダー：日付・参加者・コメント付きの項目を、スケジュール済みのトリガーとループと並べて表示します。",
     "newItem": "新しい項目",
     "today": "今日",
     "previousWeek": "前の週",
@@ -24714,9 +24714,12 @@
     },
     "people": "メンバー",
     "agents": "エージェント",
+    "searchPeople": "メンバーとエージェントを検索",
     "noDate": "日付なし",
     "noDateHint": "日付のない項目はここに表示されます。",
     "allDay": "終日",
+    "startTime": "開始時刻",
+    "endTime": "終了時刻",
     "overdue": "期限切れ",
     "status": {
       "open": "未完了",
@@ -24732,9 +24735,7 @@
     "dayEntries": "{day}、{count, plural, other {# 件}}",
     "showWeekOf": "{day} の週を表示",
     "more": "ほか {count} 件",
-    "nobody": "担当なし",
     "when": "日時",
-    "owner": "担当",
     "created": "作成",
     "clearDate": "日付を削除",
     "saveFailed": "変更は保存されませんでした。",

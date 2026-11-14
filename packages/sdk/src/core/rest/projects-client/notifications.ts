@@ -107,7 +107,7 @@ type LiveInboxNotificationKind = (typeof INBOX_NOTIFICATION_KINDS)[number];
  * agent asks (`question`, `permission`), a session was shared with you
  * (`shared`), an automation fails or works again, or a Capture computer stops
  * recording or records again (`capture_device_down`, `capture_device_recovered`),
- * or someone else @mentioned you or assigned you a calendar item (`mention`, flag `calendar`).
+ * or someone else @mentioned you or added you to a calendar item (`mention`, flag `calendar`).
  * `message` is deprecated: a room message. Rooms were removed (2026-11); the API no longer serves these routes. Removed in the next major.
  */
 export type InboxNotificationKind = LiveInboxNotificationKind | 'message';

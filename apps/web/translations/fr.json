@@ -1346,7 +1346,7 @@
         },
         "calendar": {
           "name": "Calendrier",
-          "description": "Un calendrier partagé pour les personnes et les agents : des éléments avec une date, un responsable et des commentaires, à côté des déclencheurs et Loops planifiés. Mentionnez quelqu’un avec @ pour le notifier. Les agents utilisent `kortix calendar`."
+          "description": "Un calendrier partagé pour les personnes et les agents : des éléments avec une date, des participants et des commentaires, à côté des déclencheurs et Loops planifiés. Mentionnez quelqu’un avec @ pour le notifier. Les agents utilisent `kortix calendar`."
         }
       },
       "channelsSwitch": {
@@ -3438,7 +3438,7 @@
       "automation_recovered": "Un déclencheur ou une boucle en échec fonctionne de nouveau.",
       "capture_device_down": "Un ordinateur Kortix Capture n’enregistre pas. Envoyé aux personnes qui gèrent Capture.",
       "capture_device_recovered": "Un ordinateur Kortix Capture arrêté enregistre à nouveau.",
-      "mention": "Quelqu’un d’autre vous mentionne ou vous assigne un élément du calendrier."
+      "mention": "Quelqu’un d’autre vous mentionne ou vous ajoute à un élément du calendrier."
     },
     "inbox": {
       "title": "Boîte de réception",
@@ -24697,7 +24697,7 @@
   },
   "calendar": {
     "title": "Calendrier",
-    "gateDescription": "Un calendrier partagé pour les personnes et les agents : des éléments avec une date, un responsable et des commentaires, à côté de vos déclencheurs et Loops planifiés.",
+    "gateDescription": "Un calendrier partagé pour les personnes et les agents : des éléments avec une date, des participants et des commentaires, à côté de vos déclencheurs et Loops planifiés.",
     "newItem": "Nouvel élément",
     "today": "Aujourd’hui",
     "previousWeek": "Semaine précédente",
@@ -24714,9 +24714,12 @@
     },
     "people": "Personnes",
     "agents": "Agents",
+    "searchPeople": "Rechercher des personnes et des agents",
     "noDate": "Sans date",
     "noDateHint": "Les éléments sans date attendent ici.",
     "allDay": "Toute la journée",
+    "startTime": "Heure de début",
+    "endTime": "Heure de fin",
     "overdue": "En retard",
     "status": {
       "open": "Ouvert",
@@ -24732,9 +24735,7 @@
     "dayEntries": "{day}, {count, plural, one {# entrée} other {# entrées}}",
     "showWeekOf": "Afficher la semaine du {day}",
     "more": "{count} de plus",
-    "nobody": "Personne",
     "when": "Quand",
-    "owner": "Responsable",
     "created": "Créé",
     "clearDate": "Retirer la date",
     "saveFailed": "La modification n’a pas été enregistrée.",

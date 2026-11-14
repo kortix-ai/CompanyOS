@@ -1346,7 +1346,7 @@
         },
         "calendar": {
           "name": "Calendario",
-          "description": "Un calendario compartido para personas y agentes: elementos con fecha, responsable y comentarios, junto a los disparadores y Loops programados. Menciona a alguien con @ para avisarle. Los agentes usan `kortix calendar`."
+          "description": "Un calendario compartido para personas y agentes: elementos con fecha, participantes y comentarios, junto a los disparadores y Loops programados. Menciona a alguien con @ para avisarle. Los agentes usan `kortix calendar`."
         }
       },
       "channelsSwitch": {
@@ -3438,7 +3438,7 @@
       "automation_recovered": "Un trigger o bucle que fallaba vuelve a funcionar.",
       "capture_device_down": "Un ordenador de Kortix Capture no graba. Se envía a quien administra Capture.",
       "capture_device_recovered": "Un ordenador de Kortix Capture que se detuvo vuelve a grabar.",
-      "mention": "Otra persona te menciona o te asigna un elemento del calendario."
+      "mention": "Otra persona te menciona o te añade a un elemento del calendario."
     },
     "inbox": {
       "title": "Bandeja de entrada",
@@ -24697,7 +24697,7 @@
   },
   "calendar": {
     "title": "Calendario",
-    "gateDescription": "Un calendario compartido para personas y agentes: elementos con fecha, responsable y comentarios, junto a tus disparadores y Loops programados.",
+    "gateDescription": "Un calendario compartido para personas y agentes: elementos con fecha, participantes y comentarios, junto a tus disparadores y Loops programados.",
     "newItem": "Nuevo elemento",
     "today": "Hoy",
     "previousWeek": "Semana anterior",
@@ -24714,9 +24714,12 @@
     },
     "people": "Personas",
     "agents": "Agentes",
+    "searchPeople": "Buscar personas y agentes",
     "noDate": "Sin fecha",
     "noDateHint": "Los elementos sin fecha esperan aquí.",
     "allDay": "Todo el día",
+    "startTime": "Hora de inicio",
+    "endTime": "Hora de fin",
     "overdue": "Vencido",
     "status": {
       "open": "Abierto",
@@ -24732,9 +24735,7 @@
     "dayEntries": "{day}, {count, plural, one {# entrada} other {# entradas}}",
     "showWeekOf": "Ver la semana del {day}",
     "more": "{count} más",
-    "nobody": "Nadie",
     "when": "Cuándo",
-    "owner": "Responsable",
     "created": "Creado",
     "clearDate": "Quitar fecha",
     "saveFailed": "El cambio no se guardó.",

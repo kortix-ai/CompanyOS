@@ -1758,6 +1758,13 @@
       "when": 1794662454104,
       "tag": "20261114132054_calendar_items_and_mentions",
       "breakpoints": true
+    },
+    {
+      "idx": 251,
+      "version": "7",
+      "when": 1794677302076,
+      "tag": "20261114172822_calendar_item_people",
+      "breakpoints": true
     }
   ]
 }

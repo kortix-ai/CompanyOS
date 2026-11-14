@@ -1346,7 +1346,7 @@
         },
         "calendar": {
           "name": "Calendário",
-          "description": "Um calendário compartilhado para pessoas e agentes: itens com data, responsável e comentários, ao lado dos gatilhos e Loops agendados. Mencione alguém com @ para notificá-lo. Os agentes usam `kortix calendar`."
+          "description": "Um calendário compartilhado para pessoas e agentes: itens com data, participantes e comentários, ao lado dos gatilhos e Loops agendados. Mencione alguém com @ para notificá-lo. Os agentes usam `kortix calendar`."
         }
       },
       "channelsSwitch": {
@@ -3438,7 +3438,7 @@
       "automation_recovered": "Um trigger ou ciclo que falhava volta a funcionar.",
       "capture_device_down": "Um computador do Kortix Capture não está gravando. Enviado a quem gerencia o Capture.",
       "capture_device_recovered": "Um computador do Kortix Capture que parou voltou a gravar.",
-      "mention": "Outra pessoa menciona você ou atribui a você um item do calendário."
+      "mention": "Outra pessoa menciona você ou adiciona você a um item do calendário."
     },
     "inbox": {
       "title": "Caixa de entrada",
@@ -24697,7 +24697,7 @@
   },
   "calendar": {
     "title": "Calendário",
-    "gateDescription": "Um calendário compartilhado para pessoas e agentes: itens com data, responsável e comentários, ao lado dos seus gatilhos e Loops agendados.",
+    "gateDescription": "Um calendário compartilhado para pessoas e agentes: itens com data, participantes e comentários, ao lado dos seus gatilhos e Loops agendados.",
     "newItem": "Novo item",
     "today": "Hoje",
     "previousWeek": "Semana anterior",
@@ -24714,9 +24714,12 @@
     },
     "people": "Pessoas",
     "agents": "Agentes",
+    "searchPeople": "Buscar pessoas e agentes",
     "noDate": "Sem data",
     "noDateHint": "Itens sem data esperam aqui.",
     "allDay": "Dia inteiro",
+    "startTime": "Hora de início",
+    "endTime": "Hora de término",
     "overdue": "Atrasado",
     "status": {
       "open": "Aberto",
@@ -24732,9 +24735,7 @@
     "dayEntries": "{day}, {count, plural, one {# entrada} other {# entradas}}",
     "showWeekOf": "Mostrar a semana de {day}",
     "more": "mais {count}",
-    "nobody": "Ninguém",
     "when": "Quando",
-    "owner": "Responsável",
     "created": "Criado",
     "clearDate": "Remover data",
     "saveFailed": "A alteração não foi salva.",

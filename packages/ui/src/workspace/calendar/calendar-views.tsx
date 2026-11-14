@@ -11,7 +11,7 @@ import { useState, type DragEvent } from 'react';
 import { useLocale, useTranslations } from '../../i18n';
 import { cn } from '../../lib/utils';
 import { dayKey, isOverdue, itemDayKey, monthWeeks, weekDays } from './calendar-dates';
-import { Who, type CalendarDirectory } from './calendar-people';
+import { Participants, type CalendarDirectory } from './calendar-people';
 import type { ScheduledFire } from './calendar-scheduled';
 
 export const UNDATED = 'undated';
@@ -73,8 +73,12 @@ function useTimeLabel() {
   const locale = useLocale();
   const t = useTranslations('calendar');
   const clock = new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' });
-  return (item: Pick<CalendarItem, 'starts_at' | 'all_day'>) =>
-    !item.starts_at ? t('noDate') : item.all_day ? t('allDay') : clock.format(new Date(item.starts_at));
+  return (item: Pick<CalendarItem, 'starts_at' | 'ends_at' | 'all_day'>) => {
+    if (!item.starts_at) return t('noDate');
+    if (item.all_day) return t('allDay');
+    const start = clock.format(new Date(item.starts_at));
+    return item.ends_at ? `${start} – ${clock.format(new Date(item.ends_at))}` : start;
+  };
 }
 
 function ItemCard({ item, selected, directory, now, onOpen }: { item: CalendarItem; selected: boolean; directory: CalendarDirectory; now: Date; onOpen: () => void }) {
@@ -105,9 +109,9 @@ function ItemCard({ item, selected, directory, now, onOpen }: { item: CalendarIt
             {item.comment_count}
           </span>
         ) : null}
-        {item.assignee ? (
+        {item.people.length > 0 ? (
           <span className="ml-auto">
-            <Who who={item.assignee} directory={directory} nameless unknown={t('formerMember')} />
+            <Participants people={item.people} directory={directory} />
           </span>
         ) : null}
       </span>

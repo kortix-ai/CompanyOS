@@ -10506,7 +10506,7 @@ export const evalTrials = kortixSchema.table('eval_trials', {
 ]).enableRLS();
 
 // ─── Calendar (flag `calendar`) ─────────────────────────────────────────────
-// A workspace's shared calendar: dated items with an owner and comments.
+// A workspace's shared calendar: dated items, the people on them and comments.
 // Scheduled triggers and Loops are not stored here; the clients compute their
 // fires from the trigger list. Every member who can open the workspace reads
 // and writes every item (projects/calendar/).
@@ -10522,9 +10522,8 @@ export const calendarItems = kortixSchema.table('calendar_items', {
   startsAt: timestamp('starts_at', { withTimezone: true }),
   allDay: boolean('all_day').default(false).notNull(),
   status: text('status').$type<'open' | 'done'>().default('open').notNull(),
-  /** The owner: one person, one agent (its kortix.yaml name), or nobody. */
-  assigneeUserId: uuid('assignee_user_id'),
-  assigneeAgent: text('assignee_agent'),
+  /** The end of a timed item; null for an all-day item, an item with no date, or a point in time. */
+  endsAt: timestamp('ends_at', { withTimezone: true }),
   /** Who created it: a person, or an agent session (agent name plus session id). */
   createdByUserId: uuid('created_by_user_id'),
   createdByAgent: text('created_by_agent'),
@@ -10535,9 +10534,27 @@ export const calendarItems = kortixSchema.table('calendar_items', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index('idx_calendar_items_project_starts').on(table.projectId, table.startsAt),
-  index('idx_calendar_items_project_assignee').on(table.projectId, table.assigneeUserId).where(sql`${table.status} = 'open'`),
   check('calendar_items_status_check', sql`${table.status} in ('open', 'done')`),
-  check('calendar_items_one_assignee', sql`${table.assigneeUserId} IS NULL OR ${table.assigneeAgent} IS NULL`),
+  check('calendar_items_ends_after_starts', sql`${table.endsAt} IS NULL OR (${table.startsAt} IS NOT NULL AND ${table.endsAt} > ${table.startsAt})`),
+]).enableRLS();
+
+/** The people on an item: persons and agents alike, each at most once. */
+export const calendarItemPeople = kortixSchema.table('calendar_item_people', {
+  itemId: uuid('item_id')
+    .notNull()
+    .references(() => calendarItems.itemId, { onDelete: 'cascade' }),
+  projectId: uuid('project_id').notNull(),
+  /** A person; null for an agent. */
+  userId: uuid('user_id'),
+  /** An agent by its kortix.yaml name; null for a person. */
+  agent: text('agent'),
+  addedAt: timestamp('added_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('uniq_calendar_item_people_user').on(table.itemId, table.userId).where(sql`${table.userId} IS NOT NULL`),
+  uniqueIndex('uniq_calendar_item_people_agent').on(table.itemId, table.agent).where(sql`${table.agent} IS NOT NULL`),
+  index('idx_calendar_item_people_project_user').on(table.projectId, table.userId),
+  index('idx_calendar_item_people_project_agent').on(table.projectId, table.agent),
+  check('calendar_item_people_one_kind', sql`(${table.userId} IS NULL) <> (${table.agent} IS NULL)`),
 ]).enableRLS();
 
 export const calendarComments = kortixSchema.table('calendar_comments', {

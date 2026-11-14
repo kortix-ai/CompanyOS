@@ -1346,7 +1346,7 @@
         },
         "calendar": {
           "name": "Kalendar",
-          "description": "Zajednički kalendar za ljude i agente: stavke sa datumom, odgovornim i komentarima, pored zakazanih okidača i petlji. Pomeni nekoga sa @ da ga obavestiš. Agenti koriste `kortix calendar`."
+          "description": "Zajednički kalendar za ljude i agente: stavke sa datumom, učesnicima i komentarima, pored zakazanih okidača i petlji. Pomeni nekoga sa @ da ga obavestiš. Agenti koriste `kortix calendar`."
         }
       },
       "channelsSwitch": {
@@ -3438,7 +3438,7 @@
       "automation_recovered": "Окидач или петља који нису успевали поново раде.",
       "capture_device_down": "Kortix Capture рачунар не снима. Шаље се људима који управљају Capture-ом.",
       "capture_device_recovered": "Kortix Capture рачунар који је стао поново снима.",
-      "mention": "Neko drugi te pomene ili ti dodeli stavku u kalendaru."
+      "mention": "Neko drugi te pomene ili te doda u stavku u kalendaru."
     },
     "inbox": {
       "title": "Пријемно сандуче",
@@ -24697,7 +24697,7 @@
   },
   "calendar": {
     "title": "Kalendar",
-    "gateDescription": "Zajednički kalendar za ljude i agente: stavke sa datumom, odgovornim i komentarima, pored zakazanih okidača i petlji.",
+    "gateDescription": "Zajednički kalendar za ljude i agente: stavke sa datumom, učesnicima i komentarima, pored zakazanih okidača i petlji.",
     "newItem": "Nova stavka",
     "today": "Danas",
     "previousWeek": "Prethodna nedelja",
@@ -24714,9 +24714,12 @@
     },
     "people": "Ljudi",
     "agents": "Agenti",
+    "searchPeople": "Pretraži ljude i agente",
     "noDate": "Bez datuma",
     "noDateHint": "Stavke bez datuma čekaju ovde.",
     "allDay": "Ceo dan",
+    "startTime": "Vreme početka",
+    "endTime": "Vreme završetka",
     "overdue": "Kasni",
     "status": {
       "open": "Otvoreno",
@@ -24732,9 +24735,7 @@
     "dayEntries": "{day}, {count, plural, one {# stavka} few {# stavke} other {# stavki}}",
     "showWeekOf": "Prikaži nedelju od {day}",
     "more": "još {count}",
-    "nobody": "Niko",
     "when": "Kada",
-    "owner": "Odgovoran",
     "created": "Napravljeno",
     "clearDate": "Ukloni datum",
     "saveFailed": "Izmena nije sačuvana.",

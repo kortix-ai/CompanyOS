@@ -1346,7 +1346,7 @@
         },
         "calendar": {
           "name": "Kalender",
-          "description": "Ein gemeinsamer Kalender für Menschen und Agenten: Einträge mit Datum, Verantwortlichem und Kommentaren, neben den geplanten Triggern und Loops. Erwähne jemanden mit @, um ihn zu benachrichtigen. Agenten nutzen `kortix calendar`."
+          "description": "Ein gemeinsamer Kalender für Menschen und Agenten: Einträge mit Datum, Beteiligten und Kommentaren, neben den geplanten Triggern und Loops. Erwähne jemanden mit @, um ihn zu benachrichtigen. Agenten nutzen `kortix calendar`."
         }
       },
       "channelsSwitch": {
@@ -3438,7 +3438,7 @@
       "automation_recovered": "Ein fehlschlagender Trigger oder eine Schleife funktioniert wieder.",
       "capture_device_down": "Ein Kortix-Capture-Computer nimmt nicht auf. Geht an Personen, die Capture verwalten.",
       "capture_device_recovered": "Ein gestoppter Kortix-Capture-Computer nimmt wieder auf.",
-      "mention": "Jemand anderes erwähnt dich oder weist dir einen Kalendereintrag zu."
+      "mention": "Jemand anderes erwähnt dich oder fügt dich einem Kalendereintrag hinzu."
     },
     "inbox": {
       "title": "Posteingang",
@@ -24697,7 +24697,7 @@
   },
   "calendar": {
     "title": "Kalender",
-    "gateDescription": "Ein gemeinsamer Kalender für Menschen und Agenten: Einträge mit Datum, Verantwortlichem und Kommentaren, neben deinen geplanten Triggern und Loops.",
+    "gateDescription": "Ein gemeinsamer Kalender für Menschen und Agenten: Einträge mit Datum, Beteiligten und Kommentaren, neben deinen geplanten Triggern und Loops.",
     "newItem": "Neuer Eintrag",
     "today": "Heute",
     "previousWeek": "Vorherige Woche",
@@ -24714,9 +24714,12 @@
     },
     "people": "Personen",
     "agents": "Agenten",
+    "searchPeople": "Personen und Agenten suchen",
     "noDate": "Ohne Datum",
     "noDateHint": "Einträge ohne Datum warten hier.",
     "allDay": "Ganztägig",
+    "startTime": "Startzeit",
+    "endTime": "Endzeit",
     "overdue": "Überfällig",
     "status": {
       "open": "Offen",
@@ -24732,9 +24735,7 @@
     "dayEntries": "{day}, {count, plural, one {# Eintrag} other {# Einträge}}",
     "showWeekOf": "Woche vom {day} anzeigen",
     "more": "{count} weitere",
-    "nobody": "Niemand",
     "when": "Wann",
-    "owner": "Verantwortlich",
     "created": "Erstellt",
     "clearDate": "Datum entfernen",
     "saveFailed": "Die Änderung wurde nicht gespeichert.",

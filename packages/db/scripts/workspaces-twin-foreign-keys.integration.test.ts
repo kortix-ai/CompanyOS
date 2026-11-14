@@ -21,6 +21,7 @@ import { describe, expect, test } from 'bun:test';
 import pg from 'pg';
 
 import { up as reconcileMissingRows } from '../migrations/20261114163000000_workspaces_reconcile_missing_rows.concurrent.ts';
+import { up as reconcileFromNilUuid } from '../migrations/20261114171401000_workspaces_reconcile_nil_uuid_account.concurrent.ts';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
@@ -28,6 +29,8 @@ const suite = databaseUrl ? describe : describe.skip;
 const ACCOUNT = '00000000-0000-4000-a000-00000000e101';
 const PROJECT = '00000000-0000-4000-a000-00000000e201';
 const LOST_ACCOUNT = '00000000-0000-4000-a000-00000000e102';
+/** The first uuid: prod and dev each hold one account with this id and no workspaces row (2026-11-14). */
+const NIL_ACCOUNT = '00000000-0000-0000-0000-000000000000';
 
 interface ForeignKey {
   child: string;
@@ -141,6 +144,34 @@ suite('Workspaces R2a: twin foreign keys into kortix.workspaces', () => {
       } finally {
         await client.query('rollback').catch(() => undefined);
         await client.query(`delete from kortix.accounts where account_id = $1`, [ACCOUNT]);
+      }
+    });
+  });
+
+  test('an account whose id is the first uuid: the first pass skips it, the nil-uuid pass restores it', async () => {
+    await withClient(async (client) => {
+      try {
+        await client.query('begin');
+        await client.query('alter table kortix.accounts disable trigger accounts_workspaces_sync');
+        await client.query(`insert into kortix.accounts (account_id, name) values ($1, 'Synthetic nil')`, [NIL_ACCOUNT]);
+        await client.query('alter table kortix.accounts enable trigger accounts_workspaces_sync');
+        await client.query('commit');
+        const count = async () =>
+          Number((await client.query(`select count(*)::int as n from kortix.workspaces where legacy_account_id = $1`, [NIL_ACCOUNT])).rows[0].n);
+        const pgm = { noTransaction: () => undefined, db: { query: (text: string) => client.query(text) } };
+
+        // 20261114163000000 starts its keyset AT the first uuid with `>`: no candidate (prod and dev, 2026-11-14).
+        await reconcileMissingRows(pgm as never);
+        expect(await count()).toBe(0);
+
+        await reconcileFromNilUuid(pgm as never);
+        expect(await count()).toBe(1);
+        // Idempotent.
+        await reconcileFromNilUuid(pgm as never);
+        expect(await count()).toBe(1);
+      } finally {
+        await client.query('rollback').catch(() => undefined);
+        await client.query(`delete from kortix.accounts where account_id = $1`, [NIL_ACCOUNT]);
       }
     });
   });

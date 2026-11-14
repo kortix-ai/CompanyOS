@@ -6349,6 +6349,10 @@ describe('session-log actions (runtime.actions.v1)', () => {
     const newest = (await call(r, '/log?limit=2', undefined, 'GET').then((res) => res.json())) as LogPage
     expect(newest.messages.map((m) => m.message_id)).toEqual(all.messages.slice(-2).map((m) => m.message_id))
     expect(newest.has_more).toBe(true)
+    // limit=1 reads a 4-entry tail of the 7-entry branch (KRTX-4488): the same newest message, the same has_more.
+    const tailed = (await call(r, '/log?limit=1', undefined, 'GET').then((res) => res.json())) as LogPage
+    expect(tailed.messages).toEqual(all.messages.slice(-1))
+    expect(tailed.has_more).toBe(true)
     const older = (await call(r, `/log?limit=2&before_seq=${newest.messages[0]!.seq}`, undefined, 'GET').then((res) => res.json())) as LogPage
     expect(older.messages.map((m) => m.message_id)).toEqual(all.messages.slice(-4, -2).map((m) => m.message_id))
     const after = (await call(r, `/log?after_seq=${all.messages[1]!.seq}&limit=1`, undefined, 'GET').then((res) => res.json())) as LogPage

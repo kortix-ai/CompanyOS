@@ -13,6 +13,8 @@ const SESSION_ID = 'session-cost-summary-test';
 let authType = 'supabase';
 let sandboxId: string | null = null;
 let tokenProjectId: string | null = null;
+let queryGate: Promise<void> | null = null;
+let queryCalls = 0;
 let summaryInput: Record<string, unknown> | null = null;
 let projectAccessInput: { projectId: string; action: string } | null = null;
 let projectCapabilityInput: {
@@ -100,6 +102,8 @@ mock.module('../../projects/lib/access', () => ({
 mock.module('../../shared/cost-rollups', () => ({
   getCostSummary: async (input: Record<string, unknown>) => {
     summaryInput = input;
+    queryCalls++;
+    await queryGate;
     return summary;
   },
   listCostByProject: async () => ({
@@ -144,6 +148,8 @@ beforeEach(() => {
   sandboxId = null;
   tokenProjectId = null;
   summaryInput = null;
+  queryGate = null;
+  queryCalls = 0;
   projectAccessInput = null;
   projectCapabilityInput = null;
   projectCapabilityDenied = false;
@@ -279,5 +285,27 @@ describe('GET /v1/usage/cost-summary', () => {
     }
     projectCapabilityDenied = true;
     expect((await app.request(`/v1/usage/cost-summary?project_id=${PROJECT_ID}`)).status).toBe(403);
+  });
+});
+
+describe('cost-summary in-flight cap (KRTX-4891)', () => {
+  test('a second concurrent report on the replica queues behind the first and both succeed', async () => {
+    let release!: () => void;
+    queryGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const app = createTestApp();
+    const url = `/v1/usage/cost-summary?account_id=${ACCOUNT_ID}`;
+    const running = app.request(url);
+    await Bun.sleep(0);
+
+    const queued = app.request(url);
+    await Bun.sleep(5);
+    expect(queryCalls).toBe(1);
+
+    release();
+    expect((await running).status).toBe(200);
+    expect((await queued).status).toBe(200);
+    expect((await app.request(url)).status).toBe(200);
   });
 });

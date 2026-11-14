@@ -18,6 +18,9 @@ let usageCapabilityDenied = false;
 let loadedProject: { userId: string; row: { accountId: string } } | null = null;
 const capabilityActions: string[] = [];
 let accessibleProjects: realAuthorize.Accessible = { mode: 'all' };
+// While set, the aggregation parks on it, so a test can hold queries in flight.
+let queryGate: Promise<void> | null = null;
+let queryCalls = 0;
 
 interface TestContext {
   set(key: string, value: unknown): void;
@@ -94,6 +97,8 @@ mock.module('../../projects/lib/access', () => ({
 mock.module('../../shared/cost-rollups', () => ({
   listCostByProject: async (input: Record<string, unknown>) => {
     listInput = input;
+    queryCalls++;
+    await queryGate;
     return {
       projects: projectsToReturn,
       total: projectsToReturn.length,
@@ -148,6 +153,8 @@ beforeEach(() => {
   capabilityActions.length = 0;
   projectsToReturn = [project];
   accessibleProjects = { mode: 'all' };
+  queryGate = null;
+  queryCalls = 0;
 });
 
 describe('GET /v1/usage/cost-by-project', () => {
@@ -422,4 +429,27 @@ describe('GET /v1/usage/cost-by-project?format=csv', () => {
     expect(response.status).toBe(403);
     expect(listInput).toBeNull();
   });
+});
+
+describe('cost-by-project in-flight cap (KRTX-4891)', () => {
+  for (const [name, query] of [['JSON', ''], ['CSV', '&format=csv']] as const) {
+    test(`${name}: a second concurrent report on the replica queues behind the first and both succeed`, async () => {
+      let release!: () => void;
+      queryGate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const app = createTestApp();
+      const url = `/v1/usage/cost-by-project?account_id=${ACCOUNT_ID}${query}`;
+      const running = [app.request(url)];
+      await Promise.resolve();
+
+      running.push(app.request(url));
+      await Bun.sleep(5);
+      expect(queryCalls).toBe(1);
+
+      release();
+      for (const response of await Promise.all(running)) expect(response.status).toBe(200);
+      expect((await app.request(url)).status).toBe(200);
+    });
+  }
 });

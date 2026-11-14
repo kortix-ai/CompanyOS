@@ -598,7 +598,7 @@
         },
         "preferences": {
           "label": "语言和快捷键",
-          "description": "语言和键盘快捷键。"
+          "description": "语言、动态效果和键盘快捷键。"
         },
         "connected": {
           "label": "关联账户"
@@ -635,9 +635,11 @@
     },
     "preferences": {
       "title": "语言和快捷键",
-      "description": "语言和键盘快捷键。",
+      "description": "语言、动态效果和键盘快捷键。",
       "languageTitle": "语言",
       "languageDescription": "应用程序中随处显示语言 Kortix。",
+      "motionTitle": "减弱动态效果",
+      "motionDescription": "停止整个应用中的闪光、脉冲和过渡动画。加载指示器仍会转动。",
       "keyboardTitle": "键盘快捷键",
       "keyboardDescription": "用于选项卡切换的修饰键以及应用程序中的每个快捷方式。",
       "modifierKey": "修饰键",
@@ -26532,7 +26534,10 @@
     "googleSheet": "Google 表格",
     "googleSlides": "Google 幻灯片",
     "pullRequest": "PR #{number}",
-    "issue": "议题 #{number}"
+    "issue": "议题 #{number}",
+    "artifactDocument": "文档",
+    "artifactPage": "页面",
+    "artifactUpdated": "更新于 {date}"
   },
   "subscriptionUsage": {
     "fiveHour": "5 小时",

@@ -598,7 +598,7 @@
         },
         "preferences": {
           "label": "Lingua e scorciatoie",
-          "description": "Lingua e scorciatoie da tastiera."
+          "description": "Lingua, movimento e scorciatoie da tastiera."
         },
         "connected": {
           "label": "Account collegati"
@@ -635,9 +635,11 @@
     },
     "preferences": {
       "title": "Lingua e scorciatoie",
-      "description": "Lingua e scorciatoie da tastiera.",
+      "description": "Lingua, movimento e scorciatoie da tastiera.",
       "languageTitle": "Lingua",
       "languageDescription": "La lingua Kortix viene visualizzata ovunque nell'app.",
+      "motionTitle": "Riduci movimento",
+      "motionDescription": "Ferma luccichii, pulsazioni e transizioni in tutta l’app. Gli indicatori di caricamento continuano a girare.",
       "keyboardTitle": "Scorciatoie da tastiera",
       "keyboardDescription": "Il tasto modificatore utilizzato per cambiare scheda e ogni scorciatoia nell'app.",
       "modifierKey": "Tasto modificatore",
@@ -26532,7 +26534,10 @@
     "googleSheet": "Foglio Google",
     "googleSlides": "Google Slides",
     "pullRequest": "PR #{number}",
-    "issue": "Problema #{number}"
+    "issue": "Problema #{number}",
+    "artifactDocument": "Documento",
+    "artifactPage": "Pagina",
+    "artifactUpdated": "Aggiornato il {date}"
   },
   "subscriptionUsage": {
     "fiveHour": "5 ore",

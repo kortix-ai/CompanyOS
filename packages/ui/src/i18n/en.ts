@@ -390,7 +390,7 @@ const catalog = {
         },
         "preferences": {
           "label": "Language & shortcuts",
-          "description": "Language and keyboard shortcuts."
+          "description": "Language, motion and keyboard shortcuts."
         },
         "connected": {
           "label": "Connected accounts"
@@ -9841,7 +9841,10 @@ const catalog = {
     "googleSheet": "Google Sheet",
     "googleSlides": "Google Slides",
     "pullRequest": "PR #{number}",
-    "issue": "Issue #{number}"
+    "issue": "Issue #{number}",
+    "artifactDocument": "Document",
+    "artifactPage": "Page",
+    "artifactUpdated": "Updated {date}"
   },
   "subscriptionUsage": {
     "fiveHour": "5-hour",

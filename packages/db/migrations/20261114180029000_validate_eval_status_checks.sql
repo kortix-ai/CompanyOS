@@ -1,4 +1,4 @@
--- Validate the three checks 20261114165627983_eval_pause_and_soft_cancel added NOT VALID.
+-- Validate the three checks 20261114180027000_eval_pause_and_soft_cancel added NOT VALID.
 -- Every existing row already satisfies them: the status checks only widen, and
 -- cancel_mode is null on every row from before that migration.
 set lock_timeout = '2s';

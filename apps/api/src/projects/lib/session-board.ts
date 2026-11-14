@@ -67,7 +67,7 @@ type BoardRow = Pick<ProjectSessionRow, 'sessionId' | 'status' | 'metadata'>;
 
 type LastEnded = { endReason: string | null; errorName: string | null; endedAt: Date | null };
 
-function metaString(metadata: unknown, key: string): string | null {
+export function metaString(metadata: unknown, key: string): string | null {
   const value = ((metadata ?? {}) as Record<string, unknown>)[key];
   return typeof value === 'string' && value.trim() ? value : null;
 }

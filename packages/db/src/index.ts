@@ -106,6 +106,8 @@ export {
   projectSpaceWatchers,
   projectSpaceEvents,
   projectGoals,
+  evalJobs,
+  evalTrials,
   projectGoalEvents,
   projectSpaceKindEnum,
   projectSpaceVisibilityEnum,

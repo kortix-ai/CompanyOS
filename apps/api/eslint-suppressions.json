@@ -2090,11 +2090,6 @@
       "count": 2
     }
   },
-  "src/projects/routes/session-stream.ts": {
-    "no-restricted-imports": {
-      "count": 2
-    }
-  },
   "src/projects/routes/trigger-webhooks.ts": {
     "no-restricted-imports": {
       "count": 1

@@ -726,6 +726,7 @@ export const AUDIT_ROUTE_LABELS: Readonly<Record<string, AuditRouteLabel | strin
   'GET /v1/projects/:workspaceId/gateway/series': { action: 'gateway.series.read', title: 'Viewed LLM gateway daily usage' },
   'GET /v1/projects/:workspaceId/gateway/sessions': { action: 'gateway.session_spend.list', title: 'Listed LLM gateway spend by session' },
   'GET /v1/projects/:workspaceId/gateway/sources': { action: 'gateway.source_spend.list', title: 'Listed LLM gateway spend by source' },
+  'GET /v1/projects/:workspaceId/gateway/usage': { action: 'gateway.usage.query', title: 'Queried LLM gateway spend and token usage' },
   'PUT /v1/projects/:workspaceId/git-credential': { action: 'git.credential.set', title: 'Set project Git credential' },
   'POST /v1/projects/:workspaceId/git-token': { action: 'git.push_token.create', title: 'Created Git push token' },
   'POST /v1/projects/:workspaceId/git/collaborators': { action: 'git.collaborator.invite', title: 'Added Git collaborator' },

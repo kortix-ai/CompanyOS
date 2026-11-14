@@ -586,7 +586,7 @@ usageApp.openapi(
       // Same filtered query as the JSON branch (accountId, projectId, ownerId,
       // window, sort) — only limit/offset differ, because a CSV export wants
       // up to CSV_ROW_CAP rows in one shot, not one paginated page of it.
-      const page = await withCostReportSlot(accountId, () =>
+      const page = await withCostReportSlot(() =>
         listSessionCosts({
           accountId,
           projectId,
@@ -634,7 +634,7 @@ usageApp.openapi(
     }
 
     return c.json(
-      await withCostReportSlot(accountId, () => listSessionCosts({ accountId, projectId, ownerId, ...parsed })),
+      await withCostReportSlot(() => listSessionCosts({ accountId, projectId, ownerId, ...parsed })),
     );
   },
 );
@@ -711,7 +711,7 @@ usageApp.openapi(
           'text/csv': { schema: z.string() },
         },
       },
-      ...errors(400, 401, 403),
+      ...errors(400, 401, 403, 429),
     },
   }),
   async (c) => {
@@ -761,7 +761,7 @@ usageApp.openapi(
       // Same filtered query as the JSON branch (accountId, window, sort) —
       // only limit/offset differ, because a CSV export wants up to
       // CSV_ROW_CAP rows in one shot, not one paginated page of it.
-      const page = await withCostReportSlot(accountId, () =>
+      const page = await withCostReportSlot(() =>
         listCostByProject({
           accountId,
           projectId,
@@ -800,7 +800,7 @@ usageApp.openapi(
     }
 
     return c.json(
-      await withCostReportSlot(accountId, () =>
+      await withCostReportSlot(() =>
         listCostByProject({ accountId, projectId, visibleProjectIds, window, sort, limit, offset }),
       ),
     );
@@ -846,7 +846,7 @@ usageApp.openapi(
       }
       const window = parseCostWindow({ from: c.req.query('from'), to: c.req.query('to') });
       const sessionId = c.req.query('session_id') || undefined;
-      return c.json(await withCostReportSlot(accountId, () => getCostSummary({ accountId, projectId, sessionId, window })));
+      return c.json(await withCostReportSlot(() => getCostSummary({ accountId, projectId, sessionId, window })));
     } catch (error) {
       if (error instanceof InvalidCostQueryError) {
         throw new HTTPException(400, { message: error.message });

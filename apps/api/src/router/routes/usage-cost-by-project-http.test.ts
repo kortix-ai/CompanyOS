@@ -430,14 +430,14 @@ describe('GET /v1/usage/cost-by-project?format=csv', () => {
 
 describe('cost-by-project in-flight cap (KRTX-4891)', () => {
   for (const [name, query] of [['JSON', ''], ['CSV', '&format=csv']] as const) {
-    test(`${name}: a third concurrent report for the account is a 429, and a slot frees when one settles`, async () => {
+    test(`${name}: a second concurrent report on the replica is a 429, and a slot frees when one settles`, async () => {
       let release!: () => void;
       queryGate = new Promise<void>((resolve) => {
         release = resolve;
       });
       const app = createTestApp();
       const url = `/v1/usage/cost-by-project?account_id=${ACCOUNT_ID}${query}`;
-      const running = [app.request(url), app.request(url)];
+      const running = [app.request(url)];
       await Promise.resolve();
 
       const refused = await app.request(url);

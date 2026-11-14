@@ -17,6 +17,7 @@ let sandboxId: string | null = null;
 /** A workspace-bound token (a session token): its workspace and account. */
 let tokenProjectId: string | null = null;
 let listInput: Record<string, unknown> | null = null;
+let queryGate: Promise<void> | null = null;
 let detailInput: Record<string, unknown> | null = null;
 let detailFound = true;
 let projectAccessInput: { projectId: string; action: string } | null = null;
@@ -143,6 +144,7 @@ mock.module('../../iam/directory-visibility', () => ({
 mock.module('../../shared/session-costs', () => ({
   listSessionCosts: async (input: Record<string, unknown>) => {
     listInput = input;
+    await queryGate;
     return {
       sessions: sessionsToReturn,
       total: sessionsToReturn.length,
@@ -185,6 +187,7 @@ beforeEach(() => {
   tokenProjectId = null;
   directoryView = 'full';
   listInput = null;
+  queryGate = null;
   detailInput = null;
   detailFound = true;
   projectAccessInput = null;
@@ -600,4 +603,25 @@ describe('session costs with a workspace-bound token', () => {
     expect(listInput).toBeNull();
     expect(detailInput).toBeNull();
   });
+});
+
+describe('session-costs in-flight cap (KRTX-4891)', () => {
+  for (const [name, query] of [['JSON', ''], ['CSV', '&format=csv']] as const) {
+    test(`${name}: a second concurrent report on the replica is a 429, and the slot frees when it settles`, async () => {
+      let release!: () => void;
+      queryGate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const app = createTestApp();
+      const url = `/v1/usage/session-costs?account_id=${ACCOUNT_ID}${query}`;
+      const running = app.request(url);
+      await Bun.sleep(0);
+
+      expect((await app.request(url)).status).toBe(429);
+
+      release();
+      expect((await running).status).toBe(200);
+      expect((await app.request(url)).status).toBe(200);
+    });
+  }
 });

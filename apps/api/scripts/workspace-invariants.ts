@@ -18,7 +18,7 @@
  *   I7  grants per principal on the moved workspace are unchanged
  *   I8  every member a split added holds a grant on the new workspace or is an owner
  *   I9  kortix.workspaces equals kortix.workspaces_expected for every account
- *   I10 every expand-table row has workspace_id = its account's live id (NULL
+ *   I10 every expand-table row of a live account has workspace_id = its live id (NULL
  *       only on a split_pending account)
  *   I11 no two credit_accounts rows share a stripe_subscription_id
  *   I12 every account has one live row (one per active project while split_pending)

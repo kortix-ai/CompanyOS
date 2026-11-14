@@ -51,16 +51,17 @@ const TRIGGER_BODY_KEYS = {
   // Not manifest keys: they change the trigger's chat space, not its manifest entry.
   session_access: [],
   space_id: [],
-} as const satisfies Record<string, readonly ('manifest' | 'typeSpecific' | 'event' | 'undocumented')[]>;
+} as const satisfies Record<string, readonly BodyGroup[]>;
 
+type BodyGroup = 'manifest' | 'typeSpecific' | 'event' | 'undocumented';
 type BodyKey = keyof typeof TRIGGER_BODY_KEYS;
-type KeysInGroup<Group extends string> = {
-  [K in BodyKey]: Group extends (typeof TRIGGER_BODY_KEYS)[K][number] ? K : never;
+type UndocumentedKey = {
+  [K in BodyKey]: 'undocumented' extends (typeof TRIGGER_BODY_KEYS)[K][number] ? K : never;
 }[BodyKey];
-const keysInGroup = <Group extends 'manifest' | 'typeSpecific' | 'event'>(group: Group) =>
-  (Object.keys(TRIGGER_BODY_KEYS) as BodyKey[]).filter((key) =>
-    (TRIGGER_BODY_KEYS[key] as readonly string[]).includes(group),
-  ) as KeysInGroup<Group>[];
+const keysInGroup = (group: BodyGroup): string[] =>
+  Object.entries<readonly BodyGroup[]>(TRIGGER_BODY_KEYS)
+    .filter(([, groups]) => groups.includes(group))
+    .map(([key]) => key);
 
 /** Body keys that change which event a trigger subscribes to. */
 export const EVENT_BODY_KEYS = keysInGroup('event');
@@ -108,5 +109,5 @@ export const TRIGGER_PATCH_SHAPE = {
 type KeysMatch<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 export const TRIGGER_PATCH_SHAPE_MATCHES_KEYS = true satisfies KeysMatch<
   keyof typeof TRIGGER_PATCH_SHAPE,
-  Exclude<BodyKey, KeysInGroup<'undocumented'>>
+  Exclude<BodyKey, UndocumentedKey>
 >;

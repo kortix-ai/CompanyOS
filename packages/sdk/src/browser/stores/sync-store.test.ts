@@ -2785,38 +2785,30 @@ describe("useSyncStore — buildSessionMessages (the one shared join)", () => {
 		};
 	}
 
-	// The actual leak assertion: once the store drops a session's arrays, nothing the
-	// memo holds keeps its rows reachable. The memo is weak by the store's array, so
-	// the rows go with it; observed through a WeakRef after a full collection.
-	async function rowsCollectedAfter(sessionID: string, drop: () => void): Promise<boolean> {
-		const ref = new WeakRef(capture(sessionID).rows);
+	// The leak assertion. The by-array memo is a WeakMap and goes with the array the store
+	// drops; the by-session memo is the one strong hold, so dropping a session must drop
+	// its entry. Observed through reuse, not the collector (JSC scans the stack
+	// conservatively, so a GC check is a coin flip): a fresh array of the same message and
+	// part array reuses the memo's row exactly while the entry lives.
+	function memoForgetsAfter(sessionID: string, drop: () => void): boolean {
+		const state = useSyncStore.getState();
+		const msgs = state.messages[sessionID];
+		const parts = { ...state.parts };
+		const row = state.buildSessionMessages(sessionID, msgs, parts)[0];
+		const probe = () => useSyncStore.getState().buildSessionMessages(sessionID, [...msgs], parts)[0];
+		expect(probe()).toBe(row);
 		drop();
-		// A WeakRef target stays alive until the current job ends, and JSC scans
-		// the stack conservatively: a stale slot can pin the rows through several
-		// collections (five were not enough on a loaded CI runner, run
-		// 43543224012). Give them up to twenty, each on a fresh job; a real leak
-		// keeps the rows through all of them.
-		for (let round = 0; round < 20 && ref.deref() !== undefined; round++) {
-			await new Promise((resolve) => setTimeout(resolve, 0));
-			Bun.gc(true);
-		}
-		return ref.deref() === undefined;
+		return probe() !== row;
 	}
 
-	test("eviction drops the memoized rows, not just the store slices", async () => {
+	test("eviction drops the memoized rows, not just the store slices", () => {
 		const store = useSyncStore.getState();
 		store.upsertMessage("ses_1", userMessage("msg_1"));
 		store.upsertPart("msg_1", textPart("prt_1", "msg_1", "hi"), "ses_1");
-		// Memoized while resident. The check runs in its own scope: a `held`
-		// local in this test would keep the rows (and, through `rebuild`, the
-		// store arrays the memo is keyed by) reachable for the whole test, so
-		// the collection below could never take them.
-		(() => {
-			const held = capture("ses_1");
-			expect(held.rebuild()).toBe(held.rows);
-		})();
+		const held = capture("ses_1");
+		expect(held.rebuild()).toBe(held.rows);
 
-		const collected = await rowsCollectedAfter("ses_1", () => {
+		const forgot = memoForgetsAfter("ses_1", () => {
 			useSyncStore.getState().retainSession("ses_1")();
 			// `DETACHED_SESSION_LIMIT` (8) + 1 detaches push ses_1 out of the window.
 			for (let i = 0; i < 9; i++) {
@@ -2828,7 +2820,7 @@ describe("useSyncStore — buildSessionMessages (the one shared join)", () => {
 		});
 
 		expect("ses_1" in useSyncStore.getState().messages).toBe(false);
-		expect(collected).toBe(true);
+		expect(forgot).toBe(true);
 	});
 
 	// The row-reuse memo by session is bounded, or a tab that never navigates away
@@ -2889,13 +2881,13 @@ describe("useSyncStore — buildSessionMessages (the one shared join)", () => {
 		expect(capture("ses_1").rows[0]).not.toBe(held[1].rows[0]);
 	});
 
-	test("clearSession drops the memoized rows too", async () => {
+	test("clearSession drops the memoized rows too", () => {
 		const store = useSyncStore.getState();
 		store.upsertMessage("ses_1", userMessage("msg_1"));
 		store.upsertPart("msg_1", textPart("prt_1", "msg_1", "hi"), "ses_1");
 		expect(capture("ses_1").rebuild()).toBe(capture("ses_1").rows);
 
-		expect(await rowsCollectedAfter("ses_1", () => useSyncStore.getState().clearSession("ses_1"))).toBe(true);
+		expect(memoForgetsAfter("ses_1", () => useSyncStore.getState().clearSession("ses_1"))).toBe(true);
 	});
 });
 

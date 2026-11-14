@@ -5,7 +5,7 @@
  * moved into provider-transition-routing.ts.
  */
 import { describe, expect, mock, test } from 'bun:test';
-import { type Database } from '@kortix/db';
+import { createDb, type Database } from '@kortix/db';
 import * as realAudit from './provider-transition-audit';
 
 // The after-commit audit would hit the real database; spy it away.
@@ -52,7 +52,10 @@ function fakeDatabase(writes: Array<Record<string, unknown>>): Database {
       },
     }),
   };
-  return { transaction: (cb: (tx: unknown) => unknown) => cb(tx) } as unknown as Database;
+  // createDb is lazy (no connection until a query), so a real Database carries the faked transaction.
+  return Object.assign(createDb('postgres://fake@localhost:1/fake'), {
+    transaction: (cb: (tx: unknown) => unknown) => cb(tx),
+  });
 }
 
 describe('transition marker written into project metadata', () => {

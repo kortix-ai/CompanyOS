@@ -140,9 +140,15 @@ export async function attemptArchivedBoxRemoval(
     return 'failed';
   }
   // A remove that fails because the box is already gone is a success.
-  const { removed, error: firstError } = await removeProviderBox(provider, row.externalId);
-  let removeError = firstError;
-  if (removed) {
+  const result = await removeProviderBox(provider, row.externalId);
+  let removeError: unknown;
+  if ('error' in result) {
+    if (result.removed) {
+      await markRemoved(row.sandboxId, now);
+      return 'removed';
+    }
+    removeError = result.error;
+  } else {
     try {
       await markRemoved(row.sandboxId, now);
       return 'removed';

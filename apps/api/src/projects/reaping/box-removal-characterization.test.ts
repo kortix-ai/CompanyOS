@@ -71,6 +71,15 @@ describe('attemptArchivedBoxRemoval', () => {
     expect(updates).toBe(2);
   });
 
+  test('a stamp failure after a failed remove of a gone box is a rejection, not a failed attempt', async () => {
+    removeError = new Error('404');
+    statusResult = 'removed';
+    failFirstUpdate = true;
+    await expect(attemptArchivedBoxRemoval(row)).rejects.toThrow('db down');
+    expect(providerCalls).toEqual(['remove:ext-1', 'status:ext-1']);
+    expect(updates).toBe(1);
+  });
+
   test('a clean remove stamps the row removed and never asks for status', async () => {
     expect(await attemptArchivedBoxRemoval(row)).toBe('removed');
     expect(providerCalls).toEqual(['remove:ext-1']);

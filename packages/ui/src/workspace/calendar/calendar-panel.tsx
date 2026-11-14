@@ -237,30 +237,33 @@ export function ItemPanel({
     <>
       <SplitSheetHeader closeLabel={t('close')} className="items-center">
         <SplitSheetTitle className="sr-only">{item.title}</SplitSheetTitle>
-        <Button
-          variant={done ? 'outline' : 'default'}
-          size="xs"
-          className="gap-1.5"
-          aria-busy={actions.update.isPending}
-          disabled={actions.update.isPending}
-          onClick={() => save({ status: done ? 'open' : 'done' })}
-        >
-          {done ? <CircleIcon className="size-3.5 shrink-0" aria-hidden /> : <CheckCircleIcon className="size-3.5 shrink-0" aria-hidden />}
-          {done ? t('reopen') : t('markDone')}
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm" aria-label={t('moreActions')} className="ml-auto">
-              <DotsThreeIcon className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem variant="destructive" onSelect={() => setConfirming(true)}>
-              <TrashIcon aria-hidden />
-              {t('delete')}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* The header stacks its children; the actions keep their own size on one row. */}
+        <div className="flex items-center gap-1">
+          <Button
+            variant={done ? 'outline' : 'default'}
+            size="xs"
+            className="gap-1.5"
+            aria-busy={actions.update.isPending}
+            disabled={actions.update.isPending}
+            onClick={() => save({ status: done ? 'open' : 'done' })}
+          >
+            {done ? <CircleIcon className="size-3.5 shrink-0" aria-hidden /> : <CheckCircleIcon className="size-3.5 shrink-0" aria-hidden />}
+            {done ? t('reopen') : t('markDone')}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-sm" aria-label={t('moreActions')}>
+                <DotsThreeIcon className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem variant="destructive" onSelect={() => setConfirming(true)}>
+                <TrashIcon aria-hidden />
+                {t('delete')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </SplitSheetHeader>
       <SplitSheetBody className="flex flex-col gap-6">
         <textarea

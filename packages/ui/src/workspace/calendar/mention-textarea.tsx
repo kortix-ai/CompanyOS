@@ -100,7 +100,8 @@ export function MentionTextarea({
   };
 
   return (
-    <div className="relative">
+    // The matches render in flow under the field: a dialog or the side panel grows, nothing is clipped.
+    <div>
       <Textarea
         ref={ref}
         value={value}
@@ -122,7 +123,7 @@ export function MentionTextarea({
         }}
       />
       {matches.length > 0 ? (
-        <ul role="listbox" aria-label={ariaLabel} className={cn(MENU_PANEL_STATIC, 'absolute inset-x-0 top-full z-20 mt-1')}>
+        <ul role="listbox" aria-label={ariaLabel} className={cn(MENU_PANEL_STATIC, 'mt-1')}>
           {matches.map((person, i) => (
             <li key={person.user_id} role="option" aria-selected={i === active}>
               <button

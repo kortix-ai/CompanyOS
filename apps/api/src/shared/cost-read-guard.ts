@@ -5,7 +5,9 @@ import { HTTPException } from 'hono/http-exception';
 // gateway_request_logs row of its window and runs 4 to 6 statements in parallel
 // (cost-rollups.ts), against a pool of DEFAULT_DB_POOL_MAX = 6 connections. A
 // single read can therefore fill the pool, so the bound is per replica, not per
-// account: a second read of any account waits for nothing and is refused. On
+// account: reads run one after another, up to COST_READ_MAX_WAITING queue behind
+// the running one (the cost explorer UI issues 2 to 3 at once) and any further
+// read is refused at once. Waiting reads hold no connection. On
 // 2026-11-13 one caller sent 149 session-costs reads in under six minutes; the
 // SDK retried every 503 twice, the pool saturated and unrelated routes missed
 // the 25 s request deadline (a 3 minute API-wide brownout).
@@ -18,13 +20,16 @@ export const COST_READ_CODE = 'cost_read_busy' as const;
 
 const RETRY_AFTER_SECONDS = 5;
 
+export const COST_READ_MAX_WAITING = 3;
+
 let running = false;
+const waiting: Array<() => void> = [];
 
 function busy(): HTTPException {
   const body = {
     error: 'rate_limit_exceeded',
     code: COST_READ_CODE,
-    message: 'Another cost read is running on this server. Retry shortly.',
+    message: 'Too many cost reads are queued on this server. Retry shortly.',
     retry_after_seconds: RETRY_AFTER_SECONDS,
   };
   return new HTTPException(429, {
@@ -37,11 +42,17 @@ function busy(): HTTPException {
 }
 
 export async function withCostReadGuard<T>(read: () => Promise<T>): Promise<T> {
-  if (running) throw busy();
+  if (running) {
+    if (waiting.length >= COST_READ_MAX_WAITING) throw busy();
+    // The permit is handed over directly, so `running` stays true across the handoff.
+    await new Promise<void>((resolve) => waiting.push(resolve));
+  }
   running = true;
   try {
     return await read();
   } finally {
-    running = false;
+    const next = waiting.shift();
+    if (next) next();
+    else running = false;
   }
 }

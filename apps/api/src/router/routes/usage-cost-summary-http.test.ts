@@ -128,6 +128,7 @@ mock.module('../../shared/session-costs', () => ({
 }));
 
 const { usageApp } = await import('./usage');
+const { COST_READ_MAX_WAITING } = await import('../../shared/cost-read-guard');
 
 function createTestApp() {
   const app = new Hono();
@@ -153,17 +154,19 @@ beforeEach(() => {
 });
 
 describe('GET /v1/usage/cost-summary read guard', () => {
-  test('answers 429 with Retry-After while another cost read runs on the replica, then recovers', async () => {
+  test('answers 429 with Retry-After once one read runs and the queue is full, then recovers', async () => {
     let release!: () => void;
     summaryGate = new Promise<void>((resolve) => (release = resolve));
     const app = createTestApp();
-    const running = [app.request(`/v1/usage/cost-summary?account_id=${ACCOUNT_ID}`)];
+    const running = Array.from({ length: 1 + COST_READ_MAX_WAITING }, () =>
+      app.request(`/v1/usage/cost-summary?account_id=${ACCOUNT_ID}`),
+    );
     await Promise.resolve();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const refused = await app.request(`/v1/usage/cost-summary?account_id=${ACCOUNT_ID}`);
     expect(refused.status).toBe(429);
-    expect(await refused.json()).toEqual({ error: 'Another cost read is running on this server. Retry shortly.' });
+    expect(await refused.json()).toEqual({ error: 'Too many cost reads are queued on this server. Retry shortly.' });
 
     release();
     for (const response of await Promise.all(running)) expect(response.status).toBe(200);

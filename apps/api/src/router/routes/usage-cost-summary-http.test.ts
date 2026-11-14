@@ -303,4 +303,22 @@ describe('in-flight cap (KRTX-4889)', () => {
     expect((await first).status).toBe(200);
     expect((await app.request('/v1/usage/cost-summary')).status).toBe(200);
   });
+
+  test('a different query of the same user is not a retry and runs in parallel', async () => {
+    let open: () => void = () => {};
+    summaryGate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    const app = createTestApp();
+    const first = app.request(`/v1/usage/cost-summary?project_id=${PROJECT_ID}`);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const other = app.request('/v1/usage/cost-summary?account_id=' + ACCOUNT_ID);
+    const repeat = await app.request(`/v1/usage/cost-summary?project_id=${PROJECT_ID}`);
+    expect(repeat.status).toBe(429);
+
+    open();
+    expect((await first).status).toBe(200);
+    expect((await other).status).toBe(200);
+  });
 });

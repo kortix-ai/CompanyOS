@@ -29,6 +29,7 @@
 import { getChildSessionId } from '../../turns/parts';
 import { parsePeerMessagePrompt } from '../../turns/peer-message-prompt';
 import { textRendersCard } from '../../turns/segments/card-text';
+import { callStartsConnectorSignIn } from '../../turns/segments/sign-in-call';
 import { isNoGroupActivityTool, isQuestionTool, normalizeActivityToolName } from '../../turns/segments/session-activity-groups';
 import { STARTED_WORK_TOOLS } from '../../turns/segments/started-work';
 import { formatDuration } from '../../turns/state';
@@ -117,7 +118,13 @@ const childrenOf = (turn: SessionLogTurn): Child[] =>
 /** The turn asks the person something, hands over a deliverable, or renders a card before its answer. */
 function needsPerson(turn: SessionLogTurn): boolean {
   return turn.blocks.some((b) => {
-    if (b.type === 'tool_call') return isQuestionTool(b.name) || isNoGroupActivityTool((b as ToolCallBlock).name);
+    if (b.type === 'tool_call') {
+      return (
+        isQuestionTool(b.name) ||
+        isNoGroupActivityTool(b.name) ||
+        callStartsConnectorSignIn(b)
+      );
+    }
     return b.type === 'text' && b !== turn.response && textRendersCard(b.text);
   });
 }

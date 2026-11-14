@@ -36,10 +36,6 @@ flow(
   },
 );
 
-// The warm-snapshot-config admin flow was removed with its deleted routes.
-// were deleted in #4095 ("remove the dead warm-fork sessions toggle") without
-// retiring this flow, leaving stale manifest drift.
-
 flow(
   'CONN-20',
   {
@@ -566,6 +562,8 @@ flow(
       'POST /internal/gateway/budget-check',
       'POST /internal/gateway/claude-credentials',
       'POST /internal/gateway/claude-refused',
+      'POST /internal/gateway/idempotency/get',
+      'POST /internal/gateway/idempotency/put',
       'POST /internal/gateway/models',
       'POST /internal/gateway/pool-rate-limit',
       'POST /internal/gateway/pool-usage',
@@ -583,6 +581,8 @@ flow(
       '/internal/gateway/budget-check',
       '/internal/gateway/claude-credentials',
       '/internal/gateway/claude-refused',
+      '/internal/gateway/idempotency/get',
+      '/internal/gateway/idempotency/put',
       '/internal/gateway/models',
       '/internal/gateway/pool-rate-limit',
       '/internal/gateway/pool-usage',

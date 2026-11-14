@@ -709,6 +709,7 @@
       "gracePeriodDescription": "A exclusão ocorre na data prevista. Você pode cancelar antes.",
       "immediateLabel": "Excluir imediatamente",
       "immediateDescription": "Sua conta e seus dados são excluídos imediatamente. Isto não pode ser desfeito.",
+      "noWorkspaceImmediateOnly": "Você não pertence a nenhum espaço de trabalho, então não há período de carência: sua conta é excluída imediatamente.",
       "typeDeleteToConfirm": "Digite \"delete\" para confirmar",
       "keepAccount": "Manter conta",
       "processing": "Processando…",
@@ -731,7 +732,7 @@
         "left": "Você sai de",
         "blockers": "Você é o único proprietário e outras pessoas trabalham neles. Transfira a propriedade ou exclua o espaço de trabalho.",
         "members": "{count, plural, one {# membro} other {# membros}}",
-        "nothing": "Você não pertence a nenhum espaço de trabalho. Apenas seu login é excluído.",
+        "nothing": "Nenhum espaço de trabalho é excluído ou deixado com sua conta.",
         "blockersTitle": "Transfira estes primeiro"
       }
     },
@@ -1327,6 +1328,10 @@
         "spaces_proactive": {
           "name": "Spaces-Proactive",
           "description": "Com os Espaços ativados, um espaço pode vigiar a si mesmo: ative Proativo nos detalhes dele, e um agente lê o que acontece ali (threads concluídas, perguntas em aberto, pessoas que entram) e escreve no chat só quando importa: um resultado que vale compartilhar, uma decisão que você precisa tomar ou algo atrasado. Ele também pode iniciar uma thread que faz o trabalho. Resumo diário opcional às 9:00."
+        },
+        "program_agents": {
+          "name": "Agentes de programa",
+          "description": "Um agente que executa o seu código em vez de um modelo. Dê a um agente `run: <command>` no kortix.yaml: cada turno executa esse comando no sandbox da sessão, com o workspace, os segredos e os acessos do agente. A mensagem ou os dados do trigger são a entrada, e o que o comando imprime é a resposta."
         }
       },
       "channelsSwitch": {
@@ -1730,7 +1735,7 @@
         "email": "E-mail",
         "scheduled": "Agendado",
         "webhook": "Webhook",
-        "event": "Evento de app",
+        "event": "Evento de conector",
         "manual": "Manual",
         "all": "Todos"
       },
@@ -2096,7 +2101,13 @@
       "noModelUpgradeReason": "Sem modelo: faça upgrade para o plano Credits ou adicione sua própria chave de provedor.",
       "noModelKeyReason": "Sem modelo: adicione sua própria chave de provedor.",
       "noModelUpgradePlan": "Fazer upgrade do plano",
-      "noModelAddProviderKey": "Adicionar chave do provedor"
+      "noModelAddProviderKey": "Adicionar chave do provedor",
+      "stepTitle": "Conecte um modelo",
+      "stepBody": "Os agentes de {workspace} precisam de um modelo para responder. Conecte seu plano do ChatGPT ou do Claude, ou adicione uma chave de provedor.",
+      "stepBodyUpgrade": "Os agentes de {workspace} precisam de um modelo para responder. Conecte seu plano do ChatGPT ou do Claude, adicione uma chave de provedor ou faça upgrade para o plano Credits para usar os modelos da Kortix.",
+      "stepBodyMember": "Os agentes de {workspace} precisam de um modelo para responder. Conecte seu próprio plano do ChatGPT ou do Claude ou sua chave de provedor, ou peça a alguém que gerencia este espaço de trabalho para conectar um modelo para todos.",
+      "stepThisWorkspace": "este espaço de trabalho",
+      "stepBack": "Voltar aos espaços de trabalho"
     },
     "providerRecovery": {
       "savedPrompt": "Prompt salvo",
@@ -20691,10 +20702,11 @@
       "text5f6ba69d66d1": "Habilidade removida",
       "textcb8d6b0c94c9": " e todos os arquivos nela, incluindo edições, e remove a habilidade de todos os agentes que a usam. Um commit no branch padrão.",
       "cliDeviceTitle": "Autorizar Kortix CLI",
-      "cliDeviceWarning": "Aprove apenas um início de sessão que você iniciou. Digite o código exibido no seu terminal.",
+      "cliDeviceWarning": "Aprove apenas um início de sessão que você iniciou. Confira se este código é igual ao exibido no seu terminal.",
       "cliDeviceCode": "Código de acesso",
       "cliDeviceApproved": "Acesso aprovado. Volte ao terminal.",
       "cliDeviceAction": "Autorizar CLI",
+      "cliDeviceConfirm": "Este código é igual ao do meu terminal",
       "text705a7e325b66": "O app do Kortix emitiu eventos",
       "text4b80152fb96b": "Credenciais de eventos do app do Kortix lidas",
       "text59374c1f1acd": "O app do Kortix agendou uma execução",
@@ -21346,7 +21358,16 @@
       "textb1f8e3109f1b": "{value0}: {value1} dias é o máximo que o Kortix permite.",
       "textac20a57bfde0": "Ocultar",
       "text268733ac2f60": "Não foi possível atualizar esse app",
-      "text5d8926d4a4dd": "Não foi possível registrar esse app"
+      "text5d8926d4a4dd": "Não foi possível registrar esse app",
+      "text30b9ce09f406": "Insira um período como 15m, 1h ou 1d, de pelo menos 1m.",
+      "text28d33d2ad989": "Escolha o app a chamar",
+      "textd777d7805cfa": "Insira um caminho que comece com /",
+      "text8043e69a8dd6": "Excluir gatilho",
+      "textd6fa1626e3af": "Evento de conector criado",
+      "textccf59f978ef6": "Ainda não há eventos de conector aqui",
+      "text82cbc4a4def0": "Os eventos de conector não estão configurados nesta implantação, então nenhum conector pode enviá-los ainda.",
+      "text458ceb31019b": "Gatilhos de eventos de conector",
+      "text27ca9df9dbaa": "Os gatilhos de eventos de conector estão desativados"
     },
     "publicShareConfirm": {
       "title": "Criar um link público?",
@@ -21771,6 +21792,8 @@
     "llmEstimateLabel": "Estimativa do LLM:"
   },
   "triggerComposer": {
+    "programInputPlaceholder": "Vazio: o programa lê os dados do trigger como JSON",
+    "programInputHelp": "Este agente executa um programa. Ele lê este texto pelo stdin. Deixe vazio para enviar todos os dados como JSON: o evento, o corpo do webhook ou os detalhes do agendamento, mais os dados fixos do trigger.",
     "every": "A cada",
     "dayOfMonth": "Dia do mês",
     "details": "Detalhes",
@@ -21808,7 +21831,16 @@
     "crBranchHelp": "Roda quando uma solicitação de mudança é mesclada neste branch, ou em qualquer branch se o campo estiver vazio. A instrução pode ler <code>change_request.number</code>, <code>change_request.title</code> e <code>change_request.base_ref</code>.",
     "eventsOff": "Os eventos de conectores estão em beta e desativados neste espaço de trabalho. Ative-os em Feature flags, na administração do espaço de trabalho.",
     "noApps": "Nenhum app deste espaço de trabalho envia eventos ainda. Publique um app que faça POST para <code>KORTIX_APP_EVENTS_URL</code> e escolha-o aqui.",
-    "openApps": "Abrir apps"
+    "openApps": "Abrir apps",
+    "thenLabel": "O que um disparo faz",
+    "thenAgent": "Executar um agente",
+    "thenApp": "Chamar um app",
+    "targetPath": "Caminho",
+    "targetMethod": "Método",
+    "targetHelp": "Cada disparo ativa o app e envia o payload para este caminho. Nenhum agente é executado.",
+    "intervalLabel": "Repete a cada",
+    "intervalHelp": "Um período fixo como 15m, 1h ou 1d.",
+    "useCalendar": "Usar um agendamento de calendário"
   },
   "gatewayAccess": {
     "heroTitle": "Use os modelos deste espaço de trabalho em qualquer lugar",
@@ -22153,7 +22185,7 @@
     "infoRunsThrough": "Provedor",
     "infoSignsInWith": "Login com",
     "infoCategory": "Categoria",
-    "infoAppEvents": "Eventos do app",
+    "infoAppEvents": "Eventos",
     "infoAppEventsYes": "Compatível",
     "authOAuth": "Login OAuth",
     "authApiKey": "Chave de API",
@@ -23704,9 +23736,9 @@
   },
   "automationsPause": {
     "groupTitle": "Gatilhos",
-    "groupDescription": "Agendamentos, ciclos, webhooks, eventos de apps e monitores neste espaço de trabalho.",
+    "groupDescription": "Agendamentos, loops, webhooks, eventos de conector e eventos de app neste workspace.",
     "label": "Pausar todos os gatilhos",
-    "description": "Nada neste espaço de trabalho roda sozinho: nenhum agendamento, loop, webhook, evento de app ou monitor. Executar um gatilho manualmente ainda funciona.",
+    "description": "Nada neste workspace é executado sozinho: nenhum agendamento, loop, webhook, evento de conector ou evento de app. Executar um gatilho manualmente ainda funciona.",
     "readOnlyDescription": "Apenas um proprietário ou administrador pode pausar ou retomar os gatilhos.",
     "pausedSince": "Pausado desde {date}.",
     "pauseTitle": "Pausar todos os gatilhos?",
@@ -24950,6 +24982,11 @@
       }
     },
     "modelView": {
+      "programTimeout": "Limite de tempo",
+      "programTimeoutHelp": "Uma execução mais longa é interrompida e o turno falha. De 1s a 6h, por exemplo 30m ou 2h. Vazio: 30m.",
+      "programTitle": "Programa",
+      "programCommand": "Comando",
+      "programHelp": "Cada turno executa este comando no sandbox da sessão em vez de um modelo. A mensagem chega pelo stdin e em $KORTIX_EVENT_PATH. O que ele imprime é a resposta. Uma saída diferente de zero faz o turno falhar.",
       "title": "Modelo",
       "help": "Como este agente pensa.",
       "projectDefault": "Padrão do espaço de trabalho",
@@ -26756,12 +26793,6 @@
       "setDefaultAria": "Definir {model} como modelo padrão deste espaço de trabalho",
       "setWorkspaceDefault": "Definir como padrão do espaço de trabalho"
     },
-    "profile": {
-      "deleteLogin": "Excluir meu login",
-      "deleteLoginDescription": "Exclui seu login do Kortix. Você não pertence a nenhum espaço de trabalho, então nada mais é excluído.",
-      "deleteLoginTitle": "Excluir seu login?",
-      "deleteLoginWarning": "Seu login é excluído imediatamente. Isso não pode ser desfeito."
-    },
     "capture": {
       "noWorkspaceTitle": "Primeiro crie um espaço de trabalho ou entre em um.",
       "noWorkspaceBody": "O Kortix Capture grava em um espaço de trabalho. Depois abra este login de novo.",
@@ -26865,6 +26896,20 @@
     "connect": "Conectar",
     "cardFailed": "Não foi possível conectar {app}. Tente novamente.",
     "blockedTitle": "Abra o {app} para fazer login",
-    "blockedDescription": "Seu navegador bloqueou a janela de login. Abra-a com o botão abaixo. Esta página se atualiza sozinha."
+    "blockedDescription": "Seu navegador bloqueou a janela de login. Abra-a com o botão abaixo. Esta página se atualiza sozinha.",
+    "doneTitle": "{app} conectado",
+    "doneTitleNoApp": "Conectado",
+    "doneDescription": "Seu agente já pode usar {app}.",
+    "doneClose": "Você pode fechar esta aba.",
+    "doneDeniedTitle": "Login cancelado",
+    "doneDeniedDescription": "Você não permitiu o acesso em {app}. Inicie o login novamente pelo Kortix para conectá-lo.",
+    "doneExpiredTitle": "Este link de login expirou",
+    "doneExpiredDescription": "Ele já foi usado ou é muito antigo. Inicie o login novamente pelo Kortix.",
+    "doneFailedTitle": "{app} não foi conectado",
+    "doneFailedTitleNoApp": "O login não foi concluído",
+    "doneFailedDescription": "Inicie o login novamente pelo Kortix. Se falhar de novo, envie o código abaixo ao suporte.",
+    "doneErrorCode": "Código de erro: {code}",
+    "doneOpenKortix": "Abrir o Kortix",
+    "doneFallbackApp": "o app"
   }
 }

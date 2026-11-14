@@ -2351,11 +2351,13 @@ flow(
       },
     );
 
-    await ctx.step('reject an invalid public callback state', async () => {
+    await ctx.step('send an invalid public callback state to the web return page with the reason', async () => {
       const callback = await ctx.client
         .as(ctx.P.ANON)
         .get('/v1/connectors/oauth2/callback?state=invalid&code=invalid');
-      callback.status(400);
+      callback
+        .status(302)
+        .headerEquals('location', /\/connect\/done\?oauth2=error&oauth2_error=invalid_state$/);
     });
   },
 );

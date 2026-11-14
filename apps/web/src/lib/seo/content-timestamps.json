@@ -1,5 +1,5 @@
 {
-  "marketing:index": "2026-11-11T17:16:45.000Z",
+  "marketing:index": "2026-11-13T20:10:12.000Z",
   "marketing:about": "2026-10-29T21:07:01.000Z",
   "marketing:contact": "2026-10-28T15:43:37.000Z",
   "marketing:developers": "2026-11-11T11:32:50.000Z",
@@ -13,13 +13,13 @@
   "marketing:case-studies": "2026-11-11T13:43:30.000Z",
   "marketing:framework": "2026-11-10T14:23:31.000Z",
   "marketing:multiplayer": "2026-11-07T05:36:02.000Z",
-  "marketing:sovereign": "2026-11-07T05:36:02.000Z",
+  "marketing:sovereign": "2026-11-13T09:33:42.000Z",
   "marketing:compliance": "2026-11-10T14:16:27.000Z",
   "marketing:white-label": "2026-11-11T11:32:50.000Z",
   "marketing:careers": "2026-10-28T15:43:37.000Z",
   "marketing:changelog": "2026-10-23T11:58:25.000Z",
   "marketing:use-cases": "2026-11-03T02:33:22.000Z",
-  "marketing:download": "2026-10-29T21:49:57.000Z",
+  "marketing:download": "2026-10-29T21:52:03.000Z",
   "marketing:desktop": "2026-11-11T11:32:50.000Z",
   "marketing:mobile": "2026-11-11T11:32:50.000Z",
   "marketing:slack": "2026-11-11T11:32:50.000Z",
@@ -28,7 +28,7 @@
   "docs:capture": "2026-11-11T00:19:40.000Z",
   "docs:capture/rollout": "2026-11-10T19:37:22.000Z",
   "docs:connect/chrome": "2026-11-07T05:36:02.000Z",
-  "docs:developers": "2026-11-12T02:48:41.000Z",
-  "docs:guide": "2026-11-12T05:41:21.000Z",
+  "docs:developers": "2026-11-13T19:57:18.000Z",
+  "docs:guide": "2026-11-13T18:56:13.000Z",
   "docs:index": "2026-11-07T05:36:02.000Z"
 }

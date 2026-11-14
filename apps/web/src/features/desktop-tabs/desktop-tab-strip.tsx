@@ -47,6 +47,7 @@ import {
   BookOpenTextIcon,
   BrainIcon,
   BrowserIcon,
+  CalendarBlankIcon,
   CardsThreeIcon,
   ChartBarIcon,
   ChatsCircleIcon,
@@ -1328,6 +1329,7 @@ function staticLabel(
     case 'page': {
       const icons: Record<typeof route.page, Icon> = {
         apps: AppWindowIcon,
+        calendar: CalendarBlankIcon,
         chat: ChatsCircleIcon,
         drive: HardDrivesIcon,
         files: FoldersIcon,

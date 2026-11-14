@@ -1,8 +1,9 @@
-import { beforeEach, expect, mock, test } from 'bun:test';
+import { beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import type { AgentGrant } from '@kortix/db';
 import * as realSecretGrant from './secret-grant';
 import * as realAgents from '../agents';
 import type { LoadedAgents } from '../agents';
+import { resetLogWindowsForTests } from '../../shared/log-window';
 
 const storedGrantDefault: AgentGrant = {
   agent: 'kortix',
@@ -142,6 +143,7 @@ beforeEach(() => {
   forceRefresh = undefined;
   launchableAgents = null;
   launchChecks.length = 0;
+  resetLogWindowsForTests();
 });
 
 test('reconciles a same-agent connector change for an existing session token', async () => {
@@ -258,4 +260,24 @@ test('a token already carrying an undeclared agent heals to the session agent on
   expect(writtenGrant?.agent).toBe('galileo');
   expect(grant?.agent).toBe('galileo');
   expect(writtenGrant).toEqual(derivedRunning('galileo', loadedAgents));
+});
+
+test('a session whose own agent is undeclared heals on every call but logs the line once per window', async () => {
+  // Both the stored agent and the session's own agent are gone from kortix.yaml:
+  // every connector call heals again. One prod session logged it 142 times in 2.5 min.
+  sessionAgentRow = 'removed-agent';
+  storedGrant = { agent: 'removed-agent', connectors: [], permissions: [], env: [] };
+  loadedAgents = loadedOfSpecs([
+    { name: 'galileo', enabled: true, connectors: ['slack'], permissions: 'all', env: 'all' },
+  ]);
+  const errors = spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    for (let i = 0; i < 3; i++) {
+      await reconcileStoredSessionAgentGrant({ projectId: 'project-1', sessionId: 'session-heal' });
+    }
+    const healLines = errors.mock.calls.filter(([line]) => String(line).includes('names an undeclared agent'));
+    expect(healLines).toHaveLength(1);
+  } finally {
+    errors.mockRestore();
+  }
 });

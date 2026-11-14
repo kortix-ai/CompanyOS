@@ -141,7 +141,8 @@ export const DEPRECATIONS: readonly Deprecation[] = [
     summary: 'an agent without `tools` gets every tool. Write `tools: "*"` (same meaning), or list the tools it needs.',
     apply: (doc) =>
       agentBlocks(doc).flatMap(([name, block]) => {
-        if (block.has('tools')) return [];
+        // A program agent (`run`) calls no tools: `tools` means nothing to it.
+        if (block.has('tools') || block.has('run')) return [];
         block.set('tools', everyScalar());
         return [`agents.${name}.tools`];
       }),

@@ -63,6 +63,7 @@ export * from './apps-fleet';
 export * from './drives';
 export * from './project-search';
 export * from './goals';
+export * from './evals';
 export * from './goal-file';
 export * from './notifications';
 export * from './chrome';

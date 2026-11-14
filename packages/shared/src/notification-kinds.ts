@@ -77,7 +77,7 @@ export function pushTypeOf(kind: NotificationKindName): string {
  * browser registers, so any other host is refused (no SSRF through push).
  * A host matches when it equals a suffix or ends with `.<suffix>`.
  */
-export const WEB_PUSH_HOST_SUFFIXES = [
+const WEB_PUSH_HOST_SUFFIXES = [
   'fcm.googleapis.com',
   'android.googleapis.com',
   'push.services.mozilla.com',

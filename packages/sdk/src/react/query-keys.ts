@@ -697,6 +697,16 @@ export const qk = {
     goal: (id: string, goalId: string) => [...qk.project.goals(id), 'goal', goalId] as const,
     /** `listProjectGoalEvents` — one goal's audit trail. */
     goalEvents: (id: string, goalId: string) => [...qk.project.goals(id), 'events', goalId] as const,
+    /** `listWorkspaceEvalSuites` — the `evals:` suites of kortix.yaml. Every eval key starts with it. */
+    evals: (id: string) => [...qk.project.scope(id), 'evals'] as const,
+    /** `listWorkspaceEvalJobs`, filtered by suite (`''`: every suite). */
+    evalJobs: (id: string, suite: string) => [...qk.project.evals(id), 'jobs', suite] as const,
+    /** `getWorkspaceEvalJob` and `listWorkspaceEvalTrials` of one job. */
+    evalJob: (id: string, jobId: string) => [...qk.project.evals(id), 'job', jobId] as const,
+    /** `getWorkspaceEvalTrial` — one trial with its instruction and files. */
+    evalTrial: (id: string, jobId: string, trialId: string) => [...qk.project.evalJob(id, jobId), 'trial', trialId] as const,
+    /** `listWorkspaceEvalTasks` of a suite. */
+    evalTasks: (id: string, suite: string) => [...qk.project.evals(id), 'tasks', suite] as const,
     /** `listSessionReminders` — `GET /projects/:id/sessions/:sid/reminders`. */
     sessionReminders: (id: string, sessionId: string) =>
       [...qk.project.reminders(id), 'session', sessionId] as const,

@@ -32,6 +32,24 @@ export function billingPaneUrl(accountId: string): string {
 }
 
 /**
+ * The account's billing managers: their deduped email addresses and the
+ * account's display name. `emails` is empty when the account has nobody to
+ * email yet.
+ */
+export async function billingManagers(accountId: string): Promise<{ emails: string[]; accountName: string }> {
+  const managers = [...(await accountRoleMap(accountId))]
+    .filter(([, role]) => role === 'owner' || role === 'admin')
+    .map(([userId]) => userId);
+  if (managers.length === 0) return { emails: [], accountName: 'your Kortix account' };
+  const [emailsByUser, [account]] = await Promise.all([
+    lookupEmailsByUserIds(managers),
+    db.select({ name: accountsView.name }).from(accountsView).where(eq(accountsView.accountId, accountId)).limit(1),
+  ]);
+  const emails = [...new Set([...emailsByUser.values()].filter((email): email is string => !!email))];
+  return { emails, accountName: account?.name?.trim() || 'your Kortix account' };
+}
+
+/**
  * Email every billing manager (owner or admin) of the account the message
  * `compose` builds from the account's name. Returns how many emails were
  * handed to the transport.
@@ -40,17 +58,9 @@ export async function emailBillingManagers(
   accountId: string,
   compose: (accountName: string) => Omit<EmailMessage, 'to'>,
 ): Promise<number> {
-  const managers = [...(await accountRoleMap(accountId))]
-    .filter(([, role]) => role === 'owner' || role === 'admin')
-    .map(([userId]) => userId);
-  if (managers.length === 0) return 0;
-  const [emails, [account]] = await Promise.all([
-    lookupEmailsByUserIds(managers),
-    db.select({ name: accountsView.name }).from(accountsView).where(eq(accountsView.accountId, accountId)).limit(1),
-  ]);
-  const recipients = [...new Set([...emails.values()].filter((email): email is string => !!email))];
-  if (recipients.length === 0) return 0;
-  const message = compose(account?.name?.trim() || 'your Kortix account');
-  await Promise.all(recipients.map((to) => send({ ...message, to: [to] })));
-  return recipients.length;
+  const { emails, accountName } = await billingManagers(accountId);
+  if (emails.length === 0) return 0;
+  const message = compose(accountName);
+  await Promise.all(emails.map((to) => send({ ...message, to: [to] })));
+  return emails.length;
 }

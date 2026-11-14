@@ -192,10 +192,8 @@ export interface DrawerSectionInput {
   title: string;
   /** Rows already loaded for this section, in server order: top-level rows, every pinned row in Pinned. */
   rows: readonly ProjectSession[];
-  /** Rows show only while open; the header always shows unless `hidden`. */
+  /** Rows show only while open. A section with no row to show has no header at all. */
   open: boolean;
-  /** "Shared" with no rows: no header at all. */
-  hidden: boolean;
   /** The section has another page ("Show more"). */
   hasMore: boolean;
 }
@@ -223,13 +221,15 @@ export function buildDrawerItems(
   const items: DrawerItem[] = [];
   const shown = new Set<string>();
   for (const section of sections) {
-    if (section.hidden) continue;
-    items.push({ kind: 'header', section: section.id, title: section.title, open: section.open });
     const rows = (section.id === 'pinned' ? section.rows : rootRowsOnly(section.rows)).filter((session) => {
       if (shown.has(session.session_id)) return false;
       shown.add(session.session_id);
       return true;
     });
+    // No bare header, and no "Show more", over a section with no row: a next
+    // page alone does not show a section (the hook reads past empty pages).
+    if (rows.length === 0) continue;
+    items.push({ kind: 'header', section: section.id, title: section.title, open: section.open });
     if (!section.open) continue;
     for (const session of rows) {
       items.push({ kind: 'root', section: section.id, session });

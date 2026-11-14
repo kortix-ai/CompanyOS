@@ -221,15 +221,24 @@ export async function sandboxKeepsMessageIds(externalId: string | null | undefin
   return (await readRuntimeCapabilities(externalId, actorUserId))?.includes(RUNTIME_STABLE_MESSAGE_ID_CAPABILITY) ?? false;
 }
 
-/** `sandboxKeepsMessageIds` for the session's box. False when the box cannot be read. */
-export async function sessionKeepsMessageIds(sessionId: string | null | undefined, actorUserId: string | null): Promise<boolean> {
-  if (!sessionId) return false;
+/**
+ * `sandboxKeepsMessageIds` for the session's box: true/false when the box
+ * answered, null when it could not be read (no sandbox, read failure).
+ */
+export async function sessionMessageIdCapability(sessionId: string | null | undefined, actorUserId: string | null): Promise<boolean | null> {
+  if (!sessionId) return null;
   try {
     const box = await liveInboxAdmissionDeps.readSandbox(sessionId);
-    return await sandboxKeepsMessageIds(box?.externalId, actorUserId);
+    const capabilities = await readRuntimeCapabilities(box?.externalId, actorUserId);
+    return capabilities ? capabilities.includes(RUNTIME_STABLE_MESSAGE_ID_CAPABILITY) : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+/** `sessionMessageIdCapability` where an unreadable box counts as "no": the caller re-mints. */
+export async function sessionKeepsMessageIds(sessionId: string | null | undefined, actorUserId: string | null): Promise<boolean> {
+  return (await sessionMessageIdCapability(sessionId, actorUserId)) ?? false;
 }
 
 /**

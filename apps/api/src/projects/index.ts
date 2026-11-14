@@ -91,6 +91,7 @@ import { registerArtifactRoutes } from './routes/artifacts';
 import { registerLinkPreviewRoutes } from './routes/link-preview';
 import { registerSessionRemindersRoutes } from './routes/session-reminders';
 import { registerGoalRoutes } from './routes/goals';
+import { registerEvalRoutes } from './routes/evals';
 import { registerRuntimeTriggersRoutes } from './routes/runtime-triggers';
 import { registerProjectSpacesRoutes } from './routes/project-spaces';
 import { registerProjectMemoryRoutes } from './routes/project-memory';
@@ -196,6 +197,7 @@ export function registerAllProjectRoutes(): void {
   registerLinkPreviewRoutes();
   registerSessionRemindersRoutes();
   registerGoalRoutes();
+  registerEvalRoutes();
   registerRuntimeTriggersRoutes();
   registerProjectSpacesRoutes();
   registerProjectMemoryRoutes();

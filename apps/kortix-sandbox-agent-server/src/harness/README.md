@@ -981,7 +981,9 @@ session. Every rule below holds for the working tree and for a config release.
 - **Skills.** The managed `kortix-*` skills, then exactly the folders in
   `compiled.skills`, under the config root: the active release root, else
   `/workspace` (`resolvePiSkillDirectories`). The image default has no
-  project skill. pi scans no `skills/` folder. The agent's
+  project skill. A session without repository access gets a release that
+  holds the folders of the skills its agents are granted, beside the project
+  tool modules they may call (apps/api `toolsRelease`). pi scans no `skills/` folder. The agent's
   `permission.skill` allowlist still hides every skill it does not grant.
 - **Subagents.** A kortix.yaml set has no built-in `general` or `explore`. The `agent` tool offers
   only declared, enabled agents with `mode` `subagent` or `all` that the

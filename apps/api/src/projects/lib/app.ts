@@ -114,7 +114,7 @@ export const AnyObject = z.record(z.string(), z.any());
 
 /** The prepare-branch body: the durable transition the UI polls. Mirrors
  *  `PreparationView` (provider-transition-service.ts) — carries `kind`. */
-export const PreparationViewSchema = z
+const PreparationViewSchema = z
   .object({
     kind: z.literal('preparation'),
     transition_id: z.string().nullable(),
@@ -139,7 +139,7 @@ export const PreparationViewSchema = z
   .openapi('PreparationView');
 
 /** The immediate-branch body: the updated project, tagged with `kind:'project'`. */
-export const SandboxProviderProjectResultSchema = ContractProjectSchema.extend({
+const SandboxProviderProjectResultSchema = ContractProjectSchema.extend({
   kind: z.literal('project'),
 }).openapi('SandboxProviderProjectResult');
 
@@ -152,7 +152,7 @@ export const SandboxProviderPatchResultSchema = z
 // PUBLIC projection — status / providers / generation / timestamps / user-safe
 // error class only. Never leaks lease_epoch, lease holder, internal error strings,
 // image names, or template ids (see toPublicTransitionView).
-export const SandboxProviderTransitionViewSchema = z
+const SandboxProviderTransitionViewSchema = z
   .object({
     transition_id: z.string().nullable(),
     project_id: z.string(),

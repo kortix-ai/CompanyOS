@@ -133,6 +133,12 @@ export type FeatureFlagKey =
   | 'chat_front'
   /** Proactive spaces: with `chat` on, a space's watcher reads what happens in the space and posts, starts a thread or asks only when it matters. Experimental, off by default. */
   | 'spaces_proactive'
+  /** Program agents: an agent with `run` in kortix.yaml runs that command for each turn instead of a model. Experimental, off by default. */
+  | 'program_agents'
+  /** Evals: run agents on Harbor-format tasks and score them (`evals:` in kortix.yaml, `kortix evals`). Experimental, off by default. */
+  | 'evals'
+  /** Desktop tabs: the desktop app shows browser-style tabs in the title bar for this project's pages. Client-only, off by default. */
+  | 'desktop_tabs'
   /** @deprecated Withdrawn — agents messaging people left the product. The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'human_messaging';
 
@@ -193,6 +199,9 @@ export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'chat_input',
   'chat_front',
   'spaces_proactive',
+  'program_agents',
+  'evals',
+  'desktop_tabs',
 ] as const;
 
 /**
@@ -214,6 +223,12 @@ export interface FeatureFlagView {
   enabled: boolean;
   /** True when this project set an explicit choice (vs inheriting the default). */
   overridden: boolean;
+  /**
+   * What the flag resolves to without this project's choice: the state
+   * `updateFeatureFlag(projectId, key, null)` returns it to. Absent on servers
+   * older than this field.
+   */
+  default_enabled?: boolean;
   /**
    * True for an internal-only flag (`workspace_volume`). The
    * catalog lists one only while it is on, so agents and people can see it.
@@ -345,6 +360,9 @@ export interface ProjectConfigSummary {
     /** The agent's `model:` frontmatter (`provider/model`); absent on older
      *  servers, null when it follows the project default. */
     model?: string | null;
+    /** A program agent's command (`agents.<name>.run`): each turn runs it instead of a model.
+     *  Absent or null for a model agent. */
+    run?: string | null;
     /** The server sends `kortix.yaml`. `opencode` and `kortix.toml` are never sent; they stay
      *  in the union until the next major. */
     source?: 'opencode' | 'kortix.yaml' | 'kortix.toml';

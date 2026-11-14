@@ -14,6 +14,7 @@ import type {
   SetStateAction,
 } from 'react';
 import { lazy, Suspense, useContext, useMemo, useRef } from 'react';
+import { useToastClearance } from '../../primitives/toast-clearance';
 
 import { SpaceMentionContext } from './menus/space-mentions';
 import { useFeatureFlag } from '@kortix/sdk/react';
@@ -37,6 +38,7 @@ import { ChatInputOverridesProvider } from './chat-input/chat-input-overrides';
 import type { ComposerEditorHandle } from './editor/composer-editor';
 import type { SlashAction } from './menus/slash-actions';
 import type { AttachedFile } from './types';
+import { resolveProgramAgent } from './agent-selector';
 import { useUiHostConfig } from '../../providers/ui-provider';
 
 /** What the attach picker offers when the host names no list. */
@@ -217,6 +219,8 @@ export function ComposerCard({
 }: ComposerCardProps) {
   const connectionsAbove = useContext(ModelConnectionLayoutContext) === 'above';
   const cardRef = useRef<HTMLDivElement>(null);
+  // A composer docked at the window bottom keeps toasts above its Send/Stop button.
+  useToastClearance(cardRef, slashMenuPlacement === 'above');
   const { attachAccept, modelPickerEnabled } = useUiHostConfig();
   const inlineUnderbar = underbarPlacement === 'inline';
 
@@ -231,6 +235,8 @@ export function ComposerCard({
   // Inside a space the `@` menu is its people and agents (`menus/space-mentions.ts`).
   const spaceMentions = useContext(SpaceMentionContext);
   const chatInputOpen = agentMenuOpen || modelMenuOpen || reasoningMenuOpen;
+  // A program agent (`run` in kortix.yaml) has no model: its listing names provider `program`.
+  const programAgent = resolveProgramAgent(primaryAgents, selectedAgent);
   const chatInput = useMemo<ComposerUnderbarProps['chatInput']>(() => {
     if (!chatInputEnabled) return undefined;
     return {
@@ -457,6 +463,7 @@ export function ComposerCard({
             onChange={handleFileSelect}
           />
           <ComposerToolbar
+            noModel={programAgent}
             leading={
               inlineUnderbar ? (
                 <ComposerUnderbar

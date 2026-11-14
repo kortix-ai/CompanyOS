@@ -4,7 +4,7 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { classifyGitError, isTransientGitMirrorError } from './mirror';
+import { classifyGitError, ensureStoreObjects, isTransientGitMirrorError, refreshMirror, transientGitMirrorCause } from './mirror';
 import { fetchObjects, isObjectNotOnRemoteError } from './object-store';
 
 // KRTX-4890: `git fetch of 1 objects failed (exit 128): fatal: remote error:
@@ -16,6 +16,7 @@ import { fetchObjects, isObjectNotOnRemoteError } from './object-store';
 
 const exec = promisify(execFile);
 const OID = 'a'.repeat(40);
+const REAL_GIT = Bun.which('git') ?? 'git';
 const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -29,7 +30,7 @@ async function storeWithFetchShim(stderrLine: string): Promise<{ store: string; 
   const bin = join(root, 'bin');
   await mkdir(bin);
   const shim = join(bin, 'git');
-  await writeFile(shim, `#!/bin/sh\nfor arg in "$@"; do [ "$arg" = fetch ] && { echo "${stderrLine}" >&2; exit 128; }; done\nexit 0\n`);
+  await writeFile(shim, `#!/bin/sh\nfor arg in "$@"; do [ "$arg" = fetch ] && { echo "${stderrLine}" >&2; exit 128; }; done\nexec ${REAL_GIT} "$@"\n`);
   await chmod(shim, 0o755);
   return { store, env: { PATH: `${bin}:${process.env.PATH ?? ''}` } };
 }
@@ -53,5 +54,35 @@ describe('an object the remote no longer serves', () => {
     const notOurRef = classifyGitError({ code: 128, stderr: `fatal: remote error: upload-pack: not our ref ${OID}\n` }, ['fetch'], 1000);
     expect(isTransientGitMirrorError(notOurRef)).toBe(true);
     expect(isTransientGitMirrorError(classifyGitError({ code: 128, stderr: 'fatal: bad object HEAD\n' }, ['fetch'], 1000))).toBe(false);
+  });
+});
+
+describe('ensureStoreObjects on a refusal of the remote', () => {
+  test('surfaces a transient GitOperationError (retryable 503), not a plain Error that pages', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'kortix-not-our-ref-store-'));
+    roots.push(root);
+    const remote = join(root, 'remote.git');
+    const work = join(root, 'work');
+    await exec('git', ['init', '--quiet', '--bare', '--initial-branch=main', remote]);
+    await exec('git', ['init', '--quiet', '--initial-branch=main', work]);
+    await exec('git', ['-C', work, '-c', 'user.name=Test', '-c', 'user.email=a@kortix.ai', 'commit', '--allow-empty', '-m', 'seed']);
+    await exec('git', ['-C', work, 'push', '--quiet', remote, 'main']);
+    const previousCache = process.env.KORTIX_GIT_CACHE_DIR;
+    const previousPath = process.env.PATH;
+    process.env.KORTIX_GIT_CACHE_DIR = join(root, 'cache');
+    try {
+      const project = { projectId: crypto.randomUUID(), repoUrl: remote, defaultBranch: 'main', manifestPath: 'kortix.yaml', gitAuthToken: 'synthetic' };
+      const store = await refreshMirror(project, true);
+      const { env } = await storeWithFetchShim(`fatal: remote error: upload-pack: not our ref ${OID}`);
+      process.env.PATH = env.PATH;
+      const error = await ensureStoreObjects(store, [OID]).catch((e: unknown) => e);
+      const cause = transientGitMirrorCause(error);
+      expect(cause).not.toBeNull();
+      expect(cause?.message).toContain(`not our ref ${OID}`);
+    } finally {
+      process.env.PATH = previousPath;
+      if (previousCache === undefined) delete process.env.KORTIX_GIT_CACHE_DIR;
+      else process.env.KORTIX_GIT_CACHE_DIR = previousCache;
+    }
   });
 });

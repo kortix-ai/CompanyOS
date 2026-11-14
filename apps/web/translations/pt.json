@@ -2925,7 +2925,7 @@
       "allWorkspaces": "Todos os workspaces",
       "usageDescriptionWorkspace": "Cobranças da Kortix deste workspace. Os créditos são um saldo único para todos os workspaces.",
       "usageDescriptionAll": "Cobranças da Kortix e registro de créditos de todos os workspaces.",
-      "planDescriptionAll": "Plano, saldo e gastos de todos os workspaces."
+      "planDescriptionAll": "Plano, créditos e gastos de todos os workspaces."
     }
   },
   "ssoRequired": {

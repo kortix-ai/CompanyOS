@@ -2925,7 +2925,7 @@
       "allWorkspaces": "Tutti i workspace",
       "usageDescriptionWorkspace": "Addebiti Kortix di questo workspace. I crediti sono un unico saldo per tutti i workspace.",
       "usageDescriptionAll": "Addebiti Kortix e registro dei crediti di tutti i workspace.",
-      "planDescriptionAll": "Piano, saldo e spesa di tutti i workspace."
+      "planDescriptionAll": "Piano, crediti e spesa di tutti i workspace."
     }
   },
   "ssoRequired": {

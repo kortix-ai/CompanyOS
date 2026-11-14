@@ -2925,7 +2925,7 @@
       "allWorkspaces": "Сви workspace-ови",
       "usageDescriptionWorkspace": "Kortix трошкови за овај workspace. Кредити су једно стање за све workspace-ове.",
       "usageDescriptionAll": "Kortix трошкови и књига кредита за све workspace-ове.",
-      "planDescriptionAll": "План, новчаник и потрошња за све workspace-ове."
+      "planDescriptionAll": "План, кредити и потрошња за све workspace-ове."
     }
   },
   "ssoRequired": {

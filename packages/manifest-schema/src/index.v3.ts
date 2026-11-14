@@ -40,6 +40,7 @@ import {
   SPACE_TAB_TYPES,
   TOOL_NAME_RE,
   parseDurationSeconds,
+  AGENT_TITLE_MAX_LENGTH,
 } from './constants';
 
 export { SPACE_HEADER_ITEMS, SPACE_TAB_TYPES };
@@ -497,8 +498,7 @@ export const AGENT_BLOCK_KEYS_V3 = [
 ] as const;
 const AGENT_KEYS_V3 = new Set<string>(AGENT_BLOCK_KEYS_V3);
 
-/** The longest `agents.<name>.title`. */
-export const AGENT_TITLE_MAX_LENGTH = 80;
+export { AGENT_TITLE_MAX_LENGTH } from './constants';
 
 /** Agent keys of earlier versions, with what replaces each in v3. */
 const RETIRED_AGENT_KEYS_V3: Record<string, string> = {

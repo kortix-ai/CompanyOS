@@ -2925,7 +2925,7 @@
       "allWorkspaces": "所有工作区",
       "usageDescriptionWorkspace": "此工作区的 Kortix 费用。积分是所有工作区共用的一个余额。",
       "usageDescriptionAll": "所有工作区的 Kortix 费用和积分明细。",
-      "planDescriptionAll": "所有工作区的套餐、钱包和支出。"
+      "planDescriptionAll": "所有工作区的套餐、积分和支出。"
     }
   },
   "ssoRequired": {

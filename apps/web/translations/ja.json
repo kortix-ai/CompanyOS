@@ -2925,7 +2925,7 @@
       "allWorkspaces": "すべてのワークスペース",
       "usageDescriptionWorkspace": "このワークスペースの Kortix 料金。クレジットはすべてのワークスペースで共通の残高です。",
       "usageDescriptionAll": "すべてのワークスペースの Kortix 料金とクレジット台帳。",
-      "planDescriptionAll": "すべてのワークスペースのプラン、ウォレット、利用額。"
+      "planDescriptionAll": "すべてのワークスペースのプラン、クレジット、利用額。"
     }
   },
   "ssoRequired": {

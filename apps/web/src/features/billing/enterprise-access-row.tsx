@@ -7,7 +7,6 @@
  * with billing on (Kortix cloud), and cloud never offers branding
  * (`apps/api/src/accounts/branding.ts`). Self-host has a Branding pane instead.
  *
- *
  *   - Off: a billing manager turns on the demo; anyone may talk to sales.
  *   - Demo: on, self-serve. A billing manager turns it off.
  *   - Licensed: on through a license contract.

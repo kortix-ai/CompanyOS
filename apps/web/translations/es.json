@@ -2925,7 +2925,7 @@
       "allWorkspaces": "Todos los workspaces",
       "usageDescriptionWorkspace": "Cargos de Kortix de este workspace. Los créditos son un saldo para todos los workspaces.",
       "usageDescriptionAll": "Cargos de Kortix y registro de créditos de todos los workspaces.",
-      "planDescriptionAll": "Plan, saldo y gasto de todos los workspaces."
+      "planDescriptionAll": "Plan, créditos y gasto de todos los workspaces."
     }
   },
   "ssoRequired": {

@@ -2925,7 +2925,7 @@
       "allWorkspaces": "Alle Workspaces",
       "usageDescriptionWorkspace": "Kortix-Kosten für diesen Workspace. Credits sind ein Guthaben für alle Workspaces.",
       "usageDescriptionAll": "Kortix-Kosten und Credit-Buchungen über alle Workspaces.",
-      "planDescriptionAll": "Plan, Guthaben und Ausgaben über alle Workspaces."
+      "planDescriptionAll": "Plan, Credits und Ausgaben über alle Workspaces."
     }
   },
   "ssoRequired": {

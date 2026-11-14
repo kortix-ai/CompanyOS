@@ -2925,7 +2925,7 @@
       "allWorkspaces": "All workspaces",
       "usageDescriptionWorkspace": "Kortix charges for this workspace. Credits are one balance for all workspaces.",
       "usageDescriptionAll": "Kortix charges and credit ledger across all workspaces.",
-      "planDescriptionAll": "Plan, wallet, and spend across all workspaces."
+      "planDescriptionAll": "Plan, credits and spend across all workspaces."
     }
   },
   "ssoRequired": {

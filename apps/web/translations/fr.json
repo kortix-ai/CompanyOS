@@ -2925,7 +2925,7 @@
       "allWorkspaces": "Tous les workspaces",
       "usageDescriptionWorkspace": "Frais Kortix de ce workspace. Les crédits forment un seul solde pour tous les workspaces.",
       "usageDescriptionAll": "Frais Kortix et registre des crédits de tous les workspaces.",
-      "planDescriptionAll": "Forfait, solde et dépenses de tous les workspaces."
+      "planDescriptionAll": "Forfait, crédits et dépenses de tous les workspaces."
     }
   },
   "ssoRequired": {

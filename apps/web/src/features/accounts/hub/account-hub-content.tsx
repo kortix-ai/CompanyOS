@@ -87,6 +87,7 @@ import { UserAvatar } from '@kortix/ui/user-avatar';
 import { BillingTab } from '@/features/accounts/settings/billing-tab';
 import { BrandingTab } from '@/features/accounts/settings/branding-tab';
 import { TransactionsTab } from '@/features/accounts/settings/transactions-tab';
+import { ALL_PROJECTS } from '@/features/billing/cost-explorer/cost-explorer';
 import { GlobalUpgradeModal } from '@/features/billing/global-upgrade-modal';
 import { useBrandingScope } from '@kortix/ui/internal/branding/branding-provider';
 import { Close } from '@kortix/ui/icons';
@@ -320,7 +321,10 @@ export function AccountHubContent({
                 title: localizedAccountPaneMeta(tI18nComplete).transactions?.title ?? '',
                 // Session costs follow the open workspace; credits are one
                 // wallet for all workspaces, so the copy says which is which.
-                description: workspaceId ? tCosts('usageDescriptionWorkspace') : tCosts('usageDescriptionAll'),
+                description:
+                  workspaceId && searchParams.get('project') !== ALL_PROJECTS
+                    ? tCosts('usageDescriptionWorkspace')
+                    : tCosts('usageDescriptionAll'),
               }
           : activeSection === 'billing'
             ? {

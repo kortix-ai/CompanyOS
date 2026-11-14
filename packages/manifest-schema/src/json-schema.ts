@@ -84,6 +84,7 @@ import {
   REGISTRY_NAME_MAX,
   REGISTRY_NAME_RE,
   V2_RUNTIME_VALUES,
+  AGENT_TITLE_MAX_LENGTH,
 } from './constants';
 import {
   CONNECTOR_HEADER_NAME_MAX_LENGTH,
@@ -1257,7 +1258,7 @@ function agentBlockV3Schema(): JsonSchemaFragment {
       title: {
         type: 'string',
         pattern: '\\S',
-        maxLength: 80,
+        maxLength: AGENT_TITLE_MAX_LENGTH,
         description: 'The agent\'s name as people read it, e.g. "GitHub PR reviewer". The key under `agents` stays its id: sessions, triggers and @-mentions use the key. Default: the key in sentence case.',
       },
       ...behavior,

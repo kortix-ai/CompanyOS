@@ -31,7 +31,7 @@ print(loops, r)
 json.dump(r, open('/logs/verifier/reward.json', 'w'))
 PY
 kortix evals judge \
-  --criterion followup_text="A loop's text says that quotes from Brot & Co, Kornblume and Hefezopf are pending, that the person relays them, and that the check asks which replies came in and which are still missing." \
+  --criterion followup_text="A loop's text names the three bakeries (Brot & Co, Kornblume, Hefezopf) and says what the check-in does: ask the person which quotes came in." \
   --criterion one_line="The reply tells the person in one short line when it will check in about the three quotes, and does not ask whether it should." \
   --input /logs/verifier/loops.json --input /logs/agent/response.md || { echo "kortix evals judge failed: no reward, so the trial counts as an error, not a 0"; rm -f /logs/verifier/reward.json; exit 1; }
 for id in $(python3 -c 'import json; d=json.load(open("/logs/verifier/loops.json")); print(" ".join(l["id"] for l in (d if isinstance(d, list) else d.get("reminders") or d.get("loops") or [])))' 2>/dev/null); do kortix loops rm "$id" >/dev/null 2>&1; done

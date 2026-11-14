@@ -28,9 +28,13 @@ export type DriveWithMemberAccess = Drive & { adminsOpenUserDrives?: boolean };
 export const memberDrivesShown = (drive: DriveWithMemberAccess) =>
   drive.access === 'manage' && drive.adminsOpenUserDrives === true;
 
-/** `/Users` itself or another member's desktop: kept out of navigation while member drives are hidden. */
+/**
+ * `/Users` itself or another member's desktop (`/Users/<name>`, not what is in it): the entries kept
+ * out of the `/` and `/Users` listings while member drives are hidden. A member's folder opened by
+ * URL still lists what the API returns: hiding it there would only show an empty folder.
+ */
 export const hiddenMemberPath = (path: string, personal: string | null, shown: boolean) =>
-  !shown && within(path, PEOPLE_ROOT) && !(personal && within(path, personal));
+  !shown && (path === PEOPLE_ROOT || (path.startsWith(`${PEOPLE_ROOT}/`) && !path.slice(PEOPLE_ROOT.length + 1).includes('/') && path !== personal));
 const nameOf = (path: string) => path.split('/').filter(Boolean).pop() ?? path;
 
 /**

@@ -54,11 +54,12 @@ test('member drives show only for an admin with the workspace setting on; absent
   expect(memberDrivesShown(drive('write', true))).toBe(false);
 });
 
-test('while hidden, /Users and other desktops leave navigation; your own desktop and drives stay', () => {
+test('while hidden, /Users and other desktops leave the listings; your own desktop, drives and folder contents stay', () => {
   const me = '/Users/you';
   expect(hiddenMemberPath('/Users', me, false)).toBe(true);
   expect(hiddenMemberPath('/Users/ana.lima', me, false)).toBe(true);
-  expect(hiddenMemberPath('/Users/ana.lima/Notes', me, false)).toBe(true);
+  // Inside a member's folder opened by URL, the API's listing stands.
+  expect(hiddenMemberPath('/Users/ana.lima/Notes', me, false)).toBe(false);
   expect(hiddenMemberPath('/Users/you', me, false)).toBe(false);
   expect(hiddenMemberPath('/Users/you/Notes', me, false)).toBe(false);
   expect(hiddenMemberPath('/Users/youth', me, false)).toBe(true);

@@ -96,7 +96,8 @@ function capTabs(tabs: DesktopTab[], activeId: string | null): DesktopTab[] {
  *  2. The active tab is the same destination (Customize → Triggers, Goals →
  *     one goal): it navigates. A second Customize tab never steals focus from
  *     the one you are clicking in.
- *  3. Another tab holds the same destination (`groupOf`): that tab takes focus
+ *  3. Another tab shows the same destination (`destinationOf`: a session,
+ *     an artifact, a section; one Customize section): that tab takes focus
  *     and moves to `path`. A session that has a tab, Back across a tab switch,
  *     the Customize rail's Back link to a session: none of them closes or
  *     rewrites the tab you came from, and none opens a page twice.
@@ -111,6 +112,8 @@ export function syncPath(
   state: ProjectTabs,
   path: string,
   groupOf: (path: string) => string | null,
+  /** The exact page, for rule 3 (a Customize section). Defaults to `groupOf`. */
+  destinationOf: (path: string) => string | null = groupOf,
 ): ProjectTabs {
   const group = groupOf(path);
   if (group === null) return state;
@@ -124,7 +127,10 @@ export function syncPath(
     ),
   });
   if (active && activeGroup === group) return moveActive(active.preview);
-  const owner = state.tabs.find((t) => t.id !== active?.id && groupOf(t.path) === group);
+  const destination = destinationOf(path);
+  const owner = state.tabs.find(
+    (t) => t.id !== active?.id && destinationOf(t.path) === destination,
+  );
   // A blank tab takes the destination only when no tab has it: a session
   // that is already open is focused, never opened twice. The session it
   // becomes is the person's own, so never a preview.

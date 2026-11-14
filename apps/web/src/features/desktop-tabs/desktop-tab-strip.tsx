@@ -120,6 +120,7 @@ import {
   isPrototypeKey,
   newTabPath,
   ownEntry,
+  pathDestination,
   pathGroup,
   stripVisible,
   tabRoute,
@@ -271,7 +272,14 @@ export function DesktopTabStrip({ projectId }: { projectId: string }) {
     // Any arrival settles the pending link: it landed, or a newer one won.
     inFlight.current = null;
     if (!tabRoute(pathname, projectId)) return;
-    update(projectId, (s) => syncPath(s, pathname, (p) => pathGroup(p, projectId)));
+    update(projectId, (s) =>
+      syncPath(
+        s,
+        pathname,
+        (p) => pathGroup(p, projectId),
+        (p) => pathDestination(p, projectId),
+      ),
+    );
   }, [pathname, projectId, router, update]);
 
   // Warm every background tab's route: a click is a client transition, never a

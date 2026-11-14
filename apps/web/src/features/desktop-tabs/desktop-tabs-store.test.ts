@@ -15,7 +15,7 @@ import {
   syncPath,
   type ProjectTabs,
 } from './desktop-tabs-store';
-import { isPrototypeKey, ownEntry, pathGroup, stripVisible, tabRoute } from './tab-route';
+import { isPrototypeKey, ownEntry, pathDestination, pathGroup, stripVisible, tabRoute } from './tab-route';
 
 const P = 'project-1';
 const home = `/workspaces/${P}`;
@@ -24,6 +24,7 @@ const s2 = `/workspaces/${P}/sessions/s2`;
 const models = `/workspaces/${P}/admin/models`;
 
 const g = (path: string) => pathGroup(path, P);
+const d = (path: string) => pathDestination(path, P);
 const empty: ProjectTabs = { tabs: [], activeId: null, closed: [] };
 const s1Path = (i: number) => `${home}/sessions/x${i}`;
 const paths = (s: ProjectTabs) => s.tabs.map((t) => t.path);
@@ -169,10 +170,29 @@ describe('desktop tabs: navigation', () => {
     s = syncPath(s, models, g);
     s = syncPath(s, s1, g);
     s = openBlankTab(s, home, g);
-    s = syncPath(s, `${home}/evals`, g);
-    s = syncPath(s, `${home}/admin/evals`, g);
-    expect(paths(s)).toEqual([s1, home, `${home}/admin/evals`]);
+    s = syncPath(s, `${home}/evals`, g, d);
+    s = syncPath(s, `${home}/admin/evals`, g, d);
+    expect(paths(s)).toEqual([s1, `${home}/admin/evals`, models]);
     expect(activePath(s)).toBe(`${home}/admin/evals`);
+  });
+
+  test('a Customize section clicked from another tab opens its own tab; Secrets stays', () => {
+    const secrets = `${home}/admin/secrets`;
+    const security = `${home}/admin/security`;
+    const artifact = `${home}/artifacts/a1`;
+    let s = syncPath(empty, secrets, g, d);
+    s = syncPath(s, artifact, g, d);
+    s = syncPath(s, security, g, d);
+    expect(paths(s)).toEqual([secrets, artifact, security]);
+    expect(activePath(s)).toBe(security);
+    // Inside the Customize tab, the rail moves that tab.
+    s = syncPath(s, `${home}/admin/triggers`, g, d);
+    expect(paths(s)).toEqual([secrets, artifact, `${home}/admin/triggers`]);
+    // From another tab, a section that has a tab is focused, not duplicated.
+    s = syncPath(s, artifact, g, d);
+    s = syncPath(s, secrets, g, d);
+    expect(s.tabs).toHaveLength(3);
+    expect(activePath(s)).toBe(secrets);
   });
 
   test('only one blank tab: + focuses the open one', () => {

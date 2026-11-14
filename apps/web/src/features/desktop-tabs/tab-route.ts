@@ -167,6 +167,33 @@ export function tabGroup(route: TabRoute): string {
   }
 }
 
+/**
+ * The exact page a tab shows, for focusing a tab that is already there. Finer
+ * than `tabGroup` for Customize only: each Customize section is its own
+ * destination. Moving inside the Customize tab stays in it (same group), but
+ * clicking Security from another tab opens a Security tab instead of
+ * rewriting an open Secrets tab.
+ */
+export function tabDestination(route: TabRoute): string {
+  switch (route.kind) {
+    case 'agent':
+      return `customize:agent:${route.name}`;
+    case 'admin':
+    case 'customize':
+      return `customize:${route.section ?? ''}`;
+    case 'settings':
+      return 'customize:general';
+    default:
+      return tabGroup(route);
+  }
+}
+
+/** `tabDestination` for a path, or null when the path is not a page of the project. */
+export function pathDestination(path: string, projectId: string): string | null {
+  const route = tabRoute(path, projectId);
+  return route ? tabDestination(route) : null;
+}
+
 /** The project's home: a blank New session, which the next destination replaces. */
 export const HOME_GROUP = 'home';
 const SESSION_GROUP = 'session:';

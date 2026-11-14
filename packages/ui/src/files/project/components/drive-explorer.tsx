@@ -57,6 +57,7 @@ import { useFileExplorerSource } from '../explorer-source';
 import { buildGitStatusMap } from '../hooks';
 import {
   forEachLimit,
+  inFlightPaths,
   MAX_UPLOAD_BYTES,
   partitionUploadBatch,
   resolveUploadTarget,
@@ -291,16 +292,9 @@ export function DriveExplorer({
   // Project-wide, so a batch keeps going (and its tray keeps reporting) after
   // this folder view unmounts. The tray itself is in the project shell.
   const uploads = useDriveUploads((s) => s.uploads);
-  // Cards and rows still on their way up show a spinner until the server has them.
-  const uploadingPaths = useMemo(
-    () =>
-      new Set(
-        uploads
-          .filter((u) => u.status === 'queued' || u.status === 'uploading')
-          .map((u) => (u.targetPath ? `${u.targetPath.replace(/\/+$/, '')}/${u.file.name}` : u.file.name)),
-      ),
-    [uploads],
-  );
+  // Cards and rows still on their way up (an upload, or a New file not yet
+  // created) show a spinner and defer their preview until the server has them.
+  const uploadingPaths = useMemo(() => inFlightPaths(uploads, pending), [uploads, pending]);
   const dragPageCounter = useRef(0);
 
   const [createKind, setCreateKind] = useState<DriveCreateKind | null>(null);

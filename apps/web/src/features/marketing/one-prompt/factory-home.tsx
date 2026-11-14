@@ -2,10 +2,10 @@
 
 import { KortixLogo } from '@/components/sidebar/kortix-logo';
 import { DitherField } from '@/features/marketing/kit/dither-field';
-import { setupPromptFor } from '@kortix/shared/setup-guide';
+import { loopPrompt, setupPromptFor } from '@kortix/shared/setup-guide';
 import { cn } from '@kortix/ui';
 import Link from 'next/link';
-import { useEffect, useState, type CSSProperties } from 'react';
+import { type CSSProperties } from 'react';
 
 import { YamlLine } from '@/features/marketing/code-panel';
 
@@ -35,43 +35,23 @@ const STEPS = [
   { title: 'Proves it, then stays.', body: 'It loops until one real run finishes. Then it adds the Kortix MCP server to your coding agent, so the next loop is one sentence.' },
 ];
 
-/** The second line of the headline: one factory after another. */
-function RotatingFactory({ names }: { names: string[] }) {
-  const [index, setIndex] = useState(0);
-  useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const id = setInterval(() => setIndex((i) => (i + 1) % names.length), 2400);
-    return () => clearInterval(id);
-  }, [names.length]);
-  return (
-    <span key={index} className="text-kortix-base animate-in fade-in slide-in-from-bottom-2 inline-block duration-500">
-      {names[index]}
-    </span>
-  );
-}
-
 /** The prompt itself, as the thing to click: the page's one action. */
-function PromptBox({ className }: { className?: string }) {
-  const prompt = setupPromptFor(useSetupTarget());
+function PromptBox({ loop, className }: { loop?: LoopView; className?: string }) {
+  const target = useSetupTarget();
+  const prompt = loop ? loopPrompt(loop, target) : setupPromptFor(target);
   const { copied, copy } = useCopy(prompt);
   return (
     <button
       type="button"
       onClick={copy}
       className={cn(
-        'border-border bg-card/80 hover:border-kortix-base/60 group w-full max-w-xl rounded-xl border p-5 text-left shadow-2xl shadow-black/40 backdrop-blur transition-colors',
+        'border-border bg-card/80 hover:border-kortix-base/60 group flex w-full max-w-xl flex-col gap-5 rounded-xl border p-5 text-left shadow-2xl shadow-black/40 backdrop-blur transition-colors',
         className,
       )}
     >
       <span className="text-foreground/90 block font-mono text-[13px] leading-6 whitespace-pre-wrap">{prompt}</span>
-      <span className="border-border mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-4 text-xs">
-        <span className="text-muted-foreground flex items-center gap-4">
-          <Mark name="Claude Code" />
-          <Mark name="Codex" />
-        </span>
-        <span aria-live="polite" className="bg-kortix-base group-hover:bg-kortix-base/90 shrink-0 rounded-md px-3 py-1.5 text-sm whitespace-nowrap font-medium text-white transition-colors">
-          {copied ? 'Copied' : 'Copy the prompt'}
-        </span>
+      <span aria-live="polite" className="bg-kortix-base group-hover:bg-kortix-base/90 self-end rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap text-white transition-colors">
+        {copied ? 'Copied' : 'Copy the prompt'}
       </span>
     </button>
   );
@@ -85,6 +65,10 @@ function PromptBox({ className }: { className?: string }) {
  * and every word are Kortix's own.
  */
 export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: string[] }) {
+  // The factory the page leads with: its name is the headline, its prompt is the one to copy.
+  const first = loops[0];
+  const target = useSetupTarget();
+  const prompt = first ? loopPrompt(first, target) : undefined;
   return (
     <div className="dark bg-background text-foreground relative min-h-screen overflow-x-clip">
       <div className={cn(COLUMN, 'border-border relative border-x')}>
@@ -103,7 +87,7 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
           </nav>
           <div className="flex items-center gap-2">
             <GhostButton href="/auth">Sign in</GhostButton>
-            <CopyButton size="sm" />
+            <CopyButton size="sm" text={prompt} />
           </div>
         </header>
 
@@ -116,7 +100,7 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
               For dev teams
             </span>
             <h1 className="text-foreground text-[40px] leading-[1.04] font-medium tracking-tight sm:text-6xl lg:text-[72px]">
-              Add a <RotatingFactory names={loops.map((loop) => loop.name)} />
+              Add a <span className="text-kortix-base">{first?.name ?? 'Software Factory'}</span>
               <br />
               with 1 prompt.
             </h1>
@@ -124,7 +108,7 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
               Agents that work on your repo and your tools, in the cloud, 24/7. One prompt in <Mark name="Claude Code" /> or{' '}
               <Mark name="Codex" /> sets them up. You approve what ships.
             </p>
-            <PromptBox className="mt-2" />
+            <PromptBox loop={first} className="mt-2" />
           </div>
         </section>
 
@@ -146,8 +130,8 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
 
         <section id="factories" className="border-border scroll-mt-16 border-t">
           <div className="flex flex-col gap-3 px-8 pt-20 pb-12 md:px-10">
-            <Eyebrow>One workspace · your whole company</Eyebrow>
-            <h2 className={H2}>A factory for every team.</h2>
+            <Eyebrow>The first template</Eyebrow>
+            <h2 className={H2}>Start with the {first?.name ?? 'Software Factory'}.</h2>
           </div>
           <FactoryStack loops={loops} more={catalog} />
         </section>
@@ -233,7 +217,7 @@ export function FactoryHome({ loops, catalog }: { loops: LoopView[]; catalog: st
               <br />
               Your whole company, looped.
             </h2>
-            <PromptBox />
+            <PromptBox loop={first} />
           </div>
         </section>
 

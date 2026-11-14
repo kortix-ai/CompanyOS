@@ -25,7 +25,9 @@ function menuContextForUrl(url) {
   }
   const projectId = /^\/(?:workspaces|projects)\/([^/]+)(?:\/|$)/.exec(pathname)?.[1];
   const inProject = Boolean(projectId && projectId !== 'start' && projectId !== 'new');
-  const hasActiveTab = inProject && /^\/(?:workspaces|projects)\/[^/]+\/(?:sessions\/[^/]+|customize)(?:\/|$)/.test(pathname);
+  // Every project page is a tab in the window's tab strip
+  // (apps/web/src/features/desktop-tabs), so Close Tab works on all of them.
+  const hasActiveTab = inProject;
   return { inProject, hasActiveTab };
 }
 

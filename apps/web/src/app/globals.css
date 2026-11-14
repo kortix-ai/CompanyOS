@@ -1471,6 +1471,29 @@ html[data-desktop-platform='macos'] .kx-titlebar-row [role='tab'] {
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
+/* ─── The desktop tab strip (features/desktop-tabs) ──────────────────────
+   On the desktop shell the project shell draws a browser-style tab strip as
+   its first row. The strip wears `.kx-titlebar-row` and takes the band; every
+   project view renders BELOW it. A view's own band row therefore no longer
+   touches the traffic lights or the caption buttons, so inside the tabbed
+   shell it drops the band geometry and keeps its web layout: the indent, the
+   band height and the drag region all revert to the layered utilities.
+   `revert-layer` in this unlayered sheet rolls back to the Tailwind layer. */
+html[data-desktop='true']
+  [data-kx-desktop-tabs-on]
+  :is(.kx-titlebar-row, .kx-titlebar-tabs):not(.kx-desktop-tabstrip) {
+  padding-left: revert-layer;
+  padding-right: revert-layer;
+  -webkit-app-region: initial;
+  app-region: initial;
+}
+html[data-desktop='true']
+  [data-kx-desktop-tabs-on]
+  :is(.kx-titlebar-band-height, .kx-titlebar-tabs):not(.kx-desktop-tabstrip) {
+  height: revert-layer !important;
+  min-height: revert-layer;
+}
+
 /* Overlay sidebars share the native-light row instead of adding a blank strip.
    Keep their controls out of AppKit's hit area at every renderer zoom. */
 html[data-desktop-titlebar='overlay'] .kx-overlay-sidebar-titlebar,

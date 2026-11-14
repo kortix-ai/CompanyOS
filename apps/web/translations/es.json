@@ -1650,6 +1650,7 @@
         "status": "Estado",
         "subAgent": "Subagente",
         "spawned": "Sesión generada",
+        "spawnedBy": "Iniciada por {title}",
         "subAgentCount": "{count, plural, one {# subagente} other {# subagentes}}",
         "spawnedCount": "{count, plural, one {# sesión generada} other {# sesiones generadas}}",
         "created": "Creada",
@@ -27209,5 +27210,54 @@
       "results": "Resultados"
     },
     "colTaskCount": "Tareas"
+  },
+  "desktopTabs": {
+    "tabs": "Pestañas abiertas",
+    "newTab": "Nueva pestaña",
+    "newTabToRight": "Nueva pestaña a la derecha",
+    "duplicate": "Duplicar",
+    "pin": "Fijar pestaña",
+    "unpin": "Desfijar pestaña",
+    "closeTab": "Cerrar pestaña",
+    "closeOthers": "Cerrar otras pestañas",
+    "closeToRight": "Cerrar pestañas a la derecha",
+    "reopenClosed": "Reabrir pestaña cerrada",
+    "session": "Sesión",
+    "artifact": "Artefacto",
+    "page": "Página",
+    "unavailable": "No disponible",
+    "newSession": "Nueva sesión",
+    "sessions": "Sesiones",
+    "artifacts": "Artefactos",
+    "customize": "Personalizar",
+    "goal": "Objetivo",
+    "settings": "Ajustes",
+    "pages": {
+      "apps": "Apps",
+      "chat": "Chat",
+      "drive": "Drive",
+      "files": "Archivos",
+      "goals": "Objetivos",
+      "inbox": "Bandeja",
+      "memory": "Memoria",
+      "members": "Miembros",
+      "channels": "Canales",
+      "reminders": "Loops"
+    },
+    "sections": {
+      "agents": "Agentes",
+      "connectors": "Conectores",
+      "secrets": "Secretos",
+      "skills": "Skills",
+      "drives": "Drives",
+      "apps": "Apps",
+      "triggers": "Disparadores",
+      "models": "Modelos",
+      "repo": "Repositorio",
+      "review": "Revisión",
+      "reminders": "Loops",
+      "members": "Miembros",
+      "settings": "Ajustes"
+    }
   }
 }

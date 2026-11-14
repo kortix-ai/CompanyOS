@@ -1650,6 +1650,7 @@
         "status": "Stato",
         "subAgent": "Sub-agente",
         "spawned": "Sessione avviata",
+        "spawnedBy": "Avviata da {title}",
         "subAgentCount": "{count, plural, one {# sub-agente} other {# sub-agenti}}",
         "spawnedCount": "{count, plural, one {# sessione avviata} other {# sessioni avviate}}",
         "created": "Creata",
@@ -27209,5 +27210,54 @@
       "results": "Risultati"
     },
     "colTaskCount": "Attività"
+  },
+  "desktopTabs": {
+    "tabs": "Schede aperte",
+    "newTab": "Nuova scheda",
+    "newTabToRight": "Nuova scheda a destra",
+    "duplicate": "Duplica",
+    "pin": "Fissa scheda",
+    "unpin": "Sblocca scheda",
+    "closeTab": "Chiudi scheda",
+    "closeOthers": "Chiudi altre schede",
+    "closeToRight": "Chiudi schede a destra",
+    "reopenClosed": "Riapri scheda chiusa",
+    "session": "Sessione",
+    "artifact": "Artefatto",
+    "page": "Pagina",
+    "unavailable": "Non disponibile",
+    "newSession": "Nuova sessione",
+    "sessions": "Sessioni",
+    "artifacts": "Artefatti",
+    "customize": "Personalizza",
+    "goal": "Obiettivo",
+    "settings": "Impostazioni",
+    "pages": {
+      "apps": "App",
+      "chat": "Chat",
+      "drive": "Drive",
+      "files": "File",
+      "goals": "Obiettivi",
+      "inbox": "Posta in arrivo",
+      "memory": "Memoria",
+      "members": "Membri",
+      "channels": "Canali",
+      "reminders": "Loops"
+    },
+    "sections": {
+      "agents": "Agenti",
+      "connectors": "Connettori",
+      "secrets": "Segreti",
+      "skills": "Skill",
+      "drives": "Drive",
+      "apps": "App",
+      "triggers": "Trigger",
+      "models": "Modelli",
+      "repo": "Repository",
+      "review": "Revisione",
+      "reminders": "Loops",
+      "members": "Membri",
+      "settings": "Impostazioni"
+    }
   }
 }

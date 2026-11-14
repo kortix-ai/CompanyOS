@@ -1650,6 +1650,7 @@
         "status": "Статус",
         "subAgent": "Подагент",
         "spawned": "Покренута сесија",
+        "spawnedBy": "Pokrenula ju je {title}",
         "subAgentCount": "{count, plural, one {# подагент} few {# подагента} other {# подагената}}",
         "spawnedCount": "{count, plural, one {# покренута сесија} few {# покренуте сесије} other {# покренутих сесија}}",
         "created": "Креирано",
@@ -27209,5 +27210,54 @@
       "results": "Резултати"
     },
     "colTaskCount": "Задаци"
+  },
+  "desktopTabs": {
+    "tabs": "Otvorene kartice",
+    "newTab": "Nova kartica",
+    "newTabToRight": "Nova kartica desno",
+    "duplicate": "Dupliraj",
+    "pin": "Zakači karticu",
+    "unpin": "Otkači karticu",
+    "closeTab": "Zatvori karticu",
+    "closeOthers": "Zatvori ostale kartice",
+    "closeToRight": "Zatvori kartice desno",
+    "reopenClosed": "Ponovo otvori zatvorenu karticu",
+    "session": "Sesija",
+    "artifact": "Artefakt",
+    "page": "Stranica",
+    "unavailable": "Nije dostupno",
+    "newSession": "Nova sesija",
+    "sessions": "Sesije",
+    "artifacts": "Artefakti",
+    "customize": "Prilagodi",
+    "goal": "Cilj",
+    "settings": "Podešavanja",
+    "pages": {
+      "apps": "Aplikacije",
+      "chat": "Čet",
+      "drive": "Disk",
+      "files": "Fajlovi",
+      "goals": "Ciljevi",
+      "inbox": "Prijemno sanduče",
+      "memory": "Memorija",
+      "members": "Članovi",
+      "channels": "Kanali",
+      "reminders": "Petlje"
+    },
+    "sections": {
+      "agents": "Agenti",
+      "connectors": "Konektori",
+      "secrets": "Tajne",
+      "skills": "Veštine",
+      "drives": "Diskovi",
+      "apps": "Aplikacije",
+      "triggers": "Okidači",
+      "models": "Modeli",
+      "repo": "Repozitorijum",
+      "review": "Pregled",
+      "reminders": "Petlje",
+      "members": "Članovi",
+      "settings": "Podešavanja"
+    }
   }
 }

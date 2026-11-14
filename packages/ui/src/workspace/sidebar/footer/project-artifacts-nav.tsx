@@ -10,6 +10,7 @@ import {
   InputGroupSearchIcon,
   InputGroupSearchInput,
 } from '../../../primitives/input-group';
+import { isDesktop } from '../../../internal/lib/desktop';
 import { menuRow } from '../../../primitives/menu-recipe';
 import { NavHoverCardContent, NavHoverCardList, useNavHoverCard } from '../../../internal/layout/nav-hover-card';
 import { useArtifacts, useFeatureFlag } from '@kortix/sdk/react';
@@ -131,7 +132,16 @@ export function ProjectArtifactsNavItem({ projectId }: { projectId: string }) {
 function ArtifactRow({ artifact, href, onOpen }: { artifact: Artifact; href: string; onOpen: () => void }) {
   const Glyph = TYPE_ICON[artifact.type];
   return (
-    <HoverPrefetchLink href={href} onClick={onOpen} className={menuRow('sm', 'default', 'cursor-pointer')}>
+    <HoverPrefetchLink
+      href={href}
+      onClick={onOpen}
+      // Desktop: this list goes TO the artifact, in its own tab. Without the
+      // mark, a click while a session is open opened it in that session's
+      // side panel instead (localhost-link-interceptor), and the session tab
+      // turned into an artifact viewer.
+      data-no-panel={isDesktop() ? '' : undefined}
+      className={menuRow('sm', 'default', 'cursor-pointer')}
+    >
       <Glyph aria-hidden className="text-muted-foreground size-4 shrink-0" />
       <span className="min-w-0 flex-1 truncate">{artifact.title}</span>
     </HoverPrefetchLink>

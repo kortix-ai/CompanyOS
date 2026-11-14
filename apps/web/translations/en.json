@@ -1650,6 +1650,7 @@
         "status": "Status",
         "subAgent": "Sub-agent",
         "spawned": "Spawned session",
+        "spawnedBy": "Spawned by {title}",
         "subAgentCount": "{count, plural, one {# sub-agent} other {# sub-agents}}",
         "spawnedCount": "{count, plural, one {# spawned session} other {# spawned sessions}}",
         "created": "Created",
@@ -27209,5 +27210,54 @@
       "results": "Results"
     },
     "colTaskCount": "Tasks"
+  },
+  "desktopTabs": {
+    "tabs": "Open tabs",
+    "newTab": "New tab",
+    "newTabToRight": "New tab to the right",
+    "duplicate": "Duplicate",
+    "pin": "Pin tab",
+    "unpin": "Unpin tab",
+    "closeTab": "Close tab",
+    "closeOthers": "Close other tabs",
+    "closeToRight": "Close tabs to the right",
+    "reopenClosed": "Reopen closed tab",
+    "session": "Session",
+    "artifact": "Artifact",
+    "page": "Page",
+    "unavailable": "Unavailable",
+    "newSession": "New session",
+    "sessions": "Sessions",
+    "artifacts": "Artifacts",
+    "customize": "Customize",
+    "goal": "Goal",
+    "settings": "Settings",
+    "pages": {
+      "apps": "Apps",
+      "chat": "Chat",
+      "drive": "Drive",
+      "files": "Files",
+      "goals": "Goals",
+      "inbox": "Inbox",
+      "memory": "Memory",
+      "members": "Members",
+      "channels": "Channels",
+      "reminders": "Loops"
+    },
+    "sections": {
+      "agents": "Agents",
+      "connectors": "Connectors",
+      "secrets": "Secrets",
+      "skills": "Skills",
+      "drives": "Drives",
+      "apps": "Apps",
+      "triggers": "Triggers",
+      "models": "Models",
+      "repo": "Repository",
+      "review": "Review",
+      "reminders": "Loops",
+      "members": "Members",
+      "settings": "Settings"
+    }
   }
 }

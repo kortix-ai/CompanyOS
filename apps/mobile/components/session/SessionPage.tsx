@@ -1526,7 +1526,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
     extentInsetRef.current = next;
     setExtentInset(next);
     if (next > 0) {
-      log.warn('[SessionPage] native scroll extent short of layout', {
+      log.error('[SessionPage] native scroll extent short of layout', {
         laidOutHeight: contentHeightRef.current,
         nativeHeight,
         shortfall: next,

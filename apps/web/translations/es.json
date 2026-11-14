@@ -24728,7 +24728,6 @@
     "endTime": "Hora de fin",
     "overdue": "Vencido",
     "status": {
-      "open": "Abierto",
       "done": "Hecho"
     },
     "comments": "{count, plural, one {# comentario} other {# comentarios}}",

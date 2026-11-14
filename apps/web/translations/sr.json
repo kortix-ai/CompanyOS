@@ -24728,7 +24728,6 @@
     "endTime": "Vreme završetka",
     "overdue": "Kasni",
     "status": {
-      "open": "Otvoreno",
       "done": "Završeno"
     },
     "comments": "{count, plural, one {# komentar} few {# komentara} other {# komentara}}",

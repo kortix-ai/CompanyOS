@@ -24728,7 +24728,6 @@
     "endTime": "结束时间",
     "overdue": "已逾期",
     "status": {
-      "open": "未完成",
       "done": "已完成"
     },
     "comments": "{count, plural, other {# 条评论}}",

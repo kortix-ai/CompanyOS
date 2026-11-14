@@ -24,6 +24,7 @@ import {
   CommandPopoverTrigger,
 } from '../../primitives/command';
 import { UserAvatar } from '../../primitives/user-avatar';
+import { useUiViewerId } from '../../providers/ui-provider';
 
 export interface CalendarDirectory {
   people: CalendarPerson[];
@@ -222,9 +223,9 @@ export function Who({
 }
 
 /** Every token a person can be @mentioned by: handle, email, email local part, name slug. */
-function mentionTokensOf(directory: CalendarDirectory): Set<string> {
+function mentionTokensOf(people: CalendarPerson[]): Set<string> {
   const out = new Set<string>();
-  for (const p of directory.people) {
+  for (const p of people) {
     out.add(p.handle.toLowerCase());
     if (p.email) {
       out.add(p.email.toLowerCase());
@@ -234,16 +235,22 @@ function mentionTokensOf(directory: CalendarDirectory): Set<string> {
   return out;
 }
 
-/** Text with each @mention of a known person set in medium weight. Line breaks kept. */
+/**
+ * Text with each @mention of a known person marked, the way chat apps do: a
+ * mention of the viewer in yellow, of anyone else in blue. Only people are
+ * marked: they are who a mention notifies. Line breaks kept.
+ */
 export function MentionText({ text, directory }: { text: string; directory: CalendarDirectory }): ReactNode {
-  const known = mentionTokensOf(directory);
+  const viewer = directory.person(useUiViewerId() ?? '');
+  const mine = mentionTokensOf(viewer ? [viewer] : []);
+  const known = mentionTokensOf(directory.people);
   const parts = text.split(/((?:^|(?<=[^\w@]))@[a-z0-9][a-z0-9._+-]{1,63}(?:@[a-z0-9.-]+[a-z0-9])?)/gi);
   return (
     <>
       {parts.map((part, i) => {
         const token = part.startsWith('@') ? part.slice(1).toLowerCase().replace(/[._+-]+$/, '') : null;
         return token && known.has(token) ? (
-          <span key={i} className="text-foreground font-medium">
+          <span key={i} className={cn('text-foreground rounded-sm px-0.5 font-medium', mine.has(token) ? 'bg-kortix-yellow/15' : 'bg-kortix-blue/15')}>
             {part}
           </span>
         ) : (

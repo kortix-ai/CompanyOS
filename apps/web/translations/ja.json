@@ -24728,7 +24728,6 @@
     "endTime": "終了時刻",
     "overdue": "期限切れ",
     "status": {
-      "open": "未完了",
       "done": "完了"
     },
     "comments": "{count, plural, other {# 件のコメント}}",

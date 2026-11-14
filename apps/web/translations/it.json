@@ -24728,7 +24728,6 @@
     "endTime": "Ora di fine",
     "overdue": "In ritardo",
     "status": {
-      "open": "Aperto",
       "done": "Fatto"
     },
     "comments": "{count, plural, one {# commento} other {# commenti}}",

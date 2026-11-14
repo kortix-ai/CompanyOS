@@ -114,8 +114,8 @@ export async function runSessionsUsage(argv: string[]): Promise<number> {
     const label = `${'  '.repeat(s.depth)}${terminalSafe(s.title ?? s.session_id.slice(0, 8))}`;
     out.push(
       `  ${pad(label, 40)} ${money(s.cost).padStart(10)}  ` +
-        `${C.dim}paid ${money(s.kortix_cost)} · byok ${money(s.provider_cost)} · ${num(s.request_count)} req · ` +
-        `${num(s.input_tokens)}/${num(s.output_tokens)} tok · cached ${num(s.cached_tokens)} · ${terminalSafe(s.agent_name ?? 'unknown')}${C.reset}`,
+        `${C.dim}paid ${money(s.kortix_cost)} · byok ${money(s.provider_cost)} · ${num(s.request_count)} req · ${num(s.error_count)} err · ` +
+        `${num(s.input_tokens)}/${num(s.output_tokens)} tok · cached ${num(s.cached_tokens)} · cache-write ${num(s.cache_write_tokens)} · ${terminalSafe(s.agent_name ?? 'unknown')}${C.reset}`,
     );
   }
   if (tree.hidden_sessions > 0) {

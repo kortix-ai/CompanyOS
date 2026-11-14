@@ -172,6 +172,7 @@ beforeEach(() => {
           kortix_cost: 1,
           provider_cost: 0.25,
           request_count: 2,
+          error_count: 7,
           input_tokens: 3000,
           output_tokens: 300,
           cached_tokens: 1000,
@@ -219,6 +220,8 @@ describe('kortix sessions usage (real process)', () => {
     // Each session prints its own split, the child indented under the root.
     expect(r.out).toMatch(/root\s+\$2\.00\s+paid \$2\.00 · byok \$0\.00/);
     expect(r.out).toMatch(/ {2}child\s+\$1\.25\s+paid \$1\.00 · byok \$0\.25/);
+    // Per-session errors and cache-write tokens are printed, not only the totals.
+    expect(r.out).toMatch(/child.*2 req · 7 err · .*cached 1,000 · cache-write 100 /);
   });
 
   test('hidden and truncated subtrees are reported, never silently dropped', async () => {

@@ -21394,7 +21394,11 @@
       "texta268bab502cf": "Elemento del calendario visto",
       "text16d71c4d10a2": "Elemento del calendario editado",
       "text14580c9900ac": "Elemento del calendario eliminado",
-      "text96386c724e21": "Comentó un elemento del calendario"
+      "text96386c724e21": "Comentó un elemento del calendario",
+      "textf543a9f99ce7": "Barra de acciones",
+      "textca4067071fcf": "Selección",
+      "text4cea356a17a1": "Cambios sin guardar",
+      "text2358f7b37c07": "La barra flotante de un modo temporal: una selección, cambios sin guardar, un pegado pendiente. Un título, una descripción atenuada, acciones con atajos de teclado y un botón de cierre."
     },
     "publicShareConfirm": {
       "title": "¿Crear un enlace público?",

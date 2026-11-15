@@ -21439,7 +21439,11 @@
       "texta268bab502cf": "Viewed calendar item",
       "text16d71c4d10a2": "Edited calendar item",
       "text14580c9900ac": "Deleted calendar item",
-      "text96386c724e21": "Commented on calendar item"
+      "text96386c724e21": "Commented on calendar item",
+      "textf543a9f99ce7": "Action Bar",
+      "textca4067071fcf": "Selection",
+      "text4cea356a17a1": "Unsaved edits",
+      "text2358f7b37c07": "The floating bar for a temporary mode: a selection, unsaved edits, a pending paste. A title, a muted description, actions with key hints, and a close button."
     },
     "publicShareConfirm": {
       "title": "Create a public link?",

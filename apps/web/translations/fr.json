@@ -21394,7 +21394,11 @@
       "texta268bab502cf": "Élément du calendrier consulté",
       "text16d71c4d10a2": "Élément du calendrier modifié",
       "text14580c9900ac": "Élément du calendrier supprimé",
-      "text96386c724e21": "A commenté un élément du calendrier"
+      "text96386c724e21": "A commenté un élément du calendrier",
+      "textf543a9f99ce7": "Barre d’actions",
+      "textca4067071fcf": "Sélection",
+      "text4cea356a17a1": "Modifications non enregistrées",
+      "text2358f7b37c07": "La barre flottante d’un mode temporaire : une sélection, des modifications non enregistrées, un collage en attente. Un titre, une description atténuée, des actions avec raccourcis clavier et un bouton de fermeture."
     },
     "publicShareConfirm": {
       "title": "Créer un lien public ?",

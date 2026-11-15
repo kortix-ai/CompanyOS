@@ -21394,7 +21394,11 @@
       "texta268bab502cf": "Pregledana stavka kalendara",
       "text16d71c4d10a2": "Izmenjena stavka kalendara",
       "text14580c9900ac": "Obrisana stavka kalendara",
-      "text96386c724e21": "Komentarisana stavka kalendara"
+      "text96386c724e21": "Komentarisana stavka kalendara",
+      "textf543a9f99ce7": "Traka radnji",
+      "textca4067071fcf": "Izbor",
+      "text4cea356a17a1": "Nesačuvane izmene",
+      "text2358f7b37c07": "Plutajuća traka za privremeni režim: izbor, nesačuvane izmene, lepljenje na čekanju. Naslov, prigušen opis, radnje sa prečicama na tastaturi i dugme za zatvaranje."
     },
     "publicShareConfirm": {
       "title": "Направити јавни линк?",

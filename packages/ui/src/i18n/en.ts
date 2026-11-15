@@ -8034,7 +8034,6 @@ const catalog = {
     "endTime": "End time",
     "overdue": "Overdue",
     "status": {
-      "open": "Open",
       "done": "Done"
     },
     "comments": "{count, plural, one {# comment} other {# comments}}",

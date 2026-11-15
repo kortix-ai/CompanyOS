@@ -21394,7 +21394,11 @@
       "texta268bab502cf": "Item do calendário visualizado",
       "text16d71c4d10a2": "Item do calendário editado",
       "text14580c9900ac": "Item do calendário excluído",
-      "text96386c724e21": "Comentou um item do calendário"
+      "text96386c724e21": "Comentou um item do calendário",
+      "textf543a9f99ce7": "Barra de ações",
+      "textca4067071fcf": "Seleção",
+      "text4cea356a17a1": "Alterações não salvas",
+      "text2358f7b37c07": "A barra flutuante de um modo temporário: uma seleção, alterações não salvas, uma colagem pendente. Um título, uma descrição discreta, ações com atalhos de teclado e um botão de fechar."
     },
     "publicShareConfirm": {
       "title": "Criar um link público?",

@@ -19,6 +19,7 @@ import {
 
 import { useTranslations } from '../../../../i18n';
 import { ActionBar } from '../../../../primitives/action-bar';
+import { useSaveShortcut } from '../../../../internal/hooks/use-save-shortcut';
 import { Button } from '../../../../primitives/button';
 import {
   Command,
@@ -389,8 +390,8 @@ function useScrollColumnFrame(anchor: RefObject<HTMLElement | null>) {
 /**
  * The Routing page's unsaved-edits bar: an `ActionBar` with Discard and
  * Save ⌘S. It sits `fixed` over the scroll column (`useScrollColumnFrame`),
- * because the page scrolls the window, not a positioned list column. ⌘S / Ctrl+S
- * saves while the bar shows.
+ * because the page scrolls the window, not a positioned list column. Mod+S
+ * saves while a valid edit is pending (`useSaveShortcut`).
  */
 export function RoutingSaveBar({
   message,
@@ -409,15 +410,7 @@ export function RoutingSaveBar({
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const anchorRef = useRef<HTMLSpanElement>(null);
   const frame = useScrollColumnFrame(anchorRef);
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey || event.key !== 's') return;
-      event.preventDefault();
-      if (canSave && !saving) onSave();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [canSave, saving, onSave]);
+  useSaveShortcut(canSave && !saving, onSave);
   return (
     <>
       <span ref={anchorRef} aria-hidden className="hidden" />

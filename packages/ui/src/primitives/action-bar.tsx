@@ -60,6 +60,19 @@ export interface ActionBarAction {
   onSelect: () => void;
 }
 
+// `aria-keyshortcuts` takes key names ("Meta+S"), not the glyphs drawn on the key.
+const MODIFIER_NAMES: Record<string, string> = { '⌘': 'Meta', '⌃': 'Control', '⌥': 'Alt', '⇧': 'Shift' };
+export function toAriaKeyshortcuts(kbd: string): string {
+  const keys: string[] = [];
+  let rest = kbd.trim();
+  while (rest[0] && MODIFIER_NAMES[rest[0]]) {
+    keys.push(MODIFIER_NAMES[rest[0]]!);
+    rest = rest.slice(1).trim();
+  }
+  if (rest) keys.push(rest.length === 1 ? rest.toUpperCase() : rest);
+  return keys.join('+');
+}
+
 const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 // A full transform string, not `y`: it runs on the compositor while the list loads.
 const RISE = 'translateY(8px)';
@@ -115,9 +128,9 @@ export function ActionBar({
           ) : leading ? (
             <span className="text-muted-foreground flex shrink-0 [&_svg]:size-4">{leading}</span>
           ) : null}
-          <span className="min-w-0 shrink-0 truncate">{title}</span>
+          <span className="min-w-0 truncate">{title}</span>
           {description ? (
-            <span className="text-muted-foreground min-w-0 truncate font-normal">{description}</span>
+            <span className="text-muted-foreground min-w-0 shrink-[2] truncate font-normal">{description}</span>
           ) : null}
         </span>
         {actions.length > 0 ? (
@@ -131,7 +144,7 @@ export function ActionBar({
                 onClick={a.onSelect}
                 disabled={busy || a.disabled || a.loading}
                 aria-busy={a.loading || undefined}
-                aria-keyshortcuts={a.kbd}
+                aria-keyshortcuts={a.kbd ? toAriaKeyshortcuts(a.kbd) : undefined}
                 className={cn(
                   'h-8 min-w-0 flex-auto gap-1.5 px-1.5 @lg/action-bar:flex-none @lg/action-bar:px-3',
                   a.tone === 'destructive' && 'text-destructive hover:text-destructive',

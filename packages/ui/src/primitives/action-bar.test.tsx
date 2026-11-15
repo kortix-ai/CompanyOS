@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { ActionBar, type ActionBarAction, ActionBarDock } from './action-bar';
+import { ActionBar, type ActionBarAction, ActionBarDock, toAriaKeyshortcuts } from './action-bar';
 
 const noop = () => {};
 const actions: ActionBarAction[] = [
@@ -37,7 +37,7 @@ describe('ActionBar', () => {
 
   test('kbd draws a key after the label and names the shortcut for assistive tech', () => {
     const save = button(bar(), 'Save');
-    expect(save).toContain('aria-keyshortcuts="⌘S"');
+    expect(save).toContain('aria-keyshortcuts="Meta+S"');
     expect(save).toMatch(/<kbd data-slot="kbd"[^>]*>⌘S<\/kbd>/);
     expect(button(bar(), 'Discard')).not.toContain('<kbd');
   });
@@ -77,5 +77,16 @@ describe('ActionBar', () => {
     const out = renderToStaticMarkup(<ActionBarDock>x</ActionBarDock>);
     expect(out).toContain('pointer-events-none absolute inset-x-0 bottom-4');
     expect(out).toContain('pointer-events-auto w-full max-w-xl');
+  });
+
+  test('a long title truncates instead of pushing the actions', () => {
+    const out = bar({ title: 'Moving a-very-long-file-name.md' });
+    expect(out).toMatch(/<span class="min-w-0 truncate">Moving/);
+  });
+
+  test('toAriaKeyshortcuts names the modifiers', () => {
+    expect(toAriaKeyshortcuts('⌘S')).toBe('Meta+S');
+    expect(toAriaKeyshortcuts('⌘⇧P')).toBe('Meta+Shift+P');
+    expect(toAriaKeyshortcuts('Esc')).toBe('Esc');
   });
 });

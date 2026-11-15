@@ -1681,8 +1681,8 @@
         "needsInput": "Precisa da sua resposta",
         "starting": "A acordar",
         "running": "A trabalhar",
-        "done": "Pronta",
-        "stopped": "Em repouso",
+        "done": "Concluída",
+        "stopped": "Interrompida",
         "failed": "Falhou",
         "legacy": "Antiga"
       }
@@ -1894,7 +1894,13 @@
       "noMessages": "Nenhuma mensagem ainda",
       "more": "Mais"
     },
-    "calendar": "Calendário"
+    "calendar": "Calendário",
+    "running": "Em execução",
+    "runningCount": "{count, plural, one {# sessão em execução} other {# sessões em execução}}",
+    "runningTitle": "Em execução agora",
+    "runningEmpty": "Nada está em execução.",
+    "runningIn": "em {title}",
+    "runningFirst": "A mostrar as primeiras {count}."
   },
   "dashboard": {
     "title": "Painel",
@@ -2363,6 +2369,8 @@
     "chatInputMachine": "Máquina",
     "chatInputMachineDescription": "O modelo de máquina com que esta sessão inicia.",
     "sending": "Enviando",
+    "notSentYet": "Ainda não enviado · será enviado quando você voltar a ficar online",
+    "offlineReconnecting": "Offline — reconectando…",
     "stop": "Parar",
     "startingSession": "A iniciar a sessão…",
     "sessionStarted": "Sessão iniciada",
@@ -3350,7 +3358,17 @@
       "jsonKeys": "{count, plural, one {JSON · # chave} other {JSON · # chaves}}",
       "jsonItems": "{count, plural, one {JSON · # item} other {JSON · # itens}}",
       "failedSentence": "O fluxo de trabalho parou antes de terminar.",
-      "runningCount": "{count} em execução"
+      "runningCount": "{count} em execução",
+      "spent": "{credits} créditos gastos",
+      "spentHint": "O que a Kortix cobrou até agora por esta execução: chamadas ao modelo e tempo de computação da execução e dos seus agentes.",
+      "waitingForYou": "Aguardando você · não iniciado",
+      "cancelled": "Cancelado — nada foi executado",
+      "answeredInChat": "Respondido no chat — nada foi executado",
+      "stoppedByYou": "Parado por você",
+      "attempt": "tentativa {count}",
+      "quietFor": "Sem saída há {minutes} min",
+      "quietCount": "{count} sem saída",
+      "holdingWorking": "Em espera · {count} ainda trabalhando"
     },
     "agent": {
       "backgroundWorking": "Trabalhando em segundo plano",
@@ -26542,7 +26560,11 @@
         "resume": "Não foi possível retomar a execução",
         "stop": "Não foi possível parar a execução",
         "restart": "Não foi possível reiniciar {label}"
-      }
+      },
+      "hold": "Segurar novos agentes",
+      "holdShort": "Segurar novos agentes",
+      "holdHint": "Segurar novos agentes: nenhum começa até você retomar; os que já trabalham continuam (p)",
+      "holding": "Novos agentes em espera"
     },
     "board": {
       "layoutLabel": "Layout",

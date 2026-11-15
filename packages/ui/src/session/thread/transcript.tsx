@@ -160,7 +160,7 @@ import {
   type TurnEndNotice,
 } from '@kortix/sdk';
 import type { ProviderListResponse } from '@kortix/sdk/react';
-import { isOptimisticSessionPrompt, useRuntimeReady, useSessionPrompts, useSessionWorking } from '@kortix/sdk/react';
+import { isOptimisticSessionPrompt, useRuntimeReady, useSessionPrompts, useSessionUnsentPrompts, useSessionWorking } from '@kortix/sdk/react';
 import { CodeBlockEndpoints, SandboxUrlDetector } from '../media/sandbox-url-detector';
 import { resolveLastTurnWorking } from '../composer/session-composer-readiness';
 import { HarnessSwitchMarker, RestoreNoteMarker, TurnFullText, type FullTextState } from './session-history';
@@ -834,7 +834,11 @@ function useTurnQueueTone({
   pending,
   pendingPrompt,
   interruptedBeforeRun,
-}: Pick<SessionTurnProps, 'pending' | 'pendingPrompt' | 'interruptedBeforeRun'>) {
+  sessionId,
+}: Pick<SessionTurnProps, 'pending' | 'pendingPrompt' | 'interruptedBeforeRun' | 'sessionId'>) {
+// A prompt sent while offline: its POST waits for the network, so it is not
+// "sending" yet (finding 07).
+const unsentIds = useSessionUnsentPrompts(sessionId);
 // A Stop ended the turn before a step opened under this message, or the
 // prompt still waits for delivery. Both keep the queue tone on the bubble;
 // only a delivery failure adds text.
@@ -848,9 +852,14 @@ const queuedStatus: QueuedPromptStatusState | null =
       : pendingPrompt?.reason === 'held'
         ? 'held'
         : pendingPrompt &&
-            (isOptimisticSessionPrompt(pendingPrompt) || pendingPrompt.state === 'delivering')
-          ? 'sending'
-          : statusState;
+            isOptimisticSessionPrompt(pendingPrompt) &&
+            !!pendingPrompt.message_id &&
+            unsentIds.includes(pendingPrompt.message_id)
+          ? 'unsent'
+          : pendingPrompt &&
+              (isOptimisticSessionPrompt(pendingPrompt) || pendingPrompt.state === 'delivering')
+            ? 'sending'
+            : statusState;
   return { queueState, statusState, queuedStatus };
 }
 
@@ -1746,7 +1755,7 @@ function TurnUserBubble(
                     : undefined
                 }
               />
-            ) : queuedStatus === 'sending' || queuedStatus === 'queued' || queuedStatus === 'interrupted' ? (
+            ) : queuedStatus === 'sending' || queuedStatus === 'queued' || queuedStatus === 'interrupted' || queuedStatus === 'unsent' ? (
               <QueuedPromptProgress state={queuedStatus} />
             ) : undefined
           }
@@ -2759,7 +2768,7 @@ function SessionTurnImpl(props: SessionTurnProps) {
   );
 
   const model = useTurnModelState({ turn, isWorkingTurn, sessionWorking, awaitingUser });
-  const queueTone = useTurnQueueTone({ pending, pendingPrompt, interruptedBeforeRun });
+  const queueTone = useTurnQueueTone({ pending, pendingPrompt, interruptedBeforeRun, sessionId });
   const errors = useTurnErrorState({ turn, turnOutcome });
   const answered = useAnsweredQuestionState({ turn, questions, sessionId, blocks: model.blocks, hasSteps: model.hasSteps });
   const userContent = useTurnUserContent({ turn, commandMessages, commands });

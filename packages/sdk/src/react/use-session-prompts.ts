@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { onlineManager, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import {
   type CreateSessionPromptInput,
@@ -554,6 +554,60 @@ export function __resetSentPromptsForTests(): void {
   sentBySession.clear();
 }
 
+/**
+ * Prompts sent while the browser is offline, per session, by wire message id.
+ * TanStack holds such a POST until the network returns (`networkMode:
+ * 'online'`), and the hook files no "working" claim until it goes out: an
+ * offline send showed Thinking, a timer and Stop for as long as the outage
+ * lasted while nothing left the page (finding 07). The send goes out once, on
+ * reconnect. A held send lives in this page only: closing the tab loses it.
+ */
+// replica-local: one copy per client, like the query cache it sits beside.
+const unsentBySession = new Map<string, readonly string[]>();
+const unsentListeners = new Set<() => void>();
+const NO_UNSENT: readonly string[] = [];
+
+function setUnsent(sessionId: string, update: (ids: readonly string[]) => readonly string[]): void {
+  const next = update(unsentBySession.get(sessionId) ?? NO_UNSENT);
+  if (next.length === 0) unsentBySession.delete(sessionId);
+  else unsentBySession.set(sessionId, next);
+  for (const listener of [...unsentListeners]) listener();
+}
+
+/** The id a held send is listed under: its wire message id, else its inbox key. */
+const unsentId = (input: Pick<CreateSessionPromptInput, 'messageId' | 'clientMessageId'>) =>
+  input.messageId ?? input.clientMessageId;
+
+function subscribeUnsent(listener: () => void): () => void {
+  unsentListeners.add(listener);
+  return () => unsentListeners.delete(listener);
+}
+
+/**
+ * The wire message ids of this session's prompts that wait for the network:
+ * sent while offline, not POSTed yet. Empty while online. A host draws them
+ * as "Not sent yet" instead of a running turn.
+ */
+export function useSessionUnsentPrompts(sessionId: string | null | undefined): readonly string[] {
+  return useSyncExternalStore(
+    subscribeUnsent,
+    () => (sessionId ? (unsentBySession.get(sessionId) ?? NO_UNSENT) : NO_UNSENT),
+    () => NO_UNSENT,
+  );
+}
+
+/**
+ * Whether the browser reports a network (`online` / `offline` events, the
+ * signal TanStack Query pauses requests on). True on a server render.
+ */
+export function useNetworkOnline(): boolean {
+  return useSyncExternalStore(
+    (listener) => onlineManager.subscribe(listener),
+    () => onlineManager.isOnline(),
+    () => true,
+  );
+}
+
 const promptReads = createTickSingleFlight<{
   atMs: number;
   prompts: SessionPrompt[];
@@ -730,12 +784,20 @@ export function useSessionPrompts(
       queryClient.setQueryData<SessionPrompt[]>(key, (prev) =>
         applyOptimisticPrompt(prev ?? [], input, Date.now()),
       );
-      // The receipt-side floor: a `/turn` poll landing before the POST returns
-      // must not swap Stop back to Send with the row already on screen.
-      useSessionWorkingStore.getState().notePromptAccepted(sessionId!, Date.now());
+      if (!onlineManager.isOnline()) {
+        // Offline: TanStack holds the POST until the network returns. The row
+        // stays on screen as not sent; nothing claims the session works.
+        setUnsent(sessionId!, (ids) => (ids.includes(unsentId(input)) ? ids : [...ids, unsentId(input)]));
+      } else {
+        // The receipt-side floor: a `/turn` poll landing before the POST returns
+        // must not swap Stop back to Send with the row already on screen.
+        useSessionWorkingStore.getState().notePromptAccepted(sessionId!, Date.now());
+      }
       await queryClient.cancelQueries({ queryKey: key });
     },
     mutationFn: async (input: CreateSessionPromptInput) => {
+      // Runs once the network is there: a held send goes out now.
+      setUnsent(sessionId!, (ids) => ids.filter((id) => id !== unsentId(input)));
       const result = await createSessionPrompt(projectId!, sessionId!, input);
       if (result.state !== 'failed') {
         // The response's `observed_at` is the write's place on the SERVER
@@ -760,6 +822,7 @@ export function useSessionPrompts(
       );
     },
     onError: (_error, input) => {
+      setUnsent(sessionId!, (ids) => ids.filter((id) => id !== unsentId(input)));
       queryClient.setQueryData<SessionPrompt[]>(key, (prev) =>
         removeOptimisticPrompt(prev ?? [], input.clientMessageId),
       );

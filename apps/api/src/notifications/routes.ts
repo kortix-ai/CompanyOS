@@ -76,6 +76,9 @@ const InboxNotificationSchema = z
     actor_user_id: z.string().uuid().nullable().openapi({ description: 'Who caused it: the sharer or the prompter.' }),
     url: z.string().openapi({ description: 'Web path that opens the subject and marks the row read.' }),
     read: z.boolean(),
+    resolved: z.boolean().openapi({
+      description: 'A question or permission whose ask is closed: answered, dismissed, decided or expired. False for every other kind.',
+    }),
     created_at: z.string(),
   })
   .openapi('InboxNotification');

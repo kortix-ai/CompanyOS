@@ -1681,8 +1681,8 @@
         "needsInput": "Чека ваш одговор",
         "starting": "Буди се",
         "running": "Ради",
-        "done": "Спремно",
-        "stopped": "Мирује",
+        "done": "Готово",
+        "stopped": "Заустављено",
         "failed": "Неуспело",
         "legacy": "Застарело"
       }
@@ -1894,7 +1894,13 @@
       "noMessages": "Још нема порука",
       "more": "Још"
     },
-    "calendar": "Kalendar"
+    "calendar": "Kalendar",
+    "running": "У току",
+    "runningCount": "{count, plural, one {# сесија у току} few {# сесије у току} other {# сесија у току}}",
+    "runningTitle": "Тренутно у току",
+    "runningEmpty": "Ништа није у току.",
+    "runningIn": "у {title}",
+    "runningFirst": "Приказано је првих {count}."
   },
   "dashboard": {
     "title": "Контролна табла",
@@ -2363,6 +2369,8 @@
     "chatInputMachine": "Mašina",
     "chatInputMachineDescription": "Šablon mašine na kojoj ova sesija počinje.",
     "sending": "Слање",
+    "notSentYet": "Још није послато · биће послато када поново будеш на мрежи",
+    "offlineReconnecting": "Ван мреже — поновно повезивање…",
     "stop": "Заустави",
     "startingSession": "Покретање сесије…",
     "sessionStarted": "Сесија је покренута",
@@ -3350,7 +3358,17 @@
       "jsonKeys": "{count, plural, one {JSON · # кључ} few {JSON · # кључа} other {JSON · # кључева}}",
       "jsonItems": "{count, plural, one {JSON · # ставка} few {JSON · # ставке} other {JSON · # ставки}}",
       "failedSentence": "Tok rada je stao pre nego što je završio.",
-      "runningCount": "{count} radi"
+      "runningCount": "{count} radi",
+      "spent": "Потрошено {credits} кредита",
+      "spentHint": "Колико је Kortix до сада наплатио за ово покретање: позиви модела и рачунарско време покретања и његових агената.",
+      "waitingForYou": "Чека тебе · није покренуто",
+      "cancelled": "Отказано — ништа није покренуто",
+      "answeredInChat": "Одговорено у ћаскању — ништа није покренуто",
+      "stoppedByYou": "Ти си зауставио",
+      "attempt": "покушај {count}",
+      "quietFor": "Тихо већ {minutes} мин",
+      "quietCount": "{count} тихо",
+      "holdingWorking": "Задржано · {count} још ради"
     },
     "agent": {
       "backgroundWorking": "Ради у позадини",
@@ -26542,7 +26560,11 @@
         "resume": "Није могуће наставити покретање",
         "stop": "Није могуће зауставити покретање",
         "restart": "Није могуће поново покренути {label}"
-      }
+      },
+      "hold": "Задржи нове агенте",
+      "holdShort": "Задржи нове агенте",
+      "holdHint": "Задржи нове агенте: ниједан се не покреће док не наставиш; агенти који раде настављају (p)",
+      "holding": "Нови агенти задржани"
     },
     "board": {
       "layoutLabel": "Распоред",

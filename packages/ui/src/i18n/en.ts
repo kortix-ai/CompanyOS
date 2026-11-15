@@ -1175,8 +1175,8 @@ const catalog = {
         "needsInput": "Needs input",
         "starting": "Waking",
         "running": "Working",
-        "done": "Ready",
-        "stopped": "Asleep",
+        "done": "Done",
+        "stopped": "Stopped",
         "failed": "Failed",
         "legacy": "Legacy"
       }
@@ -1388,7 +1388,13 @@ const catalog = {
       "noMessages": "No messages yet",
       "more": "More"
     },
-    "calendar": "Calendar"
+    "calendar": "Calendar",
+    "running": "Running",
+    "runningCount": "{count, plural, one {# session running} other {# sessions running}}",
+    "runningTitle": "Running now",
+    "runningEmpty": "Nothing is running.",
+    "runningIn": "in {title}",
+    "runningFirst": "Showing the first {count}."
   },
   "sessionPage": {
     "backToProject": "Back to workspace",
@@ -1686,6 +1692,8 @@ const catalog = {
     "chatInputMachine": "Machine",
     "chatInputMachineDescription": "The machine template this session starts on.",
     "sending": "Sending",
+    "notSentYet": "Not sent yet · sends when you’re back online",
+    "offlineReconnecting": "Offline — reconnecting…",
     "stop": "Stop",
     "startingSession": "Starting session…",
     "sessionStarted": "Session started",
@@ -2108,7 +2116,17 @@ const catalog = {
       "jsonKeys": "{count, plural, one {JSON · # key} other {JSON · # keys}}",
       "jsonItems": "{count, plural, one {JSON · # item} other {JSON · # items}}",
       "failedSentence": "The workflow stopped before it finished.",
-      "runningCount": "{count} running"
+      "runningCount": "{count} running",
+      "spent": "Spent {credits} credits",
+      "spentHint": "What Kortix billed for this run so far: model calls and computer time of the run and its agents.",
+      "waitingForYou": "Waiting for you · not started",
+      "cancelled": "Cancelled — nothing ran",
+      "answeredInChat": "Answered in chat — nothing ran",
+      "stoppedByYou": "Stopped by you",
+      "attempt": "attempt {count}",
+      "quietFor": "Quiet for {minutes} min",
+      "quietCount": "{count} quiet",
+      "holdingWorking": "Holding · {count} still working"
     },
     "agent": {
       "backgroundWorking": "Working in the background",
@@ -8034,7 +8052,6 @@ const catalog = {
     "endTime": "End time",
     "overdue": "Overdue",
     "status": {
-      "open": "Open",
       "done": "Done"
     },
     "comments": "{count, plural, one {# comment} other {# comments}}",
@@ -9838,7 +9855,11 @@ const catalog = {
         "resume": "Could not resume the run",
         "stop": "Could not stop the run",
         "restart": "Could not restart {label}"
-      }
+      },
+      "hold": "Hold new agents",
+      "holdShort": "Hold new agents",
+      "holdHint": "Hold new agents: none starts until you resume; agents already working go on (p)",
+      "holding": "Holding new agents"
     },
     "board": {
       "layoutLabel": "Layout",

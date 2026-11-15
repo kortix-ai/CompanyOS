@@ -74,6 +74,16 @@ export const SessionBoardStateSchema = z.enum([
 ]);
 export type SessionBoardState = z.infer<typeof SessionBoardStateSchema>;
 
+/**
+ * Is the session's work done: the field a script waits on. The same verdict
+ * as `board_state` (`working` and `needs_input` are `running`). Not `status`
+ * (the stored row lifecycle) and not `runtime_status` (the computer): a child
+ * that answered keeps `status: running` and `runtime_status: active` until
+ * its idle computer stops.
+ */
+export const SessionWorkStateSchema = z.enum(['running', 'completed', 'failed', 'stopped', 'idle']);
+export type SessionWorkState = z.infer<typeof SessionWorkStateSchema>;
+
 /** What a session waits for from its person, or null. */
 export const SessionAttentionSchema = z.enum(['question', 'approval']).nullable();
 export type SessionAttention = z.infer<typeof SessionAttentionSchema>;

@@ -95,6 +95,32 @@ describe('parseWorkflowRun', () => {
     expect(parsed?.agents[0]).toEqual({ id: 'a1', label: 'Go', status: 'done' });
   });
 
+  test('the approval, a declined run, a person\'s Stop and a quiet agent: read when well-formed, dropped otherwise', () => {
+    const parsed = parseWorkflowRun(
+      run({
+        awaitingApproval: true,
+        declined: 'chat',
+        approvalWaitMs: 50_000,
+        agents: [
+          { id: 'a1', label: 'Stopped', status: 'stopped', stoppedBy: 'person' },
+          { id: 'a2', label: 'Quiet', status: 'running', quietSince: 1_790_000_060_000 },
+        ],
+      }),
+    );
+    expect(parsed).toMatchObject({ awaitingApproval: true, declined: 'chat', approvalWaitMs: 50_000 });
+    expect(parsed?.agents).toEqual([
+      { id: 'a1', label: 'Stopped', status: 'stopped', stoppedBy: 'person' },
+      { id: 'a2', label: 'Quiet', status: 'running', quietSince: 1_790_000_060_000 },
+    ]);
+    const odd = parseWorkflowRun(
+      run({ awaitingApproval: 'yes', declined: 'later', approvalWaitMs: -1, agents: [{ id: 'a1', label: 'Go', status: 'stopped', stoppedBy: 'robot', quietSince: 'now' }] }),
+    );
+    expect(odd).not.toHaveProperty('awaitingApproval');
+    expect(odd).not.toHaveProperty('declined');
+    expect(odd).not.toHaveProperty('approvalWaitMs');
+    expect(odd?.agents[0]).toEqual({ id: 'a1', label: 'Go', status: 'stopped' });
+  });
+
   test('null without a run status or an agents list', () => {
     expect(parseWorkflowRun(undefined)).toBeNull();
     expect(parseWorkflowRun({})).toBeNull();

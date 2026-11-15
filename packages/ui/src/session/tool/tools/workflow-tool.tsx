@@ -31,13 +31,16 @@ import { useSessionIds } from '../../../providers/session-ids';
 import { RunProgressRing, type AgentStopState } from './workflow-progress';
 import { boardStateOf } from '../../agents/agent-model';
 import { WorkflowRunCard } from './workflow-run-card';
+import { WorkflowRunCost } from './workflow-run-cost';
 import {
   isLargeRun,
   LargeRunBadge,
+  runNotStarted,
   useLiveWorkflowRun,
   useRestartAgent,
   WorkflowRunControls,
 } from '../../agents/workflow-run-controls';
+import { quietAgents } from './workflow-run-card';
 import {
   countAgents,
   elapsedMs,
@@ -296,6 +299,7 @@ export function WorkflowTool(props: ToolProps) {
                     : [t('status.running'), tally.total > 0 ? t('progress', { done: tally.done, total: tally.total }) : null].filter(Boolean).join(' · ')}
             </span>
           </span>
+          <WorkflowRunCost projectId={ids.projectId} rootSessionId={runnerSession} live={!runnerEnded} />
           {/* The one way in: a secondary button, on the title's line. */}
           <Button type="button" variant="secondary" size="xs" aria-label={t('openRunLabel')} onClick={openRunner} className="-my-1 shrink-0">
             {t('openRun')}
@@ -310,10 +314,15 @@ export function WorkflowTool(props: ToolProps) {
   const counts = countAgents(run.agents);
   const progress = counts.total > 0 ? t('progress', { done: counts.done, total: counts.total }) : undefined;
   const failedPart = counts.failed > 0 ? t('failedSuffix', { count: counts.failed }) : undefined;
-  const runElapsed = elapsedMs(run, live, now);
+  // Before the run exists (its approval is open) there is no run clock: the card is a question.
+  const notStarted = runNotStarted(run);
+  const runElapsed = notStarted ? undefined : elapsedMs(run, live, now);
   const elapsed = runElapsed !== undefined && runElapsed >= 1_000 ? formatElapsed(runElapsed) : undefined;
   const join = (...parts: (string | undefined)[]) => parts.filter(Boolean).join(' · ') || undefined;
-  const paused = run.paused ? tm('paused') : undefined;
+  // A hold stops new agents only: the ones at work go on, and the line says so.
+  const paused = run.paused ? (counts.running > 0 ? t('holdingWorking', { count: counts.running }) : tm('holding')) : undefined;
+  const quiet = live ? quietAgents(run.agents, now) : 0;
+  const quietPart = quiet > 0 ? t('quietCount', { count: quiet }) : undefined;
   const subtitle =
     run.status === 'running'
       ? // A call that returned while its run goes on: the run works on without this turn.
@@ -335,14 +344,24 @@ export function WorkflowTool(props: ToolProps) {
   const phaseLine =
     phase && phaseCounts.total > 0 ? t('phaseProgress', { phase: phase.title, done: phaseCounts.done, total: phaseCounts.total }) : undefined;
   // Ended, the card is one line that says how it ended (Paper F2, F4, F5).
-  const cardSubtitle =
+  const runLine =
     run.status === 'running'
-      ? join(paused ?? (settled || run.background ? t('background') : undefined), phaseLine ?? progress, failedPart, elapsed)
+      ? join(paused ?? (settled || run.background ? t('background') : undefined), phaseLine ?? progress, failedPart, quietPart, elapsed)
       : run.status === 'done'
         ? join(t('status.done'), counts.total > 0 ? t('agents', { count: counts.total }) : undefined, elapsed)
         : run.status === 'failed'
           ? join(t('didntFinish'), counts.total > 0 ? progress : undefined, failedPart, elapsed)
           : join(t('status.stopped'), counts.total > 0 ? progress : undefined, elapsed);
+  // Not a run yet, or never one: the approval is open, or the person said no to it (their choice, not a failure).
+  const cardSubtitle = run.declined
+    ? run.declined === 'chat'
+      ? t('answeredInChat')
+      : t('cancelled')
+    : run.status === 'running' && run.awaitingApproval
+      ? t('waitingForYou')
+      : notStarted
+        ? t('status.starting')
+        : runLine;
   const callError = status === 'error' ? partError(call) : undefined;
   const runError = run.error ?? callError;
   const output = status === 'completed' ? partOutput(call) : '';
@@ -361,11 +380,19 @@ export function WorkflowTool(props: ToolProps) {
         now={now}
         onOpen={onOpen}
         stop={stop}
+        // A declined run is one muted line: nothing ran, so there are no rows to show.
+        bare={!!run.declined}
         chips={<RunChips run={run} />}
         result={result ? <OutputBlock text={result.text} markdown={result.kind === 'markdown'} /> : undefined}
         actions={
           <>
-            {(live || (!!run.runId && !run.name && !!ids.sessionId)) && (
+            <WorkflowRunCost
+              projectId={ids.projectId}
+              rootSessionId={run.background?.sessionId ?? ids.sessionId}
+              agentSessionIds={run.background ? undefined : run.agents.flatMap((agent) => (agent.sessionId ? [agent.sessionId] : []))}
+              live={live}
+            />
+            {!run.declined && (live || (!!run.runId && !run.name && !!ids.sessionId)) && (
               <WorkflowRunControls
                 projectId={ids.projectId}
                 controlSessionId={live ? controlSessionId : undefined}
@@ -390,7 +417,7 @@ export function WorkflowTool(props: ToolProps) {
           </>
         }
       />
-      {runError && run.status !== 'running' && (
+      {runError && run.status !== 'running' && !run.declined && (
         <div className="mt-2 px-4 text-sm">
           {/* One sentence; the run's raw error (script or platform words) folds behind Details. */}
           <AgentFailure sentence={t('failedSentence')} raw={runError} />

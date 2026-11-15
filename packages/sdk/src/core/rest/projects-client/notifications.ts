@@ -135,6 +135,12 @@ export interface InboxNotification {
   /** The web path that opens the subject; its `?notification=<id>` marks the row read. */
   url: string;
   read: boolean;
+  /**
+   * A `question` or `permission` whose ask is closed: answered, dismissed,
+   * decided or expired. False for every other kind. Absent from an older API:
+   * read it as false. "Needs you" leaves a resolved row out.
+   */
+  resolved?: boolean;
   created_at: string;
 }
 

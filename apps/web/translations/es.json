@@ -1681,8 +1681,8 @@
         "needsInput": "Requiere tu respuesta",
         "starting": "Despertando",
         "running": "Trabajando",
-        "done": "Lista",
-        "stopped": "En reposo",
+        "done": "Terminada",
+        "stopped": "Detenida",
         "failed": "Fallida",
         "legacy": "Anterior"
       }
@@ -1894,7 +1894,13 @@
       "noMessages": "Aún no hay mensajes",
       "more": "Más"
     },
-    "calendar": "Calendario"
+    "calendar": "Calendario",
+    "running": "En curso",
+    "runningCount": "{count, plural, one {# sesión en curso} other {# sesiones en curso}}",
+    "runningTitle": "En curso ahora",
+    "runningEmpty": "No hay nada en curso.",
+    "runningIn": "en {title}",
+    "runningFirst": "Se muestran las primeras {count}."
   },
   "dashboard": {
     "title": "Panel",
@@ -2363,6 +2369,8 @@
     "chatInputMachine": "Máquina",
     "chatInputMachineDescription": "La plantilla de máquina con la que arranca esta sesión.",
     "sending": "Enviando",
+    "notSentYet": "Aún no enviado · se enviará cuando vuelvas a tener conexión",
+    "offlineReconnecting": "Sin conexión: reconectando…",
     "stop": "Detener",
     "startingSession": "Iniciando sesión…",
     "sessionStarted": "Sesión iniciada",
@@ -3350,7 +3358,17 @@
       "jsonKeys": "{count, plural, one {JSON · # clave} other {JSON · # claves}}",
       "jsonItems": "{count, plural, one {JSON · # elemento} other {JSON · # elementos}}",
       "failedSentence": "El flujo de trabajo se detuvo antes de terminar.",
-      "runningCount": "{count} en curso"
+      "runningCount": "{count} en curso",
+      "spent": "{credits} créditos gastados",
+      "spentHint": "Lo que Kortix ha cobrado hasta ahora por esta ejecución: llamadas al modelo y tiempo de cómputo de la ejecución y sus agentes.",
+      "waitingForYou": "Esperándote · sin empezar",
+      "cancelled": "Cancelado — no se ejecutó nada",
+      "answeredInChat": "Respondido en el chat — no se ejecutó nada",
+      "stoppedByYou": "Detenido por ti",
+      "attempt": "intento {count}",
+      "quietFor": "Sin actividad desde hace {minutes} min",
+      "quietCount": "{count} sin actividad",
+      "holdingWorking": "En espera · {count} siguen trabajando"
     },
     "agent": {
       "backgroundWorking": "Trabajando en segundo plano",
@@ -26542,7 +26560,11 @@
         "resume": "No se pudo reanudar la ejecución",
         "stop": "No se pudo detener la ejecución",
         "restart": "No se pudo reiniciar {label}"
-      }
+      },
+      "hold": "Retener agentes nuevos",
+      "holdShort": "Retener agentes nuevos",
+      "holdHint": "Retener agentes nuevos: ninguno empieza hasta que reanudes; los que ya trabajan siguen (p)",
+      "holding": "Agentes nuevos retenidos"
     },
     "board": {
       "layoutLabel": "Vista",

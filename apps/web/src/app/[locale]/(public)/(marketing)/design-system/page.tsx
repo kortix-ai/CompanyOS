@@ -3357,7 +3357,7 @@ export default function BrandPage() {
                               {
                                 id: 'save',
                                 label: tI18nHardcoded.raw('i18nComplete.text1509f561f241'),
-                                kbd: tI18nHardcoded.raw('i18nComplete.text8cd003e6301b'),
+                                kbd: ['mod', 'S'],
                                 onSelect: () => {},
                               },
                             ]}

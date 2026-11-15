@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { ActionBar, type ActionBarAction, ActionBarDock, toAriaKeyshortcuts } from './action-bar';
+import { ActionBar, type ActionBarAction, ActionBarDock, keyLabel, toAriaKeyshortcuts } from './action-bar';
 
 const noop = () => {};
 const actions: ActionBarAction[] = [
   { id: 'discard', label: 'Discard', onSelect: noop },
-  { id: 'save', label: 'Save', kbd: '⌘S', emphasis: 'primary', onSelect: noop },
+  { id: 'save', label: 'Save', kbd: ['mod', 'S'], emphasis: 'primary', onSelect: noop },
   { id: 'delete', label: 'Delete', tone: 'destructive', onSelect: noop },
 ];
 const bar = (props: Partial<Parameters<typeof ActionBar>[0]> = {}) =>
@@ -35,10 +35,11 @@ describe('ActionBar', () => {
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 
-  test('kbd draws a key after the label and names the shortcut for assistive tech', () => {
+  test('kbd draws one Kbd per key in a KbdGroup and names the shortcut for assistive tech', () => {
     const save = button(bar(), 'Save');
+    // The server renders the Mac glyph; the client corrects after hydration.
     expect(save).toContain('aria-keyshortcuts="Meta+S"');
-    expect(save).toMatch(/<kbd data-slot="kbd"[^>]*>⌘S<\/kbd>/);
+    expect(save).toMatch(/<kbd data-slot="kbd-group"[^>]*><kbd data-slot="kbd"[^>]*>⌘<\/kbd><kbd data-slot="kbd"[^>]*>S<\/kbd><\/kbd>/);
     expect(button(bar(), 'Discard')).not.toContain('<kbd');
   });
 
@@ -84,9 +85,11 @@ describe('ActionBar', () => {
     expect(out).toMatch(/<span class="min-w-0 truncate">Moving/);
   });
 
-  test('toAriaKeyshortcuts names the modifiers', () => {
-    expect(toAriaKeyshortcuts('⌘S')).toBe('Meta+S');
-    expect(toAriaKeyshortcuts('⌘⇧P')).toBe('Meta+Shift+P');
-    expect(toAriaKeyshortcuts('Esc')).toBe('Esc');
+  test('mod is ⌘ on a Mac and Ctrl elsewhere, in the label and the aria name', () => {
+    expect(keyLabel('mod', true)).toBe('⌘');
+    expect(keyLabel('mod', false)).toBe('Ctrl');
+    expect(keyLabel('s', false)).toBe('S');
+    expect(toAriaKeyshortcuts(['mod', 'shift', 'p'], true)).toBe('Meta+Shift+P');
+    expect(toAriaKeyshortcuts(['mod', 'S'], false)).toBe('Control+S');
   });
 });

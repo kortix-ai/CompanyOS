@@ -396,7 +396,7 @@ export function SaveBar({
           {
             id: 'save',
             label: tI18nComplete.raw('text1509f561f241'),
-            kbd: tI18nComplete.raw('text8cd003e6301b'),
+            kbd: ['mod', 'S'],
             onSelect: onSave,
           },
         ]}

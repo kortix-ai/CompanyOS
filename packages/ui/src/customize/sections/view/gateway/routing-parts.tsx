@@ -427,7 +427,7 @@ export function RoutingSaveBar({
               {
                 id: 'save',
                 label: t('save'),
-                kbd: tI18nComplete.raw('text8cd003e6301b'),
+                kbd: ['mod', 'S'],
                 emphasis: 'primary',
                 disabled: !canSave,
                 onSelect: onSave,

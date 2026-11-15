@@ -11,7 +11,8 @@
  * - `title` states the mode in a few words. `description` adds one muted fact
  *   (the changed tabs, a selection limit). Both truncate; nothing wraps.
  * - `actions` render as one `secondary` ButtonGroup of text buttons. An action
- *   may carry a `kbd` hint, a `destructive` or `success` tone, a `primary`
+ *   may carry a `kbd` hint (one `Kbd` per key in a `KbdGroup`; `'mod'` draws ⌘
+ *   on a Mac and Ctrl elsewhere), a `destructive` or `success` tone, a `primary`
  *   emphasis (the one commit verb, such as Save), and its own `loading` state.
  * - `close` adds the trailing × that leaves the mode. Its label is the
  *   tooltip and the accessible name ("Exit selection").
@@ -34,7 +35,7 @@
 
 import { XIcon } from '@phosphor-icons/react';
 import { m } from 'motion/react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useSyncExternalStore } from 'react';
 
 import { useReducedMotion } from '../internal/hooks/use-reduced-motion';
 import { cn } from '../lib/utils';
@@ -42,7 +43,7 @@ import { Button } from './button';
 import { ButtonGroup } from './button-group';
 import { SessionDotMatrix } from './dot-matrix/session-dot-matrix';
 import Hint from './hint';
-import { Kbd } from './kbd';
+import { Kbd, KbdGroup } from './kbd';
 import Loading from './loading';
 
 export interface ActionBarAction {
@@ -52,25 +53,41 @@ export interface ActionBarAction {
   tone?: 'default' | 'success' | 'destructive';
   /** `primary` fills the button. Give it to at most one action: the commit verb. */
   emphasis?: 'default' | 'primary';
-  /** The key hint drawn after the label, such as `⌘S`. Display only. */
-  kbd?: string;
+  /**
+   * The shortcut drawn after the label, one entry per key: `['mod', 'S']`.
+   * `'mod'` is ⌘ on a Mac and Ctrl elsewhere. Display only: the page binds it.
+   */
+  kbd?: readonly string[];
   disabled?: boolean;
   /** This action alone is running: a spinner leads its label and it disables. */
   loading?: boolean;
   onSelect: () => void;
 }
 
-// `aria-keyshortcuts` takes key names ("Meta+S"), not the glyphs drawn on the key.
-const MODIFIER_NAMES: Record<string, string> = { '⌘': 'Meta', '⌃': 'Control', '⌥': 'Alt', '⇧': 'Shift' };
-export function toAriaKeyshortcuts(kbd: string): string {
-  const keys: string[] = [];
-  let rest = kbd.trim();
-  while (rest[0] && MODIFIER_NAMES[rest[0]]) {
-    keys.push(MODIFIER_NAMES[rest[0]]!);
-    rest = rest.slice(1).trim();
-  }
-  if (rest) keys.push(rest.length === 1 ? rest.toUpperCase() : rest);
-  return keys.join('+');
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+const noopSubscribe = () => () => {};
+// The server cannot know the platform: it renders ⌘, the client corrects after hydration.
+function useIsMac() {
+  return useSyncExternalStore(noopSubscribe, () => IS_MAC, () => true);
+}
+
+const MOD_SYMBOL = { mac: '⌘', other: 'Ctrl' } as const;
+const SHIFT_ALT_SYMBOL: Record<string, string> = { shift: '⇧', alt: '⌥' };
+const ARIA_NAME: Record<string, string> = { shift: 'Shift', alt: 'Alt' };
+
+/** The drawn label of one key: `'mod'` → ⌘ / Ctrl, `'shift'` → ⇧, a letter in capitals. */
+export function keyLabel(key: string, isMac: boolean): string {
+  if (key === 'mod') return isMac ? MOD_SYMBOL.mac : MOD_SYMBOL.other;
+  return SHIFT_ALT_SYMBOL[key] ?? (key.length === 1 ? key.toUpperCase() : key);
+}
+
+/** `aria-keyshortcuts` takes key names joined by `+`: `['mod', 'S']` → `Meta+S` / `Control+S`. */
+export function toAriaKeyshortcuts(keys: readonly string[], isMac: boolean): string {
+  return keys
+    .map((k) =>
+      k === 'mod' ? (isMac ? 'Meta' : 'Control') : (ARIA_NAME[k] ?? (k.length === 1 ? k.toUpperCase() : k)),
+    )
+    .join('+');
 }
 
 const EASE_OUT = [0.23, 1, 0.32, 1] as const;
@@ -104,6 +121,7 @@ export function ActionBar({
   className?: string;
 }) {
   const reduceMotion = useReducedMotion();
+  const isMac = useIsMac();
   return (
     <m.div
       data-slot="action-bar"
@@ -144,7 +162,7 @@ export function ActionBar({
                 onClick={a.onSelect}
                 disabled={busy || a.disabled || a.loading}
                 aria-busy={a.loading || undefined}
-                aria-keyshortcuts={a.kbd ? toAriaKeyshortcuts(a.kbd) : undefined}
+                aria-keyshortcuts={a.kbd?.length ? toAriaKeyshortcuts(a.kbd, isMac) : undefined}
                 className={cn(
                   'h-8 min-w-0 flex-auto gap-1.5 px-1.5 @lg/action-bar:flex-none @lg/action-bar:px-3',
                   a.tone === 'destructive' && 'text-destructive hover:text-destructive',
@@ -153,15 +171,20 @@ export function ActionBar({
               >
                 {a.loading ? <Loading className="size-3.5 shrink-0" /> : null}
                 <span className="truncate">{a.label}</span>
-                {a.kbd ? (
-                  <Kbd
-                    className={cn(
-                      'w-auto',
-                      a.emphasis === 'primary' && 'text-action-foreground/70',
-                    )}
-                  >
-                    {a.kbd}
-                  </Kbd>
+                {a.kbd?.length ? (
+                  <KbdGroup>
+                    {a.kbd.map((key) => (
+                      <Kbd
+                        key={key}
+                        className={cn(
+                          'font-mono',
+                          a.emphasis === 'primary' && 'text-action-foreground/70',
+                        )}
+                      >
+                        {keyLabel(key, isMac)}
+                      </Kbd>
+                    ))}
+                  </KbdGroup>
                 ) : null}
               </Button>
             ))}

@@ -2,13 +2,14 @@ import { describe, expect, mock, test } from 'bun:test';
 
 // `useQuery` returns its config, so the wiring is asserted without a render tree.
 const calls: Array<{ projectId: string; options: unknown }> = [];
+let served: unknown[] = [{ session_id: 's1', working: { state: 'working' } }];
 mock.module('@tanstack/react-query', () => ({
   useQuery: (config: Record<string, unknown>) => config,
 }));
 mock.module('../core/rest/projects-client', () => ({
   listWorkspaceSessionsPage: async (projectId: string, options: unknown) => {
     calls.push({ projectId, options });
-    return { items: [{ session_id: 's1' }], next_cursor: null };
+    return { items: served, next_cursor: null };
   },
 }));
 
@@ -20,8 +21,19 @@ const interval = (hook: any, data?: unknown) => hook.refetchInterval({ state: { 
 describe('useRunningSessions', () => {
   test('reads the working sessions of the workspace, one page', async () => {
     const hook = useRunningSessions('p1') as any;
-    expect(await hook.queryFn()).toEqual([{ session_id: 's1' }]);
+    expect(await hook.queryFn()).toEqual([{ session_id: 's1', working: { state: 'working' } }]);
     expect(calls.at(-1)).toEqual({ projectId: 'p1', options: { working: true, limit: RUNNING_SESSIONS_LIMIT } });
+  });
+
+  test('an API older than working=only lists every session: only the working ones are kept', async () => {
+    served = [
+      { session_id: 'busy', working: { state: 'working' } },
+      { session_id: 'idle', working: { state: 'idle' } },
+      { session_id: 'none' },
+    ];
+    const hook = useRunningSessions('p1') as any;
+    expect((await hook.queryFn()).map((s: { session_id: string }) => s.session_id)).toEqual(['busy']);
+    served = [{ session_id: 's1', working: { state: 'working' } }];
   });
 
   test('its key nests under the sessions scope, so every session invalidation refreshes it', () => {

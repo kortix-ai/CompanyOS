@@ -28,8 +28,11 @@ export function useRunningSessions(
 ) {
   return useQuery({
     queryKey: qk.project.runningSessions(projectId ?? ''),
+    // The server's own rule, again here: an API older than `working=only` ignores it and lists every session.
     queryFn: async (): Promise<ProjectSession[]> =>
-      (await listWorkspaceSessionsPage(projectId as string, { working: true, limit: RUNNING_SESSIONS_LIMIT })).items,
+      (await listWorkspaceSessionsPage(projectId as string, { working: true, limit: RUNNING_SESSIONS_LIMIT })).items.filter(
+        (session) => session.working?.state === 'working',
+      ),
     enabled: !!projectId && options.enabled !== false,
     ...contract('inventory'),
     refetchInterval: (state: { state: { data?: ProjectSession[] } }) =>

@@ -35,7 +35,7 @@ mock.module('@kortix/sdk/react', () => ({
 }));
 
 const { TooltipProvider } = await import('../../../primitives/tooltip');
-const { ProjectRunningNavItem, RunningPanel } = await import('./project-running-nav');
+const { ProjectRunningNavItem, RunningPanel, runningPanelState } = await import('./project-running-nav');
 
 function session(id: string, input: { name: string; parent?: string; since?: string; board?: 'working' | 'needs_input' }): ProjectSession {
   return {
@@ -89,6 +89,13 @@ describe('the sidebar Running row', () => {
     expect(html).toContain('needs you');
     expect(html).toContain('aria-label="Stop Launch research (workflow)"');
     expect(html).toContain('aria-label="Open Weekly digest"');
+  });
+
+  test('a failed refresh after an empty answer is an error, not "nothing runs"', () => {
+    expect(runningPanelState({ data: [], isError: true })).toBe('error');
+    expect(runningPanelState({ data: undefined, isError: true })).toBe('error');
+    expect(runningPanelState({ data: [], isError: false })).toBe('ready');
+    expect(runningPanelState({ data: undefined, isError: false })).toBe('loading');
   });
 
   test('an empty list says "Nothing is running" only after a read answered', () => {

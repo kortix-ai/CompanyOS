@@ -72,7 +72,7 @@ export function ProjectRunningNavItem({ projectId }: { projectId: string }) {
             projectId={projectId}
             sessions={sessions}
             // "Nothing is running" only after a read answered: not while it loads, not when it failed.
-            state={running.data ? 'ready' : running.isError ? 'error' : 'loading'}
+            state={runningPanelState(running)}
             onRetry={() => void running.refetch()}
             onNavigate={() => setOpen(false)}
           />
@@ -80,6 +80,15 @@ export function ProjectRunningNavItem({ projectId }: { projectId: string }) {
       </Popover>
     </SidebarMenuItem>
   );
+}
+
+/**
+ * What an empty list means. A failed read wins over cached data: after an
+ * empty answer, a failed refresh keeps `[]`, which is not "nothing runs".
+ */
+export function runningPanelState(query: { data?: unknown; isError: boolean }): 'loading' | 'error' | 'ready' {
+  if (query.isError) return 'error';
+  return query.data ? 'ready' : 'loading';
 }
 
 export function RunningPanel({

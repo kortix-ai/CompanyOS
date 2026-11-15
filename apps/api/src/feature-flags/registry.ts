@@ -629,9 +629,9 @@ const FLAGS: readonly FeatureFlagDef[] = [
       'ROUTES: every /v1/workspaces/:id/calendar* route answers 403 `feature_disabled` when off (projects/routes/calendar.ts). ' +
       'Nothing runs while it is off: no worker job, no hook on another write; the scheduled triggers on the page are computed in the browser ' +
       'from GET /triggers/all. NOTIFICATIONS: only a calendar write sends the `mention` kind. Its settings row (web and mobile) hides while the flag is off in every workspace of the person, ' +
-      'from the workspace list the app already holds (@kortix/sdk hiddenNotificationKinds; no query). A mention row from a project whose flag is off again leaves the inbox, ' +
-      'the unread count and the digest (inbox-read.ts, from the project row it already reads). MCP: read_skill lists and serves kortix-calendar only with the project_id ' +
-      'of a workspace where the flag is on. DOCS: the audit action reference leaves project.calendar.* out. BOX: off, a session box has no kortix-calendar skill and its CLI hides `kortix calendar` ' +
+      'from the cached workspace list with no request of its own (@kortix/sdk hiddenNotificationKinds). A mention row from a project whose flag is off again leaves the inbox, ' +
+      'the unread count and the digest (inbox-read.ts liveCalendarItems: the one query that runs only when mention rows exist). MCP: read_skill lists and serves kortix-calendar only with the project_id ' +
+      'of a workspace where the flag is on, from the /detail it already reads. SIDEBAR: off, the Calendar row and its query never mount. DOCS: the audit action reference leaves project.calendar.* out. BOX: off, a session box has no kortix-calendar skill and its CLI hides `kortix calendar` ' +
       '(KORTIX_FEATURE_FLAGS → kortixd). WEB: no Calendar row and no palette entry; /workspaces/:id/calendar renders FeatureGateScreen. ' +
       'The calendar_items and calendar_comments rows stay.',
   },

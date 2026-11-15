@@ -492,8 +492,8 @@ export interface SessionChatInputProps {
  *
  * The gutter is equal on both sides. It used to carry `md:pr-1`, a right-side
  * trim against the collapsed action-panel chevron rail, which then took ~37px
- * of the row's width. That rail now takes no width (`COLLAPSED_RAIL_OFFSET` in
- * `session-action-panel-column.tsx`), so the trim only shifted the card 5.5px
+ * of the row's width. Collapsed, the column now takes no width at all
+ * (`session-action-panel-column.tsx`), so the trim only shifted the card 5.5px
  * right of center. A breakpoint may never ZERO this gutter — zero is what let
  * the card touch the panel divider, and `composer-underbar.test.tsx` guards
  * exactly that line.

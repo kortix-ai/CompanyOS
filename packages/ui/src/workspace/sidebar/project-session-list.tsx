@@ -134,7 +134,6 @@ import {
 import {
   ArchiveIcon,
   ArrowsSplitIcon,
-  CaretRightIcon,
   CheckIcon,
   DotsThreeIcon,
   FolderSimpleIcon,
@@ -159,6 +158,7 @@ import { UiLink, useUiPathname, useUiRouter, useUiSearchParams, useUiViewerId } 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSessionListActions } from '../../session/actions/use-session-list-actions';
 import { Separator } from '../../primitives/separator';
+import { CaretRightSolidIcon } from '../../icons/caret-right-solid';
 
 interface ProjectSessionListProps {
   projectId: string;
@@ -940,9 +940,9 @@ function SessionListHeader({
           )}
         >
           <span className="truncate">{t('sessions')}</span>
-          <CaretRightIcon
+          <CaretRightSolidIcon
             aria-hidden
-            className="duration-normal size-3 shrink-0 opacity-0 transition-transform ease-out group-hover/sessions-header:opacity-100 group-data-[state=open]/sessions:rotate-90"
+            className="duration-normal size-4 shrink-0 opacity-0 transition-transform ease-out group-hover/sessions-header:opacity-100 group-data-[state=open]/sessions:rotate-90"
           />
         </div>
       </DisclosureTrigger>
@@ -1076,9 +1076,9 @@ function SessionListSection({
           )}
         >
           <span className="truncate">{sectionKey ? t(sectionKey) : section.label}</span>
-          <CaretRightIcon
+          <CaretRightSolidIcon
             aria-hidden
-            className="duration-normal size-3 shrink-0 opacity-0 transition-transform ease-out group-hover/section-header:opacity-100 group-data-[state=open]/section:rotate-90"
+            className="duration-normal size-4 shrink-0 opacity-0 transition-transform ease-out group-hover/section-header:opacity-100 group-data-[state=open]/section:rotate-90"
           />
           <SessionSectionMenu
             projectId={projectId}
@@ -1246,10 +1246,10 @@ function StarterSection({
           )}
         >
           <span className="truncate">{title}</span>
-          <CaretRightIcon
+          <CaretRightSolidIcon
             aria-hidden
             className={cn(
-              'duration-normal size-3 shrink-0 transition-[transform,opacity] ease-out group-data-[state=open]/section:rotate-90',
+              'duration-normal size-4 shrink-0 transition-[transform,opacity] ease-out group-data-[state=open]/section:rotate-90',
               caretOnHover &&
                 'opacity-0 group-hover/section-header:opacity-100 group-focus-visible/section-header:opacity-100',
             )}

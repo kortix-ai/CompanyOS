@@ -2691,6 +2691,10 @@ const handleCopy = async () => {
     <div
       className={cn(
         'flex items-center gap-0.5',
+        // Under the answer, the first glyph sits on the text's left edge: each
+        // icon is centred in a `size-7` button, so pull the row left by the
+        // glyph's inset, (button − 1.05rem icon) / 2 ≈ 4.5px.
+        !inToolbar && '-ml-[calc((var(--spacing)*7-1.05rem)/2)]', // audit:allow optical alignment: icon inset inside its hit area
         !inToolbar &&
           'duration-normal opacity-0 transition-opacity group-hover/turn:opacity-100 focus-within:opacity-100 has-[[data-state=open]]:opacity-100 max-md:opacity-100',
       )}

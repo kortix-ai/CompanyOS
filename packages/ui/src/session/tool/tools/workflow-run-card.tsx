@@ -126,7 +126,8 @@ export function WorkflowRunCard({
           {(subtitle || meta) && (
             <p className="text-muted-foreground flex min-w-0 items-center tabular-nums">
               {subtitle && (
-                <span className="min-w-0 truncate" title={subtitle}>
+                // Progress outranks cost: the state keeps its width up to the line, the cost truncates first.
+                <span className="max-w-full shrink-0 truncate" title={subtitle}>
                   {subtitle}
                 </span>
               )}

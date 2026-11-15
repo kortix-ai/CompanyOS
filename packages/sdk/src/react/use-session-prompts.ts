@@ -597,19 +597,11 @@ export function useSessionUnsentPrompts(sessionId: string | null | undefined): r
 }
 
 /**
- * TanStack learns the network state only from `online` / `offline` events, and
- * starts as online. A page that loaded offline saw no event, so it would fire a
- * send into a dead network and lose it. Read the browser's own flag first.
+ * Resolves at once when online, else when the network returns. It reads
+ * `onlineManager` (the `online` / `offline` events), never `navigator.onLine`
+ * alone: Chromium reports false negatives, and a hold on one would never end.
  */
-function syncOnlineFromNavigator(): void {
-  if (typeof navigator !== 'undefined' && navigator.onLine === false && onlineManager.isOnline()) {
-    onlineManager.setOnline(false);
-  }
-}
-
-/** Resolves at once when online, else when the network returns (`onlineManager`). */
 function untilOnline(): Promise<void> {
-  syncOnlineFromNavigator();
   if (onlineManager.isOnline()) return Promise.resolve();
   return new Promise((resolve) => {
     const unsubscribe = onlineManager.subscribe((online) => {
@@ -808,7 +800,6 @@ export function useSessionPrompts(
       queryClient.setQueryData<SessionPrompt[]>(key, (prev) =>
         applyOptimisticPrompt(prev ?? [], input, Date.now()),
       );
-      syncOnlineFromNavigator();
       if (!onlineManager.isOnline()) {
         // Offline: TanStack holds the POST until the network returns. The row
         // stays on screen as not sent; nothing claims the session works.

@@ -292,7 +292,7 @@ export function WorkflowTool(props: ToolProps) {
               <RunChips run={run} />
             </span>
             <span className="text-muted-foreground flex min-w-0 items-center">
-              <span className="min-w-0 truncate">
+              <span className="max-w-full shrink-0 truncate">
                 {runnerEnded === 'done'
                   ? t('status.done')
                   : runnerEnded === 'failed'

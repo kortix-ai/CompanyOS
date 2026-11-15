@@ -122,27 +122,6 @@ test('online: the send is claimed at once, before the POST answers', async () =>
   await hook.unmount();
 });
 
-test('a page that loaded offline (no offline event, so TanStack still says online): the send is held, not fired', async () => {
-  const posts = serve();
-  const hook = await mount('s_loaded_offline');
-  const nav = globalThis.navigator as unknown as Record<string, unknown> | undefined;
-  const had = nav ? Object.getOwnPropertyDescriptor(nav, 'onLine') : undefined;
-  Object.defineProperty(globalThis, 'navigator', { value: { ...(nav ?? {}), onLine: false }, configurable: true, writable: true });
-  try {
-    expect(onlineManager.isOnline()).toBe(true);
-    await act(async () => {
-      void hook.current().prompts.enqueue({ ...input, clientMessageId: 'c_3', messageId: 'msg_3' });
-      await tick();
-    });
-    expect(posts).toHaveLength(0);
-    expect(hook.current().unsent).toEqual(['msg_3']);
-  } finally {
-    Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true, writable: true });
-    if (had && nav) Object.defineProperty(nav, 'onLine', had);
-  }
-  await hook.unmount();
-});
-
 test('the first prompt of a new session, sent offline: no POST and no working claim until the network returns, then one POST', async () => {
   useSessionWorkingStore.getState().reset();
   onlineManager.setOnline(false);

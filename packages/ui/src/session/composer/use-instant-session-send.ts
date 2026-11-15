@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
+import { onlineManager } from '@tanstack/react-query';
 import { errorToast, infoToast } from '../../primitives/toast';
 import type { ComposerOptions } from './composer-chat-input';
 import type { AttachedFile } from './session-chat-input';
@@ -583,7 +584,7 @@ export function useInstantSessionSend(
         mountedRef,
       };
       // A new session's first prompt has no row on screen to say it waits: say it once.
-      if (send.first && typeof navigator !== 'undefined' && navigator.onLine === false) infoToast(tThreads('notSentYet'));
+      if (send.first && !onlineManager.isOnline()) infoToast(tThreads('notSentYet'));
       paintSend(send, env);
       const post = buildPost(send, env);
       const { detached } = send;

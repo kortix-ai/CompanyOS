@@ -286,7 +286,7 @@ export function WorkflowTool(props: ToolProps) {
               <RunProgressRing done={tally.done} failed={tally.failed} total={Math.max(tally.total, 1)} />
             )}
           </span>
-          <span className="flex min-w-0 flex-1 basis-48 flex-col gap-0.5">
+          <span className="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
             <span className="flex min-w-0 items-center gap-1.5">
               <span className="text-foreground min-w-0 truncate text-sm font-medium">{title}</span>
               <RunChips run={run} />

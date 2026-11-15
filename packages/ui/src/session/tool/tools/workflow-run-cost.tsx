@@ -90,7 +90,8 @@ export function WorkflowRunCost({
   return (
     <Hint label={t('spentHint')} side="top">
       <span data-testid="workflow-run-cost" className="text-muted-foreground shrink-0 whitespace-nowrap tabular-nums">
-        {separated && <span aria-hidden>{' · '}</span>}
+        {/* No-break spaces: a flex item drops its edge spaces, which glued "Done·". */}
+        {separated && <span aria-hidden>{'\u00a0·\u00a0'}</span>}
         {t('spent', { credits: formatUsdAsCredits(usd) })}
       </span>
     </Hint>

@@ -96,6 +96,8 @@ describe('the sidebar Running row', () => {
     expect(runningPanelState({ data: undefined, isError: true })).toBe('error');
     expect(runningPanelState({ data: [], isError: false })).toBe('ready');
     expect(runningPanelState({ data: undefined, isError: false })).toBe('loading');
+    // "Try again" in flight: the spinner, not the stale error.
+    expect(runningPanelState({ data: [], isError: true, isFetching: true })).toBe('loading');
   });
 
   test('an empty list says "Nothing is running" only after a read answered', () => {

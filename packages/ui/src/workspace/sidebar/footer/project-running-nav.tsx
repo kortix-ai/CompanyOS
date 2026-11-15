@@ -86,8 +86,9 @@ export function ProjectRunningNavItem({ projectId }: { projectId: string }) {
  * What an empty list means. A failed read wins over cached data: after an
  * empty answer, a failed refresh keeps `[]`, which is not "nothing runs".
  */
-export function runningPanelState(query: { data?: unknown; isError: boolean }): 'loading' | 'error' | 'ready' {
-  if (query.isError) return 'error';
+export function runningPanelState(query: { data?: unknown; isError: boolean; isFetching?: boolean }): 'loading' | 'error' | 'ready' {
+  // A retry after an error reads as loading, so "Try again" shows it works.
+  if (query.isError) return query.isFetching ? 'loading' : 'error';
   return query.data ? 'ready' : 'loading';
 }
 

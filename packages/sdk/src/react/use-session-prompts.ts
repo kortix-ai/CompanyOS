@@ -607,6 +607,19 @@ function syncOnlineFromNavigator(): void {
   }
 }
 
+/** Resolves at once when online, else when the network returns (`onlineManager`). */
+function untilOnline(): Promise<void> {
+  syncOnlineFromNavigator();
+  if (onlineManager.isOnline()) return Promise.resolve();
+  return new Promise((resolve) => {
+    const unsubscribe = onlineManager.subscribe((online) => {
+      if (!online) return;
+      unsubscribe();
+      resolve();
+    });
+  });
+}
+
 /**
  * Whether the browser reports a network (`online` / `offline` events, the
  * signal TanStack Query pauses requests on). True on a server render.
@@ -995,6 +1008,9 @@ export async function startSessionWithPrompt(
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? `start_${crypto.randomUUID()}`
       : `start_${now()}_${Math.random().toString(36).slice(2, 10)}`;
+  // Offline: hold the POST until the network returns, as the inbox hook does.
+  // No receipt yet, so nothing claims the session works for a send that has not left.
+  await untilOnline();
   const store = useSessionWorkingStore.getState();
   store.noteSendReceipt(sessionId, { messageId: clientMessageId, atMs: now() });
   try {

@@ -101,7 +101,8 @@ export function WorkflowRunCard({
       className="border-border mt-1.5 flex min-w-0 flex-col rounded-lg border text-xs"
     >
       {/* One left edge for the header and the rows (px-4); the ring sits in the rows' 16px glyph lane. */}
-      <header className={cn('border-border flex min-w-0 items-start gap-2.5 px-4 py-3', !bare && 'border-b')}>
+      {/* Narrow cards wrap the actions under the title: the title and status keep at least basis-48. */}
+      <header className={cn('border-border flex min-w-0 flex-wrap items-start gap-x-2.5 gap-y-1.5 px-4 py-3', !bare && 'border-b')}>
         <span className="flex h-5 shrink-0 items-center">
           {counts.total > 0 ? (
             <RunProgressRing
@@ -115,7 +116,7 @@ export function WorkflowRunCard({
             <SessionStatusMark status={runGlyphStatus(run.status === 'running' ? 'starting' : run.status)} />
           )}
         </span>
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex min-w-0 flex-1 basis-48 flex-col gap-0.5">
           <div className="flex min-w-0 items-center gap-1.5">
             <h3 className={cn('min-w-0 truncate text-sm font-medium', bare ? 'text-muted-foreground' : 'text-foreground')} title={title}>
               {title}
@@ -134,7 +135,7 @@ export function WorkflowRunCard({
           )}
         </div>
         {(actions || result) && (
-          <div className="-my-1 flex shrink-0 items-center">
+          <div className="-my-1 ml-auto flex shrink-0 items-center">
             {actions}
             {result && (
               <button

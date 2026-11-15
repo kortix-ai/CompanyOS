@@ -4,7 +4,7 @@ import { act, create } from 'react-test-renderer';
 import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { configureKortix } from '../core/http/config';
 import { useSessionWorkingStore } from '../browser/stores/session-working-store';
-import { useNetworkOnline, useSessionUnsentPrompts, useSessionPrompts } from './use-session-prompts';
+import { startSessionWithPrompt, useNetworkOnline, useSessionUnsentPrompts, useSessionPrompts } from './use-session-prompts';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -141,4 +141,27 @@ test('a page that loaded offline (no offline event, so TanStack still says onlin
     if (had && nav) Object.defineProperty(nav, 'onLine', had);
   }
   await hook.unmount();
+});
+
+test('the first prompt of a new session, sent offline: no POST and no working claim until the network returns, then one POST', async () => {
+  useSessionWorkingStore.getState().reset();
+  onlineManager.setOnline(false);
+  const calls: unknown[] = [];
+  const sending = startSessionWithPrompt(
+    'p1',
+    's_first_offline',
+    { parts: [{ type: 'text', text: 'hello' }] },
+    {
+      create: async (_projectId, _sessionId, body) => {
+        calls.push(body);
+        return { prompt_id: 'p_first', state: 'queued', message_id: body.messageId, deduped: false } as never;
+      },
+    },
+  );
+  await tick();
+  expect(calls).toHaveLength(0);
+  expect(useSessionWorkingStore.getState().receipts['s_first_offline'] ?? null).toBeNull();
+  onlineManager.setOnline(true);
+  expect((await sending).state).toBe('queued');
+  expect(calls).toHaveLength(1);
 });

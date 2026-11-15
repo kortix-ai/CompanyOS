@@ -273,7 +273,7 @@ export function WorkflowTool(props: ToolProps) {
         {/* The run card's header, alone: its progress and its result live in the run's own session. */}
         <div
           data-testid="workflow-run-link"
-          className="border-border bg-background mt-1.5 flex w-full min-w-0 items-start gap-2.5 rounded-lg border px-4 py-3 text-left text-xs"
+          className="border-border bg-background mt-1.5 flex w-full min-w-0 flex-wrap items-start gap-x-2.5 gap-y-1.5 rounded-lg border px-4 py-3 text-left text-xs"
         >
           <span className="flex h-5 shrink-0 items-center">
             {runnerEnded === 'done' ? (
@@ -286,7 +286,7 @@ export function WorkflowTool(props: ToolProps) {
               <RunProgressRing done={tally.done} failed={tally.failed} total={Math.max(tally.total, 1)} />
             )}
           </span>
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="flex min-w-0 flex-1 basis-48 flex-col gap-0.5">
             <span className="flex min-w-0 items-center gap-1.5">
               <span className="text-foreground min-w-0 truncate text-sm font-medium">{title}</span>
               <RunChips run={run} />
@@ -305,7 +305,7 @@ export function WorkflowTool(props: ToolProps) {
             </span>
           </span>
           {/* The one way in: a secondary button, on the title's line. */}
-          <Button type="button" variant="secondary" size="xs" aria-label={t('openRunLabel')} onClick={openRunner} className="-my-1 shrink-0">
+          <Button type="button" variant="secondary" size="xs" aria-label={t('openRunLabel')} onClick={openRunner} className="-my-1 ml-auto shrink-0">
             {t('openRun')}
             <ArrowUpRightIcon aria-hidden className="size-3.5 shrink-0" />
           </Button>

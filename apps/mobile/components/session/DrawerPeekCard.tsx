@@ -94,7 +94,8 @@ export function DrawerSidebarDim({ children }: { children: React.ReactNode }) {
   const progress = useDrawerProgress();
   const { colorScheme } = useColorScheme();
   const max = colorScheme === 'dark' ? SIDEBAR_DIM.dark : SIDEBAR_DIM.light;
-  const dimStyle = useAnimatedStyle(() => ({ opacity: sidebarDim(progress.value, max) }), [max]);
+  // No dependency array: on native, Reanimated tracks the closure (`max`) itself.
+  const dimStyle = useAnimatedStyle(() => ({ opacity: sidebarDim(progress.value, max) }));
 
   return (
     <Animated.View style={styles.sidebar}>

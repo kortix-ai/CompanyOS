@@ -86,7 +86,7 @@ async function loadAskStates(rows: readonly AskRow[]): Promise<AskStates> {
           .select({
             sessionId: sessionPendingQuestions.sessionId,
             requestId: sessionPendingQuestions.requestId,
-            closed: sql<boolean>`${sessionPendingQuestions.answeredAt} IS NOT NULL`,
+            closed: sql<boolean>`(${sessionPendingQuestions.answeredAt} IS NOT NULL OR ${sessionPendingQuestions.expiresAt} <= NOW())`,
           })
           .from(sessionPendingQuestions)
           .where(
@@ -102,7 +102,7 @@ async function loadAskStates(rows: readonly AskRow[]): Promise<AskStates> {
           .select({
             sessionId: sessionPendingPermissions.sessionId,
             requestId: sessionPendingPermissions.requestId,
-            closed: sql<boolean>`${sessionPendingPermissions.decidedAt} IS NOT NULL`,
+            closed: sql<boolean>`(${sessionPendingPermissions.decidedAt} IS NOT NULL OR ${sessionPendingPermissions.expiresAt} <= NOW())`,
           })
           .from(sessionPendingPermissions)
           .where(
@@ -112,13 +112,13 @@ async function loadAskStates(rows: readonly AskRow[]): Promise<AskStates> {
               ),
             ),
           ),
-    // The digest's rule (`answeredQuestionSessions` in digest.ts).
+    // The digest's rule (`answeredQuestionSessions` in digest.ts); an expired ask is closed, as in session-asks.ts.
     questionSessions.length === 0
       ? []
       : db
           .select({
             sessionId: sessionPendingQuestions.sessionId,
-            open: sql<boolean>`bool_or(${sessionPendingQuestions.answeredAt} IS NULL)`,
+            open: sql<boolean>`bool_or(${sessionPendingQuestions.answeredAt} IS NULL AND (${sessionPendingQuestions.expiresAt} IS NULL OR ${sessionPendingQuestions.expiresAt} > NOW()))`,
           })
           .from(sessionPendingQuestions)
           .where(inArray(sessionPendingQuestions.sessionId, questionSessions))

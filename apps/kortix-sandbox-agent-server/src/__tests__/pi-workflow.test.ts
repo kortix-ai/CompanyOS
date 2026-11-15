@@ -1417,6 +1417,29 @@ describe('pi workflow tool, run controls', () => {
     expect(done).not.toHaveProperty('paused')
   })
 
+  test('a hold also holds an agent that was waiting for a slot: it starts only after resume', async () => {
+    api.childrenWork()
+    const PAIR = "return parallel([() => agent('first task', { label: 'First' }), () => agent('second task', { label: 'Second' })])"
+    const { rt, service } = await boot([runWorkflow(PAIR), { text: 'parent done' }], { ...INLINE, KORTIX_WORKFLOW_MAX_CONCURRENT: '1' })
+    const http = routes(service)
+    const turn = inlineTurn(rt)
+    await waitFor(() => rt.workflowList()[0]?.agents.some((a) => a.sessionId === 'child-1' && a.status === 'running') === true)
+    const [live] = (await http.list()).runs
+    // The second call is registered, but waits for the one slot.
+    expect(live!.agents.map((a) => a.status)).toEqual(['running', 'starting'])
+    expect(await http.control(live!.runId, { action: 'pause' })).toEqual({ status: 200, body: { ok: true, paused: true } })
+
+    api.childrenSettle()
+    await waitFor(() => rt.workflowList()[0]!.agents[0]!.status === 'done', 15_000)
+    await Bun.sleep(300)
+    // The slot came free while held: the waiting agent did not start.
+    expect(api.creates).toHaveLength(1)
+
+    expect(await http.control(live!.runId, { action: 'resume' })).toEqual({ status: 200, body: { ok: true, paused: false } })
+    expect(await turn).toBe('completed')
+    expect(api.creates.map((c) => c.initial_prompt)).toEqual(['first task', 'second task'])
+  })
+
   test('restart_agent stops that child and starts it again with the same prompt; the run goes on', async () => {
     api.childrenWork()
     const { rt, frames, service } = await boot([runWorkflow("return agent('slow task', { label: 'Slow' })"), { text: 'parent done' }], INLINE)

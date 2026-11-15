@@ -969,6 +969,9 @@ class WorkflowRun {
     const reasons: Array<'stalled' | 'restarted'> = []
     try {
       for (let attempt = 1; ; attempt++) {
+        // A hold that came while this agent waited for its slot, or before a stall retry,
+        // still holds it: the hold means no new agent session starts. A person's restart goes.
+        if (reasons.at(-1) !== 'restarted' && !(await this.unpaused(signal))) return { kind: 'stopped', interrupted: true }
         entry.attempt = attempt
         // Each attempt is a new session with its own clock: the row's time restarts with it.
         if (attempt > 1) entry.startedAt = Date.now()

@@ -37,9 +37,16 @@ export function runNotStarted(run: Pick<WorkflowRun, 'status' | 'awaitingApprova
   return run.status === 'running' && (run.awaitingApproval === true || (run.agents.length === 0 && !run.background && !run.paused));
 }
 
-/** The script can still start an agent: a phase it declared has not started, or it is under its cap. */
+/**
+ * The script can still start an agent: one is queued for a slot (`starting`, no session yet),
+ * a phase it declared has not started, or it is under its cap.
+ */
 export function runCanStartAgents(run: Pick<WorkflowRun, 'phases' | 'agents' | 'maxAgents'>): boolean {
-  return run.phases.some((phase) => phase.status === 'pending') || run.agents.length < (run.maxAgents ?? Number.POSITIVE_INFINITY);
+  return (
+    run.agents.some((agent) => agent.status === 'starting' && !agent.sessionId) ||
+    run.phases.some((phase) => phase.status === 'pending') ||
+    run.agents.length < (run.maxAgents ?? Number.POSITIVE_INFINITY)
+  );
 }
 
 /** A run's large-run warning: more agents than Claude Code's "Large workflow" threshold, or the run says so. */

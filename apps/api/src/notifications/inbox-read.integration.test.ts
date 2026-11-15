@@ -453,4 +453,23 @@ withDb('notification inbox read', () => {
     // Resolving reads nothing as read: the unread count is unchanged.
     expect((await listInbox(MEMBER, { limit: 20 })).unread_count).toBe(4);
   });
+
+  test('an expired question lists as resolved, like the session asks list that drops it', async () => {
+    const sessionId = await projectSession(CREATOR);
+    await recordPendingQuestion({
+      accountId: project.account_id,
+      projectId: project.project_id,
+      sessionId,
+      requestId: 'q-expired',
+      questions: [{ question: 'Run the workflow?', options: [] }] as never,
+      expiresAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    const keyed = await seedRow(MEMBER, { sessionId, kind: 'question', dedupeKey: `question:${sessionId}:q-expired` });
+    const unkeyed = await seedRow(MEMBER, { sessionId, kind: 'question', dedupeKey: null });
+
+    const page = await listInbox(MEMBER, { limit: 20 });
+    const resolved = Object.fromEntries(page.notifications.map((n) => [n.id, n.resolved]));
+    expect(resolved[keyed]).toBe(true);
+    expect(resolved[unkeyed]).toBe(true);
+  });
 });

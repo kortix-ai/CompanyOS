@@ -42,8 +42,8 @@ describe('useRunningSessions', () => {
   test('polls fast while the list is open, modestly while work runs, slowly while nothing runs', () => {
     expect(interval(useRunningSessions('p1', { open: true }), [])).toBe(5_000);
     expect(interval(useRunningSessions('p1'), [{ session_id: 's1' }])).toBe(15_000);
-    expect(interval(useRunningSessions('p1'), [])).toBe(60_000);
-    expect(interval(useRunningSessions('p1'), undefined)).toBe(60_000);
+    expect(interval(useRunningSessions('p1'), [])).toBe(20_000);
+    expect(interval(useRunningSessions('p1'), undefined)).toBe(20_000);
     expect((useRunningSessions('p1') as any).refetchIntervalInBackground).toBe(false);
   });
 });

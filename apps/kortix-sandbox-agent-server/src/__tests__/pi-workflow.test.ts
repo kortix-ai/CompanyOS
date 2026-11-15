@@ -313,6 +313,7 @@ describe('pi workflow tool', () => {
           'Agents: up to 2. Each agent is its own session with its own computer.',
           '1. Research topic A',
           '2. Research topic B',
+          '',
           'It runs in the background: this chat stays free, and the result arrives here when the run ends.',
         ].join('\n'),
         options: [
@@ -426,7 +427,7 @@ describe('pi workflow tool', () => {
     const { rt, frames } = await boot([runWorkflow("export const meta = { agents: ['Capital of Japan', '12 x 12', 'A synonym for happy'] }\nreturn parallel([() => agent('a'), () => agent('b'), () => agent('c')])", undefined, { max_agents: 3 }), { text: 'Tokyo, 144, joyful.' }])
     const turn = rt.admit({ text: 'use a workflow: capital of Japan, 12*12, a synonym for happy', files: [] })
     const request = await answer(rt, 'Answer in chat instead')
-    expect(request.questions[0]!.question).toContain('Agents: up to 3. Each agent is its own session with its own computer.\n1. Capital of Japan\n2. 12 x 12\n3. A synonym for happy\n')
+    expect(request.questions[0]!.question).toContain('Agents: up to 3. Each agent is its own session with its own computer.\n1. Capital of Japan\n2. 12 x 12\n3. A synonym for happy\n\n')
     expect(await turn.done).toBe('completed')
     expect(api.creates).toHaveLength(0)
     const part = lastWorkflowPart(frames)
@@ -1466,6 +1467,30 @@ describe('pi workflow tool, run controls', () => {
     // The row's clock is the attempt's: a restart starts it again.
     expect(doc.agents[0]!.startedAt!).toBeGreaterThan(firstStart)
     expect(doc.logs).toContain('Slow: restarted by the person; attempt 2 of 6 starts.')
+  })
+
+  test('stop_agent stops that child for good as the person\'s stop: no retry, agent() is null, the run goes on', async () => {
+    api.childrenWork()
+    const script = "const [a, b] = await parallel([() => agent('slow one', { label: 'One' }), () => agent('slow two', { label: 'Two' })])\nreturn [a, b]"
+    const { rt, frames, service } = await boot([runWorkflow(script), { text: 'parent done' }], INLINE)
+    const http = routes(service)
+    const turn = inlineTurn(rt)
+    await waitFor(() => rt.workflowList()[0]?.agents.filter((a) => a.status === 'running' && a.sessionId).length === 2)
+    const runId = rt.workflowList()[0]!.runId
+    const one = rt.workflowList()[0]!.agents.find((a) => a.label === 'One')!.sessionId!
+    expect((await http.control(runId, { action: 'stop_agent' })).status).toBe(400)
+    expect(await http.control(runId, { action: 'stop_agent', session_id: 'child-404' })).toMatchObject({ status: 409, body: { code: 'agent_not_running' } })
+    expect(await http.control(runId, { action: 'stop_agent', session_id: one })).toEqual({ status: 200, body: { ok: true, paused: false } })
+    await waitFor(() => api.stops.includes(one))
+    api.childrenSettle()
+    expect(await turn).toBe('completed')
+    const doc = lastWorkflowPart(frames).metadata as unknown as WorkflowRunMetadata
+    // No retry session: two creates in all, and the stopped agent is the person's stop, not a failure.
+    expect(api.creates).toHaveLength(2)
+    expect(doc.status).toBe('done')
+    expect(doc.agents.find((a) => a.label === 'One')).toMatchObject({ status: 'stopped', stoppedBy: 'person' })
+    expect(doc.agents.find((a) => a.label === 'Two')).toMatchObject({ status: 'done' })
+    expect(lastWorkflowPart(frames).output).toContain('stopped by the person')
   })
 
   test('stop ends the run stopped and stops its children; an unknown run is 404; an ended run is 409', async () => {

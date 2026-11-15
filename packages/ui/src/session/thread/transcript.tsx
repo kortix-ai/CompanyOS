@@ -835,10 +835,12 @@ function useTurnQueueTone({
   pendingPrompt,
   interruptedBeforeRun,
   sessionId,
-}: Pick<SessionTurnProps, 'pending' | 'pendingPrompt' | 'interruptedBeforeRun' | 'sessionId'>) {
+  projectSessionId,
+}: Pick<SessionTurnProps, 'pending' | 'pendingPrompt' | 'interruptedBeforeRun' | 'sessionId' | 'projectSessionId'>) {
 // A prompt sent while offline: its POST waits for the network, so it is not
-// "sending" yet (finding 07).
-const unsentIds = useSessionUnsentPrompts(sessionId);
+// "sending" yet (finding 07). The SDK keys unsent sends by the project session
+// (the id the prompt was posted to), not the runtime `ses_…` id of the turn.
+const unsentIds = useSessionUnsentPrompts(projectSessionId ?? sessionId);
 // A Stop ended the turn before a step opened under this message, or the
 // prompt still waits for delivery. Both keep the queue tone on the bubble;
 // only a delivery failure adds text.
@@ -2768,7 +2770,7 @@ function SessionTurnImpl(props: SessionTurnProps) {
   );
 
   const model = useTurnModelState({ turn, isWorkingTurn, sessionWorking, awaitingUser });
-  const queueTone = useTurnQueueTone({ pending, pendingPrompt, interruptedBeforeRun, sessionId });
+  const queueTone = useTurnQueueTone({ pending, pendingPrompt, interruptedBeforeRun, sessionId, projectSessionId: props.projectSessionId });
   const errors = useTurnErrorState({ turn, turnOutcome });
   const answered = useAnsweredQuestionState({ turn, questions, sessionId, blocks: model.blocks, hasSteps: model.hasSteps });
   const userContent = useTurnUserContent({ turn, commandMessages, commands });

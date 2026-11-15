@@ -26,7 +26,7 @@ import { Button } from '../../../primitives/button';
 import { useCallback, useContext, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { qk, useNow, useProjectSession, useSessionChildren } from '@kortix/sdk/react';
-import { stopProjectSession, type ProjectSession } from '@kortix/sdk';
+import type { ProjectSession } from '@kortix/sdk';
 import { useSessionIds } from '../../../providers/session-ids';
 import { RunProgressRing, type AgentStopState } from './workflow-progress';
 import { boardStateOf } from '../../agents/agent-model';
@@ -38,6 +38,7 @@ import {
   runNotStarted,
   useLiveWorkflowRun,
   useRestartAgent,
+  useStopAgent,
   WorkflowRunControls,
 } from '../../agents/workflow-run-controls';
 import { quietAgents } from './workflow-run-card';
@@ -184,6 +185,7 @@ export function WorkflowTool(props: ToolProps) {
   // Live: a foreground run while its call runs, or a background run its runner still runs.
   const live = !!run && run.status === 'running' && (fromRunner || (!settled && !run.background && running));
   const restart = useRestartAgent(ids.projectId, controlSessionId, live ? run : null);
+  const stopWorkflowAgent = useStopAgent(ids.projectId, controlSessionId, live ? run : null);
   const now = useNow(1_000, live);
   const [open, setOpen] = useState<OpenTarget | null>(null);
   const onOpen = useCallback(
@@ -198,7 +200,7 @@ export function WorkflowTool(props: ToolProps) {
   const queryClient = useQueryClient();
   const [stopping, setStopping] = useState<ReadonlySet<string>>(() => new Set());
   const stopAgent = useMutation({
-    mutationFn: (agent: WorkflowRunAgent) => stopProjectSession(ids.projectId!, agent.sessionId!),
+    mutationFn: (agent: WorkflowRunAgent) => stopWorkflowAgent(agent),
     onSuccess: () => {
       if (ids.projectId) void queryClient.invalidateQueries({ queryKey: qk.project.sessionsScope(ids.projectId) });
     },
@@ -320,7 +322,9 @@ export function WorkflowTool(props: ToolProps) {
   const elapsed = runElapsed !== undefined && runElapsed >= 1_000 ? formatElapsed(runElapsed) : undefined;
   const join = (...parts: (string | undefined)[]) => parts.filter(Boolean).join(' · ') || undefined;
   // A hold stops new agents only: the ones at work go on, and the line says so.
-  const paused = run.paused ? (counts.running > 0 ? t('holdingWorking', { count: counts.running }) : tm('holding')) : undefined;
+  // Held agents queued for a slot (`starting`, no session) are not working: only a live child counts.
+  const working = run.agents.filter((agent) => agent.status === 'running' || (agent.status === 'starting' && Boolean(agent.sessionId))).length;
+  const paused = run.paused ? (working > 0 ? t('holdingWorking', { count: working }) : tm('holding')) : undefined;
   const quiet = live ? quietAgents(run.agents, now) : 0;
   const quietPart = quiet > 0 ? t('quietCount', { count: quiet }) : undefined;
   const subtitle =

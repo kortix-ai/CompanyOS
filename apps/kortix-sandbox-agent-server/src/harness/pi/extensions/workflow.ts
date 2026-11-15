@@ -634,6 +634,8 @@ function approvalQuestion(plan: Plan): RuntimeQuestion {
         ? [
             ...listed.map((label, index) => `${index + 1}. ${label}`),
             ...(labels.length > listed.length ? [`… and ${labels.length - listed.length} more.`] : []),
+            // A blank line ends the list: Markdown would run the next line into the last item.
+            '',
           ]
         : []),
       ...((plan.planned ?? 0) > LARGE_RUN_AGENTS
@@ -795,6 +797,8 @@ class WorkflowRun {
   private resumes: Array<() => void> = []
   /** `stop` came from the person (the control route), not from the turn. */
   stoppedByPerson = false
+  /** Agents (by entry id) the person stopped with `stop_agent`: their attempt ends, no retry. */
+  private readonly agentStops = new Set<string>()
   /** When the approval question opened (epoch ms). */
   private askedAt: number | null = null
   /** Completed agents of the resumed run that a call may reuse. */
@@ -973,8 +977,9 @@ class WorkflowRun {
         // still holds it: the hold means no new agent session starts. A person's restart goes.
         if (reasons.at(-1) !== 'restarted' && !(await this.unpaused(signal))) return { kind: 'stopped', interrupted: true }
         entry.attempt = attempt
-        // Each attempt is a new session with its own clock: the row's time restarts with it.
-        if (attempt > 1) entry.startedAt = Date.now()
+        // Each attempt is a new session with its own clock: the row's time starts with it, not
+        // while it waited for a slot or a hold, and restarts with each retry.
+        entry.startedAt = Date.now()
         delete entry.quietSince
         const control = new AbortController()
         this.attempts.set(entry.id, control)
@@ -984,6 +989,8 @@ class WorkflowRun {
         } finally {
           this.attempts.delete(entry.id)
         }
+        // `stop_agent`: the person stopped this agent. The aborted attempt stopped its child; no retry.
+        if (control.signal.aborted && !signal.aborted && this.agentStops.has(entry.id)) return { kind: 'stopped', interrupted: false, by: 'person' }
         const restarted = control.signal.aborted && !signal.aborted
         if (!restarted && outcome.kind !== 'stalled') return outcome
         reasons.push(restarted ? 'restarted' : 'stalled')
@@ -1112,6 +1119,19 @@ class WorkflowRun {
     const entry = this.doc.agents.find((agent) => agent.sessionId === sessionId && agent.status === 'running')
     const control = entry ? this.attempts.get(entry.id) : undefined
     if (!control) return false
+    control.abort()
+    return true
+  }
+
+  /**
+   * Stop the running agent of child session `sessionId` for good, as the person's stop: its
+   * session stops, `agent()` resolves null, the run goes on. False when no such agent runs.
+   */
+  stopAgent(sessionId: string): boolean {
+    const entry = this.doc.agents.find((agent) => agent.sessionId === sessionId && agent.status === 'running')
+    const control = entry ? this.attempts.get(entry.id) : undefined
+    if (!entry || !control) return false
+    this.agentStops.add(entry.id)
     control.abort()
     return true
   }
@@ -1894,6 +1914,10 @@ export class WorkflowRuns {
       case 'restart_agent':
         if (!body.session_id) return { status: 400, body: { error: 'restart_agent needs session_id: the child session of the agent' } }
         if (!run.restartAgent(body.session_id)) return { status: 409, body: { error: 'no agent of this run is running in that session', code: 'agent_not_running' } }
+        break
+      case 'stop_agent':
+        if (!body.session_id) return { status: 400, body: { error: 'stop_agent needs session_id: the child session of the agent' } }
+        if (!run.stopAgent(body.session_id)) return { status: 409, body: { error: 'no agent of this run is running in that session', code: 'agent_not_running' } }
         break
     }
     return { status: 200, body: { ok: true, paused: run.snapshot().paused === true } }

@@ -9,7 +9,7 @@ import { errorToast, successToast } from '../../primitives/toast';
 import { useTranslations } from '../../i18n';
 import { FloppyDiskIcon, PauseIcon, PlayIcon, SquareIcon, WarningIcon } from '@phosphor-icons/react';
 import { useMemo } from 'react';
-import { WORKFLOW_LARGE_AGENT_COUNT } from '@kortix/sdk';
+import { stopProjectSession, WORKFLOW_LARGE_AGENT_COUNT } from '@kortix/sdk';
 import { useSessionWorkflows } from '@kortix/sdk/react';
 import { parseWorkflowRun, type WorkflowRun, type WorkflowRunAgent } from '../tool/tools/workflow-run';
 import { useSessionPromptSend } from './session-prompt';
@@ -237,6 +237,27 @@ export function WorkflowRunControls({ projectId, controlSessionId, ownerSessionI
 }
 
 /** `restart_agent` for one agent row of a run, on the box that runs it. */
+/**
+ * Stop one agent as the person's stop: the run's `stop_agent` control, so the runner records
+ * "Stopped by you" and goes on. A box older than that control (or a run the control cannot
+ * reach) gets the old path: stop the agent's session, which the run reads as a stop.
+ */
+export function useStopAgent(projectId: string | undefined, controlSessionId: string | undefined, run: Pick<WorkflowRun, 'runId' | 'status'> | null) {
+  const { control } = useSessionWorkflows(projectId, controlSessionId, { enabled: false });
+  return async (agent: Pick<WorkflowRunAgent, 'sessionId'>): Promise<void> => {
+    if (!projectId || !agent.sessionId) return;
+    if (controlSessionId && run?.runId && run.status === 'running') {
+      try {
+        await control.mutateAsync({ runId: run.runId, body: { action: 'stop_agent', session_id: agent.sessionId } });
+        return;
+      } catch {
+        // Fall through: stopping the session still stops the agent.
+      }
+    }
+    await stopProjectSession(projectId, agent.sessionId);
+  };
+}
+
 export function useRestartAgent(projectId: string | undefined, controlSessionId: string | undefined, run: WorkflowRun | null) {
   const t = useTranslations('multiAgent.workflow');
   const { control } = useSessionWorkflows(projectId, controlSessionId, { enabled: false });

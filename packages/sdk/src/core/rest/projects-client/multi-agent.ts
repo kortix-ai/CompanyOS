@@ -219,11 +219,12 @@ export interface WorkflowRunMetadata {
  * - `pause`: no new `agent()` starts; running agents finish.
  * - `resume`: starts resume.
  * - `restart_agent`: stop that agent's session (`session_id`) and start it again.
+ * - `stop_agent`: stop that agent (`session_id`) for good, as the person's stop; the run goes on.
  * - `stop`: stop every agent and end the run.
  */
 export interface WorkflowControlBody {
-  action: 'pause' | 'resume' | 'restart_agent' | 'stop';
-  /** `restart_agent` only: the agent's child session id. */
+  action: 'pause' | 'resume' | 'restart_agent' | 'stop_agent' | 'stop';
+  /** `restart_agent` and `stop_agent` only: the agent's child session id. */
   session_id?: string;
 }
 

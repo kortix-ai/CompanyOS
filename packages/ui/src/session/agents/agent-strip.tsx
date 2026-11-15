@@ -44,6 +44,7 @@ import {
   LargeRunBadge,
   useLiveWorkflowRun,
   useRestartAgent,
+  useStopAgent,
   WorkflowRunControls,
 } from './workflow-run-controls';
 
@@ -440,9 +441,10 @@ function WorkflowLineRow({
   const { run, controlSessionId } = useLiveWorkflowRun(projectId, sessionId, listed);
   const now = useNow(1_000, open && run?.status === 'running');
   const restart = useRestartAgent(projectId, controlSessionId, run);
+  const stopWorkflowAgent = useStopAgent(projectId, controlSessionId, run);
   const queryClient = useQueryClient();
   const stopAgent = useMutation({
-    mutationFn: (agent: WorkflowRunAgent) => stopProjectSession(projectId!, agent.sessionId!),
+    mutationFn: (agent: WorkflowRunAgent) => stopWorkflowAgent(agent),
     onSuccess: () => projectId && queryClient.invalidateQueries({ queryKey: qk.project.sessionsScope(projectId) }),
     onError: (error) => errorToast(t('stopFailed'), { description: error instanceof Error ? error.message : undefined }),
   });

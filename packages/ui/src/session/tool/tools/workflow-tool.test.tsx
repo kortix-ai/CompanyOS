@@ -272,10 +272,18 @@ describe('WorkflowTool — background run read live from its runner', () => {
       sessionId: 'ses_lead',
       client: runnerHolds(run({ paused: true })),
     });
-    // Holding stops new agents only: the two at work go on, and the line says so.
-    expect(textOf(html)).toContain('Holding · 2 still working · Write 0 of 1 done');
+    // Holding stops new agents only: the one at work goes on, and the line says so. The
+    // agent queued for a slot (starting, no session) is held, so it is not counted.
+    expect(textOf(html)).toContain('Holding · 1 still working · Write 0 of 1 done');
     expect(textOf(html)).not.toContain('Paused');
     expect(html).toContain('aria-label="Resume the run"');
+  });
+
+  test('a run held before any agent started says Holding, not that queued agents still work', () => {
+    const queued = run({ paused: true, agents: run().agents.map((agent) => ({ ...agent, status: 'starting', sessionId: undefined })) });
+    const text = textOf(render(<WorkflowTool call={settledCall} />, { projectId: 'proj_1', sessionId: 'ses_lead', client: runnerHolds(queued) }));
+    expect(text).not.toContain('still working');
+    expect(text).toContain('Holding new agents');
   });
 
   test('a run that finished in its runner reads as finished, with no pause or stop', () => {

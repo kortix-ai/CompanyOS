@@ -251,12 +251,13 @@ export const SESSION_TASK_BLOCKED_CODE = 'task_blocked' as const;
  * - `pause`: no new `agent()` starts; running agents finish.
  * - `resume`: starts resume.
  * - `restart_agent`: stop that agent's session and start it again.
+ * - `stop_agent`: stop that agent for good, as the person's stop; the run goes on.
  * - `stop`: stop every agent and end the run.
  */
 export const WorkflowControlBodySchema = z
   .object({
-    action: z.enum(['pause', 'resume', 'restart_agent', 'stop']),
-    /** `restart_agent` only: the agent's child session id. */
+    action: z.enum(['pause', 'resume', 'restart_agent', 'stop_agent', 'stop']),
+    /** `restart_agent` and `stop_agent` only: the agent's child session id. */
     session_id: z.string().optional(),
   })
   .strict();

@@ -529,8 +529,14 @@ describe('WorkflowRunControls', () => {
   test('Hold says what it does, and shows only while the script can still start an agent; a held run keeps Resume', () => {
     const markup = (doc: typeof live) =>
       renderToStaticMarkup(wrap(<WorkflowRunControls projectId="proj_1" controlSessionId="ses_runner" ownerSessionId="ses_lead" run={doc} />));
-    // Every planned agent started (5 of 5): nothing is left to hold, Stop stays.
-    const allStarted = { ...live, maxAgents: 5 };
+    // Every planned agent started (5 of 5, each with its session): nothing is left to hold, Stop stays.
+    const allStarted = {
+      ...live,
+      maxAgents: 5,
+      agents: live.agents.map((agent) => (agent.status === 'starting' ? { ...agent, status: 'running' as const, sessionId: agent.sessionId ?? `ses_${agent.id}` } : agent)),
+    };
+    // An agent still queued for a slot can be held.
+    expect(markup({ ...live, maxAgents: 5 })).toContain('aria-label="Hold new agents"');
     expect(markup(allStarted)).not.toContain('Hold new agents');
     expect(markup(allStarted)).toContain('aria-label="Stop the run"');
     // A declared phase has not started: its agents can still be held.

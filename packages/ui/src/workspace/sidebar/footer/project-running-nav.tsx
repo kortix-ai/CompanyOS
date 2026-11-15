@@ -28,7 +28,7 @@ import { formatElapsed } from '../../../session/tool/tools/workflow-run';
  * other session with a live turn. Each row says where it runs, its state and
  * for how long, and offers Open and Stop (the session's own Stop).
  *
- * The read polls every 60 s while nothing runs, every 15 s while something
+ * The read polls every 20 s while nothing runs, every 15 s while something
  * does, and every 5 s while the list is open (`useRunningSessions`).
  */
 export function ProjectRunningNavItem({ projectId }: { projectId: string }) {

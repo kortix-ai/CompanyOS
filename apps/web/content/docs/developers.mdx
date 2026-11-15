@@ -8975,7 +8975,7 @@ Every hook is in `@kortix/sdk/react`. Most are React Query hooks: unless a row s
 | `useSessionReminders(projectId, sessionId)` | The session's loops, with `update` and `remove`. |
 | `useSessionMessageAuthors` · `useSessionModelUsage` · `useSessionUsage` · `useSessionProviderSecretPools` | The reads behind `s.messageAuthors()`, `s.modelUsage()`, `s.usage()` and `s.providerSecretPool.list()`. |
 | `useSessionWorkflows` · `usePeerMessages` · `useReachableAgents` · `useTeammates` · `useTeamTasks` | The workflow runs, peer messages, reachable agents, teammates and team tasks of one session. |
-| `useRunningSessions` | The workspace's sessions at work now (`working=only`). Polls every 5 s while `open`, 15 s while any runs, 60 s otherwise. |
+| `useRunningSessions` | The workspace's sessions at work now (`working=only`). Polls every 5 s while `open`, 15 s while any runs, 20 s otherwise. |
 | `useSessionStreamConnected(projectId, sessionId)` | `boolean`: whether the session's live stream is connected. |
 | `useHasSessionDesktop()` | `boolean \| undefined`: whether the open session's computer has a desktop. `undefined` until its daemon answers. |
 

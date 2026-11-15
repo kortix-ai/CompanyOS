@@ -258,7 +258,8 @@ function PhaseRow({
   const opens = agents.length > 0;
   const pending = !opens && phase.status === 'pending';
   // A closed phase still says it is at work: "4 running · 1 failed".
-  const running = agents.filter((agent) => agent.status === 'running' || agent.status === 'starting').length;
+  // An agent queued for a slot or held (`starting`, no session yet) is not running.
+  const running = agents.filter((agent) => agent.status === 'running' || (agent.status === 'starting' && !!agent.sessionId)).length;
   const meta =
     waits ??
     ([running > 0 ? t('runningCount', { count: running }) : null, tally.failed > 0 ? t('failedSuffix', { count: tally.failed }) : null]

@@ -284,6 +284,8 @@ describe('WorkflowTool — background run read live from its runner', () => {
     const text = textOf(render(<WorkflowTool call={settledCall} />, { projectId: 'proj_1', sessionId: 'ses_lead', client: runnerHolds(queued) }));
     expect(text).not.toContain('still working');
     expect(text).toContain('Holding new agents');
+    // Nor do the phase rows: no agent of the run has a session yet.
+    expect(text).not.toMatch(/\d running/);
   });
 
   test('a run that finished in its runner reads as finished, with no pause or stop', () => {

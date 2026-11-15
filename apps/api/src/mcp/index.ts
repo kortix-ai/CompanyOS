@@ -40,6 +40,7 @@ import { KORTIX_TOOL, parseArgs, runCli } from './cli';
 import { CONNECTOR_TOOLS, isConnectorTool, runConnectorTool, type Host } from './connectors';
 import { blockedPath, canonicalPath, logConversationRows, requestBodyShape, searchOperations, shapeTranscript, type Operation } from './shape';
 import { bearerToken } from '../shared/bearer-token';
+import { getManagedSkill } from '../skills/catalog';
 import { PROVISIONING_SESSION_STATUSES } from '../projects/surface';
 
 type Dispatch = (request: Request) => Promise<Response>;
@@ -1078,18 +1079,24 @@ async function readSkillTool(ctx: ToolContext, input: Record<string, unknown>): 
   const own = projectId ? await projectSkills(ctx, projectArg(input)) : [];
   if (own instanceof Error) throw own;
   const mine = name ? own.find((s) => s.slug === name || s.name === name) : undefined;
+  // The detail lists the managed guides too (skills/kortix-*/SKILL.md), with no
+  // file in the repository: such a 404 reads the guide below. A repository copy wins.
+  const guideInstead = (r: { status: number }) => r.status === 404 && getManagedSkill(mine!.slug) !== null;
   if (mine) {
     const dir = mine.path.slice(0, mine.path.lastIndexOf('/') + 1);
     if (file) {
       if (file.split('/').includes('..')) throw new ToolInputError('file must stay inside the skill directory');
       const r = await callApi(ctx, 'GET', `/v1/projects/${projectId}/files/content`, { query: { path: `${dir}${file.replace(/^\/+/, '')}` } });
-      return r.status >= 400 ? apiResult(r) : text(JSON.parse(r.body).content);
+      if (!guideInstead(r)) return r.status >= 400 ? apiResult(r) : text(JSON.parse(r.body).content);
+    } else {
+      const r = await callApi(ctx, 'GET', `/v1/projects/${projectId}/files/content`, { query: { path: mine.path } });
+      if (!guideInstead(r)) {
+        if (r.status >= 400) return apiResult(r);
+        const refs = (await skillDirectoryFiles(ctx, projectArg(input), dir)).filter((f) => f !== mine.path).map((f) => `- ${f.slice(dir.length)}`);
+        const body = JSON.parse(r.body).content as string;
+        return text(refs.length ? `${body}\n\nReference files (read_skill with project_id, name and file):\n${refs.join('\n')}` : body);
+      }
     }
-    const r = await callApi(ctx, 'GET', `/v1/projects/${projectId}/files/content`, { query: { path: mine.path } });
-    if (r.status >= 400) return apiResult(r);
-    const refs = (await skillDirectoryFiles(ctx, projectArg(input), dir)).filter((f) => f !== mine.path).map((f) => `- ${f.slice(dir.length)}`);
-    const body = JSON.parse(r.body).content as string;
-    return text(refs.length ? `${body}\n\nReference files (read_skill with project_id, name and file):\n${refs.join('\n')}` : body);
   }
   if (!name) {
     const r = await callApi(ctx, 'GET', '/v1/skills');

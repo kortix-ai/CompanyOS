@@ -355,8 +355,15 @@ flow(
       const listed = (list: string) => list.split("\n").some((line) => line.startsWith("kortix-calendar — "));
       if (listed(await toolText(70, "read_skill", {}))) throw new Error("kortix-calendar listed without a project");
       if (listed(await toolText(71, "read_skill", { project_id: p.id }))) throw new Error("kortix-calendar listed with the flag off");
-      (await mcp(rpc(72, "tools/call", { name: "read_skill", arguments: { name: "kortix-calendar" } }))).status(200).body().has("$.result.isError", true);
-      (await mcp(rpc(73, "tools/call", { name: "read_skill", arguments: { name: "kortix-calendar", project_id: p.id } }))).status(200).body().has("$.result.isError", true);
+      const refused = async (id: number, args: Record<string, unknown>) => {
+        const result = (await mcp(rpc(id, "tools/call", { name: "read_skill", arguments: args }))).status(200).json<any>().result;
+        if (!result.isError || !String(result.content[0].text).includes("behind the `calendar` feature flag")) throw new Error(`read_skill ${JSON.stringify(args)}: ${JSON.stringify(result).slice(0, 300)}`);
+      };
+      await refused(72, { name: "kortix-calendar" });
+      await refused(73, { name: "kortix-calendar", project_id: p.id });
+      // A managed guide the project detail lists has no file in the repository: with project_id it reads as the guide.
+      const system = await toolText(76, "read_skill", { name: "kortix-system", project_id: p.id });
+      if (!system.includes("kortix.yaml")) throw new Error(`kortix-system with project_id: ${system.slice(0, 300)}`);
       const features = (enabled: boolean | null) =>
         ctx.client.as(ctx.P.OWNER).patch("/v1/workspaces/:workspaceId/features", { feature: "calendar", enabled }, { params: { workspaceId: p.id } });
       (await features(true)).status(200);

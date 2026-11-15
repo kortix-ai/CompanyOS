@@ -53,7 +53,7 @@ export const PEEK_CARD_RADIUS = { ios: 44, android: 28 } as const;
  */
 export const PEEK_CARD_VEIL = 0.5;
 
-/** The radius is full once the drawer is this many times 1/8 open: 8 → at 12.5%. */
+/** The radius is full at progress 1/RAMP: 8 → 12.5% open. */
 export const PEEK_CARD_RADIUS_RAMP = 8;
 
 export interface PeekCardFrame {
@@ -69,8 +69,8 @@ export interface PeekCardFrame {
  * whole travel left the card square-cornered while it covered the sidebar, so
  * it read as a flat page, not a card. A ramp, not a step: a display whose
  * corners are under 44pt (iPhone SE, iPad, many Android phones) would show a
- * 0 → 44 step. The ramp runs in the first ~50ms of a tap, so Reduce Motion
- * needs no other path. The veil is linear in progress, so it tracks the
+ * 0 → 44 step. The ramp runs in the first ~50ms of an opening tap and the
+ * last ~110ms of a closing one, so Reduce Motion needs no other path. The veil is linear in progress, so it tracks the
  * finger during a swipe and the timed curve during a tap.
  *
  * A worklet: `DrawerPeekCard` calls it on the UI thread every frame.

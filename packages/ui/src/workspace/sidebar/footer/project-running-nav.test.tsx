@@ -61,9 +61,11 @@ const wrap = (node: ReactNode) => (
 );
 
 describe('the sidebar Running row', () => {
-  test('shows nothing while nothing runs', () => {
+  test('stays in the nav while nothing runs, with no count, so the list below never jumps', () => {
     running = [];
-    expect(renderToStaticMarkup(wrap(<ProjectRunningNavItem projectId="p1" />))).toBe('');
+    const html = renderToStaticMarkup(wrap(<ProjectRunningNavItem projectId="p1" />));
+    expect(html).toContain('>Running</span>');
+    expect(html).not.toContain('sessions running');
   });
 
   test('shows "Running" with the count of sessions at work, and polls as closed', () => {

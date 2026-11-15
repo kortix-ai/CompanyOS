@@ -22,8 +22,9 @@ import { formatElapsed } from '../../../session/tool/tools/workflow-run';
 
 /**
  * The workspace's Running row (dev audit finding 19): one place that answers
- * "what is still running?" without opening each session. The row shows only
- * while something works, with the count; it opens a list of every session at
+ * "what is still running?" without opening each session. The row always sits
+ * in the nav, so the session list below never jumps when a run starts or ends;
+ * its count shows while something works. It opens a list of every session at
  * work now (`working=only`): workflow runners, their agents, colleagues and any
  * other session with a live turn. Each row says where it runs, its state and
  * for how long, and offers Open and Stop (the session's own Stop).
@@ -36,7 +37,6 @@ export function ProjectRunningNavItem({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState(false);
   const running = useRunningSessions(projectId, { open });
   const sessions = running.data ?? [];
-  if (sessions.length === 0 && !open) return null;
   const label = t('running');
   return (
     <SidebarMenuItem>
@@ -47,9 +47,11 @@ export function ProjectRunningNavItem({ projectId }: { projectId: string }) {
               <PulseIcon />
             </span>
             <span className="truncate">{label}</span>
-            <span className="ml-auto flex shrink-0 items-center gap-1">
-              <CountBadge count={sessions.length} aria-label={t('runningCount', { count: sessions.length })} />
-            </span>
+            {sessions.length > 0 && (
+              <span className="ml-auto flex shrink-0 items-center gap-1">
+                <CountBadge count={sessions.length} aria-label={t('runningCount', { count: sessions.length })} />
+              </span>
+            )}
           </SidebarMenuButton>
         </PopoverTrigger>
         <PopoverContent

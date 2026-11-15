@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { formatUsdAsCredits } from '@kortix/shared';
 import type { SessionUsage, SessionUsageTotals } from '@kortix/sdk';
 import { useSessionUsage } from '@kortix/sdk/react';
@@ -9,6 +9,8 @@ import { useTranslations } from '../../../i18n';
 
 /** While the run works, its spend is read again this often. */
 const LIVE_REFRESH_MS = 30_000;
+/** After the run ends, one more read this much later: billing rows of its last minute land late. */
+const SETTLE_REFRESH_MS = 10_000;
 
 /** What Kortix debited for one usage entry: model calls plus compute; a server before compute was added gives model calls only. */
 function billed(totals: SessionUsageTotals): number {
@@ -45,13 +47,16 @@ export function runSpentUsd(
 /**
  * "Spent N credits" for a workflow run card: the actual spend, never an
  * estimate. Renders nothing until the read answers, and nothing for a run that
- * has cost nothing yet. Refreshed every 30 s while the run works.
+ * has cost nothing yet. Refreshed every 30 s while the run works, and twice as
+ * it ends (at once, then 10 s later), so the final number is the final spend.
+ * Inline text for the card's status line: `separated` puts a " · " before it.
  */
 export function WorkflowRunCost({
   projectId,
   rootSessionId,
   agentSessionIds,
   live,
+  separated = false,
 }: {
   projectId: string | undefined;
   /** The runner of a background run, else the session that called `workflow`. */
@@ -59,6 +64,7 @@ export function WorkflowRunCost({
   /** A run in the calling session: its agents' session ids. Omit for a background run. */
   agentSessionIds?: readonly string[];
   live: boolean;
+  separated?: boolean;
 }) {
   const t = useTranslations('tools.workflow');
   const usage = useSessionUsage(projectId, rootSessionId);
@@ -68,12 +74,23 @@ export function WorkflowRunCost({
     const timer = setInterval(() => void refetch(), LIVE_REFRESH_MS);
     return () => clearInterval(timer);
   }, [live, refetch]);
+  // The run just ended: read the final spend, then once more for rows that land late.
+  const wasLive = useRef(live);
+  useEffect(() => {
+    const ended = wasLive.current && !live;
+    wasLive.current = live;
+    if (!ended) return;
+    void refetch();
+    const timer = setTimeout(() => void refetch(), SETTLE_REFRESH_MS);
+    return () => clearTimeout(timer);
+  }, [live, refetch]);
   if (!usage.data) return null;
   const usd = runSpentUsd(usage.data, agentSessionIds);
   if (!(usd > 0)) return null;
   return (
     <Hint label={t('spentHint')} side="top">
-      <span data-testid="workflow-run-cost" className="text-muted-foreground shrink-0 px-2 text-xs tabular-nums">
+      <span data-testid="workflow-run-cost" className="text-muted-foreground shrink-0 whitespace-nowrap tabular-nums">
+        {separated && <span aria-hidden>{' · '}</span>}
         {t('spent', { credits: formatUsdAsCredits(usd) })}
       </span>
     </Hint>

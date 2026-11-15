@@ -60,6 +60,7 @@ export function WorkflowRunCard({
   run,
   title,
   subtitle,
+  meta,
   live,
   now,
   actions,
@@ -72,6 +73,8 @@ export function WorkflowRunCard({
   run: WorkflowRun;
   title: string;
   subtitle?: string;
+  /** Inline after the subtitle, on its line: "· Spent N credits". Never in the actions, which must not squeeze the title. */
+  meta?: ReactNode;
   live: boolean;
   now: number;
   /** The header alone, muted: a run that never ran (declined at its approval) has no rows. */
@@ -119,9 +122,14 @@ export function WorkflowRunCard({
             </h3>
             {chips}
           </div>
-          {subtitle && (
-            <p className="text-muted-foreground min-w-0 truncate tabular-nums" title={subtitle}>
-              {subtitle}
+          {(subtitle || meta) && (
+            <p className="text-muted-foreground flex min-w-0 items-center tabular-nums">
+              {subtitle && (
+                <span className="min-w-0 truncate" title={subtitle}>
+                  {subtitle}
+                </span>
+              )}
+              {meta}
             </p>
           )}
         </div>

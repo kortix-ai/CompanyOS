@@ -855,8 +855,8 @@ const queuedStatus: QueuedPromptStatusState | null =
         ? 'held'
         : pendingPrompt &&
             isOptimisticSessionPrompt(pendingPrompt) &&
-            !!pendingPrompt.message_id &&
-            unsentIds.includes(pendingPrompt.message_id)
+            // The SDK lists a held send by its wire message id, else its client id.
+            unsentIds.includes(pendingPrompt.message_id ?? pendingPrompt.client_message_id)
           ? 'unsent'
           : pendingPrompt &&
               (isOptimisticSessionPrompt(pendingPrompt) || pendingPrompt.state === 'delivering')

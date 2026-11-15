@@ -236,7 +236,6 @@ export function WorkflowRunControls({ projectId, controlSessionId, ownerSessionI
   return buttons.length === 1 ? <>{buttons}</> : <ButtonGroup>{buttons}</ButtonGroup>;
 }
 
-/** `restart_agent` for one agent row of a run, on the box that runs it. */
 /**
  * Stop one agent as the person's stop: the run's `stop_agent` control, so the runner records
  * "Stopped by you" and goes on. A box older than that control (or a run the control cannot
@@ -258,6 +257,7 @@ export function useStopAgent(projectId: string | undefined, controlSessionId: st
   };
 }
 
+/** `restart_agent` for one agent row of a run, on the box that runs it. */
 export function useRestartAgent(projectId: string | undefined, controlSessionId: string | undefined, run: WorkflowRun | null) {
   const t = useTranslations('multiAgent.workflow');
   const { control } = useSessionWorkflows(projectId, controlSessionId, { enabled: false });

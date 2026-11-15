@@ -291,17 +291,19 @@ export function WorkflowTool(props: ToolProps) {
               <span className="text-foreground min-w-0 truncate text-sm font-medium">{title}</span>
               <RunChips run={run} />
             </span>
-            <span className="text-muted-foreground min-w-0 truncate">
-              {runnerEnded === 'done'
-                ? t('status.done')
-                : runnerEnded === 'failed'
-                  ? t('didntFinish')
-                  : runnerEnded === 'stopped'
-                    ? t('status.stopped')
-                    : [t('status.running'), tally.total > 0 ? t('progress', { done: tally.done, total: tally.total }) : null].filter(Boolean).join(' · ')}
+            <span className="text-muted-foreground flex min-w-0 items-center">
+              <span className="min-w-0 truncate">
+                {runnerEnded === 'done'
+                  ? t('status.done')
+                  : runnerEnded === 'failed'
+                    ? t('didntFinish')
+                    : runnerEnded === 'stopped'
+                      ? t('status.stopped')
+                      : [t('status.running'), tally.total > 0 ? t('progress', { done: tally.done, total: tally.total }) : null].filter(Boolean).join(' · ')}
+              </span>
+              <WorkflowRunCost projectId={ids.projectId} rootSessionId={runnerSession} live={!runnerEnded} separated />
             </span>
           </span>
-          <WorkflowRunCost projectId={ids.projectId} rootSessionId={runnerSession} live={!runnerEnded} />
           {/* The one way in: a secondary button, on the title's line. */}
           <Button type="button" variant="secondary" size="xs" aria-label={t('openRunLabel')} onClick={openRunner} className="-my-1 shrink-0">
             {t('openRun')}
@@ -388,14 +390,17 @@ export function WorkflowTool(props: ToolProps) {
         bare={!!run.declined}
         chips={<RunChips run={run} />}
         result={result ? <OutputBlock text={result.text} markdown={result.kind === 'markdown'} /> : undefined}
+        meta={
+          <WorkflowRunCost
+            projectId={ids.projectId}
+            rootSessionId={run.background?.sessionId ?? ids.sessionId}
+            agentSessionIds={run.background ? undefined : run.agents.flatMap((agent) => (agent.sessionId ? [agent.sessionId] : []))}
+            live={live}
+            separated={!!cardSubtitle}
+          />
+        }
         actions={
           <>
-            <WorkflowRunCost
-              projectId={ids.projectId}
-              rootSessionId={run.background?.sessionId ?? ids.sessionId}
-              agentSessionIds={run.background ? undefined : run.agents.flatMap((agent) => (agent.sessionId ? [agent.sessionId] : []))}
-              live={live}
-            />
             {!run.declined && (live || (!!run.runId && !run.name && !!ids.sessionId)) && (
               <WorkflowRunControls
                 projectId={ids.projectId}

@@ -1128,7 +1128,8 @@ class WorkflowRun {
    * session stops, `agent()` resolves null, the run goes on. False when no such agent runs.
    */
   stopAgent(sessionId: string): boolean {
-    const entry = this.doc.agents.find((agent) => agent.sessionId === sessionId && agent.status === 'running')
+    // `starting` with a session: its child exists and its attempt runs, so it can be stopped too.
+    const entry = this.doc.agents.find((agent) => agent.sessionId === sessionId && (agent.status === 'running' || agent.status === 'starting'))
     const control = entry ? this.attempts.get(entry.id) : undefined
     if (!entry || !control) return false
     this.agentStops.add(entry.id)

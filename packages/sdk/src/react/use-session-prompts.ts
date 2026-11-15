@@ -788,6 +788,10 @@ export function useSessionPrompts(
     [queryClient, projectId, sessionId],
   );
 
+  // The target rides in the variables, not the closure: a send held offline
+  // resumes with the hook's LATEST options, which may name another session by
+  // then (the person opened it). It must still go where it was sent.
+  type EnqueueVars = { input: CreateSessionPromptInput; projectId: string; sessionId: string };
   const enqueueMutation = useMutation({
     // Enter paints the row NOW. The queue is server-side; the only client-side
     // job left is to not make the user wait a round-trip to see their own
@@ -796,25 +800,26 @@ export function useSessionPrompts(
     // submission (`reconcileOptimisticPrompts`). The write is SYNCHRONOUS and
     // comes before anything awaited, so the row is on screen in the same frame
     // as the keypress.
-    onMutate: async (input: CreateSessionPromptInput) => {
-      queryClient.setQueryData<SessionPrompt[]>(key, (prev) =>
+    onMutate: async ({ input, projectId: pid, sessionId: sid }: EnqueueVars) => {
+      const target = qk.project.sessionPrompts(pid, sid);
+      queryClient.setQueryData<SessionPrompt[]>(target, (prev) =>
         applyOptimisticPrompt(prev ?? [], input, Date.now()),
       );
       if (!onlineManager.isOnline()) {
         // Offline: TanStack holds the POST until the network returns. The row
         // stays on screen as not sent; nothing claims the session works.
-        setUnsent(sessionId!, (ids) => (ids.includes(unsentId(input)) ? ids : [...ids, unsentId(input)]));
+        setUnsent(sid, (ids) => (ids.includes(unsentId(input)) ? ids : [...ids, unsentId(input)]));
       } else {
         // The receipt-side floor: a `/turn` poll landing before the POST returns
         // must not swap Stop back to Send with the row already on screen.
-        useSessionWorkingStore.getState().notePromptAccepted(sessionId!, Date.now());
+        useSessionWorkingStore.getState().notePromptAccepted(sid, Date.now());
       }
-      await queryClient.cancelQueries({ queryKey: key });
+      await queryClient.cancelQueries({ queryKey: target });
     },
-    mutationFn: async (input: CreateSessionPromptInput) => {
+    mutationFn: async ({ input, projectId: pid, sessionId: sid }: EnqueueVars) => {
       // Runs once the network is there: a held send goes out now.
-      setUnsent(sessionId!, (ids) => ids.filter((id) => id !== unsentId(input)));
-      const result = await createSessionPrompt(projectId!, sessionId!, input);
+      setUnsent(sid, (ids) => ids.filter((id) => id !== unsentId(input)));
+      const result = await createSessionPrompt(pid, sid, input);
       if (result.state !== 'failed') {
         // The response's `observed_at` is the write's place on the SERVER
         // clock — what bars a queue read issued before this POST from erasing
@@ -823,28 +828,34 @@ export function useSessionPrompts(
         useSessionWorkingStore
           .getState()
           .notePromptAccepted(
-            sessionId!,
+            sid,
             Date.now(),
             Number.isFinite(serverAtMs) ? serverAtMs : undefined,
           );
       }
       return result;
     },
-    onSuccess: (result, input) => {
-      queryClient.setQueryData<SessionPrompt[]>(key, (prev) =>
+    onSuccess: (result, { input, projectId: pid, sessionId: sid }) => {
+      queryClient.setQueryData<SessionPrompt[]>(qk.project.sessionPrompts(pid, sid), (prev) =>
         result.state === 'failed'
           ? removeOptimisticPrompt(prev ?? [], input.clientMessageId)
           : settleOptimisticPrompt(prev ?? [], input.clientMessageId, result),
       );
     },
-    onError: (_error, input) => {
-      setUnsent(sessionId!, (ids) => ids.filter((id) => id !== unsentId(input)));
-      queryClient.setQueryData<SessionPrompt[]>(key, (prev) =>
+    onError: (_error, { input, projectId: pid, sessionId: sid }) => {
+      setUnsent(sid, (ids) => ids.filter((id) => id !== unsentId(input)));
+      queryClient.setQueryData<SessionPrompt[]>(qk.project.sessionPrompts(pid, sid), (prev) =>
         removeOptimisticPrompt(prev ?? [], input.clientMessageId),
       );
     },
-    onSettled: invalidate,
+    onSettled: (_data, _error, { projectId: pid, sessionId: sid }) =>
+      queryClient.invalidateQueries({ queryKey: qk.project.sessionPrompts(pid, sid) }),
   });
+  const enqueueMutate = enqueueMutation.mutateAsync;
+  const enqueue = useCallback(
+    (input: CreateSessionPromptInput) => enqueueMutate({ input, projectId: projectId!, sessionId: sessionId! }),
+    [enqueueMutate, projectId, sessionId],
+  );
   // No-op hook-level `onError`s: every caller shows its own specific toast,
   // and without one TanStack falls back to the app-global default `onError`
   // IN ADDITION — a second, generic "Failed to perform action: …" for every
@@ -936,7 +947,7 @@ export function useSessionPrompts(
     prompts: query.data ?? [],
     sent,
     isLoading: query.isLoading,
-    enqueue: enqueueMutation.mutateAsync,
+    enqueue,
     remove: removeMutation.mutateAsync,
     retry: retryMutation.mutateAsync,
     edit: (promptId: string, text: string) => editMutation.mutateAsync({ promptId, text }),

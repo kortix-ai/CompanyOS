@@ -144,3 +144,43 @@ test('the first prompt of a new session, sent offline: no POST and no working cl
   expect((await sending).state).toBe('queued');
   expect(calls).toHaveLength(1);
 });
+
+test('a send held offline goes to the session it was sent in, even after the hook moves to another session', async () => {
+  const posts = serve();
+  configureKortix({ backendUrl: 'http://api.test/v1', getToken: async () => 'tok' });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  let value!: ReturnType<typeof useSessionPrompts>;
+  function Probe({ sessionId }: { sessionId: string }) {
+    value = useSessionPrompts('p1', sessionId, { pollMs: 600_000 });
+    return null;
+  }
+  const tree = (sessionId: string) => React.createElement(QueryClientProvider, { client }, React.createElement(Probe, { sessionId }));
+  let root!: ReturnType<typeof create>;
+  await act(async () => {
+    root = create(tree('s_from'));
+    await tick();
+  });
+  await act(async () => {
+    onlineManager.setOnline(false);
+    await tick();
+  });
+  let sending!: Promise<unknown>;
+  await act(async () => {
+    sending = value.enqueue({ ...input, clientMessageId: 'c_4', messageId: 'msg_4' });
+    await tick();
+  });
+  // The person opens another session before the network returns.
+  await act(async () => {
+    root.update(tree('s_to'));
+    await tick();
+  });
+  await act(async () => {
+    onlineManager.setOnline(true);
+    await sending;
+    await tick();
+  });
+  expect(posts).toHaveLength(1);
+  expect(posts[0]).toContain('/sessions/s_from/prompts');
+  await act(async () => root.unmount());
+  client.clear();
+});

@@ -3,10 +3,13 @@
  * the sidebar is, how the page on top of it turns into a peek card, and where
  * a swipe may open it.
  *
- * The model is the ChatGPT iOS sidebar (Jay, 2026-11-11): the sidebar sits on
- * the plain chrome surface at the left; the page slides right as a card with
+ * The model is the Claude and ChatGPT iOS sidebar (Jay, 2026-11-11, and
+ * 2026-11-15: "the kortix sidebar is flat"): the sidebar lies still, BEHIND
+ * the page (`drawerType="back"`); the page slides over it as a card with
  * rounded corners and a soft shadow, and a strip of it stays visible at the
- * right edge. A tap or a swipe on that strip closes the drawer.
+ * right edge. A tap or a swipe on that strip closes the drawer. While the card
+ * covers the sidebar, the sidebar darkens (`sidebarDim`): two layers, not one
+ * sheet moving sideways.
  *
  * Pure data: unit-tested under `bun test` (`drawer-layout.test.ts`).
  */
@@ -68,6 +71,27 @@ export function peekCardFrame(progress: number, radius: number, reducedMotion: b
   'worklet';
   const p = Math.min(1, Math.max(0, progress));
   return { borderRadius: reducedMotion ? (p > 0 ? radius : 0) : p * radius, veil: p * PEEK_CARD_VEIL };
+}
+
+/**
+ * The sidebar's dim under the card: black at this alpha when the card fully
+ * covers it, none when the drawer is open. Light 0.45 is the value measured
+ * frame by frame from the Claude iOS app (sidebar #f0f0ee → #8c8c8a with the
+ * card 6% open). Dark gets more: black over a near-black surface shows less.
+ */
+export const SIDEBAR_DIM = { light: 0.45, dark: 0.6 } as const;
+
+/**
+ * The sidebar dim's alpha at drawer `progress` (0 closed, 1 open): linear,
+ * so it tracks the finger during a swipe and the timed curve during a tap.
+ * It is a fade, not motion, so Reduce Motion keeps it.
+ *
+ * A worklet: `DrawerSidebarDim` calls it on the UI thread every frame.
+ */
+export function sidebarDim(progress: number, max: number): number {
+  'worklet';
+  const p = Math.min(1, Math.max(0, progress));
+  return (1 - p) * max;
 }
 
 /**

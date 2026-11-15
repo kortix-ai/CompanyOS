@@ -4,9 +4,11 @@ import {
   DRAWER_MAX_WIDTH,
   DRAWER_MIN_PEEK,
   PEEK_CARD_VEIL,
+  SIDEBAR_DIM,
   drawerSwipeEdgeWidth,
   peekCardFrame,
   projectDrawerWidth,
+  sidebarDim,
 } from './drawer-layout';
 
 describe('projectDrawerWidth', () => {
@@ -58,6 +60,27 @@ describe('peekCardFrame', () => {
   test('progress outside 0…1 (a spring) is clamped', () => {
     expect(peekCardFrame(1.2, 44, false).borderRadius).toBe(44);
     expect(peekCardFrame(-0.1, 44, false).borderRadius).toBe(0);
+  });
+});
+
+describe('sidebarDim', () => {
+  test('open: the sidebar at full light', () => {
+    expect(sidebarDim(1, SIDEBAR_DIM.light)).toBe(0);
+  });
+
+  test('closing: darker as the card covers it, linear so it tracks the finger', () => {
+    expect(sidebarDim(0.5, SIDEBAR_DIM.light)).toBeCloseTo(SIDEBAR_DIM.light / 2, 6);
+    expect(sidebarDim(0, SIDEBAR_DIM.light)).toBeCloseTo(SIDEBAR_DIM.light, 6);
+  });
+
+  test('the Claude iOS dim: ~45% black under a closed card in light mode', () => {
+    expect(SIDEBAR_DIM.light).toBeCloseTo(0.45, 2);
+    expect(SIDEBAR_DIM.dark).toBeGreaterThan(SIDEBAR_DIM.light);
+  });
+
+  test('progress outside 0…1 (a spring) is clamped', () => {
+    expect(sidebarDim(1.2, SIDEBAR_DIM.light)).toBe(0);
+    expect(sidebarDim(-0.1, SIDEBAR_DIM.light)).toBeCloseTo(SIDEBAR_DIM.light, 6);
   });
 });
 

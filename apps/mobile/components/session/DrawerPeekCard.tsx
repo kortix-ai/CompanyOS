@@ -5,10 +5,11 @@
  *
  * `react-native-drawer-layout` (`drawerType="back"`) keeps the sidebar still
  * and moves the page over it by the drawer width (Jay, 2026-11-15: with
- * "slide" the sidebar and page moved as one flat sheet). This card adds, from the drawer's progress on the UI
- * thread (`peekCardFrame`, `lib/ui/drawer-layout.ts`):
- * - corner radius 44pt (iOS) / 28pt (Android), the display corners, as soon
- *   as the card moves (0 at rest)
+ * "slide" the sidebar and page moved as one flat sheet). This card adds,
+ * from the drawer's progress on the UI thread (`peekCardFrame`,
+ * `lib/ui/drawer-layout.ts`):
+ * - corner radius 44pt (iOS) / 28pt (Android), the display corners, reached
+ *   in the first eighth of the travel (0 at rest)
  * - a veil of the page's own colour, 0 → 50%: the content fades toward the
  *   surface, so the card stays light beside the sidebar (never an ink dim,
  *   which turned it grey)
@@ -75,7 +76,7 @@ const styles = StyleSheet.create({
   card: { flex: 1, borderRadius: RADIUS },
   clip: { flex: 1, overflow: 'hidden' },
   sidebar: { flex: 1 },
-  // Pure black: a dim, not a colour. The alpha is `SIDEBAR_DIM`.
+  // hex-allowlist: pure black (#000), a dim not a colour; its alpha is SIDEBAR_DIM.
   dim: { backgroundColor: '#000' },
 });
 

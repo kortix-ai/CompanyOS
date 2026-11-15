@@ -53,6 +53,9 @@ export const PEEK_CARD_RADIUS = { ios: 44, android: 28 } as const;
  */
 export const PEEK_CARD_VEIL = 0.5;
 
+/** The radius is full once the drawer is this many times 1/8 open: 8 → at 12.5%. */
+export const PEEK_CARD_RADIUS_RAMP = 8;
+
 export interface PeekCardFrame {
   borderRadius: number;
   /** Alpha of the page-colour veil over the card's content. */
@@ -60,11 +63,13 @@ export interface PeekCardFrame {
 }
 
 /**
- * The card's frame at drawer `progress` (0 closed, 1 open). The card takes
- * its full radius as soon as it moves, as the Claude iOS card does (Jay,
- * 2026-11-15): a radius that grew with progress left the card square-cornered
- * while it covered the sidebar, so it read as a flat page, not a card. A
- * closed page has no radius. The radius never animates, so Reduce Motion
+ * The card's frame at drawer `progress` (0 closed, 1 open). The card reaches
+ * its full radius within the first eighth of the travel (`PEEK_CARD_RADIUS_RAMP`),
+ * as the Claude iOS card does (Jay, 2026-11-15): a radius that grew over the
+ * whole travel left the card square-cornered while it covered the sidebar, so
+ * it read as a flat page, not a card. A ramp, not a step: a display whose
+ * corners are under 44pt (iPhone SE, iPad, many Android phones) would show a
+ * 0 → 44 step. The ramp runs in the first ~50ms of a tap, so Reduce Motion
  * needs no other path. The veil is linear in progress, so it tracks the
  * finger during a swipe and the timed curve during a tap.
  *
@@ -73,14 +78,15 @@ export interface PeekCardFrame {
 export function peekCardFrame(progress: number, radius: number): PeekCardFrame {
   'worklet';
   const p = Math.min(1, Math.max(0, progress));
-  return { borderRadius: p > 0 ? radius : 0, veil: p * PEEK_CARD_VEIL };
+  return { borderRadius: Math.min(1, p * PEEK_CARD_RADIUS_RAMP) * radius, veil: p * PEEK_CARD_VEIL };
 }
 
 /**
  * The sidebar's dim under the card: black at this alpha when the card fully
  * covers it, none when the drawer is open. Light 0.45 is the value measured
- * frame by frame from the Claude iOS app (sidebar #f0f0ee → #8c8c8a with the
- * card 6% open). Dark gets more: black over a near-black surface shows less.
+ * frame by frame from the Claude iOS app (sidebar #f0f0ee → #8c8c8a at drawer
+ * progress ≈ 0.06, the card almost closed). Dark gets more: black over a
+ * near-black surface shows less.
  */
 export const SIDEBAR_DIM = { light: 0.45, dark: 0.6 } as const;
 

@@ -44,15 +44,15 @@ describe('peekCardFrame', () => {
     expect(open.veil).toBeCloseTo(PEEK_CARD_VEIL, 6);
   });
 
-  test('moving: the full radius at once (Claude iOS), the veil linear so it tracks the finger', () => {
-    const nudged = peekCardFrame(0.05, 44);
-    expect(nudged.borderRadius).toBe(44);
+  test('moving: the full radius by 1/8 of the travel (Claude iOS), the veil linear so it tracks the finger', () => {
+    expect(peekCardFrame(0.0625, 44).borderRadius).toBe(22); // a ramp, no 0 → 44 step
+    expect(peekCardFrame(0.125, 44).borderRadius).toBe(44);
     const half = peekCardFrame(0.5, 44);
     expect(half.borderRadius).toBe(44);
     expect(half.veil).toBeCloseTo(PEEK_CARD_VEIL / 2, 6);
   });
 
-  test('progress outside 0…1 (a spring) is clamped', () => {
+  test('card: progress outside 0…1 (a spring) is clamped', () => {
     expect(peekCardFrame(1.2, 44).borderRadius).toBe(44);
     expect(peekCardFrame(-0.1, 44).borderRadius).toBe(0);
   });
@@ -73,7 +73,7 @@ describe('sidebarDim', () => {
     expect(SIDEBAR_DIM.dark).toBeGreaterThan(SIDEBAR_DIM.light);
   });
 
-  test('progress outside 0…1 (a spring) is clamped', () => {
+  test('dim: progress outside 0…1 (a spring) is clamped', () => {
     expect(sidebarDim(1.2, SIDEBAR_DIM.light)).toBe(0);
     expect(sidebarDim(-0.1, SIDEBAR_DIM.light)).toBeCloseTo(SIDEBAR_DIM.light, 6);
   });

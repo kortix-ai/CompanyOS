@@ -7,16 +7,14 @@
  * and moves the page over it by the drawer width (Jay, 2026-11-15: with
  * "slide" the sidebar and page moved as one flat sheet). This card adds, from the drawer's progress on the UI
  * thread (`peekCardFrame`, `lib/ui/drawer-layout.ts`):
- * - corner radius 0 → 44pt (iOS) / 28pt (Android): the display corners
+ * - corner radius 44pt (iOS) / 28pt (Android), the display corners, as soon
+ *   as the card moves (0 at rest)
  * - a veil of the page's own colour, 0 → 50%: the content fades toward the
  *   surface, so the card stays light beside the sidebar (never an ink dim,
  *   which turned it grey)
  * - a hairline edge in the border token, and a faint shadow: the card reads
  *   against the sidebar without a dark band.
  * The card keeps its full size: a scaled card left a gap beside the sidebar.
- *
- * Reduce Motion: the radius snaps on as soon as the card moves; the library's
- * translate stays.
  *
  * Two layers: the outer view casts the shadow (a clipping view cannot) with a
  * fixed radius and shadow, so it is drawn once, never per frame. The inner
@@ -27,7 +25,7 @@
 import * as React from 'react';
 import { Platform, StyleSheet } from 'react-native';
 import { useDrawerProgress } from 'react-native-drawer-layout';
-import Animated, { useAnimatedStyle, useReducedMotion } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useColorScheme } from 'nativewind';
 
 import { PEEK_CARD_RADIUS, SIDEBAR_DIM, peekCardFrame, sidebarDim } from '@/lib/ui/drawer-layout';
@@ -37,7 +35,6 @@ const RADIUS = Platform.OS === 'ios' ? PEEK_CARD_RADIUS.ios : PEEK_CARD_RADIUS.a
 
 export function DrawerPeekCard({ children }: { children: React.ReactNode }) {
   const progress = useDrawerProgress();
-  const reducedMotion = useReducedMotion();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
   // The page surface: the card's own fill, so the rounded corners never show
@@ -48,16 +45,16 @@ export function DrawerPeekCard({ children }: { children: React.ReactNode }) {
   const shadow = `0px 0px 12px 0px ${withAlpha(THEME.light.foreground, isDark ? 0.3 : 0.06)}`;
 
   const clipStyle = useAnimatedStyle(() => ({
-    borderRadius: peekCardFrame(progress.value, RADIUS, reducedMotion).borderRadius,
-  }), [reducedMotion]);
+    borderRadius: peekCardFrame(progress.value, RADIUS).borderRadius,
+  }));
   const veilStyle = useAnimatedStyle(() => ({
-    opacity: peekCardFrame(progress.value, RADIUS, reducedMotion).veil,
-  }), [reducedMotion]);
+    opacity: peekCardFrame(progress.value, RADIUS).veil,
+  }));
   // The edge appears as soon as the card moves (a closed page has no edge).
   const edgeStyle = useAnimatedStyle(() => {
-    const frame = peekCardFrame(progress.value, RADIUS, reducedMotion);
+    const frame = peekCardFrame(progress.value, RADIUS);
     return { borderRadius: frame.borderRadius, opacity: Math.min(1, progress.value * 4) };
-  }, [reducedMotion]);
+  });
 
   return (
     <Animated.View style={[styles.card, { boxShadow: shadow }]}>

@@ -60,17 +60,20 @@ export interface PeekCardFrame {
 }
 
 /**
- * The card's frame at drawer `progress` (0 closed, 1 open). Linear in
- * progress, so it tracks the finger during a swipe and the timed curve during
- * a tap. Under Reduce Motion the card does not round in motion: it takes its
- * open radius as soon as it moves; only the library's translate moves it.
+ * The card's frame at drawer `progress` (0 closed, 1 open). The card takes
+ * its full radius as soon as it moves, as the Claude iOS card does (Jay,
+ * 2026-11-15): a radius that grew with progress left the card square-cornered
+ * while it covered the sidebar, so it read as a flat page, not a card. A
+ * closed page has no radius. The radius never animates, so Reduce Motion
+ * needs no other path. The veil is linear in progress, so it tracks the
+ * finger during a swipe and the timed curve during a tap.
  *
  * A worklet: `DrawerPeekCard` calls it on the UI thread every frame.
  */
-export function peekCardFrame(progress: number, radius: number, reducedMotion: boolean): PeekCardFrame {
+export function peekCardFrame(progress: number, radius: number): PeekCardFrame {
   'worklet';
   const p = Math.min(1, Math.max(0, progress));
-  return { borderRadius: reducedMotion ? (p > 0 ? radius : 0) : p * radius, veil: p * PEEK_CARD_VEIL };
+  return { borderRadius: p > 0 ? radius : 0, veil: p * PEEK_CARD_VEIL };
 }
 
 /**

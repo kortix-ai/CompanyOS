@@ -35,31 +35,26 @@ describe('projectDrawerWidth', () => {
 
 describe('peekCardFrame', () => {
   test('closed: a plain page', () => {
-    expect(peekCardFrame(0, 44, false)).toEqual({ borderRadius: 0, veil: 0 });
+    expect(peekCardFrame(0, 44)).toEqual({ borderRadius: 0, veil: 0 });
   });
 
   test('open: the rounded card, its content faded toward the page colour, full size', () => {
-    const open = peekCardFrame(1, 44, false);
+    const open = peekCardFrame(1, 44);
     expect(open.borderRadius).toBe(44);
     expect(open.veil).toBeCloseTo(PEEK_CARD_VEIL, 6);
   });
 
-  test('half way: linear in progress, so it tracks the finger', () => {
-    const half = peekCardFrame(0.5, 44, false);
-    expect(half.borderRadius).toBe(22);
+  test('moving: the full radius at once (Claude iOS), the veil linear so it tracks the finger', () => {
+    const nudged = peekCardFrame(0.05, 44);
+    expect(nudged.borderRadius).toBe(44);
+    const half = peekCardFrame(0.5, 44);
+    expect(half.borderRadius).toBe(44);
     expect(half.veil).toBeCloseTo(PEEK_CARD_VEIL / 2, 6);
   });
 
-  test('Reduce Motion: the radius snaps on, the veil stays', () => {
-    expect(peekCardFrame(0, 44, true)).toEqual({ borderRadius: 0, veil: 0 });
-    const moving = peekCardFrame(0.3, 44, true);
-    expect(moving.borderRadius).toBe(44);
-    expect(moving.veil).toBeCloseTo(0.3 * PEEK_CARD_VEIL, 6);
-  });
-
   test('progress outside 0…1 (a spring) is clamped', () => {
-    expect(peekCardFrame(1.2, 44, false).borderRadius).toBe(44);
-    expect(peekCardFrame(-0.1, 44, false).borderRadius).toBe(0);
+    expect(peekCardFrame(1.2, 44).borderRadius).toBe(44);
+    expect(peekCardFrame(-0.1, 44).borderRadius).toBe(0);
   });
 });
 

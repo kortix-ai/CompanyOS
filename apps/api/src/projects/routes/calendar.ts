@@ -22,6 +22,7 @@ import {
   CalendarPeopleResponseSchema,
   CreateCalendarCommentRequestSchema,
   CreateCalendarItemRequestSchema,
+  FeatureDisabledErrorSchema,
   UpdateCalendarItemRequestSchema,
 } from '@kortix/api-contract';
 import type { Context } from 'hono';
@@ -42,7 +43,7 @@ type C = Context<AppEnv>;
 const projectParams = z.object({ workspaceId: z.string() });
 const itemParams = projectParams.extend({ itemId: z.string() });
 const CALENDAR_ERRORS = {
-  403: json(CalendarErrorSchema, 'feature_disabled'),
+  403: json(FeatureDisabledErrorSchema, 'feature_disabled: the calendar flag is off for this workspace'),
   404: json(CalendarErrorSchema, 'calendar_not_found'),
   422: json(CalendarErrorSchema, 'calendar_invalid, with violations'),
 };

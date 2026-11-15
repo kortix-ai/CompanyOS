@@ -1047,6 +1047,30 @@ async function listFilesTool(ctx: ToolContext, input: Record<string, unknown>): 
   return text(nodes.length ? page(nodes.map((n) => (n.type === 'directory' ? `${n.absolute}/` : n.absolute)), offset, undefined, 'entries') : 'Empty directory.');
 }
 
+/**
+ * The project's enabled feature flags (`GET /v1/workspaces/:id`), as the CLI
+ * reads them. Empty without a project or when it cannot be read.
+ */
+async function enabledProjectFlags(ctx: ToolContext, projectId: string | undefined): Promise<Set<string>> {
+  if (!projectId) return new Set();
+  const r = await callApi(ctx, 'GET', `/v1/workspaces/${projectId}`);
+  if (r.status >= 400) return new Set();
+  const rows = (JSON.parse(r.body) as { experimental_features?: { key: string; enabled?: boolean }[] }).experimental_features ?? [];
+  return new Set(rows.filter((row) => row.enabled).map((row) => row.key));
+}
+
+/**
+ * A guide behind a feature flag is listed and read only with the project_id
+ * of a workspace where the flag is on: what that workspace's session box has
+ * (kortixd `withheldManagedSkills`). Otherwise the agent learns nothing of it.
+ */
+async function requireGuideFlag(ctx: ToolContext, name: string, flag: string | null | undefined, projectId: string | undefined): Promise<void> {
+  if (!flag || (await enabledProjectFlags(ctx, projectId)).has(flag)) return;
+  throw new ToolInputError(projectId
+    ? `${name} is behind the \`${flag}\` feature flag, which is off for this workspace.`
+    : `${name} is behind the \`${flag}\` feature flag. Pass the project_id of a workspace where it is on.`);
+}
+
 async function readSkillTool(ctx: ToolContext, input: Record<string, unknown>): Promise<ToolResult> {
   const name = optionalArg(input, 'name');
   const file = optionalArg(input, 'file');
@@ -1070,21 +1094,26 @@ async function readSkillTool(ctx: ToolContext, input: Record<string, unknown>): 
   if (!name) {
     const r = await callApi(ctx, 'GET', '/v1/skills');
     if (r.status >= 400) return apiResult(r);
-    const skills = JSON.parse(r.body).skills as { name: string; description: string }[];
-    const guides = skills.map((s) => `${s.name} — ${s.description}`).join('\n\n');
+    const skills = JSON.parse(r.body).skills as { name: string; description: string; featureFlag?: string | null }[];
+    const flags = skills.some((s) => s.featureFlag) ? await enabledProjectFlags(ctx, projectId) : new Set<string>();
+    const guides = skills.filter((s) => !s.featureFlag || flags.has(s.featureFlag)).map((s) => `${s.name} — ${s.description}`).join('\n\n');
     if (!projectId) return text(guides);
     const project = own.map((s) => `${s.slug} — ${s.description ?? '(no description)'}`).join('\n\n');
     return text(`Project skills (read_skill with project_id and name):\n\n${project || '(none: the project has no skills/ directory)'}\n\nPlatform guides:\n\n${guides}`);
   }
   if (file) {
     const r = await callApi(ctx, 'GET', `/v1/skills/${encodeURIComponent(name)}/file`, { query: { path: file } });
-    return r.status >= 400 ? apiResult(r) : text(JSON.parse(r.body).content);
+    if (r.status >= 400) return apiResult(r);
+    const reference = JSON.parse(r.body) as { content: string; featureFlag?: string | null };
+    await requireGuideFlag(ctx, name, reference.featureFlag, projectId);
+    return text(reference.content);
   }
   // The body and its reference paths, as `kortix system-skills get` prints
   // them: every reference inline (`?full=1`) is ~280 KB for kortix-system.
   const r = await callApi(ctx, 'GET', `/v1/skills/${encodeURIComponent(name)}`);
   if (r.status >= 400) return apiResult(r);
-  const skill = JSON.parse(r.body) as { body: string; references?: { path: string }[] };
+  const skill = JSON.parse(r.body) as { body: string; references?: { path: string }[]; featureFlag?: string | null };
+  await requireGuideFlag(ctx, name, skill.featureFlag, projectId);
   const refs = (skill.references ?? []).map((f) => `- ${f.path}`);
   return text(refs.length ? `${skill.body}\n\nReference files (read_skill with file):\n${refs.join('\n')}` : skill.body);
 }

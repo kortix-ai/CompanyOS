@@ -95,11 +95,20 @@ flow(
           [sessionId],
         )).rows[0]?.n ?? 0);
 
-      await ctx.step('an anonymous caller → 401; the flag off → 403 feature_disabled on list and create; on again → 200', async () => {
+      await ctx.step('an anonymous caller → 401; the flag off → 403 feature_disabled on all 7 routes under /v1/workspaces and /v1/projects; on again → 200', async () => {
         (await ctx.client.as(ctx.P.ANON).get(R.list, { params })).status(401);
         await world.setFeature('calendar', false);
-        expectError(await owner.get(R.list, { params }), 403, 'feature_disabled');
-        expectError(await owner.post(R.list, { title: 'x' }, { params }), 403, 'feature_disabled');
+        const anyItem = { ...params, itemId: '00000000-0000-7000-8000-000000000000' };
+        for (const prefix of ['/v1/workspaces', '/v1/projects']) {
+          const at = (path: string) => path.replace('/v1/projects', prefix);
+          expectError(await owner.get(at(R.list), { params }), 403, 'feature_disabled');
+          expectError(await owner.post(at(R.list), { title: 'x' }, { params }), 403, 'feature_disabled');
+          expectError(await owner.get(at(R.people), { params }), 403, 'feature_disabled');
+          expectError(await owner.get(at(R.item), { params: anyItem }), 403, 'feature_disabled');
+          expectError(await owner.patch(at(R.item), { title: 'x' }, { params: anyItem }), 403, 'feature_disabled');
+          expectError(await owner.del(at(R.item), { params: anyItem }), 403, 'feature_disabled');
+          expectError(await owner.post(at(R.comments), { body: 'x' }, { params: anyItem }), 403, 'feature_disabled');
+        }
         await world.setFeature('calendar', true);
         (await owner.get(R.list, { params })).status(200);
       });
@@ -195,6 +204,19 @@ flow(
         if (who(asked) !== 'agent:kortix') throw new Error(JSON.stringify(asked.people));
         const [row] = await waitForMentions(ctx, memberPrincipal, asked.item_id, 1);
         if (!row!.body.includes('please check the numbers')) throw new Error(JSON.stringify(row));
+      });
+
+      await ctx.step('the flag off again → the agent session gets 403; the member’s mention rows leave the inbox and the unread count; on again → they are back', async () => {
+        const unread = async () => (await member.get('/v1/notifications', { query: { limit: 50 } })).status(200).json<{ unread_count: number }>().unread_count;
+        const before = await unread();
+        await world.setFeature('calendar', false);
+        expectError(await agent.client.get(R.list, { params }), 403, 'feature_disabled');
+        if ((await mentionRows(ctx, memberPrincipal, asked.item_id)).length !== 0) throw new Error('a mention row showed with the flag off');
+        const off = await unread();
+        if (off >= before) throw new Error(`unread_count did not drop with the flag off: ${before} → ${off}`);
+        await world.setFeature('calendar', true);
+        if ((await mentionRows(ctx, memberPrincipal, asked.item_id)).length !== 1) throw new Error('the mention row did not come back with the flag on');
+        if ((await unread()) !== before) throw new Error(`unread_count did not come back: ${before} → ${await unread()}`);
       });
 
       await ctx.step('the owner’s comment wakes the agent session once; the agent’s own comment wakes nobody; done and reopen move completed_at, and done wakes it again', async () => {

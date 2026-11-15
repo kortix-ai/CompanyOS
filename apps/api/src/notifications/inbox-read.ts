@@ -8,6 +8,7 @@
 import { and, desc, eq, inArray, isNull, lt, type SQL, sql } from 'drizzle-orm';
 import { calendarItems, notifications } from '@kortix/db';
 import type { NotificationKindName } from '@kortix/shared/notification-kinds';
+import { resolveFeatureFlag } from '../feature-flags/registry';
 import { db } from '../shared/db';
 import { loadSessionAccessRows, mayReadProjects, mayReadProjectTriggers, maySeeSessions, type SessionAccessRow } from './access';
 import { mfaWithheldAccounts } from './mfa-gate';
@@ -113,16 +114,17 @@ async function mfaBlockedAccounts(userId: string, accountIds: string[], ctx: Inb
 }
 
 /**
- * The rows' projects that still exist, with each one's name. A row whose
- * project is gone stays hidden.
+ * The rows' projects that still exist, with each one's name and whether its
+ * `calendar` flag is on. A row whose project is gone stays hidden.
  */
-async function notificationProjectGates(projectIds: string[]): Promise<Map<string, { name: string }>> {
+async function notificationProjectGates(projectIds: string[]): Promise<Map<string, { name: string; calendar: boolean }>> {
   if (projectIds.length === 0) return new Map();
   const rows = await db
-    .select({ projectId: projectsView.projectId, name: projectsView.name })
+    // Only the flag overrides, not the whole metadata document.
+    .select({ projectId: projectsView.projectId, name: projectsView.name, experimental: sql<unknown>`${projectsView.metadata}->'experimental'` })
     .from(projectsView)
     .where(inArray(projectsView.projectId, projectIds));
-  return new Map(rows.map((row) => [row.projectId, { name: row.name }]));
+  return new Map(rows.map((row) => [row.projectId, { name: row.name, calendar: resolveFeatureFlag({ experimental: row.experimental }, 'calendar') }]));
 }
 
 /**
@@ -152,7 +154,8 @@ async function visible<T extends InboxRowForFilter>(
   const seen = await maySeeSessions(userId, [...loaded.values()]);
   for (const id of seen) sessions.set(id, loaded.get(id)!);
 
-  const calendarRows = open.filter(isCalendarNotification);
+  // A mention from a project whose flag is off again stays hidden: no count, no inbox row, no digest.
+  const calendarRows = open.filter((row) => isCalendarNotification(row) && gates.get(row.projectId!)?.calendar === true);
   const liveItems = await liveCalendarItems(calendarRows);
   const calendarProjects = new Map<string, Set<string>>();
   for (const row of calendarRows) {
@@ -180,7 +183,7 @@ async function visible<T extends InboxRowForFilter>(
   const kept = open.filter((row) =>
     isAccountNotification(row.kind) ||
     (isCalendarNotification(row)
-      ? liveItems.has(row.calendarItemId!) && calendarReadable.has(`${row.accountId}:${row.projectId}`)
+      ? gates.get(row.projectId!)?.calendar === true && liveItems.has(row.calendarItemId!) && calendarReadable.has(`${row.accountId}:${row.projectId}`)
       : row.sessionId ? seen.has(row.sessionId) : readable.has(`${row.accountId}:${row.projectId}`)),
   );
   return { rows: kept, sessions, projectNames };

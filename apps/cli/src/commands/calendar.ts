@@ -63,6 +63,8 @@ this machine's time zone), "today 15:00", "tomorrow 09:30", or "in 2h" / "in 3d"
 or "agent:<name>".
 
 Options:
+  --workspace <id>    Workspace (default: linked, or this session's workspace).
+  --host <name>       Operate against a non-default Kortix host.
   --json              Machine-readable output.
   -h, --help          Show this help.
 `;
@@ -449,7 +451,12 @@ export async function runCalendar(argv: string[]): Promise<number> {
   const sub = rest[0] && !rest[0].startsWith('-') ? rest.shift()! : 'ls';
   if (!SUBCOMMANDS.includes(sub)) return fail(`Unknown subcommand "${sub}". Run \`kortix calendar --help\`.`);
   const json = takeFlagBool(rest, ['--json']);
-  const resolved = await resolveProjectContext({});
+  let resolved: Awaited<ReturnType<typeof resolveProjectContext>>;
+  try {
+    resolved = await resolveProjectContext({ projectArg: takeFlagValue(rest, ['--project', '--workspace']), hostArg: takeFlagValue(rest, ['--host']) });
+  } catch (err) {
+    return fail((err as Error).message);
+  }
   if (!resolved) return 1;
   const ctx: Ctx = { auth: resolved.auth, projectId: resolved.projectId };
   try {

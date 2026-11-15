@@ -199,6 +199,27 @@ export interface NotificationPreferences {
   hidden_kinds?: InboxNotificationKind[];
 }
 
+/** The feature flag each flagged kind exists behind: off in every project of the caller, the kind cannot reach them. */
+const NOTIFICATION_KIND_FLAGS: ReadonlyArray<readonly [InboxNotificationKind, string]> = [['mention', 'calendar']];
+
+/**
+ * The kinds a notification settings screen leaves out: the API's
+ * `hidden_kinds`, then each kind whose feature flag is off in every project
+ * the caller is in (`mention`: flag `calendar`). Pass the caller's projects
+ * across accounts (`useWorkspaces`), which the app has already loaded; while
+ * they are not loaded (`undefined`), a flagged kind stays hidden.
+ */
+export function hiddenNotificationKinds(
+  preferences: Pick<NotificationPreferences, 'hidden_kinds'> | undefined,
+  projects: ReadonlyArray<{ experimental?: Partial<Record<string, boolean>> | null }> | undefined,
+): InboxNotificationKind[] {
+  const hidden = new Set<InboxNotificationKind>(preferences?.hidden_kinds ?? []);
+  for (const [kind, flag] of NOTIFICATION_KIND_FLAGS) {
+    if (!(projects ?? []).some((project) => project.experimental?.[flag] === true)) hidden.add(kind);
+  }
+  return [...hidden];
+}
+
 /** A partial update: only the kinds and channels named change. */
 export interface NotificationPreferencesPatch {
   kinds: Partial<Record<InboxNotificationKind, Partial<{ push: boolean; email: boolean }>>>;

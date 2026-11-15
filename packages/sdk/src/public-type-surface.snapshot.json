@@ -2790,6 +2790,7 @@
     "hasSessionDesktop",
     "heartbeatGapEvent",
     "heldMessages",
+    "hiddenNotificationKinds",
     "holdSessionPrompts",
     "humanizeReviewActionPath",
     "humanizeSearchQuery",

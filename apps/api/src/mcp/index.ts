@@ -756,15 +756,28 @@ export function listSessionRow(s: any) {
   };
 }
 
-/** The project's own skills (`skills/<slug>/SKILL.md`, or the legacy dir) from the same /detail route the web app reads; it honors the caller's per-skill grants. */
-async function projectSkills(ctx: ToolContext, projectId: string): Promise<{ slug: string; name: string; description: string | null; path: string }[] | Error> {
+/**
+ * The project's own skills (`skills/<slug>/SKILL.md`, or the legacy dir) and its
+ * enabled feature flags, from the same /detail route the web app reads; it
+ * honors the caller's per-skill grants.
+ */
+async function projectSkills(
+  ctx: ToolContext,
+  projectId: string,
+): Promise<{ skills: { slug: string; name: string; description: string | null; path: string }[]; flags: Set<string> } | Error> {
   const r = await callApi(ctx, 'GET', `/v1/projects/${projectId}/detail`);
   if (r.status >= 400) return new ToolInputError(`HTTP ${r.status} reading project ${projectId}: ${r.body.slice(0, 200)}`);
-  const detail = JSON.parse(r.body) as { config?: { skills?: { name: string; path: string; description: string | null }[] } };
-  return (detail.config?.skills ?? []).map((s) => {
-    const dir = s.path.slice(0, s.path.lastIndexOf('/') + 1);
-    return { ...s, slug: dir.split('/').at(-2) ?? s.name };
-  });
+  const detail = JSON.parse(r.body) as {
+    config?: { skills?: { name: string; path: string; description: string | null }[] };
+    project?: { experimental?: Record<string, boolean> };
+  };
+  return {
+    skills: (detail.config?.skills ?? []).map((s) => {
+      const dir = s.path.slice(0, s.path.lastIndexOf('/') + 1);
+      return { ...s, slug: dir.split('/').at(-2) ?? s.name };
+    }),
+    flags: new Set(Object.entries(detail.project?.experimental ?? {}).flatMap(([key, on]) => (on === true ? [key] : []))),
+  };
 }
 
 /**
@@ -1049,24 +1062,12 @@ async function listFilesTool(ctx: ToolContext, input: Record<string, unknown>): 
 }
 
 /**
- * The project's enabled feature flags (`GET /v1/workspaces/:id`), as the CLI
- * reads them. Empty without a project or when it cannot be read.
- */
-async function enabledProjectFlags(ctx: ToolContext, projectId: string | undefined): Promise<Set<string>> {
-  if (!projectId) return new Set();
-  const r = await callApi(ctx, 'GET', `/v1/workspaces/${projectId}`);
-  if (r.status >= 400) return new Set();
-  const rows = (JSON.parse(r.body) as { experimental_features?: { key: string; enabled?: boolean }[] }).experimental_features ?? [];
-  return new Set(rows.filter((row) => row.enabled).map((row) => row.key));
-}
-
-/**
  * A guide behind a feature flag is listed and read only with the project_id
  * of a workspace where the flag is on: what that workspace's session box has
  * (kortixd `withheldManagedSkills`). Otherwise the agent learns nothing of it.
  */
-async function requireGuideFlag(ctx: ToolContext, name: string, flag: string | null | undefined, projectId: string | undefined): Promise<void> {
-  if (!flag || (await enabledProjectFlags(ctx, projectId)).has(flag)) return;
+function requireGuideFlag(name: string, flag: string | null | undefined, flags: Set<string>, projectId: string | undefined): void {
+  if (!flag || flags.has(flag)) return;
   throw new ToolInputError(projectId
     ? `${name} is behind the \`${flag}\` feature flag, which is off for this workspace.`
     : `${name} is behind the \`${flag}\` feature flag. Pass the project_id of a workspace where it is on.`);
@@ -1076,8 +1077,9 @@ async function readSkillTool(ctx: ToolContext, input: Record<string, unknown>): 
   const name = optionalArg(input, 'name');
   const file = optionalArg(input, 'file');
   const projectId = optionalArg(input, 'project_id');
-  const own = projectId ? await projectSkills(ctx, projectArg(input)) : [];
-  if (own instanceof Error) throw own;
+  const detail = projectId ? await projectSkills(ctx, projectArg(input)) : { skills: [], flags: new Set<string>() };
+  if (detail instanceof Error) throw detail;
+  const own = detail.skills;
   const mine = name ? own.find((s) => s.slug === name || s.name === name) : undefined;
   // The detail lists the managed guides too (skills/kortix-*/SKILL.md), with no
   // file in the repository: such a 404 reads the guide below. A repository copy wins.
@@ -1102,8 +1104,7 @@ async function readSkillTool(ctx: ToolContext, input: Record<string, unknown>): 
     const r = await callApi(ctx, 'GET', '/v1/skills');
     if (r.status >= 400) return apiResult(r);
     const skills = JSON.parse(r.body).skills as { name: string; description: string; featureFlag?: string | null }[];
-    const flags = skills.some((s) => s.featureFlag) ? await enabledProjectFlags(ctx, projectId) : new Set<string>();
-    const guides = skills.filter((s) => !s.featureFlag || flags.has(s.featureFlag)).map((s) => `${s.name} — ${s.description}`).join('\n\n');
+    const guides = skills.filter((s) => !s.featureFlag || detail.flags.has(s.featureFlag)).map((s) => `${s.name} — ${s.description}`).join('\n\n');
     if (!projectId) return text(guides);
     const project = own.map((s) => `${s.slug} — ${s.description ?? '(no description)'}`).join('\n\n');
     return text(`Project skills (read_skill with project_id and name):\n\n${project || '(none: the project has no skills/ directory)'}\n\nPlatform guides:\n\n${guides}`);
@@ -1112,7 +1113,7 @@ async function readSkillTool(ctx: ToolContext, input: Record<string, unknown>): 
     const r = await callApi(ctx, 'GET', `/v1/skills/${encodeURIComponent(name)}/file`, { query: { path: file } });
     if (r.status >= 400) return apiResult(r);
     const reference = JSON.parse(r.body) as { content: string; featureFlag?: string | null };
-    await requireGuideFlag(ctx, name, reference.featureFlag, projectId);
+    requireGuideFlag(name, reference.featureFlag, detail.flags, projectId);
     return text(reference.content);
   }
   // The body and its reference paths, as `kortix system-skills get` prints
@@ -1120,7 +1121,7 @@ async function readSkillTool(ctx: ToolContext, input: Record<string, unknown>): 
   const r = await callApi(ctx, 'GET', `/v1/skills/${encodeURIComponent(name)}`);
   if (r.status >= 400) return apiResult(r);
   const skill = JSON.parse(r.body) as { body: string; references?: { path: string }[]; featureFlag?: string | null };
-  await requireGuideFlag(ctx, name, skill.featureFlag, projectId);
+  requireGuideFlag(name, skill.featureFlag, detail.flags, projectId);
   const refs = (skill.references ?? []).map((f) => `- ${f.path}`);
   return text(refs.length ? `${skill.body}\n\nReference files (read_skill with file):\n${refs.join('\n')}` : skill.body);
 }

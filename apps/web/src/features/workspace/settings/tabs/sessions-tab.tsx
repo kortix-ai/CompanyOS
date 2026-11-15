@@ -41,7 +41,7 @@ import {
 } from '@kortix/sdk';
 import { useNotificationPreferences } from '@kortix/sdk/react';
 import { SettingsTabHeader } from '@kortix/ui/customize/settings/settings-tab-header';
-import { useWorkspaceList } from '@kortix/ui/workspace/sidebar/use-workspace-list';
+import { useCachedWorkspaceSummaries } from '@kortix/ui/workspace/sidebar/use-workspace-list';
 
 const SOUND_PACKS: { id: SoundPack }[] = [
   { id: 'off' },
@@ -426,8 +426,9 @@ export function SessionsTab() {
 
   const { user } = useAuth();
   const kindPreferences = useNotificationPreferences({ userId: user?.id });
-  // A kind behind a feature flag hides while the flag is off in every workspace: the sidebar has the list loaded.
-  const workspaceList = useWorkspaceList();
+  // A kind behind a feature flag hides while the flag is off in every workspace, read from the
+  // workspace list the settings rail already loads: no request of its own.
+  const workspaces = useCachedWorkspaceSummaries();
 
   const handleSendTestNotification = () => {
     sendWebNotification(
@@ -466,7 +467,7 @@ export function SessionsTab() {
       onSendTestNotification={handleSendTestNotification}
       notificationKinds={kindPreferences.data?.kinds}
       emailAvailable={kindPreferences.data?.email_available ?? true}
-      hiddenKinds={hiddenNotificationKinds(kindPreferences.data, workspaceList.rows.map((row) => row.project))}
+      hiddenKinds={hiddenNotificationKinds(kindPreferences.data, workspaces)}
       notificationKindsState={
         kindPreferences.data ? 'ready' : kindPreferences.isError ? 'error' : 'loading'
       }

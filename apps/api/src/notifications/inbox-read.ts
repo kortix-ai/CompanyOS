@@ -55,12 +55,20 @@ const isAccountNotification = (kind: string) => kind.startsWith('capture_device_
 /** A calendar mention (flag `calendar`): readable while its item exists and the person may open the project. */
 const isCalendarNotification = (row: InboxRowForFilter) => row.kind === 'mention' && Boolean(row.calendarItemId);
 
-/** The calendar rows' items that still exist. No query when no row names one. */
+/**
+ * The calendar rows' items that still exist in a project whose `calendar` flag
+ * is on: a mention from a project whose flag is off again stays hidden (no
+ * count, no inbox row, no digest). No query when no row names one.
+ */
 async function liveCalendarItems(rows: readonly InboxRowForFilter[]): Promise<Set<string>> {
   const ids = [...new Set(rows.flatMap((row) => (isCalendarNotification(row) ? [row.calendarItemId!] : [])))];
   if (ids.length === 0) return new Set();
-  const found = await db.select({ itemId: calendarItems.itemId }).from(calendarItems).where(inArray(calendarItems.itemId, ids));
-  return new Set(found.map((row) => row.itemId));
+  const found = await db
+    .select({ itemId: calendarItems.itemId, experimental: sql<unknown>`${projectsView.metadata}->'experimental'` })
+    .from(calendarItems)
+    .innerJoin(projectsView, eq(projectsView.projectId, calendarItems.projectId))
+    .where(inArray(calendarItems.itemId, ids));
+  return new Set(found.flatMap((row) => (resolveFeatureFlag({ experimental: row.experimental }, 'calendar') ? [row.itemId] : [])));
 }
 
 /** One inbox row as `GET /v1/notifications` returns it. */
@@ -114,17 +122,16 @@ async function mfaBlockedAccounts(userId: string, accountIds: string[], ctx: Inb
 }
 
 /**
- * The rows' projects that still exist, with each one's name and whether its
- * `calendar` flag is on. A row whose project is gone stays hidden.
+ * The rows' projects that still exist, with each one's name. A row whose
+ * project is gone stays hidden.
  */
-async function notificationProjectGates(projectIds: string[]): Promise<Map<string, { name: string; calendar: boolean }>> {
+async function notificationProjectGates(projectIds: string[]): Promise<Map<string, { name: string }>> {
   if (projectIds.length === 0) return new Map();
   const rows = await db
-    // Only the flag overrides, not the whole metadata document.
-    .select({ projectId: projectsView.projectId, name: projectsView.name, experimental: sql<unknown>`${projectsView.metadata}->'experimental'` })
+    .select({ projectId: projectsView.projectId, name: projectsView.name })
     .from(projectsView)
     .where(inArray(projectsView.projectId, projectIds));
-  return new Map(rows.map((row) => [row.projectId, { name: row.name, calendar: resolveFeatureFlag({ experimental: row.experimental }, 'calendar') }]));
+  return new Map(rows.map((row) => [row.projectId, { name: row.name }]));
 }
 
 /**
@@ -154,9 +161,8 @@ async function visible<T extends InboxRowForFilter>(
   const seen = await maySeeSessions(userId, [...loaded.values()]);
   for (const id of seen) sessions.set(id, loaded.get(id)!);
 
-  // A mention from a project whose flag is off again stays hidden: no count, no inbox row, no digest.
-  const calendarRows = open.filter((row) => isCalendarNotification(row) && gates.get(row.projectId!)?.calendar === true);
-  const liveItems = await liveCalendarItems(calendarRows);
+  const liveItems = await liveCalendarItems(open.filter(isCalendarNotification));
+  const calendarRows = open.filter((row) => isCalendarNotification(row) && liveItems.has(row.calendarItemId!));
   const calendarProjects = new Map<string, Set<string>>();
   for (const row of calendarRows) {
     const ids = calendarProjects.get(row.accountId) ?? new Set<string>();
@@ -183,7 +189,7 @@ async function visible<T extends InboxRowForFilter>(
   const kept = open.filter((row) =>
     isAccountNotification(row.kind) ||
     (isCalendarNotification(row)
-      ? gates.get(row.projectId!)?.calendar === true && liveItems.has(row.calendarItemId!) && calendarReadable.has(`${row.accountId}:${row.projectId}`)
+      ? liveItems.has(row.calendarItemId!) && calendarReadable.has(`${row.accountId}:${row.projectId}`)
       : row.sessionId ? seen.has(row.sessionId) : readable.has(`${row.accountId}:${row.projectId}`)),
   );
   return { rows: kept, sessions, projectNames };

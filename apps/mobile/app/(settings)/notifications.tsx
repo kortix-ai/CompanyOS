@@ -103,8 +103,9 @@ export default function NotificationsScreen() {
 
   const kinds = record.data?.kinds;
   // The kinds that cannot reach this person now: the API lists some, and a kind behind a
-  // feature flag hides while the flag is off in every workspace (the list is already loaded).
-  const workspaces = useWorkspaces();
+  // feature flag hides while the flag is off in every workspace. The list is read from the
+  // cache the app shell fills (enabled false): no request of its own.
+  const workspaces = useWorkspaces(false);
   const hiddenKinds = hiddenNotificationKinds(record.data, workspaces.rows.map((row) => row.project));
 
   return (

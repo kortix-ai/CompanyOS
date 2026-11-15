@@ -1463,7 +1463,7 @@ describe('pi workflow tool, run controls', () => {
     api.childrenSettle()
     expect(await turn).toBe('completed')
     const doc = lastWorkflowPart(frames).metadata as unknown as WorkflowRunMetadata
-    expect(doc).toMatchObject({ status: 'done', agents: [{ status: 'done', attempt: 2, sessionId: 'child-2' }] })
+    expect(doc).toMatchObject({ status: 'done', agents: [{ status: 'done', attempt: 2, sessionId: 'child-2', earlierSessionIds: ['child-1'] }] })
     // The row's clock is the attempt's: a restart starts it again.
     expect(doc.agents[0]!.startedAt!).toBeGreaterThan(firstStart)
     expect(doc.logs).toContain('Slow: restarted by the person; attempt 2 of 6 starts.')

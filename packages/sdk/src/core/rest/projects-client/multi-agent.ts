@@ -186,6 +186,8 @@ export interface WorkflowRunAgent {
   stoppedBy?: 'person';
   /** While it runs: when its session log last changed (epoch ms), read at most once a minute. */
   quietSince?: number;
+  /** The sessions of its earlier attempts (a restart or a stall retry), oldest first. */
+  earlierSessionIds?: string[];
 }
 
 export interface WorkflowRunMetadata {

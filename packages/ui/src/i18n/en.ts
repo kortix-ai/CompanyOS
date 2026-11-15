@@ -1393,6 +1393,8 @@ const catalog = {
     "runningCount": "{count, plural, one {# session running} other {# sessions running}}",
     "runningTitle": "Running now",
     "runningEmpty": "Nothing is running.",
+    "runningFailed": "Couldn't read what is running.",
+    "runningRetry": "Try again",
     "runningIn": "in {title}",
     "runningFirst": "Showing the first {count}."
   },

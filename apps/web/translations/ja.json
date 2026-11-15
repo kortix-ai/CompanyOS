@@ -1899,6 +1899,8 @@
     "runningCount": "{count, plural, other {# 件のセッションが実行中}}",
     "runningTitle": "実行中",
     "runningEmpty": "実行中のものはありません。",
+    "runningFailed": "実行中のものを読み込めませんでした。",
+    "runningRetry": "再試行",
     "runningIn": "{title} 内",
     "runningFirst": "最初の {count} 件を表示しています。"
   },

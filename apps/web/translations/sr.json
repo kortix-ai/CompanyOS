@@ -1899,6 +1899,8 @@
     "runningCount": "{count, plural, one {# сесија у току} few {# сесије у току} other {# сесија у току}}",
     "runningTitle": "Тренутно у току",
     "runningEmpty": "Ништа није у току.",
+    "runningFailed": "Није могуће прочитати шта је у току.",
+    "runningRetry": "Покушај поново",
     "runningIn": "у {title}",
     "runningFirst": "Приказано је првих {count}."
   },

@@ -68,7 +68,14 @@ export function ProjectRunningNavItem({ projectId }: { projectId: string }) {
           }}
           className="flex w-[min(380px,calc(100vw-1.5rem))] flex-col p-0"
         >
-          <RunningPanel projectId={projectId} sessions={sessions} onNavigate={() => setOpen(false)} />
+          <RunningPanel
+            projectId={projectId}
+            sessions={sessions}
+            // "Nothing is running" only after a read answered: not while it loads, not when it failed.
+            state={running.data ? 'ready' : running.isError ? 'error' : 'loading'}
+            onRetry={() => void running.refetch()}
+            onNavigate={() => setOpen(false)}
+          />
         </PopoverContent>
       </Popover>
     </SidebarMenuItem>
@@ -78,10 +85,15 @@ export function ProjectRunningNavItem({ projectId }: { projectId: string }) {
 export function RunningPanel({
   projectId,
   sessions,
+  state = 'ready',
+  onRetry,
   onNavigate,
 }: {
   projectId: string;
   sessions: ProjectSession[];
+  /** The read behind `sessions`: an empty list means "nothing runs" only when `ready`. */
+  state?: 'loading' | 'error' | 'ready';
+  onRetry?: () => void;
   onNavigate: () => void;
 }) {
   const t = useTranslations('sidebar');
@@ -110,7 +122,20 @@ export function RunningPanel({
   return (
     <div className="flex min-w-0 flex-col">
       <header className="border-border text-foreground border-b px-3 py-2 text-xs font-medium">{t('runningTitle')}</header>
-      {rows.length === 0 ? (
+      {rows.length === 0 && state === 'loading' ? (
+        <div className="flex justify-center px-3 py-3" role="status" aria-label={t('runningTitle')}>
+          <Loading className="text-muted-foreground size-3" />
+        </div>
+      ) : rows.length === 0 && state === 'error' ? (
+        <div className="text-muted-foreground flex items-center justify-between gap-2 px-3 py-2 text-xs">
+          <span>{t('runningFailed')}</span>
+          {onRetry && (
+            <Button type="button" variant="ghost" size="xs" onClick={onRetry}>
+              {t('runningRetry')}
+            </Button>
+          )}
+        </div>
+      ) : rows.length === 0 ? (
         <p className="text-muted-foreground px-3 py-3 text-xs">{t('runningEmpty')}</p>
       ) : (
         <ul className="flex max-h-96 min-w-0 flex-col overflow-y-auto p-1">

@@ -1899,6 +1899,8 @@
     "runningCount": "{count, plural, one {# sessione in corso} other {# sessioni in corso}}",
     "runningTitle": "In corso ora",
     "runningEmpty": "Non c’è niente in corso.",
+    "runningFailed": "Impossibile leggere cosa è in corso.",
+    "runningRetry": "Riprova",
     "runningIn": "in {title}",
     "runningFirst": "Sono mostrate le prime {count}."
   },

@@ -121,6 +121,16 @@ describe('parseWorkflowRun', () => {
     expect(odd?.agents[0]).toEqual({ id: 'a1', label: 'Go', status: 'stopped' });
   });
 
+  test('an agent restarted or retried keeps its earlier attempts\' sessions; non-strings are dropped', () => {
+    const parsed = parseWorkflowRun(
+      run({ agents: [{ id: 'a1', label: 'Retry', status: 'running', sessionId: 's3', earlierSessionIds: ['s1', 7, '', 's2'] }] }),
+    );
+    expect(parsed?.agents[0]).toMatchObject({ sessionId: 's3', earlierSessionIds: ['s1', 's2'] });
+    expect(parseWorkflowRun(run({ agents: [{ id: 'a1', label: 'Once', status: 'running', earlierSessionIds: 'no' }] }))?.agents[0]).not.toHaveProperty(
+      'earlierSessionIds',
+    );
+  });
+
   test('null without a run status or an agents list', () => {
     expect(parseWorkflowRun(undefined)).toBeNull();
     expect(parseWorkflowRun({})).toBeNull();

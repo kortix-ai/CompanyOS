@@ -1899,6 +1899,8 @@
     "runningCount": "{count, plural, one {# Sitzung läuft} other {# Sitzungen laufen}}",
     "runningTitle": "Läuft gerade",
     "runningEmpty": "Gerade läuft nichts.",
+    "runningFailed": "Was gerade läuft, konnte nicht gelesen werden.",
+    "runningRetry": "Erneut versuchen",
     "runningIn": "in {title}",
     "runningFirst": "Die ersten {count} werden angezeigt."
   },

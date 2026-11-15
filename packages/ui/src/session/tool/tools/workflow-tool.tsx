@@ -394,7 +394,12 @@ export function WorkflowTool(props: ToolProps) {
           <WorkflowRunCost
             projectId={ids.projectId}
             rootSessionId={run.background?.sessionId ?? ids.sessionId}
-            agentSessionIds={run.background ? undefined : run.agents.flatMap((agent) => (agent.sessionId ? [agent.sessionId] : []))}
+            // Every attempt's session: a restart or a stall retry keeps what the earlier attempt spent.
+            agentSessionIds={
+              run.background
+                ? undefined
+                : run.agents.flatMap((agent) => [...(agent.earlierSessionIds ?? []), ...(agent.sessionId ? [agent.sessionId] : [])])
+            }
             live={live}
             separated={!!cardSubtitle}
           />

@@ -89,6 +89,9 @@ function agent(entry: unknown, index: number): WorkflowRunAgent | undefined {
   const startedAt = time(entry.startedAt);
   const endedAt = time(entry.endedAt);
   const quietSince = time(entry.quietSince);
+  const earlierSessionIds = Array.isArray(entry.earlierSessionIds)
+    ? entry.earlierSessionIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+    : [];
   return {
     id: text(entry.id) ?? `a${index + 1}`,
     label,
@@ -105,6 +108,7 @@ function agent(entry: unknown, index: number): WorkflowRunAgent | undefined {
     ...(endedAt !== undefined ? { endedAt } : {}),
     ...(entry.stoppedBy === 'person' ? { stoppedBy: 'person' as const } : {}),
     ...(quietSince !== undefined ? { quietSince } : {}),
+    ...(earlierSessionIds.length > 0 ? { earlierSessionIds } : {}),
   };
 }
 

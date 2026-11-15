@@ -1899,6 +1899,8 @@
     "runningCount": "{count, plural, one {# sessão em execução} other {# sessões em execução}}",
     "runningTitle": "Em execução agora",
     "runningEmpty": "Nada está em execução.",
+    "runningFailed": "Não foi possível ler o que está em execução.",
+    "runningRetry": "Tentar novamente",
     "runningIn": "em {title}",
     "runningFirst": "A mostrar as primeiras {count}."
   },

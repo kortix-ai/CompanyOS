@@ -91,6 +91,15 @@ describe('the sidebar Running row', () => {
     expect(html).toContain('aria-label="Open Weekly digest"');
   });
 
+  test('an empty list says "Nothing is running" only after a read answered', () => {
+    const loading = renderToStaticMarkup(wrap(<RunningPanel projectId="p1" sessions={[]} state="loading" onNavigate={() => {}} />));
+    expect(loading).not.toContain('Nothing is running');
+    const failed = renderToStaticMarkup(wrap(<RunningPanel projectId="p1" sessions={[]} state="error" onRetry={() => {}} onNavigate={() => {}} />));
+    expect(failed).not.toContain('Nothing is running');
+    expect(failed).toContain('Couldn');
+    expect(failed).toContain('Try again');
+  });
+
   test('an empty panel says so', () => {
     const html = renderToStaticMarkup(wrap(<RunningPanel projectId="p1" sessions={[]} onNavigate={() => {}} />));
     expect(html).toContain('Nothing is running.');

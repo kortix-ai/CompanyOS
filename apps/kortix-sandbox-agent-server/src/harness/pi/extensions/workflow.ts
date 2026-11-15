@@ -1007,6 +1007,8 @@ class WorkflowRun {
               ? `${entry.label}: ${outcome.reason}; attempt ${attempt + 1} of ${STALL_ATTEMPTS} starts.`
               : `${entry.label}: no new output for ${minutes(work.stallMs)}; attempt ${attempt + 1} of ${STALL_ATTEMPTS} starts.`,
         )
+        // The earlier attempt's session keeps its spend: the card sums it with the new one.
+        if (entry.sessionId) entry.earlierSessionIds = [...(entry.earlierSessionIds ?? []), entry.sessionId]
         delete entry.sessionId
         entry.status = 'starting'
         this.publish()

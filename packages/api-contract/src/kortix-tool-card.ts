@@ -148,6 +148,8 @@ export interface WorkflowRunAgent {
    * says "Quiet for N min" once that is long.
    */
   quietSince?: number;
+  /** The sessions of its earlier attempts (a restart or a stall retry), oldest first: their spend is the run's too. */
+  earlierSessionIds?: string[];
 }
 
 export interface WorkflowRunMetadata {

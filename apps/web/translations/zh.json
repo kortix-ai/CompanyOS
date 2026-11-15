@@ -1899,6 +1899,8 @@
     "runningCount": "{count, plural, other {# 个会话运行中}}",
     "runningTitle": "正在运行",
     "runningEmpty": "没有正在运行的内容。",
+    "runningFailed": "无法读取正在运行的内容。",
+    "runningRetry": "重试",
     "runningIn": "在 {title} 中",
     "runningFirst": "显示前 {count} 个。"
   },

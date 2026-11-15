@@ -54,10 +54,12 @@ import { subagentTitle } from '../../session/agents/agent-model';
 import { SessionLabelsModal } from './modal/session-labels-modal';
 import { ShareSessionModal } from './modal/share-session-modal';
 import {
+  BACKGROUND_WORK_POLL_MS,
   getSessionDisplayTitle,
   groupChangeRequestsBySession,
   projectSessionsRefetchInterval,
   resolveSessionListViewState,
+  sessionsWorkingInBackground,
   shortRelative,
   starterSectionOf,
 } from '../../session/actions/project-session-list-helpers';
@@ -154,7 +156,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { UiLink, useUiPathname, useUiRouter, useUiSearchParams, useUiViewerId } from '../../providers/ui-provider';
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSessionListActions } from '../../session/actions/use-session-list-actions';
 import { Separator } from '../../primitives/separator';
 
@@ -289,10 +291,15 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
     labels,
     group: groupFilter,
     enabled: listsReady,
+    // One sidebar page, as the other sections read; "Load more" reads the next.
+    // Without a limit the server answered its default 50 rows (~145 KB), read
+    // again on every open and turn edge.
+    limit: SIDEBAR_PAGE_SIZE,
     refetchInterval: (loaded) =>
       projectSessionsRefetchInterval({
         sessions: loaded,
         hasOpenSession: Boolean(activeSessionId),
+        openSessionId: activeSessionId,
       }),
     // Focus IS the cross-tab signal this list has: a session started in
     // another tab (the home send is the default creation path now) has no
@@ -300,6 +307,14 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
     // sessions page already refetches on focus for the same reason.
     refetchOnWindowFocus: true,
   });
+
+  // A row that works where no stream reaches it (a run, a colleague, another
+  // chat) polls until it settles, on every route, not only a session page.
+  const backgroundWorkPoll = useCallback(
+    (loaded: ProjectSession[]) =>
+      sessionsWorkingInBackground(loaded, activeSessionId) ? BACKGROUND_WORK_POLL_MS : false,
+    [activeSessionId],
+  );
 
   // Runs other members started, and runs automation started. Each is its own
   // paged query with the same top-level filter, so a busy trigger cannot push
@@ -312,6 +327,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
     enabled: listsReady,
     limit: SIDEBAR_PAGE_SIZE,
     refetchOnWindowFocus: true,
+    refetchInterval: backgroundWorkPoll,
   });
   const automatedQuery = useProjectSessions(projectId, {
     parent: 'root',
@@ -321,6 +337,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
     enabled: listsReady,
     limit: SIDEBAR_PAGE_SIZE,
     refetchOnWindowFocus: true,
+    refetchInterval: backgroundWorkPoll,
   });
   // The viewer's pinned sessions, at the top (KRTX-2418). Any starter, any
   // depth: a pin is the viewer's choice. A pinned row is not repeated below.
@@ -329,6 +346,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
     labels,
     limit: SIDEBAR_PAGE_SIZE,
     refetchOnWindowFocus: true,
+    refetchInterval: backgroundWorkPoll,
   });
   const listActions = useSessionListActions(projectId);
 
@@ -380,7 +398,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
   // the sidebar lists. Never the whole history (565 KB measured on prod,
   // polled every 60 s; KRTX-2316).
   const { data: changeRequestData } = useQuery({
-    queryKey: [...changeRequestKeys.listScope(projectId), 'recent'],
+    queryKey: changeRequestKeys.sidebarRecent(projectId),
     queryFn: () =>
       listChangeRequests(projectId, undefined, { limit: SIDEBAR_CHANGE_REQUEST_LIMIT }),
     staleTime: 5_000,
@@ -1318,7 +1336,15 @@ function SpawnedSessions({
   renderNode: (session: ProjectSession) => ReactNode;
 }) {
   const t = useTranslations('sidebar');
-  const children = useSessionChildren(projectId, parentId, { limit: SIDEBAR_PAGE_SIZE });
+  const [childrenWork, setChildrenWork] = useState(false);
+  // A workflow runner or a colleague works where no stream reaches it: the
+  // children poll while one of them works, so its row settles on any route.
+  const children = useSessionChildren(projectId, parentId, {
+    limit: SIDEBAR_PAGE_SIZE,
+    refetchInterval: childrenWork ? BACKGROUND_WORK_POLL_MS : undefined,
+  });
+  const anyChildWorks = sessionsWorkingInBackground(children.sessions, null);
+  if (anyChildWorks !== childrenWork) setChildrenWork(anyChildWorks);
   if (children.data === undefined) {
     return (
       <div className="px-2">

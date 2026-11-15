@@ -1681,8 +1681,8 @@
         "needsInput": "回答待ち",
         "starting": "起動中",
         "running": "作業中",
-        "done": "準備完了",
-        "stopped": "スリープ中",
+        "done": "完了",
+        "stopped": "停止",
         "failed": "失敗",
         "legacy": "旧形式"
       }
@@ -1894,7 +1894,15 @@
       "noMessages": "まだメッセージはありません",
       "more": "その他"
     },
-    "calendar": "カレンダー"
+    "calendar": "カレンダー",
+    "running": "実行中",
+    "runningCount": "{count, plural, other {# 件のセッションが実行中}}",
+    "runningTitle": "実行中",
+    "runningEmpty": "実行中のものはありません。",
+    "runningFailed": "実行中のものを読み込めませんでした。",
+    "runningRetry": "再試行",
+    "runningIn": "{title} 内",
+    "runningFirst": "最初の {count} 件を表示しています。"
   },
   "dashboard": {
     "title": "ダッシュボード",
@@ -2363,6 +2371,8 @@
     "chatInputMachine": "マシン",
     "chatInputMachineDescription": "このセッションを起動するマシンテンプレート。",
     "sending": "送信中",
+    "notSentYet": "未送信 · オンラインに戻ると送信されます",
+    "offlineReconnecting": "オフライン — 再接続中…",
     "stop": "停止",
     "startingSession": "セッションを開始しています…",
     "sessionStarted": "セッションを開始しました",
@@ -3350,7 +3360,17 @@
       "jsonKeys": "{count, plural, other {JSON · # 個のキー}}",
       "jsonItems": "{count, plural, other {JSON · # 個の項目}}",
       "failedSentence": "ワークフローは完了前に停止しました。",
-      "runningCount": "{count} 件実行中"
+      "runningCount": "{count} 件実行中",
+      "spent": "{credits} クレジット使用",
+      "spentHint": "この実行でこれまでに Kortix が請求した額：実行とそのエージェントのモデル呼び出しと計算時間。",
+      "waitingForYou": "あなたの返答待ち · 未開始",
+      "cancelled": "キャンセル — 何も実行されていません",
+      "answeredInChat": "チャットで回答 — 何も実行されていません",
+      "stoppedByYou": "あなたが停止",
+      "attempt": "{count} 回目",
+      "quietFor": "{minutes} 分間出力なし",
+      "quietCount": "{count} 件が出力なし",
+      "holdingWorking": "保留中 · {count} 件が作業中"
     },
     "agent": {
       "backgroundWorking": "バックグラウンドで作業中",
@@ -21394,7 +21414,11 @@
       "texta268bab502cf": "カレンダーの項目を表示",
       "text16d71c4d10a2": "カレンダーの項目を編集",
       "text14580c9900ac": "カレンダーの項目を削除",
-      "text96386c724e21": "カレンダーの項目にコメント"
+      "text96386c724e21": "カレンダーの項目にコメント",
+      "textf543a9f99ce7": "アクションバー",
+      "textca4067071fcf": "選択",
+      "text4cea356a17a1": "未保存の編集",
+      "text2358f7b37c07": "一時的なモードのためのフローティングバー：選択、未保存の編集、保留中の貼り付け。タイトル、控えめな説明、キーヒント付きのアクション、閉じるボタン。"
     },
     "publicShareConfirm": {
       "title": "公開リンクを作成しますか？",
@@ -26542,7 +26566,11 @@
         "resume": "実行を再開できませんでした",
         "stop": "実行を停止できませんでした",
         "restart": "{label} を再起動できませんでした"
-      }
+      },
+      "hold": "新しいエージェントを保留",
+      "holdShort": "新しいエージェントを保留",
+      "holdHint": "新しいエージェントを保留: 再開するまで起動しません。作業中のエージェントは続行します (p)",
+      "holding": "新しいエージェントを保留中"
     },
     "board": {
       "layoutLabel": "レイアウト",

@@ -1681,8 +1681,8 @@
         "needsInput": "等待你的回复",
         "starting": "正在唤醒",
         "running": "工作中",
-        "done": "就绪",
-        "stopped": "休眠中",
+        "done": "已完成",
+        "stopped": "已停止",
         "failed": "失败",
         "legacy": "旧版"
       }
@@ -1894,7 +1894,15 @@
       "noMessages": "还没有消息",
       "more": "更多"
     },
-    "calendar": "日历"
+    "calendar": "日历",
+    "running": "运行中",
+    "runningCount": "{count, plural, other {# 个会话运行中}}",
+    "runningTitle": "正在运行",
+    "runningEmpty": "没有正在运行的内容。",
+    "runningFailed": "无法读取正在运行的内容。",
+    "runningRetry": "重试",
+    "runningIn": "在 {title} 中",
+    "runningFirst": "显示前 {count} 个。"
   },
   "dashboard": {
     "title": "仪表板",
@@ -2363,6 +2371,8 @@
     "chatInputMachine": "机器",
     "chatInputMachineDescription": "此会话启动时使用的机器模板。",
     "sending": "正在发送",
+    "notSentYet": "尚未发送 · 恢复联网后发送",
+    "offlineReconnecting": "离线 — 正在重新连接…",
     "stop": "停止",
     "startingSession": "正在启动会话…",
     "sessionStarted": "会话已启动",
@@ -3350,7 +3360,17 @@
       "jsonKeys": "{count, plural, other {JSON · # 个键}}",
       "jsonItems": "{count, plural, other {JSON · # 项}}",
       "failedSentence": "该工作流在完成前停止了。",
-      "runningCount": "{count} 个运行中"
+      "runningCount": "{count} 个运行中",
+      "spent": "已花费 {credits} 积分",
+      "spentHint": "Kortix 目前为此次运行收取的费用：此次运行及其智能体的模型调用和计算时间。",
+      "waitingForYou": "等待你确认 · 未开始",
+      "cancelled": "已取消 — 未运行任何内容",
+      "answeredInChat": "已在聊天中回答 — 未运行任何内容",
+      "stoppedByYou": "已由你停止",
+      "attempt": "第 {count} 次尝试",
+      "quietFor": "已 {minutes} 分钟无输出",
+      "quietCount": "{count} 个无输出",
+      "holdingWorking": "暂缓中 · {count} 个仍在工作"
     },
     "agent": {
       "backgroundWorking": "正在后台工作",
@@ -21394,7 +21414,11 @@
       "texta268bab502cf": "查看了日历事项",
       "text16d71c4d10a2": "编辑了日历事项",
       "text14580c9900ac": "删除了日历事项",
-      "text96386c724e21": "评论了日历事项"
+      "text96386c724e21": "评论了日历事项",
+      "textf543a9f99ce7": "操作栏",
+      "textca4067071fcf": "选择",
+      "text4cea356a17a1": "未保存的编辑",
+      "text2358f7b37c07": "临时模式的浮动栏：选择、未保存的编辑、待粘贴内容。标题、弱化的描述、带快捷键提示的操作，以及关闭按钮。"
     },
     "publicShareConfirm": {
       "title": "创建公开链接？",
@@ -26542,7 +26566,11 @@
         "resume": "无法恢复运行",
         "stop": "无法停止运行",
         "restart": "无法重启 {label}"
-      }
+      },
+      "hold": "暂缓新智能体",
+      "holdShort": "暂缓新智能体",
+      "holdHint": "暂缓新智能体：在你继续之前不启动新的；正在工作的会继续 (p)",
+      "holding": "已暂缓新智能体"
     },
     "board": {
       "layoutLabel": "布局",

@@ -1681,8 +1681,8 @@
         "needsInput": "Eingabe nötig",
         "starting": "Wird geweckt",
         "running": "Arbeitet",
-        "done": "Bereit",
-        "stopped": "Schläft",
+        "done": "Fertig",
+        "stopped": "Gestoppt",
         "failed": "Fehlgeschlagen",
         "legacy": "Veraltet"
       }
@@ -1894,7 +1894,15 @@
       "noMessages": "Noch keine Nachrichten",
       "more": "Mehr"
     },
-    "calendar": "Kalender"
+    "calendar": "Kalender",
+    "running": "Läuft",
+    "runningCount": "{count, plural, one {# Sitzung läuft} other {# Sitzungen laufen}}",
+    "runningTitle": "Läuft gerade",
+    "runningEmpty": "Gerade läuft nichts.",
+    "runningFailed": "Was gerade läuft, konnte nicht gelesen werden.",
+    "runningRetry": "Erneut versuchen",
+    "runningIn": "in {title}",
+    "runningFirst": "Die ersten {count} werden angezeigt."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -2363,6 +2371,8 @@
     "chatInputMachine": "Maschine",
     "chatInputMachineDescription": "Die Maschinenvorlage, mit der diese Sitzung startet.",
     "sending": "Wird gesendet",
+    "notSentYet": "Noch nicht gesendet · wird gesendet, sobald Sie wieder online sind",
+    "offlineReconnecting": "Offline – Verbindung wird wiederhergestellt…",
     "stop": "Stoppen",
     "startingSession": "Sitzung wird gestartet…",
     "sessionStarted": "Sitzung gestartet",
@@ -3350,7 +3360,17 @@
       "jsonKeys": "{count, plural, one {JSON · # Schlüssel} other {JSON · # Schlüssel}}",
       "jsonItems": "{count, plural, one {JSON · # Eintrag} other {JSON · # Einträge}}",
       "failedSentence": "Der Workflow hat aufgehört, bevor er fertig war.",
-      "runningCount": "{count} laufen"
+      "runningCount": "{count} laufen",
+      "spent": "{credits} Credits verbraucht",
+      "spentHint": "Was Kortix für diesen Lauf bisher berechnet hat: Modellaufrufe und Rechenzeit des Laufs und seiner Agenten.",
+      "waitingForYou": "Wartet auf dich · nicht gestartet",
+      "cancelled": "Abgebrochen — nichts lief",
+      "answeredInChat": "Im Chat beantwortet — nichts lief",
+      "stoppedByYou": "Von dir gestoppt",
+      "attempt": "Versuch {count}",
+      "quietFor": "Seit {minutes} Min. still",
+      "quietCount": "{count} still",
+      "holdingWorking": "Hält an · {count} arbeiten noch"
     },
     "agent": {
       "backgroundWorking": "Arbeitet im Hintergrund",
@@ -21394,7 +21414,11 @@
       "texta268bab502cf": "Kalendereintrag angesehen",
       "text16d71c4d10a2": "Kalendereintrag bearbeitet",
       "text14580c9900ac": "Kalendereintrag gelöscht",
-      "text96386c724e21": "Kalendereintrag kommentiert"
+      "text96386c724e21": "Kalendereintrag kommentiert",
+      "textf543a9f99ce7": "Aktionsleiste",
+      "textca4067071fcf": "Auswahl",
+      "text4cea356a17a1": "Ungespeicherte Änderungen",
+      "text2358f7b37c07": "Die schwebende Leiste für einen vorübergehenden Modus: eine Auswahl, ungespeicherte Änderungen, ein ausstehendes Einfügen. Ein Titel, eine gedämpfte Beschreibung, Aktionen mit Tastenhinweisen und eine Schließen-Schaltfläche."
     },
     "publicShareConfirm": {
       "title": "Öffentlichen Link erstellen?",
@@ -26542,7 +26566,11 @@
         "resume": "Der Lauf konnte nicht fortgesetzt werden",
         "stop": "Der Lauf konnte nicht gestoppt werden",
         "restart": "{label} konnte nicht neu gestartet werden"
-      }
+      },
+      "hold": "Neue Agenten zurückhalten",
+      "holdShort": "Neue Agenten zurückhalten",
+      "holdHint": "Neue Agenten zurückhalten: keiner startet, bis du fortsetzt; laufende Agenten arbeiten weiter (p)",
+      "holding": "Neue Agenten zurückgehalten"
     },
     "board": {
       "layoutLabel": "Ansicht",

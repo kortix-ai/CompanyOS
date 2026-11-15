@@ -112,6 +112,20 @@ describe('composerSelectableAgents', () => {
     ]);
   });
 
+  test('the starter reflector agents run on a schedule only: no chat picker or Tab cycle offers them', () => {
+    configureKortix({ ...base, featureFlags: { enableProjects: false } });
+    const withReflectors = [agent('kortix'), agent('memory-reflector'), agent('harness-reflector')];
+    expect(composerSelectableAgents(withReflectors).map((a) => a.name)).toEqual(['kortix']);
+    expect(composerSelectableAgents(withReflectors, { includeSubagents: true }).map((a) => a.name)).toEqual(['kortix']);
+  });
+
+  test('a session bound to a reflector still resolves to it: the trigger runs its named agent', () => {
+    configureKortix({ ...base, featureFlags: { enableProjects: false } });
+    expect(
+      resolveComposerAgent({ agents: [agent('kortix'), agent('memory-reflector')], boundAgent: 'memory-reflector' }),
+    ).toEqual({ selected: 'memory-reflector', disabled: false, reason: 'bound' });
+  });
+
   test('nothing to offer from no roster', () => {
     expect(composerSelectableAgents(undefined)).toEqual([]);
   });

@@ -13,6 +13,7 @@ import { db } from '../shared/db';
 import { loadSessionAccessRows, mayReadProjects, mayReadProjectTriggers, maySeeSessions, type SessionAccessRow } from './access';
 import { mfaWithheldAccounts } from './mfa-gate';
 import { inboxStore } from './inbox-store';
+import { resolvedAskNotifications } from './inbox-resolution';
 import { notificationUrl } from './push-payload';
 import { projectsView } from '../workspaces/rows';
 
@@ -86,6 +87,12 @@ export interface InboxNotification {
   actor_user_id: string | null;
   url: string;
   read: boolean;
+  /**
+   * A `question` or `permission` row whose ask is closed: answered, dismissed,
+   * decided or expired (`inbox-resolution.ts`). False for every other kind.
+   * "Needs you" leaves a resolved row out; the row itself stays in the inbox.
+   */
+  resolved: boolean;
   created_at: string;
 }
 
@@ -107,6 +114,7 @@ const ROW = {
   triggerSlug: notifications.triggerSlug,
   calendarItemId: notifications.calendarItemId,
   kind: notifications.kind,
+  dedupeKey: notifications.dedupeKey,
   title: notifications.title,
   body: notifications.body,
   actorUserId: notifications.actorUserId,
@@ -281,6 +289,7 @@ export async function listInbox(
       break;
     }
   }
+  const resolved = await resolvedAskNotifications(listed);
   return {
     notifications: listed.map((row) => ({
       id: row.notificationId,
@@ -304,6 +313,7 @@ export async function listInbox(
         calendarItemId: row.calendarItemId,
       }),
       read: row.readAt !== null,
+      resolved: resolved.has(row.notificationId),
       created_at: row.createdAt.toISOString(),
     })),
     unread_count: unreadShown,

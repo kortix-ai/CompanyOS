@@ -1,5 +1,6 @@
 'use client';
 
+import { useSaveShortcut } from '../../internal/hooks/use-save-shortcut';
 import { MY_KORTIX_AGENT_NAME } from '@kortix/shared';
 import { adminPath } from '../../lib/routes';
 
@@ -449,27 +450,6 @@ function useShareDialog(openedByLink: boolean): ShareState {
     [openedByLink, router, pathname],
   );
   return { open, setOpen };
-}
-
-/**
- * Mod+S saves the agent, only while the draft holds an edit. With nothing to
- * save the key keeps the browser's own behavior. A key pressed inside an open
- * dialog (an embedded screen's own editor, the secret form) belongs to that
- * dialog, never to the agent's draft.
- */
-function useSaveShortcut(dirty: boolean, onSave: () => void) {
-  useEffect(() => {
-    if (!dirty) return;
-    const handler = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey || event.key !== 's') return;
-      const target = event.target instanceof Element ? event.target : null;
-      if (target?.closest('[role="dialog"], [role="alertdialog"]')) return;
-      event.preventDefault();
-      onSave();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [dirty, onSave]);
 }
 
 /**

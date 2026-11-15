@@ -1681,8 +1681,8 @@
         "needsInput": "Serve una risposta",
         "starting": "Risveglio",
         "running": "Al lavoro",
-        "done": "Pronta",
-        "stopped": "Inattiva",
+        "done": "Completata",
+        "stopped": "Interrotta",
         "failed": "Non riuscita",
         "legacy": "Precedente"
       }
@@ -1894,7 +1894,15 @@
       "noMessages": "Ancora nessun messaggio",
       "more": "Altro"
     },
-    "calendar": "Calendario"
+    "calendar": "Calendario",
+    "running": "In corso",
+    "runningCount": "{count, plural, one {# sessione in corso} other {# sessioni in corso}}",
+    "runningTitle": "In corso ora",
+    "runningEmpty": "Non c’è niente in corso.",
+    "runningFailed": "Impossibile leggere cosa è in corso.",
+    "runningRetry": "Riprova",
+    "runningIn": "in {title}",
+    "runningFirst": "Sono mostrate le prime {count}."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -2363,6 +2371,8 @@
     "chatInputMachine": "Macchina",
     "chatInputMachineDescription": "Il modello di macchina con cui parte questa sessione.",
     "sending": "Invio in corso",
+    "notSentYet": "Non ancora inviato · verrà inviato quando tornerai online",
+    "offlineReconnecting": "Offline — riconnessione…",
     "stop": "Interrompi",
     "startingSession": "Avvio della sessione…",
     "sessionStarted": "Sessione avviata",
@@ -3350,7 +3360,17 @@
       "jsonKeys": "{count, plural, one {JSON · # chiave} other {JSON · # chiavi}}",
       "jsonItems": "{count, plural, one {JSON · # elemento} other {JSON · # elementi}}",
       "failedSentence": "Il workflow si è fermato prima di finire.",
-      "runningCount": "{count} in corso"
+      "runningCount": "{count} in corso",
+      "spent": "{credits} crediti spesi",
+      "spentHint": "Quanto Kortix ha addebitato finora per questa esecuzione: chiamate al modello e tempo di calcolo dell’esecuzione e dei suoi agenti.",
+      "waitingForYou": "In attesa di te · non avviato",
+      "cancelled": "Annullato — non è partito nulla",
+      "answeredInChat": "Risposto in chat — non è partito nulla",
+      "stoppedByYou": "Fermato da te",
+      "attempt": "tentativo {count}",
+      "quietFor": "In silenzio da {minutes} min",
+      "quietCount": "{count} in silenzio",
+      "holdingWorking": "In attesa · {count} ancora al lavoro"
     },
     "agent": {
       "backgroundWorking": "Al lavoro in background",
@@ -21394,7 +21414,11 @@
       "texta268bab502cf": "Elemento del calendario visualizzato",
       "text16d71c4d10a2": "Elemento del calendario modificato",
       "text14580c9900ac": "Elemento del calendario eliminato",
-      "text96386c724e21": "Ha commentato un elemento del calendario"
+      "text96386c724e21": "Ha commentato un elemento del calendario",
+      "textf543a9f99ce7": "Barra delle azioni",
+      "textca4067071fcf": "Selezione",
+      "text4cea356a17a1": "Modifiche non salvate",
+      "text2358f7b37c07": "La barra flottante di una modalità temporanea: una selezione, modifiche non salvate, un incolla in sospeso. Un titolo, una descrizione attenuata, azioni con scorciatoie da tastiera e un pulsante di chiusura."
     },
     "publicShareConfirm": {
       "title": "Creare un link pubblico?",
@@ -26542,7 +26566,11 @@
         "resume": "Impossibile riprendere l’esecuzione",
         "stop": "Impossibile interrompere l’esecuzione",
         "restart": "Impossibile riavviare {label}"
-      }
+      },
+      "hold": "Trattieni i nuovi agenti",
+      "holdShort": "Trattieni i nuovi agenti",
+      "holdHint": "Trattieni i nuovi agenti: nessuno parte finché non riprendi; quelli al lavoro continuano (p)",
+      "holding": "Nuovi agenti trattenuti"
     },
     "board": {
       "layoutLabel": "Vista",

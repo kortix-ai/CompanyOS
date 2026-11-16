@@ -117,9 +117,13 @@ own, owned by the person who started the job:
 3. Money: the job's workspace pays. The trial's budget (`budget_usd`, default
    $2) moves out of the job's account and into the trial's (wallet keys
    `eval-trial-budget-out|in:<trial_id>`). The trial account gets the Credits
-   plan when the job's account may use the Kortix models. At teardown the
-   unspent budget goes back (`eval-trial-refund-*`), an overspend is charged
-   to the job's account (`eval-trial-overspend:<trial_id>`).
+   plan when the job's account may use the Kortix models. When the trial
+   ends, the unspent budget goes back at once (`eval-trial-release-*`), so a
+   job holds only the budgets of the trials that run; at teardown the charges
+   that landed since are squared (`eval-trial-final-*`). An overspend is
+   charged to the job's account and the trial account brought back to zero.
+   A dev run of 34 trials at 8 at a time ran out of a $45 balance while
+   teardown alone returned the budget (2026-11-16).
 4. The project from the `minimal` starter (My Kortix and `worker`), no
    prebuild and no `project_created` event (`runProvision` `evalTrial`).
 5. The job workspace's flags plus the task's `requires_flags`.

@@ -18,11 +18,13 @@
  *   5. the job workspace's feature flags plus the task's `requires_flags`;
  *   6. the task's `environment/workspace/` files, committed on top.
  *
- * Teardown waits {@link CLEANUP_DELAY_MS} after the trial ended, so the
- * compute and model charges of its last minutes land on the trial account
- * first. Then the Apps it made go (account deletion stops sessions, not App
- * machines), the unspent budget goes back to the job's account (an overspend
- * is charged to it), and the account is deleted at once.
+ * When the trial ends, its unspent budget goes back at once: a job holds only
+ * the budgets of the trials that run. Teardown waits {@link CLEANUP_DELAY_MS}
+ * after the trial ended, so the compute and model charges of its last minutes
+ * land on the trial account first. Then the Apps it made go (account deletion
+ * stops sessions, not App machines), what landed since is squared with the
+ * job's account (a refund, or an overspend charged to it), and the account is
+ * deleted at once.
  */
 import { createHash } from 'node:crypto';
 import { apps, appDeployments, appRuntimes, evalTrialWorkspaces } from '@kortix/db';
@@ -208,12 +210,18 @@ async function copyFeatureFlags(jobProject: ProjectRow, projectId: string, requi
 
 // ── Teardown ─────────────────────────────────────────────────────────────────
 
-/** The trial ended: its workspace is deleted once late charges had time to land. */
+/**
+ * The trial ended and its sandboxes stopped: its unspent budget goes back now,
+ * so a job holds only the budgets of the trials that run. The workspace itself
+ * is deleted once late charges had time to land.
+ */
 export async function scheduleTrialWorkspaceCleanup(trialId: string, now: Date): Promise<void> {
-  await db
+  const scheduled = await db
     .update(evalTrialWorkspaces)
     .set({ cleanupAfter: new Date(now.getTime() + CLEANUP_DELAY_MS) })
-    .where(and(eq(evalTrialWorkspaces.trialId, trialId), isNull(evalTrialWorkspaces.cleanupAfter)));
+    .where(and(eq(evalTrialWorkspaces.trialId, trialId), isNull(evalTrialWorkspaces.cleanupAfter)))
+    .returning();
+  for (const row of scheduled) await settleTrialWorkspace(row, 'release');
 }
 
 /**
@@ -250,7 +258,7 @@ async function deleteTrialWorkspace(row: typeof evalTrialWorkspaces.$inferSelect
   const [account] = await db.select({ accountId: accountsView.accountId }).from(accountsView).where(eq(accountsView.accountId, row.trialAccountId)).limit(1);
   if (account) {
     await removeWorkspaceApps(row.trialProjectId);
-    if (!row.settledAt) await settleTrialWorkspace(row);
+    if (!row.settledAt) await settleTrialWorkspace(row, 'final');
     await deleteAccountImmediately(row.trialAccountId);
   }
   await db.update(evalTrialWorkspaces).set({ deletedAt: new Date(), lastError: null }).where(eq(evalTrialWorkspaces.trialAccountId, row.trialAccountId));
@@ -275,18 +283,32 @@ async function removeWorkspaceApps(projectId: string): Promise<void> {
   }
 }
 
-/** The unspent budget goes back to the job's workspace; an overspend is charged to it. Keyed by the trial: a retry moves nothing twice. */
-async function settleTrialWorkspace(row: typeof evalTrialWorkspaces.$inferSelect): Promise<void> {
+/**
+ * Square the trial account with the job's workspace: what it still holds goes
+ * back; what it spent past its budget is charged to the job's workspace and
+ * the trial account is brought back to zero. Twice: `release` when the trial
+ * ends (its budget stops being held), `final` at teardown, for the compute
+ * and model charges that landed since. Every move is keyed by the trial and
+ * the phase, so a retry moves nothing twice.
+ */
+async function settleTrialWorkspace(row: typeof evalTrialWorkspaces.$inferSelect, phase: 'release' | 'final'): Promise<void> {
   let left = 0;
   if (config.KORTIX_BILLING_INTERNAL_ENABLED && row.fundedAt) {
     left = Math.round(((await wallet.balance(row.trialAccountId))?.balance ?? 0) * 10_000) / 10_000;
-    const description = 'Eval trial: unspent budget';
+    const key = (what: string) => ({ request: `eval-trial-${phase}-${what}:${row.trialId}` });
     if (left > 0) {
-      await wallet.grant({ accountId: row.trialAccountId, amount: -left, kind: 'eval_trial_refund', description, expiring: false, key: { request: `eval-trial-refund-out:${row.trialId}` } });
-      await wallet.grant({ accountId: row.payerAccountId, amount: left, kind: 'eval_trial_refund', description, expiring: false, key: { request: `eval-trial-refund-in:${row.trialId}` } });
+      const description = 'Eval trial: unspent budget';
+      await wallet.grant({ accountId: row.trialAccountId, amount: -left, kind: 'eval_trial_refund', description, expiring: false, key: key('refund-out') });
+      await wallet.grant({ accountId: row.payerAccountId, amount: left, kind: 'eval_trial_refund', description, expiring: false, key: key('refund-in') });
     } else if (left < 0) {
-      await wallet.settle({ accountId: row.payerAccountId, amount: -left, kind: 'usage', description: 'Eval trial: spent past its budget', key: { request: `eval-trial-overspend:${row.trialId}` } });
+      const description = 'Eval trial: spent past its budget';
+      await wallet.settle({ accountId: row.payerAccountId, amount: -left, kind: 'usage', description, key: key('overspend') });
+      await wallet.grant({ accountId: row.trialAccountId, amount: -left, kind: 'eval_trial_refund', description, expiring: false, key: key('overspend-cover') });
     }
   }
-  await db.update(evalTrialWorkspaces).set({ refundUsd: String(left), settledAt: new Date() }).where(eq(evalTrialWorkspaces.trialAccountId, row.trialAccountId));
+  // `refund_usd` is the net that went back to the job's workspace (negative: it paid past the budget).
+  await db
+    .update(evalTrialWorkspaces)
+    .set({ refundUsd: sql`coalesce(${evalTrialWorkspaces.refundUsd}, 0) + ${String(left)}::numeric`, ...(phase === 'final' ? { settledAt: new Date() } : {}) })
+    .where(eq(evalTrialWorkspaces.trialAccountId, row.trialAccountId));
 }

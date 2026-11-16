@@ -312,6 +312,8 @@ test('an abort during the wait before a resend stops at once', async () => {
   }) as unknown as typeof fetch;
   let settled: unknown;
   const pending = uploadDriveFile(D, '/a/x', new Blob(['a']), { signal: controller.signal }).catch((e: unknown) => (settled = e));
+  // From the request on (the Blob is read to bytes first, in turns of its own).
+  for (let turn = 0; turn < 50 && calls.length === 0; turn++) await new Promise((resolve) => setImmediate(resolve));
   await new Promise((resolve) => setTimeout(resolve, 0));
   // Two event-loop turns, not the 500 ms wait: no wall clock, so load cannot flake it.
   await new Promise((resolve) => setImmediate(resolve));

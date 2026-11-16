@@ -559,3 +559,11 @@ test('a file-backed Blob above 64 MiB uploads over a real socket', async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('a single upload sends the Blob as bytes: a compiled Bun crashes on a file-backed Blob body', async () => {
+  respond(200, { path: '/a/x.txt', size: 3 });
+  await uploadDriveFile(D, '/a/x.txt', new Blob(['abc']));
+  const body = last().body;
+  expect(body).toBeInstanceOf(Uint8Array);
+  expect(new TextDecoder().decode(body as Uint8Array)).toBe('abc');
+});

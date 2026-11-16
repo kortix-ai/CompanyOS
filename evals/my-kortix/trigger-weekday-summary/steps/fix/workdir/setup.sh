@@ -23,19 +23,10 @@ def weekday_8_berlin(t):
 
 def fires(t):
     """Fire it now: its run starts a session (the session is the trigger agent's: the run says so, not the session)."""
-    import time
-    out = kj(f"triggers fire {t['id']}" if t['kind'] == 'yaml' else f"triggers run {t['id']}", timeout=200) or {}
-    print('fire', out)
-    if t['kind'] != 'yaml':
-        return bool(out.get('session_id') or out.get('run_id') or out.get('ok'))
-    for _ in range(18):
-        runs = rows(kj(f"triggers runs {t['id']}"), 'runs')
-        if any(r.get('session_id') and r.get('status') in ('fired', 'running') for r in runs):
-            return True
-        if any(r.get('status') in ('failed', 'rejected') for r in runs):
-            print('runs', runs); return False
-        time.sleep(5)
-    return False
+    # `fire` prints "Fired <slug> → run <id> → session <id>" once the run started a session (it waits up to 90 s).
+    out = sh(f"kortix triggers {'fire' if t['kind'] == 'yaml' else 'run'} {t['id']} 2>&1", timeout=200)
+    print('fire', out[-400:])
+    return bool(re.search(r'session [0-9a-f-]{36}', out)) and not re.search(r'✗|failed', out)
 for t in triggers():
     if weekday_8_berlin(t):
         print(t)

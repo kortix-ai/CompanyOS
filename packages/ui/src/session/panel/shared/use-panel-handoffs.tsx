@@ -129,10 +129,27 @@ export function usePanelHandoffs({
    */
   const focusedToolCallId = useFocusedToolCallId();
   const clearFocusedToolCall = useClearFocusedToolCall();
+  // The detail a `show` call opened, by key and call id. A detail holds its calls as
+  // they were when it opened, so a show opened while running and then failed would
+  // keep showing it; once the call leaves `calls` (a failed show presents nothing),
+  // its detail closes.
+  const openedShowRef = useRef<{ key: string; callId: string } | null>(null);
+  useEffect(() => {
+    const opened = openedShowRef.current;
+    if (!opened || detail?.key !== opened.key) return;
+    if (calls.some((c) => c.call_id === opened.callId)) return;
+    openedShowRef.current = null;
+    closeDetail();
+  }, [calls, detail, closeDetail]);
   useEffect(() => {
     if (!focusedToolCallId) return;
+    const focused = calls.find((c) => c.call_id === focusedToolCallId);
+    const rememberShow = (key: string) => {
+      openedShowRef.current = focused && (focused.name === 'show' || focused.name === 'show_user') ? { key, callId: focusedToolCallId } : null;
+    };
     const step = stepForCallId(steps, focusedToolCallId);
     if (step) {
+      rememberShow(`step:${step.id}:${focusedToolCallId}`);
       openDetail({
         // The call id is part of the key on purpose: a step is a GROUP, and
         // two clicks on different commands inside it produce the same
@@ -160,8 +177,9 @@ export function usePanelHandoffs({
     // before this effect ran), so open the call ITSELF instead of leaving a
     // blank panel. The focus stays armed until a detail exists, so a lagging
     // derivation lands on it rather than eating the click.
-    const call = calls.find((c) => c.call_id === focusedToolCallId);
+    const call = focused;
     if (!call) return;
+    rememberShow(`tool:${focusedToolCallId}`);
     openDetail({
       key: `tool:${focusedToolCallId}`,
       title: narrationToolName(call.name),

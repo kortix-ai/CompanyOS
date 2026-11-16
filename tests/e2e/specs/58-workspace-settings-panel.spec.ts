@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 import { loadEnv } from '../../src/core/env';
 import { createDatabaseProject, deleteDatabaseProject } from '../../src/fixtures/database-project';
@@ -19,6 +19,43 @@ const authOptions = {
 };
 const apiBase = process.env.E2E_API_URL || 'http://localhost:8008/v1';
 const api = createApiJsonClient(apiBase);
+
+/**
+ * What a person sees: how many settings navs are on screen, and the open
+ * page's column measured against its pane. The column is the outermost
+ * box with a max width around the page title; `left` and `right` are the
+ * free space beside it, in px.
+ */
+function settingsLayout(page: Page) {
+  return page.evaluate(() => {
+    const shown = (el: Element) => {
+      const box = el.getBoundingClientRect();
+      return (
+        box.width > 0 &&
+        box.height > 0 &&
+        box.right > 0 &&
+        box.left < window.innerWidth &&
+        getComputedStyle(el).visibility !== 'hidden' &&
+        !el.closest('[inert], [aria-hidden="true"]')
+      );
+    };
+    const navs = [...document.querySelectorAll('nav[aria-label="Workspace settings"]')].filter(shown).length;
+    const title = [...document.querySelectorAll('main h1')].find(shown);
+    let column: HTMLElement | null = null;
+    for (let el = title?.parentElement; el && el.tagName !== 'MAIN'; el = el.parentElement) {
+      if (getComputedStyle(el).maxWidth !== 'none') column = el;
+    }
+    if (!column) return { navs, left: null, right: null };
+    let pane = column.parentElement;
+    while (pane && pane.tagName !== 'MAIN' && !/auto|scroll/.test(getComputedStyle(pane).overflowY)) {
+      pane = pane.parentElement;
+    }
+    if (!pane) return { navs, left: null, right: null };
+    const inner = pane.getBoundingClientRect().left + pane.clientLeft;
+    const box = column.getBoundingClientRect();
+    return { navs, left: Math.round(box.left - inner), right: Math.round(inner + pane.clientWidth - box.right) };
+  });
+}
 
 test.describe('58 — Workspace settings is one panel', () => {
   test('the rail lists the sections top to bottom, and old links land on their section', async ({ page }) => {
@@ -94,6 +131,80 @@ test.describe('58 — Workspace settings is one panel', () => {
         await expect(page).toHaveURL(new RegExp(`/workspaces/${project.id}/admin/members\\?invite=1`), { timeout: 60_000 });
         await expect(page.getByText(`Invite people to Panel ${runId}`).first()).toBeVisible({ timeout: 60_000 });
         await expect(page.getByRole('combobox', { name: 'Role' }).last()).toContainText('Member');
+      });
+    } finally {
+      if (projectId) await deleteDatabaseProject(env, projectId).catch(() => undefined);
+      await deleteAuthUser(user.id, authOptions).catch(() => undefined);
+    }
+  });
+
+  test('one sidebar opens and closes, and every page centers its column', async ({ page }) => {
+    test.setTimeout(240_000);
+    const env = loadEnv();
+    if (!env.databaseUrl) throw new Error('KE2E_DATABASE_URL is required');
+    const runId = Date.now().toString(36);
+    const email = `e2e-ws-layout-${runId}@example.test`;
+    const user = await createAuthUser(email, authOptions);
+    let projectId: string | null = null;
+
+    try {
+      const session = await signIn(email, authOptions);
+      const account = await ensureOwnedAccount(api, session.access_token);
+      const project = await createDatabaseProject(env, { accountId: account, userId: user.id, name: `Layout ${runId}` });
+      projectId = project.id;
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await installBrowserSessionDirect(page, session, `/workspaces/${project.id}`, authOptions);
+      await selectAccountForUi(page, account);
+      await page.goto(`/workspaces/${project.id}`, { waitUntil: 'domcontentloaded' });
+      await dismissOnboarding(page);
+
+      // A settings page (General, Feature flags), a library page (Agents), an
+      // account page (Roles), and Customize, which opens Agents.
+      const pages = ['admin/general', 'admin/feature-flags', 'admin/agents', 'admin/roles', 'customize'];
+      // `navs`: the settings navs on screen. The column has as much space
+      // on its left as on its right.
+      const expectLayout = async (state: string, navs: number) => {
+        for (const path of pages) {
+          await page.goto(`/workspaces/${project.id}/${path}`, { waitUntil: 'domcontentloaded' });
+          if (path === 'customize') {
+            await expect(page).toHaveURL(new RegExp(`/workspaces/${project.id}/admin/agents`), { timeout: 60_000 });
+          }
+          await expect(page.locator('main h1')).toBeVisible({ timeout: 60_000 });
+          // Off the sidebar's edge, so a closed sidebar does not peek open.
+          await page.mouse.move(900, 600);
+          await expect
+            .poll(
+              async () => {
+                const layout = await settingsLayout(page);
+                const centered = layout.left !== null && layout.right !== null && Math.abs(layout.left - layout.right) <= 1;
+                return { navs: layout.navs, centered };
+              },
+              { message: `${path}, ${state}`, timeout: 30_000 },
+            )
+            .toEqual({ navs, centered: true });
+        }
+      };
+
+      await test.step('sidebar open: its settings nav is the only one, every column is centered', async () => {
+        await page.goto(`/workspaces/${project.id}/admin/general`, { waitUntil: 'domcontentloaded' });
+        const open = page.getByRole('button', { name: 'Open sidebar' });
+        if (await open.isVisible()) await open.click();
+        await expect(page.getByRole('button', { name: 'Collapse sidebar' })).toBeVisible({ timeout: 60_000 });
+        await expectLayout('sidebar open', 1);
+      });
+
+      await test.step('sidebar closed: the page draws no second settings sidebar', async () => {
+        await page.getByRole('button', { name: 'Collapse sidebar' }).click();
+        await expect(page.getByRole('button', { name: 'Open sidebar' })).toBeVisible();
+        await expectLayout('sidebar closed', 0);
+        // The one sidebar opens again and holds the settings nav.
+        await page.getByRole('button', { name: 'Open sidebar' }).click();
+        await expect(page.getByRole('navigation', { name: 'Workspace settings' })).toBeVisible();
+      });
+
+      await test.step('phone width: one strip of sections, the column fills the pane', async () => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await expectLayout('phone', 1);
       });
     } finally {
       if (projectId) await deleteDatabaseProject(env, projectId).catch(() => undefined);

@@ -61,10 +61,10 @@ export function useSettingsPageTitle(): string | null {
 }
 
 /**
- * Every Workspace settings page's column: one gutter and one top offset, left
- * aligned, so the title sits at the same x and y on every section. A page sets
- * only its own max width inside it (`max-w-2xl` a form, `max-w-5xl` a library,
- * none a table).
+ * Every Workspace settings page's column: one gutter and one top offset. A
+ * page sets its own max width inside it (`max-w-2xl` a form, `max-w-5xl` a
+ * library, none a table) and centers that box with `mx-auto`, the brand's
+ * page container (`mx-auto w-full max-w-2xl`). The text stays left aligned.
  */
 export const SETTINGS_PAGE_COLUMN_CLASS = 'w-full px-4 pt-12 pb-20 sm:px-12';
 

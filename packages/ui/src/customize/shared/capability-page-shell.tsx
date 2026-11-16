@@ -135,9 +135,9 @@ export function CapabilityPageShell({
     );
   }
   if (settingsTitle !== null) {
-    // A Workspace settings section: the settings page header and column, so
-    // the title has the rung, the left edge and the name of every other
-    // section. The frame's title bar holds the sidebar opener.
+    // A Workspace settings section: the settings page header and the centered
+    // column, so the title has the rung and the name of every other section.
+    // The frame's title bar holds the sidebar opener.
     const controls =
       search || action ? (
         <div className={cn('flex w-full items-center gap-2', !stacked && 'sm:w-auto')}>
@@ -148,7 +148,7 @@ export function CapabilityPageShell({
     return (
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         <div className={SETTINGS_PAGE_COLUMN_CLASS}>
-          <div className={cn('w-full space-y-5', wide ? 'max-w-7xl' : 'max-w-5xl')}>
+          <div className={cn('mx-auto w-full space-y-5', wide ? 'max-w-7xl' : 'max-w-5xl')}>
             <SettingsPageHeader
               title={title}
               titleAccessory={titleAddon}

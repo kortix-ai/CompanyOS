@@ -27405,5 +27405,27 @@
       "members": "Membres",
       "settings": "Paramètres"
     }
+  },
+  "workspaceSetup": {
+    "title": "Terminer la configuration",
+    "description": "{done} sur {total} terminés. Une ligne est terminée dès qu'elle est configurée.",
+    "descriptionIdle": "Ce dont les agents de cet espace de travail ont besoin de vous.",
+    "tryAgain": "Réessayer",
+    "loadFailed": "Impossible de charger les étapes de configuration.",
+    "emptyTitle": "Plus rien à configurer",
+    "emptyDescription": "Cet espace de travail n'a besoin d'aucune connexion, d'aucun secret ni de Slack de votre part.",
+    "openWorkspace": "Ouvrir l'espace de travail",
+    "completeTitle": "Configuration terminée",
+    "completeDescription": "Si vous avez lancé la configuration dans un terminal, elle y continue toute seule.",
+    "slackName": "Slack",
+    "kindConnector": "Connecteur",
+    "kindSecret": "Secret",
+    "kindSlack": "Canal",
+    "done": "Terminé",
+    "connect": "Connecter {name}",
+    "reconnect": "Reconnecter {name}",
+    "setSecret": "Définir {name}",
+    "addSlack": "Ajouter Kortix à Slack",
+    "connectSlack": "Connecter Slack"
   }
 }

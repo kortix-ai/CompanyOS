@@ -52,10 +52,25 @@ export const guideUrl = (target: SetupTarget = PROD_TARGET) => `${target.origin}
 export const SETUP_GUIDE_URL = guideUrl();
 export const FACTORY_GUIDE_URL = `${PROD_TARGET.origin}/factory.md`;
 
-/** Step 0 of the guide: install the CLI and, off production, point it at this deployment. */
+/** An older CLI lacks commands this guide uses, so step 0 always runs the installer. */
+const OLD_CLI_NOTE = [
+  'Always run the installer, also when `kortix` exists: an older CLI lacks',
+  'commands this guide uses. When `kortix onboard --help` does not list `--wait`',
+  'afterwards, an older copy is earlier on PATH: `which -a kortix` lists them;',
+  'tell the person which one to remove, in one line.',
+].join('\n');
+
+/** Step 0 of the guide: install or update the CLI and, off production, point it at this deployment. */
 function installBlock(target: SetupTarget): string {
   if (isProd(target)) {
-    return ['```bash', `command -v kortix || curl -fsSL ${target.origin}/install | bash`, 'kortix --version', '```'].join('\n');
+    return [
+      '```bash',
+      `curl -fsSL ${target.origin}/install | bash   # installs the CLI, or updates an older one`,
+      'kortix --version',
+      '```',
+      '',
+      OLD_CLI_NOTE,
+    ].join('\n');
   }
   const host = setupHostName(target);
   return [
@@ -64,12 +79,14 @@ function installBlock(target: SetupTarget): string {
     'command then talks to this deployment.',
     '',
     '```bash',
-    `command -v kortix || curl -fsSL ${target.origin}/install | KORTIX_CHANNEL=dev bash`,
+    `curl -fsSL ${target.origin}/install | KORTIX_CHANNEL=dev bash   # installs the CLI, or updates an older one`,
     'kortix --version',
     `kortix hosts info ${host} >/dev/null 2>&1 || kortix hosts add ${host} --url ${target.apiBase}`,
     `kortix hosts use ${host}`,
     'kortix hosts current   # must print ' + host,
     '```',
+    '',
+    OLD_CLI_NOTE,
     '',
     'A test deployment may have no Kortix GitHub App. When step 6 asks the person',
     'to install the App and the link does not work, use their own token instead,',
@@ -404,7 +421,9 @@ Fix every error and warning in the files you wrote. Two rules save a round:
 
 ## 5. Connect the models
 
-Connect what the person picked in step 3.
+The setup page (step 6) asks for a model first when the workspace has none:
+the person picks their Claude or ChatGPT plan, or adds a key, in the browser.
+Use these commands only when the person wants it done in the terminal:
 
 - **Claude Pro or Max:** \`kortix providers login claude --start --share workspace --json\`;
   give the person the \`authorize_url\`; they paste the code back;
@@ -416,7 +435,7 @@ Connect what the person picked in step 3.
 ## 6. Do it
 
 \`\`\`bash
-kortix onboard --yes --json \\
+kortix onboard --yes --json --wait \\
   [--env-file <file> --only <A,B>]... \\
   [--channels <a,b>] [--connect <slug,...>] \\
   --repo <owner/repo> [--name "<workspace name>"]
@@ -432,10 +451,18 @@ workspace and push its repository; it refuses a dirty tree), \`secrets\`
 (approved names, generated webhook secrets, one intake link for the rest,
 the GitHub token included), \`webhooks\` (the GitHub repository
 webhooks and labels the triggers need, through the person's \`gh\`), \`slack\`
-(connect link, the bot joins the channels), \`connectors\` (a sign-in link each),
-\`sandbox\` (build every image and wait; a first build takes 5 to 10 minutes
-and prints nothing in \`--json\` mode: tell the person before you start),
+(the bot joins the channels), \`connectors\`, \`sandbox\` (build every image and
+wait; a first build takes 5 to 10 minutes and prints nothing in \`--json\` mode),
 \`doctor\`.
+
+**The setup page.** Every step only the person can do (a model, a connector
+sign-in, a secret such as the GitHub token, Slack) is one row on
+\`<web>/workspaces/<id>/setup\`. \`onboard\` opens it in their browser before the
+image build and prints \`setup_url\`. Before you run it, say one line: "The
+setup page opens in your browser: connect what it lists. I continue when every
+row is done." Never print those links in the terminal. \`--wait\` keeps the run
+going until the page shows every row done, then finishes the phases that
+waited.
 
 A repository webhook that already sends the same event to another Kortix
 workspace is left in place and reported in the \`webhooks\` detail. Tell the
@@ -445,11 +472,12 @@ other hook with the command \`kortix doctor --loops\` prints.
 A source that is off needs nothing: a disabled Slack trigger asks for no Slack
 connection.
 
-Exit 0 is done and green. Exit 4 means \`user_actions\` are left: give the person
-all of them in one message, each exactly once, with its link (install the GitHub App, Allow in Slack,
-sign in to a connector, paste a token, \`/invite\` the bot to a private channel).
-When they say it is done, run \`kortix onboard --yes --json\` again. Exit 1: read
-the failed phase's \`detail\`, fix it, run again.
+Exit 0 is done and green. Exit 4: steps are left. A \`user_action\` the page
+does not show (\`/invite\` the bot to a private Slack channel, install the
+GitHub App) goes to the person once, in one message. \`--wait\` timed out
+(\`next\` says what the page still lists): tell the person in one line, then
+run the same command again. Exit 1: read the failed phase's \`detail\`, fix
+it, run again.
 
 ## 7. Prove it, and loop until it works
 
@@ -461,9 +489,10 @@ kortix doctor --loops --fix --json  # re-runs the phase a red line names
 Pass the same \`--repo <owner/repo>\` you gave \`onboard\`, if any.
 
 Loop until \`ready: true\`. Then one real run, the cheapest one the factory has:
-for the Software Factory, file the task the person approved in step 3, label
-it, \`kortix triggers fire factory-intake --wait 300s\`, and wait for the pull
-request. Show it to the person: the summary, the commands with their real
+for the Software Factory, file the task the person approved in step 3 and
+label it. The label starts the run: follow it with \`kortix triggers runs\`,
+fire a trigger by hand only when the template's steps say so, and wait for the
+pull request. Show it to the person: the summary, the commands with their real
 output, the demo when the change is visible. Nobody merges it but them.
 
 ## 8. Wire this computer's coding agents

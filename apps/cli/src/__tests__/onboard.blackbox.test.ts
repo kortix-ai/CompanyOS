@@ -108,6 +108,10 @@ async function runCli(args: string[]) {
     KORTIX_DISABLE_SANDBOX_ENV_FILE: '1',
     NO_COLOR: '1',
     FORCE_COLOR: '0',
+    // The setup page URL is derived from this; and never open a real browser in a test.
+    KORTIX_DASHBOARD_URL: 'https://kortix.example.test',
+    KORTIX_NO_BROWSER: '1',
+    KORTIX_ONBOARD_POLL_MS: '50',
   };
   for (const key of ['KORTIX_API_URL', 'KORTIX_TOKEN', 'KORTIX_CLI_TOKEN', 'KORTIX_PROJECT_ID', 'GH_TOKEN', 'GITHUB_TOKEN']) delete env[key];
   const child = Bun.spawn({ cmd: [process.execPath, CLI_ENTRY, ...args], cwd: repoDir, env, stdout: 'pipe', stderr: 'pipe' });
@@ -200,7 +204,9 @@ afterEach(() => {
   if (root) rmSync(root, { recursive: true, force: true });
 });
 
-const ONBOARD = ['onboard', '--yes', '--json', '--repo', REPO, '--env-file', '.env.local', '--only', 'LOCAL_TOKEN', '--channels', 'eng,#secret-room', '--build-timeout', '5'];
+const ONBOARD = ['onboard', '--yes', '--json', '--no-open', '--repo', REPO, '--env-file', '.env.local', '--only', 'LOCAL_TOKEN', '--channels', 'eng,#secret-room', '--build-timeout', '5'];
+// The run uses Slack (--channels), so the page shows the Slack step too.
+const SETUP_URL = `https://kortix.example.test/workspaces/${PROJECT_ID}/setup?slack=1`;
 
 test('first run: does the mechanics, hands the person what is theirs, exits 4; a second run skips what is done', async () => {
   const first = await runCli(ONBOARD);
@@ -208,9 +214,16 @@ test('first run: does the mechanics, hands the person what is theirs, exits 4; a
   const out = JSON.parse(first.stdout) as {
     phases: Array<{ name: string; status: string; duration_ms: number }>;
     user_actions: Array<{ kind: string; url?: string; what: string }>;
+    setup_url: string | null;
     doctor: { ready: boolean; checks: Array<{ name: string; state: string }> };
     next: string;
   };
+  // The sign-in, the secret and Slack are on one page; the run names it.
+  expect(out.setup_url).toBe(SETUP_URL);
+  expect(out.next).toContain(SETUP_URL);
+  expect(first.stderr).toContain(`open the setup page: ${SETUP_URL}`);
+  // It is announced before the image build, so the person works through it meanwhile.
+  expect(first.stderr.indexOf('open the setup page')).toBeLessThan(first.stderr.search(/^.{0,8}sandbox\s{2,}/m));
   const status = Object.fromEntries(out.phases.map((p) => [p.name, p.status]));
   expect(status).toEqual({
     validate: 'done',
@@ -267,6 +280,47 @@ test('first run: does the mechanics, hands the person what is theirs, exits 4; a
   expect(third.code).toBe(0);
   expect(JSON.parse(third.stdout).doctor.ready).toBe(true);
 }, 60_000);
+
+test('--wait: the run waits while the setup page has steps left, then finishes by itself when the person is done', async () => {
+  const args = ONBOARD.map((arg) => (arg === 'eng,#secret-room' ? 'eng' : arg)).concat('--wait', '--wait-timeout', '30');
+  const run = runCli(args);
+  // The first pass ends with the doctor (it reads the model picker); the wait's
+  // first poll reads Slack after that. Only then does the person act.
+  const hitAt = async (match: (hit: (typeof hits)[number]) => boolean, after = -1) => {
+    for (let i = 0; i < 400; i += 1) {
+      const at = hits.findIndex((hit, index) => index > after && match(hit));
+      if (at >= 0) return at;
+      await Bun.sleep(25);
+    }
+    throw new Error('the CLI never made the expected request');
+  };
+  const doctorAt = await hitAt((hit) => hit.path === `${BASE}/model-picker`);
+  await hitAt((hit) => hit.path === `${BASE}/channels/slack/installation`, doctorAt);
+  expect(posts(`${BASE}/secret-requests`)).toHaveLength(1);
+  // The person finishes the page: connects Slack and the connector, sets PERSON_KEY.
+  api.slackInstalled = true;
+  api.connectorState = 'connected';
+  api.secrets.set('PERSON_KEY', 'pasted-on-the-setup-page');
+  const done = await run;
+  expect(done.stderr).toContain('left on the setup page');
+  const out = JSON.parse(done.stdout) as { setup_url: string | null; user_actions: unknown[]; doctor: { ready: boolean } };
+  expect(out.setup_url).toBeNull();
+  expect(out.user_actions).toEqual([]);
+  expect(out.doctor.ready).toBe(true);
+  expect(done.code).toBe(0);
+  // The wait only read: one intake link in all, from the first pass.
+  expect(posts(`${BASE}/secret-requests`)).toHaveLength(1);
+});
+
+test('--wait gives up after --wait-timeout and says what the page still lists', async () => {
+  const args = ONBOARD.map((arg) => (arg === 'eng,#secret-room' ? 'eng' : arg)).concat('--wait', '--wait-timeout', '1');
+  const r = await runCli(args);
+  expect(r.code).toBe(4);
+  const out = JSON.parse(r.stdout) as { setup_url: string | null; next: string };
+  expect(out.setup_url).toBe(SETUP_URL);
+  expect(out.next).toContain('still lists');
+  expect(out.next).toContain('PERSON_KEY');
+});
 
 test('a changed file outside kortix.yaml and .kortix/ fails ship and exits 1; nothing else runs', async () => {
   writeFileSync(join(repoDir, 'app.js'), 'console.log(1)\n');

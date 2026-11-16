@@ -1,5 +1,6 @@
 import { FactoryHome } from '@/features/marketing/one-prompt/factory-home';
 import { catalogViews, loopViews } from '@/features/marketing/one-prompt/loops-content';
+import { requireLoopmaxxing } from '@/lib/loopmaxxing-gate';
 
 /**
  * Loopmaxxing, the developer landing: one prompt adds loops to your repo.
@@ -8,7 +9,9 @@ import { catalogViews, loopViews } from '@/features/marketing/one-prompt/loops-c
  * catalog are read from the template files at build time, so the page shows
  * what this build really ships.
  */
-export default function Loopmaxxing() {
+export default async function Loopmaxxing() {
+  // The layout gates too; the page renders beside it, so it must not send its content while the page is off.
+  await requireLoopmaxxing();
   // The launch leads with one template. The other factories are in the build; they join the page when their reference repositories are public.
   const loops = loopViews().filter((loop) => loop.id === 'software-factory');
   return <FactoryHome loops={loops} catalog={['Marketing', 'Sales', 'Support', 'Recruiting', ...catalogViews()]} />;

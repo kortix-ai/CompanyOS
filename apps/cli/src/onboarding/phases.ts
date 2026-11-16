@@ -342,6 +342,43 @@ export async function phaseSlack(state: OnboardState): Promise<PhaseOutcome> {
 
 interface ConnectorRow { slug: string; state?: string; status?: string; authSecret?: string | null; secretSet?: boolean }
 
+/** One step the workspace's setup page shows: a connector to sign in, a secret to paste, Slack to add. */
+export interface PendingSetupItem { kind: 'connector' | 'secret' | 'slack'; name: string }
+
+/**
+ * The steps a person still has to finish on the setup page
+ * (\`<web>/workspaces/<id>/setup\`), read-only so \`onboard --wait\` can poll it.
+ * The same rules as the secrets, slack and connectors phases, without their
+ * writes: no intake link, no generated secret, no connect call.
+ */
+export async function pendingSetup(state: OnboardState): Promise<PendingSetupItem[]> {
+  if (!state.ctx) return [];
+  const { client } = state.ctx;
+  const pending: PendingSetupItem[] = [];
+  const required = state.needs.secrets.filter((s) => s.required && !s.webhook);
+  if (required.length) {
+    const resp = await client.get<{ items?: Array<{ name: string; configured: boolean }> }>(`${base(state)}/secrets`);
+    const set = new Set((resp.items ?? []).filter((r) => r.configured).map((r) => r.name));
+    for (const secret of required) if (!set.has(secret.name)) pending.push({ kind: 'secret', name: secret.name });
+  }
+  if (state.opts.channels.length > 0 || state.needs.uses_slack) {
+    const install = await client.get<unknown>(`${base(state)}/channels/slack/installation`).catch(() => null);
+    if (!install) pending.push({ kind: 'slack', name: 'Slack' });
+  }
+  const slugs = [...new Set([...state.needs.connectors.map((c) => c.slug), ...state.opts.connect])];
+  if (slugs.length) {
+    const { connectors } = await client.get<{ connectors: ConnectorRow[] }>(`/connectors/workspaces/${state.ctx.projectId}/connectors?include_schemas=false`);
+    for (const slug of slugs) {
+      const row = connectors.find((c) => c.slug === slug);
+      const current = row?.state ?? row?.status;
+      // A connector switched off in kortix.yaml is not a step: the setup page does not list it either.
+      if (!row || row.status === 'disabled' || row.state === 'disabled') continue;
+      if (current !== 'connected' && current !== 'active') pending.push({ kind: 'connector', name: slug });
+    }
+  }
+  return pending;
+}
+
 export async function phaseConnectors(state: OnboardState): Promise<PhaseOutcome> {
   const slugs = [...new Set([...state.needs.connectors.map((c) => c.slug), ...state.opts.connect])];
   if (slugs.length === 0) return { status: 'skipped', detail: 'kortix.yaml declares no connector' };

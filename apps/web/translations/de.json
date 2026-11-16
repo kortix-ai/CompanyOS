@@ -27405,5 +27405,27 @@
       "members": "Mitglieder",
       "settings": "Einstellungen"
     }
+  },
+  "workspaceSetup": {
+    "title": "Einrichtung abschließen",
+    "description": "{done} von {total} erledigt. Eine Zeile ist erledigt, sobald sie eingerichtet ist.",
+    "descriptionIdle": "Was die Agenten dieses Workspace von dir brauchen.",
+    "tryAgain": "Erneut versuchen",
+    "loadFailed": "Die Einrichtungsschritte konnten nicht geladen werden.",
+    "emptyTitle": "Nichts mehr einzurichten",
+    "emptyDescription": "Dieser Workspace braucht keine Anmeldung, kein Secret und kein Slack von dir.",
+    "openWorkspace": "Workspace öffnen",
+    "completeTitle": "Einrichtung abgeschlossen",
+    "completeDescription": "Wenn du die Einrichtung im Terminal gestartet hast, läuft sie dort von selbst weiter.",
+    "slackName": "Slack",
+    "kindConnector": "Connector",
+    "kindSecret": "Secret",
+    "kindSlack": "Kanal",
+    "done": "Erledigt",
+    "connect": "{name} verbinden",
+    "reconnect": "{name} neu verbinden",
+    "setSecret": "{name} setzen",
+    "addSlack": "Kortix zu Slack hinzufügen",
+    "connectSlack": "Slack verbinden"
   }
 }

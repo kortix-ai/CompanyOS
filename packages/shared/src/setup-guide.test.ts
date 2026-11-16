@@ -35,6 +35,9 @@ describe('setup target', () => {
     expect(guide).toContain('kortix hosts add dev-kortix-com --url https://dev-api.kortix.com');
     expect(guide).toContain('kortix hosts use dev-kortix-com');
     expect(setupGuide()).toContain('curl -fsSL https://kortix.com/install | bash');
+    // An installed CLI can be older than the guide: the installer runs every time, never behind `command -v`.
+    expect(guide).not.toContain('command -v kortix ||');
+    expect(setupGuide()).not.toContain('command -v kortix ||');
     expect(setupGuide()).not.toContain('kortix hosts use');
     // The MCP server the guide registers is this deployment's own.
     expect(guide).toContain('claude mcp add --transport http kortix https://dev-api.kortix.com/v1/mcp');
@@ -62,6 +65,14 @@ describe('templates in the setup guide', () => {
     expect(prompt).toContain('The template is software-factory.');
     expect(prompt).not.toContain('github.com');
     expect(templatePrompt({ id: 'sales', name: 'Sales Factory' })).toBe(loopPrompt({ id: 'sales', name: 'Sales Factory' }));
+  });
+
+  test('the person finishes on one setup page, not on links in the terminal', () => {
+    const guide = setupGuide();
+    expect(guide).toContain('kortix onboard --yes --json --wait');
+    expect(guide).toContain('<web>/workspaces/<id>/setup');
+    expect(guide).toContain('Never print those links in the terminal.');
+    expect(guide).not.toContain('give the person\nall of them in one message');
   });
 
   test('the guide uses none of the words its plain-words rule bans, outside that rule', () => {

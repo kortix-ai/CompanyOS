@@ -145,6 +145,7 @@ both with `FACTORY_GITHUB_WEBHOOK_SECRET`. Then:
   ```yaml
   connectors:
     - slug: linear
+      name: Linear
       provider: composio
       app: linear
   ```

@@ -12,6 +12,7 @@ dedicated member, never a person's own account).
    ```yaml
    connectors:
      - slug: linear
+       name: Linear
        provider: composio
        app: linear
    ```

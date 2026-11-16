@@ -738,7 +738,7 @@ datasets/raw export-ignore
 
 **Workspace admin** → **Git repo** (`/workspaces/<workspace_id>/admin/git`) shows the repository, its **Status**, the **Base branch** and the **Manifest file**. It also holds **Work on this locally**, **Use your own Git client** and **People with access**. Workspace admin opens from **Settings** in Customize. The base branch is the branch new sessions and change requests start from.
 
-From the CLI, `kortix workspaces set --branch <branch>` and `--manifest <path>` change the same fields. Both need `project.settings.write`.
+From the CLI, `kortix workspaces set --branch <branch>` and `--manifest <path>` change the same fields. Both need `project.settings.write`. `--icon <emoji>` or `--glyph <Name>:<color>` sets the workspace icon; `kortix workspaces glyphs --json` lists every glyph name and color it takes.
 
 #### GitHub connection
 

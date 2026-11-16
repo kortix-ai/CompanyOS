@@ -459,12 +459,14 @@ step 3, for example "Acme Loops". \`--repo\` is the code repository on GitHub:
 always pass it.
 
 **The icon.** Once \`ship\` has linked the folder (\`.kortix/link.json\`), give
-the workspace the product's look: \`kortix workspaces set --glyph
-<Name>:<#rrggbb>\`. The color is the product's brand color from the code
-repository: \`theme_color\` in the web manifest, else the primary color of its
-CSS or Tailwind theme. The name is a Phosphor icon that fits the product
-(\`Phone\`, \`ShoppingCart\`, \`Rocket\`); the CLI refuses an unknown name, so try
-another. No brand color found: leave the default icon.
+the workspace an icon that says what the product is: \`kortix workspaces set
+--glyph <Name>:<color>\`. Pick the name from \`kortix workspaces glyphs --json\`,
+the icons Kortix supports: the one closest to what the product does (\`Phone\`
+for a calling tool, \`ShoppingCart\` for a shop), never one from the \`Kortix\` or
+\`Brand\` group. The color is the product's brand color from the code
+repository as \`#rrggbb\`: \`theme_color\` in the web manifest, else the primary
+color of its CSS or Tailwind theme. No brand color found: one of the list's
+\`colors\`.
 
 It runs in phases, each skipping what is done: \`validate\`, \`ship\` (create the
 workspace and push its repository; it refuses a dirty tree), \`secrets\`

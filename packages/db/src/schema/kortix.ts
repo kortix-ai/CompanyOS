@@ -10431,8 +10431,6 @@ export const evalJobs = kortixSchema.table('eval_jobs', {
   suite: text('suite'),
   jobName: text('job_name').notNull(),
   status: text('status').$type<'queued' | 'running' | 'completed' | 'cancelled'>().default('queued').notNull(),
-  /** Unused: pause and soft cancel were removed. Dropped by the next migration (expand/contract). */
-  cancelMode: text('cancel_mode').$type<'soft' | 'hard'>(),
   /** The commit the config and the tasks were read at. */
   commitSha: text('commit_sha'),
   ref: text('ref'),
@@ -10462,8 +10460,7 @@ export const evalJobs = kortixSchema.table('eval_jobs', {
   index('idx_eval_jobs_project_created').on(table.projectId, table.createdAt),
   uniqueIndex('uniq_eval_jobs_project_name').on(table.projectId, table.jobName),
   index('idx_eval_jobs_active').on(table.status).where(sql`${table.status} in ('queued', 'running')`),
-  check('eval_jobs_status_check', sql`${table.status} in ('queued', 'running', 'paused', 'completed', 'cancelled')`),
-  check('eval_jobs_cancel_mode_check', sql`${table.cancelMode} in ('soft', 'hard')`),
+  check('eval_jobs_status_check', sql`${table.status} in ('queued', 'running', 'completed', 'cancelled')`),
 ]).enableRLS();
 
 export const evalTrials = kortixSchema.table('eval_trials', {
@@ -10511,7 +10508,7 @@ export const evalTrials = kortixSchema.table('eval_trials', {
   index('idx_eval_trials_project_created').on(table.projectId, table.createdAt),
   check(
     'eval_trials_status_check',
-    sql`${table.status} in ('queued', 'paused', 'starting', 'agent_running', 'verifying', 'completed', 'errored', 'cancelled')`,
+    sql`${table.status} in ('queued', 'starting', 'agent_running', 'verifying', 'completed', 'errored', 'cancelled')`,
   ),
 ]).enableRLS();
 

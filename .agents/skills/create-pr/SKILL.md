@@ -65,8 +65,9 @@ caveats.
 **Sections (no others):**
 
 - **Demo video.** The attached demo and a short caption, or the non-visual exception below.
-- **Quick verification.** A few actionable bullets: where to go, what to do, and the
-  expected result. Summarize checks actually run and link detailed evidence. State material
+- **Quick verification.** Start with `Outcome: <what was accomplished>` in one sentence
+  (or 1–3 high-level bullets). Then a few actionable checks: where to go, what to do,
+  and the expected result. Summarize checks actually run and link detailed evidence. State material
   risks and failed, blocked or skipped checks. Link the issue when one exists.
 
 Keep compact fenced commands and actual runner summaries under Quick verification when

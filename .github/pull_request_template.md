@@ -14,7 +14,8 @@
 
 ## Quick verification
 
-<!-- A few actionable bullets: where to go, what to do, and the expected result.
+<!-- Start with Outcome: one sentence (or 1–3 high-level bullets) on what was accomplished.
+     Then a few actionable checks: where to go, what to do, and the expected result.
      Summarize checks actually run and link detailed evidence (commit, environment,
      verbose logs). Keep compact fenced commands and actual runner summaries here when
      required by evidence gates; they may be collapsed. State failed, blocked or skipped

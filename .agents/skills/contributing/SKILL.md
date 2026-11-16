@@ -139,7 +139,8 @@ gh pr create --base dev \
 - Write the title and `body.md` with the **create-pr** skill. It owns the PR text: English
   only, written for a reviewer who decides "merge or iterate" without the diff, in the
   two sections of `.github/pull_request_template.md`: `## Demo video`, then
-  `## Quick verification` with a few actionable bullets. Link detailed commands/output,
+  `## Quick verification` with a high-level `Outcome:` bullet first, then a few actionable
+  checks. Link detailed commands/output,
   design detail, RCAs and risk/rollback notes in PR comments or evidence. Testing, safety
   and reviewer/merge gates are unchanged. The
   line `![Demo](./output/pr/demo.mp4)` holds the video; `--attach` uploads it and rewrites

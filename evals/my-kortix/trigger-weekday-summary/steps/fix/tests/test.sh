@@ -25,15 +25,14 @@ def weekday_8_berlin(t):
 
 def fires(t):
     """Fire it now: its run starts a session (the session is the trigger agent's: the run says so, not the session)."""
-    # Fire it, then read the trigger's own record of the run: a run that started a session. (fire's follow-up read of
-    # that session can fail: the session is the trigger agent's.)
+    # Fire it: the API answers with the run and the session it started, and `fire` prints that session's id. Its
+    # follow-up read of the session, and `triggers runs`, may not see it from here: the session is the trigger
+    # agent's, and a session token opens only its own.
     out = sh(f"kortix triggers {'fire' if t['kind'] == 'yaml' else 'run'} {t['id']} 2>&1", timeout=200)
     print('fire', out[-400:])
-    if t['kind'] != 'yaml':
-        return bool(re.search(r'session [0-9a-f-]{36}', out))
-    runs = rows(kj(f"triggers runs {t['id']}"), 'runs')
+    runs = rows(kj(f"triggers runs {t['id']}"), 'runs') if t['kind'] == 'yaml' else []
     print('runs', [(r.get('status'), r.get('session_id')) for r in runs])
-    return any(r.get('session_id') and r.get('status') in ('fired', 'running') for r in runs)
+    return bool(re.search(r'session [0-9a-f]{8}-[0-9a-f-]{27}', out)) or any(r.get('session_id') and r.get('status') in ('fired', 'running') for r in runs)
 found = [t for t in triggers() if weekday_8_berlin(t)]
 on = [t for t in found if t['enabled']]
 open(f'{V}/triggers.json', 'w').write(json.dumps(triggers(), indent=1))

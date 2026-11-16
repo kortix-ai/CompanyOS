@@ -341,8 +341,9 @@ or a name filter after `--`: `pnpm --filter <pkg> test -- -t <name>`. CI and
 Linux run the full suite.
 
 No hook or gate requires a test run before a push or a merge into `dev`. Write
-a short result under `## Quick verification` and link exact commands/output in PR comments
-or evidence. The body uses only `## Demo video` and `## Quick verification` (a few
+a short result under `## Quick verification`. Keep compact fenced commands and actual
+runner summaries there when evidence gates require them (collapsed blocks are allowed).
+Link verbose logs in PR comments or evidence. The body uses only `## Demo video` and `## Quick verification` (a few
 actionable bullets), as defined by `.github/pull_request_template.md`. This changes
 presentation only, not testing, safety or reviewer/merge gates. A diff that no test reads (docs, a skill,
 a standalone script) needs no run. When the nightly run or the release suite

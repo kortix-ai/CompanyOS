@@ -16,5 +16,7 @@
 
 <!-- A few actionable bullets: where to go, what to do, and the expected result.
      Summarize checks actually run and link detailed evidence (commit, environment,
-     exact commands/output). State failed, blocked or skipped checks and material risks.
+     verbose logs). Keep compact fenced commands and actual runner summaries here when
+     required by evidence gates; they may be collapsed. State failed, blocked or skipped
+     checks and material risks.
      Link the issue when one exists. No extra sections or verification tables. -->

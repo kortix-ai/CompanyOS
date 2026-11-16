@@ -69,8 +69,10 @@ caveats.
   expected result. Summarize checks actually run and link detailed evidence. State material
   risks and failed, blocked or skipped checks. Link the issue when one exists.
 
-Put exact commands and output, tested commit/environment, design detail, RCAs, risk/rollback
-notes and longer review context in linked PR comments or artifacts. Keep evidence accessible
+Keep compact fenced commands and actual runner summaries under Quick verification when
+required by evidence gates; a collapsed block is allowed. Link verbose logs, tested
+commit/environment, design detail, RCAs, risk/rollback notes and longer review context
+in PR comments or artifacts. Keep evidence accessible
 and free of secrets and customer data. A shorter body does not reduce testing, safety,
 independent-review or merge requirements. Never replace required checks with instructions
 for the reviewer to run them.

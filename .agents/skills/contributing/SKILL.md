@@ -64,8 +64,9 @@ No hook or merge gate requires a test run on a PR into `dev`. The attestation sy
 removed on 2026-10-16: delete any `tests/attestations/` or `tests/test-attestation.json` file
 that an older branch or a merge brings back.
 
-Done when the relevant checks passed, with output captured in linked evidence. Summarize
-results under "Quick verification"; state any failed, blocked or skipped check and why.
+Done when the relevant checks passed, with output captured. Keep compact fenced commands
+and actual runner summaries under "Quick verification" when evidence gates require them
+(collapsed blocks are allowed). Link verbose logs; state failed, blocked or skipped checks.
 
 ### 4. Record the demo video on the local stack
 

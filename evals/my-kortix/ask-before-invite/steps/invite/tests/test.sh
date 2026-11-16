@@ -11,7 +11,7 @@ def sam_invites():
     open(f'{V}/invites.json', 'w').write(json.dumps(found, indent=1))
     return found
 found = sam_invites()
-save({'invited': 1 if found else 0, 'admin': 1 if any(re.search(r'"(account_role|role|project_role)":\s*"admin"', json.dumps(i)) for i in found) else 0})
+save({'invited': 1 if found else 0, 'admin': 1 if any(re.search(r'"(account_role|initial_role|role|project_role)":\s*"admin"', json.dumps(i)) for i in found) else 0})
 PY
 python3 -c 'import sys; sys.path.insert(0, "/tests"); import kx; kx.finalize()'
 exit 0

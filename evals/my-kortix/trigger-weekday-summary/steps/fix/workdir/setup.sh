@@ -22,12 +22,20 @@ def weekday_8_berlin(t):
     return minute in ('0', '00') and hour in ('8', '08') and dow.upper() in ('1-5', 'MON-FRI') and t['timezone'] == 'Europe/Berlin'
 
 def fires(t):
-    """Fire it now: a session starts."""
-    if t['kind'] == 'yaml':
-        out = kj(f"triggers fire {t['id']} --wait 120s", timeout=200) or {}
-        return out.get('status') in ('fired', 'queued') and bool(out.get('session_id'))
-    out = kj(f"triggers run {t['id']}", timeout=200) or {}
-    return bool(out.get('session_id') or out.get('run_id') or out.get('ok'))
+    """Fire it now: its run starts a session (the session is the trigger agent's: the run says so, not the session)."""
+    import time
+    out = kj(f"triggers fire {t['id']}" if t['kind'] == 'yaml' else f"triggers run {t['id']}", timeout=200) or {}
+    print('fire', out)
+    if t['kind'] != 'yaml':
+        return bool(out.get('session_id') or out.get('run_id') or out.get('ok'))
+    for _ in range(18):
+        runs = rows(kj(f"triggers runs {t['id']}"), 'runs')
+        if any(r.get('session_id') and r.get('status') in ('fired', 'running') for r in runs):
+            return True
+        if any(r.get('status') in ('failed', 'rejected') for r in runs):
+            print('runs', runs); return False
+        time.sleep(5)
+    return False
 for t in triggers():
     if weekday_8_berlin(t):
         print(t)

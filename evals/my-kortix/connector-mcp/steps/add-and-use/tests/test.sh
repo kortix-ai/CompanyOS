@@ -14,7 +14,7 @@ sections = []
 args = json.dumps(json.dumps({'repoName': 'facebook/react'}))
 for c in found:
     out = sh(f"kortix connectors call {c.get('slug')} read_wiki_structure {args} 2>>{V}/kortix.err")
-    sections = re.findall(r'^\s*-\s+\d+\s+(.+?)\s*$', out, re.M) or sections
+    sections = re.findall(r'^\s*-\s+\d+\s+(.+?)\s*$', call_text(out), re.M) or sections
 open(f'{V}/sections.txt', 'w').write('\n'.join(sections))
 text = reply().lower()
 named = [t for t in sections if t.lower() in text]

@@ -70,6 +70,29 @@ def secret_link(text):
         return []
 
 
+def call_text(out):
+    """The text a `kortix connectors call` returned: every `text` field of its JSON, else the output itself."""
+    try:
+        data = json.loads(out)
+    except ValueError:
+        return out
+    found = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == 'text' and isinstance(value, str):
+                    found.append(value)
+                else:
+                    walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(data)
+    return '\n'.join(found) or out
+
+
 def reply():
     """The agent's last reply, as the person read it."""
     path = '/logs/agent/response.md'

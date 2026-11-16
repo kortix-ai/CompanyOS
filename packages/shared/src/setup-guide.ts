@@ -107,12 +107,11 @@ export const REFERENCE_REPOS: Record<string, string> = {
 /** Kept for links to a loop's guide; the reference repository is the source an agent adapts. */
 export const loopGuideUrl = (id: string, target: SetupTarget = PROD_TARGET) => `${target.origin}/loops/${id}.md`;
 
-/** The one prompt of one factory: read its reference repository, adapt it, follow the setup guide. */
+/** The prompt of one template: the setup guide, with that template chosen. */
 export function loopPrompt(loop: { id: string; name: string }, target: SetupTarget = PROD_TARGET): string {
-  const reference = REFERENCE_REPOS[loop.id];
-  const read = reference ? `Read ${reference} and adapt it to this repository.\n` : '';
-  return `Add a Kortix ${loop.name.toLowerCase()} to this repository with me.
-${read}Set it up with the Kortix CLI, following ${guideUrl(target)} step by step.
+  const url = guideUrl(target);
+  return `Set up the Kortix ${loop.name} on this repository with me.
+Read ${url} (curl -fsSL ${url}) and follow it step by step. The template is ${loop.id}.
 Ask all your questions in one message. Never print a secret value.`;
 }
 
@@ -127,14 +126,9 @@ Ask all your questions in one message. Never print a secret value.`;
 /** The production prompt. */
 export const SETUP_PROMPT = setupPromptFor();
 
-/**
- * The prompt for one template. The CLI carries the template's onboarding
- * (\`kortix templates onboard <id>\`), so it always matches the installed version.
- */
+/** The prompt for one template: the same as the landing page's (\`loopPrompt\`). */
 export function templatePrompt(template: { id: string; name: string }, target: SetupTarget = PROD_TARGET): string {
-  return `Set up the Kortix ${template.name} on this repository with me.
-Install the Kortix CLI if it is missing (curl -fsSL ${target.origin}/install | bash), then run \`kortix templates onboard ${template.id}\` and follow what it prints, step by step.
-Ask all your questions in one message. Never print a secret value.`;
+  return loopPrompt(template, target);
 }
 
 /**
@@ -157,18 +151,21 @@ The Kortix workspace exists already: it reads kortix.yaml from ${repository} on 
 export function setupGuide(target: SetupTarget = PROD_TARGET): string {
   return `# Set up Kortix on this repository
 
-The person pasted a prompt like "Add a Kortix software factory to this
-repository with me". You are the coding agent on their computer. From here you
-do everything: install the Kortix CLI, sign them in (one click in their
-browser), investigate their repositories and the software they use, ask
-every question in one message, write their \`kortix.yaml\` by adapting a
-reference repository, loop until \`kortix doctor --loops\` is green and one
-real run worked, and wire their local coding agents to Kortix. Their part is
-one reply to your questions and a few clicks only a person can make.
+The person pasted the setup prompt. You are the coding agent on their
+computer. You install the Kortix CLI, sign them in, read their repositories and
+the software they use, and offer the Kortix template that fits. After their one
+reply you set it up, run it once for real, and show them what it made. Their
+part is one reply and the clicks only a person can make.
 
-When you are done, agents run 24/7 in Kortix cloud sandboxes on a copy of their
-dev environment, on their Claude or Codex plan or an API key, started by the
-signals the plan named (GitHub issues, failing tests, errors, Slack, schedules).
+What they get: agents that run in Kortix cloud sandboxes on a copy of their dev
+environment, on their Claude or ChatGPT plan or an API key. A signal starts
+each run: a new issue, a failing test, a production error, a signup, a
+schedule. The agent ships the work for a person to approve: a pull request, a
+ticket, a draft.
+
+There are five templates: Software Factory, Marketing Factory, Sales Factory,
+Recruiting Factory and Support Factory (\`kortix templates ls --json\`). Each
+one is an agent, its skills and its triggers, ready to fit to a repository.
 
 \`kortix\` is your only tool for the platform. Use \`--json\` for everything you
 parse.
@@ -190,12 +187,21 @@ parse.
 3. **Never point agents at a shared backend.** A name classed \`remote\` or
    \`prod\` is not uploaded. The agents' dev environment runs locally and
    throwaway in the sandbox.
-4. **Adapt, never copy.** A reference repository is an example. The
-   person's \`kortix.yaml\` fits their repository: their tracker, their
-   commands, their channels.
+4. **Install, then adapt.** \`kortix templates add\` installs a template. You
+   then fit it to this repository: its tracker, its commands, its channels.
+   The public reference repositories in the plan are finished examples to
+   read. Never copy files from them.
 5. **Verify, don't assume.** A step is done when \`kortix doctor --loops\` or a
    real run proves it.
-6. **Be brief.** One line per step while you work. Do not print what you
+6. **Plain words.** Every message to the person leads with the result or with
+   the one thing you need from them. Name the real thing: the repository, the
+   file, the command, the count, the link. Short sentences, one fact each. No
+   filler, praise, hype, emoji or exclamation marks. Never write "seamless",
+   "robust", "leverage", "powerful", "unlock", "empower", "streamline",
+   "supercharge", "effortless", "magic", "game-changer", "dive in", "let's",
+   "I'd be happy to", "great", "simply", "just" or "exciting". Show what the
+   agents will do in this repository, not what Kortix is.
+7. **Be brief.** One line per step while you work. Do not print what you
    investigated: no map, no inventory, no list of ideas. A finding reaches the
    person only as one line of the step 3 message or of the final report. The
    step 3 message has at most 40 lines, the final report at most 15.
@@ -208,7 +214,7 @@ ${installBlock(target)}
 
 \`\`\`bash
 kortix whoami          # signed in? if not:
-kortix login           # opens the browser: "click Authorize in the tab that just opened"
+kortix login           # opens the browser: "click Authorize in the browser tab it opened"
 kortix plan --json     # the deterministic baseline, names only
 \`\`\`
 
@@ -247,24 +253,24 @@ message of step 3.
    runbooks, the tracker and its labels, the changelog, and what the
    repository links to outside itself (Notion, Google Drive, Confluence,
    Figma).
-5. **The reference repositories.** \`recommendation.references\` in the plan
-   lists them. Read each one's \`README.md\`, \`ADAPTING.md\`, \`kortix.yaml\` and
-   the files it imports now. Every loop is a part you can take on its own. The Software
-   Factory has intake from issues, errors, logs and feedback, a worker that
-   opens pull requests with proof, and a reviewer. The Marketing Factory has
-   the changelog from merged pull requests, blog and social drafts, search
-   reports and a brand skill. When the prompt names one reference, that one
-   is the starting point; the other is still a source of parts.
-6. **The template's questions.** \`ADAPTING.md\` and a template's own steps
-   (printed above this guide by \`/factory.md\` and \`kortix templates
-   onboard\`) mark questions with **Ask**. Collect every one now, with your
-   recommended answer. Each one goes into the step 3 message; never ask it
-   where it appears.
-7. **The loops to offer.** From what you found, pick 2 to 4 loops, most
-   valuable first. Each one is a signal, what the agent ships, who approves
-   it, and the evidence that it fits ("42 open issues labeled bug and a test
-   suite: bug fixes as pull requests"). Keep the other good ideas for the
-   final report, under "later".
+5. **The template that fits.** \`kortix templates ls --json\` lists the
+   templates and what each one does. Match them to what you found. A code
+   repository with tests and a tracker fits the Software Factory. A website,
+   docs or a changelog fits the Marketing Factory. Signups and a CRM fit the
+   Sales Factory. An ATS fits the Recruiting Factory. A help desk fits the
+   Support Factory. Recommend the one with the most evidence and offer at most
+   one more. When the prompt or the steps above this guide name a template,
+   that one is chosen.
+6. **Its steps and questions.** \`kortix templates onboard <id> --steps\`
+   prints the recommended template's own steps. They mark questions with
+   **Ask**. Collect each one now, with your recommended answer: it goes into
+   the step 3 message. Never ask it where it appears.
+7. **What it runs here.** From the template's sources, pick the 2 to 4 that
+   fit the evidence, most valuable first. Each one is a signal, what the agent
+   ships, who approves it, and the evidence ("42 open issues labeled bug and a
+   test suite: each bug becomes a pull request with test output"). Keep the
+   other ideas for the final report, under "later". No template fits: offer 2
+   to 4 loops of your own in the same form.
 
 ## 3. One message of questions, one reply
 
@@ -274,22 +280,37 @@ Claude Code: a question tool holds fewer questions and can hide the findings.
 \`\`\`text
 Kortix setup for <owner>/<repo>
 
-Found: <the stack, and how it runs and tests>
-       <the software the loops would use>
-       <anything that needs their eye: a production value in an env file,
-        a rule that conflicts with the loops>
+<What the agents will do here, end to end, in one or two sentences with the
+ real names: "Each GitHub issue labeled kortix becomes a pull request with
+ test output and a recording. Sentry errors become tickets first. You merge.">
 
-1. Loops to start (pick any):
-   a) <name>: <signal> -> <output>, <approver> (recommended)
-   b) <name>: <signal> -> <output>, <approver>
-2. <question>?
+Found: <the stack, and how it runs and tests>
+       <the software the template will use>
+       <anything that needs their eye: a production value in an env file,
+        a rule that conflicts with the agents>
+
+1. Template:
+   a) <name> (recommended): <signal> -> <what it ships>, <who approves>
+   b) <name>: <signal> -> <what it ships>, <who approves>
+   c) none: my own loops
+2. Start with (pick any):
+   a) <source>: <signal> -> <output>, <approver> (recommended)
+   b) <source>: <signal> -> <output>, <approver>
+3. <question>?
    a) <answer> (recommended)  b) <answer>  c) <answer>
 ...
 Defaults: <every other decision, with the answer you will use>.
 
 Reply "go" to take every recommended answer, or "go" with changes:
-"go, 1ab, 3c, 5: Linear".
+"go, 1b, 2ac, 5: Linear".
 \`\`\`
+
+The opening sentence and \`Found:\`:
+
+- The opening says what the agents will do in this repository, from signal to
+  result, with the real names. It is the first thing the person reads.
+- \`Found:\` has at most 4 lines, each one a fact that changes a decision or
+  needs their eye. Everything else stays out.
 
 The questions:
 
@@ -298,24 +319,26 @@ The questions:
   gets your draft as its recommended answer; the person corrects it.
 - **Only decisions the person owns.** Pick from this list, in this order,
   and leave out a question the evidence settles:
-  1. the loops to start: signal, output and approver of each;
-  2. where work lands: the tracker or the system of record;
-  3. the software to connect as Kortix connectors (one line: connect these,
+  1. the template (settled when the prompt named one);
+  2. what it starts with: its sources, each with its signal, output and
+     approver;
+  3. where work lands: the tracker or the system of record;
+  4. the software to connect as Kortix connectors (one line: connect these,
      leave out those). When the plan shows a workspace, check each app first
      with \`kortix connectors catalog <name> --json\` and leave out an app
      with no entry;
-  4. the models: the person's Claude plan, their ChatGPT plan, or an API
+  5. the models: the person's Claude plan, their ChatGPT plan, or an API
      key; the reviewer on the strongest model;
-  5. the workspace name. The configuration always gets its own repository,
+  6. the workspace name. The configuration always gets its own repository,
      which Kortix hosts: the code repository gets no Kortix file;
-  6. the template's questions from step 2;
-  7. a repository rule that conflicts with the loops: which one wins;
-  8. the task for the real run in step 7, from what you found.
+  7. the template's questions from step 2;
+  8. a repository rule that conflicts with the agents: which one wins;
+  9. the task for the real run in step 7, from what you found.
 - **More than 8:** keep the 8 with the largest effect. Put every other
   decision, with the answer you will use, on the \`Defaults:\` line: the env
   names to upload (only \`local\`), the Slack channels, the Kortix rule in
   \`AGENTS.md\` (default: add it).
-- **A gap is a question only when a chosen loop needs it.** An
+- **A gap is a question only when a chosen source needs it.** An
   \`unrecognized_services\` prefix or an empty category becomes one question
   with likely answers ("Tickets: a) GitHub Issues (recommended) b) Linear
   c) Jira"). Otherwise leave it out.
@@ -328,6 +351,9 @@ After the reply:
   second round.
 - A question the reply leaves open gets its recommended answer: say so in one
   line.
+- The reply picks another template: read its steps
+  (\`kortix templates onboard <id> --steps\`) and go on. Its questions take
+  your recommended answers; name them in one line. No second round.
 - A new thing in the reply (a custom loop in their words, another tool): add
   it when it fits, else put it in the final report under "later".
 - From here the person only acts: a sign-in, an Authorize click, a token
@@ -349,7 +375,11 @@ at the root: \`kortix templates add <id> --repo <owner/repo> --branch <default
 branch> --json\` writes them, with the code repository named. Never write a
 \`.kortix/\` folder: it holds only the CLI's local state.
 
-Adapt the reference there: write \`kortix.yaml\` with \`env.required\` and
+Install the template there: \`kortix templates add <id> --repo <owner/repo>
+--branch <default branch> --json\`. Then follow its steps: write its settings
+JSON from the reply, turn on the triggers of the chosen sources and turn off
+the rest. No template: write the agents and triggers yourself, in the same
+layout. Then write \`kortix.yaml\` with \`env.required\` and
 \`env.optional\` listing every secret the loops use, the sandbox \`Dockerfile\` at
 the root (a Debian-family base, the code repository's runtimes at their pinned
 versions, git and gh, no \`COPY\` from the repository), the template's \`cpu\`,
@@ -464,12 +494,21 @@ ${agentBlock(target)}
 
 ## 9. Hand over
 
-A report of at most 15 lines: the loops now running and what starts each,
-where tickets land, who merges, how to start work by hand (label an issue,
-\`kortix triggers fire <slug>\`), how to add the next loop (ask this agent: it
-edits \`kortix.yaml\` and ships it), what you wired on this computer (the MCP
-server, the skills), where to watch (the workspace link), the answers you
-took by default, the ideas kept for later, and anything still open.
+Show the result first, then how to use it. At most 15 lines:
+
+1. What the real run made: the pull request, ticket or draft, its link, the
+   signal that started it, and how long it took.
+2. What runs now: one line per trigger (what starts it, what it ships, who
+   approves) and where work lands.
+3. How to start work by hand: the label to add, or
+   \`kortix triggers fire <slug>\`.
+4. Three things to ask this agent next, each one sentence the person can
+   paste, from what you found ("add a loop that turns Sentry errors into
+   tickets").
+5. Where to watch (the workspace link) and what you wired on this computer
+   (the MCP server, the skills).
+6. The answers you took by default, the ideas kept for later, and anything
+   still open.
 `;
 }
 

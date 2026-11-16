@@ -122,4 +122,11 @@ test('onboard prints the chosen template, then the setup guide; an unknown templ
   expect(r.stdout).toContain('kortix templates add software-factory --repo <owner/repo> --json');
   expect(r.stdout).toContain('# Set up Kortix on this repository');
   expect(kortix(['templates', 'onboard', 'nope']).code).toBe(1);
+
+  // --steps: only the template's own steps, for the guide's investigation.
+  const steps = kortix(['templates', 'onboard', 'software-factory', '--steps']);
+  expect(steps.code).toBe(0);
+  expect(steps.stdout).toContain('# Software Factory (`software-factory`)');
+  expect(steps.stdout).toContain('**Ask**');
+  expect(steps.stdout).not.toContain('# Set up Kortix on this repository');
 });

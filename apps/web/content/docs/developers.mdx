@@ -136,8 +136,8 @@ Ask all your questions in one message. Never print a secret value.
 Your agent reads the guide at [kortix.com/setup.md](https://kortix.com/setup.md) and does each step with you:
 
 1. Installs the `kortix` CLI and signs you in (one click in your browser).
-2. Reads the repository, your other repositories and the software you use. It asks nothing yet.
-3. Asks every question in one message of at most 8 questions, each with its recommended answer: the loops to start (from the [templates](#templates)), where work lands, the software to connect, the models, and the workspace name. The config always lives in the workspace's own repository, which Kortix hosts, so the code repository gets no Kortix file. The agents reach the code on GitHub. You reply once: `go`, or `go` with changes.
+2. Reads the repository, your other repositories and the software you use, and matches them to the [templates](#templates). It asks nothing yet.
+3. Asks every question in one message of at most 8 questions, each with its recommended answer. It starts with what the agents will do in your repository, then asks: the template (the one that fits, and at most one more), its sources to start with, where work lands, the software to connect, the models, and the workspace name. The config always lives in the workspace's own repository, which Kortix hosts, so the code repository gets no Kortix file. The agents reach the code on GitHub. You reply once: `go`, or `go` with changes.
 4. Keeps the agents you already have: each `.claude/agents/<name>.md` becomes an agent whose `prompt_file` is that file, and each folder with a `SKILL.md` becomes a skill.
 5. Writes the dev environment in the workspace repository: a `Dockerfile` at its root (a sandbox template) and the `dev-environment` skill in `skills/dev-environment/` (the install, start and test commands every agent loads).
 6. Uploads only the `.env` names its message listed, never a value it read (`kortix env push --names`, `--only`).
@@ -145,7 +145,7 @@ Your agent reads the guide at [kortix.com/setup.md](https://kortix.com/setup.md)
 8. Runs `kortix validate`, commits the workspace repository, and runs `kortix onboard --repo <owner/repo>`, which creates the workspace and names the code repository on GitHub.
 9. Stores each template secret: a random webhook secret it generates, and your GitHub token through a link where you paste it, so the value never passes through the agent.
 10. Creates the GitHub webhooks with your own `gh`.
-11. Fires one trigger and shows you the session.
+11. Runs one real task and shows you what it made: the pull request, ticket or draft, with its link.
 
 #### Plan, one go, onboard
 
@@ -167,7 +167,7 @@ A workspace that already reads a repository with no `kortix.yaml` shows **Copy s
 
 #### Templates
 
-A template is a hand-approved set of agents and triggers. Run `kortix templates add <id> --repo <owner/repo>` in the workspace repository, with the code repository named. It writes the template in the workspace layout: its agent in `agents/<name>.md`, its skills in `skills/<name>/`, and `<id>.yaml` and its settings JSON at the root. Then it adds `<id>.yaml` under `imports:` in `kortix.yaml`. Remove a template by deleting those files and the import line.
+A template is a hand-approved set of agents and triggers. The setup prompt offers the one that fits your repository. A template's own prompt runs the same setup with that template chosen. By hand, run `kortix templates add <id> --repo <owner/repo>` in the workspace repository, with the code repository named. It writes the template in the workspace layout: its agent in `agents/<name>.md`, its skills in `skills/<name>/`, and `<id>.yaml` and its settings JSON at the root. Then it adds `<id>.yaml` under `imports:` in `kortix.yaml`. Remove a template by deleting those files and the import line.
 
 | Template | `id` | What runs |
 | --- | --- | --- |

@@ -105,6 +105,17 @@ export function getTemplateFiles(id: TemplateId, vars: TemplateVars): Array<{ pa
 }
 
 /**
+ * One template's own setup steps, without the guide: what
+ * `kortix templates onboard <id> --steps` prints while the setup guide's agent
+ * investigates (guide step 2). Its **Ask** lines go into the guide's step 3 message.
+ */
+export function composeTemplateSteps(id: TemplateId): string {
+  const template = getTemplate(id);
+  const own = getTemplateOnboarding(id);
+  return [`# ${template.name} (\`${template.id}\`)`, '', template.summary, '', ...(own ? [own.trim(), ''] : [])].join('\n');
+}
+
+/**
  * The full onboarding of one template: its own steps, then the generic setup
  * guide with the template chosen. `kortix templates onboard <id>` prints it and
  * the web serves it (`/factory.md` for the Software Factory), so both say the same.
@@ -117,8 +128,8 @@ export function composeTemplateOnboarding(id: TemplateId, setupGuide: string): s
     '',
     template.summary,
     '',
-    `The template is chosen: \`${template.id}\`. In step 3 of the guide below, offer only its loops. In step 4,`,
-    `add only this one (\`kortix templates add ${template.id} --repo <owner/repo> --json\`, the code repository) and adapt it.`,
+    `The template is chosen: \`${template.id}\`. Question 1 of guide step 3 is settled: offer only its sources.`,
+    `In guide step 4, install it (\`kortix templates add ${template.id} --repo <owner/repo> --json\`, the code repository) and adapt it.`,
     'Every **Ask** in the steps below is a question for the one message of guide step 3, with its',
     'recommended answer. Never ask it where it appears.',
     '',

@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { manifestCandidatePaths } from '@kortix/manifest-schema';
 import { SETUP_GUIDE } from '@kortix/shared/setup-guide';
-import { composeTemplateOnboarding, getTemplate, getTemplateFiles, isTemplateId, listTemplates, TEMPLATE_IDS, type TemplateInfo } from '@kortix/starter/templates';
+import { composeTemplateOnboarding, composeTemplateSteps, getTemplate, getTemplateFiles, isTemplateId, listTemplates, TEMPLATE_IDS, type TemplateInfo } from '@kortix/starter/templates';
 import { takeFlagBool, takeFlagValue } from '../command-helpers.ts';
 import { githubRepoFromRemote } from '../github-remote.ts';
 import { runGit } from '../git-run.ts';
@@ -30,7 +30,8 @@ Commands:
                          Exit 1 while any line is red. --repo, --json.
   onboard <id>           Print the steps a coding agent follows to set the
                          template up with you: its own onboarding, then the
-                         setup guide with the template chosen.
+                         setup guide with the template chosen. --steps prints
+                         only the template's own steps.
   add <id>               Add the template to the repository in this directory.
 
 Options for add:
@@ -195,9 +196,9 @@ function runAdd(argv: string[], json: boolean): number {
   return 0;
 }
 
-function runOnboard(id: string | undefined): number {
+function runOnboard(id: string | undefined, stepsOnly: boolean): number {
   if (!isTemplateId(id)) return fail(`Name a template: ${TEMPLATE_IDS.join(', ')}`);
-  process.stdout.write(composeTemplateOnboarding(id, SETUP_GUIDE));
+  process.stdout.write(stepsOnly ? composeTemplateSteps(id) : composeTemplateOnboarding(id, SETUP_GUIDE));
   return 0;
 }
 
@@ -212,7 +213,7 @@ export async function runTemplates(argv: string[]): Promise<number> {
   if (command === 'ls' || command === 'list') return rest.length > 0 ? fail(`Unexpected argument: ${rest[0]}`) : runList(json);
   if (command === 'show') return runShow(rest[0], json);
   if (command === 'add') return runAdd(rest, json);
-  if (command === 'onboard') return runOnboard(rest[0]);
+  if (command === 'onboard') return runOnboard(rest.find((arg) => arg !== '--steps'), rest.includes('--steps'));
   if (command === 'doctor') {
     const repoFlag = takeFlagValue(rest, ['--repo']);
     if (!isTemplateId(rest[0])) return fail(`Name a template: ${TEMPLATE_IDS.join(', ')}`);

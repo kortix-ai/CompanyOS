@@ -180,8 +180,12 @@ and read its run line in `kortix triggers runs <slug>`: `errors=none`, and
    `gh issue create --title "<title>" --body "<what, where, expected>" --label kortix`.
    The webhook fires `source-github-issues`; confirm with
    `kortix triggers runs source-github-issues`.
-3. `kortix triggers fire factory-intake --wait 300s`. Give the person the
-   worker session link from the `[factory-intake] claimed` comment.
+3. The source run starts `factory-intake` itself: wait for it with
+   `kortix triggers runs factory-intake`. Fire it by hand
+   (`kortix triggers fire factory-intake --wait 300s`) only when no run
+   appears within 2 minutes; a second fire is a second sandbox for nothing.
+   Give the person the worker session link from the
+   `[factory-intake] claimed` comment.
 4. Wait for the `[factory-worker] handoff` comment (up to ~30 min). Open the
    pull request with the person: the **Review in 60 seconds** section, the
    commands with their real output, the demo when the change is visible.

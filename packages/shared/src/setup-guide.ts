@@ -472,9 +472,10 @@ kortix doctor --loops --fix --json  # re-runs the phase a red line names
 Pass the same \`--repo <owner/repo>\` you gave \`onboard\`, if any.
 
 Loop until \`ready: true\`. Then one real run, the cheapest one the factory has:
-for the Software Factory, file the task the person approved in step 3, label
-it, \`kortix triggers fire factory-intake --wait 300s\`, and wait for the pull
-request. Show it to the person: the summary, the commands with their real
+for the Software Factory, file the task the person approved in step 3 and
+label it. The label starts the run: follow it with \`kortix triggers runs\`,
+fire a trigger by hand only when the template's steps say so, and wait for the
+pull request. Show it to the person: the summary, the commands with their real
 output, the demo when the change is visible. Nobody merges it but them.
 
 ## 8. Wire this computer's coding agents

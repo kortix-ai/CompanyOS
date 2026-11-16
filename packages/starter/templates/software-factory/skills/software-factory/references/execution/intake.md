@@ -62,8 +62,10 @@ never pushes, never merges and never posts to chat.
       in `errors=`, next ticket.
    6. **Claim**: `ticket.claim(id, session_id)`, the comment
       `[factory-intake] claimed · attempt <n> · session <session_id>` with the
-      lines `Model: <model> — <reason>` and `Session: <dashboard link>`, and
-      `ticket.link` the session.
+      lines `Model: <model> — <reason>` and
+      `Session: $KORTIX_FRONTEND_URL/workspaces/$KORTIX_PROJECT_ID/sessions/<session_id>`
+      (both variables are set in every session; never write a link from
+      memory), and `ticket.link` the session.
 7. **Rework cap.** A ticket with more than `caps.rework_cycles_before_human`
    `[factory-review] request_changes` comments: `set_state(blocked)` and
    `[factory-intake] handed back · <n> review rejections; a person decides`,

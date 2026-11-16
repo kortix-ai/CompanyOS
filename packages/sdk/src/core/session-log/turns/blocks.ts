@@ -162,16 +162,19 @@ function carouselItem(item: ShowGroupItem, call: ToolCallBlock | undefined): Omi
 
 /**
  * A run of adjacent `show` calls (a `show-group` segment) as ONE `show` call: the first call's
- * id and call id, `input.items` the carousel of every call's items, `running` while any call
- * is open, else `complete`. N single calls and one N-item call render the same card.
+ * id, the call id of the first call that did not fail (so "Open" lands on what was shown, not
+ * on a failed attempt its retry replaced), `input.items` the carousel of every call's items,
+ * `running` while any call is open, else `complete`. N single calls and one N-item call render
+ * the same card.
  */
 export function sessionLogShowGroupCall(calls: ReadonlyArray<ToolCallBlock>): ToolCallBlock {
   const parts = calls.map(toolPartOf);
   const first = parts[0]!;
+  const target = parts.find((p) => p.state.status !== 'error') ?? first;
   const running = parts.some((p) => p.state.status === 'running' || p.state.status === 'pending');
   const byCallId = new Map(calls.map((block) => [block.call_id, block]));
   const items = showGroupItems(parts).map((item) => carouselItem(item, byCallId.get(item.callID)));
-  return toolCallBlock({ ...first, state: { ...first.state, status: running ? 'running' : 'completed', input: { items } } } as ToolPart);
+  return toolCallBlock({ ...first, callID: target.callID, state: { ...first.state, status: running ? 'running' : 'completed', input: { items } } } as ToolPart);
 }
 
 /**

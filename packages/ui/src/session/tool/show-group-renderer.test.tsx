@@ -86,6 +86,33 @@ describe('ShowGroupRenderer', () => {
   });
 });
 
+describe('ShowGroupRenderer: a failed show and its retry (2026-11-16 incident)', () => {
+  const URL = 'https://example.test/workspaces/synthetic/artifacts/synthetic';
+  // No quotes: the static markup escapes them, and the assertions match this text.
+  const MISSING_TYPE = 'type is required for a single item';
+  const FAILED = showPart('f', { action: 'show', url: URL, title: 'Catalog' }, 'error', { error: MISSING_TYPE });
+  const RETRY = showPart('r', { action: 'show', type: 'url', url: URL, title: 'Catalog' });
+
+  test('the retry that succeeded is the selected tab; the failure stays as the other tab', () => {
+    const html = renderToStaticMarkup(withProviders(<ShowGroupRenderer calls={[toolCallBlock(FAILED), toolCallBlock(RETRY)]} />));
+
+    expect(html.match(TAB)).toHaveLength(2);
+    expect(html).toMatch(/role="tab" aria-selected="false"[^>]*title="Catalog"/);
+    // The second tab is selected and its link is what the card shows, not the error.
+    expect(html.indexOf('aria-selected="true"')).toBeGreaterThan(html.indexOf('aria-selected="false"'));
+    expect(html).toContain(`data-testid="show-link-card"`);
+    expect(html).toContain(`href="${URL}"`);
+    expect(html).not.toContain(MISSING_TYPE);
+  });
+
+  test('a failure with no retry shows its message without the 420px media box', () => {
+    const html = renderToStaticMarkup(withProviders(<ShowGroupRenderer calls={[toolCallBlock(FAILED), toolCallBlock(showPart('g', { title: 'Other' }, 'error', { error: 'gone' }))]} />));
+
+    expect(html).toContain(MISSING_TYPE);
+    expect(html).not.toContain('min-h-[420px]');
+  });
+});
+
 describe('ShowGroupRenderer file viewers', () => {
   const TXT_A = showPart('a', { type: 'file', path: '/workspace/q1.txt' });
   const TXT_B = showPart('b', { type: 'file', path: '/workspace/q2.txt' });

@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, sy
 import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
+import { validateToolArguments, type ToolCall } from '@earendil-works/pi-ai'
 import { PermissionBroker, compilePermissionPolicy } from '@/harness/pi/interactions'
 import imageGen, { IMAGE_GEN_SESSION_LIMIT, IMAGE_GEN_TURN_LIMIT } from '@/services/tools/kortix/image_gen'
 import imageSearch from '@/services/tools/kortix/image_search'
@@ -712,6 +713,65 @@ describe('show', () => {
     await expect(show({})).rejects.toThrow("'type' is required.")
     await expect(show({ type: 'url' })).rejects.toThrow("'url' is required when type is 'url'.")
     await expect(show({ type: 'text' })).rejects.toThrow("'content' is required when type is 'text'.")
+  })
+
+  describe('explicit type contract: a single item names its type, items need no outer type', () => {
+    // The exact call of the 2026-11-16 incident: a url, a title, a description, no type, no items.
+    const INCIDENT = {
+      action: 'show',
+      url: 'https://example.test/workspaces/synthetic/artifacts/synthetic',
+      title: 'Automation use-case catalog',
+      description: 'Private artifact. 108 use cases, filterable by process, status and priority.',
+    }
+    /** pi's own pre-execution check of a tool call against this schema (agent-loop: validateToolArguments). */
+    const piValidates = (args: ToolCall['arguments']) => validateToolArguments({ name: 'show', description: '', parameters: showTool.parameters as never }, { type: 'toolCall', id: 'c1', name: 'show', arguments: args })
+
+    test('the incident payload is rejected before anything is shown, naming the fix', async () => {
+      await expect(showTool.execute(INCIDENT, ctx())).rejects.toThrow("'type' is required. Use one of: file, image, url, text, error, video, audio, code, markdown, pdf, html, csv, xlsx, docx, pptx. A single item names its own type (type='url' for a link); several items go in 'items'.")
+    })
+
+    test('the same payload with type url is shown, through pi validation and execute', async () => {
+      const args = piValidates({ ...INCIDENT, type: 'url' })
+      const result = JSON.parse(out(await showTool.execute(args, ctx())))
+      expect(result.entry).toMatchObject({ type: 'url', variant: 'full', url: INCIDENT.url, title: INCIDENT.title })
+    })
+
+    test('pi rejects an unknown type from the schema alone, before execute runs', () => {
+      expect(() => piValidates({ ...INCIDENT, type: 'link' })).toThrow('Validation failed for tool "show"')
+    })
+
+    test('multi-item mode needs no outer type: pi validation passes and each item carries its own', async () => {
+      const items = JSON.stringify([
+        { type: 'url', url: INCIDENT.url, title: 'Catalog' },
+        { type: 'text', content: 'done', title: 'Note' },
+      ])
+      const args = piValidates({ action: 'show', title: 'Two', items })
+      const result = JSON.parse(out(await showTool.execute(args, ctx())))
+      expect(result.items.map((item: { type: string }) => item.type)).toEqual(['url', 'text'])
+      expect(result).not.toHaveProperty('warnings')
+    })
+
+    test('an empty outer type beside items is ignored, as the contract says; an empty single type is still rejected', async () => {
+      const items = JSON.stringify([{ type: 'url', url: INCIDENT.url }])
+      const result = JSON.parse(out(await showTool.execute(piValidates({ action: 'show', type: '', items }), ctx())))
+      expect(result.items.map((item: { type: string }) => item.type)).toEqual(['url'])
+      await expect(showTool.execute(piValidates({ ...INCIDENT, type: '' }), ctx())).rejects.toThrow("'type' is required.")
+    })
+
+    test('an item without its own type is a warning beside a good item, and an error alone', async () => {
+      const result = JSON.parse(out(await show({ items: JSON.stringify([{ url: INCIDENT.url }, { type: 'url', url: INCIDENT.url }]) })))
+      expect(result.items).toHaveLength(1)
+      expect(result.warnings).toEqual(["Item 0: 'type' is required. Use one of: " + 'file, image, url, text, error, video, audio, code, markdown, pdf, html, csv, xlsx, docx, pptx.'])
+      await expect(show({ items: JSON.stringify([{ url: INCIDENT.url }]) })).rejects.toThrow("Item 0: 'type' is required.")
+    })
+
+    test('the schema states the contract: an enum of the types, no top-level combinator', () => {
+      const parameters = showTool.parameters as { properties: Record<string, { enum?: string[]; description: string }>; required: string[] } & Record<string, unknown>
+      expect(parameters.properties.type!.enum).toEqual(['', 'file', 'image', 'url', 'text', 'error', 'video', 'audio', 'code', 'markdown', 'pdf', 'html', 'csv', 'xlsx', 'docx', 'pptx'])
+      expect(parameters.properties.type!.description).toContain("Required unless 'items' is given")
+      expect(parameters.required).toEqual(['action'])
+      for (const key of ['anyOf', 'oneOf', 'allOf', 'not', 'if']) expect(parameters).not.toHaveProperty(key)
+    })
   })
 
   test('items become one carousel; a bad item is a warning while a good one remains', async () => {

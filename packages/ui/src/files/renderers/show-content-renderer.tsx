@@ -1286,7 +1286,8 @@ export function ShowCarousel({
       tabIndex={fill || count < 2 ? undefined : -1}
       onKeyDown={fill || count < 2 ? undefined : (e) => handleArrowKey(e)}
     >
-      <div className={cn(fill ? 'min-h-0 flex-1 overflow-hidden' : 'min-h-[420px]')}>
+      {/* The 420px slot holds media steady while paging; an error is one line, not a blank box. */}
+      <div className={cn(fill ? 'min-h-0 flex-1 overflow-hidden' : currentItem.status !== 'error' && 'min-h-[420px]')}>
         {currentItem.status === 'pending' ? (
           <div
             className={cn(

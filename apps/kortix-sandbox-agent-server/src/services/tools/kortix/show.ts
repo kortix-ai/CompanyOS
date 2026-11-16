@@ -257,10 +257,16 @@ const showParameters = {
   type: 'object',
   properties: {
     action: { type: 'string', description: "Action: 'show' to present an item to the user." },
+    // The contract "type unless items" is not a top-level anyOf: provider tool APIs document
+    // top-level combinators as unsupported (Anthropic input_schema; OpenAI strict mode) — not tested
+    // against them here. The enum is checked by the harness before execute; execute rejects a single
+    // item without a type before it touches anything. '' is allowed because a model may fill the
+    // unused outer type beside 'items', which ignores it; a single item with '' is still rejected.
     type: {
       type: 'string',
+      enum: ['', ...TYPES],
       description:
-        "Type of item. Required for single-item 'show' (omit when using 'items'). " +
+        "Type of item. Required unless 'items' is given (each item then carries its own type). " +
         "Options: 'file' (any file on disk), 'image' (image file), 'url' (web link or localhost preview), " +
         "'text' (inline text), 'error' (error message), 'video' (video file), 'audio' (audio file), " +
         "'code' (syntax-highlighted code block), 'markdown' (rendered markdown), " +
@@ -401,7 +407,9 @@ export default {
       })
     }
     const entry = validateAndBuildEntry(args, dir)
-    if (typeof entry === 'string') throw new Error(entry)
+    if (typeof entry === 'string') {
+      throw new Error(args.type ? entry : `${entry} A single item names its own type (type='url' for a link); several items go in 'items'.`)
+    }
     await addImageDigests([entry])
     return shown({ success: true, action: 'show', entry, message: `Item '${args.title || args.type}' presented to user.` })
   },

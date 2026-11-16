@@ -213,6 +213,21 @@ describe('sessionLogShowGroupCall', () => {
     expect((failed.input as { items: unknown[] }).items.at(-1)).toEqual({ status: 'error', type: 'error', title: 'Chart', content: 'gone' });
   });
 
+  test('a failed call and its retry: the failure keeps its slot, "Open" targets the call that succeeded', () => {
+    // The 2026-11-16 incident: `show` without `type` failed, the retry with `type: 'url'` succeeded.
+    const url = 'https://example.test/workspaces/synthetic/artifacts/synthetic';
+    const missingType = "'type' is required.";
+    const failed = call('show1', 'show', { action: 'show', url, title: 'Catalog' }, { status: 'error', result: { content: [{ type: 'text', text: missingType }], is_error: true, error: { message: missingType } } });
+    const retried = call('show2', 'show', { action: 'show', type: 'url', url, title: 'Catalog' });
+    const merged = sessionLogShowGroupCall([failed, retried]);
+    expect(merged).toMatchObject({ id: 'show1', call_id: 'call_show2', status: 'complete' });
+    expect((merged.input as { items: unknown[] }).items).toEqual([
+      { status: 'error', type: 'error', title: 'Catalog', content: missingType },
+      { status: 'ready', type: 'url', url, title: 'Catalog' },
+    ]);
+    expect(sessionLogShowGroupCall([failed])).toMatchObject({ id: 'show1', call_id: 'call_show1' });
+  });
+
   test('each item keeps the sha256 its own call\'s output gives its file (R38)', () => {
     const sha = 'b'.repeat(64);
     const out = (path: string) => ({ result: { content: [{ type: 'text' as const, text: JSON.stringify({ entry: { path, sha256: sha } }) }], is_error: false } });

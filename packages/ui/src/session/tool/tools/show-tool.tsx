@@ -101,7 +101,10 @@ export function ShowTool({ call, sessionId }: ToolProps) {
 
   const isCarousel = !!items && items.length > 0;
 
-  const [carouselIndex, setCarouselIndex] = useState(0);
+  // Until the user picks a tab, the first item that did not fail: a failed call whose retry
+  // succeeded keeps its tab, but the card opens on what was shown.
+  const [pickedIndex, setCarouselIndex] = useState<number | null>(null);
+  const carouselIndex = pickedIndex ?? Math.max(0, items?.findIndex((item) => item.status !== 'error') ?? 0);
   // Clamped: a grouped carousel can lose an item (a call that settled empty).
   const activeIndex = isCarousel ? Math.max(0, Math.min(carouselIndex, items!.length - 1)) : 0;
   const currentItem = isCarousel ? items![activeIndex] || items![0] : null;

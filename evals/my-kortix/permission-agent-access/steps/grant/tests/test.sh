@@ -11,7 +11,9 @@ def scope():
     return d
 
 def granted(d, name):
-    return name in json.dumps(d.get('secrets', d.get('scope', {}).get('secrets') if isinstance(d.get('scope'), dict) else d))
+    """The agent may use the secret: by name, or with every secret (`all`)."""
+    secrets = d.get('secrets', d.get('scope', {}).get('secrets') if isinstance(d.get('scope'), dict) else d)
+    return secrets in ('all', '*') or name in json.dumps(secrets)
 d = scope()
 secrets = d.get('secrets')
 others = [s for s in (secrets if isinstance(secrets, list) else []) if s != 'WAREHOUSE_TOKEN']

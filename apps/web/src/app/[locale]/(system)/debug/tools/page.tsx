@@ -14,7 +14,7 @@ import { FileViewer } from '@kortix/ui/file-viewer';
 import { ToolActivateContext, ToolPartRenderer } from '@kortix/ui/session';
 import { useKortixComputerStore } from '@kortix/ui/internal/stores/kortix-computer-store';
 import { useEffect, useState } from 'react';
-import { sessionLogOfV1Rows, type ToolCallBlock } from '@kortix/sdk';
+import { sessionLogOfV1Rows, sessionLogShowGroupCall, type ToolCallBlock } from '@kortix/sdk';
 import { useSessionLogThread, useSessionStateStore } from '@kortix/sdk/react';
 
 /**
@@ -360,8 +360,12 @@ const TRIGGERS_GET_OUTPUT = JSON.stringify(
   2,
 );
 
-type Row = { label: string; node: React.ReactNode };
+/** `group`: adjacent `show` calls the transcript merges into one card (`sessionLogShowGroupCall`); `node` is the last. */
+type Row = { label: string; node: React.ReactNode; group?: unknown[] };
 type Group = { title: string; rows: Row[] };
+
+const SHOW_RETRY_URL = 'https://example.test/workspaces/synthetic/artifacts/synthetic';
+const SHOW_RETRY = part('show', done({ action: 'show', type: 'url', url: SHOW_RETRY_URL, title: 'Automation use-case catalog' }, ''));
 
 const GROUPS: Group[] = [
   {
@@ -726,6 +730,20 @@ const GROUPS: Group[] = [
             '',
           ),
         ),
+      },
+      {
+        label: 'show (failed call, then its retry)',
+        node: SHOW_RETRY,
+        group: [
+          part(
+            'show',
+            errored(
+              { action: 'show', url: SHOW_RETRY_URL, title: 'Automation use-case catalog' },
+              "'type' is required. Use one of: file, image, url, text, error, video, audio, code, markdown, pdf, html, csv, xlsx, docx, pptx. A single item names its own type (type='url' for a link); several items go in 'items'.",
+            ),
+          ),
+          SHOW_RETRY,
+        ],
       },
       {
         label: 'show (carousel pills)',
@@ -1919,7 +1937,7 @@ export default function DebugToolsPage() {
                     </div>
                     <div className="border-border/40 bg-card/30 rounded-md border px-4 py-3">
                       <ToolPartRenderer
-                        call={blockOf(row.node)}
+                        call={row.group ? sessionLogShowGroupCall(row.group.map(blockOf)) : blockOf(row.node)}
                         sessionId="debug"
                         disableNavigation
                       />

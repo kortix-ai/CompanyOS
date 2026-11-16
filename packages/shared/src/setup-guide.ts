@@ -404,7 +404,9 @@ Fix every error and warning in the files you wrote. Two rules save a round:
 
 ## 5. Connect the models
 
-Connect what the person picked in step 3.
+The setup page (step 6) asks for a model first when the workspace has none:
+the person picks their Claude or ChatGPT plan, or adds a key, in the browser.
+Use these commands only when the person wants it done in the terminal:
 
 - **Claude Pro or Max:** \`kortix providers login claude --start --share workspace --json\`;
   give the person the \`authorize_url\`; they paste the code back;
@@ -416,7 +418,7 @@ Connect what the person picked in step 3.
 ## 6. Do it
 
 \`\`\`bash
-kortix onboard --yes --json \\
+kortix onboard --yes --json --wait \\
   [--env-file <file> --only <A,B>]... \\
   [--channels <a,b>] [--connect <slug,...>] \\
   --repo <owner/repo> [--name "<workspace name>"]
@@ -432,10 +434,18 @@ workspace and push its repository; it refuses a dirty tree), \`secrets\`
 (approved names, generated webhook secrets, one intake link for the rest,
 the GitHub token included), \`webhooks\` (the GitHub repository
 webhooks and labels the triggers need, through the person's \`gh\`), \`slack\`
-(connect link, the bot joins the channels), \`connectors\` (a sign-in link each),
-\`sandbox\` (build every image and wait; a first build takes 5 to 10 minutes
-and prints nothing in \`--json\` mode: tell the person before you start),
+(the bot joins the channels), \`connectors\`, \`sandbox\` (build every image and
+wait; a first build takes 5 to 10 minutes and prints nothing in \`--json\` mode),
 \`doctor\`.
+
+**The setup page.** Every step only the person can do (a model, a connector
+sign-in, a secret such as the GitHub token, Slack) is one row on
+\`<web>/workspaces/<id>/setup\`. \`onboard\` opens it in their browser before the
+image build and prints \`setup_url\`. Before you run it, say one line: "The
+setup page opens in your browser: connect what it lists. I continue when every
+row is done." Never print those links in the terminal. \`--wait\` keeps the run
+going until the page shows every row done, then finishes the phases that
+waited.
 
 A repository webhook that already sends the same event to another Kortix
 workspace is left in place and reported in the \`webhooks\` detail. Tell the
@@ -445,11 +455,12 @@ other hook with the command \`kortix doctor --loops\` prints.
 A source that is off needs nothing: a disabled Slack trigger asks for no Slack
 connection.
 
-Exit 0 is done and green. Exit 4 means \`user_actions\` are left: give the person
-all of them in one message, each exactly once, with its link (install the GitHub App, Allow in Slack,
-sign in to a connector, paste a token, \`/invite\` the bot to a private channel).
-When they say it is done, run \`kortix onboard --yes --json\` again. Exit 1: read
-the failed phase's \`detail\`, fix it, run again.
+Exit 0 is done and green. Exit 4: steps are left. A \`user_action\` the page
+does not show (\`/invite\` the bot to a private Slack channel, install the
+GitHub App) goes to the person once, in one message. \`--wait\` timed out
+(\`next\` says what the page still lists): tell the person in one line, then
+run the same command again. Exit 1: read the failed phase's \`detail\`, fix
+it, run again.
 
 ## 7. Prove it, and loop until it works
 

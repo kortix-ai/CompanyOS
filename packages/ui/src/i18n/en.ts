@@ -10606,6 +10606,28 @@ const catalog = {
       "results": "Results"
     },
     "colTaskCount": "Tasks"
+  },
+  "workspaceSetup": {
+    "title": "Finish setup",
+    "description": "{done} of {total} done. A row turns done as soon as it is set up.",
+    "descriptionIdle": "What the agents of this workspace need from you.",
+    "tryAgain": "Try again",
+    "loadFailed": "Could not load the setup steps.",
+    "emptyTitle": "Nothing left to set up",
+    "emptyDescription": "This workspace needs no sign-in, secret or Slack from you.",
+    "openWorkspace": "Open workspace",
+    "completeTitle": "Setup is complete",
+    "completeDescription": "If you started the setup in a terminal, it continues there by itself.",
+    "slackName": "Slack",
+    "kindConnector": "Connector",
+    "kindSecret": "Secret",
+    "kindSlack": "Channel",
+    "done": "Done",
+    "connect": "Connect {name}",
+    "reconnect": "Reconnect {name}",
+    "setSecret": "Set {name}",
+    "addSlack": "Add Kortix to Slack",
+    "connectSlack": "Connect Slack"
   }
 };
 

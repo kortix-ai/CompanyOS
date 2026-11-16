@@ -27405,5 +27405,27 @@
       "members": "メンバー",
       "settings": "設定"
     }
+  },
+  "workspaceSetup": {
+    "title": "セットアップを完了する",
+    "description": "{total} 件中 {done} 件完了。各行は設定が済むと完了になります。",
+    "descriptionIdle": "このワークスペースのエージェントに必要な設定です。",
+    "tryAgain": "再試行",
+    "loadFailed": "セットアップの手順を読み込めませんでした。",
+    "emptyTitle": "設定する項目はありません",
+    "emptyDescription": "このワークスペースではサインイン、シークレット、Slack の設定は不要です。",
+    "openWorkspace": "ワークスペースを開く",
+    "completeTitle": "セットアップが完了しました",
+    "completeDescription": "ターミナルでセットアップを開始した場合、そちらで自動的に続行されます。",
+    "slackName": "Slack",
+    "kindConnector": "コネクタ",
+    "kindSecret": "シークレット",
+    "kindSlack": "チャンネル",
+    "done": "完了",
+    "connect": "{name} を接続",
+    "reconnect": "{name} を再接続",
+    "setSecret": "{name} を設定",
+    "addSlack": "Kortix を Slack に追加",
+    "connectSlack": "Slack を接続"
   }
 }

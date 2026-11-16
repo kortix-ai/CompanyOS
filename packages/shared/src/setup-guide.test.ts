@@ -64,6 +64,14 @@ describe('templates in the setup guide', () => {
     expect(templatePrompt({ id: 'sales', name: 'Sales Factory' })).toBe(loopPrompt({ id: 'sales', name: 'Sales Factory' }));
   });
 
+  test('the person finishes on one setup page, not on links in the terminal', () => {
+    const guide = setupGuide();
+    expect(guide).toContain('kortix onboard --yes --json --wait');
+    expect(guide).toContain('<web>/workspaces/<id>/setup');
+    expect(guide).toContain('Never print those links in the terminal.');
+    expect(guide).not.toContain('give the person\nall of them in one message');
+  });
+
   test('the guide uses none of the words its plain-words rule bans, outside that rule', () => {
     const guide = setupGuide();
     const rule = guide.slice(guide.indexOf('6. **Plain words.**'), guide.indexOf('7. **Be brief.**'));

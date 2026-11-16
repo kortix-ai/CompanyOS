@@ -27405,5 +27405,27 @@
       "members": "Članovi",
       "settings": "Podešavanja"
     }
+  },
+  "workspaceSetup": {
+    "title": "Završi podešavanje",
+    "description": "Završeno {done} od {total}. Red je završen čim se podesi.",
+    "descriptionIdle": "Šta agentima ovog workspace-a treba od tebe.",
+    "tryAgain": "Pokušaj ponovo",
+    "loadFailed": "Koraci podešavanja nisu mogli da se učitaju.",
+    "emptyTitle": "Nema više ničega za podešavanje",
+    "emptyDescription": "Ovom workspace-u od tebe ne treba prijava, tajna ni Slack.",
+    "openWorkspace": "Otvori workspace",
+    "completeTitle": "Podešavanje je završeno",
+    "completeDescription": "Ako si podešavanje pokrenuo u terminalu, tamo se nastavlja samo.",
+    "slackName": "Slack",
+    "kindConnector": "Konektor",
+    "kindSecret": "Tajna",
+    "kindSlack": "Kanal",
+    "done": "Gotovo",
+    "connect": "Poveži {name}",
+    "reconnect": "Ponovo poveži {name}",
+    "setSecret": "Podesi {name}",
+    "addSlack": "Dodaj Kortix u Slack",
+    "connectSlack": "Poveži Slack"
   }
 }

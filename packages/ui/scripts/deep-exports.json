@@ -329,6 +329,7 @@
     "./workspace/review/review-center",
     "./workspace/review/types",
     "./workspace/settings/use-leave-workspace",
+    "./workspace/setup/workspace-setup-page",
     "./workspace/sidebar/footer/project-apps-nav",
     "./workspace/sidebar/footer/project-balance-warning",
     "./workspace/sidebar/footer/project-computer-nav",

@@ -52,10 +52,25 @@ export const guideUrl = (target: SetupTarget = PROD_TARGET) => `${target.origin}
 export const SETUP_GUIDE_URL = guideUrl();
 export const FACTORY_GUIDE_URL = `${PROD_TARGET.origin}/factory.md`;
 
-/** Step 0 of the guide: install the CLI and, off production, point it at this deployment. */
+/** An older CLI lacks commands this guide uses, so step 0 always runs the installer. */
+const OLD_CLI_NOTE = [
+  'Always run the installer, also when `kortix` exists: an older CLI lacks',
+  'commands this guide uses. When `kortix onboard --help` does not list `--wait`',
+  'afterwards, an older copy is earlier on PATH: `which -a kortix` lists them;',
+  'tell the person which one to remove, in one line.',
+].join('\n');
+
+/** Step 0 of the guide: install or update the CLI and, off production, point it at this deployment. */
 function installBlock(target: SetupTarget): string {
   if (isProd(target)) {
-    return ['```bash', `command -v kortix || curl -fsSL ${target.origin}/install | bash`, 'kortix --version', '```'].join('\n');
+    return [
+      '```bash',
+      `curl -fsSL ${target.origin}/install | bash   # installs the CLI, or updates an older one`,
+      'kortix --version',
+      '```',
+      '',
+      OLD_CLI_NOTE,
+    ].join('\n');
   }
   const host = setupHostName(target);
   return [
@@ -64,12 +79,14 @@ function installBlock(target: SetupTarget): string {
     'command then talks to this deployment.',
     '',
     '```bash',
-    `command -v kortix || curl -fsSL ${target.origin}/install | KORTIX_CHANNEL=dev bash`,
+    `curl -fsSL ${target.origin}/install | KORTIX_CHANNEL=dev bash   # installs the CLI, or updates an older one`,
     'kortix --version',
     `kortix hosts info ${host} >/dev/null 2>&1 || kortix hosts add ${host} --url ${target.apiBase}`,
     `kortix hosts use ${host}`,
     'kortix hosts current   # must print ' + host,
     '```',
+    '',
+    OLD_CLI_NOTE,
     '',
     'A test deployment may have no Kortix GitHub App. When step 6 asks the person',
     'to install the App and the link does not work, use their own token instead,',

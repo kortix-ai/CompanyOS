@@ -13,10 +13,8 @@
  * text, burst, or other standalone tool breaks the run, which keeps narrative
  * order. A lone `show` stays `standalone` and renders exactly as before.
  *
- * A failed `show` presented nothing, so it is dropped here: it renders nowhere
- * and does not split a run (2026-11-16: a call without `type` failed, its retry
- * succeeded, and the card opened on the failure). The call stays in the
- * session log and the model's context; only the presentation skips it.
+ * A failed `show` never reaches this pass: `segmentTurn` drops it
+ * (`isInvisibleActivityPart`), so it renders nowhere and does not split a run.
  *
  * `showGroupItems` flattens a group's calls into carousel items, one per
  * artifact, so N single calls and one N-item call render the same card.
@@ -56,7 +54,6 @@ export function groupShowSegments(
   };
 
   for (const segment of segments) {
-    if (segment.kind === 'standalone' && isShowTool(segment.part.tool) && segment.part.state.status === 'error') continue;
     // A call waiting on a permission reply renders its own prompt, so it
     // never shares a card with another call.
     const groupable =
@@ -146,7 +143,7 @@ export function showGroupItems(parts: ReadonlyArray<ToolPart>): ShowGroupItem[] 
     };
     const input = state.input ?? {};
 
-    // A failed call presented nothing: it has no item (see `groupShowSegments`).
+    // A failed call presented nothing: it has no item (`isInvisibleActivityPart`).
     if (state.status === 'error') continue;
 
     const nested = parseItems(input.items);

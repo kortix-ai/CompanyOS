@@ -34,6 +34,7 @@ import {
   shouldShowToolPart,
 } from '../../internal/session-types';
 import {
+  isInvisibleActivityPart,
   sessionLogCallStatus,
   sessionLogOpenCall,
   toolCallConnectorSignIns,
@@ -175,6 +176,9 @@ function ToolPartRendererImpl({
 
   // The SDK's verdict on tools that never render (a todo read, context bookkeeping).
   if (!shouldShowToolPart(call)) return null;
+  // A failed `show` presented nothing, so no surface draws it. Of failed calls,
+  // `isInvisibleActivityPart` names only that one: every other failure keeps its card.
+  if (call.status === 'error' && isInvisibleActivityPart(call)) return null;
 
   // A failed `task` dispatch is still a dispatch. OpenCode keeps the child
   // session alive through the failure (its id rides the part's

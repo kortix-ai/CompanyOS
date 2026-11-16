@@ -10,7 +10,8 @@ def memory_text():
     text = ''
     for f in drive_files('~/Memory/mykortix', depth=1):
         path = f.get('path') or f"~/Memory/mykortix/{f.get('name')}"
-        text += f"\n---\n{path}\n" + sh(f"kortix drive cat {json.dumps(path)} 2>/dev/null")
+        # The page's body only: a deleted page can still be listed, and its file name is not what is remembered.
+        text += "\n---\n" + sh(f"kortix drive cat {json.dumps(path)} 2>/dev/null")
     open(f'{V}/memory.txt', 'w').write(text)
     return text
 text = memory_text().lower()

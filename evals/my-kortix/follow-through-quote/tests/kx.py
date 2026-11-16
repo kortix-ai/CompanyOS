@@ -162,6 +162,15 @@ def drive_get(path, dest):
 ASK = re.compile(r'\?\s*$|\b(shall I|should I|want me to|do you want|ok to|okay to|go ahead\?|confirm|set it up\?|proceed\?)', re.I | re.M)
 
 
+def asked_person():
+    """The agent asked the person: a question that ends its reply, or a question card it waits on (the Review inbox)."""
+    if ASK.search(reply()[-600:]):
+        return True
+    if rows(kj(f'sessions pending {SESSION}'), 'questions'):
+        return True
+    return any(re.fullmatch(r'(ask_)?question|ask_user', c['name'], re.I) for c in tool_calls())
+
+
 def save(rewards):
     os.makedirs(V, exist_ok=True)
     json.dump(rewards, open(f'{V}/reward.json', 'w'))

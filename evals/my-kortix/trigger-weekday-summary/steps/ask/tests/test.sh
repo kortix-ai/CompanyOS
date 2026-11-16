@@ -33,9 +33,10 @@ def fires(t):
     runs = rows(kj(f"triggers runs {t['id']}"), 'runs') if t['kind'] == 'yaml' else []
     print('runs', [(r.get('status'), r.get('session_id')) for r in runs])
     return bool(re.search(r'session [0-9a-f]{8}-[0-9a-f-]{27}', out)) or any(r.get('session_id') and r.get('status') in ('fired', 'running') for r in runs)
-found = [t for t in triggers() if t['cron'] or t['type'] in ('cron', 'schedule')]
+# My Kortix's own wake-ups on this chat (loops, `reminder.*`) are not the automation it was asked to set up.
+found = [t for t in triggers() if (t['cron'] or t['type'] in ('cron', 'schedule')) and not str(t['id']).startswith('reminder.')]
 open(f'{V}/triggers.json', 'w').write(json.dumps(found, indent=1))
-asked = 1 if ASK.search(reply()[-600:]) else 0
+asked = 1 if asked_person() else 0
 save({'not_created': 0 if found else 1, 'asked': asked})
 PY
 judge \

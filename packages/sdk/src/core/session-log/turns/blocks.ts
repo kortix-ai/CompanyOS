@@ -149,13 +149,9 @@ export function sessionLogOpenCall(call: ToolCallBlock): ToolCallBlock {
   return open;
 }
 
-/**
- * A failed call keeps its slot as an `error` item whose `content` is the message. An item
- * whose own call's output gives its file a sha256 carries it (R38, `showItemDigest`).
- */
+/** An item whose own call's output gives its file a sha256 carries it (R38, `showItemDigest`). */
 function carouselItem(item: ShowGroupItem, call: ToolCallBlock | undefined): Omit<ShowGroupItem, 'callID' | 'error'> & { sha256?: string } {
-  const { callID: _callID, error, ...rest } = item;
-  if (item.status === 'error') return { ...rest, type: 'error', content: error || 'This output failed to load.' };
+  const { callID: _callID, error: _error, ...rest } = item;
   const sha256 = call && showItemDigest(call, item.path);
   return sha256 ? { ...rest, sha256 } : rest;
 }
@@ -163,7 +159,7 @@ function carouselItem(item: ShowGroupItem, call: ToolCallBlock | undefined): Omi
 /**
  * A run of adjacent `show` calls (a `show-group` segment) as ONE `show` call: the first call's
  * id, the call id of the first call that did not fail (so "Open" lands on what was shown, not
- * on a failed attempt its retry replaced), `input.items` the carousel of every call's items,
+ * on a failed attempt), `input.items` the carousel of every call's items (a failed call has none),
  * `running` while any call is open, else `complete`. N single calls and one N-item call render
  * the same card.
  */

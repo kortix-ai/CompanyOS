@@ -25,6 +25,8 @@ function ShowGroupRendererImpl({
   disableNavigation?: boolean;
 }) {
   const merged = useMemo(() => sessionLogShowGroupCall(calls), [calls]);
+  // Every call failed: a failed show presents nothing, so the card is not drawn.
+  if ((merged.input as { items: unknown[] }).items.length === 0) return null;
   return <ToolPartRenderer call={merged} sessionId={sessionId} disableNavigation={disableNavigation} />;
 }
 

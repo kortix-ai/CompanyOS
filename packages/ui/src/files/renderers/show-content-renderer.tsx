@@ -1276,6 +1276,8 @@ export function ShowCarousel({
 
   const currentItem = items[currentIndex];
   if (!currentItem) return null;
+  // The 420px slot holds media steady while paging; link cards are one row each and need none.
+  const linkCardsOnly = items.every((item) => item.type === 'url' && !(item.url && parseLocalhostUrl(item.url) && !isAppRouteUrl(item.url)));
 
   return (
     <div
@@ -1286,8 +1288,7 @@ export function ShowCarousel({
       tabIndex={fill || count < 2 ? undefined : -1}
       onKeyDown={fill || count < 2 ? undefined : (e) => handleArrowKey(e)}
     >
-      {/* The 420px slot holds media steady while paging; an error is one line, not a blank box. */}
-      <div className={cn(fill ? 'min-h-0 flex-1 overflow-hidden' : currentItem.status !== 'error' && 'min-h-[420px]')}>
+      <div className={cn(fill ? 'min-h-0 flex-1 overflow-hidden' : !linkCardsOnly && 'min-h-[420px]')}>
         {currentItem.status === 'pending' ? (
           <div
             className={cn(

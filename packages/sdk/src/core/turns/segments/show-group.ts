@@ -13,6 +13,11 @@
  * text, burst, or other standalone tool breaks the run, which keeps narrative
  * order. A lone `show` stays `standalone` and renders exactly as before.
  *
+ * A failed `show` presented nothing, so it is dropped here: it renders nowhere
+ * and does not split a run (2026-11-16: a call without `type` failed, its retry
+ * succeeded, and the card opened on the failure). The call stays in the
+ * session log and the model's context; only the presentation skips it.
+ *
  * `showGroupItems` flattens a group's calls into carousel items, one per
  * artifact, so N single calls and one N-item call render the same card.
  *
@@ -51,6 +56,7 @@ export function groupShowSegments(
   };
 
   for (const segment of segments) {
+    if (segment.kind === 'standalone' && isShowTool(segment.part.tool) && segment.part.state.status === 'error') continue;
     // A call waiting on a permission reply renders its own prompt, so it
     // never shares a card with another call.
     const groupable =
@@ -74,7 +80,7 @@ export interface ShowGroupItem {
   callID: string;
   /**
    * `pending`: the call is still streaming its arguments.
-   * `error`: the call failed; `error` carries the message.
+   * `error`: no longer produced (a failed call has no item); kept so the published type does not narrow.
    * `ready`: the payload is here and the item can render.
    */
   status: 'pending' | 'ready' | 'error';
@@ -140,18 +146,8 @@ export function showGroupItems(parts: ReadonlyArray<ToolPart>): ShowGroupItem[] 
     };
     const input = state.input ?? {};
 
-    if (state.status === 'error') {
-      // A failed call keeps its slot: hiding it would read as "never ran".
-      const title = typeof input.title === 'string' && input.title ? input.title : undefined;
-      items.push({
-        callID: part.callID,
-        status: 'error',
-        type: 'error',
-        ...(title ? { title } : {}),
-        error: typeof state.error === 'string' ? state.error : '',
-      });
-      continue;
-    }
+    // A failed call presented nothing: it has no item (see `groupShowSegments`).
+    if (state.status === 'error') continue;
 
     const nested = parseItems(input.items);
     const ready = nested

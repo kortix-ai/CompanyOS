@@ -16,7 +16,7 @@ import '@kortix/ui/session/tool/tools/register';
 import { ToolActivateContext, ToolPartRenderer } from '@kortix/ui/session';
 import { useKortixComputerStore } from '@kortix/ui/internal/stores/kortix-computer-store';
 import { useEffect, useState } from 'react';
-import { sessionLogOfV1Rows, sessionLogShowGroupCall, type ToolCallBlock } from '@kortix/sdk';
+import { sessionLogOfV1Rows, sessionLogShowGroupCall, sessionLogTurnSegments, type ToolCallBlock } from '@kortix/sdk';
 import { useSessionLogThread, useSessionStateStore } from '@kortix/sdk/react';
 
 /**
@@ -362,12 +362,20 @@ const TRIGGERS_GET_OUTPUT = JSON.stringify(
   2,
 );
 
-/** `group`: adjacent `show` calls the transcript merges into one card (`sessionLogShowGroupCall`); `node` is the last. */
+/** `group`: adjacent `show` calls, drawn as the transcript draws them (`sessionLogTurnSegments`); `node` is the last. */
 type Row = { label: string; node: React.ReactNode; group?: unknown[] };
 type Group = { title: string; rows: Row[] };
 
 const SHOW_RETRY_URL = 'https://example.test/workspaces/synthetic/artifacts/synthetic';
 const SHOW_RETRY = part('show', done({ action: 'show', type: 'url', url: SHOW_RETRY_URL, title: 'Automation use-case catalog' }, ''));
+const SHOW_FAILED = part('show', errored({ action: 'show', path: '/workspace/missing.png', title: 'Missing chart' }, "'type' is required."));
+
+/** A row's calls as the transcript draws them: a failed show is no segment, a run of shows is one card. */
+function showRowCalls(group: unknown[]): ToolCallBlock[] {
+  return sessionLogTurnSegments(group.map(blockOf)).flatMap((segment) =>
+    segment.kind === 'show-group' ? [sessionLogShowGroupCall(segment.blocks)] : segment.kind === 'standalone' ? [segment.block] : [],
+  );
+}
 
 const GROUPS: Group[] = [
   {
@@ -746,6 +754,11 @@ const GROUPS: Group[] = [
           ),
           SHOW_RETRY,
         ],
+      },
+      {
+        label: 'show (every call failed: nothing is drawn)',
+        node: SHOW_FAILED,
+        group: [SHOW_FAILED],
       },
       {
         label: 'show (carousel pills)',
@@ -1938,11 +1951,9 @@ export default function DebugToolsPage() {
                       {row.label}
                     </div>
                     <div className="border-border/40 bg-card/30 rounded-md border px-4 py-3">
-                      <ToolPartRenderer
-                        call={row.group ? sessionLogShowGroupCall(row.group.map(blockOf)) : blockOf(row.node)}
-                        sessionId="debug"
-                        disableNavigation
-                      />
+                      {(row.group ? showRowCalls(row.group) : [blockOf(row.node)]).map((call) => (
+                        <ToolPartRenderer key={call.id} call={call} sessionId="debug" disableNavigation />
+                      ))}
                     </div>
                   </div>
                 ))}

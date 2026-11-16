@@ -501,8 +501,9 @@ async function awaitEnvironment(ctx: TrialContext, trial: EvalTrialRow): Promise
   }
   const box = found.box;
   await extendSandboxDeadline({ sessionId: trial.sessionId! }, RUNNER_DEADLINE_GRANT_MS);
-  // Harbor's log folders, the artifacts publish folder among them, exist before the agent runs.
-  await boxExec(box, 'mkdir -p /logs/agent /logs/verifier /logs/artifacts');
+  // Harbor's log folders, the artifacts publish folder among them, exist before the agent runs. The agent's user
+  // writes its own (`/logs/agent`, `/logs/artifacts`); `/logs/verifier` stays root's.
+  await boxExec(box, `mkdir -p /logs/agent /logs/verifier /logs/artifacts && (id -u ${AGENT_USER} >/dev/null 2>&1 && chown ${AGENT_USER}: /logs/agent /logs/artifacts || true)`);
   let current = state;
   if (state.healthcheck && !state.healthcheck_passed) {
     const checked = await runHealthcheck(ctx, trial, box, state.healthcheck);

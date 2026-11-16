@@ -98,9 +98,66 @@ Rules learned on 2026-11-14, running the My Kortix benchmark:
 - **A local runner loop compiles the My Kortix prompt** into each session it
   creates, and it does not hot-reload: restart it after a prompt change, or
   every trial runs the old prompt. (Deployed, the worker ships with the API.)
-- **Trials share the workspace.** A grader that reads workspace state sees
-  other trials' triggers and invites; read the trial session's own tool calls
-  (`kortix sessions log --json`, call inputs only).
+- **Trials share the job's workspace unless the task asks for its own.** A
+  grader that reads workspace state then sees other trials' triggers and
+  invites. A task that grades workspace state sets
+  `[metadata.kortix] workspace = "fresh"` (below).
+
+## A fresh workspace per trial (`trial-workspace.ts`)
+
+`[metadata.kortix] workspace = "fresh"` gives every trial a workspace of its
+own. A workspace is one account and its project, so it is an account of its
+own, owned by the person who started the job:
+
+1. `kortix.eval_trial_workspaces` gets the row first: the workspace switcher
+   (`listUserWorkspaceCandidates`) leaves the account out, and notifications
+   about it are dropped (`notifier.ts` `silentAccount`).
+2. The account, with an id derived from the trial (a retried create
+   converges), never the person's one free credit grant.
+3. Money: the job's workspace pays. The trial's budget (`budget_usd`, default
+   $2) moves out of the job's account and into the trial's (wallet keys
+   `eval-trial-budget-out|in:<trial_id>`). The trial account gets the Credits
+   plan when the job's account may use the Kortix models. At teardown the
+   unspent budget goes back (`eval-trial-refund-*`), an overspend is charged
+   to the job's account (`eval-trial-overspend:<trial_id>`).
+4. The project from the `minimal` starter (My Kortix and `worker`), no
+   prebuild and no `project_created` event (`runProvision` `evalTrial`).
+5. The job workspace's flags plus the task's `requires_flags`.
+6. The task's `environment/workspace/` files, committed on top.
+
+The session is the person's own chat there: source `eval:trial`, origin
+`user`, private, so it has their Drive and My Kortix's memory, the harness a
+person gets. (In the job's workspace a trial stays `system:eval`, origin
+`system`: an unattended job never reaches the person's real Drive.) The
+runner's sweep deletes the workspace 10 minutes after the trial ended, so late
+compute and model charges land on it first: its Apps (account deletion stops
+sessions, not App machines), then the money, then `deleteAccountImmediately`.
+A fresh-workspace task cannot name a `docker_image` or a Dockerfile: the trial
+runs the agent's own sandbox.
+
+## Multi-step tasks (Harbor `[[steps]]`)
+
+`steps/<name>/{instruction.md,tests/test.sh,solution/solve.sh,workdir/}`, run
+in order. Kortix differs from Harbor in one way: every step continues the same
+session (a Kortix agent is a chat, so a later step is the person's next
+message, never a new agent in the same sandbox).
+
+- `workdir/` is copied into the working directory and `workdir/setup.sh` runs
+  there before the step's message, then is removed (the agent never reads how
+  its task was staged). It and `solve.sh` run as the agent's user (`[agent]
+  user`, else `kortix`) with the agent's environment
+  (`/dev/shm/kortix/agent-env.sh`), so `kortix` acts as the session.
+- Each step's tests replace the step before's in `/tests`; each script has
+  its own in-sandbox job id per step (a launched job never runs twice).
+- The trial stops after a step whose verifier wrote no reward, after an agent
+  error, or below the step's `min_reward`. The trial's reward is
+  `multi_step_reward_strategy` (`mean`, Harbor's default, or `final`) over the
+  steps that ran; each step's result is in `result.json` `step_results` and
+  its logs under `steps/<name>/` in the trial folder.
+- A later step's turn is the first that started after its message (`firstTurn`
+  `since`); its timeout counts from the message.
+- Not yet: a step's own healthcheck, artifacts or separate verifier (refused
+  with a reason).
 
 ## Verify a change locally
 
@@ -123,10 +180,13 @@ Rules learned on 2026-11-14, running the My Kortix benchmark:
 
 ## The My Kortix benchmark
 
-`evals/my-kortix/` holds tasks for what people ask My Kortix to do. Run it
-before and after any change to My Kortix (its prompt
-`apps/api/src/projects/lib/my-kortix-prompt.ts`, its skills, its model) and
-put both scores in the PR:
+`evals/my-kortix/` is one task per My Kortix capability (agents, colleagues,
+triggers, connectors, secrets, memory, Drive, Apps, documents, code, research,
+browser, media, evals, permissions, asking first, follow-through), each in a
+fresh workspace and graded on the state it leaves (its README has the table
+and how a grader is written). Run it before and after any change to My Kortix
+(its prompt `apps/api/src/projects/lib/my-kortix-prompt.ts`, its skills, its
+model) and put both scores per capability in the PR.
 
 It is a built-in dataset: every project can name it, and it is read from the
 Kortix repository at the commit the API was built from (`version` pins
@@ -144,36 +204,16 @@ evals:
 
 Built-in datasets are listed in `BUILTIN_DATASETS`
 (`apps/api/src/projects/evals/task-source.ts`); add one there for every
-folder of tasks Kortix ships.
+folder of tasks Kortix ships. Every `solution/solve.sh` must score 1 and
+`nop` 0: run the dataset with `oracle` and `nop` after any task change.
 
-Each task tests a rule of My Kortix's prompt; the README table names it.
-Every judged task pins `KORTIX_EVAL_JUDGE_MODEL` in `[verifier.env]`. Every
-reference solution (`solution/solve.sh`) must score 1: run the dataset with
-`oracle` after any task change.
-
-Hill-climb record (2026-11-14), 20 tasks × 3 attempts, each model and variant in its own fresh workspace:
-- **The change:** "ask, then stop" in the prompt's authority and automation rules. The prompt describes the action, asks once, and calls no creating tool until the person says yes.
-- **Acting before asking** (invite or automation created, 6 trials per model): DeepSeek 4 → 0, GLM 4 → 0.
-- **Tasks passed:**
-  - DeepSeek V4.1 Flash: 41 → 43/60, mean 0.901 → 0.904.
-  - GLM 5.3 Flash: 38 → 46/60, mean 0.881 → 0.942. The baseline had 4 sandboxes fail to start, so it is 38/56 on valid trials.
-- **Decision:** kept.
-- **Two earlier attempts were void:**
-  - the local runner loop still ran the old prompt;
-  - the shared workspace kept the connectors and triggers that earlier trials made.
-- **Still failing on both models:**
-  - `handoff-compare`: My Kortix researches itself instead of handing off.
-  - `meeting-actions`: wording.
-  - `confirm-before-invite`: it claims an invite cannot grant admin, though `kortix members invite --role admin` works.
-  - `automation-asks-first`: its reply misses what the automation needs.
-
-A task that needs a flag says so in `task.toml` `[metadata] requires_flags`.
-Judged criteria call `kortix evals judge`, so they need a sandbox image whose
-CLI has it.
+The 20 reply-graded tasks of 2026-11-13 were replaced on 2026-11-16: they
+graded what My Kortix said, in a workspace every trial shared. Their
+hill-climb (the "ask, then stop" rule) is in git history (#12682).
 
 ## Not supported yet
 
-Multi-step tasks, docker-compose environments, a restricted network
+Docker-compose environments, a restricted network
 (`no-network`/`allowlist`, `allow_internet = false`: Kortix cannot enforce it),
 `mcp_servers`, a Dockerfile that copies local files, Windows, GPUs,
 `metric.py`, Harbor's Python agents (`import_path`), and `harbor serve` (see
@@ -183,4 +223,5 @@ API rules) with its SQL `/query` and Hub upload. Each is refused with a reason
 Supported since 2026-11-14 (Harbor v0.26.0): the Hub registry, a separate
 verifier (`artifact-transfer.ts`), `[environment.healthcheck]`, `artifacts`
 (`artifacts.ts`), `.harborignore`, and Dockerfile tasks from outside the
-repository.
+repository. Since 2026-11-16: multi-step tasks (`[[steps]]`) and a fresh
+workspace per trial.

@@ -563,10 +563,13 @@ async function runStepSetup(ctx: TrialContext, trial: EvalTrialRow, box: Box, ta
   if (!state.step_setup_launched) {
     const { tree } = await loadTrialTask(ctx, trial);
     const files = withoutHarborIgnored(await loadTaskFolder(tree, taskRef(trial), `steps/${step.name}/workdir`));
-    await uploadDir(box, dir, files);
+    // Harbor adds the step's files to the working directory, never replaces it: they go to a folder of their own
+    // first (uploadDir empties its target), then into the directory the agent works in.
+    const staged = `/tmp/eval-workdir-${trial.trialId}-${state.step_index ?? 0}`;
+    await uploadDir(box, staged, files);
     // The step's files are the agent's to change, as if it made them.
     const user = task.agentUser ?? AGENT_USER;
-    await boxExec(box, `id -u ${shellQuote(user)} >/dev/null 2>&1 && cd ${shellQuote(dir)} && chown ${shellQuote(user)}: ${files.map((f) => shellQuote(f.path)).join(' ')} || true`);
+    await boxExec(box, `mkdir -p ${shellQuote(dir)} && cp -a ${shellQuote(staged)}/. ${shellQuote(dir)}/ && rm -rf ${shellQuote(staged)} && (id -u ${shellQuote(user)} >/dev/null 2>&1 && cd ${shellQuote(dir)} && chown ${shellQuote(user)}: ${files.map((f) => shellQuote(f.path)).join(' ')} || true)`);
     await launch(box, job, {
       command: `${AGENT_ENV}bash ${shellQuote(`${dir}/setup.sh`)}; code=$?; rm -f ${shellQuote(`${dir}/setup.sh`)}; exit $code`,
       cwd: dir,

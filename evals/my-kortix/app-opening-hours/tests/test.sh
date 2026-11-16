@@ -7,7 +7,8 @@ import sys; sys.path.insert(0, '/tests')
 from kx import *
 found = {'live': 0, 'public': 0, 'hours': 0}
 for a in rows(kj('apps ls'), 'apps'):
-    d = kj(f"apps show {a.get('slug')}") or a
+    shown = kj(f"apps show {a.get('slug')}") or {}
+    d = {**a, **(shown.get('app') or {})}
     url = d.get('url') or ''
     page = sh(f"curl -sL -m 30 {json.dumps(url)}") if url else ''
     open(f'{V}/page.html', 'w').write(page[:20000])

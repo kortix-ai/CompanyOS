@@ -26850,8 +26850,7 @@
         "dangerZone": "Zona pericolosa",
         "evalDatasets": "Dataset",
         "evalTasks": "Attività",
-        "evalJobs": "Job",
-        "evalTrials": "Prove"
+        "evalJobs": "Job"
       },
       "accessTitle": "Accesso",
       "accessDescription": "Chi può aprire questo workspace e con quale ruolo.",
@@ -27105,9 +27104,7 @@
       "queued": "In coda",
       "running": "In esecuzione",
       "completed": "Completato",
-      "cancelled": "Annullato",
-      "paused": "In pausa",
-      "cancelling": "Annullamento in corso"
+      "cancelled": "Annullato"
     },
     "trialStatus": {
       "queued": "In coda",
@@ -27116,8 +27113,7 @@
       "verifying": "Verifica",
       "completed": "Completata",
       "errored": "Con errore",
-      "cancelled": "Annullata",
-      "paused": "In pausa"
+      "cancelled": "Annullata"
     },
     "rerunFailed": "Riesegui le non riuscite",
     "rerunAll": "Riesegui tutto",
@@ -27174,8 +27170,7 @@
       "error": "Errore",
       "running": "In corso",
       "queued": "In coda",
-      "cancelled": "Annullata",
-      "paused": "In pausa"
+      "cancelled": "Annullata"
     },
     "colMeanScore": "Punteggio medio",
     "metricsHint": "Il punteggio di una prova è la media delle sue ricompense; questa è la loro media. Metriche Harbor per chiave: {metrics}",
@@ -27361,49 +27356,7 @@
       "files": "File",
       "results": "Risultati"
     },
-    "colTaskCount": "Attività",
-    "pause": "Metti in pausa",
-    "resume": "Riprendi",
-    "paused": "Job in pausa",
-    "resumed": "Job ripreso",
-    "cancelNow": "Ferma ora",
-    "cancelNowHint": "Le prove in corso si fermano e il job termina.",
-    "cancelDrain": "Lascia finire le prove in corso",
-    "cancelDrainHint": "Non parte né si ripete nulla di nuovo. Il job termina dopo le prove in corso.",
-    "cancelDrainStarted": "Il job termina dopo le prove in corso",
-    "trialsTitle": "Prove",
-    "trialsDescription": "Ogni prova di ogni job, filtrata sul server.",
-    "trialsInfo": "Ogni filtro elenca i suoi valori con quante prove li hanno, contate tra quelle che gli altri filtri tengono. Una riga apre la prova accanto al suo job.",
-    "searchTrials": "Cerca prove",
-    "sortLabel": "Ordina",
-    "trialSort": {
-      "desc_created_at": "Più recenti",
-      "created_at": "Meno recenti",
-      "desc_finished_at": "Finite per ultime",
-      "desc_reward": "Ricompensa più alta",
-      "reward": "Ricompensa più bassa",
-      "task": "Attività A–Z"
-    },
-    "trialFacet": {
-      "status": "Stato",
-      "job": "Job",
-      "task": "Attività",
-      "agent": "Agente",
-      "model": "Modello",
-      "exception_type": "Errore"
-    },
-    "trialFacetAny": {
-      "status": "Qualsiasi stato",
-      "job": "Tutti i job",
-      "task": "Tutte le attività",
-      "agent": "Qualsiasi agente",
-      "model": "Qualsiasi modello",
-      "exception_type": "Qualsiasi errore"
-    },
-    "noTrialsYet": "Ancora nessuna prova",
-    "displayingRange": "{from}–{to} di {total} prove",
-    "previousPage": "Pagina precedente",
-    "nextPage": "Pagina successiva"
+    "colTaskCount": "Attività"
   },
   "desktopTabs": {
     "tabs": "Schede aperte",

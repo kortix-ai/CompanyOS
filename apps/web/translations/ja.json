@@ -26850,8 +26850,7 @@
         "dangerZone": "危険な操作",
         "evalDatasets": "データセット",
         "evalTasks": "タスク",
-        "evalJobs": "ジョブ",
-        "evalTrials": "トライアル"
+        "evalJobs": "ジョブ"
       },
       "accessTitle": "アクセス",
       "accessDescription": "このワークスペースを開ける人と、そのロール。",
@@ -27105,9 +27104,7 @@
       "queued": "キュー待機中",
       "running": "実行中",
       "completed": "完了",
-      "cancelled": "キャンセル済み",
-      "paused": "一時停止中",
-      "cancelling": "キャンセル中"
+      "cancelled": "キャンセル済み"
     },
     "trialStatus": {
       "queued": "キュー待機中",
@@ -27116,8 +27113,7 @@
       "verifying": "検証中",
       "completed": "完了",
       "errored": "エラー",
-      "cancelled": "キャンセル済み",
-      "paused": "一時停止中"
+      "cancelled": "キャンセル済み"
     },
     "rerunFailed": "失敗したものを再実行",
     "rerunAll": "すべて再実行",
@@ -27174,8 +27170,7 @@
       "error": "エラー",
       "running": "実行中",
       "queued": "待機中",
-      "cancelled": "キャンセル",
-      "paused": "一時停止中"
+      "cancelled": "キャンセル"
     },
     "colMeanScore": "平均スコア",
     "metricsHint": "各トライアルのスコアは報酬の平均で、これはその平均です。報酬キーごとの Harbor の指標: {metrics}",
@@ -27361,49 +27356,7 @@
       "files": "ファイル",
       "results": "結果"
     },
-    "colTaskCount": "タスク",
-    "pause": "一時停止",
-    "resume": "再開",
-    "paused": "ジョブを一時停止しました",
-    "resumed": "ジョブを再開しました",
-    "cancelNow": "今すぐ停止",
-    "cancelNowHint": "実行中のトライアルを停止し、ジョブを終了します。",
-    "cancelDrain": "実行中のトライアルを完了させる",
-    "cancelDrainHint": "新しい開始や再試行は行いません。実行中のトライアルが終わるとジョブも終了します。",
-    "cancelDrainStarted": "実行中のトライアルが終わるとジョブが終了します",
-    "trialsTitle": "トライアル",
-    "trialsDescription": "すべてのジョブのすべてのトライアル。サーバー側で絞り込みます。",
-    "trialsInfo": "各フィルターは値と該当するトライアル数を表示します。数は他のフィルターで残ったトライアルの中で数えます。行を開くと、ジョブの横にトライアルが表示されます。",
-    "searchTrials": "トライアルを検索",
-    "sortLabel": "並べ替え",
-    "trialSort": {
-      "desc_created_at": "新しい順",
-      "created_at": "古い順",
-      "desc_finished_at": "最後に終了した順",
-      "desc_reward": "報酬が高い順",
-      "reward": "報酬が低い順",
-      "task": "タスク名順"
-    },
-    "trialFacet": {
-      "status": "ステータス",
-      "job": "ジョブ",
-      "task": "タスク",
-      "agent": "エージェント",
-      "model": "モデル",
-      "exception_type": "エラー"
-    },
-    "trialFacetAny": {
-      "status": "すべてのステータス",
-      "job": "すべてのジョブ",
-      "task": "すべてのタスク",
-      "agent": "すべてのエージェント",
-      "model": "すべてのモデル",
-      "exception_type": "すべてのエラー"
-    },
-    "noTrialsYet": "まだトライアルはありません",
-    "displayingRange": "{total} 件中 {from}–{to} 件",
-    "previousPage": "前のページ",
-    "nextPage": "次のページ"
+    "colTaskCount": "タスク"
   },
   "desktopTabs": {
     "tabs": "開いているタブ",

@@ -26850,8 +26850,7 @@
         "dangerZone": "Gefahrenzone",
         "evalDatasets": "Datensätze",
         "evalTasks": "Aufgaben",
-        "evalJobs": "Jobs",
-        "evalTrials": "Durchläufe"
+        "evalJobs": "Jobs"
       },
       "accessTitle": "Zugriff",
       "accessDescription": "Wer diesen Workspace öffnen kann, und mit welcher Rolle.",
@@ -27105,9 +27104,7 @@
       "queued": "In Warteschlange",
       "running": "Läuft",
       "completed": "Abgeschlossen",
-      "cancelled": "Abgebrochen",
-      "paused": "Pausiert",
-      "cancelling": "Wird abgebrochen"
+      "cancelled": "Abgebrochen"
     },
     "trialStatus": {
       "queued": "In Warteschlange",
@@ -27116,8 +27113,7 @@
       "verifying": "Wird geprüft",
       "completed": "Abgeschlossen",
       "errored": "Fehlgeschlagen",
-      "cancelled": "Abgebrochen",
-      "paused": "Pausiert"
+      "cancelled": "Abgebrochen"
     },
     "rerunFailed": "Fehlgeschlagene erneut ausführen",
     "rerunAll": "Alle erneut ausführen",
@@ -27174,8 +27170,7 @@
       "error": "Fehler",
       "running": "Läuft",
       "queued": "Wartet",
-      "cancelled": "Abgebrochen",
-      "paused": "Pausiert"
+      "cancelled": "Abgebrochen"
     },
     "colMeanScore": "Mittlere Punktzahl",
     "metricsHint": "Die Punktzahl eines Durchlaufs ist der Mittelwert seiner Bewertungen; dies ist deren Mittelwert. Harbors Metriken je Bewertungsschlüssel: {metrics}",
@@ -27361,49 +27356,7 @@
       "files": "Dateien",
       "results": "Ergebnisse"
     },
-    "colTaskCount": "Aufgaben",
-    "pause": "Pausieren",
-    "resume": "Fortsetzen",
-    "paused": "Job pausiert",
-    "resumed": "Job fortgesetzt",
-    "cancelNow": "Sofort stoppen",
-    "cancelNowHint": "Laufende Durchläufe stoppen und der Job endet.",
-    "cancelDrain": "Laufende Durchläufe beenden lassen",
-    "cancelDrainHint": "Nichts Neues startet oder wird wiederholt. Der Job endet nach seinen laufenden Durchläufen.",
-    "cancelDrainStarted": "Der Job endet nach seinen laufenden Durchläufen",
-    "trialsTitle": "Durchläufe",
-    "trialsDescription": "Jeder Durchlauf jedes Jobs, auf dem Server gefiltert.",
-    "trialsInfo": "Jeder Filter listet seine Werte mit der Zahl der Durchläufe, gezählt unter den Durchläufen, die die anderen Filter behalten. Eine Zeile öffnet den Durchlauf neben seinem Job.",
-    "searchTrials": "Durchläufe suchen",
-    "sortLabel": "Sortieren",
-    "trialSort": {
-      "desc_created_at": "Neueste zuerst",
-      "created_at": "Älteste zuerst",
-      "desc_finished_at": "Zuletzt beendet",
-      "desc_reward": "Höchste Belohnung",
-      "reward": "Niedrigste Belohnung",
-      "task": "Aufgabe A–Z"
-    },
-    "trialFacet": {
-      "status": "Status",
-      "job": "Job",
-      "task": "Aufgabe",
-      "agent": "Agent",
-      "model": "Modell",
-      "exception_type": "Fehler"
-    },
-    "trialFacetAny": {
-      "status": "Jeder Status",
-      "job": "Alle Jobs",
-      "task": "Alle Aufgaben",
-      "agent": "Jeder Agent",
-      "model": "Jedes Modell",
-      "exception_type": "Jeder Fehler"
-    },
-    "noTrialsYet": "Noch kein Durchlauf",
-    "displayingRange": "{from}–{to} von {total} Durchläufen",
-    "previousPage": "Vorherige Seite",
-    "nextPage": "Nächste Seite"
+    "colTaskCount": "Aufgaben"
   },
   "desktopTabs": {
     "tabs": "Offene Tabs",

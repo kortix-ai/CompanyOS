@@ -26850,8 +26850,7 @@
         "dangerZone": "Zona de peligro",
         "evalDatasets": "Conjuntos de datos",
         "evalTasks": "Tareas",
-        "evalJobs": "Trabajos",
-        "evalTrials": "Ejecuciones"
+        "evalJobs": "Trabajos"
       },
       "accessTitle": "Acceso",
       "accessDescription": "Quién puede abrir este espacio de trabajo y con qué rol.",
@@ -27105,9 +27104,7 @@
       "queued": "En cola",
       "running": "En ejecución",
       "completed": "Completado",
-      "cancelled": "Cancelado",
-      "paused": "En pausa",
-      "cancelling": "Cancelando"
+      "cancelled": "Cancelado"
     },
     "trialStatus": {
       "queued": "En cola",
@@ -27116,8 +27113,7 @@
       "verifying": "Verificando",
       "completed": "Completada",
       "errored": "Con error",
-      "cancelled": "Cancelada",
-      "paused": "En pausa"
+      "cancelled": "Cancelada"
     },
     "rerunFailed": "Repetir las fallidas",
     "rerunAll": "Repetir todas",
@@ -27174,8 +27170,7 @@
       "error": "Error",
       "running": "En curso",
       "queued": "En cola",
-      "cancelled": "Cancelada",
-      "paused": "En pausa"
+      "cancelled": "Cancelada"
     },
     "colMeanScore": "Puntuación media",
     "metricsHint": "La puntuación de cada ejecución es la media de sus recompensas; esta es su media. Métricas de Harbor por clave: {metrics}",
@@ -27361,49 +27356,7 @@
       "files": "Archivos",
       "results": "Resultados"
     },
-    "colTaskCount": "Tareas",
-    "pause": "Pausar",
-    "resume": "Reanudar",
-    "paused": "Job en pausa",
-    "resumed": "Job reanudado",
-    "cancelNow": "Detener ahora",
-    "cancelNowHint": "Las ejecuciones en curso se detienen y el job termina.",
-    "cancelDrain": "Dejar terminar las ejecuciones en curso",
-    "cancelDrainHint": "No empieza ni se reintenta nada nuevo. El job termina tras sus ejecuciones en curso.",
-    "cancelDrainStarted": "El job termina tras sus ejecuciones en curso",
-    "trialsTitle": "Ejecuciones",
-    "trialsDescription": "Todas las ejecuciones de todos los jobs, filtradas en el servidor.",
-    "trialsInfo": "Cada filtro lista sus valores con cuántas ejecuciones los tienen, contadas entre las que dejan los demás filtros. Una fila abre la ejecución junto a su job.",
-    "searchTrials": "Buscar ejecuciones",
-    "sortLabel": "Ordenar",
-    "trialSort": {
-      "desc_created_at": "Más recientes",
-      "created_at": "Más antiguas",
-      "desc_finished_at": "Terminadas al final",
-      "desc_reward": "Mayor recompensa",
-      "reward": "Menor recompensa",
-      "task": "Tarea A–Z"
-    },
-    "trialFacet": {
-      "status": "Estado",
-      "job": "Job",
-      "task": "Tarea",
-      "agent": "Agente",
-      "model": "Modelo",
-      "exception_type": "Error"
-    },
-    "trialFacetAny": {
-      "status": "Cualquier estado",
-      "job": "Todos los jobs",
-      "task": "Todas las tareas",
-      "agent": "Cualquier agente",
-      "model": "Cualquier modelo",
-      "exception_type": "Cualquier error"
-    },
-    "noTrialsYet": "Aún no hay ejecuciones",
-    "displayingRange": "{from}–{to} de {total} ejecuciones",
-    "previousPage": "Página anterior",
-    "nextPage": "Página siguiente"
+    "colTaskCount": "Tareas"
   },
   "desktopTabs": {
     "tabs": "Pestañas abiertas",

@@ -1779,6 +1779,13 @@
       "when": 1794679755268,
       "tag": "20261114180915_calendar_item_people",
       "breakpoints": true
+    },
+    {
+      "idx": 254,
+      "version": "7",
+      "when": 1794843345955,
+      "tag": "20261116153545_eval_drop_pause_and_cancel_mode",
+      "breakpoints": true
     }
   ]
 }

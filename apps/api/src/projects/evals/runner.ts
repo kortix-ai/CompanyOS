@@ -52,7 +52,6 @@ import {
   listOpenJobs,
   listOpenTrials,
   listTrials,
-  OPEN_JOB_STATUSES,
   refreshJobStats,
   setJobStatus,
   startedByOf,
@@ -976,14 +975,7 @@ async function finishTrial(ctx: TrialContext, trial: EvalTrialRow, rewards: Eval
   if (!written) return;
   await writeTrialFolder(ctx, finished, logs).catch((err) => logger.warn('[evals] trial folder not written', { trial_id: trial.trialId, error: String(err) }));
   if (trial.sessionId && ctx.config.environment.delete) await stopTrialSandbox(ctx.job, trial.sessionId);
-  if (exception && shouldRetry(exception, ctx.config.retry, trial.retry) && !(await retryStopped(ctx.job, trial))) await insertRetry(trial);
-}
-
-/** A cancel stopped retries: a soft cancel of the job, or of this trial while it ran. */
-async function retryStopped(job: EvalJobRow, trial: EvalTrialRow): Promise<boolean> {
-  const fresh = await getJob(job.projectId, job.jobId);
-  const state = (await getTrial(job.jobId, trial.trialId))?.runState as { no_retry?: boolean } | undefined;
-  return Boolean(fresh?.cancelMode || state?.no_retry);
+  if (exception && shouldRetry(exception, ctx.config.retry, trial.retry)) await insertRetry(trial);
 }
 
 export async function stopTrialSandbox(job: EvalJobRow, sessionId: string): Promise<void> {
@@ -1075,11 +1067,10 @@ async function advanceTrial(ctx: TrialContext, trial: EvalTrialRow): Promise<voi
 
 // ── Jobs ─────────────────────────────────────────────────────────────────────
 
-/** Write the job's `result.json` and end it: `completed`, or `cancelled` after a soft cancel drained it. */
+/** Write the job's `result.json` and mark it completed. */
 async function completeJob(job: EvalJobRow, project: ProjectRow, now: Date): Promise<void> {
   const stats = await refreshJobStats(job);
-  const cancelMode = (await getJob(job.projectId, job.jobId))?.cancelMode ?? job.cancelMode;
-  if (!(await setJobStatus(job.jobId, OPEN_JOB_STATUSES, { status: cancelMode ? 'cancelled' : 'completed', finishedAt: now }))) return;
+  if (!(await setJobStatus(job.jobId, ['queued', 'running'], { status: 'completed', finishedAt: now }))) return;
   const done = await getJob(job.projectId, job.jobId);
   if (!done) return;
   const trials = await listTrials(job.jobId);

@@ -10134,8 +10134,7 @@ const catalog = {
         "dangerZone": "Danger zone",
         "evalDatasets": "Datasets",
         "evalTasks": "Tasks",
-        "evalJobs": "Jobs",
-        "evalTrials": "Trials"
+        "evalJobs": "Jobs"
       },
       "accessTitle": "Access",
       "accessDescription": "Who can open this workspace, and with which role.",
@@ -10354,9 +10353,7 @@ const catalog = {
       "queued": "Queued",
       "running": "Running",
       "completed": "Completed",
-      "cancelled": "Cancelled",
-      "paused": "Paused",
-      "cancelling": "Cancelling"
+      "cancelled": "Cancelled"
     },
     "trialStatus": {
       "queued": "Queued",
@@ -10365,8 +10362,7 @@ const catalog = {
       "verifying": "Verifying",
       "completed": "Completed",
       "errored": "Errored",
-      "cancelled": "Cancelled",
-      "paused": "Paused"
+      "cancelled": "Cancelled"
     },
     "rerunFailed": "Re-run failed",
     "rerunAll": "Re-run all",
@@ -10423,8 +10419,7 @@ const catalog = {
       "error": "Error",
       "running": "Running",
       "queued": "Queued",
-      "cancelled": "Cancelled",
-      "paused": "Paused"
+      "cancelled": "Cancelled"
     },
     "colMeanScore": "Mean score",
     "metricsHint": "Each trial’s score is the mean of its rewards; this is their mean. Harbor’s metrics per reward key: {metrics}",
@@ -10610,49 +10605,7 @@ const catalog = {
       "files": "Files",
       "results": "Results"
     },
-    "colTaskCount": "Tasks",
-    "pause": "Pause",
-    "resume": "Resume",
-    "paused": "Job paused",
-    "resumed": "Job resumed",
-    "cancelNow": "Stop now",
-    "cancelNowHint": "Running trials stop and the job ends.",
-    "cancelDrain": "Let running trials finish",
-    "cancelDrainHint": "Nothing new starts or retries. The job ends after its running trials.",
-    "cancelDrainStarted": "The job ends after its running trials",
-    "trialsTitle": "Trials",
-    "trialsDescription": "Every trial of every job, filtered on the server.",
-    "trialsInfo": "Each filter lists its values with how many trials have them, counted among the trials the other filters keep. A row opens the trial beside its job.",
-    "searchTrials": "Search trials",
-    "sortLabel": "Sort",
-    "trialSort": {
-      "desc_created_at": "Newest first",
-      "created_at": "Oldest first",
-      "desc_finished_at": "Last finished",
-      "desc_reward": "Highest reward",
-      "reward": "Lowest reward",
-      "task": "Task A–Z"
-    },
-    "trialFacet": {
-      "status": "Status",
-      "job": "Job",
-      "task": "Task",
-      "agent": "Agent",
-      "model": "Model",
-      "exception_type": "Error"
-    },
-    "trialFacetAny": {
-      "status": "Any status",
-      "job": "All jobs",
-      "task": "All tasks",
-      "agent": "Any agent",
-      "model": "Any model",
-      "exception_type": "Any error"
-    },
-    "noTrialsYet": "No trial has run yet",
-    "displayingRange": "{from}–{to} of {total} trials",
-    "previousPage": "Previous page",
-    "nextPage": "Next page"
+    "colTaskCount": "Tasks"
   }
 };
 

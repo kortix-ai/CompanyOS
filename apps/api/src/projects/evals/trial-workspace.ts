@@ -222,9 +222,9 @@ export async function scheduleTrialWorkspaceCleanup(trialId: string, now: Date):
  */
 export async function sweepTrialWorkspaces(now: Date = new Date()): Promise<number> {
   await db.execute(sql`
-    UPDATE kortix.eval_trial_workspaces w SET cleanup_after = ${new Date(now.getTime() + CLEANUP_DELAY_MS)}
+    UPDATE kortix.eval_trial_workspaces w SET cleanup_after = ${new Date(now.getTime() + CLEANUP_DELAY_MS).toISOString()}::timestamptz
      WHERE w.deleted_at IS NULL AND w.cleanup_after IS NULL
-       AND w.created_at < ${new Date(now.getTime() - CLEANUP_DELAY_MS)}
+       AND w.created_at < ${new Date(now.getTime() - CLEANUP_DELAY_MS).toISOString()}::timestamptz
        AND NOT EXISTS (
          SELECT 1 FROM kortix.eval_trials t
           WHERE t.trial_id = w.trial_id AND t.status IN ('queued', 'starting', 'agent_running', 'verifying'))`);

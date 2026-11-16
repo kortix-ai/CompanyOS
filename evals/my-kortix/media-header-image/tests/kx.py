@@ -43,6 +43,33 @@ def rows(data, *keys):
     return []
 
 
+def agent_env(name):
+    """A variable of the agent's own environment (the verifier runs without it)."""
+    if os.environ.get(name):
+        return os.environ[name]
+    try:
+        for line in open('/dev/shm/kortix/agent-env.sh'):
+            m = re.match(rf"^export {name}='(.*)'$", line.strip())
+            if m:
+                return m.group(1).replace("'\\''", "'")
+    except OSError:
+        pass
+    return ''
+
+
+def secret_link(text):
+    """The secret names a secret link in `text` asks for, read from the API; [] when there is no live link."""
+    m = re.search(r'/secret-intake/(ksl_[A-Za-z0-9_-]+)', text)
+    if not m:
+        return []
+    base = re.sub(r'/v1/?$', '', agent_env('KORTIX_API_URL').rstrip('/'))
+    out = sh(f"curl -s -m 30 {json.dumps(base + '/v1/setup-links/secret/' + m.group(1))}")
+    try:
+        return [f['name'] for f in json.loads(out).get('fields', [])]
+    except (ValueError, AttributeError, KeyError, TypeError):
+        return []
+
+
 def reply():
     """The agent's last reply, as the person read it."""
     path = '/logs/agent/response.md'

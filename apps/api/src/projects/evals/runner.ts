@@ -65,8 +65,10 @@ import { readManifestEvals } from './config';
 import { readSessionLogPage } from '../session-log-read';
 import { FEATURE_FLAGS_ENV_NAME, featureFlagsEnvValue } from '../lib/feature-flag-env';
 
-/** The source of every session the runner creates. */
+/** The source of every session the runner creates in a job's own workspace (origin `system`). */
 export const EVAL_SESSION_SOURCE = 'system:eval' as const;
+/** The source of a trial session in a fresh workspace: the person's own chat there (origin `user`). */
+export const EVAL_TRIAL_SESSION_SOURCE = 'eval:trial' as const;
 
 /** Trials of one project that may hold a sandbox at once, across its jobs. */
 const PROJECT_ACTIVE_TRIALS_MAX = EVAL_LIMITS.n_concurrent_trials_max;
@@ -147,8 +149,12 @@ const runState = (trial: EvalTrialRow): RunState => (trial.runState ?? {}) as Ru
 const currentStep = (task: Pick<HarborTask, 'steps'>, state: RunState): HarborStep | null => task.steps[state.step_index ?? 0] ?? null;
 /** The project the trial's sessions live in: its own fresh workspace, else the job's. */
 const sessionProjectId = (job: EvalJobRow, trial: EvalTrialRow): string => runState(trial).workspace?.project_id ?? job.projectId;
+/** The user a script that acts as the agent runs as: the task's `[agent] user`, else Kortix's sandbox user. */
+const AGENT_USER = 'kortix';
 /** The in-sandbox job name of the oracle's solve.sh: one per step. */
 const solveJob = (trial: EvalTrialRow): string => (runState(trial).step_index ? `solve-${trial.trialId}-${runState(trial).step_index}` : `solve-${trial.trialId}`);
+/** The in-sandbox job name of tests/test.sh: one per step (a launched job never runs twice). */
+const verifyJob = (trial: EvalTrialRow): string => (runState(trial).step_index ? `verify-${trial.trialId}-${runState(trial).step_index}` : `verify-${trial.trialId}`);
 const taskRef = (trial: EvalTrialRow): EvalTaskRef => trial.taskRef as unknown as EvalTaskRef;
 const elapsed = (since: Date | null, now: Date): number => (since ? now.getTime() - since.getTime() : 0);
 
@@ -443,7 +449,7 @@ async function startTrial(ctx: TrialContext, trial: EvalTrialRow): Promise<void>
     // score a harness nobody uses. In a fresh workspace it runs as its owner: the person who started the job.
     const startedBy = fresh ? null : startedByOf(ctx.job);
     const result = await createSession({
-      source: EVAL_SESSION_SOURCE,
+      source: fresh ? EVAL_TRIAL_SESSION_SOURCE : EVAL_SESSION_SOURCE,
       project: await sessionProject(ctx, trial),
       userId: ctx.job.createdBy ?? ctx.project.accountId,
       requestingPrincipalType: startedBy?.principal_type ?? 'human',
@@ -532,12 +538,13 @@ async function launchSolution(ctx: TrialContext, trial: EvalTrialRow, box: Box, 
   await boxExec(box, 'rm -rf /solution');
   await uploadDir(box, '/solution', withoutHarborIgnored(await loadTaskFolder(tree, taskRef(trial), folder)));
   await launch(box, solveJob(trial), {
-    command: 'bash /solution/solve.sh',
+    command: `${AGENT_ENV}bash /solution/solve.sh`,
     cwd: task.workdir,
     // A Kortix solution acts in the workspace through the CLI, as the session: it gets what a grader gets.
     env: { ...task.environmentEnv, ...task.solutionEnv, ...(await kortixEnv(ctx, trial)) },
     timeoutSec: (step?.agentTimeoutSec ?? runState(trial).agent_timeout_sec ?? task.agentTimeoutSec),
     outputPath: '/logs/agent/oracle.txt',
+    user: task.agentUser ?? AGENT_USER,
   });
 }
 
@@ -554,13 +561,18 @@ async function runStepSetup(ctx: TrialContext, trial: EvalTrialRow, box: Box, ta
   const dir = state.workdir ?? task.workdir ?? '/workspace';
   if (!state.step_setup_launched) {
     const { tree } = await loadTrialTask(ctx, trial);
-    await uploadDir(box, dir, withoutHarborIgnored(await loadTaskFolder(tree, taskRef(trial), `steps/${step.name}/workdir`)));
+    const files = withoutHarborIgnored(await loadTaskFolder(tree, taskRef(trial), `steps/${step.name}/workdir`));
+    await uploadDir(box, dir, files);
+    // The step's files are the agent's to change, as if it made them.
+    const user = task.agentUser ?? AGENT_USER;
+    await boxExec(box, `id -u ${shellQuote(user)} >/dev/null 2>&1 && cd ${shellQuote(dir)} && chown ${shellQuote(user)}: ${files.map((f) => shellQuote(f.path)).join(' ')} || true`);
     await launch(box, job, {
-      command: `bash ${shellQuote(`${dir}/setup.sh`)}; code=$?; rm -f ${shellQuote(`${dir}/setup.sh`)}; exit $code`,
+      command: `${AGENT_ENV}bash ${shellQuote(`${dir}/setup.sh`)}; code=$?; rm -f ${shellQuote(`${dir}/setup.sh`)}; exit $code`,
       cwd: dir,
       env: { ...task.environmentEnv, ...(await kortixEnv(ctx, trial)) },
       timeoutSec: step.verifierTimeoutSec ?? state.verifier_timeout_sec ?? task.verifierTimeoutSec,
       outputPath: `/logs/setup-${state.step_index ?? 0}.txt`,
+      user: task.agentUser ?? AGENT_USER,
     });
     const next = { ...state, step_setup_launched: true };
     await updateTrial(trial, { runState: next as Record<string, unknown> });
@@ -606,6 +618,14 @@ async function runHealthcheck(ctx: TrialContext, trial: EvalTrialRow, box: Box, 
 const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
 
 /**
+ * The agent's own environment in a Kortix sandbox (its token, API, workspace,
+ * branch), sourced before a script that acts as the agent: Harbor runs
+ * `solve.sh` and a step's `setup.sh` in the agent's environment, and the
+ * runner's exec starts without it.
+ */
+const AGENT_ENV = '[ -f /dev/shm/kortix/agent-env.sh ] && set -a && . /dev/shm/kortix/agent-env.sh; set +a; ';
+
+/**
  * Send the instruction a session was created without. It goes through the
  * durable prompt queue with a key of its own, so a tick that dies after the
  * send sends nothing twice.
@@ -616,7 +636,7 @@ async function sendDeferredPrompt(ctx: TrialContext, trial: EvalTrialRow, state:
   // One key per step: a later step's instruction is a new message, never a replay of the first.
   const idempotencyKey = state.step_index ? `eval-prompt:${trial.trialId}:${state.step_index}` : `eval-prompt:${trial.trialId}`;
   await enqueueContinueSessionCommand({
-    source: EVAL_SESSION_SOURCE,
+    source: state.workspace ? EVAL_TRIAL_SESSION_SOURCE : EVAL_SESSION_SOURCE,
     projectId: project.projectId,
     accountId: project.accountId,
     sessionId: trial.sessionId!,
@@ -867,7 +887,7 @@ async function beginVerify(ctx: TrialContext, trial: EvalTrialRow, box: Box): Pr
     if (err instanceof EvalTrialError && err.type === 'TaskLoadError') throw err;
     throw new EvalTrialError('AddTestsDirError', `The tests could not be added to the sandbox: ${err instanceof Error ? err.message : String(err)}`);
   }
-  await launch(box, `verify-${trial.trialId}`, {
+  await launch(box, verifyJob(trial), {
     command: 'bash /tests/test.sh',
     cwd: task.workdir,
     env: await verifierEnv(ctx, trial, task),
@@ -1065,7 +1085,7 @@ async function awaitSeparateVerifier(ctx: TrialContext, trial: EvalTrialRow): Pr
       throw new EvalTrialError('AddTestsDirError', `The artifacts and tests could not be added to the verifier's sandbox: ${err instanceof Error ? err.message : String(err)}`);
     }
     const workdir = env.workdir ?? (env.source === 'task-environment' ? (state.workdir ?? task.workdir) : env.source === 'tests-dockerfile' ? await testsDockerfileWorkdir(tree, trial) : null);
-    await launch(box, `verify-${trial.trialId}`, {
+    await launch(box, verifyJob(trial), {
       command: 'bash /tests/test.sh',
       cwd: workdir,
       env: await verifierEnv(ctx, trial, task),
@@ -1083,11 +1103,11 @@ async function awaitSeparateVerifier(ctx: TrialContext, trial: EvalTrialRow): Pr
 /** test.sh's outcome in `box`, or null while it runs inside its timeout. */
 async function verifierResult(ctx: TrialContext, trial: EvalTrialRow, box: Box, launchedAt: Date | null): Promise<{ rewards: EvalRewards | null; failure: EvalException | null } | null> {
   const timeoutMs = (runState(trial).verifier_timeout_sec ?? EVAL_LIMITS.verifier_timeout_sec_default) * 1000;
-  const run = await poll(box, `verify-${trial.trialId}`);
+  const run = await poll(box, verifyJob(trial));
   if (run.state === 'missing') throw new EvalTrialError('SandboxGoneError', 'The verifier run was lost: the sandbox restarted.');
   if (run.state === 'running') {
     if (elapsed(launchedAt, ctx.now) <= timeoutMs + 30_000) return null;
-    await kill(box, `verify-${trial.trialId}`);
+    await kill(box, verifyJob(trial));
   }
   const timedOut = run.state === 'running' || run.exitCode === 124;
   let rewards: EvalRewards | null = null;

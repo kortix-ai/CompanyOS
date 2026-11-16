@@ -1786,6 +1786,13 @@
       "when": 1794843345955,
       "tag": "20261116153545_eval_drop_pause_and_cancel_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 255,
+      "version": "7",
+      "when": 1794851145393,
+      "tag": "20261116174545_eval_trial_workspaces",
+      "breakpoints": true
     }
   ]
 }

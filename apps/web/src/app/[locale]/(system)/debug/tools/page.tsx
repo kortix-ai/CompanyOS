@@ -11,6 +11,8 @@ import {
 } from '@kortix/ui/session-panel';
 import { ToolParts } from '@kortix/ui/session/panel/easy/detail-view';
 import { FileViewer } from '@kortix/ui/file-viewer';
+// Registers the tool renderers: without it every row renders the generic fallback card.
+import '@kortix/ui/session/tool/tools/register';
 import { ToolActivateContext, ToolPartRenderer } from '@kortix/ui/session';
 import { useKortixComputerStore } from '@kortix/ui/internal/stores/kortix-computer-store';
 import { useEffect, useState } from 'react';

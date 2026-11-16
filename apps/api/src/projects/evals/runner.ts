@@ -569,7 +569,12 @@ async function runStepSetup(ctx: TrialContext, trial: EvalTrialRow, box: Box, ta
     await uploadDir(box, staged, files);
     // The step's files are the agent's to change, as if it made them.
     const user = task.agentUser ?? AGENT_USER;
-    await boxExec(box, `mkdir -p ${shellQuote(dir)} && cp -a ${shellQuote(staged)}/. ${shellQuote(dir)}/ && rm -rf ${shellQuote(staged)} && (id -u ${shellQuote(user)} >/dev/null 2>&1 && cd ${shellQuote(dir)} && chown ${shellQuote(user)}: ${files.map((f) => shellQuote(f.path)).join(' ')} || true)`);
+    // tar keeps the working directory's own owner and mode (`cp -a staged/. dir/` gave it root's, and the agent's
+    // user could no longer write there).
+    await boxExec(
+      box,
+      `mkdir -p ${shellQuote(dir)} && tar -C ${shellQuote(staged)} -cf - . | tar -C ${shellQuote(dir)} -xf - --no-overwrite-dir --no-same-owner && rm -rf ${shellQuote(staged)} && (id -u ${shellQuote(user)} >/dev/null 2>&1 && cd ${shellQuote(dir)} && chown ${shellQuote(user)}: ${files.map((f) => shellQuote(f.path)).join(' ')} || true)`,
+    );
     await launch(box, job, {
       command: `${AGENT_ENV}bash ${shellQuote(`${dir}/setup.sh`)}; code=$?; rm -f ${shellQuote(`${dir}/setup.sh`)}; exit $code`,
       cwd: dir,

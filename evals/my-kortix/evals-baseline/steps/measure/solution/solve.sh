@@ -1,8 +1,9 @@
 #!/bin/bash
 set -e
-cd /workspace && kortix workspaces clone > /tmp/clone.txt 2>&1
-dir=$(find /workspace -maxdepth 2 -name kortix.yaml | head -1 | xargs dirname)
+cd /workspace && kortix workspaces clone
+dir=$(dirname "$(find /workspace -maxdepth 3 -name .git -type d | head -1)")
 cd "$dir"
+echo "clone: $dir"
 for q in late-order damaged-cake changed-mind; do
   mkdir -p "evals/refunds/$q/tests"
   printf 'A customer writes: my order (%s) went wrong, can I get a refund? Reply to them.\n' "$q" > "evals/refunds/$q/instruction.md"

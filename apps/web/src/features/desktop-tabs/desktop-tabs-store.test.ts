@@ -494,8 +494,6 @@ describe('tabRoute', () => {
 
   test('old addresses that redirect into settings belong to the section they land on', () => {
     const group = (rest: string) => pathGroup(`/workspaces/${P}/${rest}`, P);
-    expect(group('evals')).toBe('customize:evals');
-    expect(group('evals/jobs/j1')).toBe('customize:evals');
     expect(group('admin/eval-jobs/j1')).toBe('customize:evals');
     expect(group('reminders')).toBe('customize:reminders');
     expect(group('channels')).toBe('customize:connectors');

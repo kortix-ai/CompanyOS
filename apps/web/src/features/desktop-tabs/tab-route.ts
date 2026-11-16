@@ -111,8 +111,6 @@ export function tabRoute(path: string, projectId: string): TabRoute | null {
     // Old addresses that redirect into Customize. They resolve to the section
     // they land on, so the redirect stays in the Customize tab instead of
     // leaving a tab behind for an address nobody sees.
-    case 'evals':
-      return { kind: 'admin', section: b === 'jobs' ? 'eval-jobs' : 'evals' };
     case 'reminders':
       return { kind: 'admin', section: 'reminders' };
     case 'channels':

@@ -1269,7 +1269,6 @@ const ADMIN_ICONS: Record<string, Icon> = {
   'eval-jobs': ChartBarIcon,
   'eval-tasks': ChartBarIcon,
   'eval-datasets': ChartBarIcon,
-  'eval-trials': ChartBarIcon,
   settings: GearSixIcon,
 };
 

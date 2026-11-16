@@ -179,7 +179,6 @@ const RESOURCE_PAGES: Partial<Record<ProjectAdminResourceKey, SectionPage>> = {
   'eval-datasets': lazyPage(() => import('../../customize/evals/eval-datasets-page'), (m) => m.EvalDatasetsPage),
   'eval-tasks': lazyPage(() => import('../../customize/evals/eval-tasks-page'), (m) => m.EvalTasksPage),
   'eval-jobs': lazyPage(() => import('../../customize/evals/eval-jobs-page'), (m) => m.EvalJobsPage),
-  'eval-trials': lazyPage(() => import('../../customize/evals/eval-trials-page'), (m) => m.EvalTrialsPage),
   models: lazyPage(() => import('../../customize/models/models-page'), (m) => m.ModelsPage),
   secrets: lazyPage(() => import('../../customize/secrets/secrets-page'), (m) => m.SecretsPage),
   repo: lazyPage(() => import('../layout/project-files-view'), (m) => m.ProjectFilesView),

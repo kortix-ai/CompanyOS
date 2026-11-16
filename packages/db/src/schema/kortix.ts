@@ -10430,12 +10430,8 @@ export const evalJobs = kortixSchema.table('eval_jobs', {
   /** The `evals:` suite of kortix.yaml the job ran; null for an ad-hoc config. */
   suite: text('suite'),
   jobName: text('job_name').notNull(),
-  status: text('status').$type<'queued' | 'running' | 'paused' | 'completed' | 'cancelled'>().default('queued').notNull(),
-  /**
-   * Set by a cancel. `hard`: running trials stop now. `soft`: queued trials
-   * are cancelled and running ones finish without a retry; the job then ends
-   * `cancelled`. Null: not cancelled.
-   */
+  status: text('status').$type<'queued' | 'running' | 'completed' | 'cancelled'>().default('queued').notNull(),
+  /** Unused: pause and soft cancel were removed. Dropped by the next migration (expand/contract). */
   cancelMode: text('cancel_mode').$type<'soft' | 'hard'>(),
   /** The commit the config and the tasks were read at. */
   commitSha: text('commit_sha'),
@@ -10486,7 +10482,7 @@ export const evalTrials = kortixSchema.table('eval_trials', {
   attempt: integer('attempt').notNull(),
   retry: integer('retry').default(0).notNull(),
   status: text('status')
-    .$type<'queued' | 'paused' | 'starting' | 'agent_running' | 'verifying' | 'completed' | 'errored' | 'cancelled'>()
+    .$type<'queued' | 'starting' | 'agent_running' | 'verifying' | 'completed' | 'errored' | 'cancelled'>()
     .default('queued')
     .notNull(),
   sessionId: text('session_id'),

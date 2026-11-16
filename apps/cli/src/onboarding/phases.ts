@@ -371,7 +371,9 @@ export async function pendingSetup(state: OnboardState): Promise<PendingSetupIte
     for (const slug of slugs) {
       const row = connectors.find((c) => c.slug === slug);
       const current = row?.state ?? row?.status;
-      if (row && current !== 'connected' && current !== 'active') pending.push({ kind: 'connector', name: slug });
+      // A connector switched off in kortix.yaml is not a step: the setup page does not list it either.
+      if (!row || row.status === 'disabled' || row.state === 'disabled') continue;
+      if (current !== 'connected' && current !== 'active') pending.push({ kind: 'connector', name: slug });
     }
   }
   return pending;

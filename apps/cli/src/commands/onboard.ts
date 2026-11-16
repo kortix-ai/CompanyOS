@@ -294,12 +294,18 @@ export async function runOnboard(argv: string[]): Promise<number> {
   }));
   const blocked = (reason: string) => (name: PhaseName): PhaseResult => ({ name, status: 'skipped', duration_ms: 0, detail: reason });
   // Every sign-in, secret and Slack step on one page: the person clicks there, not in the terminal.
+  // The server's own workspace URL (its FRONTEND_URL) first; a guess from the API host only without one.
+  let workspaceUrl: string | null = null;
   const setupPageUrl = () =>
-    state.ctx && state.actions.some((a) => SETUP_PAGE_KINDS.has(a.kind))
-      ? `${projectWebUrl(state.ctx.apiBase, state.ctx.projectId)}/setup${state.opts.channels.length > 0 || state.needs.uses_slack ? '?slack=1' : ''}`
+    state.ctx && workspaceUrl && state.actions.some((a) => SETUP_PAGE_KINDS.has(a.kind))
+      ? `${workspaceUrl}/setup${state.opts.channels.length > 0 || state.needs.uses_slack ? '?slack=1' : ''}`
       : null;
   let announced = false;
-  const announceSetupPage = () => {
+  const announceSetupPage = async () => {
+    if (state.ctx && !workspaceUrl) {
+      const project = await state.ctx.client.get<{ dashboard_url?: string | null }>(`/workspaces/${state.ctx.projectId}`).catch(() => null);
+      workspaceUrl = projectWebUrl(state.ctx.apiBase, state.ctx.projectId, project?.dashboard_url);
+    }
     const url = setupPageUrl();
     if (!url || announced) return;
     announced = true;
@@ -321,7 +327,7 @@ export async function runOnboard(argv: string[]): Promise<number> {
       record(await timed('slack', () => phaseSlack(state)));
       record(await timed('connectors', () => phaseConnectors(state)));
       // The person works through the setup page while the image builds.
-      announceSetupPage();
+      await announceSetupPage();
       record(await timed('sandbox', () => phaseSandbox(state)));
     }
   }
@@ -331,7 +337,7 @@ export async function runOnboard(argv: string[]): Promise<number> {
   const ready = doctorExitCode(checks) === 0;
   record({ name: 'doctor', status: ready ? 'done' : 'waiting_on_person', duration_ms: Date.now() - started, detail: ready ? 'every line green' : `red: ${checks.filter((c) => c.state === 'fail').map((c) => c.name).join(', ')}` });
 
-  announceSetupPage();
+  await announceSetupPage();
   const setupUrl = setupPageUrl();
   const result = {
     workspace: state.ctx?.projectId ?? null,

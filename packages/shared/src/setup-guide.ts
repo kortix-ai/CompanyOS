@@ -34,7 +34,8 @@ const trim = (url: string) => {
  */
 export function setupTarget(origin?: string | null, backendUrl?: string | null): SetupTarget {
   const web = origin ? trim(origin) : PROD_TARGET.origin;
-  if (web === PROD_TARGET.origin) return PROD_TARGET;
+  // Production serves the web app on www.kortix.com too (its APP_URL): the same deployment.
+  if (web === PROD_TARGET.origin || web === 'https://www.kortix.com') return PROD_TARGET;
   const backend = backendUrl?.trim() ? trim(backendUrl) : '';
   const absolute = /^https?:\/\//.test(backend) ? backend : backend ? `${web}${backend.startsWith('/') ? '' : '/'}${backend}` : '';
   return { origin: web, apiBase: absolute ? absolute.replace(/\/v1$/, '') : PROD_TARGET.apiBase };
@@ -248,7 +249,7 @@ message of step 3.
    Figma).
 5. **The reference repositories.** \`recommendation.references\` in the plan
    lists them. Read each one's \`README.md\`, \`ADAPTING.md\`, \`kortix.yaml\` and
-   \`.kortix/\` now. Every loop is a part you can take on its own. The Software
+   the files it imports now. Every loop is a part you can take on its own. The Software
    Factory has intake from issues, errors, logs and feedback, a worker that
    opens pull requests with proof, and a reviewer. The Marketing Factory has
    the changelog from merged pull requests, blog and social drafts, search
@@ -305,8 +306,8 @@ The questions:
      with no entry;
   4. the models: the person's Claude plan, their ChatGPT plan, or an API
      key; the reviewer on the strongest model;
-  5. where \`kortix.yaml\` lives (this repository, or its own private
-     repository so the code gets no file) and the workspace name;
+  5. the workspace name. The configuration always gets its own repository,
+     which Kortix hosts: the code repository gets no Kortix file;
   6. the template's questions from step 2;
   7. a repository rule that conflicts with the loops: which one wins;
   8. the task for the real run in step 7, from what you found.
@@ -335,13 +336,28 @@ After the reply:
 
 ## 4. Write the configuration
 
-Adapt the reference into this repository (or the config repository): write
-\`kortix.yaml\` with \`env.required\` and \`env.optional\` listing every secret the
-loops use, the \`.kortix/<factory>/\` folder, the sandbox \`Dockerfile\` (a
-Debian-family base, the repository's runtimes at their pinned versions, git and
-gh, no \`COPY\` from the repository), the template's \`cpu\`, \`memory\` and \`disk\`
-from the plan's \`dev_environment.resources\` (a sandbox too small for the dev
-stack crashes the tests), and the \`dev-environment\` skill. Then:
+The configuration lives in the workspace repository, never in the code
+repository. Work in a folder beside this one: \`kortix workspaces clone
+<workspace_id> ../<repo>-kortix\` when the plan shows the workspace, else a new
+folder with \`git init\`. Run every later \`kortix\` command there. The code stays
+where it is; the agents reach it on GitHub.
+
+Use the layout of every workspace repository: \`kortix.yaml\` at the root, each
+agent's prompt in \`agents/<name>.md\`, each skill in \`skills/<name>/\`. A
+template adds \`<id>.yaml\` (which \`kortix.yaml\` imports) and its settings JSON
+at the root: \`kortix templates add <id> --repo <owner/repo> --branch <default
+branch> --json\` writes them, with the code repository named. Never write a
+\`.kortix/\` folder: it holds only the CLI's local state.
+
+Adapt the reference there: write \`kortix.yaml\` with \`env.required\` and
+\`env.optional\` listing every secret the loops use, the sandbox \`Dockerfile\` at
+the root (a Debian-family base, the code repository's runtimes at their pinned
+versions, git and gh, no \`COPY\` from the repository), the template's \`cpu\`,
+\`memory\` and \`disk\` from the plan's \`dev_environment.resources\` (a sandbox
+too small for the dev stack crashes the tests), and the \`dev-environment\` skill
+in \`skills/dev-environment/\`. A loop that works on the code clones it from
+GitHub with the GitHub token its template names (\`FACTORY_GITHUB_TOKEN\` for
+the Software Factory), so that token is a required secret. Then:
 
 \`\`\`bash
 kortix validate
@@ -351,11 +367,10 @@ Fix every error and warning in the files you wrote. Two rules save a round:
 
 - Give every agent you add a \`tools\` list (or \`"*"\`). An agent without one
   trips a deprecation warning.
-- When \`kortix.yaml\` lives in its own repository, add
-  \`body.repository.full_name: <owner>/<repo>\` to the \`filter\` of every
-  GitHub webhook trigger. It names the code repository in code: \`onboard\`
-  and \`doctor\` then put the webhooks and labels there, and an event from any
-  other repository never starts a run.
+- Every GitHub webhook trigger filters on
+  \`body.repository.full_name: <owner>/<repo>\`, the code repository (the
+  templates carry it). \`onboard\` and \`doctor\` then put the webhooks and
+  labels there, and an event from any other repository never starts a run.
 
 ## 5. Connect the models
 
@@ -374,18 +389,18 @@ Connect what the person picked in step 3.
 kortix onboard --yes --json \\
   [--env-file <file> --only <A,B>]... \\
   [--channels <a,b>] [--connect <slug,...>] \\
-  [--name "<workspace name>"] [--repo <owner/repo>] [--github-token -]
+  --repo <owner/repo> [--name "<workspace name>"]
 \`\`\`
 
 The first run creates the workspace. \`--name\` is its display name (default:
 \`project.name\` in \`kortix.yaml\`, else the folder name): use the name from
-step 3, for example "Acme Loops". \`--repo\` is the code repository for the
-webhooks when \`kortix.yaml\` lives elsewhere and its triggers carry no
-\`body.repository.full_name\` filter.
+step 3, for example "Acme Loops". \`--repo\` is the code repository on GitHub:
+always pass it.
 
-It runs in phases, each skipping what is done: \`validate\`, \`ship\` (link and
-push; it refuses a dirty tree), \`secrets\` (approved names, generated webhook
-secrets, one intake link for the rest), \`webhooks\` (the GitHub repository
+It runs in phases, each skipping what is done: \`validate\`, \`ship\` (create the
+workspace and push its repository; it refuses a dirty tree), \`secrets\`
+(approved names, generated webhook secrets, one intake link for the rest,
+the GitHub token included), \`webhooks\` (the GitHub repository
 webhooks and labels the triggers need, through the person's \`gh\`), \`slack\`
 (connect link, the bot joins the channels), \`connectors\` (a sign-in link each),
 \`sandbox\` (build every image and wait; a first build takes 5 to 10 minutes

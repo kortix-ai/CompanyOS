@@ -8,6 +8,9 @@ describe('setup target', () => {
   test('production, absent values and the production origin all give the production target', () => {
     expect(setupTarget(undefined, undefined)).toEqual(PROD_TARGET);
     expect(setupTarget('https://kortix.com/', 'https://api.kortix.com/v1')).toEqual(PROD_TARGET);
+    // Production's APP_URL is https://www.kortix.com: its guide must be the production one.
+    expect(setupTarget('https://www.kortix.com', 'https://api.kortix.com/v1')).toEqual(PROD_TARGET);
+    expect(setupGuide(setupTarget('https://www.kortix.com', 'https://api.kortix.com/v1'))).not.toContain('not production');
   });
 
   test('dev, a local stack and a root-relative backend each point at themselves', () => {

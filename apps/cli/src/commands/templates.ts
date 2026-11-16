@@ -1,7 +1,8 @@
 /**
  * `kortix templates` — the hand-approved templates (`@kortix/starter/templates`)
- * and adding one to the repository you stand in: its `.kortix/<id>/` folder
- * plus one line under `imports:` in `kortix.yaml`. The one-prompt setup guide
+ * and adding one to the workspace repository you stand in: its files in the
+ * root layout (`agents/`, `skills/`, `<id>.yaml`, a settings JSON) plus one
+ * line under `imports:` in `kortix.yaml`. The one-prompt setup guide
  * drives `add --json` and acts on the `next` steps it prints.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -18,8 +19,9 @@ import { C, help, status } from '../style.ts';
 
 const HELP = help`Usage: kortix templates <command> [options]
 
-Hand-approved sets of agents and triggers. Adding one writes .kortix/<id>/ and
-adds it under imports: in kortix.yaml. Nothing reaches Kortix until you push.
+Hand-approved sets of agents and triggers. Adding one writes agents/, skills/,
+<id>.yaml and a settings JSON in the workspace repository, and imports <id>.yaml
+in kortix.yaml. Nothing reaches Kortix until you push.
 
 Commands:
   ls                     List the templates.
@@ -32,7 +34,7 @@ Commands:
   add <id>               Add the template to the repository in this directory.
 
 Options for add:
-  --repo <owner/repo>    The GitHub repository. Default: the origin remote.
+  --repo <owner/repo>    The code repository on GitHub. Default: the origin remote.
   --branch <name>        The default branch. Default: origin's HEAD, else the current branch.
   --force                Overwrite template files that differ.
 
@@ -180,7 +182,7 @@ function runAdd(argv: string[], json: boolean): number {
     return 0;
   }
   process.stdout.write(`${status.ok(`${template.name} added for ${repoFullName} (${defaultBranch})`)}\n`);
-  process.stdout.write(`${status.info(`${written.length} files under ${template.import_path}; ${basename(manifest)} ${imported === 'added' ? 'imports it' : 'already imported it'}`)}\n`);
+  process.stdout.write(`${status.info(`${written.length} files written; ${basename(manifest)} ${imported === 'added' ? 'imports' : 'already imported'} ${template.import_path}`)}\n`);
   process.stdout.write(`\n  Next:\n`);
   for (const secret of template.secrets) {
     const how = secret.generate ? 'a random value' : 'your value';

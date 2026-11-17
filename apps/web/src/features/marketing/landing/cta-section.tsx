@@ -81,7 +81,7 @@ export function CtaSection({ content }: { content?: CtaContent } = {}) {
           ) : null}
           <div className="mt-8 flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-center">
             <MarketingButton
-              variant="accent"
+              variant="primary"
               size="md"
               className="hit-area-y-1 w-full sm:w-auto sm:min-w-36"
               asChild
@@ -114,7 +114,7 @@ export function CtaSection({ content }: { content?: CtaContent } = {}) {
           </h2>
           <div className="mt-8 flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-center">
             <MarketingButton
-              variant="accent"
+              variant="primary"
               size="md"
               className="hit-area-y-1 w-full sm:w-auto sm:min-w-36"
               asChild

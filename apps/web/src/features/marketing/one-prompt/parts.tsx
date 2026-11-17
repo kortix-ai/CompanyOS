@@ -89,15 +89,15 @@ function isTyping(target: EventTarget | null): boolean {
 
 export function CopyButton({
   size = 'md',
-  variant = 'accent',
+  variant = 'primary',
   text,
   label = 'Copy prompt',
   icon = 'none',
 }: {
   /** `sm` is for the header only, as on the site navbar. */
   size?: 'sm' | 'md';
-  /** The landing button's variants: `accent` is the page's main action. */
-  variant?: 'primary' | 'secondary' | 'accent';
+  /** The landing button's variants: `primary` is the page's main action. */
+  variant?: 'primary' | 'secondary';
   text?: string;
   label?: string;
   /** What follows the label: nothing (a check once copied), or the page-wide key that copies (only one button should take it). */
@@ -144,7 +144,7 @@ export function CopyButton({
 export function CopyPromptMarketingButton({ text, className }: { text: string; className?: string }) {
   const { copied, copy } = useCopy(text);
   return (
-    <MarketingButton type="button" variant="accent" size="md" className={className} onClick={copy}>
+    <MarketingButton type="button" variant="primary" size="md" className={className} onClick={copy}>
       <span>Copy prompt</span>
       <span aria-live="polite" className="sr-only">
         {copied ? 'Copied' : ''}

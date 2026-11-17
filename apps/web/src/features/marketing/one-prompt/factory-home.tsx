@@ -226,7 +226,7 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
               art={<ComposerArt tone="light" agent={first?.agent ?? 'factory'} text="Run the tests. File what fails." />}
               title={name}
               body={`1 agent, ${first?.triggers ?? 3} triggers and ${first?.skills ?? 1} ${first?.skills === 1 ? 'skill' : 'skills'}, from a public template your agent adapts to your repo.`}
-              action={<CopyButton variant="primary" text={prompt} />}
+              action={<CopyButton text={prompt} />}
             />
             <TallCard
               art={<ComposerArt agent="sales" text="Every new signup: research the company, score it and draft the outreach." />}

@@ -54,6 +54,7 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
   const [driven, setDriven] = useState(false);
   const active = ((pos % count) + count) % count;
   const run = runs[active]!;
+  const caption = run.kind === 'example' ? `${run.caption} · example` : run.caption;
   const shownBeat = still ? LAST_BEAT : beat;
 
   useEffect(() => {
@@ -74,11 +75,15 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
   const go = useCallback(
     (step: number, manual = false) => {
       const current = posRef.current;
+      // A press always takes control, even when its move is dropped below; the session it
+      // shows is finished, because the reader chose it to read it.
+      if (manual) {
+        setDriven(true);
+        setBeat(LAST_BEAT);
+      }
       // Mid-settle: drop the move rather than push `pos` out of the buffer.
       if (!still && (current < count || current >= 2 * count)) return;
-      // A session reached with the arrows shows finished: the reader chose it to read it.
-      setBeat(manual ? LAST_BEAT : 0);
-      if (manual) setDriven(true);
+      if (!manual) setBeat(0);
       if (still) {
         // Reduced motion has no slide to wait for: land in the middle copy at once.
         setPos(count + ((((current + step) % count) + count) % count));
@@ -163,13 +168,16 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
       </div>
 
       <div className="flex items-center justify-between gap-6">
-        {/* Announce only what the reader chose: a caption that changes on its own every few seconds is noise. */}
-        <p aria-live={still || driven ? 'polite' : 'off'} className="text-muted-foreground font-mono text-xs tracking-wider uppercase">
+        <p aria-hidden className="text-muted-foreground font-mono text-xs tracking-wider uppercase">
           <span key={run.id} className="animate-in fade-in duration-slow">
-            {run.caption}
-            {run.kind === 'example' ? ' · example' : null}
+            {caption}
           </span>
         </p>
+        {/* Announce only what the reader chose: a caption that changes on its own every few seconds is noise.
+            The region is always mounted, so the first arrow press is announced too. */}
+        <span aria-live="polite" className="sr-only">
+          {still || driven ? caption : ''}
+        </span>
         <div className="flex items-center gap-1">
           <ReelArrow label="Previous session" onClick={() => go(-1, true)}>
             <ArrowLeftIcon className="size-4" />

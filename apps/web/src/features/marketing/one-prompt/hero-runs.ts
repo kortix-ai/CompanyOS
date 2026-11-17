@@ -9,7 +9,7 @@ export interface HeroRun {
   id: string;
   /** The line under the reel while this session plays. The reel adds "example" to example sessions. */
   caption: string;
-  /** `real`: every line is from the demo run (2026-11-10). `example`: the steps the loop runs, with example inputs. */
+  /** `real`: from the demo run (2026-11-10); `your-org/your-repo` stands for the reader's repo. `example`: the steps the loop runs, with example inputs. */
   kind: 'real' | 'example';
   /** Who runs it: the coding agent that runs the setup prompt, or a Kortix agent. */
   host: { kind: 'claude-code' } | { kind: 'agent'; slug: string; name: string };

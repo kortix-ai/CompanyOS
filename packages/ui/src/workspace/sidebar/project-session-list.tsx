@@ -157,7 +157,6 @@ import { formatDistanceToNowStrict } from 'date-fns';
 import { UiLink, useUiPathname, useUiRouter, useUiSearchParams, useUiViewerId } from '../../providers/ui-provider';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSessionListActions } from '../../session/actions/use-session-list-actions';
-import { Separator } from '../../primitives/separator';
 import { CaretRightSolidIcon } from '../../icons/caret-right-solid';
 
 interface ProjectSessionListProps {
@@ -700,7 +699,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
     // that case here instead of letting `FadedScrollArea` render nothing with
     // no explanation.
     // `more`: no row yet, but a list has a next page. Its Load more renders below.
-    if (viewState !== 'more' && grouped.sections.length === 0 && visibleOtherCount === 0 && groups.length === 0) {
+    if (viewState !== 'more' && grouped.sections.length === 0 && visibleOtherCount === 0) {
       return (
         <div className="text-muted-foreground px-2 pt-1 pb-2 text-xs">{t('allSectionsHidden')}</div>
       );
@@ -708,35 +707,6 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
 
     return (
       <FadedScrollArea fadeColor="from-background" className="h-full min-h-0 space-y-px">
-        {groups.length > 0 && (
-          <SessionGroupSections
-            projectId={projectId}
-            groups={groups}
-            labels={labels}
-            collapsedSectionIds={collapsedSectionIds}
-            onToggleSection={(sectionId) => toggleSectionCollapsed(projectId, sectionId)}
-            passesFacets={passesFacets}
-            renderNode={(session) => renderSessionNode(session, false)}
-            actions={groupActions}
-            onRename={setGroupToRename}
-            onNewGroup={() => setGroupCreate({ fileSessionId: null })}
-            onCollapseOthers={(groupId) =>
-              collapseAllSections(projectId, [
-                ...Array.from(collapsedSectionIds).filter((id) => id !== sessionGroupSectionId(groupId)),
-                ...groups
-                  .filter((group) => group.group_id !== groupId)
-                  .map((group) => sessionGroupSectionId(group.group_id)),
-              ])
-            }
-          />
-        )}
-        {/* Without headers below, a line keeps the next row from reading as
-            part of the last group. */}
-        {groups.length > 0 && !grouped.showHeaders && (
-          <div className="px-2 py-1">
-            <Separator />
-          </div>
-        )}
         {groupsEnabled ? (
           <UngroupDropArea onDropSession={(sessionId) => void groupActions.move(sessionId, null)}>
             {renderUngrouped(grouped)}
@@ -814,10 +784,11 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
         secondary ? (listOpen ? 'flex-1' : 'shrink-0') : 'h-full',
       )}
     >
-      {/* Pinned sits above Sessions, outside it: the viewer's pins stay in
-          view while the list is closed. Its caret shows on hover. */}
-      {listsReady && (pinnedQuery.sessions.length > 0 || pinnedQuery.hasNextPage) && (
-        <div className="shrink-0">
+      {/* Pinned, then the groups, sit above Sessions, outside it: they stay in
+          view while the list is closed. Capped at half the column so they
+          never push Sessions out of view; past that they scroll. */}
+      {listsReady && (pinnedQuery.sessions.length > 0 || pinnedQuery.hasNextPage || groups.length > 0) && (
+        <div className="max-h-[50%] min-h-0 shrink-0 space-y-px overflow-y-auto">
           <StarterSection
             title={tPinArchive('section')}
             query={pinnedQuery}
@@ -827,9 +798,31 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
             renderNode={(session) => renderSessionNode(session, false)}
             caretOnHover
           />
+          {groups.length > 0 && (
+            <SessionGroupSections
+              projectId={projectId}
+              groups={groups}
+              labels={labels}
+              collapsedSectionIds={collapsedSectionIds}
+              onToggleSection={(sectionId) => toggleSectionCollapsed(projectId, sectionId)}
+              passesFacets={passesFacets}
+              renderNode={(session) => renderSessionNode(session, false)}
+              actions={groupActions}
+              onRename={setGroupToRename}
+              onNewGroup={() => setGroupCreate({ fileSessionId: null })}
+              onCollapseOthers={(groupId) =>
+                collapseAllSections(projectId, [
+                  ...Array.from(collapsedSectionIds).filter((id) => id !== sessionGroupSectionId(groupId)),
+                  ...groups
+                    .filter((group) => group.group_id !== groupId)
+                    .map((group) => sessionGroupSectionId(group.group_id)),
+                ])
+              }
+            />
+          )}
         </div>
       )}
-      {/* The header collapses the whole list: the groups, the time or status
+      {/* The header collapses the sessions in no group: the time or status
           sections, Shared, Automated. Open by default (closed when
           `secondary`); the choice persists. */}
       <Disclosure

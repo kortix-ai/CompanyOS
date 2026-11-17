@@ -144,11 +144,11 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
             <Link href="#how" className="hover:text-foreground transition-colors">How it works</Link>
             <Link href="#factories" className="hover:text-foreground transition-colors">Factories</Link>
             <Link href="#engine" className="hover:text-foreground transition-colors">kortix.yaml</Link>
-            <Link href="/docs/developers" className="hover:text-foreground transition-colors">Docs</Link>
+            <Link href={`${KORTIX}/docs/developers`} className="hover:text-foreground transition-colors">Docs</Link>
           </nav>
           <div className="flex items-center gap-2">
             <span className="hidden sm:contents">
-              <GhostButton href="/auth">Sign in</GhostButton>
+              <GhostButton href={`${KORTIX}/auth`}>Sign in</GhostButton>
             </span>
             <CopyButton size="sm" text={prompt} />
           </div>
@@ -281,7 +281,7 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
             <>
               <CopyPromptMarketingButton text={prompt} className="hit-area-y-1 w-full sm:w-auto sm:min-w-36" />
               <MarketingButton variant="secondary" size="md" className="hit-area-y-1 w-full sm:w-auto sm:min-w-36" asChild>
-                <Link href="/docs/developers">Read the docs</Link>
+                <Link href={`${KORTIX}/docs/developers`}>Read the docs</Link>
               </MarketingButton>
             </>
           ),

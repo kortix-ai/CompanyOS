@@ -79,6 +79,10 @@ import {
 import {
   SessionGroupNameModal,
   SessionGroupSections,
+  NewSessionGroupRow,
+  keepFocusForNewGroup,
+  markNewGroupFocus,
+  nextSessionGroupName,
   sessionGroupSectionId,
   UngroupDropArea,
   startSessionDrag,
@@ -260,6 +264,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
     [groupsEnabled, groupsQuery.data],
   );
   const groupActions = useSessionGroupActions(projectId, groups);
+  const tGroups = useTranslations('sidebar.sessionGroups');
   const [groupToRename, setGroupToRename] = useState<ProjectSessionGroup | null>(null);
   // `fileSessionId`: the row whose "New group…" opened the dialog goes into the new group.
   const [groupCreate, setGroupCreate] = useState<{ fileSessionId: string | null } | null>(null);
@@ -787,7 +792,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
       {/* Pinned, then the groups, sit above Sessions, outside it: they stay in
           view while the list is closed. Capped at half the column so they
           never push Sessions out of view; past that they scroll. */}
-      {listsReady && (pinnedQuery.sessions.length > 0 || pinnedQuery.hasNextPage || groups.length > 0) && (
+      {listsReady && (pinnedQuery.sessions.length > 0 || pinnedQuery.hasNextPage || groups.length > 0 || groupCreate) && (
         <div className="max-h-[50%] min-h-0 shrink-0 space-y-px overflow-y-auto">
           <StarterSection
             title={tPinArchive('section')}
@@ -818,6 +823,19 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
                     .map((group) => sessionGroupSectionId(group.group_id)),
                 ])
               }
+            />
+          )}
+          {groupsEnabled && groupCreate && (
+            // A new group is named in place, at the end of the groups: no dialog.
+            <NewSessionGroupRow
+              projectId={projectId}
+              defaultName={nextSessionGroupName(groups, tGroups('newGroup'))}
+              onDone={(group) => {
+                const fileSessionId = groupCreate.fileSessionId;
+                setGroupCreate(null);
+                // The row whose "New group…" opened it goes in.
+                if (group && fileSessionId) void groupActions.move(fileSessionId, group.group_id);
+              }}
             />
           )}
         </div>
@@ -872,15 +890,9 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
         <SessionGroupNameModal
           projectId={projectId}
           group={groupToRename}
-          open={!!groupToRename || !!groupCreate}
+          open={!!groupToRename}
           onOpenChange={(open) => {
-            if (open) return;
-            setGroupToRename(null);
-            setGroupCreate(null);
-          }}
-          onCreated={(group) => {
-            // The row whose menu opened it goes in; the group appearing with it is the result.
-            if (groupCreate?.fileSessionId) void groupActions.move(groupCreate.fileSessionId, group.group_id);
+            if (!open) setGroupToRename(null);
           }}
         />
       )}
@@ -1704,7 +1716,7 @@ function ProjectSessionRow({
               <DotsThreeIcon className="size-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" side="right" className="w-44">
+          <DropdownMenuContent align="start" side="right" className="w-44" onCloseAutoFocus={keepFocusForNewGroup}>
             <DropdownMenuItem
               className="cursor-pointer"
               onSelect={() => deferAfterClose(() => onRename(session.session_id, displayTitle))}
@@ -1744,7 +1756,10 @@ function ProjectSessionRow({
                   {onNewGroupFor && (
                     <DropdownMenuItem
                       className="cursor-pointer"
-                      onSelect={() => deferAfterClose(() => onNewGroupFor(session.session_id))}
+                      onSelect={() => {
+                        markNewGroupFocus();
+                        deferAfterClose(() => onNewGroupFor(session.session_id));
+                      }}
                     >
                       <PlusIcon />
                       {tGroups('newGroupFromMenu')}

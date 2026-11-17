@@ -53,7 +53,7 @@ const STEPS = [
 function PromptCta({ prompt, className }: { prompt?: string; className?: string }) {
   return (
     <div className={cn('flex flex-wrap items-center gap-x-5 gap-y-3', className)}>
-      <CopyButton size="lg" text={prompt} icon="shortcut" />
+      <CopyButton text={prompt} icon="shortcut" />
       <span className="text-muted-foreground inline-flex flex-wrap items-center gap-x-1.5 text-sm">
         Paste it into <Mark name="Claude Code" /> or <Mark name="Codex" />
       </span>
@@ -150,7 +150,10 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
             <a href={KORTIX} aria-label="Kortix" className="text-foreground">
               <KortixLogo size={16} variant="logomark" />
             </a>
-            <span className="text-foreground font-mono text-sm font-medium tracking-wider uppercase">Loopmaxxing</span>
+            {/* /loopmaxxing on every host: loopmaxxing.sh sends that path to its own root. */}
+            <Link href="/loopmaxxing" className="text-foreground hover:text-muted-foreground font-mono text-sm font-medium tracking-wider uppercase transition-colors">
+              Loopmaxxing
+            </Link>
           </div>
           <nav className="text-muted-foreground hidden items-center gap-8 text-sm md:flex">
             <Link href="#how" className="hover:text-foreground transition-colors">How it works</Link>
@@ -222,13 +225,13 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
               art={<ComposerArt tone="light" agent={first?.agent ?? 'factory'} text="Run the tests. File what fails." />}
               title={name}
               body={`1 agent, ${first?.triggers ?? 3} triggers and ${first?.skills ?? 1} ${first?.skills === 1 ? 'skill' : 'skills'}, from a public template your agent adapts to your repo.`}
-              action={<CopyButton tone="dark" text={prompt} />}
+              action={<CopyButton variant="primary" text={prompt} />}
             />
             <TallCard
               art={<ComposerArt agent="sales" text="Every new signup: research the company, score it and draft the outreach." />}
               title="Any loop you describe"
               body="Say what should happen and when. Your coding agent writes it as code in your repo."
-              action={<CopyButton text={setupPromptFor(target)} />}
+              action={<CopyButton variant="secondary" text={setupPromptFor(target)} />}
             />
             <TallCard art={<ApprovalArt />} title="You approve what ships" body="Every pull request, post and outbound draft waits for a person until you allow more." />
           </div>

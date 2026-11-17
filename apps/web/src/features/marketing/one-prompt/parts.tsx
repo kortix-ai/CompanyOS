@@ -83,14 +83,15 @@ function isTyping(target: EventTarget | null): boolean {
 
 export function CopyButton({
   size = 'md',
-  tone = 'light',
+  variant = 'accent',
   text,
   label = 'Copy prompt',
   icon = 'copy',
 }: {
-  size?: 'sm' | 'md' | 'lg';
-  /** `dark`: the pill for a light card. */
-  tone?: 'light' | 'dark';
+  /** `sm` is for the header only, as on the site navbar. */
+  size?: 'sm' | 'md';
+  /** The landing button's variants: `accent` is the page's main action. */
+  variant?: 'primary' | 'secondary' | 'accent';
   text?: string;
   label?: string;
   /** What follows the label: the copy mark, nothing, or the page-wide key that copies (only one button should take it). */
@@ -113,36 +114,23 @@ export function CopyButton({
     return () => window.removeEventListener('keydown', onKey);
   }, [icon]);
   return (
-    <button
+    <MarketingButton
       type="button"
+      variant={variant}
+      size={size}
       onClick={copy}
       aria-keyshortcuts={icon === 'shortcut' ? COPY_KEY.toUpperCase() : undefined}
-      className={cn(
-        'inline-flex shrink-0 items-center gap-2 rounded-md font-medium whitespace-nowrap transition-[transform,background-color] active:scale-[0.96] motion-reduce:active:scale-100',
-        tone === 'light' ? 'bg-foreground text-background hover:bg-foreground/90' : 'bg-background text-foreground hover:bg-background/90',
-        size === 'lg' && 'h-10 px-4 text-sm',
-        size === 'md' && 'h-9 px-4 text-sm',
-        size === 'sm' && 'h-8 px-3.5 text-sm',
-        // The key sits as far from the right edge as from the top and bottom: (h-10 - size-5) / 2.
-        icon === 'shortcut' && 'pr-2',
-      )}
+      // The key sits as far from the right edge as from the top and bottom: (h-10 - size-5) / 2.
+      className={cn(size === 'md' && 'hit-area-y-1', icon === 'shortcut' && 'pr-2.5')}
     >
       {/* The label never changes; the trailing mark turns into a check, and a reader hears "Copied". */}
       <span>{label}</span>
       <span aria-live="polite" className="sr-only">
         {copied ? 'Copied' : ''}
       </span>
-      {icon === 'copy' ? copied ? <CheckIcon className="size-4" /> : <Copy className="size-4" /> : null}
-      {icon === 'shortcut' ? (
-        copied ? (
-          <SolidCheckIcon aria-hidden className="size-5" />
-        ) : (
-          <Kbd className={cn('size-5', tone === 'light' ? 'bg-background/15 text-background' : 'bg-foreground/10 text-foreground')}>
-            {COPY_KEY.toUpperCase()}
-          </Kbd>
-        )
-      ) : null}
-    </button>
+      {icon === 'copy' ? copied ? <CheckIcon /> : <Copy /> : null}
+      {icon === 'shortcut' ? copied ? <SolidCheckIcon aria-hidden className="size-5!" /> : <Kbd className="bg-background/20 size-5 text-inherit">{COPY_KEY.toUpperCase()}</Kbd> : null}
+    </MarketingButton>
   );
 }
 
@@ -160,11 +148,12 @@ export function CopyPromptMarketingButton({ text, className }: { text: string; c
   );
 }
 
+/** A plain link in the header, as the site navbar draws Sign in: the landing button's secondary variant. */
 export function GhostButton({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <Link href={href} className="text-muted-foreground hover:text-foreground inline-flex h-8 items-center rounded-md px-3 text-sm font-medium transition-colors">
-      {children}
-    </Link>
+    <MarketingButton variant="secondary" asChild>
+      <Link href={href}>{children}</Link>
+    </MarketingButton>
   );
 }
 

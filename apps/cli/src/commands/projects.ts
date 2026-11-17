@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { PROJECT_GLYPH_COLORS, isProjectGlyphName, normalizeProjectGlyphColor } from '@kortix/shared';
+import { PROJECT_GLYPH_COLORS, PROJECT_GLYPH_GROUPS, isProjectGlyphName, normalizeProjectGlyphColor } from '@kortix/shared';
 import { loadAuth, loadAuthForHost } from '../api/auth.ts';
 import type { Auth } from '../api/auth.ts';
 import { ApiError, clientFromAuth } from '../api/client.ts';
@@ -72,6 +72,7 @@ Subcommands:
                        --all: Deprecated. The older view, grouped by account.
   info [<id>]          Show one workspace (defaults to the linked/default) (--json)
   set [<id>]           Update name, branch, manifest path or icon.
+  glyphs               List the glyph names and colors set --glyph takes. (--json)
   rename [<id>] <name> Alias for \`workspaces set --name <name>\`.
   cli-tokens ls|new|rm Workspace CLI tokens (kortix_pat_…).
   use [<id>]           Set the global DEFAULT workspace (interactive if omitted).
@@ -176,6 +177,8 @@ export async function runProjects(argv: string[], options: RunProjectsOptions = 
       return projectsSet(rest);
     case 'rename':
       return projectsRename(rest);
+    case 'glyphs':
+      return projectsGlyphs(rest);
     case 'cli-tokens':
     case 'cli-token':
       return projectsCliTokens(rest);
@@ -437,6 +440,25 @@ async function projectsFeatures(argv: string[]): Promise<number> {
   return 2;
 }
 
+/** `workspaces glyphs`: every name and color `set --glyph` takes, by group,
+ *  read from the same list the API and the web picker validate against. */
+function projectsGlyphs(argv: string[]): number {
+  const rest = [...argv];
+  const json = takeFlagBool(rest, ['--json']);
+  if (rest.length > 0) {
+    process.stderr.write(`${status.err(`unexpected argument "${rest[0]}"`)}\n  Usage: kortix workspaces glyphs [--json]\n`);
+    return 2;
+  }
+  const groups = PROJECT_GLYPH_GROUPS.map((group) => ({ label: group.label, names: [...group.names] }));
+  if (json) {
+    process.stdout.write(`${JSON.stringify({ groups, colors: [...PROJECT_GLYPH_COLORS] }, null, 2)}\n`);
+    return 0;
+  }
+  for (const group of groups) process.stdout.write(`${C.bold}${group.label}${C.reset}: ${group.names.join(', ')}\n`);
+  process.stdout.write(`\n${C.dim}colors: ${PROJECT_GLYPH_COLORS.join(', ')}, or #rrggbb${C.reset}\n`);
+  return 0;
+}
+
 /** `--glyph <name>:<color>` → the `icon_glyph` object the API validates.
  *  Returns null on an unknown name or color so the CLI can refuse loudly —
  *  the server would silently degrade an invalid glyph to "no glyph". */
@@ -468,7 +490,8 @@ Options:
   --manifest <path>      Manifest path, e.g. kortix.yaml.
   --icon <emoji>         Set the workspace emoji.
   --no-icon              Remove the emoji.
-  --glyph <name>:<color> Set the workspace glyph, e.g. Rocket:blue.
+  --glyph <name>:<color> Set the workspace glyph, e.g. Rocket:blue. The names:
+                         kortix workspaces glyphs.
                          Colors: ${PROJECT_GLYPH_COLORS.join(', ')}, or #rrggbb.
   --no-glyph             Remove the glyph.
   --workspace <id>       Act on this workspace (default: linked/default).
@@ -566,7 +589,7 @@ async function projectsSet(argv: string[]): Promise<number> {
     if (!glyph) {
       process.stderr.write(
         `${status.err(`Invalid --glyph "${glyphArg}". Use <name>:<color>, e.g. Rocket:blue.`)}\n` +
-          `  ${C.dim}colors: ${PROJECT_GLYPH_COLORS.join(', ')}, or #rrggbb${C.reset}\n`,
+          `  ${C.dim}colors: ${PROJECT_GLYPH_COLORS.join(', ')}, or #rrggbb; names: kortix workspaces glyphs${C.reset}\n`,
       );
       return 2;
     }

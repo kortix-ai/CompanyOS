@@ -222,6 +222,13 @@ parse.
    investigated: no map, no inventory, no list of ideas. A finding reaches the
    person only as one line of the step 3 message or of the final report. The
    step 3 message has at most 40 lines, the final report at most 15.
+8. **A connector before a token.** An app the loops use gets a Kortix
+   connector when the catalog has one: the person signs in once on the setup
+   page and copies no key. Ask for an API token only for an app no connector
+   serves, or for a token the template's steps name (the GitHub token).
+9. **Keep the reply.** Do what the person chose. When a choice cannot work as
+   chosen, only the person decides the change: say why in one line, give your
+   fix and wait for the answer. Never swap a choice without saying so.
 
 ## 0. Install
 
@@ -343,7 +350,9 @@ The questions:
   4. the software to connect as Kortix connectors (one line: connect these,
      leave out those). When the plan shows a workspace, check each app first
      with \`kortix connectors catalog <name> --json\` and leave out an app
-     with no entry;
+     with no entry. Before sign-in, an MCP server's tool list in the catalog
+     is a directory's copy and can be out of date: never drop a connector for
+     a tool it seems to lack. The template's steps name the connector to use;
   5. the models: the person's Claude plan, their ChatGPT plan, or an API
      key; the reviewer on the strongest model;
   6. the workspace name. The configuration always gets its own repository,
@@ -396,7 +405,10 @@ Install the template there: \`kortix templates add <id> --repo <owner/repo>
 --branch <default branch> --json\`. Then follow its steps: write its settings
 JSON from the reply, turn on the triggers of the chosen sources and turn off
 the rest. No template: write the agents and triggers yourself, in the same
-layout. Then write \`kortix.yaml\` with \`env.required\` and
+layout. Declare every app the loops call under \`connectors:\` (rule 8), with the
+entry the template's steps give, else the catalog's: \`onboard\` turns each one
+into a sign-in row on the setup page. An app reached only through a secret gets
+no row. Then write \`kortix.yaml\` with \`env.required\` and
 \`env.optional\` listing every secret the loops use, the sandbox \`Dockerfile\` at
 the root (a Debian-family base, the code repository's runtimes at their pinned
 versions, git and gh, no \`COPY\` from the repository), the template's \`cpu\`,
@@ -445,6 +457,16 @@ The first run creates the workspace. \`--name\` is its display name (default:
 \`project.name\` in \`kortix.yaml\`, else the folder name): use the name from
 step 3, for example "Acme Loops". \`--repo\` is the code repository on GitHub:
 always pass it.
+
+**The icon.** Once \`ship\` has linked the folder (\`.kortix/link.json\`), give
+the workspace an icon that says what the product is: \`kortix workspaces set
+--glyph <Name>:<color>\`. Pick the name from \`kortix workspaces glyphs --json\`,
+the icons Kortix supports: the one closest to what the product does (\`Phone\`
+for a calling tool, \`ShoppingCart\` for a shop), never one from the \`Kortix\` or
+\`Brand\` group. The color is the product's brand color from the code
+repository as \`#rrggbb\`: \`theme_color\` in the web manifest, else the primary
+color of its CSS or Tailwind theme. No brand color found: one of the list's
+\`colors\`.
 
 It runs in phases, each skipping what is done: \`validate\`, \`ship\` (create the
 workspace and push its repository; it refuses a dirty tree), \`secrets\`

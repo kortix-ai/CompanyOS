@@ -4,7 +4,7 @@
  * Session groups in the sidebar (`session_groups` flag): the project's shared,
  * named folders of sessions, between Pinned and the rest of the list.
  *
- * Each group is a section. Its rows load when it is open (one paged list per
+ * Each group is a section header like Pinned's (no icon). Its rows load when it is open (one paged list per
  * group, any starter, any depth), and its open state is the viewer's own,
  * beside the other sections in the session-filter store. A session moves into
  * a group from its `⋯` menu or by dragging its row onto the group; a group
@@ -26,13 +26,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  ArrowsInLineVerticalIcon,
   DotsThreeIcon,
-  FolderIcon,
-  FolderOpenIcon,
   PencilSimpleIcon,
+  PlusIcon,
   TrashIcon,
 } from '@phosphor-icons/react';
-import { useMemo, useState, type DragEvent, type ReactNode, type SyntheticEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode, type SyntheticEvent } from 'react';
 
 import { useTranslations } from '../../i18n';
 import { cn } from '../../internal/lib/utils';
@@ -52,7 +52,6 @@ import {
   Modal,
   ModalBody,
   ModalContent,
-  ModalDescription,
   ModalFooter,
   ModalHeader,
   ModalTitle,
@@ -80,6 +79,26 @@ const GROUP_NAME_MAX = 80;
  * dragged group lands above or below the one under the pointer.
  */
 let draggingGroupId: string | null = null;
+
+/**
+ * Set by a menu's "New group" just before the menu closes: that close must not
+ * hand focus back to the menu trigger, or it would pull focus out of the new
+ * group's name field the moment it appears. Read and cleared by
+ * `keepFocusForNewGroup` in the menu's `onCloseAutoFocus`.
+ */
+let newGroupTakesFocus = false;
+
+/** Call before opening the new-group row from a menu item. */
+export function markNewGroupFocus(): void {
+  newGroupTakesFocus = true;
+}
+
+/** `onCloseAutoFocus` of a menu with a "New group" item. */
+export function keepFocusForNewGroup(event: Event): void {
+  if (!newGroupTakesFocus) return;
+  newGroupTakesFocus = false;
+  event.preventDefault();
+}
 
 /** Keeps a click or key inside a group's menu or dialog (portals bubble through React) off the header's toggle. */
 const stopAtMenu = (event: SyntheticEvent) => event.stopPropagation();
@@ -170,26 +189,22 @@ export function useSessionGroupActions(projectId: string, groups: readonly Proje
 }
 
 /**
- * Create a group (`group` null) or rename one. A taken name and the group
- * limit show in the dialog; the dialog closes with a toast once the list holds
- * the change. `onCreated` receives the new group (a row's "New group…" files
- * its session into it).
+ * Rename a group (a new group is named in place, `NewSessionGroupRow`). A
+ * taken name shows in the dialog; the dialog closes with a toast once the
+ * list holds the change.
  */
 export function SessionGroupNameModal({
   projectId,
   group,
   open,
   onOpenChange,
-  onCreated,
 }: {
   projectId: string;
   group: ProjectSessionGroup | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreated?: (group: ProjectSessionGroup) => void;
 }) {
   const t = useTranslations('sidebar.sessionGroups');
-  const create = useCreateProjectSessionGroup(projectId);
   const rename = useRenameProjectSessionGroup(projectId);
   const [value, setValue] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
@@ -202,32 +217,20 @@ export function SessionGroupNameModal({
     }
   }
 
-  const pending = create.isPending || rename.isPending;
+  const pending = rename.isPending;
   const name = value.trim();
   const unchanged = group !== null && name === group.name;
 
   const submit = async () => {
-    if (!name || unchanged || pending) return;
+    if (!group || !name || unchanged || pending) return;
     setProblem(null);
     try {
-      if (group) {
-        await rename.mutateAsync({ groupId: group.group_id, name });
-        successToast(t('renamed'));
-      } else {
-        const created = await create.mutateAsync({ name });
-        successToast(t('created'));
-        onCreated?.(created);
-      }
+      await rename.mutateAsync({ groupId: group.group_id, name });
+      successToast(t('renamed'));
       onOpenChange(false);
     } catch (error) {
       const code = error instanceof ApiError ? error.code : undefined;
-      setProblem(
-        code === 'group_name_taken'
-          ? t('nameTaken')
-          : code === 'group_limit'
-            ? t('limit')
-            : t(group ? 'renameFailed' : 'createFailed'),
-      );
+      setProblem(code === 'group_name_taken' ? t('nameTaken') : t('renameFailed'));
     }
   };
 
@@ -235,8 +238,7 @@ export function SessionGroupNameModal({
     <Modal open={open} onOpenChange={(next) => !pending && onOpenChange(next)}>
       <ModalContent className="lg:max-w-md">
         <ModalHeader>
-          <ModalTitle>{group ? t('rename') : t('createTitle')}</ModalTitle>
-          {group ? null : <ModalDescription>{t('createDescription')}</ModalDescription>}
+          <ModalTitle>{t('rename')}</ModalTitle>
         </ModalHeader>
         <ModalBody className="space-y-2">
           <Input
@@ -276,11 +278,105 @@ export function SessionGroupNameModal({
           </Button>
           <Button size="sm" className="w-full sm:w-auto" onClick={() => void submit()} disabled={!name || unchanged || pending}>
             {pending ? <Loading className="size-4 shrink-0" /> : null}
-            {group ? t('save') : t('create')}
+            {t('save')}
           </Button>
         </ModalFooter>
       </ModalContent>
     </Modal>
+  );
+}
+
+/** `base`, or `base 2`, `base 3`…: the first name no group of the project has (names are unique per project). */
+export function nextSessionGroupName(groups: readonly ProjectSessionGroup[], base: string): string {
+  const taken = new Set(groups.map((group) => group.name.toLowerCase()));
+  if (!taken.has(base.toLowerCase())) return base;
+  let n = 2;
+  while (taken.has(`${base} ${n}`.toLowerCase())) n += 1;
+  return `${base} ${n}`;
+}
+
+/**
+ * A new group, named in place: the row a group header takes, holding an input
+ * with `defaultName` selected. Enter or a click elsewhere creates it; Escape,
+ * or an empty name, drops the row. A taken name or the group limit shows as a
+ * toast and keeps the row open. `onDone` gets the new group, or null.
+ */
+export function NewSessionGroupRow({
+  projectId,
+  defaultName,
+  onDone,
+}: {
+  projectId: string;
+  defaultName: string;
+  onDone: (group: ProjectSessionGroup | null) => void;
+}) {
+  const t = useTranslations('sidebar.sessionGroups');
+  const create = useCreateProjectSessionGroup(projectId);
+  const [value, setValue] = useState(defaultName);
+  // A ref, not `isPending`: Enter and the blur that follows land in one render.
+  const busy = useRef(false);
+  const done = useRef(false);
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  const finish = (group: ProjectSessionGroup | null) => {
+    done.current = true;
+    onDone(group);
+  };
+  const commit = async () => {
+    if (busy.current || done.current) return;
+    const name = value.trim();
+    if (!name) return finish(null);
+    busy.current = true;
+    try {
+      finish(await create.mutateAsync({ name }));
+    } catch (error) {
+      const code = error instanceof ApiError ? error.code : undefined;
+      errorToast(code === 'group_name_taken' ? t('nameTaken') : code === 'group_limit' ? t('limit') : t('createFailed'));
+    } finally {
+      busy.current = false;
+    }
+  };
+
+  // A click anywhere else creates the group (a blur would also fire when a
+  // closing menu or a toast moves focus, which is not the viewer leaving).
+  const commitRef = useRef(commit);
+  commitRef.current = commit;
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rowRef.current?.contains(event.target as Node)) void commitRef.current();
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+  }, []);
+
+  return (
+    <div ref={rowRef} className="space-y-1" data-session-group-draft>
+      <div className={cn('flex items-center px-1', SESSION_ROW_HEIGHT_CLASS)}>
+        <input
+          autoFocus
+          value={value}
+          maxLength={GROUP_NAME_MAX}
+          aria-label={t('namePlaceholder')}
+          placeholder={t('namePlaceholder')}
+          onFocus={(event) => event.currentTarget.select()}
+          onChange={(event) => setValue(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing) return;
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              void commit();
+            } else if (event.key === 'Escape') {
+              event.preventDefault();
+              finish(null);
+            }
+          }}
+          className="border-input bg-background text-sidebar-foreground placeholder:text-muted-foreground focus-visible:border-ring h-7 w-full min-w-0 rounded-md border px-1.5 text-sm font-medium outline-none"
+        />
+      </div>
+      <p className="text-muted-foreground flex h-8 items-center px-2 text-xs">
+        <span className="truncate">{t('empty')}</span>
+      </p>
+    </div>
   );
 }
 
@@ -296,6 +392,10 @@ interface SessionGroupSectionsProps {
   renderNode: (session: ProjectSession) => ReactNode;
   actions: ReturnType<typeof useSessionGroupActions>;
   onRename: (group: ProjectSessionGroup) => void;
+  /** Open the New group dialog. */
+  onNewGroup: () => void;
+  /** Close every group except this one; this one stays open. */
+  onCollapseOthers: (groupId: string) => void;
 }
 
 /** Every group of the project, in order. */
@@ -321,6 +421,8 @@ function SessionGroupSection({
   renderNode,
   actions,
   onRename,
+  onNewGroup,
+  onCollapseOthers,
 }: Omit<SessionGroupSectionsProps, 'groups'> & { group: ProjectSessionGroup; groupIds: string[] }) {
   const t = useTranslations('sidebar');
   const tGroups = useTranslations('sidebar.sessionGroups');
@@ -368,11 +470,9 @@ function SessionGroupSection({
               draggingGroupId = null;
             }}
             className={cn(
-              // A group is a folder, not a section label: it takes a session
-              // row's geometry (px-2, gap-2, 16px icon, regular weight) so its
-              // icon and name sit on the same axes as the rows it holds, while
-              // Pinned and the date headers stay the only labels.
-              'group/section-header text-muted-foreground hover:bg-sidebar-row hover:text-sidebar-foreground relative flex cursor-pointer items-center gap-2 rounded-md px-2 text-sm',
+              // A group header reads like Pinned and the date headers (name,
+              // then a caret on hover), with the row hover fill and a `⋯` menu.
+              'group/section-header text-muted-foreground hover:bg-sidebar-row hover:text-sidebar-foreground relative flex cursor-pointer items-center gap-1 rounded-md px-2 text-sm font-medium',
               SESSION_ROW_HEIGHT_CLASS,
               drop.over === 'session' && 'bg-sidebar-row text-sidebar-foreground',
               // A group dropped here takes this place: a line marks the side it
@@ -383,19 +483,17 @@ function SessionGroupSection({
                 (groupIds.indexOf(draggingGroupId ?? '') < index ? 'before:bottom-0' : 'before:top-0'),
             )}
           >
-            {open ? (
-              <FolderOpenIcon aria-hidden className="size-4 shrink-0" />
-            ) : (
-              <FolderIcon aria-hidden className="size-4 shrink-0" />
-            )}
             <span className="min-w-0 truncate">{group.name}</span>
             <CaretRightSolidIcon
               aria-hidden
-              className="duration-normal size-4 shrink-0 opacity-0 transition-transform ease-out group-hover/section-header:opacity-100 group-data-[state=open]/section:rotate-90"
+              // Always shown: the caret is what tells a group from a date header.
+              className="duration-normal size-4 shrink-0 transition-transform ease-out group-data-[state=open]/section:rotate-90"
             />
             <SessionGroupMenu
               group={group}
               onRename={() => onRename(group)}
+              onNewGroup={onNewGroup}
+              onCollapseOthers={groupIds.length > 1 ? () => onCollapseOthers(group.group_id) : null}
               onMoveUp={moveGroupBy(groupIds, group.group_id, -1)}
               onMoveDown={moveGroupBy(groupIds, group.group_id, 1)}
               onReorder={(ids) => void actions.reorder(ids)}
@@ -406,9 +504,8 @@ function SessionGroupSection({
         <DisclosureContent contentClassName="space-y-px">
           {rows.map(renderNode)}
           {query.data !== undefined && rows.length === 0 && !query.hasNextPage ? (
-            // Indented to the name's x (px-2 + 16px icon + gap-2), one row tall,
-            // so the empty group reads as a folder with nothing in it yet.
-            <p className="text-muted-foreground flex h-8 items-center pr-2 pl-8 text-xs">
+            // Aligned to the name's x (px-2), one row tall.
+            <p className="text-muted-foreground flex h-8 items-center px-2 text-xs">
               <span className="truncate">{tGroups('empty')}</span>
             </p>
           ) : null}
@@ -427,7 +524,8 @@ function SessionGroupSection({
 }
 
 /**
- * The group header's `⋯`: Rename, Move up, Move down, Delete. Hover-revealed
+ * The group header's `⋯`: New group, then Rename, Move up, Move down, then
+ * Collapse others, then Delete. Hover-revealed
  * like a section header's; click and Enter/Space stop propagation so opening
  * it never toggles the group.
  */
@@ -435,6 +533,8 @@ function SessionGroupMenu({
   projectId,
   group,
   onRename,
+  onNewGroup,
+  onCollapseOthers,
   onMoveUp,
   onMoveDown,
   onReorder,
@@ -442,6 +542,9 @@ function SessionGroupMenu({
   projectId: string;
   group: ProjectSessionGroup;
   onRename: () => void;
+  onNewGroup: () => void;
+  /** Null while this is the only group (the item is hidden). */
+  onCollapseOthers: (() => void) | null;
   /** The order after Move up / Move down; null at that end (the item is disabled). */
   onMoveUp: string[] | null;
   onMoveDown: string[] | null;
@@ -476,7 +579,18 @@ function SessionGroupMenu({
             <DotsThreeIcon className="size-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" side="right" className="w-44">
+        <DropdownMenuContent align="start" side="right" className="w-44" onCloseAutoFocus={keepFocusForNewGroup}>
+          <DropdownMenuItem
+            className="cursor-pointer"
+            onSelect={() => {
+              markNewGroupFocus();
+              afterClose(onNewGroup);
+            }}
+          >
+            <PlusIcon />
+            {tGroups('newGroup')}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem className="cursor-pointer" onSelect={() => afterClose(onRename)}>
             <PencilSimpleIcon />
             {tGroups('rename')}
@@ -489,6 +603,15 @@ function SessionGroupMenu({
             <ArrowDownIcon />
             {tGroups('moveDown')}
           </DropdownMenuItem>
+          {onCollapseOthers ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="cursor-pointer" onSelect={onCollapseOthers}>
+                <ArrowsInLineVerticalIcon />
+                {tGroups('collapseOthers')}
+              </DropdownMenuItem>
+            </>
+          ) : null}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="cursor-pointer"

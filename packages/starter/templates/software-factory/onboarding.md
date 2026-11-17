@@ -139,10 +139,26 @@ both with `FACTORY_GITHUB_WEBHOOK_SECRET`. Then:
   `factory:ready`, `factory:in-progress`, `factory:in-review`,
   `factory:blocked`, `priority:1` … `priority:4`, `needs-review`,
   `do-not-merge` (`gh label create <name> --force`).
-- Linear, Jira or Asana: connect it (`kortix connectors add <slug>`, or
-  `kortix secrets request <TOKEN> --scope runtime` for the API token), create
-  the `factory` label, read the state, status or section ids and write them
-  into `store.states` (`references/stores/<kind>.md` names them).
+- Linear: add the connector to `software-factory.yaml` before guide step 6,
+  so the setup page shows "Connect Linear" (one sign-in, no API key):
+
+  ```yaml
+  connectors:
+    - slug: linear
+      name: Linear
+      provider: composio
+      app: linear
+  ```
+
+  Composio's Linear has the GraphQL action the store uses
+  (`references/stores/linear.md`). Linear's own MCP server has none, so never
+  pick it for the store, whatever the catalog lists first. `LINEAR_API_KEY`
+  only when the person refuses the connector. The person signs in as the
+  factory's Linear user (`store.agent_identity`).
+- Jira or Asana: connect it (`kortix connectors add <slug>`, or
+  `kortix secrets request <TOKEN> --scope runtime` for the API token).
+- Then create the `factory` label, read the state, status or section ids and
+  write them into `store.states` (`references/stores/<kind>.md` names them).
 - JSON file: create the branch with `{"version":1,"next_id":1,"tickets":[]}`.
 
 ### E. The sources

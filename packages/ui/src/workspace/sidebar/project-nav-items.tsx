@@ -5,7 +5,6 @@ import { ProjectCalendarNavItem } from './footer/project-calendar-nav';
 import { ProjectGoalsNavItem } from './footer/project-goals-nav';
 import { ProjectInboxNavItem } from './footer/project-inbox-nav';
 import { ProjectArtifactsNavItem } from './footer/project-artifacts-nav';
-import { ProjectRunningNavItem } from './footer/project-running-nav';
 import { ProjectFilesNavItem } from './footer/project-files-nav';
 import {
   CustomizeGlyph,
@@ -30,8 +29,7 @@ import { adminPath } from '../../lib/routes';
  * (project-spaces-nav.tsx).
  */
 // `inbox` is first: it is the one row that says something waits on you.
-// `running` is last: it shows only while something works, so it never moves the rows above it.
-const NAV_ROWS = ['inbox', 'customize', 'files', 'apps', 'calendar', 'goals', 'artifacts', 'running'] as const;
+const NAV_ROWS = ['inbox', 'customize', 'files', 'apps', 'calendar', 'goals', 'artifacts'] as const;
 type NavRowId = (typeof NAV_ROWS)[number];
 
 /** `inbox={false}`: the host shows the Inbox row elsewhere (Spaces on: beside Review, `project-spaces-nav`). */
@@ -125,7 +123,5 @@ function NavItem({ id, projectId }: { id: NavRowId; projectId: string }) {
       return <ProjectGoalsNavItem projectId={projectId} />;
     case 'artifacts':
       return <ProjectArtifactsNavItem projectId={projectId} />;
-    case 'running':
-      return <ProjectRunningNavItem projectId={projectId} />;
   }
 }

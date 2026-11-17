@@ -1350,6 +1350,8 @@ permission:
 - **Tools that follow a capability.** `write` follows `edit`. A workspace's own `memory` tool (the ejected copy of the retired Kortix tool) follows `edit`, or `read` when it only views. `image_gen` follows `edit`. `web_search` and `image_search` follow `websearch`. `scrape_webpage` follows `webfetch`.
 - **Action only.** `question`, `webfetch` and `websearch` take an action, not a glob map.
 - **`bash` globs** match each command of a line. In `a; b`, `a | b` or `$(b)`, the strictest answer wins: `deny`, then `ask`, then `allow`.
+- **Heredocs.** A heredoc body is text, not commands, when each command on its line only reads or ignores its input: `cd /tmp; cat > notes.md <<'EOF'`, `git commit -F - <<'EOF'`. A body sent to a program that can run it (`sh <<EOF`, `cat <<EOF | bash`) is matched as commands.
+- **A line that does not parse** (an open quote or bracket) asks when the first word of a restricted glob appears in the line. Otherwise `"*"` decides.
 - **Path globs** match the file, relative to `/workspace`. A path outside `/workspace` also answers to `external_directory`. A path rule does not govern `bash`.
 - **Precedence.** The most specific matching rule wins, whatever the key order. The longest pattern is the most specific.
 - `permission.skill` and `permission.task` are errors. Use `skills` and `subagents`.

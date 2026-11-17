@@ -125,7 +125,7 @@ export function PromoSwitcher({ slides, label }: { slides: readonly PromoSlide[]
                 aria-label={slide.title}
                 aria-current={current || undefined}
                 onClick={() => setActiveId(slide.id)}
-                className="group/dot focus-visible:ring-ring flex size-6 cursor-pointer items-center justify-center rounded-sm outline-none focus-visible:ring-2"
+                className="group/dot focus-visible:ring-ring flex size-6 cursor-pointer max-md:size-8 items-center justify-center rounded-sm outline-none focus-visible:ring-2"
               >
                 <span
                   className={cn(

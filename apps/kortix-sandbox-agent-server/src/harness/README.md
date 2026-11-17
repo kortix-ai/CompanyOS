@@ -1122,8 +1122,19 @@ reads each `$(…)`, backtick, `<(…)`, `>(…)` and `( … )` body as commands
 own, and the strictest answer wins (`deny`, then `ask`, then `allow`). So
 `bash: { '*': deny, 'kortix connectors call x get *': allow }` runs that call
 and refuses `kortix connectors call x get a; env`. A line whose quotes or
-brackets do not balance is decided as a call with no subject: a restriction
-asks.
+brackets do not balance is decided as a call with no subject: a restricted
+pattern asks when its first word is a word of the line, else `*` decides.
+
+**A heredoc body is data when nothing on its line can run it.** Every command
+on the heredoc's line must be in `NEVER_RUNS_STDIN`: a data reader (`cat`,
+`tee`, `jq`, `git commit -F -`, `gh … --body-file -`) or a command that ignores
+stdin (`cd`, `mkdir`, `echo`). So `cd /tmp; cat > body.md <<'EOF'` keeps its
+markdown out of the check. The body is read as commands when the line has any
+other program (`sh <<EOF`, `cat <<EOF | bash`, a function defined on the
+line), when the line ends in a pipe (bash continues the pipeline after the
+body), or when an unquoted body runs `$(…)` or a backtick. Prod 2026-11-17: an
+agent with `kortix` rules asked a person to approve a change-request body,
+because `cd /tmp;` was not in the list.
 
 **Precedence:** the most specific matching rule wins, whatever
 order the keys are written in (`@kortix/api-contract/permission-rules`). The

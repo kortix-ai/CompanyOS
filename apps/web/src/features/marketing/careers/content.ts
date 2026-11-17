@@ -14,13 +14,13 @@
  *    "Remote" on a location. Compensation is named only
  *    as its parts (base, variable, founding equity): the founder has not
  *    published numbers. Locations are per opening and come from the founder
- *    (2026-11-10): MTS and FDE in **Belgrade, Serbia** or **Remote**; both
- *    founding GTM roles in the **US**: Enterprise based in New York,
- *    Developers based in San Francisco, US remote possible for both.
+ *    (2026-11-10): MTS and FDE in **Belgrade, Serbia** or **Remote**; the
+ *    founding GTM role in the **US**, based in New York, US remote possible.
  *  - The openings are the founder's own list and order: Founding GTM
- *    (Enterprise), Founding GTM (Developers), MTS, FDE. The board shows the
- *    role and its location only, no summary line. Every opening has a role
- *    page with the spec (founder, 2026-11-10). The GTM title is open (Founding
+ *    (Enterprise), MTS, FDE. The board shows the role and its location only,
+ *    no summary line. Every opening has a role page with the spec (founder,
+ *    2026-11-10). Founding GTM (Developers, San Francisco) is hidden (founder,
+ *    2026-11-17): its page copy is in commit 06740ac6be. The GTM title is open (Founding
  *    GTM Lead, Head of GTM, Head of Business, CBO). The MTS and FDE pages name
  *    no pay at all ("we share the numbers in the first call") and no manager.
  *  - "How we sell" is the public half of the GTM thesis. No internal numbers.
@@ -39,11 +39,10 @@
 
 const TECH_LOCATION = 'Belgrade, Serbia · Remote';
 const ENTERPRISE_LOCATION = 'New York · US remote';
-const DEVELOPERS_LOCATION = 'San Francisco · US remote';
 
 export const hero = {
   title: 'Open positions.',
-  lead: 'Belgrade, New York, San Francisco or remote.',
+  lead: 'Belgrade, New York or remote.',
   description: 'An extremely small, talent-dense team.',
   roleLabel: 'Role',
   locationLabel: 'Location',
@@ -55,7 +54,7 @@ export const hero = {
 } as const;
 
 /** Every opening's role page, by URL slug. */
-export const ROLE_SLUGS = ['gtm-enterprise', 'gtm-developers', 'mts', 'fde'] as const;
+export const ROLE_SLUGS = ['gtm-enterprise', 'mts', 'fde'] as const;
 export type RoleSlug = (typeof ROLE_SLUGS)[number];
 
 /** The board: the role, its full name and its location, in the founder's order. No summary line
@@ -75,13 +74,6 @@ export const openings: readonly {
     href: '/careers/gtm-enterprise',
   },
   {
-    id: 'gtm-developers',
-    name: 'Founding GTM Developers',
-    full: 'Founding Go-to-Market, Developers',
-    location: DEVELOPERS_LOCATION,
-    href: '/careers/gtm-developers',
-  },
-  {
     id: 'mts',
     name: 'MTS',
     full: 'Member of Technical Staff',
@@ -97,7 +89,7 @@ export const openings: readonly {
   },
 ];
 
-/** What every founding GTM role page shows the same way. */
+/** What the founding GTM role page shows. */
 const gtmFacts = {
   reportsTo: { k: 'Reports to', v: 'Marko Kraemer, CEO' },
   pay: { k: 'Compensation', v: 'Base salary, variable pay and founding equity' },
@@ -107,7 +99,7 @@ const gtmFacts = {
 export const howWeSell = {
   title: 'How we sell.',
   titleMuted: 'Two motions, one account.',
-  sub: 'Developers adopt Kortix bottom-up. Companies buy outcomes top-down. Each founding GTM lead owns one motion, and the two share one pipeline.',
+  sub: 'Developers adopt Kortix bottom-up. Companies buy outcomes top-down. The founding GTM lead turns the first into the second.',
   items: [
     {
       id: 'open-source',
@@ -136,7 +128,7 @@ export const howWeSell = {
   ],
 } as const;
 
-/** The interview loop, the same for both GTM roles. */
+/** The interview loop for the GTM role. */
 const gtmProcess = [
   {
     id: 'intro',
@@ -376,124 +368,6 @@ export const roles: Record<RoleSlug, RolePage> = {
       title: 'Founding GTM, Enterprise — Kortix careers',
       description:
         'The first enterprise go-to-market hire at Kortix: 0 to 1 GTM, enterprise sales, consultancy and partnerships. New York or US remote.',
-    },
-  },
-  'gtm-developers': {
-    hero: {
-      title: 'Founding GTM, Developers.',
-      titleMuted: 'San Francisco, or remote in the US.',
-      sub: 'You turn the open-source audience into teams that run real work on Kortix and pay for it. Product-led growth and developer relations, in one seat.',
-    },
-    facts: [
-      gtmFacts.reportsTo,
-      { k: 'Location', v: 'Based in San Francisco. US remote possible.' },
-      gtmFacts.pay,
-      { k: 'Title', v: 'Founding GTM Lead or Head of Growth. Your pick.' },
-    ],
-    own: {
-      title: 'What you own.',
-      titleMuted: 'The path from a GitHub star to a paying team.',
-      rows: [
-        {
-          id: 'funnel',
-          k: 'The funnel',
-          v: 'From GitHub and the site to signup, a first working session, a team workspace and a paid plan.',
-        },
-        {
-          id: 'activation',
-          k: 'Activation',
-          v: 'With the engineers: the CLI, onboarding and templates, until a new user gets real work done on day one.',
-        },
-        {
-          id: 'launches',
-          k: 'Launches',
-          v: 'Every release, launch and demo: what we say, where, and to whom.',
-        },
-        {
-          id: 'community',
-          k: 'Content and community',
-          v: 'Technical writing, demos, templates and the places developers talk.',
-        },
-        {
-          id: 'handoff',
-          k: 'The hand-off',
-          v: 'Spot the companies where a team already runs on Kortix and bring them to the enterprise lead.',
-        },
-      ],
-    },
-    year: {
-      title: 'The first 12 months.',
-      titleMuted: 'From an audience to a growth engine.',
-      items: [
-        {
-          id: 'read',
-          n: 'Days 0–30',
-          k: 'Read the funnel',
-          v: 'Measure the path from visit to paid. Talk to active users. Name where people drop.',
-        },
-        {
-          id: 'activate',
-          n: 'Days 31–90',
-          k: 'Fix activation',
-          v: 'Ship the onboarding and template changes that get a new user to a working session on day one. Run one launch.',
-        },
-        {
-          id: 'repeat',
-          n: 'Days 91–180',
-          k: 'Make growth repeatable',
-          v: 'A weekly launch and content rhythm, templates and integrations that bring users in, and a weekly funnel report.',
-        },
-        {
-          id: 'team',
-          n: 'Days 181–365',
-          k: 'Build the team',
-          v: 'Hire the next people in growth and developer relations. Own self-serve revenue with the CEO.',
-        },
-      ],
-    },
-    have: {
-      title: 'What you have done.',
-      titleMuted: 'The non-negotiables.',
-      rows: [
-        {
-          id: 'grew',
-          k: '0 to 1, before',
-          v: 'You owned growth, developer relations or GTM at a developer tool or open-source company, with numbers you can name.',
-        },
-        {
-          id: 'build',
-          k: 'You build',
-          v: 'You write code, ship demos and read the funnel in SQL yourself.',
-        },
-        {
-          id: 'write',
-          k: 'You write and record',
-          v: 'Launch posts, docs, demos and videos that developers share.',
-        },
-        {
-          id: 'experiments',
-          k: 'You run experiments',
-          v: 'You kept what worked, killed what did not, and can show both.',
-        },
-        {
-          id: 'agents',
-          k: 'You run on agents',
-          v: 'You use coding agents every day and know where they fail.',
-        },
-        {
-          id: 'plus',
-          k: 'A plus',
-          v: 'You built an open-source community, or turned free users into paying teams.',
-        },
-      ],
-    },
-    principles: howWeSell,
-    process: { title: 'How we hire.', titleMuted: 'About two weeks.', rows: gtmProcess },
-    applyArea: 'Founding GTM — Developers',
-    meta: {
-      title: 'Founding GTM, Developers — Kortix careers',
-      description:
-        'The first developer and product-led growth hire at Kortix: the funnel, activation, launches and community. San Francisco or US remote.',
     },
   },
   mts: {
@@ -807,7 +681,6 @@ export const applyForm = {
   areaPlaceholder: 'Pick the closest one',
   areaOptions: [
     'Founding GTM — Enterprise',
-    'Founding GTM — Developers',
     'MTS — Member of Technical Staff',
     'FDE — Forward Deployed Engineer',
     'Not sure — read it and tell me',

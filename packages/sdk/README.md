@@ -502,9 +502,10 @@ In React, `useSessionMessageAuthors(projectId, sessionId, messageCount)` reads t
 
 ### Share one response
 
-The web session's **Share response** button publishes one finished response.
-The prompt stays private unless the person selects **Prompt and response**.
-The SDK exposes the same operations as named exports:
+Response sharing is available through the SDK and API. The transcript no longer
+offers a Share response button or dialog. Existing public links remain active.
+Use `unshareTurn` to revoke an existing link. The prompt stays private unless
+`include_prompt` is true. The SDK exposes these operations as named exports:
 
 ```ts
 import { getTurnShare, shareTurn, unshareTurn, getPublicResponse } from '@kortix/sdk';

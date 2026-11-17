@@ -168,7 +168,7 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
       </div>
 
       <div className="flex items-center justify-between gap-6">
-        <p aria-hidden className="text-muted-foreground font-mono text-xs tracking-wider uppercase">
+        <p aria-hidden={still || driven} className="text-muted-foreground font-mono text-xs tracking-wider uppercase">
           <span key={run.id} className="animate-in fade-in duration-slow">
             {caption}
           </span>

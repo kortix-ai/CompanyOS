@@ -102,7 +102,7 @@ export function heroRuns(loop: LoopView | undefined, prompt: string): HeroRun[] 
       kind: 'example',
       host: { kind: 'agent', slug: 'marketing', name: 'marketing' },
       source: 'Pull request merged',
-      ask: `Merged: ${DEMO.pr.title}`,
+      ask: DEMO.pr.title,
       context: `Pull request #${DEMO.pr.number}`,
       steps: 4,
       answer: 'Wrote the changelog entry and the post, recorded the change in a browser and rendered a captioned video.',

@@ -26,7 +26,7 @@
 // session of those agents mounts it, and everyone who may use one of them
 // reaches it (`FolderSubject.agentIds`). Off, people have only their own folder.
 
-import { PRIVATE_CHANNELS_DIR, spaceDriveFolders } from '@kortix/shared';
+import { PRIVATE_CHANNELS_DIR, SESSION_GROUPS_DIR, spaceDriveFolders } from '@kortix/shared';
 
 export { PRIVATE_CHANNELS_DIR };
 
@@ -244,6 +244,8 @@ export interface FolderMountPlan {
 const RESERVED_MOUNT_NAMES = new Set(['me', 'readme-md']);
 
 export function folderMountName(path: string): string {
+  // A space's folder is named by its id; a session mounts it as /drives/space.
+  if (path.startsWith(`${SESSION_GROUPS_DIR}/`) && path.split('/').length === 4) return 'space';
   const last = path.split('/').filter(Boolean).pop() ?? 'files';
   const slug = last
     .normalize('NFKD')
@@ -360,7 +362,9 @@ export function sessionMountCandidates(
     /**
      * With `chat` on, the files folder of the public channel or DM the session's
      * thread is filed in (its thread files live there, `memory/thread-files.ts`);
-     * null otherwise. A private channel's is `channelFolder`.
+     * null otherwise. A private channel's is `channelFolder`. With
+     * `session_groups` on and no channel, the folder of the session's space
+     * (`sessionGroupDriveFolder`), mounted at /drives/space.
      */
     spaceFolder?: string | null;
   },

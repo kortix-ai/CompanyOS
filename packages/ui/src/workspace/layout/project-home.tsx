@@ -46,6 +46,7 @@ import { SandboxPicker } from '../home/sandbox-picker';
 import { ProjectHomeWallpaper, ProjectHomeWelcomeBody } from '../home/welcome-body';
 import { useProjectHomeCall } from './use-project-home-call';
 import { useProjectHomeSend } from './use-project-home-send';
+import { SpacePicker } from '../session-spaces/space-picker';
 
 // This path is this view's public surface — the instant session shell and the
 // IAM tests already import from here, so the moved pieces keep their address.
@@ -128,7 +129,11 @@ function ProjectHomeView({
   beforeSend,
   onboarding: onboardingEnabled = false,
 }: ProjectHomeProps) {
-  const defaultSend = useProjectHomeSend(projectId, { beforeSend });
+  const searchParams = useUiSearchParams();
+  // The space a new session is filed in (flag `session_groups`). A space's
+  // page links here with `?space=<group_id>` to start with it picked.
+  const [selectedSpace, setSelectedSpace] = useState<string | null>(() => searchParams?.get('space') || null);
+  const defaultSend = useProjectHomeSend(projectId, { beforeSend, groupId: selectedSpace });
   const { HomeAnnouncement } = useUiComponents();
   const send = onSend ?? defaultSend.send;
   const creating = onSend ? !!busy : defaultSend.sending;
@@ -137,7 +142,6 @@ function ProjectHomeView({
   // The first chat never ends, but it opens only when asked for
   // (`firstChatHref`: the sidebar row or the onboarding exit). Plain project
   // home, which "New session" opens, stays the normal home.
-  const searchParams = useUiSearchParams();
   const firstChatPending = useFirstChatPending(projectId);
   const firstChatRequested = isFirstChatRequested(searchParams);
   const router = useUiRouter();
@@ -457,6 +461,12 @@ function ProjectHomeView({
       onAgentSelectionChange={setSelectedAgent}
       sandboxSlot={sandboxSlot}
       call={call}
+      // A host's own `onSend` decides where a session goes; the first chat is the onboarding.
+      toolbarSlot={
+        onSend || firstChat ? undefined : (
+          <SpacePicker projectId={projectId} value={selectedSpace} onChange={setSelectedSpace} />
+        )
+      }
     />
   );
 

@@ -294,3 +294,26 @@ describe('shared Drives', () => {
     expect(plan).toEqual(['/Sales:ro', '/Channels/deals']);
   });
 });
+
+describe('a space folder (session_groups)', () => {
+  test('a session in a space mounts the space folder read-write at /drives/space, beside its person folder', () => {
+    const SPACE = '/Company/Spaces/3f2a0c1e-0000-4000-8000-000000000001';
+    const grants: FolderGrant[] = [{ path: '/Users/ana', level: 'manage', principalType: 'user', principalId: 'ana' }];
+    const mounts = planFolderMounts(
+      sessionMountCandidates(grants, {
+        agentId: null,
+        owner: 'ana',
+        groupIds: new Set(),
+        own: '/Users/ana',
+        channelFolder: null,
+        privateChannelFolders: NO_PRIVATE_CHANNEL_FOLDERS,
+        spaceFolder: SPACE,
+      }),
+      16,
+    ).mounts;
+    expect(mounts.map((m) => [m.path, m.mountPath, m.readOnly])).toEqual([
+      ['/Users/ana', '/drives/me', false],
+      [SPACE, '/drives/space', false],
+    ]);
+  });
+});

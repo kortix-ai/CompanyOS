@@ -1074,6 +1074,15 @@ export const SessionCreateInputSchema = z
      * the flag off; a session in no space is not a thread.
      */
     space_id: z.string().uuid().nullable().optional(),
+    /**
+     * The space (session group, product word "Space") a person's own
+     * top-level session is filed in. Read only while the project's
+     * `session_groups` flag is on. Absent: a fork keeps its source's space,
+     * anything else is in none. A session another session starts is never
+     * filed; it belongs to its parent's space. An unknown id: 404
+     * `group_not_found`.
+     */
+    group_id: z.string().uuid().nullable().optional(),
     session_id: z
       .string()
       .regex(
@@ -1657,12 +1666,16 @@ export const SpaceLinkCreateInputSchema = z
 export type SpaceLinkCreateInput = z.infer<typeof SpaceLinkCreateInputSchema>;
 
 /**
- * A session group: a named folder of the project's sessions in the sidebar
- * (`/projects/:id/session-groups`, behind the `session_groups` flag). Every
- * project member sees the same groups in the same order. A session is in at
- * most one group (`ProjectSession.group_id`).
+ * A session group (product word "Space"): a named folder of the project's
+ * sessions (`/projects/:id/session-groups`, behind the `session_groups` flag).
+ * Every project member sees the same groups in the same order. A session is
+ * in at most one group (`ProjectSession.group_id`). Every session of a group
+ * is told the group's name and description at turn start, and mounts the
+ * group's Files folder.
  */
 export const SESSION_GROUP_NAME_MAX = 80;
+/** The longest group description. */
+export const SESSION_GROUP_DESCRIPTION_MAX = 2000;
 /** The most groups one project may have. */
 export const SESSION_GROUPS_MAX = 50;
 
@@ -1670,6 +1683,8 @@ export const SessionGroupSchema = z
   .object({
     group_id: z.string(),
     name: z.string(),
+    /** What the group is for; null when none was given. */
+    description: z.string().nullable(),
     /** 0-based place in the project's order; the list is sorted by it. */
     position: z.number().int().nonnegative(),
     created_by: z.string().nullable(),
@@ -1683,12 +1698,20 @@ export const SessionGroupListSchema = z.object({ groups: z.array(SessionGroupSch
 export type SessionGroupList = z.infer<typeof SessionGroupListSchema>;
 
 const SessionGroupNameSchema = z.string().trim().min(1).max(SESSION_GROUP_NAME_MAX);
+/** Trimmed; empty or null clears it. */
+const SessionGroupDescriptionSchema = z.string().trim().max(SESSION_GROUP_DESCRIPTION_MAX).nullable();
 
 /** A new group goes last in the order. A name another group of the project has (any case) is refused. */
-export const SessionGroupCreateInputSchema = z.object({ name: SessionGroupNameSchema }).strict();
+export const SessionGroupCreateInputSchema = z
+  .object({ name: SessionGroupNameSchema, description: SessionGroupDescriptionSchema.optional() })
+  .strict();
 export type SessionGroupCreateInput = z.infer<typeof SessionGroupCreateInputSchema>;
 
-export const SessionGroupUpdateInputSchema = z.object({ name: SessionGroupNameSchema }).strict();
+/** Rename a group, change its description, or both. */
+export const SessionGroupUpdateInputSchema = z
+  .object({ name: SessionGroupNameSchema.optional(), description: SessionGroupDescriptionSchema.optional() })
+  .strict()
+  .refine((input) => input.name !== undefined || input.description !== undefined, 'Give name, description, or both');
 export type SessionGroupUpdateInput = z.infer<typeof SessionGroupUpdateInputSchema>;
 
 /** The project's groups in their new order: every group id, each once. */

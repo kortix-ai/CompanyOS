@@ -16,7 +16,7 @@ import {
   createSessionGroup,
   deleteSessionGroup,
   listSessionGroups,
-  renameSessionGroup,
+  updateSessionGroup,
   reorderSessionGroups,
   setSessionGroup,
 } from '../projects/lib/session-groups';
@@ -80,23 +80,41 @@ describe('session groups', () => {
     expect(await names(other)).toEqual(['0:Store A']);
   });
 
+  test('a description is stored on create, changed alone by an update, and cleared by an empty one', async () => {
+    const made = await createSessionGroup({
+      accountId: other.account_id,
+      projectId: other.project_id,
+      name: 'Launch',
+      description: 'Ship the pricing page.',
+      createdBy: creator,
+    });
+    if (!made.ok) throw new Error(made.code);
+    expect(made.group.description).toBe('Ship the pricing page.');
+    const changed = await updateSessionGroup(other.project_id, made.group.groupId, { description: 'Ship it by Dec 1.' });
+    expect(changed.ok && [changed.group.name, changed.group.description]).toEqual(['Launch', 'Ship it by Dec 1.']);
+    const cleared = await updateSessionGroup(other.project_id, made.group.groupId, { description: '' });
+    expect(cleared.ok && cleared.group.description).toBeNull();
+    // The other tests count this project's groups.
+    expect(await deleteSessionGroup(other.project_id, made.group.groupId)).toBe(true);
+  });
+
   test('rename: a free name, or the same name in another case; a taken name and an unknown or foreign group are refused', async () => {
     const [a, b] = await listSessionGroups(project.project_id);
-    const renamed = await renameSessionGroup(project.project_id, a!.groupId, 'Store A (EU)');
+    const renamed = await updateSessionGroup(project.project_id, a!.groupId, { name: 'Store A (EU)' });
     expect(renamed.ok && renamed.group.name).toBe('Store A (EU)');
     expect(renamed.ok && renamed.group.updatedAt.getTime()).toBeGreaterThanOrEqual(a!.updatedAt.getTime());
-    const recased = await renameSessionGroup(project.project_id, b!.groupId, 'STORE B');
+    const recased = await updateSessionGroup(project.project_id, b!.groupId, { name: 'STORE B' });
     expect(recased.ok && recased.group.name).toBe('STORE B');
-    expect(await renameSessionGroup(project.project_id, b!.groupId, 'store a (eu)')).toEqual({
+    expect(await updateSessionGroup(project.project_id, b!.groupId, { name: 'store a (eu)' })).toEqual({
       ok: false,
       code: 'group_name_taken',
     });
-    expect(await renameSessionGroup(project.project_id, crypto.randomUUID(), 'X')).toEqual({
+    expect(await updateSessionGroup(project.project_id, crypto.randomUUID(), { name: 'X' })).toEqual({
       ok: false,
       code: 'group_not_found',
     });
     const [foreign] = await listSessionGroups(other.project_id);
-    expect(await renameSessionGroup(project.project_id, foreign!.groupId, 'Mine now')).toEqual({
+    expect(await updateSessionGroup(project.project_id, foreign!.groupId, { name: 'Mine now' })).toEqual({
       ok: false,
       code: 'group_not_found',
     });

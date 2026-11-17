@@ -1952,8 +1952,8 @@ export const projectSessionInitiatorEnum = kortixSchema.enum('project_session_in
 ]);
 
 /**
- * A session group: a named folder of a project's sessions in the sidebar,
- * behind the `session_groups` flag. Every project member sees the same groups
+ * A session group (product word "Space"): a named folder of a project's
+ * sessions in the sidebar, behind the `session_groups` flag. Every project member sees the same groups
  * in the same order (`position`, 0-based). A session is in at most one group
  * (`project_sessions.group_id`); deleting a group leaves its sessions in none.
  */
@@ -1969,6 +1969,8 @@ export const projectSessionGroups = kortixSchema.table(
       .references(() => projects.projectId, { onDelete: 'cascade' }),
     /** Trimmed, 1–80 characters; unique in the project in any case. */
     name: text('name').notNull(),
+    /** What the space is for, at most 2000 characters (the API checks it). Every session of the space reads it at turn start. */
+    description: text('description'),
     position: integer('position').notNull(),
     createdBy: uuid('created_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

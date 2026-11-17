@@ -50,11 +50,12 @@ export function listSessionGroups(projectId: string): Promise<SessionGroupRow[]>
   return groupsOf(db, projectId);
 }
 
-/** A new group, last in the order. `name` is already trimmed (the contract schema). */
+/** A new group, last in the order. `name` and `description` are already trimmed (the contract schema). */
 export async function createSessionGroup(input: {
   accountId: string;
   projectId: string;
   name: string;
+  description?: string | null;
   createdBy: string | null;
 }): Promise<{ ok: true; group: SessionGroupRow } | { ok: false; code: 'group_name_taken' | 'group_limit' }> {
   try {
@@ -68,6 +69,7 @@ export async function createSessionGroup(input: {
           accountId: input.accountId,
           projectId: input.projectId,
           name: input.name,
+          description: input.description || null,
           position: existing.length,
           createdBy: input.createdBy,
         })
@@ -80,16 +82,20 @@ export async function createSessionGroup(input: {
   }
 }
 
-/** Rename a group of the project. Its own name in another case is free. */
-export async function renameSessionGroup(
+/** Rename a group of the project, change its description, or both. Its own name in another case is free. An empty description clears it. */
+export async function updateSessionGroup(
   projectId: string,
   groupId: string,
-  name: string,
+  input: { name?: string; description?: string | null },
 ): Promise<{ ok: true; group: SessionGroupRow } | { ok: false; code: 'group_name_taken' | 'group_not_found' }> {
   try {
     const [group] = await db
       .update(projectSessionGroups)
-      .set({ name, updatedAt: new Date() })
+      .set({
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.description !== undefined ? { description: input.description || null } : {}),
+        updatedAt: new Date(),
+      })
       .where(and(eq(projectSessionGroups.projectId, projectId), eq(projectSessionGroups.groupId, groupId)))
       .returning();
     return group ? { ok: true, group } : { ok: false, code: 'group_not_found' };
@@ -197,4 +203,13 @@ export async function setSessionGroup(
     if (errorSqlstate(error) === '23503') return { ok: false, code: 'group_not_found' };
     throw error;
   }
+}
+
+/** A group of the project, or null. */
+export async function findSessionGroup(projectId: string, groupId: string): Promise<SessionGroupRow | null> {
+  const [group] = await db
+    .select()
+    .from(projectSessionGroups)
+    .where(and(eq(projectSessionGroups.projectId, projectId), eq(projectSessionGroups.groupId, groupId)));
+  return group ?? null;
 }

@@ -1,6 +1,7 @@
 // Session groups — `/v1/projects/:id/session-groups` (apps/api/src/projects/routes/session-groups.ts).
-// A group is a named folder of the project's sessions that every member sees,
-// in one shared order. A session is in at most one group
+// A group (product word "Space") is a named folder of the project's sessions
+// that every member sees, in one shared order. Every session of a group is told
+// its name and description at turn start and mounts its Files folder. A session is in at most one group
 // (`ProjectSession.group_id`); list a group's sessions with
 // `listProjectSessionsPage(projectId, { group })`. Every route answers 403
 // `feature_disabled` while the project's `session_groups` flag is off.
@@ -17,6 +18,8 @@ export interface ProjectSessionGroup {
   group_id: string;
   /** 1–80 characters, unique in the project in any case. */
   name: string;
+  /** What the group is for, at most 2000 characters; null when none was given. */
+  description: string | null;
   /** 0-based place in the project's order. */
   position: number;
   created_by: string | null;
@@ -31,6 +34,8 @@ export type WorkspaceSessionGroup = ProjectSessionGroup;
 export interface CreateProjectSessionGroupInput {
   /** 1–80 characters after trimming. */
   name: string;
+  /** What the group is for, at most 2000 characters after trimming. */
+  description?: string | null;
 }
 
 /** The workspace name of {@link CreateProjectSessionGroupInput}: the same type. */
@@ -88,6 +93,25 @@ export const renameProjectSessionGroup = renameWorkspaceSessionGroup;
 /** Delete a group. Its sessions stay, in no group; the groups after it move up one place. */
 export async function deleteWorkspaceSessionGroup(projectId: string, groupId: string): Promise<void> {
   unwrap(await backendApi.delete<{ ok: true }>(`/workspaces/${projectId}/session-groups/${groupId}`, { showErrors: false }));
+}
+
+/** The fields {@link updateWorkspaceSessionGroup} changes; at least one. */
+export interface UpdateWorkspaceSessionGroupInput {
+  /** 1–80 characters after trimming. */
+  name?: string;
+  /** At most 2000 characters after trimming; `null` or empty clears it. */
+  description?: string | null;
+}
+
+/**
+ * Rename a group, change its description, or both; only the fields given are
+ * sent. A taken name rejects with 409 `group_name_taken`; an unknown group
+ * with 404 `group_not_found`.
+ */
+export async function updateWorkspaceSessionGroup(projectId: string, groupId: string, input: UpdateWorkspaceSessionGroupInput) {
+  return unwrap(
+    await backendApi.patch<ProjectSessionGroup>(`/workspaces/${projectId}/session-groups/${groupId}`, input, { showErrors: false }),
+  );
 }
 
 /** @deprecated Use `deleteWorkspaceSessionGroup`. Kept permanently. */

@@ -38,6 +38,7 @@ import {
   SessionGroupOrderInputSchema,
   SessionGroupSchema,
   SessionGroupUpdateInputSchema,
+  SESSION_GROUP_DESCRIPTION_MAX,
   SESSION_GROUP_NAME_MAX,
   SessionScopeInputSchema,
   SessionScopeSchema,
@@ -464,6 +465,7 @@ describe('session group contracts', () => {
   const GROUP = {
     group_id: '22222222-3333-4444-8555-666666666666',
     name: 'Store A',
+    description: null,
     position: 0,
     created_by: '99999999-8888-4777-8666-555555555555',
     created_at: NOW,
@@ -489,6 +491,13 @@ describe('session group contracts', () => {
     expect(SessionGroupCreateInputSchema.safeParse({ name: 'x'.repeat(SESSION_GROUP_NAME_MAX) }).success).toBe(true);
     expect(SessionGroupUpdateInputSchema.parse({ name: ' Store B ' })).toEqual({ name: 'Store B' });
     expect(SessionGroupCreateInputSchema.safeParse({ name: 'Store A', position: 3 }).success).toBe(false);
+  });
+
+  test('a description is trimmed, at most SESSION_GROUP_DESCRIPTION_MAX characters, and null clears it', () => {
+    expect(SessionGroupCreateInputSchema.parse({ name: 'A', description: '  Launch plan  ' })).toEqual({ name: 'A', description: 'Launch plan' });
+    expect(SessionGroupCreateInputSchema.safeParse({ name: 'A', description: 'x'.repeat(SESSION_GROUP_DESCRIPTION_MAX + 1) }).success).toBe(false);
+    expect(SessionGroupUpdateInputSchema.parse({ description: null })).toEqual({ description: null });
+    expect(SessionGroupUpdateInputSchema.safeParse({}).success).toBe(false);
   });
 
   test('an order names each group once, by id', () => {

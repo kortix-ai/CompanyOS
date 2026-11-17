@@ -78,6 +78,8 @@ export function bindProjectOperationsReview(projectId: string) {
       /** Last in the order. A taken name (any case) rejects with 409 `group_name_taken`. */
       create: (input: Parameters<typeof P.createWorkspaceSessionGroup>[1]) => P.createWorkspaceSessionGroup(projectId, input),
       rename: (groupId: string, name: string) => P.renameWorkspaceSessionGroup(projectId, groupId, name),
+      /** Rename, change the description, or both; `description: null` clears it. */
+      update: (groupId: string, input: Parameters<typeof P.updateWorkspaceSessionGroup>[2]) => P.updateWorkspaceSessionGroup(projectId, groupId, input),
       /** Every group id, once, in the new order; an out-of-date list rejects with 409 `group_order_stale`. */
       reorder: (groupIds: readonly string[]) => P.reorderWorkspaceSessionGroups(projectId, groupIds),
       /** Its sessions stay, in no group. */

@@ -559,6 +559,8 @@
     "./workspace/review/mock-data": "./src/workspace/review/mock-data.ts",
     "./workspace/review/review-center": "./src/workspace/review/review-center.tsx",
     "./workspace/review/types": "./src/workspace/review/types.ts",
+    "./workspace/session-spaces/space-detail-page": "./src/workspace/session-spaces/space-detail-page.tsx",
+    "./workspace/session-spaces/spaces-page": "./src/workspace/session-spaces/spaces-page.tsx",
     "./workspace/settings/use-leave-workspace": "./src/workspace/settings/use-leave-workspace.tsx",
     "./workspace/setup/workspace-setup-page": "./src/workspace/setup/workspace-setup-page.tsx",
     "./workspace/sidebar/footer/project-apps-nav": "./src/workspace/sidebar/footer/project-apps-nav.tsx",
@@ -2700,6 +2702,14 @@
       "./workspace/review/types": {
         "types": "./dist/workspace/review/types.d.ts",
         "import": "./dist/workspace/review/types.js"
+      },
+      "./workspace/session-spaces/space-detail-page": {
+        "types": "./dist/workspace/session-spaces/space-detail-page.d.ts",
+        "import": "./dist/workspace/session-spaces/space-detail-page.js"
+      },
+      "./workspace/session-spaces/spaces-page": {
+        "types": "./dist/workspace/session-spaces/spaces-page.d.ts",
+        "import": "./dist/workspace/session-spaces/spaces-page.js"
       },
       "./workspace/settings/use-leave-workspace": {
         "types": "./dist/workspace/settings/use-leave-workspace.d.ts",

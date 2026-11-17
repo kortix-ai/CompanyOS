@@ -8,6 +8,7 @@ import {
   renameWorkspaceSessionGroup,
   reorderWorkspaceSessionGroups,
   setWorkspaceSessionGroup,
+  updateWorkspaceSessionGroup,
   type ProjectSessionGroup,
 } from './session-groups';
 import { listWorkspaceSessionsPage } from './sessions';
@@ -36,6 +37,7 @@ configureKortix({ backendUrl: 'http://test.local/v1', getToken: async () => 'tok
 const storeA: ProjectSessionGroup = {
   group_id: '00000000-0000-4000-8000-00000000000a',
   name: 'Store A',
+  description: null,
   position: 0,
   created_by: '00000000-0000-4000-8000-000000000001',
   created_at: '2026-10-27T00:00:00.000Z',
@@ -61,6 +63,27 @@ test('renameProjectSessionGroup PATCHes { name } on the group', async () => {
   expect(calls).toEqual([
     { url: `http://test.local/v1/workspaces/P1/session-groups/${storeA.group_id}`, method: 'PATCH', body: { name: 'Store A (EU)' } },
   ]);
+});
+
+test('createWorkspaceSessionGroup POSTs a description with the name', async () => {
+  nextResponse = { status: 201, body: { ...storeA, description: 'Launch plan' } };
+  expect((await createWorkspaceSessionGroup('P1', { name: 'Store A', description: 'Launch plan' })).description).toBe('Launch plan');
+  expect(calls[0]!.body).toEqual({ name: 'Store A', description: 'Launch plan' });
+});
+
+test('updateWorkspaceSessionGroup PATCHes only the fields given; null clears the description', async () => {
+  nextResponse = { status: 200, body: { ...storeA, description: null } };
+  expect((await updateWorkspaceSessionGroup('P1', storeA.group_id, { description: null })).description).toBeNull();
+  expect(calls).toEqual([
+    { url: `http://test.local/v1/workspaces/P1/session-groups/${storeA.group_id}`, method: 'PATCH', body: { description: null } },
+  ]);
+});
+
+test('updateWorkspaceSessionGroup rejects a taken name with ApiError group_name_taken', async () => {
+  nextResponse = { status: 409, body: { error: 'taken', code: 'group_name_taken' } };
+  const error = await updateWorkspaceSessionGroup('P1', storeA.group_id, { name: 'Store B' }).catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(ApiError);
+  expect((error as ApiError).code).toBe('group_name_taken');
 });
 
 test('deleteProjectSessionGroup DELETEs the group', async () => {

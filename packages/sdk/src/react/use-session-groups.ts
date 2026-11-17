@@ -9,8 +9,10 @@ import {
   renameWorkspaceSessionGroup,
   reorderWorkspaceSessionGroups,
   setWorkspaceSessionGroup,
+  updateWorkspaceSessionGroup,
   type CreateProjectSessionGroupInput,
   type ProjectSessionGroup,
+  type UpdateWorkspaceSessionGroupInput,
 } from '../core/rest/projects-client/session-groups';
 import { contract } from './query-contracts';
 import { qk } from './query-keys';
@@ -88,6 +90,17 @@ export function useRenameWorkspaceSessionGroup(projectId: string) {
 
 /** @deprecated Use `useRenameWorkspaceSessionGroup`. Kept permanently. */
 export const useRenameProjectSessionGroup = useRenameWorkspaceSessionGroup;
+
+/** Rename a group, change its description, or both. A taken name rejects with `ApiError` code `group_name_taken`. */
+export function useUpdateWorkspaceSessionGroup(projectId: string) {
+  const invalidate = useInvalidateSessionGroups(projectId);
+  return useMutation({
+    mutationFn: (args: { groupId: string; input: UpdateWorkspaceSessionGroupInput }) =>
+      updateWorkspaceSessionGroup(projectId, args.groupId, args.input),
+    onSuccess: invalidate,
+    onError: callerShowsError,
+  });
+}
 
 /** Delete a group. Its sessions move to no group, so its list and the no-group lists refetch too. */
 export function useDeleteWorkspaceSessionGroup(projectId: string) {

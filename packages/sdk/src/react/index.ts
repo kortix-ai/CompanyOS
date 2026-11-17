@@ -328,6 +328,7 @@ export {
   useDeleteWorkspaceSessionGroup, useDeleteProjectSessionGroup,
   useWorkspaceSessionGroups, useProjectSessionGroups,
   useRenameWorkspaceSessionGroup, useRenameProjectSessionGroup,
+  useUpdateWorkspaceSessionGroup,
   useReorderWorkspaceSessionGroups, useReorderProjectSessionGroups,
   useSetWorkspaceSessionGroup, useSetProjectSessionGroup,
 } from './use-session-groups';

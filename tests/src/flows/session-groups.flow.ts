@@ -1,6 +1,7 @@
 /**
- * Session groups — named folders of a project's sessions that every member
- * shares, behind the `session_groups` flag. Spec: tests/spec/end-to-end.md
+ * Session groups (product word "Spaces") — named folders of a project's
+ * sessions that every member shares, behind the `session_groups` flag. A
+ * group has a description, and a session can be created in one (`group_id`). Spec: tests/spec/end-to-end.md
  * § 7b. Source of truth: apps/api/src/projects/routes/session-groups.ts +
  * projects/lib/session-groups.ts + the `group` filter of GET /sessions.
  */
@@ -14,6 +15,7 @@ import {
 } from '@kortix/api-contract';
 import { flow, flowMeta } from '../core/flow';
 import { fail } from '../core/expect';
+import type { FlowMeta } from '../core/types';
 import { insertSession, openWorld } from '../fixtures/agent-principals';
 
 const ROUTES = {
@@ -27,6 +29,7 @@ const ROUTES = {
 const SESSION_ROUTES = {
   list: 'GET /v1/projects/:projectId/sessions',
   read: 'GET /v1/projects/:projectId/sessions/:sessionId',
+  create: 'POST /v1/projects/:projectId/sessions',
 };
 const GROUPS = '/v1/workspaces/:projectId/session-groups';
 const GROUP = '/v1/workspaces/:projectId/session-groups/:groupId';
@@ -35,7 +38,7 @@ const ASSIGN = '/v1/workspaces/:projectId/sessions/:sessionId/group';
 const SESSIONS = '/v1/workspaces/:projectId/sessions';
 const SESSION = '/v1/workspaces/:projectId/sessions/:sessionId';
 
-type Group = { group_id: string; name: string; position: number };
+type Group = { group_id: string; name: string; description: string | null; position: number };
 type Session = { session_id: string; group_id: string | null; updated_at: string };
 
 flow('SGRP-1', flowMeta('session-groups', Object.values(ROUTES), { timeoutMs: 120_000 }), async (ctx) => {
@@ -113,6 +116,18 @@ flow('SGRP-2', flowMeta('session-groups', [ROUTES.list, ROUTES.create, ROUTES.up
       (await outsider.post(GROUPS, { name: 'Intruder' }, { params })).status([403, 404]);
       const { rows } = await world.db.query('SELECT 1 FROM kortix.project_session_groups WHERE project_id = $1', [project.id]);
       if (rows.length !== 3) fail(`expected 3 groups, found ${rows.length}`);
+    });
+
+    await ctx.step('a description is trimmed and stored; PATCH changes it alone, empty clears it; 2001 characters or an empty PATCH → 400', async () => {
+      const r = await world.owner.post(GROUPS, { name: 'Launch', description: '  Ship the pricing page.  ' }, { params });
+      r.status(201).body().schema(SessionGroupSchema).has('$.description', 'Ship the pricing page.');
+      const launch = r.json<Group>().group_id;
+      (await world.owner.patch(GROUP, { description: 'Ship it by Dec 1.' }, { params: { ...params, groupId: launch } }))
+        .status(200).body().has('$.name', 'Launch').has('$.description', 'Ship it by Dec 1.');
+      (await world.owner.patch(GROUP, { description: '' }, { params: { ...params, groupId: launch } })).status(200).body().has('$.description', null);
+      (await world.owner.post(GROUPS, { name: 'Long', description: 'x'.repeat(2001) }, { params })).status(400);
+      (await world.owner.patch(GROUP, {}, { params: { ...params, groupId: launch } })).status(400);
+      (await world.owner.del(GROUP, { params: { ...params, groupId: launch } })).status(200);
     });
 
     await ctx.step('PATCH renames; a taken name → 409; an unknown or malformed id → 404 group_not_found', async () => {
@@ -232,6 +247,42 @@ flow('SGRP-3', flowMeta('session-groups', [ROUTES.create, ROUTES.assign, ROUTES.
     await ctx.step('deleting Store A leaves its session in no group', async () => {
       (await world.owner.del(GROUP, { params: { ...params, groupId: store } })).status(200);
       if ((await readSession(shared)).group_id !== null) fail('the session still names the deleted group');
+    });
+  } finally {
+    await world.close();
+  }
+});
+
+// SGRP-4 needs the session create route to answer, which needs a sandbox
+// provider and a reachable KORTIX_URL; the local profile answers 503.
+const createMeta = (routes: string[]): FlowMeta => ({
+  domain: 'session-groups',
+  requires: ['database', 'sandbox'],
+  timeoutMs: 300_000,
+  routes,
+});
+
+flow('SGRP-4', createMeta([ROUTES.create, SESSION_ROUTES.create, SESSION_ROUTES.list]), async (ctx) => {
+  const { project, world } = await openWorld(ctx);
+  const params = { projectId: project.id };
+  try {
+    await world.setFeature('session_groups', true);
+    await world.fund();
+    const space = (await world.owner.post(GROUPS, { name: 'Q4 launch' }, { params })).status(201).json<Group>().group_id;
+    let sessionId = '';
+
+    await ctx.step('create a session with group_id → 201, group_id is the space; ?group=<id> lists it', async () => {
+      const r = await world.owner.post(SESSIONS, { group_id: space, initial_prompt: 'ke2e: noop' }, { params });
+      r.status(201).body().schema(ProjectSessionSchema).has('$.group_id', space);
+      sessionId = r.json<Session>().session_id;
+      ctx.track('session', sessionId, { projectId: project.id });
+      const ids = (await world.owner.get(SESSIONS, { params, query: { group: space } })).status(200).json<Session[]>().map((s) => s.session_id);
+      if (!ids.includes(sessionId)) fail('the new session is not in its space list', ids);
+    });
+
+    await ctx.step('an unknown group_id → 404 group_not_found and no session', async () => {
+      (await world.owner.post(SESSIONS, { group_id: randomUUID(), initial_prompt: 'ke2e: noop' }, { params }))
+        .status(404).body().has('$.code', 'group_not_found');
     });
   } finally {
     await world.close();

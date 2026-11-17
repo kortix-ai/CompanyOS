@@ -30,6 +30,7 @@ import {
   DotsThreeIcon,
   PencilSimpleIcon,
   PlusIcon,
+  StackIcon,
   TrashIcon,
 } from '@phosphor-icons/react';
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode, type SyntheticEvent } from 'react';
@@ -65,6 +66,8 @@ import {
   ShowMoreButton,
 } from '../../session/list/session-list-chrome';
 import { CaretRightSolidIcon } from '../../icons/caret-right-solid';
+import { uiRoutes } from '../../lib/routes';
+import { useUiRouter } from '../../providers/ui-provider';
 
 /** A dragged session row carries its id under this type. */
 const SESSION_DRAG_TYPE = 'application/x-kortix-session';
@@ -435,8 +438,9 @@ function SessionGroupSection({
     labels,
     limit: SIDEBAR_PAGE_SIZE,
     enabled: open,
-    // No focus refetch: a new session never starts inside a group, and a
-    // project with dozens of open groups would refetch every one of them.
+    // No focus refetch: a project with dozens of open groups would refetch
+    // every one of them. A session started in a space refetches these lists
+    // itself (`use-project-home-send.ts`).
     refetchOnWindowFocus: false,
   });
   // A pinned row shows under Pinned only. The `group_id` check drops a row the
@@ -551,6 +555,8 @@ function SessionGroupMenu({
   onReorder: (groupIds: string[]) => void;
 }) {
   const tGroups = useTranslations('sidebar.sessionGroups');
+  const router = useUiRouter();
+  const spaceHref = uiRoutes().sessionSpace?.(projectId, group.group_id) ?? null;
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const remove = useDeleteProjectSessionGroup(projectId);
@@ -580,6 +586,15 @@ function SessionGroupMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="right" className="w-44" onCloseAutoFocus={keepFocusForNewGroup}>
+          {spaceHref ? (
+            <>
+              <DropdownMenuItem className="cursor-pointer" onSelect={() => router.push(spaceHref)}>
+                <StackIcon />
+                {tGroups('openSpace')}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          ) : null}
           <DropdownMenuItem
             className="cursor-pointer"
             onSelect={() => {

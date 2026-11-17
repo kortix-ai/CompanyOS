@@ -23,6 +23,7 @@ import {
   type SessionGroup,
 } from '@kortix/api-contract';
 import type { Context } from 'hono';
+import { makeSessionGroupFolder } from '../../drives/space-folders';
 import { requireFeatureFlag } from '../../feature-flags/gate';
 import { PROJECT_ACTIONS } from '../../iam';
 import { auth, errors, json } from '../../openapi';
@@ -35,7 +36,7 @@ import {
   createSessionGroup,
   deleteSessionGroup,
   listSessionGroups,
-  renameSessionGroup,
+  updateSessionGroup,
   reorderSessionGroups,
   setSessionGroup,
   type SessionGroupRow,
@@ -53,6 +54,7 @@ function serializeGroup(row: SessionGroupRow): SessionGroup {
   return {
     group_id: row.groupId,
     name: row.name,
+    description: row.description,
     position: row.position,
     created_by: row.createdBy,
     created_at: row.createdAt.toISOString(),
@@ -115,6 +117,7 @@ export function registerSessionGroupsRoutes(): void {
         accountId: loaded.row.accountId,
         projectId: loaded.row.projectId,
         name: c.req.valid('json').name,
+        description: c.req.valid('json').description ?? null,
         createdBy: loaded.userId,
       });
       if (!result.ok) {
@@ -122,6 +125,8 @@ export function registerSessionGroupsRoutes(): void {
           ? c.json({ error: 'This project already has 50 session groups.', code: 'group_limit' }, 409)
           : c.json(NAME_TAKEN, 409);
       }
+      // Its Files folder, best effort and off the response path.
+      void makeSessionGroupFolder(loaded.row.accountId, loaded.row.projectId, result.group.groupId);
       return c.json(serializeGroup(result.group), 201);
     },
   );
@@ -157,20 +162,20 @@ export function registerSessionGroupsRoutes(): void {
       method: 'patch',
       path: '/{workspaceId}/session-groups/{groupId}',
       tags: ['sessions'],
-      summary: 'Rename a session group',
+      summary: 'Rename a session group or change its description',
       ...auth,
       request: {
         params: groupParams,
         body: { required: true, content: { 'application/json': { schema: SessionGroupUpdateInputSchema } } },
       },
-      responses: { 200: json(SessionGroupSchema, 'The renamed group'), ...errors(400, 403, 404, 409) },
+      responses: { 200: json(SessionGroupSchema, 'The changed group'), ...errors(400, 403, 404, 409) },
     }),
     async (c) => {
       const loaded = await loadGroupsProject(c, 'session');
       if (loaded instanceof Response) return loaded;
       const groupId = c.req.param('groupId')!;
       if (!isUuid(groupId)) return c.json(GROUP_NOT_FOUND, 404);
-      const result = await renameSessionGroup(loaded.row.projectId, groupId, c.req.valid('json').name);
+      const result = await updateSessionGroup(loaded.row.projectId, groupId, c.req.valid('json'));
       if (!result.ok) return result.code === 'group_not_found' ? c.json(GROUP_NOT_FOUND, 404) : c.json(NAME_TAKEN, 409);
       return c.json(serializeGroup(result.group), 200);
     },

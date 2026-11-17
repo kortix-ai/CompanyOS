@@ -1575,6 +1575,12 @@
     "referralShareTitle": "Freunde empfehlen",
     "referralShareSubtitle": "Erhalte 400 Credits",
     "new": "Neu",
+    "mcpPromo": {
+      "title": "Kortix in ChatGPT und Claude nutzen",
+      "description": "Füge Kortix zu dem KI-Chat hinzu, den du schon nutzt. Starte Agenten, verfolge ihre Arbeit und nutze deine Connectors von dort.",
+      "cta": "Verbinden"
+    },
+    "promos": "Wege, Kortix zu nutzen",
     "upgrade": "Upgraden",
     "chats": "Chats",
     "library": "Dateien",
@@ -22427,7 +22433,7 @@
   },
   "connectMcp": {
     "title": "Kortix über MCP verbinden",
-    "description": "Nutze Kortix in Claude, Claude Code, Cursor, Codex oder jedem MCP-Client. Du meldest dich einmal an. Keine Installation nötig.",
+    "description": "Nutze Kortix in Claude, ChatGPT, Claude Code, Cursor, Codex oder jedem MCP-Client. Du meldest dich einmal an. Keine Installation nötig.",
     "docs": "Doku",
     "done": "Fertig",
     "copy": "Kopieren",
@@ -22437,6 +22443,7 @@
     "copyUrl": "URL kopieren",
     "via": {
       "claude": "Einstellungen → Connectors",
+      "chatgpt": "Entwicklermodus → eigener Connector",
       "claude-code": "Ein Terminal-Befehl",
       "cursor": "Installation mit einem Klick",
       "codex": "Zwei Terminal-Befehle",
@@ -22712,6 +22719,13 @@
     "onlyYouDescription": "Nur du, in jedem Workspace, in deinen privaten Sitzungen.",
     "everyoneDescription": "Alle im Workspace können ihn nutzen, auch Automatisierungen.",
     "promoLine": "Lass Kortix mit deinen lokalen Dateien arbeiten und deinen Computer steuern.",
+    "promo": {
+      "title": "Deinen Arbeitscomputer verbinden",
+      "titleThis": "Diesen Computer verbinden",
+      "description": "Agenten arbeiten mit deinen lokalen Dateien, führen Programme aus und bedienen die Apps auf deinem Bildschirm. Du entscheidest, was sie dürfen.",
+      "cta": "Verbinden",
+      "ctaOneClick": "Mit einem Klick verbinden"
+    },
     "dismissPromo": "Ausblenden",
     "useCliInstead": "Stattdessen die CLI verwenden",
     "cliHint": "Der Befehl zeigt einen Code und öffnet eine Seite, auf der du dieses Gerät freigibst. Danach läuft er im Hintergrund.",

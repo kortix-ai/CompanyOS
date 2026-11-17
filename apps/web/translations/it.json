@@ -1575,6 +1575,12 @@
     "referralShareTitle": "Invita Amici",
     "referralShareSubtitle": "Ottieni 400 crediti",
     "new": "Nuovo",
+    "mcpPromo": {
+      "title": "Usa Kortix in ChatGPT e Claude",
+      "description": "Aggiungi Kortix alla chat AI che usi già. Avvia agenti, segui il loro lavoro e usa i tuoi connettori da lì.",
+      "cta": "Collega"
+    },
+    "promos": "Modi di usare Kortix",
     "upgrade": "Aggiorna",
     "chats": "Chat",
     "library": "File",
@@ -22427,7 +22433,7 @@
   },
   "connectMcp": {
     "title": "Collega Kortix tramite MCP",
-    "description": "Usa Kortix da Claude, Claude Code, Cursor, Codex o qualsiasi client MCP. Accedi una sola volta. Niente da installare.",
+    "description": "Usa Kortix da Claude, ChatGPT, Claude Code, Cursor, Codex o qualsiasi client MCP. Accedi una sola volta. Niente da installare.",
     "docs": "Documentazione",
     "done": "Fine",
     "copy": "Copia",
@@ -22437,6 +22443,7 @@
     "copyUrl": "Copia URL",
     "via": {
       "claude": "Impostazioni → Connettori",
+      "chatgpt": "Modalità sviluppatore → connettore personalizzato",
       "claude-code": "Un comando da terminale",
       "cursor": "Installazione con un clic",
       "codex": "Due comandi da terminale",
@@ -22712,6 +22719,13 @@
     "onlyYouDescription": "Solo tu, in ogni workspace, nelle tue sessioni private.",
     "everyoneDescription": "Tutti nel workspace possono usarlo, incluse le automazioni.",
     "promoLine": "Lascia che Kortix lavori con i tuoi file locali e controlli il tuo computer.",
+    "promo": {
+      "title": "Collega il tuo computer di lavoro",
+      "titleThis": "Collega questo computer",
+      "description": "Gli agenti lavorano con i tuoi file locali, eseguono programmi e usano le app sul tuo schermo. Decidi tu cosa possono fare.",
+      "cta": "Collega",
+      "ctaOneClick": "Collega con un clic"
+    },
     "dismissPromo": "Ignora",
     "useCliInstead": "Usa invece la CLI",
     "cliHint": "Il comando mostra un codice e apre una pagina in cui approvi questo dispositivo. Poi resta attivo in background.",

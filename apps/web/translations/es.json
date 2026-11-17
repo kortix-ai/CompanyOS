@@ -1575,6 +1575,12 @@
     "referralShareTitle": "Referir Amigos",
     "referralShareSubtitle": "Obtén 400 créditos",
     "new": "Nuevo",
+    "mcpPromo": {
+      "title": "Usa Kortix en ChatGPT y Claude",
+      "description": "Añade Kortix al chat de IA que ya usas. Inicia agentes, sigue su trabajo y usa tus conectores desde allí.",
+      "cta": "Conectar"
+    },
+    "promos": "Formas de usar Kortix",
     "upgrade": "Mejorar",
     "chats": "Chats",
     "library": "Archivos",
@@ -22427,7 +22433,7 @@
   },
   "connectMcp": {
     "title": "Conecta Kortix por MCP",
-    "description": "Usa Kortix desde Claude, Claude Code, Cursor, Codex o cualquier cliente MCP. Inicias sesión una vez. Sin instalar nada.",
+    "description": "Usa Kortix desde Claude, ChatGPT, Claude Code, Cursor, Codex o cualquier cliente MCP. Inicias sesión una vez. Sin instalar nada.",
     "docs": "Docs",
     "done": "Listo",
     "copy": "Copiar",
@@ -22437,6 +22443,7 @@
     "copyUrl": "Copiar URL",
     "via": {
       "claude": "Ajustes → Conectores",
+      "chatgpt": "Modo desarrollador → conector personalizado",
       "claude-code": "Un comando de terminal",
       "cursor": "Instalación en un clic",
       "codex": "Dos comandos de terminal",
@@ -22712,6 +22719,13 @@
     "onlyYouDescription": "Solo tú, en todos los espacios de trabajo, en tus sesiones privadas.",
     "everyoneDescription": "Todos en el espacio de trabajo pueden usarlo, incluidas las automatizaciones.",
     "promoLine": "Deja que Kortix trabaje con tus archivos locales y controle tu ordenador.",
+    "promo": {
+      "title": "Conecta tu ordenador de trabajo",
+      "titleThis": "Conectar este ordenador",
+      "description": "Los agentes trabajan con tus archivos locales, ejecutan programas y usan las apps de tu pantalla. Tú decides qué pueden hacer.",
+      "cta": "Conectar",
+      "ctaOneClick": "Conectar con un clic"
+    },
     "dismissPromo": "Descartar",
     "useCliInstead": "Usar la CLI en su lugar",
     "cliHint": "El comando muestra un código y abre una página donde apruebas este dispositivo. Después se ejecuta en segundo plano.",

@@ -1575,6 +1575,12 @@
     "referralShareTitle": "Indicar Amigos",
     "referralShareSubtitle": "Ganhe 400 créditos",
     "new": "Novo",
+    "mcpPromo": {
+      "title": "Use o Kortix no ChatGPT e no Claude",
+      "description": "Adicione o Kortix ao chat de IA que você já usa. Inicie agentes, acompanhe o trabalho e use seus conectores de lá.",
+      "cta": "Conectar"
+    },
+    "promos": "Formas de usar o Kortix",
     "upgrade": "Melhorar",
     "chats": "Chats",
     "library": "Arquivos",
@@ -22427,7 +22433,7 @@
   },
   "connectMcp": {
     "title": "Conecte o Kortix via MCP",
-    "description": "Use o Kortix no Claude, Claude Code, Cursor, Codex ou qualquer cliente MCP. Você entra uma vez. Nada para instalar.",
+    "description": "Use o Kortix no Claude, ChatGPT, Claude Code, Cursor, Codex ou qualquer cliente MCP. Você entra uma vez. Nada para instalar.",
     "docs": "Docs",
     "done": "Concluir",
     "copy": "Copiar",
@@ -22437,6 +22443,7 @@
     "copyUrl": "Copiar URL",
     "via": {
       "claude": "Configurações → Conectores",
+      "chatgpt": "Modo de desenvolvedor → conector personalizado",
       "claude-code": "Um comando no terminal",
       "cursor": "Instalação com um clique",
       "codex": "Dois comandos no terminal",
@@ -22712,6 +22719,13 @@
     "onlyYouDescription": "Só você, em todos os espaços de trabalho, nas suas sessões privadas.",
     "everyoneDescription": "Todos no espaço de trabalho podem usá-lo, incluindo automações.",
     "promoLine": "Deixe o Kortix trabalhar com seus arquivos locais e controlar seu computador.",
+    "promo": {
+      "title": "Conecte seu computador de trabalho",
+      "titleThis": "Conectar este computador",
+      "description": "Os agentes trabalham com seus arquivos locais, executam programas e usam os apps da sua tela. Você decide o que eles podem fazer.",
+      "cta": "Conectar",
+      "ctaOneClick": "Conectar com um clique"
+    },
     "dismissPromo": "Dispensar",
     "useCliInstead": "Usar a CLI em vez disso",
     "cliHint": "O comando mostra um código e abre uma página onde você aprova este dispositivo. Depois ele roda em segundo plano.",

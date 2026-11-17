@@ -1575,6 +1575,12 @@
     "referralShareTitle": "友達を紹介",
     "referralShareSubtitle": "400クレジット獲得",
     "new": "新規",
+    "mcpPromo": {
+      "title": "ChatGPT や Claude から Kortix を使う",
+      "description": "いつもの AI チャットに Kortix を追加しましょう。エージェントの起動、作業の確認、コネクタの利用がそこからできます。",
+      "cta": "接続"
+    },
+    "promos": "Kortix の使い方",
     "upgrade": "アップグレード",
     "chats": "チャット",
     "library": "ファイル",
@@ -22427,7 +22433,7 @@
   },
   "connectMcp": {
     "title": "MCP で Kortix に接続",
-    "description": "Claude、Claude Code、Cursor、Codex、または任意の MCP クライアントから Kortix を使えます。サインインは一度だけ。インストールは不要です。",
+    "description": "Claude、ChatGPT、Claude Code、Cursor、Codex、または任意の MCP クライアントから Kortix を使えます。サインインは一度だけ。インストールは不要です。",
     "docs": "ドキュメント",
     "done": "完了",
     "copy": "コピー",
@@ -22437,6 +22443,7 @@
     "copyUrl": "URL をコピー",
     "via": {
       "claude": "設定 → コネクタ",
+      "chatgpt": "開発者モード → カスタムコネクタ",
       "claude-code": "ターミナルコマンド 1 つ",
       "cursor": "ワンクリックでインストール",
       "codex": "ターミナルコマンド 2 つ",
@@ -22712,6 +22719,13 @@
     "onlyYouDescription": "あなただけ。すべてのワークスペースの、あなたのプライベートセッションで使えます。",
     "everyoneDescription": "ワークスペースの全員が使えます。自動化も含みます。",
     "promoLine": "Kortix がローカルファイルを扱い、コンピューターを操作できるようにします。",
+    "promo": {
+      "title": "仕事用のコンピューターを接続",
+      "titleThis": "このコンピューターを接続",
+      "description": "エージェントがローカルファイルを扱い、プログラムを実行し、画面上のアプリを操作します。何を許可するかはあなたが決めます。",
+      "cta": "接続",
+      "ctaOneClick": "ワンクリックで接続"
+    },
     "dismissPromo": "閉じる",
     "useCliInstead": "代わりに CLI を使う",
     "cliHint": "コマンドはコードを表示し、このデバイスを承認するページを開きます。その後はバックグラウンドで動作します。",

@@ -1575,6 +1575,12 @@
     "referralShareTitle": "推荐好友",
     "referralShareSubtitle": "获得 400 积分",
     "new": "新",
+    "mcpPromo": {
+      "title": "在 ChatGPT 和 Claude 中使用 Kortix",
+      "description": "把 Kortix 添加到你已在用的 AI 聊天中。在那里启动智能体、跟进它们的工作并使用你的连接器。",
+      "cta": "连接"
+    },
+    "promos": "Kortix 的更多用法",
     "upgrade": "升级",
     "chats": "聊天",
     "library": "文件",
@@ -22427,7 +22433,7 @@
   },
   "connectMcp": {
     "title": "通过 MCP 连接 Kortix",
-    "description": "在 Claude、Claude Code、Cursor、Codex 或任何 MCP 客户端中使用 Kortix。只需登录一次，无需安装。",
+    "description": "在 Claude、ChatGPT、Claude Code、Cursor、Codex 或任何 MCP 客户端中使用 Kortix。只需登录一次，无需安装。",
     "docs": "文档",
     "done": "完成",
     "copy": "复制",
@@ -22437,6 +22443,7 @@
     "copyUrl": "复制 URL",
     "via": {
       "claude": "设置 → 连接器",
+      "chatgpt": "开发者模式 → 自定义连接器",
       "claude-code": "一条终端命令",
       "cursor": "一键安装",
       "codex": "两条终端命令",
@@ -22712,6 +22719,13 @@
     "onlyYouDescription": "只有你，在每个工作区的私人会话中。",
     "everyoneDescription": "工作区中的所有人都可以使用，包括自动化。",
     "promoLine": "让 Kortix 处理你的本地文件并控制你的电脑。",
+    "promo": {
+      "title": "连接你的工作电脑",
+      "titleThis": "连接这台电脑",
+      "description": "智能体可以处理你的本地文件、运行程序并操作屏幕上的应用。由你决定它们能做什么。",
+      "cta": "连接",
+      "ctaOneClick": "一键连接"
+    },
     "dismissPromo": "关闭",
     "useCliInstead": "改用 CLI",
     "cliHint": "该命令会显示一个代码，并打开一个页面供你批准此设备。之后它会在后台运行。",

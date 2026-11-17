@@ -1575,6 +1575,12 @@
     "referralShareTitle": "Препоручите пријатеље",
     "referralShareSubtitle": "Освојите 400 кредита",
     "new": "Ново",
+    "mcpPromo": {
+      "title": "Користите Kortix у ChatGPT-у и Claude-у",
+      "description": "Додајте Kortix у AI чет који већ користите. Покрећите агенте, пратите њихов рад и користите своје конекторе одатле.",
+      "cta": "Повежи"
+    },
+    "promos": "Начини да користите Kortix",
     "upgrade": "Надоградња",
     "chats": "Ћаскања",
     "library": "Датотеке",
@@ -22427,7 +22433,7 @@
   },
   "connectMcp": {
     "title": "Povežite Kortix preko MCP-a",
-    "description": "Koristite Kortix iz Claude, Claude Code, Cursor, Codex ili bilo kog MCP klijenta. Prijavljujete se jednom. Ništa ne morate da instalirate.",
+    "description": "Koristite Kortix iz Claude, ChatGPT, Claude Code, Cursor, Codex ili bilo kog MCP klijenta. Prijavljujete se jednom. Ništa ne morate da instalirate.",
     "docs": "Dokumentacija",
     "done": "Gotovo",
     "copy": "Kopiraj",
@@ -22437,6 +22443,7 @@
     "copyUrl": "Kopiraj URL",
     "via": {
       "claude": "Podešavanja → Konektori",
+      "chatgpt": "Režim za programere → prilagođeni konektor",
       "claude-code": "Jedna komanda u terminalu",
       "cursor": "Instalacija jednim klikom",
       "codex": "Dve komande u terminalu",
@@ -22712,6 +22719,13 @@
     "onlyYouDescription": "Само ви, у сваком радном простору, у својим приватним сесијама.",
     "everyoneDescription": "Сви у радном простору могу да га користе, укључујући аутоматизације.",
     "promoLine": "Дозволите Kortix-у да ради са вашим локалним датотекама и управља вашим рачунаром.",
+    "promo": {
+      "title": "Повежите свој пословни рачунар",
+      "titleThis": "Повежите овај рачунар",
+      "description": "Агенти раде са вашим локалним датотекама, покрећу програме и користе апликације на вашем екрану. Ви одлучујете шта смеју.",
+      "cta": "Повежи",
+      "ctaOneClick": "Повежи једним кликом"
+    },
     "dismissPromo": "Одбаци",
     "useCliInstead": "Користи CLI уместо тога",
     "cliHint": "Команда приказује код и отвара страницу на којој одобравате овај уређај. Затим ради у позадини.",

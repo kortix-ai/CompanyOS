@@ -563,9 +563,8 @@
     "./workspace/setup/workspace-setup-page": "./src/workspace/setup/workspace-setup-page.tsx",
     "./workspace/sidebar/footer/project-apps-nav": "./src/workspace/sidebar/footer/project-apps-nav.tsx",
     "./workspace/sidebar/footer/project-balance-warning": "./src/workspace/sidebar/footer/project-balance-warning.tsx",
-    "./workspace/sidebar/footer/project-computer-nav": "./src/workspace/sidebar/footer/project-computer-nav.tsx",
     "./workspace/sidebar/footer/project-manifest-issues-alert": "./src/workspace/sidebar/footer/project-manifest-issues-alert.tsx",
-    "./workspace/sidebar/footer/project-mcp-nav": "./src/workspace/sidebar/footer/project-mcp-nav.tsx",
+    "./workspace/sidebar/footer/project-promo-cards": "./src/workspace/sidebar/footer/project-promo-cards.tsx",
     "./workspace/sidebar/footer/project-sandbox-alert": "./src/workspace/sidebar/footer/project-sandbox-alert.tsx",
     "./workspace/sidebar/footer/project-upgrade-button": "./src/workspace/sidebar/footer/project-upgrade-button.tsx",
     "./workspace/sidebar/footer/sandbox-health": "./src/workspace/sidebar/footer/sandbox-health.ts",
@@ -2718,17 +2717,13 @@
         "types": "./dist/workspace/sidebar/footer/project-balance-warning.d.ts",
         "import": "./dist/workspace/sidebar/footer/project-balance-warning.js"
       },
-      "./workspace/sidebar/footer/project-computer-nav": {
-        "types": "./dist/workspace/sidebar/footer/project-computer-nav.d.ts",
-        "import": "./dist/workspace/sidebar/footer/project-computer-nav.js"
-      },
       "./workspace/sidebar/footer/project-manifest-issues-alert": {
         "types": "./dist/workspace/sidebar/footer/project-manifest-issues-alert.d.ts",
         "import": "./dist/workspace/sidebar/footer/project-manifest-issues-alert.js"
       },
-      "./workspace/sidebar/footer/project-mcp-nav": {
-        "types": "./dist/workspace/sidebar/footer/project-mcp-nav.d.ts",
-        "import": "./dist/workspace/sidebar/footer/project-mcp-nav.js"
+      "./workspace/sidebar/footer/project-promo-cards": {
+        "types": "./dist/workspace/sidebar/footer/project-promo-cards.d.ts",
+        "import": "./dist/workspace/sidebar/footer/project-promo-cards.js"
       },
       "./workspace/sidebar/footer/project-sandbox-alert": {
         "types": "./dist/workspace/sidebar/footer/project-sandbox-alert.d.ts",

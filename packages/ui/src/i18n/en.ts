@@ -1069,6 +1069,12 @@ const catalog = {
     "referralShareTitle": "Refer Friends",
     "referralShareSubtitle": "Get 400 credits",
     "new": "New",
+    "mcpPromo": {
+      "title": "Use Kortix in ChatGPT and Claude",
+      "description": "Add Kortix to the AI chat you already use. Start agents, follow their work and use your connectors from there.",
+      "cta": "Connect"
+    },
+    "promos": "Ways to use Kortix",
     "upgrade": "Upgrade",
     "chats": "Chats",
     "library": "Files",
@@ -7162,7 +7168,7 @@ const catalog = {
   },
   "connectMcp": {
     "title": "Connect Kortix over MCP",
-    "description": "Use Kortix from Claude, Claude Code, Cursor, Codex, or any MCP client. You sign in once. Nothing to install.",
+    "description": "Use Kortix from Claude, ChatGPT, Claude Code, Cursor, Codex, or any MCP client. You sign in once. Nothing to install.",
     "docs": "Docs",
     "done": "Done",
     "copy": "Copy",
@@ -7172,6 +7178,7 @@ const catalog = {
     "copyUrl": "Copy URL",
     "via": {
       "claude": "Settings → Connectors",
+      "chatgpt": "Developer mode → custom connector",
       "claude-code": "One terminal command",
       "cursor": "One-click install",
       "codex": "Two terminal commands",
@@ -7434,6 +7441,13 @@ const catalog = {
     "onlyYouDescription": "Only you, in every workspace, in your private sessions.",
     "everyoneDescription": "Everyone in the workspace can use it, including automations.",
     "promoLine": "Let Kortix work with your local files and take control of your computer.",
+    "promo": {
+      "title": "Connect your work computer",
+      "titleThis": "Connect this computer",
+      "description": "Agents work with your local files, run programs and use the apps on your screen. You decide what they may do.",
+      "cta": "Connect",
+      "ctaOneClick": "Connect in one click"
+    },
     "dismissPromo": "Dismiss",
     "useCliInstead": "Use the CLI instead",
     "cliHint": "The command shows a code and opens a page where you approve this device. It then runs in the background.",

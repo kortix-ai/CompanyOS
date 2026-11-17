@@ -1575,6 +1575,12 @@
     "referralShareTitle": "Parrainer des Amis",
     "referralShareSubtitle": "Gagnez 400 crédits",
     "new": "Nouveau",
+    "mcpPromo": {
+      "title": "Utilisez Kortix dans ChatGPT et Claude",
+      "description": "Ajoutez Kortix au chat IA que vous utilisez déjà. Lancez des agents, suivez leur travail et utilisez vos connecteurs depuis là.",
+      "cta": "Connecter"
+    },
+    "promos": "Façons d’utiliser Kortix",
     "upgrade": "Améliorer",
     "chats": "Discussions",
     "library": "Fichiers",
@@ -22427,7 +22433,7 @@
   },
   "connectMcp": {
     "title": "Connecter Kortix via MCP",
-    "description": "Utilisez Kortix depuis Claude, Claude Code, Cursor, Codex ou tout client MCP. Vous vous connectez une seule fois. Rien à installer.",
+    "description": "Utilisez Kortix depuis Claude, ChatGPT, Claude Code, Cursor, Codex ou tout client MCP. Vous vous connectez une seule fois. Rien à installer.",
     "docs": "Docs",
     "done": "Terminé",
     "copy": "Copier",
@@ -22437,6 +22443,7 @@
     "copyUrl": "Copier l’URL",
     "via": {
       "claude": "Paramètres → Connecteurs",
+      "chatgpt": "Mode développeur → connecteur personnalisé",
       "claude-code": "Une commande dans le terminal",
       "cursor": "Installation en un clic",
       "codex": "Deux commandes dans le terminal",
@@ -22712,6 +22719,13 @@
     "onlyYouDescription": "Vous seul, dans chaque espace de travail, dans vos sessions privées.",
     "everyoneDescription": "Tout le monde dans l'espace de travail peut l'utiliser, y compris les automatisations.",
     "promoLine": "Laissez Kortix travailler avec vos fichiers locaux et prendre le contrôle de votre ordinateur.",
+    "promo": {
+      "title": "Connectez votre ordinateur de travail",
+      "titleThis": "Connecter cet ordinateur",
+      "description": "Les agents utilisent vos fichiers locaux, lancent des programmes et se servent des apps de votre écran. Vous décidez de ce qu'ils peuvent faire.",
+      "cta": "Connecter",
+      "ctaOneClick": "Connecter en un clic"
+    },
     "dismissPromo": "Masquer",
     "useCliInstead": "Utiliser la CLI à la place",
     "cliHint": "La commande affiche un code et ouvre une page où vous approuvez cet appareil. Elle s'exécute ensuite en arrière-plan.",

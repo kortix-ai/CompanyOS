@@ -4,6 +4,7 @@ import { PROD_TARGET, setupPromptFor, setupTarget, type SetupTarget } from '@kor
 import { Copy } from '@kortix/ui/icons';
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
 import { Claude } from '@kortix/ui/internal/icons/claude';
+import { SolidCheckIcon } from '@kortix/ui/internal/icons/solid-check-icon';
 import { Kbd } from '@kortix/ui/kbd';
 import { Codex } from '@kortix/ui/internal/icons/codex';
 import { cn } from '@kortix/ui';
@@ -102,12 +103,20 @@ export function CopyButton({
         icon === 'shortcut' && 'pr-2.5',
       )}
     >
-      <span aria-live="polite">{copied ? 'Copied' : label}</span>
+      {/* The label never changes; the trailing mark turns into a check, and a reader hears "Copied". */}
+      <span>{label}</span>
+      <span aria-live="polite" className="sr-only">
+        {copied ? 'Copied' : ''}
+      </span>
       {icon === 'copy' ? copied ? <CheckIcon className="size-4" /> : <Copy className="size-4" /> : null}
       {icon === 'shortcut' ? (
-        <Kbd className={cn('size-5 rounded-sm', tone === 'light' ? 'bg-background/15 text-background' : 'bg-foreground/10 text-foreground')}>
-          {COPY_KEY.toUpperCase()}
-        </Kbd>
+        copied ? (
+          <SolidCheckIcon aria-hidden className="size-5" />
+        ) : (
+          <Kbd className={cn('size-5', tone === 'light' ? 'bg-background/15 text-background' : 'bg-foreground/10 text-foreground')}>
+            {COPY_KEY.toUpperCase()}
+          </Kbd>
+        )
       ) : null}
     </button>
   );
@@ -118,7 +127,10 @@ export function CopyPromptMarketingButton({ text, className }: { text: string; c
   const { copied, copy } = useCopy(text);
   return (
     <MarketingButton type="button" variant="accent" size="md" className={className} onClick={copy}>
-      <span aria-live="polite">{copied ? 'Copied' : 'Copy prompt'}</span>
+      <span>Copy prompt</span>
+      <span aria-live="polite" className="sr-only">
+        {copied ? 'Copied' : ''}
+      </span>
       {copied ? <CheckIcon /> : <Copy />}
     </MarketingButton>
   );

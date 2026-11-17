@@ -41,7 +41,7 @@ export function MarketingButton({
     <Comp
       data-variant={variant}
       className={cn(
-        'kx-button inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-medium whitespace-nowrap select-none',
+        'kx-button inline-flex shrink-0 items-center justify-center gap-2 rounded-[calc(var(--radius)-1px)] font-medium whitespace-nowrap select-none',
         'outline-ring focus-visible:outline-2 focus-visible:outline-offset-2',
         'disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
         SIZES[size],

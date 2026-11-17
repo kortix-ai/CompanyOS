@@ -94,7 +94,7 @@ export function CopyButton({
       onClick={copy}
       aria-keyshortcuts={icon === 'shortcut' ? COPY_KEY.toUpperCase() : undefined}
       className={cn(
-        'inline-flex shrink-0 items-center gap-2 rounded-full font-medium whitespace-nowrap transition-[transform,background-color] active:scale-[0.96] motion-reduce:active:scale-100',
+        'inline-flex shrink-0 items-center gap-2 rounded-md font-medium whitespace-nowrap transition-[transform,background-color] active:scale-[0.96] motion-reduce:active:scale-100',
         tone === 'light' ? 'bg-foreground text-background hover:bg-foreground/90' : 'bg-background text-foreground hover:bg-background/90',
         size === 'lg' && 'h-10 px-5 text-sm',
         size === 'md' && 'h-9 px-4 text-sm',
@@ -105,7 +105,7 @@ export function CopyButton({
       <span aria-live="polite">{copied ? 'Copied' : label}</span>
       {icon === 'copy' ? copied ? <CheckIcon className="size-4" /> : <Copy className="size-4" /> : null}
       {icon === 'shortcut' ? (
-        <Kbd className={cn('size-5 rounded-md', tone === 'light' ? 'bg-background/15 text-background' : 'bg-foreground/10 text-foreground')}>
+        <Kbd className={cn('size-5 rounded-sm', tone === 'light' ? 'bg-background/15 text-background' : 'bg-foreground/10 text-foreground')}>
           {COPY_KEY.toUpperCase()}
         </Kbd>
       ) : null}
@@ -126,7 +126,7 @@ export function CopyPromptMarketingButton({ text, className }: { text: string; c
 
 export function GhostButton({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <Link href={href} className="text-muted-foreground hover:text-foreground inline-flex h-8 items-center rounded-full px-3 text-sm font-medium transition-colors">
+    <Link href={href} className="text-muted-foreground hover:text-foreground inline-flex h-8 items-center rounded-md px-3 text-sm font-medium transition-colors">
       {children}
     </Link>
   );

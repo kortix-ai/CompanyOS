@@ -18,6 +18,8 @@ const LAST_BEAT = BEATS_MS.length;
 
 /** Panel width and the gap between panels. The track moves by their sum. */
 const PANEL = 'min(84vw, 400px)';
+/** The slide's length: `duration-slower` on the track. The reel settles after it. */
+const SLIDE_MS = 500;
 const GAP = '16px';
 
 const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
@@ -32,7 +34,7 @@ function subscribeReducedMotion(onChange: () => void) {
  * The hero reel: agent sessions side by side. The session at the left edge
  * plays: its message arrives, the agent works, the result lands. Then the
  * reel moves one panel on. It loops without end (the list is drawn three
- * times and the track jumps back to the middle copy). It pauses on hover,
+ * times and the track jumps back to the middle copy after each slide). It pauses on hover,
  * on focus and off screen. Reduced motion shows every session finished and
  * moves only when the arrows are used.
  */
@@ -59,13 +61,27 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
     return () => observer.disconnect();
   }, []);
 
+  // The middle copy holds `pos` between moves. A move may step one panel outside it; the
+  // reel then settles back before it accepts the next move, so `pos` never leaves the buffer.
+  const outside = pos < count || pos >= 2 * count;
+  const posRef = useRef(pos);
+  useEffect(() => {
+    posRef.current = pos;
+  }, [pos]);
   const go = useCallback(
-    (step: number) => {
-      setBeat(0);
-      // Reduced motion has no slide to wait for: land in the middle copy at once.
-      if (still) return setPos((current) => count + ((((current + step) % count) + count) % count));
+    (step: number, manual = false) => {
+      const current = posRef.current;
+      // Mid-settle: drop the move rather than push `pos` out of the buffer.
+      if (!still && (current < count || current >= 2 * count)) return;
+      // A session reached with the arrows shows finished: the reader chose it to read it.
+      setBeat(manual ? LAST_BEAT : 0);
+      if (still) {
+        // Reduced motion has no slide to wait for: land in the middle copy at once.
+        setPos(count + ((((current + step) % count) + count) % count));
+        return;
+      }
       setAnimate(true);
-      setPos((current) => current + step);
+      setPos(current + step);
     },
     [still, count],
   );
@@ -78,11 +94,15 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
   }, [beat, still, hovered, focused, visible, go]);
 
   // After a slide ends outside the middle copy, jump back into it with no animation.
-  const settle = () => {
-    if (pos >= count && pos < 2 * count) return;
-    setAnimate(false);
-    setPos(count + active);
-  };
+  // A timer, not `transitionend`: that event does not fire in a hidden tab.
+  useEffect(() => {
+    if (!outside) return;
+    const id = setTimeout(() => {
+      setAnimate(false);
+      setPos(count + active);
+    }, SLIDE_MS);
+    return () => clearTimeout(id);
+  }, [outside, count, active]);
   useEffect(() => {
     if (animate) return;
     const id = requestAnimationFrame(() => setAnimate(true));
@@ -112,9 +132,6 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
     >
       <div
         style={track}
-        onTransitionEnd={(event) => {
-          if (event.target === event.currentTarget) settle();
-        }}
         className={cn(
           'flex',
           // A large element crossing the page: the marketing duration, the house curve.
@@ -141,10 +158,10 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
           </span>
         </p>
         <div className="flex items-center gap-1">
-          <ReelArrow label="Previous session" onClick={() => go(-1)}>
+          <ReelArrow label="Previous session" onClick={() => go(-1, true)}>
             <ArrowLeftIcon className="size-4" />
           </ReelArrow>
-          <ReelArrow label="Next session" onClick={() => go(1)}>
+          <ReelArrow label="Next session" onClick={() => go(1, true)}>
             <ArrowRightIcon className="size-4" />
           </ReelArrow>
         </div>

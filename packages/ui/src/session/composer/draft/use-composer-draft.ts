@@ -147,7 +147,6 @@ export function useComposerDraft({
     const pending = pendingRef.current;
     if (!activeScope || !userIdRef.current || !pending) return;
     pendingRef.current = null;
-    if (sentRef.current === sentKey(pending.doc, quotesRef.current, pastesRef.current)) return;
     writeDraft(
       activeScope,
       serializeDraft({
@@ -183,7 +182,8 @@ export function useComposerDraft({
   const handleDocChange = useCallback(
     (doc: JSONContent, isEmpty: boolean) => {
       if (!activeRef.current || !scopeRef.current || !userIdRef.current) return;
-      if (sentRef.current !== sentKey(doc, quotesRef.current, pastesRef.current)) sentRef.current = null;
+      if (sentRef.current === sentKey(doc, quotesRef.current, pastesRef.current)) return;
+      sentRef.current = null;
       pendingRef.current = { doc, isEmpty };
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(flush, SAVE_DEBOUNCE_MS);

@@ -97,10 +97,11 @@ export function CopyButton({
       className={cn(
         'inline-flex shrink-0 items-center gap-2 rounded-md font-medium whitespace-nowrap transition-[transform,background-color] active:scale-[0.96] motion-reduce:active:scale-100',
         tone === 'light' ? 'bg-foreground text-background hover:bg-foreground/90' : 'bg-background text-foreground hover:bg-background/90',
-        size === 'lg' && 'h-10 px-5 text-sm',
+        size === 'lg' && 'h-10 px-4 text-sm',
         size === 'md' && 'h-9 px-4 text-sm',
         size === 'sm' && 'h-8 px-3.5 text-sm',
-        icon === 'shortcut' && 'pr-2.5',
+        // The key sits as far from the right edge as from the top and bottom: (h-10 - size-5) / 2.
+        icon === 'shortcut' && 'pr-2',
       )}
     >
       {/* The label never changes; the trailing mark turns into a check, and a reader hears "Copied". */}

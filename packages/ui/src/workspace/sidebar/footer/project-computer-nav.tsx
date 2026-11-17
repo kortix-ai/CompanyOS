@@ -1,11 +1,10 @@
 'use client';
 
-import { PromoNavRow } from './promo-nav-row';
+import { PromoCard, PromoMark } from './promo-card';
 
-import { LaptopIcon } from '@phosphor-icons/react';
+import { CursorClickIcon, FolderSimpleIcon, LaptopIcon, TerminalWindowIcon } from '@phosphor-icons/react';
 import { useCallback, useState, useSyncExternalStore } from 'react';
 
-import Loading from '../../../primitives/loading';
 import { useSidebar } from '../../../primitives/sidebar';
 import {
   useConnectDesktopComputer,
@@ -16,6 +15,9 @@ import { useIsMobile } from '../../../internal/hooks';
 import { useTranslations } from '../../../i18n';
 
 export const COMPUTER_PROMO_DISMISSED_KEY = 'kortix.computer-promo.dismissed';
+
+/** The machine, then the three capabilities a pairing grants: Filesystem, Shell, Computer Use. */
+const MARKS = [LaptopIcon, FolderSimpleIcon, TerminalWindowIcon, CursorClickIcon] as const;
 
 const subscribeNoop = () => () => {};
 
@@ -72,7 +74,7 @@ function ComputerPromo({
   onOpenConnect: () => void;
 }) {
   const t = useTranslations('computers');
-  const tSidebar = useTranslations('sidebar');
+  const tPromo = useTranslations('computers.promo');
   const isMobile = useIsMobile();
   const { setOpenMobile } = useSidebar();
   const paired = useOwnsPairedComputer();
@@ -83,19 +85,16 @@ function ComputerPromo({
 
   if (!paired.isSuccess || paired.owns || desktop.isPending) return null;
 
-  const title = oneClick ? t('connectThisComputer') : t('connectYourComputer');
-
   return (
-    <PromoNavRow
-      icon={
-        connectDesktop.isPending ? (
-          <Loading className="size-4 shrink-0" />
-        ) : (
-          <LaptopIcon className="text-muted-foreground size-4 shrink-0" />
-        )
-      }
-      label={connectDesktop.isPending ? t('connecting') : title}
-      badge={tSidebar('new')}
+    <PromoCard
+      marks={MARKS.map((MarkIcon, index) => (
+        <PromoMark key={index}>
+          <MarkIcon className="size-5" />
+        </PromoMark>
+      ))}
+      title={oneClick ? tPromo('titleThis') : tPromo('title')}
+      description={tPromo('description')}
+      cta={connectDesktop.isPending ? t('connecting') : oneClick ? tPromo('ctaOneClick') : tPromo('cta')}
       dismissLabel={t('dismissPromo')}
       onDismiss={onDismiss}
       pending={connectDesktop.isPending}

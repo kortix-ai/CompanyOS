@@ -171,19 +171,28 @@ export function ProjectSidebar({
   // live inside "More": the bottom of the sidebar is More and the status alerts.
   const connectRows = (
     <>
-              {/* Connect MCP over Connect your computer: one block, 1px seam,
-                  inner corners rounded-sm. Either row can be absent (dismissed,
-                  or a paired computer), so the corners come from the siblings
-                  that render and an empty block collapses. A plain <li>, not
-                  SidebarMenuItem: its `group/menu-item` would make hovering one
-                  row light up the other row's badge and dismiss. */}
+              {/* The two cards: Kortix in the chat apps people already use,
+                  then their own computer. Each is dismissed on its own (or the
+                  computer one disappears once a machine is paired), and an
+                  empty list collapses. Under 40rem of window height only the
+                  first card shows, so the session list keeps its rows. */}
               <li className="not-has-[li]:hidden">
-                <SidebarMenu className="gap-px [&>li:not(:first-child)>[data-sidebar=menu-button]]:rounded-t-sm [&>li:not(:last-child)>[data-sidebar=menu-button]]:rounded-b-sm">
+                <ul className="flex flex-col gap-2 pb-1 [@media(max-height:40rem)]:[&>li:not(:first-child)]:hidden">
                   <ProjectMcpNavItem onOpenConnect={() => setConnectMcpOpen(true)} />
                   <ProjectComputerNavItem
                     projectId={projectId}
                     onOpenConnect={() => setComputerConnectOpen(true)}
                   />
+                </ul>
+              </li>
+              {/* Chrome over Download app: one block, 1px seam, inner corners
+                  rounded-sm. Either row can be absent, so the corners come
+                  from the siblings that render and an empty block collapses.
+                  A plain <li>, not SidebarMenuItem: its `group/menu-item`
+                  would make hovering one row light up the other row's badge
+                  and dismiss. */}
+              <li className="not-has-[li]:hidden">
+                <SidebarMenu className="gap-px [&>li:not(:first-child)>[data-sidebar=menu-button]]:rounded-t-sm [&>li:not(:last-child)>[data-sidebar=menu-button]]:rounded-b-sm">
                   {chrome ? (
                     <ProjectChromeNavItem onOpenConnect={() => useAppsModalStore.getState().setOpen(true)} />
                   ) : null}

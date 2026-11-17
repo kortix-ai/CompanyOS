@@ -215,6 +215,13 @@ The 20 reply-graded tasks of 2026-11-13 were replaced on 2026-11-16: they
 graded what My Kortix said, in a workspace every trial shared. Their
 hill-climb (the "ask, then stop" rule) is in git history (#12682).
 
+The next tasks and graders (collateral-damage checks, prompt injection,
+should-not-ask controls, noisy workspaces, proactivity, graded deliverables),
+the 2026 agent-eval research behind them, and the open failures the benchmark
+found are in `.agents/skills/learnings/work/agent-benchmark-expansion/`. The
+plan to let agents grow their own evals is in
+`.agents/skills/learnings/work/continual-learning/`.
+
 ## Not supported yet
 
 Docker-compose environments, a restricted network

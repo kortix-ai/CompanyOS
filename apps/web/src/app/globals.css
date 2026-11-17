@@ -582,15 +582,15 @@
   }
 }
 
-/* Marketing button (after Catalyst's button): `kx-button`, rendered by
+/* Marketing button (the "inner stroke" button): `kx-button`, rendered by
    `features/marketing/kit/marketing-button.tsx` and nowhere else. Ink and
    paper only: no brand-blue fill (Jay, 2026-11-18). Ring blue stays the
    focus outline, never a fill.
 
-   - primary: a solid ink button in light, a solid paper button in dark. A
-     1px border one shade darker than the fill, a 1px inset top highlight
-     and a 1px contact shadow.
-   - secondary: an outline button. A hairline border and no fill.
+   - No border. Two 1px rings in box-shadow: a light stroke just inside the
+     edge and a ring just outside it, so the edge reads as a bevel.
+   - primary: solid ink in light, solid paper in dark.
+   - secondary: a near-paper fill with a hairline outer ring.
    - Hover is color only, on pointer devices. Press scales to 0.96.
    - A leading icon marked data-slot="icon" (the GitHub mark) takes a
      quieter tone of the label color. Other svgs (a trailing arrow, a check)
@@ -599,10 +599,11 @@
      still wins. */
 @layer components {
   .kx-button {
-    border: 1px solid var(--kx-btn-border);
     background-color: var(--kx-btn-bg);
     color: var(--kx-btn-fg);
-    box-shadow: var(--kx-btn-shadow, none);
+    box-shadow:
+      inset 0 0 0 1px var(--kx-btn-stroke),
+      0 0 0 1px var(--kx-btn-ring);
     transition-property: background-color, scale;
     transition-duration: var(--duration-normal);
     transition-timing-function: var(--ease-out);
@@ -616,32 +617,32 @@
   .kx-button[data-variant='primary'] {
     --kx-btn-bg: var(--foreground);
     --kx-btn-bg-hover: color-mix(in oklch, var(--foreground) 88%, var(--background));
-    --kx-btn-border: color-mix(in oklch, var(--foreground) 82%, oklch(0 0 0));
+    --kx-btn-stroke: color-mix(in oklch, var(--background) 15%, transparent);
+    --kx-btn-ring: var(--foreground);
     --kx-btn-fg: var(--background);
     --kx-btn-icon: color-mix(in oklch, var(--background) 72%, var(--foreground));
-    --kx-btn-shadow:
-      inset 0 1px 0 color-mix(in oklch, var(--background) 15%, transparent),
-      0 1px 2px color-mix(in oklch, var(--foreground) 10%, transparent);
   }
 
   .kx-button[data-variant='secondary'] {
-    --kx-btn-bg: transparent;
-    --kx-btn-bg-hover: color-mix(in oklch, var(--foreground) 4%, transparent);
-    --kx-btn-border: color-mix(in oklch, var(--foreground) 12%, transparent);
+    --kx-btn-bg: color-mix(in oklch, var(--foreground) 2%, var(--background));
+    --kx-btn-bg-hover: color-mix(in oklch, var(--foreground) 5%, var(--background));
+    --kx-btn-stroke: var(--background);
+    --kx-btn-ring: color-mix(in oklch, var(--foreground) 10%, transparent);
     --kx-btn-fg: var(--foreground);
     --kx-btn-icon: var(--muted-foreground);
   }
 
   .dark .kx-button[data-variant='primary'] {
     --kx-btn-bg-hover: color-mix(in oklch, var(--foreground) 90%, var(--background));
-    --kx-btn-border: color-mix(in oklch, var(--foreground) 85%, var(--background));
+    --kx-btn-stroke: color-mix(in oklch, var(--background) 8%, transparent);
     --kx-btn-icon: color-mix(in oklch, var(--background) 60%, var(--foreground));
-    --kx-btn-shadow: 0 1px 2px color-mix(in oklch, var(--background) 40%, transparent);
   }
 
   .dark .kx-button[data-variant='secondary'] {
-    --kx-btn-bg-hover: color-mix(in oklch, var(--foreground) 6%, transparent);
-    --kx-btn-border: color-mix(in oklch, var(--foreground) 15%, transparent);
+    --kx-btn-bg: color-mix(in oklch, var(--foreground) 5%, var(--background));
+    --kx-btn-bg-hover: color-mix(in oklch, var(--foreground) 9%, var(--background));
+    --kx-btn-stroke: color-mix(in oklch, var(--foreground) 8%, transparent);
+    --kx-btn-ring: color-mix(in oklch, var(--foreground) 12%, transparent);
   }
 
   @media (hover: hover) and (pointer: fine) {

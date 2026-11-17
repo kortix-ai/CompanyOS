@@ -12,7 +12,7 @@ const SIZES = {
 export type MarketingButtonProps = ComponentProps<'button'> & {
   /**
    * `primary` is the solid ink button (paper in dark): the main action.
-   * `secondary` is the outline button beside it. Ink and paper only.
+   * `secondary` is the near-paper button beside it. Ink and paper only.
    */
   variant?: 'primary' | 'secondary';
   size?: keyof typeof SIZES;
@@ -21,9 +21,9 @@ export type MarketingButtonProps = ComponentProps<'button'> & {
 };
 
 /**
- * The marketing button, after Catalyst's button. The fill, border, inset
- * highlight, hover and press scale live in the `kx-button` class in
- * globals.css; this file only picks the variant and the size.
+ * The marketing button, the "inner stroke" button. The fill, the two edge
+ * rings, hover and press scale live in the `kx-button` class in globals.css;
+ * this file only picks the variant and the size.
  *
  * Sizes: `sm` is for the navbar only. Every in-page button is `size="md"`
  * plus `className="hit-area-y-1"`, which grows its tap target to about 44px

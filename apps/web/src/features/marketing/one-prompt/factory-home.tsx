@@ -271,21 +271,21 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
 
       {/* The site's footer: its closing call to action carries this page's copy and the copy action. */}
       <Footer
-        cta={
-          <>
-            <h2 className="text-foreground text-2xl font-medium tracking-tight text-balance md:text-3xl lg:text-4xl">
-              One prompt.
-              <span className="text-muted-foreground block">Your whole company, looped.</span>
-            </h2>
-            <div className="mt-8 flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-center">
+        linkOrigin={KORTIX}
+        themeToggle={false}
+        cta={{
+          title: 'One prompt.',
+          subtitle: 'Your whole company, looped.',
+          trust: 'Paste it into Claude Code or Codex. Your agent asks before every decision.',
+          actions: (
+            <>
               <CopyPromptMarketingButton text={prompt} className="hit-area-y-1 w-full sm:w-auto sm:min-w-36" />
               <MarketingButton variant="secondary" size="md" className="hit-area-y-1 w-full sm:w-auto sm:min-w-36" asChild>
                 <Link href="/docs/developers">Read the docs</Link>
               </MarketingButton>
-            </div>
-            <p className="text-muted-foreground mt-6 text-sm text-pretty">Paste it into Claude Code or Codex. Your agent asks before every decision.</p>
-          </>
-        }
+            </>
+          ),
+        }}
       />
     </div>
   );

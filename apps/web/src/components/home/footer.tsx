@@ -2,12 +2,11 @@
 
 import { KortixLogo } from '@/components/sidebar/kortix-logo';
 import Link from '@/components/site-link';
-import { CtaSection } from '@/features/marketing/landing/cta-section';
+import { CtaSection, type CtaContent } from '@/features/marketing/landing/cta-section';
 import { FOOTER_TRANSLATION_KEYS } from '@/i18n/footer-translation-keys.generated';
 import { useTranslations } from '@/i18n/use-translations';
 import { showsMarketingLink } from '@/lib/config';
 import { cn } from '@kortix/ui';
-import type { ReactNode } from 'react';
 import { localizeUiCatalog } from '@kortix/ui/i18n';
 import { ThemeToggle } from './theme-toggle';
 
@@ -91,8 +90,14 @@ function FooterLink({ label, href, external }: FooterLinkItem) {
   );
 }
 
-/** `cta` replaces the closing call to action's copy and actions on a page that needs its own (see `CtaSection`). */
-const Footer = ({ cta }: { cta?: ReactNode } = {}) => {
+/**
+ * `cta` replaces the closing call to action's copy and actions (see `CtaSection`).
+ * `linkOrigin` prefixes the mark and every internal link: a page served on
+ * another host (loopmaxxing.sh) links to kortix.com instead of to paths that
+ * host only redirects. `themeToggle` hides the theme switch on a page that is
+ * always dark.
+ */
+const Footer = ({ cta, linkOrigin = '', themeToggle = true }: { cta?: CtaContent; linkOrigin?: string; themeToggle?: boolean } = {}) => {
   const tI18nHardcoded = useTranslations('hardcodedUi');
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const footerSections = localizeUiCatalog(FOOTER_SECTIONS, tI18nComplete, FOOTER_TRANSLATION_KEYS);
@@ -109,7 +114,7 @@ const Footer = ({ cta }: { cta?: ReactNode } = {}) => {
         <div className="mx-auto grid max-w-7xl grid-cols-1 gap-12 px-6 pt-12 pb-16 lg:grid-cols-12">
           <div className="flex flex-col justify-between gap-12 lg:col-span-5">
             <Link
-              href="/"
+              href={linkOrigin || '/'}
               aria-label="Kortix home"
               className="text-foreground outline-ring w-fit rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
             >
@@ -121,7 +126,7 @@ const Footer = ({ cta }: { cta?: ReactNode } = {}) => {
                 {tI18nHardcoded.raw('autoComponentsHomeFooterJsxTextCopye99743e8')}
                 {currentYear} {tI18nHardcoded.raw('i18nComplete.textab54cf5e1d9d')}
               </small>
-              <ThemeToggle variant="compact" systemTheme={false} />
+              {themeToggle ? <ThemeToggle variant="compact" systemTheme={false} /> : null}
             </div>
           </div>
 
@@ -136,7 +141,7 @@ const Footer = ({ cta }: { cta?: ReactNode } = {}) => {
                         link.href === '/use-cases') ||
                       !showsMarketingLink(link.href) ? null : (
                         <li key={link.label}>
-                          <FooterLink {...link} />
+                          <FooterLink {...link} href={link.external ? link.href : `${linkOrigin}${link.href}`} />
                         </li>
                       ),
                     )}

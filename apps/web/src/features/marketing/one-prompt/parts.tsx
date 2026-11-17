@@ -83,7 +83,7 @@ export function CopyButton({
 export function CopyPromptMarketingButton({ text, className }: { text: string; className?: string }) {
   const { copied, copy } = useCopy(text);
   return (
-    <MarketingButton variant="accent" size="md" className={className} onClick={copy}>
+    <MarketingButton type="button" variant="accent" size="md" className={className} onClick={copy}>
       {copied ? <CheckIcon /> : <Copy />}
       <span aria-live="polite">{copied ? 'Copied' : 'Copy prompt'}</span>
     </MarketingButton>

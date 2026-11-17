@@ -53,7 +53,7 @@ const STEPS = [
 function PromptCta({ prompt, className }: { prompt?: string; className?: string }) {
   return (
     <div className={cn('flex flex-wrap items-center gap-x-5 gap-y-3', className)}>
-      <CopyButton size="lg" text={prompt} />
+      <CopyButton size="lg" text={prompt} icon="shortcut" />
       <span className="text-muted-foreground inline-flex flex-wrap items-center gap-x-1.5 text-sm">
         Paste it into <Mark name="Claude Code" /> or <Mark name="Codex" />
       </span>
@@ -161,7 +161,7 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
             <span className="hidden sm:contents">
               <GhostButton href={`${KORTIX}/auth`}>Sign in</GhostButton>
             </span>
-            <CopyButton size="sm" text={prompt} />
+            <CopyButton size="sm" text={prompt} icon="none" />
           </div>
         </div>
       </header>

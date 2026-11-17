@@ -72,6 +72,8 @@ export interface UseComposerDraftResult {
   handleDocChange: (doc: JSONContent, isEmpty: boolean) => void;
   /** Call on a SUCCESSFUL send. Never on a refusal — those keep the text. */
   clearSavedDraft: () => void;
+  /** The host refused the send: what is on screen is a draft again. */
+  sendRefused: () => void;
 }
 
 /**
@@ -125,7 +127,8 @@ export function useComposerDraft({
    * `sentKey` of its document, quotes and tiles. That is sent, not a draft: an
    * attachment released or finishing after Send must not save it again, or
    * the home handoff carries it into the new session's composer. The first
-   * change to any of them (typing, clearing, a new quote) ends it.
+   * change to any of them (typing, clearing, a new quote) or a refused send
+   * ends it.
    */
   const sentRef = useRef<string | null>(null);
 
@@ -276,5 +279,9 @@ export function useComposerDraft({
     if (editorRef.current) completeHomeComposerFocus(scope, editorRef.current);
   }, [active, scope, userId, editorReady, hasPrefill, editorRef, onRestore]);
 
-  return { handleDocChange, clearSavedDraft };
+  const sendRefused = useCallback(() => {
+    sentRef.current = null;
+  }, []);
+
+  return { handleDocChange, clearSavedDraft, sendRefused };
 }

@@ -244,4 +244,20 @@ describe('useComposerDraft after a send that keeps its text on screen', () => {
 
     expect(readDraft(HOME, USER)?.quotes).toEqual(['a quoted line']);
   });
+
+  test('after a refused send, a file added to the text still on screen is saved', () => {
+    const editor = fakeEditor('Create failed, try again');
+    const home = mountHome(editor.ref, []);
+
+    act(() => home.hook().clearSavedDraft());
+    // The create failed: the text stays on screen and is a draft again.
+    act(() => home.hook().sendRefused());
+    home.setLists({ uploads: [UPLOAD] });
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    expect(savedText(HOME)).toBe('Create failed, try again');
+    expect(readDraft(HOME, USER)?.uploads).toEqual([UPLOAD]);
+  });
 });

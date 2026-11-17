@@ -839,7 +839,7 @@ function ComposerImpl(props: SessionChatInputProps) {
     [restoreQuoteTexts, restorePastes, tComposerAttachments],
   );
 
-  const { handleDocChange, clearSavedDraft } = useComposerDraft({
+  const { handleDocChange, clearSavedDraft, sendRefused } = useComposerDraft({
     active: draftActive,
     scope: draftScope,
     handoffScope: draftHandoffScope,
@@ -1870,6 +1870,7 @@ function ComposerImpl(props: SessionChatInputProps) {
           // The host refused the send before anything durable happened. Its uploads
           // are back in the tray, and the draft returns: a failed file shows its
           // Retry; a ready one sends again without re-upload.
+          sendRefused();
           const currentDoc = editorRef.current?.getDocument() ?? null;
           const currentIsEmpty = editorRef.current?.isEmpty() ?? true;
           const sentFiles = filesToSend ?? [];
@@ -1932,6 +1933,7 @@ function ComposerImpl(props: SessionChatInputProps) {
       onCommand,
       onHoldCommand,
       clearSavedDraft,
+      sendRefused,
       handleDocChange,
       setQuoteList,
       restoreQuoteTexts,

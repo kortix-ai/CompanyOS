@@ -10,7 +10,7 @@ import { ArrowRightIcon, PlusIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { useMemo, type ReactNode } from 'react';
 
-import { ENGINE, FAQ, MANIFEST, PLANS, TEAMS } from './factory-content';
+import { ENGINE, FAQ, MANIFEST, TEAMS } from './factory-content';
 import { heroRuns } from './hero-runs';
 import type { LoopView } from './loops-content';
 import { CopyButton, GhostButton, Mark, useSetupTarget } from './parts';
@@ -105,7 +105,7 @@ function TallCard({ art, title, body, action, light }: { art: ReactNode; title: 
       <div className="flex flex-col gap-2">
         <h3 className={cn('text-base font-medium', light ? 'text-background' : 'text-foreground')}>{title}</h3>
         <p className={cn('text-base text-pretty lg:min-h-18', light ? 'text-background/70' : 'text-muted-foreground')}>{body}</p>
-        <div className="flex h-12 items-end">{action}</div>
+        <div className={cn('h-12 items-end', action ? 'flex' : 'hidden lg:flex')}>{action}</div>
       </div>
     </div>
   );
@@ -220,9 +220,9 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
             />
             <TallCard art={<ApprovalArt />} title="You approve what ships" body="Every pull request, post and outbound draft waits for a person until you allow more." />
           </div>
-          <ul className="mt-16 grid gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="mt-16 grid grid-cols-2 gap-y-10 lg:grid-cols-3 lg:gap-y-12">
             {TEAMS.map((team) => (
-              <li key={team.slug} className="border-border flex flex-col gap-3 border-l pl-6 sm:pl-8">
+              <li key={team.slug} className="border-border flex flex-col gap-3 border-l pr-3 pl-4 sm:pl-8">
                 <TeamMark slug={team.slug} />
                 <span className="text-foreground text-sm font-medium">{team.name}</span>
                 <span className="text-muted-foreground max-w-60 text-sm text-pretty">{team.line}</span>
@@ -236,18 +236,10 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
             title="Bring the plan you already pay for"
             lead={
               <>
-                Your <Mark name="Claude" /> or <Mark name="Codex" /> subscription, or any API key. A 3 a.m. run uses it too.
+                Your <Mark name="Claude" /> or ChatGPT subscription, or any API key. A 3 a.m. run uses it too.
               </>
             }
-          >
-            <ul className="flex flex-wrap gap-2">
-              {PLANS.map((plan) => (
-                <li key={plan} className="border-border text-foreground rounded-full border px-3 py-1 text-sm">
-                  {plan}
-                </li>
-              ))}
-            </ul>
-          </SplitHeading>
+          />
         </section>
 
         <section id="engine" className={cn(COLUMN, SECTION, 'scroll-mt-16')}>

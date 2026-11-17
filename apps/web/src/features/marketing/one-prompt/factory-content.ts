@@ -75,9 +75,6 @@ export const ENGINE = [
   { term: 'Secrets', key: 'env', body: 'The file names them. The values stay encrypted in your workspace and reach only the agents you grant.' },
 ];
 
-/** The plans a run can use, as the FAQ answers which models the agents use. */
-export const PLANS = ['Claude subscription', 'ChatGPT subscription', 'Any API key'];
-
 export const FAQ = [
   { q: 'What is Kortix?', a: 'Cloud agents for your repository, defined in one kortix.yaml: the agents, what starts them, the skills they use and what they may do.' },
   { q: 'What is a factory?', a: 'One agent with its triggers and skills for one team\'s work. Each template is a public repository; your coding agent reads it and adapts it to yours.' },

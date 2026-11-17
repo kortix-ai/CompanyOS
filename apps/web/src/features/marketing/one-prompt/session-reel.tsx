@@ -11,6 +11,7 @@ import { ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, CaretDownIcon, CaretRightIc
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 
 import type { HeroRun } from './hero-runs';
+import { usePageDefaultDark } from './parts';
 import { AgentTile } from './section-art';
 
 /** A horizontal trackpad swipe this long (px of `deltaX`) moves the reel one session. */
@@ -401,6 +402,7 @@ const PICKER_AGENTS = ['factory', 'marketing', 'sales', 'support', 'recruiting']
 function LiveComposer({ defaultAgent, busy, onSend }: { defaultAgent: string; busy: boolean; onSend: (message: string, agent: string) => void }) {
   const [text, setText] = useState('');
   const [agent, setAgent] = useState(defaultAgent);
+  const defaultDark = usePageDefaultDark();
   const agents = PICKER_AGENTS.includes(agent) ? PICKER_AGENTS : [agent, ...PICKER_AGENTS];
   const send = () => {
     const message = text.trim();
@@ -436,7 +438,8 @@ function LiveComposer({ defaultAgent, busy, onSend }: { defaultAgent: string; bu
               <CaretDownIcon className="text-muted-foreground size-3" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-40">
+          {/* The menu renders in a portal, outside the page's dark-by-default wrapper: it takes the same theme. */}
+          <DropdownMenuContent align="start" className={cn(defaultDark && 'dark', 'min-w-40')}>
             <DropdownMenuRadioGroup value={agent} onValueChange={setAgent}>
               {agents.map((slug) => (
                 <DropdownMenuRadioItem key={slug} value={slug} className="gap-2">

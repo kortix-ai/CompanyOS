@@ -10,6 +10,7 @@ import { Codex } from '@kortix/ui/internal/icons/codex';
 import { cn } from '@kortix/ui';
 import { CheckIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
+import { useTheme } from 'next-themes';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 const COPIED_MS = 2000;
@@ -24,6 +25,28 @@ const noSubscription = () => () => {};
 export function useSetupTarget(): SetupTarget {
   const origin = useSyncExternalStore(noSubscription, () => window.location.origin, () => PROD_TARGET.origin);
   return useMemo(() => setupTarget(origin), [origin]);
+}
+
+/**
+ * True while the reader has not chosen a theme: this page is dark by default, though the site's
+ * default is light. A choice made with the theme switch (next-themes keeps it under `theme` in
+ * localStorage) wins. The server renders dark.
+ */
+export function usePageDefaultDark(): boolean {
+  // Re-render when the switch changes the theme, so the stored choice is read again.
+  useTheme();
+  const chosen = useSyncExternalStore(
+    noSubscription,
+    () => {
+      try {
+        return window.localStorage.getItem('theme');
+      } catch {
+        return null;
+      }
+    },
+    () => null,
+  );
+  return chosen === null;
 }
 
 export function useCopy(text: string) {

@@ -1,9 +1,11 @@
 'use client';
 
 import { PROD_TARGET, setupPromptFor, setupTarget, type SetupTarget } from '@kortix/shared/setup-guide';
+import { Copy } from '@kortix/ui/icons';
 import { Claude } from '@kortix/ui/internal/icons/claude';
 import { Codex } from '@kortix/ui/internal/icons/codex';
 import { cn } from '@kortix/ui';
+import { CheckIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 
@@ -40,7 +42,11 @@ export function useCopy(text: string) {
   return { copied, copy };
 }
 
-export function CopyButton({ size = 'md', text, label = 'Copy the prompt' }: { size?: 'sm' | 'md'; text?: string; label?: string }) {
+/**
+ * The page's one action: copy the setup prompt. A light pill on the dark page,
+ * the copy mark turning into a check for two seconds once the text is on the clipboard.
+ */
+export function CopyButton({ size = 'md', text, label = 'Copy prompt' }: { size?: 'sm' | 'md' | 'lg'; text?: string; label?: string }) {
   const target = useSetupTarget();
   const { copied, copy } = useCopy(text ?? setupPromptFor(target));
   return (
@@ -48,10 +54,13 @@ export function CopyButton({ size = 'md', text, label = 'Copy the prompt' }: { s
       type="button"
       onClick={copy}
       className={cn(
-        'bg-kortix-base hover:bg-kortix-base/90 rounded-md font-medium text-white transition-colors',
-        size === 'md' ? 'h-9 px-4 text-sm' : 'h-8 px-3 text-sm',
+        'bg-foreground text-background hover:bg-foreground/90 inline-flex shrink-0 items-center gap-2 rounded-full font-medium whitespace-nowrap transition-colors active:scale-[0.96] motion-reduce:active:scale-100',
+        size === 'lg' && 'h-10 px-5 text-sm',
+        size === 'md' && 'h-9 px-4 text-sm',
+        size === 'sm' && 'h-8 px-3.5 text-sm',
       )}
     >
+      {copied ? <CheckIcon className="size-4" /> : <Copy className="size-4" />}
       <span aria-live="polite">{copied ? 'Copied' : label}</span>
     </button>
   );
@@ -59,7 +68,7 @@ export function CopyButton({ size = 'md', text, label = 'Copy the prompt' }: { s
 
 export function GhostButton({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <Link href={href} className="border-border bg-card text-foreground hover:bg-accent inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium transition-colors">
+    <Link href={href} className="text-muted-foreground hover:text-foreground inline-flex h-8 items-center rounded-full px-3 text-sm font-medium transition-colors">
       {children}
     </Link>
   );

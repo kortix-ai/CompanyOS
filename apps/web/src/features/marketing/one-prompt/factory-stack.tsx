@@ -94,7 +94,7 @@ function CardBar({ index, total, team }: { index: number; total: number; team: s
   return (
     <div className="border-border text-muted-foreground flex items-center justify-between border-b px-6 py-3 font-mono text-xs">
       <span>
-        {WORKSPACE} <span className="text-muted-foreground/50">/</span> <span className="text-foreground">{team.toLowerCase()}</span>
+        {WORKSPACE} <span className="text-muted-foreground">/</span> <span className="text-foreground">{team.toLowerCase()}</span>
       </span>
       <span>
         {String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
@@ -121,7 +121,7 @@ function FactoryCard({ loop, index, total }: { loop: LoopView; index: number; to
           </div>
           <div className="mt-auto flex flex-col gap-4">
             <div className="flex flex-wrap items-center gap-4">
-              <CopyButton text={prompt} label="Copy the prompt" />
+              <CopyButton text={prompt} label="Copy prompt" />
               {reference ? (
                 <a href={reference} className="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline">
                   See the template

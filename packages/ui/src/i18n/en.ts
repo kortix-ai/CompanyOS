@@ -1074,6 +1074,7 @@ const catalog = {
       "description": "Add Kortix to the AI chat you already use. Start agents, follow their work and use your connectors from there.",
       "cta": "Connect"
     },
+    "promos": "Ways to use Kortix",
     "upgrade": "Upgrade",
     "chats": "Chats",
     "library": "Files",

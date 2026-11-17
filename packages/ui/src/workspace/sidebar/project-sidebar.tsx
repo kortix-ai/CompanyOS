@@ -17,8 +17,7 @@ import {
 } from '../../primitives/sidebar';
 import { ComputerConnectModal } from '../../internal/tunnel/computer-connect';
 import { ConnectMcpModal } from '../../internal/layout/connect-mcp-modal';
-import { ProjectMcpNavItem } from './footer/project-mcp-nav';
-import { ProjectComputerNavItem } from './footer/project-computer-nav';
+import { ProjectPromoCards } from './footer/project-promo-cards';
 import { ProjectDownloadAppNavItem } from './footer/project-download-app-nav';
 import { ProjectManifestIssuesAlert } from './footer/project-manifest-issues-alert';
 import { ProjectSandboxAlert } from './footer/project-sandbox-alert';
@@ -171,17 +170,15 @@ export function ProjectSidebar({
   // live inside "More": the bottom of the sidebar is More and the status alerts.
   const connectRows = (
     <>
-              {/* The two cards: Kortix in the chat apps people already use,
-                  then their own computer. Each is dismissed on its own (or the
-                  computer one disappears once a machine is paired), and an
-                  empty list collapses. Under 40rem of window height only the
-                  first card shows, so the session list keeps its rows. */}
+              {/* One card, two slides: Kortix in the chat apps people
+                  already use, then their own computer. An empty list
+                  collapses. */}
               <li className="not-has-[li]:hidden">
-                <ul className="flex flex-col gap-2 pb-1 [@media(max-height:40rem)]:[&>li:not(:first-child)]:hidden">
-                  <ProjectMcpNavItem onOpenConnect={() => setConnectMcpOpen(true)} />
-                  <ProjectComputerNavItem
+                <ul className="pb-1">
+                  <ProjectPromoCards
                     projectId={projectId}
-                    onOpenConnect={() => setComputerConnectOpen(true)}
+                    onOpenMcp={() => setConnectMcpOpen(true)}
+                    onOpenComputer={() => setComputerConnectOpen(true)}
                   />
                 </ul>
               </li>

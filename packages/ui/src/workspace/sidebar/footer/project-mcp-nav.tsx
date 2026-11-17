@@ -1,6 +1,7 @@
 'use client';
 
-import { PromoCard, PromoMark } from './promo-card';
+import type { PromoSlide } from './promo-card';
+import { PromoMark } from './promo-card';
 
 import { PlusIcon } from '@phosphor-icons/react';
 import { useCallback, useState, useSyncExternalStore } from 'react';
@@ -32,14 +33,13 @@ function readDismissed(): boolean {
 }
 
 /**
- * "Use Kortix in ChatGPT and Claude": the same promo card as "Connect your
- * computer" (`project-computer-nav.tsx`), shown until dismissed. It sells the
+ * "Use Kortix in ChatGPT and Claude": the MCP slide of the sidebar's promo
+ * switcher (`project-promo-cards.tsx`), shown until dismissed. It sells the
  * MCP server by the chat apps people already use, not by the protocol name.
- * `onOpenConnect` opens `ConnectMcpModal`, which the sidebar owns for the
- * same reason it owns the computer dialog: on a phone this card unmounts with
- * the sidebar sheet.
+ * `onOpenConnect` opens `ConnectMcpModal`, which the sidebar owns: on a phone
+ * the card unmounts with the sidebar sheet.
  */
-export function ProjectMcpNavItem({ onOpenConnect }: { onOpenConnect: () => void }) {
+export function useMcpPromo(onOpenConnect: () => void): PromoSlide | null {
   const t = useTranslations('sidebar.mcpPromo');
   const tComputers = useTranslations('computers');
   const isMobile = useIsMobile();
@@ -47,7 +47,6 @@ export function ProjectMcpNavItem({ onOpenConnect }: { onOpenConnect: () => void
   // The server and the hydrating render read "dismissed"; the stored flag applies after.
   const stored = useSyncExternalStore(subscribeNoop, readDismissed, () => true);
   const [dismissedNow, setDismissed] = useState(false);
-  const dismissed = stored || dismissedNow;
   const dismiss = useCallback(() => {
     setDismissed(true);
     try {
@@ -56,31 +55,30 @@ export function ProjectMcpNavItem({ onOpenConnect }: { onOpenConnect: () => void
       // Private mode or blocked storage: dismissed for this page view only.
     }
   }, []);
-  if (dismissed) return null;
+  if (stored || dismissedNow) return null;
 
-  return (
-    <PromoCard
-      marks={
-        <>
-          {MARKS.map(({ name, Logo }) => (
-            <PromoMark key={name} label={name}>
-              <Logo className="size-5" />
-            </PromoMark>
-          ))}
-          <PromoMark>
-            <PlusIcon className="size-4" />
+  return {
+    id: 'mcp',
+    marks: (
+      <>
+        {MARKS.map(({ name, Logo }) => (
+          <PromoMark key={name} label={name}>
+            <Logo className="size-5" />
           </PromoMark>
-        </>
-      }
-      title={t('title')}
-      description={t('description')}
-      cta={t('cta')}
-      dismissLabel={tComputers('dismissPromo')}
-      onDismiss={dismiss}
-      onClick={() => {
-        onOpenConnect();
-        if (isMobile) setOpenMobile(false);
-      }}
-    />
-  );
+        ))}
+        <PromoMark>
+          <PlusIcon className="size-4" />
+        </PromoMark>
+      </>
+    ),
+    title: t('title'),
+    description: t('description'),
+    cta: t('cta'),
+    dismissLabel: tComputers('dismissPromo'),
+    onDismiss: dismiss,
+    onClick: () => {
+      onOpenConnect();
+      if (isMobile) setOpenMobile(false);
+    },
+  };
 }

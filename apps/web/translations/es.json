@@ -1580,6 +1580,7 @@
       "description": "Añade Kortix al chat de IA que ya usas. Inicia agentes, sigue su trabajo y usa tus conectores desde allí.",
       "cta": "Conectar"
     },
+    "promos": "Formas de usar Kortix",
     "upgrade": "Mejorar",
     "chats": "Chats",
     "library": "Archivos",

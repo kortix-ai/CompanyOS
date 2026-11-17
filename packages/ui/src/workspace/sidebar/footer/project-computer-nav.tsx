@@ -1,9 +1,10 @@
 'use client';
 
-import { PromoCard, PromoMark } from './promo-card';
+import type { PromoSlide } from './promo-card';
+import { PromoMark } from './promo-card';
 
 import { CursorClickIcon, FolderSimpleIcon, LaptopIcon, TerminalWindowIcon } from '@phosphor-icons/react';
-import { useCallback, useState, useSyncExternalStore } from 'react';
+import { useCallback, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 import { useSidebar } from '../../../primitives/sidebar';
 import {
@@ -29,29 +30,11 @@ function readDismissed(): boolean {
   }
 }
 
-/**
- * "Connect your computer": an advertisement, not a status widget. It shows
- * until the caller owns a paired machine or dismisses it, and never on a
- * deployment with computers disabled (the machine list answers 503). The
- * controls for a paired machine live in the workspace menu's "Your computer"
- * (desktop app).
- *
- * - Desktop app: one click pairs this machine (`desktopComputerConnect`).
- * - Browser: `onOpenConnect` opens the download / CLI dialog. The sidebar owns
- *   that dialog, not this row: on a phone the row lives in the sidebar sheet,
- *   and closing the sheet unmounts it together with anything it renders.
- */
-export function ProjectComputerNavItem({
-  projectId,
-  onOpenConnect,
-}: {
-  projectId: string;
-  onOpenConnect: () => void;
-}) {
+/** Whether the computer slide was dismissed in this browser, and the dismiss. */
+export function useComputerPromoDismissed(): [boolean, () => void] {
   // The server and the hydrating render read "dismissed"; the stored flag applies after.
   const stored = useSyncExternalStore(subscribeNoop, readDismissed, () => true);
   const [dismissedNow, setDismissed] = useState(false);
-  const dismissed = stored || dismissedNow;
   const dismiss = useCallback(() => {
     setDismissed(true);
     try {
@@ -60,18 +43,33 @@ export function ProjectComputerNavItem({
       // Private mode or blocked storage: dismissed for this page view only.
     }
   }, []);
-  if (dismissed) return null;
-  return <ComputerPromo projectId={projectId} onDismiss={dismiss} onOpenConnect={onOpenConnect} />;
+  return [stored || dismissedNow, dismiss];
 }
 
-function ComputerPromo({
+/**
+ * "Connect your work computer": the computer slide of the sidebar's promo
+ * switcher (`project-promo-cards.tsx`). An advertisement, not a status
+ * widget: the slide is `null` while the caller's machines load, once they own
+ * a paired machine, and on a deployment with computers disabled (the machine
+ * list answers 503). Mount it only while the slide is not dismissed, so a
+ * dismissed slide reads no machine list. The controls for a paired machine
+ * live in the workspace menu's "Your computer" (desktop app).
+ *
+ * - Desktop app: one click pairs this machine (`desktopComputerConnect`).
+ * - Browser: `onOpenConnect` opens the download / CLI dialog. The sidebar owns
+ *   that dialog: on a phone the card lives in the sidebar sheet, and closing
+ *   the sheet unmounts it together with anything it renders.
+ */
+export function ComputerPromoSlide({
   projectId,
-  onDismiss,
   onOpenConnect,
+  onDismiss,
+  children,
 }: {
   projectId: string;
-  onDismiss: () => void;
   onOpenConnect: () => void;
+  onDismiss: () => void;
+  children: (slide: PromoSlide | null) => ReactNode;
 }) {
   const t = useTranslations('computers');
   const tPromo = useTranslations('computers.promo');
@@ -83,29 +81,28 @@ function ComputerPromo({
   const { desktop, oneClick, stale } = useThisComputerState();
   const connectDesktop = useConnectDesktopComputer(projectId);
 
-  if (!paired.isSuccess || paired.owns || desktop.isPending) return null;
+  if (!paired.isSuccess || paired.owns || desktop.isPending) return children(null);
 
-  return (
-    <PromoCard
-      marks={MARKS.map((MarkIcon, index) => (
-        <PromoMark key={index}>
-          <MarkIcon className="size-5" />
-        </PromoMark>
-      ))}
-      title={oneClick ? tPromo('titleThis') : tPromo('title')}
-      description={tPromo('description')}
-      cta={connectDesktop.isPending ? t('connecting') : oneClick ? tPromo('ctaOneClick') : tPromo('cta')}
-      dismissLabel={t('dismissPromo')}
-      onDismiss={onDismiss}
-      pending={connectDesktop.isPending}
-      onClick={() => {
-        if (oneClick) {
-          connectDesktop.mutate({ reauth: stale });
-          return;
-        }
-        onOpenConnect();
-        if (isMobile) setOpenMobile(false);
-      }}
-    />
-  );
+  return children({
+    id: 'computer',
+    marks: MARKS.map((MarkIcon, index) => (
+      <PromoMark key={index}>
+        <MarkIcon className="size-5" />
+      </PromoMark>
+    )),
+    title: oneClick ? tPromo('titleThis') : tPromo('title'),
+    description: tPromo('description'),
+    cta: connectDesktop.isPending ? t('connecting') : oneClick ? tPromo('ctaOneClick') : tPromo('cta'),
+    dismissLabel: t('dismissPromo'),
+    onDismiss,
+    pending: connectDesktop.isPending,
+    onClick: () => {
+      if (oneClick) {
+        connectDesktop.mutate({ reauth: stale });
+        return;
+      }
+      onOpenConnect();
+      if (isMobile) setOpenMobile(false);
+    },
+  });
 }

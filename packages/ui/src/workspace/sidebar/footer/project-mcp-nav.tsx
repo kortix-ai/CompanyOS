@@ -67,7 +67,7 @@ export function useMcpPromo(onOpenConnect: () => void): PromoSlide | null {
           </PromoMark>
         ))}
         <PromoMark>
-          <PlusIcon className="size-4" />
+          <PlusIcon className="size-5" />
         </PromoMark>
       </>
     ),

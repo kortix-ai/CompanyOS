@@ -25,8 +25,8 @@ export interface PromoSlide {
 /**
  * The sidebar's advertisements, one card at a time. Every slide is a card: an
  * art header with a row of marks, a title, one sentence and a call to action.
- * The header is the still of the art in the dialog the card opens, so the
- * click lands where the card promised.
+ * The header is the still of the art in the dialog the card opens, dimmed,
+ * with the marks floating on it, so the click lands where the card promised.
  *
  * All slides share one grid cell, so the card is as tall as its tallest slide
  * and switching never moves the session list above. The dots switch by hand;
@@ -71,9 +71,11 @@ export function PromoSwitcher({ slides, label }: { slides: readonly PromoSlide[]
               {/* Dark in both themes, like every art pane. */}
               <span
                 aria-hidden="true"
-                className="dark bg-background relative isolate flex h-16 w-full shrink-0 items-center justify-center gap-1.5 border-b"
+                className="dark bg-background relative isolate flex h-16 w-full shrink-0 items-center justify-center gap-4 border-b"
               >
                 <BeamsStill />
+                {/* Dims the beams to near-black, so the marks float on a calm ground. */}
+                <span className="bg-background/50 absolute inset-0" />
                 {slide.marks}
               </span>
               <span className="flex flex-1 flex-col gap-2 p-3">
@@ -144,16 +146,12 @@ export function PromoSwitcher({ slides, label }: { slides: readonly PromoSlide[]
 }
 
 /**
- * One tile on a card's art: white in both themes (`bg-foreground` under the
- * art's `dark` scope), the mark inked black (`text-background`) unless it
- * carries its own brand colors.
+ * One mark on a card's art, with no tile: white under the art's `dark` scope
+ * (`text-foreground`) unless it carries its own brand colors.
  */
 export function PromoMark({ children, label }: { children: ReactNode; label?: string }) {
   return (
-    <span
-      title={label}
-      className="bg-foreground text-background relative flex size-9 shrink-0 items-center justify-center rounded-md shadow-md"
-    >
+    <span title={label} className="text-foreground relative flex shrink-0 items-center justify-center">
       {children}
     </span>
   );

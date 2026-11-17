@@ -23,7 +23,9 @@
  *    2026-11-17): its page copy is in commit 06740ac6be. The GTM title is open (Founding
  *    GTM Lead, Head of GTM, Head of Business, CBO). The MTS and FDE pages name
  *    no pay at all ("we share the numbers in the first call") and no manager.
- *  - "How we sell" is the public half of the GTM thesis. No internal numbers.
+ *  - "How we sell" is the public half of the GTM thesis: the homepage pillars (outcomes,
+ *    multiplayer AI, company as code, sovereign and open), sold one vertical at a time
+ *    (founder, 2026-11-17). No internal numbers, no customer or partner names.
  *  - Applications go through `ApplyModal`, which posts to the same
  *    `/api/demo-request` pipeline as "Book your demo". There is no ATS and no
  *    jobs@ alias — do not invent one. The three direct links (email, X,
@@ -98,32 +100,32 @@ const gtmFacts = {
 /** The public half of the GTM thesis. Claims trace to kortix-brand `claims.md` / `positioning.md`. */
 export const howWeSell = {
   title: 'How we sell.',
-  titleMuted: 'Two motions, one account.',
-  sub: 'Developers adopt Kortix bottom-up. Companies buy outcomes top-down. The founding GTM lead turns the first into the second.',
+  titleMuted: 'One platform, every vertical.',
+  sub: 'Kortix CompanyOS is one horizontal platform. A vertical is a buyer, a case study and a partner, not a separate product.',
   items: [
     {
-      id: 'open-source',
-      n: '01',
-      k: 'Open source is the distribution',
-      v: '20,000+ GitHub stars are the top of the funnel. A security reviewer can read the code, and self-host removes the lock-in fear. We never gate the core to make a sale.',
-    },
-    {
-      id: 'champion',
-      n: '02',
-      k: 'The developer champions, the company buys',
-      v: 'Developers find Kortix and run their agents on it. Revenue starts when a team runs real work on it, not when someone stars the repo.',
-    },
-    {
       id: 'outcomes',
-      n: '03',
+      n: '01',
       k: 'Outcomes, not seats',
-      v: 'Hand it an outcome, AI agents run it 24/7. A deal starts with one scoped outcome and grows one outcome at a time.',
+      v: 'Hand it an outcome, AI agents run it 24/7. A deal starts with one scoped outcome in one team and grows one outcome at a time.',
     },
     {
-      id: 'ownership',
+      id: 'multiplayer',
+      n: '02',
+      k: 'Multiplayer AI',
+      v: 'One AI for the whole company. Every team works with the same agents, skills, memory and connectors, with roles and per-resource permissions.',
+    },
+    {
+      id: 'company-as-code',
+      n: '03',
+      k: 'Company as code',
+      v: "Every agent, skill, rule and connector is a file in one git repo the customer owns. That is how a workflow fits one company's data and process exactly.",
+    },
+    {
+      id: 'sovereign',
       n: '04',
-      k: 'Ownership, not intelligence',
-      v: 'Claude Cowork and ChatGPT Work teach the market what agents can do. We win the company that must own its agents, data, models and infrastructure.',
+      k: 'Sovereign and open',
+      v: 'Open source with 20,000+ GitHub stars. Kortix Cloud, their VPC or on-prem, any model with their own keys. SOC 2 Type I verified, SAML SSO and SCIM.',
     },
   ],
 } as const;
@@ -143,12 +145,12 @@ const gtmProcess = [
   {
     id: 'sample',
     k: 'Work sample, 60 min',
-    v: 'One live exercise (a pitch to a security-minded buyer, or a launch plan), then your plan for the first 90 days.',
+    v: 'One live exercise: a pitch to a security-minded buyer in a vertical you pick. Then your plan for the first 90 days.',
   },
   {
     id: 'team',
     k: 'Team call, 45 min',
-    v: 'Two engineers ask how you would explain the technical parts of Kortix to a customer or a developer.',
+    v: 'Two engineers ask how you would explain the technical parts of Kortix to a CTO or a security team.',
   },
   {
     id: 'references',
@@ -244,6 +246,9 @@ type RolePage = {
   process: { title: string; titleMuted: string; rows: readonly { id: string; k: string; v: string }[] };
   applyArea: string;
   meta: { title: string; description: string };
+  /** `JobPosting` structured data: the day this posting went up and where the role is based.
+   *  `remoteCountry` only where the founder said remote within one country. */
+  posting: { datePosted: string; locality: string; region?: string; country: string; remoteCountry?: string };
 };
 
 export const roles: Record<RoleSlug, RolePage> = {
@@ -251,7 +256,7 @@ export const roles: Record<RoleSlug, RolePage> = {
     hero: {
       title: 'Founding GTM, Enterprise.',
       titleMuted: 'New York, or remote in the US.',
-      sub: 'The first go-to-market hire for the companies that must own their AI. You take Kortix from founder-led sales to an enterprise business, and you have done it before.',
+      sub: 'Build the Kortix enterprise business from zero. You pick the verticals, land the first lighthouse customer in each, and turn founder-led sales into a motion that runs without the founder. You have done it before.',
     },
     facts: [
       gtmFacts.reportsTo,
@@ -261,27 +266,37 @@ export const roles: Record<RoleSlug, RolePage> = {
     ],
     own: {
       title: 'What you own.',
-      titleMuted: 'Everything that turns Kortix into enterprise revenue.',
+      titleMuted: 'The enterprise business, from the first deal.',
       rows: [
         {
-          id: 'zero-to-one',
-          k: '0 to 1',
-          v: 'The ideal customer, the pitch, the sales process and the first repeatable revenue.',
+          id: 'verticals',
+          k: 'The verticals',
+          v: 'Which industries we sell to first, and in what order. Financial services, retail and consumer goods, energy, industrials: you rank them by sales cycle and fit, open the long cycles now and close the short ones in parallel.',
+        },
+        {
+          id: 'lighthouse',
+          k: 'Lighthouse customers',
+          v: 'The first named customer in each vertical, from pilot to contract to a published case study that the rest of that vertical reads.',
         },
         {
           id: 'enterprise-sales',
           k: 'Enterprise sales',
-          v: 'Pipeline, pilots, security reviews, contracts, renewals and expansion.',
+          v: 'Pipeline, pilots, security reviews, procurement, contracts, renewals and expansion.',
         },
         {
-          id: 'consultancy',
-          k: 'Consultancy',
+          id: 'partners',
+          k: 'Partners',
+          v: 'Systems integrators, consultancies and technology partners that sell and deploy Kortix for their clients. One horizontal platform, verticalized partners.',
+        },
+        {
+          id: 'services',
+          k: 'Services',
           v: "Our done-for-you service, where forward-deployed engineers build a company's agents and apps. You decide who it is for and how it is scoped, sold and delivered.",
         },
         {
-          id: 'partnerships',
-          k: 'Partnerships',
-          v: 'Agencies, consultancies and resellers that sell and deploy Kortix for their clients.',
+          id: 'story',
+          k: 'The story',
+          v: 'The pitch, the case studies and the numbers for each vertical: what the buyer owns, what it saves, and the workflows it builds on its own data.',
         },
         {
           id: 'offer',
@@ -298,19 +313,19 @@ export const roles: Record<RoleSlug, RolePage> = {
           id: 'learn',
           n: 'Days 0–30',
           k: 'Learn the buyer',
-          v: 'Join every founder-led deal and take over the open pipeline. Talk to paying accounts. Write the pitch and the deal stages.',
+          v: 'Join every founder-led deal and take over the open pipeline. Talk to every paying account. Write the pitch, the deal stages and a case study for each deployment that runs today.',
         },
         {
-          id: 'close',
+          id: 'verticals',
           n: 'Days 31–90',
-          k: 'Close without the founder',
-          v: 'Close the first deals with no founder on the call. Ship the sales kit: deck, demo script, security review answers.',
+          k: 'Pick the verticals',
+          v: 'Rank the verticals and commit to the first ones. Start the long enterprise cycles. Close the first deals with no founder on the call. Ship the sales kit: deck, demo, security review answers.',
         },
         {
-          id: 'repeat',
+          id: 'lighthouse',
           n: 'Days 91–180',
-          k: 'Make it repeatable',
-          v: 'Outbound and partner channels that add pipeline every week. Pilot to contract, end to end.',
+          k: 'Lighthouse customers',
+          v: 'A signed lighthouse customer and a published case study in each first vertical. A partner channel that adds pipeline every week.',
         },
         {
           id: 'team',
@@ -330,14 +345,14 @@ export const roles: Record<RoleSlug, RolePage> = {
           v: 'You were the first GTM hire and took a company from founder-led sales to a repeatable motion, with revenue you can name.',
         },
         {
-          id: 'close',
-          k: 'You close',
-          v: 'You closed technical software deals yourself, and you still want to.',
+          id: 'enterprise',
+          k: 'Large enterprises',
+          v: 'You closed technical software deals with large companies yourself, and you know who signs in at least one regulated vertical.',
         },
         {
           id: 'security',
           k: 'Through security review',
-          v: 'You took deals through security questionnaires, legal and procurement at large companies.',
+          v: 'You took deals through security questionnaires, legal and procurement, and you kept them moving.',
         },
         {
           id: 'peer',
@@ -347,17 +362,17 @@ export const roles: Record<RoleSlug, RolePage> = {
         {
           id: 'write',
           k: 'You write',
-          v: 'Your emails, decks and one-pagers are short and exact. You write them yourself.',
+          v: 'Your emails, decks, case studies and one-pagers are short and exact. You write them yourself.',
         },
         {
-          id: 'agents',
-          k: 'You run on agents',
-          v: 'You use AI agents in your own work today and know what they do well.',
+          id: 'owner',
+          k: 'An owner',
+          v: 'You join for the mission and the founding equity. You run on AI agents in your own work today.',
         },
         {
           id: 'plus',
           k: 'A plus',
-          v: 'You built a partner channel or a services line that brought in revenue.',
+          v: 'You built a channel with systems integrators or consultancies, or a services line that brought in revenue.',
         },
       ],
     },
@@ -367,8 +382,9 @@ export const roles: Record<RoleSlug, RolePage> = {
     meta: {
       title: 'Founding GTM, Enterprise — Kortix careers',
       description:
-        'The first enterprise go-to-market hire at Kortix: 0 to 1 GTM, enterprise sales, consultancy and partnerships. New York or US remote.',
+        'Build the Kortix enterprise business from zero: pick the verticals, land lighthouse customers, sell with partners. New York or US remote.',
     },
+    posting: { datePosted: '2026-11-17', locality: 'New York', region: 'NY', country: 'US', remoteCountry: 'US' },
   },
   mts: {
     hero: {
@@ -482,6 +498,7 @@ export const roles: Record<RoleSlug, RolePage> = {
     principles: howWeBuild,
     process: { title: 'How we hire.', titleMuted: 'About two weeks.', rows: techProcess },
     applyArea: 'MTS — Member of Technical Staff',
+    posting: { datePosted: '2026-07-31', locality: 'Belgrade', country: 'RS' },
     meta: {
       title: 'Member of Technical Staff — Kortix careers',
       description:
@@ -600,6 +617,7 @@ export const roles: Record<RoleSlug, RolePage> = {
     principles: howWeBuild,
     process: { title: 'How we hire.', titleMuted: 'About two weeks.', rows: techProcess },
     applyArea: 'FDE — Forward Deployed Engineer',
+    posting: { datePosted: '2026-10-28', locality: 'Belgrade', country: 'RS' },
     meta: {
       title: 'Forward Deployed Engineer — Kortix careers',
       description:

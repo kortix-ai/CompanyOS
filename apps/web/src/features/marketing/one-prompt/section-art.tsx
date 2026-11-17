@@ -1,4 +1,4 @@
-import { AgentMark } from '@kortix/ui/internal/components/agent-mark';
+import { AgentMarkGlyph, agentMarkTileClass, agentMarkVars } from '@kortix/ui/internal/components/agent-mark';
 import { Claude } from '@kortix/ui/internal/icons/claude';
 import { cn } from '@kortix/ui';
 import { ArrowUpIcon, CaretDownIcon, PaperclipIcon } from '@phosphor-icons/react';
@@ -20,7 +20,7 @@ function Pane({ className, children }: { className?: string; children: ReactNode
 function Row({ lead, text, meta, dim }: { lead: ReactNode; text: string; meta?: ReactNode; dim?: boolean }) {
   return (
     <div className={cn('flex items-center gap-3 rounded-md px-2.5 py-2 text-sm', dim && 'opacity-50')}>
-      <span className="flex size-4 shrink-0 items-center justify-center">{lead}</span>
+      <span className="flex size-5 shrink-0 items-center justify-center">{lead}</span>
       <span className="text-foreground min-w-0 flex-1 truncate">{text}</span>
       {meta ? <span className="text-muted-foreground shrink-0 text-xs">{meta}</span> : null}
     </div>
@@ -29,14 +29,34 @@ function Row({ lead, text, meta, dim }: { lead: ReactNode; text: string; meta?: 
 
 const dot = (on: boolean) => <span className={cn('size-1.5 rounded-full', on ? 'bg-kortix-base' : 'bg-muted-foreground')} />;
 
+/** A tool's official mark: the same tiles the connector screens use (`public/connector-icons/`). */
+function ToolIcon({ slug }: { slug: 'github' | 'slack' | 'sentry' }) {
+  // eslint-disable-next-line @next/next/no-img-element -- a 20px static SVG tile; next/image adds nothing here
+  return <img src={`/connector-icons/${slug}.svg`} alt="" width={20} height={20} className="size-5 rounded-sm" />;
+}
+
+/** An agent's pixel mark in its tile, without the hover hint: art carries no tooltip. */
+export function AgentTile({ slug, size = 14 }: { slug: string; size?: 14 | 21 }) {
+  const tile = size === 21 ? 28 : 20;
+  return (
+    <span
+      aria-hidden
+      style={{ ...agentMarkVars(slug), width: tile, height: tile }}
+      className={cn('inline-flex shrink-0 items-center justify-center bg-(--mark-tile)', size === 21 ? 'rounded-md' : 'rounded-sm', agentMarkTileClass(slug))}
+    >
+      <AgentMarkGlyph slug={slug} size={size} />
+    </span>
+  );
+}
+
 /** Step 1: the scan names every tool it finds, and where it found it. */
 export function FindArt() {
   return (
     <Pane>
       <div className="text-muted-foreground px-2.5 pt-1.5 pb-2 text-xs">Found in your repo</div>
-      <Row lead={dot(true)} text="GitHub" meta={<span className="font-mono">.github/workflows</span>} />
-      <Row lead={dot(true)} text="Sentry" meta={<span className="font-mono">@sentry/node</span>} />
-      <Row lead={dot(true)} text="Slack" meta={<span className="font-mono">SLACK_WEBHOOK_URL</span>} />
+      <Row lead={<ToolIcon slug="github" />} text="GitHub" meta={<span className="font-mono">.github/workflows</span>} />
+      <Row lead={<ToolIcon slug="sentry" />} text="Sentry" meta={<span className="font-mono">@sentry/node</span>} />
+      <Row lead={<ToolIcon slug="slack" />} text="Slack" meta={<span className="font-mono">SLACK_WEBHOOK_URL</span>} />
       <Row lead={dot(false)} text="Your helpdesk" meta="Asked you" dim />
     </Pane>
   );
@@ -47,9 +67,9 @@ export function ConnectArt() {
   const state = (text: string) => <span className="border-border rounded-sm border px-1.5">{text}</span>;
   return (
     <Pane>
-      <Row lead={dot(true)} text="GitHub" meta={state('Connected')} />
-      <Row lead={dot(true)} text="Slack" meta={state('Connected')} />
-      <Row lead={dot(true)} text="Sentry" meta={state('Connected')} />
+      <Row lead={<ToolIcon slug="github" />} text="GitHub" meta={state('Connected')} />
+      <Row lead={<ToolIcon slug="slack" />} text="Slack" meta={state('Connected')} />
+      <Row lead={<ToolIcon slug="sentry" />} text="Sentry" meta={state('Connected')} />
       <div className="border-border mx-2.5 my-1.5 border-t" />
       <Row lead={dot(true)} text="SENTRY_DSN" meta="Value encrypted" />
     </Pane>
@@ -65,10 +85,10 @@ export function SignalArt() {
   );
   return (
     <Pane>
-      <Row lead={dot(true)} text="Issue opened" meta={toggle(true)} />
+      <Row lead={<ToolIcon slug="github" />} text="Issue opened" meta={toggle(true)} />
       <Row lead={dot(true)} text="Every night at 02:00" meta={toggle(true)} />
-      <Row lead={dot(true)} text="Pull request merged" meta={toggle(true)} />
-      <Row lead={dot(false)} text="New error in Sentry" meta={toggle(false)} dim />
+      <Row lead={<ToolIcon slug="github" />} text="Pull request merged" meta={toggle(true)} />
+      <Row lead={<ToolIcon slug="sentry" />} text="New error in Sentry" meta={toggle(false)} dim />
     </Pane>
   );
 }
@@ -97,45 +117,81 @@ export function ProveArt() {
   );
 }
 
-/** A reply box with a message in it, as the composer draws it. */
-export function ComposerArt({ text, tone = 'dark' }: { text: string; tone?: 'dark' | 'light' }) {
+/**
+ * The Kortix chat input: the message, then one row of attach, the agent
+ * picker, space, send. `light` is the input on a light card.
+ */
+export function ChatComposer({
+  text,
+  agent,
+  tone = 'dark',
+  busy = false,
+  className,
+}: {
+  /** The typed message; empty shows the "Reply…" placeholder. */
+  text?: string;
+  agent: string;
+  tone?: 'dark' | 'light';
+  /** The agent is working: send turns into stop. */
+  busy?: boolean;
+  className?: string;
+}) {
+  const light = tone === 'light';
   return (
     <div
       className={cn(
-        'flex w-full max-w-sm min-w-0 flex-col gap-6 rounded-xl border p-3 shadow-2xl',
-        tone === 'light' ? 'border-background/10 bg-background/5 text-background shadow-none' : 'border-border bg-card text-foreground shadow-black/40',
+        'flex w-full min-w-0 flex-col gap-3 rounded-xl border p-2.5',
+        light ? 'border-background/10 bg-background/5 text-background' : 'border-border bg-card text-foreground',
+        className,
       )}
     >
-      <span className="text-sm">{text}</span>
-      <div className={cn('flex items-center justify-between', tone === 'light' ? 'text-background/60' : 'text-muted-foreground')}>
-        <span className="inline-flex items-center gap-1 text-xs">
-          Skills
+      <span className={cn('min-h-10 px-1 pt-0.5 text-sm', !text && (light ? 'text-background/50' : 'text-muted-foreground'))}>{text || 'Reply…'}</span>
+      <div className={cn('flex items-center gap-1', light ? 'text-background/60' : 'text-muted-foreground')}>
+        <span className="inline-flex size-7 items-center justify-center rounded-md">
+          <PaperclipIcon className="size-4" />
+        </span>
+        <span className={cn('inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs', light ? 'bg-background/5' : 'bg-muted/60')}>
+          <AgentTile slug={agent} />
+          <span className={light ? 'text-background' : 'text-foreground'}>{agent}</span>
           <CaretDownIcon className="size-3" />
         </span>
-        <span className="flex items-center gap-2.5">
-          <PaperclipIcon className="size-3.5" />
-          <span className={cn('inline-flex size-6 items-center justify-center rounded-full', tone === 'light' ? 'bg-background text-foreground' : 'bg-foreground text-background')}>
-            <ArrowUpIcon className="size-3" />
-          </span>
+        <span
+          className={cn(
+            'ml-auto inline-flex size-7 items-center justify-center rounded-full',
+            light ? 'bg-background text-foreground' : busy ? 'bg-foreground text-background' : 'bg-accent text-muted-foreground',
+          )}
+        >
+          {busy ? <span className="size-2 rounded-xs bg-current" /> : <ArrowUpIcon className="size-3.5" />}
         </span>
       </div>
     </div>
   );
 }
 
-/** The one thing that waits for a person: the pull request from the demo run. */
+/** A card-sized composer with a message in it. */
+export function ComposerArt({ text, agent, tone = 'dark' }: { text: string; agent: string; tone?: 'dark' | 'light' }) {
+  return <ChatComposer text={text} agent={agent} tone={tone} className={cn('max-w-sm', tone === 'dark' && 'shadow-2xl shadow-black/40')} />;
+}
+
+function Approval({ slug, title, status, time, className }: { slug: string; title: string; status: string; time: string; className?: string }) {
+  return (
+    <div className={cn('border-border bg-card flex items-center gap-3 rounded-xl border p-3 shadow-2xl shadow-black/40', className)}>
+      <AgentTile slug={slug} size={21} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="text-foreground truncate text-sm font-medium">{title}</span>
+        <span className="text-muted-foreground truncate text-xs">{status}</span>
+      </div>
+      <span className="text-muted-foreground shrink-0 text-xs">{time}</span>
+    </div>
+  );
+}
+
+/** What waits for a person: the pull request from the demo run, and a deploy as an example. */
 export function ApprovalArt() {
   return (
-    <div className="flex w-full max-w-sm min-w-0 flex-col">
-      <div className="border-border bg-card relative z-10 flex items-center gap-3 rounded-xl border p-3 shadow-2xl shadow-black/40">
-        <AgentMark slug="factory" size={21} />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <span className="text-foreground truncate text-sm font-medium">Pull request #{DEMO.pr.number}</span>
-          <span className="text-muted-foreground truncate text-xs">Waiting for you to merge</span>
-        </div>
-        <span className="text-muted-foreground shrink-0 text-xs">now</span>
-      </div>
-      <div className="border-border bg-card mx-3 -mt-1.5 h-3 rounded-b-xl border border-t-0 opacity-60" />
+    <div className="flex w-full max-w-sm min-w-0 flex-col gap-2">
+      <Approval slug="factory" title={`Pull request #${DEMO.pr.number}`} status="Waiting for you to merge" time="now" />
+      <Approval slug="factory" title="Deploy to production" status="Waiting for your approval" time="2m" className="opacity-70" />
     </div>
   );
 }

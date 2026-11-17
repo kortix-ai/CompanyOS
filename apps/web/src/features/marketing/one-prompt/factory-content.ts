@@ -38,6 +38,7 @@ export const MANIFEST = [
   '    tools: [lookup_order]',
   '    extensions: [review-gate]',
   '    connectors: [helpdesk]',
+  '    secrets: [SENTRY_DSN]',
   '',
   'triggers:',
   '  - slug: nightly-tests',
@@ -63,7 +64,7 @@ export const MANIFEST = [
   '    - { slug: dev, dockerfile: .kortix/Dockerfile }',
 ];
 
-/** What kortix.yaml defines, one line each. `key` is the YAML key. */
+/** What kortix.yaml defines, one line each. `key` is the YAML key whose lines light up when the part is hovered. */
 export const ENGINE = [
   { term: 'Agents', key: 'agents', body: 'Every agent is a pi coding agent you define: its prompt, model, skills and what it may use. Nothing is granted by default.' },
   { term: 'Triggers', key: 'triggers', body: 'What starts an agent: a schedule, a webhook, a Slack message, an app event.' },
@@ -72,7 +73,7 @@ export const ENGINE = [
   { term: 'Extensions', key: 'extensions', body: 'pi extensions change the agent itself: hooks on its lifecycle, new commands, new behavior. A file in your repo or a pinned npm package.' },
   { term: 'Connectors', key: 'connectors', body: '3,000+ apps in a click, plus MCP, OpenAPI and raw HTTP. Rules decide which calls run and which wait for you.' },
   { term: 'Environment', key: 'sandbox', body: 'A Dockerfile for the sandbox each session runs in: your toolchain, your services, your tests.' },
-  { term: 'Secrets', key: 'env', body: 'The file names them. The values stay encrypted in your workspace and reach only the agents you grant.' },
+  { term: 'Secrets', key: 'secrets', body: 'The file names them. The values stay encrypted in your workspace and reach only the agents you grant.' },
 ];
 
 export const FAQ = [

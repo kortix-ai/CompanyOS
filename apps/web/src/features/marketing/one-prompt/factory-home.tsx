@@ -4,19 +4,18 @@ import { KortixLogo } from '@/components/sidebar/kortix-logo';
 import Footer from '@/components/home/footer';
 import { FaqSection } from '@/features/marketing/faq';
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
-import { YamlLine } from '@/features/marketing/code-panel';
 import { loopPrompt, REFERENCE_REPOS, setupPromptFor } from '@kortix/shared/setup-guide';
-import { AgentMarkGlyph, agentMarkTileClass, agentMarkVars } from '@kortix/ui/internal/components/agent-mark';
 import { cn } from '@kortix/ui';
 import { ArrowRightIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { useMemo, type ReactNode } from 'react';
 
-import { ENGINE, FAQ, MANIFEST, TEAMS } from './factory-content';
+import { FAQ, TEAMS } from './factory-content';
 import { heroRuns } from './hero-runs';
 import type { LoopView } from './loops-content';
 import { CopyButton, CopyPromptMarketingButton, GhostButton, Mark, useSetupTarget } from './parts';
-import { ApprovalArt, ComposerArt, ConnectArt, FindArt, ProveArt, SignalArt } from './section-art';
+import { EngineGrid } from './engine-grid';
+import { AgentTile, ApprovalArt, ComposerArt, ConnectArt, FindArt, ProveArt, SignalArt } from './section-art';
 import { SessionReel } from './session-reel';
 
 /** The company site: this page is one product of it. */
@@ -61,15 +60,13 @@ function PromptCta({ prompt, className }: { prompt?: string; className?: string 
   );
 }
 
-/** A section's opening: the title on the left, the lead on the right. */
+/** A section's opening: the title, then its lead under it. */
 function SplitHeading({ title, lead, children }: { title: ReactNode; lead: ReactNode; children?: ReactNode }) {
   return (
-    <div className="grid gap-6 lg:grid-cols-2 lg:gap-16">
+    <div className="flex max-w-3xl flex-col items-start gap-5">
       <h2 className={H2}>{title}</h2>
-      <div className="flex flex-col items-start gap-6 lg:pt-1.5">
-        <p className={LEAD}>{lead}</p>
-        {children}
-      </div>
+      <p className={LEAD}>{lead}</p>
+      {children}
     </div>
   );
 }
@@ -102,15 +99,6 @@ function TallCard({ art, title, body, action, light }: { art: ReactNode; title: 
         <div className={cn('h-12 items-end', action ? 'flex' : 'hidden lg:flex')}>{action}</div>
       </div>
     </div>
-  );
-}
-
-/** A team's pixel mark without the hover hint: the team's name is printed beside it. */
-function TeamMark({ slug }: { slug: string }) {
-  return (
-    <span aria-hidden style={{ ...agentMarkVars(slug), width: 20, height: 20 }} className={cn('inline-flex items-center justify-center rounded-sm bg-(--mark-tile)', agentMarkTileClass(slug))}>
-      <AgentMarkGlyph slug={slug} size={14} />
-    </span>
   );
 }
 
@@ -201,25 +189,25 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
           <div className="mt-16 grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-3">
             <TallCard
               light
-              art={<ComposerArt tone="light" text="Run the tests. File what fails." />}
+              art={<ComposerArt tone="light" agent={first?.agent ?? 'factory'} text="Run the tests. File what fails." />}
               title={name}
               body={`1 agent, ${first?.triggers ?? 3} triggers and ${first?.skills ?? 1} ${first?.skills === 1 ? 'skill' : 'skills'}, from a public template your agent adapts to your repo.`}
               action={<CopyButton tone="dark" text={prompt} />}
             />
             <TallCard
-              art={<ComposerArt text="Every new signup: research the company, score it and draft the outreach." />}
+              art={<ComposerArt agent="sales" text="Every new signup: research the company, score it and draft the outreach." />}
               title="Any loop you describe"
               body="Say what should happen and when. Your coding agent writes it as code in your repo."
               action={<CopyButton text={setupPromptFor(target)} />}
             />
             <TallCard art={<ApprovalArt />} title="You approve what ships" body="Every pull request, post and outbound draft waits for a person until you allow more." />
           </div>
-          <ul className="mt-16 grid grid-cols-2 gap-y-10 lg:grid-cols-3 lg:gap-y-12">
+          <ul className="mt-20 grid grid-cols-2 gap-x-6 gap-y-12 lg:grid-cols-3 lg:gap-x-10 lg:gap-y-14">
             {TEAMS.map((team) => (
-              <li key={team.slug} className="border-border flex flex-col gap-3 border-l pr-3 pl-4 sm:pl-8">
-                <TeamMark slug={team.slug} />
-                <span className="text-foreground text-sm font-medium">{team.name}</span>
-                <span className="text-muted-foreground max-w-60 text-sm text-pretty">{team.line}</span>
+              <li key={team.slug} className="flex flex-col">
+                <AgentTile slug={team.slug} size={21} />
+                <span className="text-foreground mt-5 text-base font-medium">{team.name}</span>
+                <span className="text-muted-foreground mt-1.5 max-w-72 text-base text-pretty">{team.line}</span>
               </li>
             ))}
           </ul>
@@ -237,29 +225,7 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
             title="One file in your repo runs all of it"
             lead="The setup adds kortix.yaml. It defines every agent, what starts it and what it may touch. You review it like code."
           />
-          <div className="border-border mt-16 grid grid-cols-[minmax(0,1fr)] overflow-hidden rounded-xl border lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-            <div className="border-border bg-card/40 border-b lg:border-r lg:border-b-0">
-              <div className="border-border text-muted-foreground border-b px-6 py-3 font-mono text-xs">kortix.yaml</div>
-              <pre className="overflow-x-auto px-6 py-5 font-mono text-xs leading-6">
-                {MANIFEST.map((line, i) => (
-                  <span key={i} className="block whitespace-pre">
-                    {line === '' ? ' ' : <YamlLine line={line} />}
-                  </span>
-                ))}
-              </pre>
-            </div>
-            <dl className="grid grid-cols-[minmax(0,1fr)] content-start sm:grid-cols-2 sm:[&>div:nth-last-child(-n+2)]:border-b-0 [&>div:last-child]:border-b-0">
-              {ENGINE.map((part) => (
-                <div key={part.term} className="border-border flex flex-col gap-2 border-b p-6 sm:odd:border-r">
-                  <dt className="text-foreground flex items-baseline gap-2 text-sm font-medium">
-                    {part.term}
-                    <span className="text-muted-foreground font-mono text-xs font-normal">{part.key}</span>
-                  </dt>
-                  <dd className="text-muted-foreground text-sm text-pretty">{part.body}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
+          <EngineGrid />
         </section>
 
         <FaqSection

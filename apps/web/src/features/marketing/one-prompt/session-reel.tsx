@@ -1,13 +1,20 @@
 'use client';
 
-import { Close } from '@kortix/ui/icons';
-import { AgentMark } from '@kortix/ui/internal/components/agent-mark';
+import { ChainOfThought } from '@kortix/ui/chain-of-thought';
+import { Disclosure, DisclosureContent, DisclosureTrigger } from '@kortix/ui/disclosure';
 import { Claude } from '@kortix/ui/internal/icons/claude';
+import { TextShimmer } from '@kortix/ui/text-shimmer';
 import { cn } from '@kortix/ui';
-import { ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, ArrowsOutSimpleIcon, CaretDownIcon, CaretRightIcon, MinusIcon, PaperclipIcon } from '@phosphor-icons/react';
+import { ArrowLeftIcon, ArrowRightIcon, CaretRightIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 
 import type { HeroRun } from './hero-runs';
+import { AgentTile, ChatComposer } from './section-art';
+
+/** A horizontal trackpad swipe this long (px of `deltaX`) moves the reel one session. */
+const SWIPE_PX = 40;
+/** After a swipe moves the reel, the rest of that gesture's momentum is ignored for this long. */
+const SWIPE_COOLDOWN_MS = 700;
 
 /**
  * How long each beat of the playing session lasts: the message, the context,
@@ -65,6 +72,30 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
     return () => observer.disconnect();
   }, []);
 
+  // A sideways trackpad swipe moves the reel, as the arrows do. Vertical scrolling passes through
+  // to the page. A native listener, because React's wheel handler is passive and cannot stop the
+  // browser's back-swipe.
+  const goRef = useRef<(step: number, manual?: boolean) => void>(() => {});
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    let travel = 0;
+    let lockedUntil = 0;
+    const onWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+      event.preventDefault();
+      const now = performance.now();
+      if (now < lockedUntil) return;
+      travel += event.deltaX;
+      if (Math.abs(travel) < SWIPE_PX) return;
+      goRef.current(travel > 0 ? 1 : -1, true);
+      travel = 0;
+      lockedUntil = now + SWIPE_COOLDOWN_MS;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
   // The middle copy holds `pos` between moves. A move may step one panel outside it; the
   // reel then settles back before it accepts the next move, so `pos` never leaves the buffer.
   const outside = pos < count || pos >= 2 * count;
@@ -94,6 +125,9 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
     },
     [still, count],
   );
+  useEffect(() => {
+    goRef.current = go;
+  }, [go]);
 
   // Play the active session one beat at a time, then move on.
   useEffect(() => {
@@ -213,12 +247,46 @@ function Beat({ at, beat, instant, className, children }: { at: number; beat: nu
   );
 }
 
+/**
+ * "Worked through N steps": the session chat's work fold. Closed, it is one
+ * quiet line over the answer; open, a hairline under it, then the steps.
+ */
+function WorkFold({ run, working }: { run: HeroRun; working: boolean }) {
+  if (working) {
+    return (
+      <TextShimmer className="text-sm [--base-color:color-mix(in_oklch,var(--muted-foreground)_55%,transparent)] [--base-gradient-color:var(--muted-foreground)] dark:[--base-color:color-mix(in_oklch,var(--muted-foreground)_55%,transparent)] dark:[--base-gradient-color:var(--muted-foreground)]">
+        Working
+      </TextShimmer>
+    );
+  }
+  return (
+    <Disclosure className="group/work flex-col">
+      <DisclosureTrigger className="select-none">
+        <div className="text-muted-foreground hover:text-foreground group-data-[state=open]/work:border-border flex w-full cursor-pointer items-center gap-2 text-left text-sm transition-colors group-data-[state=open]/work:border-b group-data-[state=open]/work:pb-2">
+          <span className="min-w-0 truncate tabular-nums">Worked through {run.work.length} steps</span>
+          <CaretRightIcon aria-hidden className="size-3.5 flex-none transition-transform group-data-[state=open]/work:rotate-90" />
+        </div>
+      </DisclosureTrigger>
+      <DisclosureContent>
+        <ChainOfThought className="mt-3 space-y-2">
+          {run.work.map((step, index) => (
+            <div key={index} className="flex items-baseline gap-2.5 text-sm">
+              <span aria-hidden className="bg-muted-foreground/40 relative top-[-2px] size-1.5 shrink-0 rounded-full" />
+              <span className={cn('min-w-0', step.cmd ? 'text-foreground font-mono text-xs' : 'text-muted-foreground')}>{step.cmd ? `$ ${step.text}` : step.text}</span>
+            </div>
+          ))}
+        </ChainOfThought>
+      </DisclosureContent>
+    </Disclosure>
+  );
+}
+
 /** One session window: its header, the conversation and a reply box. */
 function SessionPanel({ run, playing, beat, still, instant }: { run: HeroRun; playing: boolean; beat: number; still: boolean; instant: boolean }) {
   const working = playing && !still && beat === 2;
+  const agent = run.host.kind === 'claude-code' ? 'kortix' : run.host.slug;
   return (
     <article
-      aria-hidden={!playing}
       style={{ width: PANEL }}
       className={cn(
         'bg-card flex h-[520px] shrink-0 flex-col overflow-hidden rounded-xl border',
@@ -228,18 +296,14 @@ function SessionPanel({ run, playing, beat, still, instant }: { run: HeroRun; pl
     >
       <header className="flex h-12 shrink-0 items-center justify-between gap-3 px-4">
         <div className="flex min-w-0 items-center gap-2">
-          {run.host.kind === 'claude-code' ? <Claude className="size-4 shrink-0" /> : <AgentMark slug={run.host.slug} size={14} />}
+          {run.host.kind === 'claude-code' ? <Claude className="size-4 shrink-0" /> : <AgentTile slug={run.host.slug} />}
           <span className="text-foreground truncate text-sm font-medium">{run.host.kind === 'claude-code' ? 'Claude Code' : run.host.name}</span>
-          <span className="border-border text-muted-foreground shrink-0 truncate rounded-sm border px-1.5 text-xs">{run.source}</span>
         </div>
-        <div aria-hidden className="text-muted-foreground flex shrink-0 items-center gap-2.5">
-          <MinusIcon className="size-3.5" />
-          <ArrowsOutSimpleIcon className="size-3.5" />
-          <Close className="size-3.5" />
-        </div>
+        <span className="border-border text-muted-foreground shrink-0 truncate rounded-md border px-2 py-0.5 text-xs">{run.source}</span>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-4 pt-2">
+      {/* The conversation scrolls on its own: an opened fold can be longer than the window. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 pt-2 pb-2 [scrollbar-width:none]">
         <div className="flex flex-col items-end gap-2">
           <p className="bg-muted text-foreground ml-8 rounded-lg px-3 py-2.5 text-sm">
             {/* The clamp sits on the text, not the padded bubble, so no half line shows below it. */}
@@ -254,11 +318,8 @@ function SessionPanel({ run, playing, beat, still, instant }: { run: HeroRun; pl
           ) : null}
         </div>
 
-        <Beat instant={instant} at={2} beat={beat} className="flex flex-col gap-2">
-          <span className={cn('text-muted-foreground inline-flex items-center gap-1 text-xs', working && 'animate-pulse')}>
-            {working ? 'Working' : `Worked through ${run.steps} steps`}
-            <CaretRightIcon weight="fill" className="size-2.5" />
-          </span>
+        <Beat instant={instant} at={2} beat={beat} className="flex flex-col gap-3">
+          <WorkFold run={run} working={working} />
           <Beat instant={instant} at={3} beat={beat}>
             <p className="text-foreground text-sm text-pretty">{run.answer}</p>
           </Beat>
@@ -291,22 +352,8 @@ function SessionPanel({ run, playing, beat, still, instant }: { run: HeroRun; pl
         ) : null}
       </div>
 
-      <div aria-hidden className="p-2.5">
-        <div className="bg-muted/60 flex flex-col gap-4 rounded-lg px-3 pt-3 pb-2.5">
-          <span className="text-muted-foreground text-sm">Reply…</span>
-          <div className="text-muted-foreground flex items-center justify-between">
-            <span className="inline-flex items-center gap-1 text-xs">
-              Skills
-              <CaretDownIcon className="size-3" />
-            </span>
-            <div className="flex items-center gap-2.5">
-              <PaperclipIcon className="size-3.5" />
-              <span className={cn('inline-flex size-6 items-center justify-center rounded-full', working ? 'bg-foreground text-background' : 'bg-accent text-muted-foreground')}>
-                {working ? <span className="size-2 rounded-xs bg-current" /> : <ArrowUpIcon className="size-3" />}
-              </span>
-            </div>
-          </div>
-        </div>
+      <div aria-hidden className="shrink-0 p-2.5">
+        <ChatComposer agent={agent} busy={working} />
       </div>
     </article>
   );

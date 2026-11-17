@@ -19,8 +19,8 @@ export interface HeroRun {
   ask: string;
   /** The item the session took as context. */
   context?: string;
-  /** How many steps the agent took, shown as "Worked through N steps". */
-  steps: number;
+  /** What the agent did, one line per step: the "Worked through N steps" fold opens to these. `cmd`: a shell command. */
+  work: Array<{ text: string; cmd?: boolean }>;
   answer: string;
   /** Rows the agent produced: issues, checks, files. */
   rows?: Array<{ label: string; text: string; done?: boolean }>;
@@ -45,7 +45,13 @@ export function heroRuns(loop: LoopView | undefined, prompt: string): HeroRun[] 
       source: 'Your terminal',
       ask: prompt,
       context: 'your-org/your-repo',
-      steps: 5,
+      work: [
+        { text: 'Read the setup guide' },
+        { text: 'Found GitHub, Sentry and Slack in the repo' },
+        { text: 'Connected GitHub, Slack and Sentry' },
+        { text: 'Wrote kortix.yaml' },
+        { text: 'Ran the factory once and watched it finish' },
+      ],
       answer: 'Found your tools, connected them and set the signals. Then it ran the factory once to prove it works.',
       result: {
         kind: 'kortix.yaml',
@@ -61,7 +67,7 @@ export function heroRuns(loop: LoopView | undefined, prompt: string): HeroRun[] 
       source: 'Schedule · 02:00',
       ask: 'Run the tests. File what fails.',
       context: 'nightly-tests',
-      steps: DEMO.tickets.length + 1,
+      work: [{ text: 'npm test', cmd: true }, ...DEMO.tickets.map((ticket) => ({ text: `Filed issue #${ticket.number}` }))],
       answer: `Found ${DEMO.tickets.length} bugs and filed each one with the request that reproduces it.`,
       rows: DEMO.tickets.map((ticket) => ({ label: `#${ticket.number}`, text: ticket.title })),
     },
@@ -73,7 +79,7 @@ export function heroRuns(loop: LoopView | undefined, prompt: string): HeroRun[] 
       source: `Issue #${issue.number}`,
       ask: issue.title,
       context: `${DEMO.repo} #${issue.number}`,
-      steps: DEMO.worker.length,
+      work: DEMO.worker.map((line) => ({ text: line.text, cmd: line.kind === 'cmd' })),
       answer: 'Reproduced the crash on main, fixed the parser and proved the fix. The pull request waits for your review.',
       result: {
         kind: `Pull request #${DEMO.pr.number} · +${DEMO.pr.additions} −${DEMO.pr.deletions}`,
@@ -89,7 +95,7 @@ export function heroRuns(loop: LoopView | undefined, prompt: string): HeroRun[] 
       source: `Pull request #${DEMO.pr.number}`,
       ask: `Review pull request #${DEMO.pr.number} before a person sees it.`,
       context: DEMO.pr.branch,
-      steps: DEMO.pr.checks.length,
+      work: DEMO.pr.checks.map((check) => ({ text: check })),
       answer: 'Ran every check on main and on the branch.',
       rows: DEMO.pr.checks.map((check) => {
         const [label, text] = check.split(' · ');
@@ -104,7 +110,7 @@ export function heroRuns(loop: LoopView | undefined, prompt: string): HeroRun[] 
       source: 'Pull request merged',
       ask: DEMO.pr.title,
       context: `Pull request #${DEMO.pr.number}`,
-      steps: 4,
+      work: [{ text: 'Loaded the brand skill' }, { text: 'Wrote the changelog entry' }, { text: 'Recorded the change in a browser' }, { text: 'Rendered a captioned video' }],
       answer: 'Wrote the changelog entry and the post, recorded the change in a browser and rendered a captioned video.',
       result: { kind: 'Draft', title: 'Changelog entry, post and video', status: 'Waiting for you to publish' },
     },
@@ -116,7 +122,7 @@ export function heroRuns(loop: LoopView | undefined, prompt: string): HeroRun[] 
       source: 'In-app feedback',
       ask: 'CSV export fails on large tables',
       context: 'Ticket from a customer',
-      steps: 4,
+      work: [{ text: 'Triaged it: bug, high priority' }, { text: 'Searched the docs and the code' }, { text: 'Drafted the answer' }, { text: 'Filed the bug for engineering' }],
       answer: 'Searched the docs and the code, drafted the answer and filed the bug for engineering.',
       result: { kind: 'Draft', title: 'Reply to the customer, bug ticket linked', status: 'Waiting for you to send' },
     },

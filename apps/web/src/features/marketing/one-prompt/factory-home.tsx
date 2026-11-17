@@ -61,13 +61,15 @@ function PromptCta({ prompt, className }: { prompt?: string; className?: string 
   );
 }
 
-/** A section's opening: the title, then its lead under it. */
+/** A section's opening: the title, then its lead under it. An action sits on the lead's row, at the right edge. */
 function SplitHeading({ title, lead, children }: { title: ReactNode; lead: ReactNode; children?: ReactNode }) {
   return (
-    <div className="flex max-w-3xl flex-col items-start gap-5">
-      <h2 className={H2}>{title}</h2>
-      <p className={LEAD}>{lead}</p>
-      {children}
+    <div className="flex flex-col gap-5">
+      <h2 className={cn(H2, 'max-w-3xl')}>{title}</h2>
+      <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-end sm:justify-between sm:gap-10">
+        <p className={cn(LEAD, 'max-w-3xl')}>{lead}</p>
+        {children ? <div className="shrink-0">{children}</div> : null}
+      </div>
     </div>
   );
 }

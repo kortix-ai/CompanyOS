@@ -45,6 +45,7 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
   const [animate, setAnimate] = useState(true);
   const [beat, setBeat] = useState(0);
   const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
   const [visible, setVisible] = useState(false);
   const active = ((pos % count) + count) % count;
   const run = runs[active]!;
@@ -71,10 +72,10 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
 
   // Play the active session one beat at a time, then move on.
   useEffect(() => {
-    if (still || hovered || !visible) return;
+    if (still || hovered || focused || !visible) return;
     const id = setTimeout(() => (beat < LAST_BEAT ? setBeat(beat + 1) : go(1)), BEATS_MS[Math.min(beat, LAST_BEAT - 1)]);
     return () => clearTimeout(id);
-  }, [beat, still, hovered, visible, go]);
+  }, [beat, still, hovered, focused, visible, go]);
 
   // After a slide ends outside the middle copy, jump back into it with no animation.
   const settle = () => {
@@ -102,8 +103,11 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
       aria-label="Agent sessions"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onFocus={() => setHovered(true)}
-      onBlur={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      // Focus moving between the two arrows stays inside: only leaving the reel resumes it.
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
+      }}
       className="flex flex-col gap-8"
     >
       <div

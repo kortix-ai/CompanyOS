@@ -1,27 +1,29 @@
 'use client';
 
 import { KortixLogo } from '@/components/sidebar/kortix-logo';
-import { DitherField } from '@/features/marketing/kit/dither-field';
+import Footer from '@/components/home/footer';
+import { FaqSection } from '@/features/marketing/faq';
+import { MarketingButton } from '@/features/marketing/kit/marketing-button';
 import { YamlLine } from '@/features/marketing/code-panel';
 import { loopPrompt, REFERENCE_REPOS, setupPromptFor } from '@kortix/shared/setup-guide';
 import { AgentMarkGlyph, agentMarkTileClass, agentMarkVars } from '@kortix/ui/internal/components/agent-mark';
 import { cn } from '@kortix/ui';
-import { ArrowRightIcon, PlusIcon } from '@phosphor-icons/react';
+import { ArrowRightIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { useMemo, type ReactNode } from 'react';
 
 import { ENGINE, FAQ, MANIFEST, TEAMS } from './factory-content';
 import { heroRuns } from './hero-runs';
 import type { LoopView } from './loops-content';
-import { CopyButton, GhostButton, Mark, useSetupTarget } from './parts';
+import { CopyButton, CopyPromptMarketingButton, GhostButton, Mark, useSetupTarget } from './parts';
 import { ApprovalArt, ComposerArt, ConnectArt, FindArt, ProveArt, SignalArt } from './section-art';
 import { SessionReel } from './session-reel';
 
 /** The company site: this page is one product of it. */
 const KORTIX = 'https://kortix.com';
 
-/** The column every section sits in. */
-const COLUMN = 'mx-auto w-full max-w-[1192px] px-4 sm:px-8 md:px-10';
+/** The column every section sits in: the site grid, the same as the shared FAQ and footer. */
+const COLUMN = 'mx-auto w-full max-w-7xl px-6';
 /** The space between two sections: each one reads as its own chapter. */
 const SECTION = 'py-24 lg:py-32';
 const H2 = 'text-foreground text-3xl font-medium tracking-tight text-balance sm:text-4xl lg:text-5xl';
@@ -45,14 +47,6 @@ const STEPS = [
     body: 'It loops until one real run finishes. Then it adds the Kortix MCP server to your coding agent, so the next loop is one sentence.',
     art: <ProveArt />,
   },
-];
-
-/** The footer: each group's links as [label, href]. */
-const FOOTER: Array<{ title: string; links: Array<[string, string]> }> = [
-  { title: 'Product', links: [['How it works', '#how'], ['Factories', '#factories'], ['kortix.yaml', '#engine']] },
-  { title: 'Developers', links: [['Docs', '/docs/developers'], ['The setup guide', '/setup.md'], ['GitHub', 'https://github.com/kortix-ai/CompanyOS']] },
-  { title: 'Company', links: [['Kortix', KORTIX], ['Careers', '/careers'], ['Contact', '/contact']] },
-  { title: 'Legal', links: [['Terms', '/legal/terms'], ['Privacy', '/legal?tab=privacy']] },
 ];
 
 /** The page's one action and where to paste it. */
@@ -268,69 +262,31 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
           </div>
         </section>
 
-        <section className={cn(COLUMN, SECTION, 'grid gap-10 lg:grid-cols-2 lg:gap-16')}>
-          <div className="flex flex-col items-start gap-4">
-            <h2 className={H2}>Questions</h2>
-            <Link href="/contact" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors">
-              Talk to the team
-              <ArrowRightIcon className="size-3.5" />
-            </Link>
-          </div>
-          <div className="border-border border-t">
-            {FAQ.map((item) => (
-              <details key={item.q} className="border-border group border-b">
-                <summary className="text-foreground flex cursor-pointer list-none items-center justify-between gap-6 py-5 text-base [&::-webkit-details-marker]:hidden">
-                  {item.q}
-                  <PlusIcon aria-hidden className="text-muted-foreground size-4 shrink-0 transition-transform duration-moderate ease-out group-open:rotate-45 motion-reduce:transition-none" />
-                </summary>
-                <p className="text-muted-foreground max-w-xl pb-6 text-base text-pretty">{item.a}</p>
-              </details>
-            ))}
-          </div>
-        </section>
-
-        <section className="relative overflow-hidden">
-          <div aria-hidden className="pointer-events-none absolute inset-x-0 top-[70%] bottom-0 opacity-80 [mask-image:linear-gradient(to_bottom,transparent,#000_70%)]">
-            <DitherField className="text-kortix-base" />
-          </div>
-          <div className={cn(COLUMN, 'relative flex flex-col items-center gap-6 py-32 text-center lg:py-44')}>
-            <h2 className="text-foreground text-4xl font-medium tracking-tight text-balance sm:text-5xl lg:text-6xl">
-              One prompt.
-              <br />
-              Your whole company, looped.
-            </h2>
-            <p className="text-muted-foreground max-w-md text-lg text-pretty">Paste it into Claude Code or Codex. Your agent asks before every decision.</p>
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-              <CopyButton size="lg" text={prompt} />
-              <Link
-                href="/docs/developers"
-                className="border-border bg-card text-foreground hover:bg-accent inline-flex h-10 items-center rounded-full border px-5 text-sm font-medium transition-colors"
-              >
-                Read the docs
-              </Link>
-            </div>
-          </div>
-        </section>
+        <FaqSection
+          eyebrow="Frequently asked questions"
+          title="The questions developers ask before they paste the prompt."
+          items={FAQ.map((item, index) => ({ id: `loopmaxxing-faq-${index + 1}`, question: item.q, answer: item.a }))}
+        />
       </main>
 
-      <footer className="border-border border-t">
-        <div className={cn(COLUMN, 'grid grid-cols-2 gap-10 py-14 md:grid-cols-[minmax(0,1fr)_repeat(4,minmax(0,1fr))]')}>
-          <a href={KORTIX} aria-label="Kortix" className="text-foreground col-span-2 md:col-span-1">
-            <KortixLogo size={16} variant="logomark" />
-          </a>
-          {FOOTER.map((group) => (
-            <div key={group.title} className="flex flex-col gap-3 text-sm">
-              <span className="text-foreground font-medium">{group.title}</span>
-              {group.links.map(([label, href]) => (
-                <Link key={label} href={href} className="text-muted-foreground hover:text-foreground transition-colors">
-                  {label}
-                </Link>
-              ))}
+      {/* The site's footer: its closing call to action carries this page's copy and the copy action. */}
+      <Footer
+        cta={
+          <>
+            <h2 className="text-foreground text-2xl font-medium tracking-tight text-balance md:text-3xl lg:text-4xl">
+              One prompt.
+              <span className="text-muted-foreground block">Your whole company, looped.</span>
+            </h2>
+            <div className="mt-8 flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-center">
+              <CopyPromptMarketingButton text={prompt} className="hit-area-y-1 w-full sm:w-auto sm:min-w-36" />
+              <MarketingButton variant="secondary" size="md" className="hit-area-y-1 w-full sm:w-auto sm:min-w-36" asChild>
+                <Link href="/docs/developers">Read the docs</Link>
+              </MarketingButton>
             </div>
-          ))}
-        </div>
-        <div className={cn(COLUMN, 'text-muted-foreground pb-10 text-xs')}>Loopmaxxing, by Kortix. Open source.</div>
-      </footer>
+            <p className="text-muted-foreground mt-6 text-sm text-pretty">Paste it into Claude Code or Codex. Your agent asks before every decision.</p>
+          </>
+        }
+      />
     </div>
   );
 }

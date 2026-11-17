@@ -2,6 +2,7 @@
 
 import { PROD_TARGET, setupPromptFor, setupTarget, type SetupTarget } from '@kortix/shared/setup-guide';
 import { Copy } from '@kortix/ui/icons';
+import { MarketingButton } from '@/features/marketing/kit/marketing-button';
 import { Claude } from '@kortix/ui/internal/icons/claude';
 import { Codex } from '@kortix/ui/internal/icons/codex';
 import { cn } from '@kortix/ui';
@@ -75,6 +76,17 @@ export function CopyButton({
       {copied ? <CheckIcon className="size-4" /> : <Copy className="size-4" />}
       <span aria-live="polite">{copied ? 'Copied' : label}</span>
     </button>
+  );
+}
+
+/** Copy prompt as the site's closing button: the same button the footer call to action uses on every page. */
+export function CopyPromptMarketingButton({ text, className }: { text: string; className?: string }) {
+  const { copied, copy } = useCopy(text);
+  return (
+    <MarketingButton variant="accent" size="md" className={className} onClick={copy}>
+      {copied ? <CheckIcon /> : <Copy />}
+      <span aria-live="polite">{copied ? 'Copied' : 'Copy prompt'}</span>
+    </MarketingButton>
   );
 }
 

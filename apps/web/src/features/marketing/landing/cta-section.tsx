@@ -12,14 +12,16 @@ import { HoverPrefetchLink } from '@kortix/ui/internal/components/hover-prefetch
 import { latestProjectPath } from '@kortix/ui/internal/lib/onboarding/last-project-cookie';
 import { ArrowRightIcon } from '@phosphor-icons/react';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 /**
  * Closing CTA above the site map: a two-tone line that echoes the hero, two
  * actions, then the trust line. Copy lives in content.ts. A page can replace
- * the copy and both actions through `footer-cta.ts`.
+ * the copy and both actions through `footer-cta.ts`, or pass its own
+ * `content` (a heading, actions and a line under them) when an action is not
+ * a link, as the Loopmaxxing page's Copy prompt is.
  */
-export function CtaSection() {
+export function CtaSection({ content }: { content?: ReactNode } = {}) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const { cta } = getLocalizedLandingContent(tI18nComplete);
   const { user } = useAuth();
@@ -55,7 +57,9 @@ export function CtaSection() {
         <DitherField className="text-kortix-base" />
       </div>
 
-      {override ? (
+      {content ? (
+        <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-6 text-center">{content}</div>
+      ) : override ? (
         <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-6 text-center">
           <h2 className="text-foreground text-2xl font-medium tracking-tight text-balance md:text-3xl lg:text-4xl">
             {override.title}

@@ -7,6 +7,7 @@ import { FOOTER_TRANSLATION_KEYS } from '@/i18n/footer-translation-keys.generate
 import { useTranslations } from '@/i18n/use-translations';
 import { showsMarketingLink } from '@/lib/config';
 import { cn } from '@kortix/ui';
+import type { ReactNode } from 'react';
 import { localizeUiCatalog } from '@kortix/ui/i18n';
 import { ThemeToggle } from './theme-toggle';
 
@@ -90,7 +91,8 @@ function FooterLink({ label, href, external }: FooterLinkItem) {
   );
 }
 
-const Footer = () => {
+/** `cta` replaces the closing call to action's copy and actions on a page that needs its own (see `CtaSection`). */
+const Footer = ({ cta }: { cta?: ReactNode } = {}) => {
   const tI18nHardcoded = useTranslations('hardcodedUi');
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const footerSections = localizeUiCatalog(FOOTER_SECTIONS, tI18nComplete, FOOTER_TRANSLATION_KEYS);
@@ -98,7 +100,7 @@ const Footer = () => {
 
   return (
     <section className="from-card to-background relative overflow-hidden border-t bg-linear-to-b from-30% to-90% pt-12">
-      <CtaSection />
+      <CtaSection content={cta} />
 
       {/* Polar's layout: the mark top left, the copyright and theme switch
           pinned to the bottom of the same column; the link groups in a grid

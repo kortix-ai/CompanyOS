@@ -14,7 +14,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { FAQ, TEAMS } from './factory-content';
 import { heroRuns } from './hero-runs';
 import type { LoopView } from './loops-content';
-import { CopyButton, CopyPromptMarketingButton, GhostButton, Mark, usePageDefaultDark, useSetupTarget } from './parts';
+import { CopyButton, CopyPromptMarketingButton, GhostButton, Mark, useForceDarkPage, useSetupTarget } from './parts';
 import { EngineGrid } from './engine-grid';
 import { PlanFlow } from './plan-flow';
 import { AgentTile, ApprovalArt, ComposerArt, ConnectArt, FindArt, ProveArt, SignalArt } from './section-art';
@@ -142,9 +142,9 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
   const runs = useMemo(() => heroRuns(first, prompt), [first, prompt]);
   const name = first?.name ?? 'Software Factory';
   const reference = first ? REFERENCE_REPOS[first.id] : undefined;
-  const defaultDark = usePageDefaultDark();
+  useForceDarkPage();
   return (
-    <div className={cn(defaultDark && 'dark', 'bg-background text-foreground relative min-h-screen overflow-x-clip')}>
+    <div className="dark bg-background text-foreground relative min-h-screen overflow-x-clip [color-scheme:dark]">
       <header className="border-border bg-background/80 sticky top-0 z-30 border-b backdrop-blur">
         <div className={cn(COLUMN, 'flex h-16 items-center justify-between gap-4')}>
           <div className="flex items-center gap-4">

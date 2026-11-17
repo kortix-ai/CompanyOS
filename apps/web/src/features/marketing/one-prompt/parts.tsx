@@ -8,7 +8,6 @@ import { Kbd } from '@kortix/ui/kbd';
 import { Codex } from '@kortix/ui/internal/icons/codex';
 import { cn } from '@kortix/ui';
 import Link from 'next/link';
-import { useTheme } from 'next-themes';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 const COPIED_MS = 2000;
@@ -26,25 +25,34 @@ export function useSetupTarget(): SetupTarget {
 }
 
 /**
- * True while the reader has not chosen a theme: this page is dark by default, though the site's
- * default is light. A choice made with the theme switch (next-themes keeps it under `theme` in
- * localStorage) wins. The server renders dark.
+ * The page is always dark, whatever theme the reader picked elsewhere on the
+ * site. The wrapper wears `.dark`, and while the page is mounted the root
+ * element does too, so the overscroll area, the scrollbars and every portal
+ * (menus, tooltips) are dark as well. The reader's stored choice is never
+ * changed; leaving the page puts the root back as it was.
  */
-export function usePageDefaultDark(): boolean {
-  // Re-render when the switch changes the theme, so the stored choice is read again.
-  useTheme();
-  const chosen = useSyncExternalStore(
-    noSubscription,
-    () => {
-      try {
-        return window.localStorage.getItem('theme');
-      } catch {
-        return null;
-      }
-    },
-    () => null,
-  );
-  return chosen === null;
+export function useForceDarkPage() {
+  useEffect(() => {
+    const root = document.documentElement;
+    const hadDark = root.classList.contains('dark');
+    const hadLight = root.classList.contains('light');
+    const scheme = root.style.colorScheme;
+    const apply = () => {
+      if (!root.classList.contains('dark')) root.classList.add('dark');
+      if (root.classList.contains('light')) root.classList.remove('light');
+      if (root.style.colorScheme !== 'dark') root.style.colorScheme = 'dark';
+    };
+    apply();
+    // The theme provider rewrites the root class when the theme changes: put dark back.
+    const observer = new MutationObserver(apply);
+    observer.observe(root, { attributes: true, attributeFilter: ['class', 'style'] });
+    return () => {
+      observer.disconnect();
+      root.classList.toggle('dark', hadDark);
+      root.classList.toggle('light', hadLight);
+      root.style.colorScheme = scheme;
+    };
+  }, []);
 }
 
 export function useCopy(text: string) {

@@ -1580,6 +1580,16 @@
       "description": "把 Kortix 添加到你已在用的 AI 聊天中。在那里启动智能体、跟进它们的工作并使用你的连接器。",
       "cta": "连接"
     },
+    "desktopPromo": {
+      "title": "获取桌面应用",
+      "description": "用 Quick Entry 在任意应用中把任务交给 Kortix，并一键连接这台电脑。",
+      "cta": "下载"
+    },
+    "phonePromo": {
+      "title": "手机上的 Kortix",
+      "description": "每个会话都在你的口袋里。会话完成或需要你回答时，推送会告诉你。",
+      "cta": "获取应用"
+    },
     "promos": "Kortix 的更多用法",
     "upgrade": "升级",
     "chats": "聊天",

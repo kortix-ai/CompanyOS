@@ -1580,6 +1580,16 @@
       "description": "いつもの AI チャットに Kortix を追加しましょう。エージェントの起動、作業の確認、コネクタの利用がそこからできます。",
       "cta": "接続"
     },
+    "desktopPromo": {
+      "title": "デスクトップアプリを入手",
+      "description": "Quick Entry でどのアプリからでも Kortix にタスクを渡せます。このコンピューターもワンクリックで接続できます。",
+      "cta": "ダウンロード"
+    },
+    "phonePromo": {
+      "title": "スマートフォンで Kortix",
+      "description": "すべてのセッションをポケットに。終わったときや回答が必要なときはプッシュ通知でお知らせします。",
+      "cta": "アプリを入手"
+    },
     "promos": "Kortix の使い方",
     "upgrade": "アップグレード",
     "chats": "チャット",

@@ -1580,6 +1580,16 @@
       "description": "Füge Kortix zu dem KI-Chat hinzu, den du schon nutzt. Starte Agenten, verfolge ihre Arbeit und nutze deine Connectors von dort.",
       "cta": "Verbinden"
     },
+    "desktopPromo": {
+      "title": "Hol dir die Desktop-App",
+      "description": "Gib Kortix mit Quick Entry aus jeder App eine Aufgabe und verbinde diesen Computer mit einem Klick.",
+      "cta": "Herunterladen"
+    },
+    "phonePromo": {
+      "title": "Kortix auf deinem Handy",
+      "description": "Jede Session in deiner Tasche. Eine Push-Nachricht sagt dir, wenn eine fertig ist oder deine Antwort braucht.",
+      "cta": "App holen"
+    },
     "promos": "Wege, Kortix zu nutzen",
     "upgrade": "Upgraden",
     "chats": "Chats",

@@ -1074,6 +1074,16 @@ const catalog = {
       "description": "Add Kortix to the AI chat you already use. Start agents, follow their work and use your connectors from there.",
       "cta": "Connect"
     },
+    "desktopPromo": {
+      "title": "Get the desktop app",
+      "description": "Hand Kortix a task from any app with Quick Entry, and connect this computer in one click.",
+      "cta": "Download"
+    },
+    "phonePromo": {
+      "title": "Kortix on your phone",
+      "description": "Every session in your pocket. A push tells you when one finishes or needs your answer.",
+      "cta": "Get the app"
+    },
     "promos": "Ways to use Kortix",
     "upgrade": "Upgrade",
     "chats": "Chats",

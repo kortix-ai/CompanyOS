@@ -1580,6 +1580,16 @@
       "description": "Adicione o Kortix ao chat de IA que você já usa. Inicie agentes, acompanhe o trabalho e use seus conectores de lá.",
       "cta": "Conectar"
     },
+    "desktopPromo": {
+      "title": "Baixe o app para desktop",
+      "description": "Passe uma tarefa ao Kortix de qualquer app com o Quick Entry e conecte este computador com um clique.",
+      "cta": "Baixar"
+    },
+    "phonePromo": {
+      "title": "Kortix no seu celular",
+      "description": "Todas as sessões no seu bolso. Uma notificação avisa quando uma termina ou precisa da sua resposta.",
+      "cta": "Baixar o app"
+    },
     "promos": "Formas de usar o Kortix",
     "upgrade": "Melhorar",
     "chats": "Chats",

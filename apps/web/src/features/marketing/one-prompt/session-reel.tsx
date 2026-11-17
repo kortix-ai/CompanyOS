@@ -49,6 +49,9 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [visible, setVisible] = useState(false);
+  // After the first arrow press the reader drives the reel: autoplay stops for good. Touch has
+  // no hover and a tap does not focus, so this is the pause that works everywhere (WCAG 2.2.2).
+  const [driven, setDriven] = useState(false);
   const active = ((pos % count) + count) % count;
   const run = runs[active]!;
   const shownBeat = still ? LAST_BEAT : beat;
@@ -75,6 +78,7 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
       if (!still && (current < count || current >= 2 * count)) return;
       // A session reached with the arrows shows finished: the reader chose it to read it.
       setBeat(manual ? LAST_BEAT : 0);
+      if (manual) setDriven(true);
       if (still) {
         // Reduced motion has no slide to wait for: land in the middle copy at once.
         setPos(count + ((((current + step) % count) + count) % count));
@@ -88,10 +92,10 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
 
   // Play the active session one beat at a time, then move on.
   useEffect(() => {
-    if (still || hovered || focused || !visible) return;
+    if (still || driven || hovered || focused || !visible) return;
     const id = setTimeout(() => (beat < LAST_BEAT ? setBeat(beat + 1) : go(1)), BEATS_MS[Math.min(beat, LAST_BEAT - 1)]);
     return () => clearTimeout(id);
-  }, [beat, still, hovered, focused, visible, go]);
+  }, [beat, still, driven, hovered, focused, visible, go]);
 
   // After a slide ends outside the middle copy, jump back into it with no animation.
   // A timer, not `transitionend`: that event does not fire in a hidden tab.
@@ -103,10 +107,17 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
     }, SLIDE_MS);
     return () => clearTimeout(id);
   }, [outside, count, active]);
+  // Two frames: the first paints the jump with no transition, the second turns it back on.
   useEffect(() => {
     if (animate) return;
-    const id = requestAnimationFrame(() => setAnimate(true));
-    return () => cancelAnimationFrame(id);
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => setAnimate(true));
+    });
+    return () => {
+      cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
+    };
   }, [animate]);
 
   const panels = [...runs, ...runs, ...runs];
@@ -143,7 +154,7 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
             key={`${item.id}-${index}`}
             run={item}
             playing={index === pos}
-            // Sessions already passed stay finished; the ones still to come wait for their message.
+            // Sessions already passed stay finished; the ones still to come show only their message.
             beat={index === pos ? shownBeat : still || index < pos ? LAST_BEAT : 0}
             still={still}
             instant={!animate || still}
@@ -152,9 +163,11 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
       </div>
 
       <div className="flex items-center justify-between gap-6">
-        <p aria-live="polite" className="text-muted-foreground font-mono text-xs tracking-wider uppercase">
+        {/* Announce only what the reader chose: a caption that changes on its own every few seconds is noise. */}
+        <p aria-live={still || driven ? 'polite' : 'off'} className="text-muted-foreground font-mono text-xs tracking-wider uppercase">
           <span key={run.id} className="animate-in fade-in duration-slow">
             {run.caption}
+            {run.kind === 'example' ? ' · example' : null}
           </span>
         </p>
         <div className="flex items-center gap-1">

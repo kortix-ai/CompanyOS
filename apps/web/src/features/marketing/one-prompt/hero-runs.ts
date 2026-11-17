@@ -7,7 +7,7 @@ import type { LoopView } from './loops-content';
  */
 export interface HeroRun {
   id: string;
-  /** The line under the reel while this session plays. */
+  /** The line under the reel while this session plays. The reel adds "example" to example sessions. */
   caption: string;
   /** `real`: every line is from the demo run (2026-11-10). `example`: the steps the loop runs, with example inputs. */
   kind: 'real' | 'example';
@@ -98,11 +98,11 @@ export function heroRuns(loop: LoopView | undefined, prompt: string): HeroRun[] 
     },
     {
       id: 'changelog',
-      caption: 'Ships the changelog · example',
+      caption: 'Ships the changelog',
       kind: 'example',
       host: { kind: 'agent', slug: 'marketing', name: 'marketing' },
       source: 'Pull request merged',
-      ask: 'Return 400 on malformed JSON',
+      ask: `Merged: ${DEMO.pr.title}`,
       context: `Pull request #${DEMO.pr.number}`,
       steps: 4,
       answer: 'Wrote the changelog entry and the post, recorded the change in a browser and rendered a captioned video.',
@@ -110,7 +110,7 @@ export function heroRuns(loop: LoopView | undefined, prompt: string): HeroRun[] 
     },
     {
       id: 'support',
-      caption: 'Answers every ticket · example',
+      caption: 'Answers every ticket',
       kind: 'example',
       host: { kind: 'agent', slug: 'support', name: 'support' },
       source: 'In-app feedback',

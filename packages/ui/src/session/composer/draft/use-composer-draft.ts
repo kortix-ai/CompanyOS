@@ -32,6 +32,11 @@ const NO_QUOTES: readonly string[] = [];
 const NO_PASTES: readonly PastedContent[] = [];
 const NO_UPLOADS: readonly StoredUpload[] = [];
 
+/** A composer's sendable content, compared to tell a sent message from a new draft. */
+function sentKey(doc: JSONContent, quotes: readonly string[], pastes: readonly PastedContent[]): string {
+  return JSON.stringify([doc, quotes, pastes]);
+}
+
 export interface UseComposerDraftInput {
   active?: boolean;
   /** Move the remaining home draft into the created session on unmount. */
@@ -116,13 +121,13 @@ export function useComposerDraft({
   const restoredKeyRef = useRef<string | null>(null);
   const activeRef = useRef(active);
   /**
-   * The document the last send left on screen (`clearOnSend={false}`, project
-   * home), serialized. That text is sent, not a draft: a later save of the
-   * same document (an attachment released or finishing after Send) must not
-   * bring it back, and the home handoff would then carry it into the new
-   * session's composer. Any edit makes a different document, which saves.
+   * What the last send left on screen (`clearOnSend={false}`, project home):
+   * `sentKey` of its document, quotes and tiles. That is sent, not a draft: an
+   * attachment released or finishing after Send must not save it again, or
+   * the home handoff carries it into the new session's composer. The first
+   * change to any of them (typing, clearing, a new quote) ends it.
    */
-  const sentDocRef = useRef<string | null>(null);
+  const sentRef = useRef<string | null>(null);
 
   /**
    * Write whatever is pending, now.
@@ -142,7 +147,7 @@ export function useComposerDraft({
     const pending = pendingRef.current;
     if (!activeScope || !userIdRef.current || !pending) return;
     pendingRef.current = null;
-    if (sentDocRef.current === JSON.stringify(pending.doc)) return;
+    if (sentRef.current === sentKey(pending.doc, quotesRef.current, pastesRef.current)) return;
     writeDraft(
       activeScope,
       serializeDraft({
@@ -178,6 +183,7 @@ export function useComposerDraft({
   const handleDocChange = useCallback(
     (doc: JSONContent, isEmpty: boolean) => {
       if (!activeRef.current || !scopeRef.current || !userIdRef.current) return;
+      if (sentRef.current !== sentKey(doc, quotesRef.current, pastesRef.current)) sentRef.current = null;
       pendingRef.current = { doc, isEmpty };
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(flush, SAVE_DEBOUNCE_MS);
@@ -215,7 +221,10 @@ export function useComposerDraft({
     }
     pendingRef.current = null;
     const editor = editorRef.current;
-    sentDocRef.current = editor && !editor.isEmpty() ? JSON.stringify(editor.getDocument()) : null;
+    sentRef.current =
+      editor && !editor.isEmpty()
+        ? sentKey(editor.getDocument(), quotesRef.current, pastesRef.current)
+        : null;
     const activeScope = scopeRef.current;
     if (activeRef.current && activeScope) clearDraft(activeScope);
   }, [editorRef, scopeRef]);

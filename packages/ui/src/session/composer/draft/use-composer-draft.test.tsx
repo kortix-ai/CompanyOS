@@ -64,39 +64,48 @@ function savedText(scope: DraftScope): string | null {
 }
 
 type Hook = ReturnType<typeof useComposerDraft>;
+type Lists = { uploads?: StoredUpload[]; quotes?: string[] };
 
 /** Mounts the hook the way the project-home composer wires it. */
 function mountHome(editorRef: RefObject<ComposerEditorHandle | null>, uploads: StoredUpload[]) {
   const handoffScope: RefObject<DraftScope | null> = { current: null };
-  let hook!: Hook;
-  let renderer!: ReactTestRenderer;
-  const Harness = ({ list }: { list: StoredUpload[] }) => {
+  let hook: Hook | null = null;
+  const Harness = ({ lists }: { lists: Lists }) => {
     hook = useComposerDraft({
       scope: HOME,
       handoffScope,
       editorRef,
       editorReady: true,
       attachedFiles: [],
-      uploads: list,
+      uploads: lists.uploads,
+      quotes: lists.quotes,
       hasPrefill: false,
       onRestore: () => undefined,
     });
     return null;
   };
+  let renderer: ReactTestRenderer | null = null;
   act(() => {
-    renderer = create(createElement(Harness, { list: uploads }));
+    renderer = create(createElement(Harness, { lists: { uploads } }));
   });
+  const mounted = (): ReactTestRenderer => {
+    if (!renderer) throw new Error('harness not mounted');
+    return renderer;
+  };
   return {
-    hook: () => hook,
-    setUploads: (list: StoredUpload[]) =>
+    hook: (): Hook => {
+      if (!hook) throw new Error('hook not rendered');
+      return hook;
+    },
+    setLists: (lists: Lists) =>
       act(() => {
-        renderer.update(createElement(Harness, { list }));
+        mounted().update(createElement(Harness, { lists }));
       }),
     /** The create resolved: the session page replaces project home. */
     navigate: () =>
       act(() => {
         handoffScope.current = SESSION;
-        renderer.unmount();
+        mounted().unmount();
       }),
   };
 }
@@ -137,7 +146,7 @@ describe('useComposerDraft after a send that keeps its text on screen', () => {
     expect(savedText(HOME)).toBeNull();
     // The send posted, so it releases its uploads: the tray's finished-upload
     // list changes while the editor still shows the sent text.
-    home.setUploads([]);
+    home.setLists({ uploads: [] });
     home.navigate();
 
     expect(savedText(SESSION)).toBeNull();
@@ -150,7 +159,7 @@ describe('useComposerDraft after a send that keeps its text on screen', () => {
 
     act(() => home.hook().clearSavedDraft());
     // Send does not wait for uploads; this one finishes a moment later.
-    home.setUploads([UPLOAD]);
+    home.setLists({ uploads: [UPLOAD] });
     act(() => {
       jest.advanceTimersByTime(1000);
     });
@@ -180,7 +189,7 @@ describe('useComposerDraft after a send that keeps its text on screen', () => {
     const home = mountHome(editor.ref, [UPLOAD]);
 
     act(() => home.hook().clearSavedDraft());
-    home.setUploads([]);
+    home.setLists({ uploads: [] });
     // The user writes the next message while the send is still in flight.
     editor.set('A follow-up');
     act(() => home.hook().handleDocChange(doc('A follow-up'), false));
@@ -204,5 +213,35 @@ describe('useComposerDraft after a send that keeps its text on screen', () => {
     });
 
     expect(savedText(HOME)).toBe('Retry me');
+  });
+
+  test('a sent command typed again is saved again', () => {
+    const editor = fakeEditor('/help');
+    const home = mountHome(editor.ref, []);
+
+    // A command send clears the saved draft first, then empties the editor.
+    act(() => home.hook().clearSavedDraft());
+    editor.set('');
+    act(() => home.hook().handleDocChange(doc(''), true));
+    editor.set('/help');
+    act(() => home.hook().handleDocChange(doc('/help'), false));
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    expect(savedText(HOME)).toBe('/help');
+  });
+
+  test('a quote added to the text still on screen is a new draft', () => {
+    const editor = fakeEditor('Kept after a refused send');
+    const home = mountHome(editor.ref, []);
+
+    act(() => home.hook().clearSavedDraft());
+    home.setLists({ quotes: ['a quoted line'] });
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    expect(readDraft(HOME, USER)?.quotes).toEqual(['a quoted line']);
   });
 });

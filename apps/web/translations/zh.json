@@ -1859,6 +1859,7 @@
       "deleteFailed": "无法删除分组",
       "moveUp": "上移",
       "moveDown": "下移",
+      "collapseOthers": "折叠其他",
       "reorderFailed": "无法重新排序分组",
       "moveTo": "移至分组",
       "removeFromGroup": "移出分组",

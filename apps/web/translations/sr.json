@@ -1859,6 +1859,7 @@
       "deleteFailed": "Групу није могуће обрисати",
       "moveUp": "Помери нагоре",
       "moveDown": "Помери надоле",
+      "collapseOthers": "Skupi ostale",
       "reorderFailed": "Групе није могуће преуредити",
       "moveTo": "Премести у групу",
       "removeFromGroup": "Уклони из групе",

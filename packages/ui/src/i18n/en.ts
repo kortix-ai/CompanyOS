@@ -1353,6 +1353,7 @@ const catalog = {
       "deleteFailed": "Could not delete the group",
       "moveUp": "Move up",
       "moveDown": "Move down",
+      "collapseOthers": "Collapse others",
       "reorderFailed": "Could not reorder the groups",
       "moveTo": "Move to group",
       "removeFromGroup": "Remove from group",

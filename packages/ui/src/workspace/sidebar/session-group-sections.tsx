@@ -4,7 +4,7 @@
  * Session groups in the sidebar (`session_groups` flag): the project's shared,
  * named folders of sessions, between Pinned and the rest of the list.
  *
- * Each group is a section. Its rows load when it is open (one paged list per
+ * Each group is a section header like Pinned's (no icon). Its rows load when it is open (one paged list per
  * group, any starter, any depth), and its open state is the viewer's own,
  * beside the other sections in the session-filter store. A session moves into
  * a group from its `⋯` menu or by dragging its row onto the group; a group
@@ -26,10 +26,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  ArrowsInLineVerticalIcon,
   DotsThreeIcon,
-  FolderIcon,
-  FolderOpenIcon,
   PencilSimpleIcon,
+  PlusIcon,
   TrashIcon,
 } from '@phosphor-icons/react';
 import { useMemo, useState, type DragEvent, type ReactNode, type SyntheticEvent } from 'react';
@@ -296,6 +296,10 @@ interface SessionGroupSectionsProps {
   renderNode: (session: ProjectSession) => ReactNode;
   actions: ReturnType<typeof useSessionGroupActions>;
   onRename: (group: ProjectSessionGroup) => void;
+  /** Open the New group dialog. */
+  onNewGroup: () => void;
+  /** Close every group except this one; this one stays open. */
+  onCollapseOthers: (groupId: string) => void;
 }
 
 /** Every group of the project, in order. */
@@ -321,6 +325,8 @@ function SessionGroupSection({
   renderNode,
   actions,
   onRename,
+  onNewGroup,
+  onCollapseOthers,
 }: Omit<SessionGroupSectionsProps, 'groups'> & { group: ProjectSessionGroup; groupIds: string[] }) {
   const t = useTranslations('sidebar');
   const tGroups = useTranslations('sidebar.sessionGroups');
@@ -368,11 +374,9 @@ function SessionGroupSection({
               draggingGroupId = null;
             }}
             className={cn(
-              // A group is a folder, not a section label: it takes a session
-              // row's geometry (px-2, gap-2, 16px icon, regular weight) so its
-              // icon and name sit on the same axes as the rows it holds, while
-              // Pinned and the date headers stay the only labels.
-              'group/section-header text-muted-foreground hover:bg-sidebar-row hover:text-sidebar-foreground relative flex cursor-pointer items-center gap-2 rounded-md px-2 text-sm',
+              // A group header reads like Pinned and the date headers (name,
+              // then a caret on hover), with the row hover fill and a `⋯` menu.
+              'group/section-header text-muted-foreground hover:bg-sidebar-row hover:text-sidebar-foreground relative flex cursor-pointer items-center gap-1 rounded-md px-2 text-sm font-medium',
               SESSION_ROW_HEIGHT_CLASS,
               drop.over === 'session' && 'bg-sidebar-row text-sidebar-foreground',
               // A group dropped here takes this place: a line marks the side it
@@ -383,11 +387,6 @@ function SessionGroupSection({
                 (groupIds.indexOf(draggingGroupId ?? '') < index ? 'before:bottom-0' : 'before:top-0'),
             )}
           >
-            {open ? (
-              <FolderOpenIcon aria-hidden className="size-4 shrink-0" />
-            ) : (
-              <FolderIcon aria-hidden className="size-4 shrink-0" />
-            )}
             <span className="min-w-0 truncate">{group.name}</span>
             <CaretRightSolidIcon
               aria-hidden
@@ -396,6 +395,8 @@ function SessionGroupSection({
             <SessionGroupMenu
               group={group}
               onRename={() => onRename(group)}
+              onNewGroup={onNewGroup}
+              onCollapseOthers={groupIds.length > 1 ? () => onCollapseOthers(group.group_id) : null}
               onMoveUp={moveGroupBy(groupIds, group.group_id, -1)}
               onMoveDown={moveGroupBy(groupIds, group.group_id, 1)}
               onReorder={(ids) => void actions.reorder(ids)}
@@ -406,9 +407,8 @@ function SessionGroupSection({
         <DisclosureContent contentClassName="space-y-px">
           {rows.map(renderNode)}
           {query.data !== undefined && rows.length === 0 && !query.hasNextPage ? (
-            // Indented to the name's x (px-2 + 16px icon + gap-2), one row tall,
-            // so the empty group reads as a folder with nothing in it yet.
-            <p className="text-muted-foreground flex h-8 items-center pr-2 pl-8 text-xs">
+            // Aligned to the name's x (px-2), one row tall.
+            <p className="text-muted-foreground flex h-8 items-center px-2 text-xs">
               <span className="truncate">{tGroups('empty')}</span>
             </p>
           ) : null}
@@ -427,7 +427,8 @@ function SessionGroupSection({
 }
 
 /**
- * The group header's `⋯`: Rename, Move up, Move down, Delete. Hover-revealed
+ * The group header's `⋯`: New group, then Rename, Move up, Move down, then
+ * Collapse others, then Delete. Hover-revealed
  * like a section header's; click and Enter/Space stop propagation so opening
  * it never toggles the group.
  */
@@ -435,6 +436,8 @@ function SessionGroupMenu({
   projectId,
   group,
   onRename,
+  onNewGroup,
+  onCollapseOthers,
   onMoveUp,
   onMoveDown,
   onReorder,
@@ -442,6 +445,9 @@ function SessionGroupMenu({
   projectId: string;
   group: ProjectSessionGroup;
   onRename: () => void;
+  onNewGroup: () => void;
+  /** Null while this is the only group (the item is hidden). */
+  onCollapseOthers: (() => void) | null;
   /** The order after Move up / Move down; null at that end (the item is disabled). */
   onMoveUp: string[] | null;
   onMoveDown: string[] | null;
@@ -477,6 +483,11 @@ function SessionGroupMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="right" className="w-44">
+          <DropdownMenuItem className="cursor-pointer" onSelect={() => afterClose(onNewGroup)}>
+            <PlusIcon />
+            {tGroups('newGroup')}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem className="cursor-pointer" onSelect={() => afterClose(onRename)}>
             <PencilSimpleIcon />
             {tGroups('rename')}
@@ -489,6 +500,15 @@ function SessionGroupMenu({
             <ArrowDownIcon />
             {tGroups('moveDown')}
           </DropdownMenuItem>
+          {onCollapseOthers ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="cursor-pointer" onSelect={onCollapseOthers}>
+                <ArrowsInLineVerticalIcon />
+                {tGroups('collapseOthers')}
+              </DropdownMenuItem>
+            </>
+          ) : null}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="cursor-pointer"

@@ -1859,6 +1859,7 @@
       "deleteFailed": "Impossibile eliminare il gruppo",
       "moveUp": "Sposta su",
       "moveDown": "Sposta giù",
+      "collapseOthers": "Comprimi gli altri",
       "reorderFailed": "Impossibile riordinare i gruppi",
       "moveTo": "Sposta nel gruppo",
       "removeFromGroup": "Rimuovi dal gruppo",

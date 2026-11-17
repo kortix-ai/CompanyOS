@@ -79,6 +79,7 @@ import {
 import {
   SessionGroupNameModal,
   SessionGroupSections,
+  sessionGroupSectionId,
   UngroupDropArea,
   startSessionDrag,
   useSessionGroupActions,
@@ -138,7 +139,6 @@ import {
   DotsThreeIcon,
   FolderSimpleIcon,
   FolderSimpleMinusIcon,
-  FolderSimplePlusIcon,
   PlusIcon,
   PushPinIcon,
   PushPinSlashIcon,
@@ -425,6 +425,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
   const collapsedSections = useSessionFilterStore(selectCollapsedSections(projectId));
   const collapsedSectionIds = useMemo(() => new Set(collapsedSections), [collapsedSections]);
   const toggleSectionCollapsed = useSessionFilterStore((s) => s.toggleSectionCollapsed);
+  const collapseAllSections = useSessionFilterStore((s) => s.collapseAllSections);
   // Open by default: the collapsed-sections store, as Channels and Direct
   // messages. Closed by default (`secondary`): the expanded store, as Shared
   // and Automated. Both persist per project.
@@ -707,18 +708,6 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
 
     return (
       <FadedScrollArea fadeColor="from-background" className="h-full min-h-0 space-y-px">
-        {/* Pinned is the top of the list, not a block above it. Its caret shows
-            on hover. With group headers below, the next header separates it;
-            without them, a line keeps an unpinned row from reading as pinned. */}
-        <StarterSection
-          title={tPinArchive('section')}
-          query={pinnedQuery}
-          sessions={visiblePinned}
-          open={!collapsedSectionIds.has(PINNED_SECTION_ID)}
-          onToggle={() => toggleSectionCollapsed(projectId, PINNED_SECTION_ID)}
-          renderNode={(session) => renderSessionNode(session, false)}
-          caretOnHover
-        />
         {groups.length > 0 && (
           <SessionGroupSections
             projectId={projectId}
@@ -730,11 +719,20 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
             renderNode={(session) => renderSessionNode(session, false)}
             actions={groupActions}
             onRename={setGroupToRename}
+            onNewGroup={() => setGroupCreate({ fileSessionId: null })}
+            onCollapseOthers={(groupId) =>
+              collapseAllSections(projectId, [
+                ...Array.from(collapsedSectionIds).filter((id) => id !== sessionGroupSectionId(groupId)),
+                ...groups
+                  .filter((group) => group.group_id !== groupId)
+                  .map((group) => sessionGroupSectionId(group.group_id)),
+              ])
+            }
           />
         )}
         {/* Without headers below, a line keeps the next row from reading as
-            part of the pinned rows or of the last group. */}
-        {(visiblePinned.length > 0 || groups.length > 0) && !grouped.showHeaders && (
+            part of the last group. */}
+        {groups.length > 0 && !grouped.showHeaders && (
           <div className="px-2 py-1">
             <Separator />
           </div>
@@ -816,7 +814,22 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
         secondary ? (listOpen ? 'flex-1' : 'shrink-0') : 'h-full',
       )}
     >
-      {/* The header collapses the whole list: Pinned, the time or status
+      {/* Pinned sits above Sessions, outside it: the viewer's pins stay in
+          view while the list is closed. Its caret shows on hover. */}
+      {listsReady && (pinnedQuery.sessions.length > 0 || pinnedQuery.hasNextPage) && (
+        <div className="shrink-0">
+          <StarterSection
+            title={tPinArchive('section')}
+            query={pinnedQuery}
+            sessions={visiblePinned}
+            open={!collapsedSectionIds.has(PINNED_SECTION_ID)}
+            onToggle={() => toggleSectionCollapsed(projectId, PINNED_SECTION_ID)}
+            renderNode={(session) => renderSessionNode(session, false)}
+            caretOnHover
+          />
+        </div>
+      )}
+      {/* The header collapses the whole list: the groups, the time or status
           sections, Shared, Automated. Open by default (closed when
           `secondary`); the choice persists. */}
       <Disclosure
@@ -976,7 +989,7 @@ function SessionListHeader({
             className={controlClass}
             onClick={onNewGroup}
           >
-            <FolderSimplePlusIcon className="size-4" />
+            <PlusIcon className="size-3.5" />
           </Button>
         </Hint>
       )}
@@ -1740,7 +1753,7 @@ function ProjectSessionRow({
                       className="cursor-pointer"
                       onSelect={() => deferAfterClose(() => onNewGroupFor(session.session_id))}
                     >
-                      <FolderSimplePlusIcon />
+                      <PlusIcon />
                       {tGroups('newGroupFromMenu')}
                     </DropdownMenuItem>
                   )}

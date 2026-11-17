@@ -1859,6 +1859,7 @@
       "deleteFailed": "グループを削除できませんでした",
       "moveUp": "上へ移動",
       "moveDown": "下へ移動",
+      "collapseOthers": "他を折りたたむ",
       "reorderFailed": "グループを並べ替えできませんでした",
       "moveTo": "グループに移動",
       "removeFromGroup": "グループから外す",

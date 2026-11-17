@@ -1,3 +1,4 @@
+import { extraRuns } from './agent-sessions';
 import { DEMO } from './factory-content';
 import type { LoopView } from './loops-content';
 
@@ -126,5 +127,6 @@ export function heroRuns(loop: LoopView | undefined, prompt: string): HeroRun[] 
       answer: 'Searched the docs and the code, drafted the answer and filed the bug for engineering.',
       result: { kind: 'Draft', title: 'Reply to the customer, bug ticket linked', status: 'Waiting for you to send' },
     },
+    ...extraRuns(),
   ];
 }

@@ -8,8 +8,9 @@ import { Claude } from '@kortix/ui/internal/icons/claude';
 import { TextShimmer } from '@kortix/ui/text-shimmer';
 import { cn } from '@kortix/ui';
 import { ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, CaretDownIcon, CaretRightIcon, PaperclipIcon } from '@phosphor-icons/react';
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 
+import { sessionPool } from './agent-sessions';
 import type { HeroRun } from './hero-runs';
 import { usePageDefaultDark } from './parts';
 import { AgentTile } from './section-art';
@@ -20,11 +21,24 @@ const SWIPE_PX = 40;
 const SWIPE_COOLDOWN_MS = 700;
 
 /**
- * How long each beat of the playing session lasts: the message, the context,
- * the agent working, the answer, the result, then a hold before the reel moves on.
+ * How long each beat of a session lasts: the message, the context, the agent
+ * working, the answer, the result, then a hold before the panel starts its next session.
  */
-const BEATS_MS = [700, 700, 1600, 700, 800, 3200];
+const BEATS_MS = [700, 700, 1800, 700, 800, 3600];
 const LAST_BEAT = BEATS_MS.length;
+/** The reel moves one panel on this often. Every panel plays its own sessions meanwhile. */
+const SLIDE_EVERY_MS = 4500;
+/** Panels start their first session this far apart, so they never all move at once. */
+const STAGGER_MS = 900;
+/**
+ * Only the panels near the reel's left edge are drawn: from one before it to
+ * seven after (a 2560 px screen shows about six). Every other slot is an
+ * empty box of the same width, so the track keeps its geometry with a
+ * fraction of the DOM, and only drawn panels run their clocks.
+ */
+const DRAW_BEFORE = 1;
+const DRAW_AFTER = 7;
+// DRAW_BEFORE + DRAW_AFTER + 1 must stay below the number of runs, or two copies of one run would need drawing.
 
 /** Panel width and the gap between panels. The track moves by their sum. */
 const PANEL = 'min(84vw, 400px)';
@@ -41,9 +55,10 @@ function subscribeReducedMotion(onChange: () => void) {
 }
 
 /**
- * The hero reel: agent sessions side by side. The session at the left edge
- * plays: its message arrives, the agent works, the result lands. Then the
- * reel moves one panel on. It loops without end (the list is drawn three
+ * The hero reel: agent sessions side by side, every one of them live. Each
+ * panel plays a session (the message arrives, the agent works, the result
+ * lands), then picks another of its agent's sessions at random, without end.
+ * The reel moves one panel on every few seconds. It loops without end (the list is drawn three
  * times and the track jumps back to the middle copy after each slide). It pauses on hover,
  * on focus and off screen. Reduced motion shows every session finished and
  * moves only when the arrows are used.
@@ -55,7 +70,6 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
   // `pos` indexes the tripled list; the middle copy starts at `count`.
   const [pos, setPos] = useState(count);
   const [animate, setAnimate] = useState(true);
-  const [beat, setBeat] = useState(0);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -65,7 +79,6 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
   const active = ((pos % count) + count) % count;
   const run = runs[active]!;
   const caption = run.kind === 'example' ? `${run.caption} · example` : run.caption;
-  const shownBeat = still ? LAST_BEAT : beat;
 
   useEffect(() => {
     const el = root.current;
@@ -109,15 +122,10 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
   const go = useCallback(
     (step: number, manual = false) => {
       const current = posRef.current;
-      // A press always takes control, even when its move is dropped below; the session it
-      // shows is finished, because the reader chose it to read it.
-      if (manual) {
-        setDriven(true);
-        setBeat(LAST_BEAT);
-      }
+      // A press always takes control, even when its move is dropped below.
+      if (manual) setDriven(true);
       // Mid-settle: drop the move rather than push `pos` out of the buffer.
       if (!still && (current < count || current >= 2 * count)) return;
-      if (!manual) setBeat(0);
       if (still) {
         // Reduced motion has no slide to wait for: land in the middle copy at once.
         setPos(count + ((((current + step) % count) + count) % count));
@@ -132,12 +140,12 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
     goRef.current = go;
   }, [go]);
 
-  // Play the active session one beat at a time, then move on.
+  // Move one panel on at a steady pace; the panels play on their own.
   useEffect(() => {
     if (still || driven || hovered || focused || !visible) return;
-    const id = setTimeout(() => (beat < LAST_BEAT ? setBeat(beat + 1) : go(1)), BEATS_MS[Math.min(beat, LAST_BEAT - 1)]);
-    return () => clearTimeout(id);
-  }, [beat, still, driven, hovered, focused, visible, go]);
+    const id = setInterval(() => go(1), SLIDE_EVERY_MS);
+    return () => clearInterval(id);
+  }, [still, driven, hovered, focused, visible, go]);
 
   // After a slide ends outside the middle copy, jump back into it with no animation.
   // A timer, not `transitionend`: that event does not fire in a hidden tab.
@@ -162,7 +170,6 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
     };
   }, [animate]);
 
-  const panels = [...runs, ...runs, ...runs];
   const track: CSSProperties = {
     gap: GAP,
     transform: `translate3d(calc(-${pos} * (${PANEL} + ${GAP})), 0, 0)`,
@@ -191,13 +198,14 @@ export function SessionReel({ runs }: { runs: HeroRun[] }) {
           animate && !still && 'ease-default transition-transform duration-slower',
         )}
       >
-        {panels.map((item, index) => (
-          <SessionPanel
-            key={`${item.id}-${index}`}
+        {runs.map((item, index) => (
+          <RunPanels
+            key={item.id}
             run={item}
-            playing={index === pos}
-            // Sessions already passed stay finished; the ones still to come show only their message.
-            beat={index === pos ? shownBeat : still || index < pos ? LAST_BEAT : 0}
+            index={index}
+            count={count}
+            pos={pos}
+            live={visible}
             still={still}
             instant={!animate || still}
           />
@@ -284,24 +292,113 @@ function WorkFold({ run, working }: { run: HeroRun; working: boolean }) {
   );
 }
 
+/** Where one run's panel stands: the session it plays, its beat, and what the reader sent it. */
+type Play = { run: HeroRun; beat: number; round: number; sent: Array<{ message: string; to: string }>; working: boolean };
+
+/**
+ * One run's clock. It plays the run's sessions beat by beat and, when one
+ * ends, picks another at random, never the same twice in a row. It holds
+ * while the reader points at or types into the panel.
+ */
+function useRunPlay(first: HeroRun, live: boolean, delay: number, still: boolean) {
+  const pool = useMemo(() => sessionPool(first), [first]);
+  const [index, setIndex] = useState(0);
+  const [round, setRound] = useState(0);
+  const [beat, setBeat] = useState(0);
+  const [held, setHeld] = useState(false);
+  const [sent, setSent] = useState<Play['sent']>([]);
+  const playing = live && !still && !held && sent.length === 0;
+
+  useEffect(() => {
+    if (!playing) return;
+    const wait = round === 0 && beat === 0 ? delay + BEATS_MS[0]! : BEATS_MS[Math.min(beat, LAST_BEAT - 1)]!;
+    const id = setTimeout(() => {
+      if (beat < LAST_BEAT) {
+        setBeat(beat + 1);
+        return;
+      }
+      setIndex(pool.length < 2 ? 0 : (index + 1 + Math.floor(Math.random() * (pool.length - 1))) % pool.length);
+      setRound((value) => value + 1);
+      setBeat(0);
+    }, wait);
+    return () => clearTimeout(id);
+  }, [playing, beat, round, delay, index, pool.length]);
+
+  const play: Play = {
+    run: pool[index] ?? first,
+    beat: still ? LAST_BEAT : beat,
+    round,
+    sent,
+    working: playing && beat === 2,
+  };
+  return {
+    play,
+    hold: setHeld,
+    send: (message: string, to: string) => setSent((list) => [...list, { message, to }]),
+  };
+}
+
+/**
+ * One run, drawn three times (once per copy of the list): one clock, so the
+ * copies always show the same moment and the jump back to the middle copy
+ * never changes what the reader sees. Flex `order` puts each copy in its slot.
+ */
+function RunPanels({ run, index, count, pos, live, still, instant }: { run: HeroRun; index: number; count: number; pos: number; live: boolean; still: boolean; instant: boolean }) {
+  const slots = [0, 1, 2].map((copy) => copy * count + index);
+  const drawn = (slot: number) => slot >= pos - DRAW_BEFORE && slot <= pos + DRAW_AFTER;
+  // The clock runs only while one of the run's copies is drawn.
+  const { play, hold, send } = useRunPlay(run, live && slots.some(drawn), index * STAGGER_MS, still);
+  // The window is narrower than one copy of the list, so at most one copy is drawn. It is one
+  // element whose `order` moves: the jump back to the middle copy never remounts it.
+  const shown = slots.find(drawn);
+  return (
+    <>
+      {slots
+        .filter((slot) => slot !== shown)
+        .map((slot) => (
+          <div key={slot} aria-hidden style={{ width: PANEL, order: slot }} className="shrink-0" />
+        ))}
+      {shown === undefined ? null : <SessionPanel key="panel" order={shown} run={play.run} play={play} instant={instant} onHold={hold} onSend={send} />}
+    </>
+  );
+}
+
 /** One session window: its header, the conversation and a reply box. */
-function SessionPanel({ run, playing, beat, still, instant }: { run: HeroRun; playing: boolean; beat: number; still: boolean; instant: boolean }) {
-  const working = playing && !still && beat === 2;
+function SessionPanel({
+  order,
+  run,
+  play,
+  instant,
+  onHold,
+  onSend,
+}: {
+  /** The panel's slot in the tripled list. */
+  order: number;
+  run: HeroRun;
+  /** Where this run's session stands; the reel keeps it, so every copy of the run shows the same. */
+  play: Play;
+  instant: boolean;
+  onHold: (held: boolean) => void;
+  onSend: (message: string, to: string) => void;
+}) {
+  const { beat, round, sent, working } = play;
   const agent = run.host.kind === 'claude-code' ? 'kortix' : run.host.slug;
-  // What the reader typed into this window, with the reply each message got.
-  const [sent, setSent] = useState<Array<{ message: string; to: string }>>([]);
   const end = useRef<HTMLDivElement>(null);
+  const shownBeat = beat;
   useEffect(() => {
     if (sent.length) end.current?.scrollIntoView({ block: 'nearest' });
   }, [sent.length]);
   return (
     <article
-      style={{ width: PANEL }}
+      style={{ width: PANEL, order }}
+      onMouseEnter={() => onHold(true)}
+      onMouseLeave={() => onHold(false)}
+      onFocus={() => onHold(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) onHold(false);
+      }}
       className={cn(
-        'bg-card flex h-[520px] shrink-0 flex-col overflow-hidden rounded-xl border',
-        !instant && 'transition-[opacity,border-color] duration-slower ease-out',
-        // The playing window wears the one accent: a blue edge, so the eye lands on the live session.
-        playing ? 'border-kortix-base opacity-100' : 'border-border opacity-50',
+        'bg-card border-border flex h-[520px] shrink-0 flex-col overflow-hidden rounded-xl border',
       )}
     >
       <header className="flex h-16 shrink-0 items-center justify-between gap-3 px-4">
@@ -315,25 +412,26 @@ function SessionPanel({ run, playing, beat, still, instant }: { run: HeroRun; pl
           )}
           <span className="text-foreground truncate text-sm font-medium">{run.host.kind === 'claude-code' ? 'Claude Code' : run.host.name}</span>
         </div>
-        <span
-          className={cn(
-            'shrink-0 truncate rounded-md px-2 py-0.5 text-xs',
-            playing ? 'bg-kortix-base/15 text-kortix-base' : 'border-border text-muted-foreground border',
-          )}
-        >
+        <span className="border-border text-muted-foreground shrink-0 truncate rounded-md border px-2 py-0.5 text-xs">
           {run.source}
         </span>
       </header>
 
       {/* The conversation scrolls on its own: an opened fold can be longer than the window. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 pt-2 pb-2 [scrollbar-width:none]">
+      <div
+        key={`${run.id}-${round}`}
+        className={cn(
+          'flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 pt-2 pb-2 [scrollbar-width:none]',
+          round > 0 && 'animate-in fade-in duration-slow',
+        )}
+      >
         <div className="flex flex-col items-end gap-2">
           <p className="bg-muted text-foreground ml-8 rounded-lg px-3 py-2.5 text-sm">
             {/* The clamp sits on the text, not the padded bubble, so no half line shows below it. */}
             <span className="line-clamp-3 whitespace-pre-line">{run.ask}</span>
           </p>
           {run.context ? (
-            <Beat instant={instant} at={1} beat={beat}>
+            <Beat instant={instant} at={1} beat={shownBeat}>
               <span className="text-muted-foreground text-xs">
                 <span className="text-foreground">{run.context}</span> added to context
               </span>
@@ -341,15 +439,15 @@ function SessionPanel({ run, playing, beat, still, instant }: { run: HeroRun; pl
           ) : null}
         </div>
 
-        <Beat instant={instant} at={2} beat={beat} className="flex flex-col gap-3">
+        <Beat instant={instant} at={2} beat={shownBeat} className="flex flex-col gap-3">
           <WorkFold run={run} working={working} />
-          <Beat instant={instant} at={3} beat={beat}>
+          <Beat instant={instant} at={3} beat={shownBeat}>
             <p className="text-foreground text-sm text-pretty">{run.answer}</p>
           </Beat>
         </Beat>
 
         {run.rows ? (
-          <Beat instant={instant} at={4} beat={beat}>
+          <Beat instant={instant} at={4} beat={shownBeat}>
             <ul className="border-border divide-border divide-y rounded-lg border">
               {run.rows.map((row) => (
                 <li key={row.label + row.text} className="flex items-baseline gap-3 px-3 py-2 text-xs">
@@ -362,7 +460,7 @@ function SessionPanel({ run, playing, beat, still, instant }: { run: HeroRun; pl
         ) : null}
 
         {run.result ? (
-          <Beat instant={instant} at={4} beat={beat}>
+          <Beat instant={instant} at={4} beat={shownBeat}>
             <div className="border-border flex flex-col gap-1 rounded-lg border px-3 py-2.5">
               <span className="text-muted-foreground font-mono text-xs">{run.result.kind}</span>
               <span className="text-foreground line-clamp-2 text-sm font-medium">{run.result.title}</span>
@@ -386,7 +484,7 @@ function SessionPanel({ run, playing, beat, still, instant }: { run: HeroRun; pl
       </div>
 
       <div className="shrink-0 p-2.5">
-        <LiveComposer defaultAgent={agent} busy={working} onSend={(message, to) => setSent((list) => [...list, { message, to }])} />
+        <LiveComposer defaultAgent={agent} busy={working} onSend={onSend} />
       </div>
     </article>
   );

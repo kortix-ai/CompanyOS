@@ -16,6 +16,7 @@ import { heroRuns } from './hero-runs';
 import type { LoopView } from './loops-content';
 import { CopyButton, CopyPromptMarketingButton, GhostButton, Mark, usePageDefaultDark, useSetupTarget } from './parts';
 import { EngineGrid } from './engine-grid';
+import { PlanFlow } from './plan-flow';
 import { AgentTile, ApprovalArt, ComposerArt, ConnectArt, FindArt, ProveArt, SignalArt } from './section-art';
 import { SessionReel } from './session-reel';
 
@@ -246,11 +247,12 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
           </ul>
         </section>
 
-        <section className={cn(COLUMN, 'py-16 lg:py-20')}>
+        <section className={cn(COLUMN, SECTION)}>
           <SplitHeading
             title="Bring the plan you already pay for"
-            lead="Your Claude or ChatGPT subscription, or any API key. A 3 a.m. run uses it too."
+            lead="Connect your Claude or ChatGPT subscription, or any API key."
           />
+          <PlanFlow />
         </section>
 
         <section id="engine" className={cn(COLUMN, SECTION, 'scroll-mt-16')}>
@@ -271,6 +273,7 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
       {/* The site's footer: its closing call to action carries this page's copy and the copy action. */}
       <Footer
         linkOrigin={KORTIX}
+        themeToggle={false}
         cta={{
           title: 'One prompt.',
           subtitle: 'Your whole company, looped.',

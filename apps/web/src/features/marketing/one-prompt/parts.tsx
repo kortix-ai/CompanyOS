@@ -1,14 +1,12 @@
 'use client';
 
 import { PROD_TARGET, setupPromptFor, setupTarget, type SetupTarget } from '@kortix/shared/setup-guide';
-import { Copy } from '@kortix/ui/icons';
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
 import { Claude } from '@kortix/ui/internal/icons/claude';
 import { SolidCheckIcon } from '@kortix/ui/internal/icons/solid-check-icon';
 import { Kbd } from '@kortix/ui/kbd';
 import { Codex } from '@kortix/ui/internal/icons/codex';
 import { cn } from '@kortix/ui';
-import { CheckIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
@@ -86,7 +84,7 @@ export function CopyButton({
   variant = 'accent',
   text,
   label = 'Copy prompt',
-  icon = 'copy',
+  icon = 'none',
 }: {
   /** `sm` is for the header only, as on the site navbar. */
   size?: 'sm' | 'md';
@@ -94,8 +92,8 @@ export function CopyButton({
   variant?: 'primary' | 'secondary' | 'accent';
   text?: string;
   label?: string;
-  /** What follows the label: the copy mark, nothing, or the page-wide key that copies (only one button should take it). */
-  icon?: 'copy' | 'none' | 'shortcut';
+  /** What follows the label: nothing (a check once copied), or the page-wide key that copies (only one button should take it). */
+  icon?: 'none' | 'shortcut';
 }) {
   const target = useSetupTarget();
   const { copied, copy } = useCopy(text ?? setupPromptFor(target));
@@ -128,7 +126,7 @@ export function CopyButton({
       <span aria-live="polite" className="sr-only">
         {copied ? 'Copied' : ''}
       </span>
-      {icon === 'copy' ? copied ? <CheckIcon /> : <Copy /> : null}
+      {icon === 'none' && copied ? <SolidCheckIcon aria-hidden className="size-4" /> : null}
       {icon === 'shortcut' ? copied ? <SolidCheckIcon aria-hidden className="size-5!" /> : <Kbd className="bg-background/20 size-5 text-inherit">{COPY_KEY.toUpperCase()}</Kbd> : null}
     </MarketingButton>
   );
@@ -143,7 +141,7 @@ export function CopyPromptMarketingButton({ text, className }: { text: string; c
       <span aria-live="polite" className="sr-only">
         {copied ? 'Copied' : ''}
       </span>
-      {copied ? <CheckIcon /> : <Copy />}
+      {copied ? <SolidCheckIcon className="size-4" /> : null}
     </MarketingButton>
   );
 }

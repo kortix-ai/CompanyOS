@@ -115,6 +115,14 @@ export function useComposerDraft({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoredKeyRef = useRef<string | null>(null);
   const activeRef = useRef(active);
+  /**
+   * The document the last send left on screen (`clearOnSend={false}`, project
+   * home), serialized. That text is sent, not a draft: a later save of the
+   * same document (an attachment released or finishing after Send) must not
+   * bring it back, and the home handoff would then carry it into the new
+   * session's composer. Any edit makes a different document, which saves.
+   */
+  const sentDocRef = useRef<string | null>(null);
 
   /**
    * Write whatever is pending, now.
@@ -134,6 +142,7 @@ export function useComposerDraft({
     const pending = pendingRef.current;
     if (!activeScope || !userIdRef.current || !pending) return;
     pendingRef.current = null;
+    if (sentDocRef.current === JSON.stringify(pending.doc)) return;
     writeDraft(
       activeScope,
       serializeDraft({
@@ -205,9 +214,11 @@ export function useComposerDraft({
       timerRef.current = null;
     }
     pendingRef.current = null;
+    const editor = editorRef.current;
+    sentDocRef.current = editor && !editor.isEmpty() ? JSON.stringify(editor.getDocument()) : null;
     const activeScope = scopeRef.current;
     if (activeRef.current && activeScope) clearDraft(activeScope);
-  }, [scopeRef]);
+  }, [editorRef, scopeRef]);
 
   /**
    * Flush on every way a page can go away without unmounting cleanly.

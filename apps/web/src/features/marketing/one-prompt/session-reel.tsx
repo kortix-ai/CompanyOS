@@ -1,15 +1,17 @@
 'use client';
 
+import { Button } from '@kortix/ui/button';
 import { ChainOfThought } from '@kortix/ui/chain-of-thought';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@kortix/ui/dropdown-menu';
 import { Disclosure, DisclosureContent, DisclosureTrigger } from '@kortix/ui/disclosure';
 import { Claude } from '@kortix/ui/internal/icons/claude';
 import { TextShimmer } from '@kortix/ui/text-shimmer';
 import { cn } from '@kortix/ui';
-import { ArrowLeftIcon, ArrowRightIcon, CaretRightIcon } from '@phosphor-icons/react';
+import { ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, CaretDownIcon, CaretRightIcon, PaperclipIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 
 import type { HeroRun } from './hero-runs';
-import { AgentTile, ChatComposer } from './section-art';
+import { AgentTile } from './section-art';
 
 /** A horizontal trackpad swipe this long (px of `deltaX`) moves the reel one session. */
 const SWIPE_PX = 40;
@@ -285,6 +287,12 @@ function WorkFold({ run, working }: { run: HeroRun; working: boolean }) {
 function SessionPanel({ run, playing, beat, still, instant }: { run: HeroRun; playing: boolean; beat: number; still: boolean; instant: boolean }) {
   const working = playing && !still && beat === 2;
   const agent = run.host.kind === 'claude-code' ? 'kortix' : run.host.slug;
+  // What the reader typed into this window, with the reply each message got.
+  const [sent, setSent] = useState<Array<{ message: string; to: string }>>([]);
+  const end = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (sent.length) end.current?.scrollIntoView({ block: 'nearest' });
+  }, [sent.length]);
   return (
     <article
       style={{ width: PANEL }}
@@ -350,11 +358,94 @@ function SessionPanel({ run, playing, beat, still, instant }: { run: HeroRun; pl
             </div>
           </Beat>
         ) : null}
+
+        {sent.map((item, index) => (
+          <div key={index} className="flex flex-col gap-3">
+            <p className="bg-muted text-foreground ml-8 self-end rounded-lg px-3 py-2.5 text-sm whitespace-pre-wrap">{item.message}</p>
+            <p className="text-muted-foreground text-sm text-pretty">
+              In your workspace, <span className="text-foreground">{item.to}</span> runs this on your repo. Copy the prompt above to set it up.
+            </p>
+          </div>
+        ))}
+        <div ref={end} />
       </div>
 
-      <div aria-hidden className="shrink-0 p-2.5">
-        <ChatComposer agent={agent} busy={working} />
+      <div className="shrink-0 p-2.5">
+        <LiveComposer defaultAgent={agent} busy={working} onSend={(message, to) => setSent((list) => [...list, { message, to }])} />
       </div>
     </article>
+  );
+}
+
+/** The agents the picker offers: the factory and the teams a description can loop. */
+const PICKER_AGENTS = ['factory', 'marketing', 'sales', 'support', 'recruiting'];
+
+/**
+ * The Kortix chat input, live: type into it, Enter sends (Shift+Enter is a new
+ * line), the agent picker opens a menu, and send stays a secondary button.
+ */
+function LiveComposer({ defaultAgent, busy, onSend }: { defaultAgent: string; busy: boolean; onSend: (message: string, agent: string) => void }) {
+  const [text, setText] = useState('');
+  const [agent, setAgent] = useState(defaultAgent);
+  const agents = PICKER_AGENTS.includes(agent) ? PICKER_AGENTS : [agent, ...PICKER_AGENTS];
+  const send = () => {
+    const message = text.trim();
+    if (!message) return;
+    onSend(message, agent);
+    setText('');
+  };
+  return (
+    <div className="border-border bg-card focus-within:border-foreground/20 flex flex-col gap-2 rounded-xl border p-2 transition-colors">
+      <textarea
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            send();
+          }
+        }}
+        rows={2}
+        aria-label={`Message ${agent}`}
+        placeholder="Reply…"
+        className="text-foreground placeholder:text-muted-foreground w-full resize-none bg-transparent px-1.5 pt-1 text-sm outline-none"
+      />
+      <div className="flex items-center gap-1">
+        <Button type="button" variant="ghost" size="icon-sm" aria-label="Attach a file" className="text-muted-foreground">
+          <PaperclipIcon className="size-4" />
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="ghost" size="xs" className="text-foreground gap-1.5 px-1.5 text-xs">
+              <AgentTile slug={agent} />
+              {agent}
+              <CaretDownIcon className="text-muted-foreground size-3" />
+            </Button>
+          </DropdownMenuTrigger>
+          {/* The menu renders in a portal outside the page's dark wrapper: it carries the dark theme itself. */}
+          <DropdownMenuContent align="start" className="dark min-w-40">
+            <DropdownMenuRadioGroup value={agent} onValueChange={setAgent}>
+              {agents.map((slug) => (
+                <DropdownMenuRadioItem key={slug} value={slug} className="gap-2">
+                  <AgentTile slug={slug} />
+                  {slug}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button
+          type="button"
+          variant="secondary"
+          size="icon-sm"
+          aria-label={busy ? 'Working' : 'Send'}
+          disabled={!busy && !text.trim()}
+          onClick={send}
+          className="ml-auto rounded-full"
+        >
+          {busy ? <span className="size-2 rounded-xs bg-current" /> : <ArrowUpIcon className="size-3.5" />}
+        </Button>
+      </div>
+    </div>
   );
 }

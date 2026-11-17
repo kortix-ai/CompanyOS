@@ -43,8 +43,9 @@ export function EngineGrid() {
             <span
               key={i}
               className={cn(
-                'block whitespace-pre transition-opacity duration-normal ease-out',
-                focus && !LINE_KEYS[i]!.includes(focus) && 'opacity-30',
+                // The line bleeds to the panel's edges, so its highlight is a full-width band.
+                '-mx-6 block px-6 whitespace-pre transition-[opacity,background-color] duration-normal ease-out',
+                focus && (LINE_KEYS[i]!.includes(focus) ? 'bg-kortix-base/15' : 'opacity-30'),
               )}
             >
               {line === '' ? ' ' : <YamlLine line={line} />}

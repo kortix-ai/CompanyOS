@@ -14,7 +14,7 @@ import { DEMO } from './factory-content';
 
 /** One window in an art cell: a card on the page surface, faded where the cell crops it. */
 function Pane({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn('border-border bg-card w-full max-w-sm min-w-0 rounded-xl border p-2 shadow-2xl shadow-black/40', className)}>{children}</div>;
+  return <div className={cn('border-border bg-card w-full max-w-sm min-w-0 rounded-xl border p-2 shadow-xl shadow-black/15', className)}>{children}</div>;
 }
 
 function Row({ lead, text, meta, dim }: { lead: ReactNode; text: string; meta?: ReactNode; dim?: boolean }) {
@@ -170,12 +170,12 @@ export function ChatComposer({
 
 /** A card-sized composer with a message in it. */
 export function ComposerArt({ text, agent, tone = 'dark' }: { text: string; agent: string; tone?: 'dark' | 'light' }) {
-  return <ChatComposer text={text} agent={agent} tone={tone} className={cn('max-w-sm', tone === 'dark' && 'shadow-2xl shadow-black/40')} />;
+  return <ChatComposer text={text} agent={agent} tone={tone} className={cn('max-w-sm', tone === 'dark' && 'shadow-xl shadow-black/15')} />;
 }
 
 function Approval({ slug, title, status, time, className }: { slug: string; title: string; status: string; time: string; className?: string }) {
   return (
-    <div className={cn('border-border bg-card flex items-center gap-3 rounded-xl border p-3 shadow-2xl shadow-black/40', className)}>
+    <div className={cn('border-border bg-card flex items-center gap-3 rounded-xl border p-3 shadow-xl shadow-black/15', className)}>
       <AgentTile slug={slug} size={21} />
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="text-foreground truncate text-sm font-medium">{title}</span>

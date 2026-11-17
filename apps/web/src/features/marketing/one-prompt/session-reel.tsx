@@ -299,15 +299,29 @@ function SessionPanel({ run, playing, beat, still, instant }: { run: HeroRun; pl
       className={cn(
         'bg-card flex h-[520px] shrink-0 flex-col overflow-hidden rounded-xl border',
         !instant && 'transition-[opacity,border-color] duration-slower ease-out',
-        playing ? 'border-foreground/15 opacity-100' : 'border-border opacity-50',
+        // The playing window wears the one accent: a blue edge, so the eye lands on the live session.
+        playing ? 'border-kortix-base opacity-100' : 'border-border opacity-50',
       )}
     >
-      <header className="flex h-12 shrink-0 items-center justify-between gap-3 px-4">
-        <div className="flex min-w-0 items-center gap-2">
-          {run.host.kind === 'claude-code' ? <Claude className="size-4 shrink-0" /> : <AgentTile slug={run.host.slug} />}
+      <header className="flex h-16 shrink-0 items-center justify-between gap-3 px-4">
+        <div className="flex min-w-0 items-center gap-2.5">
+          {run.host.kind === 'claude-code' ? (
+            <span className="border-border inline-flex size-7 shrink-0 items-center justify-center rounded-md border">
+              <Claude className="size-4" />
+            </span>
+          ) : (
+            <AgentTile slug={run.host.slug} size={21} />
+          )}
           <span className="text-foreground truncate text-sm font-medium">{run.host.kind === 'claude-code' ? 'Claude Code' : run.host.name}</span>
         </div>
-        <span className="border-border text-muted-foreground shrink-0 truncate rounded-md border px-2 py-0.5 text-xs">{run.source}</span>
+        <span
+          className={cn(
+            'shrink-0 truncate rounded-md px-2 py-0.5 text-xs',
+            playing ? 'bg-kortix-base/15 text-kortix-base' : 'border-border text-muted-foreground border',
+          )}
+        >
+          {run.source}
+        </span>
       </header>
 
       {/* The conversation scrolls on its own: an opened fold can be longer than the window. */}
@@ -422,8 +436,7 @@ function LiveComposer({ defaultAgent, busy, onSend }: { defaultAgent: string; bu
               <CaretDownIcon className="text-muted-foreground size-3" />
             </Button>
           </DropdownMenuTrigger>
-          {/* The menu renders in a portal outside the page's dark wrapper: it carries the dark theme itself. */}
-          <DropdownMenuContent align="start" className="dark min-w-40">
+          <DropdownMenuContent align="start" className="min-w-40">
             <DropdownMenuRadioGroup value={agent} onValueChange={setAgent}>
               {agents.map((slug) => (
                 <DropdownMenuRadioItem key={slug} value={slug} className="gap-2">

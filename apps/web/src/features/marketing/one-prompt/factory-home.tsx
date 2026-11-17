@@ -142,7 +142,7 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
   const name = first?.name ?? 'Software Factory';
   const reference = first ? REFERENCE_REPOS[first.id] : undefined;
   return (
-    <div className="dark bg-background text-foreground relative min-h-screen overflow-x-clip">
+    <div className="bg-background text-foreground relative min-h-screen overflow-x-clip">
       <header className="border-border bg-background/80 sticky top-0 z-30 border-b backdrop-blur">
         <div className={cn(COLUMN, 'flex h-16 items-center justify-between gap-4')}>
           <div className="flex items-center gap-4">
@@ -167,7 +167,12 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
       </header>
 
       <main>
-        <section className={COLUMN}>
+        <section className="relative">
+          {/* The Kortix dither as a flat band behind the hero copy: it fades out before the reel. */}
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[560px] opacity-60 [mask-image:linear-gradient(to_bottom,#000,transparent_85%),radial-gradient(70%_100%_at_70%_0,#000,transparent)] [mask-composite:intersect]">
+            <DitherField className="text-kortix-base" />
+          </div>
+          <div className={cn(COLUMN, 'relative')}>
           <div className="flex flex-col items-start gap-6 pt-20 pb-14 lg:pt-32 lg:pb-20">
             <span className="text-muted-foreground text-sm">Loopmaxxing for dev teams</span>
             <h1 className="text-foreground max-w-5xl text-4xl font-medium tracking-tight text-balance sm:text-6xl lg:text-7xl">
@@ -182,6 +187,7 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
           </div>
           <div className="pb-8">
             <SessionReel runs={runs} />
+          </div>
           </div>
         </section>
 
@@ -261,7 +267,6 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
       {/* The site's footer: its closing call to action carries this page's copy and the copy action. */}
       <Footer
         linkOrigin={KORTIX}
-        themeToggle={false}
         cta={{
           title: 'One prompt.',
           subtitle: 'Your whole company, looped.',

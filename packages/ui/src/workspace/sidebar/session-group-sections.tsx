@@ -390,7 +390,8 @@ function SessionGroupSection({
             <span className="min-w-0 truncate">{group.name}</span>
             <CaretRightSolidIcon
               aria-hidden
-              className="duration-normal size-4 shrink-0 opacity-0 transition-transform ease-out group-hover/section-header:opacity-100 group-data-[state=open]/section:rotate-90"
+              // Always shown: the caret is what tells a group from a date header.
+              className="duration-normal size-4 shrink-0 transition-transform ease-out group-data-[state=open]/section:rotate-90"
             />
             <SessionGroupMenu
               group={group}

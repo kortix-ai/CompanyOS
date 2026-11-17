@@ -1,13 +1,10 @@
-"use client";
+'use client';
 
-import {
-  ComputerPromoSlide,
-  useComputerPromoDismissed,
-} from "./project-computer-nav";
-import { useMcpPromo } from "./project-mcp-nav";
-import { PromoSwitcher, type PromoSlide } from "./promo-card";
+import { ComputerPromoSlide, useComputerPromoDismissed } from './project-computer-nav';
+import { useMcpPromo } from './project-mcp-nav';
+import { PromoSwitcher, type PromoSlide } from './promo-card';
 
-import { useTranslations } from "../../../i18n";
+import { useTranslations } from '../../../i18n';
 
 /**
  * The sidebar's promo card: Kortix in the chat apps people already use, then
@@ -24,24 +21,18 @@ export function ProjectPromoCards({
   onOpenMcp: () => void;
   onOpenComputer: () => void;
 }) {
-  const t = useTranslations("sidebar");
+  const t = useTranslations('sidebar');
   const mcp = useMcpPromo(onOpenMcp);
   const [computerDismissed, dismissComputer] = useComputerPromoDismissed();
   const render = (computer: PromoSlide | null) => (
     <PromoSwitcher
-      label={t("promos")}
-      slides={[mcp, computer].filter(
-        (slide): slide is PromoSlide => slide !== null,
-      )}
+      label={t('promos')}
+      slides={[mcp, computer].filter((slide): slide is PromoSlide => slide !== null)}
     />
   );
   if (computerDismissed) return render(null);
   return (
-    <ComputerPromoSlide
-      projectId={projectId}
-      onOpenConnect={onOpenComputer}
-      onDismiss={dismissComputer}
-    >
+    <ComputerPromoSlide projectId={projectId} onOpenConnect={onOpenComputer} onDismiss={dismissComputer}>
       {render}
     </ComputerPromoSlide>
   );

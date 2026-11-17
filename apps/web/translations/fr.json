@@ -1577,7 +1577,8 @@
     "new": "Nouveau",
     "mcpPromo": {
       "title": "Utilisez Kortix dans ChatGPT et Claude",
-      "description": "Ajoutez Kortix au chat IA que vous utilisez déjà."
+      "description": "Ajoutez Kortix au chat IA que vous utilisez déjà. Lancez des agents, suivez leur travail et utilisez vos connecteurs depuis là.",
+      "cta": "Connecter"
     },
     "promos": "Façons d’utiliser Kortix",
     "upgrade": "Améliorer",
@@ -22721,7 +22722,9 @@
     "promo": {
       "title": "Connectez votre ordinateur de travail",
       "titleThis": "Connecter cet ordinateur",
-      "description": "Les agents utilisent vos fichiers, votre terminal et vos apps."
+      "description": "Les agents utilisent vos fichiers locaux, lancent des programmes et se servent des apps de votre écran. Vous décidez de ce qu'ils peuvent faire.",
+      "cta": "Connecter",
+      "ctaOneClick": "Connecter en un clic"
     },
     "dismissPromo": "Masquer",
     "useCliInstead": "Utiliser la CLI à la place",

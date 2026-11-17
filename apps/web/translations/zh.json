@@ -1577,7 +1577,8 @@
     "new": "新",
     "mcpPromo": {
       "title": "在 ChatGPT 和 Claude 中使用 Kortix",
-      "description": "把 Kortix 添加到你已在用的 AI 聊天中。"
+      "description": "把 Kortix 添加到你已在用的 AI 聊天中。在那里启动智能体、跟进它们的工作并使用你的连接器。",
+      "cta": "连接"
     },
     "promos": "Kortix 的更多用法",
     "upgrade": "升级",
@@ -22721,7 +22722,9 @@
     "promo": {
       "title": "连接你的工作电脑",
       "titleThis": "连接这台电脑",
-      "description": "智能体可以使用你的文件、终端和应用。"
+      "description": "智能体可以处理你的本地文件、运行程序并操作屏幕上的应用。由你决定它们能做什么。",
+      "cta": "连接",
+      "ctaOneClick": "一键连接"
     },
     "dismissPromo": "关闭",
     "useCliInstead": "改用 CLI",

@@ -51,7 +51,7 @@ export function ConnectArt() {
       <Row lead={dot(true)} text="Slack" meta={state('Connected')} />
       <Row lead={dot(true)} text="Sentry" meta={state('Connected')} />
       <div className="border-border mx-2.5 my-1.5 border-t" />
-      <Row lead={dot(true)} text="SENTRY_DSN" meta="Name only, value encrypted" />
+      <Row lead={dot(true)} text="SENTRY_DSN" meta="Value encrypted" />
     </Pane>
   );
 }
@@ -103,7 +103,7 @@ export function ComposerArt({ text, tone = 'dark' }: { text: string; tone?: 'dar
     <div
       className={cn(
         'flex w-full max-w-sm min-w-0 flex-col gap-6 rounded-xl border p-3 shadow-2xl',
-        tone === 'light' ? 'border-background/10 bg-background/5 text-background shadow-black/10' : 'border-border bg-card text-foreground shadow-black/40',
+        tone === 'light' ? 'border-background/10 bg-background/5 text-background shadow-none' : 'border-border bg-card text-foreground shadow-black/40',
       )}
     >
       <span className="text-sm">{text}</span>

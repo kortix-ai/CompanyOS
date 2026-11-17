@@ -4,13 +4,13 @@ import { KortixLogo } from '@/components/sidebar/kortix-logo';
 import { DitherField } from '@/features/marketing/kit/dither-field';
 import { YamlLine } from '@/features/marketing/code-panel';
 import { loopPrompt, REFERENCE_REPOS, setupPromptFor } from '@kortix/shared/setup-guide';
-import { AgentMark } from '@kortix/ui/internal/components/agent-mark';
+import { AgentMarkGlyph, agentMarkTileClass, agentMarkVars } from '@kortix/ui/internal/components/agent-mark';
 import { cn } from '@kortix/ui';
 import { ArrowRightIcon, PlusIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { useMemo, type ReactNode } from 'react';
 
-import { ENGINE, FAQ, MANIFEST, TEAMS, TOOLS } from './factory-content';
+import { ENGINE, FAQ, MANIFEST, PLANS, TEAMS } from './factory-content';
 import { heroRuns } from './hero-runs';
 import type { LoopView } from './loops-content';
 import { CopyButton, GhostButton, Mark, useSetupTarget } from './parts';
@@ -47,8 +47,13 @@ const STEPS = [
   },
 ];
 
-/** Hairlines between the four cells: one column on a phone, two from `md`. */
-const CELL_BORDERS = ['border-b md:border-r', 'border-b', 'border-b md:border-r md:border-b-0', ''];
+/** The footer: each group's links as [label, href]. */
+const FOOTER: Array<{ title: string; links: Array<[string, string]> }> = [
+  { title: 'Product', links: [['How it works', '#how'], ['Factories', '#factories'], ['kortix.yaml', '#engine']] },
+  { title: 'Developers', links: [['Docs', '/docs/developers'], ['The setup guide', '/setup.md'], ['GitHub', 'https://github.com/kortix-ai/CompanyOS']] },
+  { title: 'Company', links: [['Kortix', KORTIX], ['Careers', '/careers'], ['Contact', '/contact']] },
+  { title: 'Legal', links: [['Terms', '/legal/terms'], ['Privacy', '/legal?tab=privacy']] },
+];
 
 /** The page's one action and where to paste it. */
 function PromptCta({ prompt, className }: { prompt?: string; className?: string }) {
@@ -90,19 +95,28 @@ function ArtCell({ art, title, body, className }: { art: ReactNode; title: strin
   );
 }
 
-/** One tall card: the art in the middle, the name and one line at the bottom. */
+/** One tall card: the art in the middle, the name and one line at the bottom. Every card keeps an action row, so the titles line up. */
 function TallCard({ art, title, body, action, light }: { art: ReactNode; title: string; body: string; action?: ReactNode; light?: boolean }) {
   return (
-    <div className={cn('flex min-h-[460px] flex-col rounded-xl border p-6 sm:p-8', light ? 'bg-foreground text-background border-transparent' : 'border-border bg-card')}>
-      <div aria-hidden className="flex flex-1 items-center justify-center py-10">
+    <div className={cn('flex flex-col rounded-xl border p-6 sm:p-8 lg:min-h-[460px]', light ? 'bg-foreground text-background border-transparent' : 'border-border bg-card')}>
+      <div aria-hidden className="flex flex-1 items-center justify-center py-6 lg:py-10">
         {art}
       </div>
       <div className="flex flex-col gap-2">
         <h3 className={cn('text-base font-medium', light ? 'text-background' : 'text-foreground')}>{title}</h3>
-        <p className={cn('text-base text-pretty', light ? 'text-background/70' : 'text-muted-foreground')}>{body}</p>
-        {action ? <div className="pt-4">{action}</div> : null}
+        <p className={cn('text-base text-pretty lg:min-h-18', light ? 'text-background/70' : 'text-muted-foreground')}>{body}</p>
+        <div className="flex h-12 items-end">{action}</div>
       </div>
     </div>
+  );
+}
+
+/** A team's pixel mark without the hover hint: the team's name is printed beside it. */
+function TeamMark({ slug }: { slug: string }) {
+  return (
+    <span aria-hidden style={{ ...agentMarkVars(slug), width: 20, height: 20 }} className={cn('inline-flex items-center justify-center rounded-sm bg-(--mark-tile)', agentMarkTileClass(slug))}>
+      <AgentMarkGlyph slug={slug} size={14} />
+    </span>
   );
 }
 
@@ -171,12 +185,11 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
             title="One conversation sets up the whole loop"
             lead="The prompt walks your coding agent through the setup with you. It asks before every decision and stops when one real run has finished."
           />
-          <div className="border-border mt-16 grid grid-cols-[minmax(0,1fr)] overflow-hidden rounded-xl border md:grid-cols-2">
-            {STEPS.map((step, index) => (
+          <div className="border-border mt-16 grid grid-cols-[minmax(0,1fr)] overflow-hidden rounded-xl border md:grid-cols-2 [&>*]:border-b [&>*:last-child]:border-b-0 md:[&>*:nth-child(odd)]:border-r md:[&>*:nth-last-child(-n+2)]:border-b-0">
+            {STEPS.map((step) => (
               <ArtCell
                 key={step.title}
                 {...step}
-                className={CELL_BORDERS[index]}
               />
             ))}
           </div>
@@ -203,13 +216,14 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
               art={<ComposerArt text="Every new signup: research the company, score it and draft the outreach." />}
               title="Any loop you describe"
               body="Say what should happen and when. Your coding agent writes it as code in your repo."
+              action={<CopyButton text={setupPromptFor(target)} />}
             />
             <TallCard art={<ApprovalArt />} title="You approve what ships" body="Every pull request, post and outbound draft waits for a person until you allow more." />
           </div>
           <ul className="mt-16 grid gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
             {TEAMS.map((team) => (
               <li key={team.slug} className="border-border flex flex-col gap-3 border-l pl-6 sm:pl-8">
-                <AgentMark slug={team.slug} size={14} />
+                <TeamMark slug={team.slug} />
                 <span className="text-foreground text-sm font-medium">{team.name}</span>
                 <span className="text-muted-foreground max-w-60 text-sm text-pretty">{team.line}</span>
               </li>
@@ -217,7 +231,7 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
           </ul>
         </section>
 
-        <section className={cn(COLUMN, SECTION)}>
+        <section className={cn(COLUMN, 'py-16 lg:py-20')}>
           <SplitHeading
             title="Bring the plan you already pay for"
             lead={
@@ -226,9 +240,11 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
               </>
             }
           >
-            <ul className="text-muted-foreground flex flex-wrap gap-x-6 gap-y-2 text-sm">
-              {TOOLS.filter((tool) => tool !== 'Claude Code' && tool !== 'Codex').map((tool) => (
-                <li key={tool}>{tool}</li>
+            <ul className="flex flex-wrap gap-2">
+              {PLANS.map((plan) => (
+                <li key={plan} className="border-border text-foreground rounded-full border px-3 py-1 text-sm">
+                  {plan}
+                </li>
               ))}
             </ul>
           </SplitHeading>
@@ -239,7 +255,7 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
             title="One file in your repo runs all of it"
             lead="The setup adds kortix.yaml. It defines every agent, what starts it and what it may touch. You review it like code."
           />
-          <div className="border-border mt-16 grid grid-cols-[minmax(0,1fr)] overflow-hidden rounded-xl border lg:grid-cols-2">
+          <div className="border-border mt-16 grid grid-cols-[minmax(0,1fr)] overflow-hidden rounded-xl border lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
             <div className="border-border bg-card/40 border-b lg:border-r lg:border-b-0">
               <div className="border-border text-muted-foreground border-b px-6 py-3 font-mono text-xs">kortix.yaml</div>
               <pre className="overflow-x-auto px-6 py-5 font-mono text-xs leading-6">
@@ -286,7 +302,7 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
         </section>
 
         <section className="relative overflow-hidden">
-          <div aria-hidden className="pointer-events-none absolute inset-x-0 top-1/2 bottom-0 opacity-80 [mask-image:linear-gradient(to_bottom,transparent,#000_70%)]">
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 top-[70%] bottom-0 opacity-80 [mask-image:linear-gradient(to_bottom,transparent,#000_70%)]">
             <DitherField className="text-kortix-base" />
           </div>
           <div className={cn(COLUMN, 'relative flex flex-col items-center gap-6 py-32 text-center lg:py-44')}>
@@ -310,20 +326,15 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
       </main>
 
       <footer className="border-border border-t">
-        <div className={cn(COLUMN, 'grid gap-10 py-14 sm:grid-cols-[minmax(0,1fr)_repeat(4,minmax(0,1fr))]')}>
-          <a href={KORTIX} aria-label="Kortix" className="text-foreground">
+        <div className={cn(COLUMN, 'grid grid-cols-2 gap-10 py-14 md:grid-cols-[minmax(0,1fr)_repeat(4,minmax(0,1fr))]')}>
+          <a href={KORTIX} aria-label="Kortix" className="text-foreground col-span-2 md:col-span-1">
             <KortixLogo size={16} variant="logomark" />
           </a>
-          {[
-            { title: 'Product', links: [['How it works', '#how'], ['Factories', '#factories'], ['kortix.yaml', '#engine']] },
-            { title: 'Developers', links: [['Docs', '/docs/developers'], ['The setup guide', '/setup.md'], ['GitHub', 'https://github.com/kortix-ai/CompanyOS']] },
-            { title: 'Company', links: [['Kortix', KORTIX], ['Careers', '/careers'], ['Contact', '/contact']] },
-            { title: 'Legal', links: [['Terms', '/legal/terms'], ['Privacy', '/legal?tab=privacy']] },
-          ].map((group) => (
+          {FOOTER.map((group) => (
             <div key={group.title} className="flex flex-col gap-3 text-sm">
               <span className="text-foreground font-medium">{group.title}</span>
               {group.links.map(([label, href]) => (
-                <Link key={label} href={href!} className="text-muted-foreground hover:text-foreground transition-colors">
+                <Link key={label} href={href} className="text-muted-foreground hover:text-foreground transition-colors">
                   {label}
                 </Link>
               ))}

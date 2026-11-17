@@ -42,7 +42,9 @@ export const MANIFEST = [
   'triggers:',
   '  - slug: nightly-tests',
   '    on: { cron: "0 0 2 * * *" }',
-  '    run: { agent: factory, prompt: "Run the tests. File what fails." }',
+  '    run:',
+  '      agent: factory',
+  '      prompt: Run the tests. File what fails.',
   '',
   'skills:',
   '  software-factory: skills/software-factory',
@@ -52,7 +54,9 @@ export const MANIFEST = [
   '  review-gate: { pi: extensions/review-gate.ts }',
   '',
   'connectors:',
-  '  - { slug: helpdesk, provider: http, base_url: https://helpdesk.example.com/api }',
+  '  - slug: helpdesk',
+  '    provider: http',
+  '    base_url: https://helpdesk.example.com/api',
   '',
   'sandbox:',
   '  templates:',
@@ -71,8 +75,8 @@ export const ENGINE = [
   { term: 'Secrets', key: 'env', body: 'The file names them. The values stay encrypted in your workspace and reach only the agents you grant.' },
 ];
 
-/** Names only: the brand kit allows no third-party logos. */
-export const TOOLS = ['GitHub', 'Linear', 'Jira', 'Asana', 'Slack', 'Sentry', 'Better Stack', 'Claude Code', 'Codex'];
+/** The plans a run can use, as the FAQ answers which models the agents use. */
+export const PLANS = ['Claude subscription', 'ChatGPT subscription', 'Any API key'];
 
 export const FAQ = [
   { q: 'What is Kortix?', a: 'Cloud agents for your repository, defined in one kortix.yaml: the agents, what starts them, the skills they use and what they may do.' },

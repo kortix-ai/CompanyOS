@@ -46,7 +46,18 @@ export function useCopy(text: string) {
  * The page's one action: copy the setup prompt. A light pill on the dark page,
  * the copy mark turning into a check for two seconds once the text is on the clipboard.
  */
-export function CopyButton({ size = 'md', text, label = 'Copy prompt' }: { size?: 'sm' | 'md' | 'lg'; text?: string; label?: string }) {
+export function CopyButton({
+  size = 'md',
+  tone = 'light',
+  text,
+  label = 'Copy prompt',
+}: {
+  size?: 'sm' | 'md' | 'lg';
+  /** `dark`: the pill for a light card. */
+  tone?: 'light' | 'dark';
+  text?: string;
+  label?: string;
+}) {
   const target = useSetupTarget();
   const { copied, copy } = useCopy(text ?? setupPromptFor(target));
   return (
@@ -54,7 +65,8 @@ export function CopyButton({ size = 'md', text, label = 'Copy prompt' }: { size?
       type="button"
       onClick={copy}
       className={cn(
-        'bg-foreground text-background hover:bg-foreground/90 inline-flex shrink-0 items-center gap-2 rounded-full font-medium whitespace-nowrap transition-colors active:scale-[0.96] motion-reduce:active:scale-100',
+        'inline-flex shrink-0 items-center gap-2 rounded-full font-medium whitespace-nowrap transition-colors active:scale-[0.96] motion-reduce:active:scale-100',
+        tone === 'light' ? 'bg-foreground text-background hover:bg-foreground/90' : 'bg-background text-foreground hover:bg-background/90',
         size === 'lg' && 'h-10 px-5 text-sm',
         size === 'md' && 'h-9 px-4 text-sm',
         size === 'sm' && 'h-8 px-3.5 text-sm',
@@ -83,8 +95,4 @@ export function Mark({ name }: { name: 'Claude' | 'Codex' | 'Claude Code' }) {
       {name}
     </span>
   );
-}
-
-export function Eyebrow({ children }: { children: ReactNode }) {
-  return <span className="text-muted-foreground font-mono text-xs tracking-wider uppercase">{children}</span>;
 }

@@ -84,3 +84,13 @@ export const FAQ = [
   { q: 'Who approves the work?', a: 'You. Every pull request, post and outbound draft waits for a person until you allow more. Security fixes always wait.' },
   { q: 'How do I turn it off?', a: 'Pause its triggers with one command, or delete its folder under .kortix/.' },
 ];
+
+/** The teams the same prompt builds a loop for, from a description. `slug` picks the agent mark. */
+export const TEAMS = [
+  { slug: 'marketing', name: 'Marketing', line: 'Every merge becomes a changelog, a post and a video.' },
+  { slug: 'sales', name: 'Sales', line: 'Every signup researched, scored and drafted before you wake up.' },
+  { slug: 'support', name: 'Support', line: 'Every ticket answered in draft or routed to engineering.' },
+  { slug: 'recruiting', name: 'Recruiting', line: 'Every applicant scored against the role, with an interview kit.' },
+  { slug: 'research', name: 'Research', line: 'Say what to watch. It writes the brief on your schedule.' },
+  { slug: 'operations', name: 'Operations', line: 'Say what the back office repeats. It runs it and asks first.' },
+];

@@ -1,30 +1,39 @@
-'use client';
+"use client";
 
-import type { PromoSlide } from './promo-card';
-import { PromoMark } from './promo-card';
+import type { PromoSlide } from "./promo-card";
+import { PromoMark } from "./promo-card";
 
-import { CursorClickIcon, FolderSimpleIcon, LaptopIcon, TerminalWindowIcon } from '@phosphor-icons/react';
-import { useCallback, useState, useSyncExternalStore, type ReactNode } from 'react';
+import {
+  CursorClickIcon,
+  FolderSimpleIcon,
+  TerminalWindowIcon,
+} from "@phosphor-icons/react";
+import {
+  useCallback,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 
-import { useSidebar } from '../../../primitives/sidebar';
+import { useSidebar } from "../../../primitives/sidebar";
 import {
   useConnectDesktopComputer,
   useOwnsPairedComputer,
   useThisComputerState,
-} from '../../../internal/tunnel/computer-connect';
-import { useIsMobile } from '../../../internal/hooks';
-import { useTranslations } from '../../../i18n';
+} from "../../../internal/tunnel/computer-connect";
+import { useIsMobile } from "../../../internal/hooks";
+import { useTranslations } from "../../../i18n";
 
-export const COMPUTER_PROMO_DISMISSED_KEY = 'kortix.computer-promo.dismissed';
+export const COMPUTER_PROMO_DISMISSED_KEY = "kortix.computer-promo.dismissed";
 
-/** The machine, then the three capabilities a pairing grants: Filesystem, Shell, Computer Use. */
-const MARKS = [LaptopIcon, FolderSimpleIcon, TerminalWindowIcon, CursorClickIcon] as const;
+/** The three capabilities a pairing grants: Filesystem, Shell, Computer Use. */
+const MARKS = [FolderSimpleIcon, TerminalWindowIcon, CursorClickIcon] as const;
 
 const subscribeNoop = () => () => {};
 
 function readDismissed(): boolean {
   try {
-    return window.localStorage.getItem(COMPUTER_PROMO_DISMISSED_KEY) === '1';
+    return window.localStorage.getItem(COMPUTER_PROMO_DISMISSED_KEY) === "1";
   } catch {
     return false;
   }
@@ -38,7 +47,7 @@ export function useComputerPromoDismissed(): [boolean, () => void] {
   const dismiss = useCallback(() => {
     setDismissed(true);
     try {
-      window.localStorage.setItem(COMPUTER_PROMO_DISMISSED_KEY, '1');
+      window.localStorage.setItem(COMPUTER_PROMO_DISMISSED_KEY, "1");
     } catch {
       // Private mode or blocked storage: dismissed for this page view only.
     }
@@ -71,8 +80,8 @@ export function ComputerPromoSlide({
   onDismiss: () => void;
   children: (slide: PromoSlide | null) => ReactNode;
 }) {
-  const t = useTranslations('computers');
-  const tPromo = useTranslations('computers.promo');
+  const t = useTranslations("computers");
+  const tPromo = useTranslations("computers.promo");
   const isMobile = useIsMobile();
   const { setOpenMobile } = useSidebar();
   const paired = useOwnsPairedComputer();
@@ -81,19 +90,23 @@ export function ComputerPromoSlide({
   const { desktop, oneClick, stale } = useThisComputerState();
   const connectDesktop = useConnectDesktopComputer(projectId);
 
-  if (!paired.isSuccess || paired.owns || desktop.isPending) return children(null);
+  if (!paired.isSuccess || paired.owns || desktop.isPending)
+    return children(null);
 
   return children({
-    id: 'computer',
+    id: "computer",
     marks: MARKS.map((MarkIcon, index) => (
       <PromoMark key={index}>
-        <MarkIcon className="size-5" />
+        <MarkIcon className="size-4" />
       </PromoMark>
     )),
-    title: oneClick ? tPromo('titleThis') : tPromo('title'),
-    description: tPromo('description'),
-    cta: connectDesktop.isPending ? t('connecting') : oneClick ? tPromo('ctaOneClick') : tPromo('cta'),
-    dismissLabel: t('dismissPromo'),
+    title: connectDesktop.isPending
+      ? t("connecting")
+      : oneClick
+        ? tPromo("titleThis")
+        : tPromo("title"),
+    description: tPromo("description"),
+    dismissLabel: t("dismissPromo"),
     onDismiss,
     pending: connectDesktop.isPending,
     onClick: () => {

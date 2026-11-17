@@ -1071,8 +1071,7 @@ const catalog = {
     "new": "New",
     "mcpPromo": {
       "title": "Use Kortix in ChatGPT and Claude",
-      "description": "Add Kortix to the AI chat you already use. Start agents, follow their work and use your connectors from there.",
-      "cta": "Connect"
+      "description": "Add Kortix to the AI chat you already use."
     },
     "promos": "Ways to use Kortix",
     "upgrade": "Upgrade",
@@ -7444,9 +7443,7 @@ const catalog = {
     "promo": {
       "title": "Connect your work computer",
       "titleThis": "Connect this computer",
-      "description": "Agents work with your local files, run programs and use the apps on your screen. You decide what they may do.",
-      "cta": "Connect",
-      "ctaOneClick": "Connect in one click"
+      "description": "Agents use your files, terminal and apps."
     },
     "dismissPromo": "Dismiss",
     "useCliInstead": "Use the CLI instead",

@@ -1577,8 +1577,7 @@
     "new": "新規",
     "mcpPromo": {
       "title": "ChatGPT や Claude から Kortix を使う",
-      "description": "いつもの AI チャットに Kortix を追加しましょう。エージェントの起動、作業の確認、コネクタの利用がそこからできます。",
-      "cta": "接続"
+      "description": "いつもの AI チャットに Kortix を追加しましょう。"
     },
     "promos": "Kortix の使い方",
     "upgrade": "アップグレード",
@@ -22722,9 +22721,7 @@
     "promo": {
       "title": "仕事用のコンピューターを接続",
       "titleThis": "このコンピューターを接続",
-      "description": "エージェントがローカルファイルを扱い、プログラムを実行し、画面上のアプリを操作します。何を許可するかはあなたが決めます。",
-      "cta": "接続",
-      "ctaOneClick": "ワンクリックで接続"
+      "description": "エージェントがファイル、ターミナル、アプリを使います。"
     },
     "dismissPromo": "閉じる",
     "useCliInstead": "代わりに CLI を使う",

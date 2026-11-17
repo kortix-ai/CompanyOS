@@ -158,12 +158,11 @@ function LoginCard({ login, still }: { login: (typeof LOGINS)[number]; still: bo
     <figure ref={root} className="dark border-border relative isolate flex flex-col overflow-hidden rounded-xl border">
       {/* The stage: a deep-brand-to-page gradient, the mark as a watermark. The terminal stands on it and ends at the separator. */}
       <div style={{ background: BRANDS[login.id].stage }} className="relative isolate flex flex-1 flex-col overflow-hidden">
-        <span
-          aria-hidden
-          style={{ filter: WATERMARK_FILTER }}
-          className="pointer-events-none absolute -top-12 -right-12 -z-10 size-72 opacity-20 mix-blend-overlay sm:size-80"
-        >
-          {login.mark}
+        {/* The mark: at the right edge, a quarter past it, centered on the top half of the stage. */}
+        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 -z-10 flex h-1/2 items-center justify-end">
+          <span style={{ filter: WATERMARK_FILTER }} className="size-72 shrink-0 translate-x-1/4 opacity-10 mix-blend-overlay sm:size-80">
+            {login.mark}
+          </span>
         </span>
         <div className="flex items-center gap-3 px-6 pt-6 sm:px-8 sm:pt-8">
           <span

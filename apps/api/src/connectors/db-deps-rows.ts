@@ -17,7 +17,7 @@ import {
   loadTelegramInstall,
   loadDiscordInstall,
 } from '../channels/install-store';
-import { agentPolicySet } from '../iam/agent-scope';
+import { callPolicySetOf, principalMayUseConnector } from './principal-access';
 import { canonicalConnectorAlias, resolveSessionConnectorConnection } from '../projects/lib/session-connector-bindings';
 import { db } from '../shared/db';
 import {
@@ -27,7 +27,6 @@ import {
 } from './credentials';
 import type { ConnectorAuth } from './call';
 import { type DefaultMode, type Policy, type PolicyAction, type Risk, parseStoredConditions, resolveEffectiveAction } from './policy';
-import { principalMayUseConnector } from './principal-access';
 import type { ConnectorPrincipal } from './router-contract';
 
 const DEFAULT_AUTH: ConnectorAuth = {
@@ -204,10 +203,12 @@ export async function resolveActiveConnectorConnection(principal: ConnectorPrinc
  * Whether the agent's own `<slug>.<actionPath>` call with these args would run
  * without approval. `principal` is the one the agent's session token names
  * (`resolveTokenPrincipal`). The gateway's checks, in its order: the connector
- * is assigned to the agent, enabled, has an active account this session may
- * use, and has the action. Then its policy layers (project, the agent's policy
- * set, connector, `sensitive`, the default mode), with the exact args. For a
- * server post that stands in for that call.
+ * is assigned to the agent (its own grant, its channel, or its spawn line's
+ * inherited grants), enabled, has an active account this session may use, and
+ * has the action. Then its policy layers (project, the policy set
+ * `callPolicySetOf` resolves — the caller's own grant, else the nearest
+ * ancestor's that reaches the connector, connector, `sensitive`, the default
+ * mode), with the exact args. For a server post that stands in for that call.
  */
 export async function connectorActionAlwaysRuns(input: {
   principal: ConnectorPrincipal;
@@ -224,7 +225,11 @@ export async function connectorActionAlwaysRuns(input: {
     .where(and(eq(connectors.projectId, principal.projectId), eq(connectors.slug, input.slug)))
     .limit(1);
   if (!row?.enabled || !(await resolveActiveConnectorConnection(principal, row))) return false;
-  const setName = agentPolicySet(principal.agentGrant ?? null, alias);
+  // The same resolution the gateway's /call runs: the caller's own grant when
+  // it reaches the connector, else the nearest ancestor's set — a server post
+  // standing in for a delegated session answers to the set that session's own
+  // call answers to, never to its own (unreaching) grant's map.
+  const setName = callPolicySetOf(principal, alias)?.name ?? null;
   const [[action], connectorPolicies, projectPolicies, defaultMode, setPolicies] = await Promise.all([
     db
       .select({ risk: connectorActions.risk })

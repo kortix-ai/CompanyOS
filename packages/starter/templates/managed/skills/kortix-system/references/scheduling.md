@@ -1,9 +1,9 @@
 # Scheduling playbook
 
 Read this when you decide whether and how to schedule work, every time you
-start something whose result comes later, and before a long job. The decision tables are in
-`SKILL.md` → `<scheduling>`; trigger fields are in `kortix/kortix-yaml.md`
-→ triggers.
+start something whose result comes later, and before a long job. The decision
+tables and `403 feature_disabled` are in `SKILL.md` → `<scheduling>`; trigger fields
+are in `kortix/kortix-yaml.md` → triggers.
 
 ## Follow-through
 
@@ -69,11 +69,6 @@ wake-up is a promise nobody keeps: the session sleeps until someone types.
 teammate or a workflow (each reports back to you by itself), for a question
 to the person in this chat (ask it now, then end the turn), or for anything
 the person said not to track.
-
-**Loops off.** `kortix loop` answers `403 feature_disabled`: tell the person
-Loops are off and that a workspace admin turns them on (`kortix workspaces
-features enable reminders`). Meanwhile, a one-off `at` trigger starts a fresh
-session at the time; put the full context in its prompt.
 
 ### Worked example: quote requests to 12 printers
 
@@ -263,15 +258,13 @@ day-of-week`. A 5-field expression works too (seconds = 0). Day-of-week
 
 `run: { session: … }` decides what each fire runs in:
 
-- `fresh` (default): a new session with no history. Right for digests,
-  monitors and posts: judge "what is new" from the data, not from memory.
+- `fresh` (default): a new session with no memory of this chat, so the
+  prompt holds all it needs. Right for digests, monitors and posts: judge
+  "what is new" from the data.
 - `reuse`: the same long-lived session every fire. Use it only when a run
   needs what earlier runs saw.
 - `keyed` with `session_key` (`"{{ body.thread_id }}"`): one session per key.
 - `pinned` with `session_id`: one named session.
-
-A `fresh` run has no memory of this chat. Put everything it needs in the
-prompt.
 
 ## Notify, or stay silent
 
@@ -309,9 +302,7 @@ whole conversation and workspace.
   starts a new session instead). `kortix triggers rm <id>` removes it.
 - Every merge into a branch, for the whole workspace, is a `kortix.yaml`
   trigger: `type: change_request`, `filter: { base: main }` (omit the filter
-  for any branch), `agent`, `prompt`. The prompt reads
-  `{{ change_request.number }}`, `{{ change_request.title }}` and
-  `{{ change_request.base_ref }}`.
+  for any branch), `agent`, `prompt` (it reads `{{ change_request.* }}`).
 - A loop lives in the database, not in `kortix.yaml`: no CR. It never
   starts a new session; it pauses itself when its session is deleted.
 - From a Slack or Teams thread, the fire is not a channel turn: post the

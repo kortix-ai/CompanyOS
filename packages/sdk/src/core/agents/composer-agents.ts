@@ -27,10 +27,13 @@ export function projectConfigAgentsToRuntimeAgents(config: ProjectConfigSummary)
 function projectConfigAgentToRuntimeAgent(agent: ProjectConfigSummary['agents'][number]): Agent {
   return {
     name: agent.name,
+    ...(agent.title ? { title: agent.title } : {}),
     description: agent.description ?? undefined,
     mode: agent.mode ?? undefined,
     source: agent.source,
     hidden: agent.hidden === true || agent.enabled === false,
+    // A program agent runs its command, not a model: pickers read provider `program` and offer no model.
+    ...(agent.run ? { model: { providerID: 'program', modelID: agent.name } } : {}),
   } as unknown as Agent;
 }
 
@@ -50,8 +53,24 @@ export function composerSelectableAgents(
 ): Agent[] {
   if (!Array.isArray(agents)) return [];
   const includeSubagents = options?.includeSubagents === true;
-  return agents.filter((a) => isSelectableAgent(includeSubagents ? { ...a, mode: null } : a));
+  return agents.filter(
+    (a) =>
+      !SCHEDULED_ONLY_AGENTS.has(a.name) &&
+      isSelectableAgent(includeSubagents ? { ...a, mode: null } : a),
+  );
 }
+
+/**
+ * Agents the starter shipped to run from a cron trigger only, with no
+ * `hidden: true`: `memory-reflector` (starter until 2026-08-08, still committed
+ * in older workspaces) and `harness-reflector` (the continual-harness
+ * reflector). Nobody chats with them, so the composer's picker and Tab cycle
+ * leave them out. Everywhere else they stay: the Agents page, trigger pickers
+ * (`isSelectableAgent`), and a session a trigger started on one, which still
+ * resolves to it as its bound agent. A new automation agent declares
+ * `hidden: true` instead of joining this list.
+ */
+const SCHEDULED_ONLY_AGENTS = new Set(['memory-reflector', 'harness-reflector']);
 
 export type ComposerAgentReason =
   /** The roster has not loaded yet — nothing is refused on a pending query. */

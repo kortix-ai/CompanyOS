@@ -32,6 +32,15 @@ import {
 import { pendingPrincipalId, type Actor, type PrincipalRef } from './actor';
 import { notAnAudienceGrant } from './audience-grants';
 import { projectsView } from '../workspaces/rows';
+import {
+  accountScoped,
+  accountScopedNoJoin,
+  grantScopeIdOf,
+  grantScopeOf,
+  projectScoped,
+  projectScopedNoJoin,
+  storedAction,
+} from './workspace-scope';
 
 export type AssignmentSource = 'manual' | 'scim' | 'sso' | 'invite' | 'system';
 
@@ -145,6 +154,19 @@ export interface AssignmentFilter {
   liveOnly?: boolean;
 }
 
+/**
+ * A fetched row in its legacy scope shape: the workspace form (R2b) reads as
+ * its role's scope, and an account grant reports `scopeId: null`
+ * (`workspace-scope.ts`). Every read of this module returns this shape, so the
+ * guards, the audit events and the wire see one form.
+ */
+function asLegacyScope<
+  T extends { scopeType: string; scopeId: string | null; objectType: string | null; roleScopeType: string; roleAccountId: string | null },
+>({ roleScopeType, roleAccountId, ...r }: T) {
+  const scope = { scopeType: r.scopeType, scopeId: r.scopeId, objectType: r.objectType, roleScopeType };
+  return { ...r, scopeType: grantScopeOf(scope) ?? r.scopeType, scopeId: grantScopeIdOf(scope), roleIsSystem: roleAccountId === null };
+}
+
 /** Every assignment matching the filter, newest first. */
 export async function listAssignments(filter: AssignmentFilter): Promise<AssignmentRow[]> {
   const clauses = [eq(roleAssignments.accountId, filter.accountId)];
@@ -164,8 +186,9 @@ export async function listAssignments(filter: AssignmentFilter): Promise<Assignm
       )!,
     );
   }
-  if (filter.scopeType) clauses.push(eq(roleAssignments.scopeType, filter.scopeType));
-  if (filter.scopeId) clauses.push(eq(roleAssignments.scopeId, filter.scopeId));
+  // The workspace form (R2b) reads as its role's scope (`workspace-scope.ts`).
+  if (filter.scopeType) clauses.push(filter.scopeType === 'account' ? accountScoped() : projectScoped());
+  if (filter.scopeId) clauses.push(projectScoped(), eq(roleAssignments.scopeId, filter.scopeId));
   if (filter.roleId) clauses.push(eq(roleAssignments.roleId, filter.roleId));
   if (filter.objectType) clauses.push(eq(roleAssignments.objectType, filter.objectType));
   if (filter.objectId) clauses.push(eq(roleAssignments.objectId, filter.objectId));
@@ -179,6 +202,7 @@ export async function listAssignments(filter: AssignmentFilter): Promise<Assignm
       roleId: roleAssignments.roleId,
       roleKey: iamRoles.key,
       roleAccountId: iamRoles.accountId,
+      roleScopeType: iamRoles.scopeType,
       scopeType: roleAssignments.scopeType,
       scopeId: roleAssignments.scopeId,
       objectType: roleAssignments.objectType,
@@ -194,7 +218,7 @@ export async function listAssignments(filter: AssignmentFilter): Promise<Assignm
     .where(and(...clauses))
     .orderBy(sql`${roleAssignments.createdAt} desc`);
 
-  return rows.map(({ roleAccountId, ...r }) => ({ ...r, roleIsSystem: roleAccountId === null }));
+  return rows.map(asLegacyScope);
 }
 
 // ─── Writes ─────────────────────────────────────────────────────────────────
@@ -805,17 +829,10 @@ async function assertWriterMayAssign(
 ): Promise<void> {
   if (writer === SYSTEM_ACTOR) return;
   const projectObj: Obj = scopeId ? { type: 'project', id: scopeId } : { type: 'account' };
-  // Who may use a secret value or a connector account is a person's decision.
-  // An agent that may write either could otherwise widen one narrowed away
-  // from it, or name itself in the audience, and then use it.
-  if ((objectType === 'secret' || objectType === 'connection') && writer.credential.kind === 'agent_session') {
-    throw new HTTPException(403, {
-      message:
-        objectType === 'secret'
-          ? 'An agent cannot change who can use a secret. A person changes it in Customize → Secrets.'
-          : 'An agent cannot change who can use a connector account. A person changes it in Customize → Connectors.',
-    });
-  }
+  // Who may use a secret value or a connector account: the same permission
+  // for a person and for an agent session acting for one (the person's role ∩
+  // the agent's grant). An agent widens an audience only when its grant holds
+  // the permission a person gave it.
   if (objectType === 'secret') {
     await assertAuthorized(writer, 'project.secret.write', projectObj);
     return;
@@ -883,7 +900,7 @@ async function assertDelegable(role: ResolvedRole): Promise<void> {
     .from(iamRoleActions)
     .where(eq(iamRoleActions.roleId, role.roleId));
   const forbidden = rows
-    .map((r) => r.action)
+    .map((r) => storedAction(r.action))
     .filter((a) => catalog.byAction.get(a)?.delegable === false);
   if (forbidden.length > 0) {
     throw new HTTPException(403, {
@@ -934,7 +951,7 @@ async function clearSuperAdminAfterOwnerLoss(writer: Writer, accountId: string, 
         eq(roleAssignments.accountId, accountId),
         eq(roleAssignments.principalType, 'user'),
         eq(roleAssignments.principalId, userId),
-        eq(roleAssignments.scopeType, 'account'),
+        accountScoped(),
         isNull(iamRoles.accountId),
         eq(iamRoles.key, 'owner'),
         or(isNull(roleAssignments.expiresAt), gt(roleAssignments.expiresAt, sql`now()`)),
@@ -987,7 +1004,7 @@ async function assertNotLastOwner(accountId: string, row: AssignmentRow): Promis
     .where(
       and(
         eq(roleAssignments.accountId, accountId),
-        eq(roleAssignments.scopeType, 'account'),
+        accountScoped(),
         isNull(iamRoles.accountId),
         eq(iamRoles.key, 'owner'),
         ne(roleAssignments.assignmentId, row.assignmentId),
@@ -1020,7 +1037,7 @@ async function assertNotLastMembership(accountId: string, row: AssignmentRow): P
     .where(
       and(
         eq(roleAssignments.accountId, accountId),
-        eq(roleAssignments.scopeType, 'account'),
+        accountScoped(),
         eq(roleAssignments.principalType, 'user'),
         eq(roleAssignments.principalId, row.principalId),
         isNull(iamRoles.accountId),
@@ -1053,7 +1070,7 @@ export async function deleteAccountScopeAssignments(accountId: string, userId: s
         eq(roleAssignments.accountId, accountId),
         eq(roleAssignments.principalType, 'user'),
         eq(roleAssignments.principalId, userId),
-        eq(roleAssignments.scopeType, 'account'),
+        accountScopedNoJoin(),
       ),
     );
   invalidateIamCacheForUser(userId);
@@ -1072,7 +1089,7 @@ export async function deleteProjectScopeAssignments(accountId: string, userId: s
         eq(roleAssignments.accountId, accountId),
         eq(roleAssignments.principalType, 'user'),
         eq(roleAssignments.principalId, userId),
-        eq(roleAssignments.scopeType, 'project'),
+        projectScopedNoJoin(),
         notAnAudienceGrant(),
       ),
     );
@@ -1100,6 +1117,7 @@ export async function listAssignmentsByIds(assignmentIds: string[]): Promise<Ass
       roleId: roleAssignments.roleId,
       roleKey: iamRoles.key,
       roleAccountId: iamRoles.accountId,
+      roleScopeType: iamRoles.scopeType,
       scopeType: roleAssignments.scopeType,
       scopeId: roleAssignments.scopeId,
       objectType: roleAssignments.objectType,
@@ -1113,7 +1131,7 @@ export async function listAssignmentsByIds(assignmentIds: string[]): Promise<Ass
     .from(roleAssignments)
     .innerJoin(iamRoles, eq(iamRoles.roleId, roleAssignments.roleId))
     .where(inArray(roleAssignments.assignmentId, assignmentIds));
-  return rows.map(({ roleAccountId, ...r }) => ({ ...r, roleIsSystem: roleAccountId === null }));
+  return rows.map(asLegacyScope);
 }
 
 /**
@@ -1261,6 +1279,7 @@ export async function findExpiredAssignments(since: Date): Promise<AssignmentRow
       roleId: roleAssignments.roleId,
       roleKey: iamRoles.key,
       roleAccountId: iamRoles.accountId,
+      roleScopeType: iamRoles.scopeType,
       scopeType: roleAssignments.scopeType,
       scopeId: roleAssignments.scopeId,
       objectType: roleAssignments.objectType,
@@ -1280,7 +1299,7 @@ export async function findExpiredAssignments(since: Date): Promise<AssignmentRow
         sql`${roleAssignments.expiresAt} > ${since}`,
       ),
     );
-  return rows.map(({ roleAccountId, ...r }) => ({ ...r, roleIsSystem: roleAccountId === null }));
+  return rows.map(asLegacyScope);
 }
 
 /** Bulk principal lookup used by the read models (`GET /projects/:id/access`). */
@@ -1314,6 +1333,7 @@ export async function assignmentsForRoles(accountId: string, roleIds: string[]):
       roleId: roleAssignments.roleId,
       roleKey: iamRoles.key,
       roleAccountId: iamRoles.accountId,
+      roleScopeType: iamRoles.scopeType,
       scopeType: roleAssignments.scopeType,
       scopeId: roleAssignments.scopeId,
       objectType: roleAssignments.objectType,
@@ -1327,5 +1347,5 @@ export async function assignmentsForRoles(accountId: string, roleIds: string[]):
     .from(roleAssignments)
     .innerJoin(iamRoles, eq(iamRoles.roleId, roleAssignments.roleId))
     .where(and(eq(roleAssignments.accountId, accountId), inArray(roleAssignments.roleId, roleIds)));
-  return rows.map(({ roleAccountId, ...r }) => ({ ...r, roleIsSystem: roleAccountId === null }));
+  return rows.map(asLegacyScope);
 }

@@ -340,8 +340,8 @@ function isRedeclaredInjectedIdentifierNoise(input: {
 
 // Third-party tracking-pixel `Response.json()` noise. A marketing pixel
 // (observed: Vector, `https://cdn.vector.co/pixel.js`, loaded on the marketing
-// site by the visitor-identification vendor chain,
-// `apps/web/src/components/analytics/visitor-pixel.tsx`) fetches its own API
+// site by a visitor-identification vendor chain; apps/web removed that vendor
+// on 2026-11-12, but a host page can still load the same pixel) fetches its own API
 // (`https://api.vector.co/pixel/ip-info`) and calls `response.json()` without
 // checking `response.ok`. When the site's bot protection 403s the request with
 // an empty body, `Response.json()` rejects with the canonical DOM
@@ -383,11 +383,27 @@ function isRedeclaredInjectedIdentifierNoise(input: {
 // neither frames nor a filename, so it can never confirm the vendor origin.
 const PIXEL_RESPONSE_JSON_NOISE_MESSAGE =
   /^Failed to execute 'json' on 'Response': Unexpected end of JSON input$/;
-const TRACKING_PIXEL_SCRIPT_FRAME = /pixel\.js(?:[?#].*)?$/;
+const LINE_TERMINATOR = /[\n\r\u2028\u2029]/;
+
+/**
+ * True when the source's last line names a `pixel.js` script, optionally
+ * followed by a query or fragment: the same set `/pixel\.js(?:[?#].*)?$/`
+ * matches, in linear time. That unanchored regex backtracks quadratically on a
+ * frame filename of many `pixel.js#` repetitions (CodeQL
+ * js/polynomial-redos), and frame filenames are page-controlled.
+ */
+function endsWithPixelScript(source: string): boolean {
+  const line = source.split(LINE_TERMINATOR).pop() ?? '';
+  for (let i = line.indexOf('pixel.js'); i !== -1; i = line.indexOf('pixel.js', i + 1)) {
+    const next = line[i + 'pixel.js'.length];
+    if (next === undefined || next === '?' || next === '#') return true;
+  }
+  return false;
+}
 
 function isTrackingPixelScriptSource(filename: unknown): boolean {
   const source = normalizeString(filename);
-  return TRACKING_PIXEL_SCRIPT_FRAME.test(source) && !isBrowserBundleSource(source);
+  return endsWithPixelScript(source) && !isBrowserBundleSource(source);
 }
 
 export function isTrackingPixelResponseJsonNoise(input: {

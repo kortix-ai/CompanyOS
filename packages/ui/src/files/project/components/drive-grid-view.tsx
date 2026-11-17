@@ -2,6 +2,7 @@
 
 import { Button } from '../../../primitives/button';
 import type { DroppedEntry } from '../drop-tree';
+import { type DriveListingProps, listingWriteHandlers } from './explorer-listing';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -20,6 +21,7 @@ import { Label } from '../../../primitives/label';
 import type { GitStatusType } from '../../tree/components/file-tree-item';
 import type { FileNode } from '../../../internal/files/types';
 import { cn } from '../../../lib/utils';
+import { ManifestIssueMark } from './manifest-issue-mark';
 import Loading from '../../../primitives/loading';
 import { Copy } from '../../../icons/copy';
 import {
@@ -479,6 +481,9 @@ const FileCard = memo(function FileCard({
           <FileThumbnail
             filePath={node.path}
             fileName={node.name}
+            // No preview until the server has the file: a read before the
+            // write lands is a 404 the card would keep (D-08).
+            deferPreview={uploading}
             onOpen={open}
             className={cn(
               'border-border h-[120px] rounded-lg border',
@@ -522,7 +527,7 @@ const FileCard = memo(function FileCard({
             </DropdownMenu>
           )}
 
-          <div className="flex min-w-0 items-center px-0.5">
+          <div className="flex min-w-0 items-center gap-1 px-0.5">
             {isRenaming ? (
               <input
                 ref={renameInputRef}
@@ -540,7 +545,10 @@ const FileCard = memo(function FileCard({
                 className="border-primary/50 w-full border-b bg-transparent py-0.5 text-sm outline-none"
               />
             ) : (
-              <span className="text-foreground truncate text-sm font-medium">{node.name}</span>
+              <>
+                <span className="text-foreground truncate text-sm font-medium">{node.name}</span>
+                <ManifestIssueMark path={node.path} name={node.name} />
+              </>
             )}
           </div>
         </div>
@@ -568,67 +576,26 @@ const ELEVATED_DIR_META: Record<string, { description: string }> = {
   '.kortix': { description: 'Workspace config, tasks, context' },
 };
 
-interface DriveGridViewProps {
-  elevatedDirs: FileNode[];
-  dirs: FileNode[];
-  files: FileNode[];
-  onNavigateToDir: (node: FileNode) => void;
-  onOpenFile: (node: FileNode) => void;
-  onPreviewFile: (node: FileNode) => void;
-  onDownload: (node: FileNode) => void;
-  onDownloadDir: (node: FileNode) => void;
-  onRename: (node: FileNode, newName: string) => void;
-  onDelete: (node: FileNode) => void;
-  onHistory: (node: FileNode) => void;
-  onCopy: (node: FileNode) => void;
-  onCut: (node: FileNode) => void;
-  onDropMove: (sourcePath: string, targetDirPath: string) => void;
-  /** External files dropped onto a folder card upload into THAT folder. */
-  onDropUpload?: (files: File[], targetDirPath: string, entries?: DroppedEntry[]) => void;
-  gitStatusMap: Map<string, GitStatusType>;
-  clipboardPath?: string;
-  clipboardOperation?: string;
-  isDirDownloading: (path: string) => boolean;
-  /** Hide mutation context-menu entries (delete/rename/cut/copy/history). */
-  readOnly?: boolean;
-  /** Folders that cannot be renamed, cut or deleted (see `ExplorerCapabilities.fixedAt`). */
-  isFixed?: (path: string) => boolean;
-  /** Paths still uploading. */
-  uploadingPaths?: ReadonlySet<string>;
-}
-
-export function DriveGridView({
-  elevatedDirs,
-  dirs,
-  files,
-  onNavigateToDir,
-  onOpenFile,
-  onPreviewFile,
-  onDownload,
-  onDownloadDir,
-  onRename: rawOnRename,
-  onDelete: rawOnDelete,
-  onHistory: rawOnHistory,
-  onCopy: rawOnCopy,
-  onCut: rawOnCut,
-  onDropMove: rawOnDropMove,
-  onDropUpload: rawOnDropUpload,
-  gitStatusMap,
-  clipboardPath,
-  clipboardOperation,
-  isDirDownloading,
-  readOnly = false,
-  isFixed,
-  uploadingPaths,
-}: DriveGridViewProps) {
+export function DriveGridView(props: DriveListingProps) {
+  const {
+    elevatedDirs,
+    dirs,
+    files,
+    onNavigateToDir,
+    onOpenFile,
+    onPreviewFile,
+    onDownload,
+    onDownloadDir,
+    onHistory,
+    gitStatusMap,
+    clipboardPath,
+    clipboardOperation,
+    isDirDownloading,
+    isFixed,
+    uploadingPaths,
+  } = props;
+  const { onRename, onDelete, onCopy, onCut, onDropMove, onDropUpload } = listingWriteHandlers(props);
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
-  const onRename = readOnly ? undefined : rawOnRename;
-  const onDelete = readOnly ? undefined : rawOnDelete;
-  const onHistory = rawOnHistory;
-  const onCopy = readOnly ? undefined : rawOnCopy;
-  const onCut = readOnly ? undefined : rawOnCut;
-  const onDropMove = readOnly ? undefined : rawOnDropMove;
-  const onDropUpload = readOnly ? undefined : rawOnDropUpload;
   return (
     <div className="space-y-7 p-5">
       {elevatedDirs.length > 0 && (

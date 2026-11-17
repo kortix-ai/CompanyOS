@@ -63,10 +63,6 @@ import {
   workspaceHasProjectDenial,
 } from '../workspaces/one-project';
 import {
-  buildCachedFastBootGitHint,
-  resolveFastBootGitHintWithCache,
-} from './lib/fast-boot-git-hint';
-import {
   classifyProvisionReplay,
   findIdempotentProvision,
   isProvisionIdempotencyConflict,
@@ -103,8 +99,6 @@ export const PROVISION_PHASES = [
 
 export type ProvisionPhase = (typeof PROVISION_PHASES)[number];
 export type ProvisionEmit = (phase: ProvisionPhase) => void;
-
-const FAST_BOOT_SEED_HINT_TIMEOUT_MS = 8_000;
 
 /**
  * The exact status codes `runProvision` can produce, matching both routes'
@@ -164,6 +158,12 @@ export interface ProvisionContext {
    * project_id = workspace_id, so the workspace keeps its id (design.md §3.2 C1).
    */
   projectId?: string;
+  /**
+   * A workspace an eval trial runs in (`projects/evals/trial-workspace.ts`):
+   * no template prebuild (the trial's sessions boot the agent's own sandbox)
+   * and no `project_created` product event (nobody created a project).
+   */
+  evalTrial?: boolean;
 }
 
 /**
@@ -360,7 +360,7 @@ export async function runProvision(ctx: ProvisionContext, emit: ProvisionEmit): 
   if ('result' in seeding) return seeding.result;
   const { seeded } = seeding;
 
-  if (seeded) {
+  if (seeded && !ctx.evalTrial) {
     kickProjectTemplatePrebuilds(
       {
         projectId: row.projectId,
@@ -379,7 +379,7 @@ export async function runProvision(ctx: ProvisionContext, emit: ProvisionEmit): 
   // account takes the project's.
   if (ctx.newWorkspace) await renameAccountOfSoleProject(row, row.name);
 
-  captureProductEvent({
+  if (!ctx.evalTrial) captureProductEvent({
     userId: scope.userId,
     accountId: scope.accountId,
     event: 'project_created',
@@ -955,52 +955,6 @@ async function seedProvisionedRepo(
         updatedAt: new Date(),
       }).catch(() => {}); // best-effort — a mirror-write hiccup must not fail project creation
 
-      // Same switch as the create-time hint (#6973): a seeded project's FIRST
-      // session must already find its base tip + scaffold delta cached.
-      if (writeUpstream) {
-        const hintTask = resolveFastBootGitHintWithCache(
-          {
-            projectId: row.projectId,
-            repoUrl: writeUpstream.url,
-            defaultBranch: provisioned.defaultBranch,
-            manifestPath: row.manifestPath,
-            gitAuthToken: null,
-            gitAuthHeaders: writeUpstream.headers,
-          },
-          provisioned.defaultBranch,
-          null,
-        )
-          .then((hint) =>
-            buildCachedFastBootGitHint(provisioned.defaultBranch, hint),
-          )
-          .catch((error) => {
-            console.warn('[projects] fast-boot seed hint unavailable', {
-              projectId: row.projectId,
-              error: error instanceof Error ? error.message : String(error),
-            });
-            return null;
-          });
-        let timeout: ReturnType<typeof setTimeout> | undefined;
-        const cachedHint = await Promise.race([
-          hintTask,
-          new Promise<null>((resolve) => {
-            timeout = setTimeout(() => resolve(null), FAST_BOOT_SEED_HINT_TIMEOUT_MS);
-          }),
-        ]).finally(() => {
-          if (timeout) clearTimeout(timeout);
-        });
-        if (cachedHint) {
-          const currentMetadata = (row.metadata as Record<string, unknown> | null) ?? {};
-          const currentGit =
-            currentMetadata.git && typeof currentMetadata.git === 'object'
-              ? (currentMetadata.git as Record<string, unknown>)
-              : {};
-          row.metadata = {
-            ...currentMetadata,
-            git: { ...currentGit, fast_boot: cachedHint },
-          };
-        }
-      }
     } catch (error) {
       const stage = error instanceof ManagedRepoSeedError ? error.stage : 'push';
       console.error(

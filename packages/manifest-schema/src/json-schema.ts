@@ -4,7 +4,7 @@
  *
  * This is DATA generated from the same constants/enums the imperative
  * validator (`./index.ts`) uses (`GRANTABLE_KORTIX_PERMISSIONS`,
- * `CONNECTOR_PROVIDERS`, `AGENT_MODES_V2`, `WORKSPACE_MODES_V2`, …) so the
+ * `CONNECTOR_PROVIDERS`, `AGENT_MODES_V2`, …) so the
  * two can never silently drift apart — see the conformance test
  * (`__tests__/json-schema.conformance.test.ts`), which runs a shared fixture
  * corpus through both `validateManifest` and this schema (via ajv) and
@@ -84,7 +84,7 @@ import {
   REGISTRY_NAME_MAX,
   REGISTRY_NAME_RE,
   V2_RUNTIME_VALUES,
-  WORKSPACE_MODES_V2,
+  AGENT_TITLE_MAX_LENGTH,
 } from './constants';
 import {
   CONNECTOR_HEADER_NAME_MAX_LENGTH,
@@ -597,12 +597,15 @@ function onRunTriggerSchema(): JsonSchemaFragment {
       },
       run: {
         type: 'object',
-        description: 'What a fire runs: an agent turn, or a call to an App.',
+        description: 'What a fire runs: an agent turn, or a call to an App. `prompt` is required unless `app` is set or the agent is a program agent (`agents.<name>.run`), whose input defaults to the payload.',
         additionalProperties: false,
-        anyOf: [{ required: ['prompt'] }, { required: ['app'] }],
         properties: {
-          agent: { ...NON_BLANK_STRING, description: 'A declared agent. Default: `default_agent`.' },
-          prompt: { ...NON_BLANK_STRING, description: 'The first message of the run. Required unless `run.app` is set.' },
+          agent: { ...NON_BLANK_STRING, description: 'A declared agent. Default: `default_agent`. A program agent (`agents.<name>.run`) runs its command with the prompt as input.' },
+          prompt: {
+            ...NON_BLANK_STRING,
+            description:
+              'The first message of the run, as a template over the fire payload. `{{ body.order.id }}` is one value (an object renders as JSON); `{{ payload }}` is the whole payload as JSON. Roots: `trigger` and `fired_at` always; `body` and `headers` for a webhook; `event` for an event or App trigger; `change_request` for a change request; `source`, `actor` and `message` for a manual fire. A program agent reads the rendered prompt on stdin; omitted, it reads the whole payload as JSON. Required unless `run.app` is set or the agent is a program agent.',
+          },
           session: {
             ...normalizedEnumSchema(['fresh', 'reuse', 'pinned', 'keyed']),
             default: 'fresh',
@@ -618,7 +621,11 @@ function onRunTriggerSchema(): JsonSchemaFragment {
           app: { ...appSlug, description: 'The fire calls this App instead of an agent.' },
           path: { type: 'string', pattern: '^/', description: 'With `run.app`: the request path. Starts with `/`.' },
           method: { type: 'string', enum: ['POST', 'GET'], description: 'With `run.app`: the request method.' },
-          payload: { type: 'object', description: 'With `run.app`: the request body.' },
+          payload: {
+            type: 'object',
+            description:
+              'With `run.app`: the request body. With an agent: static input merged under each fire\'s payload (the fire\'s own keys win), so `{{ payload }}` and a program agent\'s stdin carry it. At most 64 KiB.',
+          },
         },
       },
     },
@@ -997,34 +1004,12 @@ function agentBlockV2Schema(): JsonSchemaFragment {
       },
       kortix_permissions: kortixPermissionsGrantSetSchema(),
       kortix_cli: deprecatedKortixCliGrantSetSchema(),
-      repository_access: { type: 'boolean', deprecated: true, description: 'Use workspace.project_repository.' },
-      workspace: {
-        description: 'What new sessions of this agent get in /workspace.',
-        oneOf: [
-          {
-            type: 'object',
-            properties: {
-              project_repository: {
-                type: 'boolean',
-                default: true,
-                description: 'Check out the project repository and allow repository access. Defaults to true.',
-              },
-            },
-            additionalProperties: false,
-          },
-          { type: 'string', enum: [...WORKSPACE_MODES_V2], deprecated: true },
-        ],
-      },
+      repository_access: { type: 'boolean', deprecated: true, description: 'Ignored: a session never checks out the project repository at boot.' },
+      workspace: { deprecated: true, description: 'Ignored: a session never checks out the project repository at boot.' },
       // This agent's pi packages, on top of the top-level list; `exclude` drops top-level ones.
       harnesses: harnessesSchema('agent'),
     },
     additionalProperties: false,
-    allOf: [
-      { if: { required: ['workspace'], properties: { workspace: { const: 'branch' } } }, then: { properties: { repository_access: { const: true } } } },
-      { if: { required: ['workspace'], properties: { workspace: { enum: ['runtime', 'read'] } } }, then: { properties: { repository_access: { const: false } } } },
-      { if: { required: ['workspace'], properties: { workspace: { type: 'object', required: ['project_repository'], properties: { project_repository: { const: true } } } } }, then: { properties: { repository_access: { const: true } } } },
-      { if: { required: ['workspace'], properties: { workspace: { type: 'object', required: ['project_repository'], properties: { project_repository: { const: false } } } } }, then: { properties: { repository_access: { const: false } } } },
-    ],
   };
 }
 
@@ -1270,14 +1255,32 @@ function agentBlockV3Schema(): JsonSchemaFragment {
   return {
     type: 'object',
     properties: {
+      title: {
+        type: 'string',
+        pattern: '\\S',
+        maxLength: AGENT_TITLE_MAX_LENGTH,
+        description: 'The agent\'s name as people read it, e.g. "GitHub PR reviewer". The key under `agents` stays its id: sessions, triggers and @-mentions use the key. Default: the key in sentence case.',
+      },
       ...behavior,
       permission: {
         ...permission,
         default: 'allow',
         description: 'Which tool calls run, ask a person, or never run: `allow`, `ask` or `deny` (`"*"` and `all` also mean `allow`). `skill` and `task` belong to `skills` and `subagents`.',
       },
-      prompt: { ...NON_BLANK_STRING, description: 'The system prompt. Set `prompt` or `prompt_file`, not both.' },
+      prompt: { ...NON_BLANK_STRING, description: 'The system prompt. Set `prompt` or `prompt_file`, not both. Not with `run`.' },
       prompt_file: { type: 'string', pattern: AGENT_FILE_PATTERN, description: 'A repository path to a `.md` file. The file is the system prompt. A leading `---` frontmatter block is dropped, so an agent file another tool reads (`.claude/agents/<name>.md`) works as is.' },
+      run: {
+        ...NON_BLANK_STRING,
+        maxLength: 4096,
+        description:
+          "A program agent: the shell command (`bash -c`) each turn runs instead of a model, once, in the session's sandbox. It runs in the first `workspace.repos` path (else `/workspace`), after `workspace.setup` is done, with the agent's secrets, `KORTIX_TOKEN` and `KORTIX_API_URL` (pass them to `createKortix` from `@kortix/sdk` to act as the agent). Input: the message on stdin, and `{ version, session_id, agent, prompt }` as JSON in the file `$KORTIX_EVENT_PATH`. A trigger that omits `prompt` sends its whole payload as JSON, with its `run.payload` merged in. Reply: stdout, rendered as Markdown (first 256 KiB). A non-zero exit fails the turn with the end of stderr, and the run is not retried. A run past `timeout` (default `30m`) is stopped. Stop ends the command's process group. Excludes `model`, `prompt` and `prompt_file`; model keys have no effect. Needs the `program_agents` feature.",
+      },
+      timeout: {
+        type: 'string',
+        default: '30m',
+        description:
+          'A program agent\'s run limit, a duration from `1s` to `6h` (`"30m"`, `"2h"`). A run that is still going is stopped (SIGTERM, then SIGKILL after 5 s) and the turn fails. Only with `run`.',
+      },
       enabled: { type: 'boolean', default: true, description: '`false`: no session starts with the agent, and no agent starts it as a subagent.' },
       codemode: {
         type: 'string',
@@ -1321,22 +1324,6 @@ function agentBlockV3Schema(): JsonSchemaFragment {
         'Project permissions (`project.*`) the agent holds, whoever starts the session. `kortix validate --scopes` prints them. An account permission is an error.',
         v2.properties.kortix_permissions,
       ),
-      workspace: {
-        description: 'What new sessions of this agent get in /workspace. Any other key under `workspace` is an error.',
-        anyOf: [
-          { type: 'string', enum: ['branch', 'runtime', 'read'], deprecated: true, description: 'Deprecated: `branch` is `{ project_repository: true }`, `runtime` is `{ project_repository: false }`.' },
-          { type: 'object' },
-        ],
-        properties: {
-          project_repository: {
-            type: 'boolean',
-            default: false,
-            description:
-              '`true`: new sessions check out the project repository in `/workspace`, on their own session branch. `false`: no checkout, and repository calls answer `403` `session_repository_access_denied`. Project tools still load.',
-          },
-        },
-        additionalProperties: false,
-      },
       sandbox: { ...v2.properties.sandbox, description: 'A template slug, or `default` for the platform image. Default: `sandbox.default`.' },
       space: {
         type: 'string',
@@ -1352,7 +1339,52 @@ function agentBlockV3Schema(): JsonSchemaFragment {
       env: { ...v2.properties.secrets, deprecated: true, description: 'Deprecated: use `secrets` (same value).' },
       kortix_cli: { ...deprecatedKortixCliGrantSetSchema(), description: 'Deprecated: use `kortix_permissions` (same value).' },
       connectors_personal: { ...v2.properties.connectors_personal, deprecated: true, description: 'Deprecated: use `connectors_required` (same value).' },
-      repository_access: { type: 'boolean', deprecated: true, description: 'Deprecated: use `workspace: { project_repository: <bool> }`.' },
+      repository_access: { type: 'boolean', deprecated: true, description: 'Deprecated and ignored: a session never checks out the project repository at boot. Delete the key.' },
+      workspace: {
+        description:
+          "What this agent's sessions get to work in. Nothing is cloned and nothing runs unless it says so. `repos` and `setup` run in the background after the session starts: they never hold its first turn.",
+        anyOf: [
+          {
+            type: 'object',
+            properties: {
+              sandbox: { type: 'string', pattern: SLUG_SCHEMA.pattern, description: 'A `sandbox.templates` slug, or `default`: the machine. Same as the agent\'s `sandbox` key.' },
+              repos: {
+                type: 'array',
+                description: 'Explicit clones of the workspace repository, on the session branch. Needs `workspace.gitops.read` in `kortix_permissions`. None by default.',
+                items: {
+                  type: 'object',
+                  properties: {
+                    path: { type: 'string', pattern: '^/workspace(/.*)?$', description: 'Where the clone goes: `/workspace` or a folder under it. Default `/workspace`.' },
+                    sparse: { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 }, description: 'Monorepo subset: the repository folders a cone sparse-checkout keeps.' },
+                  },
+                  additionalProperties: false,
+                },
+              },
+              setup: {
+                type: 'array',
+                description: 'Steps run in order after the clones, each in its own login shell with the agent\'s secrets, in the first clone\'s folder (or `/workspace`). A `cd` does not carry to the next step. A failure stops the rest; the session keeps running.',
+                items: {
+                  anyOf: [
+                    { type: 'string', minLength: 1 },
+                    {
+                      type: 'object',
+                      required: ['run'],
+                      properties: {
+                        run: { type: 'string', minLength: 1, description: 'The shell command.' },
+                        cwd: { type: 'string', minLength: 1, description: 'Where it runs: relative to the first clone\'s folder, or absolute under `/workspace`.' },
+                      },
+                      additionalProperties: false,
+                    },
+                  ],
+                },
+              },
+              project_repository: { type: 'boolean', deprecated: true, description: 'Deprecated: `true` becomes `workspace.gitops.read` in `kortix_permissions`.' },
+            },
+            additionalProperties: false,
+          },
+          { type: 'string', deprecated: true, description: 'Deprecated: `branch` becomes `workspace.gitops.read`; `runtime` and `read` mean nothing.' },
+        ],
+      },
     },
     additionalProperties: false,
     not: { required: ['prompt', 'prompt_file'] },
@@ -1506,6 +1538,7 @@ export function buildManifestSchema(): JsonSchemaFragment {
         },
         additionalProperties: false,
       },
+      evals: evalsSchema(),
       spaces: {
         type: ['object', 'null'],
         description: 'Spaces: channels with configured tabs. Agents join one with `agents.<name>.space`.',
@@ -1597,4 +1630,118 @@ export const KORTIX_JSON_SCHEMA: JsonSchemaFragment = buildManifestSchema();
 /** The manifest JSON Schema (`kortix schema`, `/schema/kortix.schema.json`, the kortix-system skill). */
 export function manifestJsonSchema(): JsonSchemaFragment {
   return KORTIX_JSON_SCHEMA;
+}
+
+/** A `tasks` / `datasets` value of an eval suite: one path, or a list of paths and `{ path }` / `{ name, version }` tables. */
+function evalSourcesSchema(description: string): JsonSchemaFragment {
+  return {
+    description,
+    anyOf: [
+      { type: 'string' },
+      {
+        type: 'array',
+        items: {
+          anyOf: [
+            { type: 'string' },
+            {
+              type: 'object',
+              properties: {
+                path: { type: 'string', description: 'A repository path: one task folder (it holds `task.toml`) or a folder of task folders.' },
+                name: {
+                  type: 'string',
+                  description:
+                    'A Harbor Hub package `org/name` (under `tasks` a task, under `datasets` a dataset), optionally `@ref`; or a dataset of the legacy Harbor registry, such as `terminal-bench`.',
+                },
+                git_url: { type: 'string', description: 'A public git repository (https). `path` is inside it.' },
+                git_commit_id: { type: 'string', description: 'The commit, branch or tag of `git_url`. Default: its default branch.' },
+                version: { type: ['string', 'number'], description: 'The legacy registry dataset version, such as `2.0`, or a Harbor Hub ref.' },
+                ref: { type: 'string', description: 'A Harbor Hub ref: a tag (`latest`), a revision (`3`) or `sha256:<digest>`. Default: `latest`.' },
+                task_names: { type: 'array', items: { type: 'string' }, description: 'Glob patterns of task names to keep.' },
+                exclude_task_names: { type: 'array', items: { type: 'string' }, description: 'Glob patterns of task names to leave out.' },
+                n_tasks: { type: 'integer', minimum: 1, description: 'Keep at most this many tasks, in name order.' },
+              },
+            },
+          ],
+        },
+      },
+    ],
+  };
+}
+
+/** `evals`: suite name → a job config in Harbor's job config field names (`./evals.ts`). */
+function evalsSchema(): JsonSchemaFragment {
+  return {
+    type: ['object', 'null'],
+    description:
+      'Eval suites. Each suite runs agents on Harbor-format tasks (an instruction, a sandbox and `tests/test.sh`, which writes the reward) and scores them. A suite is a job config in the field names of a Harbor job config, or `config: <path>` to a Harbor job config file. Start one with `kortix evals run <suite>`. Needs the `evals` feature.',
+    additionalProperties: {
+      type: 'object',
+      properties: {
+        config: { type: 'string', description: 'A repository path to a Harbor job config (`.yaml`, `.yml` or `.json`). The other keys of the suite override its fields.' },
+        tasks: evalSourcesSchema('The tasks to run: a repository path, or a list of them.'),
+        datasets: evalSourcesSchema('Folders of tasks, Harbor Hub datasets (`{ name: terminal-bench/terminal-bench-2-1 }`), or datasets of the legacy Harbor registry (`{ name: terminal-bench, version: "2.0" }`).'),
+        agents: {
+          description: 'The agents to score. Default: `oracle`, which runs each task\'s `solution/solve.sh` and proves the task is solvable.',
+          type: 'array',
+          items: {
+            anyOf: [
+              { type: 'string' },
+              {
+                type: 'object',
+                required: ['name'],
+                properties: {
+                  name: { type: 'string', description: 'An agent of this project, `oracle` (runs `solution/solve.sh`) or `nop` (does nothing).' },
+                  model_name: { type: 'string', description: 'A `provider/model` id. Absent: the agent\'s own model.' },
+                  override_timeout_sec: { type: 'number', exclusiveMinimum: 0, description: 'Replaces each task\'s `agent.timeout_sec`.' },
+                  max_timeout_sec: { type: 'number', exclusiveMinimum: 0, description: 'Caps each task\'s `agent.timeout_sec`.' },
+                },
+              },
+            ],
+          },
+        },
+        job_name: { type: 'string', description: 'The name of each job of the suite. Default: `<suite>-<timestamp>`.' },
+        n_attempts: { type: 'integer', minimum: 1, maximum: 100, default: 1, description: 'Trials per task and agent.' },
+        n_concurrent_trials: { type: 'integer', minimum: 1, maximum: 32, default: 4, description: 'Trials running at once.' },
+        timeout_multiplier: { type: 'number', exclusiveMinimum: 0, default: 1, description: 'Multiplies every task timeout.' },
+        agent_timeout_multiplier: { type: 'number', exclusiveMinimum: 0, description: 'Multiplies the agent timeout. Wins over `timeout_multiplier`.' },
+        verifier_timeout_multiplier: { type: 'number', exclusiveMinimum: 0, description: 'Multiplies the verifier timeout. Wins over `timeout_multiplier`.' },
+        retry: {
+          type: 'object',
+          description: 'Run a trial again after an error the error policy marks as retryable.',
+          properties: {
+            max_retries: { type: 'integer', minimum: 0, maximum: 10, default: 0 },
+            include_exceptions: { type: 'array', items: { type: 'string' } },
+            exclude_exceptions: { type: 'array', items: { type: 'string' } },
+          },
+        },
+        override_error_policy: {
+          type: 'object',
+          description: 'Exception type → `{ should_retry, should_grade, has_valid_reward }`.',
+          additionalProperties: {
+            type: 'object',
+            properties: { should_retry: { type: 'boolean' }, should_grade: { type: 'boolean' }, has_valid_reward: { type: 'boolean' } },
+          },
+        },
+        metrics: {
+          type: 'array',
+          description: 'How rewards aggregate across trials. Default: `mean`.',
+          items: { anyOf: [{ type: 'string', enum: ['mean', 'sum', 'min', 'max'] }, { type: 'object', properties: { type: { type: 'string', enum: ['mean', 'sum', 'min', 'max'] } } }] },
+        },
+        environment: {
+          type: 'object',
+          properties: {
+            sandbox: { type: 'string', description: 'A `sandbox.templates` slug every trial boots. Absent: each agent\'s own sandbox.' },
+            delete: { type: 'boolean', default: true, description: 'Stop each trial\'s sandbox when the trial ends.' },
+          },
+        },
+        verifier: {
+          type: 'object',
+          properties: {
+            disable: { type: 'boolean', default: false, description: 'Run no verifier: trials end with no reward.' },
+            env: { type: 'object', additionalProperties: { type: 'string' }, description: 'Variables added to every task\'s `[verifier.env]`.' },
+          },
+        },
+      },
+    },
+  };
 }

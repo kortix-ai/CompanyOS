@@ -233,7 +233,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     docker.io \
     git \
-    openssh-client && \
+    openssh-client \
+    tini && \
     apt-get upgrade -y && \
     rm -rf /var/lib/apt/lists/*
 
@@ -267,11 +268,13 @@ COPY --from=deps /app/packages/db/scripts/ledger-repair.ts ./packages/db/scripts
 COPY --from=deps /app/packages/db/scripts/local-invalid-index-repair.ts ./packages/db/scripts/local-invalid-index-repair.ts
 COPY --from=deps /app/packages/db/scripts/migration-target.ts ./packages/db/scripts/migration-target.ts
 COPY --from=deps /app/packages/db/scripts/migration-files.ts ./packages/db/scripts/migration-files.ts
+COPY --from=deps /app/packages/db/scripts/migration-ledger.ts ./packages/db/scripts/migration-ledger.ts
 COPY --from=deps /app/packages/db/scripts/migration-ledger-repair.ts ./packages/db/scripts/migration-ledger-repair.ts
 COPY --from=deps /app/packages/db/scripts/migration-retry.ts ./packages/db/scripts/migration-retry.ts
 COPY --from=deps /app/packages/db/scripts/migration-runtime-overrides.ts ./packages/db/scripts/migration-runtime-overrides.ts
 COPY --from=deps /app/packages/db/scripts/migration-status.ts ./packages/db/scripts/migration-status.ts
 COPY --from=deps /app/packages/db/scripts/catalog.ts ./packages/db/scripts/catalog.ts
+COPY --from=deps /app/packages/db/scripts/sha256.ts ./packages/db/scripts/sha256.ts
 # Non-kortix bootstrap (basejump + credit RPCs + signup triggers) for FRESH
 # self-host databases. `migrate.ts bootstrap` applies this before `up` when
 # basejump is absent (no-op on provisioned cloud/dev DBs).
@@ -386,4 +389,10 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
 # Non-root user (bun image ships with 'bun' user)
 USER bun
 
+# tini is PID 1 and reaps orphaned processes; Bun as PID 1 does not. git
+# detaches its auto-maintenance after every fetch and commit, and each orphan
+# stayed as a zombie. From 2026-11-03 the prod worker aborted every ~90 min,
+# when no PID was left for a new thread. ECS and the self-host compose file
+# override only the command, so every process of this image runs under tini.
+ENTRYPOINT ["/usr/bin/tini", "-s", "--", "/usr/local/bin/docker-entrypoint.sh"]
 CMD ["bun", "run", "src/index.ts"]

@@ -1,4 +1,4 @@
-import { FEATURE_DISABLED_CODE } from '@kortix/sdk';
+import { FEATURE_DISABLED_CODE, WORKSPACE_DELETING_CODE } from '@kortix/sdk';
 
 import { loadAuth, loadAuthForHost, loadEnvAuth, type Auth } from './api/auth.ts';
 import {
@@ -433,7 +433,11 @@ export async function locateSessionAnywhere(
         };
       }
     }
-    const probed = await probeSession(ctx.client, ctx.projectId, sessionId);
+    // A short id that matched nothing is not a session id: the API answers it
+    // with `400 Invalid session id`, so it is never sent as one.
+    const probed = SESSION_UUID_RE.test(sessionId)
+      ? await probeSession(ctx.client, ctx.projectId, sessionId)
+      : false;
     if (probed !== false && !(probed instanceof ApiError)) {
       return {
         located: { client: ctx.client, auth: ctx.auth, projectId: ctx.projectId, session: probed },
@@ -557,6 +561,18 @@ function printHostRetryHints(retryCommand: (hostName: string) => string): void {
 export const SESSION_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * The session ids a multi-id command was given. A session id never holds
+ * whitespace or a comma, so one argument with several ids (an unsplit zsh
+ * variable, a pasted list) is several ids. Flags are not ids.
+ */
+export function sessionIdArgs(args: readonly string[]): string[] {
+  return args
+    .filter((arg) => !arg.startsWith('-'))
+    .flatMap((arg) => arg.split(/[\s,]+/))
+    .filter(Boolean);
+}
+
 /** Expand a short session-id prefix against the project's session list,
  *  returning the matched row (the list already carries it — no re-fetch).
  *  The list leaves out the caller's archived sessions, so a prefix with no
@@ -567,7 +583,13 @@ export async function expandSessionIdPrefix(
   projectId: string,
   reference: string,
 ): Promise<ProjectSession | 'ambiguous' | null> {
-  for (const view of ['', '?archived=only']) {
+  // One list page holds only the newest 50 sessions, so an older session's
+  // short id was never found and fell through to a direct read with the
+  // prefix, which the API refuses (`400 Invalid session id`). `q` matches an
+  // id prefix server-side across every page; the startsWith below drops the
+  // rows `q` matched on another field.
+  const q = `q=${encodeURIComponent(reference)}&limit=200`;
+  for (const view of [`?${q}`, `?archived=only&${q}`]) {
     try {
       const sessions = await client.get<ProjectSession[]>(`/workspaces/${projectId}/sessions${view}`);
       const matches = sessions.filter((s) => s.session_id.startsWith(reference));
@@ -640,7 +662,13 @@ async function scanHostForSession(hostName: string, sessionId: string): Promise<
     } catch {
       continue;
     }
-    const hit = await probeConcurrently(projects, (p) => probeSession(client, p.project_id, sessionId));
+    // A short id is expanded per workspace, never sent as an id.
+    const isFullId = SESSION_UUID_RE.test(sessionId);
+    const hit = await probeConcurrently(projects, async (p) => {
+      if (isFullId) return probeSession(client, p.project_id, sessionId);
+      const expanded = await expandSessionIdPrefix(client, p.project_id, sessionId);
+      return expanded && expanded !== 'ambiguous' ? expanded : false;
+    });
     if (hit) {
       return {
         client,
@@ -746,6 +774,14 @@ function repositoryDisconnectedCode(err: unknown): boolean {
 
 export { NO_WORKSPACE_LINE };
 
+/** How to point the default at a live workspace once it named a deleted one (KRTX-4924). */
+export const PICK_DEFAULT_LINE = 'Pick another: kortix workspaces use <id> (kortix workspaces ls lists them).';
+
+/** True for the API's 409 `workspace_deleting`: the workspace is closed, inside its restore window. */
+export function isWorkspaceDeletingError(err: unknown): boolean {
+  return hasApiErrorCode(err, WORKSPACE_DELETING_CODE);
+}
+
 /** True for the API's 409 `no_workspace`. */
 export function isNoWorkspaceError(err: unknown): boolean {
   return hasApiErrorCode(err, NO_WORKSPACE_CODE);
@@ -799,6 +835,10 @@ export function surfaceApiError(err: unknown): number {
       );
     } else if (err.status === 404) {
       process.stderr.write(`${status.err(err.message || 'Not found.')}\n`);
+    } else if (isWorkspaceDeletingError(err)) {
+      // The workspace is closed and inside its restore window: a default or
+      // link that still names it fails every command until it points elsewhere.
+      process.stderr.write(`${status.err(err.message)}\n  ${PICK_DEFAULT_LINE}\n`);
     } else {
       process.stderr.write(`${status.err(`HTTP ${err.status}: ${err.message}`)}\n`);
       // A remediation-bearing body (the webhook-secret 409s, e.g.) names the
@@ -889,7 +929,8 @@ export function takeFlagValue(argv: string[], requested: string[]): string | und
     for (const n of names) {
       if (a === n) {
         const v = argv[i + 1];
-        if (!v || v.startsWith('-')) throw new Error(`${n} requires a value`);
+        // A lone `-` is a value: stdin, by Unix convention (`--github-token -`).
+        if (!v || (v.startsWith('-') && v !== '-')) throw new Error(`${n} requires a value`);
         argv.splice(i, 2);
         return v;
       }

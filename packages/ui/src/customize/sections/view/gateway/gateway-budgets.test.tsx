@@ -23,7 +23,7 @@ mock.module('@kortix/sdk/react', () => ({
   useSetGatewayBudget: () => ({ mutate: () => {}, isPending: false }),
   useDeleteGatewayBudget: () => ({ mutate: () => {}, isPending: false }),
 }));
-// The dialog's shell is Radix-portaled, which the test renderer cannot
+// The dialog's shell renders through a portal, which the test renderer cannot
 // traverse; the shell is not the subject, so render it inline and keep the
 // segmented controls (the Tabs primitive) real.
 const host = (tag: string) =>
@@ -243,7 +243,7 @@ describe('the budget dialog’s segmented controls', () => {
     await act(async () => setBudget.props.onClick());
     // The two segmented controls render as real tabs: a named tablist whose
     // triggers are the choices the dialog takes (KRTX-4630 keeps the old
-    // "comes from the design system" pin as a render assertion). Radix's Slot
+    // "comes from the design system" pin as a render assertion). `asChild`
     // composition reports each element twice (composite + host); host nodes
     // only.
     const isHost = (node: { type: unknown }) => typeof node.type === 'string';

@@ -11,7 +11,6 @@
  * starts every NEW thread, and a thread keeps the model it started with.
  */
 import { config } from '../../config';
-import { projectFeatureFlagEnabled } from '../../feature-flags/for-project';
 import { labelForModelRef } from '../../llm-gateway/models/picker';
 import { toWireModel } from '../../llm-gateway/resolution/effective';
 import {
@@ -23,7 +22,8 @@ import {
   describeKeys,
   listChannelModels,
 } from '../model-access';
-import { chatUser, resolveChatActor } from '../core/identity';
+import { chatUser } from '../core/identity';
+import { resolveSlackActor } from './auto-link';
 import { authorizeChannelChange } from '../core/settings';
 import { settingsRefusalText, slackSettingsChannel, slackUserOf } from './settings-text';
 import { slackChannelIsDm } from './util';
@@ -39,6 +39,8 @@ export interface SlackModelCtx {
   slackUserId: string;
   /** The slash command's name (`/kortix`), for the copy. */
   command: string;
+  /** The Kortix workspace whose own Slack app received the request, if any. */
+  projectScopedProjectId?: string;
 }
 
 /** Up to this many models are one button each; more become one searchable select. */
@@ -60,16 +62,14 @@ const SHARED_SCOPE_NOTE =
  * keys count, linked or not.
  */
 export async function slackModelScope(ctx: SlackModelCtx): Promise<ChannelModelScope | null> {
-  const gate = await channelModelContext({ teamId: ctx.teamId, channelId: ctx.channelId });
+  const gate = await channelModelContext({ teamId: ctx.teamId, channelId: ctx.channelId, projectId: ctx.projectScopedProjectId });
   if (!gate) return null;
   const sender = config.SLACK_REQUIRE_USER_IDENTITY ? ctx.slackUserId : '';
   const actor = sender
-    ? await resolveChatActor(chatUser('slack', ctx.teamId, sender), gate).catch(() => null)
+    ? await resolveSlackActor(chatUser('slack', ctx.teamId, sender), gate).catch(() => null)
     : null;
-  const pooledEnabled = await projectFeatureFlagEnabled(gate.projectId, 'pooled_provider_secrets').catch(() => false);
   return channelModelScope({
     ...gate,
-    pooledEnabled,
     linkedUserId: actor && 'userId' in actor ? actor.userId : null,
     oneToOne: slackChannelIsDm(ctx.channelId),
   });
@@ -104,7 +104,7 @@ export async function buildSlackModelsResponse(ctx: SlackModelCtx): Promise<Slas
       blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `*No Kortix workspace is connected to this channel yet.*\nRun \`${ctx.command}\` to connect one, then pick a model.` } }],
     };
   }
-  const selection = await currentChannelSelection({ teamId: ctx.teamId, channelId: ctx.channelId });
+  const selection = await currentChannelSelection({ teamId: ctx.teamId, channelId: ctx.channelId, projectId: ctx.projectScopedProjectId });
   const current = selection?.sessionModel ?? null;
 
   const { models, defaultModel } = await listChannelModels(scope);
@@ -198,7 +198,7 @@ export async function buildSlackModelsResponse(ctx: SlackModelCtx): Promise<Slas
  */
 export async function applySlackModelChoice(ctx: SlackModelCtx, choice: string): Promise<string> {
   const connect = `Connect a Kortix workspace first — run \`${ctx.command}\`.`;
-  const channelCtx = { teamId: ctx.teamId, channelId: ctx.channelId };
+  const channelCtx = { teamId: ctx.teamId, channelId: ctx.channelId, projectId: ctx.projectScopedProjectId };
   const id = choice.trim();
   const scope = await slackModelScope(ctx);
   if (!scope) return connect;

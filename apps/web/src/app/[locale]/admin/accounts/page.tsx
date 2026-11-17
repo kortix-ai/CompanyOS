@@ -66,7 +66,7 @@ import {
 } from '@kortix/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@kortix/ui/tabs';
 import { errorToast, successToast } from '@kortix/ui/toast';
-import { CreditTransactionsTable } from '@/features/billing/transactions-table';
+import { CreditActivityFeed } from '@/features/billing/credit-activity-feed';
 import { EmptyState } from '@kortix/ui/empty-state';
 import {
   useAdminAccount,
@@ -2070,12 +2070,12 @@ function LedgerTab({ ledgerQuery }: { ledgerQuery: ReturnType<typeof useAdminAcc
     );
   }
 
-  // The same table the customer sees under Billing → Credit ledger, fed from
+  // The same feed the customer sees under Usage → Credit ledger, fed from
   // the admin endpoint. One implementation, so an operator reading a support
   // ticket and the customer reading their own history see identical rows.
   return (
     <div className="max-h-[50vh] overflow-y-auto">
-      <CreditTransactionsTable rows={adminLedgerRows(entries)} />
+      <CreditActivityFeed rows={adminLedgerRows(entries)} />
     </div>
   );
 }

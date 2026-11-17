@@ -34,6 +34,7 @@ Module entries and `@kortix/ui/theme` need 0.14.4+. Inside `kortix-ai/CompanyOS`
 | Expand and collapse               | `Disclosure`, `DisclosureTrigger`, `DisclosureContent`                                                         | `disclosure`                          |
 | Form field; search field          | `Field`, `FieldLabel`, `FieldGroup`, `FieldDescription` with `Input`, `Textarea`, `Select`; `InputGroupSearch` | `field`, `input-group`                |
 | Panel; buttons side by side       | `Card` and its slots, or `bg-popover rounded-md border px-4 py-5`; `ButtonGroup`                               | `card`, `button-group`                |
+| A selection, unsaved edits or a pending paste needs actions | `ActionBar` in an `ActionBarDock` at the bottom of the column; actions take `kbd`, `tone`, `emphasis` | `action-bar` |
 | Tabs and filters                  | `Tabs`, `TabsList size="xs"`, `TabsTrigger`                                                                          | `tabs`                                |
 | Menu, picker, palette             | `DropdownMenu`, `Popover`, `Command`                                                                           | `dropdown-menu`, `popover`, `command` |
 | Table and empty list              | `Table`; `Empty` with one muted line                                                                           | `table`, `empty`                      |
@@ -51,7 +52,7 @@ A new primitive is the last step: tokens only, a small API, and a section on `/d
 | A hand-rolled chip `<span>` or a colored banner               | `Badge`, `Alert`                                                                                        |
 | `SectionCard`, `List` / `ListRow`                             | `Card`, `<ul className="space-y-2">` rows                                                               |
 | `lucide-react` or another icon set                            | `@phosphor-icons/react`, `*Icon` names, no `weight` prop (only `weight="fill"` for solid status glyphs) |
-| A fork or a restyled copy of a component                      | the component as it ships; theme with tokens (section 6)                                                |
+| A fork of a component, or `@base-ui/react`, `@radix-ui/*`, `cmdk`, `vaul` in a host | the component as it ships, themed with tokens (section 6); `asChild` on its parts, `Slot` from `@kortix/ui/slot` |
 
 ## 4. Tokens only
 

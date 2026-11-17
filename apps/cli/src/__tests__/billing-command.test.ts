@@ -11,6 +11,12 @@ const ACCOUNT = 'account_1';
 let tmp: string;
 let server: ReturnType<typeof Bun.serve> | null = null;
 let creditBalance: number | undefined = 42.5;
+/** The server's view for a caller without billing.read (account-state gatingView). */
+let gatedCredits = false;
+const HIDDEN = {
+  reason: 'token_account_shared',
+  message: 'Use a personal key: run `kortix login` on your own machine, or open the web app.',
+};
 let calls: Array<{ method: string; path: string; search: string; body: unknown }> = [];
 
 function writeConfig(apiBase: string): string {
@@ -79,6 +85,16 @@ function startServer(): string {
         req.method === 'GET' || req.method === 'DELETE' ? null : await req.json().catch(() => null);
       calls.push({ method: req.method, path, search: url.search, body });
 
+      if (path === '/v1/billing/account-state' && req.method === 'GET' && gatedCredits) {
+        return Response.json({
+          billing_state: 'active',
+          plan: { key: 'credits', family: 'credits', label: 'Credits', monthly_usd: null },
+          credits: { can_run: true, total: null, daily: null, monthly: null, extra: null, hidden: HIDDEN },
+          subscription: { tier_key: 'credits', tier_display_name: 'Credits' },
+          tier: { name: 'credits', display_name: 'Credits' },
+          can_manage_billing: false,
+        });
+      }
       if (path === '/v1/billing/account-state' && req.method === 'GET') {
         return Response.json({
           ...ACCOUNT_STATE,
@@ -235,6 +251,7 @@ describe('kortix billing', () => {
     process.env = { ...ORIGINAL_ENV };
     calls = [];
     creditBalance = 42.5;
+    gatedCredits = false;
   });
 
   afterEach(() => {
@@ -358,6 +375,25 @@ describe('kortix billing', () => {
         daily: 'credits',
       },
     });
+  });
+
+  test('hidden credit amounts are explicit nulls with the reason, and no units map', async () => {
+    gatedCredits = true;
+    const config = writeConfig(startServer());
+    const json = await runCli(['billing', 'status', '--json'], config);
+    expect(json.code).toBe(0);
+    const state = JSON.parse(json.stdout);
+    expect(state.credits).toEqual({
+      can_run: true,
+      total: null,
+      daily: null,
+      monthly: null,
+      extra: null,
+      hidden: HIDDEN,
+    });
+    const human = await runCli(['billing', 'status'], config);
+    expect(human.code).toBe(0);
+    expect(human.stdout).toMatch(/credits\s+hidden — Use a personal key: run `kortix login`/);
   });
 
   test('JSON labels API tier grants in USD and scheduled grants in credits without conversion', async () => {
@@ -541,6 +577,15 @@ describe('kortix billing', () => {
           c.path === '/v1/usage/cost-by-project' && c.search.includes('project_id=project-self'),
       ),
     ).toBeTruthy();
+  });
+
+  test('costs --by workspace --json gives each workspace its credits, as the summary does', async () => {
+    const config = writeConfig(startServer());
+    const r = await runCli(['billing', 'costs', '--by', 'workspace', '--project', 'proj_1', '--json'], config);
+    expect(r.code).toBe(0);
+    const page = JSON.parse(r.stdout);
+    expect(page.projects[0].total_cost).toBe(5);
+    expect(page.projects[0].credits).toEqual({ total: '500', llm: '350', compute: '150' });
   });
 
   test('costs --by session rolls up per session and forwards owner/project scope', async () => {

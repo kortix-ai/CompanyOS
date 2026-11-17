@@ -8,8 +8,6 @@ import { locales } from '@/i18n/catalog.mjs';
 import {
   DESKTOP_LEGACY_PATH_SCRIPT,
   desktopShellPath,
-  workspaceDesktopRewrites,
-  workspacePathOfDesktopLegacy,
   workspaceRedirects,
 } from './workspace-redirects';
 
@@ -73,9 +71,9 @@ describe('the /projects → /workspaces redirects', () => {
     expect(redirectOf('/projects/p1/agent/kortix')).toEqual({ location: '/workspaces/p1/admin/agents/kortix', status: 307 });
     expect(redirectOf('/workspaces/p1/customize/agents/kortix?tab=access')).toEqual({ location: '/workspaces/p1/admin/agents/kortix?tab=access', status: 307 });
     expect(redirectOf('/workspaces/p1/customize/agents')).toEqual({ location: '/workspaces/p1/admin/agents', status: 307 });
-    expect(redirectOf('/workspaces/p1/review?id=cr%3A7')).toEqual({ location: '/workspaces/p1/inbox?view=review&id=cr%3A7', status: 307 });
-    expect(redirectOf('/workspaces/p1/customize/review')).toEqual({ location: '/workspaces/p1/inbox?view=review', status: 307 });
-    expect(redirectOf('/projects/p1/review')).toEqual({ location: '/workspaces/p1/inbox?view=review', status: 307 });
+    expect(redirectOf('/workspaces/p1/review?id=cr%3A7')).toBeNull();
+    expect(redirectOf('/workspaces/p1/customize/review')).toEqual({ location: '/workspaces/p1/review', status: 307 });
+    expect(redirectOf('/projects/p1/review')).toEqual({ location: '/workspaces/p1/review', status: 308 });
     expect(redirectOf('/projects/p1/backends/app1')).toEqual({ location: '/workspaces/p1/apps?app=app1', status: 307 });
     expect(redirectOf('/projects/p1/customize/settings?section=models')).toEqual({
       location: '/workspaces/p1/admin/models?section=models',
@@ -122,13 +120,9 @@ function redirectFor(url: string, ua: string): string | null {
 
 describe('an installed desktop shell keeps every app page in its window', () => {
   test.each(['/projects', '/projects/start', '/projects/p1', '/projects/p1/sessions/s1', '/new'])(
-    '%s: no server redirect for the shell; the page is served from /workspaces',
+    '%s: no server redirect for the shell (the middleware serves it from /workspaces)',
     (path) => {
       expect(redirectFor(path, DESKTOP_UA)).toBeNull();
-      const rewrite = workspaceDesktopRewrites().find((r) => match(r.source, { decode: decodeURIComponent })(path));
-      expect(rewrite?.has?.every((c) => headerMatches(c, DESKTOP_UA))).toBe(true);
-      const params = (match(rewrite!.source, { decode: decodeURIComponent })(path) as { params: object }).params;
-      expect(compile(rewrite!.destination)(params)).toBe(workspacePathOfDesktopLegacy(path)!);
     },
   );
 

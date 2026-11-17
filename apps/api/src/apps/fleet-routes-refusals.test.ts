@@ -5,7 +5,7 @@
  * the caller cannot see, the 409 mapping of a refused volume destroy, the
  * confirmation gate, and the 200 body shape of the machine listing.
  */
-import { describe, expect, mock, test } from 'bun:test';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { makeOpenApiApp } from '../openapi';
 import type { AppEnv } from '../types';
 
@@ -35,13 +35,26 @@ class AppVolumeError extends Error {
 
 const machines: unknown[] = [];
 const volumes = { destroyThrows: null as AppVolumeError | null };
+/** The same shapes the real wake classes carry (KRTX-4730: the timeout is a class). */
+class AppWakeInProgressError extends Error {
+  constructor() {
+    super('App cold start did not finish in time');
+    this.name = 'AppWakeInProgressError';
+  }
+}
+const fleet = { startThrows: null as Error | Response | null };
+mock.module('./public-proxy-runtime', () => ({ AppWakeInProgressError }));
 mock.module('./fleet', () => ({
   AppFleetError,
   MAX_GROUP_SCALE: 8,
   listAppMachines: async () => machines,
-  startMachine: async () => {},
+  startMachine: async () => {
+    if (fleet.startThrows) throw fleet.startThrows;
+  },
   stopMachine: async () => {},
-  restartMachine: async () => {},
+  restartMachine: async () => {
+    if (fleet.startThrows) throw fleet.startThrows;
+  },
   destroyMachine: async () => {},
   setAppScale: async () => ({}),
   execInMachine: async () => ({}),
@@ -71,6 +84,10 @@ const VOLUME_ID = '00000000-0000-4000-8000-000000000003';
 const APP_ROW = { appId: APP_ID, accountId: '00000000-0000-4000-8000-000000000004' };
 
 describe('App fleet routes: HTTP refusals', () => {
+  afterEach(() => {
+    fleet.startThrows = null;
+  });
+
   test('a machine route 404s for an App the caller cannot see', async () => {
     gate.visible = null;
     const res = await app.request(`/${WORKSPACE_ID}/apps/${APP_ID}/machines`);
@@ -93,6 +110,22 @@ describe('App fleet routes: HTTP refusals', () => {
     const res = await app.request(`/${WORKSPACE_ID}/apps/${APP_ID}/volumes/${VOLUME_ID}?confirm=data`, { method: 'DELETE' });
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: 'The volume is mounted on a machine; stop the machine first.', code: 'volume_attached' });
+  });
+
+  test('a machine start still in progress answers the starting contract, not a 500', async () => {
+    gate.visible = APP_ROW;
+    fleet.startThrows = new AppWakeInProgressError();
+    const res = await app.request(`/${WORKSPACE_ID}/apps/${APP_ID}/machines/00000000-0000-4000-8000-000000000005/start`, { method: 'POST' });
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: 'The machine is still starting: another start was already running. Check the machines list again.', code: 'machine_start_in_progress' });
+  });
+
+  test('a wake superseded mid-flight passes its 409 through', async () => {
+    gate.visible = APP_ROW;
+    fleet.startThrows = Response.json({ error: 'App start was superseded by a newer lifecycle request', code: 'app_start_superseded' }, { status: 409 });
+    const res = await app.request(`/${WORKSPACE_ID}/apps/${APP_ID}/machines/00000000-0000-4000-8000-000000000005/restart`, { method: 'POST' });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'App start was superseded by a newer lifecycle request', code: 'app_start_superseded' });
   });
 
   test('a volume destroy without the exact name asks for confirmation', async () => {

@@ -416,11 +416,6 @@ const FIXTURES: Fixture[] = [
     input: 'triggers:\n  - slug: t\n    type: cron\n    on: { every: 5m }\n    run: { prompt: go }\n',
   },
   {
-    name: 'on/run: run needs a prompt or an app',
-    valid: false,
-    input: 'triggers:\n  - slug: t\n    on: { every: 5m }\n    run: { agent: default }\n',
-  },
-  {
     name: 'on/run: a webhook needs its secret',
     valid: false,
     input: 'triggers:\n  - slug: t\n    on: { webhook: {} }\n    run: { prompt: go }\n',
@@ -754,17 +749,9 @@ const FIXTURES: Fixture[] = [
     valid: false,
     input: 'default_agent: w\nagents:\n  w:\n    kortix_cli: [billing.not_an_action]\n',
   },
-  { name: 'workspace.project_repository false', valid: true, input: 'default_agent: a\nagents:\n  a:\n    workspace:\n      project_repository: false\n' },
-  { name: 'workspace.project_repository true', valid: true, input: 'default_agent: a\nagents:\n  a:\n    workspace:\n      project_repository: true\n' },
-  { name: 'empty workspace map', valid: true, input: 'default_agent: a\nagents:\n  a:\n    workspace: {}\n' },
-  { name: 'workspace.project_repository "false"', valid: false, input: 'default_agent: a\nagents:\n  a:\n    workspace:\n      project_repository: "false"\n' },
-  { name: 'unknown workspace key', valid: false, input: 'default_agent: a\nagents:\n  a:\n    workspace:\n      project_repo: false\n' },
-  { name: 'workspace list', valid: false, input: 'default_agent: a\nagents:\n  a:\n    workspace: [project_repository]\n' },
-  {
-    name: 'unknown workspace value rejected',
-    valid: false,
-    input: 'default_agent: w\nagents:\n  w:\n    workspace: everywhere\n',
-  },
+  // `workspace` is obsolete: every old shape is accepted and ignored (deprecation `agent-workspace`).
+  { name: 'obsolete workspace map accepted', valid: true, input: 'default_agent: a\nagents:\n  a:\n    workspace:\n      project_repository: true\n' },
+  { name: 'obsolete workspace string accepted', valid: true, input: 'default_agent: w\nagents:\n  w:\n    workspace: everywhere\n' },
   {
     name: 'declarative agent egress policy accepted (not enforced)',
     valid: true,
@@ -1296,6 +1283,16 @@ describe('Known divergence: cross-field rules only the imperative validator enfo
     const yaml = 'default_agent: ghost\nagents:\n  w: {}\n';
     expect(validateManifest(yaml).valid).toBe(false);
     expect(validateCombined(parseYaml(yaml))).toBe(true);
+  });
+
+  // `prompt` may be omitted when the trigger's agent is a program agent (`run`): which agents have `run` is another section.
+  test('a run with no prompt and no app: imperative rejects for a model agent, accepts for a program agent; schema accepts both', () => {
+    const model = 'triggers:\n  - slug: t\n    on: { every: 5m }\n    run: { agent: default }\n';
+    const program = 'agents:\n  j:\n    run: node j.js\ntriggers:\n  - slug: t\n    on: { every: 5m }\n    run: { agent: j }\n';
+    expect(validateManifest(model).valid).toBe(false);
+    expect(validateCombined(parseYaml(model))).toBe(true);
+    expect(validateManifest(program).valid).toBe(true);
+    expect(validateCombined(parseYaml(program))).toBe(true);
   });
 
   test("a trigger's agent naming an undeclared agent: imperative rejects, schema accepts", () => {

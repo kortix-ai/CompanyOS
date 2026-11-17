@@ -18,7 +18,8 @@ export function PromoNavRow({
 }: {
   icon: ReactNode;
   label: string;
-  badge: string;
+  /** A short tag ("New"); omitted, the row shows only the dismiss on hover. */
+  badge?: string;
   dismissLabel: string;
   onDismiss: () => void;
   onClick: () => void;
@@ -35,9 +36,11 @@ export function PromoNavRow({
         {icon}
         <span className="min-w-0 flex-1 truncate">{label}</span>
       </SidebarMenuButton>
-      <SidebarMenuBadge className="bg-kortix-blue/15 text-foreground mr-1 rounded-sm px-1.5 group-focus-within/menu-item:opacity-0 group-hover/menu-item:opacity-0 max-md:hidden">
-        {badge}
-      </SidebarMenuBadge>
+      {badge ? (
+        <SidebarMenuBadge className="bg-kortix-blue/15 text-foreground mr-1 rounded-sm px-1.5 group-focus-within/menu-item:opacity-0 group-hover/menu-item:opacity-0 max-md:hidden">
+          {badge}
+        </SidebarMenuBadge>
+      ) : null}
       <SidebarMenuAction onClick={onDismiss} aria-label={dismissLabel} showOnHover className="mr-1">
         <XIcon />
       </SidebarMenuAction>

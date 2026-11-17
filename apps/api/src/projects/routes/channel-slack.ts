@@ -11,10 +11,11 @@ import { INSTALL_STATE_INVALID, InstallCompletionBody } from '../../channels/cor
 import { buildSlackInstallUrl, completeSlackOauthInstall } from '../../channels/slack-oauth';
 import { slackOauthMode } from '../../channels/slack-oauth-mode';
 import { bindSlackThreadToSession } from '../../channels/slack/binding';
+import { joinSlackChannels } from '../../channels/slack/join';
 import { downloadSlackFile, uploadSlackFile } from '../../channels/slack/file-proxy';
 import { provenSlackWorkspaces } from '../../channels/slack/inbound';
-import { CONVERSATION_NOT_IN_PROJECT } from '../../connectors/channel-read-scope';
-import { slackWriteRefusal } from '../../connectors/channel-write-scope';
+import { SLACK_NOT_LINKED } from '../../connectors/slack-visibility';
+import { slackPrivateWriteRefusal, slackWriteRefusal } from '../../connectors/channel-write-scope';
 import { reconcileChannelConnectors } from '../../connectors/sync';
 import { PROJECT_ACTIONS } from '../../iam';
 import { isSessionSandboxCredential } from '../../middleware/session-sandbox-credential';
@@ -96,6 +97,63 @@ export function registerChannelSlackRoutes(): void {
       } catch {
         return c.json({ oauth_available: false, install_url: null });
       }
+    },
+  );
+
+  // POST /v1/workspaces/:workspaceId/channels/slack/join
+  // The bot joins public channels itself (conversations.join). A private
+  // channel answers needs_invite: a person runs /invite there.
+
+  projectsApp.openapi(
+    createRoute({
+      method: 'post',
+      path: '/{workspaceId}/channels/slack/join',
+      tags: ['channels'],
+      summary: 'Join the Slack bot to channels',
+      description:
+        'Joins the workspace Slack bot to each named channel (`#name`, `name` or a channel id). Public channels are joined at once; a private channel answers `needs_invite`. `connected: false` when the workspace has no Slack connection.',
+      ...auth,
+      request: {
+        params: z.object({ workspaceId: z.string() }),
+        body: {
+          content: {
+            'application/json': { schema: z.object({ channels: z.array(z.string().min(1).max(100)).min(1).max(50) }) },
+          },
+        },
+      },
+      responses: {
+        200: json(
+          z.object({
+            connected: z.boolean(),
+            team: z.string().nullable(),
+            bot_user_id: z.string().nullable(),
+            results: z.array(
+              z.object({
+                channel: z.string(),
+                id: z.string().nullable(),
+                status: z.enum(['joined', 'already_member', 'needs_invite', 'not_found', 'error']),
+                error: z.string().optional(),
+              }),
+            ),
+          }),
+          'One result per channel',
+        ),
+        ...errors(400, 403, 404),
+      },
+    }),
+    async (c) => {
+      const projectId = workspaceIdParam(c);
+      const loaded = await loadProjectForUser(c, projectId, 'read');
+      if (!loaded) return c.json({ error: 'Not found' }, 404);
+      await assertProjectCapability(
+        c,
+        loaded.userId,
+        loaded.row.accountId,
+        projectId,
+        PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE,
+      );
+      const { channels } = c.req.valid('json');
+      return c.json(await joinSlackChannels(projectId, channels), 200);
     },
   );
 
@@ -304,7 +362,7 @@ export function registerChannelSlackRoutes(): void {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
-      const result = await downloadSlackFile(projectId, c.req.query('url') ?? '');
+      const result = await downloadSlackFile(projectId, c.req.query('url') ?? '', loaded.userId);
       if (!result.ok) return c.json({ error: result.error }, result.status);
       c.header('Content-Type', result.contentType);
       return c.body(result.body);
@@ -357,12 +415,14 @@ export function registerChannelSlackRoutes(): void {
             ? body.threadTs
             : undefined;
       // A file post is a write, under the same rule as the connector's
-      // send_message: never into another project's channel or thread.
+      // send_message: only the Kortix workspace holding the Slack workspace.
       const refusal = await slackWriteRefusal(projectId, { channel: body.channel, ts: threadTs, tsArg: 'thread_ts' });
       if (refusal?.kind === 'invalid') return c.json({ error: refusal.message }, 400);
       // No install on record: Slack is not connected, the 404 this route always gave.
       if (refusal?.kind === 'install') return c.json({ error: refusal.message }, 404);
-      if (refusal) return c.json({ error: refusal.message, reason: CONVERSATION_NOT_IN_PROJECT }, 403);
+      if (refusal) return c.json({ error: refusal.message, reason: SLACK_NOT_LINKED }, 403);
+      const privateRefusal = await slackPrivateWriteRefusal(projectId, loaded.userId, body.channel);
+      if (privateRefusal) return c.json({ error: privateRefusal.message, reason: privateRefusal.reason }, 403);
       const result = await uploadSlackFile(projectId, {
         channel: String(body.channel ?? ''),
         filename: String(body.filename ?? ''),
@@ -495,12 +555,30 @@ export function registerChannelSlackRoutes(): void {
         );
       }
       // Binding routes the thread's replies here, so it is a write into that
-      // conversation (connectors/channel-write-scope.ts). Another project's
-      // thread is left to the bind below, which reports it as it always has.
+      // conversation (connectors/channel-write-scope.ts): only the Kortix
+      // workspace holding the Slack workspace binds. Another session's thread
+      // is left to the bind below, which reports it as it always has.
       const refusal = await slackWriteRefusal(projectId, { channel, ts: threadTs, tsArg: 'thread_ts' });
       if (refusal?.kind === 'invalid') return c.json({ error: refusal.message }, 400);
-      if (refusal?.kind === 'channel') {
-        return c.json({ error: refusal.message, code: 'CONVERSATION_NOT_IN_PROJECT', reason: CONVERSATION_NOT_IN_PROJECT, channel }, 403);
+      if (refusal?.kind === 'not_linked') {
+        return c.json({ error: refusal.message, code: 'SLACK_NOT_LINKED', reason: SLACK_NOT_LINKED, channel }, 403);
+      }
+      // A bind routes the thread's replies to this session: a private channel
+      // needs the caller's person in it, as a post there does. A sandbox token
+      // names only its own session, so its person is that session's; any
+      // other credential is its own user, whatever session it names.
+      let person: string | null = (c as any).get('userId') ?? null;
+      if (callerSandboxSessionId !== null) {
+        const [owner] = await db
+          .select({ createdBy: projectSessions.createdBy })
+          .from(projectSessions)
+          .where(and(eq(projectSessions.sessionId, callerSandboxSessionId), eq(projectSessions.projectId, projectId)))
+          .limit(1);
+        person = owner?.createdBy ?? null;
+      }
+      const privateRefusal = await slackPrivateWriteRefusal(projectId, person, channel);
+      if (privateRefusal) {
+        return c.json({ error: privateRefusal.message, code: 'SLACK_PRIVATE_CONVERSATION', reason: privateRefusal.reason, channel }, 403);
       }
       const binding = await bindSlackThreadToSession({
         projectId,

@@ -21,8 +21,8 @@ import {
   CommandItem,
   CommandList,
   CommandShortcut,
+  useCommandState,
 } from '@kortix/ui/command';
-import { useCommandState } from 'cmdk';
 import { EntityAvatar } from '@kortix/ui/entity-avatar';
 import { AgentMark } from '@kortix/ui/internal/components/agent-mark';
 import { FadedScrollArea } from '@kortix/ui/faded-scroll-area';
@@ -157,7 +157,8 @@ import {
   useVisibleAgents,
   useFeatureFlags,
 } from '@kortix/sdk/react';
-import { capitalizeWords, formatRelativeTime } from '@kortix/shared';
+import { agentDisplayName, capitalizeWords, formatRelativeTime } from '@kortix/shared';
+import { InlineCodeText } from '@kortix/ui/markdown';
 import {
   ArrowDownIcon as ArrowDown,
   ArrowUpIcon as ArrowUp,
@@ -237,8 +238,8 @@ function sanitizeCmdkValue(value: string): string {
  *
  * **This is also the row's cmdk selection identity**, which cmdk requires to
  * be unique — two rows sharing a `value` are both marked `aria-selected` and
- * Enter always fires the first one. cmdk 0.2.1 (the installed version, checked
- * against `node_modules/cmdk/dist/index.d.ts`) has no separate `keywords` prop
+ * Enter always fires the first one. The command core (`@kortix/ui/command`, a
+ * port of cmdk 0.2.1) has no separate `keywords` prop
  * to move the search text onto, and `CommandDialog` in `packages/ui/src/primitives/command`
  * forwards neither `filter` nor `shouldFilter`, so the value is the only lever.
  * Uniqueness therefore rests on the curated text itself, which is safe because
@@ -1265,10 +1266,10 @@ export function CommandPalette() {
       // filters in play read the same text.
       //
       // THIS FILTER DECIDES WHAT IS VISIBLE, not cmdk's. Every CommandGroup in
-      // this file passes `forceMount`, and cmdk 0.2.1 propagates a group's
-      // `forceMount` to its items through the group context
-      // (`g = props.forceMount ?? groupContext.forceMount` in
-      // `cmdk/dist/index.mjs`), so cmdk's own scorer never removes one of
+      // this file passes `forceMount`, and the command core (a port of cmdk
+      // 0.2.1, `packages/ui/src/primitives/command-core.tsx`) propagates a
+      // group's `forceMount` to its items through the group context, so its
+      // own scorer never removes one of
       // these rows — it only RANKS them, by scoring the same `value`. That is
       // why a stale keyword here is a wrong ANSWER rather than a wrong order,
       // and why the two can never disagree about which rows exist.
@@ -1307,7 +1308,9 @@ export function CommandPalette() {
     const q = query.trim().toLowerCase();
     return agents.filter(
       (a) =>
-        (a.name || '').toLowerCase().includes(q) || (a.description || '').toLowerCase().includes(q),
+        (a.name || '').toLowerCase().includes(q) ||
+        (a.title || '').toLowerCase().includes(q) ||
+        (a.description || '').toLowerCase().includes(q),
     );
   }, [agents, query]);
 
@@ -1583,7 +1586,7 @@ export function CommandPalette() {
   /*
    * Warm the destinations the rows on screen can reach.
    *
-   * A palette row can never be an anchor. cmdk 0.2.1 activates a row on Enter
+   * A palette row can never be an anchor. The command core activates a row on Enter
    * by dispatching its own `cmdk-item-select` event — not a DOM click — and
    * `Command.Item` renders a hard-coded div with no `asChild`, so wrapping the
    * row in a `<Link>` leaves keyboard activation dead. Every navigation below
@@ -1926,7 +1929,7 @@ export function CommandPalette() {
   // `router.push`: nothing else discards the App Router route cache across an
   // identity change.
   const performLogout = useCallback((event: React.MouseEvent) => {
-    // `preventDefault` keeps the confirm dialog UP. Radix closes it on click,
+    // `preventDefault` keeps the confirm dialog UP. The alert dialog closes it on click,
     // which left the palette gone, the dialog gone, and the unchanged app on
     // screen for as long as the sign-out took — up to the full step budget when
     // the network is broken — with nothing saying anything was happening.
@@ -2920,7 +2923,7 @@ export function CommandPalette() {
                         <CommandItem
                           key={agent.name}
                           value={sanitizeCmdkValue(
-                            `agent ${agent.name} ${agent.description || ''}`,
+                            `agent ${agent.name} ${agent.title || ''} ${agent.description || ''}`,
                           )}
                           onSelect={() => handleSelectAgent(agent.name)}
                         >
@@ -2928,11 +2931,11 @@ export function CommandPalette() {
                           <AgentMark slug={agent.name} size={21} />
                           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
                             <span className="truncate text-sm font-medium">
-                              {capitalizeWords(agent.name)}
+                              {agentDisplayName(agent.name, agent.title)}
                             </span>
                             {agent.description && (
                               <span className="text-muted-foreground/50 truncate text-xs">
-                                {agent.description}
+                                <InlineCodeText text={agent.description} />
                               </span>
                             )}
                           </div>

@@ -11,6 +11,7 @@ import Loading from '../../primitives/loading';
 import type { ModelDefaultControls } from '../models/model-selector';
 import { ModelSelector } from '../models/model-selector';
 import { ReasoningEffortSelector } from './reasoning-effort-selector';
+import type { ComposerCall } from '../voice/composer-call';
 import { SendStopControl } from './send-stop-control';
 
 /**
@@ -99,6 +100,8 @@ export interface ComposerToolbarProps {
   leading?: React.ReactNode;
   /** The `chat_input` control holds model and effort: this toolbar draws neither. */
   pickersInChatInput?: boolean;
+  /** The agent runs a program (`run`), not a model: this toolbar draws neither model nor effort. */
+  noModel?: boolean;
 
   isSending: boolean;
   isBusy: boolean;
@@ -123,6 +126,8 @@ export interface ComposerToolbarProps {
   attachmentFailed?: boolean;
   /** Why the selected model cannot take the attachments, or null. See `SendStopControl`. */
   attachmentUnsupported?: string | null;
+  /** The host's voice call, offered in Send's place on an empty composer. See `SendStopControl`. */
+  call?: ComposerCall;
   onSubmit: () => void;
 }
 
@@ -146,6 +151,7 @@ export function ComposerToolbar({
   rewind,
   leading,
   pickersInChatInput = false,
+  noModel = false,
   isSending,
   isBusy,
   onStop,
@@ -164,12 +170,13 @@ export function ComposerToolbar({
   agentUnavailable = false,
   attachmentFailed = false,
   attachmentUnsupported = null,
+  call,
   onSubmit,
 }: ComposerToolbarProps) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const { modelPickerEnabled } = useUiHostConfig();
   const showModel =
-    !pickersInChatInput && modelPickerEnabled && (models.length > 0 || modelRequired) && !!onModelChange;
+    !noModel && !pickersInChatInput && modelPickerEnabled && (models.length > 0 || modelRequired) && !!onModelChange;
   // Either `/` palette row opens the one merged popover.
   const pickerOpen =
     modelMenuOpen === undefined && reasoningMenuOpen === undefined
@@ -202,7 +209,7 @@ export function ComposerToolbar({
           />
         )}
 
-        {!showModel && modelPickerEnabled && !pickersInChatInput && <ReasoningEffortSelector
+        {!showModel && !noModel && modelPickerEnabled && !pickersInChatInput && <ReasoningEffortSelector
           variants={variants}
           selectedVariant={selectedVariant}
           onVariantChange={onVariantChange}
@@ -265,6 +272,7 @@ export function ComposerToolbar({
           agentUnavailable={agentUnavailable}
           attachmentFailed={attachmentFailed}
           attachmentUnsupported={attachmentUnsupported}
+          call={call}
           onSubmit={onSubmit}
         />
       </div>

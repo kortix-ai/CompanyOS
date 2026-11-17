@@ -324,7 +324,7 @@ release, at Promote to Production, and nowhere else. The rules:
 |---|---|---|
 | Your box | T0 for the packages you touched, the targeted test, and the real surface: the route with curl, the CLI process, the page with agent-browser | your judgment |
 | Pull request into `dev` | nothing, unless a person adds `test` or `preview` | no |
-| Push to `dev` | only the seconds-long guards: `secret-scan`, `secrets-guard`, and path-gated `DB Migrations` / `i18n-catalogs` / `Terraform Apply Global` / `deploy-api-router-dev` | no |
+| Push to `dev` | seconds-long guards: `secret-scan`, `secrets-guard`; path-gated `DB Migrations` / `i18n-catalogs` / `Terraform Apply Global` / `deploy-api-router-dev`; requested mobile-input-gated `Mobile TestFlight` build | no |
 | Nightly on `dev` | `Tests` `core` and `packages` lanes, no browser: a red night comments the failures on the commit, so they are ready to fix before a promote | no |
 | Pull request into `staging` | nothing: Promote to Production opens and merges it | no |
 | Pull request into `prod` | the release suite, once (`full suite + quality gates`) | **yes, the only gate** |
@@ -403,6 +403,17 @@ not replace dev, and a dev smoke test does not replace focused local tests.
 Record the branch, PR, local commands and output, merge SHA, deploy run,
 deployed SHA evidence, and the exact dev command or interaction in the final
 response.
+
+## Mobile versioning
+
+**Mobile changes require a version bump.** Follow `apps/mobile/AGENTS.md`:
+run `node apps/mobile/scripts/set-version.mjs --next` once per mobile task.
+For example: `1.6.2` → `1.6.21` → `1.6.22` → `1.6.23`.
+Keep major and minor unchanged. Commit every synchronized native version copy.
+This also applies when shared-package changes alter mobile behavior.
+Mobile changes merged into `dev` automatically build iOS for TestFlight with
+the production API. This dedicated workflow does not submit App Review or
+release to the App Store. See `apps/mobile/BUILD_GUIDE.md`.
 
 ## Architecture: `@kortix/sdk` is the source of truth
 
@@ -602,11 +613,13 @@ See `tests/e2e/helpers/session-auth.ts` for the exact calls.
   larger runner): Blacksmith billed ~$2.7k in September 2026 for minutes
   GitHub gives this repo for free. `tests/unit/image-build-speed-workflow.test.ts`
   enforces the free default.
-- `.github/workflows/tests.yml` holds the six contract lanes — `core-flows`,
+- `.github/workflows/tests.yml` holds the seven contract lanes — `core-flows`,
   `core-db`, `packages-api`, `packages-cli`, `packages-kortixd`,
-  `packages-rest` — one GitHub-hosted runner each (`CI_RUNNER_L`). `core-*`
-  split the core run (`--core-group=flows|db`); `packages-*` are slices of
-  package quality (`--packages-only --package-group=<g>`). The concurrency
+  `packages-publish`, `packages-rest` — one runner each (`CI_RUNNER_L`).
+  `core-*` split the core run (`--core-group=flows|db`); `packages-*` are
+  slices of package quality (`--packages-only --package-group=<g>`).
+  `publish` builds, packs and install-tests the npm packages; `rest` runs the
+  repo-wide checks and the tests of every other package. The concurrency
   settings in `tests/bin/package-quality.ts` must not be raised. Each lane is
   the unchanged root command at the exact requested SHA. Do not add CI-only
   test logic.

@@ -46,13 +46,10 @@ import { CapabilityPageShell } from '../shared/capability-page-shell';
 export function AgentDrivesSection({
   projectId,
   agentName,
-  repositoryAccess = true,
 }: {
   projectId: string;
   /** Absent: the project's mounts (Project admin). */
   agentName?: string;
-  /** Whether sessions of the agent get the project repository at /workspace. Agent mode only. */
-  repositoryAccess?: boolean;
 }) {
   const t = useTranslations('agentMounts');
   const drive = useProjectDrive(projectId);
@@ -60,7 +57,6 @@ export function AgentDrivesSection({
   const agentPlan = useAgentMounts(agentName ? driveId : null, agentName ?? '');
   const projectPlan = useProjectMounts(agentName ? null : driveId);
   const plan = agentName ? agentPlan : projectPlan;
-  const showRepository = !!agentName && repositoryAccess;
   const root = useFolderAccess(driveId, '/');
   // Mounting needs `manage` on the folder; someone who holds it at the top holds it below.
   const canMount = root.data?.access === 'manage';
@@ -89,7 +85,7 @@ export function AgentDrivesSection({
         }
       />
     );
-  } else if (plan.data.mounts.length === 0 && !showRepository) {
+  } else if (plan.data.mounts.length === 0) {
     body = (
       <EmptyState media={<EmptyArt icon={HardDrivesIcon} />} title={t('emptyTitle')} description={agentName ? t('emptyDescription') : t('projectEmptyDescription')} />
     );
@@ -97,15 +93,6 @@ export function AgentDrivesSection({
     body = (
       <div className="space-y-3">
         <EditorList>
-          {showRepository ? (
-            <li className="flex min-h-12 items-center gap-3 px-4 py-2">
-              <span className="min-w-0 flex-1">
-                <code className="text-foreground block truncate font-mono text-sm">/workspace</code>
-                <span className="text-muted-foreground block truncate text-xs">{t('repository')}</span>
-              </span>
-              <span className="text-muted-foreground shrink-0 text-xs">{t('readWrite')}</span>
-            </li>
-          ) : null}
           {plan.data.mounts.map((mount) => (
             <MountRow key={mount.path} driveId={driveId} agentName={agentName} mount={mount} />
           ))}

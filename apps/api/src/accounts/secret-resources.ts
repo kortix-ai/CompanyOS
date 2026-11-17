@@ -8,9 +8,13 @@ import { auth, errors, json } from '../openapi';
 import { db } from '../shared/db';
 import { accountMemberRow } from '../iam/membership-read';
 import { clearAccountSecretCooldown, encryptAccountSecret, memberMayReadProject, probeAccountSecret, secretUsableInProject } from '../secrets/account-resource';
-import { resolveFeatureFlag } from '../feature-flags/registry';
 import { ACCOUNT_ACTIONS, actorOf, authorize, PROJECT_ACTIONS } from '../iam';
 import { resolveCatalogUpstream } from '../llm-gateway/models/provider-registry';
+import { type KeyVerification, verifyAndRecordAccountKey } from '../llm-gateway/provider-verify';
+import { customProviderSecretName, readCustomProviders } from '../llm-gateway/custom-providers';
+import { isAwsRegion } from '../llm-gateway/resolution/aws-region';
+import { seedProjectDefaultModelOnConnect } from '../llm-gateway/models/seed-default';
+import { BEDROCK_PROVIDER_ID, BEDROCK_REGION_NAME } from '../secrets/llm-credential-names';
 import { SUBSCRIPTION_PROVIDERS, SubscriptionAccountSchema, SubscriptionUsageSchema, refreshSubscriptionUsage, storedSubscriptionUsage, subscriptionAccount } from '../llm-gateway/subscription-usage';
 import { AccountIdParam, accountsRouter, getMembership } from './core/app';
 import { readJsonObject } from '../shared/http-body';
@@ -21,6 +25,11 @@ import { PATH_WORKSPACE_ID_VAR, isCanonicalWorkspacePath } from '../middleware/w
 import { projectsView } from '../workspaces/rows';
 import { workspaceFactsOf } from '../iam/workspace-facts';
 
+const KeyVerificationSchema = z.object({
+  status: z.enum(['verified', 'invalid', 'unknown']),
+  message: z.string(),
+  checked_at: z.string(),
+});
 const SecretIdParam = AccountIdParam.extend({ secretId: z.string().uuid() });
 const GrantParam = SecretIdParam.extend({ userId: z.string().uuid() });
 const View = z.object({
@@ -38,6 +47,9 @@ const View = z.object({
   granted_user_ids: z.array(z.string()), can_use: z.boolean(),
   /** Can the server decrypt the stored value? Never carries the value. */
   status: SecretValueStatusSchema,
+  /** The last check of a provider API key against its provider (on save, on
+   *  rotate, or on request); null for a login and for a key never checked. */
+  verification: KeyVerificationSchema.nullable(),
 });
 const Create = z.object({
   project_id: z.string().uuid().optional(),
@@ -65,7 +77,16 @@ async function mayManage(c: Context<AppEnv>, accountId: string, creatorId: strin
 async function mayWriteAccount(c: Context<AppEnv>, accountId: string) {
   return (await authorize(await actorOf(c, accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE)).allowed;
 }
-async function view(row: typeof accountSecretResources.$inferSelect, actorId: string, projectId?: string) {
+type ResourceRow = typeof accountSecretResources.$inferSelect;
+
+/** `row` with a check that just ran, as its stored columns now read. */
+function withVerification(row: ResourceRow, verification: KeyVerification | null): ResourceRow {
+  return verification
+    ? { ...row, verifyStatus: verification.status, verifyMessage: verification.message, verifiedAt: verification.checkedAt }
+    : row;
+}
+
+async function view(row: ResourceRow, actorId: string, projectId?: string) {
   const grants = await db.select({ userId: accountSecretGrants.userId }).from(accountSecretGrants)
     .where(and(eq(accountSecretGrants.accountId, row.accountId), eq(accountSecretGrants.secretId, row.secretId)));
   return {
@@ -79,6 +100,13 @@ async function view(row: typeof accountSecretResources.$inferSelect, actorId: st
     created_by: row.createdBy, created_at: row.createdAt.toISOString(), updated_at: row.updatedAt.toISOString(),
     granted_user_ids: grants.map((grant) => grant.userId),
     status: probeAccountSecret(row.accountId, row.valueEnc),
+    verification: row.verifyStatus && row.verifiedAt
+      ? {
+          status: row.verifyStatus as 'verified' | 'invalid' | 'unknown',
+          message: row.verifyMessage ?? '',
+          checked_at: row.verifiedAt.toISOString(),
+        }
+      : null,
     can_use: (projectId ?? row.projectId)
       ? secretUsableInProject(row, (projectId ?? row.projectId)!, grants.some((grant) => grant.userId === actorId)) &&
         await memberMayReadProject(row.accountId, (projectId ?? row.projectId)!, actorId)
@@ -192,8 +220,16 @@ export function registerSecretResourceRoutes() {
     const parsed = Create.safeParse(await readJsonObject(c));
     if (!parsed.success) return c.json({ error: 'Invalid secret resource' }, 400);
     const body = parsed.data;
-    if (resolveCatalogUpstream(body.provider_id)?.envVar !== body.name) {
+    // A key's name is the one the gateway reads for its provider: the catalog
+    // key name, Bedrock's region next to its key, or a custom provider's key.
+    const nameMatches = resolveCatalogUpstream(body.provider_id)?.envVar === body.name ||
+      (body.provider_id === BEDROCK_PROVIDER_ID && body.name === BEDROCK_REGION_NAME) ||
+      (customProviderSecretName(body.provider_id) === body.name && body.project_id !== undefined);
+    if (!nameMatches) {
       return c.json({ error: 'Provider and environment name do not match' }, 400);
+    }
+    if (body.name === BEDROCK_REGION_NAME && !isAwsRegion(body.value.trim())) {
+      return c.json({ error: 'AWS_REGION must be an AWS region name, such as us-east-1' }, 400);
     }
     if (body.project_id) {
       const [project] = await db.select({ accountId: projectsView.accountId, metadata: projectsView.metadata }).from(projectsView)
@@ -207,7 +243,12 @@ export function registerSecretResourceRoutes() {
       ) {
         return c.json({ error: 'Workspace unavailable' }, 403);
       }
-      if (!resolveFeatureFlag(project.metadata, 'pooled_provider_secrets')) return c.json({ error: 'Pooled provider secrets are disabled' }, 403);
+      // Named accounts are the one store of provider keys: the flag no longer
+      // decides where a key is saved (secrets/llm-credential-move.ts).
+      if (customProviderSecretName(body.provider_id) === body.name &&
+        !readCustomProviders(project.metadata).some((provider) => provider.id === body.provider_id)) {
+        return c.json({ error: 'Provider and environment name do not match' }, 400);
+      }
       if (body.access_mode !== 'members' || (body.user_ids ?? []).some((id) => id !== userId)) {
         const verdict = await authorize(await actorOf(c, accountId), PROJECT_ACTIONS.PROJECT_SECRET_WRITE, { type: 'project', id: body.project_id });
         if (!verdict.allowed) return c.json({ error: 'Workspace secret write access required' }, 403);
@@ -234,7 +275,17 @@ export function registerSecretResourceRoutes() {
       await tx.insert(accountSecretGrants).values(userIds.map((grantee) => ({ accountId, secretId: row!.secretId, userId: grantee, grantedBy: userId })));
       return row!;
     });
-    return c.json(await view(resource, userId), 201);
+    // The key is saved first; one cheap call to the provider then says whether
+    // it works. A failed check never undoes the save (`unknown`).
+    const verification = await verifyAndRecordAccountKey(resource, userId);
+    // A workspace with no usable default model gets one from a key that works.
+    if (resource.projectId) {
+      void seedProjectDefaultModelOnConnect({
+        projectId: resource.projectId, accountId, userId, secretName: resource.name,
+        ...(verification ? { keyCheck: verification.status } : {}),
+      });
+    }
+    return c.json(await view(withVerification(resource, verification), userId), 201);
   });
 
   accountsRouter.openapi(createRoute({
@@ -298,9 +349,27 @@ export function registerSecretResourceRoutes() {
     }
     const parsed = z.object({ value: z.string().min(1).max(65536) }).safeParse(await readJsonObject(c));
     if (!parsed.success) return c.json({ error: 'Invalid value' }, 400);
-    const [updated] = await db.update(accountSecretResources).set({ valueEnc: encryptAccountSecret(accountId, parsed.data.value), cooldownUntil: null, needsReauthAt: null, updatedAt: new Date() })
+    const [updated] = await db.update(accountSecretResources).set({ valueEnc: encryptAccountSecret(accountId, parsed.data.value), cooldownUntil: null, needsReauthAt: null, verifyStatus: null, verifiedAt: null, verifyMessage: null, updatedAt: new Date() })
       .where(eq(accountSecretResources.secretId, row.secretId)).returning();
-    return c.json(await view(updated!, userId));
+    return c.json(await view(withVerification(updated!, await verifyAndRecordAccountKey(updated!, userId)), userId));
+  });
+
+  // "Check again" on a saved key: the same one call that runs on save.
+  accountsRouter.openapi(createRoute({
+    method: 'post', path: '/{workspaceId}/secret-resources/{secretId}/verify', tags: ['secrets'],
+    summary: 'Check one saved provider API key against its provider', ...auth,
+    request: { params: SecretIdParam },
+    responses: { 200: json(View, 'Secret metadata with the check result'), ...errors(400, 403, 404) },
+  }), async (c) => {
+    const { secretId } = c.req.valid('param');
+    const accountId = accountIdParam(c);
+    const userId = c.get('userId');
+    const row = await loadSecret(accountId, secretId);
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    if (!(await mayManage(c, accountId, row.createdBy))) return c.json({ error: 'Forbidden' }, 403);
+    const verification = await verifyAndRecordAccountKey(row, userId);
+    if (!verification) return c.json({ error: 'Only a provider API key in a workspace can be checked' }, 400);
+    return c.json(await view(withVerification(row, verification), userId));
   });
 
   // An owner's "retry now": a ChatGPT plan's usage can be reset before the reset

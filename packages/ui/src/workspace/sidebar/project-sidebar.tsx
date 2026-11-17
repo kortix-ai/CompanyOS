@@ -19,6 +19,7 @@ import { ComputerConnectModal } from '../../internal/tunnel/computer-connect';
 import { ConnectMcpModal } from '../../internal/layout/connect-mcp-modal';
 import { ProjectMcpNavItem } from './footer/project-mcp-nav';
 import { ProjectComputerNavItem } from './footer/project-computer-nav';
+import { ProjectDownloadAppNavItem } from './footer/project-download-app-nav';
 import { ProjectManifestIssuesAlert } from './footer/project-manifest-issues-alert';
 import { ProjectSandboxAlert } from './footer/project-sandbox-alert';
 import { ProjectRepositoryDisconnectedAlert } from '../repository-disconnected';
@@ -58,8 +59,14 @@ export function ProjectSidebar({
   projectId,
   menu,
   onOpenSearch,
+  onOpenDownloadApp,
 }: {
   projectId: string;
+  /**
+   * Opens the host's Download app dialog. Without it, the footer has no
+   * Download app row.
+   */
+  onOpenDownloadApp?: () => void;
   /**
    * Opens the host's search (apps/web: its command palette). Without it, the
    * header has no Search button.
@@ -180,6 +187,7 @@ export function ProjectSidebar({
                   {chrome ? (
                     <ProjectChromeNavItem onOpenConnect={() => useAppsModalStore.getState().setOpen(true)} />
                   ) : null}
+                  {onOpenDownloadApp ? <ProjectDownloadAppNavItem onOpenDownload={onOpenDownloadApp} /> : null}
                 </SidebarMenu>
               </li>
               {/* Last (Jay, 2026-09-03). It is the only paid call to action in

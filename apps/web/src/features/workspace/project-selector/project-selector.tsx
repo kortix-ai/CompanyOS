@@ -6,7 +6,7 @@ import { ArrowRightIcon, MagnifyingGlassIcon, PlusIcon } from '@phosphor-icons/r
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useEffect, useMemo, useState, useTransition, type MouseEvent } from 'react';
 
 import { Button } from '@kortix/ui/button';
 import { EntityAvatar } from '@kortix/ui/entity-avatar';
@@ -44,6 +44,7 @@ import { WorkspaceHandoff } from '@kortix/ui/workspace/new/workspace-handoff';
 import {
   suggestWorkspaceName,
   validateWorkspaceName,
+  withNameParam,
   workspaceNameMessage,
 } from '@kortix/ui/workspace/new/workspace-name';
 import { useWorkspaceStateActions } from '@kortix/ui/workspace/sidebar/use-workspace-list';
@@ -71,10 +72,10 @@ export interface ProjectSelectorViewProps {
   connectComputer?: boolean;
   email: string | null;
   name?: string | null;
+  /** `user_metadata.avatar_url` — the picture Settings → Profile stored (KRTX-4492). */
+  avatarUrl?: string | null;
   loading: boolean;
   loadFailed: boolean;
-  /** Some account's project list failed: the list may be missing rows. */
-  partialFailure?: boolean;
   workspaces: WorkspaceRow[];
   invites: MyAccountInvite[];
   /** `/workspaces/new`, or null when this caller may not create a workspace. */
@@ -111,11 +112,17 @@ export interface InlineCreateProps {
   onNameBlur: () => void;
   onSubmit: () => void;
   onRetry: () => void;
+  /** "More options" is navigating to `/workspaces/new`: the link shows a spinner. */
+  openingMore: boolean;
+  /** Open `href` (`/workspaces/new`) carrying the name on screen. */
+  onOpenMore: (href: string) => void;
+  /** Prefetch the URL `onOpenMore` will push (pointer enter, focus). */
+  onWarmMore: (href: string) => void;
 }
 
 export function ProjectSelectorView(props: ProjectSelectorViewProps) {
   const t = useTranslations('workspaces.chooser');
-  const { email, loading, loadFailed, workspaces, invites } = props;
+  const { email, loading, loadFailed, workspaces, invites, avatarUrl } = props;
   const createHref =
     props.createHref && props.connectComputer ? `${props.createHref}?connect=computer` : props.createHref;
   const [query, setQuery] = useState('');
@@ -141,7 +148,13 @@ export function ProjectSelectorView(props: ProjectSelectorViewProps) {
 
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-lg flex-col px-6 py-20">
-      <AccountTopBar email={email} name={props.name} signingOut={props.signingOut} onLogOut={props.onLogOut} />
+      <AccountTopBar
+        email={email}
+        name={props.name}
+        avatarUrl={avatarUrl}
+        signingOut={props.signingOut}
+        onLogOut={props.onLogOut}
+      />
 
       {/* `my-auto` centers the block in the viewport while it fits, and lets
           it start at the top and scroll once the list is taller. Blank while
@@ -227,15 +240,6 @@ export function ProjectSelectorView(props: ProjectSelectorViewProps) {
                 </section>
               ) : null}
 
-              {props.partialFailure ? (
-                <div className="flex items-center justify-between gap-3 rounded-md border border-dashed px-4 py-3">
-                  <p className="text-muted-foreground text-xs">{t('partialError')}</p>
-                  <Button size="sm" variant="outline" onClick={props.onRetryAll}>
-                    {t('retry')}
-                  </Button>
-                </div>
-              ) : null}
-
               {createHref && inlineCreate ? (
                 <div className="flex flex-col items-center gap-6">
                   <InlineCreateForm createHref={createHref} form={inlineCreate} />
@@ -297,6 +301,9 @@ function InlineCreateForm({ createHref, form }: { createHref: string; form: Inli
           autoCapitalize="none"
           autoCorrect="off"
           value={form.name}
+          // Read-only while "More options" opens: the push already carries
+          // this name, so a later edit would be lost.
+          readOnly={form.openingMore}
           onChange={(event) => form.onNameChange(event.target.value)}
           onBlur={form.onNameBlur}
           placeholder={tNew('name.placeholder')}
@@ -314,7 +321,12 @@ function InlineCreateForm({ createHref, form }: { createHref: string; form: Inli
           {tWorkspaces('freeCreditsRule')}
         </p>
       ) : null}
-      <Button type="submit" disabled={!form.canSubmit} className="w-full" data-testid="selector-create">
+      <Button
+        type="submit"
+        disabled={!form.canSubmit || form.openingMore}
+        className="w-full"
+        data-testid="selector-create"
+      >
         {t('createAction')}
       </Button>
       {form.error ? (
@@ -334,7 +346,22 @@ function InlineCreateForm({ createHref, form }: { createHref: string; form: Inli
         </div>
       ) : null}
       <Button asChild variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground self-center">
-        <Link href={createHref} prefetch data-testid="selector-create-more">
+        <Link
+          href={createHref}
+          prefetch
+          data-testid="selector-create-more"
+          aria-busy={form.openingMore || undefined}
+          aria-disabled={form.openingMore || undefined}
+          onPointerEnter={() => form.onWarmMore(createHref)}
+          onFocus={() => form.onWarmMore(createHref)}
+          onClick={(event) => {
+            // A modified click opens a new tab on the static href.
+            if (isModifiedClick(event)) return;
+            event.preventDefault();
+            form.onOpenMore(createHref);
+          }}
+        >
+          {form.openingMore ? <Loading className="size-3.5 shrink-0" /> : null}
           {t('moreOptions')}
         </Link>
       </Button>
@@ -540,9 +567,9 @@ export function ProjectSelector({ connectComputer }: { connectComputer?: boolean
       connectComputer={connectComputer}
       email={user?.email ?? null}
       name={user?.user_metadata?.name}
+      avatarUrl={user?.user_metadata?.avatar_url}
       loading={data.listsLoading || data.invitesQuery.isLoading}
       loadFailed={data.accountsQuery.isError || data.allListsFailed}
-      partialFailure={data.failedAccountIds.length > 0}
       workspaces={data.workspaces}
       invites={data.invites}
       createHref={createHref}
@@ -588,6 +615,12 @@ function useInlineCreate(allowed: boolean): InlineCreateProps {
     setName((current) => current || suggestWorkspaceName());
   }, []);
   const { create, status, error, retry, canRetry, phase } = useCreateWorkspace();
+  // "More options" navigates to `/workspaces/new`, which can take seconds on a
+  // cold route. The push runs in a transition so the link shows a spinner
+  // from the click until the page commits, and it carries the name on screen
+  // (`?name=`) so the next page does not suggest a different one.
+  const router = useRouter();
+  const [openingMore, startOpeningMore] = useTransition();
   // The managed source: the server makes the account (`new_workspace: true`).
   const state = { ...INITIAL_FORM_STATE, name };
   const submitting = status === 'creating';
@@ -612,5 +645,11 @@ function useInlineCreate(allowed: boolean): InlineCreateProps {
       if (canSubmit) void create(state);
     },
     onRetry: retry,
+    openingMore,
+    onOpenMore: (href) => {
+      if (openingMore) return;
+      startOpeningMore(() => router.push(withNameParam(href, name)));
+    },
+    onWarmMore: (href) => router.prefetch(withNameParam(href, name)),
   };
 }

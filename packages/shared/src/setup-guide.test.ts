@@ -1,0 +1,86 @@
+import { describe, expect, test } from 'bun:test';
+
+import { PROD_TARGET, loopPrompt, setupGuide, setupHostName, setupPromptFor, setupTarget, templatePrompt } from './setup-guide';
+
+// A prompt copied on a deployment must name that deployment's guide, and the
+// guide must point the CLI at that deployment's API (founder call 2026-11-10).
+describe('setup target', () => {
+  test('production, absent values and the production origin all give the production target', () => {
+    expect(setupTarget(undefined, undefined)).toEqual(PROD_TARGET);
+    expect(setupTarget('https://kortix.com/', 'https://api.kortix.com/v1')).toEqual(PROD_TARGET);
+    // Production's APP_URL is https://www.kortix.com: its guide must be the production one.
+    expect(setupTarget('https://www.kortix.com', 'https://api.kortix.com/v1')).toEqual(PROD_TARGET);
+    expect(setupGuide(setupTarget('https://www.kortix.com', 'https://api.kortix.com/v1'))).not.toContain('not production');
+  });
+
+  test('dev, a local stack and a root-relative backend each point at themselves', () => {
+    expect(setupTarget('https://dev.kortix.com', 'https://dev-api.kortix.com/v1')).toEqual({ origin: 'https://dev.kortix.com', apiBase: 'https://dev-api.kortix.com' });
+    expect(setupTarget('http://localhost:14800', 'http://localhost:14808/v1')).toEqual({ origin: 'http://localhost:14800', apiBase: 'http://localhost:14808' });
+    expect(setupTarget('https://kortix.example.com', '/v1')).toEqual({ origin: 'https://kortix.example.com', apiBase: 'https://kortix.example.com' });
+  });
+
+  test('prompts name the guide of their own deployment', () => {
+    const local = setupTarget('http://localhost:14800', 'http://localhost:14808/v1');
+    expect(setupPromptFor()).toContain('https://kortix.com/setup.md');
+    expect(setupPromptFor(local)).toContain('http://localhost:14800/setup.md');
+    expect(setupPromptFor(local)).not.toContain('kortix.com');
+    expect(loopPrompt({ id: 'sales', name: 'Sales Factory' }, local)).toContain('http://localhost:14800/setup.md');
+  });
+
+  test('the guide off production installs from that origin and selects a CLI host for its API', () => {
+    const dev = setupTarget('https://dev.kortix.com', 'https://dev-api.kortix.com/v1');
+    const guide = setupGuide(dev);
+    expect(setupHostName(dev)).toBe('dev-kortix-com');
+    expect(guide).toContain('curl -fsSL https://dev.kortix.com/install | KORTIX_CHANNEL=dev bash');
+    expect(guide).toContain('kortix hosts add dev-kortix-com --url https://dev-api.kortix.com');
+    expect(guide).toContain('kortix hosts use dev-kortix-com');
+    expect(setupGuide()).toContain('curl -fsSL https://kortix.com/install | bash');
+    // An installed CLI can be older than the guide: the installer runs every time, never behind `command -v`.
+    expect(guide).not.toContain('command -v kortix ||');
+    expect(setupGuide()).not.toContain('command -v kortix ||');
+    expect(setupGuide()).not.toContain('kortix hosts use');
+    // The MCP server the guide registers is this deployment's own.
+    expect(guide).toContain('claude mcp add --transport http kortix https://dev-api.kortix.com/v1/mcp');
+    expect(setupGuide()).toContain('codex mcp add kortix --url https://api.kortix.com/v1/mcp');
+  });
+});
+
+// The one prompt offers the templates; a template's prompt is the same guide
+// with that template chosen (founder call 2026-11-16).
+describe('templates in the setup guide', () => {
+  test('the guide lists the templates, reads the recommended one, and asks for the template first', () => {
+    const guide = setupGuide();
+    expect(guide).toContain('kortix templates ls --json');
+    expect(guide).toContain('kortix templates onboard <id> --steps');
+    expect(guide).toContain('1. Template:');
+    expect(guide).toContain('kortix templates add <id> --repo <owner/repo>');
+    for (const name of ['Software Factory', 'Marketing Factory', 'Sales Factory', 'Recruiting Factory', 'Support Factory']) {
+      expect(guide).toContain(name);
+    }
+  });
+
+  test('a template prompt opens the setup guide with the template named, never a reference repository', () => {
+    const prompt = loopPrompt({ id: 'software-factory', name: 'Software Factory' });
+    expect(prompt).toContain('https://kortix.com/setup.md');
+    expect(prompt).toContain('The template is software-factory.');
+    expect(prompt).not.toContain('github.com');
+    expect(templatePrompt({ id: 'sales', name: 'Sales Factory' })).toBe(loopPrompt({ id: 'sales', name: 'Sales Factory' }));
+  });
+
+  test('the person finishes on one setup page, not on links in the terminal', () => {
+    const guide = setupGuide();
+    expect(guide).toContain('kortix onboard --yes --json --wait');
+    expect(guide).toContain('<web>/workspaces/<id>/setup');
+    expect(guide).toContain('Never print those links in the terminal.');
+    expect(guide).not.toContain('give the person\nall of them in one message');
+  });
+
+  test('the guide uses none of the words its plain-words rule bans, outside that rule', () => {
+    const guide = setupGuide();
+    const rule = guide.slice(guide.indexOf('6. **Plain words.**'), guide.indexOf('7. **Be brief.**'));
+    expect(rule.length).toBeGreaterThan(100);
+    const rest = guide.replace(rule, '');
+    const banned = /\b(seamless(ly)?|robust|leverag\w*|powerful|unlock\w*|empower\w*|streamlin\w*|supercharg\w*|effortless\w*|magic\w*|game-changer|dive in|let's|I'd be happy to|great|simply|just|exciting|24\/7)\b/gi;
+    expect(rest.match(banned) ?? []).toEqual([]);
+  });
+});

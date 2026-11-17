@@ -23,20 +23,14 @@ function baseConfig(): Config {
     workspace: WORKSPACE,
     projectTarget: WORKSPACE,
     defaultBranch: 'main',
-    branchFetchAttempts: 60,
-    branchFetchDelaySec: 0.25,
-    autoClone: false,
     projectId: 'project-1',
     apiUrl: 'http://api.test/v1',
     repoUrl: undefined,
     branchName: undefined,
-    sessionFresh: false,
     baseSha: undefined,
     sandboxToken: TEST_TOKEN,
     gitUserName: 'Kortix Agent',
     gitUserEmail: 'agent@kortix.ai',
-    cloneFilter: '',
-    cloneDepth: 1,
   }
 }
 

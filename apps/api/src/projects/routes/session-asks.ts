@@ -125,7 +125,7 @@ export function registerSessionAsksRoutes(): void {
       }
       // An ask exists so the agent yields to a person: its own token never answers it.
       if (isProjectSessionPrincipal(c)) {
-        return c.json({ error: 'An agent cannot answer its own ask — a person must', code: 'ASK_REQUIRES_HUMAN' }, 403);
+        return c.json({ error: "This ask waits for a person: the person the session works for answers it.", code: 'ASK_REQUIRES_HUMAN' }, 403);
       }
       const loaded = await loadProjectForUser(c, projectId, 'session');
       if (!loaded) return c.json({ error: 'Not found' }, 404);

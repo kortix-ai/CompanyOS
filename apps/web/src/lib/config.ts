@@ -33,6 +33,25 @@ export const isServicesPagesEnabled = (): boolean => {
   return getEnv().SERVICES_PAGES_ENABLED;
 };
 
+/**
+ * Whether Loopmaxxing is reachable: the /loopmaxxing page and the
+ * loopmaxxing.sh host. Off by default: KORTIX_PUBLIC_LOOPMAXXING_ENABLED=true
+ * turns it on, and `next dev` turns it on locally.
+ */
+export const isLoopmaxxingEnabled = (): boolean => {
+  return getEnv().LOOPMAXXING_ENABLED;
+};
+
+/**
+ * Whether Loopmaxxing is announced: the marketing site shows the announcement
+ * bar that links to it. A reachable page stays unannounced until
+ * KORTIX_PUBLIC_LOOPMAXXING_ANNOUNCED=true (dev sets it; `next dev` turns it
+ * on locally). Prod leaves it unset until the launch.
+ */
+export const isLoopmaxxingAnnounced = (): boolean => {
+  return getEnv().LOOPMAXXING_ENABLED && getEnv().LOOPMAXXING_ANNOUNCED;
+};
+
 const SERVICES_PAGES = new Set(['/services']);
 
 /** False for a link to /services while that page is off. */

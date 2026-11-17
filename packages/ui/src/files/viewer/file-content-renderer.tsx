@@ -30,7 +30,8 @@ import {
   FloppyDiskIcon as Save,
 } from '@phosphor-icons/react';
 import React, { lazy, Suspense, useCallback, useMemo, useState } from 'react';
-import { useReducedMotion, type Variant } from 'motion/react';
+import { type Variant } from 'motion/react';
+import { useReducedMotion } from '../../internal/hooks/use-reduced-motion';
 import { Disclosure, DisclosureContent } from '../../primitives/disclosure';
 // Direct module import, not the feature barrel: the barrel re-exports THIS file.
 import { HtmlPreview } from './html-preview';
@@ -471,13 +472,11 @@ export function FileContentRenderer({
           )}
 
           {/* XLSX / XLS preview */}
-          {!isLoading && !error && !isNotFound && fileCategory === 'xlsx' && (!bytesOnly || blobUrl) && (
+          {isContentReady && fileCategory === 'xlsx' && rawBlob && (
             <Suspense fallback={<RendererFallback />}>
               <XlsxRenderer
                 key={`xlsx-${filePath}-${contentRevision}-${reloadKey}`}
-                // A bytes-only source hands the workbook over as a blob URL;
-                // the renderer reads a sandbox path only for a session.
-                filePath={bytesOnly ? blobUrl! : filePath}
+                blob={rawBlob}
                 fileName={fileName}
                 className="h-full"
                 showDownload={false}

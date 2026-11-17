@@ -214,7 +214,7 @@ export const topics = {
       description: 'Read it, export it, stream it.',
       body: [
         'Kortix records who did what, when, how they signed in, and whether it was allowed. An agent’s row names the person it acted for.',
-        'Export CSV or JSONL, or stream each new event to a signed webhook. Events stay readable for 90 days, then sit in a locked archive to day 365.',
+        'Export CSV or JSONL, or stream each new event to a signed webhook. The log shows the last 14 days; older events sit in a locked archive to day 365, and the export reads them.',
       ],
     },
   ],
@@ -321,7 +321,7 @@ export const faqItems = [
     id: 'compliance-audit',
     question: 'How long is the audit log kept?',
     answer:
-      'Events stay readable for 90 days. Events from 90 to 365 days old sit in a locked archive that nobody can shorten or delete, and you can export them.',
+      'The log shows the last 14 days. Events from 14 to 365 days old sit in a locked archive that nobody can shorten or delete, and you can export them.',
   },
   {
     id: 'compliance-oversight',

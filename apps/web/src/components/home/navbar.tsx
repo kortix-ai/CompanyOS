@@ -588,7 +588,7 @@ export function Navbar({ solidAtTop = false }: { solidAtTop?: boolean } = {}) {
                   <MarketingButton variant="secondary" asChild className="hidden lg:inline-flex">
                     <Link href={CTA_LINK}>{signInLabel}</Link>
                   </MarketingButton>
-                  <MarketingButton asChild className="hit-area-y-3">
+                  <MarketingButton variant="accent" asChild className="hit-area-y-3">
                     <Link href={CTA_LINK} onClick={trackCtaSignup}>
                       {getStartedLabel}
                     </Link>
@@ -651,7 +651,6 @@ export function Navbar({ solidAtTop = false }: { solidAtTop?: boolean } = {}) {
           aria-modal="true"
           aria-label={tHardcodedUi.raw('componentsHomeNavbar.line322JsxAttrAriaLabelOpenMenu')}
           onKeyDown={onDrawerKeyDown}
-          data-lenis-prevent
           className="bg-background fixed inset-0 z-50 flex flex-col lg:hidden"
         >
           <div

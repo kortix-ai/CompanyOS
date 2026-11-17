@@ -38,8 +38,9 @@ import {
 } from './jobs';
 import { KORTIX_TOOL, parseArgs, runCli } from './cli';
 import { CONNECTOR_TOOLS, isConnectorTool, runConnectorTool, type Host } from './connectors';
-import { blockedPath, canonicalPath, requestBodyShape, searchOperations, shapeTranscript, type Operation } from './shape';
+import { blockedPath, canonicalPath, logConversationRows, requestBodyShape, searchOperations, shapeTranscript, type Operation } from './shape';
 import { bearerToken } from '../shared/bearer-token';
+import { getManagedSkill } from '../skills/catalog';
 import { PROVISIONING_SESSION_STATUSES } from '../projects/surface';
 
 type Dispatch = (request: Request) => Promise<Response>;
@@ -460,7 +461,7 @@ const TOOLS = [
     name: 'read_session',
     title: 'Read a session',
     description:
-      "Read a session: its status, whether a turn is running, and the latest messages with each tool call's input and output. wait_seconds blocks until the agent is idle (up to 45 s); call again while `turn` is not `idle` (`booting`, `running` or `queued`). Tool inputs and outputs are cut per part (marked `[truncated: N of M chars]`); when the messages do not fit, the oldest are dropped (`omitted_older`). `last_turn_error` names a failed turn. Older history: call_api on the session's transcript route with shape=sync.",
+      "Read a session: its status, whether a turn is running, and the latest messages with each tool call's input and output. wait_seconds blocks until the agent is idle (up to 45 s); call again while `turn` is not `idle` (`booting`, `running` or `queued`). Tool inputs and outputs are cut per part (marked `[truncated: N of M chars]`); when the messages do not fit, the oldest are dropped (`omitted_older`). `last_turn_error` names a failed turn. Each message carries its `seq`. Older history: call_api GET /v1/workspaces/{workspaceId}/sessions/{session_id}/log with before_seq (the oldest `seq` you have) and limit: one page of the stored session log.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -755,15 +756,28 @@ export function listSessionRow(s: any) {
   };
 }
 
-/** The project's own skills (`skills/<slug>/SKILL.md`, or the legacy dir) from the same /detail route the web app reads; it honors the caller's per-skill grants. */
-async function projectSkills(ctx: ToolContext, projectId: string): Promise<{ slug: string; name: string; description: string | null; path: string }[] | Error> {
+/**
+ * The project's own skills (`skills/<slug>/SKILL.md`, or the legacy dir) and its
+ * enabled feature flags, from the same /detail route the web app reads; it
+ * honors the caller's per-skill grants.
+ */
+async function projectSkills(
+  ctx: ToolContext,
+  projectId: string,
+): Promise<{ skills: { slug: string; name: string; description: string | null; path: string }[]; flags: Set<string> } | Error> {
   const r = await callApi(ctx, 'GET', `/v1/projects/${projectId}/detail`);
   if (r.status >= 400) return new ToolInputError(`HTTP ${r.status} reading project ${projectId}: ${r.body.slice(0, 200)}`);
-  const detail = JSON.parse(r.body) as { config?: { skills?: { name: string; path: string; description: string | null }[] } };
-  return (detail.config?.skills ?? []).map((s) => {
-    const dir = s.path.slice(0, s.path.lastIndexOf('/') + 1);
-    return { ...s, slug: dir.split('/').at(-2) ?? s.name };
-  });
+  const detail = JSON.parse(r.body) as {
+    config?: { skills?: { name: string; path: string; description: string | null }[] };
+    project?: { experimental?: Record<string, boolean> };
+  };
+  return {
+    skills: (detail.config?.skills ?? []).map((s) => {
+      const dir = s.path.slice(0, s.path.lastIndexOf('/') + 1);
+      return { ...s, slug: dir.split('/').at(-2) ?? s.name };
+    }),
+    flags: new Set(Object.entries(detail.project?.experimental ?? {}).flatMap(([key, on]) => (on === true ? [key] : []))),
+  };
 }
 
 /**
@@ -853,27 +867,23 @@ export async function runTool(ctx: ToolContext, name: string, input: Record<stri
   }
 }
 
-async function listProjectsTool(ctx: ToolContext, input: Record<string, unknown>): Promise<ToolResult> {
-  const accounts = await callApi(ctx, 'GET', '/v1/accounts');
-  if (accounts.status >= 400) return apiResult(accounts);
-  const parsed = JSON.parse(accounts.body);
-  const list = (Array.isArray(parsed) ? parsed : (parsed.accounts ?? [])) as { account_id: string; name?: string }[];
-  const perAccount = await Promise.all(
-    list.map(async (account) => {
-      const r = await callApi(ctx, 'GET', '/v1/projects', { query: { account_id: account.account_id } });
-      const rows = r.status < 400 ? (JSON.parse(r.body) as any[]) : [];
-      return rows.map((p) => ({
-        project_id: p.project_id,
-        name: p.name,
-        account: account.name ?? account.account_id,
-        account_id: account.account_id,
-        repository: p.repo_url ?? null,
-        default_branch: p.default_branch ?? null,
-        role: p.effective_project_role ?? null,
-      }));
-    }),
-  );
-  const projects = perAccount.flat();
+async function listProjectsTool(ctx: ToolContext, _input: Record<string, unknown>): Promise<ToolResult> {
+  // One read: every workspace the caller may open, across accounts. A token
+  // bound to one workspace (what the consent screen issues) lists that one;
+  // `GET /v1/accounts` is a person's route and refuses it.
+  const r = await callApi(ctx, 'GET', '/v1/workspaces');
+  if (r.status >= 400) return apiResult(r);
+  const rows = JSON.parse(r.body) as Array<Record<string, any>>;
+  const projects = rows.map((p) => ({
+    project_id: p.project_id,
+    name: p.name,
+    // One account per workspace: the workspace name is the account's.
+    account: p.name ?? p.account_id,
+    account_id: p.account_id,
+    repository: p.repo_url ?? null,
+    default_branch: p.default_branch ?? null,
+    role: p.effective_project_role ?? null,
+  }));
   return text(JSON.stringify(projects, null, 2));
 }
 
@@ -924,13 +934,30 @@ async function readSessionTool(ctx: ToolContext, input: Record<string, unknown>)
   }
   if ('error' in activity) return apiResult(activity.error!);
   const late = Symbol('late');
-  const transcript = await Promise.race([
-    callApi(ctx, 'GET', `${path}/transcript`, { query: { limit, chars: 1500, detail: 'full' } }),
+  // The stored session log (`GET …/log`), never the v1 transcript route (P8.3 removes it).
+  const log = await Promise.race([
+    callApi(ctx, 'GET', `${path}/log`, { query: { limit } }),
     Bun.sleep(Math.max(ctx.deadline - Date.now() - 2_000, 0)).then(() => late),
   ]);
-  const note = typeof transcript === 'symbol' ? 'transcript: not read inside the request budget; call again' : transcript.status >= 400 ? `transcript: HTTP ${transcript.status} ${transcript.body}` : null;
+  // A session that saved nothing yet answers 404 `session_log_missing`: no messages, not an error.
+  const missing = typeof log !== 'symbol' && log.status === 404 && logMissing(log.body);
+  const note = typeof log === 'symbol' ? 'transcript: not read inside the request budget; call again' : log.status >= 400 && !missing ? `transcript: HTTP ${log.status} ${log.body}` : null;
   if (note) return text(`${JSON.stringify(activity.summary, null, 2)}\n\n${note}`);
-  return text(shapeTranscript(activity.summary, JSON.parse((transcript as ApiReply).body)));
+  if (missing) {
+    return text(shapeTranscript(activity.summary, { source: 'log', reason: 'nothing is saved for this session yet', messages: [], message_count: 0, complete: true }));
+  }
+  const page = JSON.parse((log as ApiReply).body) as { messages?: unknown[]; has_more?: boolean };
+  const rows = logConversationRows((page.messages ?? []) as never, 1500);
+  return text(shapeTranscript(activity.summary, { source: 'log', messages: rows, message_count: rows.length, complete: page.has_more === false }));
+}
+
+/** True when a 404 body is the log route's `session_log_missing` (the session saved nothing yet). */
+function logMissing(body: string): boolean {
+  try {
+    return (JSON.parse(body) as { code?: unknown }).code === 'session_log_missing';
+  } catch {
+    return false;
+  }
 }
 
 async function runCommandTool(ctx: ToolContext, input: Record<string, unknown>): Promise<ToolResult> {
@@ -1034,44 +1061,67 @@ async function listFilesTool(ctx: ToolContext, input: Record<string, unknown>): 
   return text(nodes.length ? page(nodes.map((n) => (n.type === 'directory' ? `${n.absolute}/` : n.absolute)), offset, undefined, 'entries') : 'Empty directory.');
 }
 
+/**
+ * A guide behind a feature flag is listed and read only with the project_id
+ * of a workspace where the flag is on: what that workspace's session box has
+ * (kortixd `withheldManagedSkills`). Otherwise the agent learns nothing of it.
+ */
+function requireGuideFlag(name: string, flag: string | null | undefined, flags: Set<string>, projectId: string | undefined): void {
+  if (!flag || flags.has(flag)) return;
+  throw new ToolInputError(projectId
+    ? `${name} is behind the \`${flag}\` feature flag, which is off for this workspace.`
+    : `${name} is behind the \`${flag}\` feature flag. Pass the project_id of a workspace where it is on.`);
+}
+
 async function readSkillTool(ctx: ToolContext, input: Record<string, unknown>): Promise<ToolResult> {
   const name = optionalArg(input, 'name');
   const file = optionalArg(input, 'file');
   const projectId = optionalArg(input, 'project_id');
-  const own = projectId ? await projectSkills(ctx, projectArg(input)) : [];
-  if (own instanceof Error) throw own;
+  const detail = projectId ? await projectSkills(ctx, projectArg(input)) : { skills: [], flags: new Set<string>() };
+  if (detail instanceof Error) throw detail;
+  const own = detail.skills;
   const mine = name ? own.find((s) => s.slug === name || s.name === name) : undefined;
+  // The detail lists the managed guides too (skills/kortix-*/SKILL.md), with no
+  // file in the repository: such a 404 reads the guide below. A repository copy wins.
+  const guideInstead = (r: { status: number }) => r.status === 404 && getManagedSkill(mine!.slug) !== null;
   if (mine) {
     const dir = mine.path.slice(0, mine.path.lastIndexOf('/') + 1);
     if (file) {
       if (file.split('/').includes('..')) throw new ToolInputError('file must stay inside the skill directory');
       const r = await callApi(ctx, 'GET', `/v1/projects/${projectId}/files/content`, { query: { path: `${dir}${file.replace(/^\/+/, '')}` } });
-      return r.status >= 400 ? apiResult(r) : text(JSON.parse(r.body).content);
+      if (!guideInstead(r)) return r.status >= 400 ? apiResult(r) : text(JSON.parse(r.body).content);
+    } else {
+      const r = await callApi(ctx, 'GET', `/v1/projects/${projectId}/files/content`, { query: { path: mine.path } });
+      if (!guideInstead(r)) {
+        if (r.status >= 400) return apiResult(r);
+        const refs = (await skillDirectoryFiles(ctx, projectArg(input), dir)).filter((f) => f !== mine.path).map((f) => `- ${f.slice(dir.length)}`);
+        const body = JSON.parse(r.body).content as string;
+        return text(refs.length ? `${body}\n\nReference files (read_skill with project_id, name and file):\n${refs.join('\n')}` : body);
+      }
     }
-    const r = await callApi(ctx, 'GET', `/v1/projects/${projectId}/files/content`, { query: { path: mine.path } });
-    if (r.status >= 400) return apiResult(r);
-    const refs = (await skillDirectoryFiles(ctx, projectArg(input), dir)).filter((f) => f !== mine.path).map((f) => `- ${f.slice(dir.length)}`);
-    const body = JSON.parse(r.body).content as string;
-    return text(refs.length ? `${body}\n\nReference files (read_skill with project_id, name and file):\n${refs.join('\n')}` : body);
   }
   if (!name) {
     const r = await callApi(ctx, 'GET', '/v1/skills');
     if (r.status >= 400) return apiResult(r);
-    const skills = JSON.parse(r.body).skills as { name: string; description: string }[];
-    const guides = skills.map((s) => `${s.name} — ${s.description}`).join('\n\n');
+    const skills = JSON.parse(r.body).skills as { name: string; description: string; featureFlag?: string | null }[];
+    const guides = skills.filter((s) => !s.featureFlag || detail.flags.has(s.featureFlag)).map((s) => `${s.name} — ${s.description}`).join('\n\n');
     if (!projectId) return text(guides);
     const project = own.map((s) => `${s.slug} — ${s.description ?? '(no description)'}`).join('\n\n');
     return text(`Project skills (read_skill with project_id and name):\n\n${project || '(none: the project has no skills/ directory)'}\n\nPlatform guides:\n\n${guides}`);
   }
   if (file) {
     const r = await callApi(ctx, 'GET', `/v1/skills/${encodeURIComponent(name)}/file`, { query: { path: file } });
-    return r.status >= 400 ? apiResult(r) : text(JSON.parse(r.body).content);
+    if (r.status >= 400) return apiResult(r);
+    const reference = JSON.parse(r.body) as { content: string; featureFlag?: string | null };
+    requireGuideFlag(name, reference.featureFlag, detail.flags, projectId);
+    return text(reference.content);
   }
   // The body and its reference paths, as `kortix system-skills get` prints
   // them: every reference inline (`?full=1`) is ~280 KB for kortix-system.
   const r = await callApi(ctx, 'GET', `/v1/skills/${encodeURIComponent(name)}`);
   if (r.status >= 400) return apiResult(r);
-  const skill = JSON.parse(r.body) as { body: string; references?: { path: string }[] };
+  const skill = JSON.parse(r.body) as { body: string; references?: { path: string }[]; featureFlag?: string | null };
+  requireGuideFlag(name, skill.featureFlag, detail.flags, projectId);
   const refs = (skill.references ?? []).map((f) => `- ${f.path}`);
   return text(refs.length ? `${skill.body}\n\nReference files (read_skill with file):\n${refs.join('\n')}` : skill.body);
 }

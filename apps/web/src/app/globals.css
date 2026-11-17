@@ -638,6 +638,14 @@
     color: var(--foreground);
   }
 
+  /* The one accent action of a page, in the brand blue, in both themes. */
+  .kx-button[data-variant='accent'],
+  .dark .kx-button[data-variant='accent'] {
+    --kx-btn-deep: color-mix(in oklch, var(--kortix-base) 84%, var(--kx-btn-shade));
+    --kx-btn-light: var(--kortix-base);
+    color: oklch(1 0 0);
+  }
+
   .dark .kx-button {
     --kx-btn-hi: color-mix(in oklch, var(--foreground) 10%, transparent);
     --kx-btn-ring: color-mix(in oklch, var(--background) 8%, transparent);
@@ -707,13 +715,6 @@
     white calc(100% - var(--spacing) * 2),
     transparent
   );
-}
-
-/* Lenis (features/marketing/kit/smooth-scroll.tsx) drives the page scroll on
-   marketing routes. The base `scroll-behavior: smooth` above would animate
-   every scrollTo it issues a second time, so it steps aside while Lenis runs. */
-html.lenis {
-  scroll-behavior: auto;
 }
 
 /* Catalogue card reveal — the cards a "View all" uncovers in a category grid.
@@ -1327,7 +1328,7 @@ html[data-desktop-titlebar='overlay']
     [role='alertdialog'],
     [role='menu'],
     [role='listbox'],
-    [data-radix-popper-content-wrapper],
+    [data-kortix-floating],
     [data-sonner-toaster]
   )
   :is(
@@ -1360,7 +1361,7 @@ html[data-desktop-platform='macos']
     [role='alertdialog'],
     [role='menu'],
     [role='listbox'],
-    [data-radix-popper-content-wrapper],
+    [data-kortix-floating],
     [data-sonner-toaster]
   )
   :is(
@@ -1470,6 +1471,42 @@ html[data-desktop-platform='macos'] .kx-titlebar-row [role='tab'] {
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
+/* ─── The desktop tab strip (features/desktop-tabs) ──────────────────────
+   On the desktop shell the project shell draws a browser-style tab strip as
+   its first row. The strip wears `.kx-titlebar-row` and takes the band; every
+   project view renders BELOW it. A view's own band row therefore no longer
+   touches the traffic lights or the caption buttons, so inside the tabbed
+   shell it drops the band geometry and keeps its web layout: the indent, the
+   band height and the drag region all revert to the layered utilities.
+   `revert-layer` in this unlayered sheet rolls back to the Tailwind layer. */
+html[data-desktop='true']
+  [data-kx-desktop-tabs-on]
+  :is(.kx-titlebar-row, .kx-titlebar-tabs):not(.kx-desktop-tabstrip) {
+  padding-left: revert-layer;
+  padding-right: revert-layer;
+  -webkit-app-region: initial;
+  app-region: initial;
+}
+html[data-desktop='true']
+  [data-kx-desktop-tabs-on]
+  :is(.kx-titlebar-band-height, .kx-titlebar-tabs):not(.kx-desktop-tabstrip) {
+  height: revert-layer !important;
+  min-height: revert-layer;
+}
+/* A project view sized to the window (`h-svh`, `h-dvh`, `h-screen`) sits
+   below the strip, so it is the window minus the strip. Without this the view
+   overflows by the strip's height and the whole window scrolls, strip and
+   all. The strip writes its measured height (it differs per platform and in
+   fullscreen) to `--kx-desktop-tabstrip-height` on <html>. */
+html[data-desktop='true'] [data-kx-desktop-tabs-on] :is(.h-svh, .h-dvh, .h-screen) {
+  height: calc(100svh - var(--kx-desktop-tabstrip-height, 0px));
+}
+/* The tabbed shell is never taller than the window, so a view that sizes
+   itself with `flex-1 min-h-0` (Drive) scrolls inside, below the strip. */
+html[data-desktop='true'] [data-kx-desktop-tabs-on] {
+  max-height: 100svh;
+}
+
 /* Overlay sidebars share the native-light row instead of adding a blank strip.
    Keep their controls out of AppKit's hit area at every renderer zoom. */
 html[data-desktop-titlebar='overlay'] .kx-overlay-sidebar-titlebar,
@@ -1544,4 +1581,27 @@ html[data-desktop-platform='macos'] .kx-settings-mobile-titlebar .kx-settings-mo
 [data-sidebar-resizing] * {
   cursor: col-resize !important;
   user-select: none !important;
+}
+
+/* ── Mobile input floor and app-chrome hygiene (KRTX-4719) ───────────────────
+   iOS Safari force-zooms the page when a focused control renders under 16px.
+   The UI kit ships `text-sm` (14px) on Input/Textarea and native selects at
+   every width, so one rule restores the 16px floor below the 640px
+   breakpoint; `!important` is what beats the one-class utilities without
+   touching every primitive. The composer carries its own `text-base
+   sm:text-sm` (packages/ui/src/session/composer). Desktop keeps 14px. */
+@media (max-width: 639.98px) {
+  input,
+  textarea,
+  select {
+    font-size: 1rem !important;
+  }
+}
+
+/* The app never bounces or pull-refreshes like a document: the root scroller
+   eats the overscroll (the installed PWA especially), and taps keep no
+   materialize flash (inherited, so one rule covers every surface). */
+html {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
 }

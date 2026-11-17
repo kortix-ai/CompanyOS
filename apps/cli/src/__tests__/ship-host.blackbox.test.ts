@@ -16,6 +16,8 @@ let managedRepo: boolean;
 let onboardingBodies: unknown[];
 let refuseOnboarding: boolean;
 let refuseCredential: boolean;
+/** The reconcile route's answer; null answers 404 (an API older than the route). */
+let reconcileResponse: { status: number; body: unknown } | null;
 
 beforeEach(() => {
   cwd = mkdtempSync(join(tmpdir(), 'kortix-ship-host-'));
@@ -30,6 +32,7 @@ beforeEach(() => {
   onboardingBodies = [];
   refuseOnboarding = false;
   refuseCredential = false;
+  reconcileResponse = null;
   bareRepo = join(cwd, 'remote.git');
   server = Bun.serve({
     port: 0,
@@ -58,6 +61,12 @@ beforeEach(() => {
         ? Response.json({ error: 'credential refused' }, { status: 403 })
         : Response.json({ push_token: 'synthetic', repo_url: bareRepo });
       if (path.endsWith('/connectors/sync')) return Response.json({ ok: true });
+      if (path.endsWith('/sandbox-templates/reconcile')) {
+        expect(req.method).toBe('POST');
+        return reconcileResponse
+          ? Response.json(reconcileResponse.body, { status: reconcileResponse.status })
+          : Response.json({ error: 'Not found' }, { status: 404 });
+      }
       if (path.startsWith('/v1/workspaces/'))
         return Response.json({
           project_id: path.split('/').at(-1),
@@ -338,6 +347,39 @@ test('projects clone keeps a shipped link and README clean', async () => {
   }
 });
 
+test('inside its session, workspaces clone checks out the session branch: the only branch the Git proxy lets it push', async () => {
+  useLocalRepo = true;
+  const git = (dir: string, ...args: string[]) => {
+    const result = Bun.spawnSync(['git', ...args], { cwd: dir, stdout: 'pipe', stderr: 'pipe' });
+    expect(result.exitCode).toBe(0);
+    return result.stdout.toString().trim();
+  };
+  writeFileSync(join(cwd, 'README.md'), 'Synthetic\n');
+  git(cwd, 'add', 'kortix.yaml', 'README.md');
+  git(cwd, '-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.test', 'commit', '-m', 'fixture');
+  git(cwd, 'clone', '--bare', '.', bareRepo);
+  const session = { KORTIX_PROJECT_ID: 'workspace_project', KORTIX_BRANCH_NAME: 'ses-synthetic-1' };
+
+  const fresh = await cli(['workspaces', 'clone', 'workspace_project', 'fresh', '--host', 'workspace'], session);
+  expect(fresh.code).toBe(0);
+  expect(fresh.stdout).toContain('ses-synthetic-1');
+  expect(git(join(cwd, 'fresh'), 'branch', '--show-current')).toBe('ses-synthetic-1');
+  expect(git(join(cwd, 'fresh'), 'config', 'push.default')).toBe('current');
+
+  // A session branch that already holds pushed work is checked out as it is, never reset.
+  git(join(cwd, 'fresh'), '-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.test', 'commit', '--allow-empty', '-m', 'session work');
+  const tip = git(join(cwd, 'fresh'), 'rev-parse', 'HEAD');
+  git(join(cwd, 'fresh'), 'push', '-q', 'origin', 'ses-synthetic-1');
+  const again = await cli(['workspaces', 'clone', 'workspace_project', 'again', '--host', 'workspace'], session);
+  expect(again.code).toBe(0);
+  expect(git(join(cwd, 'again'), 'rev-parse', 'HEAD')).toBe(tip);
+
+  // Another workspace's clone, or a clone outside a session, keeps its default branch.
+  const other = await cli(['workspaces', 'clone', 'workspace_project', 'outside', '--host', 'workspace'], { KORTIX_BRANCH_NAME: '' });
+  expect(other.code).toBe(0);
+  expect(git(join(cwd, 'outside'), 'branch', '--show-current')).not.toBe('ses-synthetic-1');
+});
+
 // A product-created workspace is seeded with scaffold commits before the first
 // `kortix ship`, while `kortix init` starts from its own unrelated commit. Ship
 // must reconcile that seeded remote instead of surfacing a non-fast-forward
@@ -556,4 +598,90 @@ test.each([
   expect(result.stderr).toContain('links GitHub repositories only');
   expect(result.stderr).toContain('--origin managed');
   expect(hits).toEqual([]);
+});
+
+// 2026-11-10: a workspace declared `sandbox.templates: [{ slug: dev, ... }]`
+// and shipped; nothing built `dev`, and sessions booted the platform default.
+const TEMPLATE_MANIFEST = [
+  'name: synthetic-workspace',
+  'sandbox:',
+  '  default: dev',
+  '  templates:',
+  '    - slug: dev',
+  '      dockerfile: .kortix/sandbox/Dockerfile',
+  '',
+].join('\n');
+
+async function shipManagedFolder(manifest: string) {
+  useLocalRepo = true;
+  managedRepo = true;
+  link();
+  const git = (...args: string[]) => {
+    const result = Bun.spawnSync(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' });
+    expect(result.exitCode).toBe(0);
+    return result.stdout.toString().trim();
+  };
+  git('config', 'user.name', 'Synthetic');
+  git('config', 'user.email', 'synthetic@example.test');
+  writeFileSync(join(cwd, '.git/info/exclude'), '/remote.git/\n/.bun/\n');
+  git('add', '-A');
+  git('commit', '-m', 'base');
+  git('clone', '--bare', '.', bareRepo);
+  writeFileSync(join(cwd, 'kortix.yaml'), manifest);
+  return cli(['ship', '--host', 'workspace', '--no-verify', '--no-env', '--no-connect', '-y']);
+}
+
+test('ship starts the build of a declared sandbox template after the push and names the wait command', async () => {
+  reconcileResponse = {
+    status: 200,
+    body: {
+      templates: [
+        { slug: 'dev', snapshot_name: 'kortix-tpl-dev', state: 'building', error: null, providers: [{ provider: 'platinum', state: 'missing', started: true }] },
+      ],
+      started: 1,
+    },
+  };
+  const result = await shipManagedFolder(TEMPLATE_MANIFEST);
+  expect(result.code).toBe(0);
+  expect(result.stdout).toContain('sandbox dev build started on platinum');
+  expect(result.stdout).toContain('kortix sandboxes build dev --wait');
+  const paths = hits.map((hit) => hit.path);
+  const pushedAt = paths.findIndex((path) => path.endsWith('/git-token'));
+  const reconciledAt = paths.indexOf('/v1/workspaces/workspace_project/sandbox-templates/reconcile');
+  expect(pushedAt).toBeGreaterThanOrEqual(0);
+  expect(reconciledAt).toBeGreaterThan(pushedAt);
+});
+
+test('ship reports a template that is already built, and one the server could not build, without failing', async () => {
+  reconcileResponse = {
+    status: 200,
+    body: {
+      templates: [
+        { slug: 'dev', snapshot_name: 'kortix-tpl-dev', state: 'ready', error: null, providers: [{ provider: 'platinum', state: 'active', started: false }] },
+      ],
+      started: 0,
+    },
+  };
+  let result = await shipManagedFolder(TEMPLATE_MANIFEST);
+  expect(result.code).toBe(0);
+  expect(result.stdout).toContain('sandbox dev ready');
+
+  reconcileResponse = { status: 503, body: { error: 'No sandbox template provider is enabled' } };
+  writeFileSync(join(cwd, 'kortix.yaml'), `${TEMPLATE_MANIFEST}# second\n`);
+  result = await cli(['ship', '--host', 'workspace', '--no-verify', '--no-env', '--no-connect', '-y']);
+  expect(result.code).toBe(0);
+  expect(result.stdout).toContain('sandbox build not started: No sandbox template provider is enabled');
+});
+
+test('ship on a host without the reconcile route names the build command; a manifest with no template asks nothing', async () => {
+  let result = await shipManagedFolder(TEMPLATE_MANIFEST);
+  expect(result.code).toBe(0);
+  expect(result.stdout).toContain('this Kortix host does not build sandbox templates on ship');
+  expect(result.stdout).toContain('kortix sandboxes build dev --wait');
+
+  hits.length = 0;
+  writeFileSync(join(cwd, 'kortix.yaml'), 'name: synthetic-workspace\n');
+  result = await cli(['ship', '--host', 'workspace', '--no-verify', '--no-env', '--no-connect', '-y']);
+  expect(result.code).toBe(0);
+  expect(hits.some((hit) => hit.path.endsWith('/sandbox-templates/reconcile'))).toBe(false);
 });

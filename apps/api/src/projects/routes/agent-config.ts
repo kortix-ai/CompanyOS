@@ -18,6 +18,7 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { ignoredAgentSettings } from '@kortix/api-contract/runtime-relay';
 import {
+  AGENT_TITLE_MAX_LENGTH,
   EVERY_GRANT,
   type ManifestIssue,
   isManifestSyntaxError,
@@ -113,14 +114,21 @@ const AgentBlockSchema = z
     commands: GrantSetSchema.optional(),
     extensions: ExcludableGrantSetSchema.optional(),
     codemode: z.enum(['on', 'only', 'off']).optional(),
+    // The agent's display name (`agents.<name>.title`). The key stays its id.
+    title: z.string().trim().min(1).max(AGENT_TITLE_MAX_LENGTH).optional(),
+    // A program agent's command (`agents.<name>.run`): each turn runs it in place of a model.
+    run: z.string().trim().min(1).max(4096).optional(),
+    // A program agent's run limit, a duration (`30m`). The manifest validator checks its range.
+    timeout: z.string().trim().min(1).max(32).optional(),
     // What a full context does: `record` (default) resets onto the searchable record; `summary` compacts.
     context: z.enum(['record', 'summary']).optional(),
     // Deprecated request alias of kortix_permissions. The handler normalizes it
     // (normalizeKortixPermissionAliases) before serialization.
     kortix_cli: GrantSetSchema.optional(),
+    // Obsolete (a session never checks out the repository at boot): accepted from
+    // older clients and dropped.
     repository_access: z.boolean().optional(),
-    // Deprecated input alias for older clients.
-    workspace: z.enum(['runtime', 'read', 'branch']).optional(),
+    workspace: z.unknown().optional(),
     // Server-owned; accepted so a GET → PUT round trip keeps working. Only the
     // value already in effect (the block's `prompt_file`) is allowed.
     file: z.string().max(1024).optional(),

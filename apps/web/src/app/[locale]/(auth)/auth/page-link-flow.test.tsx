@@ -101,15 +101,16 @@ test('unavailable SSO still permits the supported email sign-in link', async () 
   await act(async () => form.props.onSubmit({ preventDefault() {} }));
   const text = JSON.stringify(root.toJSON());
   expect(ssoProbes).toBe(1);
-  expect(text).toContain('We sent a link to');
-  expect(text).toContain('Open it to continue');
+  // The mode-less eligible answer renders the KRTX-3504 neutral link copy —
+  // true for a new account and an existing one alike (no account-history leak).
+  expect(text).toContain('Enter the code sent to');
   // KRTX-2096: the link step also presents the six-digit code form, so the
   // emailed code works even when the link itself never reaches the browser.
   expect(text).toContain('one-time-code');
   await act(async () => root.unmount());
 });
 
-// The SSO interstitial's "Email me a link instead" fires the same send-magic
+// The SSO interstitial's "Email me a code" fires the same send-magic
 // action as the password form's button — a refused send must cool it down
 // there too, not leave it re-firing the doomed action on every click.
 test('a rate-limited send cools the SSO interstitial link button down', async () => {
@@ -134,7 +135,7 @@ test('a rate-limited send cools the SSO interstitial link button down', async ()
       .findAllByProps({ type: 'button' })
       .find((button) => {
         const children = button.props.children;
-        return typeof children === 'string' && children.includes('Email me a link instead');
+        return typeof children === 'string' && children.includes('Email me a code');
       });
     if (!linkButton) throw new Error('SSO interstitial link button did not render');
     await act(async () => linkButton.props.onClick());

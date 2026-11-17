@@ -17,11 +17,13 @@
  */
 import { z } from 'zod';
 import { SessionLogPageSchema } from './session-log/wire';
-import { SessionAttentionSchema, SessionBoardStateSchema, SessionInboundSchema } from './multi-agent';
+import { SessionAttentionSchema, SessionBoardStateSchema, SessionInboundSchema, SessionWorkStateSchema } from './multi-agent';
 import { SESSION_PROMPT_REASONS } from './wire-values';
 
 export * from './memory';
 export * from './goals';
+export * from './evals';
+export * from './calendar';
 export * from './wire-values';
 
 /** Loose JSON object — jsonb metadata/config columns surfaced as-is. */
@@ -59,7 +61,6 @@ export const FeatureFlagMapSchema = z.object({
   marketplace: z.boolean(),
   reminders: z.boolean(),
   secrets_egress: z.boolean(),
-  pooled_provider_secrets: z.boolean(),
   us_region: z.boolean(),
   event_triggers: z.boolean(),
   chat: z.boolean(),
@@ -74,6 +75,10 @@ export const FeatureFlagMapSchema = z.object({
   chat_input: z.boolean(),
   chat_front: z.boolean(),
   spaces_proactive: z.boolean(),
+  program_agents: z.boolean(),
+  evals: z.boolean(),
+  desktop_tabs: z.boolean(),
+  calendar: z.boolean(),
 });
 export type FeatureFlagMap = z.infer<typeof FeatureFlagMapSchema>;
 
@@ -95,6 +100,8 @@ export const FeatureFlagViewSchema = z.object({
   available: z.boolean(),
   enabled: z.boolean(),
   overridden: z.boolean(),
+  /** What the flag resolves to without the project's choice: the state a reset returns it to. Absent on servers older than this field. */
+  default_enabled: z.boolean().optional(),
   /** Internal-only flag, listed only while on. Only a platform operator can change it. */
   operator_only: z.boolean().optional(),
   /** Work in progress: not recommended yet. Absent on servers older than this field. */
@@ -210,6 +217,8 @@ export const ProjectSchema = z.object({
     meta_agent: z.literal(true).optional(),
     /** Not a flag since 2026-11-06 (notifications are on for every project; email is opt-in per kind); always `true` for older SDK, web, CLI and mobile clients. */
     notification_center: z.literal(true).optional(),
+    /** Not a flag since 2026-11-12 (named provider keys, sharing and session key selection are on for every project); always `true` for older SDK, web, CLI and terminal UI clients. */
+    pooled_provider_secrets: z.literal(true).optional(),
     /** Not a flag since 2026-11-03 (warm sessions were removed); always `false` for older SDK, web and mobile clients, which pre-create a session only while it is true. */
     warm_sessions: z.literal(false).optional(),
     /** Not a flag since 2026-11-02 (every project has a Drive); `true` wherever the platform stores a Drive (Platinum), for older SDK, CLI and hosts. */
@@ -1200,6 +1209,13 @@ export const ProjectSessionSchema = z.object({
    * older servers omit them.
    */
   board_state: SessionBoardStateSchema.optional(),
+  /**
+   * Is the work done: `running` (a live turn, or waiting for its person),
+   * `completed`, `failed`, `stopped` or `idle`. Read this to wait for a
+   * session. `status` is the stored row lifecycle and `runtime_status` the
+   * computer; neither says the work is done. Older servers omit it.
+   */
+  work_state: SessionWorkStateSchema.optional(),
   /** What the session waits for from its person: `question`, `approval`, or null. */
   attention: SessionAttentionSchema.optional(),
   /** The newest turn start, turn end or accepted prompt (ISO), or null. */
@@ -1228,6 +1244,7 @@ export const ProjectSessionSchema = z.object({
   custom_name: z.string().nullable(),
   labels: z.array(z.string()),
   agent_name: z.string(),
+  /** The stored row lifecycle (`running` from start until the computer stops), not whether the work is done: read `work_state`. */
   status: SessionStatusSchema,
   error: z.string().nullable(),
   metadata: JsonObjectSchema,
@@ -1281,6 +1298,7 @@ export const ProjectSessionSchema = z.object({
   /** May publish one assistant response through a public link: a human owner or project manager who can read it. Single-session reads only. */
   can_publish_response: z.boolean().optional(),
   can_access: z.boolean().optional(),
+  /** The computer's state. `active` while the box runs, which outlives a finished turn by up to ~10 min. */
   runtime_status: z
     .enum(['provisioning', 'active', 'stopped', 'error', 'archived'])
     .nullable()
@@ -2085,6 +2103,8 @@ export const TriggerSchema = z.object({
   auto_paused_at: z.string().nullable().optional(),
   /** Why it paused, e.g. `auto-paused: ran at max_runs_per_hour 60 for 2 hours in a row`. */
   auto_paused_reason: z.string().nullable().optional(),
+  // A pause that ends by itself once the account can run the trigger (trigger-setup-pause.ts).
+  auto_paused_code: z.enum(['billing', 'no_usable_model']).nullable().optional(),
   /**
    * (KRTX-1721) `skip` holds a fire while the trigger's previous run is still
    * active; in reuse, pinned and keyed mode, while its previous prompt still
@@ -2340,25 +2360,24 @@ export const SessionPromptPlacementSchema = z.enum(['transcript', 'composer']);
 export type SessionPromptPlacement = z.infer<typeof SessionPromptPlacementSchema>;
 
 /**
- * How a prompt reaches a session whose turn is running.
- * - `steer`: the running turn reads it at its next step boundary; the turn
- *   does not stop. Needs the runtime capability `session.steer` and the
- *   turn's own prompter; otherwise the row falls back to `queue`.
- * - `queue` (Queue List): waits for the turn to end, then runs as its own turn.
- * - `interrupt` (Quick Queue, "Stop and send"): ends the turn after the
- *   running tool, then runs as its own turn.
- * With no turn running, all three start a turn. `placement` is derived:
- * `interrupt` is `transcript`, the other two are `composer`.
+ * How a prompt reaches a session whose turn is running. There is one mode:
+ * `steer`. The running turn reads the prompt at its next step, after the
+ * running tool call returns; the turn does not stop. With no turn running, the
+ * prompt starts a turn. The API serves `steer` for every row.
+ *
+ * `queue` and `interrupt` are accepted from older clients and delivered as
+ * `steer`. @deprecated values, removed in the next major.
  */
 export const SessionPromptDeliverySchema = z.enum(['steer', 'queue', 'interrupt']);
 export type SessionPromptDelivery = z.infer<typeof SessionPromptDeliverySchema>;
 
 /**
- * Why a `steer` row was delivered as `queue` instead:
+ * Why a prompt did not steer the running turn and waits for the next turn:
  * - `unsupported`: the session's runtime does not list `session.steer`
- *   (OpenCode 1.18.14 or earlier, or an older daemon).
- * - `not_prompter`: the running turn belongs to another member.
+ *   (an older daemon).
  * - `turn_ended`: the turn ended before the message reached it.
+ * - `not_prompter`: @deprecated, never written since 2026-11-04 (anyone who
+ *   may send to the session steers it); old rows may still carry it.
  */
 export const SessionPromptSteerFallbackSchema = z.enum(['unsupported', 'not_prompter', 'turn_ended']);
 export type SessionPromptSteerFallback = z.infer<typeof SessionPromptSteerFallbackSchema>;
@@ -2372,7 +2391,7 @@ export const SessionPromptSchema = z.object({
   placement: SessionPromptPlacementSchema,
   /** Absent from an API built before steering: read it as `placement` implies. */
   delivery: SessionPromptDeliverySchema.optional(),
-  /** Set when a `steer` row fell back to `queue`; `delivery` then reads `queue`. */
+  /** Set when a prompt could not steer the running turn and waits for the next one. */
   steer_fallback: SessionPromptSteerFallbackSchema.nullable().optional(),
   /** Full accepted text. `text` is the capped preview. */
   full_text: z.string(),

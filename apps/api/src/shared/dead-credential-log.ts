@@ -1,17 +1,16 @@
 /**
- * Rate-limit marked dead-credential refusals and agent-grant denials by
- * method, normalized route, status and reason, and ship the throttled line at
- * a severity that follows the window's volume. Responses and emitted message
- * text stay unchanged. A ten-minute window permits six lines per route/reason
- * per process per hour. Suppression counts are best-effort: they appear only
- * on the next warning. A final quiet burst, eviction or process restart can
- * lose pending counts; use request-completion logs or auth audits for exact
- * refusal accounting.
+ * Mark the refusals the global error handler rate-limits and ships at a
+ * severity that follows the window's volume: dead credentials, agent-grant
+ * denials, MFA step-up denials, credential-fence denials, keyed by method,
+ * normalized route, status and reason. The window limiter itself is
+ * shared/log-window.ts (a ten-minute window, six lines per key per process
+ * per hour; suppression counts are best-effort) and caps the severity
+ * escalation at one warn per key per hour (KRTX-4674's residual: an hour of
+ * grinding past the burst band shipped every window's line at warn and
+ * re-tripped the infra-sweep's new-pattern bar). Responses and emitted
+ * message text stay unchanged.
  */
 import { HTTPException } from 'hono/http-exception';
-
-const WINDOW_MS = 10 * 60_000;
-const MAX_TRACKED_MESSAGES = 10_000;
 
 /**
  * The suppressed count at which a throttled refusal line ships at `warn`
@@ -23,11 +22,20 @@ const MAX_TRACKED_MESSAGES = 10_000;
  * audit-events route, 2026-11-07). Measured prod steady state: a pending
  * count of 0-4 per route/reason per replica window; the KRTX-1039 storm ran
  * ~200. Above this band is a caller ignoring the typed stop code — that
- * stays warn.
+ * stays warn, at most one line per key per hour (log-window.ts's hourly warn
+ * cap, KRTX-4674: the escalation is replica-local and per window, and a
+ * heavy hour shipped 16/15/15 warns per route across three replicas — over
+ * the sweep's 10/h bar).
  */
 export const DEAD_CREDENTIAL_BURST_SUPPRESSED = 10;
 
 const UUID_PATTERN = /[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/gi;
+
+/** Same treatment as UUID_PATTERN: a sandbox proxy path carries the box's
+ *  `sbx_` external id, and one box per bucket would shard a fleet-wide grind
+ *  (or every polled dead box) into a warn line per box (KRTX-4768). The
+ *  printed line keeps the id. */
+const SANDBOX_EXTERNAL_ID_PATTERN = /sbx_[0-9a-z]+/gi;
 
 /**
  * The throttle bucket key for a dead-credential refusal: method, route,
@@ -39,17 +47,15 @@ const UUID_PATTERN = /[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/gi;
  * key hides it.
  */
 export function deadCredentialLogKey(method: string, path: string, status: number, reason: string): string {
-  return `${method} ${path} ${status} ${reason}`.replace(UUID_PATTERN, ':id');
+  return `${method} ${path} ${status} ${reason}`
+    .replace(UUID_PATTERN, ':id')
+    .replace(SANDBOX_EXTERNAL_ID_PATTERN, ':sandbox');
 }
 
 const deadCredentials = new WeakSet<HTTPException>();
 
 // Same throttle, second mark: the agent-grant denial family (below).
 const agentGrantDenials = new WeakSet<HTTPException>();
-
-type Window = { loggedAt: number; suppressed: number };
-// replica-local: a log-noise limiter; each replica rate-limits its own lines.
-const windows = new Map<string, Window>();
 
 /** Mark an exception as a dead-credential refusal. Called by
  *  `deadCredential401`, the one constructor every gate that refuses a
@@ -132,6 +138,140 @@ export function isAgentGrantDenial(err: HTTPException): boolean {
   return agentGrantDenials.has(err);
 }
 
+// KRTX-4674: an account whose "Require MFA" policy is on refuses every aal1
+// browser session until its person completes the step-up. The caller that
+// polls through the refusal — the web app's workspace panels refetch the
+// sessions/triggers lists every few seconds — receives the SAME typed 403
+// forever, and per-request logging turned that loop into a warn storm
+// (700+ lines in one hour across three list routes, 0 in the 24 h before).
+const accountMfaDenials = new WeakSet<HTTPException>();
+
+/**
+ * Mark an exception as an account-MFA step-up denial: the account-wide
+ * "Require MFA" policy refused an aal1 session. The response already tells
+ * the client what to do (`code:'account_mfa_required'`, the web app's
+ * step-up dialog keys on it), so a caller that cannot or will not act on it
+ * receives the SAME refusal forever. The mark routes the LINE through the
+ * shared window throttle without touching the response, exactly as
+ * `markAgentGrantDenial` does. Called by `buildDenialError`'s
+ * `account_mfa_required` branch, the one constructor every such refusal
+ * throws. The sibling actionable denial `sso_required` keeps its
+ * per-request line until a log pattern shows a caller looping on it.
+ */
+export function markAccountMfaDenial(err: HTTPException): void {
+  accountMfaDenials.add(err);
+}
+
+/** True for an exception `markAccountMfaDenial` marked. */
+export function isAccountMfaDenial(err: HTTPException): boolean {
+  return accountMfaDenials.has(err);
+}
+
+// KRTX-4731: the credential fence's refusal (middleware/workspace-binding.ts,
+// thrown by `enforceTokenProjectScope` — the one constructor every fence
+// refusal goes through) is a designed denial: the fence is fail closed by
+// route table, and the typed 403 body names the remedy
+// (code credential_fence_refused, the check, "use a personal key or sign
+// in"). A caller that cannot or will not act on it — an OAuth workspace
+// token looping POST /v1/mcp — receives the SAME refusal forever, and
+// per-request logging turned that loop into a warn storm with a 0 baseline
+// (prod 2026-11-11: 31 warn lines in one hour on POST /v1/mcp, 0 in the 24 h
+// before). The mark routes the LINE through the shared window throttle
+// without touching the response, exactly as markAgentGrantDenial does. The
+// mark covers every check the fence reports (person-route, platform-route,
+// cross-workspace, …): a probing storm still escalates to warn above the
+// churn band — severity follows the volume.
+const credentialFenceDenials = new WeakSet<HTTPException>();
+
+/**
+ * Mark an exception as a credential-fence denial. Called by
+ * `enforceTokenProjectScope`, so every fence refusal shares it.
+ */
+export function markCredentialFenceDenial(err: HTTPException): void {
+  credentialFenceDenials.add(err);
+}
+
+/** True for an exception `markCredentialFenceDenial` marked. */
+export function isCredentialFenceDenial(err: HTTPException): boolean {
+  return credentialFenceDenials.has(err);
+}
+
+// KRTX-4801: a person whose workspace role or membership lacks the action is
+// refused with the SAME typed 403 on every call — the constraint changes only
+// when a human edits their role or membership, and the body already names the
+// permission and (for the role-shaped reasons) who grants it. The #12240
+// assert-form gates (`resolveAdmin` and siblings) made exactly that refusal
+// log per request, and a host that renders the connect button polls
+// GET .../connect-requests for every session it shows: 22 warn lines in one
+// prod hour on that route, 0 in the 24 h before, forever while the caller
+// polls. The mark routes the LINE through the shared window throttle
+// without touching the response, exactly as markAgentGrantDenial does.
+const personRoleDenials = new WeakSet<HTTPException>();
+
+/**
+ * Mark an exception as a person role/membership denial: the caller's standing
+ * role or membership in the workspace lacks the action. Called by
+ * `buildDenialError`, the one constructor every such refusal throws.
+ */
+export function markPersonRoleDenial(err: HTTPException): void {
+  personRoleDenials.add(err);
+}
+
+/** True for an exception `markPersonRoleDenial` marked. */
+export function isPersonRoleDenial(err: HTTPException): boolean {
+  return personRoleDenials.has(err);
+}
+
+// KRTX-4800: the agent-access gate (projects/lib/agent-access.ts) refuses a
+// caller whose session's agent is not theirs with the SAME typed 403 on every
+// call — the state changes only when a manager grants the agent, and the body
+// already names the remedy ("ask a manager to grant you one") plus the agents
+// the caller could run instead. Two people of one workspace kept retrying the
+// start of one such session: 29 warn lines in one prod hour against a 0
+// baseline, every line repeating what the response had just said. The mark
+// routes the LINE through the shared window throttle without touching the
+// response, exactly as markAgentGrantDenial does — that one is the sibling
+// family for the agent principal's own kortix_permissions refusals.
+const agentAccessDenials = new WeakSet<HTTPException>();
+
+/**
+ * Mark an exception as an agent-access denial: the deny-by-default agent gate
+ * refused the agent this caller's session resolves to. Called by the gate's
+ * `denial()` constructor, the one constructor every such refusal throws
+ * (`no_agent_access` and `agent_not_accessible`, human and agent-delegation
+ * paths alike).
+ */
+export function markAgentAccessDenial(err: HTTPException): void {
+  agentAccessDenials.add(err);
+}
+
+/** True for an exception `markAgentAccessDenial` marked. */
+export function isAgentAccessDenial(err: HTTPException): boolean {
+  return agentAccessDenials.has(err);
+}
+
+/**
+ * The 403 message `combinedAuth` throws when a valid caller is refused a
+ * preview sandbox proxy route: the sandbox's `session_sandboxes` row is gone
+ * (every session stop deletes it) or the caller is not a member of the box's
+ * account. `assertPreviewSandboxAccess` at the proxy route throws the same
+ * message with a `, userId: …, sandboxId: …` suffix, so the family matches
+ * the prefix. The web client polls the runtime surface of the session it has
+ * open every 5 s, and a box that died while its session row still reads
+ * `running` is refused forever — per-request logging turned one open tab on
+ * one dead box into 89 warn lines in an hour against a 1.58/h baseline
+ * (KRTX-4768). The response stays a plain untyped 403: the refusal is
+ * correct, and unlike a dead credential the state CAN come back (a new box
+ * on the next session open), so there is no typed stop code to add — only
+ * the line is throttled.
+ */
+export const PREVIEW_SANDBOX_DENIED_MESSAGE = 'Not authorized to access this sandbox';
+
+/** True for the plain and the route-level suffixed form of the message. */
+export function isPreviewSandboxDenied(status: number, reason: string): boolean {
+  return status === 403 && reason.startsWith(PREVIEW_SANDBOX_DENIED_MESSAGE);
+}
+
 /**
  * The 401 message `resolveJwt` throws when a presented Supabase JWT fails
  * verification (expired, bad signature, malformed) or rejects at the network
@@ -153,25 +293,4 @@ export const INVALID_OR_EXPIRED_TOKEN_MESSAGE = 'Invalid or expired token';
  */
 export function isInvalidExpiredTokenRefusal(status: number, reason: string): boolean {
   return status === 401 && reason === INVALID_OR_EXPIRED_TOKEN_MESSAGE;
-}
-
-/** First warning logs immediately; the next window reports pending suppression. */
-export function deadCredentialLogDecision(key: string, now: number): { log: boolean; suppressed: number } {
-  const window = windows.get(key);
-  if (window && now - window.loggedAt < WINDOW_MS) {
-    window.suppressed += 1;
-    return { log: false, suppressed: 0 };
-  }
-  const suppressed = window?.suppressed ?? 0;
-  if (!window && windows.size >= MAX_TRACKED_MESSAGES) {
-    const oldest = windows.keys().next().value;
-    if (oldest !== undefined) windows.delete(oldest);
-  }
-  windows.set(key, { loggedAt: now, suppressed: 0 });
-  return { log: true, suppressed };
-}
-
-/** Test seam. */
-export function resetDeadCredentialLogForTests(): void {
-  windows.clear();
 }

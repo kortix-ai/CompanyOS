@@ -447,9 +447,9 @@ flow(
             { agent_name: 'mykortix', runtime_context: { 'kortix.subagent.depth': 1, 'kortix.agent.instructions': 'You are a product designer and prototyper.' } },
             { params },
           );
-        // Local: every create check passed and the loopback callback check answers.
+        // Local: every create check passed; the local profile serves no model, so the model check answers (SESS-64).
         if (ctx.env.target === 'local') {
-          r.status(503).body().has('$.code', 'KORTIX_URL_UNREACHABLE');
+          r.status(409).body().has('$.code', 'no_model_available');
         } else {
           r.status(201).body().has('$.agent_name', 'mykortix');
           ctx.track('session', r.json<{ session_id: string }>().session_id, { projectId: project.id });
@@ -458,9 +458,9 @@ flow(
 
       await ctx.step('a non-meta session asking for My Kortix by its old slug `meta` passes the recursion check and gets `mykortix`', async () => {
         const r = await ctx.client.withBearer(worker!.token, 'SESSION_TOKEN').post('/v1/workspaces/:projectId/sessions', { agent_name: 'meta' }, { params });
-        // Local: every create check passed and the loopback callback check answers.
+        // Local: every create check passed; the local profile serves no model, so the model check answers (SESS-64).
         if (ctx.env.target === 'local') {
-          r.status(503).body().has('$.code', 'KORTIX_URL_UNREACHABLE');
+          r.status(409).body().has('$.code', 'no_model_available');
         } else {
           r.status(201).body().has('$.agent_name', 'mykortix');
           ctx.track('session', r.json<{ session_id: string }>().session_id, { projectId: project.id });
@@ -649,7 +649,7 @@ flow(
         (await session.post('/v1/workspaces/:projectId/gateway/keys', { name: 'from-session' }, { params: { projectId: project.id } }))
           .status(403)
           .body()
-          .has('$.error', 'Agent-session tokens cannot manage gateway keys');
+          .has('$.code', 'agent_human_only_action');
         const made = await owner.post('/v1/workspaces/:projectId/gateway/keys', { name: 'scope-5' }, { params: { projectId: project.id } });
         made.status(200).body().exists('$.secret_key');
         const keyId = made.json<{ key_id: string }>().key_id;
@@ -1250,8 +1250,8 @@ flow(
           { params },
         );
         if (ctx.env.target === 'local') {
-          // Local: the loopback callback check answers before the approval step, so the ask is seeded as the API records it.
-          r.status(503).body().has('$.code', 'KORTIX_URL_UNREACHABLE');
+          // Local: the model check answers before the approval step (the local profile serves no model, SESS-64), so the ask is seeded as the API records it.
+          r.status(409).body().has('$.code', 'no_model_available');
           const seeded = await db.query<{ id: string }>(
             `INSERT INTO kortix.session_colleague_access
                (account_id, project_id, session_id, surface_session_id, title, connectors, secrets, access_hash, expires_at)

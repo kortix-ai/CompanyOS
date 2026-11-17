@@ -231,7 +231,17 @@ describe('connectorErrorHttpStatus()', () => {
     expect(connectorErrorHttpStatus('upstream_500: boom', 500)).toBe(503);
     expect(connectorErrorHttpStatus('upstream_502: {"error":"bad gateway"}', 502)).toBe(503);
     expect(connectorErrorHttpStatus('upstream_522: <!doctype html>', 522)).toBe(503);
-    expect(connectorErrorHttpStatus('composio_upstream_unavailable: Composio answered 403 with an HTML error page', 502)).toBe(503);
+    expect(connectorErrorHttpStatus('composio_upstream_unavailable: Composio answered 502 with an HTML error page', 502)).toBe(503);
+  });
+  test('an edge block page keeps its 4xx: the tool never ran, so retrying is never right (KRTX-4722)', () => {
+    // executeComposio now carries the edge's own 403 on the result, so the
+    // route answers 403 and the SDK's retry hook (429/503 only) stands down.
+    expect(
+      connectorErrorHttpStatus(
+        'composio_upstream_unavailable: Composio answered 403 with an HTML error page (page: Attention Required! | Cloudflare): the edge refused the call before it reached the provider, so the tool did not run — the same arguments will be refused again.',
+        403,
+      ),
+    ).toBe(403);
   });
   test('no upstream answer (a thrown or timed-out call) stays a server 500', () => {
     expect(connectorErrorHttpStatus('upstream_timeout: x')).toBe(500);

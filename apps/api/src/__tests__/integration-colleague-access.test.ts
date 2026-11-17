@@ -116,8 +116,9 @@ describe('deciding and using', () => {
     expect(await readColleagueAccess(first.colleagueId)).toEqual(ACCESS);
     expect(await readColleagueAccess(second.colleagueId)).toBeNull();
     expect(await readColleagueAccess(myKortix)).toBeNull();
-    expect(await myKortixSessionGrant(first.colleagueId)).toEqual({ agent: 'mykortix', permissions: 'all', connectors: ['gmail'], env: ['STRIPE_KEY'] });
-    expect(await myKortixSessionGrant(myKortix)).toEqual({ agent: 'mykortix', permissions: 'all', connectors: [], env: [] });
+    // My Kortix holds every connector and secret its person can use; a colleague inherits it.
+    expect(await myKortixSessionGrant(first.colleagueId)).toEqual({ agent: 'mykortix', permissions: 'all', connectors: 'all', env: 'all' });
+    expect(await myKortixSessionGrant(myKortix)).toEqual({ agent: 'mykortix', permissions: 'all', connectors: 'all', env: 'all' });
   });
 
   test('a deny is used by no start, and the same list can be asked again', async () => {

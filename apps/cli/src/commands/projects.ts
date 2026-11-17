@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { PROJECT_GLYPH_COLORS, isProjectGlyphName, normalizeProjectGlyphColor } from '@kortix/shared';
+import { PROJECT_GLYPH_COLORS, PROJECT_GLYPH_GROUPS, isProjectGlyphName, normalizeProjectGlyphColor } from '@kortix/shared';
 import { loadAuth, loadAuthForHost } from '../api/auth.ts';
 import type { Auth } from '../api/auth.ts';
 import { ApiError, clientFromAuth } from '../api/client.ts';
@@ -9,6 +9,7 @@ import {
   clearDefaultProject,
   defaultProject,
   getHost,
+  listHosts,
   setActiveAccount,
   setDefaultProject,
 } from '../api/config.ts';
@@ -16,8 +17,10 @@ import type { AccountMembership, MeResponse, ProjectSummary } from '../api/types
 import { openInBrowser } from '../browser.ts';
 import {
   NO_WORKSPACE_LINE,
+  PICK_DEFAULT_LINE,
   emitJson,
   isNoWorkspaceError,
+  isWorkspaceDeletingError,
   locateProjectAnywhere,
   noWorkspace,
   resolveProjectContext,
@@ -37,7 +40,7 @@ import {
   resolveProjectId,
   saveLink,
 } from '../project-link.ts';
-import { listWorkspaceRowsReport, type WorkspaceListFailure, type WorkspaceRow } from '../project-bind.ts';
+import { ensureDefaultProjectBinding, listWorkspaceRowsReport, listableWorkspace, type WorkspaceListFailure, type WorkspaceRow } from '../project-bind.ts';
 import { confirm } from '../prompts.ts';
 import { C, help, pad, status } from '../style.ts';
 import { selectFromList } from '../tui-select.ts';
@@ -69,6 +72,7 @@ Subcommands:
                        --all: Deprecated. The older view, grouped by account.
   info [<id>]          Show one workspace (defaults to the linked/default) (--json)
   set [<id>]           Update name, branch, manifest path or icon.
+  glyphs               List the glyph names and colors set --glyph takes. (--json)
   rename [<id>] <name> Alias for \`workspaces set --name <name>\`.
   cli-tokens ls|new|rm Workspace CLI tokens (kortix_pat_…).
   use [<id>]           Set the global DEFAULT workspace (interactive if omitted).
@@ -100,8 +104,9 @@ first, then — unless you pass --host — scans every other logged-in host for
 it. A directory link (.kortix/link.json) always wins over the default; the
 default is what commands use anywhere else on your machine.
 
-The workspace id is the project_id field of --json output. kortix projects
-is the older name of this command and still works. So do --project <id> and
+The workspace id is the workspace_id field of --json output (project_id, the
+older name of the same field, stays). kortix projects is the older name of
+this command and still works. So do --project <id> and
 KORTIX_PROJECT_ID (KORTIX_WORKSPACE_ID wins when both are set).
 
 Examples:
@@ -110,7 +115,7 @@ Examples:
   kortix workspaces use 3f2a9c1e-…
 `;
 
-export interface RunProjectsOptions {
+interface RunProjectsOptions {
   /** Invoked as `kortix projects` / `project`, the older name. `ls` then
    *  prints exactly what it printed before Workspaces: the active account's
    *  projects. Scripts parse that output. */
@@ -172,6 +177,8 @@ export async function runProjects(argv: string[], options: RunProjectsOptions = 
       return projectsSet(rest);
     case 'rename':
       return projectsRename(rest);
+    case 'glyphs':
+      return projectsGlyphs(rest);
     case 'cli-tokens':
     case 'cli-token':
       return projectsCliTokens(rest);
@@ -190,7 +197,7 @@ export async function runProjects(argv: string[], options: RunProjectsOptions = 
         process.stderr.write(`${status.err((err as Error).message)}\n`);
         return 2;
       }
-      return projectsInfo(idFlag ?? restCopy[0], json, hostArg);
+      return projectsInfo(idFlag ?? restCopy[0], json, hostArg, options.olderName);
     }
     case 'use':
     case 'default': {
@@ -433,6 +440,25 @@ async function projectsFeatures(argv: string[]): Promise<number> {
   return 2;
 }
 
+/** `workspaces glyphs`: every name and color `set --glyph` takes, by group,
+ *  read from the same list the API and the web picker validate against. */
+function projectsGlyphs(argv: string[]): number {
+  const rest = [...argv];
+  const json = takeFlagBool(rest, ['--json']);
+  if (rest.length > 0) {
+    process.stderr.write(`${status.err(`unexpected argument "${rest[0]}"`)}\n  Usage: kortix workspaces glyphs [--json]\n`);
+    return 2;
+  }
+  const groups = PROJECT_GLYPH_GROUPS.map((group) => ({ label: group.label, names: [...group.names] }));
+  if (json) {
+    process.stdout.write(`${JSON.stringify({ groups, colors: [...PROJECT_GLYPH_COLORS] }, null, 2)}\n`);
+    return 0;
+  }
+  for (const group of groups) process.stdout.write(`${C.bold}${group.label}${C.reset}: ${group.names.join(', ')}\n`);
+  process.stdout.write(`\n${C.dim}colors: ${PROJECT_GLYPH_COLORS.join(', ')}, or #rrggbb${C.reset}\n`);
+  return 0;
+}
+
 /** `--glyph <name>:<color>` → the `icon_glyph` object the API validates.
  *  Returns null on an unknown name or color so the CLI can refuse loudly —
  *  the server would silently degrade an invalid glyph to "no glyph". */
@@ -464,7 +490,8 @@ Options:
   --manifest <path>      Manifest path, e.g. kortix.yaml.
   --icon <emoji>         Set the workspace emoji.
   --no-icon              Remove the emoji.
-  --glyph <name>:<color> Set the workspace glyph, e.g. Rocket:blue.
+  --glyph <name>:<color> Set the workspace glyph, e.g. Rocket:blue. The names:
+                         kortix workspaces glyphs.
                          Colors: ${PROJECT_GLYPH_COLORS.join(', ')}, or #rrggbb.
   --no-glyph             Remove the glyph.
   --workspace <id>       Act on this workspace (default: linked/default).
@@ -562,7 +589,7 @@ async function projectsSet(argv: string[]): Promise<number> {
     if (!glyph) {
       process.stderr.write(
         `${status.err(`Invalid --glyph "${glyphArg}". Use <name>:<color>, e.g. Rocket:blue.`)}\n` +
-          `  ${C.dim}colors: ${PROJECT_GLYPH_COLORS.join(', ')}, or #rrggbb${C.reset}\n`,
+          `  ${C.dim}colors: ${PROJECT_GLYPH_COLORS.join(', ')}, or #rrggbb; names: kortix workspaces glyphs${C.reset}\n`,
       );
       return 2;
     }
@@ -916,7 +943,28 @@ async function projectsClone(
   }
 
   process.stdout.write(`${status.ok(`Cloned ${project.name}`)}\n`);
+  const sessionBranch = checkoutSessionBranch(repoRoot, project.project_id);
+  if (sessionBranch) process.stdout.write(`${status.ok(`On session branch ${sessionBranch}: \`git push\` sends it, \`kortix cr open\` proposes it`)}\n`);
   return 0;
+}
+
+/**
+ * Inside a session sandbox (`KORTIX_BRANCH_NAME`), a clone of the session's own
+ * workspace lands on the session branch: the Git proxy lets a session push that
+ * branch and no other. A branch that already holds pushed work is checked out
+ * as it is, never reset. Returns the branch, or null when nothing was done.
+ */
+function checkoutSessionBranch(repoRoot: string, projectId: string): string | null {
+  const branch = process.env.KORTIX_BRANCH_NAME?.trim();
+  if (!branch || process.env.KORTIX_PROJECT_ID?.trim() !== projectId) return null;
+  const remote = runGit(repoRoot, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`]);
+  const checkout = runGit(repoRoot, remote.ok ? ['checkout', '-q', branch] : ['checkout', '-q', '-b', branch]);
+  if (!checkout.ok) {
+    process.stderr.write(`${status.err(`Could not check out the session branch ${branch}; run \`git checkout -b ${branch}\` before you push.`)}\n`);
+    return null;
+  }
+  runGit(repoRoot, ['config', 'push.default', 'current']);
+  return branch;
 }
 
 function requireAuth() {
@@ -988,7 +1036,8 @@ async function projectsCreate(argv: string[]): Promise<number> {
     );
     if (!isDefaultProjectResponse(project)) return invalidDefaultProjectResponse(project);
     // Provisioning also returns a one-time push credential. Never print it.
-    if (json) emitJson({ project_id: project.project_id, name: project.name, account_id: project.account_id });
+    // `workspace_id` equals `project_id`; `project_id` stays for older scripts.
+    if (json) emitJson({ workspace_id: project.project_id, project_id: project.project_id, name: project.name, account_id: project.account_id });
     else process.stdout.write(`${project.project_id}\n`);
     return 0;
   } catch (err) {
@@ -1095,12 +1144,7 @@ function renderWorkspaceTable(rows: WorkspaceRow[], marks: { linked?: string; de
     const isDefault = p.project_id === marks.def;
     const isLinked = p.project_id === marks.linked;
     const marker = isDefault ? `${C.green}● ${C.reset}` : isLinked ? `${C.cyan}◆ ${C.reset}` : '  ';
-    const state =
-      p.state === 'setup_required'
-        ? `   ${C.yellow}set up needed${C.reset}`
-        : p.state === 'deleting'
-          ? `   ${C.yellow}deleting${C.reset}`
-          : '';
+    const state = p.state === 'setup_required' ? `   ${C.yellow}set up needed${C.reset}` : '';
     const tag =
       (isDefault
         ? `   ${C.green}default${C.reset}`
@@ -1146,8 +1190,9 @@ async function projectsLsOlder(
   let projects: ProjectSummary[];
   try {
     // GET /workspaces lists every workspace of the caller: keep the active
-    // account's, which is what this older command has always listed.
-    const every = await client.get<ProjectSummary[]>('/workspaces');
+    // account's, which is what this older command has always listed. A deleted
+    // workspace (restore window) is left out (KRTX-4714).
+    const every = (await client.get<ProjectSummary[]>('/workspaces')).filter(listableWorkspace);
     projects = filterProjects(accountId ? every.filter((p) => p.account_id === accountId) : every, query);
   } catch (err) {
     return surface(err);
@@ -1265,12 +1310,7 @@ function renderProjectTable(
     const isDefault = p.project_id === marks.def;
     const isLinked = p.project_id === marks.linked;
     const marker = isDefault ? `${C.green}● ${C.reset}` : isLinked ? `${C.cyan}◆ ${C.reset}` : '  ';
-    const state =
-      p.state === 'setup_required'
-        ? `   ${C.yellow}set up needed${C.reset}`
-        : p.state === 'deleting'
-          ? `   ${C.yellow}deleting${C.reset}`
-          : '';
+    const state = p.state === 'setup_required' ? `   ${C.yellow}set up needed${C.reset}` : '';
     const tag =
       (isDefault
         ? `   ${C.green}default${C.reset}`
@@ -1305,7 +1345,7 @@ export function gitConnectionLines(git: GitConnectionState): string {
   return out;
 }
 
-async function projectsInfo(arg?: string, json = false, hostArg?: string): Promise<number> {
+async function projectsInfo(arg?: string, json = false, hostArg?: string, olderName = false): Promise<number> {
   const id = resolveProjectId(arg, { hostScoped: !hostArg, hostArg });
   if (!id) {
     process.stderr.write(
@@ -1332,7 +1372,8 @@ async function projectsInfo(arg?: string, json = false, hostArg?: string): Promi
   }
   process.stdout.write('\n');
   process.stdout.write(`  ${C.bold}${p.name}${C.reset}\n`);
-  process.stdout.write(`  ${C.dim}project_id ${C.reset}${p.project_id}\n`);
+  // `kortix projects info` prints what it printed before Workspaces: scripts parse it.
+  process.stdout.write(`  ${C.dim}${olderName ? 'project_id' : 'workspace '} ${C.reset}${p.project_id}\n`);
   process.stdout.write(`  ${C.dim}account_id ${C.reset}${p.account_id}\n`);
   process.stdout.write(`  ${C.dim}repo       ${C.reset}${p.repo_url}\n`);
   process.stdout.write(`  ${C.dim}branch     ${C.reset}${p.default_branch}\n`);
@@ -1663,8 +1704,12 @@ async function projectsRm(args: string[]): Promise<number> {
     return surface(err);
   }
 
-  // Drop the local binding if we just removed the linked workspace.
+  // Drop the local binding if we just removed the linked workspace, and the
+  // default on every host that pointed at it: a deleted workspace answers
+  // every later command with 409 `workspace_deleting`.
   if (loadLink()?.project_id === id) clearLink();
+  const wasDefault = listHosts().filter((h) => h.host.default_project?.project_id === id);
+  for (const h of wasDefault) clearDefaultProject(h.name);
 
   process.stdout.write(
     `${status.ok(`Deleted ${C.bold}${project.name}${C.reset}`)}\n` +
@@ -1674,6 +1719,12 @@ async function projectsRm(args: string[]): Promise<number> {
           ? `  ${C.dim}managed git repo deleted${C.reset}\n`
           : `  ${C.dim}no managed repo to delete (bring-your-own repos are left untouched)${C.reset}\n`),
   );
+  if (wasDefault.length === 0) return 0;
+  // The active host rebinds the way login does: the one workspace left binds
+  // (its account becomes active), several offer the picker or the hint.
+  const activeAuth = wasDefault.some((h) => h.name === activeHostName()) ? loadAuth() : null;
+  process.stdout.write(`  Cleared the default workspace.${activeAuth ? '' : ` ${PICK_DEFAULT_LINE}`}\n`);
+  if (activeAuth) await ensureDefaultProjectBinding(activeAuth);
   return 0;
 }
 
@@ -1681,9 +1732,9 @@ async function projectsRm(args: string[]): Promise<number> {
 
 function surface(err: unknown): number {
   if (isNoWorkspaceError(err)) return noWorkspace();
-  // A denial goes through the shared formatter so the CLI's tail names the
-  // refused identity and the right remedy.
-  if (err instanceof ApiError && err.status === 403) return surfaceApiError(err);
+  // A denial, or a workspace being deleted, goes through the shared formatter:
+  // the tail names the refused identity, or how to switch the default.
+  if (err instanceof ApiError && (err.status === 403 || isWorkspaceDeletingError(err))) return surfaceApiError(err);
   if (err instanceof ApiError) {
     if (err.status === 401) {
       process.stderr.write(`${status.err(tokenRejectedLine(err.message))}\n`);

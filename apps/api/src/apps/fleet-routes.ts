@@ -49,6 +49,7 @@ import {
 } from './volumes';
 import type { AppVolumeInfo } from './volume-store';
 import { AppLimitError, AppAccountUnfundedError } from './limits';
+import { AppWakeInProgressError } from './public-proxy-runtime';
 
 const AppParams = z.object({ workspaceId: z.string().uuid(), appId: z.string().uuid() });
 const MachineParams = AppParams.extend({ machineId: z.string().uuid() });
@@ -88,7 +89,7 @@ const GATE_ERRORS = errors(400, 402, 403, 404, 409, 429, 503);
  */
 type GateRefusal =
   | Extract<Awaited<ReturnType<typeof authorizedProject>>, Response>
-  | Exclude<ReturnType<typeof refusal>, null>;
+  | Exclude<Awaited<ReturnType<typeof refusal>>, null>;
 
 /**
  * The gate and refusal mapping every fleet route shares: project membership
@@ -106,19 +107,27 @@ async function handle<T>(c: Context<AppEnv>, permission: AppPermission, body: (a
   try {
     return await body(app);
   } catch (error) {
-    const refused = refusal(c, error);
+    const refused = await refusal(c, error);
     if (refused) return refused;
     throw error;
   }
 }
 
 /** The documented answer of a fleet or volume refusal, or null. */
-function refusal(c: Context<AppEnv>, error: unknown) {
+async function refusal(c: Context<AppEnv>, error: unknown) {
   if (error instanceof AppFleetError || error instanceof AppVolumeError) {
     return c.json({ error: error.message, code: error.code }, error.status);
   }
   if (error instanceof AppLimitError) return c.json({ error: error.message, code: error.code, ...error.detail }, error.status);
   if (error instanceof AppAccountUnfundedError) return c.json({ error: error.message, code: error.reason, ...error.detail }, 402);
+  // The machine is starting (another wake held it), not broken: the starting
+  // contract, not a 500. A wake superseded mid-flight carries its own 409.
+  if (error instanceof AppWakeInProgressError) {
+    return c.json({ error: 'The machine is still starting: another start was already running. Check the machines list again.', code: 'machine_start_in_progress' }, 503);
+  }
+  if (error instanceof Response) {
+    return c.json(await error.json(), error.status as 409);
+  }
   return null;
 }
 

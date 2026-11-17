@@ -99,7 +99,7 @@ everywhere.
 | Release | What | Gate to start | Downtime |
 |---|---|---|---|
 | **R1** (this PR, #11857) | Everything user-visible at once: workspace on every surface (API, SDK, CLI, TUI, kortixd, web, desktop, mobile, docs, skills, copy), one Settings panel, workspace-based pricing, one IAM scope and one credential fence, the workspace lifecycle, the legacy split (shipped in `dry_run`). Plus the EXPAND migrations for R2: the `kortix.workspaces` table kept in sync by triggers, `workspace_id` on the account-only tables with dual-write triggers and a batched backfill, shadow reads that log mismatches. | — | none |
-| **R2** (two deploys, R2a and R2b) | `kortix.workspaces` becomes the source of truth. Writers move to it. `accounts` and `projects` become read-only compatibility views. Twin foreign keys into `workspaces` are added and validated online. | Prod, read-only aggregates: 0 `split_pending` rows; 0 shadow mismatches for 7 consecutive days; invariants I1–I12 exit 0; 0 NULL `workspace_id` on the expand tables; 0 lint suppressions for direct `accounts`/`projects` imports. Marko approves. | none |
+| **R2** (two deploys, R2a and R2b) | `kortix.workspaces` becomes the source of truth. Writers move to it. `accounts` and `projects` become read-only compatibility views. Twin foreign keys into `workspaces` are added and validated online. | Prod, read-only aggregates: 0 `split_pending` rows; 0 shadow mismatches for 7 consecutive days; invariants I1–I12 exit 0; 0 NULL `workspace_id` on the expand tables where the account has a live workspace (rows of deleted accounts keep NULL: on 2026-11-10 they were ~29% of the NULL `credit_ledger` rows, and `workspace_id_of_account` is NULL for them); 0 lint suppressions for direct `accounts`/`projects` imports. Release owner approves (Dimitrije since 2026-11-10). | none |
 | **R3** (planned cutover) | Rename `project_id → workspace_id` in 132 relations, drop the redundant `account_id`, rename the ledgers' `account_id` to `legacy_account_id`, drop the old foreign keys and the two legacy stores. Catalog-only DDL. | R2b live 7 days; counts equal (every account and project row is in `workspaces`); the cutover rehearsed on a restored snapshot (needs Marko's approval). Marko approves the window. | ~2 min, announced |
 
 Switching the split from `dry_run` to `apply` on prod is a separate step after R1 ships.
@@ -120,7 +120,7 @@ the repo).
 | **K1** | One auth model. Delete `WORKSPACE_ADMIN_PROJECT_ACTIONS`, `isWorkspaceAdministration` and `authorize` step 4b. Delete the fence's `admin` flag. A workspace-bound credential reaches every route of its own workspace (C4). The person's grants decide for a person and for an inherited (ungoverned) agent session; `grant ∩ ceiling − HUMAN_ONLY` decides for a governed agent. `HUMAN_ONLY` (C8) is the only agent wall: minting credentials and moving money. `kortix access invite` from the onboarding skill and the kortixd `kortix_people` tool work in a session. | auth |
 | **K2** | Workspace lifecycle = account lifecycle. `DELETE /v1/workspaces/:id` (and `DELETE /v1/projects/:id` on a 1:1 workspace) closes the account in the same transaction as the project archive: an `account_deletion_requests` row with the 14-day grace (the existing closure model, D6b), every credential of the account revoked, channels and event subscriptions released, automations stopped. After commit: `cancelSubscription(accountId, 'workspace_deleted')` (cancel at period end). Members lose access at once (engine rule, C3). Owners see the workspace as `deleting` and can restore it until `deletion_scheduled_for` (`POST /v1/workspaces/:id/restore`: cancel the request, un-archive, `reactivateSubscription`). The existing sweep erases it at `scheduled_for` (repo, sandboxes, Stripe, wallet, rows). A `split_pending` workspace keeps the old behavior: archive its project row only. Nothing billable is invisible: a project-less account that pays is listed as `setup_required` (C1, C5). | identity |
 | **K3** | `GET /v1/workspaces` lists every workspace the caller may see, across all accounts, in one request (C5). A workspace-bound credential gets its one workspace. `POST /v1/workspaces` creates a workspace with no flag (C5). The old `GET /v1/projects` keeps its single-account meaning. `new_workspace` stays on `POST /v1/projects/provision` only. `/provision`, `/provision-stream`, root `POST /` and `/quota` are not mounted under `/v1/workspaces`. Naming stage (2026-11-06): `/:id/transfer`, root `/link-repository` and `/create-repo` are aliases (`/v1/workspaces/…`); the project audit slice is `GET /v1/workspaces/:id/audit/events`; the trigger fire is `POST /v1/webhooks/workspaces/:id/:slug` (the shown `webhook_url`); every legacy route with its own meaning is `deprecated` in OpenAPI with `x-kortix-replaced-by` (`WORKSPACE_LEGACY_REPLACEMENTS`); `unit-workspace-route-aliases.test.ts` fails on a new route with a `projects`/`accounts` segment that is none of alias, deprecated legacy, retired or allowlisted. | api |
-| **K4** | The paying rule is `kortix.account_is_paying` (C6): paid tier, purchased credits or an active enterprise contract; a bare `stripe_subscription_id` never counts (149 legacy accounts carry a stale one on Free). Split-off billing (C6): a free source's split-off keeps free-credit eligibility and gets one Free grant (a one-time exception, no `free_credit_claims` row); a paying source's split-off gets the keeper's plan comped until the keeper's current period ends, with pro-rated plan credits, then falls to Free with eligibility. Each affected workspace shows a split notice for 30 days (C9). Each OWNER of an affected account gets one email when the account's moves finish, in `apply` mode only. Never a bulk email. | billing (functions) · split (calls, notice, email) |
+| **K4** | The paying rule is `kortix.account_is_paying` (C6): paid tier, purchased credits or an active enterprise contract; a bare `stripe_subscription_id` never counts (149 legacy accounts carry a stale one on Free). Split-off billing (C6): a free source's split-off keeps free-credit eligibility and gets one Free grant (a one-time exception, no `free_credit_claims` row); a paying source's split-off gets the keeper's plan comped until the keeper's current period ends, with pro-rated plan credits, then falls to Free with eligibility. Each affected workspace shows a split notice for 30 days (C9). No owner email or any other owner message (D13, 2026-11-11; this cell said one email per owner). | billing (functions) · split (calls, notice, email) |
 | 1 | No reuse. "Create workspace" always creates a new account; only an idempotent replay (same `idempotency_key`) returns an existing one. Delete `reusableOwnedAccount`'s empty-account branch. A deleted workspace's account is closing and can never come back. | identity |
 | 2 | "Delete account" deletes the PERSON, never `resolveAccountId`'s earliest workspace. Plan per membership: sole owner and only member → delete that workspace; sole owner with other members → `409 sole_owner_of_shared_workspace` with `workspaces: [{workspace_id, name, member_count}]`; otherwise leave. `deleteLogin(userId)` runs last. `DELETE /v1/account/delete-immediately` runs the plan now. `POST /v1/account/request-deletion` writes `kortix.person_deletion_requests` (14 days); the account-deletion worker runs the plan when it is due. | identity |
 | 3, 4 | Membership is access. Engine rule (C3): an account-scope `member` reaches its account's workspace at the `member` tier when the workspace is not `split_pending`. Existing members without a project grant gain access with no data migration. Invites default to role `member` and need no `project_grants` on a 1:1 workspace. `split_pending` accounts keep per-project grants. | auth |
@@ -135,7 +135,7 @@ the repo).
 | 13 | The `/v1/workspaces` IAM wire shows one scope: `/iam/roles` returns the four ladder roles plus custom roles (one `member` row, no `agent-user`); `/iam/permissions` emits `workspace_action` and `scope_type: 'workspace'`; `/iam/assignments` rows add `scope_type: 'workspace'` and `workspace_id` next to the legacy fields. `GET /v1/workspaces/:id/secret-resources` defaults `project_id` to the path workspace. | auth · api (secret-resources default) |
 | 14 | Impersonation refuses every state-changing method under `/v1/accounts/:id/iam/**` (one subtree rule; only `iam/members/:id/effective(:batch)` stays open), and `DELETE` on the workspace. `assignRole` refuses an impersonating writer (`impersonation_invalid`). An account-scope assignment to a non-member also writes the membership, so the holder shows in Members. | auth |
 | 15 | Fixed by K1: a person's workspace key manages its own workspace per the person's role. The SDK no longer lists `createAccountToken → createWorkspaceToken` as an exact equivalent (different reach). Fence refusals carry `code: 'credential_fence_refused'` and workspace wording. | auth · api (SDK) |
-| 16 | Canonical paths take workspace ids only (C5). An account id, an unknown id, a tombstone or a workspace the caller cannot read answers `404 workspace_not_found` on every sub-path, so existence cannot be probed. Legacy paths keep the either-id tolerance. SDK workspace helpers pass workspace ids. | api |
+| 16 | Canonical paths take workspace ids only (C5). An account id, an unknown id or a tombstone answers `404 workspace_not_found` on every sub-path. A live workspace the caller cannot read answers `403 workspace_access_denied` (2026-11-11, #12460 follow-up: the 404 made the ask-for-access screen unreachable; ids are random uuids, so the 403 confirms only an id the caller holds). Legacy paths keep the either-id tolerance. SDK workspace helpers pass workspace ids. | api |
 | 17 | OpenAPI: a `Workspace` schema from the route's own zod object; one alias source (`workspaceAliasOf` in `packages/shared/src/workspace-routes.ts`) for the spec and the route manifest; `WORKSPACE_MERGED_LEGACY_ROUTES` respected; whole-segment param regex (custom verbs survive); a `workspaces` tag and canonical summaries; a unit test compares the spec's alias set with `tests/spec/routes.generated.json`. | api |
 | 18 | `developers.mdx` and the SDK README get one canonical route table (canonical ↔ legacy), the error table (`workspace_has_project` with `workspace_id`, `workspace_not_found`, `workspace_setup_required`, `workspace_deleting`, `workspace_setting_read_only`), and the corrected provision row. The SDK exports `WORKSPACE_HAS_PROJECT_CODE`, `isWorkspaceHasProjectError` and the new codes. | api |
 | 19 | The invite dialog is "Invite people to {workspace}": email chips, one role select (Member / Manager / Admin; Owner by transfer only), optional expiry. The per-project rows show only on a `split_pending` workspace. Members and Access merge into one Members table with one role column. | web |
@@ -354,7 +354,12 @@ the table row (shadow). A difference logs `[workspaces] shadow_mismatch` with
   `person-route`, `foreign-sandbox`, `default-deny`.
 - `tokenScopeAllows` and `agentPrincipalDecision`: an account-scope action is in scope for
   a bound credential when the actor's account is the credential workspace's account and
-  that workspace is not `split_pending`.
+  that workspace is not `split_pending`. On its own `split_pending` account the denial
+  reason is `token_account_shared` (not `token_out_of_scope`), and the fence's
+  account-family refusal says the same: both name the working credential (a personal
+  key, `kortix login`), never "name the workspace". Usage reads (`/v1/usage/cost-summary`,
+  `cost-by-project`, `session-costs[/:id]`) serve a bound credential its own workspace's
+  slice, with or without `project_id`/`account_id` naming it.
 - Mint and list: Workspace settings mints workspace keys only. `GET /v1/workspaces/:id/tokens`
   lists W's keys. `GET /v1/me/tokens` lists the caller's personal keys across workspaces;
   `DELETE /v1/me/tokens/:tokenId` revokes one. Minting is `HUMAN_ONLY`.
@@ -515,9 +520,9 @@ this table; a wave-2 stream adds the row for a route it adds).
 
 - Id rules: canonical paths (`/v1/workspaces/**`, `/v1/connectors/workspaces/**`,
   `/scim/v2/workspaces/**`) take workspace ids only. Input uuids are case-insensitive;
-  output is lowercase. An account id, unknown id, tombstone, dormant non-paying workspace or
-  a workspace the caller cannot read → `404 { code: 'workspace_not_found' }` on every
-  sub-path. A `setup_required` workspace → `409 workspace_setup_required` on project-backed
+  output is lowercase. An account id, unknown id, tombstone or dormant non-paying workspace
+  → `404 { code: 'workspace_not_found' }` on every sub-path. A live workspace the caller
+  cannot read → `403 { code: 'workspace_access_denied' }`. A `setup_required` workspace → `409 workspace_setup_required` on project-backed
   sub-paths (sessions, agents, files, …); account families answer. Legacy paths keep
   either-id tolerance and their old status codes.
 - Every record that names a workspace carries `workspace_id` (= `project_id`). `account_id`
@@ -660,13 +665,15 @@ export function parseWorkspaceSettingsSection(raw: string | null | undefined): W
 - Denial reasons added: `workspace_closed` (mapped to 404/409, C3), and
   `agent_human_only_action` now covers every agent session.
 
-#### C9. Split notice and owner email
+#### C9. Split notice (no owner email, D13)
 
 - `GET /v1/workspaces/:id` adds `split_notice: { role: 'keeper' | 'moved'; source_name:
   string; completed_at: string; billing: 'free' | 'comped' | null; comped_until: string |
   null } | null`, for 30 days after the account's last move (derived from
   `workspace_split_runs`).
-- Owner email: one per (owner, source account) when the account's last move is `done`;
+- **Removed 2026-11-11 (D13, "no owner notices"): the split sends no email.** The outbox
+  table `kortix.workspace_split_emails` stays, empty. What R1 built, for history:
+  one per (owner, source account) when the account's last move is `done`;
   owners only. The outbox is `kortix.workspace_split_emails`
   (`20261106183012059_workspace_split_emails.sql`): one row per owner, unique on
   `idempotency_key` = `workspace-split-email:<from_account_id>:<user_id>`. The tick
@@ -845,13 +852,15 @@ project".
 (`held_reason: account_has_identity_provider`) whatever the keeper: the split
 copies members, not the IdP, so SSO enforcement and SCIM deprovisioning would
 stop at the keeper. Confirming the keeper does not release it; the split
-carrying identity is a follow-up. The move transaction re-checks both holds
+carrying identity is a follow-up. The move transaction re-checks the hold
 under the run lock. Every split-off grant is keyed by run AND target account
 (`split_off_grant:<run>:<account>`), so a reopened run never replays the
-dormant account's grant. The owner email waits until every done run has
-`plan.billing`.
+dormant account's grant. The account finish (`plan.account_finished_at`, no email
+since D13) waits until every done run has `plan.billing`.
 
-**Paying holds, D3 (Billing + split stage, 2026-11-06):** a source that pays only through
+**Paying holds, D3 (Billing + split stage, 2026-11-06; superseded by D12, 2026-11-10: a
+paying account is no longer held, the keeper rule picks the project that keeps the billing,
+and the split-off billing below is unchanged):** a source that pays only through
 top-ups (a Free account with purchased credits or a completed purchase) or only through an
 active enterprise contract on Free is `held` (`account_has_billing`) like a paid plan: no
 auto split, its owner confirms the keeper (`confirm-keeper`). After the confirmation its
@@ -951,8 +960,8 @@ file asks the orchestrator):
    the columns and triggers.
 6. **Legacy `DELETE /v1/projects/:id` on a 1:1 workspace now closes the account** (K2).
    Old clients get the same 200 shape.
-7. **Open: an owner-confirmation deadline for held split accounts** (item 43, pending
-   Marko). A `held` account (paying, enterprise or ambiguous) waits for
+7. **Closed by D12 (2026-11-10): no hold for a paying account, so no deadline.** Was:
+   an owner-confirmation deadline for held split accounts (item 43). A `held` account (paying, enterprise or ambiguous) waits for
    `confirm-keeper` with no deadline. The proposal: a 14-day window, a reminder in the
    notice and the owner email, then the worker applies the default keeper (the most
    active project). Not built; the split runbook keeps held accounts for a person.
@@ -964,6 +973,33 @@ file asks the orchestrator):
 Gate: §2. Two deploys, because rewiring writers and turning their table into a view must
 be two releases (learning `2026-08-19T182307Z`), and `ON CONFLICT (cols)` cannot run
 against a view (learning `2026-08-19T163833Z`).
+
+**R2a build order (Dimitrije, 2026-11-11).** `dev` rides every release, so a PR that lands on
+`dev` must be safe to release before the split has finished on prod. A migration cannot wait for
+the gate at runtime: one that skips itself is recorded as applied and never runs again.
+
+| PR | Steps | When it can land on `dev` |
+|---|---|---|
+| R2a-0 | The reconcile keeps rows in place (`20261111135934314_workspaces_reconcile_in_place.sql`). The R1 body deleted and re-inserted a row on every change (a rename, an open, a settings write, an archive) and deleted a moved project's row when the source was reconciled first; with step 4's foreign keys that cascades into, or is refused by, every referencing row. Proof: `reconcile-in-place.integration.test.ts` (a canary table references each row `ON DELETE CASCADE`). | any time |
+| R2a-1 | 8a: the account-of-project lookups through one store function | any time |
+| R2a-2 | 7: the engine reads `scope_type = 'workspace'` and the `workspace.*` names | any time |
+| R2a-3a | 4, project side: the 78 twins into `workspaces(workspace_id)` (`NOT VALID`, `NO ACTION`, deferred), and the reconcile of an account with no row (`20261114163000000`, `20261114171401000` for an account whose id is the first uuid, `20261114163001000`–`…163024000`; re-dated after dev's newest on 2026-11-14, when dev had added 3 more keys into `projects`). Proof: `workspaces-twin-foreign-keys.integration.test.ts` | any time: no file references `workspaces(legacy_account_id)` |
+| R2a-3b | 1 (unique index), 4 account side (the 52 twins into `workspaces(legacy_account_id)`), the fixture rewrite (below), 2–3 (the store writes `workspaces` first, the mirror trigger), 6 (fill), 8 (flip) | on branch `workspaces-r2a`; merged into `dev` once dev, staging and prod have 0 `split_pending` rows (step 1 refuses to build before, on purpose) |
+
+**Step 1 retires multi-project accounts in the database (found 2026-11-11).** With a full unique
+index on `legacy_account_id`, the R1 reconcile cannot write a second live row for one account, so
+an INSERT of a second active project fails. That is the intent, and it has three costs that land
+with R2a-3b: (a) the test fixtures that put several projects in one account through
+`split_pending` move to one account per project: `seedProject` in
+`apps/api/src/__tests__/helpers/integration-fixtures.ts` (123 importing files), the ke2e
+`tests/src/fixtures/database-project.ts` (the run's owner account holds every fixture project),
+and about 48 test files that seed `split_pending` themselves; (b) the split suites and the
+`split_pending` branches of the engine become dead code: R2a-3b deletes the suites that need a
+two-project account, R2b deletes the code; (c) `workspace-split.ts reverse` cannot run after
+step 1 (it puts two projects back into one account).
+
+Step 9 (the Drizzle property codemod) leaves R2a: §5 "API-internal names follow the column"
+(decided 2026-11-06) renames the internal names in the R3 image, with the columns.
 
 **R2a (deploy 1, safe with R1 pods running):**
 
@@ -982,10 +1018,22 @@ against a view (learning `2026-08-19T163833Z`).
 4. Twin foreign keys, `NOT VALID`: each FK into `projects(project_id)` (72 tables in
    `kortix.ts`) gets a twin into `workspaces(workspace_id)`; each FK into
    `accounts(account_id)` (50 tables) gets a twin into `workspaces(legacy_account_id)`.
-   Same `ON DELETE` action. Tombstones cascade through
-   `former_account_id → workspaces(legacy_account_id) ON DELETE CASCADE`.
-5. `VALIDATE CONSTRAINT` for each twin, one migration per large table (SHARE UPDATE
-   EXCLUSIVE, does not block writes; partitions one by one).
+   **Amended 2026-11-11: every twin is `NO ACTION DEFERRABLE INITIALLY DEFERRED` in R2a; the old
+   key keeps the `ON DELETE` action.** While the R1 reconcile derives the table, a row that holds
+   an account's `legacy_account_id` is deleted or cleared inside a normal write: the project-less
+   row the first project replaces (reconcile step 1b), and the source row a transfer tombstones
+   (step 1a, `legacy_account_id := NULL` until the dormant row is upserted). A `CASCADE` twin into
+   `legacy_account_id` would delete every account-keyed row of the workspace there; a non-deferred
+   one would refuse the transfer. A deferred `NO ACTION` twin checks at commit, when the
+   replacement row exists. The tombstone key (`former_account_id → workspaces(legacy_account_id)`)
+   moves to R2b step 10b for the same reason. 74 keys into `projects` (78 on 2026-11-14), 52 into `accounts` once
+   `projects.account_id` (the old store's own key) is left out (catalog, 2026-11-11).
+5. **Moved to R2b step 10b (2026-11-11).** A `VALIDATE` in R2a is wasted: R2b re-creates every
+   twin with its final action (an FK's action cannot be altered in place) and validates it then.
+   Prod read-only 2026-11-11: 0 project rows without their workspaces row, so the project-side
+   twins validate as they are; the account side needs the one missing row (R2a-3a repairs it).
+   `gateway_request_logs` (55 GB) and `session_lifecycle_commands` (26 GB) each get their own
+   `VALIDATE` file, last in the deploy.
 6. Fill the account-wide NULL `project_id` rows of the workspace-owned tables classified
    `workspace_owned_nullable` in `workspace-key-classes.ts` (for example
    `account_secret_resources` with `project_id IS NULL`, `account_model_preferences`
@@ -1025,6 +1073,10 @@ against a view (learning `2026-08-19T163833Z`).
 
 **R2b (deploy 2, after the last R2a task is up and no R1 task runs; migrations run first):**
 
+10b. Re-create each twin with the old key's `ON DELETE` action (`ADD … NOT VALID`, then
+     `VALIDATE` per large table) and add the tombstone key `former_account_id →
+     workspaces(legacy_account_id) ON DELETE CASCADE`: the store no longer deletes a live row
+     inside a write. Drop the R2a twins in the same file as their replacement.
 10. Drop the R1 reconcile triggers on `projects`, `accounts`, `account_deletion_requests`
     and the R1 dual-write `BEFORE` triggers' account→workspace direction: the expand
     tables' trigger becomes `NEW.account_id := (SELECT legacy_account_id FROM workspaces
@@ -1033,6 +1085,11 @@ against a view (learning `2026-08-19T163833Z`).
 11. Rewrite `role_assignments` to `scope_type = 'workspace'`, `scope_id = workspace_id`, and
     `permissions`/`role_permissions` strings to the `workspace.*` names (small tables,
     batched `.concurrent.ts`). R2a pods read both.
+    **Amended 2026-11-11:** the rewrite needs the checks R2a-2 widens
+    (`role_assignments_scope_type_check`, `…_scope_shape_check`) and must first drop
+    `role_assignments_scope_id_projects_project_id_fk`: an account role on a project-less
+    workspace gets `scope_id = workspace_id = account_id`, which is no project id. The twin
+    `role_assignments_scope_id_workspaces_fk` holds the reference.
 11a. Drop `kortix.workspaces_expected`, `kortix.workspaces_reconcile_account` and
      the M5 trigger functions with their triggers (step 10 removes the callers);
      `kortix.workspace_id_of_account` stays as the lookup the expand tables'
@@ -1170,7 +1227,7 @@ These parts of the earlier design stay valid and are built or kept as written th
   keeps calling the old paths.
 - The split engine (`project-transfer.ts` + `workspace-split-copy.ts`), its lease ledger
   (`workspace_split_runs`), its mode switch (`WORKSPACE_SPLIT_MODE` or the
-  `workspace_split` row of `kortix.platform_settings`), holds for paying accounts, reverse
+  `workspace_split` row of `kortix.platform_settings`), the identity-provider hold, reverse
   and reopen: `split-runbook.md`.
 - The codemods are committed, re-runnable scripts (`scripts/codemods/`); after a dev merge,
   re-run them instead of resolving their conflicts by hand.

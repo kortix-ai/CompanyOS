@@ -92,7 +92,7 @@ function ArtCell({ art, title, body, className }: { art: ReactNode; title: strin
 /**
  * One tall card: the art in the middle, the name and one line at the bottom. Every card keeps an
  * action row, so the titles line up. The light card lights up on hover: a dither rises from its
- * bottom edge at 40%. The dither is a WebGL canvas and a browser keeps only a few alive, so it
+ * bottom edge at 60%. The dither is a WebGL canvas and a browser keeps only a few alive, so it
  * mounts while a mouse is over the card and unmounts when it leaves.
  */
 function TallCard({ art, title, body, action, light }: { art: ReactNode; title: string; body: string; action?: ReactNode; light?: boolean }) {
@@ -107,7 +107,7 @@ function TallCard({ art, title, body, action, light }: { art: ReactNode; title: 
       )}
     >
       {hovered ? (
-        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 opacity-40 [mask-image:linear-gradient(to_top,#000,transparent_75%)]">
+        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 opacity-60 [mask-image:linear-gradient(to_top,#000,transparent_75%)]">
           <div className="animate-in fade-in duration-slower absolute inset-0">
             <DitherField className="text-kortix-base" />
           </div>

@@ -3,12 +3,13 @@
 import { KortixLogo } from '@/components/sidebar/kortix-logo';
 import Footer from '@/components/home/footer';
 import { FaqSection } from '@/features/marketing/faq';
+import { DitherField } from '@/features/marketing/kit/dither-field';
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
 import { loopPrompt, REFERENCE_REPOS, setupPromptFor } from '@kortix/shared/setup-guide';
 import { cn } from '@kortix/ui';
 import { ArrowRightIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 
 import { FAQ, TEAMS } from './factory-content';
 import { heroRuns } from './hero-runs';
@@ -86,10 +87,30 @@ function ArtCell({ art, title, body, className }: { art: ReactNode; title: strin
   );
 }
 
-/** One tall card: the art in the middle, the name and one line at the bottom. Every card keeps an action row, so the titles line up. */
+/**
+ * One tall card: the art in the middle, the name and one line at the bottom. Every card keeps an
+ * action row, so the titles line up. The light card lights up on hover: a dither rises from its
+ * bottom edge at 40%. The dither is a WebGL canvas and a browser keeps only a few alive, so it
+ * mounts while a mouse is over the card and unmounts when it leaves.
+ */
 function TallCard({ art, title, body, action, light }: { art: ReactNode; title: string; body: string; action?: ReactNode; light?: boolean }) {
+  const [hovered, setHovered] = useState(false);
   return (
-    <div className={cn('flex flex-col rounded-xl border p-6 sm:p-8 lg:min-h-[460px]', light ? 'bg-foreground text-background border-transparent' : 'border-border bg-card')}>
+    <div
+      onPointerEnter={(event) => light && event.pointerType === 'mouse' && setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      className={cn(
+        'relative isolate flex flex-col overflow-hidden rounded-xl border p-6 sm:p-8 lg:min-h-[460px]',
+        light ? 'bg-foreground text-background border-transparent' : 'border-border bg-card',
+      )}
+    >
+      {hovered ? (
+        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 opacity-40 [mask-image:linear-gradient(to_top,#000,transparent_75%)]">
+          <div className="animate-in fade-in duration-slower absolute inset-0">
+            <DitherField className="text-kortix-base" />
+          </div>
+        </div>
+      ) : null}
       <div aria-hidden className="flex flex-1 items-center justify-center py-6 lg:py-10">
         {art}
       </div>

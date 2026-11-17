@@ -2,7 +2,6 @@
 
 import { PROD_TARGET, setupPromptFor, setupTarget, type SetupTarget } from '@kortix/shared/setup-guide';
 import { Copy } from '@kortix/ui/icons';
-import { DitherField } from '@/features/marketing/kit/dither-field';
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
 import { Claude } from '@kortix/ui/internal/icons/claude';
 import { Codex } from '@kortix/ui/internal/icons/codex';
@@ -62,30 +61,18 @@ export function CopyButton({
 }) {
   const target = useSetupTarget();
   const { copied, copy } = useCopy(text ?? setupPromptFor(target));
-  // The dither is a WebGL canvas, and a browser keeps only a few alive at once: it mounts while a
-  // mouse is over the button and unmounts when it leaves, so the page never holds one per button.
-  const [hovered, setHovered] = useState(false);
   return (
     <button
       type="button"
       onClick={copy}
-      onPointerEnter={(event) => event.pointerType === 'mouse' && setHovered(true)}
-      onPointerLeave={() => setHovered(false)}
       className={cn(
-        'relative isolate inline-flex shrink-0 items-center gap-2 overflow-hidden rounded-full font-medium whitespace-nowrap transition-[transform,background-color] active:scale-[0.96] motion-reduce:active:scale-100',
+        'inline-flex shrink-0 items-center gap-2 rounded-full font-medium whitespace-nowrap transition-[transform,background-color] active:scale-[0.96] motion-reduce:active:scale-100',
         tone === 'light' ? 'bg-foreground text-background hover:bg-foreground/90' : 'bg-background text-foreground hover:bg-background/90',
         size === 'lg' && 'h-10 px-5 text-sm',
         size === 'md' && 'h-9 px-4 text-sm',
         size === 'sm' && 'h-8 px-3.5 text-sm',
       )}
     >
-      {hovered ? (
-        <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 opacity-40 [mask-image:linear-gradient(to_right,transparent,#000)]">
-          <span className="animate-in fade-in duration-slow absolute inset-0">
-            <DitherField className="text-kortix-base" />
-          </span>
-        </span>
-      ) : null}
       <span aria-live="polite">{copied ? 'Copied' : label}</span>
       {copied ? <CheckIcon className="size-4" /> : <Copy className="size-4" />}
     </button>

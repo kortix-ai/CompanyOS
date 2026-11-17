@@ -234,11 +234,7 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
         <section className={cn(COLUMN, 'py-16 lg:py-20')}>
           <SplitHeading
             title="Bring the plan you already pay for"
-            lead={
-              <>
-                Your <Mark name="Claude" /> or ChatGPT subscription, or any API key. A 3 a.m. run uses it too.
-              </>
-            }
+            lead="Your Claude or ChatGPT subscription, or any API key. A 3 a.m. run uses it too."
           />
         </section>
 

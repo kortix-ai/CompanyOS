@@ -1743,7 +1743,7 @@ kortix tasks 3f2a1b9c ls      # a lead's list from outside the team
 
 Each session row of the API carries the board's fields: `board_state`, `attention` (`question`, `approval` or `null`), `last_activity_at`, `result_excerpt` (at most 280 characters of the last answer), `agent_handle`, `team_lead_session_id` and `inbound`. `kortix sessions status --json` prints `board_state`, `attention`, `agent_handle` and `team_lead_session_id` for each session.
 
-`GET /workspaces/:id/sessions?working=only` lists only the sessions at work now: a live turn on their box, so `working.state` is `working`. Workflow runners, their agents and colleagues are included. The workspace Running view reads it through `useRunningSessions(projectId, { open })` in `@kortix/sdk/react` (`listWorkspaceSessionsPage(projectId, { working: true })`).
+`GET /workspaces/:id/sessions?working=only` lists only the sessions at work now: a live turn on their box, so `working.state` is `working`. Workflow runners, their agents and colleagues are included. SDK callers can read it through `useRunningSessions(projectId, { open })` in `@kortix/sdk/react` (`listWorkspaceSessionsPage(projectId, { working: true })`).
 
 #### Is the work done?
 

@@ -1,6 +1,6 @@
 import type React from 'react';
 
-import { INLINE_CODE } from './code/inline-chip';
+import { INLINE_CODE } from './inline-chip';
 
 export type InlineCodeSegment = { kind: 'text' | 'code'; value: string };
 

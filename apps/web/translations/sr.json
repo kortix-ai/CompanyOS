@@ -2226,6 +2226,11 @@
       "resume": "Настави",
       "agentIsWorking": "{agent} ради",
       "needsYouOn": "Потребан си: {header}"
+    },
+    "panel": {
+      "outputNew": "Ново",
+      "outputUpdated": "Ажурирано",
+      "resizePane": "Промени величину окна"
     }
   },
   "agents": {
@@ -27414,7 +27419,9 @@
       "goals": "Ciljevi",
       "inbox": "Prijemno sanduče",
       "memory": "Memorija",
-      "members": "Članovi"
+      "members": "Članovi",
+      "review": "Pregled",
+      "setup": "Završi podešavanje"
     },
     "sections": {
       "agents": "Agenti",

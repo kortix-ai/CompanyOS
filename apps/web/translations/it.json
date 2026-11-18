@@ -2226,6 +2226,11 @@
       "resume": "Riprendi",
       "agentIsWorking": "{agent} sta lavorando",
       "needsYouOn": "Serve a te: {header}"
+    },
+    "panel": {
+      "outputNew": "Nuovo",
+      "outputUpdated": "Aggiornato",
+      "resizePane": "Ridimensiona il riquadro"
     }
   },
   "agents": {
@@ -27414,7 +27419,9 @@
       "goals": "Obiettivi",
       "inbox": "Posta in arrivo",
       "memory": "Memoria",
-      "members": "Membri"
+      "members": "Membri",
+      "review": "Revisione",
+      "setup": "Completa la configurazione"
     },
     "sections": {
       "agents": "Agenti",

@@ -33,7 +33,6 @@ import { createOwnedAccount } from '../../accounts/core/create-account';
 import { teardownAppRuntimes } from '../../apps/images';
 import { destroyAppVolumes } from '../../apps/volumes';
 import { applyAdminOverride } from '../../billing/services/account-write-owner';
-import { deleteAccountImmediately } from '../../billing/services/account-deletion';
 import { accountMayUseManagedModels } from '../../billing/services/entitlements';
 import { wallet } from '../../billing/wallet';
 import { config } from '../../config';
@@ -259,6 +258,10 @@ async function deleteTrialWorkspace(row: typeof evalTrialWorkspaces.$inferSelect
   if (account) {
     await removeWorkspaceApps(row.trialProjectId);
     if (!row.settledAt) await settleTrialWorkspace(row, 'final');
+    // Loaded here, not at import: account deletion reaches the sandbox reaper
+    // and the legacy runtime bootstrap, which the routes and the proxy must
+    // not load at boot (sandbox-proxy/module-graph.test.ts).
+    const { deleteAccountImmediately } = await import('../../billing/services/account-deletion');
     await deleteAccountImmediately(row.trialAccountId);
   }
   await db.update(evalTrialWorkspaces).set({ deletedAt: new Date(), lastError: null }).where(eq(evalTrialWorkspaces.trialAccountId, row.trialAccountId));

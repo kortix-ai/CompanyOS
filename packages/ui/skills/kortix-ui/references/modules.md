@@ -89,7 +89,9 @@ export function Answer({ text }: { text: string }) {
 
 Code outside markdown: `CodeHighlight` (`code`, `language`) draws one highlighted block without the markdown parser; `INLINE_CODE` is the class string of an inline code chip.
 
-Names: `markdownPolicy`, `MarkdownPolicy`, `MarkdownTrust`, `MarkdownVariant`, `UnifiedMarkdown`, `UnifiedMarkdownProps`, `CopyOverlay`, `CodeHighlight`, `HighlightedCode`, `INLINE_CODE`, `CopyButton`, `MarkdownWithFrontmatter`, `languageLabel`, `normalizeLanguage`
+Short agent-written strings: `InlineCodeText` (`text`) draws `code spans` as inline chips with no block elements, safe in a menu row. `splitInlineCode` splits a line into `InlineCodeSegment`s, `plainTextFromMarkdown` returns the plain words, `shortSummary` (`input`, `max` = 160) the first sentence for an `aria-describedby`.
+
+Names: `markdownPolicy`, `MarkdownPolicy`, `MarkdownTrust`, `MarkdownVariant`, `UnifiedMarkdown`, `UnifiedMarkdownProps`, `CopyOverlay`, `CodeHighlight`, `HighlightedCode`, `INLINE_CODE`, `CopyButton`, `MarkdownWithFrontmatter`, `languageLabel`, `normalizeLanguage`, `InlineCodeText`, `InlineCodeSegment`, `plainTextFromMarkdown`, `shortSummary`, `splitInlineCode`
 
 ## `@kortix/ui/genui`
 
@@ -187,7 +189,7 @@ Source: `src/files/viewer/index.ts`. Render any file kind (pdf, docx, xlsx, csv,
 
 Mount: `FileViewer` with `content` needs no provider, no SDK client and no `QueryClientProvider`; with a `shareContext` it needs both (its Copy link reads the session). `FileContentRenderer`: inside `FileSourceProvider` (where the bytes come from).
 
-Props: `FileViewer`: `content`, `fileName`, optional `path`, `onClose`, `refresh`, `className`. `HTML_PREVIEW_IFRAME_CLASS` is the class list of the HTML preview's iframe, for a host that draws its own. `FileContentRenderer`: `filePath`, `showHeader`, `readOnly`, `targetLine`, `onSaved`. `FileSource`: `id`, `useFileContent`, `useBinaryBlob`, `download`, `upload`, optional `save`, `bytesOnly`.
+Props: `FileViewer`: `content`, `fileName`, optional `path`, `onClose`, `refresh`, `className`. `HTML_PREVIEW_IFRAME_CLASS` is the class list of the HTML preview's iframe, for a host that draws its own. `FileContentRenderer`: `filePath`, `showHeader`, `readOnly`, `targetLine`, `onSaved`. `FileSource`: `id`, `useFileContent`, `useBinaryBlob`, `download`, `upload`, optional `save`, `bytesOnly`. `FileAnnotationsProvider` (`diagnosticsFor(filePath)`) adds diagnostics the LSP store does not hold, such as `kortix.yaml` issues; `useFileAnnotations(filePath)` reads them, none outside a provider.
 
 ```tsx
 import { FileViewer } from '@kortix/ui/file-viewer';
@@ -198,7 +200,7 @@ export function Note({ text }: { text: string }) {
 }
 ```
 
-Names: `FileContentRenderer`, `FileContentRendererProps`, `FilePreviewModal`, `FilePreviewModalProps`, `FilePreviewState`, `FileSourceProvider`, `useFileSource`, `BinaryBlobResult`, `FileContent`, `FileContentResult`, `FilePatch`, `FilePatchHunk`, `FileSource`, `HtmlPreview`, `PreviewFitProvider`, `isUsableIntrinsicSize`, `SaveAsPdfButton`, `framePolicy`, `getFileCategory`, `getLanguageFromExt`, `FileCategory`, `FrameContent`, `FramePolicy`, `FileViewer`, `ShowCarouselItem`
+Names: `FileContentRenderer`, `FileContentRendererProps`, `FilePreviewModal`, `FilePreviewModalProps`, `FilePreviewState`, `FileSourceProvider`, `useFileSource`, `BinaryBlobResult`, `FileContent`, `FileContentResult`, `FilePatch`, `FilePatchHunk`, `FileSource`, `HtmlPreview`, `PreviewFitProvider`, `isUsableIntrinsicSize`, `SaveAsPdfButton`, `framePolicy`, `getFileCategory`, `getLanguageFromExt`, `FileCategory`, `FrameContent`, `FramePolicy`, `FileViewer`, `ShowCarouselItem`, `FileAnnotationsProvider`, `useFileAnnotations`
 
 ## `@kortix/ui/terminal`
 

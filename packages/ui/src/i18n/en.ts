@@ -1620,6 +1620,11 @@ const catalog = {
       "resume": "Resume",
       "agentIsWorking": "{agent} is working",
       "needsYouOn": "Needs you: {header}"
+    },
+    "panel": {
+      "outputNew": "New",
+      "outputUpdated": "Updated",
+      "resizePane": "Resize pane"
     }
   },
   "agents": {

@@ -437,7 +437,7 @@ function SessionPanel({
       <div
         key={`${run.id}-${round}`}
         className={cn(
-          'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-4 pt-4 pb-2',
+          'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-4 pt-4 pb-8',
           round > 0 && 'animate-in fade-in duration-slow',
         )}
       >

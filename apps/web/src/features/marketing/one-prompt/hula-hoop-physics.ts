@@ -6,10 +6,6 @@ export type HoopState = {
   speed: number;
   /** Tilt of the hoop from flat, in radians. */
   tilt: number;
-  /** Signed angle turned since the last whole loop or change of direction, in radians. */
-  progress: number;
-  /** Whole turns since the page loaded. */
-  loops: number;
   /** The speed a hoop settles back to when nobody touches it. 0 under reduced motion. */
   idle: number;
 };
@@ -36,15 +32,7 @@ export function hoopStep(state: HoopState, dt: number, input: { drag: number | n
   }
   state.speed = clamp(state.speed + input.impulse);
 
-  const step = state.speed * dt;
-  state.phase += step;
-  // A loop is a whole turn one way: a change of direction starts the count of that turn again.
-  if (step !== 0 && Math.sign(step) !== Math.sign(state.progress)) state.progress = 0;
-  state.progress += step;
-  while (Math.abs(state.progress) >= Math.PI * 2) {
-    state.loops += 1;
-    state.progress -= Math.sign(state.progress) * Math.PI * 2;
-  }
+  state.phase += state.speed * dt;
 
   const fast = Math.min(1, Math.abs(state.speed) / 10);
   const target = TILT_SLOW + (TILT_FAST - TILT_SLOW) * fast;

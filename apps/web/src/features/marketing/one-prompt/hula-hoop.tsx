@@ -173,7 +173,7 @@ export function HulaHoop({ className }: { className?: string }) {
     let last = 0;
     const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     // The entrance: the hoop arrives thrown, then settles to its idle swing.
-    const state: HoopState = { phase: 0.6, speed: still ? 0 : 7, tilt: 0.16, progress: 0, loops: 0, idle: still ? 0 : IDLE };
+    const state: HoopState = { phase: 0.6, speed: still ? 0 : 7, tilt: 0.16, idle: still ? 0 : IDLE };
     const drag = { active: false, id: -1, x: 0, t: 0, velocity: 0 };
     let impulse = 0;
 

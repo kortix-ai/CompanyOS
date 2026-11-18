@@ -4,13 +4,14 @@ import { Claude } from '@kortix/ui/internal/icons/claude';
 import { Codex } from '@kortix/ui/internal/icons/codex';
 import { Cursor } from '@kortix/ui/internal/icons/cursor';
 import { SolidCheckIcon } from '@kortix/ui/internal/icons/solid-check-icon';
-import { Modal, ModalContent, ModalDescription, ModalFooter, ModalHeader, ModalTitle } from '@kortix/ui/modal';
-import { PlusIcon } from '@phosphor-icons/react';
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
+import { Kbd } from '@kortix/ui/kbd';
+import { Modal, ModalClose, ModalContent, ModalDescription, ModalTitle } from '@kortix/ui/modal';
+import { PlusIcon, ShareFatIcon } from '@phosphor-icons/react';
+import { createContext, useCallback, useContext, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
 
-import { AsciiHoop } from './ascii-hoop';
+import { LoopmaxxingWordmark } from './hoop';
 
 /** The coding agents the dialog shows, each with its own mark. A "+" closes the row: any agent with a shell runs the prompt. */
 const AGENTS: ReadonlyArray<{ name: string; mark: ReactNode }> = [
@@ -19,6 +20,8 @@ const AGENTS: ReadonlyArray<{ name: string; mark: ReactNode }> = [
   { name: 'Cursor', mark: <Cursor className="size-5" /> },
   // eslint-disable-next-line @next/next/no-img-element -- a 20px static SVG; next/image adds nothing here
   { name: 'OpenCode', mark: <img src="/provider-icons/opencode.svg" alt="" width={20} height={20} className="size-5 invert" /> },
+  // eslint-disable-next-line @next/next/no-img-element -- a 20px static SVG; next/image adds nothing here
+  { name: 'pi', mark: <img src="/provider-icons/pi.svg" alt="" width={20} height={20} className="size-5" /> },
 ];
 
 type CopyGuide = { open: (text: string) => void };
@@ -41,13 +44,11 @@ export const COPY_GUIDE_ATTR = 'data-copy-guide';
 export function CopyGuideProvider({ children }: { children: ReactNode }) {
   const [text, setText] = useState<string | null>(null);
   const opener = useRef<HTMLElement | null>(null);
-  const done = useRef<HTMLButtonElement | null>(null);
   const open = useCallback((copied: string) => {
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setText(copied);
-    // Done takes the focus once the dialog has placed its own: no focus ring greets the reader, Copy again is one Tab back.
-    setTimeout(() => done.current?.focus(), 60);
   }, []);
+  const touch = useTouchFirst();
   const close = () => {
     setText(null);
     // After the close starts, so the dialog's own focus handling does not take it back.
@@ -57,59 +58,128 @@ export function CopyGuideProvider({ children }: { children: ReactNode }) {
     <CopyGuideContext.Provider value={{ open }}>
       {children}
       <Modal open={text !== null} onOpenChange={(next) => !next && close()}>
-        <ModalContent {...{ [COPY_GUIDE_ATTR]: '' }} className="overflow-hidden sm:max-w-md">
-          {/* The art: the hula hoop as an ASCII spinning donut, on black. Mounted only while the dialog is open. */}
-          <div aria-hidden className="bg-background h-56 sm:h-64">
-            <AsciiHoop className="animate-in fade-in duration-slow size-full" />
-          </div>
-          <ModalHeader>
-            <ModalTitle className="inline-flex items-center gap-2">
-              <SolidCheckIcon aria-hidden className="size-4.5" />
-              Prompt copied
-            </ModalTitle>
-            <ModalDescription>Open your coding agent, paste it and hit Enter.</ModalDescription>
-          </ModalHeader>
-          <ul className="flex flex-wrap items-center gap-x-5 gap-y-3 px-6 pb-2">
-            {AGENTS.map((agent) => (
-              <li key={agent.name} className="text-foreground inline-flex items-center gap-2 text-sm">
-                <span aria-hidden className="inline-flex shrink-0">
-                  {agent.mark}
-                </span>
-                {agent.name}
+        {/* A full-screen takeover: LOOPMAXXING with its two spinning hoop O's is the centrepiece, then what to do next. */}
+        <ModalContent
+          {...{ [COPY_GUIDE_ATTR]: '' }}
+          showCloseButton={false}
+          className="bg-background data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 inset-0 h-dvh max-h-none w-screen max-w-none space-y-0 overflow-y-auto rounded-none! border-0 duration-(--duration-moderate) lg:top-0 lg:left-0 lg:block lg:h-dvh lg:max-w-none lg:translate-x-0 lg:translate-y-0"
+        >
+          {/* The prompt is already copied: Esc, or a click or tap anywhere, closes it. Only the phone's share action stays. */}
+          <ModalClose className="sr-only">Close</ModalClose>
+          <div onClick={close} className="flex min-h-full w-full cursor-default flex-col items-center justify-center gap-12 py-16 text-center">
+            {/* The word spans about 90% of the screen: its size is a share of the full-width box (cqi), so it fits at every width. */}
+            <div className="@container w-full px-6">
+              <div className="text-foreground flex justify-center font-mono text-[12.6cqi] leading-none font-medium whitespace-nowrap uppercase">
+                <LoopmaxxingWordmark />
+              </div>
+            </div>
+            <div className="flex flex-col items-center gap-3">
+              <ModalTitle className="text-foreground inline-flex items-center gap-2.5 text-2xl font-medium tracking-tight sm:text-3xl">
+                <SolidCheckIcon aria-hidden className="size-6" />
+                Prompt copied
+              </ModalTitle>
+              <ModalDescription className="text-muted-foreground text-base sm:text-lg">
+                {touch ? 'Run it on your computer: send it to yourself.' : 'Open your coding agent, paste it and hit Enter.'}
+              </ModalDescription>
+            </div>
+            <ul className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 px-6">
+              {AGENTS.map((agent) => (
+                <li key={agent.name} className="text-foreground inline-flex items-center gap-2 text-sm">
+                  <span aria-hidden className="inline-flex shrink-0">
+                    {agent.mark}
+                  </span>
+                  {agent.name}
+                </li>
+              ))}
+              <li className="text-muted-foreground inline-flex items-center">
+                <PlusIcon aria-hidden className="size-5" />
+                <span className="sr-only">and more</span>
               </li>
-            ))}
-            <li className="text-muted-foreground inline-flex items-center">
-              <PlusIcon aria-hidden className="size-5" />
-              <span className="sr-only">and more</span>
-            </li>
-          </ul>
-          <ModalFooter className="sm:justify-between">
-            {text !== null ? <CopyAgain text={text} /> : null}
-            <MarketingButton ref={done} type="button" variant="primary" size="md" onClick={close}>
-              Done
-            </MarketingButton>
-          </ModalFooter>
+            </ul>
+            {touch && text !== null ? <SendToYourself /> : null}
+            <p className="text-muted-foreground inline-flex items-center gap-1.5 text-sm">
+              {touch ? (
+                'Tap anywhere to close'
+              ) : (
+                <>
+                  <Kbd>Esc</Kbd> to close
+                </>
+              )}
+            </p>
+          </div>
         </ModalContent>
       </Modal>
     </CopyGuideContext.Provider>
   );
 }
 
-/** Copies the prompt again: a later copy elsewhere may have replaced it on the clipboard. */
-function CopyAgain({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
+/** A touch-first device without hover: a phone or a tablet. The prompt runs on a computer, not here. */
+function useTouchFirst(): boolean {
+  return useSyncExternalStore(
+    noSubscription,
+    () => window.matchMedia('(pointer: coarse) and (hover: none)').matches,
+    () => false,
+  );
+}
+
+const noSubscription = () => () => {};
+
+/** What the phone sends: the page, and one line on what to do with it. */
+const SHARE = {
+  title: 'Loopmaxxing',
+  text: 'Add a Software Factory to your repo with 1 prompt. Open this on your computer and copy the prompt into Claude Code or Codex.',
+};
+
+/**
+ * On a phone, the prompt waits for a computer: send the page to yourself. The
+ * share sheet reaches Slack, WhatsApp, Messages and Mail. Without one, or when
+ * it fails, WhatsApp, Email and Copy link do the same by hand.
+ */
+function SendToYourself() {
+  const [fallback, setFallback] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  // The page itself, without a query or a hash: the link to open on the computer.
+  const url = typeof window === 'undefined' ? '' : `${window.location.origin}${window.location.pathname}`;
+  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+  const share = async () => {
     try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      return;
+      await navigator.share({ ...SHARE, url });
+    } catch (error) {
+      // The reader closed the sheet: nothing to do. Any other failure: show the links instead.
+      if (!(error instanceof DOMException && error.name === 'AbortError')) setFallback(true);
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
   };
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setLinkCopied(true);
+    } catch {
+      // The clipboard refused: the other two links still work.
+    }
+  };
+  const message = `${SHARE.text} ${url}`;
   return (
-    <MarketingButton type="button" variant="secondary" size="md" onClick={() => void copy()}>
-      {copied ? 'Copied' : 'Copy again'}
-    </MarketingButton>
+    <div onClick={(event) => event.stopPropagation()} className="flex w-full flex-col items-center gap-3 px-6">
+      {canShare && !fallback ? (
+        <MarketingButton type="button" variant="primary" size="md" className="hit-area-y-1 w-full max-w-xs" onClick={() => void share()}>
+          <ShareFatIcon aria-hidden className="size-4" />
+          Send it to yourself
+        </MarketingButton>
+      ) : (
+        <div className="flex w-full max-w-xs flex-col gap-2">
+          <MarketingButton variant="primary" size="md" className="hit-area-y-1 w-full" asChild>
+            <a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noopener noreferrer">
+              WhatsApp
+            </a>
+          </MarketingButton>
+          <MarketingButton variant="secondary" size="md" className="hit-area-y-1 w-full" asChild>
+            <a href={`mailto:?subject=${encodeURIComponent(SHARE.title)}&body=${encodeURIComponent(message)}`}>Email</a>
+          </MarketingButton>
+          <MarketingButton type="button" variant="secondary" size="md" className="hit-area-y-1 w-full" onClick={() => void copyLink()}>
+            {linkCopied ? 'Link copied' : 'Copy link'}
+          </MarketingButton>
+        </div>
+      )}
+    </div>
   );
 }

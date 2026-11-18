@@ -242,7 +242,7 @@ function ReelArrow({ label, onClick, children }: { label: string; onClick: () =>
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="text-muted-foreground hover:text-foreground hover:bg-accent inline-flex size-9 items-center justify-center rounded-md transition-colors"
+      className="text-muted-foreground hover:text-foreground hover:bg-accent hit-area-1 inline-flex size-9 items-center justify-center rounded-md transition-colors"
     >
       {children}
     </button>
@@ -552,12 +552,12 @@ function LiveComposer({ defaultAgent, busy, onSend }: { defaultAgent: string; bu
         className="text-foreground placeholder:text-muted-foreground w-full resize-none bg-transparent px-1.5 pt-1 text-sm outline-none"
       />
       <div className="flex items-center gap-1">
-        <Button type="button" variant="ghost" size="icon-sm" aria-label="Attach a file" className="text-muted-foreground">
+        <Button type="button" variant="ghost" size="icon-sm" aria-label="Attach a file" className="text-muted-foreground hit-area-2.5">
           <PaperclipIcon className="size-4" />
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button type="button" variant="ghost" size="xs" className="text-foreground gap-1.5 px-1.5 text-xs">
+            <Button type="button" variant="ghost" size="xs" className="text-foreground hit-area-y-2.5 gap-1.5 px-1.5 text-xs">
               <AgentTile slug={agent} />
               {agent}
               <CaretDownIcon className="text-muted-foreground size-3" />
@@ -582,7 +582,7 @@ function LiveComposer({ defaultAgent, busy, onSend }: { defaultAgent: string; bu
           aria-label={busy ? 'Working' : 'Send'}
           disabled={!busy && !text.trim()}
           onClick={send}
-          className="ml-auto rounded-full"
+          className="hit-area-2.5 ml-auto rounded-full"
         >
           {busy ? <span className="size-2 rounded-xs bg-current" /> : <ArrowUpIcon className="size-3.5" />}
         </Button>

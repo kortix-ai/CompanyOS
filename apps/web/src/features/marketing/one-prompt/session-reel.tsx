@@ -1,5 +1,6 @@
 'use client';
 
+import { FULL_COLOR_LOGOS } from '@/features/marketing/landing-sections/works-with-logos';
 import { Button } from '@kortix/ui/button';
 import { ChainOfThought } from '@kortix/ui/chain-of-thought';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@kortix/ui/dropdown-menu';
@@ -7,7 +8,7 @@ import { Disclosure, DisclosureContent, DisclosureTrigger } from '@kortix/ui/dis
 import { Claude } from '@kortix/ui/internal/icons/claude';
 import { TextShimmer } from '@kortix/ui/text-shimmer';
 import { cn } from '@kortix/ui';
-import { ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, CaretDownIcon, CaretRightIcon, PaperclipIcon } from '@phosphor-icons/react';
+import { ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, CaretDownIcon, CaretRightIcon, ClockIcon, LightningIcon, PaperclipIcon, TerminalWindowIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 
 import { sessionPool } from './agent-sessions';
@@ -303,14 +304,16 @@ function useRunPlay(first: HeroRun, live: boolean, delay: number, still: boolean
   const pool = useMemo(() => sessionPool(first), [first]);
   const [index, setIndex] = useState(0);
   const [round, setRound] = useState(0);
-  const [beat, setBeat] = useState(0);
+  // The first session renders finished, so nothing builds up on load; the next ones play beat by beat.
+  const [beat, setBeat] = useState(LAST_BEAT);
   const [held, setHeld] = useState(false);
   const [sent, setSent] = useState<Play['sent']>([]);
   const playing = live && !still && !held && sent.length === 0;
 
   useEffect(() => {
     if (!playing) return;
-    const wait = round === 0 && beat === 0 ? delay + BEATS_MS[0]! : BEATS_MS[Math.min(beat, LAST_BEAT - 1)]!;
+    const hold = BEATS_MS[Math.min(beat, LAST_BEAT - 1)]!;
+    const wait = round === 0 && beat === LAST_BEAT ? delay + hold : hold;
     const id = setTimeout(() => {
       if (beat < LAST_BEAT) {
         setBeat(beat + 1);
@@ -362,7 +365,31 @@ function RunPanels({ run, index, count, pos, live, still, instant }: { run: Hero
   );
 }
 
-/** One session window: its header, the conversation and a reply box. */
+/**
+ * The mark of what started a run: the integration's logo as a flat glyph in
+ * the theme ink (the site's logo set), a clock for a schedule, a terminal for
+ * the setup prompt, a bolt for any other event.
+ */
+function TriggerMark({ via, terminal }: { via?: string; terminal: boolean }) {
+  const glyph = 'text-muted-foreground size-4 shrink-0';
+  if (terminal) return <TerminalWindowIcon aria-hidden className={glyph} />;
+  if (via === 'schedule') return <ClockIcon aria-hidden className={glyph} />;
+  if (!via) return <LightningIcon aria-hidden className={glyph} />;
+  // The brand's own colors where a color file exists; a one-color mark (GitHub) stays white.
+  if (FULL_COLOR_LOGOS.has(via)) {
+    // eslint-disable-next-line @next/next/no-img-element -- a 16px static SVG; next/image adds nothing here
+    return <img src={`/media/landing/logos/color/${via}.svg`} alt="" width={16} height={16} className="size-4 shrink-0" />;
+  }
+  return (
+    <span
+      aria-hidden
+      className="bg-foreground size-4 shrink-0"
+      style={{ maskImage: `url(/media/landing/logos/${via}.svg)`, maskSize: 'contain', maskRepeat: 'no-repeat', maskPosition: 'center' }}
+    />
+  );
+}
+
+/** One session window: what started it, the agent, the conversation and a reply box. */
 function SessionPanel({
   order,
   run,
@@ -400,31 +427,29 @@ function SessionPanel({
         'bg-card border-border flex h-[520px] shrink-0 flex-col overflow-hidden rounded-xl border',
       )}
     >
-      <header className="flex h-16 shrink-0 items-center justify-between gap-3 px-4">
-        <div className="flex min-w-0 items-center gap-2.5">
-          {run.host.kind === 'claude-code' ? (
-            <span className="border-border inline-flex size-7 shrink-0 items-center justify-center rounded-md border">
-              <Claude className="size-4" />
-            </span>
-          ) : (
-            <AgentTile slug={run.host.slug} size={21} />
-          )}
-          <span className="text-foreground truncate text-sm font-medium">{run.host.kind === 'claude-code' ? 'Claude Code' : run.host.name}</span>
-        </div>
-        <span className="border-border text-muted-foreground shrink-0 truncate rounded-md border px-2 py-0.5 text-xs">
-          {run.source}
-        </span>
+      {/* What started the run, first: most runs are started by an integration, not by a person typing. */}
+      <div className="border-border flex h-11 shrink-0 items-center gap-2.5 border-b px-4">
+        <TriggerMark via={run.via} terminal={run.host.kind === 'claude-code'} />
+        <span className="text-foreground min-w-0 truncate text-sm font-medium">{run.source}</span>
+        <span className="text-muted-foreground ml-auto shrink-0 text-xs">{run.host.kind === 'claude-code' ? 'You ran it' : 'Ran on its own'}</span>
+      </div>
+      <header className="flex h-12 shrink-0 items-center gap-2.5 px-4">
+        {run.host.kind === 'claude-code' ? (
+          <span className="border-border inline-flex size-7 shrink-0 items-center justify-center rounded-md border">
+            <Claude className="size-4" />
+          </span>
+        ) : (
+          <AgentTile slug={run.host.slug} size={21} />
+        )}
+        <span className="text-foreground truncate text-sm font-medium">{run.host.kind === 'claude-code' ? 'Claude Code' : run.host.name}</span>
       </header>
 
-      {/* The conversation scrolls on its own only once the reader opened a fold or sent a message: those
-          can be longer than the window. Until then it is no scroll container, so a page scroll over the reel
-          never stops on it. No `overscroll-contain`: a trackpad gesture latches onto any contained scroller,
-          even one with nothing to scroll, and the page stays still. */}
+      {/* The conversation never scrolls under the reader's wheel or finger: a page scroll over the reel
+          always moves the page. What does not fit is clipped; a sent message brings itself into view. */}
       <div
         key={`${run.id}-${round}`}
         className={cn(
-          'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-4 pt-2 pb-2 [scrollbar-width:none] has-[[data-state=open]]:overflow-y-auto',
-          sent.length > 0 && 'overflow-y-auto',
+          'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-4 pt-2 pb-2',
           round > 0 && 'animate-in fade-in duration-slow',
         )}
       >
@@ -493,8 +518,8 @@ function SessionPanel({
   );
 }
 
-/** The agents the picker offers: the factory and the teams a description can loop. */
-const PICKER_AGENTS = ['factory', 'marketing', 'sales', 'support', 'recruiting'];
+/** The agents the picker offers: the engineer and the teams a description can loop. */
+const PICKER_AGENTS = ['engineer', 'marketing', 'sales', 'support', 'recruiting'];
 
 /**
  * The Kortix chat input, live: type into it, Enter sends (Shift+Enter is a new

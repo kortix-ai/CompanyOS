@@ -1,5 +1,5 @@
 {
-  "$comment": "The Software Factory configuration. The factory agent reads this file at the start of every run. The setup agent writes it with you (references/analysis.md). Change it with a commit; the next run reads the new values.",
+  "$comment": "The Software Factory configuration. The engineer agent reads this file at the start of every run. The setup agent writes it with you (references/analysis.md). Change it with a commit; the next run reads the new values.",
   "version": 1,
   "repository": {
     "full_name": "{{repoFullName}}",

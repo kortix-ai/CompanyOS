@@ -3,7 +3,7 @@
 Run the guide below as written. This template adds its steps at the points
 named here, in this order: **analysis → identity → store → sources → first
 proof**. The factory is one agent, `factory`, with one contract skill,
-`software-factory`. Its files are `software-factory.yaml`, `factory.json`, `agents/factory.md`
+`software-factory`. Its files are `software-factory.yaml`, `factory.json`, `agents/engineer.md`
 and `skills/software-factory/`: read `skills/software-factory/SKILL.md` once before you start (sections 0, 0.1
 and 1 at least), so you know the identity, the store, the sources and the
 merge policy you set up.

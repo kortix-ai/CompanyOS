@@ -1,8 +1,10 @@
+'use client';
+
 import { AgentMarkGlyph, agentMarkTileClass, agentMarkVars } from '@kortix/ui/internal/components/agent-mark';
 import { Claude } from '@kortix/ui/internal/icons/claude';
 import { cn } from '@kortix/ui';
-import { ArrowUpIcon, CaretDownIcon, PaperclipIcon } from '@phosphor-icons/react';
-import type { ReactNode } from 'react';
+import { ArrowUpIcon, CaretDownIcon, CheckIcon, PaperclipIcon } from '@phosphor-icons/react';
+import { useEffect, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 
 import { DEMO } from './factory-content';
 
@@ -12,25 +14,16 @@ import { DEMO } from './factory-content';
  * assistive tech, the cell's title and text carry the meaning.
  */
 
-/** One window in an art cell: a card on the page surface, faded where the cell crops it. */
-function Pane({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn('border-border bg-card w-full max-w-sm min-w-0 rounded-xl border p-2 shadow-xl shadow-black/15', className)}>{children}</div>;
-}
-
-function Row({ lead, text, meta, dim }: { lead: ReactNode; text: string; meta?: ReactNode; dim?: boolean }) {
-  return (
-    <div className={cn('flex items-center gap-3 rounded-md px-2.5 py-2 text-sm', dim && 'opacity-50')}>
-      <span className="flex size-5 shrink-0 items-center justify-center">{lead}</span>
-      <span className="text-foreground min-w-0 flex-1 truncate">{text}</span>
-      {meta ? <span className="text-muted-foreground shrink-0 text-xs">{meta}</span> : null}
-    </div>
-  );
-}
-
 const dot = (on: boolean) => <span className={cn('size-1.5 rounded-full', on ? 'bg-kortix-base' : 'bg-muted-foreground')} />;
 
+/** The marks in `public/connector-icons/` that the step cards show. */
+type ToolSlug =
+  | 'airtable' | 'asana' | 'canva' | 'cloudflare' | 'discord' | 'dropbox' | 'figma' | 'github' | 'gmail' | 'google_calendar'
+  | 'google_docs' | 'google_drive' | 'google_sheets' | 'hubspot' | 'intercom' | 'linear' | 'notion' | 'paypal' | 'posthog'
+  | 'sentry' | 'slack' | 'stripe' | 'supabase' | 'teams' | 'telegram' | 'vercel' | 'webflow';
+
 /** A tool's official mark: the same tiles the connector screens use (`public/connector-icons/`). */
-function ToolIcon({ slug }: { slug: 'github' | 'slack' | 'sentry' }) {
+function ToolIcon({ slug }: { slug: ToolSlug }) {
   // eslint-disable-next-line @next/next/no-img-element -- a 20px static SVG tile; next/image adds nothing here
   return <img src={`/connector-icons/${slug}.svg`} alt="" width={20} height={20} className="size-5 rounded-sm" />;
 }
@@ -49,66 +42,187 @@ export function AgentTile({ slug, size = 14 }: { slug: string; size?: 14 | 21 })
   );
 }
 
-/** Step 1: the scan names every tool it finds, and where it found it. */
+/** Rows that scroll without end: drawn twice, so moving by half lands on the start (`kx-ticker` in globals.css). */
+function Loop({ axis = 'y', seconds, reverse, className, children }: { axis?: 'x' | 'y'; seconds: number; reverse?: boolean; className?: string; children: ReactNode }) {
+  return (
+    <div
+      className={cn(axis === 'y' ? 'kx-ticker' : 'kx-ticker-x flex w-max', className)}
+      style={{ '--ticker-duration': `${seconds}s`, animationDirection: reverse ? 'reverse' : undefined } as CSSProperties}
+    >
+      {children}
+      {children}
+    </div>
+  );
+}
+
+/** Where the scan found each tool: the file and the match in it. The ones it cannot see, it asks about. */
+const FOUND: ReadonlyArray<{ slug: ToolSlug; where: string; match: string }> = [
+  { slug: 'github', where: '.github/workflows/ci.yml', match: 'actions/checkout' },
+  { slug: 'sentry', where: 'package.json', match: '@sentry/node' },
+  { slug: 'stripe', where: '.env.example', match: 'STRIPE_SECRET_KEY' },
+  { slug: 'slack', where: 'src/notify.ts', match: 'SLACK_WEBHOOK_URL' },
+  { slug: 'supabase', where: 'supabase/config.toml', match: 'project_id' },
+  { slug: 'vercel', where: 'vercel.json', match: 'buildCommand' },
+  { slug: 'posthog', where: 'package.json', match: 'posthog-js' },
+  { slug: 'intercom', where: 'src/widget.tsx', match: 'intercom-client' },
+  { slug: 'cloudflare', where: 'wrangler.toml', match: 'account_id' },
+  { slug: 'notion', where: 'README.md', match: 'notion.so/runbook' },
+  { slug: 'figma', where: 'docs/design.md', match: 'figma.com/file' },
+  { slug: 'discord', where: '.env.example', match: 'DISCORD_BOT_TOKEN' },
+  { slug: 'paypal', where: 'package.json', match: '@paypal/checkout' },
+];
+
+/** The apps the connect step reaches, as two rows of tiles that move past each other. */
+const APPS_TOP: ReadonlyArray<ToolSlug> = ['github', 'slack', 'stripe', 'linear', 'gmail', 'notion', 'hubspot', 'intercom', 'google_drive'];
+const APPS_BOTTOM: ReadonlyArray<ToolSlug> = ['sentry', 'teams', 'asana', 'google_sheets', 'airtable', 'dropbox', 'google_calendar', 'figma', 'supabase'];
+
+/** What starts an agent: app events, messages, schedules. `when` is how long ago it fired. */
+const SIGNALS: ReadonlyArray<{ slug?: ToolSlug; name: string; when: string }> = [
+  { slug: 'github', name: 'Issue opened', when: 'now' },
+  { name: 'Every night at 02:00', when: '2m' },
+  { slug: 'sentry', name: 'New error in production', when: '4m' },
+  { slug: 'stripe', name: 'Payment failed', when: '9m' },
+  { slug: 'slack', name: '@engineer in #eng', when: '12m' },
+  { slug: 'intercom', name: 'Customer asks for a refund', when: '18m' },
+  { slug: 'hubspot', name: 'Deal moved to Won', when: '25m' },
+  { slug: 'gmail', name: 'Email from a customer', when: '31m' },
+  { slug: 'posthog', name: 'New signup', when: '40m' },
+  { slug: 'vercel', name: 'Deploy failed', when: '52m' },
+  { slug: 'google_calendar', name: 'Sales call ended', when: '1h' },
+  { slug: 'webflow', name: 'Form submitted', when: '1h' },
+];
+
+/** Runs the agents finished: the steps each took and what it left for a person. */
+const RUNS: ReadonlyArray<{ agent: string; loop: string; steps: string[]; result: string }> = [
+  { agent: 'engineer', loop: 'nightly-tests', steps: ['Ran 412 tests on main', 'Reproduced 3 failures', 'Filed 3 issues with the request'], result: '3 bugs filed' },
+  { agent: 'engineer', loop: 'fix #6', steps: ['Reproduced the crash', 'Fixed the parser', 'Tests pass on the branch'], result: 'Pull request waits for you' },
+  { agent: 'support', loop: 'refunds', steps: ['Read the conversation', 'Checked the order in Stripe', 'Drafted the reply'], result: 'Refund waits for you' },
+  { agent: 'sales', loop: 'new-signups', steps: ['Researched 9 companies', 'Scored each against your ICP', 'Drafted the outreach'], result: '9 drafts wait for you' },
+];
+
+/** One beat of the run card: a step appears, the result appears, the card holds, the next run comes in. */
+const RUN_BEAT_MS = 900;
+
+/** Step 1: the scan as it runs in your terminal: the file, the match, the tool it means. Then a question. */
 export function FindArt() {
   return (
-    <Pane>
-      <div className="text-muted-foreground px-2.5 pt-1.5 pb-2 text-xs">Found in your repo</div>
-      <Row lead={<ToolIcon slug="github" />} text="GitHub" meta={<span className="font-mono">.github/workflows</span>} />
-      <Row lead={<ToolIcon slug="sentry" />} text="Sentry" meta={<span className="font-mono">@sentry/node</span>} />
-      <Row lead={<ToolIcon slug="slack" />} text="Slack" meta={<span className="font-mono">SLACK_WEBHOOK_URL</span>} />
-      <Row lead={dot(false)} text="Your helpdesk" meta="Asked you" dim />
-    </Pane>
+    <div className="border-border bg-background w-full max-w-sm min-w-0 overflow-hidden rounded-xl border font-mono text-xs shadow-xl shadow-black/15">
+      <div className="border-border text-muted-foreground flex items-center gap-2 border-b px-3 py-2">
+        <Claude className="size-3.5 shrink-0" />
+        <span className="truncate">Scanning your-org/your-repo</span>
+      </div>
+      <div className="group/ticker h-44 overflow-hidden px-3 [mask-image:linear-gradient(to_bottom,transparent,#000_15%,#000_85%,transparent)]">
+        <Loop seconds={30}>
+          {FOUND.map((found) => (
+            <div key={found.where + found.match} className="flex items-center gap-2 py-1.5">
+              <ToolIcon slug={found.slug} />
+              <span className="text-muted-foreground min-w-0 flex-1 truncate">{found.where}</span>
+              <span className="text-foreground shrink-0">{found.match}</span>
+            </div>
+          ))}
+        </Loop>
+      </div>
+      <div className="border-border border-t px-3 py-2.5">
+        <span className="text-foreground">? Which helpdesk do you use?</span>
+        <span aria-hidden className="bg-foreground ml-1 inline-block h-3 w-1.5 animate-pulse align-middle motion-reduce:animate-none" />
+      </div>
+    </div>
   );
 }
 
-/** Step 2: each tool connected; a secret shows by name only. */
+/** Step 2: the apps in two rows that move past each other, and what the setup stored. */
 export function ConnectArt() {
-  const state = (text: string) => <span className="border-border rounded-sm border px-1.5">{text}</span>;
-  return (
-    <Pane>
-      <Row lead={<ToolIcon slug="github" />} text="GitHub" meta={state('Connected')} />
-      <Row lead={<ToolIcon slug="slack" />} text="Slack" meta={state('Connected')} />
-      <Row lead={<ToolIcon slug="sentry" />} text="Sentry" meta={state('Connected')} />
-      <div className="border-border mx-2.5 my-1.5 border-t" />
-      <Row lead={dot(true)} text="SENTRY_DSN" meta="Value encrypted" />
-    </Pane>
-  );
-}
-
-/** Step 3: the signals the agents listen to, each one a switch. */
-export function SignalArt() {
-  const toggle = (on: boolean) => (
-    <span className={cn('flex h-4 w-7 items-center rounded-full p-0.5', on ? 'bg-foreground justify-end' : 'bg-muted justify-start')}>
-      <span className={cn('size-3 rounded-full', on ? 'bg-background' : 'bg-muted-foreground')} />
+  const tile = (slug: ToolSlug) => (
+    <span key={slug} className="border-border bg-card mr-3 flex size-12 shrink-0 items-center justify-center rounded-xl border">
+      <ToolIcon slug={slug} />
     </span>
   );
   return (
-    <Pane>
-      <Row lead={<ToolIcon slug="github" />} text="Issue opened" meta={toggle(true)} />
-      <Row lead={dot(true)} text="Every night at 02:00" meta={toggle(true)} />
-      <Row lead={<ToolIcon slug="github" />} text="Pull request merged" meta={toggle(true)} />
-      <Row lead={<ToolIcon slug="sentry" />} text="New error in Sentry" meta={toggle(false)} dim />
-    </Pane>
+    <div className="group/ticker flex w-full min-w-0 flex-col items-center gap-6">
+      <div className="w-full overflow-hidden [mask-image:linear-gradient(to_right,transparent,#000_15%,#000_85%,transparent)]">
+        <Loop axis="x" seconds={34}>{APPS_TOP.map(tile)}</Loop>
+        <Loop axis="x" seconds={40} reverse className="mt-3">{APPS_BOTTOM.map(tile)}</Loop>
+      </div>
+      <div className="border-border bg-card flex items-center gap-3 rounded-full border px-4 py-2 text-xs shadow-xl shadow-black/15">
+        <span className="text-foreground">3,000+ apps</span>
+        <span className="bg-border h-3 w-px" />
+        <span className="text-muted-foreground font-mono">SENTRY_DSN ••••••</span>
+        <span className="text-muted-foreground">encrypted</span>
+      </div>
+    </div>
   );
 }
 
-/** Step 4: the first real run, then the Kortix MCP server added to the coding agent. */
+/** Step 3: events as they arrive, a stream of pills, each one a signal an agent listens to. */
+export function SignalArt() {
+  return (
+    <div className="group/ticker h-60 w-full max-w-sm min-w-0 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,#000_20%,#000_80%,transparent)]">
+      <Loop seconds={36} reverse>
+        {SIGNALS.map((signal, index) => (
+          <div key={signal.name} className={cn('flex py-1.5', index % 2 ? 'justify-end' : 'justify-start')}>
+            <span className="border-border bg-card inline-flex max-w-full items-center gap-2 rounded-full border py-1.5 pr-3 pl-1.5 text-sm">
+              {signal.slug ? <ToolIcon slug={signal.slug} /> : <span className="bg-muted flex size-5 items-center justify-center rounded-full">{dot(true)}</span>}
+              <span className="text-foreground truncate">{signal.name}</span>
+              <span className="text-muted-foreground shrink-0 text-xs">{signal.when}</span>
+            </span>
+          </div>
+        ))}
+      </Loop>
+    </div>
+  );
+}
+
+const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
+function subscribeReducedMotion(onChange: () => void) {
+  const query = window.matchMedia(REDUCED_MOTION);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
+
+/**
+ * Step 4: one run plays out a step at a time, ends on what waits for a
+ * person, then the next run takes its place. Under it, the Kortix MCP server
+ * the setup added to your coding agent. Reduced motion shows the first run, done.
+ */
 export function ProveArt() {
+  const still = useSyncExternalStore(subscribeReducedMotion, () => window.matchMedia(REDUCED_MOTION).matches, () => false);
+  const [ticks, setTicks] = useState(0);
+  useEffect(() => {
+    if (still) return;
+    const id = setInterval(() => setTicks((value) => value + 1), RUN_BEAT_MS);
+    return () => clearInterval(id);
+  }, [still]);
+  const beat = still ? RUNS[0]!.steps.length + 1 : ticks;
+  // A run lasts its steps, the result, then three beats of hold.
+  const length = (run: (typeof RUNS)[number]) => run.steps.length + 4;
+  let at = beat % RUNS.reduce((sum, run) => sum + length(run), 0);
+  let index = 0;
+  while (at >= length(RUNS[index]!)) {
+    at -= length(RUNS[index]!);
+    index += 1;
+  }
+  const run = RUNS[index]!;
+  const done = at > run.steps.length;
   return (
     <div className="flex w-full max-w-sm min-w-0 flex-col gap-3">
-      <Pane>
-        <div className="flex items-center justify-between px-2.5 pt-1.5 pb-2 text-xs">
-          <span className="text-muted-foreground">First run · nightly-tests</span>
-          <span className="text-foreground inline-flex items-center gap-1.5">
-            {dot(true)}
-            Finished
-          </span>
+      <div key={run.loop} className="border-border bg-card animate-in fade-in duration-slow rounded-xl border p-3 shadow-xl shadow-black/15">
+        <div className="flex items-center gap-2.5">
+          <AgentTile slug={run.agent} />
+          <span className="text-foreground min-w-0 flex-1 truncate font-mono text-sm">{run.loop}</span>
+          <span className={cn('text-xs', done ? 'text-foreground' : 'text-muted-foreground')}>{done ? 'Finished' : 'Running'}</span>
         </div>
-        {DEMO.tickets.map((ticket) => (
-          <Row key={ticket.number} lead={<span className="text-muted-foreground font-mono text-xs">#{ticket.number}</span>} text={ticket.title} />
-        ))}
-      </Pane>
+        <ol className="mt-3 flex flex-col gap-2">
+          {run.steps.map((step, stepIndex) => (
+            <li key={step} className={cn('duration-normal flex items-center gap-2.5 text-sm transition-opacity', stepIndex < at ? 'opacity-100' : 'opacity-0')}>
+              <CheckIcon className="text-foreground size-3.5 shrink-0" />
+              <span className="text-muted-foreground truncate">{step}</span>
+            </li>
+          ))}
+        </ol>
+        <div className={cn('border-border duration-normal mt-3 border-t pt-3 text-sm transition-opacity', done ? 'opacity-100' : 'opacity-0')}>
+          <span className="text-foreground">{run.result}</span>
+        </div>
+      </div>
       <div className="border-border bg-card text-muted-foreground ml-8 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs">
         <Claude className="size-3.5 shrink-0" />
         <span className="truncate">Kortix MCP server added to Claude Code</span>
@@ -190,8 +304,8 @@ function Approval({ slug, title, status, time, className }: { slug: string; titl
 export function ApprovalArt() {
   return (
     <div className="flex w-full max-w-sm min-w-0 flex-col gap-2">
-      <Approval slug="factory" title={`Pull request #${DEMO.pr.number}`} status="Waiting for you to merge" time="now" />
-      <Approval slug="factory" title="Deploy to production" status="Waiting for your approval" time="2m" className="opacity-70" />
+      <Approval slug="engineer" title={`Pull request #${DEMO.pr.number}`} status="Waiting for you to merge" time="now" />
+      <Approval slug="engineer" title="Deploy to production" status="Waiting for your approval" time="2m" className="opacity-70" />
     </div>
   );
 }

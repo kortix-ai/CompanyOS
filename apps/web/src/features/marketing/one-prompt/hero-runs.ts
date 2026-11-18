@@ -1,4 +1,4 @@
-import { extraRuns } from './agent-sessions';
+import { closingRuns, engineeringRuns, leadRuns } from './agent-sessions';
 import { DEMO } from './factory-content';
 import type { LoopView } from './loops-content';
 
@@ -14,8 +14,10 @@ export interface HeroRun {
   kind: 'real' | 'example';
   /** Who runs it: the coding agent that runs the setup prompt, or a Kortix agent. */
   host: { kind: 'claude-code' } | { kind: 'agent'; slug: string; name: string };
-  /** What started the session, shown beside the name. */
+  /** What started the session, shown at the top of its panel. */
   source: string;
+  /** The integration that started it: a logo slug under /media/landing/logos, or `schedule`. None: a plain event glyph. */
+  via?: string;
   /** The message that starts the session. */
   ask: string;
   /** The item the session took as context. */
@@ -30,14 +32,16 @@ export interface HeroRun {
 }
 
 /**
- * The sessions the hero plays: the prompt sets the factory up, then the
- * factory works. The engineering sessions use the real demo run; the last two
- * are labelled examples.
+ * The sessions the hero plays, every one a loop that fired on its own except
+ * the setup. It opens on runs an integration started (a Sentry alert, a pull
+ * request, a Slack message), then the prompt that sets the factory up, then
+ * the engineer's real demo run and more engineering loops. Two other teams'
+ * loops close it. Example sessions are labelled.
  */
 export function heroRuns(loop: LoopView | undefined, prompt: string): HeroRun[] {
-  const agent = { kind: 'agent' as const, slug: loop?.agent ?? 'factory', name: loop?.agent ?? 'factory' };
+  const agent = { kind: 'agent' as const, slug: loop?.agent ?? 'engineer', name: loop?.agent ?? 'engineer' };
   const issue = DEMO.tickets[0]!;
-  return [
+  const [setup, nightly, fix, review, changelog, support]: HeroRun[] = [
     {
       id: 'setup',
       caption: 'One prompt sets it up',
@@ -66,7 +70,8 @@ export function heroRuns(loop: LoopView | undefined, prompt: string): HeroRun[] 
       kind: 'real',
       host: agent,
       source: 'Schedule · 02:00',
-      ask: 'Run the tests. File what fails.',
+      via: 'schedule',
+      ask: 'nightly-tests · main',
       context: 'nightly-tests',
       work: [{ text: 'npm test', cmd: true }, ...DEMO.tickets.map((ticket) => ({ text: `Filed issue #${ticket.number}` }))],
       answer: `Found ${DEMO.tickets.length} bugs and filed each one with the request that reproduces it.`,
@@ -77,7 +82,8 @@ export function heroRuns(loop: LoopView | undefined, prompt: string): HeroRun[] 
       caption: 'Fixes what breaks',
       kind: 'real',
       host: agent,
-      source: `Issue #${issue.number}`,
+      source: `GitHub issue #${issue.number}`,
+      via: 'github',
       ask: issue.title,
       context: `${DEMO.repo} #${issue.number}`,
       work: DEMO.worker.map((line) => ({ text: line.text, cmd: line.kind === 'cmd' })),
@@ -93,8 +99,9 @@ export function heroRuns(loop: LoopView | undefined, prompt: string): HeroRun[] 
       caption: 'Proves every change',
       kind: 'real',
       host: agent,
-      source: `Pull request #${DEMO.pr.number}`,
-      ask: `Review pull request #${DEMO.pr.number} before a person sees it.`,
+      source: `Pull request #${DEMO.pr.number} opened`,
+      via: 'github',
+      ask: DEMO.pr.title,
       context: DEMO.pr.branch,
       work: DEMO.pr.checks.map((check) => ({ text: check })),
       answer: 'Ran every check on main and on the branch.',
@@ -109,6 +116,7 @@ export function heroRuns(loop: LoopView | undefined, prompt: string): HeroRun[] 
       kind: 'example',
       host: { kind: 'agent', slug: 'marketing', name: 'marketing' },
       source: 'Pull request merged',
+      via: 'github',
       ask: DEMO.pr.title,
       context: `Pull request #${DEMO.pr.number}`,
       work: [{ text: 'Loaded the brand skill' }, { text: 'Wrote the changelog entry' }, { text: 'Recorded the change in a browser' }, { text: 'Rendered a captioned video' }],
@@ -127,6 +135,9 @@ export function heroRuns(loop: LoopView | undefined, prompt: string): HeroRun[] 
       answer: 'Searched the docs and the code, drafted the answer and filed the bug for engineering.',
       result: { kind: 'Draft', title: 'Reply to the customer, bug ticket linked', status: 'Waiting for you to send' },
     },
-    ...extraRuns(),
   ];
+  const [sentry, slack] = leadRuns(agent.slug);
+  // The reel opens on runs nobody typed: a Sentry alert, a pull request, a Slack message. The setup follows,
+  // then engineering loops; the other teams close it.
+  return [sentry, review!, slack, setup!, nightly!, fix!, ...engineeringRuns(agent.slug), changelog!, support!, ...closingRuns()];
 }

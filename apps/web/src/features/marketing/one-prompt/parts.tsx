@@ -2,6 +2,8 @@
 
 import { PROD_TARGET, setupPromptFor, setupTarget, type SetupTarget } from '@kortix/shared/setup-guide';
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
+
+import { COPY_GUIDE_ATTR, useCopyGuide } from './copy-guide';
 import { Claude } from '@kortix/ui/internal/icons/claude';
 import { SolidCheckIcon } from '@kortix/ui/internal/icons/solid-check-icon';
 import { Kbd } from '@kortix/ui/kbd';
@@ -61,17 +63,23 @@ export function useCopy(text: string) {
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
   }, []);
-  const copy = async () => {
+  /** True once the text is on the clipboard. */
+  const copy = async (): Promise<boolean> => {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
-      return; // Nothing reached the clipboard: claim nothing.
+      return false; // Nothing reached the clipboard: claim nothing.
     }
+    flash();
+    return true;
+  };
+  /** Shows the copied state without writing to the clipboard: another button already did. */
+  const flash = () => {
     setCopied(true);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setCopied(false), COPIED_MS);
   };
-  return { copied, copy };
+  return { copied, copy, flash };
 }
 
 /**
@@ -80,6 +88,10 @@ export function useCopy(text: string) {
  */
 /** The key that copies the prompt from anywhere on the page. */
 const COPY_KEY = 'c';
+/** Set on <html> while the copy key is held: every key chip on the page shows it pressed. */
+const KEY_DOWN_ATTR = 'copyKey';
+/** Fired once the key copied the prompt: buttons that show the key but do not own it show "copied" too. */
+const KEY_COPIED_EVENT = 'loopmaxxing:key-copied';
 
 /** True when a key press belongs to something the reader is typing into. */
 function isTyping(target: EventTarget | null): boolean {
@@ -93,6 +105,8 @@ export function CopyButton({
   text,
   label = 'Copy prompt',
   icon = 'none',
+  bindKey = true,
+  className,
 }: {
   /** `sm` is for the header only, as on the site navbar. */
   size?: 'sm' | 'md';
@@ -102,23 +116,56 @@ export function CopyButton({
   label?: string;
   /** What follows the label: nothing (a check once copied), or the page-wide key that copies (only one button should take it). */
   icon?: 'none' | 'shortcut';
+  /** With `icon="shortcut"`: false shows the key without listening for it, so a second button can show it while one button owns it. */
+  bindKey?: boolean;
+  className?: string;
 }) {
   const target = useSetupTarget();
-  const { copied, copy } = useCopy(text ?? setupPromptFor(target));
+  const prompt = text ?? setupPromptFor(target);
+  const { copied, copy: write, flash } = useCopy(prompt);
+  const guide = useCopyGuide();
+  // Every copy opens the page's guide: where to paste the prompt next.
+  const copy = async () => {
+    if (await write()) guide?.open(prompt);
+  };
   const copyRef = useRef(copy);
+  const flashRef = useRef(flash);
   useEffect(() => {
     copyRef.current = copy;
+    flashRef.current = flash;
   });
   useEffect(() => {
     if (icon !== 'shortcut') return;
+    if (!bindKey) {
+      const onCopied = () => flashRef.current();
+      window.addEventListener(KEY_COPIED_EVENT, onCopied);
+      return () => window.removeEventListener(KEY_COPIED_EVENT, onCopied);
+    }
+    const root = document.documentElement;
+    const release = () => delete root.dataset[KEY_DOWN_ATTR];
     const onKey = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== COPY_KEY || event.repeat || event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
+      if (event.key.toLowerCase() !== COPY_KEY || event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
+      // The guide is open: the key does not copy again under it.
+      if (document.querySelector(`[${COPY_GUIDE_ATTR}]`)) return;
       event.preventDefault();
-      void copyRef.current();
+      root.dataset[KEY_DOWN_ATTR] = 'down';
+      if (event.repeat) return;
+      void copyRef.current().then(() => window.dispatchEvent(new Event(KEY_COPIED_EVENT)));
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === COPY_KEY) release();
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [icon]);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', release);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', release);
+      release();
+    };
+  }, [icon, bindKey]);
+  const key = size === 'sm' ? 'size-4' : 'size-5';
   return (
     <MarketingButton
       type="button"
@@ -127,7 +174,13 @@ export function CopyButton({
       onClick={copy}
       aria-keyshortcuts={icon === 'shortcut' ? COPY_KEY.toUpperCase() : undefined}
       // The key sits as far from the right edge as from the top and bottom: (h-10 - size-5) / 2.
-      className={cn(size === 'md' && 'hit-area-y-1', icon === 'shortcut' && 'pr-2.5')}
+      className={cn(
+        size === 'md' && 'hit-area-y-1',
+        icon === 'shortcut' && (size === 'sm' ? 'pr-2' : 'pr-2.5'),
+        // Held key: the button dims as under a press, the chip sinks one pixel (color only with reduced motion).
+        icon === 'shortcut' && 'in-data-[copy-key=down]:opacity-85',
+        className,
+      )}
     >
       {/* The label never changes; the trailing mark turns into a check, and a reader hears "Copied". */}
       <span>{label}</span>
@@ -135,21 +188,12 @@ export function CopyButton({
         {copied ? 'Copied' : ''}
       </span>
       {icon === 'none' && copied ? <SolidCheckIcon aria-hidden className="size-4" /> : null}
-      {icon === 'shortcut' ? copied ? <SolidCheckIcon aria-hidden className="size-5!" /> : <Kbd className="bg-background/20 size-5 text-inherit">{COPY_KEY.toUpperCase()}</Kbd> : null}
-    </MarketingButton>
-  );
-}
-
-/** Copy prompt as the site's closing button: the same button the footer call to action uses on every page. */
-export function CopyPromptMarketingButton({ text, className }: { text: string; className?: string }) {
-  const { copied, copy } = useCopy(text);
-  return (
-    <MarketingButton type="button" variant="primary" size="md" className={className} onClick={copy}>
-      <span>Copy prompt</span>
-      <span aria-live="polite" className="sr-only">
-        {copied ? 'Copied' : ''}
-      </span>
-      {copied ? <SolidCheckIcon className="size-4" /> : null}
+      {icon === 'shortcut' ? copied ? <SolidCheckIcon aria-hidden className={cn(key, 'shrink-0')} /> : <Kbd
+            className={cn(
+              'bg-background/20 duration-fast text-inherit transition-[translate,background-color] in-data-[copy-key=down]:translate-y-px in-data-[copy-key=down]:bg-background/45 motion-reduce:in-data-[copy-key=down]:translate-y-0',
+              key,
+            )}
+          >{COPY_KEY.toUpperCase()}</Kbd> : null}
     </MarketingButton>
   );
 }

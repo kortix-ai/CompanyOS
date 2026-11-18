@@ -265,6 +265,7 @@ export const AUDIT_ROUTE_LABELS: Readonly<Record<string, AuditRouteLabel | strin
   'POST /v1/cli/device/start': { action: 'auth.cli_device.start', title: 'Started CLI device login' },
   'POST /v1/cli/device/poll': { action: 'auth.cli_device.poll', title: 'Polled CLI device login' },
   'POST /v1/cli/device/decide': { action: 'auth.cli_device.decide', title: 'Approved or denied CLI login' },
+  'POST /v1/cli/setup-events': { action: 'cli.setup_event.create', title: 'Reported CLI setup progress' },
   'POST /v1/auth/mfa/factors': { action: 'auth.mfa.factor.create', title: 'Enrolled a second factor' },
   'DELETE /v1/auth/mfa/factors/:factorId': { action: 'auth.mfa.factor.delete', title: 'Removed a second factor' },
   'POST /v1/auth/mfa/factors/:factorId/challenge': { action: 'auth.mfa.challenge.create', title: 'Started a second-factor challenge' },

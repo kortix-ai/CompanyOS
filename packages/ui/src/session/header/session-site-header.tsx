@@ -65,7 +65,7 @@ import {
   useToggleActionPanel,
   useToggleRightPanel,
 } from '../../internal/stores/kortix-computer-store';
-import { SESSION_BAR_CLASS } from '../panel/panel-chrome';
+import { SESSION_BAR_CLASS } from '../../internal/layout/panel-chrome';
 import { Kbd, KbdGroup } from '../../primitives/kbd';
 import { createProjectSession, directSubsessions, restartProjectSession, stopProjectSession } from '@kortix/sdk';
 import {

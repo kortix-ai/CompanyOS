@@ -40,8 +40,8 @@ const escapeHtml = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '
 
 /**
  * schema.org `JobPosting`, so the opening is eligible for job search results. Built from the
- * page's own copy. No `baseSalary`: no pay numbers are published (see the accuracy gate in
- * `careers/content.ts`).
+ * page's own copy. `baseSalary` only where the role page publishes pay numbers (see the accuracy
+ * gate in `careers/content.ts`).
  */
 function jobPostingJsonLd(slug: RoleSlug) {
   const role = roles[slug];
@@ -70,19 +70,27 @@ function jobPostingJsonLd(slug: RoleSlug) {
       sameAs: CANONICAL_ORIGIN,
       logo: `${CANONICAL_ORIGIN}/icon-512.png`,
     },
-    jobLocation: {
+    jobLocation: posting.locations.map((place) => ({
       '@type': 'Place',
       address: {
         '@type': 'PostalAddress',
-        addressLocality: posting.locality,
-        ...(posting.region ? { addressRegion: posting.region } : {}),
-        addressCountry: posting.country,
+        addressLocality: place.locality,
+        ...(place.region ? { addressRegion: place.region } : {}),
+        addressCountry: place.country,
       },
-    },
-    ...(posting.remoteCountry
+    })),
+    ...(posting.baseSalary
       ? {
-          jobLocationType: 'TELECOMMUTE',
-          applicantLocationRequirements: { '@type': 'Country', name: posting.remoteCountry },
+          baseSalary: {
+            '@type': 'MonetaryAmount',
+            currency: posting.baseSalary.currency,
+            value: {
+              '@type': 'QuantitativeValue',
+              minValue: posting.baseSalary.min,
+              maxValue: posting.baseSalary.max,
+              unitText: 'YEAR',
+            },
+          },
         }
       : {}),
   };

@@ -9,19 +9,18 @@
  * Voice rules: the `kortix-brand` skill. The bar is distilled from `CLAUDE.md`.
  *
  * ACCURACY GATE for this page specifically:
- *  - INVENT NOTHING about employment. No salary band, no equity percentage,
- *    no benefits, no headcount, no remote-work terms beyond the word
- *    "Remote" on a location. Compensation is named only
- *    as its parts (base, variable, founding equity): the founder has not
- *    published numbers. Locations are per opening and come from the founder
- *    (2026-11-10): MTS and FDE in **Belgrade, Serbia** or **Remote**; the
- *    founding GTM role in the **US**, based in New York, US remote possible.
+ *  - INVENT NOTHING about employment. No benefits, no headcount, no remote-work
+ *    terms beyond the word "Remote" on a location. Pay numbers appear only where
+ *    the founder set them: the founding GTM role (founder, 2026-11-18). Locations
+ *    are per opening and come from the founder: MTS and FDE in **Belgrade,
+ *    Serbia** or **Remote** (2026-11-10); the founding GTM role in the first US
+ *    office, which opens in New York or San Francisco, not remote (2026-11-18).
  *  - The openings are the founder's own list and order: Founding GTM
- *    (Enterprise), MTS, FDE. The board shows the role and its location only,
+ *    (Enterprise & Partners), MTS, FDE. The board shows the role and its location only,
  *    no summary line. Every opening has a role page with the spec (founder,
  *    2026-11-10). Founding GTM (Developers, San Francisco) is hidden (founder,
- *    2026-11-17): its page copy is in commit 06740ac6be. The GTM title is open (Founding
- *    GTM Lead, Head of GTM, Head of Business, CBO). The MTS and FDE pages name
+ *    2026-11-17): its page copy is in commit 06740ac6be. The GTM page follows the
+ *    founder's hiring doc (2026-11-18). The MTS and FDE pages name
  *    no pay at all ("we share the numbers in the first call") and no manager.
  *  - "How we sell" is the public half of the GTM thesis: the homepage pillars (outcomes,
  *    multiplayer AI, company as code, sovereign and open), sold one vertical at a time
@@ -40,11 +39,11 @@
  */
 
 const TECH_LOCATION = 'Belgrade, Serbia · Remote';
-const ENTERPRISE_LOCATION = 'New York · US remote';
+const ENTERPRISE_LOCATION = 'New York or San Francisco';
 
 export const hero = {
   title: 'Open positions.',
-  lead: 'Belgrade, New York or remote.',
+  lead: 'Belgrade, New York, San Francisco or remote.',
   description: 'An extremely small, talent-dense team.',
   roleLabel: 'Role',
   locationLabel: 'Location',
@@ -70,8 +69,8 @@ export const openings: readonly {
 }[] = [
   {
     id: 'gtm-enterprise',
-    name: 'Founding GTM Enterprise',
-    full: 'Founding Go-to-Market, Enterprise',
+    name: 'Founding GTM, Enterprise & Partners',
+    full: 'Founding Go-to-Market, Enterprise & Partners',
     location: ENTERPRISE_LOCATION,
     href: '/careers/gtm-enterprise',
   },
@@ -94,7 +93,7 @@ export const openings: readonly {
 /** What the founding GTM role page shows. */
 const gtmFacts = {
   reportsTo: { k: 'Reports to', v: 'Marko Kraemer, CEO' },
-  pay: { k: 'Compensation', v: 'Base salary, variable pay and founding equity' },
+  pay: { k: 'Compensation', v: '$180k–$250k base, $60k–$100k variable, 1.5%–2.5% equity' },
 } as const;
 
 /** The public half of the GTM thesis. Claims trace to kortix-brand `claims.md` / `positioning.md`. */
@@ -246,62 +245,56 @@ type RolePage = {
   process: { title: string; titleMuted: string; rows: readonly { id: string; k: string; v: string }[] };
   applyArea: string;
   meta: { title: string; description: string };
-  /** `JobPosting` structured data: the day this posting went up and where the role is based.
-   *  `remoteCountry` only where the founder said remote within one country. */
-  posting: { datePosted: string; locality: string; region?: string; country: string; remoteCountry?: string };
+  /** `JobPosting` structured data: the day this posting went up, where the role is based, and the
+   *  yearly base salary range where the founder published one. */
+  posting: {
+    datePosted: string;
+    locations: readonly { locality: string; region?: string; country: string }[];
+    baseSalary?: { min: number; max: number; currency: string };
+  };
 };
 
 export const roles: Record<RoleSlug, RolePage> = {
   'gtm-enterprise': {
     hero: {
-      title: 'Founding GTM, Enterprise.',
-      titleMuted: 'New York, or remote in the US.',
-      sub: 'Build the Kortix enterprise business from zero. You pick the verticals, land the first lighthouse customer in each, and turn founder-led sales into a motion that runs without the founder. You have done it before.',
+      title: 'Founding GTM, Enterprise & Partners.',
+      titleMuted: 'New York or San Francisco.',
+      sub: 'There is no sales motion yet. There are customers who found us and organic adoption inside companies. You build the enterprise business from zero. Kortix is backed by Microsoft and Freestyle VC.',
     },
     facts: [
       gtmFacts.reportsTo,
-      { k: 'Location', v: 'Based in New York. US remote possible.' },
+      { k: 'Location', v: 'Our first US office, in New York or San Francisco' },
       gtmFacts.pay,
-      { k: 'Title', v: 'Founding GTM Lead, Head of GTM or CBO. Your pick.' },
+      { k: 'Equity mix', v: 'Trade base and variable pay for more equity, up to 5%' },
     ],
     own: {
-      title: 'What you own.',
+      title: 'What you will do.',
       titleMuted: 'The enterprise business, from the first deal.',
       rows: [
         {
           id: 'verticals',
           k: 'The verticals',
-          v: 'Which industries we sell to first, and in what order. Financial services, retail and consumer goods, energy, industrials: you rank them by sales cycle and fit, open the long cycles now and close the short ones in parallel.',
+          v: 'Pick the first verticals and the order to sell them in.',
+        },
+        {
+          id: 'deals',
+          k: 'The first deals',
+          v: 'Close the first enterprise deals yourself, from pilot to contract.',
         },
         {
           id: 'lighthouse',
           k: 'Lighthouse customers',
-          v: 'The first named customer in each vertical, from pilot to contract to a published case study that the rest of that vertical reads.',
-        },
-        {
-          id: 'enterprise-sales',
-          k: 'Enterprise sales',
-          v: 'Pipeline, pilots, security reviews, procurement, contracts, renewals and expansion.',
+          v: 'Land a lighthouse customer and a published case study in each vertical.',
         },
         {
           id: 'partners',
           k: 'Partners',
-          v: 'Systems integrators, consultancies and technology partners that sell and deploy Kortix for their clients. One horizontal platform, verticalized partners.',
+          v: 'Build the partner channel with systems integrators and consultancies.',
         },
         {
-          id: 'services',
-          k: 'Services',
-          v: "Our done-for-you service, where forward-deployed engineers build a company's agents and apps. You decide who it is for and how it is scoped, sold and delivered.",
-        },
-        {
-          id: 'story',
-          k: 'The story',
-          v: 'The pitch, the case studies and the numbers for each vertical: what the buyer owns, what it saves, and the workflows it builds on its own data.',
-        },
-        {
-          id: 'offer',
-          k: 'The offer',
-          v: 'Packaging and pricing across self-serve, Enterprise, self-host and services, decided with the CEO.',
+          id: 'team',
+          k: 'The team',
+          v: 'Hire the first account executives.',
         },
       ],
     },
@@ -313,25 +306,25 @@ export const roles: Record<RoleSlug, RolePage> = {
           id: 'learn',
           n: 'Days 0–30',
           k: 'Learn the buyer',
-          v: 'Join every founder-led deal and take over the open pipeline. Talk to every paying account. Write the pitch, the deal stages and a case study for each deployment that runs today.',
+          v: 'Talk to every paying customer and take over the open pipeline.',
         },
         {
           id: 'verticals',
           n: 'Days 31–90',
           k: 'Pick the verticals',
-          v: 'Rank the verticals and commit to the first ones. Start the long enterprise cycles. Close the first deals with no founder on the call. Ship the sales kit: deck, demo, security review answers.',
+          v: 'Commit to the first verticals. Close the first deals with no founder on the call.',
         },
         {
           id: 'lighthouse',
           n: 'Days 91–180',
           k: 'Lighthouse customers',
-          v: 'A signed lighthouse customer and a published case study in each first vertical. A partner channel that adds pipeline every week.',
+          v: 'A signed lighthouse customer and a published case study in each first vertical.',
         },
         {
           id: 'team',
           n: 'Days 181–365',
           k: 'Build the team',
-          v: 'Hire and lead the first account executives. Own the revenue number and the forecast with the CEO.',
+          v: 'The first account executives, and a revenue number you own with the CEO.',
         },
       ],
     },
@@ -342,49 +335,41 @@ export const roles: Record<RoleSlug, RolePage> = {
         {
           id: 'done-it',
           k: '0 to 1, before',
-          v: 'You were the first GTM hire and took a company from founder-led sales to a repeatable motion, with revenue you can name.',
+          v: 'You built an enterprise motion from zero: the first seat, the first deals, the playbook.',
         },
         {
           id: 'enterprise',
-          k: 'Large enterprises',
-          v: 'You closed technical software deals with large companies yourself, and you know who signs in at least one regulated vertical.',
-        },
-        {
-          id: 'security',
-          k: 'Through security review',
-          v: 'You took deals through security questionnaires, legal and procurement, and you kept them moving.',
+          k: 'Platform deals',
+          v: 'You sold a complex platform to business buyers: six figures and up, cycles of six months or more, through security review.',
         },
         {
           id: 'peer',
-          k: 'A peer to engineers',
-          v: "You demo the product live and answer a CTO's follow-up questions.",
+          k: 'Hands on',
+          v: 'You demo the product live and write your own decks and emails.',
         },
         {
-          id: 'write',
-          k: 'You write',
-          v: 'Your emails, decks, case studies and one-pagers are short and exact. You write them yourself.',
-        },
-        {
-          id: 'owner',
-          k: 'An owner',
-          v: 'You join for the mission and the founding equity. You run on AI agents in your own work today.',
-        },
-        {
-          id: 'plus',
-          k: 'A plus',
-          v: 'You built a channel with systems integrators or consultancies, or a services line that brought in revenue.',
+          id: 'background',
+          k: 'Background',
+          v: 'Enterprise AI (Palantir, Glean, Writer, Sierra), process automation (UiPath, Celonis) or workflow and CRM platforms (ServiceNow, Salesforce).',
         },
       ],
     },
     principles: howWeSell,
     process: { title: 'How we hire.', titleMuted: 'About two weeks.', rows: gtmProcess },
-    applyArea: 'Founding GTM — Enterprise',
+    applyArea: 'Founding GTM — Enterprise & Partners',
     meta: {
-      title: 'Founding GTM, Enterprise — Kortix careers',
+      title: 'Founding GTM, Enterprise & Partners — Kortix careers',
       description:
-        'Build the Kortix enterprise business from zero: pick the verticals, land lighthouse customers, sell with partners. New York or US remote.',
+        'Build the Kortix enterprise business from zero: pick the verticals, land lighthouse customers, sell with partners. New York or San Francisco.',
     },
-    posting: { datePosted: '2026-11-17', locality: 'New York', region: 'NY', country: 'US', remoteCountry: 'US' },
+    posting: {
+      datePosted: '2026-11-18',
+      locations: [
+        { locality: 'New York', region: 'NY', country: 'US' },
+        { locality: 'San Francisco', region: 'CA', country: 'US' },
+      ],
+      baseSalary: { min: 180000, max: 250000, currency: 'USD' },
+    },
   },
   mts: {
     hero: {
@@ -498,7 +483,7 @@ export const roles: Record<RoleSlug, RolePage> = {
     principles: howWeBuild,
     process: { title: 'How we hire.', titleMuted: 'About two weeks.', rows: techProcess },
     applyArea: 'MTS — Member of Technical Staff',
-    posting: { datePosted: '2026-07-31', locality: 'Belgrade', country: 'RS' },
+    posting: { datePosted: '2026-07-31', locations: [{ locality: 'Belgrade', country: 'RS' }] },
     meta: {
       title: 'Member of Technical Staff — Kortix careers',
       description:
@@ -617,7 +602,7 @@ export const roles: Record<RoleSlug, RolePage> = {
     principles: howWeBuild,
     process: { title: 'How we hire.', titleMuted: 'About two weeks.', rows: techProcess },
     applyArea: 'FDE — Forward Deployed Engineer',
-    posting: { datePosted: '2026-10-28', locality: 'Belgrade', country: 'RS' },
+    posting: { datePosted: '2026-10-28', locations: [{ locality: 'Belgrade', country: 'RS' }] },
     meta: {
       title: 'Forward Deployed Engineer — Kortix careers',
       description:
@@ -698,7 +683,7 @@ export const applyForm = {
   areaLabel: 'Which opening',
   areaPlaceholder: 'Pick the closest one',
   areaOptions: [
-    'Founding GTM — Enterprise',
+    'Founding GTM — Enterprise & Partners',
     'MTS — Member of Technical Staff',
     'FDE — Forward Deployed Engineer',
     'Not sure — read it and tell me',

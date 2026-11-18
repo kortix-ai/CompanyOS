@@ -88,15 +88,46 @@ export const COMPUTE_HOURLY = `$${DEFAULT_COMPUTE_HOURLY_PRICE_USD.toFixed(2)}`;
 export const FREE_COMPUTE_USD = `$${FREE_MONTHLY_CREDITS / CREDITS_PER_USD}`;
 
 export const FAQ = [
-  { q: 'What is Kortix?', a: 'Cloud agents for your repository, defined in one kortix.yaml: the agents, what starts them, the skills they use and what they may do.' },
-  { q: 'What is a factory?', a: 'One agent with its triggers and skills for one team\'s work. Each template is a public repository; your coding agent reads it and adapts it to yours.' },
-  { q: 'Which coding agents can run the prompt?', a: 'Any agent with a shell on your computer: Claude Code, Codex, Cursor. It follows the setup guide with you.' },
-  { q: 'Which models do the agents use?', a: 'The plan you already have: your Claude or ChatGPT subscription, or any API key you add. It is shared with your workspace, so scheduled runs use it too.' },
-  { q: 'Does it work with my existing repository?', a: 'Yes. It reads how the repository builds and tests, and writes an environment the agents use. Your code stays in your GitHub repository.' },
-  { q: 'Where do the agents run?', a: 'In Kortix cloud sandboxes, in an environment built from your repository. They never point at your staging or production systems.' },
-  { q: 'Who approves the work?', a: 'You. Every pull request, post and outbound draft waits for a person until you allow more. Security fixes always wait.' },
-  { q: 'What does it cost?', a: `Adding it is free, and Free includes ${FREE_COMPUTE_USD} of agent computer every month. Past that you pay only for the cloud computer your agents run on: about ${COMPUTE_HOURLY} an hour for the default machine, billed per second while it runs. Models run on your own Claude or ChatGPT plan or API key.` },
-  { q: 'How do I turn it off?', a: 'Pause its triggers with one command, or delete its folder under .kortix/.' },
+  {
+    q: 'How is this different from Claude Code or Codex?',
+    a: 'Claude Code and Codex work while you prompt them. Kortix agents run in the cloud on their own: a failing test, a Sentry error or a merged pull request starts them, day and night. You set them up once, with the coding agent you already use.',
+  },
+  {
+    q: 'What happens when I paste the prompt?',
+    a: 'Your coding agent installs the Kortix CLI, signs you in and reads your repository. It finds your tools, connects them and writes kortix.yaml. Then it runs the factory once, so you see a real result before it starts working on its own.',
+  },
+  {
+    q: 'What is a factory?',
+    a: 'An agent with the triggers and skills for one kind of work. The Software Factory turns issues, failing tests and errors into verified pull requests. Each factory starts from a public template that your coding agent adapts to your repository.',
+  },
+  {
+    q: 'Does it work with my existing repository?',
+    a: 'Yes. It reads how your repository builds and tests and writes an environment the agents use. Everything it adds is files in your repository, kortix.yaml first, so you review it like any other change.',
+  },
+  {
+    q: 'Which coding agents and models does it work with?',
+    a: 'The prompt runs in Claude Code, Codex, Cursor, OpenCode, pi or any agent with a shell. The cloud agents use your Claude or ChatGPT subscription, or any API key you add.',
+  },
+  {
+    q: 'What can the agents do on their own?',
+    a: 'Only what kortix.yaml allows. Pull requests, posts and outbound messages wait for a person until you allow more. Security fixes always wait.',
+  },
+  {
+    q: 'Is my code safe?',
+    a: 'Agents run in isolated cloud sandboxes and never verify against production. Secrets stay encrypted in your workspace and reach only the agents you grant. Kortix is SOC 2 Type I verified.',
+  },
+  {
+    q: 'What does it cost?',
+    a: `Adding it is free, and Free includes ${FREE_COMPUTE_USD} of compute every month. Past that you pay only for the cloud computer your agents run on: about ${COMPUTE_HOURLY} an hour, billed per second while it runs. Models run on your own subscription or API key.`,
+  },
+  {
+    q: 'Can I self-host it?',
+    a: 'Yes. The code is on GitHub at kortix-ai/CompanyOS, and the command kortix self-host start runs it on your own machine or cloud.',
+  },
+  {
+    q: 'How do I turn it off?',
+    a: 'kortix triggers pause <slug> stops one loop, and kortix triggers pause stops them all. resume starts them again. To remove a factory, delete its files and its line under imports: in kortix.yaml.',
+  },
 ];
 
 /** The teams the same prompt builds a loop for, from a description. `slug` picks the agent mark. */

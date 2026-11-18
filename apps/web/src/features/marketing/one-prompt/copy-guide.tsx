@@ -20,6 +20,8 @@ const AGENTS: ReadonlyArray<{ name: string; mark: ReactNode }> = [
   { name: 'Cursor', mark: <Cursor className="size-5" /> },
   // eslint-disable-next-line @next/next/no-img-element -- a 20px static SVG; next/image adds nothing here
   { name: 'OpenCode', mark: <img src="/provider-icons/opencode.svg" alt="" width={20} height={20} className="size-5 invert" /> },
+  // eslint-disable-next-line @next/next/no-img-element -- a 20px static SVG; next/image adds nothing here
+  { name: 'pi', mark: <img src="/provider-icons/pi.svg" alt="" width={20} height={20} className="size-5" /> },
 ];
 
 type CopyGuide = { open: (text: string) => void };

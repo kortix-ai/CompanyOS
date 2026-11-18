@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@kortix/ui';
-import type { CSSProperties } from 'react';
+import { createContext, useContext, type CSSProperties, type ReactNode } from 'react';
 
 import { AsciiHoop } from './ascii-hoop';
 import { HOOP_PALETTE, SEGMENTS } from './hoop-palette';
@@ -20,32 +20,56 @@ export function hoop(index: number): string {
   return `var(--hoop-${((index % HOOP_PALETTE.length) + HOOP_PALETTE.length) % HOOP_PALETTE.length})`;
 }
 
-/** An O of the wordmark: the hoop facing the reader, its tube as thick as a letter's stroke, filling its box. */
-const LETTER_O = { tilt: Math.PI / 2 - 0.3, sway: 0.12, tube: 0.42, fill: 1 } as const;
-
 /** The word's letter-spacing: the header's small caps run wide, the big word runs tight. The O's take the same. */
 const TRACKING = { wide: '0.05em', tight: '-0.025em' } as const;
 
+/** How the wordmark draws its "OO": one infinity (the default), two hoops linked, or two hoops apart. */
+export type WordmarkVariant = 'infinity' | 'linked' | 'split';
+export const WORDMARK_VARIANTS: readonly WordmarkVariant[] = ['infinity', 'linked', 'split'];
+
+/** The variant every wordmark below it draws, unless it names its own. */
+export const WordmarkVariantContext = createContext<WordmarkVariant>('infinity');
+
+/** One O of `split`: the hoop facing the reader, its tube as thick as a letter's stroke. */
+const LETTER_O = { shape: 'ring', tube: 0.42 } as const;
+
 /**
- * One O: a box exactly one letter of the monospace font, 1ch wide (its
- * advance) and 1cap tall (its cap height), sitting on the baseline where an O
- * would. The letters after it land where plain text puts them, at any size.
+ * A letter slot: exactly the width plain text gives `letters` letters (1ch
+ * each, plus the tracking between them) and 1cap tall on the baseline. The
+ * hoop's canvas covers the ink box of the font's real "O"s inside it, so the
+ * letters after it land where plain text puts them, at any size.
  */
-function HoopO({ phase, direction }: { phase: number; direction: 1 | -1 }) {
+function Slot({ letters, children }: { letters: 1 | 2; children: ReactNode }) {
   return (
-    // Letter-spacing follows every character but never an inline box, so the box carries it as a right margin.
-    <span className="relative inline-block h-[1cap] w-[1ch] align-baseline" style={{ marginRight: 'var(--wordmark-tracking)' }}>
-      <AsciiHoop {...LETTER_O} phase={phase} direction={direction} />
+    <span
+      className="relative inline-block h-[1cap] align-baseline"
+      style={{
+        width: letters === 1 ? '1ch' : 'calc(2ch + var(--wordmark-tracking))',
+        // Letter-spacing follows every character but never an inline box, so the slot carries it as a right margin.
+        marginRight: 'var(--wordmark-tracking)',
+      }}
+    >
+      {children}
     </span>
   );
 }
 
 /**
- * LOOPMAXXING with its two O's as ASCII spinning hoops (`AsciiHoop`), turning
- * opposite ways with their colors offset, so the pair plays off each other.
- * Below 40 px a hoop draws as a pixel ring. Screen readers read the word.
+ * LOOPMAXXING with its "OO" drawn by `AsciiHoop`: one infinity (the default),
+ * two hoops interlocked (`linked`) or two hoops turning opposite ways (`split`).
+ * Below 40 px they draw in pixel squares. Screen readers read the word.
  */
-export function LoopmaxxingWordmark({ className, tracking = 'tight' }: { className?: string; tracking?: keyof typeof TRACKING }) {
+export function LoopmaxxingWordmark({
+  className,
+  tracking = 'tight',
+  variant,
+}: {
+  className?: string;
+  tracking?: keyof typeof TRACKING;
+  variant?: WordmarkVariant;
+}) {
+  const fromContext = useContext(WordmarkVariantContext);
+  const shown = variant ?? fromContext;
   return (
     <span
       className={cn('inline-block whitespace-nowrap', className)}
@@ -53,8 +77,21 @@ export function LoopmaxxingWordmark({ className, tracking = 'tight' }: { classNa
     >
       <span className="sr-only">Loopmaxxing</span>
       <span aria-hidden>
-        L<HoopO phase={0} direction={1} />
-        <HoopO phase={0.5} direction={-1} />
+        L
+        {shown === 'split' ? (
+          <>
+            <Slot letters={1}>
+              <AsciiHoop {...LETTER_O} letters={1} />
+            </Slot>
+            <Slot letters={1}>
+              <AsciiHoop {...LETTER_O} letters={1} phase={0.5} direction={-1} />
+            </Slot>
+          </>
+        ) : (
+          <Slot letters={2}>
+            <AsciiHoop shape={shown} letters={2} tube={shown === 'linked' ? 0.38 : 0.3} />
+          </Slot>
+        )}
         PMAXXING
       </span>
     </span>

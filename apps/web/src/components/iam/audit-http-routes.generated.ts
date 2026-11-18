@@ -360,6 +360,7 @@ const AUDIT_HTTP_ROUTE_KEYS = [
   "POST|v1|cli|device|decide",
   "POST|v1|cli|device|poll",
   "POST|v1|cli|device|start",
+  "POST|v1|cli|setup-events",
   "GET|v1|clients|mobile",
   "POST|v1|connectors|attachments",
   "POST|v1|connectors|call",

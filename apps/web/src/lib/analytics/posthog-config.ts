@@ -2,7 +2,8 @@
  * PostHog rules that decide what leaves the browser. Pure functions, no
  * posthog-js import: `posthog-client.ts` applies them, the unit test pins them.
  *
- * 1. Where to send. A project key belongs to kortix.com. Any other host —
+ * 1. Where to send. A project key belongs to kortix.com (and loopmaxxing.sh,
+ *    the developer landing it serves). Any other host —
  *    dev, staging, a self-hosted install, a white-label domain, a PR preview —
  *    gets no key,
  *    so posthog-js is never even downloaded there. Project keys are public by
@@ -34,6 +35,9 @@ export type AnalyticsEnvironment = 'production' | 'staging' | 'dev' | 'local';
 const HOST_ENVIRONMENTS: Record<string, AnalyticsEnvironment> = {
   'kortix.com': 'production',
   'www.kortix.com': 'production',
+  // The developer landing (Loopmaxxing) on its own domain: the setup prompt is copied there.
+  'loopmaxxing.sh': 'production',
+  'www.loopmaxxing.sh': 'production',
 };
 
 function isLocalHost(hostname: string): boolean {

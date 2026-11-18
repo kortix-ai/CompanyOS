@@ -354,7 +354,7 @@ export function DriveExplorer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [searchEnabled, toggleSearch, closeSearch, isSearchOpen]);
 
-  const { elevatedDirs, dirs, fileItems } = useSortedListing(files, partial);
+  const { dirs, fileItems } = useSortedListing(files, partial);
 
   // ── Handlers ──────────────────────────────────────────────────
 
@@ -1017,7 +1017,7 @@ export function DriveExplorer({
   const [selectionStore] = useState(createSelectionStore);
   useEffect(() => selectionStore.clear(), [currentPath, selectionStore]);
   const selectMode = useSyncExternalStore(selectionStore.subscribe, selectionStore.mode, () => false);
-  const ordered = useMemo(() => [...elevatedDirs, ...dirs, ...fileItems], [elevatedDirs, dirs, fileItems]);
+  const ordered = useMemo(() => [...dirs, ...fileItems], [dirs, fileItems]);
   // Read by the stable callbacks below at the moment they run.
   const orderedRef = useRef(ordered);
   useEffect(() => {
@@ -1289,7 +1289,6 @@ export function DriveExplorer({
     !error &&
     Boolean(files) &&
     !listing.hasNextPage &&
-    elevatedDirs.length === 0 &&
     dirs.length === 0 &&
     fileItems.length === 0;
 
@@ -1476,7 +1475,6 @@ export function DriveExplorer({
                 <>
                   {viewMode === 'grid' ? (
                     <DriveGridView
-                      elevatedDirs={elevatedDirs}
                       dirs={dirs}
                       files={fileItems}
                       onNavigateToDir={handleNavigateToDir}
@@ -1501,7 +1499,6 @@ export function DriveExplorer({
                     />
                   ) : (
                     <DriveListView
-                      elevatedDirs={elevatedDirs}
                       dirs={dirs}
                       files={fileItems}
                       sortDisabled={partial}

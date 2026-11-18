@@ -17,12 +17,15 @@ import {
 const ORIGIN = 'https://kortix.com';
 
 describe('posthogProjectForHost', () => {
-  test('only kortix.com reports, as production', () => {
+  test('only kortix.com and loopmaxxing.sh report, as production', () => {
     expect(posthogProjectForHost('kortix.com', undefined)).toEqual({
       key: POSTHOG_PROJECT_KEY,
       environment: 'production',
     });
     expect(posthogProjectForHost('www.kortix.com', undefined)?.environment).toBe('production');
+    expect(posthogProjectForHost('loopmaxxing.sh', undefined)?.environment).toBe('production');
+    expect(posthogProjectForHost('www.loopmaxxing.sh', undefined)?.environment).toBe('production');
+    expect(posthogProjectForHost('evil-loopmaxxing.sh', undefined)).toBeNull();
   });
 
   test('dev and staging never report', () => {

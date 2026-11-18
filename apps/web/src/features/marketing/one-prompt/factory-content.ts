@@ -90,7 +90,8 @@ export const FREE_COMPUTE_USD = `$${FREE_MONTHLY_CREDITS / CREDITS_PER_USD}`;
 export const FAQ = [
   {
     q: 'How is this different from Claude Code or Codex?',
-    a: 'Claude Code and Codex work while you prompt them. Kortix agents run in the cloud on their own: a failing test, a Sentry error or a merged pull request starts them, day and night. You set them up once, with the coding agent you already use.',
+    // Claude: each step is the unmodified `claude` program in the sandbox (harness/README.md). ChatGPT: pi on the Codex plan's models, not the Codex program.
+    a: 'It runs on them. With a Claude subscription, every step runs in Claude Code itself; with ChatGPT, on your Codex plan\'s models. Kortix adds what they need to run 24/7 without you: a cloud computer for each agent, triggers like a failing test, a Sentry error or a merged pull request, your connected tools and encrypted secrets.',
   },
   {
     q: 'What happens when I paste the prompt?',

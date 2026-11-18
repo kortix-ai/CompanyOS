@@ -42,12 +42,9 @@ const SOURCE = 'careers-application';
 export function ApplyModal({
   open,
   onOpenChange,
-  defaultArea,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Pre-selects the opening when the modal opens from a role page. */
-  defaultArea?: string;
 }): ReactNode {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const { applyForm } = getLocalizedCareersContent(tI18nComplete);
@@ -66,7 +63,6 @@ export function ApplyModal({
     if (open) {
       setStep('form');
       setError(null);
-      if (defaultArea) setArea(defaultArea);
     }
   }
 

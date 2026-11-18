@@ -62,7 +62,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const entries = new Map<string, SitemapEntry>();
 
   // The only public pages that are not content records.
-  for (const pathname of ['/a1o', '/changelog/releases', '/careers/gtm-enterprise', '/careers/mts', '/careers/fde']) {
+  for (const pathname of ['/a1o', '/changelog/releases']) {
     if (!showsMarketingLink(pathname)) continue;
     const entry = htmlEntry(pathname);
     entries.set(entry.url, entry);

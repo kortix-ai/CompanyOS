@@ -13,36 +13,36 @@ type CareersContent = ReturnType<typeof getLocalizedCareersContent>;
 
 /**
  * The board, in a band (after Linear's and Runway's open-roles lists on
- * Mobbin): one row per opening with the role, its full name, its location and
- * "View role", which opens the opening's page.
+ * Mobbin): one row per opening with the role and its full name, one line, its
+ * location and Apply. No disclosure: each opening is one line on purpose.
  */
 function Board({
   hero,
   openings,
-}: Pick<CareersContent, 'hero' | 'openings'>): ReactNode {
+  apply,
+  onApply,
+}: Pick<CareersContent, 'hero' | 'openings' | 'apply'> & { onApply: () => void }): ReactNode {
   return (
     <Band>
       <div className="px-6 lg:px-11">
         <div aria-hidden className="text-muted-foreground hidden grid-cols-12 border-b py-4 text-sm lg:grid">
-          <span className="col-span-6 pr-8">{hero.roleLabel}</span>
-          <span className="col-span-6">{hero.locationLabel}</span>
+          <span className="col-span-4 pr-8">{hero.roleLabel}</span>
+          <span className="col-span-5">{hero.summaryLabel}</span>
         </div>
         <ul className="divide-y">
           {openings.map((opening) => (
             <li key={opening.id} className="grid grid-cols-1 items-center gap-y-3 py-6 lg:grid-cols-12">
-              <span className="flex flex-col gap-1 lg:col-span-6 lg:pr-8">
-                <Link
-                  href={opening.href}
-                  className="text-xl font-medium tracking-tight underline-offset-4 hover:underline"
-                >
-                  {opening.name}
-                </Link>
+              <span className="flex flex-col gap-1 lg:col-span-4 lg:pr-8">
+                <span className="text-xl font-medium tracking-tight">{opening.name}</span>
                 <span className="text-muted-foreground text-sm">{opening.full}</span>
               </span>
-              <span className="flex items-center justify-between gap-4 lg:col-span-6">
-                <span className="text-foreground text-base">{opening.location}</span>
-                <MarketingButton size="md" variant="secondary" className="hit-area-y-1" asChild>
-                  <Link href={opening.href}>{hero.viewRole}</Link>
+              <span className="text-foreground max-w-xl text-base text-pretty lg:col-span-5 lg:pr-8">
+                {opening.summary}
+              </span>
+              <span className="flex items-center justify-between gap-4 lg:col-span-3 lg:justify-end">
+                <span className="text-muted-foreground text-sm">{opening.location}</span>
+                <MarketingButton size="md" variant="secondary" className="hit-area-y-1" onClick={onApply}>
+                  {apply.cta}
                 </MarketingButton>
               </span>
             </li>
@@ -87,7 +87,7 @@ export function CareersPage(): ReactNode {
             </>
           }
         />
-        <Board hero={hero} openings={openings} />
+        <Board hero={hero} openings={openings} apply={apply} onApply={openApply} />
       </section>
 
       {/* The bar: seven cells, and the eighth is the way in. */}

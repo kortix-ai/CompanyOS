@@ -337,6 +337,12 @@ function PrivacyPolicy() {
           it. The rest of this policy also applies.
         </P>
         <P>
+          When you sign in to Kortix with Google, Kortix receives only your name, email address, and
+          profile picture. We use them for your Kortix account, as described in the rest of this
+          policy. Signing in gives Kortix no access to your Gmail, Calendar, Drive, Docs, or Sheets.
+          Connecting one of them is a separate step with its own Google consent screen.
+        </P>
+        <P>
           Kortix&apos;s use and transfer to any other app of information received from Google APIs
           will adhere to the{' '}
           <a

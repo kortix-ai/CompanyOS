@@ -431,25 +431,25 @@ function SessionPanel({
       <div className="border-border flex h-11 shrink-0 items-center gap-2.5 border-b px-4">
         <TriggerMark via={run.via} terminal={run.host.kind === 'claude-code'} />
         <span className="text-foreground min-w-0 truncate text-sm font-medium">{run.source}</span>
-        <span className="text-muted-foreground ml-auto shrink-0 text-xs">{run.host.kind === 'claude-code' ? 'You ran it' : 'Ran on its own'}</span>
+        {/* Who picked it up, at the row's end. */}
+        <span className="ml-auto flex shrink-0 items-center gap-2">
+          {run.host.kind === 'claude-code' ? (
+            <span className="border-border inline-flex size-5 shrink-0 items-center justify-center rounded-sm border">
+              <Claude className="size-3" />
+            </span>
+          ) : (
+            <AgentTile slug={run.host.slug} />
+          )}
+          <span className="text-muted-foreground text-sm">{run.host.kind === 'claude-code' ? 'Claude Code' : run.host.name}</span>
+        </span>
       </div>
-      <header className="flex h-12 shrink-0 items-center gap-2.5 px-4">
-        {run.host.kind === 'claude-code' ? (
-          <span className="border-border inline-flex size-7 shrink-0 items-center justify-center rounded-md border">
-            <Claude className="size-4" />
-          </span>
-        ) : (
-          <AgentTile slug={run.host.slug} size={21} />
-        )}
-        <span className="text-foreground truncate text-sm font-medium">{run.host.kind === 'claude-code' ? 'Claude Code' : run.host.name}</span>
-      </header>
 
       {/* The conversation never scrolls under the reader's wheel or finger: a page scroll over the reel
           always moves the page. What does not fit is clipped; a sent message brings itself into view. */}
       <div
         key={`${run.id}-${round}`}
         className={cn(
-          'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-4 pt-2 pb-2',
+          'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-4 pt-4 pb-2',
           round > 0 && 'animate-in fade-in duration-slow',
         )}
       >

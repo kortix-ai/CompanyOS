@@ -97,25 +97,3 @@ export function LoopmaxxingWordmark({
     </span>
   );
 }
-
-/** A straight piece of hoop, a hairline: the segments side by side. A band's top edge. */
-export function HoopLine({ className }: { className?: string }) {
-  return (
-    <div aria-hidden className={cn('flex h-px', className)}>
-      {SEGMENTS.map((segment, index) => (
-        <span key={index} style={{ flexGrow: segment.length, background: hoop(segment.color) }} />
-      ))}
-    </div>
-  );
-}
-
-/** A section's mark: four dots, one per hoop color. */
-export function HoopDots({ className }: { className?: string }) {
-  return (
-    <span aria-hidden className={cn('inline-flex items-center gap-1.5', className)}>
-      {HOOP_PALETTE.map((_, index) => (
-        <span key={index} className="size-1.5 rounded-full" style={{ background: hoop(index) }} />
-      ))}
-    </span>
-  );
-}

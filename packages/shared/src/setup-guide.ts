@@ -242,15 +242,10 @@ parse.
 9. **Keep the reply.** Do what the person chose. When a choice cannot work as
    chosen, only the person decides the change: say why in one line, give your
    fix and wait for the answer. Never swap a choice without saying so.
-10. **Make the clicks when you can.** When you can drive the person's browser
-    (a browser tool or MCP server that uses their own browser profile), offer
-    it in the step 3 message. With their yes, make their clicks yourself:
-    Authorize for \`kortix login\` (a new person signs up there with the Google
-    or GitHub sign-in they already have), each row of the setup page (a
-    connector's sign-in and consent, Add to Slack, a model plan) and the
-    GitHub App install. Never type a password, a one-time code, a card number
-    or a secret value: when a page asks for one, that step is the person's.
-    Say so in one line, wait, and go on.
+10. **The setup page is the person's.** Every sign-in (the model plan, a
+    connector, Slack, the GitHub App) and every pasted token happen there, in
+    the page \`onboard\` opens. Never sign in, connect or click for the person,
+    in the terminal or in a browser.
 
 ## 0. Install
 
@@ -424,9 +419,7 @@ The questions:
   names to upload (every \`local\` name the app reads; never a \`remote\` or
   \`prod\` one), the sandbox size with its cost ("4 vCPU, 8 GB, 30 GB disk:
   about $${sandboxHourlyUsd(4, 8).toFixed(2)} an hour while a session runs"), the Kortix
-  rule in \`AGENTS.md\` (default: add it) and, when
-  you can drive their browser, "I make the sign-in clicks in your browser"
-  (rule 10).
+  rule in \`AGENTS.md\` (default: add it).
 - **A gap is a question only when a chosen source needs it.** An
   \`unrecognized_services\` prefix or an empty category becomes one question
   with likely answers ("Tickets: a) GitHub Issues (recommended) b) Linear
@@ -557,22 +550,15 @@ repository, the step 3 answer decides how they land:
 ## 5. Connect the models
 
 The setup page (step 6) asks for a model first when the workspace has none:
-the person picks their Claude or ChatGPT plan, or adds a key, in the browser.
-Use these commands only when the person wants it done in the terminal:
-
-- **Claude Pro or Max:** \`kortix providers login claude --start --share workspace --json\`;
-  give the person the \`authorize_url\`; they paste the code back;
-  \`kortix providers login claude --flow <flow_id> --code <code> --share workspace\`.
-- **ChatGPT Plus or Pro:** \`kortix providers login openai\` in the background;
-  give the person the link and the code it prints.
-- **An API key:** \`kortix providers set <provider>\`; the person types the key.
+the person picks their Claude or ChatGPT plan, or adds a key, there (rule
+10). Connect no model from the terminal.
 
 ## 6. Do it
 
 \`\`\`bash
 kortix onboard --yes --json --wait \\
   [--env-file <file> --only <A,B>]... \\
-  [--channels <a,b>] [--connect <slug,...>] \\
+  [--channels <a,b>] \\
   --repo <owner/repo> [--name "<workspace name>"]
 \`\`\`
 
@@ -611,10 +597,10 @@ going until the page shows every row done, then finishes the phases that
 waited.
 
 Run the command as written. Never add \`--no-open\` and never drop \`--wait\`:
-the page is where the person, or you with their yes (rule 10), makes every
-click. Wait for \`onboard\` to exit before you end your turn: ending the turn
-can stop a command that runs in the background, and a question to the person
-never waits on a running \`onboard\`.
+the page is where the person makes every click (rule 10). Wait for
+\`onboard\` to exit before you end your turn: ending the turn can stop a
+command that runs in the background, and a question to the person never waits
+on a running \`onboard\`.
 
 A repository webhook that already sends the same event to another Kortix
 workspace is left in place and reported in the \`webhooks\` detail. Tell the
@@ -630,8 +616,7 @@ App. The first run asks for the App's install on this repository: a
 
 Exit 0 is done and green. Exit 4: steps are left. A \`user_action\` the page
 does not show (\`/invite\` the bot to a private Slack channel, install the
-GitHub App) goes to the person once, in one message, or is your click with
-their yes (rule 10). \`--wait\` timed out
+GitHub App) goes to the person once, in one message. \`--wait\` timed out
 (\`next\` says what the page still lists): tell the person in one line, then
 run the same command again. Exit 1: read the failed phase's \`detail\`, fix
 it, run again.

@@ -98,8 +98,11 @@ describe('templates in the setup guide', () => {
     expect(guide).toContain('kortix sessions wait-for <session_id> --timeout 1800 --json');
     expect(guide).toContain('kortix sessions log <session_id> --json --limit 200');
     expect(guide).toContain('never from the agent\'s summary');
-    // A browser-capable agent makes the clicks; never a password or a code.
-    expect(guide).toContain('Never type a password, a one-time code, a card number');
+    // The person makes every sign-in on the setup page; the agent never clicks or signs in for them.
+    expect(guide).toContain('Never sign in, connect or click for the person');
+    expect(guide).not.toContain('providers login claude');
+    expect(guide).not.toContain('--connect <slug');
+    expect(guide).not.toContain('rule 10), makes');
   });
 
   test('the guide sizes the sandbox from the stack, quotes its cost, and resizes from measured peaks', () => {

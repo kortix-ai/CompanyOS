@@ -26,6 +26,7 @@ import { CopyGuideProvider } from './copy-guide';
 import { CopyButton, GhostButton, Mark, useForceDarkPage, useSetupTarget } from './parts';
 import { EngineGrid } from './engine-grid';
 import { HulaHoop } from './hula-hoop';
+import { HoopScrollbar } from './hoop-scrollbar';
 import { PlanFlow } from './plan-flow';
 import { AgentTile, ApprovalArt, ComposerArt, ConnectArt, FindArt, ProveArt, SignalArt } from './section-art';
 import { SessionReel } from './session-reel';
@@ -309,7 +310,8 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
   return (
     <WordmarkVariantContext.Provider value={variant}>
     <CopyGuideProvider>
-            <div style={hoopVars} className="dark bg-background text-foreground relative min-h-screen overflow-x-clip [color-scheme:dark]">
+            <div id="loopmaxxing-content" style={hoopVars} className="dark bg-background text-foreground relative min-h-screen overflow-x-clip [color-scheme:dark]">
+        <HoopScrollbar />
         <header className="bg-background/80 border-border sticky top-0 z-30 border-b backdrop-blur">
           <div className={cn(COLUMN, 'flex h-16 items-center justify-between gap-4')}>
             {/* The logo is one link home: /loopmaxxing on every host (loopmaxxing.sh sends that path to its root). This

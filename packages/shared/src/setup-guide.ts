@@ -487,7 +487,11 @@ the root (a Debian-family base, the code repository's runtimes at their pinned
 versions, git and gh, no \`COPY\` from the repository), the template's \`cpu\`,
 \`memory\` and \`disk\` from the plan's \`dev_environment.resources\` (a sandbox
 too small for the dev stack crashes the tests), and the \`dev-environment\` skill
-in \`skills/dev-environment/\`. A loop that works on the code clones it from
+in \`skills/dev-environment/\` (or the folder the team's own has). The skill
+starts with how a session gets the code, because a session's \`/workspace\`
+starts empty: in this repository, \`kortix workspaces clone\` (the workspace
+repository is the code); in a new repository, the GitHub clone with the token
+the template names. Then the install, start and test commands. A loop that works on the code clones it from
 GitHub with the GitHub token its template names (\`FACTORY_GITHUB_TOKEN\` for
 the Software Factory), so that token is a required secret. Then:
 

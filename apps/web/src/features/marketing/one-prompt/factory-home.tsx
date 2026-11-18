@@ -201,8 +201,7 @@ function PlansBand({ prompt }: { prompt: string }) {
 }
 
 /**
- * The page's end, instead of the site's footer: the hoop's grain, one closing
- * line with the prompt under it, then the name across the page's width.
+ * The shared closing CTA, then the full-width name on a plain background.
  */
 function PageEnd({ prompt }: { prompt: string }) {
   const wordmark = useRef<HTMLDivElement>(null);
@@ -240,20 +239,15 @@ function PageEnd({ prompt }: { prompt: string }) {
   }, []);
   return (
     <Footer
-      linkOrigin={KORTIX}
-      themeToggle={false}
       cta={{
         title: 'One prompt.',
         subtitle: 'Your whole company, looped.',
         actions: <CopyButton text={prompt} icon="shortcut" bindKey={false} />,
         palette: HOOP_PALETTE,
       }}
-      linkSection={
-        <div className="min-w-0 lg:col-span-7">
+      footerContent={
+        <div className="w-full px-6 pt-12 pb-16">
           <div ref={wordmark} className="relative isolate overflow-hidden">
-            <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 -scale-y-100">
-              <DitherField className="text-kortix-base" palette={HOOP_PALETTE} fade="top" />
-            </div>
             <div className="@container">
               <Link
                 href="/loopmaxxing"

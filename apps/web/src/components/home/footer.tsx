@@ -96,9 +96,9 @@ function FooterLink({ label, href, external }: FooterLinkItem) {
  * `linkOrigin` prefixes the mark and every internal link: a page served on
  * another host (loopmaxxing.sh) links to kortix.com instead of to paths that
  * host only redirects. `themeToggle` hides the theme switch on a page that is
- * always dark. `linkSection` replaces only the link columns, keeping the brand and copyright.
+ * always dark. `footerContent` replaces the footer grid below the closing CTA.
  */
-const Footer = ({ cta, linkOrigin = '', themeToggle = true, linkSection }: { cta?: CtaContent; linkOrigin?: string; themeToggle?: boolean; linkSection?: ReactNode } = {}) => {
+const Footer = ({ cta, linkOrigin = '', themeToggle = true, footerContent }: { cta?: CtaContent; linkOrigin?: string; themeToggle?: boolean; footerContent?: ReactNode } = {}) => {
   const tI18nHardcoded = useTranslations('hardcodedUi');
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const footerSections = localizeUiCatalog(FOOTER_SECTIONS, tI18nComplete, FOOTER_TRANSLATION_KEYS);
@@ -112,7 +112,7 @@ const Footer = ({ cta, linkOrigin = '', themeToggle = true, linkSection }: { cta
           pinned to the bottom of the same column; the link groups in a grid
           on the right. */}
       <footer id="site-footer" className="relative z-10">
-        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-12 px-6 pt-12 pb-16 lg:grid-cols-12">
+        {footerContent ?? <div className="mx-auto grid max-w-7xl grid-cols-1 gap-12 px-6 pt-12 pb-16 lg:grid-cols-12">
           <div className="flex flex-col justify-between gap-12 lg:col-span-5">
             <Link
               href={linkOrigin || '/'}
@@ -131,7 +131,7 @@ const Footer = ({ cta, linkOrigin = '', themeToggle = true, linkSection }: { cta
             </div>
           </div>
 
-          {linkSection ?? <nav aria-label="Footer" className="lg:col-span-7">
+          <nav aria-label="Footer" className="lg:col-span-7">
             <div className="grid grid-cols-2 gap-x-6 gap-y-12 md:grid-cols-4">
               {footerSections.map((section) => (
                 <div key={section.title} className="min-w-0">
@@ -150,8 +150,8 @@ const Footer = ({ cta, linkOrigin = '', themeToggle = true, linkSection }: { cta
                 </div>
               ))}
             </div>
-          </nav>}
-        </div>
+          </nav>
+        </div>}
       </footer>
     </section>
   );

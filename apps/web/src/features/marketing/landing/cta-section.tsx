@@ -2,6 +2,7 @@
 
 import { useRequestDemo } from '@/features/contact/request-demo-provider';
 import { DitherField } from '@/features/marketing/kit/dither-field';
+import { cn } from '@kortix/ui';
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
 import { getLocalizedLandingContent } from '@/features/marketing/landing/content';
 import { footerCtaFor } from '@/features/marketing/landing/footer-cta';
@@ -21,7 +22,14 @@ import { useEffect, useState, type ReactNode } from 'react';
  * action is not a link, as the Loopmaxxing page's Copy prompt is. The section
  * still draws the heading, the action row and the trust line.
  */
-export type CtaContent = { title: string; subtitle: string; actions: ReactNode; trust?: string };
+export type CtaContent = {
+  title: string;
+  subtitle: string;
+  actions: ReactNode;
+  trust?: string;
+  /** Four `#RRGGBB` colors for the dither band above the title, instead of the brand blue. */
+  palette?: readonly [string, string, string, string];
+};
 
 export function CtaSection({ content }: { content?: CtaContent } = {}) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
@@ -52,11 +60,16 @@ export function CtaSection({ content }: { content?: CtaContent } = {}) {
           the copy sits on the plain surface. Two mask layers, added: a
           straight fade that ends at 150px across the full width, and a
           centred ellipse that carries the middle down to 300px. */}
+      {/* A palette fades by thinning its dots, not by a mask, so its colors stay pure. */}
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-81.5 [mask-image:linear-gradient(to_bottom,#000,transparent_150px),radial-gradient(50%_300px_at_50%_0,#000,transparent)]"
+        className={cn(
+          'pointer-events-none absolute inset-x-0 top-0 h-81.5',
+          !content?.palette &&
+            '[mask-image:linear-gradient(to_bottom,#000,transparent_150px),radial-gradient(50%_300px_at_50%_0,#000,transparent)]',
+        )}
         aria-hidden
       >
-        <DitherField className="text-kortix-base" />
+        <DitherField className="text-kortix-base" palette={content?.palette} fade={content?.palette ? 'top' : undefined} />
       </div>
 
       {content ? (

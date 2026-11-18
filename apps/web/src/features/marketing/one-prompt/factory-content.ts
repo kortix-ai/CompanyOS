@@ -1,3 +1,9 @@
+import {
+  CREDITS_PER_USD,
+  DEFAULT_COMPUTE_HOURLY_PRICE_USD,
+  FREE_MONTHLY_CREDITS,
+} from '@kortix/ui/internal/billing/compute-pricing';
+
 /**
  * The data on the Software Factory home. Every ticket, command and result is
  * from one real run on a private demo repository (2026-11-10): the nightly tester filed issues #1–#3, the builder opened pull
@@ -32,8 +38,8 @@ export const DEMO = {
 /** A small, valid kortix.yaml: one agent, what starts it, and the registries it draws on. */
 export const MANIFEST = [
   'agents:',
-  '  factory:',
-  '    prompt_file: agents/factory.md',
+  '  engineer:',
+  '    prompt_file: agents/engineer.md',
   '    skills: [software-factory]',
   '    tools: [lookup_order]',
   '    extensions: [review-gate]',
@@ -44,7 +50,7 @@ export const MANIFEST = [
   '  - slug: nightly-tests',
   '    on: { cron: "0 0 2 * * *" }',
   '    run:',
-  '      agent: factory',
+  '      agent: engineer',
   '      prompt: Run the tests. File what fails.',
   '',
   'skills:',
@@ -76,14 +82,20 @@ export const ENGINE = [
   { term: 'Secrets', key: 'secrets', body: 'The file names them. The values stay encrypted in your workspace and reach only the agents you grant.' },
 ];
 
+/** A running hour of the default agent computer, from the billing rate card: "$0.11". */
+export const COMPUTE_HOURLY = `$${DEFAULT_COMPUTE_HOURLY_PRICE_USD.toFixed(2)}`;
+/** The Free plan's monthly credits in dollars: "$5". */
+export const FREE_COMPUTE_USD = `$${FREE_MONTHLY_CREDITS / CREDITS_PER_USD}`;
+
 export const FAQ = [
   { q: 'What is Kortix?', a: 'Cloud agents for your repository, defined in one kortix.yaml: the agents, what starts them, the skills they use and what they may do.' },
   { q: 'What is a factory?', a: 'One agent with its triggers and skills for one team\'s work. Each template is a public repository; your coding agent reads it and adapts it to yours.' },
-  { q: 'Which coding agents can run the prompt?', a: 'Any agent with a shell on your computer: Claude Code, Codex, Cursor. It follows the setup guide with you and asks before every decision.' },
+  { q: 'Which coding agents can run the prompt?', a: 'Any agent with a shell on your computer: Claude Code, Codex, Cursor. It follows the setup guide with you.' },
   { q: 'Which models do the agents use?', a: 'The plan you already have: your Claude or ChatGPT subscription, or any API key you add. It is shared with your workspace, so scheduled runs use it too.' },
   { q: 'Does it work with my existing repository?', a: 'Yes. It reads how the repository builds and tests, and writes an environment the agents use. Your code stays in your GitHub repository.' },
   { q: 'Where do the agents run?', a: 'In Kortix cloud sandboxes, in an environment built from your repository. They never point at your staging or production systems.' },
   { q: 'Who approves the work?', a: 'You. Every pull request, post and outbound draft waits for a person until you allow more. Security fixes always wait.' },
+  { q: 'What does it cost?', a: `Adding it is free, and Free includes ${FREE_COMPUTE_USD} of agent computer every month. Past that you pay only for the cloud computer your agents run on: about ${COMPUTE_HOURLY} an hour for the default machine, billed per second while it runs. Models run on your own Claude or ChatGPT plan or API key.` },
   { q: 'How do I turn it off?', a: 'Pause its triggers with one command, or delete its folder under .kortix/.' },
 ];
 

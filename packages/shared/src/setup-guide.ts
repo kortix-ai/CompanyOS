@@ -673,7 +673,9 @@ Then size the sandbox from the measured peaks, never from a guess:
 - peak disk above 80 %: add half again;
 - the tests take over 10 minutes and the CPU was busy: double the cpu;
 - after a pass with peak memory under 40 % and peak disk under 50 %: one
-  step down, then one more pass, since every session pays for the size.
+  step down (memory ÷ 1.5, rounded up), then one more pass, since every
+  session pays for the size. Never go under 2 vCPU, 4 GB and 20 GB: the
+  agent and its browser share the machine with the app.
 
 Resize with \`kortix sandboxes update <slug> --cpu <n> --memory <gb> --disk
 <gb>\`. A new size rebuilds the image. Write the final size and the measured

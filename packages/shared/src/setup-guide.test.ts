@@ -111,6 +111,7 @@ describe('templates in the setup guide', () => {
     expect(guide).toContain('sample used memory and used disk every 2');
     expect(guide).toContain('peak memory above 80 % of the size: one step up');
     expect(guide).toContain('kortix sandboxes update <slug> --cpu <n> --memory <gb> --disk');
+    expect(guide).toContain('Never go under 2 vCPU, 4 GB and 20 GB');
   });
 
   test('the guide uses none of the words its plain-words rule bans, outside that rule', () => {

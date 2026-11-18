@@ -32,7 +32,7 @@
 
 export const hero = {
   title: 'Open positions.',
-  lead: 'Belgrade, New York, San Francisco or US remote.',
+  lead: 'Belgrade, New York, San Francisco or remote.',
   description: 'An extremely small, talent-dense team.',
   roleLabel: 'Role',
   locationLabel: 'Location',

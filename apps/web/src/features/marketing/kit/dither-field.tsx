@@ -89,8 +89,8 @@ const FRAGMENT = `
       float ellipse = 1.0 - smoothstep(0.1, 0.95, length(vec2((across - 0.5) / 0.5, down / 0.66)));
       fade = max(band, ellipse);
     }
-    // No hard top edge: the field thins in over its first rows.
-    if (fadeMode > 0.5) fade *= smoothstep(0.0, 0.1, down);
+    // Only detached top bands soften their first rows. The hero meets its header.
+    if (fadeMode > 0.5 && fadeMode < 1.5) fade *= smoothstep(0.0, 0.1, down);
     float on = step(bayer8(cell) + 0.02, level * fade * mix(1.0, 1.2, paletteOn));
     vec3 color = ink;
     if (paletteOn > 0.5) {

@@ -412,7 +412,7 @@ function SessionPanel({
         if (!event.currentTarget.contains(event.relatedTarget)) onHold(false);
       }}
       className={cn(
-        'bg-card border-border flex min-h-88 shrink-0 flex-col overflow-hidden rounded-xl border',
+        'bg-card border-border flex h-108 shrink-0 flex-col overflow-hidden rounded-xl border',
       )}
     >
       {/* What started the run, first: most runs are started by an integration, not by a person typing. */}

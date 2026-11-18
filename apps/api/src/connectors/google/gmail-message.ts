@@ -66,18 +66,26 @@ export function header(part: GmailPart | undefined, name: string): string {
 
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
 
+/** Applies `pattern` until the string stops changing: one pass over `<scr<script>ipt>` leaves a new tag behind. */
+function replaceUntilStable(text: string, pattern: RegExp, replacement: string): string {
+  for (let previous = ''; previous !== text; ) {
+    previous = text;
+    text = text.replace(pattern, replacement);
+  }
+  return text;
+}
+
 /** HTML → readable plain text: block tags become line breaks, entities decode. */
 export function htmlToText(html: string): string {
-  return html
-    .replace(/<(script|style|head)[^>]*>[\s\S]*?<\/\1>/gi, '')
+  const blocks = replaceUntilStable(html, /<(script|style|head)[^>]*>[\s\S]*?<\/\1>/gi, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(p|div|tr|li|h[1-6]|blockquote|table)>/gi, '\n')
     .replace(/<li[^>]*>/gi, '- ')
     .replace(/<a\s[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (_m, href: string, text: string) => {
-      const label = text.replace(/<[^>]+>/g, '').trim();
+      const label = replaceUntilStable(text, /<[^>]+>/g, '').trim();
       return label && label !== href ? `${label} (${href})` : href;
-    })
-    .replace(/<[^>]+>/g, '')
+    });
+  return replaceUntilStable(blocks, /<[^>]+>/g, '')
     .replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, code: string) => {
       if (code.startsWith('#x') || code.startsWith('#X')) return String.fromCodePoint(parseInt(code.slice(2), 16));
       if (code.startsWith('#')) return String.fromCodePoint(parseInt(code.slice(1), 10));

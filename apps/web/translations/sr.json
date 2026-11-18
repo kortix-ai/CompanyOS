@@ -2226,6 +2226,11 @@
       "resume": "Настави",
       "agentIsWorking": "{agent} ради",
       "needsYouOn": "Потребан си: {header}"
+    },
+    "panel": {
+      "outputNew": "Ново",
+      "outputUpdated": "Ажурирано",
+      "resizePane": "Промени величину окна"
     }
   },
   "agents": {

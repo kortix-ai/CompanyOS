@@ -2226,6 +2226,11 @@
       "resume": "再開",
       "agentIsWorking": "{agent} が作業中",
       "needsYouOn": "あなたの対応が必要: {header}"
+    },
+    "panel": {
+      "outputNew": "新規",
+      "outputUpdated": "更新済み",
+      "resizePane": "ペインのサイズを変更"
     }
   },
   "agents": {

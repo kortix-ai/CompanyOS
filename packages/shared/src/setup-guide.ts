@@ -222,13 +222,23 @@ parse.
    investigated: no map, no inventory, no list of ideas. A finding reaches the
    person only as one line of the step 3 message or of the final report. The
    step 3 message has at most 40 lines, the final report at most 15.
-8. **A connector before a token.** An app the loops use gets a Kortix
-   connector when the catalog has one: the person signs in once on the setup
+8. **A connector for every app.** Every app you found gets a Kortix connector
+   when the catalog has one, whether a loop calls it or not: the agents then
+   reach all of the team's software. The person signs in once on the setup
    page and copies no key. Ask for an API token only for an app no connector
    serves, or for a token the template's steps name (the GitHub token).
 9. **Keep the reply.** Do what the person chose. When a choice cannot work as
    chosen, only the person decides the change: say why in one line, give your
    fix and wait for the answer. Never swap a choice without saying so.
+10. **Make the clicks when you can.** When you can drive the person's browser
+    (a browser tool or MCP server that uses their own browser profile), offer
+    it in the step 3 message. With their yes, make their clicks yourself:
+    Authorize for \`kortix login\` (a new person signs up there with the Google
+    or GitHub sign-in they already have), each row of the setup page (a
+    connector's sign-in and consent, Add to Slack, a model plan) and the
+    GitHub App install. Never type a password, a one-time code, a card number
+    or a secret value: when a page asks for one, that step is the person's.
+    Say so in one line, wait, and go on.
 
 ## 0. Install
 
@@ -262,11 +272,18 @@ message of step 3.
    \`CLAUDE.md\`, \`CONTRIBUTING.md\`, the README, CI workflows, the scripts the
    team runs. Note every rule that conflicts with agents shipping work (for
    example "push to main"). For a monorepo, note which apps exist and how
-   each one starts and tests.
+   each one starts and tests. Note the skills and agents the team has
+   already: every folder with a \`SKILL.md\`
+   (\`find . -name SKILL.md -not -path '*/node_modules/*'\`: \`.claude/skills/\`,
+   \`.agents/skills/\`, \`skills/\`) and every \`.claude/agents/<name>.md\`. The
+   setup reuses them (step 4).
 2. **The other repositories.** \`gh repo list <owner> --limit 100 --json name,description,pushedAt,isArchived\`
    for the owner of this repository's origin, plus the repositories this one
    names (submodules, workflow \`uses:\` of the same owner, links in the docs).
-   Note the ones pushed in the last 90 days and what each one is.
+   Note the ones pushed in the last 90 days and what each one is. Then name
+   the shape: one repository (a monorepo is one: several apps, one
+   repository), or one product over several repositories (a web app, an API,
+   services, each in its own). The shape decides where Kortix lives (step 3).
 3. **The software.** Start from the plan's \`integrations\` (each has a
    category and its evidence), \`unrecognized_services\` and \`mcp_servers\`.
    Add what you find yourself: SDK imports, webhook handlers, secret names in
@@ -347,8 +364,10 @@ The questions:
   2. what it starts with: its sources, each with its signal, output and
      approver;
   3. where work lands: the tracker or the system of record;
-  4. the software to connect as Kortix connectors (one line: connect these,
-     leave out those). When the plan shows a workspace, check each app first
+  4. the software to connect as Kortix connectors: every app you found that
+     the catalog has, whether a loop calls it or not (rule 8). One line that
+     names them, recommended: all, and ends with "Anything missing?" so the
+     reply can add one. When the plan shows a workspace, check each app first
      with \`kortix connectors catalog <name> --json\` and leave out an app
      with no entry. Before sign-in, an MCP server's tool list in the catalog
      is a directory's copy and can be out of date: never drop a connector for
@@ -361,21 +380,32 @@ The questions:
      already runs another, adding it here moves it. Say so in the question;
   6. the models: the person's Claude plan, their ChatGPT plan, or an API
      key; the reviewer on the strongest model;
-  7. the workspace name. The configuration always gets its own repository,
-     which Kortix hosts: the code repository gets no Kortix file;
+  7. where Kortix lives, from the shape you named in step 2, with the
+     workspace name:
+     a) this repository (recommended for one repository or a monorepo):
+        \`kortix.yaml\`, \`agents/\` and \`skills/\` go next to the code, the
+        workspace runs on this GitHub repository, and the team's own skills
+        and agents are reused where they are. Ask how the files land: a
+        commit on the default branch (recommended when the team pushes
+        there) or a pull request they merge;
+     b) a new repository Kortix hosts (recommended for a product over
+        several repositories): the agents reach each code repository on
+        GitHub;
   8. the template's questions from step 2;
   9. a repository rule that conflicts with the agents: which one wins;
   10. the task for the real run in step 7, from what you found.
 - **More than 8:** keep the 8 with the largest effect. Put every other
   decision, with the answer you will use, on the \`Defaults:\` line: the env
-  names to upload (only \`local\`), the Kortix rule in \`AGENTS.md\` (default:
-  add it).
+  names to upload (every \`local\` name the app reads; never a \`remote\` or
+  \`prod\` one), the Kortix rule in \`AGENTS.md\` (default: add it) and, when
+  you can drive their browser, "I make the sign-in clicks in your browser"
+  (rule 10).
 - **A gap is a question only when a chosen source needs it.** An
   \`unrecognized_services\` prefix or an empty category becomes one question
   with likely answers ("Tickets: a) GitHub Issues (recommended) b) Linear
   c) Jira"). Otherwise leave it out.
-- **Never** ask one item at a time, an open "what else do you use?", or for a
-  secret value.
+- **Never** ask one item at a time or for a secret value. The software line's
+  "Anything missing?" is the one open question.
 
 After the reply:
 
@@ -394,27 +424,50 @@ After the reply:
 
 ## 4. Write the configuration
 
-The configuration lives in the workspace repository, never in the code
-repository. Work in a folder beside this one: \`kortix workspaces clone
-<workspace_id> ../<repo>-kortix\` when the plan shows the workspace, else a new
-folder with \`git init\`. Run every later \`kortix\` command there. The code stays
-where it is; the agents reach it on GitHub.
+Where you work follows the step 3 answer "where Kortix lives".
 
-Use the layout of every workspace repository: \`kortix.yaml\` at the root, each
-agent's prompt in \`agents/<name>.md\`, each skill in \`skills/<name>/\`. A
-template adds \`<id>.yaml\` (which \`kortix.yaml\` imports) and its settings JSON
-at the root: \`kortix templates add <id> --repo <owner/repo> --branch <default
-branch> --json\` writes them, with the code repository named. Never write a
-\`.kortix/\` folder: no workspace repository has one.
+**In this repository** (one repository or a monorepo). The configuration goes
+next to the code, at the repository root (a monorepo's root, never one app's
+folder), and the workspace runs on this GitHub repository: every session
+starts from it. Work in this repository on its default branch. When the person
+has uncommitted work here, never commit, stash or discard it: work in
+\`git worktree add ../<repo>-kortix <default branch>\` instead. Reuse what the
+repository has, where it is, and never copy or move it:
 
-Install the template there: \`kortix templates add <id> --repo <owner/repo>
---branch <default branch> --json\`. Then follow its steps: write its settings
+- each skill folder you found in step 2, by its path:
+  \`skills: { <name>: .claude/skills/<name> }\`. The folder's last segment is
+  the name: lowercase words joined by \`-\`, not starting with \`kortix-\`;
+- each \`.claude/agents/<name>.md\` as an agent's prompt:
+  \`agents.<name>.prompt_file: .claude/agents/<name>.md\` (its frontmatter is
+  ignored, so give the agent its own \`tools\` and \`model\`);
+- the root \`AGENTS.md\` (else \`CLAUDE.md\`): every session reads it as it is.
+
+A template: \`kortix templates add <id> --json\` (the repository and branch come
+from \`origin\`). It refuses a file that exists and differs: rename the
+template's file, never overwrite the team's.
+
+**In a new repository** (a product over several repositories). Work in a
+folder beside this one: \`kortix workspaces clone <workspace_id>
+../<repo>-kortix\` when the plan shows the workspace, else a new folder with
+\`git init\`. Run every later \`kortix\` command there. The code stays where it
+is; the agents reach each code repository on GitHub. Copy the skills you found
+into \`skills/<name>/\` there, so the agents have them too. A template:
+\`kortix templates add <id> --repo <owner/repo> --branch <default branch>
+--json\`, with the main code repository named.
+
+Both use the layout of every workspace repository: \`kortix.yaml\` at the root,
+each agent's prompt in \`agents/<name>.md\` (or the file it already has), each
+skill in \`skills/<name>/\` (or the folder it already has). A template adds
+\`<id>.yaml\` (which \`kortix.yaml\` imports) and its settings JSON at the root.
+Never write a \`.kortix/\` folder: it holds only the CLI's local state.
+
+Then follow the template's steps: write its settings
 JSON from the reply, turn on the triggers of the chosen sources and turn off
 the rest. No template: write the agents and triggers yourself, in the same
-layout. Declare every app the loops call under \`connectors:\` (rule 8), with the
-entry the template's steps give, else the catalog's: \`onboard\` turns each one
-into a sign-in row on the setup page. An app reached only through a secret gets
-no row. Slack, when the reply says yes, is this entry in \`kortix.yaml\`, the one
+layout. Declare every app you found under \`connectors:\` (rule 8), whether a
+loop calls it or not, with the entry the template's steps give, else the
+catalog's: \`onboard\` turns each one into a sign-in row on the setup page. An
+app reached only through a secret gets no row. Slack, when the reply says yes, is this entry in \`kortix.yaml\`, the one
 Kortix writes itself when Slack connects; \`onboard\` turns it into the "Add to
 Slack" row:
 
@@ -427,12 +480,18 @@ connectors:
 \`\`\`
 
 Then write \`kortix.yaml\` with \`env.required\` and
-\`env.optional\` listing every secret the loops use, the sandbox \`Dockerfile\` at
+\`env.optional\` listing every secret the loops use and every env name the app
+reads to install, start and test (the plan's \`env\` names classed \`local\`;
+step 7 proves none is missing), the sandbox \`Dockerfile\` at
 the root (a Debian-family base, the code repository's runtimes at their pinned
 versions, git and gh, no \`COPY\` from the repository), the template's \`cpu\`,
 \`memory\` and \`disk\` from the plan's \`dev_environment.resources\` (a sandbox
 too small for the dev stack crashes the tests), and the \`dev-environment\` skill
-in \`skills/dev-environment/\`. A loop that works on the code clones it from
+in \`skills/dev-environment/\` (or the folder the team's own has). The skill
+starts with how a session gets the code, because a session's \`/workspace\`
+starts empty: in this repository, \`kortix workspaces clone\` (the workspace
+repository is the code); in a new repository, the GitHub clone with the token
+the template names. Then the install, start and test commands. A loop that works on the code clones it from
 GitHub with the GitHub token its template names (\`FACTORY_GITHUB_TOKEN\` for
 the Software Factory), so that token is a required secret. Then:
 
@@ -448,6 +507,17 @@ Fix every error and warning in the files you wrote. Two rules save a round:
   \`body.repository.full_name: <owner>/<repo>\`, the code repository (the
   templates carry it). \`onboard\` and \`doctor\` then put the webhooks and
   labels there, and an event from any other repository never starts a run.
+
+Commit the Kortix files before step 6: \`onboard\` refuses any other
+uncommitted change, and the workspace reads the default branch. In this
+repository, the step 3 answer decides how they land:
+
+- **A commit:** commit only the Kortix files on the default branch. \`onboard\`
+  pushes it. A protected branch refuses the push: say so in one line and
+  open a pull request instead.
+- **A pull request:** \`git switch -c kortix/setup\`, commit, push,
+  \`gh pr create\`. When the person has merged it, switch to the default
+  branch, pull, and go on.
 
 ## 5. Connect the models
 
@@ -513,9 +583,14 @@ other hook with the command \`kortix doctor --loops\` prints.
 A source that is off needs nothing: a disabled Slack trigger asks for no Slack
 connection.
 
+In this repository, \`ship\` links the workspace to it through the Kortix GitHub
+App. The first run asks for the App's install on this repository: a
+\`github_app_install\` action with its link.
+
 Exit 0 is done and green. Exit 4: steps are left. A \`user_action\` the page
 does not show (\`/invite\` the bot to a private Slack channel, install the
-GitHub App) goes to the person once, in one message. \`--wait\` timed out
+GitHub App) goes to the person once, in one message, or is your click with
+their yes (rule 10). \`--wait\` timed out
 (\`next\` says what the page still lists): tell the person in one line, then
 run the same command again. Exit 1: read the failed phase's \`detail\`, fix
 it, run again.
@@ -529,7 +604,43 @@ kortix doctor --loops --fix --json  # re-runs the phase a red line names
 
 Pass the same \`--repo <owner/repo>\` you gave \`onboard\`, if any.
 
-Loop until \`ready: true\`. Then one real run, the cheapest one the factory has:
+Loop until \`ready: true\`. A green doctor proves the configuration, not the
+dev environment: the image is built, but nothing has run the app in it yet.
+
+**Prove the dev environment.** Start a session on the agent that works on the
+code, so it runs on that agent's \`sandbox\` (else \`sandbox.default\`): the
+image the \`Dockerfile\` built. A session without \`--agent\` runs My Kortix on
+another image and proves nothing.
+
+\`\`\`bash
+kortix sessions new --agent <agent> --json --prompt "<the check>"   # capture session_id
+kortix sessions wait-for <session_id> --timeout 1800 --json        # until the turn ends
+kortix sessions log <session_id> --json --limit 200                # the real tool output
+\`\`\`
+
+The check, as the prompt: "Load the dev-environment skill and follow it: get
+the code as it says, run its install, start and test commands, and report each
+command with its exit code. Start the app, open it with agent-browser, take a snapshot and say
+what the page shows. Change nothing in the repository."
+
+Judge from the log's \`tool_call\` blocks (\`result.content[].text\` is the real
+output), never from the agent's summary. It passes when every command exits 0,
+the tests pass (a test that fails on the default branch too may fail: name
+it), and the snapshot shows the app, not an error page. A failure is yours to
+fix, and the person waits for none of it:
+
+- a missing runtime, system package or service: the \`Dockerfile\`;
+- a wrong or missing command: the \`dev-environment\` skill;
+- a missing env name: \`env.required\`, then its value (a \`local\` value
+  through \`kortix env push\`, else a row on the setup page);
+- too little memory or disk: the template's resources.
+
+Commit, run \`kortix onboard --yes --json --wait\` again (it ships and rebuilds
+the image), and run the check in a new session. Loop until it passes. When your
+harness has subagents, give this loop to one: the logs are long, and your
+thread keeps the person's context.
+
+Then one real run, the cheapest one the factory has:
 for the Software Factory, file the task the person approved in step 3 and
 label it. The label starts the run: follow it with \`kortix triggers runs\`,
 fire a trigger by hand only when the template's steps say so, and wait for the
@@ -567,7 +678,9 @@ ${agentBlock(target)}
 Show the result first, then how to use it. At most 15 lines:
 
 1. What the real run made: the pull request, ticket or draft, its link, the
-   signal that started it, and how long it took.
+   signal that started it, and how long it took. Then what the dev-environment
+   check proved: install, the tests (passed of total) and the app in the
+   browser.
 2. What runs now: one line per trigger (what starts it, what it ships, who
    approves) and where work lands.
 3. How to start work by hand: the label to add, or

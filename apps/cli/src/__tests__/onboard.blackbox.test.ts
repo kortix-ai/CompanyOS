@@ -87,6 +87,8 @@ let api: {
   triggers: string[];
   slackInstalled: boolean;
   connectorState: string;
+  /** False: the workspace has not applied kortix.yaml's connectors yet (a push straight to GitHub). */
+  connectorsSynced: boolean;
   ready: boolean;
   buildStarted: boolean;
 };
@@ -130,7 +132,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'kortix-onboard-'));
   repoDir = join(root, 'repo');
   hits = [];
-  api = { secrets: new Map(), triggers: ['issues-labeled', 'nightly'], slackInstalled: false, connectorState: 'needs_account', ready: true, buildStarted: false };
+  api = { secrets: new Map(), triggers: ['issues-labeled', 'nightly'], slackInstalled: false, connectorState: 'needs_account', connectorsSynced: true, ready: true, buildStarted: false };
 
   mkdirSync(join(root, 'bin'));
   writeFileSync(join(root, 'bin', 'gh'), `#!${process.execPath}\n${FAKE_GH}`);
@@ -171,7 +173,11 @@ beforeEach(() => {
         const channels = (body?.channels as string[]) ?? [];
         return Response.json({ connected: true, team: 'Synthetic Slack', bot_user_id: 'U0BOT', results: channels.map((channel) => ({ channel, id: `C0${channel.toUpperCase()}`, status: channel === 'secret-room' ? 'needs_invite' : 'joined' })) });
       }
-      if (path === `${EX}/connectors`) return Response.json({ connectors: [{ slug: 'tickets', provider: 'mcp', state: api.connectorState, authSecret: null, secretSet: false }] });
+      if (path === `${EX}/connectors`) return Response.json({ connectors: api.connectorsSynced ? [{ slug: 'tickets', provider: 'mcp', state: api.connectorState, authSecret: null, secretSet: false }] : [] });
+      if (path === `${EX}/connectors/sync`) {
+        api.connectorsSynced = true;
+        return Response.json({ synced: 1, errors: [] });
+      }
       if (path === `${EX}/connectors/tickets/connect`) return Response.json({ provider: 'mcp', connectUrl: `${origin}/connect/tickets`, connected: false });
       if (path === `${BASE}/model-picker`) return Response.json({ defaultModel: 'synthetic/model', models: { 'synthetic/model': { available: true } } });
       return Response.json({ error: `fake api: no route ${request.method} ${path}` }, { status: 404 });
@@ -237,6 +243,8 @@ test('first run: does the mechanics, hands the person what is theirs, exits 4; a
   });
   for (const phase of out.phases) expect(typeof phase.duration_ms).toBe('number');
   expect(out.user_actions.map((a) => a.kind).sort()).toEqual(['connector_sign_in', 'secret_request', 'slack_install']);
+  // The connectors were on the workspace already: no sync.
+  expect(posts(`${EX}/connectors/sync`)).toHaveLength(0);
 
   // The approved local value went up as-is; the webhook secret was generated and signs the hook.
   expect(api.secrets.get('LOCAL_TOKEN')).toBe(LOCAL_VALUE);
@@ -280,6 +288,19 @@ test('first run: does the mechanics, hands the person what is theirs, exits 4; a
   expect(third.code).toBe(0);
   expect(JSON.parse(third.stdout).doctor.ready).toBe(true);
 }, 60_000);
+
+test('a connector kortix.yaml declares but the workspace has not applied yet is synced, then offered for sign-in', async () => {
+  // A push straight to GitHub, or a branch switched after the first ship: no sync has run.
+  api.connectorsSynced = false;
+  const run = await runCli(ONBOARD);
+  expect(run.code).toBe(4);
+  const out = JSON.parse(run.stdout) as { phases: Array<{ name: string; status: string; detail: string }>; user_actions: Array<{ kind: string }> };
+  expect(posts(`${EX}/connectors/sync`)).toHaveLength(1);
+  const connectors = out.phases.find((p) => p.name === 'connectors')!;
+  expect(connectors.status).toBe('waiting_on_person');
+  expect(connectors.detail).toContain('tickets needs a person');
+  expect(out.user_actions.map((a) => a.kind)).toContain('connector_sign_in');
+});
 
 test('--wait: the run waits while the setup page has steps left, then finishes by itself when the person is done', async () => {
   const args = ONBOARD.map((arg) => (arg === 'eng,#secret-room' ? 'eng' : arg)).concat('--wait', '--wait-timeout', '30');

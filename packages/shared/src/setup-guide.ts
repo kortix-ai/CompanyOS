@@ -296,6 +296,11 @@ message of step 3.
    the shape: one repository (a monorepo is one: several apps, one
    repository), or one product over several repositories (a web app, an API,
    services, each in its own). The shape decides where Kortix lives (step 3).
+   Check the person's rights on each code repository:
+   \`gh api repos/<owner>/<repo> --jq .permissions\`. \`onboard\` creates the
+   GitHub webhooks with their \`gh\`, which needs \`admin\`. Without it, say so on
+   the \`Found:\` line and name who can: an owner of the repository runs
+   \`kortix doctor --loops --fix\` once, or the triggers poll instead.
 3. **The software.** Start from the plan's \`integrations\` (each has a
    category and its evidence), \`unrecognized_services\` and \`mcp_servers\`.
    Add what you find yourself: SDK imports, webhook handlers, secret names in
@@ -544,7 +549,10 @@ repository, the step 3 answer decides how they land:
   open a pull request instead.
 - **A pull request:** \`git switch -c kortix/setup\`, commit, push,
   \`gh pr create\`. When the person has merged it, switch to the default
-  branch, pull, and go on.
+  branch, pull, and go on. Never point the workspace at \`kortix/setup\` to
+  start before the merge: many repositories delete a merged branch
+  (\`delete_branch_on_merge\`), and the workspace would then read a branch
+  that no longer exists.
 
 ## 5. Connect the models
 
@@ -601,6 +609,12 @@ setup page opens in your browser: connect what it lists. I continue when every
 row is done." Never print those links in the terminal. \`--wait\` keeps the run
 going until the page shows every row done, then finishes the phases that
 waited.
+
+Run the command as written. Never add \`--no-open\` and never drop \`--wait\`:
+the page is where the person, or you with their yes (rule 10), makes every
+click. Wait for \`onboard\` to exit before you end your turn: ending the turn
+can stop a command that runs in the background, and a question to the person
+never waits on a running \`onboard\`.
 
 A repository webhook that already sends the same event to another Kortix
 workspace is left in place and reported in the \`webhooks\` detail. Tell the

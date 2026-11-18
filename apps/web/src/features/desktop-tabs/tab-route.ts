@@ -39,7 +39,9 @@ export type TabRoute =
         | 'goals'
         | 'inbox'
         | 'memory'
-        | 'members';
+        | 'members'
+        | 'review'
+        | 'setup';
     };
 
 const PAGES = new Set([
@@ -52,6 +54,8 @@ const PAGES = new Set([
   'inbox',
   'memory',
   'members',
+  'review',
+  'setup',
 ]);
 
 // A real app path is percent-encoded; a raw control character (a newline)

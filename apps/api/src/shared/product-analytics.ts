@@ -85,7 +85,17 @@ export type ProductEvent =
   /** A paid plan ended. `store`, `previous_tier`, `amount_usd`. */
   | 'subscription_cancelled'
   /** A one-off credit purchase was paid. `amount_usd`, `store`. */
-  | 'credits_topped_up';
+  | 'credits_topped_up'
+  // Guided setup (/setup.md), reported by the CLI through POST /v1/cli/setup-events (cli/setup-events.ts).
+  // Every one carries `setup_id` (one run), `agent` (the coding agent running the guide) and `cli_version`.
+  /** `kortix plan`, the guide's step 1. `has_workspace`, `has_manifest`. Once per setup_id. */
+  | 'setup_started'
+  /** `kortix templates add`. `template`: our template id. Once per setup_id and template. */
+  | 'setup_template_added'
+  /** Each `kortix onboard` run. `exit_code`, `phase_<name>` statuses, `waited_s` on the setup page, `steps_left`, counts. */
+  | 'setup_onboard_run'
+  /** The first green `kortix doctor --loops` or onboard. `via`, `minutes_since_start`. Once per setup_id. */
+  | 'setup_ready';
 
 export type ProductEventProperties = Record<string, string | number | boolean | null | undefined>;
 

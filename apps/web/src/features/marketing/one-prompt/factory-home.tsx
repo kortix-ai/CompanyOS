@@ -15,11 +15,11 @@ import { Github } from '@kortix/ui/internal/icons/github';
 import { DEFAULT_COMPUTE_SPEC, ENTRY_TIER_USD } from '@kortix/ui/internal/billing/compute-pricing';
 import { ArrowRightIcon, ArrowUpRightIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 import { COMPUTE_HOURLY, FAQ, FREE_COMPUTE_USD, TEAMS } from './factory-content';
 import { heroRuns } from './hero-runs';
-import { HoopDots, HoopLine, hoopVars, LoopmaxxingWordmark } from './hoop';
+import { HoopDots, HoopLine, hoopVars, LoopmaxxingWordmark, WORDMARK_VARIANTS, WordmarkVariantContext, type WordmarkVariant } from './hoop';
 import { HOOP_PALETTE } from './hoop-palette';
 import type { LoopView } from './loops-content';
 import { CopyGuideProvider } from './copy-guide';
@@ -227,7 +227,7 @@ function PageEnd({ prompt }: { prompt: string }) {
           <Link
             href="/loopmaxxing"
             aria-label="Loopmaxxing"
-            className="from-foreground/60 flex justify-center bg-linear-to-b to-transparent bg-clip-text pb-10 font-mono text-[14cqi] leading-none font-medium tracking-tight whitespace-nowrap text-transparent uppercase"
+            className="from-foreground/60 flex justify-center bg-linear-to-b to-transparent bg-clip-text pb-10 font-mono text-[14cqi] leading-none font-medium whitespace-nowrap text-transparent uppercase"
           >
             <LoopmaxxingWordmark />
           </Link>
@@ -271,6 +271,7 @@ function useSectionInView(): string | null {
  * The repo's GitHub stars, as the site navbar shows them: the mark always, the
  * count once it loads. `stars`, not `formattedStars`, decides: the formatter
  * returns an en dash for a missing count, and a missing count shows nothing.
+ * Phones show only the wordmark and Copy prompt: the stars start at `sm`.
  */
 function GitHubStars() {
   const { stars, formattedStars, loading } = useGitHubStars();
@@ -281,12 +282,23 @@ function GitHubStars() {
       target="_blank"
       rel="noopener noreferrer"
       aria-label={known ? `Kortix on GitHub, ${formattedStars} stars` : 'Kortix on GitHub'}
-      className="text-muted-foreground hover:text-foreground mr-2 inline-flex h-8 items-center gap-1.5 text-sm transition-colors"
+      className="text-muted-foreground hover:text-foreground mr-2 hidden h-8 items-center gap-1.5 text-sm transition-colors sm:inline-flex"
     >
       <Github className="size-4 shrink-0" />
       {known ? <span className="tabular-nums">{formattedStars}</span> : null}
     </a>
   );
+}
+
+const noSubscription = () => () => {};
+
+/**
+ * `?wordmark=infinity|linked|split` picks the wordmark's "OO" on the whole
+ * page, the takeover included. Missing or unknown: infinity, the default.
+ */
+function useWordmarkVariant(): WordmarkVariant {
+  const asked = useSyncExternalStore(noSubscription, () => new URLSearchParams(window.location.search).get('wordmark'), () => null);
+  return WORDMARK_VARIANTS.find((variant) => variant === asked) ?? 'infinity';
 }
 
 /**
@@ -307,20 +319,31 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
   const reference = first ? REFERENCE_REPOS[first.id] : undefined;
   useForceDarkPage();
   const active = useSectionInView();
+  const variant = useWordmarkVariant();
   return (
+    <WordmarkVariantContext.Provider value={variant}>
     <CopyGuideProvider>
       <div style={hoopVars} className="dark bg-background text-foreground relative min-h-screen overflow-x-clip [color-scheme:dark]">
         <header className="bg-background/80 border-border sticky top-0 z-30 border-b backdrop-blur">
           <div className={cn(COLUMN, 'flex h-16 items-center justify-between gap-4')}>
-            <div className="flex items-center gap-4">
-              <a href={KORTIX} aria-label="Kortix" className="text-foreground">
+            {/* The logo is one link home: /loopmaxxing on every host (loopmaxxing.sh sends that path to its root). This
+                page is home, so a click scrolls it to the top instead of leaving it. */}
+            <Link
+              href="/loopmaxxing"
+              aria-label="Loopmaxxing by Kortix, home"
+              onClick={(event) => {
+                event.preventDefault();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="group/wordmark text-foreground hit-area-y-3 flex items-center gap-4"
+            >
+              <span aria-hidden className="inline-flex">
                 <KortixLogo size={16} variant="logomark" />
-              </a>
-              {/* /loopmaxxing on every host: loopmaxxing.sh sends that path to its own root. */}
-              <Link href="/loopmaxxing" className="group/wordmark text-foreground font-mono text-sm font-medium tracking-wider uppercase">
-                <LoopmaxxingWordmark />
-              </Link>
-            </div>
+              </span>
+              <span aria-hidden className="font-mono text-base font-medium uppercase">
+                <LoopmaxxingWordmark tracking="wide" />
+              </span>
+            </Link>
             <nav className="text-muted-foreground hidden items-center gap-8 text-sm md:flex">
               {NAV.map((item) => (
                 <Link
@@ -391,7 +414,7 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
           <section id="factories" className={cn(COLUMN, SECTION, 'scroll-mt-16')}>
             <SplitHeading title={`Start with a factory, then loop anything`} lead={first?.line ?? 'Issues, failing tests and errors in. Verified pull requests out.'}>
               {reference ? (
-                <a href={reference} className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors">
+                <a href={reference} className="text-muted-foreground hover:text-foreground hit-area-y-4 inline-flex items-center gap-1.5 text-sm transition-colors">
                   See the template
                   <ArrowRightIcon className="size-3.5" />
                 </a>
@@ -458,5 +481,6 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
         <PageEnd prompt={prompt} />
       </div>
     </CopyGuideProvider>
+    </WordmarkVariantContext.Provider>
   );
 }

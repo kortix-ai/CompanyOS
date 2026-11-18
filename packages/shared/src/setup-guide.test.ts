@@ -83,6 +83,25 @@ describe('templates in the setup guide', () => {
     expect(guide).toContain('--channels\` takes the Slack channels the reply named');
   });
 
+  test('the guide lets the person keep Kortix in their repository, reuses its skills, and proves the dev environment', () => {
+    const guide = setupGuide();
+    // Where Kortix lives: this repository for one repository or a monorepo, a new one for several.
+    expect(guide).toContain('a) this repository (recommended for one repository or a monorepo)');
+    expect(guide).toContain('b) a new repository Kortix hosts (recommended for a product over');
+    expect(guide).toContain('skills: { <name>: .claude/skills/<name> }');
+    expect(guide).toContain('agents.<name>.prompt_file: .claude/agents/<name>.md');
+    // Every app found, not only the ones a loop calls.
+    expect(guide).toContain('whether a loop calls it or not');
+    expect(guide).toContain('"Anything missing?"');
+    // The dev environment runs for real on the workspace image, judged from the tool output.
+    expect(guide).toContain('kortix sessions new --agent <agent> --json --prompt');
+    expect(guide).toContain('kortix sessions wait-for <session_id> --timeout 1800 --json');
+    expect(guide).toContain('kortix sessions log <session_id> --json --limit 200');
+    expect(guide).toContain('never from the agent\'s summary');
+    // A browser-capable agent makes the clicks; never a password or a code.
+    expect(guide).toContain('Never type a password, a one-time code, a card number');
+  });
+
   test('the guide uses none of the words its plain-words rule bans, outside that rule', () => {
     const guide = setupGuide();
     const rule = guide.slice(guide.indexOf('6. **Plain words.**'), guide.indexOf('7. **Be brief.**'));

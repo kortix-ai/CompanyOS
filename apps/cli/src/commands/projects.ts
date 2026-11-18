@@ -29,14 +29,16 @@ import {
   takeFlagValue,
   tokenRejectedLine,
 } from '../command-helpers.ts';
-import { appendGitExcludeEntries } from '../git-exclude.ts';
 import { authGitEnv } from '../git-ops.ts';
 import { runGit } from '../git-run.ts';
 import { configureProjectGitAuth, resolveProjectGitTarget } from '../project-git.ts';
 import {
   clearLink,
+  isGitCheckout,
   isKortixProject,
+  LINK_LOCATION,
   loadLink,
+  NotAGitCheckoutError,
   resolveProjectId,
   saveLink,
 } from '../project-link.ts';
@@ -58,7 +60,7 @@ const HELP = help`Usage: kortix workspaces <subcommand> [options]
 
 A workspace is one company's Kortix: its people, agents, sessions, secrets,
 connectors, billing and config repo. You can belong to several workspaces;
-one is the default, and a linked directory (.kortix/link.json) overrides it.
+one is the default, and a linked checkout (git config kortix.workspace) overrides it.
 
 Subcommands:
   create <name>        Create a workspace; prints its id (--json).
@@ -80,10 +82,11 @@ Subcommands:
                        instead of the active one.
   unset                Clear the global default workspace. --host <name> clears
                        that host's instead.
-  link [<id>]          Bind cwd to a workspace (writes .kortix/link.json).
+  link [<id>]          Bind this git checkout to a workspace (git config
+                       kortix.workspace; never committed).
                        --host <name> binds a workspace on that logged-in host,
                        authenticating with its stored key.
-  unlink               Remove .kortix/link.json from cwd
+  unlink               Remove this checkout's workspace link
   open [<id>]          Open one workspace in the browser
   clone [<id>] [dir]   Clone the workspace's config repo through the
                        authenticated Kortix git proxy. Falls back to your local
@@ -101,7 +104,7 @@ Subcommands:
 
 An explicit <id> on info/open/rm resolves on its own: tries the active host
 first, then — unless you pass --host — scans every other logged-in host for
-it. A directory link (.kortix/link.json) always wins over the default; the
+it. A checkout's link (git config kortix.workspace) always wins over the default; the
 default is what commands use anywhere else on your machine.
 
 The workspace id is the workspace_id field of --json output (project_id, the
@@ -836,26 +839,22 @@ export function saveClonedProjectLink(
   host: string | undefined,
   hostUrl: string,
 ): void {
+  // Always into the clone's git config. A repository an older CLI shipped
+  // still holds a committed `.kortix/link.json`: the clone keeps it untouched
+  // (a fresh clone stays clean), and the next `kortix ship` deletes it.
   const existing = loadLink(repoRoot);
-  if (
-    existing?.project_id !== project.project_id ||
-    existing.account_id !== project.account_id ||
-    existing.host !== host ||
-    existing.host_url !== hostUrl
-  ) {
-    saveLink(
-      {
-        project_id: project.project_id,
-        account_id: project.account_id,
-        host,
-        host_url: hostUrl,
-        linked_at: new Date().toISOString(),
-      },
-      repoRoot,
-    );
-  }
-
-  appendGitExcludeEntries(repoRoot, ['/.kortix/link.json'], 'Kortix local workspace binding');
+  saveLink(
+    {
+      project_id: project.project_id,
+      account_id: project.account_id,
+      host,
+      host_url: hostUrl,
+      linked_at:
+        existing?.project_id === project.project_id ? existing.linked_at : new Date().toISOString(),
+    },
+    repoRoot,
+    { keepLegacyFile: true },
+  );
 }
 
 /** Resolve clone auth without ever placing a credential in the remote URL.
@@ -1553,16 +1552,19 @@ async function projectsLink(arg?: string, hostArg?: string): Promise<number> {
     return 1;
   }
 
-  // Refuse to scatter `.kortix/link.json` into random directories. A
-  // project is only "Kortix-linkable" if it already has a `.kortix/`
-  // dir (from `kortix init`) or a `kortix.yaml` at the root.
+  // Only a Kortix config repo is linkable: a `kortix.yaml` at the root.
   if (!isKortixProject()) {
     process.stderr.write(
-      `${status.err(`Not a Kortix config repo — no .kortix/ or kortix.yaml in ${process.cwd()}.`)}\n`,
+      `${status.err(`Not a Kortix config repo — no kortix.yaml in ${process.cwd()}.`)}\n`,
     );
     process.stderr.write(
       `  ${C.dim}Run ${C.reset}${C.cyan}kortix init${C.reset}${C.dim} here first to scaffold one.${C.reset}\n`,
     );
+    return 1;
+  }
+  // The link lives in the checkout's git config: refuse before any request.
+  if (!isGitCheckout()) {
+    process.stderr.write(`${status.err(new NotAGitCheckoutError(process.cwd()).message)}\n`);
     return 1;
   }
 
@@ -1606,15 +1608,21 @@ async function projectsLink(arg?: string, hostArg?: string): Promise<number> {
   // A --host link binds that host: the link record must name it so later
   // commands in this directory reach the project through its credential.
   const hostName = hostArg ?? activeHostName() ?? 'default';
-  saveLink({
-    project_id: target.project_id,
-    account_id: target.account_id,
-    host: hostName,
-    host_url: auth.api_base,
-    linked_at: new Date().toISOString(),
-  });
+  try {
+    saveLink({
+      project_id: target.project_id,
+      account_id: target.account_id,
+      host: hostName,
+      host_url: auth.api_base,
+      linked_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    if (!(err instanceof NotAGitCheckoutError)) throw err;
+    process.stderr.write(`${status.err(err.message)}\n`);
+    return 1;
+  }
   process.stdout.write(
-    `${status.ok(`Linked ${C.bold}${target.name}${C.reset}${C.dim} → .kortix/link.json${C.reset}`)}\n`,
+    `${status.ok(`Linked ${C.bold}${target.name}${C.reset}${C.dim} → ${LINK_LOCATION}${C.reset}`)}\n`,
   );
   process.stdout.write(
     `  ${C.dim}host:       ${C.reset}${hostName} ${C.faded}(${auth.api_base})${C.reset}\n`,

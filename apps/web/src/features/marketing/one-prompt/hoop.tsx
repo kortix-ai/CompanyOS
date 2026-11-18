@@ -1,9 +1,10 @@
 'use client';
 
 import { cn } from '@kortix/ui';
-import type { CSSProperties } from 'react';
+import { createContext, useContext, type CSSProperties, type ReactNode } from 'react';
 
-import { HOOP_PALETTE } from './hoop-palette';
+import { AsciiHoop } from './ascii-hoop';
+import { HOOP_PALETTE, SEGMENTS } from './hoop-palette';
 
 /**
  * The hula hoop, Loopmaxxing's motif: its four colors used sparingly on a
@@ -19,74 +20,78 @@ export function hoop(index: number): string {
   return `var(--hoop-${((index % HOOP_PALETTE.length) + HOOP_PALETTE.length) % HOOP_PALETTE.length})`;
 }
 
+/** The word's letter-spacing: the header's small caps run wide, the big word runs tight. The O's take the same. */
+const TRACKING = { wide: '0.05em', tight: '-0.025em' } as const;
+
+/** How the wordmark draws its "OO": one infinity (the default), two hoops linked, or two hoops apart. */
+export type WordmarkVariant = 'infinity' | 'linked' | 'split';
+export const WORDMARK_VARIANTS: readonly WordmarkVariant[] = ['infinity', 'linked', 'split'];
+
+/** The variant every wordmark below it draws, unless it names its own. */
+export const WordmarkVariantContext = createContext<WordmarkVariant>('infinity');
+
+/** One O of `split`: the hoop facing the reader, its tube as thick as a letter's stroke. */
+const LETTER_O = { shape: 'ring', tube: 0.42 } as const;
+
 /**
- * The hoop's segments as the toy has them: long and short pieces, never one
- * color twice in a row. `color` indexes the palette; lengths are percent.
+ * A letter slot: exactly the width plain text gives `letters` letters (1ch
+ * each, plus the tracking between them) and 1cap tall on the baseline. The
+ * hoop's canvas covers the ink box of the font's real "O"s inside it, so the
+ * letters after it land where plain text puts them, at any size.
  */
-const SEGMENTS: ReadonlyArray<{ color: number; length: number }> = [
-  { color: 3, length: 7 },
-  { color: 2, length: 16 },
-  { color: 1, length: 15 },
-  { color: 0, length: 12 },
-  { color: 2, length: 9 },
-  { color: 0, length: 14 },
-  { color: 1, length: 17 },
-  { color: 0, length: 10 },
-];
-
-/** Where each segment starts on the ring, in percent. */
-const STARTS = SEGMENTS.map((_, index) => SEGMENTS.slice(0, index).reduce((sum, segment) => sum + segment.length, 0));
-
-/** The palette index of the segment at a point of the ring, `fraction` of the way round (0 to 1). */
-export function hoopColorAt(fraction: number): number {
-  const percent = (((fraction % 1) + 1) % 1) * 100;
-  for (let index = SEGMENTS.length - 1; index >= 0; index -= 1) {
-    if (percent >= STARTS[index]!) return SEGMENTS[index]!.color;
-  }
-  return SEGMENTS[0]!.color;
-}
-
-/** The segments along an ellipse. */
-function Segments({ cx, cy, rx, ry, width }: { cx: number; cy: number; rx: number; ry: number; width: number }) {
-  return SEGMENTS.map((segment, index) => {
-    const offset = -STARTS[index]!;
-    return (
-      <ellipse
-        key={index}
-        cx={cx}
-        cy={cy}
-        rx={rx}
-        ry={ry}
-        fill="none"
-        pathLength={100}
-        stroke={hoop(segment.color)}
-        strokeWidth={width}
-        strokeDasharray={`${segment.length} ${100 - segment.length}`}
-        strokeDashoffset={offset}
-      />
-    );
-  });
-}
-
-/** A ring seen from above: one O of the wordmark. It spins without end; the two O's turn opposite ways. */
-function HoopRing({ className, style }: { className?: string; style?: CSSProperties }) {
+function Slot({ letters, children }: { letters: 1 | 2; children: ReactNode }) {
   return (
-    <svg aria-hidden viewBox="0 0 100 100" style={style} className={cn('shrink-0 animate-[spin_6s_linear_infinite] motion-reduce:animate-none', className)}>
-      <Segments cx={50} cy={50} rx={40} ry={40} width={11} />
-    </svg>
+    <span
+      className="relative inline-block h-[1cap] align-baseline"
+      style={{
+        width: letters === 1 ? '1ch' : 'calc(2ch + var(--wordmark-tracking))',
+        // Letter-spacing follows every character but never an inline box, so the slot carries it as a right margin.
+        marginRight: 'var(--wordmark-tracking)',
+      }}
+    >
+      {children}
+    </span>
   );
 }
 
-/** LOOPMAXXING with its two O's as hoops. The caller's link carries `group/wordmark`. Screen readers read the word. */
-export function LoopmaxxingWordmark({ className }: { className?: string }) {
+/**
+ * LOOPMAXXING with its "OO" drawn by `AsciiHoop`: one infinity (the default),
+ * two hoops interlocked (`linked`) or two hoops turning opposite ways (`split`).
+ * Below 40 px they draw in pixel squares. Screen readers read the word.
+ */
+export function LoopmaxxingWordmark({
+  className,
+  tracking = 'tight',
+  variant,
+}: {
+  className?: string;
+  tracking?: keyof typeof TRACKING;
+  variant?: WordmarkVariant;
+}) {
+  const fromContext = useContext(WordmarkVariantContext);
+  const shown = variant ?? fromContext;
   return (
-    <span className={cn('inline-flex items-center', className)}>
+    <span
+      className={cn('inline-block whitespace-nowrap', className)}
+      style={{ '--wordmark-tracking': TRACKING[tracking], letterSpacing: 'var(--wordmark-tracking)' } as CSSProperties}
+    >
       <span className="sr-only">Loopmaxxing</span>
-      {/* The rings are sized in em, not on the spacing scale, so the word scales as one piece: the header's mark, the page's last line. */}
-      <span aria-hidden className="inline-flex items-center">
+      <span aria-hidden>
         L
-        <HoopRing style={{ width: '0.8em', height: '0.8em', marginLeft: '0.05em' }} />
-        <HoopRing className="[animation-direction:reverse]" style={{ width: '0.8em', height: '0.8em', marginLeft: '-0.1em', marginRight: '0.05em' }} />
+        {shown === 'split' ? (
+          <>
+            <Slot letters={1}>
+              <AsciiHoop {...LETTER_O} letters={1} />
+            </Slot>
+            <Slot letters={1}>
+              <AsciiHoop {...LETTER_O} letters={1} phase={0.5} direction={-1} />
+            </Slot>
+          </>
+        ) : (
+          <Slot letters={2}>
+            <AsciiHoop shape={shown} letters={2} tube={shown === 'linked' ? 0.38 : 0.3} />
+          </Slot>
+        )}
         PMAXXING
       </span>
     </span>

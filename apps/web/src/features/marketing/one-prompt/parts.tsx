@@ -1,6 +1,7 @@
 'use client';
 
 import { PROD_TARGET, setupPromptFor, setupTarget, type SetupTarget } from '@kortix/shared/setup-guide';
+import { track } from '@/lib/track';
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
 
 import { COPY_GUIDE_ATTR, useCopyGuide } from './copy-guide';
@@ -125,8 +126,12 @@ export function CopyButton({
   const { copied, copy: write, flash } = useCopy(prompt);
   const guide = useCopyGuide();
   // Every copy opens the page's guide: where to paste the prompt next.
-  const copy = async () => {
-    if (await write()) guide?.open(prompt);
+  const copy = async (method: 'button' | 'key' = 'button') => {
+    if (!(await write())) return;
+    // A template prompt names its template (loopPrompt): "The template is <id>."
+    const template = /The template is ([a-z0-9-]+)\./.exec(prompt)?.[1] ?? 'none';
+    track('setup_prompt_copied', { template, method, location: window.location.pathname });
+    guide?.open(prompt);
   };
   const copyRef = useRef(copy);
   const flashRef = useRef(flash);
@@ -150,7 +155,7 @@ export function CopyButton({
       event.preventDefault();
       root.dataset[KEY_DOWN_ATTR] = 'down';
       if (event.repeat) return;
-      void copyRef.current().then(() => window.dispatchEvent(new Event(KEY_COPIED_EVENT)));
+      void copyRef.current('key').then(() => window.dispatchEvent(new Event(KEY_COPIED_EVENT)));
     };
     const onKeyUp = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() === COPY_KEY) release();
@@ -171,12 +176,13 @@ export function CopyButton({
       type="button"
       variant={variant}
       size={size}
-      onClick={copy}
+      onClick={() => void copy()}
       aria-keyshortcuts={icon === 'shortcut' ? COPY_KEY.toUpperCase() : undefined}
       // The key sits as far from the right edge as from the top and bottom: (h-10 - size-5) / 2.
       className={cn(
-        size === 'md' && 'hit-area-y-1',
-        icon === 'shortcut' && (size === 'sm' ? 'pr-2' : 'pr-2.5'),
+        size === 'md' ? 'hit-area-y-1' : 'hit-area-y-2',
+        // A phone has no C key: the chip shows from `sm` up.
+        icon === 'shortcut' && (size === 'sm' ? 'sm:pr-2' : 'sm:pr-2.5'),
         // Held key: the button dims as under a press, the chip sinks one pixel (color only with reduced motion).
         icon === 'shortcut' && 'in-data-[copy-key=down]:opacity-85',
         className,
@@ -190,7 +196,7 @@ export function CopyButton({
       {icon === 'none' && copied ? <SolidCheckIcon aria-hidden className="size-4" /> : null}
       {icon === 'shortcut' ? copied ? <SolidCheckIcon aria-hidden className={cn(key, 'shrink-0')} /> : <Kbd
             className={cn(
-              'bg-background/20 duration-fast text-inherit transition-[translate,background-color] in-data-[copy-key=down]:translate-y-px in-data-[copy-key=down]:bg-background/45 motion-reduce:in-data-[copy-key=down]:translate-y-0',
+              'bg-background/20 duration-fast text-inherit max-sm:hidden transition-[translate,background-color] in-data-[copy-key=down]:translate-y-px in-data-[copy-key=down]:bg-background/45 motion-reduce:in-data-[copy-key=down]:translate-y-0',
               key,
             )}
           >{COPY_KEY.toUpperCase()}</Kbd> : null}

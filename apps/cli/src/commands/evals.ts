@@ -31,7 +31,7 @@ import {
 } from '@kortix/sdk';
 import type { WorkspaceEvalJob, WorkspaceEvalJobConfig, WorkspaceEvalJobFilters, WorkspaceEvalJobStatus, WorkspaceEvalTrial } from '@kortix/sdk';
 import type { Auth } from '../api/auth.ts';
-import { withCliErrors } from '../api/client.ts';
+import { ApiError, createApiClient, withCliErrors } from '../api/client.ts';
 import { splitHelp } from '../command-argv.ts';
 import { emitJson, fail, resolveProjectContext, surfaceApiError, takeFlagBool, takeFlagValue, takeFlagValues } from '../command-helpers.ts';
 import { C, help, pad } from '../style.ts';
@@ -542,11 +542,11 @@ async function judge(argv: string[], json: boolean): Promise<number> {
   if (!criteria.size) return fail('Pass at least one --criterion <name>="<what earns 1.0>".');
   const creds = sessionCredentials();
   if (!creds) return fail(`No session credentials: set KORTIX_TOKEN and KORTIX_API_URL, or run inside a Kortix sandbox (${JUDGE_ENV_FILE}).`);
-  const gateway = `${new URL(creds.apiUrl).origin}/v1/llm/v1`;
-  const headers = { Authorization: `Bearer ${creds.token}`, 'content-type': 'application/json' };
+  // The LLM gateway is a Kortix API route (/v1/llm/v1/*): it goes through the SDK client.
+  const gateway = (timeoutMs: number) => createApiClient({ apiBase: creds.apiUrl, token: creds.token, signal: AbortSignal.timeout(timeoutMs) });
   if (!model) {
     // The first model the gateway serves this session.
-    const listed = (await fetch(`${gateway}/models`, { headers, signal: AbortSignal.timeout(30_000) }).then((r) => r.json()).catch(() => null)) as { data?: Array<{ id: string }> } | null;
+    const listed = await gateway(30_000).get<{ data?: Array<{ id: string }> }>('/llm/v1/models').catch(() => null);
     model = listed?.data?.[0]?.id ?? '';
     if (!model) return fail('No model: pass --model <id> or set KORTIX_EVAL_JUDGE_MODEL.');
   }
@@ -573,18 +573,14 @@ async function judge(argv: string[], json: boolean): Promise<number> {
   ].join('\n');
   let reply = '';
   for (let attempt = 1; attempt <= 3; attempt += 1) {
-    const res = await fetch(`${gateway}/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ model, temperature: 0, max_tokens: 4_000, messages: [{ role: 'user', content: prompt }] }),
-      signal: AbortSignal.timeout(180_000),
-    }).catch((err) => err as Error);
-    if (res instanceof Error || !res.ok) {
-      if (attempt === 3) return fail(`The judge model did not answer: ${res instanceof Error ? res.message : `HTTP ${res.status} ${(await res.text()).slice(0, 300)}`}`);
+    const body = await gateway(180_000)
+      .post<{ choices?: Array<{ message?: { content?: string | null } }> }>('/llm/v1/chat/completions', { model, temperature: 0, max_tokens: 4_000, messages: [{ role: 'user', content: prompt }] })
+      .catch((err) => err as Error);
+    if (body instanceof Error) {
+      if (attempt === 3) return fail(`The judge model did not answer: ${body instanceof ApiError && body.status ? `HTTP ${body.status} ` : ''}${body.message.slice(0, 300)}`);
       await Bun.sleep(2_000 * attempt);
       continue;
     }
-    const body = (await res.json()) as { choices?: Array<{ message?: { content?: string | null } }> };
     reply = body.choices?.[0]?.message?.content ?? '';
     if (parseJudgeReply(reply, names)) break;
   }

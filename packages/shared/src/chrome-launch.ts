@@ -7,8 +7,9 @@
  * response, CLI line or prompt links to `/settings/chrome`, which would open
  * Profile instead.
  *
- * `KORTIX_CHROME_ENABLED` still serves `/v1/chrome/*` on dev, so the extension
- * can pair while it is built (an operator turns the flag on for that project:
+ * `KORTIX_CHROME_ENABLED` serves `/v1/chrome/*` on every deployment, so the
+ * Chrome Web Store build signs in and the store can review it before launch
+ * (an operator turns the flag on for a reviewer or test project:
  * `PUT /v1/admin/api/projects/:id/features`). To launch, set this to true: the web surfaces,
  * the flag and the links come back together.
  */

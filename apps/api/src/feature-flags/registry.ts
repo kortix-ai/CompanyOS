@@ -462,7 +462,7 @@ const FLAGS: readonly FeatureFlagDef[] = [
     description:
       "Let a session drive your own Chrome, with your logins, through the Kortix in Chrome extension: it opens its tabs in a group named after the session, and you can take over or stop it at any time.",
     stability: 'experimental',
-    // Off on staging and prod until the Chrome Web Store listing is public.
+    // Where the API serves /v1/chrome (KORTIX_CHROME_ENABLED: local, dev, staging, prod).
     available: () => config.KORTIX_CHROME_ENABLED,
     // Not launched (CHROME_LAUNCHED, #11436): the web has no Chrome surface, so
     // no project gets it by default and the catalog does not offer it. An

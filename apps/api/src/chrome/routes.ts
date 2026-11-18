@@ -73,8 +73,8 @@ function notFound(c: Context) {
 }
 
 /**
- * Until launch, Kortix in Chrome exists only where KORTIX_CHROME_ENABLED is on
- * (local and dev). Off, every /v1/chrome route answers 404, so the extension
+ * Kortix in Chrome exists only where KORTIX_CHROME_ENABLED is on (local, dev,
+ * staging and prod deploys set it). Off, every /v1/chrome route answers 404, so the extension
  * says this server does not have Kortix in Chrome.
  */
 export const chromeMasterSwitch: MiddlewareHandler = async (c, next) => {

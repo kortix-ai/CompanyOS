@@ -2226,6 +2226,11 @@
       "resume": "Reprendre",
       "agentIsWorking": "{agent} travaille",
       "needsYouOn": "Vous attend : {header}"
+    },
+    "panel": {
+      "outputNew": "Nouveau",
+      "outputUpdated": "Mis à jour",
+      "resizePane": "Redimensionner le panneau"
     }
   },
   "agents": {

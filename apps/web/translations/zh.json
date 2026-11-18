@@ -2226,6 +2226,11 @@
       "resume": "继续",
       "agentIsWorking": "{agent} 正在处理",
       "needsYouOn": "需要你：{header}"
+    },
+    "panel": {
+      "outputNew": "新",
+      "outputUpdated": "已更新",
+      "resizePane": "调整窗格大小"
     }
   },
   "agents": {

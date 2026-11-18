@@ -74,9 +74,15 @@ const UNAUTHORIZED = (description: string): Answer => ({
   headers: { 'WWW-Authenticate': `Bearer error="invalid_token", error_description="${description}"` },
 });
 
+/** Above this, the text block points at structuredContent instead of repeating it (downloads reach 25 MB). */
+const MAX_TEXT_COPY_CHARS = 64 * 1024;
+
 function toolResult(output: unknown): Record<string, unknown> {
   const structured = output && typeof output === 'object' && !Array.isArray(output) ? (output as Record<string, unknown>) : { result: output };
-  return { content: [{ type: 'text', text: JSON.stringify(structured) }], structuredContent: structured };
+  const json = JSON.stringify(structured);
+  // MCP asks for the JSON in a text block too; a large answer would travel twice.
+  const text = json.length <= MAX_TEXT_COPY_CHARS ? json : `The result is ${json.length} characters of JSON: read structuredContent.`;
+  return { content: [{ type: 'text', text }], structuredContent: structured };
 }
 
 function toolError(message: string): Record<string, unknown> {

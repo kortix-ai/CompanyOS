@@ -96,7 +96,7 @@ const GOOGLE = {
  * deployment's Google project must list every one (GCP `kortix-connectors`
  * for staging and prod, `kortix-connectors-dev` for local and dev).
  */
-const GOOGLE_IDENTITY = ['openid', 'https://www.googleapis.com/auth/userinfo.email'];
+const GOOGLE_IDENTITY = ['openid', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile'];
 const googleScope = (name: string) => `https://www.googleapis.com/auth/${name}`;
 const DRIVE = googleScope('drive');
 

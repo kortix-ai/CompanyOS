@@ -108,7 +108,7 @@ The single flow that, if green, proves the platform end-to-end. Each substep lin
 
 1. `kortix init <name> -y` → creates a fresh standalone `<name>/` directory, writes `kortix.yaml`, `agents/`, `skills/` and `memory/`, wires agent skill, and runs `git init -b main`. No API call. (§2)
 2. `kortix login --token $PAT` → `GET /accounts/me` → 200, host saved active. (§2)
-3. `kortix ship -y` (no `origin` present) → managed path: `POST /projects/provision` → 201 `{push_token, repo_id, repo_url}`; `git remote add origin <managed GitHub URL>`; commit; token-header push; writes `.kortix/link.json`. (§14)
+3. `kortix ship -y` (no `origin` present) → managed path: `POST /projects/provision` → 201 `{push_token, repo_id, repo_url}`; `git remote add origin <managed GitHub URL>`; commit; token-header push; writes the checkout's `git config kortix.workspace`. (§14)
 4. Poll `GET /projects/:id/snapshots` → wait for a `ready` snapshot. (§4)
 5. `kortix secrets set STRIPE_API_KEY=sk_live_…` → `POST /projects/:id/secrets` → 200. (§6)
 6. `kortix sessions new -p "add a README"` → `POST /projects/:id/sessions` → 201 status `provisioning`; branch `<sessionId>` created. (§7)
@@ -889,7 +889,7 @@ GitHub is **outbound only** (repo create, Contents API commits, installation-tok
 
 The first-ship creation cases below apply only when no explicit project, folder link, or saved host default resolves.
 
-`SHIP-1` first ship, no `origin` → managed: `POST /projects/provision` → set `origin` to the managed GitHub URL, commit, header-injected token push, write `link.json`. Requires `PROJECT_CREATE`.
+`SHIP-1` first ship, no `origin` → managed: `POST /projects/provision` → set `origin` to the managed GitHub URL, commit, header-injected token push, write `git config kortix.workspace`. Requires `PROJECT_CREATE`.
 `SHIP-2` first ship, existing `origin` → **BYO** (single-writable-origin rule), GitHub only: `POST /projects` accepts only a GitHub repo_url (`normalizeRepoUrl`), so ship refuses a non-GitHub origin itself, before any project request: exit 2, a message naming the GitHub-only rule, no link.json, and the origin never modified. The real happy path needs a live GitHub repo + App install.
 `SHIP-3` first ship `--origin <git-url>` → BYO explicit; only this case rewrites `origin` (`git remote set-url`). A non-GitHub `--origin` is refused before any project request and before the rewrite: exit 2, the message suggests `--origin managed`, no link.json, origin not rewritten.
 `SHIP-4` first ship `--origin managed` → force managed even if origin exists.

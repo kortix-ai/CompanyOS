@@ -582,92 +582,76 @@
   }
 }
 
-/* Marketing button (the Buio "dimensional" button): `kx-button`, rendered by
-   `features/marketing/kit/marketing-button.tsx` and nowhere else. The one
-   sanctioned gradient outside an art module: Jay asked for Buio's lit button
-   (2026-10-25), so it lives here as a single component class built from the
-   theme tokens with color-mix, never as utilities on a page.
+/* Marketing button (the "inner stroke" button): `kx-button`, rendered by
+   `features/marketing/kit/marketing-button.tsx` and nowhere else. Ink and
+   paper only: no brand-blue fill (Jay, 2026-11-18). Ring blue stays the
+   focus outline, never a fill.
 
-   - Two stops, light from the top. Hover swaps them, so the light edge moves
-     to the bottom. The stops are registered as <color> so the swap cross-fades
-     instead of snapping (an unregistered custom property cannot interpolate).
-   - The edge is the inset highlight ring plus a 1px outer ring, not a border.
-   - Light theme mirrors dark: secondary is a paper button with a hairline,
-     primary is an ink button, because grey with white ink fails contrast there.
+   - No border. Two 1px rings in box-shadow: a light stroke just inside the
+     edge and a ring just outside it, so the edge reads as a bevel.
+   - primary: solid ink in light, solid paper in dark.
+   - secondary: a near-paper fill with a hairline outer ring.
+   - Hover is color only, on pointer devices. Press scales to 0.96.
+   - A leading icon marked data-slot="icon" (the GitHub mark) takes a
+     quieter tone of the label color. Other svgs (a trailing arrow, a check)
+     keep the label color.
    - In @layer components so a utility on the same element (w-full, a size)
      still wins. */
-@property --kx-btn-top {
-  syntax: '<color>';
-  inherits: false;
-  initial-value: transparent;
-}
-
-@property --kx-btn-bottom {
-  syntax: '<color>';
-  inherits: false;
-  initial-value: transparent;
-}
-
 @layer components {
   .kx-button {
-    --kx-btn-hi: color-mix(in oklch, var(--background) 14%, transparent);
-    --kx-btn-ring: color-mix(in oklch, var(--foreground) 12%, transparent);
-    --kx-btn-shade: var(--foreground);
-    --kx-btn-top: var(--kx-btn-light);
-    --kx-btn-bottom: var(--kx-btn-deep);
-    background-image: linear-gradient(to top, var(--kx-btn-bottom), var(--kx-btn-top));
+    background-color: var(--kx-btn-bg);
+    color: var(--kx-btn-fg);
     box-shadow:
-      inset 0 0 0.5px 1px var(--kx-btn-hi),
-      0 0 0 1px var(--kx-btn-ring),
-      0 0.5px 1px color-mix(in oklch, var(--kx-btn-shade) 6%, transparent),
-      0 1px 2px color-mix(in oklch, var(--kx-btn-shade) 5%, transparent);
-    transition-property: --kx-btn-top, --kx-btn-bottom, scale;
-    transition-duration: var(--duration-slow), var(--duration-slow), var(--duration-normal);
-    transition-timing-function: var(--ease-in-out), var(--ease-in-out), var(--ease-out);
+      inset 0 0 0 1px var(--kx-btn-stroke),
+      0 0 0 1px var(--kx-btn-ring);
+    transition-property: background-color, scale;
+    transition-duration: var(--duration-normal);
+    transition-timing-function: var(--ease-out);
+  }
+
+  .kx-button [data-slot='icon'] {
+    color: var(--kx-btn-icon);
+    transition: color var(--duration-normal) var(--ease-out);
   }
 
   .kx-button[data-variant='primary'] {
-    --kx-btn-deep: var(--foreground);
-    --kx-btn-light: color-mix(in oklch, var(--foreground) 80%, var(--background));
-    color: var(--background);
+    --kx-btn-bg: var(--foreground);
+    --kx-btn-bg-hover: color-mix(in oklch, var(--foreground) 88%, var(--background));
+    --kx-btn-stroke: color-mix(in oklch, var(--background) 15%, transparent);
+    --kx-btn-ring: var(--foreground);
+    --kx-btn-fg: var(--background);
+    --kx-btn-icon: color-mix(in oklch, var(--background) 72%, var(--foreground));
   }
 
   .kx-button[data-variant='secondary'] {
-    --kx-btn-deep: color-mix(in oklch, var(--foreground) 6%, var(--background));
-    --kx-btn-light: var(--background);
-    color: var(--foreground);
-  }
-
-  /* The one accent action of a page, in the brand blue, in both themes. */
-  .kx-button[data-variant='accent'],
-  .dark .kx-button[data-variant='accent'] {
-    --kx-btn-deep: color-mix(in oklch, var(--kortix-base) 84%, var(--kx-btn-shade));
-    --kx-btn-light: var(--kortix-base);
-    color: oklch(1 0 0);
-  }
-
-  .dark .kx-button {
-    --kx-btn-hi: color-mix(in oklch, var(--foreground) 10%, transparent);
-    --kx-btn-ring: color-mix(in oklch, var(--background) 8%, transparent);
-    --kx-btn-shade: var(--background);
+    --kx-btn-bg: color-mix(in oklch, var(--foreground) 2%, var(--background));
+    --kx-btn-bg-hover: color-mix(in oklch, var(--foreground) 5%, var(--background));
+    --kx-btn-stroke: var(--background);
+    --kx-btn-ring: color-mix(in oklch, var(--foreground) 10%, transparent);
+    --kx-btn-fg: var(--foreground);
+    --kx-btn-icon: var(--muted-foreground);
   }
 
   .dark .kx-button[data-variant='primary'] {
-    --kx-btn-deep: color-mix(in oklch, var(--foreground) 24%, var(--background));
-    --kx-btn-light: color-mix(in oklch, var(--foreground) 49%, var(--background));
-    color: var(--foreground);
+    --kx-btn-bg-hover: color-mix(in oklch, var(--foreground) 90%, var(--background));
+    --kx-btn-stroke: color-mix(in oklch, var(--background) 8%, transparent);
+    --kx-btn-icon: color-mix(in oklch, var(--background) 60%, var(--foreground));
   }
 
   .dark .kx-button[data-variant='secondary'] {
-    --kx-btn-deep: var(--background);
-    --kx-btn-light: color-mix(in oklch, var(--foreground) 8%, var(--background));
-    color: var(--foreground);
+    --kx-btn-bg: color-mix(in oklch, var(--foreground) 5%, var(--background));
+    --kx-btn-bg-hover: color-mix(in oklch, var(--foreground) 9%, var(--background));
+    --kx-btn-stroke: color-mix(in oklch, var(--foreground) 8%, transparent);
+    --kx-btn-ring: color-mix(in oklch, var(--foreground) 12%, transparent);
   }
 
   @media (hover: hover) and (pointer: fine) {
     .kx-button:hover {
-      --kx-btn-top: var(--kx-btn-deep);
-      --kx-btn-bottom: var(--kx-btn-light);
+      background-color: var(--kx-btn-bg-hover);
+    }
+
+    .kx-button:hover [data-slot='icon'] {
+      color: var(--kx-btn-fg);
     }
   }
 

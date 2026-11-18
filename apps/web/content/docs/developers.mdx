@@ -147,6 +147,8 @@ Your agent reads the guide at [kortix.com/setup.md](https://kortix.com/setup.md)
 10. Creates the GitHub webhooks with your own `gh`.
 11. Runs one real task and shows you what it made: the pull request, ticket or draft, with its link.
 
+While it runs, the CLI reports each step to Kortix: `kortix plan` starts a setup, then `templates add`, each `onboard` and the first green `doctor --loops`. Each report carries the step's outcome, counts and durations, and the name of the coding agent; never a repository, secret, channel or connector name. Set `DO_NOT_TRACK=1` or `KORTIX_TELEMETRY=0` to turn it off.
+
 #### Plan, one go, onboard
 
 Three commands carry the mechanics, so the agent and you only agree the plan:

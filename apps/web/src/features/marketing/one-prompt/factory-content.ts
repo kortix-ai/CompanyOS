@@ -67,7 +67,7 @@ export const MANIFEST = [
   '',
   'sandbox:',
   '  templates:',
-  '    - { slug: dev, dockerfile: .kortix/Dockerfile }',
+  '    - { slug: dev, dockerfile: Dockerfile }',
 ];
 
 /** What kortix.yaml defines, one line each. `key` is the YAML key whose lines light up when the part is hovered. */

@@ -47,9 +47,11 @@ sensitive or restricted scope starts a new verification.
 
 ## Requirements Google checks
 
-- **Branding.** App name "Kortix", logo, home page `https://www.kortix.com`,
-  privacy policy `https://www.kortix.com/legal?tab=privacy`, terms
-  `https://www.kortix.com/legal?tab=terms`, authorized domain `kortix.com`. A
+- **Branding.** App name "Kortix", logo, home page `https://kortix.com/`,
+  privacy policy `https://kortix.com/legal?tab=privacy`, terms
+  `https://kortix.com/legal?tab=terms`, authorized domain `kortix.com`. Use
+  `kortix.com`, not `www.kortix.com`: `www` redirects, and Google's checker
+  must not follow a redirect. A
   project Owner or Editor must be a verified owner of `kortix.com` in Google
   Search Console. The project Owner is verified through a TXT record on
   `kortix.com` in Cloudflare (`google-site-verification=p3mL…`, comment
@@ -67,6 +69,14 @@ sensitive or restricted scope starts a new verification.
   data access through each.
 - **Publishing status.** Audience → "In production" before Verification
   Center → "Prepare for verification".
+- **Brand before data access.** Branding → "Verify branding" runs an automated
+  check (minutes), then "Publish branding" (within 7 days, or the result
+  expires). The data-access request stays locked until branding is published.
+- **Data Access page.** One justification for the sensitive scopes, one for
+  Drive and one for Gmail (1,000 characters each, text as in the table above),
+  the features "Drive productivity" and "Email productivity", and the video
+  link. Save stores them; Verification Center → "Prepare for verification"
+  submits.
 - **CASA.** Restricted scopes need an App Defense Alliance CASA assessment by
   an authorized lab (TAC Security lists Tier 2 at $540–$720 per app per year).
   The lab issues a Letter of Assessment to Google. Repeat at least every 12
@@ -100,6 +110,10 @@ sensitive or restricted scope starts a new verification.
 Newest first. Add a line for every submission, Google email, CASA step and
 recertification.
 
+- 2026-11-18: project "In production" (0 of 100 unverified users). Branding
+  verified and published. Scope justifications and features saved on Data
+  Access. Left: the demo video on staging after the next release, then submit
+  once the privacy section is live on kortix.com.
 - 2026-11-18: "Kortix staging" client deleted (restorable until 2026-12-18);
   "Kortix prod + staging" serves both. `apps/api/.env.staging` uses it.
 - 2026-11-18: Search Console Domain property `kortix.com` verified for the

@@ -353,7 +353,14 @@ function SpacePeople({ projectId, space, onOpen }: { projectId: string; space: P
     const ids = [space.created_by, ...(space.member_ids ?? [])].filter((id): id is string => !!id);
     const emailOf = new Map((access.data?.members ?? []).map((member) => [member.user_id, member.email ?? '']));
     const shown = ids.slice(0, AVATARS_MAX);
-    body = (
+    // A viewer who may not read the people list knows only how many: the count, never a "?" avatar.
+    const known = shown.every((id) => !!emailOf.get(id));
+    body = !known ? (
+      <span className="text-muted-foreground flex items-center gap-1.5 text-sm tabular-nums">
+        <UsersThreeIcon className="size-4 shrink-0" />
+        {ids.length}
+      </span>
+    ) : (
       <span className="flex items-center">
         {shown.map((id, index) => (
           <span key={id} className={cn('ring-background rounded-sm ring-2', index > 0 && '-ml-1.5')}>

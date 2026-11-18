@@ -441,6 +441,40 @@
   }
 }
 
+/* A list that scrolls up without end (Loopmaxxing's step cards). The list is
+   drawn twice, so moving it up by half its height lands on the start again.
+   It pauses under the pointer and stands still for reduced motion. */
+@keyframes kx-ticker {
+  to {
+    transform: translateY(-50%);
+  }
+}
+
+@keyframes kx-ticker-x {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.kx-ticker {
+  animation: kx-ticker var(--ticker-duration, 40s) linear infinite;
+}
+
+.kx-ticker-x {
+  animation: kx-ticker-x var(--ticker-duration, 40s) linear infinite;
+}
+
+.group\/ticker:hover :is(.kx-ticker, .kx-ticker-x) {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kx-ticker,
+  .kx-ticker-x {
+    animation: none;
+  }
+}
+
 /* Page-enter motion: soft fade-up for standalone pages (/workspaces). `both`
    keeps delayed elements hidden until their turn. Stagger delays are capped
    so long lists never feel slow — everything past the sixth child enters

@@ -353,17 +353,23 @@ The questions:
      with no entry. Before sign-in, an MCP server's tool list in the catalog
      is a directory's copy and can be out of date: never drop a connector for
      a tool it seems to lack. The template's steps name the connector to use;
-  5. the models: the person's Claude plan, their ChatGPT plan, or an API
+  5. Slack, unless the plan shows it connected. Recommend yes: the team then
+     gives the agents work by mentioning @Kortix in a channel or in a direct
+     message, and the reply comes back in the same thread. The answer may name
+     channels for it to join (\`#eng\`); none is needed, a direct message works
+     without one. One Slack workspace runs one Kortix workspace: when theirs
+     already runs another, adding it here moves it. Say so in the question;
+  6. the models: the person's Claude plan, their ChatGPT plan, or an API
      key; the reviewer on the strongest model;
-  6. the workspace name. The configuration always gets its own repository,
+  7. the workspace name. The configuration always gets its own repository,
      which Kortix hosts: the code repository gets no Kortix file;
-  7. the template's questions from step 2;
-  8. a repository rule that conflicts with the agents: which one wins;
-  9. the task for the real run in step 7, from what you found.
+  8. the template's questions from step 2;
+  9. a repository rule that conflicts with the agents: which one wins;
+  10. the task for the real run in step 7, from what you found.
 - **More than 8:** keep the 8 with the largest effect. Put every other
   decision, with the answer you will use, on the \`Defaults:\` line: the env
-  names to upload (only \`local\`), the Slack channels, the Kortix rule in
-  \`AGENTS.md\` (default: add it).
+  names to upload (only \`local\`), the Kortix rule in \`AGENTS.md\` (default:
+  add it).
 - **A gap is a question only when a chosen source needs it.** An
   \`unrecognized_services\` prefix or an empty category becomes one question
   with likely answers ("Tickets: a) GitHub Issues (recommended) b) Linear
@@ -408,7 +414,19 @@ the rest. No template: write the agents and triggers yourself, in the same
 layout. Declare every app the loops call under \`connectors:\` (rule 8), with the
 entry the template's steps give, else the catalog's: \`onboard\` turns each one
 into a sign-in row on the setup page. An app reached only through a secret gets
-no row. Then write \`kortix.yaml\` with \`env.required\` and
+no row. Slack, when the reply says yes, is this entry in \`kortix.yaml\`, the one
+Kortix writes itself when Slack connects; \`onboard\` turns it into the "Add to
+Slack" row:
+
+\`\`\`yaml
+connectors:
+  - slug: kortix_slack
+    name: Slack
+    provider: channel
+    platform: slack
+\`\`\`
+
+Then write \`kortix.yaml\` with \`env.required\` and
 \`env.optional\` listing every secret the loops use, the sandbox \`Dockerfile\` at
 the root (a Debian-family base, the code repository's runtimes at their pinned
 versions, git and gh, no \`COPY\` from the repository), the template's \`cpu\`,
@@ -456,7 +474,8 @@ kortix onboard --yes --json --wait \\
 The first run creates the workspace. \`--name\` is its display name (default:
 \`project.name\` in \`kortix.yaml\`, else the folder name): use the name from
 step 3, for example "Acme Loops". \`--repo\` is the code repository on GitHub:
-always pass it.
+always pass it. \`--channels\` takes the Slack channels the reply named; leave
+it out when it named none.
 
 **The icon.** Once \`ship\` has linked the folder (\`.kortix/link.json\`), give
 the workspace an icon that says what the product is: \`kortix workspaces set
@@ -471,11 +490,11 @@ color of its CSS or Tailwind theme. No brand color found: one of the list's
 It runs in phases, each skipping what is done: \`validate\`, \`ship\` (create the
 workspace and push its repository; it refuses a dirty tree), \`secrets\`
 (approved names, generated webhook secrets, one intake link for the rest,
-the GitHub token included), \`webhooks\` (the GitHub repository
-webhooks and labels the triggers need, through the person's \`gh\`), \`slack\`
-(the bot joins the channels), \`connectors\`, \`sandbox\` (build every image and
-wait; a first build takes 5 to 10 minutes and prints nothing in \`--json\` mode),
-\`doctor\`.
+the GitHub token included), \`webhooks\` (the GitHub repository webhooks and
+labels the triggers need, through the person's \`gh\`), \`slack\` (waits for
+Slack, then the bot joins the channels), \`connectors\`, \`sandbox\` (build every
+image and wait; a first build takes 5 to 10 minutes and prints nothing in
+\`--json\` mode), \`doctor\`.
 
 **The setup page.** Every step only the person can do (a model, a connector
 sign-in, a secret such as the GitHub token, Slack) is one row on
@@ -552,7 +571,9 @@ Show the result first, then how to use it. At most 15 lines:
 2. What runs now: one line per trigger (what starts it, what it ships, who
    approves) and where work lands.
 3. How to start work by hand: the label to add, or
-   \`kortix triggers fire <slug>\`.
+   \`kortix triggers fire <slug>\`. With Slack connected, first one task to send
+   in Slack, a sentence the person can paste into a direct message to @Kortix
+   or a channel it joined ("@Kortix why did the last deploy fail?").
 4. Three things to ask this agent next, each one sentence the person can
    paste, from what you found ("add a loop that turns Sentry errors into
    tickets").

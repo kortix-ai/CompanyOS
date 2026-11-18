@@ -12,7 +12,7 @@ obligations that keep the approval valid.
 
 | GCP project | Audience | Clients | Used by |
 | --- | --- | --- | --- |
-| `kortix-connectors` (#342665293767) | External. Goes through verification and CASA | "Kortix prod", "Kortix staging" | prod, staging |
+| `kortix-connectors` (#342665293767) | External. Goes through verification and CASA | "Kortix prod + staging" (one client, so the demo video shows one client ID; redirects `api.kortix.com` and `staging-api.kortix.com`) | prod, staging |
 | `kortix-connectors-dev` | Internal (kortix.ai accounts only). Never verified | "Kortix local", "Kortix dev" | local, dev |
 | `kortix` | Sign in with Google only. Branding verified, no data scopes | — | Kortix sign-in. Do not add data scopes here |
 
@@ -51,7 +51,11 @@ sensitive or restricted scope starts a new verification.
   privacy policy `https://www.kortix.com/legal?tab=privacy`, terms
   `https://www.kortix.com/legal?tab=terms`, authorized domain `kortix.com`. A
   project Owner or Editor must be a verified owner of `kortix.com` in Google
-  Search Console. Branding cannot change while a review runs.
+  Search Console. The project Owner is verified through a TXT record on
+  `kortix.com` in Cloudflare (`google-site-verification=p3mL…`, comment
+  "Search Console: Google OAuth verification of kortix-connectors"). Do not
+  delete that record: the verification ends with it. Branding cannot change
+  while a review runs.
 - **Privacy policy.** The section "Google user data" (`#google-user-data` in
   `apps/web/src/app/[locale]/(public)/(seo)/legal/page.tsx`) states what we
   access, use, store, share and delete, and carries Google's Limited Use
@@ -96,4 +100,10 @@ sensitive or restricted scope starts a new verification.
 Newest first. Add a line for every submission, Google email, CASA step and
 recertification.
 
-- 2026-11-18: privacy section drafted. Project still "Testing". Not submitted.
+- 2026-11-18: "Kortix staging" client deleted (restorable until 2026-12-18);
+  "Kortix prod + staging" serves both. `apps/api/.env.staging` uses it.
+- 2026-11-18: Search Console Domain property `kortix.com` verified for the
+  project Owner (TXT record in Cloudflare).
+- 2026-11-18: privacy section "Google user data" merged to `dev` (#12810).
+  Reaches www.kortix.com with the next release. Project still "Testing". Not
+  submitted.

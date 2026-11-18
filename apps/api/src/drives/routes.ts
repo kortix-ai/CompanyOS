@@ -58,6 +58,7 @@ import {
   PRIVATE_CHANNELS_DIR,
   type PrivateChannelFolders,
   privateChannelFolderOf,
+  reservedRootInUse,
 } from './folders';
 import {
   type DriveRow,
@@ -340,8 +341,8 @@ function structural(path: string, caller: Caller): boolean {
   return (
     path === '/' ||
     path === USERS_DIR ||
-    // `/Channels` holds the tree together only while it holds a private channel's folder.
-    (path === PRIVATE_CHANNELS_DIR && privateFolders(caller).size > 0) ||
+    // `/Channels` and `/Spaces` hold the tree together only while they hold a reserved folder.
+    reservedRootInUse(path, privateFolders(caller)) ||
     personalFolderOf(path) === path ||
     privateChannelFolderOf(path, privateFolders(caller)) === path ||
     path === caller.personalFolder
@@ -719,7 +720,7 @@ drivesApp.openapi(
     const channelNames = entries.some((e) => privateChannelFolderOf(e.path, privateFolders(caller)) === e.path)
       ? new Map((await privateChannelRows(drive.projectId!)).flatMap((r) => (r.folder && r.slug ? [[r.folder, `#${r.slug}`] as const] : [])))
       : null;
-    // A space's folder is named by its id (`/Company/Spaces/<group_id>`); it lists under the space's name.
+    // A space's folder is named by its id (`/Spaces/<group_id>`); it lists under the space's name.
     const spaceNames = path === SESSION_GROUPS_DIR ? await sessionGroupFolderNames(drive.projectId!) : null;
     return c.json({
       access: folderAccess(path, grants, subject),

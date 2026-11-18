@@ -100,6 +100,7 @@ export {
   chatUserIdentities,
   projectSessions,
   projectSessionGroups,
+  projectSessionGroupMembers,
   projectSpaces,
   projectSpaceLinks,
   projectSpaceMembers,
@@ -367,6 +368,7 @@ export type { AgentGrant, StoredAgentGrant, StoredKeyScopes, ArtifactCommentMent
 export { readStoredAgentGrant } from './schema/kortix';
 export type { AccountBrandingRecord, DriveVolumeMoveRecord } from './schema/kortix';
 export type { MemoryThreadLoadLayer } from './schema/kortix';
+export type { ProjectSpaceTabRecord } from './schema/kortix';
 export type { ProjectGoalCriterion, ProjectGoalSessionRef, ProjectGoalVerification } from './schema/kortix';
 export type { SecretEgressPolicy, SecretEgressRule, SecretInjectionSlot } from './schema/kortix';
 

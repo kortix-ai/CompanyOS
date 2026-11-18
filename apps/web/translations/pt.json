@@ -21996,14 +21996,14 @@
     "loadErrorBody": "Verifique sua conexão e tente novamente."
   },
   "sessionOversight": {
-    "label": "Admins podem abrir qualquer sessão",
-    "description": "Proprietários e admins do espaço de trabalho podem abrir qualquer sessão deste espaço de trabalho, incluindo as privadas. Cada sessão aberta assim fica no registro de auditoria.",
-    "ownerOnlyDescription": "Proprietários e admins do espaço de trabalho podem abrir qualquer sessão deste espaço de trabalho, incluindo as privadas. Só um proprietário do espaço de trabalho pode alterar isso.",
+    "label": "Admins podem abrir cada sessão e espaço",
+    "description": "Proprietários e admins do workspace podem abrir qualquer sessão e espaço deste workspace, incluindo os privados. Cada sessão aberta assim fica no log de auditoria.",
+    "ownerOnlyDescription": "Proprietários e admins do workspace podem abrir qualquer sessão e espaço deste workspace, incluindo os privados. Só um proprietário do workspace pode mudar isso.",
     "enableTitle": "Permitir que admins abram qualquer sessão?",
-    "enableDescription": "Proprietários e admins do espaço de trabalho poderão abrir todas as sessões deste espaço de trabalho, incluindo as que os membros mantêm privadas. Os membros verão um aviso na janela de compartilhamento. Cada sessão aberta assim é registrada no registro de auditoria.",
+    "enableDescription": "Proprietários e admins do workspace poderão abrir cada sessão e espaço deste workspace, incluindo os que os membros mantiveram privados. Os membros veem um aviso na caixa de compartilhamento. Cada sessão aberta assim é registrada no log de auditoria.",
     "enableConfirm": "Ativar",
     "disableTitle": "Deixar de permitir que admins abram qualquer sessão?",
-    "disableDescription": "As sessões privadas voltam a ser apenas do proprietário. Os admins mantêm acesso apenas às sessões compartilhadas com eles.",
+    "disableDescription": "Sessões e espaços privados voltam para seus proprietários e para as pessoas com quem foram compartilhados. Admins mantêm acesso apenas ao que for compartilhado com eles.",
     "disableConfirm": "Desativar",
     "enabledToast": "Agora os admins podem abrir qualquer sessão",
     "disabledToast": "As sessões privadas voltaram a ser apenas do proprietário",
@@ -27506,6 +27506,16 @@
     "pickerSearch": "Buscar espaços",
     "pickerEmpty": "Nenhum espaço corresponde",
     "gateDescription": "Agrupe sessões relacionadas em espaços que compartilham arquivos e contexto.",
-    "loadMore": "Carregar mais"
+    "loadMore": "Carregar mais",
+    "share": "Compartilhar",
+    "shareTitle": "Compartilhar {name}",
+    "shareDescription": "Todas as pessoas que você adicionar veem cada sessão deste espaço e os arquivos dele.",
+    "shareEveryone": "Todo o workspace",
+    "shareSearch": "Buscar pessoas",
+    "shared": "Compartilhamento atualizado",
+    "shareFailed": "Não foi possível mudar quem vê o espaço",
+    "shareNotMember": "Compartilhe um espaço apenas com membros deste workspace.",
+    "sharedWith": "{count, plural, one {Compartilhado com # pessoa} other {Compartilhado com # pessoas}}",
+    "private": "Privado"
   }
 }

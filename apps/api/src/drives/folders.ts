@@ -124,9 +124,23 @@ export function personalFolderOf(path: string): string | null {
 export function privateChannelFolderOf(path: string, channels: PrivateChannelFolders): string | null {
   if (channels.size === 0) return null;
   const parts = path.split('/').filter(Boolean);
-  if (parts.length < 2 || `/${parts[0]}` !== PRIVATE_CHANNELS_DIR) return null;
-  const folder = `${PRIVATE_CHANNELS_DIR}/${parts[1]}`;
+  if (parts.length < 2 || !RESERVED_ROOTS.includes(`/${parts[0]}`)) return null;
+  const folder = `/${parts[0]}/${parts[1]}`;
   return channels.has(folder) ? folder : null;
+}
+
+/**
+ * The roots whose child folders can be reserved: a private channel's
+ * (`/Channels/<space_id>`) and a Space's (`/Spaces/<group_id>`). Only the
+ * folders in the reserved set are; any other child is an ordinary folder.
+ */
+const RESERVED_ROOTS: readonly string[] = [PRIVATE_CHANNELS_DIR, SESSION_GROUPS_DIR];
+
+/** `path` is a reserved root that holds a reserved folder (`/Channels` with a private channel, `/Spaces` with a space). */
+export function reservedRootInUse(path: string, channels: PrivateChannelFolders): boolean {
+  if (!RESERVED_ROOTS.includes(path)) return false;
+  for (const folder of channels) if (folder.startsWith(`${path}/`)) return true;
+  return false;
 }
 
 /** `path` is a private channel's folder, inside one, or a folder that holds one (`/Channels`, `/`). */
@@ -147,7 +161,7 @@ function protectedFolderOf(path: string, channels: PrivateChannelFolders): strin
  * learns that a private channel exists from an empty `/Channels`).
  */
 function adminReaches(path: string, channels: PrivateChannelFolders, people = false): boolean {
-  if (channels.size > 0 && path === PRIVATE_CHANNELS_DIR) return false;
+  if (reservedRootInUse(path, channels)) return false;
   return (people || !personalFolderOf(path)) && !privateChannelFolderOf(path, channels);
 }
 
@@ -245,7 +259,7 @@ const RESERVED_MOUNT_NAMES = new Set(['me', 'readme-md']);
 
 export function folderMountName(path: string): string {
   // A space's folder is named by its id; a session mounts it as /drives/space.
-  if (path.startsWith(`${SESSION_GROUPS_DIR}/`) && path.split('/').length === 4) return 'space';
+  if (path.startsWith(`${SESSION_GROUPS_DIR}/`) && path.split('/').length === 3) return 'space';
   const last = path.split('/').filter(Boolean).pop() ?? 'files';
   const slug = last
     .normalize('NFKD')

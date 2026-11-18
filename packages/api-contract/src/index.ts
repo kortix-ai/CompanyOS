@@ -1676,6 +1676,10 @@ export type SpaceLinkCreateInput = z.infer<typeof SpaceLinkCreateInputSchema>;
 export const SESSION_GROUP_NAME_MAX = 80;
 /** The longest group description. */
 export const SESSION_GROUP_DESCRIPTION_MAX = 2000;
+/** Who sees a group: its creator and members (`private`, the default) or the whole project. */
+export const SESSION_GROUP_VISIBILITIES = ['private', 'project'] as const;
+/** The most people one group is shared with by name. */
+export const SESSION_GROUP_MEMBERS_MAX = 200;
 /** The most groups one project may have. */
 export const SESSION_GROUPS_MAX = 50;
 
@@ -1685,6 +1689,17 @@ export const SessionGroupSchema = z
     name: z.string(),
     /** What the group is for; null when none was given. */
     description: z.string().nullable(),
+    /**
+     * `private`: its creator and `member_ids` see it and every session in it.
+     * `project`: everyone in the project does. New groups are `private`.
+     */
+    visibility: z.enum(SESSION_GROUP_VISIBILITIES),
+    /** The people a `private` group is shared with (its creator not listed). */
+    member_ids: z.array(z.string()),
+    /** The tabs after Sessions, in order: a channel's tab shape (`SpaceTabSchema`). */
+    tabs: z.array(SpaceTabSchema),
+    /** The caller may change its sharing and delete it: its creator, or an owner or admin under account session oversight. */
+    can_manage: z.boolean(),
     /** 0-based place in the project's order; the list is sorted by it. */
     position: z.number().int().nonnegative(),
     created_by: z.string().nullable(),
@@ -1726,6 +1741,25 @@ export const SessionGroupOrderInputSchema = z
 export type SessionGroupOrderInput = z.infer<typeof SessionGroupOrderInputSchema>;
 
 /** File a session into a group of its project, or take it out of its group (`null`). */
+/**
+ * `PUT /projects/:id/session-groups/:groupId/sharing`: who sees the group,
+ * replacing what was there. `private` with no `member_ids` is "Only me";
+ * `private` with ids is "Specific people"; `project` is "Everyone in this
+ * workspace" (ids are then ignored and cleared). Its creator and owners or
+ * admins under account session oversight only (`can_manage`).
+ */
+export const SessionGroupSharingInputSchema = z
+  .object({
+    visibility: z.enum(SESSION_GROUP_VISIBILITIES),
+    member_ids: z
+      .array(z.string().uuid())
+      .max(SESSION_GROUP_MEMBERS_MAX)
+      .refine((ids) => new Set(ids).size === ids.length, 'member_ids must name each person once')
+      .default([]),
+  })
+  .strict();
+export type SessionGroupSharingInput = z.infer<typeof SessionGroupSharingInputSchema>;
+
 export const SessionGroupAssignInputSchema = z.object({ group_id: z.string().uuid().nullable() }).strict();
 export type SessionGroupAssignInput = z.infer<typeof SessionGroupAssignInputSchema>;
 

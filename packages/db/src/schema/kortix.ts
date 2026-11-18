@@ -1953,9 +1953,13 @@ export const projectSessionInitiatorEnum = kortixSchema.enum('project_session_in
 
 /**
  * A session group (product word "Space"): a named folder of a project's
- * sessions in the sidebar, behind the `session_groups` flag. Every project member sees the same groups
- * in the same order (`position`, 0-based). A session is in at most one group
- * (`project_sessions.group_id`); deleting a group leaves its sessions in none.
+ * sessions, behind the `session_groups` flag. `private` (the default): only
+ * its creator and its members (`project_session_group_members`) see it, and
+ * they see every session in it whatever the session's own sharing. `project`:
+ * everyone in the project does. Account session oversight shows every group
+ * to owners and admins. The groups share one order (`position`, 0-based). A
+ * session is in at most one group (`project_sessions.group_id`); deleting a
+ * group leaves its sessions in none, back to their own sharing.
  */
 export const projectSessionGroups = kortixSchema.table(
   'project_session_groups',
@@ -1971,6 +1975,10 @@ export const projectSessionGroups = kortixSchema.table(
     name: text('name').notNull(),
     /** What the space is for, at most 2000 characters (the API checks it). Every session of the space reads it at turn start. */
     description: text('description'),
+    /** `private` | `project` (check below). */
+    visibility: text('visibility').default('private').notNull(),
+    /** The tabs after Sessions, in order (at most 20): a channel's tab shape (`ProjectSpaceTabRecord`, kinds file|folder|artifact|app|link). */
+    tabs: jsonb('tabs').$type<ProjectSpaceTabRecord[]>().default(sql`'[]'::jsonb`).notNull(),
     position: integer('position').notNull(),
     createdBy: uuid('created_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -1979,8 +1987,26 @@ export const projectSessionGroups = kortixSchema.table(
   (table) => [
     check('project_session_groups_name_check', sql`char_length(${table.name}) between 1 and 80`),
     check('project_session_groups_position_check', sql`${table.position} >= 0`),
+    check('project_session_groups_visibility_check', sql`${table.visibility} in ('private', 'project')`),
     uniqueIndex('uniq_project_session_groups_name').on(table.projectId, sql`lower(${table.name})`),
     index('idx_project_session_groups_project').on(table.projectId, table.position),
+  ],
+);
+
+/** The people a private session group (Space) is shared with; its creator is not listed. */
+export const projectSessionGroupMembers = kortixSchema.table(
+  'project_session_group_members',
+  {
+    groupId: uuid('group_id')
+      .notNull()
+      .references(() => projectSessionGroups.groupId, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull(),
+    addedBy: uuid('added_by'),
+    addedAt: timestamp('added_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.groupId, table.userId] }),
+    index('idx_project_session_group_members_user').on(table.userId),
   ],
 );
 

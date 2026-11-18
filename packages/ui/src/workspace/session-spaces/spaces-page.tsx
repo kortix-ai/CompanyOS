@@ -2,7 +2,7 @@
 
 import type { ProjectSessionGroup } from '@kortix/sdk';
 import { useFeatureFlag, useWorkspaceSessionGroups } from '@kortix/sdk/react';
-import { MagnifyingGlassIcon, PlusIcon, StackIcon } from '@phosphor-icons/react';
+import { LockSimpleIcon, MagnifyingGlassIcon, PlusIcon, StackIcon, UsersThreeIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 
 import { CapabilityPageShell } from '../../customize/shared/capability-page-shell';
@@ -19,6 +19,7 @@ import {
   InputGroupSearchIcon,
   InputGroupSearchInput,
 } from '../../primitives/input-group';
+import Hint from '../../primitives/hint';
 import { Skeleton } from '../../primitives/skeleton';
 import { UiLink as Link, useUiRouter } from '../../providers/ui-provider';
 import { SpaceFormModal } from './space-form-modal';
@@ -125,9 +126,11 @@ export function SpacesPage({ projectId }: { projectId: string }) {
   );
 }
 
-/** One space: the stack glyph on a muted tile, the name, and the first line of what it is for. */
+/** One space: the stack glyph on a muted tile, the name, the first line of what it is for, and who sees it. */
 function SpaceTile({ projectId, space }: { projectId: string; space: ProjectSessionGroup }) {
+  const t = useTranslations('sessionSpaces');
   const href = uiRoutes().sessionSpace?.(projectId, space.group_id);
+  const everyone = space.visibility === 'project';
   if (!href) return null;
   return (
     <Link
@@ -144,6 +147,11 @@ function SpaceTile({ projectId, space }: { projectId: string; space: ProjectSess
           <span className="text-muted-foreground block truncate text-xs">{space.description}</span>
         ) : null}
       </span>
+      <Hint label={everyone ? t('visibility') : (space.member_ids?.length ?? 0) > 0 ? t('sharedWith', { count: space.member_ids!.length }) : t('private')}>
+        <span className="text-muted-foreground shrink-0" aria-label={everyone ? t('visibility') : t('private')}>
+          {everyone ? <UsersThreeIcon className="size-4" /> : <LockSimpleIcon className="size-4" />}
+        </span>
+      </Hint>
     </Link>
   );
 }

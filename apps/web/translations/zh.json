@@ -21996,14 +21996,14 @@
     "loadErrorBody": "请检查网络连接后重试。"
   },
   "sessionOversight": {
-    "label": "管理员可打开所有会话",
-    "description": "工作区所有者和管理员可以打开此工作区中的任何会话，包括私密会话。以此方式打开的每个会话都会记入审计日志。",
-    "ownerOnlyDescription": "工作区所有者和管理员可以打开此工作区中的任何会话，包括私密会话。只有工作区所有者可以更改此设置。",
+    "label": "管理员可以打开每个会话和空间",
+    "description": "工作区所有者和管理员可以打开此工作区中的任何会话和空间，包括私有的。以这种方式打开的每个会话都会记录在审计日志中。",
+    "ownerOnlyDescription": "工作区所有者和管理员可以打开此工作区中的任何会话和空间，包括私有的。只有工作区所有者可以更改此设置。",
     "enableTitle": "允许管理员打开所有会话？",
-    "enableDescription": "工作区所有者和管理员将能够打开此工作区中的所有会话，包括成员设为私密的会话。成员会在共享对话框中看到提示。以此方式打开的每个会话都会记入审计日志。",
+    "enableDescription": "工作区所有者和管理员将能够打开此工作区中的每个会话和空间，包括成员设为私有的。成员会在共享对话框中看到提示。以这种方式打开的每个会话都会记录在审计日志中。",
     "enableConfirm": "开启",
     "disableTitle": "不再允许管理员打开所有会话？",
-    "disableDescription": "私密会话恢复为仅所有者可见。管理员只保留对与其共享的会话的访问权限。",
+    "disableDescription": "私有会话和空间将恢复为仅其所有者和被共享者可见。管理员只保留对与其共享内容的访问权限。",
     "disableConfirm": "关闭",
     "enabledToast": "管理员现在可以打开所有会话",
     "disabledToast": "私密会话已恢复为仅所有者可见",
@@ -27506,6 +27506,16 @@
     "pickerSearch": "搜索空间",
     "pickerEmpty": "没有匹配的空间",
     "gateDescription": "将相关会话归入共享文件和上下文的空间。",
-    "loadMore": "加载更多"
+    "loadMore": "加载更多",
+    "share": "共享",
+    "shareTitle": "共享 {name}",
+    "shareDescription": "你添加的每个人都能看到此空间中的每个会话及其文件。",
+    "shareEveryone": "此工作区中的所有人",
+    "shareSearch": "搜索成员",
+    "shared": "共享设置已更新",
+    "shareFailed": "无法更改可查看该空间的人",
+    "shareNotMember": "只能与此工作区的成员共享空间。",
+    "sharedWith": "{count, plural, other {已与 # 人共享}}",
+    "private": "私有"
   }
 }

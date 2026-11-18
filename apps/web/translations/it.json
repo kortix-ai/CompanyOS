@@ -21996,14 +21996,14 @@
     "loadErrorBody": "Controlla la connessione e riprova."
   },
   "sessionOversight": {
-    "label": "Gli admin possono aprire ogni sessione",
-    "description": "Proprietari e admin del workspace possono aprire qualsiasi sessione di questo workspace, comprese quelle private. Ogni sessione aperta così è nel registro di audit.",
-    "ownerOnlyDescription": "Proprietari e admin del workspace possono aprire qualsiasi sessione di questo workspace, comprese quelle private. Solo un proprietario del workspace può modificarlo.",
+    "label": "Gli admin possono aprire ogni sessione e spazio",
+    "description": "Proprietari e admin del workspace possono aprire qualsiasi sessione e spazio di questo workspace, anche quelli privati. Ogni sessione aperta così è nel registro di audit.",
+    "ownerOnlyDescription": "Proprietari e admin del workspace possono aprire qualsiasi sessione e spazio di questo workspace, anche quelli privati. Solo un proprietario del workspace può cambiarlo.",
     "enableTitle": "Consentire agli admin di aprire ogni sessione?",
-    "enableDescription": "Proprietari e admin potranno aprire tutte le sessioni di questo workspace, comprese quelle che i membri mantengono private. I membri vedranno un avviso nella finestra di condivisione. Ogni sessione aperta così viene registrata nel registro di audit.",
+    "enableDescription": "Proprietari e admin del workspace potranno aprire ogni sessione e spazio di questo workspace, anche quelli che i membri hanno tenuto privati. I membri vedono un avviso nella finestra di condivisione. Ogni sessione aperta così viene registrata nel registro di audit.",
     "enableConfirm": "Attiva",
     "disableTitle": "Non consentire più agli admin di aprire ogni sessione?",
-    "disableDescription": "Le sessioni private tornano visibili solo al proprietario. Gli admin mantengono l’accesso solo alle sessioni condivise con loro.",
+    "disableDescription": "Sessioni e spazi privati tornano ai loro proprietari e alle persone con cui sono condivisi. Gli admin mantengono l'accesso solo a ciò che è condiviso con loro.",
     "disableConfirm": "Disattiva",
     "enabledToast": "Ora gli admin possono aprire ogni sessione",
     "disabledToast": "Le sessioni private sono di nuovo solo del proprietario",
@@ -27506,6 +27506,16 @@
     "pickerSearch": "Cerca spazi",
     "pickerEmpty": "Nessuno spazio corrisponde",
     "gateDescription": "Raggruppa le sessioni correlate in spazi che condividono file e contesto.",
-    "loadMore": "Carica altro"
+    "loadMore": "Carica altro",
+    "share": "Condividi",
+    "shareTitle": "Condividi {name}",
+    "shareDescription": "Tutte le persone che aggiungi vedono ogni sessione di questo spazio e i suoi file.",
+    "shareEveryone": "Tutto il workspace",
+    "shareSearch": "Cerca persone",
+    "shared": "Condivisione aggiornata",
+    "shareFailed": "Impossibile cambiare chi vede lo spazio",
+    "shareNotMember": "Condividi uno spazio solo con membri di questo workspace.",
+    "sharedWith": "{count, plural, one {Condiviso con # persona} other {Condiviso con # persone}}",
+    "private": "Privato"
   }
 }

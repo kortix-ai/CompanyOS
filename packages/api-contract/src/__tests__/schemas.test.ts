@@ -37,6 +37,7 @@ import {
   SessionGroupListSchema,
   SessionGroupOrderInputSchema,
   SessionGroupSchema,
+  SessionGroupSharingInputSchema,
   SessionGroupUpdateInputSchema,
   SESSION_GROUP_DESCRIPTION_MAX,
   SESSION_GROUP_NAME_MAX,
@@ -466,6 +467,10 @@ describe('session group contracts', () => {
     group_id: '22222222-3333-4444-8555-666666666666',
     name: 'Store A',
     description: null,
+    visibility: 'private' as const,
+    member_ids: [],
+    tabs: [],
+    can_manage: true,
     position: 0,
     created_by: '99999999-8888-4777-8666-555555555555',
     created_at: NOW,
@@ -498,6 +503,16 @@ describe('session group contracts', () => {
     expect(SessionGroupCreateInputSchema.safeParse({ name: 'A', description: 'x'.repeat(SESSION_GROUP_DESCRIPTION_MAX + 1) }).success).toBe(false);
     expect(SessionGroupUpdateInputSchema.parse({ description: null })).toEqual({ description: null });
     expect(SessionGroupUpdateInputSchema.safeParse({}).success).toBe(false);
+  });
+
+  test('sharing: private (with or without people) or project; ids are uuids, each once; nothing else', () => {
+    const ana = '11111111-2222-4333-8444-555555555555';
+    expect(SessionGroupSharingInputSchema.parse({ visibility: 'private' })).toEqual({ visibility: 'private', member_ids: [] });
+    expect(SessionGroupSharingInputSchema.parse({ visibility: 'private', member_ids: [ana] }).member_ids).toEqual([ana]);
+    expect(SessionGroupSharingInputSchema.safeParse({ visibility: 'private', member_ids: [ana, ana] }).success).toBe(false);
+    expect(SessionGroupSharingInputSchema.safeParse({ visibility: 'private', member_ids: ['ana'] }).success).toBe(false);
+    expect(SessionGroupSharingInputSchema.safeParse({ visibility: 'everyone' }).success).toBe(false);
+    expect(SessionGroupSchema.safeParse({ ...GROUP, visibility: 'restricted' }).success).toBe(false);
   });
 
   test('an order names each group once, by id', () => {

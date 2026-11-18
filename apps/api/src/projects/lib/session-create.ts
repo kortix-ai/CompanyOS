@@ -99,6 +99,8 @@ import { spaceAccessFor } from '../../shared/space-access';
 import { FIRST_PROMPT_MAX_CHARS, SPACE_NOT_FOUND, ensureDefaultSpace, findForkSourceSpace, forkSourceVisibility, findLiveChannel, findSessionSpace, inheritedPrivateSpace, spaceSessionVisibility } from './project-spaces';
 import { liveTriggerSpace, triggerRunSpace } from './trigger-space';
 import { findSessionGroup } from './session-groups';
+import { canSeeGroup, groupMemberIds } from '../../shared/session-group-access';
+import { groupViewerFor } from './session-group-viewer';
 
 import {
 } from '../../git-proxy/project-snapshot';
@@ -398,7 +400,11 @@ export async function resolveRequestedSessionGroup(input: CreateProjectSessionIn
     return { groupId: source?.groupId ?? null };
   }
   const group = typeof body.group_id === 'string' && isUuid(body.group_id) ? await findSessionGroup(project.projectId, body.group_id) : null;
-  if (!group) return { error: { status: 404, body: { error: 'No such space in this workspace.', code: 'group_not_found' } } };
+  // A private group says nothing to someone it is not shared with: the same 404.
+  const visible = group && input.userId
+    ? canSeeGroup(group, (await groupMemberIds([group.groupId])).get(group.groupId) ?? [], await groupViewerFor(input.userId, project.accountId))
+    : false;
+  if (!group || !visible) return { error: { status: 404, body: { error: 'No such space in this workspace.', code: 'group_not_found' } } };
   return { groupId: group.groupId };
 }
 

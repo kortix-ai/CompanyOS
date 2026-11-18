@@ -8,6 +8,8 @@ import {
   renameWorkspaceSessionGroup,
   reorderWorkspaceSessionGroups,
   setWorkspaceSessionGroup,
+  setWorkspaceSessionGroupSharing,
+  setWorkspaceSessionGroupTabs,
   updateWorkspaceSessionGroup,
   type ProjectSessionGroup,
 } from './session-groups';
@@ -38,6 +40,10 @@ const storeA: ProjectSessionGroup = {
   group_id: '00000000-0000-4000-8000-00000000000a',
   name: 'Store A',
   description: null,
+  visibility: 'private',
+  member_ids: [],
+  tabs: [],
+  can_manage: true,
   position: 0,
   created_by: '00000000-0000-4000-8000-000000000001',
   created_at: '2026-10-27T00:00:00.000Z',
@@ -84,6 +90,34 @@ test('updateWorkspaceSessionGroup rejects a taken name with ApiError group_name_
   const error = await updateWorkspaceSessionGroup('P1', storeA.group_id, { name: 'Store B' }).catch((e: unknown) => e);
   expect(error).toBeInstanceOf(ApiError);
   expect((error as ApiError).code).toBe('group_name_taken');
+});
+
+test('setWorkspaceSessionGroupSharing PUTs who sees the group and returns it', async () => {
+  const ana = '00000000-0000-4000-8000-0000000000aa';
+  nextResponse = { status: 200, body: { ...storeA, member_ids: [ana] } };
+  expect((await setWorkspaceSessionGroupSharing('P1', storeA.group_id, { visibility: 'private', member_ids: [ana] })).member_ids).toEqual([ana]);
+  expect(calls).toEqual([
+    {
+      url: `http://test.local/v1/workspaces/P1/session-groups/${storeA.group_id}/sharing`,
+      method: 'PUT',
+      body: { visibility: 'private', member_ids: [ana] },
+    },
+  ]);
+});
+
+test('setWorkspaceSessionGroupSharing rejects a caller who may not manage it with ApiError group_manage_forbidden', async () => {
+  nextResponse = { status: 403, body: { error: 'no', code: 'group_manage_forbidden' } };
+  const error = await setWorkspaceSessionGroupSharing('P1', storeA.group_id, { visibility: 'project' }).catch((e: unknown) => e);
+  expect((error as ApiError).code).toBe('group_manage_forbidden');
+});
+
+test('setWorkspaceSessionGroupTabs PUTs the whole ordered list', async () => {
+  const tabs = [{ id: 'plan', title: 'Plan', kind: 'file' as const, ref: '/Spaces/g/plan.md' }];
+  nextResponse = { status: 200, body: { ...storeA, tabs } };
+  expect((await setWorkspaceSessionGroupTabs('P1', storeA.group_id, tabs)).tabs).toEqual(tabs);
+  expect(calls).toEqual([
+    { url: `http://test.local/v1/workspaces/P1/session-groups/${storeA.group_id}/tabs`, method: 'PUT', body: { tabs } },
+  ]);
 });
 
 test('deleteProjectSessionGroup DELETEs the group', async () => {

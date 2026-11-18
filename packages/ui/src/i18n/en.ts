@@ -6803,14 +6803,14 @@ const catalog = {
     "loadErrorBody": "Check your connection and try again."
   },
   "sessionOversight": {
-    "label": "Admins can open every session",
-    "description": "Workspace owners and admins can open any session in this workspace, including private ones. Every session opened this way is in the audit log.",
-    "ownerOnlyDescription": "Workspace owners and admins can open any session in this workspace, including private ones. Only a workspace owner can change this.",
+    "label": "Admins can open every session and space",
+    "description": "Workspace owners and admins can open any session and space in this workspace, including private ones. Every session opened this way is in the audit log.",
+    "ownerOnlyDescription": "Workspace owners and admins can open any session and space in this workspace, including private ones. Only a workspace owner can change this.",
     "enableTitle": "Let admins open every session?",
-    "enableDescription": "Workspace owners and admins will be able to open every session in this workspace, including sessions members kept private. Members see a notice in the share dialog. Each session opened this way is recorded in the audit log.",
+    "enableDescription": "Workspace owners and admins will be able to open every session and space in this workspace, including the ones members kept private. Members see a notice in the share dialog. Each session opened this way is recorded in the audit log.",
     "enableConfirm": "Turn on",
     "disableTitle": "Stop admins opening every session?",
-    "disableDescription": "Private sessions go back to owner-only. Admins keep access only to sessions shared with them.",
+    "disableDescription": "Private sessions and spaces go back to their owners and the people they are shared with. Admins keep access only to what is shared with them.",
     "disableConfirm": "Turn off",
     "enabledToast": "Admins can now open every session",
     "disabledToast": "Private sessions are owner-only again",
@@ -7980,6 +7980,7 @@ const catalog = {
   },
   "goals": {
     "title": "Goals",
+    "gateDescription": "Agents own an objective until it is verifiably done: the goal lives in Files, a daily heartbeat wakes it, the agent chases people for what it needs, and an independent check closes it.",
     "empty": "No goals yet",
     "retry": "Try again",
     "needsYou": "Needs you",
@@ -8026,6 +8027,8 @@ const catalog = {
     "sessions": "Sessions",
     "you": "You",
     "anotherMember": "A teammate",
+    "share": "Share",
+    "composerPlaceholder": "Describe the outcome you want",
     "paused": "Paused",
     "criteriaMet": "{met} of {total} done criteria met",
     "state": {
@@ -10677,7 +10680,17 @@ const catalog = {
     "pickerSearch": "Search spaces",
     "pickerEmpty": "No space matches",
     "gateDescription": "Group related sessions into spaces that share files and context.",
-    "loadMore": "Load more"
+    "loadMore": "Load more",
+    "share": "Share",
+    "shareTitle": "Share {name}",
+    "shareDescription": "Everyone you add sees every session in this space and its files.",
+    "shareEveryone": "Everyone in this workspace",
+    "shareSearch": "Search people",
+    "shared": "Sharing updated",
+    "shareFailed": "Could not change who sees the space",
+    "shareNotMember": "Share a space only with members of this workspace.",
+    "sharedWith": "{count, plural, one {Shared with # person} other {Shared with # people}}",
+    "private": "Private"
   }
 };
 

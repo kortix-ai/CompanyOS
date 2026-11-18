@@ -19,13 +19,14 @@
  * (`parent_session_id`, or the older `metadata.spawned_by_session`) stays
  * with its parent.
  */
-import { SESSION_GROUPS_MAX } from '@kortix/api-contract';
-import { projectSessionGroups, projectSessions } from '@kortix/db';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { SESSION_GROUPS_MAX, type SpaceTab } from '@kortix/api-contract';
+import { accountMembers, projectSessionGroupMembers, projectSessionGroups, projectSessions } from '@kortix/db';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../../shared/db';
 import { errorSqlstate } from '../../shared/error-cause';
 import { uniqueViolationConstraint } from '../../shared/postgres-errors';
 import { forgetSessionListPollEtags } from './session-list-poll-memo';
+import { storedSpaceTabs } from './project-spaces';
 
 export type SessionGroupRow = typeof projectSessionGroups.$inferSelect;
 
@@ -106,27 +107,33 @@ export async function updateSessionGroup(
 }
 
 /**
- * Put the project's groups in this order. `groupIds` must name every group of
- * the project exactly once; otherwise nothing changes and the answer is
- * `group_order_stale` (the caller's list is out of date).
+ * Put the groups the caller sees in this order. `groupIds` must name every
+ * group in `visible` exactly once (every group of the project when absent);
+ * otherwise nothing changes and the answer is `group_order_stale` (the
+ * caller's list is out of date). A group the caller does not see keeps its
+ * place: the caller's groups fill the places theirs held, in the new order.
  */
 export async function reorderSessionGroups(
   projectId: string,
   groupIds: readonly string[],
+  visible?: (groupId: string) => boolean,
 ): Promise<{ ok: true; groups: SessionGroupRow[] } | { ok: false; code: 'group_order_stale' }> {
   return db.transaction(async (tx) => {
     await lockProjectGroups(tx, projectId);
     const existing = await groupsOf(tx, projectId);
-    const known = new Set(existing.map((group) => group.groupId));
+    const seen = visible ? existing.filter((group) => visible(group.groupId)) : existing;
+    const known = new Set(seen.map((group) => group.groupId));
     if (
-      groupIds.length !== existing.length ||
+      groupIds.length !== seen.length ||
       new Set(groupIds).size !== groupIds.length ||
       groupIds.some((id) => !known.has(id))
     ) {
       return { ok: false as const, code: 'group_order_stale' as const };
     }
+    const queue = [...groupIds];
+    const order = existing.map((group) => (known.has(group.groupId) ? queue.shift()! : group.groupId));
     const now = new Date();
-    for (const [position, groupId] of groupIds.entries()) {
+    for (const [position, groupId] of order.entries()) {
       const current = existing.find((group) => group.groupId === groupId)!;
       if (current.position === position) continue;
       await tx
@@ -212,4 +219,69 @@ export async function findSessionGroup(projectId: string, groupId: string): Prom
     .from(projectSessionGroups)
     .where(and(eq(projectSessionGroups.projectId, projectId), eq(projectSessionGroups.groupId, groupId)));
   return group ?? null;
+}
+
+/**
+ * Who sees a group: `private` with `memberIds` (none: only its creator) or
+ * `project` (members cleared). Every id must be a member of the project's
+ * account (`not_a_member` otherwise, nothing changes); the creator is never
+ * listed. One transaction.
+ */
+export async function setSessionGroupSharing(input: {
+  projectId: string;
+  accountId: string;
+  groupId: string;
+  visibility: 'private' | 'project';
+  memberIds: readonly string[];
+  addedBy: string;
+}): Promise<{ ok: true; group: SessionGroupRow; memberIds: string[] } | { ok: false; code: 'group_not_found' | 'not_a_member' }> {
+  return db.transaction(async (tx) => {
+    const [group] = await tx
+      .select()
+      .from(projectSessionGroups)
+      .where(and(eq(projectSessionGroups.projectId, input.projectId), eq(projectSessionGroups.groupId, input.groupId)))
+      .for('update');
+    if (!group) return { ok: false as const, code: 'group_not_found' as const };
+    const wanted = input.visibility === 'project' ? [] : input.memberIds.filter((id) => id !== group.createdBy);
+    if (wanted.length > 0) {
+      const found = await tx
+        .select({ userId: accountMembers.userId })
+        .from(accountMembers)
+        .where(and(eq(accountMembers.accountId, input.accountId), inArray(accountMembers.userId, wanted)));
+      if (found.length !== wanted.length) return { ok: false as const, code: 'not_a_member' as const };
+    }
+    const [updated] = await tx
+      .update(projectSessionGroups)
+      .set({ visibility: input.visibility, updatedAt: new Date() })
+      .where(eq(projectSessionGroups.groupId, input.groupId))
+      .returning();
+    await tx.delete(projectSessionGroupMembers).where(eq(projectSessionGroupMembers.groupId, input.groupId));
+    if (wanted.length > 0) {
+      await tx
+        .insert(projectSessionGroupMembers)
+        .values(wanted.map((userId) => ({ groupId: input.groupId, userId, addedBy: input.addedBy })));
+    }
+    // Who sees the group's sessions changed: no list page may answer from before.
+    forgetSessionListPollEtags(input.projectId);
+    return { ok: true as const, group: updated!, memberIds: wanted };
+  });
+}
+
+/**
+ * Replace a group's tabs (already validated: `SpaceTabsInputSchema`). A link
+ * tab's `embeddable` is the server's, as for a channel (`storedSpaceTabs`).
+ */
+export async function setSessionGroupTabs(
+  projectId: string,
+  group: Pick<SessionGroupRow, 'groupId' | 'tabs'>,
+  tabs: readonly SpaceTab[],
+): Promise<SessionGroupRow | null> {
+  const stored = await storedSpaceTabs(group.tabs, tabs);
+  const groupId = group.groupId;
+  const [updated] = await db
+    .update(projectSessionGroups)
+    .set({ tabs: stored, updatedAt: new Date() })
+    .where(and(eq(projectSessionGroups.projectId, projectId), eq(projectSessionGroups.groupId, groupId)))
+    .returning();
+  return updated ?? null;
 }

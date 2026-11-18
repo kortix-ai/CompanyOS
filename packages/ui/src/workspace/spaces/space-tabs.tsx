@@ -74,7 +74,7 @@ export const KIND_ICON: Record<ProjectSpaceTabKind, Icon> = {
  * runs, the tab row shows the list being saved. A person may edit a DM they
  * own (every DM they see) or a channel they may edit (`can_edit`).
  */
-export function useSpaceTabs(projectId: string, space: ProjectSpace) {
+export function useSpaceTabs(projectId: string, space: ProjectSpace): SpaceTabsState {
   const t = useTranslations('spaces.view.tabEdit');
   const mutation = useSetProjectSpaceTabs(projectId);
   const saved = space.tabs ?? [];
@@ -88,7 +88,12 @@ export function useSpaceTabs(projectId: string, space: ProjectSpace) {
   return { tabs, canEdit, save };
 }
 
-export type SpaceTabsState = ReturnType<typeof useSpaceTabs>;
+/** A place's tabs while they show, whether this person may change them, and the write that replaces them all. */
+export interface SpaceTabsState {
+  tabs: ProjectSpaceTab[];
+  canEdit: boolean;
+  save: (next: ProjectSpaceTab[]) => Promise<unknown>;
+}
 
 /**
  * One stored tab in the tab row. A right click opens its menu; the open tab
@@ -190,12 +195,16 @@ export function StoredTabTrigger({
 export function AddTabMenu({
   projectId,
   space,
+  ownFolder: ownFolderOverride,
   state,
   onAdded,
   label,
 }: {
   projectId: string;
-  space: ProjectSpace;
+  /** A channel or DM: its own folder is the first folder offered. */
+  space?: ProjectSpace;
+  /** Another place's own folder (a Space's `/Spaces/<group_id>`), when there is no `space`. */
+  ownFolder?: string | null;
   state: SpaceTabsState;
   onAdded: (id: string) => void;
   /** A text trigger ("Add tab", the details panel) instead of the tab row's "+". */
@@ -209,10 +218,12 @@ export function AddTabMenu({
   const [ask, setAsk] = useState<TargetKind | null>(null);
   const { tabs, save } = state;
   const full = tabs.length >= SPACE_TABS_MAX;
-  const name = space.kind === 'channel' ? space.slug : space.dm_agent_name;
-  const ownFolder = name
-    ? spaceDriveFolders(space.kind, name, drive.data?.personalFolder ?? null, space.visibility === 'private' ? space.space_id : null)?.files ?? null
-    : null;
+  const name = space ? (space.kind === 'channel' ? space.slug : space.dm_agent_name) : null;
+  const ownFolder = space
+    ? name
+      ? spaceDriveFolders(space.kind, name, drive.data?.personalFolder ?? null, space.visibility === 'private' ? space.space_id : null)?.files ?? null
+      : null
+    : (ownFolderOverride ?? null);
 
   const add = async (kind: ProjectSpaceTabKind, title: string, ref: string) => {
     const tab: ProjectSpaceTab = { id: newTabId(kind, tabs), title: tabTitle(title, t(`kind.${kind}`)), kind, ref };
@@ -482,6 +493,35 @@ export function StoredTabPanel({
   renderFolder?: (folder: { space: ProjectSpace; tab: 'files'; place: string; path: string; missing: ReactNode }) => ReactNode;
   renderFile?: (file: SpaceFile) => ReactNode;
 }) {
+  return (
+    <StoredTabBody
+      projectId={projectId}
+      tab={tab}
+      state={state}
+      folder={renderFolder ? (path, missing) => renderFolder({ space, tab: 'files', place, path, missing }) : undefined}
+      file={renderFile ? (path, title, missing) => renderFile({ space, place, path, title, missing }) : undefined}
+    />
+  );
+}
+
+/**
+ * The body of a stored tab for any place that has tabs (a channel, a DM, a
+ * Space): `folder` and `file` render a Drive folder or file the host's way;
+ * the rest is the same everywhere.
+ */
+export function StoredTabBody({
+  projectId,
+  tab,
+  state,
+  folder,
+  file,
+}: {
+  projectId: string;
+  tab: ProjectSpaceTab;
+  state: SpaceTabsState;
+  folder?: (path: string, missing: ReactNode) => ReactNode;
+  file?: (path: string, title: string, missing: ReactNode) => ReactNode;
+}) {
   const t = useTranslations('spaces.view.tabEdit');
   const removeAction = state.canEdit ? (
     <Button variant="outline" size="sm" onClick={() => void state.save(removeTab(state.tabs, tab.id)).catch(() => undefined)}>
@@ -501,13 +541,13 @@ export function StoredTabPanel({
   const ref = tab.ref ?? '';
   switch (tab.kind) {
     case 'file':
-      return ref && renderFile ? <>{renderFile({ space, place, path: ref, title: tab.title, missing })}</> : missing;
+      return ref && file ? <>{file(ref, tab.title, missing)}</> : missing;
     case 'artifact':
       return <ArtifactTab projectId={projectId} artifactId={ref} missingAction={removeAction} />;
     case 'app':
       return <AppTab projectId={projectId} slug={ref} missingAction={removeAction} />;
     case 'folder':
-      return ref && renderFolder ? <>{renderFolder({ space, tab: 'files', place, path: ref, missing })}</> : missing;
+      return ref && folder ? <>{folder(ref, missing)}</> : missing;
     case 'link':
       if (!isLinkUrl(ref)) return missing;
       return tab.embeddable === true ? <LinkFrame url={ref} title={tab.title} /> : <LinkCard url={ref} title={tab.title} />;

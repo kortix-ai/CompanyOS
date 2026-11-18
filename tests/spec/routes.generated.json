@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1813,
-  "aliases": 704,
+  "count": 1817,
+  "aliases": 706,
   "routes": [
     {
       "method": "GET",
@@ -4263,6 +4263,16 @@
     },
     {
       "method": "PUT",
+      "path": "/v1/projects/:workspaceId/session-groups/:groupId/sharing",
+      "aliasOf": "/v1/workspaces/:workspaceId/session-groups/:groupId/sharing"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/projects/:workspaceId/session-groups/:groupId/tabs",
+      "aliasOf": "/v1/workspaces/:workspaceId/session-groups/:groupId/tabs"
+    },
+    {
+      "method": "PUT",
       "path": "/v1/projects/:workspaceId/session-groups/order",
       "aliasOf": "/v1/workspaces/:workspaceId/session-groups/order"
     },
@@ -7322,6 +7332,14 @@
     {
       "method": "PATCH",
       "path": "/v1/workspaces/:workspaceId/session-groups/:groupId"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/workspaces/:workspaceId/session-groups/:groupId/sharing"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/workspaces/:workspaceId/session-groups/:groupId/tabs"
     },
     {
       "method": "PUT",

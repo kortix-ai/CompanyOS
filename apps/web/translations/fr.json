@@ -21996,14 +21996,14 @@
     "loadErrorBody": "Vérifiez votre connexion et réessayez."
   },
   "sessionOversight": {
-    "label": "Les admins peuvent ouvrir toutes les sessions",
-    "description": "Les propriétaires et admins de l’espace de travail peuvent ouvrir n’importe quelle session de cet espace de travail, y compris les sessions privées. Chaque session ouverte ainsi figure dans le journal d’audit.",
-    "ownerOnlyDescription": "Les propriétaires et admins de l’espace de travail peuvent ouvrir n’importe quelle session de cet espace de travail, y compris les sessions privées. Seul un propriétaire de l’espace de travail peut modifier ce réglage.",
+    "label": "Les admins peuvent ouvrir chaque session et chaque espace",
+    "description": "Les propriétaires et admins du workspace peuvent ouvrir n'importe quelle session et n'importe quel espace de ce workspace, y compris les privés. Chaque session ouverte ainsi figure dans le journal d'audit.",
+    "ownerOnlyDescription": "Les propriétaires et admins du workspace peuvent ouvrir n'importe quelle session et n'importe quel espace de ce workspace, y compris les privés. Seul un propriétaire du workspace peut modifier ce réglage.",
     "enableTitle": "Autoriser les admins à ouvrir toutes les sessions ?",
-    "enableDescription": "Les propriétaires et admins de l’espace de travail pourront ouvrir toutes les sessions de cet espace de travail, y compris celles que les membres gardent privées. Les membres verront un avis dans la fenêtre de partage. Chaque session ouverte ainsi est enregistrée dans le journal d’audit.",
+    "enableDescription": "Les propriétaires et admins du workspace pourront ouvrir chaque session et chaque espace de ce workspace, y compris ceux que les membres ont gardés privés. Les membres voient un avertissement dans la boîte de partage. Chaque session ouverte ainsi est enregistrée dans le journal d'audit.",
     "enableConfirm": "Activer",
     "disableTitle": "Ne plus autoriser les admins à ouvrir toutes les sessions ?",
-    "disableDescription": "Les sessions privées redeviennent réservées à leur propriétaire. Les admins gardent l’accès uniquement aux sessions partagées avec eux.",
+    "disableDescription": "Les sessions et espaces privés reviennent à leurs propriétaires et aux personnes avec qui ils sont partagés. Les admins ne gardent l'accès qu'à ce qui est partagé avec eux.",
     "disableConfirm": "Désactiver",
     "enabledToast": "Les admins peuvent désormais ouvrir toutes les sessions",
     "disabledToast": "Les sessions privées sont de nouveau réservées à leur propriétaire",
@@ -27506,6 +27506,16 @@
     "pickerSearch": "Rechercher des espaces",
     "pickerEmpty": "Aucun espace ne correspond",
     "gateDescription": "Regroupez les sessions liées dans des espaces qui partagent fichiers et contexte.",
-    "loadMore": "Charger plus"
+    "loadMore": "Charger plus",
+    "share": "Partager",
+    "shareTitle": "Partager {name}",
+    "shareDescription": "Toutes les personnes que vous ajoutez voient chaque session de cet espace et ses fichiers.",
+    "shareEveryone": "Tout le workspace",
+    "shareSearch": "Rechercher des personnes",
+    "shared": "Partage mis à jour",
+    "shareFailed": "Impossible de modifier qui voit l'espace",
+    "shareNotMember": "Partagez un espace uniquement avec des membres de ce workspace.",
+    "sharedWith": "{count, plural, one {Partagé avec # personne} other {Partagé avec # personnes}}",
+    "private": "Privé"
   }
 }

@@ -1,21 +1,26 @@
 'use client';
 
 import type { ProjectSession, ProjectSessionGroup } from '@kortix/sdk';
+import type { ProjectSpaceTab } from '@kortix/sdk';
 import {
   useDeleteWorkspaceSessionGroup,
+  useSetWorkspaceSessionGroupTabs,
   useFeatureFlag,
   useWorkspaceSessionGroups,
   useWorkspaceSessions,
 } from '@kortix/sdk/react';
-import { MY_KORTIX_SANDBOX_SLUG, isMyKortixAgentName } from '@kortix/shared';
+import { MY_KORTIX_SANDBOX_SLUG, isMyKortixAgentName, sessionGroupDriveFolder } from '@kortix/shared';
 import {
   ChatCircleIcon,
   DotsThreeIcon,
   FolderSimpleIcon,
+  LockSimpleIcon,
   PencilSimpleIcon,
+  ShareNetworkIcon,
   StackIcon,
   TextAlignLeftIcon,
   TrashIcon,
+  UsersThreeIcon,
 } from '@phosphor-icons/react';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
@@ -46,7 +51,10 @@ import { ComposerChatInput, type ComposerOptions } from '../../session/composer/
 import type { DraftScope } from '../../session/composer/draft/composer-draft';
 import type { AttachedFile } from '../../session/composer/session-chat-input';
 import { useProjectHomeSend } from '../layout/use-project-home-send';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../primitives/tabs';
+import { AddTabMenu, StoredTabBody, StoredTabTrigger, type SpaceTabsState } from '../spaces/space-tabs';
 import { SpaceFormModal } from './space-form-modal';
+import { SpaceShareModal } from './space-share-modal';
 
 /** Rows per page of the space's sessions. */
 const PAGE_SIZE = 30;
@@ -55,10 +63,16 @@ const SKELETON_WIDTHS = ['w-56', 'w-40', 'w-64', 'w-44'];
 /**
  * One space (flag `session_groups`): a composer that starts each new session
  * in it, its sessions newest first, and beside them what it is for and its
- * shared Files folder (`/Company/Spaces/<group_id>`, mounted in every
+ * shared Files folder (`/Spaces/<group_id>`, mounted in every
  * session of the space at /drives/space).
  */
-export function SpaceDetailPage({ projectId, groupId }: { projectId: string; groupId: string }) {
+/** How the host renders a Drive folder or file in a tab (apps/web: the Drive explorer and file viewer). */
+export interface SpaceDriveRenderers {
+  renderFolder?: (folder: { path: string; place: string; ownFolder: string | null; missing: ReactNode }) => ReactNode;
+  renderFile?: (file: { path: string; title: string; missing: ReactNode }) => ReactNode;
+}
+
+export function SpaceDetailPage({ projectId, groupId, ...renderers }: { projectId: string; groupId: string } & SpaceDriveRenderers) {
   const t = useTranslations('sessionSpaces');
   const flag = useFeatureFlag(projectId, 'session_groups');
   const groups = useWorkspaceSessionGroups(flag.enabled ? projectId : null);
@@ -105,7 +119,7 @@ export function SpaceDetailPage({ projectId, groupId }: { projectId: string; gro
   }
   return (
     <ProjectScope projectId={projectId}>
-      <SpaceView projectId={projectId} space={space} />
+      <SpaceView projectId={projectId} space={space} {...renderers} />
     </ProjectScope>
   );
 }
@@ -115,11 +129,14 @@ function PageFrame({
   projectId,
   name,
   menu,
+  action,
   children,
 }: {
   projectId: string;
   name: string | null;
   menu?: ReactNode;
+  /** The page's one action at the right of the breadcrumb (Share). */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   const t = useTranslations('sessionSpaces');
@@ -143,6 +160,7 @@ function PageFrame({
               {menu}
             </>
           ) : null}
+          {action ? <span className="ml-auto shrink-0">{action}</span> : null}
         </nav>
         {children}
       </div>
@@ -150,16 +168,30 @@ function PageFrame({
   );
 }
 
-function SpaceView({ projectId, space }: { projectId: string; space: ProjectSessionGroup }) {
+function SpaceView({ projectId, space, renderFolder, renderFile }: { projectId: string; space: ProjectSessionGroup } & SpaceDriveRenderers) {
   const t = useTranslations('sessionSpaces');
   const [editing, setEditing] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const canManage = space.can_manage === true;
   return (
-    <PageFrame projectId={projectId} name={space.name} menu={<SpaceMenu projectId={projectId} space={space} onEdit={() => setEditing(true)} />}>
+    <PageFrame
+      projectId={projectId}
+      name={space.name}
+      menu={<SpaceMenu projectId={projectId} space={space} onEdit={() => setEditing(true)} />}
+      action={
+        canManage ? (
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setSharing(true)}>
+            <ShareNetworkIcon className="size-3.5 shrink-0" />
+            {t('share')}
+          </Button>
+        ) : null
+      }
+    >
       <h1 className="text-foreground text-xl font-medium text-balance">{space.name}</h1>
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_16rem]">
-        <div className="min-w-0 space-y-8">
+        <div className="min-w-0 space-y-6">
           <SpaceComposer projectId={projectId} space={space} />
-          <SpaceSessions projectId={projectId} space={space} />
+          <SpaceTabsRow projectId={projectId} space={space} renderFolder={renderFolder} renderFile={renderFile} />
         </div>
         <aside className="space-y-1" aria-label={space.name}>
           <AsideRow
@@ -176,10 +208,14 @@ function SpaceView({ projectId, space }: { projectId: string; space: ProjectSess
             ) : null}
           </AsideRow>
           <SpaceFilesRow projectId={projectId} space={space} />
-          <p className="text-muted-foreground px-2 pt-3 text-xs">{t('visibility')}</p>
+          <p className="text-muted-foreground flex items-center gap-1.5 px-2 pt-3 text-xs">
+            {space.visibility === 'project' ? <UsersThreeIcon className="size-3.5 shrink-0" /> : <LockSimpleIcon className="size-3.5 shrink-0" />}
+            {sharingLine(space, t)}
+          </p>
         </aside>
       </div>
       <SpaceFormModal projectId={projectId} space={space} open={editing} onOpenChange={setEditing} />
+      {canManage ? <SpaceShareModal projectId={projectId} space={space} open={sharing} onOpenChange={setSharing} /> : null}
     </PageFrame>
   );
 }
@@ -203,7 +239,7 @@ function SpaceFilesRow({ projectId, space }: { projectId: string; space: Project
   const t = useTranslations('sessionSpaces');
   const drive = uiRoutes().drive(projectId);
   if (!drive) return null;
-  const href = `${drive}${drive.includes('?') ? '&' : '?'}path=Company/Spaces/${encodeURIComponent(space.group_id)}`;
+  const href = `${drive}${drive.includes('?') ? '&' : '?'}path=Spaces/${encodeURIComponent(space.group_id)}`;
   return (
     <AsideRow
       icon={<FolderSimpleIcon className="size-4" />}
@@ -236,11 +272,15 @@ function SpaceMenu({ projectId, space, onEdit }: { projectId: string; space: Pro
             <PencilSimpleIcon />
             {t('edit')}
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem className="cursor-pointer" variant="destructive" onSelect={() => setConfirmOpen(true)}>
-            <TrashIcon />
-            {t('delete')}
-          </DropdownMenuItem>
+          {space.can_manage === true ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="cursor-pointer" variant="destructive" onSelect={() => setConfirmOpen(true)}>
+                <TrashIcon />
+                {t('delete')}
+              </DropdownMenuItem>
+            </>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
       <ConfirmDialog
@@ -264,6 +304,65 @@ function SpaceMenu({ projectId, space, onEdit }: { projectId: string; space: Pro
         }}
       />
     </>
+  );
+}
+
+/** Who sees the space, in one line: everyone, how many people besides its creator, or only its creator. */
+function sharingLine(space: ProjectSessionGroup, t: ReturnType<typeof useTranslations>): string {
+  if (space.visibility === 'project') return t('visibility');
+  const count = space.member_ids?.length ?? 0;
+  return count > 0 ? t('sharedWith', { count }) : t('private');
+}
+
+/** The open tab: Sessions first, then the space's stored tabs, then "+" (everyone who sees the space may edit them). */
+const SESSIONS_TAB = 'sessions';
+
+function useSessionSpaceTabs(projectId: string, space: ProjectSessionGroup): SpaceTabsState {
+  const t = useTranslations('spaces.view.tabEdit');
+  const mutation = useSetWorkspaceSessionGroupTabs(projectId);
+  const saved = space.tabs ?? [];
+  const tabs = mutation.isPending && mutation.variables?.groupId === space.group_id ? mutation.variables.tabs : saved;
+  const save = (next: ProjectSpaceTab[]) =>
+    mutation.mutateAsync({ groupId: space.group_id, tabs: next }).catch((error: unknown) => {
+      errorToast(t('saveError'), { description: error instanceof Error ? error.message : undefined });
+      throw error;
+    });
+  return { tabs, canEdit: true, save };
+}
+
+function SpaceTabsRow({ projectId, space, renderFolder, renderFile }: { projectId: string; space: ProjectSessionGroup } & SpaceDriveRenderers) {
+  const t = useTranslations('sessionSpaces');
+  const state = useSessionSpaceTabs(projectId, space);
+  const [tab, setTab] = useState(SESSIONS_TAB);
+  const ownFolder = sessionGroupDriveFolder(space.group_id);
+  // A tab removed elsewhere: back to Sessions.
+  const open = tab === SESSIONS_TAB || state.tabs.some((stored) => stored.id === tab) ? tab : SESSIONS_TAB;
+  return (
+    <Tabs value={open} onValueChange={setTab} className="gap-4">
+      <TabsList type="underline" size="sm" className="w-full justify-start gap-4 overflow-x-auto">
+        <TabsTrigger value={SESSIONS_TAB} className="w-fit flex-none">
+          {t('sessionsHeading')}
+        </TabsTrigger>
+        {state.tabs.map((stored, index) => (
+          <StoredTabTrigger key={stored.id} tab={stored} index={index} active={stored.id === open} state={state} />
+        ))}
+        <AddTabMenu projectId={projectId} ownFolder={ownFolder} state={state} onAdded={setTab} />
+      </TabsList>
+      <TabsContent value={SESSIONS_TAB}>
+        <SpaceSessions projectId={projectId} space={space} />
+      </TabsContent>
+      {state.tabs.map((stored) => (
+        <TabsContent key={stored.id} value={stored.id} className="bg-popover flex h-[36rem] min-h-0 flex-none flex-col overflow-hidden rounded-md border">
+          <StoredTabBody
+            projectId={projectId}
+            tab={stored}
+            state={state}
+            folder={renderFolder ? (path, missing) => renderFolder({ path, place: space.name, ownFolder, missing }) : undefined}
+            file={renderFile ? (path, title, missing) => renderFile({ path, title, missing }) : undefined}
+          />
+        </TabsContent>
+      ))}
+    </Tabs>
   );
 }
 
@@ -309,8 +408,7 @@ function SpaceSessions({ projectId, space }: { projectId: string; space: Project
   const query = useWorkspaceSessions(projectId, { group: space.group_id, parent: 'root', limit: PAGE_SIZE });
   const rows = query.sessions.filter((session) => session.group_id === space.group_id);
   return (
-    <section className="space-y-3">
-      <h2 className="text-foreground text-sm font-medium">{t('sessionsHeading')}</h2>
+    <section className="space-y-3" aria-label={t('sessionsHeading')}>
       {query.isLoading || query.isScanning ? (
         <ul className="space-y-2" aria-hidden>
           {SKELETON_WIDTHS.map((width) => (

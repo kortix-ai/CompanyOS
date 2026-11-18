@@ -19,10 +19,12 @@
 
 import { logger } from '../lib/logger';
 import { accountMembers, driveConflicts, driveMountRevocations, drives, iamRoles, projectSessionGroups, projectSessions, projectSpaceLinks, projectSpaceMembers, projectSpaces, roleAssignments, serviceAccounts, sessionSandboxes } from '@kortix/db';
-import { sessionGroupDriveFolder, spaceDriveFolders } from '@kortix/shared';
+import { SESSION_GROUPS_DIR, sessionGroupDriveFolder, spaceDriveFolders } from '@kortix/shared';
+import { groupFolderAccess } from '../shared/session-group-access';
 import { privateChannelAccess } from '../shared/space-access';
 import { and, asc, count, desc, eq, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import { projectFeatureFlagEnabled } from '../feature-flags/for-project';
+import { hasAccountSessionOversight } from '../iam/session-oversight';
 import { resolveSessionSandboxRegion } from '../platform/services/sandbox-region';
 import { SYSTEM_ACTOR, assignRole, revokeAssignment } from '../iam/assignments';
 import { resolvePrincipal } from '../iam/authorize';
@@ -473,6 +475,12 @@ export async function driveSubjectFor(
   // is an ordinary folder.
   const folders = await privateChannelFoldersFor(drive.projectId!, userId, bound);
   grants = onlyVisiblePrivateGrants(grants, folders);
+  // Seeing a Space is the key to its folder: a grant computed now, never
+  // stored, so sharing and unsharing take effect on the next request.
+  for (const folder of folders.visible) {
+    if (!folder.startsWith(`${SESSION_GROUPS_DIR}/`)) continue;
+    grants = [...grants, { path: folder, level: 'write', principalType: 'user', principalId: userId, source: 'system' }];
+  }
   const privateChannelFolders = folders.all;
   // A private channel's thread writes only its channel's folder (the twin of
   // `sessionMountCandidates`): its person's write elsewhere, admin included, is read here.
@@ -530,9 +538,13 @@ function privateFolderOfSpace(spaceId: string): string | null {
  * session-bound credential (`bound`). One read, memoized with `hiddenSpaceIds`.
  */
 export async function privateChannelFoldersFor(projectId: string, userId: string, bound: string | null): Promise<PrivateChannelFolderAccess> {
-  const { all, hidden } = await privateChannelAccess(projectId, userId, bound);
-  const allFolders = new Set<string>();
-  const visible = new Set<string>();
+  const [{ all, hidden }, spaces] = await Promise.all([
+    privateChannelAccess(projectId, userId, bound),
+    groupFolderAccess(projectId, userId, bound, (accountId) => hasAccountSessionOversight(userId, accountId)),
+  ]);
+  // A Space's folder (`/Spaces/<group_id>`) is reserved the same way: only the people who see the space reach it.
+  const allFolders = new Set<string>(spaces.all);
+  const visible = new Set<string>(spaces.visible);
   for (const spaceId of all) {
     const folder = privateFolderOfSpace(spaceId);
     if (!folder) continue;
@@ -544,7 +556,17 @@ export async function privateChannelFoldersFor(projectId: string, userId: string
 
 /** The project's private channel folders, read now (no memo): for mounts and grant sync. */
 export async function projectPrivateChannelFolders(projectId: string): Promise<Set<string>> {
-  return new Set((await privateChannelRows(projectId)).flatMap((row) => (row.folder ? [row.folder] : [])));
+  const [channels, groups] = await Promise.all([
+    privateChannelRows(projectId),
+    db.select({ groupId: projectSessionGroups.groupId }).from(projectSessionGroups).where(eq(projectSessionGroups.projectId, projectId)),
+  ]);
+  return new Set([
+    ...channels.flatMap((row) => (row.folder ? [row.folder] : [])),
+    ...groups.flatMap((row) => {
+      const folder = sessionGroupDriveFolder(row.groupId);
+      return folder ? [folder] : [];
+    }),
+  ]);
 }
 
 /** The project's private channels (archived included) with their folder (`/Channels/<space_id>`) and slug. */
@@ -671,7 +693,7 @@ export async function sessionGroupFolder(projectId: string, sessionId: string): 
   return group ? sessionGroupDriveFolder(group.groupId) : null;
 }
 
-/** Each space's folder (`sessionGroupDriveFolder`) and the space's name, for the Files listing of `/Company/Spaces`. */
+/** Each space's folder (`sessionGroupDriveFolder`) and the space's name, for the Files listing of `/Spaces`. */
 export async function sessionGroupFolderNames(projectId: string): Promise<Map<string, string>> {
   const rows = await db
     .select({ groupId: projectSessionGroups.groupId, name: projectSessionGroups.name })

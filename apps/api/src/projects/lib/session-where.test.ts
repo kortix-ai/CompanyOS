@@ -129,7 +129,7 @@ describe('a space (session group)', () => {
   });
 
   test('the brief carries the description, the mounted folder and how to read the other sessions', () => {
-    const brief = sessionSpaceBrief(grouped({ drive_mounts: [{ mountPath: '/drives/space', subdir: `/Company/Spaces/${GROUP}` }] }))!;
+    const brief = sessionSpaceBrief(grouped({ drive_mounts: [{ mountPath: '/drives/space', subdir: `/Spaces/${GROUP}` }] }))!;
     expect(brief).toContain('## This space: "Q4 launch"');
     expect(brief).toContain('Ship the pricing page by Dec 1.');
     expect(brief).toContain('- Shared files: /drives/space/ (read-write;');

@@ -21996,14 +21996,14 @@
     "loadErrorBody": "Prüfe deine Verbindung und versuche es erneut."
   },
   "sessionOversight": {
-    "label": "Admins können jede Sitzung öffnen",
-    "description": "Workspace-Inhaber und Admins können jede Sitzung in diesem Workspace öffnen, auch private. Jede so geöffnete Sitzung steht im Audit-Log.",
-    "ownerOnlyDescription": "Workspace-Inhaber und Admins können jede Sitzung in diesem Workspace öffnen, auch private. Nur ein Workspace-Inhaber kann das ändern.",
+    "label": "Admins können jede Sitzung und jeden Space öffnen",
+    "description": "Workspace-Inhaber und Admins können jede Sitzung und jeden Space in diesem Workspace öffnen, auch private. Jede so geöffnete Sitzung steht im Audit-Log.",
+    "ownerOnlyDescription": "Workspace-Inhaber und Admins können jede Sitzung und jeden Space in diesem Workspace öffnen, auch private. Nur ein Workspace-Inhaber kann das ändern.",
     "enableTitle": "Admins jede Sitzung öffnen lassen?",
-    "enableDescription": "Workspace-Inhaber und Admins können dann jede Sitzung in diesem Workspace öffnen, auch Sitzungen, die Mitglieder privat halten. Mitglieder sehen einen Hinweis im Teilen-Dialog. Jede so geöffnete Sitzung wird im Audit-Log erfasst.",
+    "enableDescription": "Workspace-Inhaber und Admins können dann jede Sitzung und jeden Space in diesem Workspace öffnen, auch die, die Mitglieder privat gehalten haben. Mitglieder sehen einen Hinweis im Teilen-Dialog. Jede so geöffnete Sitzung wird im Audit-Log festgehalten.",
     "enableConfirm": "Einschalten",
     "disableTitle": "Admins nicht mehr jede Sitzung öffnen lassen?",
-    "disableDescription": "Private Sitzungen sind wieder nur für ihre Inhaber. Admins behalten nur Zugriff auf Sitzungen, die mit ihnen geteilt sind.",
+    "disableDescription": "Private Sitzungen und Spaces gehören wieder ihren Inhabern und den Personen, mit denen sie geteilt sind. Admins behalten nur Zugriff auf das, was mit ihnen geteilt ist.",
     "disableConfirm": "Ausschalten",
     "enabledToast": "Admins können jetzt jede Sitzung öffnen",
     "disabledToast": "Private Sitzungen sind wieder nur für Inhaber",
@@ -27506,6 +27506,16 @@
     "pickerSearch": "Spaces durchsuchen",
     "pickerEmpty": "Kein Space passt",
     "gateDescription": "Fasse zusammengehörige Sitzungen in Spaces zusammen, die Dateien und Kontext teilen.",
-    "loadMore": "Mehr laden"
+    "loadMore": "Mehr laden",
+    "share": "Teilen",
+    "shareTitle": "{name} teilen",
+    "shareDescription": "Alle, die du hinzufügst, sehen jede Sitzung in diesem Space und seine Dateien.",
+    "shareEveryone": "Alle in diesem Workspace",
+    "shareSearch": "Personen suchen",
+    "shared": "Freigabe aktualisiert",
+    "shareFailed": "Die Freigabe des Space konnte nicht geändert werden",
+    "shareNotMember": "Teile einen Space nur mit Mitgliedern dieses Workspace.",
+    "sharedWith": "{count, plural, one {Mit # Person geteilt} other {Mit # Personen geteilt}}",
+    "private": "Privat"
   }
 }

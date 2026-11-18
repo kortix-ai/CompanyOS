@@ -42,6 +42,7 @@ import {
 import { db } from '../../shared/db';
 import { qualifiedColumn } from '../../shared/sql-qualified-column';
 import { hasAccountSessionOversight } from '../../iam/session-oversight';
+import { sharedGroupIdsWhileOn } from './session-group-viewer';
 
 import { accountGroupMembers, projectSessionGrants, projectSessions, sessionSandboxes } from '@kortix/db';
 import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, notInArray, or, sql, type SQL } from 'drizzle-orm';
@@ -280,6 +281,12 @@ export interface SessionListViewer {
   deleted?: boolean;
   /** The private channels the viewer may not see (`hiddenSpaceIds`). REQUIRED: their sessions never list. */
   hiddenSpaceIds: ReadonlySet<string>;
+  /**
+   * The Spaces (session groups) whose sessions the viewer sees through the
+   * group (`sharedGroupIdsFor`): a session in one, or a child of one, lists
+   * whatever its own sharing. Absent: none (a group then widens nothing).
+   */
+  sharedGroupIds?: ReadonlySet<string>;
 }
 
 /**
@@ -326,8 +333,16 @@ export function sessionListViewerSql(viewer: SessionListViewer): SQL {
   // `created_by` is compared as a uuid, never cast to text: the cast hides the
   // column's statistics, the planner then expects a handful of matching rows,
   // and it may read and sort every live row of the project for one page.
+  // A Space the viewer sees shares the sessions in it, and their children.
+  const shared = [...(viewer.sharedGroupIds ?? [])];
+  const sharedList = sql.join(shared.map((id) => sql`${id}::uuid`), sql`, `);
+  const throughGroup = shared.length === 0
+    ? undefined
+    : sql`(${t.groupId} in (${sharedList})
+      or ${t.parentSessionId} in (select p.session_id from ${projectSessions} as p where p.group_id in (${sharedList}))
+      or ${t.metadata} ->> 'spawned_by_session' in (select p.session_id from ${projectSessions} as p where p.group_id in (${sharedList})))`;
   const byRules = sql`(${t.createdBy} = ${viewer.viewerId} or ${t.visibility} = 'project'
-    or (${t.visibility} = 'restricted' and ${granted}))`;
+    or (${t.visibility} = 'restricted' and ${granted})${throughGroup ? sql` or ${throughGroup}` : sql``})`;
   // Oversight and the trigger-run manager override are a human's powers only.
   const canAccess =
     bound === null && viewer.scope === 'project' && viewer.accountSessionOversight
@@ -449,6 +464,7 @@ async function foldSessionRows(
     runtimeStatusBySession: Map<string, RuntimeStatus>;
     userStates: Map<string, SessionUserState>;
     hiddenSpaceIds: ReadonlySet<string>;
+    sharedGroupIds: ReadonlySet<string>;
   },
 ) {
   const { input, canManageProject, subject, accountSessionOversight, grantsBySession, ownerIdentities, runtimeStatusBySession, userStates } = ctx;
@@ -483,6 +499,7 @@ async function foldSessionRows(
     ),
     personId ? loadSessionUserStates(rowIds, personId) : new Map<string, SessionUserState>(),
   ]);
+  const parentGroupIds = ctx.sharedGroupIds.size > 0 ? await parentGroupsOf(rows) : undefined;
 
   const rowRuntime = new Map(runtimeRows.map((row) => [row.sessionId, row.status]));
   for (const [key, value] of rowStates) userStates.set(key, value);
@@ -503,7 +520,29 @@ async function foldSessionRows(
     agentPrincipal: input.agentPrincipal === true,
     deleted: input.filter?.deleted === true,
     hiddenSpaceIds: ctx.hiddenSpaceIds,
+    sharedGroupIds: ctx.sharedGroupIds,
+    parentGroupIds,
   });
+}
+
+/** The group of each child row's parent (`parent_session_id` or `spawned_by_session`), for the Space widening. */
+async function parentGroupsOf(rows: ProjectSessionRow[]): Promise<Map<string, string | null>> {
+  const parents = [
+    ...new Set(
+      rows.flatMap((row) => {
+        if (row.groupId) return [];
+        const meta = (row.metadata ?? {}) as Record<string, unknown>;
+        const parent = row.parentSessionId ?? (typeof meta.spawned_by_session === 'string' ? meta.spawned_by_session : null);
+        return parent ? [parent] : [];
+      }),
+    ),
+  ];
+  if (parents.length === 0) return new Map();
+  const found = await db
+    .select({ sessionId: projectSessions.sessionId, groupId: projectSessions.groupId })
+    .from(projectSessions)
+    .where(inArray(projectSessions.sessionId, parents));
+  return new Map(found.map((row) => [row.sessionId, row.groupId]));
 }
 
 /** Serves the ancestors a page's children point at but the page does not hold. */
@@ -718,6 +757,10 @@ export async function loadProjectSessionInventory(input: {
   // The private channels this viewer may not see: the page WHERE and the fold both drop their sessions.
   const hiddenRead = hiddenSpaceIds(input.projectId, input.userId, input.boundCredentialSessionId);
   hiddenRead.catch(() => undefined);
+  // The Spaces this viewer sees: the page WHERE and the fold both list their sessions. An agent principal never widens.
+  const sharedRead = input.agentPrincipal === true ? Promise.resolve(new Set<string>()) : sharedGroupIdsWhileOn(input.projectId, input.userId);
+  sharedRead.catch(() => undefined);
+  const sharedGroupIds = await sharedRead;
   const viewerSql = (canManageProject: boolean, accountSessionOversight: boolean, hidden: ReadonlySet<string>) =>
     sessionListViewerSql({
       scope: input.scope,
@@ -728,6 +771,7 @@ export async function loadProjectSessionInventory(input: {
       accountSessionOversight,
       deleted: filter.deleted === true,
       hiddenSpaceIds: hidden,
+      sharedGroupIds,
     });
   // The page WHERE needs the manager standing and the oversight verdict, so
   // the first chunk starts once both are in. It does not wait for the share
@@ -791,6 +835,7 @@ export async function loadProjectSessionInventory(input: {
       runtimeStatusBySession,
       userStates,
       hiddenSpaceIds: hidden,
+      sharedGroupIds,
     });
 
   for (let pass = 0; pass < MAX_CHUNKS && items.length < limit; pass += 1) {

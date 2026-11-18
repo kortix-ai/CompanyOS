@@ -457,7 +457,7 @@ const FLAGS: readonly FeatureFlagDef[] = [
       "so the sidebar lists every session again. Turning it off deletes nothing: the groups and each session's " +
       '`group_id` stay and come back when it is turned on. WEB: no space sections, no Spaces page or picker, no New space and no Move to space. ' +
       'SESSIONS: session create ignores `group_id` while off. On, every session of a space (a child: its parent\'s) gets the "## This space" ' +
-      'turn text (projects/lib/session-where.ts: name, description, mounted folder) and mounts /Company/Spaces/<group_id> read-write at /drives/space (drives/service.ts sessionGroupFolder).',
+      'turn text (projects/lib/session-where.ts: name, description, mounted folder) and mounts /Spaces/<group_id> read-write at /drives/space (drives/service.ts sessionGroupFolder). SHARING: a group is private to its creator by default; sharing it (people or the whole project) shares every session in it and its folder (shared/session-group-access.ts).',
   },
   {
     key: 'chrome',

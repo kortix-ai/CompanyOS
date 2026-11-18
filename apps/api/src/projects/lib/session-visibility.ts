@@ -15,6 +15,8 @@ import {
 import { authorize } from '../../iam/authorize';
 import { isAgentPrincipalActor, type Actor } from '../../iam/actor';
 import { hasAccountSessionOversight } from '../../iam/session-oversight';
+import { sessionSharedThroughGroup } from '../../shared/session-group-access';
+import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { recordAuditEvent } from '../../shared/audit';
 import { db } from '../../shared/db';
 import { projectSessions, serviceAccounts } from '@kortix/db';
@@ -378,6 +380,20 @@ async function sessionReadAccess(
         visibility: row.visibility,
       });
     }
+  }
+  // A Space the caller sees shares the sessions in it (session-group-access.ts).
+  // Asked only when the rules above refused; never for an agent principal (it
+  // reads only its own sessions), across a hidden private channel, or to a
+  // sibling backend session.
+  if (
+    !visible &&
+    spaceVisible &&
+    !(loaded.actor && isAgentPrincipalActor(loaded.actor)) &&
+    isSessionTargetVisibleToCaller(ownership) &&
+    resolveFeatureFlag(loaded.row.metadata, 'session_groups') &&
+    (await sessionSharedThroughGroup(loaded.row.projectId, loaded.userId, row))
+  ) {
+    visible = true;
   }
   // An agent session always opens itself and the sessions it spawned. A trigger
   // run's `created_by` is the agent's service account, never the token's user, so

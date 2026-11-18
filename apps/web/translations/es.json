@@ -21996,14 +21996,14 @@
     "loadErrorBody": "Revisa tu conexión e inténtalo de nuevo."
   },
   "sessionOversight": {
-    "label": "Los administradores pueden abrir cualquier sesión",
-    "description": "Los propietarios y administradores del espacio de trabajo pueden abrir cualquier sesión de este espacio de trabajo, incluidas las privadas. Cada sesión abierta así queda en el registro de auditoría.",
-    "ownerOnlyDescription": "Los propietarios y administradores del espacio de trabajo pueden abrir cualquier sesión de este espacio de trabajo, incluidas las privadas. Solo un propietario del espacio de trabajo puede cambiarlo.",
+    "label": "Los administradores pueden abrir cada sesión y espacio",
+    "description": "Los propietarios y administradores del workspace pueden abrir cualquier sesión y espacio de este workspace, incluidos los privados. Cada sesión abierta así queda en el registro de auditoría.",
+    "ownerOnlyDescription": "Los propietarios y administradores del workspace pueden abrir cualquier sesión y espacio de este workspace, incluidos los privados. Solo un propietario del workspace puede cambiarlo.",
     "enableTitle": "¿Permitir que los administradores abran cualquier sesión?",
-    "enableDescription": "Los propietarios y administradores del espacio de trabajo podrán abrir todas las sesiones de este espacio de trabajo, incluidas las que los miembros mantienen privadas. Los miembros verán un aviso en el diálogo de compartir. Cada sesión abierta así se registra en el registro de auditoría.",
+    "enableDescription": "Los propietarios y administradores del workspace podrán abrir cada sesión y espacio de este workspace, incluidos los que los miembros mantuvieron privados. Los miembros ven un aviso en el diálogo de compartir. Cada sesión abierta así se registra en el registro de auditoría.",
     "enableConfirm": "Activar",
     "disableTitle": "¿Dejar de permitir que los administradores abran cualquier sesión?",
-    "disableDescription": "Las sesiones privadas vuelven a ser solo del propietario. Los administradores solo conservan acceso a las sesiones compartidas con ellos.",
+    "disableDescription": "Las sesiones y los espacios privados vuelven a sus propietarios y a las personas con quienes se compartieron. Los administradores solo conservan acceso a lo que se comparte con ellos.",
     "disableConfirm": "Desactivar",
     "enabledToast": "Los administradores ya pueden abrir cualquier sesión",
     "disabledToast": "Las sesiones privadas vuelven a ser solo del propietario",
@@ -27506,6 +27506,16 @@
     "pickerSearch": "Buscar espacios",
     "pickerEmpty": "Ningún espacio coincide",
     "gateDescription": "Agrupa sesiones relacionadas en espacios que comparten archivos y contexto.",
-    "loadMore": "Cargar más"
+    "loadMore": "Cargar más",
+    "share": "Compartir",
+    "shareTitle": "Compartir {name}",
+    "shareDescription": "Todas las personas que añadas ven cada sesión de este espacio y sus archivos.",
+    "shareEveryone": "Todo el workspace",
+    "shareSearch": "Buscar personas",
+    "shared": "Uso compartido actualizado",
+    "shareFailed": "No se pudo cambiar quién ve el espacio",
+    "shareNotMember": "Comparte un espacio solo con miembros de este workspace.",
+    "sharedWith": "{count, plural, one {Compartido con # persona} other {Compartido con # personas}}",
+    "private": "Privado"
   }
 }

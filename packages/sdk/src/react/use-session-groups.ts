@@ -9,10 +9,13 @@ import {
   renameWorkspaceSessionGroup,
   reorderWorkspaceSessionGroups,
   setWorkspaceSessionGroup,
+  setWorkspaceSessionGroupSharing,
+  setWorkspaceSessionGroupTabs,
   updateWorkspaceSessionGroup,
   type CreateProjectSessionGroupInput,
   type ProjectSessionGroup,
   type UpdateWorkspaceSessionGroupInput,
+  type WorkspaceSessionGroupSharingInput,
 } from '../core/rest/projects-client/session-groups';
 import { contract } from './query-contracts';
 import { qk } from './query-keys';
@@ -83,6 +86,36 @@ export function useRenameWorkspaceSessionGroup(projectId: string) {
   const invalidate = useInvalidateSessionGroups(projectId);
   return useMutation({
     mutationFn: (args: { groupId: string; name: string }) => renameWorkspaceSessionGroup(projectId, args.groupId, args.name),
+    onSuccess: invalidate,
+    onError: callerShowsError,
+  });
+}
+
+/**
+ * Change who sees a group. Who sees its sessions changes with it, so every
+ * session list refetches too. A caller who may not manage it rejects with
+ * `ApiError` code `group_manage_forbidden`.
+ */
+export function useSetWorkspaceSessionGroupSharing(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { groupId: string; input: WorkspaceSessionGroupSharingInput }) =>
+      setWorkspaceSessionGroupSharing(projectId, args.groupId, args.input),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: qk.project.sessionGroups(projectId) }),
+        queryClient.invalidateQueries({ queryKey: qk.project.sessionsScope(projectId) }),
+      ]),
+    onError: callerShowsError,
+  });
+}
+
+/** Replace a group's tabs (the whole ordered list). */
+export function useSetWorkspaceSessionGroupTabs(projectId: string) {
+  const invalidate = useInvalidateSessionGroups(projectId);
+  return useMutation({
+    mutationFn: (args: { groupId: string; tabs: Parameters<typeof setWorkspaceSessionGroupTabs>[2] }) =>
+      setWorkspaceSessionGroupTabs(projectId, args.groupId, args.tabs),
     onSuccess: invalidate,
     onError: callerShowsError,
   });

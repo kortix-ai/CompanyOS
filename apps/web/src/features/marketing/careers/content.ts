@@ -10,13 +10,13 @@
  *
  * ACCURACY GATE for this page specifically:
  *  - INVENT NOTHING about employment. No salary band, no equity, no benefits,
- *    no headcount, no remote policy beyond the word "Remote" on a location.
- *    Locations are per opening (founder, 2026-11-18): Founding GTM in the first
- *    US office, New York or San Francisco; MTS and FDE in Belgrade, Serbia, or
- *    remote.
+ *    no headcount, no remote policy beyond "US remote" on a location.
+ *    Locations are per opening (founder, 2026-11-18): Founding GTM in the US
+ *    (New York or San Francisco); MTS in Belgrade or New York/San Francisco;
+ *    FDE in New York/San Francisco or US remote.
  *  - The three openings (Founding GTM, MTS, FDE, 2026-11-18) are the founder's own list and
- *    order. Keep each to one broad line: no role pages, no spec. A spec belongs in a
- *    conversation.
+ *    order. The board names the role and its location only: no summary line, no role pages,
+ *    no spec. A spec belongs in a conversation.
  *  - Applications go through `ApplyModal`, which posts to the same
  *    `/api/demo-request` pipeline as "Book your demo". There is no ATS and no
  *    jobs@ alias — do not invent one. The three direct links (email, X,
@@ -30,42 +30,37 @@
  *  - No culture-page filler. If a sentence restates the one above it, cut it.
  */
 
-const TECH_LOCATION = 'Belgrade · Remote';
-
 export const hero = {
   title: 'Open positions.',
-  lead: 'Belgrade, New York, San Francisco or remote.',
+  lead: 'Belgrade, New York, San Francisco or US remote.',
   description: 'An extremely small, talent-dense team.',
   roleLabel: 'Role',
-  summaryLabel: 'Summary',
+  locationLabel: 'Location',
   ctaPrimary: 'Apply',
   ctaSecondary: 'Why Kortix exists',
   ctaSecondaryHref: '/about',
 } as const;
 
-/** The board: the role, its full name, one open line and its location. Deliberately broad — the
- *  rest is a conversation. */
+/** The board: the role, its full name and its location. Deliberately broad — the rest is a
+ *  conversation. */
 export const openings = [
   {
     id: 'gtm',
     name: 'Founding GTM',
     full: 'Enterprise & Partners',
-    summary: 'Build the enterprise business from zero: the first verticals, the first deals, the partner channel.',
-    location: 'New York or San Francisco',
+    location: 'US (NYC/SF)',
   },
   {
     id: 'mts',
     name: 'MTS',
     full: 'Member of Technical Staff',
-    summary: 'Build Kortix itself, anywhere in the stack.',
-    location: TECH_LOCATION,
+    location: 'Belgrade or NYC/SF',
   },
   {
     id: 'fde',
     name: 'FDE',
     full: 'Forward Deployed Engineer',
-    summary: 'Work with customers to put Kortix to work across their company.',
-    location: TECH_LOCATION,
+    location: 'NYC/SF or US remote',
   },
 ] as const;
 

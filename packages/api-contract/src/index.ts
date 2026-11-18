@@ -1705,6 +1705,10 @@ export const SessionGroupSchema = z
     created_by: z.string().nullable(),
     created_at: z.string(),
     updated_at: z.string(),
+    /** List only: the group's top-level sessions the caller can open (soft-deleted ones excluded). */
+    session_count: z.number().int().nonnegative().optional(),
+    /** List only: when the newest of those sessions last changed; null with none. */
+    last_activity_at: z.string().nullable().optional(),
   })
   .strict();
 export type SessionGroup = z.infer<typeof SessionGroupSchema>;

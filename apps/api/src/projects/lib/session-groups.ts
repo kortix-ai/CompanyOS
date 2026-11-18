@@ -285,3 +285,40 @@ export async function setSessionGroupTabs(
     .returning();
   return updated ?? null;
 }
+
+/** One group's activity: its top-level sessions and when the newest of them last changed. */
+export interface SessionGroupActivity {
+  sessionCount: number;
+  lastActivityAt: Date | null;
+}
+
+/**
+ * The activity of each group: its top-level, live sessions (soft-deleted ones
+ * excluded) and their newest `updated_at`. One grouped query over the
+ * `(group_id, updated_at)` index. A group with no session has no entry.
+ */
+export async function sessionGroupActivity(projectId: string, groupIds: readonly string[]): Promise<Map<string, SessionGroupActivity>> {
+  const out = new Map<string, SessionGroupActivity>();
+  if (groupIds.length === 0) return out;
+  const rows = await db
+    .select({
+      groupId: projectSessions.groupId,
+      sessionCount: sql<number>`count(*)::int`,
+      lastActivityAt: sql<Date | null>`max(${projectSessions.updatedAt})`,
+    })
+    .from(projectSessions)
+    .where(
+      and(
+        eq(projectSessions.projectId, projectId),
+        inArray(projectSessions.groupId, [...groupIds]),
+        sql`${projectSessions.parentSessionId} is null`,
+        sql`(${projectSessions.metadata} ? 'deletedAt') is not true`,
+      ),
+    )
+    .groupBy(projectSessions.groupId);
+  for (const row of rows) {
+    if (!row.groupId) continue;
+    out.set(row.groupId, { sessionCount: row.sessionCount, lastActivityAt: row.lastActivityAt ? new Date(row.lastActivityAt) : null });
+  }
+  return out;
+}

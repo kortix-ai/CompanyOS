@@ -1378,7 +1378,11 @@ const catalog = {
       "moveFailed": "Could not move the session",
       "empty": "Drag a session here",
       "groupOptions": "Space options",
-      "openSpace": "Open space"
+      "openSpace": "Open space",
+      "showSessions": "Show sessions",
+      "hideSessions": "Hide sessions",
+      "heading": "Spaces",
+      "allSpaces": "All spaces"
     },
     "recentlyDeleted": {
       "view": "Recently deleted",
@@ -10688,7 +10692,23 @@ const catalog = {
     "editDetails": "Edit details",
     "everyone": "Everyone",
     "searchSessions": "Search sessions",
-    "noSessionsMatch": "No session matches"
+    "noSessionsMatch": "No session matches",
+    "noDescription": "Add what this space is for",
+    "sessionCount": "{count, plural, =0 {No sessions} one {# session} other {# sessions}}",
+    "activeAgo": "active {when}",
+    "onlyYou": "Only you",
+    "about": "About",
+    "edit": "Edit",
+    "people": "People",
+    "openFiles": "Open",
+    "filesEmpty": "No files yet",
+    "peopleCount": "{count, plural, one {# person} other {# people}}",
+    "morePeople": "{count, plural, one {# more person} other {# more people}}",
+    "moreFiles": "{count, plural, one {# more file} other {# more files}}",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "thisWeek": "This week",
+    "earlier": "Earlier"
   }
 };
 

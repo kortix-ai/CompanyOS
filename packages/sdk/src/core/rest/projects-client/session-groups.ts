@@ -37,6 +37,10 @@ export interface ProjectSessionGroup {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /** In a list: the group's top-level sessions the caller can open. Absent on older APIs and on single-group responses. */
+  session_count?: number;
+  /** In a list: when the newest of those sessions last changed; null with none. Absent on older APIs and on single-group responses. */
+  last_activity_at?: string | null;
 }
 
 /** The workspace name of {@link ProjectSessionGroup}: the same type. */

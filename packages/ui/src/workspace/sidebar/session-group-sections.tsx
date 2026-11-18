@@ -26,7 +26,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDownIcon,
   ArrowUpIcon,
-  ArrowUpRightIcon,
   ArrowsInLineVerticalIcon,
   DotsThreeIcon,
   PencilSimpleIcon,
@@ -69,7 +68,7 @@ import {
 } from '../../session/list/session-list-chrome';
 import { CaretRightSolidIcon } from '../../icons/caret-right-solid';
 import { uiRoutes } from '../../lib/routes';
-import { useUiRouter } from '../../providers/ui-provider';
+import { UiLink, useUiPathname, useUiRouter } from '../../providers/ui-provider';
 
 /** A dragged session row carries its id under this type. */
 const SESSION_DRAG_TYPE = 'application/x-kortix-session';
@@ -108,7 +107,10 @@ export function keepFocusForNewGroup(event: Event): void {
 /** Keeps a click or key inside a group's menu or dialog (portals bubble through React) off the header's toggle. */
 const stopAtMenu = (event: SyntheticEvent) => event.stopPropagation();
 
-/** The collapsed-sections id of one group. */
+/**
+ * The sections-state id of one space. Spaces start collapsed: the id in the
+ * set means the space is open (unlike Pinned and Sessions, where it means closed).
+ */
 export function sessionGroupSectionId(groupId: string): string {
   return `group:${groupId}`;
 }
@@ -385,6 +387,48 @@ export function NewSessionGroupRow({
   );
 }
 
+/**
+ * The Spaces heading over the spaces: its label opens the Spaces page, its "+"
+ * (on hover) names a new space in place, like the Sessions header's controls.
+ */
+export function SpacesHeading({ projectId, onNew }: { projectId: string; onNew: () => void }) {
+  const tGroups = useTranslations('sidebar.sessionGroups');
+  const href = uiRoutes().sessionSpaces?.(projectId) ?? null;
+  const label = 'text-muted-foreground group-hover/spaces-header:text-sidebar-foreground min-w-0 flex-1 truncate text-sm font-medium';
+  return (
+    <div className={cn('group/spaces-header hover:bg-sidebar-row flex items-center gap-1 rounded-md px-2 transition-colors', SESSION_ROW_HEIGHT_CLASS)}>
+      {href ? (
+        <Hint label={tGroups('allSpaces')} side="right">
+          <UiLink href={href} prefetch={false} className={cn(label, 'self-stretch leading-8 focus-visible:outline-none')}>
+            {tGroups('heading')}
+          </UiLink>
+        </Hint>
+      ) : (
+        <span className={label}>{tGroups('heading')}</span>
+      )}
+      <Hint label={tGroups('newGroup')} side="right">
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          type="button"
+          aria-label={tGroups('newGroup')}
+          onClick={() => {
+            markNewGroupFocus();
+            onNew();
+          }}
+          className={cn(
+            SESSION_MENU_TRIGGER_CLASS,
+            'relative opacity-0 before:absolute before:-inset-1',
+            'group-hover/spaces-header:opacity-100 focus-visible:opacity-100',
+          )}
+        >
+          <PlusIcon className="size-4" />
+        </Button>
+      </Hint>
+    </div>
+  );
+}
+
 interface SessionGroupSectionsProps {
   projectId: string;
   groups: readonly ProjectSessionGroup[];
@@ -432,7 +476,11 @@ function SessionGroupSection({
   const t = useTranslations('sidebar');
   const tGroups = useTranslations('sidebar.sessionGroups');
   const sectionId = sessionGroupSectionId(group.group_id);
-  const open = !collapsedSectionIds.has(sectionId);
+  const open = collapsedSectionIds.has(sectionId);
+  const spaceHref = uiRoutes().sessionSpace?.(projectId, group.group_id) ?? null;
+  // The space whose page is open reads as the current row, as a nav row does.
+  const pathname = useUiPathname();
+  const current = !!spaceHref && !!pathname && pathname.endsWith(spaceHref);
   // Any starter and any depth, like Pinned: a session is in a group because
   // someone put it there. Loaded only while the group is open.
   const query = useProjectSessions(projectId, {
@@ -464,50 +512,69 @@ function SessionGroupSection({
         className="group/section space-y-1"
         transition={{ duration: 0.15, ease: 'easeOut' }}
       >
-        <DisclosureTrigger>
-          <div
-            draggable
-            onDragStart={(event) => {
-              event.dataTransfer.setData(GROUP_DRAG_TYPE, group.group_id);
-              event.dataTransfer.effectAllowed = 'move';
-              draggingGroupId = group.group_id;
-            }}
-            onDragEnd={() => {
-              draggingGroupId = null;
-            }}
-            className={cn(
-              // A group header reads like Pinned and the date headers (name,
-              // then a caret on hover), with the row hover fill and a `⋯` menu.
-              'group/section-header text-muted-foreground hover:bg-sidebar-row hover:text-sidebar-foreground relative flex cursor-pointer items-center gap-1 rounded-md px-2 text-sm font-medium',
-              SESSION_ROW_HEIGHT_CLASS,
-              drop.over === 'session' && 'bg-sidebar-row text-sidebar-foreground',
-              // A group dropped here takes this place: a line marks the side it
-              // lands on (below this group when it comes from above).
-              drop.over === 'group' &&
-                'before:bg-foreground/40 before:absolute before:inset-x-2 before:h-0.5 before:rounded-full',
-              drop.over === 'group' &&
-                (groupIds.indexOf(draggingGroupId ?? '') < index ? 'before:bottom-0' : 'before:top-0'),
-            )}
-          >
-            <span className="min-w-0 truncate">{group.name}</span>
-            <CaretRightSolidIcon
-              aria-hidden
-              // Always shown: the caret is what tells a group from a date header.
-              className="duration-normal size-4 shrink-0 transition-transform ease-out group-data-[state=open]/section:rotate-90"
-            />
-            <SessionGroupMenu
-              group={group}
-              onRename={() => onRename(group)}
-              onNewGroup={onNewGroup}
-              onCollapseOthers={groupIds.length > 1 ? () => onCollapseOthers(group.group_id) : null}
-              onMoveUp={moveGroupBy(groupIds, group.group_id, -1)}
-              onMoveDown={moveGroupBy(groupIds, group.group_id, 1)}
-              onReorder={(ids) => void actions.reorder(ids)}
-              projectId={projectId}
-            />
-          </div>
-        </DisclosureTrigger>
-        <DisclosureContent contentClassName="space-y-px">
+        <div
+          draggable
+          onDragStart={(event) => {
+            event.dataTransfer.setData(GROUP_DRAG_TYPE, group.group_id);
+            event.dataTransfer.effectAllowed = 'move';
+            draggingGroupId = group.group_id;
+          }}
+          onDragEnd={() => {
+            draggingGroupId = null;
+          }}
+          className={cn(
+            // A space reads like a nav row (Inbox, Drive): a 16px glyph slot, then its name, which opens the space.
+            // The glyph turns into the caret on hover; the caret folds the space's sessions under it.
+            'group/section-header text-sidebar-foreground/80 hover:bg-sidebar-row hover:text-sidebar-foreground relative flex items-center gap-2 rounded-md px-2 text-sm',
+            SESSION_ROW_HEIGHT_CLASS,
+            current && 'bg-active text-sidebar-accent-foreground font-medium hover:bg-active',
+            drop.over === 'session' && 'bg-sidebar-row text-sidebar-foreground',
+            // A group dropped here takes this place: a line marks the side it
+            // lands on (below this group when it comes from above).
+            drop.over === 'group' &&
+              'before:bg-foreground/40 before:absolute before:inset-x-2 before:h-0.5 before:rounded-full',
+            drop.over === 'group' &&
+              (groupIds.indexOf(draggingGroupId ?? '') < index ? 'before:bottom-0' : 'before:top-0'),
+          )}
+        >
+          <DisclosureTrigger>
+            <button
+              type="button"
+              aria-label={`${open ? tGroups('hideSessions') : tGroups('showSessions')}: ${group.name}`}
+              className="text-muted-foreground hover:text-sidebar-foreground hit-area-1.5 flex size-4 shrink-0 items-center justify-center rounded-sm"
+            >
+              <StackIcon aria-hidden className="size-4 group-hover/section-header:hidden group-focus-within/section-header:hidden" />
+              <CaretRightSolidIcon
+                aria-hidden
+                className="duration-normal hidden size-4 transition-transform ease-out group-hover/section-header:block group-focus-within/section-header:block group-data-[state=open]/section:rotate-90"
+              />
+            </button>
+          </DisclosureTrigger>
+          {spaceHref ? (
+            <UiLink
+              href={spaceHref}
+              prefetch={false}
+              aria-current={current ? 'page' : undefined}
+              className="min-w-0 flex-1 truncate self-stretch leading-8 focus-visible:outline-none"
+            >
+              {group.name}
+            </UiLink>
+          ) : (
+            <span className="min-w-0 flex-1 truncate">{group.name}</span>
+          )}
+          <SessionGroupMenu
+            group={group}
+            onRename={() => onRename(group)}
+            onNewGroup={onNewGroup}
+            onCollapseOthers={groupIds.length > 1 ? () => onCollapseOthers(group.group_id) : null}
+            onMoveUp={moveGroupBy(groupIds, group.group_id, -1)}
+            onMoveDown={moveGroupBy(groupIds, group.group_id, 1)}
+            onReorder={(ids) => void actions.reorder(ids)}
+            projectId={projectId}
+          />
+        </div>
+        {/* The space's sessions, one step in under its name. */}
+        <DisclosureContent contentClassName="space-y-px pl-4">
           {rows.map(renderNode)}
           {query.data !== undefined && rows.length === 0 && !query.hasNextPage ? (
             // Aligned to the name's x (px-2), one row tall.
@@ -568,28 +635,8 @@ function SessionGroupMenu({
   };
 
   return (
-    // `contents`: the trigger stays a flex item of the header (`ml-auto`).
+    // `contents`: the trigger stays a flex item of the header, after the name.
     <span className="contents" onClick={stopAtMenu} onKeyDown={stopAtMenu}>
-      {/* The space's page, as a channel opens on click in Slack; the header itself folds the section. */}
-      {spaceHref ? (
-        <Hint label={tGroups('openSpace')} side="right">
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            type="button"
-            aria-label={`${tGroups('openSpace')}: ${group.name}`}
-            onClick={() => router.push(spaceHref)}
-            className={cn(
-              SESSION_MENU_TRIGGER_CLASS,
-              'relative ml-auto opacity-0',
-              'before:absolute before:-inset-1',
-              'group-hover/section-header:opacity-100 focus-visible:opacity-100',
-            )}
-          >
-            <ArrowUpRightIcon className="size-4" />
-          </Button>
-        </Hint>
-      ) : null}
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
           <Button
@@ -599,7 +646,7 @@ function SessionGroupMenu({
             aria-label={`${tGroups('groupOptions')}: ${group.name}`}
             className={cn(
               SESSION_MENU_TRIGGER_CLASS,
-              spaceHref ? 'relative opacity-0' : 'relative ml-auto opacity-0',
+              'relative opacity-0',
               'before:absolute before:-inset-1',
               'group-hover/section-header:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100',
             )}

@@ -1884,7 +1884,11 @@
       "moveFailed": "Сесију није могуће преместити",
       "empty": "Превуци сесију овде",
       "groupOptions": "Опције простора",
-      "openSpace": "Отвори простор"
+      "openSpace": "Отвори простор",
+      "showSessions": "Prikaži sesije",
+      "hideSessions": "Sakrij sesije",
+      "heading": "Prostori",
+      "allSpaces": "Svi prostori"
     },
     "recentlyDeleted": {
       "view": "Недавно обрисане",
@@ -27517,6 +27521,22 @@
     "editDetails": "Измени детаље",
     "everyone": "Сви",
     "searchSessions": "Претражи сесије",
-    "noSessionsMatch": "Ниједна сесија се не поклапа"
+    "noSessionsMatch": "Ниједна сесија се не поклапа",
+    "noDescription": "Dodaj čemu služi ovaj prostor",
+    "sessionCount": "{count, plural, =0 {Nema sesija} one {# sesija} few {# sesije} other {# sesija}}",
+    "activeAgo": "aktivno {when}",
+    "onlyYou": "Samo ti",
+    "about": "O prostoru",
+    "edit": "Izmeni",
+    "people": "Ljudi",
+    "openFiles": "Otvori",
+    "filesEmpty": "Još nema fajlova",
+    "peopleCount": "{count, plural, one {# osoba} few {# osobe} other {# osoba}}",
+    "morePeople": "{count, plural, one {još # osoba} few {još # osobe} other {još # osoba}}",
+    "moreFiles": "{count, plural, one {još # fajl} few {još # fajla} other {još # fajlova}}",
+    "today": "Danas",
+    "yesterday": "Juče",
+    "thisWeek": "Ove nedelje",
+    "earlier": "Ranije"
   }
 }

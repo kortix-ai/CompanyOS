@@ -44,6 +44,7 @@ import {
   reorderSessionGroups,
   setSessionGroup,
   setSessionGroupSharing,
+  sessionGroupActivity,
   setSessionGroupTabs,
   type SessionGroupRow,
 } from '../lib/session-groups';
@@ -148,7 +149,20 @@ export function registerSessionGroupsRoutes(): void {
       if (loaded instanceof Response) return loaded;
       const viewer = await groupViewerFor(loaded.userId, loaded.row.accountId);
       const { rows, members } = await visibleGroups(loaded.row.projectId, viewer);
-      return c.json({ groups: rows.map((row) => serializeGroup(row, members.get(row.groupId) ?? [], viewer)) }, 200);
+      const activity = await sessionGroupActivity(loaded.row.projectId, rows.map((row) => row.groupId));
+      return c.json(
+        {
+          groups: rows.map((row) => {
+            const seen = activity.get(row.groupId);
+            return {
+              ...serializeGroup(row, members.get(row.groupId) ?? [], viewer),
+              session_count: seen?.sessionCount ?? 0,
+              last_activity_at: seen?.lastActivityAt?.toISOString() ?? null,
+            };
+          }),
+        },
+        200,
+      );
     },
   );
 

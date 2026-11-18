@@ -1884,7 +1884,11 @@
       "moveFailed": "Die Sitzung konnte nicht verschoben werden",
       "empty": "Zieh eine Sitzung hierher",
       "groupOptions": "Space-Optionen",
-      "openSpace": "Space öffnen"
+      "openSpace": "Space öffnen",
+      "showSessions": "Sitzungen zeigen",
+      "hideSessions": "Sitzungen ausblenden",
+      "heading": "Spaces",
+      "allSpaces": "Alle Spaces"
     },
     "recentlyDeleted": {
       "view": "Zuletzt gelöscht",
@@ -27517,6 +27521,22 @@
     "editDetails": "Details bearbeiten",
     "everyone": "Alle",
     "searchSessions": "Sitzungen durchsuchen",
-    "noSessionsMatch": "Keine Sitzung passt"
+    "noSessionsMatch": "Keine Sitzung passt",
+    "noDescription": "Wofür ist dieser Space?",
+    "sessionCount": "{count, plural, =0 {Keine Sitzungen} one {# Sitzung} other {# Sitzungen}}",
+    "activeAgo": "aktiv {when}",
+    "onlyYou": "Nur du",
+    "about": "Über",
+    "edit": "Bearbeiten",
+    "people": "Personen",
+    "openFiles": "Öffnen",
+    "filesEmpty": "Noch keine Dateien",
+    "peopleCount": "{count, plural, one {# Person} other {# Personen}}",
+    "morePeople": "{count, plural, one {# weitere Person} other {# weitere Personen}}",
+    "moreFiles": "{count, plural, one {# weitere Datei} other {# weitere Dateien}}",
+    "today": "Heute",
+    "yesterday": "Gestern",
+    "thisWeek": "Diese Woche",
+    "earlier": "Früher"
   }
 }

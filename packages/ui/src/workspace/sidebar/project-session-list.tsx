@@ -79,6 +79,7 @@ import {
 import {
   SessionGroupNameModal,
   SessionGroupSections,
+  SpacesHeading,
   NewSessionGroupRow,
   keepFocusForNewGroup,
   markNewGroupFocus,
@@ -792,7 +793,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
       {/* Pinned, then the groups, sit above Sessions, outside it: they stay in
           view while the list is closed. Capped at half the column so they
           never push Sessions out of view; past that they scroll. */}
-      {listsReady && (pinnedQuery.sessions.length > 0 || pinnedQuery.hasNextPage || groups.length > 0 || groupCreate) && (
+      {listsReady && (pinnedQuery.sessions.length > 0 || pinnedQuery.hasNextPage || groupsEnabled || groups.length > 0 || groupCreate) && (
         <div className="max-h-[50%] min-h-0 shrink-0 space-y-px overflow-y-auto">
           <StarterSection
             title={tPinArchive('section')}
@@ -803,6 +804,7 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
             renderNode={(session) => renderSessionNode(session, false)}
             caretOnHover
           />
+          {groupsEnabled && <SpacesHeading projectId={projectId} onNew={() => setGroupCreate({ fileSessionId: null })} />}
           {groups.length > 0 && (
             <SessionGroupSections
               projectId={projectId}
@@ -815,14 +817,14 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
               actions={groupActions}
               onRename={setGroupToRename}
               onNewGroup={() => setGroupCreate({ fileSessionId: null })}
-              onCollapseOthers={(groupId) =>
+              onCollapseOthers={(groupId) => {
+                // A space's id in the set means open: keep every other section's state, and only this space open.
+                const spaceIds = new Set(groups.map((group) => sessionGroupSectionId(group.group_id)));
                 collapseAllSections(projectId, [
-                  ...Array.from(collapsedSectionIds).filter((id) => id !== sessionGroupSectionId(groupId)),
-                  ...groups
-                    .filter((group) => group.group_id !== groupId)
-                    .map((group) => sessionGroupSectionId(group.group_id)),
-                ])
-              }
+                  ...Array.from(collapsedSectionIds).filter((id) => !spaceIds.has(id)),
+                  sessionGroupSectionId(groupId),
+                ]);
+              }}
             />
           )}
           {groupsEnabled && groupCreate && (

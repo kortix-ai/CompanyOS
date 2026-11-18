@@ -227,6 +227,18 @@ flow('SGRP-3', flowMeta('session-groups', [ROUTES.create, ROUTES.sharing, ROUTES
       (await world.owner.get(SESSIONS, { params, query: { group: 'store-a' } })).status(400);
     });
 
+    await ctx.step('GET /session-groups counts each space\'s sessions: Store A has 1, last active at its updated_at; a new empty space has 0 and null', async () => {
+      const empty = (await world.owner.post(GROUPS, { name: 'Empty' }, { params })).status(201).json<Group>().group_id;
+      const listed = (await world.owner.get(GROUPS, { params })).status(200).json<{ groups: Array<Group & { session_count?: number; last_activity_at?: string | null }> }>().groups;
+      const a = listed.find((group) => group.group_id === store);
+      const e = listed.find((group) => group.group_id === empty);
+      const session = await readSession(shared);
+      if (a?.session_count !== 1) fail('Store A session_count', a);
+      if (!a?.last_activity_at || Date.parse(a.last_activity_at) !== Date.parse(session.updated_at)) fail('Store A last_activity_at', [a?.last_activity_at, session.updated_at]);
+      if (e?.session_count !== 0 || e.last_activity_at !== null) fail('Empty space activity', e);
+      (await world.owner.del(GROUP, { params: { ...params, groupId: empty } })).status(200);
+    });
+
     await ctx.step("a session the member cannot see → 404; another project's group or an unknown one → 404 group_not_found", async () => {
       (await asMember.put(ASSIGN, { group_id: store }, { params: { ...params, sessionId: hidden } })).status(404);
       const foreign = randomUUID();

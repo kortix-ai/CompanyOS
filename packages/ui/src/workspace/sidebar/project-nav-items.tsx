@@ -6,7 +6,6 @@ import { ProjectGoalsNavItem } from './footer/project-goals-nav';
 import { ProjectInboxNavItem } from './footer/project-inbox-nav';
 import { ProjectArtifactsNavItem } from './footer/project-artifacts-nav';
 import { ProjectFilesNavItem } from './footer/project-files-nav';
-import { ProjectSessionSpacesNavItem } from './footer/project-session-spaces-nav';
 import {
   CustomizeGlyph,
   useCapabilityAccess,
@@ -26,11 +25,11 @@ import { adminPath } from '../../lib/routes';
 /**
  * The nav rows under New session, in one fixed order. Each row applies its
  * own flag and permission gate and renders nothing when the project does not
- * offer it. Spaces (`spaces`) are session groups under `session_groups`;
- * channels are the sidebar under the `chat` flag (project-spaces-nav.tsx).
+ * offer it. Spaces are the channel sidebar under the `chat` flag
+ * (project-spaces-nav.tsx).
  */
 // `inbox` is first: it is the one row that says something waits on you.
-const NAV_ROWS = ['inbox', 'spaces', 'customize', 'files', 'apps', 'calendar', 'goals', 'artifacts'] as const;
+const NAV_ROWS = ['inbox', 'customize', 'files', 'apps', 'calendar', 'goals', 'artifacts'] as const;
 type NavRowId = (typeof NAV_ROWS)[number];
 
 /** `inbox={false}`: the host shows the Inbox row elsewhere (Spaces on: beside Review, `project-spaces-nav`). */
@@ -112,8 +111,6 @@ function NavItem({ id, projectId }: { id: NavRowId; projectId: string }) {
   switch (id) {
     case 'inbox':
       return <ProjectInboxNavItem />;
-    case 'spaces':
-      return <ProjectSessionSpacesNavItem projectId={projectId} />;
     case 'customize':
       return <CustomizeNavEntry projectId={projectId} />;
     case 'apps':

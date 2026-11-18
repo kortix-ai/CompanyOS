@@ -1884,7 +1884,11 @@
       "moveFailed": "无法移动会话",
       "empty": "将会话拖到这里",
       "groupOptions": "空间选项",
-      "openSpace": "打开空间"
+      "openSpace": "打开空间",
+      "showSessions": "显示会话",
+      "hideSessions": "隐藏会话",
+      "heading": "空间",
+      "allSpaces": "所有空间"
     },
     "recentlyDeleted": {
       "view": "最近删除",
@@ -27517,6 +27521,22 @@
     "editDetails": "编辑详情",
     "everyone": "所有人",
     "searchSessions": "搜索会话",
-    "noSessionsMatch": "没有匹配的会话"
+    "noSessionsMatch": "没有匹配的会话",
+    "noDescription": "添加此空间的用途",
+    "sessionCount": "{count, plural, =0 {暂无会话} other {# 个会话}}",
+    "activeAgo": "{when}活跃",
+    "onlyYou": "仅你自己",
+    "about": "关于",
+    "edit": "编辑",
+    "people": "成员",
+    "openFiles": "打开",
+    "filesEmpty": "暂无文件",
+    "peopleCount": "{count, plural, other {# 人}}",
+    "morePeople": "{count, plural, other {还有 # 人}}",
+    "moreFiles": "{count, plural, other {还有 # 个文件}}",
+    "today": "今天",
+    "yesterday": "昨天",
+    "thisWeek": "本周",
+    "earlier": "更早"
   }
 }

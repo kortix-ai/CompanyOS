@@ -1,10 +1,7 @@
 'use client';
 
 import type { ProjectSession, ProjectSessionGroup, ProjectSpaceTab } from '@kortix/sdk';
-import { listProjectAccess } from '@kortix/sdk';
 import {
-  contract,
-  qk,
   useDeleteWorkspaceSessionGroup,
   useFeatureFlag,
   useSetWorkspaceSessionGroupTabs,
@@ -15,15 +12,14 @@ import { MY_KORTIX_SANDBOX_SLUG, isMyKortixAgentName, sessionGroupDriveFolder } 
 import {
   CaretDownIcon,
   ChatCircleIcon,
+  FileTextIcon,
   LockSimpleIcon,
   MagnifyingGlassIcon,
   PencilSimpleIcon,
-  ShareNetworkIcon,
   StackIcon,
   TrashIcon,
   UsersThreeIcon,
 } from '@phosphor-icons/react';
-import { useQuery } from '@tanstack/react-query';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 
@@ -32,7 +28,6 @@ import { useTranslations } from '../../i18n';
 import { useDebounce } from '../../internal/hooks/use-debounced-value';
 import { SidebarToggle } from '../../internal/layout/sidebar-toggle';
 import { ProjectScope } from '../../internal/project-scope';
-import { cn } from '../../lib/utils';
 import { uiRoutes } from '../../lib/routes';
 import { Button } from '../../primitives/button';
 import { ConfirmDialog } from '../../primitives/confirm-dialog';
@@ -58,7 +53,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../primitives/tabs'
 import { errorToast, successToast } from '../../primitives/toast';
 import { UserAvatar } from '../../primitives/user-avatar';
 import { UiLink as Link, useUiRouter, useUiSearchParams, useUiShallowNavigate, useUiPathname } from '../../providers/ui-provider';
+import { useDriveFolder, useProjectDrive } from '../../files/drives/use-drives';
 import { getSessionDisplayTitle, sessionLastActivityAt } from '../../session/actions/project-session-list-helpers';
+import { sessionDisplayStatus } from '../../session/actions/session-label';
+import { SessionStatusMark } from '../../session/list/session-status-mark';
 import type { AttachmentSubmission } from '../../session/composer/attachment-submission';
 import { ComposerChatInput, type ComposerOptions } from '../../session/composer/composer-chat-input';
 import type { DraftScope } from '../../session/composer/draft/composer-draft';
@@ -66,6 +64,7 @@ import type { AttachedFile } from '../../session/composer/session-chat-input';
 import { useProjectHomeSend } from '../layout/use-project-home-send';
 import { AddTabMenu, StoredTabBody, StoredTabTrigger, type SpaceTabsState } from '../spaces/space-tabs';
 import { SpaceFormModal } from './space-form-modal';
+import { SpaceAudienceMark, spaceAudience, useSpaceAudienceLabel, useWorkspacePeople } from './space-people';
 import { SpaceShareModal } from './space-share-modal';
 
 /** Rows per page of the space's session history. */
@@ -74,8 +73,10 @@ const SKELETON_WIDTHS = ['w-56', 'w-40', 'w-64', 'w-44'];
 /** The two built-in tabs; stored tabs follow them. `?tab=` names the open one. */
 const HOME_TAB = 'home';
 const FILES_TAB = 'files';
-/** People shown in the header before "+N". */
-const AVATARS_MAX = 4;
+/** People listed in the About rail before "N more". */
+const PEOPLE_MAX = 6;
+/** Files listed in the About rail before "N more". */
+const FILES_MAX = 5;
 
 /** How the host renders a Drive folder or file in a tab (apps/web: the Drive explorer and file viewer). */
 export interface SpaceDriveRenderers {
@@ -178,31 +179,28 @@ function SpaceView({ projectId, space, renderFolder, renderFile }: { projectId: 
     <div className="bg-background flex min-h-0 flex-1 flex-col">
       <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
         <header className="border-border shrink-0 border-b">
-          <div className="flex h-12 items-center gap-2 px-3">
+          <div className="flex h-14 items-center gap-2 px-3">
             <SidebarToggle />
-            <span className="bg-muted text-muted-foreground flex size-6 shrink-0 items-center justify-center rounded-md">
-              <StackIcon className="size-3.5" />
+            <span className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-md">
+              <StackIcon className="size-4" />
             </span>
             <SpaceTitleMenu projectId={projectId} space={space} onEdit={() => setEditing(true)} />
             {space.description ? (
-              <Hint label={space.description}>
-                <button
-                  type="button"
-                  onClick={() => setEditing(true)}
-                  className="text-muted-foreground hover:text-foreground duration-fast hidden min-w-0 truncate text-left text-sm transition-colors md:block"
-                >
-                  {space.description}
-                </button>
-              </Hint>
+              <>
+                <span aria-hidden className="bg-border hidden h-4 w-px shrink-0 md:block" />
+                <Hint label={space.description}>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(true)}
+                    className="text-muted-foreground hover:text-foreground duration-fast hidden min-w-0 truncate px-1 text-left text-sm transition-colors md:block"
+                  >
+                    {space.description}
+                  </button>
+                </Hint>
+              </>
             ) : null}
-            <div className="ml-auto flex shrink-0 items-center gap-2">
-              <SpacePeople projectId={projectId} space={space} onOpen={canManage ? () => setSharing(true) : undefined} />
-              {canManage ? (
-                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setSharing(true)}>
-                  <ShareNetworkIcon className="size-3.5 shrink-0" />
-                  {t('share')}
-                </Button>
-              ) : null}
+            <div className="ml-auto flex shrink-0 items-center">
+              <AudienceShare projectId={projectId} space={space} onShare={canManage ? () => setSharing(true) : undefined} />
             </div>
           </div>
           <TabsList type="underline" size="sm" className="w-full justify-start gap-4 overflow-x-auto px-4">
@@ -219,7 +217,13 @@ function SpaceView({ projectId, space, renderFolder, renderFile }: { projectId: 
           </TabsList>
         </header>
         <TabsContent value={HOME_TAB} className="min-h-0 flex-1 overflow-y-auto">
-          <SpaceHome projectId={projectId} space={space} />
+          <SpaceHome
+            projectId={projectId}
+            space={space}
+            onEdit={() => setEditing(true)}
+            onShare={canManage ? () => setSharing(true) : undefined}
+            onOpenFiles={() => setTab(FILES_TAB)}
+          />
         </TabsContent>
         <TabsContent value={FILES_TAB} className="flex min-h-0 flex-1 flex-col">
           {ownFolder && renderFolder
@@ -268,7 +272,7 @@ function SpaceTitleMenu({ projectId, space, onEdit }: { projectId: string; space
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="text-foreground -ml-1 min-w-0 shrink gap-1 px-1.5 text-sm font-medium" aria-label={t('options')}>
+          <Button variant="ghost" size="sm" className="text-foreground min-w-0 shrink gap-1 px-1.5 text-base font-medium" aria-label={t('options')}>
             <span className="truncate">{space.name}</span>
             <CaretDownIcon className="text-muted-foreground size-3 shrink-0" />
           </Button>
@@ -314,87 +318,185 @@ function SpaceTitleMenu({ projectId, space, onEdit }: { projectId: string; space
 }
 
 /**
- * Who sees the space, at the right of the header: "Everyone" for a space
- * shared with the workspace; else its creator and members as avatars (a lock
- * when it is its creator's alone). The avatars need the workspace's people
- * list; a viewer who may not read it sees the count instead.
+ * Who sees the space, and Share, as one control at the right of the header:
+ * the people (or the lock, or the workspace glyph) then "Share". Whoever may
+ * not change the sharing sees the people alone, named on hover.
  */
-function SpacePeople({ projectId, space, onOpen }: { projectId: string; space: ProjectSessionGroup; onOpen?: () => void }) {
+function AudienceShare({ projectId, space, onShare }: { projectId: string; space: ProjectSessionGroup; onShare?: () => void }) {
   const t = useTranslations('sessionSpaces');
-  const access = useQuery({
-    queryKey: qk.project.access(projectId),
-    queryFn: () => listProjectAccess(projectId),
-    enabled: space.visibility !== 'project' && (space.member_ids?.length ?? 0) > 0,
-    retry: false,
-    ...contract('inventory'),
-  });
-  const label =
-    space.visibility === 'project'
-      ? t('visibility')
-      : (space.member_ids?.length ?? 0) > 0
-        ? t('sharedWith', { count: space.member_ids!.length })
-        : t('private');
-  let body: ReactNode;
-  if (space.visibility === 'project') {
-    body = (
-      <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
-        <UsersThreeIcon className="size-4 shrink-0" />
-        <span className="hidden sm:inline">{t('everyone')}</span>
-      </span>
-    );
-  } else if ((space.member_ids?.length ?? 0) === 0) {
-    body = (
-      <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
-        <LockSimpleIcon className="size-4 shrink-0" />
-        <span className="hidden sm:inline">{t('private')}</span>
-      </span>
-    );
-  } else {
-    const ids = [space.created_by, ...(space.member_ids ?? [])].filter((id): id is string => !!id);
-    const emailOf = new Map((access.data?.members ?? []).map((member) => [member.user_id, member.email ?? '']));
-    const shown = ids.slice(0, AVATARS_MAX);
-    // A viewer who may not read the people list knows only how many: the count, never a "?" avatar.
-    const known = shown.every((id) => !!emailOf.get(id));
-    body = !known ? (
-      <span className="text-muted-foreground flex items-center gap-1.5 text-sm tabular-nums">
-        <UsersThreeIcon className="size-4 shrink-0" />
-        {ids.length}
-      </span>
-    ) : (
-      <span className="flex items-center">
-        {shown.map((id, index) => (
-          <span key={id} className={cn('ring-background rounded-sm ring-2', index > 0 && '-ml-1.5')}>
-            <UserAvatar email={emailOf.get(id) ?? ''} name={emailOf.get(id) || null} colorKey={id} size="xs" />
-          </span>
-        ))}
-        {ids.length > AVATARS_MAX ? (
-          <span className="text-muted-foreground ml-1.5 text-xs tabular-nums">+{ids.length - AVATARS_MAX}</span>
-        ) : null}
-      </span>
+  const label = useSpaceAudienceLabel(space);
+  if (!onShare) {
+    return (
+      <Hint label={label}>
+        <span aria-label={label} className="flex h-8 items-center px-1.5">
+          <SpaceAudienceMark projectId={projectId} space={space} />
+        </span>
+      </Hint>
     );
   }
   return (
     <Hint label={label}>
-      {onOpen ? (
-        <button type="button" onClick={onOpen} aria-label={label} className="hover:bg-hover duration-fast flex h-8 items-center rounded-md px-1.5 transition-colors">
-          {body}
-        </button>
-      ) : (
-        <span aria-label={label} className="flex h-8 items-center px-1.5">
-          {body}
-        </span>
-      )}
+      <Button size="sm" variant="outline" className="gap-2" onClick={onShare}>
+        <SpaceAudienceMark projectId={projectId} space={space} max={3} />
+        {t('share')}
+      </Button>
     </Hint>
   );
 }
 
-/** Home: start a session in the space, then its history. */
-function SpaceHome({ projectId, space }: { projectId: string; space: ProjectSessionGroup }) {
+/**
+ * Home: start a session in the space, then its history. Beside them on a wide
+ * screen, what the space is about: what it is for, who is in it, its newest files.
+ */
+function SpaceHome({
+  projectId,
+  space,
+  onEdit,
+  onShare,
+  onOpenFiles,
+}: {
+  projectId: string;
+  space: ProjectSessionGroup;
+  onEdit: () => void;
+  onShare?: () => void;
+  onOpenFiles: () => void;
+}) {
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-8 px-4 pt-10 pb-20 md:px-8">
-      <SpaceComposer projectId={projectId} space={space} />
-      <SpaceHistory projectId={projectId} space={space} />
+    <div className="mx-auto grid w-full max-w-5xl gap-10 px-4 pt-8 pb-20 md:px-8 lg:grid-cols-[minmax(0,1fr)_16rem]">
+      <div className="min-w-0 space-y-8">
+        <SpaceComposer projectId={projectId} space={space} />
+        <SpaceHistory projectId={projectId} space={space} />
+      </div>
+      <SpaceAbout projectId={projectId} space={space} onEdit={onEdit} onShare={onShare} onOpenFiles={onOpenFiles} />
     </div>
+  );
+}
+
+/** The About rail: three short blocks, each a label over its facts, on wide screens only. */
+function SpaceAbout({
+  projectId,
+  space,
+  onEdit,
+  onShare,
+  onOpenFiles,
+}: {
+  projectId: string;
+  space: ProjectSessionGroup;
+  onEdit: () => void;
+  onShare?: () => void;
+  onOpenFiles: () => void;
+}) {
+  const t = useTranslations('sessionSpaces');
+  return (
+    <aside className="hidden space-y-8 lg:block" aria-label={t('about')}>
+      <AboutBlock title={t('about')} action={<AboutAction onClick={onEdit}>{t('edit')}</AboutAction>}>
+        {space.description ? (
+          <p className="text-muted-foreground text-sm text-pretty whitespace-pre-line">{space.description}</p>
+        ) : (
+          <button type="button" onClick={onEdit} className="text-muted-foreground hover:text-foreground duration-fast text-left text-sm transition-colors">
+            {t('noDescription')}
+          </button>
+        )}
+      </AboutBlock>
+      <AboutBlock title={t('people')} action={onShare ? <AboutAction onClick={onShare}>{t('share')}</AboutAction> : null}>
+        <SpacePeopleList projectId={projectId} space={space} />
+      </AboutBlock>
+      <AboutBlock title={t('tabFiles')} action={<AboutAction onClick={onOpenFiles}>{t('openFiles')}</AboutAction>}>
+        <SpaceRecentFiles projectId={projectId} space={space} onOpenFiles={onOpenFiles} />
+      </AboutBlock>
+    </aside>
+  );
+}
+
+function AboutBlock({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="space-y-2.5">
+      <div className="flex h-6 items-center justify-between gap-2">
+        <h3 className="text-muted-foreground text-xs font-medium">{title}</h3>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function AboutAction({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <Button variant="transparent" size="sm" className="text-muted-foreground hover:text-foreground h-6 px-0 text-xs" onClick={onClick}>
+      {children}
+    </Button>
+  );
+}
+
+/** Who is in the space, one row each: the whole workspace, its creator alone, or the people it is shared with. */
+function SpacePeopleList({ projectId, space }: { projectId: string; space: ProjectSessionGroup }) {
+  const t = useTranslations('sessionSpaces');
+  const audience = spaceAudience(space);
+  const people = useWorkspacePeople(projectId, audience.kind !== 'everyone');
+  if (audience.kind === 'everyone') {
+    return (
+      <p className="text-foreground flex items-center gap-2 text-sm">
+        <UsersThreeIcon className="text-muted-foreground size-4 shrink-0" />
+        {t('visibility')}
+      </p>
+    );
+  }
+  const ids = audience.kind === 'private' ? [space.created_by].filter((id): id is string => !!id) : audience.ids;
+  // A viewer who may not read the people list sees how many, never a partial list.
+  const known = ids.every((id) => people.has(id)) ? ids : [];
+  if (known.length === 0) {
+    return (
+      <p className="text-foreground flex items-center gap-2 text-sm">
+        {audience.kind === 'private' ? <LockSimpleIcon className="text-muted-foreground size-4 shrink-0" /> : <UsersThreeIcon className="text-muted-foreground size-4 shrink-0" />}
+        {audience.kind === 'private' ? (space.can_manage === true ? t('onlyYou') : t('private')) : t('peopleCount', { count: ids.length })}
+      </p>
+    );
+  }
+  return (
+    <ul className="space-y-2">
+      {known.slice(0, PEOPLE_MAX).map((id) => (
+        <li key={id} className="flex min-w-0 items-center gap-2">
+          <UserAvatar email={people.get(id)!.email} name={people.get(id)!.email} colorKey={id} size="xs" />
+          <span className="text-foreground min-w-0 truncate text-sm">{people.get(id)!.email}</span>
+        </li>
+      ))}
+      {ids.length > PEOPLE_MAX ? <li className="text-muted-foreground text-xs tabular-nums">{t('morePeople', { count: ids.length - PEOPLE_MAX })}</li> : null}
+    </ul>
+  );
+}
+
+/** The newest files in the space's folder; each opens the Files tab. */
+function SpaceRecentFiles({ projectId, space, onOpenFiles }: { projectId: string; space: ProjectSessionGroup; onOpenFiles: () => void }) {
+  const t = useTranslations('sessionSpaces');
+  const drive = useProjectDrive(projectId);
+  const path = sessionGroupDriveFolder(space.group_id);
+  const folder = useDriveFolder(path ? (drive.data?.driveId ?? null) : null, path ?? '/');
+  if (drive.isLoading || folder.isLoading) {
+    return (
+      <div className="space-y-2" aria-hidden>
+        <Skeleton className="h-3.5 w-40 py-0" />
+        <Skeleton className="h-3.5 w-32 py-0" />
+      </div>
+    );
+  }
+  const files = (folder.data?.entries ?? []).filter((entry) => entry.type === 'file').sort((a, b) => b.mtime - a.mtime);
+  if (files.length === 0) return <p className="text-muted-foreground text-sm">{t('filesEmpty')}</p>;
+  return (
+    <ul className="space-y-0.5">
+      {files.slice(0, FILES_MAX).map((file) => (
+        <li key={file.path}>
+          <button
+            type="button"
+            onClick={onOpenFiles}
+            className="hover:bg-hover duration-fast -mx-1.5 flex w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors"
+          >
+            <FileTextIcon className="text-muted-foreground size-4 shrink-0" />
+            <span className="text-foreground min-w-0 flex-1 truncate text-sm">{file.name}</span>
+          </button>
+        </li>
+      ))}
+      {files.length > FILES_MAX ? <li className="text-muted-foreground px-0 pt-1 text-xs tabular-nums">{t('moreFiles', { count: files.length - FILES_MAX })}</li> : null}
+    </ul>
   );
 }
 
@@ -469,10 +571,10 @@ function SpaceHistory({ projectId, space }: { projectId: string; space: ProjectS
         </div>
       </div>
       {query.isLoading || query.isScanning ? (
-        <ul className="divide-border divide-y" aria-hidden>
+        <ul className="space-y-1" aria-hidden>
           {SKELETON_WIDTHS.map((width) => (
-            <li key={width} className="flex items-center gap-3 py-3">
-              <Skeleton className="size-6 shrink-0 rounded-sm py-0" />
+            <li key={width} className="flex items-center gap-3 px-2 py-2.5">
+              <Skeleton className="size-4 shrink-0 rounded-full py-0" />
               <Skeleton className={`h-3.5 py-0 ${width}`} />
               <Skeleton className="ml-auto h-3 w-10 shrink-0 py-0" />
             </li>
@@ -497,13 +599,20 @@ function SpaceHistory({ projectId, space }: { projectId: string; space: ProjectS
         />
       ) : (
         <>
-          <ul className="divide-border divide-y">
-            {rows.map((session) => (
-              <li key={session.session_id}>
-                <SessionHistoryRow projectId={projectId} session={session} />
-              </li>
+          <div className="space-y-5">
+            {byDay(rows).map((day) => (
+              <section key={day.key} className="space-y-1">
+                <h3 className="text-muted-foreground px-2 text-xs font-medium">{t(day.key)}</h3>
+                <ul>
+                  {day.sessions.map((session) => (
+                    <li key={session.session_id}>
+                      <SessionHistoryRow projectId={projectId} session={session} />
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
+          </div>
           {query.hasNextPage ? (
             <Button
               variant="outline"
@@ -521,7 +630,23 @@ function SpaceHistory({ projectId, space }: { projectId: string; space: ProjectS
   );
 }
 
-/** One session of the history: who started it, its title, how long ago it was active. */
+/** The day buckets of the history, newest first: Today, Yesterday, This week, Earlier. Empty buckets are left out. */
+function byDay(sessions: readonly ProjectSession[]): Array<{ key: 'today' | 'yesterday' | 'thisWeek' | 'earlier'; sessions: ProjectSession[] }> {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const day = 24 * 60 * 60 * 1000;
+  const buckets = { today: [] as ProjectSession[], yesterday: [] as ProjectSession[], thisWeek: [] as ProjectSession[], earlier: [] as ProjectSession[] };
+  for (const session of sessions) {
+    const at = new Date(sessionLastActivityAt(session)).getTime();
+    if (at >= startOfToday.getTime()) buckets.today.push(session);
+    else if (at >= startOfToday.getTime() - day) buckets.yesterday.push(session);
+    else if (at >= startOfToday.getTime() - 6 * day) buckets.thisWeek.push(session);
+    else buckets.earlier.push(session);
+  }
+  return (['today', 'yesterday', 'thisWeek', 'earlier'] as const).filter((key) => buckets[key].length > 0).map((key) => ({ key, sessions: buckets[key] }));
+}
+
+/** One session of the history: its status, its title, who started it (an avatar, named on hover), when it last moved. */
 function SessionHistoryRow({ projectId, session }: { projectId: string; session: ProjectSession }) {
   const when = useMemo(() => {
     try {
@@ -531,22 +656,24 @@ function SessionHistoryRow({ projectId, session }: { projectId: string; session:
     }
   }, [session]);
   const starter = session.initiator?.label ?? null;
-  const live = session.status === 'running';
   return (
     <Link
       href={uiRoutes().session(projectId, session.session_id)}
       prefetch={false}
-      className="hover:bg-hover duration-fast -mx-2 flex items-center gap-3 rounded-md px-2 py-2.5 transition-colors"
+      className="hover:bg-hover duration-fast flex items-center gap-3 rounded-md px-2 py-2 transition-colors"
     >
-      <span className="relative shrink-0">
-        <UserAvatar email={starter ?? ''} name={starter} colorKey={session.created_by ?? session.session_id} size="sm" />
-        {live ? <span className="bg-kortix-green ring-background absolute -right-0.5 -bottom-0.5 size-2 rounded-full ring-2" /> : null}
+      <span className="flex size-4 shrink-0 items-center justify-center">
+        <SessionStatusMark status={sessionDisplayStatus(session)} />
       </span>
-      <span className="min-w-0 flex-1">
-        <span className="text-foreground block truncate text-sm">{getSessionDisplayTitle(session)}</span>
-        {starter ? <span className="text-muted-foreground block truncate text-xs">{starter}</span> : null}
-      </span>
-      <span className="text-muted-foreground shrink-0 text-xs tabular-nums">{when}</span>
+      <span className="text-foreground min-w-0 flex-1 truncate text-sm">{getSessionDisplayTitle(session)}</span>
+      {starter ? (
+        <Hint label={starter}>
+          <span className="shrink-0">
+            <UserAvatar email={starter} name={starter} colorKey={session.created_by ?? session.session_id} size="xs" />
+          </span>
+        </Hint>
+      ) : null}
+      <span className="text-muted-foreground w-24 shrink-0 text-right text-xs tabular-nums">{when}</span>
     </Link>
   );
 }

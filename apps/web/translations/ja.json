@@ -1884,7 +1884,11 @@
       "moveFailed": "セッションを移動できませんでした",
       "empty": "ここにセッションをドラッグ",
       "groupOptions": "スペースのオプション",
-      "openSpace": "スペースを開く"
+      "openSpace": "スペースを開く",
+      "showSessions": "セッションを表示",
+      "hideSessions": "セッションを隠す",
+      "heading": "スペース",
+      "allSpaces": "すべてのスペース"
     },
     "recentlyDeleted": {
       "view": "最近削除した項目",
@@ -27517,6 +27521,22 @@
     "editDetails": "詳細を編集",
     "everyone": "全員",
     "searchSessions": "セッションを検索",
-    "noSessionsMatch": "一致するセッションはありません"
+    "noSessionsMatch": "一致するセッションはありません",
+    "noDescription": "このスペースの目的を追加",
+    "sessionCount": "{count, plural, =0 {セッションなし} other {# 件のセッション}}",
+    "activeAgo": "{when}に更新",
+    "onlyYou": "自分のみ",
+    "about": "概要",
+    "edit": "編集",
+    "people": "メンバー",
+    "openFiles": "開く",
+    "filesEmpty": "ファイルはまだありません",
+    "peopleCount": "{count, plural, other {# 人}}",
+    "morePeople": "{count, plural, other {ほか # 人}}",
+    "moreFiles": "{count, plural, other {ほか # 件のファイル}}",
+    "today": "今日",
+    "yesterday": "昨日",
+    "thisWeek": "今週",
+    "earlier": "それ以前"
   }
 }

@@ -57,6 +57,18 @@ test('listProjectSessionGroups GETs the project groups and returns the array in 
   expect(calls).toEqual([{ url: 'http://test.local/v1/workspaces/P1/session-groups', method: 'GET', body: undefined }]);
 });
 
+test('listWorkspaceSessionGroups returns each group with its activity: session_count and last_activity_at', async () => {
+  // Typed fields: this object only compiles when the type declares them.
+  const active: ProjectSessionGroup = { ...storeA, session_count: 3, last_activity_at: '2026-11-18T10:00:00.000Z' };
+  const idle: ProjectSessionGroup = { ...storeB, session_count: 0, last_activity_at: null };
+  nextResponse = { status: 200, body: { groups: [active, idle] } };
+  const [first, second] = await listWorkspaceSessionGroups('P1');
+  expect(first?.session_count).toBe(3);
+  expect(first?.last_activity_at).toBe('2026-11-18T10:00:00.000Z');
+  expect(second?.session_count).toBe(0);
+  expect(second?.last_activity_at).toBeNull();
+});
+
 test('createProjectSessionGroup POSTs { name } and returns the group', async () => {
   nextResponse = { status: 201, body: storeA };
   expect(await createWorkspaceSessionGroup('P1', { name: 'Store A' })).toEqual(storeA);

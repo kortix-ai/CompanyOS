@@ -1884,7 +1884,11 @@
       "moveFailed": "Não foi possível mover a sessão",
       "empty": "Arraste uma sessão para cá",
       "groupOptions": "Opções do espaço",
-      "openSpace": "Abrir espaço"
+      "openSpace": "Abrir espaço",
+      "showSessions": "Mostrar sessões",
+      "hideSessions": "Ocultar sessões",
+      "heading": "Espaços",
+      "allSpaces": "Todos os espaços"
     },
     "recentlyDeleted": {
       "view": "Excluídas recentemente",
@@ -27517,6 +27521,22 @@
     "editDetails": "Editar detalhes",
     "everyone": "Todos",
     "searchSessions": "Buscar sessões",
-    "noSessionsMatch": "Nenhuma sessão corresponde"
+    "noSessionsMatch": "Nenhuma sessão corresponde",
+    "noDescription": "Adicione para que serve este espaço",
+    "sessionCount": "{count, plural, =0 {Nenhuma sessão} one {# sessão} other {# sessões}}",
+    "activeAgo": "ativo {when}",
+    "onlyYou": "Só você",
+    "about": "Sobre",
+    "edit": "Editar",
+    "people": "Pessoas",
+    "openFiles": "Abrir",
+    "filesEmpty": "Ainda sem arquivos",
+    "peopleCount": "{count, plural, one {# pessoa} other {# pessoas}}",
+    "morePeople": "{count, plural, one {mais # pessoa} other {mais # pessoas}}",
+    "moreFiles": "{count, plural, one {mais # arquivo} other {mais # arquivos}}",
+    "today": "Hoje",
+    "yesterday": "Ontem",
+    "thisWeek": "Esta semana",
+    "earlier": "Antes"
   }
 }

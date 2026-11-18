@@ -19,12 +19,13 @@ import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } fr
 
 import { COMPUTE_HOURLY, FAQ, FREE_COMPUTE_USD, TEAMS } from './factory-content';
 import { heroRuns } from './hero-runs';
-import { HoopDots, HoopLine, hoopVars, LoopmaxxingWordmark, WORDMARK_VARIANTS, WordmarkVariantContext, type WordmarkVariant } from './hoop';
+import { hoopVars, LoopmaxxingWordmark, WORDMARK_VARIANTS, WordmarkVariantContext, type WordmarkVariant } from './hoop';
 import { HOOP_PALETTE } from './hoop-palette';
 import type { LoopView } from './loops-content';
 import { CopyGuideProvider } from './copy-guide';
 import { CopyButton, GhostButton, Mark, useForceDarkPage, useSetupTarget } from './parts';
 import { EngineGrid } from './engine-grid';
+import { HulaHoop } from './hula-hoop';
 import { PlanFlow } from './plan-flow';
 import { AgentTile, ApprovalArt, ComposerArt, ConnectArt, FindArt, ProveArt, SignalArt } from './section-art';
 import { SessionReel } from './session-reel';
@@ -73,7 +74,6 @@ function PromptCta({ prompt, className }: { prompt?: string; className?: string 
 function SplitHeading({ title, lead, children }: { title: ReactNode; lead: ReactNode; children?: ReactNode }) {
   return (
     <div className="flex flex-col gap-5">
-      <HoopDots />
       <h2 className={cn(H2, 'max-w-3xl')}>{title}</h2>
       <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-end sm:justify-between sm:gap-10">
         <p className={cn(LEAD, 'max-w-3xl')}>{lead}</p>
@@ -158,7 +158,6 @@ function PlansBand({ prompt }: { prompt: string }) {
   const [monthlyUsd, setMonthlyUsd] = useState<number>(ENTRY_TIER_USD);
   return (
     <div className="border-border mt-16 overflow-hidden rounded-xl border">
-      <HoopLine />
       <div className="divide-border grid grid-cols-1 divide-y lg:grid-cols-3 lg:divide-x lg:divide-y-0">
         {plans.map((plan) => (
           <PricingPlanCard
@@ -201,24 +200,11 @@ function PlansBand({ prompt }: { prompt: string }) {
 }
 
 /**
- * The page's end, instead of the site's footer: the hoop's grain, one closing
- * line with the prompt under it, then the name across the page's width.
+ * The page's end, instead of the site's footer: the name across the page's width.
  */
-function PageEnd({ prompt }: { prompt: string }) {
+function PageEnd() {
   return (
     <footer className="relative">
-      {/* The grain fades by thinning its dots toward the title, which sits on the plain surface below it. */}
-      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-81.5">
-        <DitherField className="text-kortix-base" palette={HOOP_PALETTE} fade="top" />
-      </div>
-      <div className={cn(COLUMN, 'relative flex flex-col items-center gap-8 pt-64 text-center')}>
-        <h2 className={H2}>
-          One prompt.
-          <br />
-          <span className="text-muted-foreground">Your whole company, looped.</span>
-        </h2>
-        <CopyButton text={prompt} icon="shortcut" bindKey={false} />
-      </div>
       {/* The name closes the page across its width, on clean black. The letters fade from grey into the black;
           the two hoop O's keep their full colors, which turn muddy at any lower opacity. Its size is a
           share of the container's width (cqi), so the whole word fits at every width with the page's side gutter. */}
@@ -323,7 +309,7 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
   return (
     <WordmarkVariantContext.Provider value={variant}>
     <CopyGuideProvider>
-      <div style={hoopVars} className="dark bg-background text-foreground relative min-h-screen overflow-x-clip [color-scheme:dark]">
+            <div style={hoopVars} className="dark bg-background text-foreground relative min-h-screen overflow-x-clip [color-scheme:dark]">
         <header className="bg-background/80 border-border sticky top-0 z-30 border-b backdrop-blur">
           <div className={cn(COLUMN, 'flex h-16 items-center justify-between gap-4')}>
             {/* The logo is one link home: /loopmaxxing on every host (loopmaxxing.sh sends that path to its root). This
@@ -373,26 +359,25 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
 
         <main>
           <section className="relative">
-            {/* The dither in the hoop's colors, a flat band behind the hero copy: it fades out before the reel. */}
-            <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-48 sm:h-[560px]">
-              <DitherField className="text-kortix-base" palette={HOOP_PALETTE} fade="top-right" />
-            </div>
             <div className={cn(COLUMN, 'relative')}>
-            <div className="flex flex-col items-start gap-6 pt-20 pb-14 lg:pt-32 lg:pb-20">
-              <span className="text-muted-foreground text-sm">For dev teams</span>
-              <h1 className="text-foreground max-w-5xl text-4xl font-medium tracking-tight text-balance sm:text-6xl lg:text-7xl">
+            {/* Eyebrow, headline, one short intro: the headline carries the page, the intro stays two lines of grey. */}
+            <div className="flex flex-col items-start pt-20 pb-24 lg:pt-32 lg:pb-36">
+              <span className="text-foreground text-base">For dev teams</span>
+              <h1 className="text-foreground mt-4 max-w-4xl text-4xl font-medium tracking-tight text-balance sm:text-5xl lg:text-6xl">
                 Add a {name}
                 <br />
                 with 1 prompt.
               </h1>
-              <p className="text-muted-foreground max-w-xl text-lg text-pretty">
-                Agents that work on your repo and your tools, in the cloud, 24/7, without you prompting them. One prompt sets them up, on the Claude or Codex subscription or API key you already pay for.
+              <p className="text-muted-foreground mt-5 max-w-lg text-base text-pretty">
+                Agents work on your repo and your tools in the cloud, 24/7, without you prompting them. One prompt sets them up.
               </p>
-              <p className="text-muted-foreground inline-flex flex-wrap items-center gap-x-1.5 text-sm">
+              <p className="text-muted-foreground mt-3 inline-flex flex-wrap items-center gap-x-1.5 text-sm">
                 Integrates with <Mark name="Claude Code" /> <Mark name="Codex" /> and any API key
               </p>
-              <PromptCta prompt={prompt} className="mt-2" />
+              <PromptCta prompt={prompt} className="mt-8" />
             </div>
+            {/* The loop you can touch: beside the headline where the column has room for it. After the copy in the DOM, so the prompt comes first in tab order. */}
+            <HulaHoop className="absolute top-12 right-6 hidden w-[520px] xl:block 2xl:w-[580px]" />
             <div className="pb-8">
               <SessionReel runs={runs} />
             </div>
@@ -478,7 +463,7 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
           />
         </main>
 
-        <PageEnd prompt={prompt} />
+        <PageEnd />
       </div>
     </CopyGuideProvider>
     </WordmarkVariantContext.Provider>

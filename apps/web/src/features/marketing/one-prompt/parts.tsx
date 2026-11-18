@@ -4,7 +4,6 @@ import { PROD_TARGET, setupPromptFor, setupTarget, type SetupTarget } from '@kor
 import { track } from '@/lib/track';
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
 
-import { COPY_GUIDE_ATTR, useCopyGuide } from './copy-guide';
 import { Claude } from '@kortix/ui/internal/icons/claude';
 import { SolidCheckIcon } from '@kortix/ui/internal/icons/solid-check-icon';
 import { Kbd } from '@kortix/ui/kbd';
@@ -124,14 +123,11 @@ export function CopyButton({
   const target = useSetupTarget();
   const prompt = text ?? setupPromptFor(target);
   const { copied, copy: write, flash } = useCopy(prompt);
-  const guide = useCopyGuide();
-  // Every copy opens the page's guide: where to paste the prompt next.
   const copy = async (method: 'button' | 'key' = 'button') => {
     if (!(await write())) return;
     // A template prompt names its template (loopPrompt): "The template is <id>."
     const template = /The template is ([a-z0-9-]+)\./.exec(prompt)?.[1] ?? 'none';
     track('setup_prompt_copied', { template, method, location: window.location.pathname });
-    guide?.open(prompt);
   };
   const copyRef = useRef(copy);
   const flashRef = useRef(flash);
@@ -150,8 +146,6 @@ export function CopyButton({
     const release = () => delete root.dataset[KEY_DOWN_ATTR];
     const onKey = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== COPY_KEY || event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
-      // The guide is open: the key does not copy again under it.
-      if (document.querySelector(`[${COPY_GUIDE_ATTR}]`)) return;
       event.preventDefault();
       root.dataset[KEY_DOWN_ATTR] = 'down';
       if (event.repeat) return;

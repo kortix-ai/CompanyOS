@@ -1,7 +1,7 @@
 'use client';
 
 import { KortixLogo } from '@/components/sidebar/kortix-logo';
-import Footer from '@/components/home/footer';
+import { StretchFooter } from './stretch-footer';
 import { useGitHubStars } from '@/hooks/use-github-stars';
 import { FaqSection } from '@/features/marketing/faq';
 import { PricingPlanCard } from '@/features/billing/pricing-plan-card';
@@ -23,7 +23,6 @@ import { heroRuns } from './hero-runs';
 import { hoopVars, LoopmaxxingWordmark, WORDMARK_VARIANTS, WordmarkVariantContext, type WordmarkVariant } from './hoop';
 import { HOOP_PALETTE } from './hoop-palette';
 import type { LoopView } from './loops-content';
-import { CopyGuideProvider } from './copy-guide';
 import { CopyButton, GhostButton, Mark, useForceDarkPage, useSetupTarget } from './parts';
 import { EngineGrid } from './engine-grid';
 import { HoopScrollbar } from './hoop-scrollbar';
@@ -200,72 +199,6 @@ function PlansBand({ prompt }: { prompt: string }) {
   );
 }
 
-/**
- * The shared closing CTA, then the full-width name on a plain background.
- */
-function PageEnd({ prompt }: { prompt: string }) {
-  const wordmark = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = wordmark.current;
-    if (!el) return;
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
-    let frame = 0;
-    const update = () => {
-      frame = 0;
-      const bounds = el.getBoundingClientRect();
-      const progress = reduced.matches || el.contains(document.activeElement)
-        ? 1
-        : Math.max(0, Math.min(1, (window.innerHeight - bounds.top) / bounds.height)) ** 2;
-      el.style.setProperty('--footer-reveal', String(progress));
-    };
-    const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
-    const observer = new ResizeObserver(schedule);
-    observer.observe(el);
-    window.addEventListener('scroll', schedule, { passive: true });
-    window.addEventListener('resize', schedule);
-    reduced.addEventListener('change', schedule);
-    el.addEventListener('focusin', schedule);
-    el.addEventListener('focusout', schedule);
-    update();
-    return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-      window.removeEventListener('scroll', schedule);
-      window.removeEventListener('resize', schedule);
-      reduced.removeEventListener('change', schedule);
-      el.removeEventListener('focusin', schedule);
-      el.removeEventListener('focusout', schedule);
-    };
-  }, []);
-  return (
-    <Footer
-      cta={{
-        title: 'One prompt.',
-        subtitle: 'Your whole company, looped.',
-        actions: <CopyButton text={prompt} icon="shortcut" bindKey={false} />,
-        palette: HOOP_PALETTE,
-      }}
-      footerContent={
-        <div className="w-full px-6 pt-12 pb-16">
-          <div ref={wordmark} className="relative isolate overflow-hidden">
-            <div className="@container">
-              <Link
-                href="/loopmaxxing"
-                aria-label="Loopmaxxing"
-                className="text-foreground focus-visible:outline-ring flex justify-center pb-10 font-mono text-[14cqi] leading-none font-medium whitespace-nowrap uppercase focus-visible:outline-2 focus-visible:-outline-offset-2"
-              >
-                <span style={{ clipPath: 'inset(0 0 calc((1 - var(--footer-reveal, 1)) * 100%) 0)' }}>
-                  <LoopmaxxingWordmark />
-                </span>
-              </Link>
-            </div>
-          </div>
-        </div>
-      }
-    />
-  );
-}
-
 /** The header's links, in page order. Docs follows them and leaves the page. */
 const NAV = [
   { id: 'how', label: 'How it works' },
@@ -351,7 +284,6 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
   const variant = useWordmarkVariant();
   return (
     <WordmarkVariantContext.Provider value={variant}>
-    <CopyGuideProvider>
             <div id="loopmaxxing-content" style={hoopVars} className="dark bg-background text-foreground relative min-h-screen overflow-x-clip [color-scheme:dark]">
         <HoopScrollbar />
         <header className="bg-background/80 border-border sticky top-0 z-30 border-b backdrop-blur">
@@ -508,9 +440,8 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
           />
         </main>
 
-        <PageEnd prompt={prompt} />
+        <StretchFooter prompt={prompt} />
       </div>
-    </CopyGuideProvider>
     </WordmarkVariantContext.Provider>
   );
 }

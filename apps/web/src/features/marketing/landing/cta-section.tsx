@@ -12,14 +12,18 @@ import { HoverPrefetchLink } from '@kortix/ui/internal/components/hover-prefetch
 import { latestProjectPath } from '@kortix/ui/internal/lib/onboarding/last-project-cookie';
 import { ArrowRightIcon } from '@phosphor-icons/react';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 /**
  * Closing CTA above the site map: a two-tone line that echoes the hero, two
  * actions, then the trust line. Copy lives in content.ts. A page can replace
- * the copy and both actions through `footer-cta.ts`.
+ * the copy and both actions through `footer-cta.ts`, or pass `content` when an
+ * action is not a link, as the Loopmaxxing page's Copy prompt is. The section
+ * still draws the heading, the action row and the trust line.
  */
-export function CtaSection() {
+export type CtaContent = { title: string; subtitle: string; actions: ReactNode; trust?: string };
+
+export function CtaSection({ content }: { content?: CtaContent } = {}) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const { cta } = getLocalizedLandingContent(tI18nComplete);
   const { user } = useAuth();
@@ -55,7 +59,18 @@ export function CtaSection() {
         <DitherField className="text-kortix-base" />
       </div>
 
-      {override ? (
+      {content ? (
+        <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-6 text-center">
+          <h2 className="text-foreground text-2xl font-medium tracking-tight text-balance md:text-3xl lg:text-4xl">
+            {content.title}
+            <span className="text-muted-foreground block">{content.subtitle}</span>
+          </h2>
+          <div className="mt-8 flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-center">
+            {content.actions}
+          </div>
+          {content.trust ? <p className="text-muted-foreground mt-6 text-sm text-pretty">{content.trust}</p> : null}
+        </div>
+      ) : override ? (
         <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-6 text-center">
           <h2 className="text-foreground text-2xl font-medium tracking-tight text-balance md:text-3xl lg:text-4xl">
             {override.title}
@@ -66,7 +81,7 @@ export function CtaSection() {
           ) : null}
           <div className="mt-8 flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-center">
             <MarketingButton
-              variant="accent"
+              variant="primary"
               size="md"
               className="hit-area-y-1 w-full sm:w-auto sm:min-w-36"
               asChild
@@ -99,7 +114,7 @@ export function CtaSection() {
           </h2>
           <div className="mt-8 flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-center">
             <MarketingButton
-              variant="accent"
+              variant="primary"
               size="md"
               className="hit-area-y-1 w-full sm:w-auto sm:min-w-36"
               asChild

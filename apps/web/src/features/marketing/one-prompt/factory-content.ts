@@ -38,11 +38,14 @@ export const MANIFEST = [
   '    tools: [lookup_order]',
   '    extensions: [review-gate]',
   '    connectors: [helpdesk]',
+  '    secrets: [SENTRY_DSN]',
   '',
   'triggers:',
   '  - slug: nightly-tests',
   '    on: { cron: "0 0 2 * * *" }',
-  '    run: { agent: factory, prompt: "Run the tests. File what fails." }',
+  '    run:',
+  '      agent: factory',
+  '      prompt: Run the tests. File what fails.',
   '',
   'skills:',
   '  software-factory: skills/software-factory',
@@ -52,14 +55,16 @@ export const MANIFEST = [
   '  review-gate: { pi: extensions/review-gate.ts }',
   '',
   'connectors:',
-  '  - { slug: helpdesk, provider: http, base_url: https://helpdesk.example.com/api }',
+  '  - slug: helpdesk',
+  '    provider: http',
+  '    base_url: https://helpdesk.example.com/api',
   '',
   'sandbox:',
   '  templates:',
   '    - { slug: dev, dockerfile: .kortix/Dockerfile }',
 ];
 
-/** What kortix.yaml defines, one line each. `key` is the YAML key. */
+/** What kortix.yaml defines, one line each. `key` is the YAML key whose lines light up when the part is hovered. */
 export const ENGINE = [
   { term: 'Agents', key: 'agents', body: 'Every agent is a pi coding agent you define: its prompt, model, skills and what it may use. Nothing is granted by default.' },
   { term: 'Triggers', key: 'triggers', body: 'What starts an agent: a schedule, a webhook, a Slack message, an app event.' },
@@ -68,11 +73,8 @@ export const ENGINE = [
   { term: 'Extensions', key: 'extensions', body: 'pi extensions change the agent itself: hooks on its lifecycle, new commands, new behavior. A file in your repo or a pinned npm package.' },
   { term: 'Connectors', key: 'connectors', body: '3,000+ apps in a click, plus MCP, OpenAPI and raw HTTP. Rules decide which calls run and which wait for you.' },
   { term: 'Environment', key: 'sandbox', body: 'A Dockerfile for the sandbox each session runs in: your toolchain, your services, your tests.' },
-  { term: 'Secrets', key: 'env', body: 'The file names them. The values stay encrypted in your workspace and reach only the agents you grant.' },
+  { term: 'Secrets', key: 'secrets', body: 'The file names them. The values stay encrypted in your workspace and reach only the agents you grant.' },
 ];
-
-/** Names only: the brand kit allows no third-party logos. */
-export const TOOLS = ['GitHub', 'Linear', 'Jira', 'Asana', 'Slack', 'Sentry', 'Better Stack', 'Claude Code', 'Codex'];
 
 export const FAQ = [
   { q: 'What is Kortix?', a: 'Cloud agents for your repository, defined in one kortix.yaml: the agents, what starts them, the skills they use and what they may do.' },
@@ -83,4 +85,14 @@ export const FAQ = [
   { q: 'Where do the agents run?', a: 'In Kortix cloud sandboxes, in an environment built from your repository. They never point at your staging or production systems.' },
   { q: 'Who approves the work?', a: 'You. Every pull request, post and outbound draft waits for a person until you allow more. Security fixes always wait.' },
   { q: 'How do I turn it off?', a: 'Pause its triggers with one command, or delete its folder under .kortix/.' },
+];
+
+/** The teams the same prompt builds a loop for, from a description. `slug` picks the agent mark. */
+export const TEAMS = [
+  { slug: 'marketing', name: 'Marketing', line: 'Every merge becomes a changelog, a post and a video.' },
+  { slug: 'sales', name: 'Sales', line: 'Every signup researched, scored and drafted before you wake up.' },
+  { slug: 'support', name: 'Support', line: 'Every ticket answered in draft or routed to engineering.' },
+  { slug: 'recruiting', name: 'Recruiting', line: 'Every applicant scored against the role, with an interview kit.' },
+  { slug: 'research', name: 'Research', line: 'Say what to watch. It writes the brief on your schedule.' },
+  { slug: 'operations', name: 'Operations', line: 'Say what the back office repeats. It runs it and asks first.' },
 ];

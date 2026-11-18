@@ -4449,14 +4449,14 @@ Set these with `kortix self-host env set`. Each row says what the variable turns
 | `TUNNEL_ENABLED` | Default `true`. `false` turns off [computers](/docs/guide#computers): `/v1/tunnel/*` answers `503` `tunnel_disabled`. |
 | `PLATINUM_API_KEY` | Required. Sessions, App machines and volumes, and Drive (`/drives`). |
 
-OAuth callbacks, such as `<KORTIX_URL>/v1/connectors/oauth2/callback` and the Slack and Teams redirects, use `KORTIX_URL`. Domain mode and a named tunnel keep it stable. A quick tunnel changes it at every restart and breaks every callback you registered.
+OAuth callbacks, such as `<KORTIX_URL>/v1/connectors/oauth2/callback` and the Slack and Teams redirects, use `KORTIX_URL`. Domain mode and a named tunnel keep it stable. A quick tunnel changes it at every restart and breaks every callback you registered. `KORTIX_OAUTH_CALLBACK_ORIGIN` replaces `KORTIX_URL` in the connector callback only: set it to a stable origin the browser reaches, such as `http://localhost:8008` on one machine, and register `<origin>/v1/connectors/oauth2/callback`.
 
 #### Kortix OAuth clients
 
 Some MCP servers in the catalog do not let Kortix register itself. Kortix signs in to them with an OAuth client that you create at the vendor once per instance.
 
 1. At the vendor, create an OAuth app with the redirect URI `<KORTIX_URL>/v1/connectors/oauth2/callback`.
-   - Google: a **Web application** client. Select **Use this client for an AI-powered agent**. Enable the Gmail, Calendar, Drive, Docs and Sheets APIs and their MCP services. Add the scopes from Google's [MCP server guide](https://developers.google.com/workspace/guides/configure-mcp-servers). The Workspace MCP servers are a Google developer preview.
+   - Google: a **Web application** client. Select **Use this client for an AI-powered agent**. Enable the Gmail, Google Calendar, Google Drive, Google Docs, Google Sheets and People APIs. In **Data Access**, add `openid`, `userinfo.email`, `gmail.modify`, `gmail.settings.basic`, `contacts.readonly`, `contacts.other.readonly`, `calendar`, `drive`, `documents` and `spreadsheets` (each under `https://www.googleapis.com/auth/` except `openid`). Kortix serves Gmail, Calendar, Drive, Docs and Sheets itself on Google's REST APIs, with the tool names of Composio's toolkits; see [Google apps](#google-apps).
    - GitHub: an OAuth app (not a GitHub App).
    - X: in the X Developer Console, set up **User authentication** with OAuth 2.0, the app type **Web App, Automated App or Bot** (a confidential client) and the permission **Read and write**. Kortix requests `tweet.read tweet.write users.read offline.access`.
 2. Store the clients as one JSON value:
@@ -4466,6 +4466,18 @@ Some MCP servers in the catalog do not let Kortix register itself. Kortix signs 
    ```
 
 3. Restart the API. The apps of each configured vendor appear in the catalog.
+
+#### Google apps
+
+With a `google` entry in `KORTIX_OAUTH_CLIENTS`, the catalog lists Gmail, Google Calendar, Google Drive, Google Docs and Google Sheets as Kortix apps, and the Composio toolkits for them (`gmail`, `googlecalendar`, `googledrive`, `googledocs`, `googlesheets`) leave the catalog.
+
+- The tools keep the names and arguments of the Composio toolkits (`gmail.fetch_emails`, `gmail.send_email`, `google_calendar.events_list`, `google_drive.find_file`, …), so agents, skills and tool rules written for Composio keep working. A tool answers the object the Composio tool returned as its `data`.
+- Kortix runs the tools inside the API process. The access token reaches only `*.googleapis.com`. A connector's URL is `https://google.mcp.kortix.com/<service>`: an identity, not a network address.
+- Kortix asks for `gmail.modify`, not full mailbox access: `delete_message`, `delete_thread` and `batch_delete_messages` move mail to Trash, where Gmail deletes it after 30 days.
+- A downloaded file (`gmail.get_attachment`, `google_drive.download_file`) comes back as `file.content_base64`, up to 25 MB. Save a large answer with `kortix connectors call … --out result.json`. A file to send or upload goes in `attachments[]` as `content` (base64, or `--attach <file>`) or `url` (public https).
+- An existing Composio connector moves with `kortix connectors move <slug>`, or **Move to Kortix** on its page: the owner signs in to Google once, and the connector keeps its slug, its tool rules and its Gmail, Calendar and Drive event triggers. Google sign-ins cannot move between OAuth apps, so each account signs in again.
+
+Google review: `gmail.modify`, `gmail.settings.basic` and `drive` are restricted scopes. A Google project that is **In production** with these scopes needs Google's verification and a yearly third-party security assessment (CASA). Until then, people see an "unverified app" screen, and at most 100 Google accounts can ever sign in. In **Testing**, Google ends every sign-in after 7 days. A project with the **Internal** user type (Google Workspace only) needs neither, for accounts of that Workspace.
 
 #### Composio toolkits that need your own OAuth app
 

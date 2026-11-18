@@ -37,6 +37,15 @@ const SEGMENTS: ReadonlyArray<{ color: number; length: number }> = [
 /** Where each segment starts on the ring, in percent. */
 const STARTS = SEGMENTS.map((_, index) => SEGMENTS.slice(0, index).reduce((sum, segment) => sum + segment.length, 0));
 
+/** The palette index of the segment at a point of the ring, `fraction` of the way round (0 to 1). */
+export function hoopColorAt(fraction: number): number {
+  const percent = (((fraction % 1) + 1) % 1) * 100;
+  for (let index = SEGMENTS.length - 1; index >= 0; index -= 1) {
+    if (percent >= STARTS[index]!) return SEGMENTS[index]!.color;
+  }
+  return SEGMENTS[0]!.color;
+}
+
 /** The segments along an ellipse. */
 function Segments({ cx, cy, rx, ry, width }: { cx: number; cy: number; rx: number; ry: number; width: number }) {
   return SEGMENTS.map((segment, index) => {

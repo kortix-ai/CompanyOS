@@ -10,6 +10,8 @@ import { createContext, useCallback, useContext, useRef, useState, type ReactNod
 
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
 
+import { AsciiHoop } from './ascii-hoop';
+
 /** The coding agents the dialog shows, each with its own mark. A "+" closes the row: any agent with a shell runs the prompt. */
 const AGENTS: ReadonlyArray<{ name: string; mark: ReactNode }> = [
   { name: 'Claude Code', mark: <Claude className="size-5" /> },
@@ -39,9 +41,12 @@ export const COPY_GUIDE_ATTR = 'data-copy-guide';
 export function CopyGuideProvider({ children }: { children: ReactNode }) {
   const [text, setText] = useState<string | null>(null);
   const opener = useRef<HTMLElement | null>(null);
+  const done = useRef<HTMLButtonElement | null>(null);
   const open = useCallback((copied: string) => {
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setText(copied);
+    // Done takes the focus once the dialog has placed its own: no focus ring greets the reader, Copy again is one Tab back.
+    setTimeout(() => done.current?.focus(), 60);
   }, []);
   const close = () => {
     setText(null);
@@ -52,7 +57,11 @@ export function CopyGuideProvider({ children }: { children: ReactNode }) {
     <CopyGuideContext.Provider value={{ open }}>
       {children}
       <Modal open={text !== null} onOpenChange={(next) => !next && close()}>
-        <ModalContent {...{ [COPY_GUIDE_ATTR]: '' }} className="sm:max-w-md">
+        <ModalContent {...{ [COPY_GUIDE_ATTR]: '' }} className="overflow-hidden sm:max-w-md">
+          {/* The art: the hula hoop as an ASCII spinning donut, on black. Mounted only while the dialog is open. */}
+          <div aria-hidden className="bg-background h-56 sm:h-64">
+            <AsciiHoop className="animate-in fade-in duration-slow size-full" />
+          </div>
           <ModalHeader>
             <ModalTitle className="inline-flex items-center gap-2">
               <SolidCheckIcon aria-hidden className="size-4.5" />
@@ -76,7 +85,7 @@ export function CopyGuideProvider({ children }: { children: ReactNode }) {
           </ul>
           <ModalFooter className="sm:justify-between">
             {text !== null ? <CopyAgain text={text} /> : null}
-            <MarketingButton type="button" variant="primary" size="md" onClick={close}>
+            <MarketingButton ref={done} type="button" variant="primary" size="md" onClick={close}>
               Done
             </MarketingButton>
           </ModalFooter>

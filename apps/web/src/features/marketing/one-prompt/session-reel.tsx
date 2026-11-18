@@ -416,11 +416,15 @@ function SessionPanel({
         </span>
       </header>
 
-      {/* The conversation scrolls on its own: an opened fold can be longer than the window. */}
+      {/* The conversation scrolls on its own only once the reader opened a fold or sent a message: those
+          can be longer than the window. Until then it is no scroll container, so a page scroll over the reel
+          never stops on it. No `overscroll-contain`: a trackpad gesture latches onto any contained scroller,
+          even one with nothing to scroll, and the page stays still. */}
       <div
         key={`${run.id}-${round}`}
         className={cn(
-          'flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 pt-2 pb-2 [scrollbar-width:none]',
+          'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-4 pt-2 pb-2 [scrollbar-width:none] has-[[data-state=open]]:overflow-y-auto',
+          sent.length > 0 && 'overflow-y-auto',
           round > 0 && 'animate-in fade-in duration-slow',
         )}
       >

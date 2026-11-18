@@ -34,9 +34,18 @@ export const REDUCE_MOTION_ATTRIBUTE = 'data-reduce-motion';
 
 const SYSTEM_QUERY = '(prefers-reduced-motion: reduce)';
 
+/**
+ * True when `<html>` carries the switch's attribute. A document without an
+ * `<html>` element (a stubbed document in a test, a non-DOM renderer) reads
+ * as off instead of throwing at module load.
+ */
+function htmlReducesMotion(): boolean {
+  return typeof document !== 'undefined' && document.documentElement?.hasAttribute(REDUCE_MOTION_ATTRIBUTE) === true;
+}
+
 // The pre-paint script has already marked <html>. Seed the flag from it when
 // this module loads, so Motion skips from the first mount animation on.
-if (typeof document !== 'undefined' && document.documentElement.hasAttribute(REDUCE_MOTION_ATTRIBUTE)) {
+if (htmlReducesMotion()) {
   MotionGlobalConfig.skipAnimations = true;
 }
 
@@ -56,7 +65,7 @@ function getSystemQuery(): MediaQueryList | null {
 /** True when the OS asks for reduced motion or the person turned it on. Safe on the server (false). */
 export function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined' || typeof document === 'undefined') return false;
-  if (document.documentElement.hasAttribute(REDUCE_MOTION_ATTRIBUTE)) return true;
+  if (htmlReducesMotion()) return true;
   return getSystemQuery()?.matches ?? false;
 }
 
@@ -79,15 +88,16 @@ const serverSnapshot = (): boolean => false;
 
 /** The attribute, live: set only while the switch is on AND a workspace route is showing. */
 function subscribeAttribute(onChange: () => void): () => void {
-  if (typeof MutationObserver === 'undefined' || typeof document === 'undefined') return () => {};
+  if (typeof MutationObserver === 'undefined' || typeof document === 'undefined' || !document.documentElement) {
+    return () => {};
+  }
   const observer = new MutationObserver(onChange);
   observer.observe(document.documentElement, { attributes: true, attributeFilter: [REDUCE_MOTION_ATTRIBUTE] });
   return () => observer.disconnect();
 }
 // A renderer with no DOM (React Native, react-test-renderer) still calls the
 // client snapshot: no document means no switch.
-const attributeSnapshot = (): boolean =>
-  typeof document !== 'undefined' && document.documentElement.hasAttribute(REDUCE_MOTION_ATTRIBUTE);
+const attributeSnapshot = (): boolean => htmlReducesMotion();
 
 /** True while the switch applies to the current page (`data-reduce-motion` is on `<html>`). */
 export function useReduceMotionActive(): boolean {

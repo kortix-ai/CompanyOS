@@ -38,11 +38,16 @@ export const SETUP_AGENTS = [
   'none',
 ] as const;
 
-/** The phases of `kortix onboard` (apps/cli/src/onboarding/phases.ts) and how each ended. */
-export const ONBOARD_PHASES = ['validate', 'ship', 'secrets', 'webhooks', 'slack', 'connectors', 'sandbox', 'doctor'] as const;
+/** How each phase of `kortix onboard` (apps/cli/src/onboarding/phases.ts) ended. */
 const PHASE_STATUSES = ['done', 'skipped', 'waiting_on_person', 'failed'] as const;
 
 const count = z.number().int().min(0).max(10_000);
+
+/** Each phase the run reached, with its status. A run that stopped early names fewer phases. */
+const phase = z.enum(PHASE_STATUSES).optional();
+const PhasesSchema = z
+  .object({ validate: phase, ship: phase, secrets: phase, webhooks: phase, slack: phase, connectors: phase, sandbox: phase, doctor: phase })
+  .strict();
 
 const Common = {
   /** One guided setup: the CLI keeps it for 24 hours after the last event. */
@@ -83,7 +88,7 @@ const SetupEventBodySchema = z
             secrets: count,
             sandbox_templates: count,
             slack: z.boolean(),
-            phases: z.record(z.enum(ONBOARD_PHASES), z.enum(PHASE_STATUSES)),
+            phases: PhasesSchema,
           })
           .strict(),
       })
@@ -131,7 +136,7 @@ export function setupEventProperties(body: SetupEventBody): ProductEventProperti
   if (body.event !== 'setup_onboard_run') return { ...common, ...body.properties };
   const { phases, ...rest } = body.properties;
   const flat: ProductEventProperties = { ...common, ...rest };
-  for (const [name, status] of Object.entries(phases)) flat[`phase_${name}`] = status;
+  for (const [name, status] of Object.entries(phases)) if (status) flat[`phase_${name}`] = status;
   return flat;
 }
 

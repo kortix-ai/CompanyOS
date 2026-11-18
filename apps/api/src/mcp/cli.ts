@@ -52,6 +52,8 @@ export const DENY_SUBCOMMANDS: { path: [string, string]; denial: Denial }[] = [
   { path: ['drive', 'put'], denial: { reason: 'it uploads a local file, and this server has none', use: 'run_command in a session sandbox, where the file lives: `kortix drive put <file> <path>` there' } },
   { path: ['artifacts', 'publish'], denial: { reason: 'it uploads a local file or folder, and this server has none', use: 'run_command in a session sandbox, where the file lives: `kortix artifacts publish <file|dir>` there' } },
   { path: ['artifacts', 'pull'], denial: { reason: 'it writes files to a local folder, and this server has none', use: '`kortix artifacts cat <artifact> [<path>]` prints one file here; pull in a session sandbox' } },
+  { path: ['evals', 'init'], denial: { reason: 'it writes a first task into a local folder, and this server has no project checkout', use: 'run_command in a session sandbox, where the repository lives: `kortix evals init` there' } },
+  { path: ['evals', 'judge'], denial: { reason: "it is an eval verifier step: it reads a trial's local files and writes its reward file", use: 'nothing: a trial\'s tests/test.sh runs it in that trial\'s sandbox' } },
   { path: ['apps', 'deploy'], denial: { reason: 'it deploys a local directory, and this server has none', use: 'run_command in a session sandbox, where the source lives: `kortix apps deploy <path>` there' } },
   { path: ['apps', 'token'], denial: { reason: 'it prints a sign-in token for an App into this conversation', use: 'run_command in a session sandbox: `kortix apps token <app>` there' } },
   ...['create', 'new'].map((sub) => ({
@@ -73,7 +75,7 @@ export const CLI_ALLOWED = [
   'workspaces', 'workspace', 'projects', 'project',
   'sessions', 'session', 'chat', 'files', 'cr', 'review', 'triggers', 'automations', 'tasks', 'loops', 'loop', 'reminders', 'remind', 'connectors',
   'secrets', 'providers', 'env', 'gateway', 'apps', 'channels', 'sandboxes', 'marketplace', 'system-skills',
-  'skills', 'registry', 'agents', 'models', 'access', 'roles', 'permissions', 'perms', 'audit', 'grants', 'feedback', 'drive', 'search', 'artifacts', 'spaces', 'calendar', 'help', 'version',
+  'skills', 'registry', 'agents', 'models', 'access', 'roles', 'permissions', 'perms', 'audit', 'grants', 'feedback', 'drive', 'search', 'artifacts', 'spaces', 'calendar', 'evals', 'help', 'version',
 ];
 
 export function denial(args: string[]): Denial | null {

@@ -57,7 +57,7 @@ never pushes, never merges and never posts to chat.
       pull request (when one exists), the feedback items or the closing comment
       (rework and closed PR only, as one list), and
       `Follow references/execution/worker.md.`
-   5. **Start**: `kortix sessions new --agent factory --model "$MODEL" --label factory-worker --context factory.role=worker --context factory.ticket=<id> --prompt "$(cat <brief>)" --json`.
+   5. **Start**: `kortix sessions new --agent engineer --model "$MODEL" --label factory-worker --context factory.role=worker --context factory.ticket=<id> --prompt "$(cat <brief>)" --json`.
       Read `session_id`. A failure: leave the ticket in `ready`, name the error
       in `errors=`, next ticket.
    6. **Claim**: `ticket.claim(id, session_id)`, the comment

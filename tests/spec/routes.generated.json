@@ -1,6 +1,6 @@
 {
   "generatedAt": "static",
-  "count": 1813,
+  "count": 1814,
   "aliases": 704,
   "routes": [
     {
@@ -1596,6 +1596,10 @@
     {
       "method": "POST",
       "path": "/v1/cli/device/start"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/cli/setup-events"
     },
     {
       "method": "GET",

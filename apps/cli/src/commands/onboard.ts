@@ -33,6 +33,7 @@ import {
   type UserAction,
 } from '../onboarding/phases.ts';
 import { C, help, status } from '../style.ts';
+import { currentCredential, reportOnboardRun, reportSetupReady } from '../setup-telemetry.ts';
 import { channelList } from './channels-join.ts';
 import { githubRepoFromRemote } from '../github-remote.ts';
 import { openInBrowser } from '../browser.ts';
@@ -182,8 +183,14 @@ function phaseLine(p: PhaseResult): string {
 /** The user_actions the workspace's setup page shows; the others stay in the terminal. */
 const SETUP_PAGE_KINDS = new Set<UserAction['kind']>(['connector_sign_in', 'secret_request', 'slack_install']);
 
+/** Seconds the run before this one waited on the setup page: `--wait` finishes with a second pass. */
+let carriedWaitS = 0;
+
 export async function runOnboard(argv: string[]): Promise<number> {
   const original = [...argv];
+  const runStarted = Date.now();
+  let waitedS = carriedWaitS;
+  carriedWaitS = 0;
   const flags = takeFlags(argv, HELP, (rest) => {
     const envPairs: Array<{ file: string; only: string[] }> = [];
     // `--env-file A --only X,Y --env-file B --only Z`: each --only belongs to the --env-file before it.
@@ -350,14 +357,32 @@ export async function runOnboard(argv: string[]): Promise<number> {
   };
   const code = phases.some((p) => p.status === 'failed') ? 1 : state.actions.length > 0 || !ready ? 4 : 0;
   if (setupUrl && flags.wait && code === 4) {
+    const waitStarted = Date.now();
     const left = await waitForSetup(state, flags.waitTimeout);
+    waitedS += Math.round((Date.now() - waitStarted) / 1000);
     // Done on the page: one more pass finishes the phases that waited and prints the result.
     if (left.length === 0) {
       const again = original.filter((arg) => arg !== '--wait');
+      carriedWaitS = waitedS;
       return runOnboard(again.includes('--no-open') ? again : [...again, '--no-open']);
     }
     result.next = `The setup page still lists ${left.map((item) => item.name).join(', ')} after ${flags.waitTimeout}s. Run kortix onboard --yes --json --wait again when the person is back.`;
   }
+  const credential = currentCredential();
+  await reportOnboardRun(credential, {
+    project_id: state.ctx?.projectId ?? null,
+    exit_code: code,
+    wait: flags.wait,
+    waited_s: waitedS,
+    duration_s: Math.round((Date.now() - runStarted) / 1000),
+    steps_left: state.actions.length,
+    connectors: state.needs.connectors.length,
+    secrets: state.needs.secrets.length,
+    sandbox_templates: state.needs.sandbox_templates.length,
+    slack: state.needs.uses_slack || state.opts.channels.length > 0,
+    phases: Object.fromEntries(phases.map((phase) => [phase.name, phase.status])),
+  });
+  if (code === 0) await reportSetupReady(credential, { project_id: state.ctx?.projectId ?? null, via: 'onboard' });
   if (flags.json) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else process.stdout.write(`\n  ${result.next}\n\n`);
   return code;

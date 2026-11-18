@@ -16,6 +16,7 @@ import { runGit } from '../git-run.ts';
 import { addManifestImport } from '../manifest-edit.ts';
 import { runTemplatesDoctor } from './templates-doctor.ts';
 import { C, help, status } from '../style.ts';
+import { currentCredential, reportTemplateAdded } from '../setup-telemetry.ts';
 
 const HELP = help`Usage: kortix templates <command> [options]
 
@@ -112,7 +113,7 @@ function runShow(id: string | undefined, json: boolean): number {
   return 0;
 }
 
-function runAdd(argv: string[], json: boolean): number {
+async function runAdd(argv: string[], json: boolean): Promise<number> {
   const repoFlag = takeFlagValue(argv, ['--repo']);
   const branchFlag = takeFlagValue(argv, ['--branch']);
   const force = takeFlagBool(argv, ['--force']);
@@ -178,6 +179,7 @@ function runAdd(argv: string[], json: boolean): number {
     written,
     next: nextSteps(template),
   };
+  await reportTemplateAdded(currentCredential(), template.id);
   if (json) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return 0;

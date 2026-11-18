@@ -27414,7 +27414,9 @@
       "goals": "Ciljevi",
       "inbox": "Prijemno sanduče",
       "memory": "Memorija",
-      "members": "Članovi"
+      "members": "Članovi",
+      "review": "Pregled",
+      "setup": "Završi podešavanje"
     },
     "sections": {
       "agents": "Agenti",

@@ -51,6 +51,7 @@ import {
   CardsThreeIcon,
   ChartBarIcon,
   ChatsCircleIcon,
+  CheckCircleIcon,
   ClockCounterClockwiseIcon,
   CpuIcon,
   CreditCardIcon,
@@ -1336,6 +1337,8 @@ function staticLabel(
         inbox: TrayIcon,
         memory: BrainIcon,
         members: UsersIcon,
+        review: GitDiffIcon,
+        setup: CheckCircleIcon,
       };
       return { icon: icons[route.page], title: t(`pages.${route.page}`) };
     }

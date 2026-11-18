@@ -41,13 +41,13 @@ the person with the factory's rule beside it. **Ask** which one wins; the factor
 contract wins without an answer. Write the decision into the `dev-environment`
 skill. The code repository's own skills (`.agents/skills`, `.claude/skills`):
 when Kortix lives in that repository (guide step 3), `kortix.yaml` registers them
-where they are and `agents.factory.skills` lists them. When Kortix lives in a new
+where they are and `agents.engineer.skills` lists them. When Kortix lives in a new
 repository, the worker reads them from its clone, and the `dev-environment` skill
 names where they are.
 
 ### B. In guide step 4: grant the dev environment
 
-Add `dev-environment` to `agents.factory.skills` in
+Add `dev-environment` to `agents.engineer.skills` in
 `software-factory.yaml`, once `kortix.yaml` registers it. The
 workers verify every change with its commands.
 
@@ -103,7 +103,7 @@ a generic GitHub token secret. `<owner>/<repo>` is the code repository.
 5. **Identity check**, run by the factory with the token itself:
 
    ```sh
-   sid=$(kortix sessions new --agent factory --label factory-identity --prompt "[factory] role=identity mode=setup" --json | jq -r .session_id)
+   sid=$(kortix sessions new --agent engineer --label factory-identity --prompt "[factory] role=identity mode=setup" --json | jq -r .session_id)
    kortix sessions wait-for "$sid"
    kortix sessions log "$sid"     # the line that starts with factory-identity:
    ```

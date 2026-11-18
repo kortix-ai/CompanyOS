@@ -27414,7 +27414,9 @@
       "goals": "Objetivos",
       "inbox": "Caixa de entrada",
       "memory": "Memória",
-      "members": "Membros"
+      "members": "Membros",
+      "review": "Revisão",
+      "setup": "Concluir a configuração"
     },
     "sections": {
       "agents": "Agentes",

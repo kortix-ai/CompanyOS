@@ -27414,7 +27414,9 @@
       "goals": "Goals",
       "inbox": "Inbox",
       "memory": "Memory",
-      "members": "Members"
+      "members": "Members",
+      "review": "Review",
+      "setup": "Finish setup"
     },
     "sections": {
       "agents": "Agents",

@@ -27414,7 +27414,9 @@
       "goals": "Ziele",
       "inbox": "Posteingang",
       "memory": "Gedächtnis",
-      "members": "Mitglieder"
+      "members": "Mitglieder",
+      "review": "Review",
+      "setup": "Einrichtung abschließen"
     },
     "sections": {
       "agents": "Agenten",

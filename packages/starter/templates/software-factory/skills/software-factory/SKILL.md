@@ -351,7 +351,7 @@ keyed.
 **Worker sessions.** Intake starts one worker per ticket:
 
 ```sh
-kortix sessions new --agent factory --model "$MODEL" \
+kortix sessions new --agent engineer --model "$MODEL" \
   --label factory-worker --context factory.role=worker --context factory.ticket=<ticket id> \
   --prompt "$(cat /tmp/factory/intake/brief-<n>.md)" --json
 ```

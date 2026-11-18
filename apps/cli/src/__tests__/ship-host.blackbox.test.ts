@@ -149,6 +149,12 @@ function link(host = 'workspace') {
     JSON.stringify({ project_id: 'workspace_project', account_id: 'account_workspace', host }),
   );
 }
+/** The link as this CLI writes it: the checkout's git config. `link()` writes the older file, which ship migrates in a commit of its own. */
+function linkInGitConfig(host = 'workspace') {
+  for (const [key, value] of [['kortix.workspace', 'workspace_project'], ['kortix.account', 'account_workspace'], ['kortix.host', host]]) {
+    expect(Bun.spawnSync(['git', 'config', '--local', key, value], { cwd }).exitCode).toBe(0);
+  }
+}
 const ship = [
   'ship',
   '--dry-run',
@@ -460,7 +466,7 @@ test('seeded managed ship merges the seeded history and ships', async () => {
 test('seeded managed ship fast-forwards a folder the remote moved past', async () => {
   useLocalRepo = true;
   managedRepo = true;
-  link();
+  linkInGitConfig();
   const git = (...args: string[]) => {
     const result = Bun.spawnSync(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' });
     expect(result.exitCode).toBe(0);

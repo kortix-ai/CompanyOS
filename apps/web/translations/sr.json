@@ -22283,6 +22283,7 @@
     "installProfileHint": "Назив под којим се овај конектор види у Kortix-у.",
     "wayComposio": "Povezuje se preko Composio, partnera treće strane koji obavlja prijavu umesto tebe: prijaviš se na {name} jednim klikom, a Composio čuva prijavu.",
     "wayMcpOneClick": "Povezuje se na sopstveni MCP server aplikacije {name}. Samo se prijaviš na {name}.",
+    "wayKortixGoogle": "Kortix se povezuje na {name} preko Google API-ja. Samo se prijaviš na Google.",
     "wayMcpSetup": "Povezuje se na sopstveni MCP server aplikacije {name}. Potrebna je tvoja OAuth aplikacija ili API ključ, podešava se posle instalacije.",
     "wayApi": "Povezuje se direktno na {kind} aplikacije {name}. Posle instalacije dodaj nalog sa API ključem ili tokenom.",
     "installsWay": "Instalira preko {kind}",

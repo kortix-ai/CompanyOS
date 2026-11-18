@@ -35,8 +35,11 @@ export function kortixOAuthClients(raw: string = config.KORTIX_OAUTH_CLIENTS ?? 
 }
 
 
-/** Composio toolkits a Kortix Google MCP server replaces (`./google`). */
-export const KORTIX_GOOGLE_TOOLKITS: readonly string[] = ['gmail', 'googlecalendar', 'googledrive', 'googledocs', 'googlesheets'];
+/**
+ * Composio toolkits a Kortix Google MCP server replaces (`./google`).
+ * `googlesuper` bundles the same five services; an installed one keeps working.
+ */
+export const KORTIX_GOOGLE_TOOLKITS: readonly string[] = ['gmail', 'googlecalendar', 'googledrive', 'googledocs', 'googlesheets', 'googlesuper'];
 
 /** The Composio toolkits Kortix serves itself on this deployment: its Google client is configured. */
 export function kortixReplacedToolkits(clients = kortixOAuthClients()): readonly string[] {

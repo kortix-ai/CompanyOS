@@ -22283,6 +22283,7 @@
     "installProfileHint": "此连接器在 Kortix 中显示的名称。",
     "wayComposio": "通过 Composio 连接，这是一家为你处理登录的第三方合作伙伴：你一键登录 {name}，由 Composio 保存登录。",
     "wayMcpOneClick": "连接到 {name} 自己的 MCP 服务器。你只需登录 {name}。",
+    "wayKortixGoogle": "Kortix 通过 Google 的 API 连接 {name}。你只需登录 Google。",
     "wayMcpSetup": "连接到 {name} 自己的 MCP 服务器。需要你自己的 OAuth 应用或 API 密钥，在安装后设置。",
     "wayApi": "直接连接到 {name} 的 {kind}。安装后用它的 API 密钥或令牌添加账户。",
     "installsWay": "通过 {kind} 安装",

@@ -22283,6 +22283,7 @@
     "installProfileHint": "Kortix でこのコネクタに表示される名前。",
     "wayComposio": "Composio 経由で接続します。Composio はサインインを代行するサードパーティのパートナーです。{name} にワンクリックでサインインし、Composio がログインを保持します。",
     "wayMcpOneClick": "{name} 自身の MCP サーバーに接続します。{name} にサインインするだけです。",
+    "wayKortixGoogle": "Kortix は Google の API を通じて {name} に接続します。Google にサインインするだけです。",
     "wayMcpSetup": "{name} 自身の MCP サーバーに接続します。自分の OAuth アプリか API キーが必要で、インストール後に設定します。",
     "wayApi": "{name} の {kind} に直接接続します。インストール後に API キーかトークンでアカウントを追加します。",
     "installsWay": "{kind} でインストール",

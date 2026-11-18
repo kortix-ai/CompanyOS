@@ -22283,6 +22283,7 @@
     "installProfileHint": "El nombre que se ve para este conector en Kortix.",
     "wayComposio": "Se conecta a través de Composio, un socio externo que gestiona el inicio de sesión por ti: inicias sesión en {name} con un clic y Composio conserva el acceso.",
     "wayMcpOneClick": "Se conecta al servidor MCP propio de {name}. Solo inicias sesión en {name}.",
+    "wayKortixGoogle": "Kortix se conecta a {name} mediante la API de Google. Solo inicias sesión en Google.",
     "wayMcpSetup": "Se conecta al servidor MCP propio de {name}. Necesita tu propia app OAuth o una clave de API, que se configura tras instalar.",
     "wayApi": "Se conecta directamente a la {kind} de {name}. Tras instalar, añade una cuenta con su clave de API o token.",
     "installsWay": "Instala vía {kind}",

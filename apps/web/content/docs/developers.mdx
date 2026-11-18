@@ -137,13 +137,13 @@ Your agent reads the guide at [kortix.com/setup.md](https://kortix.com/setup.md)
 
 1. Installs the `kortix` CLI and signs you in (one click in your browser).
 2. Reads the repository, your other repositories and the software you use, and matches them to the [templates](#templates). It asks nothing yet.
-3. Asks every question in one message of at most 8 questions, each with its recommended answer. It starts with what the agents will do in your repository, then asks: the template (the one that fits, and at most one more), its sources to start with, where work lands, the software to connect, the models, and the workspace name. The config always lives in the workspace's own repository, which Kortix hosts, so the code repository gets no Kortix file. The agents reach the code on GitHub. You reply once: `go`, or `go` with changes.
+3. Asks every question in one message of at most 8 questions, each with its recommended answer. It starts with what the agents will do in your repository, then asks: the template (the one that fits, and at most one more), its sources to start with, where work lands, the software to connect, Slack, the models, and the workspace name. The config always lives in the workspace's own repository, which Kortix hosts, so the code repository gets no Kortix file. The agents reach the code on GitHub. You reply once: `go`, or `go` with changes.
 4. Keeps the agents you already have: each `.claude/agents/<name>.md` becomes an agent whose `prompt_file` is that file, and each folder with a `SKILL.md` becomes a skill.
 5. Writes the dev environment in the workspace repository: a `Dockerfile` at its root (a sandbox template) and the `dev-environment` skill in `skills/dev-environment/` (the install, start and test commands every agent loads).
 6. Uploads only the `.env` names its message listed, never a value it read (`kortix env push --names`, `--only`).
 7. Connects the plan your agents run on: your Claude or ChatGPT subscription, shared with the workspace so triggered sessions use it, or an API key.
 8. Runs `kortix validate`, commits the workspace repository, and runs `kortix onboard --repo <owner/repo>`, which creates the workspace and names the code repository on GitHub.
-9. Stores each template secret: it generates a random webhook secret, and opens the [setup page](#plan-one-go-onboard) in your browser, where you connect each app and paste your GitHub token. No value passes through the agent.
+9. Stores each template secret: it generates a random webhook secret, and opens the [setup page](#plan-one-go-onboard) in your browser, where you connect each app, add Kortix to Slack and paste your GitHub token. No value passes through the agent. With Slack added, your team gives the agents work by mentioning @Kortix in a channel or in a direct message.
 10. Creates the GitHub webhooks with your own `gh`.
 11. Runs one real task and shows you what it made: the pull request, ticket or draft, with its link.
 

@@ -27414,7 +27414,9 @@
       "goals": "ゴール",
       "inbox": "受信トレイ",
       "memory": "メモリ",
-      "members": "メンバー"
+      "members": "メンバー",
+      "review": "レビュー",
+      "setup": "セットアップを完了する"
     },
     "sections": {
       "agents": "エージェント",

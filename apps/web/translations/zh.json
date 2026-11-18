@@ -27414,7 +27414,9 @@
       "goals": "目标",
       "inbox": "收件箱",
       "memory": "记忆",
-      "members": "成员"
+      "members": "成员",
+      "review": "审核",
+      "setup": "完成设置"
     },
     "sections": {
       "agents": "智能体",

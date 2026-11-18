@@ -86,7 +86,8 @@ function base(state: OnboardState): string {
 
 // ── ship ─────────────────────────────────────────────────────────────────────
 
-const KORTIX_PATH = /^(kortix\.ya?ml|\.kortix\/.*)$/;
+// kortix.yaml, and the old link file a ship moves into the git config.
+const KORTIX_PATH = /^(kortix\.ya?ml|\.kortix\/link\.json)$/;
 
 /** Changed paths from `git status --porcelain` (renames: the new path). */
 function changedPaths(root: string): string[] {
@@ -97,7 +98,7 @@ export async function phaseShip(state: OnboardState): Promise<PhaseOutcome> {
   const changed = changedPaths(state.root);
   const foreign = changed.filter((path) => !KORTIX_PATH.test(path));
   if (foreign.length > 0) {
-    return { status: 'failed', detail: `${foreign.length} changed files outside kortix.yaml and .kortix/ (first: ${foreign[0]}): commit them or move them aside, then run onboard again` };
+    return { status: 'failed', detail: `${foreign.length} changed files outside kortix.yaml (first: ${foreign[0]}): commit them or move them aside, then run onboard again` };
   }
   if (changed.length === 0 && state.ctx) {
     const head = runGit(state.root, ['rev-parse', 'HEAD']).stdout.trim();

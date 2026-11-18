@@ -1575,6 +1575,22 @@
     "referralShareTitle": "Refer Friends",
     "referralShareSubtitle": "Get 400 credits",
     "new": "New",
+    "mcpPromo": {
+      "title": "Use Kortix in ChatGPT and Claude",
+      "description": "Add Kortix to the AI chat you already use. Start agents, follow their work and use your connectors from there.",
+      "cta": "Connect"
+    },
+    "desktopPromo": {
+      "title": "Get the desktop app",
+      "description": "Hand Kortix a task from any app with Quick Entry, and connect this computer in one click.",
+      "cta": "Download"
+    },
+    "phonePromo": {
+      "title": "Kortix on your phone",
+      "description": "Every session in your pocket. A push tells you when one finishes or needs your answer.",
+      "cta": "Get the app"
+    },
+    "promos": "Ways to use Kortix",
     "upgrade": "Upgrade",
     "chats": "Chats",
     "library": "Files",
@@ -16621,7 +16637,7 @@
       "textb2a8625a332e": "Three scheduled triggers on a time axis with a present-moment marker, and the next run called out.",
       "textb2ac0da7c543": "Whole team",
       "textb2c0cab20dc3": "JSON-RPC batches are not supported",
-      "textb2c293b68745": ".kortix/connectors/routes.toml",
+      "textb2c293b68745": "connectors/routes.toml",
       "textb2c5bc52374a": "Secret deleted",
       "textb2d544129223": "It is not done if",
       "textb2e30caf44ee": "Use hardcoded hex colors in components",
@@ -18695,7 +18711,7 @@
       "textecbd276ebec2": "Try a search.",
       "textecc7ed048b32": "month end close",
       "texteccba86b787c": "A laptop, a VPS, or your own network.",
-      "textecccd43d1878": ".kortix/connectors/schema.graphql",
+      "textecccd43d1878": "connectors/schema.graphql",
       "texteccce15347a4": "You do not have access to preview this App.",
       "textecd3c555ab44": "Failed to save permissions",
       "textecdcf83028e7": "Review parameters",
@@ -22267,6 +22283,7 @@
     "installProfileHint": "The name people see for this connector in Kortix.",
     "wayComposio": "Connects through Composio, a third-party partner that runs the sign-in for you: you sign in to {name} in one click, and Composio keeps the login.",
     "wayMcpOneClick": "Connects to {name}'s own MCP server. You only sign in to {name}.",
+    "wayKortixGoogle": "Kortix connects to {name} through Google's API. You only sign in to Google.",
     "wayMcpSetup": "Connects to {name}'s own MCP server. It needs your own OAuth app or an API key, set after install.",
     "wayApi": "Connects to {name}'s {kind} directly. Add an account with its API key or token after install.",
     "installsWay": "Installs via {kind}",
@@ -22427,7 +22444,7 @@
   },
   "connectMcp": {
     "title": "Connect Kortix over MCP",
-    "description": "Use Kortix from Claude, Claude Code, Cursor, Codex, or any MCP client. You sign in once. Nothing to install.",
+    "description": "Use Kortix from Claude, ChatGPT, Claude Code, Cursor, Codex, or any MCP client. You sign in once. Nothing to install.",
     "docs": "Docs",
     "done": "Done",
     "copy": "Copy",
@@ -22437,6 +22454,7 @@
     "copyUrl": "Copy URL",
     "via": {
       "claude": "Settings → Connectors",
+      "chatgpt": "Developer mode → custom connector",
       "claude-code": "One terminal command",
       "cursor": "One-click install",
       "codex": "Two terminal commands",
@@ -22712,6 +22730,13 @@
     "onlyYouDescription": "Only you, in every workspace, in your private sessions.",
     "everyoneDescription": "Everyone in the workspace can use it, including automations.",
     "promoLine": "Let Kortix work with your local files and take control of your computer.",
+    "promo": {
+      "title": "Connect your work computer",
+      "titleThis": "Connect this computer",
+      "description": "Agents work with your local files, run programs and use the apps on your screen. You decide what they may do.",
+      "cta": "Connect",
+      "ctaOneClick": "Connect in one click"
+    },
     "dismissPromo": "Dismiss",
     "useCliInstead": "Use the CLI instead",
     "cliHint": "The command shows a code and opens a page where you approve this device. It then runs in the background.",

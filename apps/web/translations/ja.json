@@ -1575,6 +1575,22 @@
     "referralShareTitle": "友達を紹介",
     "referralShareSubtitle": "400クレジット獲得",
     "new": "新規",
+    "mcpPromo": {
+      "title": "ChatGPT や Claude から Kortix を使う",
+      "description": "いつもの AI チャットに Kortix を追加しましょう。エージェントの起動、作業の確認、コネクタの利用がそこからできます。",
+      "cta": "接続"
+    },
+    "desktopPromo": {
+      "title": "デスクトップアプリを入手",
+      "description": "Quick Entry でどのアプリからでも Kortix にタスクを渡せます。このコンピューターもワンクリックで接続できます。",
+      "cta": "ダウンロード"
+    },
+    "phonePromo": {
+      "title": "スマートフォンで Kortix",
+      "description": "すべてのセッションをポケットに。終わったときや回答が必要なときはプッシュ通知でお知らせします。",
+      "cta": "アプリを入手"
+    },
+    "promos": "Kortix の使い方",
     "upgrade": "アップグレード",
     "chats": "チャット",
     "library": "ファイル",
@@ -16576,7 +16592,7 @@
       "textb2a8625a332e": "時間軸上に3つのスケジュール済みトリガーがあり、現在時点のマーカーと次回実行が表示されています。",
       "textb2ac0da7c543": "チーム全体",
       "textb2c0cab20dc3": "JSON-RPCバッチはサポートされていません",
-      "textb2c293b68745": ".kortix/connectors/routes.toml",
+      "textb2c293b68745": "connectors/routes.toml",
       "textb2c5bc52374a": "シークレットが削除されました",
       "textb2d544129223": "次の状態では完了とは言えません",
       "textb2e30caf44ee": "コンポーネント内で16進カラーをハードコードしない",
@@ -18650,7 +18666,7 @@
       "textecbd276ebec2": "検索してみてください。",
       "textecc7ed048b32": "月末締め処理",
       "texteccba86b787c": "ノートPC、VPS、またはあなた自身のネットワーク。",
-      "textecccd43d1878": ".kortix/connectors/schema.graphql",
+      "textecccd43d1878": "connectors/schema.graphql",
       "texteccce15347a4": "このAppをプレビューするアクセス権がありません。",
       "textecd3c555ab44": "権限の保存に失敗しました",
       "textecdcf83028e7": "パラメーターを確認",
@@ -22267,6 +22283,7 @@
     "installProfileHint": "Kortix でこのコネクタに表示される名前。",
     "wayComposio": "Composio 経由で接続します。Composio はサインインを代行するサードパーティのパートナーです。{name} にワンクリックでサインインし、Composio がログインを保持します。",
     "wayMcpOneClick": "{name} 自身の MCP サーバーに接続します。{name} にサインインするだけです。",
+    "wayKortixGoogle": "Kortix は Google の API を通じて {name} に接続します。Google にサインインするだけです。",
     "wayMcpSetup": "{name} 自身の MCP サーバーに接続します。自分の OAuth アプリか API キーが必要で、インストール後に設定します。",
     "wayApi": "{name} の {kind} に直接接続します。インストール後に API キーかトークンでアカウントを追加します。",
     "installsWay": "{kind} でインストール",
@@ -22427,7 +22444,7 @@
   },
   "connectMcp": {
     "title": "MCP で Kortix に接続",
-    "description": "Claude、Claude Code、Cursor、Codex、または任意の MCP クライアントから Kortix を使えます。サインインは一度だけ。インストールは不要です。",
+    "description": "Claude、ChatGPT、Claude Code、Cursor、Codex、または任意の MCP クライアントから Kortix を使えます。サインインは一度だけ。インストールは不要です。",
     "docs": "ドキュメント",
     "done": "完了",
     "copy": "コピー",
@@ -22437,6 +22454,7 @@
     "copyUrl": "URL をコピー",
     "via": {
       "claude": "設定 → コネクタ",
+      "chatgpt": "開発者モード → カスタムコネクタ",
       "claude-code": "ターミナルコマンド 1 つ",
       "cursor": "ワンクリックでインストール",
       "codex": "ターミナルコマンド 2 つ",
@@ -22712,6 +22730,13 @@
     "onlyYouDescription": "あなただけ。すべてのワークスペースの、あなたのプライベートセッションで使えます。",
     "everyoneDescription": "ワークスペースの全員が使えます。自動化も含みます。",
     "promoLine": "Kortix がローカルファイルを扱い、コンピューターを操作できるようにします。",
+    "promo": {
+      "title": "仕事用のコンピューターを接続",
+      "titleThis": "このコンピューターを接続",
+      "description": "エージェントがローカルファイルを扱い、プログラムを実行し、画面上のアプリを操作します。何を許可するかはあなたが決めます。",
+      "cta": "接続",
+      "ctaOneClick": "ワンクリックで接続"
+    },
     "dismissPromo": "閉じる",
     "useCliInstead": "代わりに CLI を使う",
     "cliHint": "コマンドはコードを表示し、このデバイスを承認するページを開きます。その後はバックグラウンドで動作します。",

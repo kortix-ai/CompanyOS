@@ -1,6 +1,6 @@
 # Source: the sales inbox
 
-Trigger `sales-inbound-email`, a connector event: `GMAIL_NEW_GMAIL_MESSAGE` on
+Trigger `sales-inbound-email`, a connector event: `gmail.message.received` on
 the `gmail` connector. Disabled by default. Connector events are a workspace
 feature flag (**Workspace admin** → **Feature flags** → event triggers). Another
 mail connector: list its event types with

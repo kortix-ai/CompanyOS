@@ -68,6 +68,7 @@ person.
 | `$pageview`, `$pageleave`, `$autocapture` | web | navigation, clicks | scrubbed URL, `environment`, `platform` (`web`/`desktop`), `app_version` |
 | `cta_signup_clicked` | web | a sign-up button on a marketing page | `location` |
 | `auth_completed` | web | the browser lands after sign-up or sign-in | `kind` (`signup`/`login`), `method` |
+| `setup_prompt_copied` | web | a Loopmaxxing copy button (or its C key) put the setup prompt on the clipboard | `template` (the one the prompt names, else `none`), `method` (`button`/`key`), `location` |
 | panel events (`panel_opened`, …) | web (`@kortix/ui`) | session panel and conversation UI | `source`, `kind`, `count` |
 | `user_signed_up` | API | a new person's first `GET /v1/accounts` with no workspace (`accounts/core/signup-event.ts`) | `method` (email, google, github, apple), `invited` (an invitation to the email was open at sign-up); sets the person property `signup_kind` (`invited`, `self_serve`) once |
 | `user_logged_in` | API | a CLI device login or a headless sign-in (not a token refresh) | `method` |
@@ -94,6 +95,18 @@ person.
 | `subscription_cancelled` | API | a paid plan ends | `store`, `previous_tier`, `amount_usd` |
 | `credits_topped_up` | API | a one-off credit purchase is paid | `amount_usd`, `store` |
 | `member_joined` | API | a person joins a workspace someone else made | `via` (invite, auto_claim, direct_add, project_invite, access_request), `role` |
+| `setup_started` | API (CLI) | `kortix plan`, step 1 of /setup.md: a setup run starts (once per `setup_id`) | `has_workspace`, `has_manifest` |
+| `setup_template_added` | API (CLI) | `kortix templates add` inside a setup run | `template` |
+| `setup_onboard_run` | API (CLI) | each `kortix onboard` inside a setup run | `exit_code`, `phase_<name>` (done, skipped, waiting_on_person, failed), `wait`, `waited_s`, `duration_s`, `steps_left`, `connectors`, `secrets`, `sandbox_templates`, `slack`, `project_id` |
+| `setup_ready` | API (CLI) | the first green `kortix onboard` or `kortix doctor --loops` of a run (once per `setup_id`) | `via`, `minutes_since_start`, `project_id` |
+
+The four `setup_*` API events come from the CLI through `POST /v1/cli/setup-events`
+(`apps/api/src/cli/setup-events.ts`, closed schema, 20 a minute per person) and
+`apps/cli/src/setup-telemetry.ts`. Each carries `setup_id` (one guided setup:
+`kortix plan` starts it, it ends 24 hours after its last event), `agent` (the
+coding agent, from `AI_AGENT`, `CLAUDECODE` and each tool's marker) and
+`cli_version`. Outside a run the CLI sends nothing; `DO_NOT_TRACK=1` or
+`KORTIX_TELEMETRY=0` turns it off.
 
 Request-driven events carry `source` (web, cli, mobile, desktop). API events
 that two code paths can report carry a fixed uuid (`dedupeKey`), and the
@@ -170,6 +183,7 @@ README). They follow the design of the closed PR #7144.
 | Connectors, secrets, triggers, apps, flags, billing gates | Kortix · Setup & adoption |
 | Visitors, referrers, UTM, landing pages, first-touch signups, survey answers | Kortix · Acquisition |
 | Goals, visitor → paid, signup → paid, time to paid | Kortix · Conversion |
+| Does the setup prompt end in working loops, which coding agent ran it, where onboard stops | Kortix · Setup |
 | One person's journey | PostHog → People → the person → Events |
 
 Every insight sets `filterTestAccounts`: `environment = production`, no

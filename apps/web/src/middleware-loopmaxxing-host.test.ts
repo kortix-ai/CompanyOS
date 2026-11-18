@@ -43,6 +43,13 @@ test('after the launch the root is the landing page and other pages are kortix.c
   expect(own.headers.get('location')).toBe('https://loopmaxxing.sh/');
 });
 
+test('after the launch the page reads its star count from the host itself', async () => {
+  // A redirect to kortix.com would be cross-origin with no CORS header: the header's count would vanish.
+  process.env[FLAG] = 'true';
+  const res = await middleware(request('/api/github-stars'));
+  expect(res.headers.get('location') ?? '').not.toContain('kortix.com');
+});
+
 test('after the launch the setup guide is served under the host itself', async () => {
   process.env[FLAG] = 'true';
   const res = await middleware(request('/setup.md'));

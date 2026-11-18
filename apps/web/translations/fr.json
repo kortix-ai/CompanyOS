@@ -1575,6 +1575,22 @@
     "referralShareTitle": "Parrainer des Amis",
     "referralShareSubtitle": "Gagnez 400 crédits",
     "new": "Nouveau",
+    "mcpPromo": {
+      "title": "Utilisez Kortix dans ChatGPT et Claude",
+      "description": "Ajoutez Kortix au chat IA que vous utilisez déjà. Lancez des agents, suivez leur travail et utilisez vos connecteurs depuis là.",
+      "cta": "Connecter"
+    },
+    "desktopPromo": {
+      "title": "Installez l’app de bureau",
+      "description": "Confiez une tâche à Kortix depuis n’importe quelle app avec Quick Entry, et connectez cet ordinateur en un clic.",
+      "cta": "Télécharger"
+    },
+    "phonePromo": {
+      "title": "Kortix sur votre téléphone",
+      "description": "Chaque session dans votre poche. Une notification vous prévient quand une session se termine ou attend votre réponse.",
+      "cta": "Obtenir l’app"
+    },
+    "promos": "Façons d’utiliser Kortix",
     "upgrade": "Améliorer",
     "chats": "Discussions",
     "library": "Fichiers",
@@ -16576,7 +16592,7 @@
       "textb2a8625a332e": "Trois déclencheurs programmés sur un axe temporel avec un marqueur indiquant le moment présent et la prochaine exécution mise en évidence.",
       "textb2ac0da7c543": "Toute l’équipe",
       "textb2c0cab20dc3": "Les lots JSON-RPC ne sont pas pris en charge",
-      "textb2c293b68745": ".kortix/connectors/routes.toml",
+      "textb2c293b68745": "connectors/routes.toml",
       "textb2c5bc52374a": "Secret supprimé",
       "textb2d544129223": "Ce n’est pas terminé si",
       "textb2e30caf44ee": "Utiliser des couleurs hexadécimales codées en dur dans les composants",
@@ -18650,7 +18666,7 @@
       "textecbd276ebec2": "Essayez une recherche.",
       "textecc7ed048b32": "clôture mensuelle",
       "texteccba86b787c": "Un ordinateur portable, un VPS ou votre propre réseau.",
-      "textecccd43d1878": ".kortix/connectors/schema.graphql",
+      "textecccd43d1878": "connectors/schema.graphql",
       "texteccce15347a4": "Vous n’avez pas accès à l’aperçu de cette App.",
       "textecd3c555ab44": "Échec de l’enregistrement des autorisations",
       "textecdcf83028e7": "Vérifier les paramètres",
@@ -22267,6 +22283,7 @@
     "installProfileHint": "Le nom de ce connecteur dans Kortix.",
     "wayComposio": "Se connecte via Composio, un partenaire tiers qui gère la connexion pour vous : vous vous connectez à {name} en un clic, et Composio conserve la connexion.",
     "wayMcpOneClick": "Se connecte au serveur MCP de {name}. Vous vous connectez seulement à {name}.",
+    "wayKortixGoogle": "Kortix se connecte à {name} via l'API de Google. Vous vous connectez seulement à Google.",
     "wayMcpSetup": "Se connecte au serveur MCP de {name}. Il faut votre propre app OAuth ou une clé d’API, définie après l’installation.",
     "wayApi": "Se connecte directement à l’{kind} de {name}. Après l’installation, ajoutez un compte avec sa clé d’API ou son jeton.",
     "installsWay": "Installe via {kind}",
@@ -22427,7 +22444,7 @@
   },
   "connectMcp": {
     "title": "Connecter Kortix via MCP",
-    "description": "Utilisez Kortix depuis Claude, Claude Code, Cursor, Codex ou tout client MCP. Vous vous connectez une seule fois. Rien à installer.",
+    "description": "Utilisez Kortix depuis Claude, ChatGPT, Claude Code, Cursor, Codex ou tout client MCP. Vous vous connectez une seule fois. Rien à installer.",
     "docs": "Docs",
     "done": "Terminé",
     "copy": "Copier",
@@ -22437,6 +22454,7 @@
     "copyUrl": "Copier l’URL",
     "via": {
       "claude": "Paramètres → Connecteurs",
+      "chatgpt": "Mode développeur → connecteur personnalisé",
       "claude-code": "Une commande dans le terminal",
       "cursor": "Installation en un clic",
       "codex": "Deux commandes dans le terminal",
@@ -22712,6 +22730,13 @@
     "onlyYouDescription": "Vous seul, dans chaque espace de travail, dans vos sessions privées.",
     "everyoneDescription": "Tout le monde dans l'espace de travail peut l'utiliser, y compris les automatisations.",
     "promoLine": "Laissez Kortix travailler avec vos fichiers locaux et prendre le contrôle de votre ordinateur.",
+    "promo": {
+      "title": "Connectez votre ordinateur de travail",
+      "titleThis": "Connecter cet ordinateur",
+      "description": "Les agents utilisent vos fichiers locaux, lancent des programmes et se servent des apps de votre écran. Vous décidez de ce qu'ils peuvent faire.",
+      "cta": "Connecter",
+      "ctaOneClick": "Connecter en un clic"
+    },
     "dismissPromo": "Masquer",
     "useCliInstead": "Utiliser la CLI à la place",
     "cliHint": "La commande affiche un code et ouvre une page où vous approuvez cet appareil. Elle s'exécute ensuite en arrière-plan.",

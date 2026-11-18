@@ -75,6 +75,14 @@ describe('templates in the setup guide', () => {
     expect(guide).not.toContain('give the person\nall of them in one message');
   });
 
+  test('the guide offers Slack and declares it with the slug Kortix writes when Slack connects', () => {
+    const guide = setupGuide();
+    expect(guide).toContain('5. Slack, unless the plan shows it connected. Recommend yes');
+    // apps/api/src/connectors/channel-manifest.ts writes this entry on connect: the same slug makes that a no-op.
+    expect(guide).toContain('  - slug: kortix_slack\n    name: Slack\n    provider: channel\n    platform: slack');
+    expect(guide).toContain('--channels\` takes the Slack channels the reply named');
+  });
+
   test('the guide uses none of the words its plain-words rule bans, outside that rule', () => {
     const guide = setupGuide();
     const rule = guide.slice(guide.indexOf('6. **Plain words.**'), guide.indexOf('7. **Be brief.**'));

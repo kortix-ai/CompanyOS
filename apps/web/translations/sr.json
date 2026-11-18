@@ -1575,6 +1575,22 @@
     "referralShareTitle": "Препоручите пријатеље",
     "referralShareSubtitle": "Освојите 400 кредита",
     "new": "Ново",
+    "mcpPromo": {
+      "title": "Користите Kortix у ChatGPT-у и Claude-у",
+      "description": "Додајте Kortix у AI чет који већ користите. Покрећите агенте, пратите њихов рад и користите своје конекторе одатле.",
+      "cta": "Повежи"
+    },
+    "desktopPromo": {
+      "title": "Преузмите десктоп апликацију",
+      "description": "Дајте Kortix-у задатак из било које апликације уз Quick Entry и повежите овај рачунар једним кликом.",
+      "cta": "Преузми"
+    },
+    "phonePromo": {
+      "title": "Kortix на вашем телефону",
+      "description": "Свака сесија у вашем џепу. Обавештење вам јавља када се нека заврши или чека ваш одговор.",
+      "cta": "Преузми апликацију"
+    },
+    "promos": "Начини да користите Kortix",
     "upgrade": "Надоградња",
     "chats": "Ћаскања",
     "library": "Датотеке",
@@ -16576,7 +16592,7 @@
       "textb2a8625a332e": "Три заказана окидача на временској оси са маркером тренутног тренутка и истакнутим следећим покретањем.",
       "textb2ac0da7c543": "Цео тим",
       "textb2c0cab20dc3": "JSON-RPC пакети нису подржани",
-      "textb2c293b68745": ".kortix/connectors/routes.toml",
+      "textb2c293b68745": "connectors/routes.toml",
       "textb2c5bc52374a": "Тајна избрисана",
       "textb2d544129223": "Није завршено ако",
       "textb2e30caf44ee": "Немојте користити хексадецималне боје хардкодоване у компонентама",
@@ -18650,7 +18666,7 @@
       "textecbd276ebec2": "Пробајте претрагу.",
       "textecc7ed048b32": "закључење месеца",
       "texteccba86b787c": "Лаптоп, VPS или ваша сопствена мрежа.",
-      "textecccd43d1878": ".kortix/connectors/schema.graphql",
+      "textecccd43d1878": "connectors/schema.graphql",
       "texteccce15347a4": "Немате приступ прегледу ове апликације.",
       "textecd3c555ab44": "Чување дозвола није успело",
       "textecdcf83028e7": "Прегледај параметре",
@@ -22267,6 +22283,7 @@
     "installProfileHint": "Назив под којим се овај конектор види у Kortix-у.",
     "wayComposio": "Povezuje se preko Composio, partnera treće strane koji obavlja prijavu umesto tebe: prijaviš se na {name} jednim klikom, a Composio čuva prijavu.",
     "wayMcpOneClick": "Povezuje se na sopstveni MCP server aplikacije {name}. Samo se prijaviš na {name}.",
+    "wayKortixGoogle": "Kortix se povezuje na {name} preko Google API-ja. Samo se prijaviš na Google.",
     "wayMcpSetup": "Povezuje se na sopstveni MCP server aplikacije {name}. Potrebna je tvoja OAuth aplikacija ili API ključ, podešava se posle instalacije.",
     "wayApi": "Povezuje se direktno na {kind} aplikacije {name}. Posle instalacije dodaj nalog sa API ključem ili tokenom.",
     "installsWay": "Instalira preko {kind}",
@@ -22427,7 +22444,7 @@
   },
   "connectMcp": {
     "title": "Povežite Kortix preko MCP-a",
-    "description": "Koristite Kortix iz Claude, Claude Code, Cursor, Codex ili bilo kog MCP klijenta. Prijavljujete se jednom. Ništa ne morate da instalirate.",
+    "description": "Koristite Kortix iz Claude, ChatGPT, Claude Code, Cursor, Codex ili bilo kog MCP klijenta. Prijavljujete se jednom. Ništa ne morate da instalirate.",
     "docs": "Dokumentacija",
     "done": "Gotovo",
     "copy": "Kopiraj",
@@ -22437,6 +22454,7 @@
     "copyUrl": "Kopiraj URL",
     "via": {
       "claude": "Podešavanja → Konektori",
+      "chatgpt": "Režim za programere → prilagođeni konektor",
       "claude-code": "Jedna komanda u terminalu",
       "cursor": "Instalacija jednim klikom",
       "codex": "Dve komande u terminalu",
@@ -22712,6 +22730,13 @@
     "onlyYouDescription": "Само ви, у сваком радном простору, у својим приватним сесијама.",
     "everyoneDescription": "Сви у радном простору могу да га користе, укључујући аутоматизације.",
     "promoLine": "Дозволите Kortix-у да ради са вашим локалним датотекама и управља вашим рачунаром.",
+    "promo": {
+      "title": "Повежите свој пословни рачунар",
+      "titleThis": "Повежите овај рачунар",
+      "description": "Агенти раде са вашим локалним датотекама, покрећу програме и користе апликације на вашем екрану. Ви одлучујете шта смеју.",
+      "cta": "Повежи",
+      "ctaOneClick": "Повежи једним кликом"
+    },
     "dismissPromo": "Одбаци",
     "useCliInstead": "Користи CLI уместо тога",
     "cliHint": "Команда приказује код и отвара страницу на којој одобравате овај уређај. Затим ради у позадини.",

@@ -1575,6 +1575,22 @@
     "referralShareTitle": "Referir Amigos",
     "referralShareSubtitle": "Obtén 400 créditos",
     "new": "Nuevo",
+    "mcpPromo": {
+      "title": "Usa Kortix en ChatGPT y Claude",
+      "description": "Añade Kortix al chat de IA que ya usas. Inicia agentes, sigue su trabajo y usa tus conectores desde allí.",
+      "cta": "Conectar"
+    },
+    "desktopPromo": {
+      "title": "Descarga la app de escritorio",
+      "description": "Encarga una tarea a Kortix desde cualquier app con Quick Entry y conecta este ordenador con un clic.",
+      "cta": "Descargar"
+    },
+    "phonePromo": {
+      "title": "Kortix en tu móvil",
+      "description": "Cada sesión en tu bolsillo. Un aviso te dice cuándo una termina o necesita tu respuesta.",
+      "cta": "Obtener la app"
+    },
+    "promos": "Formas de usar Kortix",
     "upgrade": "Mejorar",
     "chats": "Chats",
     "library": "Archivos",
@@ -16576,7 +16592,7 @@
       "textb2a8625a332e": "Tres activadores programados en un eje temporal con un marcador del momento actual y la próxima ejecución destacada.",
       "textb2ac0da7c543": "Todo el equipo",
       "textb2c0cab20dc3": "Los lotes JSON-RPC no son compatibles",
-      "textb2c293b68745": ".kortix/connectors/routes.toml",
+      "textb2c293b68745": "connectors/routes.toml",
       "textb2c5bc52374a": "Secreto eliminado",
       "textb2d544129223": "No está terminado si",
       "textb2e30caf44ee": "Uses colores hexadecimales codificados directamente en los componentes",
@@ -18650,7 +18666,7 @@
       "textecbd276ebec2": "Prueba una búsqueda.",
       "textecc7ed048b32": "cierre de fin de mes",
       "texteccba86b787c": "Un portátil, un VPS o tu propia red.",
-      "textecccd43d1878": ".kortix/connectors/schema.graphql",
+      "textecccd43d1878": "connectors/schema.graphql",
       "texteccce15347a4": "No tienes acceso para previsualizar esta App.",
       "textecd3c555ab44": "No se pudieron guardar los permisos",
       "textecdcf83028e7": "Revisar parámetros",
@@ -22267,6 +22283,7 @@
     "installProfileHint": "El nombre que se ve para este conector en Kortix.",
     "wayComposio": "Se conecta a través de Composio, un socio externo que gestiona el inicio de sesión por ti: inicias sesión en {name} con un clic y Composio conserva el acceso.",
     "wayMcpOneClick": "Se conecta al servidor MCP propio de {name}. Solo inicias sesión en {name}.",
+    "wayKortixGoogle": "Kortix se conecta a {name} mediante la API de Google. Solo inicias sesión en Google.",
     "wayMcpSetup": "Se conecta al servidor MCP propio de {name}. Necesita tu propia app OAuth o una clave de API, que se configura tras instalar.",
     "wayApi": "Se conecta directamente a la {kind} de {name}. Tras instalar, añade una cuenta con su clave de API o token.",
     "installsWay": "Instala vía {kind}",
@@ -22427,7 +22444,7 @@
   },
   "connectMcp": {
     "title": "Conecta Kortix por MCP",
-    "description": "Usa Kortix desde Claude, Claude Code, Cursor, Codex o cualquier cliente MCP. Inicias sesión una vez. Sin instalar nada.",
+    "description": "Usa Kortix desde Claude, ChatGPT, Claude Code, Cursor, Codex o cualquier cliente MCP. Inicias sesión una vez. Sin instalar nada.",
     "docs": "Docs",
     "done": "Listo",
     "copy": "Copiar",
@@ -22437,6 +22454,7 @@
     "copyUrl": "Copiar URL",
     "via": {
       "claude": "Ajustes → Conectores",
+      "chatgpt": "Modo desarrollador → conector personalizado",
       "claude-code": "Un comando de terminal",
       "cursor": "Instalación en un clic",
       "codex": "Dos comandos de terminal",
@@ -22712,6 +22730,13 @@
     "onlyYouDescription": "Solo tú, en todos los espacios de trabajo, en tus sesiones privadas.",
     "everyoneDescription": "Todos en el espacio de trabajo pueden usarlo, incluidas las automatizaciones.",
     "promoLine": "Deja que Kortix trabaje con tus archivos locales y controle tu ordenador.",
+    "promo": {
+      "title": "Conecta tu ordenador de trabajo",
+      "titleThis": "Conectar este ordenador",
+      "description": "Los agentes trabajan con tus archivos locales, ejecutan programas y usan las apps de tu pantalla. Tú decides qué pueden hacer.",
+      "cta": "Conectar",
+      "ctaOneClick": "Conectar con un clic"
+    },
     "dismissPromo": "Descartar",
     "useCliInstead": "Usar la CLI en su lugar",
     "cliHint": "El comando muestra un código y abre una página donde apruebas este dispositivo. Después se ejecuta en segundo plano.",

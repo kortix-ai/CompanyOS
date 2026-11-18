@@ -423,6 +423,12 @@ const nextConfig = (): NextConfig => ({
 
   // Performance optimizations
   experimental: {
+    // Next 16.4 stops `next dev` under a coding agent (it reads the agent's
+    // environment) to print an upgrade notice, and lets it start only on a
+    // retry within 5 minutes. `pnpm dev` and `pnpm worktree start` take longer
+    // than that to reach the web server, so every agent session's stack died
+    // at the notice. Next.js upgrades arrive through Dependabot and PRs.
+    agentUpgrade: false,
     // Next 16 gives a dynamic page segment a client-cache TTL of 0, so every
     // navigation to a route under `workspaces/[id]/layout.tsx` (which awaits
     // cookies(), making the whole subtree dynamic) discards the segment and

@@ -177,9 +177,14 @@ function initTask(dir: string | undefined, json: boolean): number {
   const written: string[] = [];
   for (const [path, content] of Object.entries(INIT_FILES)) {
     const target = join(root, path);
-    if (existsSync(target)) continue;
     mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, content, { mode: path.endsWith('.sh') ? 0o755 : 0o644 });
+    // 'wx' creates the file or fails when it exists: no window between a check and the write.
+    try {
+      writeFileSync(target, content, { mode: path.endsWith('.sh') ? 0o755 : 0o644, flag: 'wx' });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue;
+      throw error;
+    }
     written.push(target);
   }
   const tasksDir = dir ?? 'evals/tasks';
@@ -588,12 +593,11 @@ async function judge(argv: string[], json: boolean): Promise<number> {
   if (!result) return fail(`The judge's reply is not one score per criterion: ${reply.slice(0, 300)}`);
   // Merge: a test.sh may have written code-checked rewards first.
   let merged: Record<string, number> = {};
-  if (existsSync(out)) {
-    try {
-      merged = JSON.parse(readFileSync(out, 'utf8')) as Record<string, number>;
-    } catch {
-      merged = {};
-    }
+  try {
+    merged = JSON.parse(readFileSync(out, 'utf8')) as Record<string, number>;
+  } catch {
+    // No reward file yet, or an unreadable one: start empty.
+    merged = {};
   }
   merged = { ...merged, ...result.scores };
   mkdirSync(dirname(out), { recursive: true });

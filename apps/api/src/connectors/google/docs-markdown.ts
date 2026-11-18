@@ -241,7 +241,13 @@ class Converter {
           this.table(token as Tokens.Table);
           break;
         case 'html': {
-          const html = (token as Tokens.HTML).text.replace(/<!--[\s\S]*?-->/g, '').trim();
+          // Repeat until stable: one pass over `<!-<!---->-->` leaves a new comment opener behind.
+          let html = (token as Tokens.HTML).text;
+          for (let previous = ''; previous !== html; ) {
+            previous = html;
+            html = html.replace(/<!--[\s\S]*?-->/g, '');
+          }
+          html = html.trim();
           if (html && !isLineBreakTag(html)) this.para(this.plain(html), ctx);
           break;
         }

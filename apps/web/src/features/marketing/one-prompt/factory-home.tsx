@@ -23,6 +23,7 @@ import { heroRuns } from './hero-runs';
 import { hoopVars, LoopmaxxingWordmark, WORDMARK_VARIANTS, WordmarkVariantContext, type WordmarkVariant } from './hoop';
 import { HOOP_PALETTE } from './hoop-palette';
 import type { LoopView } from './loops-content';
+import { CopyGuideProvider } from './copy-guide';
 import { CopyButton, GhostButton, Mark, useForceDarkPage, useSetupTarget } from './parts';
 import { EngineGrid } from './engine-grid';
 import { HoopScrollbar } from './hoop-scrollbar';
@@ -284,6 +285,7 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
   const variant = useWordmarkVariant();
   return (
     <WordmarkVariantContext.Provider value={variant}>
+    <CopyGuideProvider>
             <div id="loopmaxxing-content" style={hoopVars} className="dark bg-background text-foreground relative min-h-screen overflow-x-clip [color-scheme:dark]">
         <HoopScrollbar />
         <header className="bg-background/80 border-border sticky top-0 z-30 border-b backdrop-blur">
@@ -442,6 +444,7 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
 
         <StretchFooter prompt={prompt} />
       </div>
+    </CopyGuideProvider>
     </WordmarkVariantContext.Provider>
   );
 }

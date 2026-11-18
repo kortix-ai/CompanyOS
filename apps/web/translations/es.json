@@ -1305,7 +1305,7 @@
         },
         "session_groups": {
           "name": "Espacios",
-          "description": "Agrupa sesiones en espacios que todo el workspace comparte. Inicia una sesión en un espacio desde su página o desde el selector de espacio bajo el compositor. Cada sesión de un espacio sabe para qué sirve y monta su carpeta compartida de Files."
+          "description": "Agrupa sesiones en espacios, cada uno con sus archivos y pestañas. Un espacio nuevo es solo tuyo; compártelo con personas o con todo el workspace. Inicia una sesión en un espacio desde su página o desde el selector de espacio bajo el compositor. Cada sesión de un espacio sabe para qué sirve y monta su carpeta de Files."
         },
         "chrome": {
           "name": "Kortix en Chrome",

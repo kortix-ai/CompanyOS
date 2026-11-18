@@ -1305,7 +1305,7 @@
         },
         "session_groups": {
           "name": "Spazi",
-          "description": "Raggruppa le sessioni in spazi condivisi da tutto il workspace. Avvia una sessione in uno spazio dalla sua pagina o dal selettore Spazio sotto il compositore. Ogni sessione di uno spazio sa a cosa serve e monta la sua cartella Files condivisa."
+          "description": "Raggruppa le sessioni in spazi, ognuno con i suoi file e le sue schede. Un nuovo spazio è privato; condividilo con persone o con tutto il workspace. Avvia una sessione in uno spazio dalla sua pagina o dal selettore Spazio sotto il compositore. Ogni sessione di uno spazio sa a cosa serve e monta la sua cartella Files."
         },
         "chrome": {
           "name": "Kortix in Chrome",

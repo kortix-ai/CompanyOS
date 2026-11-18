@@ -445,7 +445,7 @@ const FLAGS: readonly FeatureFlagDef[] = [
     // Product word "Spaces" since 2026-11-17; the key keeps its name (stored on projects).
     name: 'Spaces',
     description:
-      'Group sessions into spaces that everyone in the workspace shares. Start a session in a space from its page or from the Space picker under the composer. Every session in a space knows what the space is for and mounts its shared Files folder.',
+      'Group sessions into spaces, each with its own files and tabs. A new space is private to you; share it with people or with the whole workspace. Start a session in a space from its page or from the Space picker under the composer. Every session in a space knows what the space is for and mounts its Files folder.',
     stability: 'experimental',
     wip: true,
     available: () => true,

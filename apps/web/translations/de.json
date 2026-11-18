@@ -1305,7 +1305,7 @@
         },
         "session_groups": {
           "name": "Spaces",
-          "description": "Fasse Sitzungen in Spaces zusammen, die alle im Workspace teilen. Starte eine Sitzung in einem Space auf seiner Seite oder über die Space-Auswahl unter dem Eingabefeld. Jede Sitzung in einem Space weiß, wofür er da ist, und bindet seinen gemeinsamen Files-Ordner ein."
+          "description": "Fasse Sitzungen in Spaces zusammen, jeder mit eigenen Dateien und Tabs. Ein neuer Space gehört nur dir; teile ihn mit Personen oder dem ganzen Workspace. Starte eine Sitzung in einem Space auf seiner Seite oder über die Space-Auswahl unter dem Eingabefeld. Jede Sitzung in einem Space weiß, wofür er da ist, und bindet seinen Files-Ordner ein."
         },
         "chrome": {
           "name": "Kortix in Chrome",

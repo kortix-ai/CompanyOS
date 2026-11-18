@@ -1305,7 +1305,7 @@
         },
         "session_groups": {
           "name": "Espaces",
-          "description": "Regroupez les sessions dans des espaces partagés par tout le workspace. Lancez une session dans un espace depuis sa page ou depuis le sélecteur d'espace sous le compositeur. Chaque session d'un espace sait à quoi il sert et monte son dossier Files partagé."
+          "description": "Regroupez les sessions dans des espaces, chacun avec ses fichiers et ses onglets. Un nouvel espace est privé ; partagez-le avec des personnes ou avec tout le workspace. Lancez une session dans un espace depuis sa page ou depuis le sélecteur d'espace sous le compositeur. Chaque session d'un espace sait à quoi il sert et monte son dossier Files."
         },
         "chrome": {
           "name": "Kortix dans Chrome",

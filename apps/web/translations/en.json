@@ -1125,7 +1125,7 @@
         },
         "session_groups": {
           "name": "Spaces",
-          "description": "Group sessions into spaces that everyone in the workspace shares. Start a session in a space from its page or from the Space picker under the composer. Every session in a space knows what the space is for and mounts its shared Files folder."
+          "description": "Group sessions into spaces, each with its own files and tabs. A new space is private to you; share it with people or with the whole workspace. Start a session in a space from its page or from the Space picker under the composer. Every session in a space knows what the space is for and mounts its Files folder."
         },
         "chrome": {
           "name": "Kortix in Chrome",

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { PROD_TARGET, loopPrompt, setupGuide, setupHostName, setupPromptFor, setupTarget, templatePrompt } from './setup-guide';
+import { PROD_TARGET, loopPrompt, sandboxHourlyUsd, setupGuide, setupHostName, setupPromptFor, setupTarget, templatePrompt } from './setup-guide';
 
 // A prompt copied on a deployment must name that deployment's guide, and the
 // guide must point the CLI at that deployment's API (founder call 2026-11-10).
@@ -100,6 +100,17 @@ describe('templates in the setup guide', () => {
     expect(guide).toContain('never from the agent\'s summary');
     // A browser-capable agent makes the clicks; never a password or a code.
     expect(guide).toContain('Never type a password, a one-time code, a card number');
+  });
+
+  test('the guide sizes the sandbox from the stack, quotes its cost, and resizes from measured peaks', () => {
+    const guide = setupGuide();
+    expect(guide).toContain('8. **What it needs to run.**');
+    expect(guide).toContain('(cpu 1–32, memory 1–128, disk 1–500)');
+    expect(sandboxHourlyUsd(4, 8)).toBe(0.22);
+    expect(guide).toContain('about $0.22 an hour while a session runs');
+    expect(guide).toContain('sample used memory and used disk every 2');
+    expect(guide).toContain('peak memory above 80 % of the size: one step up');
+    expect(guide).toContain('kortix sandboxes update <slug> --cpu <n> --memory <gb> --disk');
   });
 
   test('the guide uses none of the words its plain-words rule bans, outside that rule', () => {

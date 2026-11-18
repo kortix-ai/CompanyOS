@@ -164,6 +164,18 @@ export function setupPrompt(
 The Kortix workspace exists already: it reads kortix.yaml from ${repository} on ${branch}. Push the setup there.`;
 }
 
+/**
+ * What a running session sandbox costs, as the guide quotes it. Billing owns the
+ * numbers (apps/api/src/platform/providers/compute-rates.ts); an API unit test
+ * fails when these drift from it.
+ */
+export const SANDBOX_RATES = { vcpuHour: 0.0324, memoryGbHour: 0.0108, diskGbMonth: 0.0526 } as const;
+
+/** The hourly cost of a running sandbox of this size, in USD. */
+export function sandboxHourlyUsd(cpu: number, memoryGb: number): number {
+  return Math.round((cpu * SANDBOX_RATES.vcpuHour + memoryGb * SANDBOX_RATES.memoryGbHour) * 100) / 100;
+}
+
 /** The guide for one deployment, served at \`<origin>/setup.md\`. */
 export function setupGuide(target: SetupTarget = PROD_TARGET): string {
   return `# Set up Kortix on this repository
@@ -312,6 +324,14 @@ message of step 3.
    test suite: each bug becomes a pull request with test output"). Keep the
    other ideas for the final report, under "later". No template fits: offer 2
    to 4 loops of your own in the same form.
+8. **What it needs to run.** The sandbox runs the dev stack and its tests,
+   never production traffic: size it for the heaviest command, usually the
+   build or the test suite. Start from the plan's \`dev_environment.resources\`
+   (memory first: 4 GB, more for browser tests, Docker, each service and a
+   monorepo; CPU follows memory). Raise it for what the plan does not see: a
+   Next.js or webpack production build (6 GB or more), a JVM or Gradle build,
+   a mobile build, a local model, a \`--max-old-space-size\` in the scripts,
+   or the CI runner size the team already pays for (\`runs-on\`).
 
 ## 3. One message of questions, one reply
 
@@ -397,7 +417,9 @@ The questions:
 - **More than 8:** keep the 8 with the largest effect. Put every other
   decision, with the answer you will use, on the \`Defaults:\` line: the env
   names to upload (every \`local\` name the app reads; never a \`remote\` or
-  \`prod\` one), the Kortix rule in \`AGENTS.md\` (default: add it) and, when
+  \`prod\` one), the sandbox size with its cost ("4 vCPU, 8 GB, 30 GB disk:
+  about $${sandboxHourlyUsd(4, 8).toFixed(2)} an hour while a session runs"), the Kortix
+  rule in \`AGENTS.md\` (default: add it) and, when
   you can drive their browser, "I make the sign-in clicks in your browser"
   (rule 10).
 - **A gap is a question only when a chosen source needs it.** An
@@ -479,21 +501,26 @@ connectors:
     platform: slack
 \`\`\`
 
-Then write \`kortix.yaml\` with \`env.required\` and
-\`env.optional\` listing every secret the loops use and every env name the app
-reads to install, start and test (the plan's \`env\` names classed \`local\`;
-step 7 proves none is missing), the sandbox \`Dockerfile\` at
-the root (a Debian-family base, the code repository's runtimes at their pinned
-versions, git and gh, no \`COPY\` from the repository), the template's \`cpu\`,
-\`memory\` and \`disk\` from the plan's \`dev_environment.resources\` (a sandbox
-too small for the dev stack crashes the tests), and the \`dev-environment\` skill
-in \`skills/dev-environment/\` (or the folder the team's own has). The skill
-starts with how a session gets the code, because a session's \`/workspace\`
-starts empty: in this repository, \`kortix workspaces clone\` (the workspace
-repository is the code); in a new repository, the GitHub clone with the token
-the template names. Then the install, start and test commands. A loop that works on the code clones it from
-GitHub with the GitHub token its template names (\`FACTORY_GITHUB_TOKEN\` for
-the Software Factory), so that token is a required secret. Then:
+Then write \`kortix.yaml\` with \`env.required\` and \`env.optional\` listing every
+secret the loops use and every env name the app reads to install, start and
+test (the plan's \`env\` names classed \`local\`; step 7 proves none is missing),
+the sandbox \`Dockerfile\` at the root (a Debian-family base, the code
+repository's runtimes at their pinned versions, git and gh, no \`COPY\` from
+the repository), and the template's \`cpu\`, \`memory\` and \`disk\` from step 2:
+whole numbers, memory and disk in GB (cpu 1–32, memory 1–128, disk 1–500).
+A running sandbox costs $${SANDBOX_RATES.vcpuHour} per vCPU-hour plus $${SANDBOX_RATES.memoryGbHour} per GB-hour of
+memory, billed per second; a stopped one costs only its disk ($${SANDBOX_RATES.diskGbMonth} per
+GB-month). Too small crashes the tests; too large bills every session for
+room it never uses. Step 7 measures the real need.
+
+Write the \`dev-environment\` skill in \`skills/dev-environment/\` (or the folder
+the team's own has). It starts with how a session gets the code, because a
+session's \`/workspace\` starts empty: in this repository, \`kortix workspaces
+clone\` (the workspace repository is the code); in a new repository, the
+GitHub clone with the token the template names. Then the install, start and
+test commands. A loop that works on the code clones it from GitHub with the
+GitHub token its template names (\`FACTORY_GITHUB_TOKEN\` for the Software
+Factory), so that token is a required secret. Then:
 
 \`\`\`bash
 kortix validate
@@ -620,8 +647,12 @@ kortix sessions log <session_id> --json --limit 200                # the real to
 
 The check, as the prompt: "Load the dev-environment skill and follow it: get
 the code as it says, run its install, start and test commands, and report each
-command with its exit code. Start the app, open it with agent-browser, take a snapshot and say
-what the page shows. Change nothing in the repository."
+command with its exit code. Start the app, open it with agent-browser, take a
+snapshot and say what the page shows. Change nothing in the repository.
+Measure the machine too: print \`nproc\`, \`free -m\` and \`df -m /\` first; while
+the install, build and tests run, sample used memory and used disk every 2
+seconds; report both peaks, how long the tests took, and any process killed
+for memory (exit 137, or \`oom\` in \`dmesg\`)."
 
 Judge from the log's \`tool_call\` blocks (\`result.content[].text\` is the real
 output), never from the agent's summary. It passes when every command exits 0,
@@ -634,6 +665,20 @@ fix, and the person waits for none of it:
 - a missing env name: \`env.required\`, then its value (a \`local\` value
   through \`kortix env push\`, else a row on the setup page);
 - too little memory or disk: the template's resources.
+
+Then size the sandbox from the measured peaks, never from a guess:
+
+- killed for memory, or peak memory above 80 % of the size: one step up
+  (memory × 1.5, rounded up; cpu 2 under 8 GB, 4 under 12 GB, else 8);
+- peak disk above 80 %: add half again;
+- the tests take over 10 minutes and the CPU was busy: double the cpu;
+- after a pass with peak memory under 40 % and peak disk under 50 %: one
+  step down, then one more pass, since every session pays for the size.
+
+Resize with \`kortix sandboxes update <slug> --cpu <n> --memory <gb> --disk
+<gb>\`. A new size rebuilds the image. Write the final size and the measured
+peaks into the \`dev-environment\` skill, so the next change to the stack knows
+its headroom.
 
 Commit, run \`kortix onboard --yes --json --wait\` again (it ships and rebuilds
 the image), and run the check in a new session. Loop until it passes. When your
@@ -680,7 +725,7 @@ Show the result first, then how to use it. At most 15 lines:
 1. What the real run made: the pull request, ticket or draft, its link, the
    signal that started it, and how long it took. Then what the dev-environment
    check proved: install, the tests (passed of total) and the app in the
-   browser.
+   browser, and the sandbox size with its peaks and its cost per hour.
 2. What runs now: one line per trigger (what starts it, what it ships, who
    approves) and where work lands.
 3. How to start work by hand: the label to add, or

@@ -196,6 +196,7 @@ export function AddTabMenu({
   projectId,
   space,
   ownFolder: ownFolderOverride,
+  ownFolderTab = true,
   state,
   onAdded,
   label,
@@ -205,6 +206,8 @@ export function AddTabMenu({
   space?: ProjectSpace;
   /** Another place's own folder (a Space's `/Spaces/<group_id>`), when there is no `space`. */
   ownFolder?: string | null;
+  /** Offer the own folder as a tab ("This space's files"). False where the place already shows it as a built-in tab. */
+  ownFolderTab?: boolean;
   state: SpaceTabsState;
   onAdded: (id: string) => void;
   /** A text trigger ("Add tab", the details panel) instead of the tab row's "+". */
@@ -261,7 +264,7 @@ export function AddTabMenu({
               {t('kind.folder')}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="w-56">
-              {ownFolder ? (
+              {ownFolder && ownFolderTab ? (
                 <DropdownMenuItem onSelect={quick('folder', t('spaceFiles'), ownFolder)}>{t('spaceFiles')}</DropdownMenuItem>
               ) : null}
               <DropdownMenuItem onSelect={() => open('folder')}>{t('otherFolder')}</DropdownMenuItem>

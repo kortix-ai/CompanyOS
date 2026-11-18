@@ -26,6 +26,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  ArrowUpRightIcon,
   ArrowsInLineVerticalIcon,
   DotsThreeIcon,
   PencilSimpleIcon,
@@ -47,6 +48,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../../primitives/dropdown-menu';
+import Hint from '../../primitives/hint';
 import { Input } from '../../primitives/input';
 import Loading from '../../primitives/loading';
 import {
@@ -568,6 +570,26 @@ function SessionGroupMenu({
   return (
     // `contents`: the trigger stays a flex item of the header (`ml-auto`).
     <span className="contents" onClick={stopAtMenu} onKeyDown={stopAtMenu}>
+      {/* The space's page, as a channel opens on click in Slack; the header itself folds the section. */}
+      {spaceHref ? (
+        <Hint label={tGroups('openSpace')} side="right">
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            type="button"
+            aria-label={`${tGroups('openSpace')}: ${group.name}`}
+            onClick={() => router.push(spaceHref)}
+            className={cn(
+              SESSION_MENU_TRIGGER_CLASS,
+              'relative ml-auto opacity-0',
+              'before:absolute before:-inset-1',
+              'group-hover/section-header:opacity-100 focus-visible:opacity-100',
+            )}
+          >
+            <ArrowUpRightIcon className="size-4" />
+          </Button>
+        </Hint>
+      ) : null}
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
           <Button
@@ -577,7 +599,7 @@ function SessionGroupMenu({
             aria-label={`${tGroups('groupOptions')}: ${group.name}`}
             className={cn(
               SESSION_MENU_TRIGGER_CLASS,
-              'relative ml-auto opacity-0',
+              spaceHref ? 'relative opacity-0' : 'relative ml-auto opacity-0',
               'before:absolute before:-inset-1',
               'group-hover/section-header:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100',
             )}

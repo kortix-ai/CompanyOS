@@ -27480,7 +27480,6 @@
     "saveFailed": "スペースを保存できませんでした",
     "nameTaken": "このワークスペースの別のスペースがその名前を使っています。",
     "limit": "ワークスペースのスペースは最大 50 個です。",
-    "edit": "スペースを編集",
     "delete": "スペースを削除",
     "deleteTitle": "このスペースを削除しますか？",
     "deleteDescription": "{name} はこのワークスペースの全員に対して削除されます。セッションはスペースなしで残り、ファイルは Files に残ります。この操作は元に戻せません。",
@@ -27492,11 +27491,6 @@
     "sessionsEmptyTitle": "セッションはまだありません",
     "sessionsEmptyDescription": "上で開始するか、サイドバーのメニューからセッションをここへ移動します。",
     "sessionsLoadFailed": "セッションを読み込めませんでした",
-    "descriptionRow": "説明",
-    "filesRow": "ファイル",
-    "add": "追加",
-    "editShort": "編集",
-    "open": "開く",
     "visibility": "このワークスペースの全員",
     "notFoundTitle": "このスペースは存在しません",
     "notFoundDescription": "削除されたか、リンクが間違っています。",
@@ -27516,6 +27510,12 @@
     "shareFailed": "スペースを見られる人を変更できませんでした",
     "shareNotMember": "スペースはこのワークスペースのメンバーとだけ共有できます。",
     "sharedWith": "{count, plural, other {# 人と共有}}",
-    "private": "非公開"
+    "private": "非公開",
+    "tabHome": "ホーム",
+    "tabFiles": "ファイル",
+    "editDetails": "詳細を編集",
+    "everyone": "全員",
+    "searchSessions": "セッションを検索",
+    "noSessionsMatch": "一致するセッションはありません"
   }
 }

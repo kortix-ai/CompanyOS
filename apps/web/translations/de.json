@@ -27480,7 +27480,6 @@
     "saveFailed": "Der Space konnte nicht gespeichert werden",
     "nameTaken": "Ein anderer Space in diesem Workspace hat diesen Namen.",
     "limit": "Ein Workspace hat höchstens 50 Spaces.",
-    "edit": "Space bearbeiten",
     "delete": "Space löschen",
     "deleteTitle": "Diesen Space löschen?",
     "deleteDescription": "{name} wird für alle in diesem Workspace gelöscht. Seine Sitzungen bleiben erhalten, ohne Space, und seine Dateien bleiben in Files. Dies kann nicht rückgängig gemacht werden.",
@@ -27492,11 +27491,6 @@
     "sessionsEmptyTitle": "Noch keine Sitzungen",
     "sessionsEmptyDescription": "Starte oben eine, oder verschiebe eine Sitzung über ihr Menü in der Seitenleiste hierher.",
     "sessionsLoadFailed": "Die Sitzungen konnten nicht geladen werden",
-    "descriptionRow": "Beschreibung",
-    "filesRow": "Dateien",
-    "add": "Hinzufügen",
-    "editShort": "Bearbeiten",
-    "open": "Öffnen",
     "visibility": "Alle in diesem Workspace",
     "notFoundTitle": "Diesen Space gibt es nicht",
     "notFoundDescription": "Er wurde gelöscht, oder der Link ist falsch.",
@@ -27516,6 +27510,12 @@
     "shareFailed": "Die Freigabe des Space konnte nicht geändert werden",
     "shareNotMember": "Teile einen Space nur mit Mitgliedern dieses Workspace.",
     "sharedWith": "{count, plural, one {Mit # Person geteilt} other {Mit # Personen geteilt}}",
-    "private": "Privat"
+    "private": "Privat",
+    "tabHome": "Start",
+    "tabFiles": "Dateien",
+    "editDetails": "Details bearbeiten",
+    "everyone": "Alle",
+    "searchSessions": "Sitzungen durchsuchen",
+    "noSessionsMatch": "Keine Sitzung passt"
   }
 }

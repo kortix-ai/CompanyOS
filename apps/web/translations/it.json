@@ -27480,7 +27480,6 @@
     "saveFailed": "Impossibile salvare lo spazio",
     "nameTaken": "Un altro spazio in questo workspace ha già quel nome.",
     "limit": "Un workspace ha al massimo 50 spazi.",
-    "edit": "Modifica spazio",
     "delete": "Elimina spazio",
     "deleteTitle": "Eliminare questo spazio?",
     "deleteDescription": "{name} viene eliminato per tutto il workspace. Le sue sessioni restano, senza spazio, e i suoi file restano in Files. L'operazione non si può annullare.",
@@ -27492,11 +27491,6 @@
     "sessionsEmptyTitle": "Ancora nessuna sessione",
     "sessionsEmptyDescription": "Avviane una qui sopra, o sposta qui una sessione dal suo menu nella barra laterale.",
     "sessionsLoadFailed": "Impossibile caricare le sessioni",
-    "descriptionRow": "Descrizione",
-    "filesRow": "File",
-    "add": "Aggiungi",
-    "editShort": "Modifica",
-    "open": "Apri",
     "visibility": "Tutto il workspace",
     "notFoundTitle": "Questo spazio non esiste",
     "notFoundDescription": "È stato eliminato, oppure il link è errato.",
@@ -27516,6 +27510,12 @@
     "shareFailed": "Impossibile cambiare chi vede lo spazio",
     "shareNotMember": "Condividi uno spazio solo con membri di questo workspace.",
     "sharedWith": "{count, plural, one {Condiviso con # persona} other {Condiviso con # persone}}",
-    "private": "Privato"
+    "private": "Privato",
+    "tabHome": "Home",
+    "tabFiles": "File",
+    "editDetails": "Modifica dettagli",
+    "everyone": "Tutti",
+    "searchSessions": "Cerca sessioni",
+    "noSessionsMatch": "Nessuna sessione corrisponde"
   }
 }

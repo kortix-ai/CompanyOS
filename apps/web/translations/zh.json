@@ -27480,7 +27480,6 @@
     "saveFailed": "无法保存空间",
     "nameTaken": "此工作区中已有其他空间使用该名称。",
     "limit": "一个工作区最多有 50 个空间。",
-    "edit": "编辑空间",
     "delete": "删除空间",
     "deleteTitle": "删除此空间？",
     "deleteDescription": "{name} 将对此工作区中的所有人删除。其会话会保留，不属于任何空间，其文件保留在 Files 中。此操作无法撤销。",
@@ -27492,11 +27491,6 @@
     "sessionsEmptyTitle": "还没有会话",
     "sessionsEmptyDescription": "在上方开始一个会话，或通过侧边栏中会话的菜单将其移到这里。",
     "sessionsLoadFailed": "无法加载会话",
-    "descriptionRow": "描述",
-    "filesRow": "文件",
-    "add": "添加",
-    "editShort": "编辑",
-    "open": "打开",
     "visibility": "此工作区中的所有人",
     "notFoundTitle": "此空间不存在",
     "notFoundDescription": "它已被删除，或链接有误。",
@@ -27516,6 +27510,12 @@
     "shareFailed": "无法更改可查看该空间的人",
     "shareNotMember": "只能与此工作区的成员共享空间。",
     "sharedWith": "{count, plural, other {已与 # 人共享}}",
-    "private": "私有"
+    "private": "私有",
+    "tabHome": "首页",
+    "tabFiles": "文件",
+    "editDetails": "编辑详情",
+    "everyone": "所有人",
+    "searchSessions": "搜索会话",
+    "noSessionsMatch": "没有匹配的会话"
   }
 }

@@ -7980,7 +7980,6 @@ const catalog = {
   },
   "goals": {
     "title": "Goals",
-    "gateDescription": "Agents own an objective until it is verifiably done: the goal lives in Files, a daily heartbeat wakes it, the agent chases people for what it needs, and an independent check closes it.",
     "empty": "No goals yet",
     "retry": "Try again",
     "needsYou": "Needs you",
@@ -8027,8 +8026,6 @@ const catalog = {
     "sessions": "Sessions",
     "you": "You",
     "anotherMember": "A teammate",
-    "share": "Share",
-    "composerPlaceholder": "Describe the outcome you want",
     "paused": "Paused",
     "criteriaMet": "{met} of {total} done criteria met",
     "state": {
@@ -10654,7 +10651,6 @@ const catalog = {
     "saveFailed": "Could not save the space",
     "nameTaken": "Another space in this workspace has that name.",
     "limit": "A workspace has at most 50 spaces.",
-    "edit": "Edit space",
     "delete": "Delete space",
     "deleteTitle": "Delete this space?",
     "deleteDescription": "{name} is deleted for everyone in this workspace. Its sessions stay, in no space, and its files stay in Files. This cannot be undone.",
@@ -10666,11 +10662,6 @@ const catalog = {
     "sessionsEmptyTitle": "No sessions yet",
     "sessionsEmptyDescription": "Start one above, or move a session here from its menu in the sidebar.",
     "sessionsLoadFailed": "Could not load the sessions",
-    "descriptionRow": "Description",
-    "filesRow": "Files",
-    "add": "Add",
-    "editShort": "Edit",
-    "open": "Open",
     "visibility": "Everyone in this workspace",
     "notFoundTitle": "This space does not exist",
     "notFoundDescription": "It was deleted, or the link is wrong.",
@@ -10690,7 +10681,13 @@ const catalog = {
     "shareFailed": "Could not change who sees the space",
     "shareNotMember": "Share a space only with members of this workspace.",
     "sharedWith": "{count, plural, one {Shared with # person} other {Shared with # people}}",
-    "private": "Private"
+    "private": "Private",
+    "tabHome": "Home",
+    "tabFiles": "Files",
+    "editDetails": "Edit details",
+    "everyone": "Everyone",
+    "searchSessions": "Search sessions",
+    "noSessionsMatch": "No session matches"
   }
 };
 

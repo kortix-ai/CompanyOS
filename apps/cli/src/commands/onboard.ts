@@ -82,7 +82,7 @@ Options:
   --wait                    When the person has steps left, wait until the
                             setup page shows them done, then finish the run.
   --wait-timeout <sec>      How long --wait waits (default 1800).
-  -m, --message <msg>       Commit message when kortix.yaml or .kortix/ changed
+  -m, --message <msg>       Commit message when kortix.yaml changed
                             (default "chore: add Kortix loops").
   -h, --help                Show this help.
 

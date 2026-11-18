@@ -67,7 +67,7 @@ export const MANIFEST = [
   '',
   'sandbox:',
   '  templates:',
-  '    - { slug: dev, dockerfile: .kortix/Dockerfile }',
+  '    - { slug: dev, dockerfile: Dockerfile }',
 ];
 
 /** What kortix.yaml defines, one line each. `key` is the YAML key whose lines light up when the part is hovered. */
@@ -96,7 +96,7 @@ export const FAQ = [
   { q: 'Where do the agents run?', a: 'In Kortix cloud sandboxes, in an environment built from your repository. They never point at your staging or production systems.' },
   { q: 'Who approves the work?', a: 'You. Every pull request, post and outbound draft waits for a person until you allow more. Security fixes always wait.' },
   { q: 'What does it cost?', a: `Adding it is free, and Free includes ${FREE_COMPUTE_USD} of agent computer every month. Past that you pay only for the cloud computer your agents run on: about ${COMPUTE_HOURLY} an hour for the default machine, billed per second while it runs. Models run on your own Claude or ChatGPT plan or API key.` },
-  { q: 'How do I turn it off?', a: 'Pause its triggers with one command, or delete its folder under .kortix/.' },
+  { q: 'How do I turn it off?', a: 'Pause its triggers with one command, or remove its import from kortix.yaml.' },
 ];
 
 /** The teams the same prompt builds a loop for, from a description. `slug` picks the agent mark. */

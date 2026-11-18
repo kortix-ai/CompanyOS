@@ -405,7 +405,7 @@ agent's prompt in \`agents/<name>.md\`, each skill in \`skills/<name>/\`. A
 template adds \`<id>.yaml\` (which \`kortix.yaml\` imports) and its settings JSON
 at the root: \`kortix templates add <id> --repo <owner/repo> --branch <default
 branch> --json\` writes them, with the code repository named. Never write a
-\`.kortix/\` folder: it holds only the CLI's local state.
+\`.kortix/\` folder: no workspace repository has one.
 
 Install the template there: \`kortix templates add <id> --repo <owner/repo>
 --branch <default branch> --json\`. Then follow its steps: write its settings
@@ -477,7 +477,7 @@ step 3, for example "Acme Loops". \`--repo\` is the code repository on GitHub:
 always pass it. \`--channels\` takes the Slack channels the reply named; leave
 it out when it named none.
 
-**The icon.** Once \`ship\` has linked the folder (\`.kortix/link.json\`), give
+**The icon.** Once \`ship\` has linked the folder, give
 the workspace an icon that says what the product is: \`kortix workspaces set
 --glyph <Name>:<color>\`. Pick the name from \`kortix workspaces glyphs --json\`,
 the icons Kortix supports: the one closest to what the product does (\`Phone\`

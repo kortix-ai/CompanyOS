@@ -9,6 +9,7 @@ import { showsMarketingLink } from '@/lib/config';
 import { cn } from '@kortix/ui';
 import { localizeUiCatalog } from '@kortix/ui/i18n';
 import { ThemeToggle } from './theme-toggle';
+import type { ReactNode } from 'react';
 
 type FooterLinkItem = {
   label: string;
@@ -95,9 +96,9 @@ function FooterLink({ label, href, external }: FooterLinkItem) {
  * `linkOrigin` prefixes the mark and every internal link: a page served on
  * another host (loopmaxxing.sh) links to kortix.com instead of to paths that
  * host only redirects. `themeToggle` hides the theme switch on a page that is
- * always dark.
+ * always dark. `linkSection` replaces only the link columns, keeping the brand and copyright.
  */
-const Footer = ({ cta, linkOrigin = '', themeToggle = true }: { cta?: CtaContent; linkOrigin?: string; themeToggle?: boolean } = {}) => {
+const Footer = ({ cta, linkOrigin = '', themeToggle = true, linkSection }: { cta?: CtaContent; linkOrigin?: string; themeToggle?: boolean; linkSection?: ReactNode } = {}) => {
   const tI18nHardcoded = useTranslations('hardcodedUi');
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const footerSections = localizeUiCatalog(FOOTER_SECTIONS, tI18nComplete, FOOTER_TRANSLATION_KEYS);
@@ -130,7 +131,7 @@ const Footer = ({ cta, linkOrigin = '', themeToggle = true }: { cta?: CtaContent
             </div>
           </div>
 
-          <nav aria-label="Footer" className="lg:col-span-7">
+          {linkSection ?? <nav aria-label="Footer" className="lg:col-span-7">
             <div className="grid grid-cols-2 gap-x-6 gap-y-12 md:grid-cols-4">
               {footerSections.map((section) => (
                 <div key={section.title} className="min-w-0">
@@ -149,7 +150,7 @@ const Footer = ({ cta, linkOrigin = '', themeToggle = true }: { cta?: CtaContent
                 </div>
               ))}
             </div>
-          </nav>
+          </nav>}
         </div>
       </footer>
     </section>

@@ -1,14 +1,12 @@
 'use client';
 
 import { FULL_COLOR_LOGOS } from '@/features/marketing/landing-sections/works-with-logos';
-import { Button } from '@kortix/ui/button';
 import { ChainOfThought } from '@kortix/ui/chain-of-thought';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@kortix/ui/dropdown-menu';
 import { Disclosure, DisclosureContent, DisclosureTrigger } from '@kortix/ui/disclosure';
 import { Claude } from '@kortix/ui/internal/icons/claude';
 import { TextShimmer } from '@kortix/ui/text-shimmer';
 import { cn } from '@kortix/ui';
-import { ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, CaretDownIcon, CaretRightIcon, ClockIcon, LightningIcon, PaperclipIcon, TerminalWindowIcon } from '@phosphor-icons/react';
+import { ArrowLeftIcon, ArrowRightIcon, CaretRightIcon, ClockIcon, LightningIcon, TerminalWindowIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 
 import { sessionPool } from './agent-sessions';
@@ -292,13 +290,13 @@ function WorkFold({ run, working }: { run: HeroRun; working: boolean }) {
   );
 }
 
-/** Where one run's panel stands: the session it plays, its beat, and what the reader sent it. */
-type Play = { run: HeroRun; beat: number; round: number; sent: Array<{ message: string; to: string }>; working: boolean };
+/** Where one run's panel stands: the session it plays, its beat, and its current work state. */
+type Play = { run: HeroRun; beat: number; round: number; working: boolean };
 
 /**
  * One run's clock. It plays the run's sessions beat by beat and, when one
  * ends, picks another at random, never the same twice in a row. It holds
- * while the reader points at or types into the panel.
+ * while the reader points at or focuses the panel.
  */
 function useRunPlay(first: HeroRun, live: boolean, delay: number, still: boolean) {
   const pool = useMemo(() => sessionPool(first), [first]);
@@ -307,8 +305,7 @@ function useRunPlay(first: HeroRun, live: boolean, delay: number, still: boolean
   // The first session renders finished, so nothing builds up on load; the next ones play beat by beat.
   const [beat, setBeat] = useState(LAST_BEAT);
   const [held, setHeld] = useState(false);
-  const [sent, setSent] = useState<Play['sent']>([]);
-  const playing = live && !still && !held && sent.length === 0;
+  const playing = live && !still && !held;
 
   useEffect(() => {
     if (!playing) return;
@@ -330,13 +327,11 @@ function useRunPlay(first: HeroRun, live: boolean, delay: number, still: boolean
     run: pool[index] ?? first,
     beat: still ? LAST_BEAT : beat,
     round,
-    sent,
     working: playing && beat === 2,
   };
   return {
     play,
     hold: setHeld,
-    send: (message: string, to: string) => setSent((list) => [...list, { message, to }]),
   };
 }
 
@@ -349,7 +344,7 @@ function RunPanels({ run, index, count, pos, live, still, instant }: { run: Hero
   const slots = [0, 1, 2].map((copy) => copy * count + index);
   const drawn = (slot: number) => slot >= pos - DRAW_BEFORE && slot <= pos + DRAW_AFTER;
   // The clock runs only while one of the run's copies is drawn.
-  const { play, hold, send } = useRunPlay(run, live && slots.some(drawn), index * STAGGER_MS, still);
+  const { play, hold } = useRunPlay(run, live && slots.some(drawn), index * STAGGER_MS, still);
   // The window is narrower than one copy of the list, so at most one copy is drawn. It is one
   // element whose `order` moves: the jump back to the middle copy never remounts it.
   const shown = slots.find(drawn);
@@ -360,7 +355,7 @@ function RunPanels({ run, index, count, pos, live, still, instant }: { run: Hero
         .map((slot) => (
           <div key={slot} aria-hidden style={{ width: PANEL, order: slot }} className="shrink-0" />
         ))}
-      {shown === undefined ? null : <SessionPanel key="panel" order={shown} run={play.run} play={play} instant={instant} onHold={hold} onSend={send} />}
+      {shown === undefined ? null : <SessionPanel key="panel" order={shown} run={play.run} play={play} instant={instant} onHold={hold} />}
     </>
   );
 }
@@ -389,14 +384,13 @@ function TriggerMark({ via, terminal }: { via?: string; terminal: boolean }) {
   );
 }
 
-/** One session window: what started it, the agent, the conversation and a reply box. */
+/** One session window: what started it, the agent, the conversation and the result. */
 function SessionPanel({
   order,
   run,
   play,
   instant,
   onHold,
-  onSend,
 }: {
   /** The panel's slot in the tripled list. */
   order: number;
@@ -405,15 +399,9 @@ function SessionPanel({
   play: Play;
   instant: boolean;
   onHold: (held: boolean) => void;
-  onSend: (message: string, to: string) => void;
 }) {
-  const { beat, round, sent, working } = play;
-  const agent = run.host.kind === 'claude-code' ? 'kortix' : run.host.slug;
-  const end = useRef<HTMLDivElement>(null);
+  const { beat, round, working } = play;
   const shownBeat = beat;
-  useEffect(() => {
-    if (sent.length) end.current?.scrollIntoView({ block: 'nearest' });
-  }, [sent.length]);
   return (
     <article
       style={{ width: PANEL, order }}
@@ -445,7 +433,7 @@ function SessionPanel({
       </div>
 
       {/* The conversation never scrolls under the reader's wheel or finger: a page scroll over the reel
-          always moves the page. What does not fit is clipped; a sent message brings itself into view. */}
+          always moves the page. What does not fit is clipped. */}
       <div
         key={`${run.id}-${round}`}
         className={cn(
@@ -499,94 +487,7 @@ function SessionPanel({
             </div>
           </Beat>
         ) : null}
-
-        {sent.map((item, index) => (
-          <div key={index} className="flex flex-col gap-3">
-            <p className="bg-muted text-foreground ml-8 self-end rounded-lg px-3 py-2.5 text-sm whitespace-pre-wrap">{item.message}</p>
-            <p className="text-muted-foreground text-sm text-pretty">
-              In your workspace, <span className="text-foreground">{item.to}</span> runs this on your repo. Copy the prompt above to set it up.
-            </p>
-          </div>
-        ))}
-        <div ref={end} />
-      </div>
-
-      <div className="shrink-0 p-2.5">
-        <LiveComposer defaultAgent={agent} busy={working} onSend={onSend} />
       </div>
     </article>
-  );
-}
-
-/** The agents the picker offers: the engineer and the teams a description can loop. */
-const PICKER_AGENTS = ['engineer', 'marketing', 'sales', 'support', 'recruiting'];
-
-/**
- * The Kortix chat input, live: type into it, Enter sends (Shift+Enter is a new
- * line), the agent picker opens a menu, and send stays a secondary button.
- */
-function LiveComposer({ defaultAgent, busy, onSend }: { defaultAgent: string; busy: boolean; onSend: (message: string, agent: string) => void }) {
-  const [text, setText] = useState('');
-  const [agent, setAgent] = useState(defaultAgent);
-  const agents = PICKER_AGENTS.includes(agent) ? PICKER_AGENTS : [agent, ...PICKER_AGENTS];
-  const send = () => {
-    const message = text.trim();
-    if (!message) return;
-    onSend(message, agent);
-    setText('');
-  };
-  return (
-    <div className="border-border bg-card focus-within:border-foreground/20 flex flex-col gap-2 rounded-xl border p-2 transition-colors">
-      <textarea
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-            event.preventDefault();
-            send();
-          }
-        }}
-        rows={2}
-        aria-label={`Message ${agent}`}
-        placeholder="Reply…"
-        className="text-foreground placeholder:text-muted-foreground w-full resize-none bg-transparent px-1.5 pt-1 text-sm outline-none"
-      />
-      <div className="flex items-center gap-1">
-        <Button type="button" variant="ghost" size="icon-sm" aria-label="Attach a file" className="text-muted-foreground hit-area-2.5">
-          <PaperclipIcon className="size-4" />
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button type="button" variant="ghost" size="xs" className="text-foreground hit-area-y-2.5 gap-1.5 px-1.5 text-xs">
-              <AgentTile slug={agent} />
-              {agent}
-              <CaretDownIcon className="text-muted-foreground size-3" />
-            </Button>
-          </DropdownMenuTrigger>
-          {/* The menu renders in a portal, outside the page's dark wrapper: it is dark too. */}
-          <DropdownMenuContent align="start" className="dark min-w-40">
-            <DropdownMenuRadioGroup value={agent} onValueChange={setAgent}>
-              {agents.map((slug) => (
-                <DropdownMenuRadioItem key={slug} value={slug} className="gap-2">
-                  <AgentTile slug={slug} />
-                  {slug}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <Button
-          type="button"
-          variant="secondary"
-          size="icon-sm"
-          aria-label={busy ? 'Working' : 'Send'}
-          disabled={!busy && !text.trim()}
-          onClick={send}
-          className="hit-area-2.5 ml-auto rounded-full"
-        >
-          {busy ? <span className="size-2 rounded-xs bg-current" /> : <ArrowUpIcon className="size-3.5" />}
-        </Button>
-      </div>
-    </div>
   );
 }

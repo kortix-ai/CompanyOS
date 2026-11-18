@@ -1,6 +1,7 @@
 'use client';
 
 import { KortixLogo } from '@/components/sidebar/kortix-logo';
+import Footer from '@/components/home/footer';
 import { useGitHubStars } from '@/hooks/use-github-stars';
 import { FaqSection } from '@/features/marketing/faq';
 import { PricingPlanCard } from '@/features/billing/pricing-plan-card';
@@ -15,7 +16,7 @@ import { Github } from '@kortix/ui/internal/icons/github';
 import { DEFAULT_COMPUTE_SPEC, ENTRY_TIER_USD } from '@kortix/ui/internal/billing/compute-pricing';
 import { ArrowRightIcon, ArrowUpRightIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
-import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 import { COMPUTE_HOURLY, FAQ, FREE_COMPUTE_USD, TEAMS } from './factory-content';
 import { heroRuns } from './hero-runs';
@@ -25,7 +26,6 @@ import type { LoopView } from './loops-content';
 import { CopyGuideProvider } from './copy-guide';
 import { CopyButton, GhostButton, Mark, useForceDarkPage, useSetupTarget } from './parts';
 import { EngineGrid } from './engine-grid';
-import { HulaHoop } from './hula-hoop';
 import { HoopScrollbar } from './hoop-scrollbar';
 import { PlanFlow } from './plan-flow';
 import { AgentTile, ApprovalArt, ComposerArt, ConnectArt, FindArt, ProveArt, SignalArt } from './section-art';
@@ -201,26 +201,74 @@ function PlansBand({ prompt }: { prompt: string }) {
 }
 
 /**
- * The page's end, instead of the site's footer: the name across the page's width.
+ * The page's end, instead of the site's footer: the hoop's grain, one closing
+ * line with the prompt under it, then the name across the page's width.
  */
-function PageEnd() {
+function PageEnd({ prompt }: { prompt: string }) {
+  const wordmark = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = wordmark.current;
+    if (!el) return;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const bounds = el.getBoundingClientRect();
+      const progress = reduced.matches || el.contains(document.activeElement)
+        ? 1
+        : Math.max(0, Math.min(1, (window.innerHeight - bounds.top) / bounds.height)) ** 2;
+      el.style.setProperty('--footer-reveal', String(progress));
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
+    const observer = new ResizeObserver(schedule);
+    observer.observe(el);
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    reduced.addEventListener('change', schedule);
+    el.addEventListener('focusin', schedule);
+    el.addEventListener('focusout', schedule);
+    update();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      reduced.removeEventListener('change', schedule);
+      el.removeEventListener('focusin', schedule);
+      el.removeEventListener('focusout', schedule);
+    };
+  }, []);
   return (
-    <footer className="relative">
-      {/* The name closes the page across its width, on clean black. The letters fade from grey into the black;
-          the two hoop O's keep their full colors, which turn muddy at any lower opacity. Its size is a
-          share of the container's width (cqi), so the whole word fits at every width with the page's side gutter. */}
-      <div className="mt-24 px-6 lg:mt-32">
-        <div className="@container">
-          <Link
-            href="/loopmaxxing"
-            aria-label="Loopmaxxing"
-            className="from-foreground/60 flex justify-center bg-linear-to-b to-transparent bg-clip-text pb-10 font-mono text-[14cqi] leading-none font-medium whitespace-nowrap text-transparent uppercase"
-          >
-            <LoopmaxxingWordmark />
-          </Link>
+    <Footer
+      linkOrigin={KORTIX}
+      themeToggle={false}
+      cta={{
+        title: 'One prompt.',
+        subtitle: 'Your whole company, looped.',
+        actions: <CopyButton text={prompt} icon="shortcut" bindKey={false} />,
+        palette: HOOP_PALETTE,
+      }}
+      linkSection={
+        <div className="min-w-0 lg:col-span-7">
+          <div ref={wordmark} className="relative isolate overflow-hidden">
+            <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 -scale-y-100">
+              <DitherField className="text-kortix-base" palette={HOOP_PALETTE} fade="top" />
+            </div>
+            <div className="@container">
+              <Link
+                href="/loopmaxxing"
+                aria-label="Loopmaxxing"
+                className="text-foreground focus-visible:outline-ring flex justify-center pb-10 font-mono text-[14cqi] leading-none font-medium whitespace-nowrap uppercase focus-visible:outline-2 focus-visible:-outline-offset-2"
+              >
+                <span style={{ clipPath: 'inset(0 0 calc((1 - var(--footer-reveal, 1)) * 100%) 0)' }}>
+                  <LoopmaxxingWordmark />
+                </span>
+              </Link>
+            </div>
+          </div>
         </div>
-      </div>
-    </footer>
+      }
+    />
   );
 }
 
@@ -361,9 +409,12 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
 
         <main>
           <section className="relative">
+            <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-48 sm:h-[560px]">
+              <DitherField className="text-kortix-base" palette={HOOP_PALETTE} fade="top-right" />
+            </div>
             <div className={cn(COLUMN, 'relative')}>
             {/* Eyebrow, headline, one short intro: the headline carries the page, the intro stays two lines of grey. */}
-            <div className="flex flex-col items-start pt-20 pb-24 lg:pt-32 lg:pb-36">
+            <div className="flex flex-col items-start pt-20 pb-14 lg:pt-32 lg:pb-20">
               <span className="text-foreground text-base">For dev teams</span>
               <h1 className="text-foreground mt-4 max-w-4xl text-4xl font-medium tracking-tight text-balance sm:text-5xl lg:text-6xl">
                 Add a {name}
@@ -378,8 +429,6 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
               </p>
               <PromptCta prompt={prompt} className="mt-8" />
             </div>
-            {/* The loop you can touch: beside the headline where the column has room for it. After the copy in the DOM, so the prompt comes first in tab order. */}
-            <HulaHoop className="absolute top-12 right-6 hidden w-[520px] xl:block 2xl:w-[580px]" />
             <div className="pb-8">
               <SessionReel runs={runs} />
             </div>
@@ -465,7 +514,7 @@ export function FactoryHome({ loops }: { loops: LoopView[] }) {
           />
         </main>
 
-        <PageEnd />
+        <PageEnd prompt={prompt} />
       </div>
     </CopyGuideProvider>
     </WordmarkVariantContext.Provider>

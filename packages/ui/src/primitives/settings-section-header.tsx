@@ -62,12 +62,10 @@ export function useSettingsPageTitle(): string | null {
 
 /**
  * Every Workspace settings page's column: one gutter and one top offset. A
- * page sets its own max width inside it (`max-w-2xl` a form, `max-w-5xl` a
- * library, none a table) and centers that box with `mx-auto`, the brand's
- * page container (`mx-auto w-full max-w-2xl`). The text stays left aligned.
+ * page sets only its own max width on the column's child (`max-w-2xl` a form,
+ * `max-w-5xl` a library, none a table); `[&>*]:mx-auto` centers that child in
+ * the pane. The text stays left aligned.
  */
-// `[&>*]:mx-auto`: each page caps its own width (`max-w-2xl` … `max-w-7xl`) on
-// the column's child, and that child sits centered in the pane.
 export const SETTINGS_PAGE_COLUMN_CLASS = 'w-full px-4 pt-12 pb-20 sm:px-12 [&>*]:mx-auto';
 
 /**

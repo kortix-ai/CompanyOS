@@ -623,7 +623,7 @@ export function ProjectAdminDashboard({
                     <AccountHubSheetProvider>
                       {activeRow.project && ProjectPage ? (
                         <div className={SETTINGS_PAGE_COLUMN_CLASS}>
-                          <div className="mx-auto flex w-full max-w-2xl flex-col space-y-6">
+                          <div className="flex w-full max-w-2xl flex-col space-y-6">
                             {/* General places the account half before its
                                 Danger zone; every other section appends it. */}
                             {active === 'general' ? (

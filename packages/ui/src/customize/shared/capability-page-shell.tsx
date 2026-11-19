@@ -148,7 +148,7 @@ export function CapabilityPageShell({
     return (
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         <div className={SETTINGS_PAGE_COLUMN_CLASS}>
-          <div className={cn('mx-auto w-full space-y-5', wide ? 'max-w-7xl' : 'max-w-5xl')}>
+          <div className={cn('w-full space-y-5', wide ? 'max-w-7xl' : 'max-w-5xl')}>
             <SettingsPageHeader
               title={title}
               titleAccessory={titleAddon}

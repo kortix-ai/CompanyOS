@@ -292,7 +292,7 @@ test('with chat on, neither the Spaces list nor the opened More group has an Inb
     more?.click();
   });
   const html = document.body.innerHTML;
-  // Review stays the first row of the Spaces list.
+  // The Spaces list still renders (Review is its first row; the test above checks the order).
   expect(html).toContain('href="/workspaces/synthetic-project/review"');
   expectNoInbox(html);
 });

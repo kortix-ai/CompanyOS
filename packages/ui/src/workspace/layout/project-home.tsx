@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ACCOUNT_PANEL_PARAM, hubTarget } from '../../internal/stores/account-panel-store';
 import { SplitNoticeBanner } from '../settings/split-notice-banner';
+import { SetupBanner } from '../setup/setup-banner';
 import { useTranslations } from '../../i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -482,9 +483,12 @@ function ProjectHomeView({
           state either: that page has one job. */}
       {firstChatPending || !onboarded || noAgent || !HomeAnnouncement ? null : <HomeAnnouncement />}
 
-      {/* What changed when a legacy account's workspaces became their own (C9). */}
-      <div className="relative z-10 mx-auto w-full max-w-2xl px-4 pt-14 empty:hidden">
+      {/* What changed when a legacy account's workspaces became their own
+          (C9), and the way back to the setup page while a step is open. */}
+      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col gap-2 px-4 pt-14 empty:hidden">
         <SplitNoticeBanner workspaceId={projectId} />
+        {/* Keyed: a dismissal belongs to one workspace, and switching reuses this view. */}
+        <SetupBanner key={projectId} projectId={projectId} />
       </div>
 
       {/* No bubble or "Thinking" row is painted here on send. The page stays

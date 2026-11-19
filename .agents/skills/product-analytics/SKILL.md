@@ -203,9 +203,27 @@ README). They follow the design of the closed PR #7144.
 | Does the setup prompt end in working loops, which coding agent ran it, where onboard stops | Kortix · Setup |
 | One person's journey | PostHog → People → the person → Events |
 
-Every insight sets `filterTestAccounts`: `environment = production`, no
-`@kortix.ai` / `@kortix.com` person, not the internal cohort. Local, dev and
+Every insight sets `filterTestAccounts`: `environment = production`, and the
+person is not in the cohort "Internal / Test users" (311084). Local, dev and
 staging events never reach the charts.
+
+### Kortix staff are out of every chart
+
+- The cohort holds every person with `$internal_or_test_user = true`. Persons
+  carry no email (rule 1), so the filter's email conditions match nobody: the
+  flag is what excludes staff.
+- The API sets the flag (`flagStaffOnce` in `shared/product-analytics.ts`): the
+  first event of a person in each API process reads their email from
+  `auth.users`, and a `@kortix.ai` or `@kortix.com` address sends one `$set`.
+  PostHog gets the flag, never the email. Web events land on the same person,
+  so they drop out too.
+- Cohort membership is read when a chart runs, so a flag also hides the
+  person's earlier events. The cohort is dynamic: a new flag counts after its
+  next recalculation (hours).
+- A teammate who uses a personal email: set `$internal_or_test_user = true` on
+  their person by hand (PostHog → People → the person → Properties).
+- 2026-11-19: 23 staff persons were flagged once by hand (prod `auth.users`
+  ids on the two domains that PostHog knew, plus one personal account).
 
 ## PostHog project settings (set 2026-11-04, replay 2026-11-19)
 

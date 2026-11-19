@@ -319,9 +319,21 @@ export async function middleware(request: NextRequest) {
       return NextResponse.rewrite(landing);
     }
     if (pathname === '/loopmaxxing') return NextResponse.redirect(`https://${visitorHostname(request)}/`, 308);
+    // Its own sitemap and llms.txt; robots.txt answers per host in its route.
+    const own = LOOPMAXXING_SITE_FILES[pathname];
+    if (own) {
+      const file = request.nextUrl.clone();
+      file.pathname = own;
+      return NextResponse.rewrite(file);
+    }
     if (!LOOPMAXXING_SERVED.test(pathname)) {
       return NextResponse.redirect(`https://kortix.com${pathname}${request.nextUrl.search}`, 307);
     }
+  }
+  // On kortix.com the page has one address, loopmaxxing.sh: a permanent
+  // redirect gives search engines one URL to rank instead of a copy per locale.
+  if (KORTIX_SITE_HOSTS.has(visitorHostname(request)) && LOOPMAXXING_PAGE.test(pathname) && loopmaxxingEnabled()) {
+    return NextResponse.redirect(`https://loopmaxxing.sh/${request.nextUrl.search}`, 308);
   }
   // These are probes for server files, not product routes. A plain response also
   // avoids rendering the translated application shell for sensitive-file probes.
@@ -996,7 +1008,17 @@ const LOOPMAXXING_HOSTS = new Set(['loopmaxxing.sh', 'www.loopmaxxing.sh']);
  * page's own API calls stay on the host: a redirect to kortix.com is
  * cross-origin, and the response carries no CORS header.
  */
-const LOOPMAXXING_SERVED = /^\/(?:setup\.md|factory\.md|install(?:\.sh)?|loops\/[^/]+|api\/github-stars)$/;
+const LOOPMAXXING_SERVED = /^\/(?:setup\.md|factory\.md|install(?:\.sh)?|loops\/[^/]+|api\/github-stars|robots\.txt)$/;
+/** The host's own crawler files, rewritten to `app/loopmaxxing-site/`. */
+const LOOPMAXXING_SITE_FILES: Record<string, string> = {
+  '/sitemap.xml': '/loopmaxxing-site/sitemap.xml',
+  '/llms.txt': '/loopmaxxing-site/llms.txt',
+  '/llms-full.txt': '/loopmaxxing-site/llms.txt',
+};
+/** The production marketing hosts, where /loopmaxxing moves to its own domain. */
+const KORTIX_SITE_HOSTS = new Set(['kortix.com', 'www.kortix.com']);
+/** /loopmaxxing and every locale copy of it, such as /de/loopmaxxing. */
+const LOOPMAXXING_PAGE = new RegExp(`^/(?:(?:${locales.join('|')})/)?loopmaxxing/?$`);
 
 /** Read at request time (dynamic key), so one image serves dev with it and prod without. */
 function loopmaxxingEnabled(): boolean {

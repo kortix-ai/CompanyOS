@@ -86,8 +86,8 @@ const RuntimeEnvSchema = z.object({
   /** Loopmaxxing is announced: the announcement bar on the marketing site
    *  links to it and search engines may index the page. Needs
    *  LOOPMAXXING_ENABLED. Off unless KORTIX_PUBLIC_LOOPMAXXING_ANNOUNCED /
-   *  NEXT_PUBLIC_LOOPMAXXING_ANNOUNCED is "true" (dev sets it) or the app
-   *  runs under `next dev`. */
+   *  NEXT_PUBLIC_LOOPMAXXING_ANNOUNCED is "true" (dev, staging and prod set
+   *  it) or the app runs under `next dev`. */
   LOOPMAXXING_ANNOUNCED: z.boolean().default(false),
   /** Self-host account-creation restriction: hides "New account" affordances
    *  (accounts page header button + empty-state CTA, account-switcher

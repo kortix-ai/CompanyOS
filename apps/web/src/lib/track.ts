@@ -36,6 +36,12 @@ export const JOURNEY_EVENTS = [
   'cta_signup_clicked',
   /** The browser landed after a finished sign-up or sign-in. `kind`, `method`. */
   'auth_completed',
+  /**
+   * The setup prompt went to the clipboard (Loopmaxxing's copy buttons). `template`: the
+   * template the prompt names, else `none`. `method`: `button` or `key` (the page's C key).
+   * `location`: page path. The CLI's `setup_started` is the next step of the funnel.
+   */
+  'setup_prompt_copied',
 ] as const;
 
 export type PanelEvent = (typeof PANEL_EVENTS)[number];

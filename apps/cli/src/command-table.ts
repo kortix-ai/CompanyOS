@@ -269,6 +269,18 @@ export const TIERS: readonly CommandTier[] = [
             featureFlag: 'goals',
           },
           {
+            name: 'evals',
+            args: '<subcommand>',
+            blurb: 'Run agents on Harbor-format tasks and score them: init, suites, tasks, run, jobs, show, compare, rerun, cancel',
+            featureFlag: 'evals',
+          },
+          {
+            name: 'calendar',
+            args: '<subcommand>',
+            blurb: 'The shared calendar: dated items with the people on them and comments; @mention a person to ask them: ls, add, show, edit, done, comment, rm',
+            featureFlag: 'calendar',
+          },
+          {
             name: 'artifacts',
             args: '<subcommand>',
             blurb: 'Share docs and pages: publish, ls, share, versions, pull',

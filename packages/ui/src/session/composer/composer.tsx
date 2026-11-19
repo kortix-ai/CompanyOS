@@ -16,7 +16,7 @@ import { useProjectConfig, usePromptAttachments, useRuntimeSessions } from '@kor
 import { useActiveSpace } from '../../internal/stores/active-space-store';
 import { MoonIcon, WarningIcon } from '@phosphor-icons/react';
 import { SESSION_NOTICE, type SessionLogMessage } from '@kortix/sdk';
-import { newPastedContentId, type PastedContent, splitPastedContent, trimPastedText } from '@kortix/shared';
+import { agentDisplayName, newPastedContentId, type PastedContent, splitPastedContent, trimPastedText } from '@kortix/shared';
 import type { JSONContent } from '@tiptap/core';
 import type { RefObject } from 'react';
 import {
@@ -492,8 +492,8 @@ export interface SessionChatInputProps {
  *
  * The gutter is equal on both sides. It used to carry `md:pr-1`, a right-side
  * trim against the collapsed action-panel chevron rail, which then took ~37px
- * of the row's width. That rail now takes no width (`COLLAPSED_RAIL_OFFSET` in
- * `session-action-panel-column.tsx`), so the trim only shifted the card 5.5px
+ * of the row's width. Collapsed, the column now takes no width at all
+ * (`session-action-panel-column.tsx`), so the trim only shifted the card 5.5px
  * right of center. A breakpoint may never ZERO this gutter — zero is what let
  * the card touch the panel divider, and `composer-underbar.test.tsx` guards
  * exactly that line.
@@ -724,7 +724,8 @@ function ComposerImpl(props: SessionChatInputProps) {
   useMenuRevalidation(menuOpen, projectId);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { takeFiles, modelPickerEnabled, contextMeterEnabled, runtimeSlashEnabled, useSlashActions } = useUiHostConfig();
+  const { takeFiles, modelPickerEnabled, contextMeterEnabled, runtimeSlashEnabled, useSlashActions, agentLabels } =
+    useUiHostConfig();
   // The host's own `/` rows. The config is fixed for the app's life, so the hook is the same one every render.
   const hostSlashRows = (useSlashActions ?? useNoSlashActions)();
   // A host that hides the harness lists none of its commands, and a typed "/init" stays text.
@@ -838,7 +839,7 @@ function ComposerImpl(props: SessionChatInputProps) {
     [restoreQuoteTexts, restorePastes, tComposerAttachments],
   );
 
-  const { handleDocChange, clearSavedDraft } = useComposerDraft({
+  const { handleDocChange, clearSavedDraft, sendRefused } = useComposerDraft({
     active: draftActive,
     scope: draftScope,
     handoffScope: draftHandoffScope,
@@ -1600,7 +1601,8 @@ function ComposerImpl(props: SessionChatInputProps) {
     });
     return available.map((action) => {
       if (action.id === 'switch-agent' && selectedAgent) {
-        return { ...action, value: selectedAgent };
+        // The name the agent chip shows, not the slug.
+        return { ...action, value: agentLabels?.[selectedAgent] ?? agentDisplayName(selectedAgent, agents.find((a) => a.name === selectedAgent)?.title) };
       }
       // The ring icon (via `context`) plus the reading as the row's
       // "current setting" text — same grammar as the agent row's value.
@@ -1610,7 +1612,7 @@ function ComposerImpl(props: SessionChatInputProps) {
       return action;
     }).concat(hostSlashActions(hostSlashRows));
   }, [
-    selectedAgent, canSwitchAgent, onCompactClick, onContextClick, contextUsage, tI18nComplete,
+    selectedAgent, agents, agentLabels, canSwitchAgent, onCompactClick, onContextClick, contextUsage, tI18nComplete,
     modelPickerEnabled, contextMeterEnabled, runtimeSlashEnabled, hostSlashRows,
   ]);
 
@@ -1868,6 +1870,7 @@ function ComposerImpl(props: SessionChatInputProps) {
           // The host refused the send before anything durable happened. Its uploads
           // are back in the tray, and the draft returns: a failed file shows its
           // Retry; a ready one sends again without re-upload.
+          sendRefused();
           const currentDoc = editorRef.current?.getDocument() ?? null;
           const currentIsEmpty = editorRef.current?.isEmpty() ?? true;
           const sentFiles = filesToSend ?? [];
@@ -1930,6 +1933,7 @@ function ComposerImpl(props: SessionChatInputProps) {
       onCommand,
       onHoldCommand,
       clearSavedDraft,
+      sendRefused,
       handleDocChange,
       setQuoteList,
       restoreQuoteTexts,

@@ -11,6 +11,14 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
+/** The checkout's workspace link: the `[kortix]` keys of its git config. */
+function gitLink(dir: string): Record<string, string> {
+  const out = Bun.spawnSync(['git', '-C', dir, 'config', '--local', '--get-regexp', '^kortix\\.'], { stdout: 'pipe' }).stdout.toString();
+  return Object.fromEntries(
+    out.split('\n').filter(Boolean).map((line) => [line.slice(0, line.indexOf(' ')), line.slice(line.indexOf(' ') + 1)]),
+  );
+}
+
 const CLI_ROOT = resolve(import.meta.dir, '..', '..');
 const CLI_ENTRY = join(CLI_ROOT, 'src', 'index.ts');
 const ORIGINAL_ENV = { ...process.env };
@@ -921,11 +929,16 @@ describe('kortix CLI black-box behavior', () => {
     expect(listBeforeLink.code).toBe(0);
     expect(JSON.parse(listBeforeLink.stdout)).toEqual([expect.objectContaining({ project_id: 'proj_e2e', name: 'E2E Project' })]);
 
+    // The link lives in the checkout's git config, so linking needs a git checkout.
+    const notGit = await runCli(['projects', 'link', 'proj_e2e'], root, { KORTIX_CONFIG_FILE: configFile });
+    expect(notGit.code).toBe(1);
+    expect(notGit.stderr).toContain('not inside a git checkout');
+    expect(Bun.spawnSync(['git', 'init', '-q', '-b', 'main'], { cwd: root }).exitCode).toBe(0);
     const link = await runCli(['projects', 'link', 'proj_e2e'], root, { KORTIX_CONFIG_FILE: configFile });
     expect(link.code).toBe(0);
     expect(link.stdout).toContain('Linked');
-    const linked = JSON.parse(readFileSync(join(root, '.kortix', 'link.json'), 'utf8'));
-    expect(linked).toMatchObject({ project_id: 'proj_e2e', account_id: 'account_1', host: 'test', host_url: apiBase });
+    expect(gitLink(root)).toMatchObject({ 'kortix.workspace': 'proj_e2e', 'kortix.account': 'account_1', 'kortix.host': 'test', 'kortix.host-url': apiBase });
+    expect(existsSync(join(root, '.kortix'))).toBe(false);
 
     const info = await runCli(['projects', 'info', '--json'], root, { KORTIX_CONFIG_FILE: configFile });
     expect(info.code).toBe(0);
@@ -948,11 +961,11 @@ describe('kortix CLI black-box behavior', () => {
 
     const unlink = await runCli(['projects', 'unlink'], root, { KORTIX_CONFIG_FILE: configFile });
     expect(unlink.code).toBe(0);
-    expect(existsSync(join(root, '.kortix', 'link.json'))).toBe(false);
+    expect(gitLink(root)).toEqual({});
 
     const relink = await runCli(['projects', 'link', 'proj_e2e'], root, { KORTIX_CONFIG_FILE: configFile });
     expect(relink.code).toBe(0);
-    expect(existsSync(join(root, '.kortix', 'link.json'))).toBe(true);
+    expect(gitLink(root)['kortix.workspace']).toBe('proj_e2e');
 
     const removeProject = await runCli(['projects', 'rm', 'proj_e2e', '--yes'], root, { KORTIX_CONFIG_FILE: configFile });
     expect(removeProject.code).toBe(0);
@@ -961,7 +974,7 @@ describe('kortix CLI black-box behavior', () => {
     expect(removeProject.stdout).toContain('Deleted');
     expect(removeProject.stdout).not.toContain('Archived');
     expect(removeProject.stdout).toContain('managed git repo deleted');
-    expect(existsSync(join(root, '.kortix', 'link.json'))).toBe(false);
+    expect(gitLink(root)).toEqual({});
 
     expect(requests.map((r) => [r.method, r.path, r.body ?? null])).toEqual([
       // `projects ls` (the older name) is scoped to the active account; by-id
@@ -990,6 +1003,7 @@ describe('kortix CLI black-box behavior', () => {
     const init = await runCli(['init', 'edge-e2e', '--yes', '--no-git']);
     expect(init.code).toBe(0);
     const root = join(tmp, 'edge-e2e');
+    expect(Bun.spawnSync(['git', 'init', '-q', '-b', 'main'], { cwd: root }).exitCode).toBe(0);
 
     const missingProject = await runCli(['projects', 'link', 'missing'], root, { KORTIX_CONFIG_FILE: configFile });
     expect(missingProject.code).toBe(1);

@@ -3888,11 +3888,17 @@ export const sandboxTemplates = kortixSchema.table(
     /** 'daytona' (others to follow). */
     provider: text('provider').default('daytona').notNull(),
 
-    // ─── Image definition (exactly one of image / dockerfilePath) ──────────
+    // ─── Image definition (at most one of image / dockerfilePath / dockerfileInline) ──
     /** Public Docker image reference (e.g. python:3.12-slim). */
     image: text('image'),
     /** Repo-relative path to a Dockerfile. Mutually exclusive with `image`. */
     dockerfilePath: text('dockerfile_path'),
+    /**
+     * A Dockerfile's text, for an image defined outside the project repository
+     * (an eval task from a Harbor dataset). Built without a build context, as a
+     * repository Dockerfile is. Mutually exclusive with the two above.
+     */
+    dockerfileInline: text('dockerfile_inline'),
     /** Optional entrypoint override. */
     entrypoint: text('entrypoint'),
 
@@ -9592,6 +9598,8 @@ export const notifications = kortixSchema.table('notifications', {
   roomThreadSeq: bigint('room_thread_seq', { mode: 'number' }),
   artifactId: uuid('artifact_id'),
   artifactThreadId: uuid('artifact_thread_id'),
+  // A `mention` row's calendar item (flag `calendar`). No FK: the read filter hides a row whose item is gone.
+  calendarItemId: uuid('calendar_item_id'),
   kind: text('kind').notNull(),
   title: text('title').notNull(),
   body: text('body').default('').notNull(),
@@ -9618,7 +9626,7 @@ export const notifications = kortixSchema.table('notifications', {
   index('idx_notifications_artifact').on(table.artifactId).where(sql`${table.artifactId} IS NOT NULL`),
   index('idx_notifications_artifact_thread').on(table.artifactThreadId).where(sql`${table.artifactThreadId} IS NOT NULL`),
   index('idx_notifications_created').on(table.createdAt),
-  check('notifications_kind', sql`${table.kind} IN ('turn_done', 'turn_error', 'question', 'permission', 'shared', 'automation_failed', 'automation_recovered', 'capture_device_down', 'capture_device_recovered', 'message', 'artifact_comment')`), // 'message': retired with Rooms; old rows age out
+  check('notifications_kind', sql`${table.kind} IN ('turn_done', 'turn_error', 'question', 'permission', 'shared', 'automation_failed', 'automation_recovered', 'capture_device_down', 'capture_device_recovered', 'mention', 'message', 'artifact_comment')`), // 'message': retired with Rooms; old rows age out
 ]);
 
 /** One record per user: partial overrides of the default notification preferences. */
@@ -10407,4 +10415,200 @@ export const creditCodeRedemptions = kortixSchema.table('credit_code_redemptions
 }, (table) => [
   uniqueIndex('uniq_credit_code_redemptions_code_account').on(table.codeId, table.accountId),
   index('idx_credit_code_redemptions_account').on(table.accountId),
+]).enableRLS();
+
+// ── Evals (`apps/api/src/projects/evals/`, flag `evals`) ─────────────────────
+// A job is a set of trials: tasks × agents × attempts, in Harbor's task format.
+// The job folder in the project's Files holds the content (config, results,
+// verifier output). These rows are its index and the runner's queue state.
+export const evalJobs = kortixSchema.table('eval_jobs', {
+  jobId: uuid('job_id').defaultRandom().primaryKey(),
+  projectId: uuid('project_id')
+    .notNull()
+    .references(() => projects.projectId, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').notNull(),
+  /** The `evals:` suite of kortix.yaml the job ran; null for an ad-hoc config. */
+  suite: text('suite'),
+  jobName: text('job_name').notNull(),
+  status: text('status').$type<'queued' | 'running' | 'completed' | 'cancelled'>().default('queued').notNull(),
+  /** The commit the config and the tasks were read at. */
+  commitSha: text('commit_sha'),
+  ref: text('ref'),
+  /** The resolved job config (`EvalJobConfig` of @kortix/api-contract). */
+  config: jsonb('config').$type<Record<string, unknown>>().notNull(),
+  /** `EvalJobStats`, recomputed whenever a trial ends. */
+  stats: jsonb('stats').$type<Record<string, unknown>>().default({}).notNull(),
+  rerunOf: uuid('rerun_of'),
+  driveId: uuid('drive_id'),
+  /** Files path of the job folder, `/Evals/<job_name>`. */
+  folder: text('folder').notNull(),
+  createdBy: uuid('created_by'),
+  /**
+   * Who started the job, as the session create needs it: principal type,
+   * token kind and the session the token acts from. Trial sessions are
+   * created as this principal. Null on jobs from before the column.
+   */
+  startedBy: jsonb('started_by').$type<Record<string, unknown>>(),
+  /** `Idempotency-Key` of the POST that created the job, and a hash of its body. */
+  idempotencyKey: text('idempotency_key'),
+  requestHash: text('request_hash'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_eval_jobs_project_created').on(table.projectId, table.createdAt),
+  uniqueIndex('uniq_eval_jobs_project_name').on(table.projectId, table.jobName),
+  index('idx_eval_jobs_active').on(table.status).where(sql`${table.status} in ('queued', 'running')`),
+  check('eval_jobs_status_check', sql`${table.status} in ('queued', 'running', 'completed', 'cancelled')`),
+]).enableRLS();
+
+export const evalTrials = kortixSchema.table('eval_trials', {
+  trialId: uuid('trial_id').defaultRandom().primaryKey(),
+  jobId: uuid('job_id')
+    .notNull()
+    .references(() => evalJobs.jobId, { onDelete: 'cascade' }),
+  projectId: uuid('project_id').notNull(),
+  /** `<task>__<agent>__<attempt>`; a retry appends `__r<n>`. The trial's folder name. */
+  trialName: text('trial_name').notNull(),
+  taskName: text('task_name').notNull(),
+  /** Where the task is read from (`EvalTaskRef`): a repository path, or a git url and commit. */
+  taskRef: jsonb('task_ref').$type<Record<string, unknown>>().notNull(),
+  agent: text('agent').notNull(),
+  model: text('model'),
+  attempt: integer('attempt').notNull(),
+  retry: integer('retry').default(0).notNull(),
+  status: text('status')
+    .$type<'queued' | 'starting' | 'agent_running' | 'verifying' | 'completed' | 'errored' | 'cancelled'>()
+    .default('queued')
+    .notNull(),
+  sessionId: text('session_id'),
+  /** The verifier's reward: `{ reward: 1 }` or one number per key. */
+  rewards: jsonb('rewards').$type<Record<string, number>>(),
+  rewardValid: boolean('reward_valid').default(false).notNull(),
+  /** `EvalException`: the first error of the trial, with its policy. */
+  exception: jsonb('exception').$type<Record<string, unknown>>(),
+  /** The runner's working state for the current phase (deadlines, the in-sandbox job). Not part of the result. */
+  runState: jsonb('run_state').$type<Record<string, unknown>>().default({}).notNull(),
+  usage: jsonb('usage').$type<Record<string, number>>(),
+  environmentStartedAt: timestamp('environment_started_at', { withTimezone: true }),
+  environmentFinishedAt: timestamp('environment_finished_at', { withTimezone: true }),
+  agentStartedAt: timestamp('agent_started_at', { withTimezone: true }),
+  agentFinishedAt: timestamp('agent_finished_at', { withTimezone: true }),
+  verifierStartedAt: timestamp('verifier_started_at', { withTimezone: true }),
+  verifierFinishedAt: timestamp('verifier_finished_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_eval_trials_job').on(table.jobId, table.taskName, table.agent, table.attempt),
+  uniqueIndex('uniq_eval_trials_job_name').on(table.jobId, table.trialName),
+  index('idx_eval_trials_session').on(table.sessionId).where(sql`${table.sessionId} is not null`),
+  index('idx_eval_trials_project_created').on(table.projectId, table.createdAt),
+  check(
+    'eval_trials_status_check',
+    sql`${table.status} in ('queued', 'starting', 'agent_running', 'verifying', 'completed', 'errored', 'cancelled')`,
+  ),
+]).enableRLS();
+
+/**
+ * A workspace made for one eval trial (`[metadata.kortix] workspace = "fresh"`,
+ * apps/api/src/projects/evals/trial-workspace.ts). The row is written before
+ * the account exists and outlives it: the workspace switcher hides its account,
+ * the runner's sweep deletes the workspace once the trial ended, and the money
+ * moved for it (budget out of the payer, refund back) stays on record.
+ * No foreign keys: the trial account, its project and the job are deleted
+ * while this row stays.
+ */
+export const evalTrialWorkspaces = kortixSchema.table('eval_trial_workspaces', {
+  trialAccountId: uuid('trial_account_id').primaryKey(),
+  trialProjectId: uuid('trial_project_id').notNull(),
+  trialId: uuid('trial_id').notNull(),
+  jobId: uuid('job_id').notNull(),
+  /** The job's workspace: it pays for the trial and keeps its results. */
+  payerAccountId: uuid('payer_account_id').notNull(),
+  jobProjectId: uuid('job_project_id').notNull(),
+  /** The person the trial acts as: the owner of the trial workspace. */
+  ownerUserId: uuid('owner_user_id').notNull(),
+  budgetUsd: numeric('budget_usd', { precision: 12, scale: 4 }).default('0').notNull(),
+  fundedAt: timestamp('funded_at', { withTimezone: true }),
+  /** What went back to the payer (negative: the trial spent past its budget, and the payer paid the rest). */
+  refundUsd: numeric('refund_usd', { precision: 12, scale: 4 }),
+  settledAt: timestamp('settled_at', { withTimezone: true }),
+  /** The sweep deletes the workspace after this: late compute and model charges land first. */
+  cleanupAfter: timestamp('cleanup_after', { withTimezone: true }),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  lastError: text('last_error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('uniq_eval_trial_workspaces_trial').on(table.trialId),
+  index('idx_eval_trial_workspaces_live').on(table.cleanupAfter).where(sql`${table.deletedAt} is null`),
+]).enableRLS();
+
+// ─── Calendar (flag `calendar`) ─────────────────────────────────────────────
+// A workspace's shared calendar: dated items, the people on them and comments.
+// Scheduled triggers and Loops are not stored here; the clients compute their
+// fires from the trigger list. Every member who can open the workspace reads
+// and writes every item (projects/calendar/).
+
+export const calendarItems = kortixSchema.table('calendar_items', {
+  itemId: uuid('item_id').default(sql`kortix.uuid_v7()`).primaryKey(),
+  projectId: uuid('project_id')
+    .notNull()
+    .references(() => projects.projectId, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  notes: text('notes').default('').notNull(),
+  /** Null: the item has no date ("No date"). With `all_day`, UTC midnight of the date. */
+  startsAt: timestamp('starts_at', { withTimezone: true }),
+  allDay: boolean('all_day').default(false).notNull(),
+  status: text('status').$type<'open' | 'done'>().default('open').notNull(),
+  /** The end of a timed item; null for an all-day item, an item with no date, or a point in time. */
+  endsAt: timestamp('ends_at', { withTimezone: true }),
+  /** Who created it: a person, or an agent session (agent name plus session id). */
+  createdByUserId: uuid('created_by_user_id'),
+  createdByAgent: text('created_by_agent'),
+  /** No FK: a deleted session keeps its items; a reply then wakes nothing. */
+  createdBySessionId: text('created_by_session_id'),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_calendar_items_project_starts').on(table.projectId, table.startsAt),
+  check('calendar_items_status_check', sql`${table.status} in ('open', 'done')`),
+  check('calendar_items_ends_after_starts', sql`${table.endsAt} IS NULL OR (${table.startsAt} IS NOT NULL AND ${table.endsAt} > ${table.startsAt})`),
+]).enableRLS();
+
+/** The people on an item: persons and agents alike, each at most once. */
+export const calendarItemPeople = kortixSchema.table('calendar_item_people', {
+  itemId: uuid('item_id')
+    .notNull()
+    .references(() => calendarItems.itemId, { onDelete: 'cascade' }),
+  projectId: uuid('project_id').notNull(),
+  /** A person; null for an agent. */
+  userId: uuid('user_id'),
+  /** An agent by its kortix.yaml name; null for a person. */
+  agent: text('agent'),
+  addedAt: timestamp('added_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('uniq_calendar_item_people_user').on(table.itemId, table.userId).where(sql`${table.userId} IS NOT NULL`),
+  uniqueIndex('uniq_calendar_item_people_agent').on(table.itemId, table.agent).where(sql`${table.agent} IS NOT NULL`),
+  index('idx_calendar_item_people_project_user').on(table.projectId, table.userId),
+  index('idx_calendar_item_people_project_agent').on(table.projectId, table.agent),
+  check('calendar_item_people_one_kind', sql`(${table.userId} IS NULL) <> (${table.agent} IS NULL)`),
+]).enableRLS();
+
+export const calendarComments = kortixSchema.table('calendar_comments', {
+  commentId: uuid('comment_id').default(sql`kortix.uuid_v7()`).primaryKey(),
+  itemId: uuid('item_id')
+    .notNull()
+    .references(() => calendarItems.itemId, { onDelete: 'cascade' }),
+  projectId: uuid('project_id').notNull(),
+  body: text('body').notNull(),
+  authorUserId: uuid('author_user_id'),
+  authorAgent: text('author_agent'),
+  authorSessionId: text('author_session_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_calendar_comments_item').on(table.itemId, table.commentId),
 ]).enableRLS();

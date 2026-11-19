@@ -32,7 +32,7 @@ export function RivalEyebrow({
         return (
           <span key={r.id} className="flex items-center gap-1.5">
             {i > 0 && (
-              <span className="text-muted-foreground/50 mr-1">
+              <span className="text-muted-foreground mr-1">
                 {tI18nComplete.raw('text6201111b83a0')}
               </span>
             )}
@@ -120,7 +120,7 @@ const Hero = () => {
 
         {/* 490ms + the 620ms text ramp lands this at 1110ms — the exact moment
             the frame (290ms + 820ms) finishes, so the fold closes on one beat. */}
-        <p className="kx-hero-text text-muted-foreground/60 mx-auto mt-6 max-w-7xl px-6 text-center font-mono text-[11px] tracking-wide [--kx-enter:490ms]">
+        <p className="kx-hero-text text-muted-foreground mx-auto mt-6 max-w-7xl px-6 text-center font-mono text-[11px] tracking-wide [--kx-enter:490ms]">
           {hero.trust}
         </p>
       </div>

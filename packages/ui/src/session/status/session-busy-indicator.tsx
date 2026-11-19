@@ -1,6 +1,7 @@
 'use client';
 
-import { AnimatePresence, m, useReducedMotion } from 'motion/react';
+import { AnimatePresence, m } from 'motion/react';
+import { useReducedMotion } from '../../internal/hooks/use-reduced-motion';
 import { useEffect, useState } from 'react';
 
 import { SessionDotMatrix } from '../../primitives/dot-matrix/session-dot-matrix';
@@ -106,7 +107,7 @@ export function SessionBusyIndicator({
       <SessionDotMatrix sessionId={sessionId} size={14} className="shrink-0" />
       <span className="relative min-w-0 flex-1" aria-hidden>
         {isRetrying ? (
-          <span className="text-muted-foreground/70 block truncate text-sm leading-5 tabular-nums">
+          <span className="text-muted-foreground block truncate text-sm leading-5 tabular-nums">
             {label}
           </span>
         ) : (
@@ -128,7 +129,7 @@ export function SessionBusyIndicator({
               </AnimatePresence>
             </span>
             {elapsed ? (
-              <span className="text-muted-foreground/70 shrink-0 text-sm leading-5 tabular-nums">
+              <span className="text-muted-foreground shrink-0 text-sm leading-5 tabular-nums">
                 {elapsed}
               </span>
             ) : null}

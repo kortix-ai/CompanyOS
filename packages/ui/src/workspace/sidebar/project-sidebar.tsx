@@ -17,9 +17,7 @@ import {
 } from '../../primitives/sidebar';
 import { ComputerConnectModal } from '../../internal/tunnel/computer-connect';
 import { ConnectMcpModal } from '../../internal/layout/connect-mcp-modal';
-import { ProjectMcpNavItem } from './footer/project-mcp-nav';
-import { ProjectComputerNavItem } from './footer/project-computer-nav';
-import { ProjectDownloadAppNavItem } from './footer/project-download-app-nav';
+import { ProjectPromoCards } from './footer/project-promo-cards';
 import { ProjectManifestIssuesAlert } from './footer/project-manifest-issues-alert';
 import { ProjectSandboxAlert } from './footer/project-sandbox-alert';
 import { ProjectRepositoryDisconnectedAlert } from '../repository-disconnected';
@@ -37,13 +35,12 @@ import { useBillingAccountId } from '../../internal/stores/billing-account-conte
 import { useFeatureFlag } from '@kortix/sdk/react';
 import { AppsModal } from '../../internal/apps-and-extensions/apps-modal';
 import { useAppsModalStore } from '../../internal/stores/apps-modal-store';
-import { ProjectChromeNavItem } from './footer/project-chrome-nav';
 import { CHROME_UI_ENABLED } from '../../internal/chrome/use-chrome-offered';
 import {
   MagnifyingGlassIcon,
   NavigationArrowIcon,
 } from '@phosphor-icons/react';
-import { UiLink as Link } from '../../providers/ui-provider';
+import { UiLink as Link, useUiPathname } from '../../providers/ui-provider';
 import { useWorkspaceSettingsRailStore } from '../../internal/stores/workspace-settings-rail-store';
 import { SettingsReturnTracker, SidebarDrill } from './sidebar-drill';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
@@ -55,6 +52,11 @@ import { Close } from '../../icons/close';
 const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
 const modSymbol = isMac ? '⌘' : 'Ctrl';
 
+
+/** Workspace pages with a centered bottom composer: home and one session (not the Sessions list). */
+const CENTERED_COMPOSER_ROUTE = /\/workspaces\/[^/]+(?:\/sessions\/[^/]+(?:\/.*)?)?\/?$/;
+/** Workspace pages whose composer runs to the right edge: chat, DMs, channels, Spaces. */
+const FULL_COMPOSER_ROUTE = /\/workspaces\/[^/]+\/(?:c|chat|dm|spaces)(?:\/.*)?$/;
 export function ProjectSidebar({
   projectId,
   menu,
@@ -85,6 +87,7 @@ export function ProjectSidebar({
   const { state, setOpenMobile, toggleSidebar, peek } = useSidebar();
   const isExpanded = state === 'expanded';
   const isMobile = useIsMobile();
+  const pathname = useUiPathname();
   const sessionsGroupRef = useRef<HTMLDivElement>(null);
   // Mounted outside <Sidebar>: the mobile sheet unmounts its content on close.
   const [computerConnectOpen, setComputerConnectOpen] = useState(false);
@@ -171,24 +174,22 @@ export function ProjectSidebar({
   // live inside "More": the bottom of the sidebar is More and the status alerts.
   const connectRows = (
     <>
-              {/* Connect MCP over Connect your computer: one block, 1px seam,
-                  inner corners rounded-sm. Either row can be absent (dismissed,
-                  or a paired computer), so the corners come from the siblings
-                  that render and an empty block collapses. A plain <li>, not
-                  SidebarMenuItem: its `group/menu-item` would make hovering one
-                  row light up the other row's badge and dismiss. */}
+              {/* One card for every promo: MCP, the computer, Chrome, the
+                  desktop app, the phone app. An empty list collapses. */}
               <li className="not-has-[li]:hidden">
-                <SidebarMenu className="gap-px [&>li:not(:first-child)>[data-sidebar=menu-button]]:rounded-t-sm [&>li:not(:last-child)>[data-sidebar=menu-button]]:rounded-b-sm">
-                  <ProjectMcpNavItem onOpenConnect={() => setConnectMcpOpen(true)} />
-                  <ProjectComputerNavItem
-                    projectId={projectId}
-                    onOpenConnect={() => setComputerConnectOpen(true)}
-                  />
-                  {chrome ? (
-                    <ProjectChromeNavItem onOpenConnect={() => useAppsModalStore.getState().setOpen(true)} />
+                <ul className="pb-1">
+                  {/* Phone only: on desktop the card floats in the window's
+                      corner (mounted below, outside the sidebar). */}
+                  {isMobile ? (
+                    <ProjectPromoCards
+                      projectId={projectId}
+                      onOpenMcp={() => setConnectMcpOpen(true)}
+                      onOpenComputer={() => setComputerConnectOpen(true)}
+                      onOpenChrome={chrome ? () => useAppsModalStore.getState().setOpen(true) : undefined}
+                      onOpenDownloadApp={onOpenDownloadApp}
+                    />
                   ) : null}
-                  {onOpenDownloadApp ? <ProjectDownloadAppNavItem onOpenDownload={onOpenDownloadApp} /> : null}
-                </SidebarMenu>
+                </ul>
               </li>
               {/* Last (Jay, 2026-09-03). It is the only paid call to action in
                   this group, and above the nav rows it put a sell between the
@@ -396,6 +397,26 @@ export function ProjectSidebar({
       <SidebarRail aria-label={t('resize')} title={t('resizeHelp')} />
     </Sidebar>
     <SettingsReturnTracker projectId={projectId} />
+    {/* Desktop: the promo card floats in the window's bottom-right corner,
+        outside the sidebar and its More disclosure, so it shows whether or
+        not the sidebar or More is open. */}
+    {isMobile ? null : (
+      <ProjectPromoCards
+        projectId={projectId}
+        onOpenMcp={() => setConnectMcpOpen(true)}
+        onOpenComputer={() => setComputerConnectOpen(true)}
+        onOpenChrome={chrome ? () => useAppsModalStore.getState().setOpen(true) : undefined}
+        onOpenDownloadApp={onOpenDownloadApp}
+        variant="floating"
+        composer={
+          FULL_COMPOSER_ROUTE.test(pathname)
+            ? 'full'
+            : CENTERED_COMPOSER_ROUTE.test(pathname)
+              ? 'centered'
+              : undefined
+        }
+      />
+    )}
     <ComputerConnectModal
       projectId={projectId}
       open={computerConnectOpen}

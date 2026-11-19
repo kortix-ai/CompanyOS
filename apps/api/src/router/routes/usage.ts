@@ -14,6 +14,7 @@ import { auth, errors, json, makeOpenApiApp } from '../../openapi';
 import { assertProjectCapability, loadProjectForUser } from '../../projects/lib/access';
 import { CSV_ROW_CAP, toCsv } from '../../shared/cost-csv';
 import { getCostSummary, listCostByProject } from '../../shared/cost-rollups';
+import { withCostReadGuard } from '../../shared/cost-read-guard';
 import {
   type CostSort,
   type CostWindow,
@@ -593,15 +594,17 @@ usageApp.openapi(
       // Same filtered query as the JSON branch (accountId, projectId, ownerId,
       // window, sort) — only limit/offset differ, because a CSV export wants
       // up to CSV_ROW_CAP rows in one shot, not one paginated page of it.
-      const page = await listSessionCosts({
-        accountId,
-        projectId,
-        ownerId,
-        window: parsed.window,
-        sort: parsed.sort,
-        limit: CSV_ROW_CAP,
-        offset: 0,
-      });
+      const page = await withCostReadGuard(() =>
+        listSessionCosts({
+          accountId,
+          projectId,
+          ownerId,
+          window: parsed.window,
+          sort: parsed.sort,
+          limit: CSV_ROW_CAP,
+          offset: 0,
+        }),
+      );
       const body = toCsv(
         [
           'session_id',
@@ -638,7 +641,9 @@ usageApp.openapi(
       });
     }
 
-    return c.json(await listSessionCosts({ accountId, projectId, ownerId, ...parsed }));
+    return c.json(
+      await withCostReadGuard(() => listSessionCosts({ accountId, projectId, ownerId, ...parsed })),
+    );
   },
 );
 
@@ -764,15 +769,17 @@ usageApp.openapi(
       // Same filtered query as the JSON branch (accountId, window, sort) —
       // only limit/offset differ, because a CSV export wants up to
       // CSV_ROW_CAP rows in one shot, not one paginated page of it.
-      const page = await listCostByProject({
-        accountId,
-        projectId,
-        visibleProjectIds,
-        window,
-        sort,
-        limit: CSV_ROW_CAP,
-        offset: 0,
-      });
+      const page = await withCostReadGuard(() =>
+        listCostByProject({
+          accountId,
+          projectId,
+          visibleProjectIds,
+          window,
+          sort,
+          limit: CSV_ROW_CAP,
+          offset: 0,
+        }),
+      );
       const body = toCsv(
         [
           'project_id',
@@ -800,7 +807,11 @@ usageApp.openapi(
       });
     }
 
-    return c.json(await listCostByProject({ accountId, projectId, visibleProjectIds, window, sort, limit, offset }));
+    return c.json(
+      await withCostReadGuard(() =>
+        listCostByProject({ accountId, projectId, visibleProjectIds, window, sort, limit, offset }),
+      ),
+    );
   },
 );
 
@@ -841,13 +852,11 @@ usageApp.openapi(
           message: 'A workspace-bound token cannot query an arbitrary session',
         });
       }
+      const window = parseCostWindow({ from: c.req.query('from'), to: c.req.query('to') });
       return c.json(
-        await getCostSummary({
-          accountId,
-          projectId,
-          sessionId: c.req.query('session_id') || undefined,
-          window: parseCostWindow({ from: c.req.query('from'), to: c.req.query('to') }),
-        }),
+        await withCostReadGuard(() =>
+          getCostSummary({ accountId, projectId, sessionId: c.req.query('session_id') || undefined, window }),
+        ),
       );
     } catch (error) {
       if (error instanceof InvalidCostQueryError) {

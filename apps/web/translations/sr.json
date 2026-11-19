@@ -2231,6 +2231,11 @@
       "resume": "Настави",
       "agentIsWorking": "{agent} ради",
       "needsYouOn": "Потребан си: {header}"
+    },
+    "panel": {
+      "outputNew": "Ново",
+      "outputUpdated": "Ажурирано",
+      "resizePane": "Промени величину окна"
     }
   },
   "agents": {
@@ -22307,8 +22312,8 @@
     "toolsAfterInstall": "Ova {kind} navodi svoje alate posle instalacije.",
     "typeFilterLabel": "Tip konektora",
     "typeFilterAll": "Svi tipovi",
-    "moveComposioTitle": "{app} ima sopstveni MCP server",
-    "moveComposioBody": "Ovaj konektor radi preko Composio. Možeš ga prebaciti na sopstveni MCP server aplikacije {app}: prijavi se jednom i prebacuje se. Agenti, okidači i kortix.yaml i dalje koriste {slug}.",
+    "moveComposioTitle": "{app} može da se poveže bez Composio",
+    "moveComposioBody": "Ovaj konektor radi preko Composio. Kortix može da ga poveže direktno: prijavi se jednom i prebacuje se. Agenti, okidači i kortix.yaml i dalje koriste {slug}.",
     "moveComposioAction": "Prebaci na MCP",
     "wayChannel": "Ugrađeno u Kortix: ljudi pišu agentu u aplikaciji {name}, bez trećih strana. Podesi jednom na njegovoj stranici.",
     "waySetUp": "Podesi",
@@ -27419,7 +27424,9 @@
       "goals": "Ciljevi",
       "inbox": "Prijemno sanduče",
       "memory": "Memorija",
-      "members": "Članovi"
+      "members": "Članovi",
+      "review": "Pregled",
+      "setup": "Završi podešavanje"
     },
     "sections": {
       "agents": "Agenti",

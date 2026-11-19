@@ -7,6 +7,7 @@ import { evalJobs, evalTrials, sessionSandboxes } from '@kortix/db';
 import type { EvalJobConfig, EvalJobStats, EvalJobStatus, EvalTrialStatus, EvalUsage } from '@kortix/api-contract';
 import { and, asc, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '../../shared/db';
+import { qualifiedColumn } from '../../shared/sql-qualified-column';
 import type { PlannedTrial } from './config';
 import { computeJobStats } from './scoring';
 
@@ -152,7 +153,7 @@ function jobFilters(projectId: string, filters: EvalJobFilters): SQL | undefined
  */
 export async function listJobs(projectId: string, opts: EvalJobFilters & { limit: number; after?: string }): Promise<EvalJobRow[]> {
   const keyset = opts.after
-    ? sql`(${evalJobs.createdAt}, ${evalJobs.jobId}) < (select c.created_at, c.job_id from kortix.eval_jobs c where c.job_id = ${opts.after})`
+    ? sql`(${qualifiedColumn(evalJobs.createdAt)}, ${qualifiedColumn(evalJobs.jobId)}) < (select c.created_at, c.job_id from kortix.eval_jobs c where c.job_id = ${opts.after})`
     : undefined;
   return db
     .select()

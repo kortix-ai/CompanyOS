@@ -2231,6 +2231,11 @@
       "resume": "Fortsetzen",
       "agentIsWorking": "{agent} arbeitet",
       "needsYouOn": "Braucht dich: {header}"
+    },
+    "panel": {
+      "outputNew": "Neu",
+      "outputUpdated": "Aktualisiert",
+      "resizePane": "Bereichsgröße ändern"
     }
   },
   "agents": {
@@ -22307,8 +22312,8 @@
     "toolsAfterInstall": "Diese {kind} listet ihre Tools nach der Installation.",
     "typeFilterLabel": "Connector-Typ",
     "typeFilterAll": "Alle Typen",
-    "moveComposioTitle": "{app} hat einen eigenen MCP-Server",
-    "moveComposioBody": "Dieser Connector läuft über Composio. Du kannst ihn auf den eigenen MCP-Server von {app} umstellen: einmal anmelden, dann wechselt er. Agenten, Trigger und kortix.yaml nutzen weiter {slug}.",
+    "moveComposioTitle": "{app} geht auch ohne Composio",
+    "moveComposioBody": "Dieser Connector läuft über Composio. Kortix kann ihn direkt verbinden: einmal anmelden, dann wechselt er. Agenten, Trigger und kortix.yaml nutzen weiter {slug}.",
     "moveComposioAction": "Auf MCP umstellen",
     "wayChannel": "In Kortix eingebaut: Leute schreiben dem Agenten in {name}, ohne Drittanbieter. Einmal auf seiner Seite einrichten.",
     "waySetUp": "Einrichten",
@@ -27419,7 +27424,9 @@
       "goals": "Ziele",
       "inbox": "Posteingang",
       "memory": "Gedächtnis",
-      "members": "Mitglieder"
+      "members": "Mitglieder",
+      "review": "Review",
+      "setup": "Einrichtung abschließen"
     },
     "sections": {
       "agents": "Agenten",

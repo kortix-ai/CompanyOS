@@ -385,7 +385,17 @@ export async function phaseConnectors(state: OnboardState): Promise<PhaseOutcome
   if (slugs.length === 0) return { status: 'skipped', detail: 'kortix.yaml declares no connector' };
   if (!state.ctx) return { status: 'failed', detail: 'no workspace' };
   const ex = `/connectors/workspaces/${state.ctx.projectId}`;
-  const { connectors } = await state.ctx.client.get<{ connectors: ConnectorRow[] }>(`${ex}/connectors?include_schemas=false`);
+  const list = () => state.ctx!.client.get<{ connectors: ConnectorRow[] }>(`${ex}/connectors?include_schemas=false`).then((r) => r.connectors);
+  let connectors = await list();
+  // The workspace applies kortix.yaml on a push through Kortix, on ship, or on a
+  // periodic sweep. A push straight to GitHub, or a branch switched after the
+  // first ship, reaches none of them yet: apply it now, as `kortix connectors sync`.
+  const syncErrors = new Map<string, string>();
+  if (slugs.some((slug) => !connectors.some((c) => c.slug === slug))) {
+    const synced = await state.ctx.client.post<{ errors?: Array<{ slug: string; error: string }> }>(`${ex}/connectors/sync`).catch(() => null);
+    for (const e of synced?.errors ?? []) syncErrors.set(e.slug, e.error);
+    connectors = await list();
+  }
   const notes: string[] = [];
   let waiting = 0;
   let failed = 0;
@@ -393,7 +403,12 @@ export async function phaseConnectors(state: OnboardState): Promise<PhaseOutcome
     const row = connectors.find((c) => c.slug === slug);
     const current = row?.state ?? row?.status;
     if (current === 'connected' || current === 'active') { notes.push(`${slug} connected`); continue; }
-    if (!row) { failed += 1; notes.push(`${slug} is not on the workspace (ship first, or check the slug)`); continue; }
+    if (!row) {
+      failed += 1;
+      const why = syncErrors.get(slug) ?? syncErrors.get('(manifest)') ?? syncErrors.get('(git-auth)');
+      notes.push(`${slug} is not on the workspace after a sync${why ? `: ${why}` : ' (check the slug in kortix.yaml on the branch the workspace reads)'}`);
+      continue;
+    }
     if (row.authSecret && !row.secretSet) {
       const link = await state.ctx.client.post<{ url: string }>(`/workspaces/${state.ctx.projectId}/secret-requests`, { names: [row.authSecret], scope: 'connector' });
       state.actions.push({ kind: 'secret_request', what: `Paste the credential of connector ${slug} (${row.authSecret})`, url: link.url });

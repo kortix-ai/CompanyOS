@@ -1625,6 +1625,11 @@ const catalog = {
       "resume": "Resume",
       "agentIsWorking": "{agent} is working",
       "needsYouOn": "Needs you: {header}"
+    },
+    "panel": {
+      "outputNew": "New",
+      "outputUpdated": "Updated",
+      "resizePane": "Resize pane"
     }
   },
   "agents": {
@@ -7042,8 +7047,8 @@ const catalog = {
     "toolsAfterInstall": "This {kind} lists its tools after install.",
     "typeFilterLabel": "Connector type",
     "typeFilterAll": "All types",
-    "moveComposioTitle": "{app} has its own MCP server",
-    "moveComposioBody": "This connector runs through Composio. You can switch it to {app}'s own MCP server: sign in once and it switches. Agents, triggers and kortix.yaml keep using {slug}.",
+    "moveComposioTitle": "{app} can connect without Composio",
+    "moveComposioBody": "This connector runs through Composio. Kortix can connect it directly: sign in once and it switches. Agents, triggers and kortix.yaml keep using {slug}.",
     "moveComposioAction": "Switch to MCP",
     "wayChannel": "Built into Kortix: people message the agent in {name}, with no third party. Set it up once on its page.",
     "waySetUp": "Set up",

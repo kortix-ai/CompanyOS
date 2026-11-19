@@ -21,7 +21,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { sdkBackendUrl } from '@kortix/shared/host-config';
+import { createApiClient } from './api/client.ts';
 import { configFilePath } from './api/config.ts';
 import { resolveProjectAuth } from './command-helpers.ts';
 import { cliVersion } from './tui-bin.ts';
@@ -133,16 +133,9 @@ function versionLabel(): string {
 async function send(credential: Credential | null | undefined, event: SetupEvent, run: SetupRun, properties: object): Promise<void> {
   if (!credential?.token || telemetryOff()) return;
   try {
-    await fetch(`${sdkBackendUrl(credential.api_base)}/cli/setup-events`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${credential.token}`,
-        'Content-Type': 'application/json',
-        'X-Kortix-Client-Version': `cli/${versionLabel()}`,
-      },
-      body: JSON.stringify({ event, setup_id: run.id, agent: codingAgent(), cli_version: versionLabel(), properties }),
-      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
-    });
+    // The SDK client sends the token and the X-Kortix-Client-Version header.
+    await createApiClient({ apiBase: credential.api_base, token: credential.token, signal: AbortSignal.timeout(SEND_TIMEOUT_MS) })
+      .post('/cli/setup-events', { event, setup_id: run.id, agent: codingAgent(), cli_version: versionLabel(), properties });
   } catch {
     // Telemetry never fails a command.
   }

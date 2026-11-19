@@ -879,6 +879,9 @@ const envSchema = z.object({
   PLATINUM_API_KEY: optStr,
   PLATINUM_API_URL: optStr,
   PLATINUM_TEMPLATE: optStr,
+  // The org's template cap (Platinum tiers 10/50/500; the API exposes no read
+  // of it). The snapshot quota GC reclaims from 80% of this value.
+  PLATINUM_TEMPLATE_QUOTA: optInt(500),
   // Per-webhook HMAC-SHA-256 secret from Platinum's `POST /v1/webhooks` (shown
   // once at registration). Optional — same backstop story as Daytona's.
   PLATINUM_WEBHOOK_SECRET: optStr,
@@ -1728,6 +1731,7 @@ export const config = {
   PLATINUM_API_URL:
     env.PLATINUM_TARGET === 'local' ? env.PLATINUM_API_URL_LOCAL : env.PLATINUM_API_URL,
   PLATINUM_TEMPLATE: env.PLATINUM_TEMPLATE,
+  PLATINUM_TEMPLATE_QUOTA: env.PLATINUM_TEMPLATE_QUOTA,
   PLATINUM_WEBHOOK_SECRET: env.PLATINUM_WEBHOOK_SECRET,
   // ─── Sandbox Provisioning (Platform) ──────────────────────────────────────
   KORTIX_URL: env.KORTIX_URL,

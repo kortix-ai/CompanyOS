@@ -12,7 +12,7 @@ import { Fragment, Suspense, useState, type ReactNode } from 'react';
 
 import { TERMS_LAST_UPDATED, TERMS_OF_SERVICE } from './terms-of-service';
 
-const LEGAL_LAST_UPDATED = 'November 4, 2026';
+const LEGAL_LAST_UPDATED = 'November 18, 2026';
 
 type LegalTab = 'imprint' | 'terms' | 'privacy';
 
@@ -193,6 +193,7 @@ const PRIVACY_TITLES = {
   'information-use': 'How we use it and our legal bases',
   cookies: 'Cookies and analytics',
   'information-sharing': 'Who we share it with',
+  'google-user-data': 'Google user data',
   'international-transfers': 'International transfers',
   retention: 'How long we keep it',
   'information-protection': 'How we protect it',
@@ -326,6 +327,142 @@ function PrivacyPolicy() {
           </li>
         </Bullets>
         <P>We do not sell personal information.</P>
+      </Section>
+
+      <Section id="google-user-data" title={PRIVACY_TITLES['google-user-data']}>
+        <P>
+          When you connect Gmail, Google Calendar, Google Drive, Google Docs, or Google Sheets, you
+          sign in to Google and grant Kortix access to some of your Google data (&quot;Google user
+          data&quot;). This section states how Kortix accesses, uses, stores, shares, and deletes
+          it. The rest of this policy also applies.
+        </P>
+        <P>
+          When you sign in to Kortix with Google, Kortix receives only your name, email address, and
+          profile picture. We use them for your Kortix account, as described in the rest of this
+          policy. Signing in gives Kortix no access to your Gmail, Calendar, Drive, Docs, or Sheets.
+          Connecting one of them is a separate step with its own Google consent screen.
+        </P>
+        <P>
+          Kortix&apos;s use and transfer to any other app of information received from Google APIs
+          will adhere to the{' '}
+          <a
+            href="https://developers.google.com/terms/api-services-user-data-policy"
+            className={LINK}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Google API Services User Data Policy
+          </a>
+          , including the Limited Use requirements.
+        </P>
+        <Clause lead="What we access">
+          <Bullets>
+            <li>
+              Gmail: messages, threads, drafts, labels, attachments, filters, and send-as addresses
+              with their signatures, and your Google contacts, so that an agent can read, search,
+              write, send, label, and organize email for you.
+            </li>
+            <li>
+              Google Calendar: calendars and events, so that an agent can list, create, change, and
+              delete events and find free time.
+            </li>
+            <li>
+              Google Drive: files, folders, comments, and sharing settings, so that an agent can
+              search, read, upload, export, move, share, and organize files.
+            </li>
+            <li>
+              Google Docs and Google Sheets: documents and spreadsheets, so that an agent can read,
+              create, and edit them.
+            </li>
+            <li>
+              Your Google account email address and name, to show which account a connection uses.
+            </li>
+          </Bullets>
+        </Clause>
+        <Clause lead="How we use it">
+          <Bullets>
+            <li>
+              Only to provide the features you use. An agent reads or changes your Google data when
+              you ask it to, or when an automation you set up runs (for example, a trigger that
+              checks Gmail for new messages that match your filter).
+            </li>
+            <li>
+              We do not use Google user data for advertising, we do not sell it, and we do not use it
+              to determine credit-worthiness or for lending.
+            </li>
+            <li>
+              We never use Google user data to develop, improve, or train generalized or
+              non-personalized AI or machine-learning models.
+            </li>
+          </Bullets>
+        </Clause>
+        <Clause lead="How we store and protect it">
+          <Bullets>
+            <li>
+              Your Google access and refresh tokens are encrypted at rest. Only Kortix servers use
+              them, and only to call Google APIs. Agent sandboxes never receive them.
+            </li>
+            <li>
+              Google data that an agent reads becomes part of that session&apos;s conversation and
+              of any files the agent writes in your project. We store it like other customer
+              content, as described in &quot;How long we keep it&quot; and &quot;How we protect
+              it&quot;.
+            </li>
+          </Bullets>
+        </Clause>
+        <Clause lead="Who we share it with">
+          <Bullets>
+            <li>
+              The AI model provider of the model that runs a session receives the Google data that
+              the agent reads in that session, to generate the agent&apos;s reply. Kortix-managed
+              models run at the providers on our{' '}
+              <Link href="/legal/subprocessors" className={LINK}>
+                subprocessors page
+              </Link>
+              . A model that you connect with your own API key or account runs at that provider,
+              under your agreement with it.
+            </li>
+            <li>Third-party services that you instruct an agent to send it to.</li>
+            <li>
+              Otherwise only to comply with the law, to protect people and the Services, or as part
+              of a merger, acquisition, or sale of assets, with notice to you.
+            </li>
+          </Bullets>
+        </Clause>
+        <Clause lead="Who can read it">
+          <P>
+            Kortix staff do not read your Google user data, except with your explicit consent for
+            specific data (for example, when you ask support to look at a session), when it is
+            necessary for security purposes such as investigating abuse, to comply with the law, or
+            when the data is aggregated and anonymized for internal operations.
+          </P>
+        </Clause>
+        <Clause lead="How to remove access and delete it">
+          <Bullets>
+            <li>
+              Disconnect the connector in Kortix. We revoke the token at Google and delete it from
+              our systems at once. You can also remove Kortix&apos;s access at{' '}
+              <a
+                href="https://myaccount.google.com/connections"
+                className={LINK}
+                target="_blank"
+                rel="noreferrer"
+              >
+                myaccount.google.com/connections
+              </a>
+              .
+            </li>
+            <li>
+              Delete a session to delete the Google data that its agent read. You can restore a
+              deleted session for 30 days. Then we delete its content, and it leaves our backups
+              within about 35 more days. Files that an agent wrote stay in your project until you
+              delete them.
+            </li>
+            <li>
+              To ask us to delete your Google user data, email <MailLink address={PRIVACY_EMAIL} />.
+            </li>
+          </Bullets>
+        </Clause>
       </Section>
 
       <Section id="international-transfers" title={PRIVACY_TITLES['international-transfers']}>

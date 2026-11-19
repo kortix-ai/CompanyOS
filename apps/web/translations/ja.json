@@ -2231,6 +2231,11 @@
       "resume": "再開",
       "agentIsWorking": "{agent} が作業中",
       "needsYouOn": "あなたの対応が必要: {header}"
+    },
+    "panel": {
+      "outputNew": "新規",
+      "outputUpdated": "更新済み",
+      "resizePane": "ペインのサイズを変更"
     }
   },
   "agents": {
@@ -22307,8 +22312,8 @@
     "toolsAfterInstall": "この {kind} はインストール後にツールを一覧します。",
     "typeFilterLabel": "コネクターの種類",
     "typeFilterAll": "すべての種類",
-    "moveComposioTitle": "{app} には独自の MCP サーバーがあります",
-    "moveComposioBody": "このコネクターは Composio 経由で動いています。{app} 自身の MCP サーバーに切り替えられます。一度サインインすると切り替わります。エージェント、トリガー、kortix.yaml は引き続き {slug} を使います。",
+    "moveComposioTitle": "{app} は Composio なしで接続できます",
+    "moveComposioBody": "このコネクターは Composio 経由で動いています。Kortix が直接接続できます。一度サインインすると切り替わります。エージェント、トリガー、kortix.yaml は引き続き {slug} を使います。",
     "moveComposioAction": "MCP に切り替え",
     "wayChannel": "Kortix に組み込み：{name} でエージェントにメッセージできます。第三者は不要です。そのページで一度設定します。",
     "waySetUp": "設定",
@@ -27419,7 +27424,9 @@
       "goals": "ゴール",
       "inbox": "受信トレイ",
       "memory": "メモリ",
-      "members": "メンバー"
+      "members": "メンバー",
+      "review": "レビュー",
+      "setup": "セットアップを完了する"
     },
     "sections": {
       "agents": "エージェント",

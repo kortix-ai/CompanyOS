@@ -196,7 +196,7 @@ export function CopyButton({
       {icon === 'none' && copied ? <SolidCheckIcon aria-hidden className="size-4" /> : null}
       {icon === 'shortcut' ? copied ? <SolidCheckIcon aria-hidden className={cn(key, 'shrink-0')} /> : <Kbd
             className={cn(
-              'bg-background/20 duration-fast text-inherit max-sm:hidden transition-[translate,background-color] in-data-[copy-key=down]:translate-y-px in-data-[copy-key=down]:bg-background/45 motion-reduce:in-data-[copy-key=down]:translate-y-0',
+              'border-none bg-background/20 font-sans duration-fast text-inherit max-sm:hidden transition-[translate,background-color] in-data-[copy-key=down]:translate-y-px in-data-[copy-key=down]:bg-background/45 motion-reduce:in-data-[copy-key=down]:translate-y-0',
               key,
             )}
           >{COPY_KEY.toUpperCase()}</Kbd> : null}

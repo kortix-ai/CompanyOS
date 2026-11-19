@@ -2231,6 +2231,11 @@
       "resume": "Reanudar",
       "agentIsWorking": "{agent} está trabajando",
       "needsYouOn": "Te necesita: {header}"
+    },
+    "panel": {
+      "outputNew": "Nuevo",
+      "outputUpdated": "Actualizado",
+      "resizePane": "Cambiar el tamaño del panel"
     }
   },
   "agents": {
@@ -22307,8 +22312,8 @@
     "toolsAfterInstall": "Esta {kind} lista sus herramientas tras instalar.",
     "typeFilterLabel": "Tipo de conector",
     "typeFilterAll": "Todos los tipos",
-    "moveComposioTitle": "{app} tiene su propio servidor MCP",
-    "moveComposioBody": "Este conector funciona a través de Composio. Puedes cambiarlo al servidor MCP propio de {app}: inicia sesión una vez y cambia. Los agentes, disparadores y kortix.yaml siguen usando {slug}.",
+    "moveComposioTitle": "{app} puede conectarse sin Composio",
+    "moveComposioBody": "Este conector funciona a través de Composio. Kortix puede conectarlo directamente: inicia sesión una vez y cambia. Los agentes, disparadores y kortix.yaml siguen usando {slug}.",
     "moveComposioAction": "Cambiar a MCP",
     "wayChannel": "Integrado en Kortix: la gente escribe al agente en {name}, sin terceros. Configúralo una vez en su página.",
     "waySetUp": "Configurar",
@@ -27419,7 +27424,9 @@
       "goals": "Objetivos",
       "inbox": "Bandeja",
       "memory": "Memoria",
-      "members": "Miembros"
+      "members": "Miembros",
+      "review": "Revisión",
+      "setup": "Terminar la configuración"
     },
     "sections": {
       "agents": "Agentes",

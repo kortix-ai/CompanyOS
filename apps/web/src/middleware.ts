@@ -991,8 +991,12 @@ export async function middleware(request: NextRequest) {
  */
 /** The hosts of the developer landing. */
 const LOOPMAXXING_HOSTS = new Set(['loopmaxxing.sh', 'www.loopmaxxing.sh']);
-/** What those hosts serve themselves, beside the landing at their root. */
-const LOOPMAXXING_SERVED = /^\/(?:setup\.md|factory\.md|install(?:\.sh)?|loops\/[^/]+)$/;
+/**
+ * What those hosts serve themselves, beside the landing at their root. The
+ * page's own API calls stay on the host: a redirect to kortix.com is
+ * cross-origin, and the response carries no CORS header.
+ */
+const LOOPMAXXING_SERVED = /^\/(?:setup\.md|factory\.md|install(?:\.sh)?|loops\/[^/]+|api\/github-stars)$/;
 
 /** Read at request time (dynamic key), so one image serves dev with it and prod without. */
 function loopmaxxingEnabled(): boolean {

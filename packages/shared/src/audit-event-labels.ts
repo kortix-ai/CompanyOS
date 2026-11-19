@@ -42,6 +42,7 @@ export const AUDIT_EVENT_LABELS: Readonly<Record<string, string>> = {
   'billing.split_off.reverse': 'Reversed split-off workspace billing',
   'admin.account.trial.extend': 'Extended account trial',
   'account.closed': 'Closed account: plan reset to Free',
+  'eval.trial_workspace.plan': 'Put an eval trial workspace on Credits',
   'enterprise.contract.activate': 'Activated Enterprise contract',
   'enterprise.contract.end.*': 'Enterprise contract ended',
   'enterprise.contract.end.operator': 'Enterprise contract ended by an operator',

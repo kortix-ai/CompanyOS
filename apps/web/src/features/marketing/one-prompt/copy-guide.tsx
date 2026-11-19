@@ -12,6 +12,7 @@ import { createContext, useCallback, useContext, useRef, useState, useSyncExtern
 import { MarketingButton } from '@/features/marketing/kit/marketing-button';
 
 import { LoopmaxxingWordmark } from './hoop';
+import { HOOP_PALETTE } from './hoop-palette';
 
 /** The coding agents the dialog shows, each with its own mark. A "+" closes the row: any agent with a shell runs the prompt. */
 const AGENTS: ReadonlyArray<{ name: string; mark: ReactNode }> = [
@@ -73,13 +74,15 @@ export function CopyGuideProvider({ children }: { children: ReactNode }) {
                 <LoopmaxxingWordmark />
               </div>
             </div>
-            <div className="flex flex-col items-center gap-3">
-              <ModalTitle className="text-foreground inline-flex items-center gap-2.5 text-2xl font-medium tracking-tight sm:text-3xl">
-                <SolidCheckIcon aria-hidden className="size-6" />
-                Prompt copied
-              </ModalTitle>
-              <ModalDescription className="text-muted-foreground text-base sm:text-lg">
-                {touch ? 'Run it on your computer: send it to yourself.' : 'Open your coding agent, paste it and hit Enter.'}
+            <div className="flex w-full flex-col items-center gap-5 px-6">
+              <ModalTitle className="sr-only">Prompt copied</ModalTitle>
+              {/* What is on the clipboard: the prompt itself, one line, with the check. */}
+              <div className="bg-card flex max-w-full min-w-0 items-center gap-3 rounded-full sm:max-w-xl py-2.5 pr-5 pl-3">
+                <SolidCheckIcon aria-hidden className="size-5.5 shrink-0" style={{ color: HOOP_PALETTE[2] }} />
+                <span className="text-muted-foreground min-w-0 truncate font-mono text-sm">{text}</span>
+              </div>
+              <ModalDescription className="text-muted-foreground text-base">
+                {touch ? 'Run it on your computer: send it to yourself.' : 'On your clipboard. Paste it into your coding agent and hit Enter.'}
               </ModalDescription>
             </div>
             <ul className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 px-6">

@@ -175,13 +175,21 @@ describe('ModelPickerSheet', () => {
 
   test('the Agent tab names the project roster by its configured titles (KRTX-4980)', async () => {
     const { threadAgents } = await import('@/lib/session/composer-config');
-    const agents: ProjectConfigSummary['agents'] = [
-      { name: 'mykortix', path: 'a', title: 'mykortix', description: null, mode: 'primary' },
-      { name: 'github-pr-reviewer', path: 'b', title: 'GitHub PR Reviewer', description: null, mode: 'primary' },
-      { name: 'chief-of-staff', path: 'c', title: null, description: null, mode: 'primary' },
-    ];
-    // The roster reads only `default_agent` and `agents` of the project config.
-    const config = { default_agent: 'mykortix', agents } as unknown as ProjectConfigSummary;
+    const config: ProjectConfigSummary = {
+      is_kortix_repo: true,
+      signals: {},
+      manifest_raw: null,
+      default_agent: 'mykortix',
+      agent_discovery: 'declarative',
+      agents: [
+        { name: 'mykortix', path: 'a', title: 'mykortix', description: null, mode: 'primary' },
+        { name: 'github-pr-reviewer', path: 'b', title: 'GitHub PR Reviewer', description: null, mode: 'primary' },
+        { name: 'chief-of-staff', path: 'c', title: null, description: null, mode: 'primary' },
+      ],
+      skills: [],
+      commands: [],
+      env: { required: [], optional: [] },
+    };
     const r = await render({ ...baseProps, agent: { ...baseProps.agent, agents: threadAgents(config), activeName: 'mykortix' } });
     r.ref.current?.open();
     await act(async () => (pickerProps(r).tabs as { onSelect: (i: number) => void }).onSelect(0));

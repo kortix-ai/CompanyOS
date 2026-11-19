@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import React from 'react';
-import { act, create } from 'react-test-renderer';
+import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 type Props = React.PropsWithChildren<Record<string, unknown>>;
@@ -32,23 +32,25 @@ test('the tabbed picker keeps a full-height scrolling list and selects the final
   const onSelect = mock();
   const onTab = mock();
   const options = Array.from({ length: 40 }, (_, i) => ({ key: `model-${i}`, label: `Model ${i}` }));
-  let tree: ReturnType<typeof create>;
+  const rendered: { tree?: ReactTestRenderer } = {};
   await act(async () => {
-    tree = create(<PickerSheet title="Model" options={options} activeKey="model-0" onSelect={onSelect}
+    rendered.tree = create(<PickerSheet title="Model" options={options} activeKey="model-0" onSelect={onSelect}
       searchLabel="Search models" emptyLabel="No matching models" closeOnSelect={false}
       tabs={{ items: [], activeIndex: 1, onSelect: onTab }} />);
   });
-  const modal = tree!.root.find((node: { type: unknown }) => node.type === 'modal');
+  const { tree } = rendered;
+  if (!tree) throw new Error('PickerSheet did not render');
+  const modal = tree.root.find((node: { type: unknown }) => node.type === 'modal');
   expect(modal.props.snapPoints).toEqual(['100%']);
   expect(modal.props.enableDynamicSizing).toBe(false);
-  const scroll = tree!.root.find((node: { type: unknown }) => node.type === 'scroll');
+  const scroll = tree.root.find((node: { type: unknown }) => node.type === 'scroll');
   expect(scroll.props.style).toEqual({ flex: 1 });
   expect(scroll.props.contentContainerStyle.paddingBottom).toBe(126);
-  const rows = tree!.root.findAll((node: { type: unknown }) => node.type === 'row');
+  const rows = tree.root.findAll((node: { type: unknown }) => node.type === 'row');
   expect(rows).toHaveLength(40);
   await act(async () => rows[39].props.onPress());
   expect(onSelect).toHaveBeenCalledWith('model-39');
-  await act(async () => tree!.root.find((node: { type: unknown }) => node.type === 'tabs').props.onSelect(0));
+  await act(async () => tree.root.find((node: { type: unknown }) => node.type === 'tabs').props.onSelect(0));
   expect(onTab).toHaveBeenCalledWith(0);
-  await act(async () => tree!.unmount());
+  await act(async () => tree.unmount());
 });

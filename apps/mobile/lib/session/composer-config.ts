@@ -92,6 +92,8 @@ export interface ComposerChip {
 export function composerChip(i: {
   connectModel: boolean;
   agentName: string | null | undefined;
+  /** The agent's configured `title`, which web's selector shows over its name. */
+  agentTitle?: string | null;
   modelName: string | null | undefined;
   /** The agent the last send used, shown until `agentName` resolves. */
   pendingAgentName?: string | null;
@@ -101,7 +103,7 @@ export function composerChip(i: {
   if (i.connectModel) return { label: 'Connect model', variant: 'secondary' };
   const agentName = i.agentName || (i.agentsLoading ? i.pendingAgentName : null);
   if (!agentName && i.agentsLoading) return null;
-  const label = agentName ? agentDisplayName(agentName) : i.modelName;
+  const label = agentName ? agentDisplayName(agentName, i.agentName ? i.agentTitle : null) : i.modelName;
   return label ? { label, variant: 'ghost' } : null;
 }
 
@@ -149,7 +151,7 @@ export function latestAssistantAgent(messages: ReadonlyArray<{ role: string; age
   return null;
 }
 
-export function agentDisplayName(name: string | undefined, title?: string): string {
+export function agentDisplayName(name: string | undefined, title?: string | null): string {
   return name ? sharedAgentDisplayName(name, title) : 'Agent';
 }
 

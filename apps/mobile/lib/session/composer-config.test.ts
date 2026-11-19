@@ -102,6 +102,16 @@ describe('composer chip (KRTX-247)', () => {
       composerChip({ connectModel: false, agentName: 'plan', pendingAgentName: 'kortix', agentsLoading: false, modelName: 'Sonnet 5' }),
     ).toEqual({ label: 'Plan', variant: 'ghost' });
   });
+
+  test('the chip names the selected agent by its configured title, like the picker row (KRTX-4980)', () => {
+    expect(
+      composerChip({ connectModel: false, agentName: 'github-pr-reviewer', agentTitle: 'GitHub PR Reviewer', modelName: 'Sonnet 5' }),
+    ).toEqual({ label: 'GitHub PR Reviewer', variant: 'ghost' });
+    // The title belongs to the resolved agent, never to the pending one.
+    expect(
+      composerChip({ connectModel: false, agentName: null, agentTitle: 'GitHub PR Reviewer', pendingAgentName: 'kortix', agentsLoading: true, modelName: 'Sonnet 5' }),
+    ).toEqual({ label: 'Kortix', variant: 'ghost' });
+  });
 });
 
 describe('thinking level names', () => {

@@ -49,8 +49,8 @@ export interface KeyboardShortcutPreferences {
 export interface UserPreferences {
   keyboard: KeyboardShortcutPreferences;
   /**
-   * The palette used in light mode and in dark mode — defaults 'pure-light'
-   * and 'pure-dark'. The mode itself (light / dark / system) stays in
+   * The palette used in light mode and in dark mode — defaults 'light'
+   * and 'dark' (Kortix light / Kortix dark). The mode itself (light / dark / system) stays in
    * `next-themes`; see `lib/interface-themes.ts`. Legacy persisted preferences
    * predate these keys, so read sites go through `normalizeLightTheme` /
    * `normalizeDarkTheme`.

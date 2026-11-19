@@ -100,7 +100,7 @@ export function AccountPane({
           className={cn(
             // A container: the members grid follows the pane's width, not the
             // viewport (the app sidebar and the settings rail sit beside it).
-            '@container w-full',
+            '@container mx-auto w-full',
             width === 'fluid' ? 'space-y-5' : 'space-y-10',
             WIDTH_CLASS[width],
           )}

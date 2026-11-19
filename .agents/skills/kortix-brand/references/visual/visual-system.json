@@ -156,7 +156,7 @@
       "sidebar-ring": { "ref": "ring", "utility": "ring-sidebar-ring", "mobile": true, "use": "Focus ring in the sidebar. Follows --ring, so a white-label focus color reaches the sidebar." }
     },
     "accents": {
-      "rule": "The only sources of hue in product UI. Theme-invariant today (same value in light and dark). Tinted fill = /15, glyph = solid. Two opacities, no others.",
+      "rule": "The only sources of hue in product UI. Each accent has a light and a dark value (J-7): the light value is darker so it holds contrast on white. Tinted fill = /15, glyph = solid. Two opacities, no others.",
       "kortix-base": {
         "ref": "ring",
         "hex": "#0099ff",
@@ -166,19 +166,20 @@
         "web_value": "var(--color-ring)",
         "mobile_value": "var(--ring)"
       },
-      "kortix-green": { "value": "oklch(0.581 0.165 146.619)", "hex": "#199338", "utility": "text-kortix-green", "mobile": true, "meaning": "success, running, connected, merged" },
-      "kortix-red": { "value": "oklch(0.648 0.202 24.745)", "hex": "#f14b4c", "utility": "text-kortix-red", "mobile": true, "meaning": "error, failed" },
-      "kortix-orange": { "value": "oklch(0.691 0.142 71.784)", "hex": "#d18b19", "utility": "text-kortix-orange", "mobile": true, "meaning": "warning, needs attention" },
+      "kortix-green": { "light": "oklch(0.48 0.143 146.619)", "dark": "oklch(0.581 0.165 146.619)", "hex": ["#037225", "#199338"], "mobile_value": "135 70.5% 33.8%", "utility": "text-kortix-green", "mobile": true, "meaning": "success, running, connected, merged" },
+      "kortix-red": { "light": "oklch(0.52 0.202 24.745)", "dark": "oklch(0.648 0.202 24.745)", "hex": ["#c21425", "#f14b4c"], "mobile_value": "360 85.3% 62%", "utility": "text-kortix-red", "mobile": true, "meaning": "error, failed" },
+      "kortix-orange": { "light": "oklch(0.615 0.13 71.784)", "dark": "oklch(0.691 0.142 71.784)", "hex": ["#b47508", "#d18b19"], "mobile_value": "37.1 78.7% 45.9%", "utility": "text-kortix-orange", "mobile": true, "meaning": "warning, needs attention" },
       "kortix-yellow": {
-        "value": "oklch(0.732 0.15 90.688)",
-        "hex": "#cca300",
+        "light": "oklch(0.609 0.124 90.688)",
+        "dark": "oklch(0.732 0.15 90.688)",
+        "hex": ["#9f7f02", "#cca300"], "mobile_value": "48 100% 40%",
         "utility": "text-kortix-yellow",
         "mobile": true,
         "meaning": "pending",
-        "note": "Slightly outside sRGB; displays clip to #cca300. 2.38:1 on #ffffff."
+        "note": "The dark value is slightly outside sRGB and clips to #cca300. The light value #9f7f02 is 3.81:1 on #ffffff."
       },
-      "kortix-blue": { "value": "oklch(0.652 0.177 252.624)", "hex": "#2b91f7", "utility": "text-kortix-blue", "mobile": true, "meaning": "info, open, in review" },
-      "kortix-purple": { "value": "oklch(0.675 0.131 306.212)", "hex": "#ab80d6", "utility": "text-kortix-purple", "mobile": true, "meaning": "reserved: no default meaning" }
+      "kortix-blue": { "light": "oklch(0.61 0.177 252.624)", "dark": "oklch(0.652 0.177 252.624)", "hex": ["#1784e9", "#2b91f7"], "mobile_value": "210 93% 56.9%", "utility": "text-kortix-blue", "mobile": true, "meaning": "info, open, in review" },
+      "kortix-purple": { "light": "oklch(0.622 0.131 306.212)", "dark": "oklch(0.675 0.131 306.212)", "hex": ["#9b70c5", "#ab80d6"], "mobile_value": "270 51.3% 67.1%", "utility": "text-kortix-purple", "mobile": true, "meaning": "reserved: no default meaning" }
     },
     "status_mobile_only": {
       "rule": "Web uses kortix-green and kortix-orange for status. Mobile aliases its semantic success and warning tokens to the same accents (J-4).",
@@ -461,7 +462,7 @@
       "change": "Mobile keeps stock spacing (decided), but also stock type (text-xs 12 vs 13px) and radius (xl 12 vs 14px). Decide whether type and radius follow web."
     },
     { "id": "J-6", "status": "open", "change": "text-md line-height uses 0.9375 against a 0.9rem size. Fix the denominator or delete text-md (8 uses)." },
-    { "id": "J-7", "status": "open", "change": "kortix-* accents are theme-invariant and measure 2.38-3.98:1 on #ffffff (yellow lowest). Decide on light/dark pairs for text use." },
+    { "id": "J-7", "status": "resolved", "change": "Each kortix-* accent has a light and a dark value. Light green/red 4.55:1 on #dedede, the darkest light fill token (6.1:1 on #ffffff); orange/yellow/blue/purple 3.05:1 on #e6e6e6. Dark keeps the old values. Mobile stays theme-invariant (mobile_value) until native theme.ts follows." },
     {
       "id": "J-8",
       "date": "2026-10-01",

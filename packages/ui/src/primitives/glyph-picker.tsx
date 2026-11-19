@@ -155,7 +155,7 @@ export function GlyphPicker({
           placeholder="Search icons…"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          className="text-foreground placeholder:text-muted-foreground/70 h-full w-full bg-transparent text-sm outline-none [&::-webkit-search-cancel-button]:appearance-none"
+          className="text-foreground placeholder:text-muted-foreground h-full w-full bg-transparent text-sm outline-none [&::-webkit-search-cancel-button]:appearance-none"
         />
       </div>
 
@@ -299,7 +299,7 @@ function CustomColor({
       <div className="mb-3 flex items-center gap-3">
         <span aria-hidden className="size-6 shrink-0 rounded-full" style={{ background: hex }} />
         <label className="flex min-w-0 flex-1 items-center gap-2.5 text-sm">
-          <span className="text-muted-foreground/80">HEX</span>
+          <span className="text-muted-foreground">HEX</span>
           <span className="text-foreground">#</span>
           <input
             aria-label="Hex colour"

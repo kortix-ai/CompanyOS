@@ -272,9 +272,8 @@ function expectNoInbox(html: string) {
 
 test('the desktop sidebar has no Inbox row (KRTX-4949)', async () => {
   await mountSidebar(1280);
-  const html = container!.innerHTML;
-  expect(html).toContain('newSession');
-  expectNoInbox(html);
+  expect(document.body.innerHTML).toContain('newSession');
+  expectNoInbox(document.body.innerHTML);
 });
 
 test('the mobile sheet has no Inbox row (KRTX-4949)', async () => {
@@ -286,12 +285,13 @@ test('the mobile sheet has no Inbox row (KRTX-4949)', async () => {
 test('with chat on, neither the Spaces list nor the opened More group has an Inbox row (KRTX-4949)', async () => {
   channelsOn = true;
   await mountSidebar(1280);
-  expectNoInbox(container!.innerHTML);
+  expectNoInbox(document.body.innerHTML);
   const more = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'more');
+  expect(more).toBeDefined();
   await act(async () => {
-    more!.click();
+    more?.click();
   });
-  const html = container!.innerHTML;
+  const html = document.body.innerHTML;
   // Review stays the first row of the Spaces list.
   expect(html).toContain('href="/workspaces/synthetic-project/review"');
   expectNoInbox(html);

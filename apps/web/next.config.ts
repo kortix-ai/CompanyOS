@@ -1087,7 +1087,9 @@ const nextConfig = (): NextConfig => ({
       },
       {
         source: '/ingest/:path*',
-        destination: 'https://eu.i.posthog.com/:path*',
+        // POSTHOG_INGEST_ORIGIN points a local run at a capture sink
+        // (product-analytics skill, "Verify an event"). Production leaves it unset.
+        destination: `${process.env.POSTHOG_INGEST_ORIGIN || 'https://eu.i.posthog.com'}/:path*`,
       },
       // /docs is a Blume static build in public/docs/. Astro writes clean URLs as
       // directories, and Next's static handler does not resolve a directory index,

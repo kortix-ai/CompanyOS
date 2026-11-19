@@ -119,7 +119,7 @@ export function CatalogCard({
           </>
         ) : null}
         {meta ? (
-          <span className="text-muted-foreground/80 flex flex-wrap items-center gap-x-2 gap-y-0.5 pt-1 text-xs">
+          <span className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5 pt-1 text-xs">
             {meta}
           </span>
         ) : null}

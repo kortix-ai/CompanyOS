@@ -16,6 +16,14 @@
  *    the query. Every URL is reduced before it is sent: own-origin paths under
  *    the app become a route template, only campaign parameters survive the
  *    query, and the hash never leaves.
+ * 4. Session replay (decision 2026-11-19). A visitor is recorded unless they
+ *    rejected analytics in the banner, within the free plan's 5,000
+ *    recordings a month: every session of a person who signed up in the last
+ *    14 days, a tenth of other signed-in sessions, a fiftieth of anonymous
+ *    ones. For a signed-in person, and on every private or sign-in page, the
+ *    recording hides all text, every input, every attribute that can carry
+ *    text, link targets off our origin and image sources; frames are blocked.
+ *    Page URLs follow rule 3.
  */
 
 import { locales } from '@/i18n/catalog.mjs';
@@ -49,9 +57,17 @@ function isLocalHost(hostname: string): boolean {
   );
 }
 
+/**
+ * Hosts whose sessions may be recorded. loopmaxxing.sh is not one yet: its
+ * CookieYes banner does not load there, so a visitor could not reject.
+ */
+const REPLAY_HOSTS = new Set(['kortix.com', 'www.kortix.com']);
+
 export interface PostHogProject {
   key: string;
   environment: AnalyticsEnvironment;
+  /** Session replay may run on this host (`shouldRecordSession`). */
+  replay: boolean;
 }
 
 /**
@@ -65,9 +81,9 @@ export function posthogProjectForHost(
 ): PostHogProject | null {
   const host = hostname.toLowerCase();
   const environment = HOST_ENVIRONMENTS[host];
-  if (environment) return { key: POSTHOG_PROJECT_KEY, environment };
+  if (environment) return { key: POSTHOG_PROJECT_KEY, environment, replay: REPLAY_HOSTS.has(host) };
   if (isLocalHost(host) && localKey?.startsWith('phc_')) {
-    return { key: localKey, environment: 'local' };
+    return { key: localKey, environment: 'local', replay: true };
   }
   return null;
 }
@@ -129,6 +145,11 @@ const ROUTE_WORDS = new Set([
   'spaces',
   'settings',
   'capture',
+  'inbox',
+  'panel',
+  'redeem',
+  'discord',
+  'install',
   'devices',
   'invites',
   'slack',
@@ -292,4 +313,260 @@ export function scrubEvent<T extends ScrubbableEvent>(event: T, origin: string):
     }
   }
   return event;
+}
+
+// ── Session replay (rule 4) ──────────────────────────────────────────────
+
+/** Days after sign-up during which every session is recorded: activation happens here. */
+export const REPLAY_NEW_USER_DAYS = 14;
+
+/**
+ * The share of sessions recorded, by who the visitor is. The free plan stops
+ * at 5,000 recordings a month. Traffic in the week to 2026-11-19: 2,097
+ * signed-in sessions (1,144 from people in their first three weeks) and
+ * ~4,900 anonymous ones. Each rate is at least the one after it, so a
+ * session recorded while anonymous stays recorded after sign-in.
+ */
+export const REPLAY_RATES = { new_user: 1, signed_in: 0.1, anonymous: 0.02 } as const;
+export type ReplayTier = keyof typeof REPLAY_RATES;
+
+const DAY_MS = 86_400_000;
+
+/** `signedUpAt`: the Supabase user's `created_at`; null when nobody is signed in. */
+export function replayTier(signedUpAt: string | null, now: number): ReplayTier {
+  if (signedUpAt === null) return 'anonymous';
+  const created = Date.parse(signedUpAt);
+  return Number.isFinite(created) && now - created < REPLAY_NEW_USER_DAYS * DAY_MS
+    ? 'new_user'
+    : 'signed_in';
+}
+
+/** A fraction in [0, 1) that depends only on the session id (FNV-1a, 32 bit). */
+export function sessionFraction(sessionId: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < sessionId.length; i++) {
+    hash ^= sessionId.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0) / 0x1_0000_0000;
+}
+
+/** Whether this session is recorded. A rejection in the banner always wins. */
+export function shouldRecordSession(input: {
+  replay: boolean;
+  consent: AnalyticsConsent;
+  tier: ReplayTier;
+  sessionId: string;
+}): boolean {
+  if (!input.replay || input.consent === 'denied') return false;
+  return sessionFraction(input.sessionId) < REPLAY_RATES[input.tier];
+}
+
+function withoutLocale(pathname: string): string {
+  const segments = pathname.split('/');
+  return segments.length > 1 && (locales as readonly string[]).includes(segments[1]!)
+    ? `/${segments.slice(2).join('/')}`
+    : pathname;
+}
+
+/**
+ * Whether a recording hides text here. A signed-in person sees their own
+ * workspace on every page; a sign-in page shows the email being typed.
+ */
+export function replayMasksPage(pathname: string, signedIn: boolean): boolean {
+  if (signedIn || isPrivatePath(pathname)) return true;
+  const path = withoutLocale(pathname);
+  return path === '/auth' || path.startsWith('/auth/');
+}
+
+/** Frames, plugins and anything a component marks with `ph-no-capture` record as an empty box. */
+export const REPLAY_BLOCK_SELECTOR = 'iframe, object, embed';
+
+const REPLAY_MASK = '***';
+
+/** Every visible character becomes `*`; spaces stay, so the layout keeps its shape. */
+export function maskReplayText(text: string): string {
+  return text.replace(/\S/g, '*');
+}
+
+/**
+ * Attributes a masked recording keeps unchanged: layout, state and styling.
+ * None of them carries text a person wrote or named. Everything else that is
+ * not a URL (`title`, `alt`, `aria-label`, `placeholder`, `value`, `id`,
+ * `name`, `content`, other `data-*`) becomes `***`.
+ */
+const REPLAY_KEPT_ATTRIBUTES = new Set([
+  'class',
+  'role',
+  'type',
+  'dir',
+  'lang',
+  'tabindex',
+  'charset',
+  'rel',
+  'as',
+  'media',
+  'sizes',
+  'crossorigin',
+  'loading',
+  'decoding',
+  'target',
+  'disabled',
+  'hidden',
+  'open',
+  'checked',
+  'selected',
+  'readonly',
+  'required',
+  'multiple',
+  'draggable',
+  'contenteditable',
+  'spellcheck',
+  'inputmode',
+  'colspan',
+  'rowspan',
+  'cols',
+  'rows',
+  'span',
+  'start',
+  'reversed',
+  // SVG geometry and paint.
+  'width',
+  'height',
+  'viewbox',
+  'preserveaspectratio',
+  'xmlns',
+  'xmlns:xlink',
+  'version',
+  'focusable',
+  'd',
+  'fill',
+  'fill-rule',
+  'fill-opacity',
+  'clip-rule',
+  'clip-path',
+  'mask',
+  'stroke',
+  'stroke-width',
+  'stroke-linecap',
+  'stroke-linejoin',
+  'stroke-dasharray',
+  'stroke-dashoffset',
+  'stroke-opacity',
+  'stroke-miterlimit',
+  'opacity',
+  'transform',
+  'points',
+  'x',
+  'y',
+  'x1',
+  'y1',
+  'x2',
+  'y2',
+  'cx',
+  'cy',
+  'r',
+  'rx',
+  'ry',
+  'offset',
+  'stop-color',
+  'stop-opacity',
+  'gradientunits',
+  'gradienttransform',
+  'vector-effect',
+  'shape-rendering',
+  // State that styling reads.
+  'aria-expanded',
+  'aria-selected',
+  'aria-checked',
+  'aria-pressed',
+  'aria-hidden',
+  'aria-disabled',
+  'aria-current',
+  'aria-haspopup',
+  'aria-modal',
+  'aria-orientation',
+  'aria-busy',
+  'aria-invalid',
+  'aria-level',
+  'aria-valuenow',
+  'aria-valuemin',
+  'aria-valuemax',
+  'aria-sort',
+  'aria-live',
+  'data-state',
+  'data-side',
+  'data-align',
+  'data-orientation',
+  'data-slot',
+  'data-disabled',
+  'data-highlighted',
+  'data-selected',
+  'data-active',
+  'data-variant',
+  'data-size',
+  'data-theme',
+  'data-sidebar',
+  'data-collapsible',
+  'data-open',
+  'data-closed',
+  'data-starting-style',
+  'data-ending-style',
+]);
+
+/** Attributes whose value is one URL. */
+const REPLAY_URL_ATTRIBUTES = new Set([
+  'href',
+  'src',
+  'action',
+  'formaction',
+  'poster',
+  'xlink:href',
+  'data',
+  'cite',
+  'background',
+]);
+
+/** Attributes whose value is a list of URLs: dropped. */
+const REPLAY_URL_LIST_ATTRIBUTES = new Set(['srcset', 'imagesrcset', 'ping']);
+
+/**
+ * A link or source in a masked recording. Our origin keeps its path (a route
+ * template on private pages) without query or hash: our own assets still
+ * render. Another origin keeps only its host. `mailto:`, `data:`, `blob:`
+ * and the rest become empty.
+ */
+export function replayUrl(value: string, origin: string): string {
+  if (value.startsWith('#')) return '#';
+  let url: URL;
+  try {
+    url = new URL(value, origin);
+  } catch {
+    return '';
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
+  if (url.origin !== origin) return `${url.origin}/`;
+  return `${url.origin}${sanitizePath(url.pathname)}`;
+}
+
+/**
+ * The value a recording stores for one attribute. rrweb's own attributes
+ * (`rr_width`, `_cssText`, …) always pass: they hold layout and our CSS.
+ * Unmasked pages hide only `value`, which rrweb records unmasked for hidden
+ * inputs.
+ */
+export function replayAttribute(
+  name: string,
+  value: string,
+  masked: boolean,
+  origin: string,
+): string {
+  const key = name.toLowerCase();
+  if (!value || key.startsWith('rr_') || key.startsWith('_')) return value;
+  if (key === 'value') return REPLAY_MASK;
+  if (!masked || REPLAY_KEPT_ATTRIBUTES.has(key)) return value;
+  if (key === 'style') return value.replace(/url\([^)]*\)/gi, 'url()');
+  if (REPLAY_URL_ATTRIBUTES.has(key)) return replayUrl(value, origin);
+  if (REPLAY_URL_LIST_ATTRIBUTES.has(key)) return '';
+  return REPLAY_MASK;
 }

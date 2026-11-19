@@ -40,7 +40,7 @@ import {
   MagnifyingGlassIcon,
   NavigationArrowIcon,
 } from '@phosphor-icons/react';
-import { UiLink as Link } from '../../providers/ui-provider';
+import { UiLink as Link, useUiPathname } from '../../providers/ui-provider';
 import { useWorkspaceSettingsRailStore } from '../../internal/stores/workspace-settings-rail-store';
 import { SettingsReturnTracker, SidebarDrill } from './sidebar-drill';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
@@ -52,6 +52,11 @@ import { Close } from '../../icons/close';
 const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
 const modSymbol = isMac ? '⌘' : 'Ctrl';
 
+
+/** Workspace pages with a centered bottom composer: home and one session (not the Sessions list). */
+const CENTERED_COMPOSER_ROUTE = /\/workspaces\/[^/]+(?:\/sessions\/[^/]+(?:\/.*)?)?\/?$/;
+/** Workspace pages whose composer runs to the right edge: chat, DMs, channels, Spaces. */
+const FULL_COMPOSER_ROUTE = /\/workspaces\/[^/]+\/(?:c|chat|dm|spaces)(?:\/.*)?$/;
 export function ProjectSidebar({
   projectId,
   menu,
@@ -82,6 +87,7 @@ export function ProjectSidebar({
   const { state, setOpenMobile, toggleSidebar, peek } = useSidebar();
   const isExpanded = state === 'expanded';
   const isMobile = useIsMobile();
+  const pathname = useUiPathname();
   const sessionsGroupRef = useRef<HTMLDivElement>(null);
   // Mounted outside <Sidebar>: the mobile sheet unmounts its content on close.
   const [computerConnectOpen, setComputerConnectOpen] = useState(false);
@@ -172,13 +178,17 @@ export function ProjectSidebar({
                   desktop app, the phone app. An empty list collapses. */}
               <li className="not-has-[li]:hidden">
                 <ul className="pb-1">
-                  <ProjectPromoCards
-                    projectId={projectId}
-                    onOpenMcp={() => setConnectMcpOpen(true)}
-                    onOpenComputer={() => setComputerConnectOpen(true)}
-                    onOpenChrome={chrome ? () => useAppsModalStore.getState().setOpen(true) : undefined}
-                    onOpenDownloadApp={onOpenDownloadApp}
-                  />
+                  {/* Phone only: on desktop the card floats in the window's
+                      corner (mounted below, outside the sidebar). */}
+                  {isMobile ? (
+                    <ProjectPromoCards
+                      projectId={projectId}
+                      onOpenMcp={() => setConnectMcpOpen(true)}
+                      onOpenComputer={() => setComputerConnectOpen(true)}
+                      onOpenChrome={chrome ? () => useAppsModalStore.getState().setOpen(true) : undefined}
+                      onOpenDownloadApp={onOpenDownloadApp}
+                    />
+                  ) : null}
                 </ul>
               </li>
               {/* Last (Jay, 2026-09-03). It is the only paid call to action in
@@ -387,6 +397,26 @@ export function ProjectSidebar({
       <SidebarRail aria-label={t('resize')} title={t('resizeHelp')} />
     </Sidebar>
     <SettingsReturnTracker projectId={projectId} />
+    {/* Desktop: the promo card floats in the window's bottom-right corner,
+        outside the sidebar and its More disclosure, so it shows whether or
+        not the sidebar or More is open. */}
+    {isMobile ? null : (
+      <ProjectPromoCards
+        projectId={projectId}
+        onOpenMcp={() => setConnectMcpOpen(true)}
+        onOpenComputer={() => setComputerConnectOpen(true)}
+        onOpenChrome={chrome ? () => useAppsModalStore.getState().setOpen(true) : undefined}
+        onOpenDownloadApp={onOpenDownloadApp}
+        variant="floating"
+        composer={
+          FULL_COMPOSER_ROUTE.test(pathname)
+            ? 'full'
+            : CENTERED_COMPOSER_ROUTE.test(pathname)
+              ? 'centered'
+              : undefined
+        }
+      />
+    )}
     <ComputerConnectModal
       projectId={projectId}
       open={computerConnectOpen}

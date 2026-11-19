@@ -65,7 +65,7 @@ describe('startPostHog — the surveys display contract', () => {
 describe('startPostHog — the session replay contract', () => {
   type Recording = {
     maskAllInputs?: boolean;
-    maskTextFn?: (text: string) => string;
+    maskTextFn?: (text: string, element?: HTMLElement) => string;
     maskAttributeFn?: (name: string, value: string) => string;
   };
   const recording = () => inits[0]?.session_recording as Recording;
@@ -75,9 +75,30 @@ describe('startPostHog — the session replay contract', () => {
     expect(recording().maskAllInputs).toBe(true);
   });
 
+  /** A text node's parent, inside or outside a message (`REPLAY_CONTENT_SELECTOR`). */
+  const element = (inContent: boolean) =>
+    ({ closest: () => (inContent ? {} : null) }) as unknown as HTMLElement;
+
   test('on a private page the recording hides text and text-bearing attributes', () => {
-    expect(recording().maskTextFn?.('Acme roadmap')).toBe('**** *******');
-    expect(recording().maskAttributeFn?.('title', 'Acme roadmap')).toBe('***');
+    expect(recording().maskTextFn?.('Zephyrine roadmap', element(false))).toBe('********* *******');
+    expect(recording().maskAttributeFn?.('title', 'Zephyrine roadmap')).toBe('***');
     expect(recording().maskAttributeFn?.('class', 'flex')).toBe('flex');
+  });
+
+  test('our interface text from the English catalog stays readable', () => {
+    expect(recording().maskTextFn?.('Available', element(false))).toBe('Available');
+    expect(recording().maskTextFn?.('API key · 14 models', element(false))).toBe(
+      'API key · 14 models',
+    );
+    expect(recording().maskAttributeFn?.('aria-label', 'Show more')).toBe('Show more');
+  });
+
+  test('inside a message or document even our interface text is hidden', () => {
+    expect(recording().maskTextFn?.('Available', element(true))).toBe('*********');
+  });
+
+  test('click text reaches before_send, which keeps only interface text on private pages', () => {
+    expect(inits[0]?.mask_all_text).toBe(false);
+    expect(inits[0]?.mask_all_element_attributes).toBe(true);
   });
 });

@@ -3428,3 +3428,37 @@ flow(
     }
   },
 );
+
+flow('TRG-44', {
+  domain: 'triggers',
+  routes: [
+    'GET /v1/workspaces/:projectId/sessions/:sessionId',
+    'GET /v1/workspaces/:projectId/sessions',
+    'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+    'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+    'GET /v1/workspaces/:projectId/triggers/:slug/runs',
+  ],
+}, async (ctx) => {
+  const team = await ctx.fixtures.team({ enterprise: true });
+  const project = await team.project();
+  const member = await team.addMember('member');
+  if (!member.userId) throw new Error('reader fixture needs a member');
+  await team.grantProjectRole(project.id, member.userId, 'member');
+  const ownerId = ctx.P.OWNER.userId;
+  if (!ownerId) throw new Error('reader fixture needs an owner');
+  const sessionId = await createDatabaseSession(ctx.env, {
+    projectId: project.id, accountId: team.id, userId: ownerId, visibility: 'private',
+    metadata: { source: 'trigger:cron', trigger_kind: 'git', trigger_slug: 'reader-proof', trigger_session_readers: { humans: 'members', agents: [] } },
+  });
+  const client = ctx.client.as(member);
+  await ctx.step('a non-owner member reads the trigger session and finds it in the list', async () => {
+    (await client.get('/v1/workspaces/:projectId/sessions/:sessionId', { params: { projectId: project.id, sessionId } })).status(200).body().has('$.session_id', sessionId);
+    const list = await client.get('/v1/workspaces/:projectId/sessions', { params: { projectId: project.id } });
+    list.status(200);
+    if (!JSON.stringify(list.json()).includes(sessionId)) throw new Error('reader session missing from inventory');
+  });
+  await ctx.step('the same reader cannot start or prompt that session', async () => {
+    (await client.post('/v1/workspaces/:projectId/sessions/:sessionId/start', {}, { params: { projectId: project.id, sessionId } })).status(404);
+    (await client.post('/v1/workspaces/:projectId/sessions/:sessionId/prompts', { client_message_id: 'reader-denied', parts: [{ type: 'text', text: 'Do not run.' }] }, { params: { projectId: project.id, sessionId } })).status(404);
+  });
+});

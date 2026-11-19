@@ -1,6 +1,7 @@
 import { inviteIdFromUrl, rememberInviteLink } from '@/lib/invites/invite-landing';
 import { resolveShareLinkUrl } from '@/lib/share-link';
 import { isBrowserReturnPath } from '@/lib/session/connect-model';
+import { isAppOpenUrl } from '@/lib/utils/browser-return';
 
 /**
  * Share links (`kortix.com/share/*`) have no in-app route. The root layout's
@@ -12,13 +13,19 @@ import { isBrowserReturnPath } from '@/lib/session/connect-model';
  * only close the browser session. On Android they also arrive as a deep link;
  * the same rule keeps the user on the screen that opened the browser.
  *
+ * The bare app URL (`kortix://`, the iOS Smart App Banner's OPEN) only brings
+ * the app forward: a warm open keeps the current screen, and the root
+ * layout closes the in-app browser it came from (`closeBrowserOnAppOpen`).
+ *
  * Invite links (`kortix://invites/<id>`) route to `app/invites/[id].tsx`. The
  * id is also remembered (KRTX-1731): signed out, `AuthProtection` sends the
  * user to /auth, and the start screen opens the invite after sign-in.
  */
 export function redirectSystemPath({ path, initial }: { path: string; initial: boolean }) {
   try {
-    if (resolveShareLinkUrl(path) || isBrowserReturnPath(path)) return initial ? '/' : null;
+    if (resolveShareLinkUrl(path) || isBrowserReturnPath(path) || isAppOpenUrl(path)) {
+      return initial ? '/' : null;
+    }
     const inviteId = inviteIdFromUrl(path);
     if (inviteId) rememberInviteLink(inviteId);
   } catch {

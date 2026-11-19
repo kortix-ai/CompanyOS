@@ -798,9 +798,9 @@
       "wallpaperDescription": "Позадина вашег радног простора.",
       "defaultWallpaper": "Подразумевано",
       "themes": {
-        "light": "Светла",
+        "light": "Kortix Светла",
         "pureLight": "Чиста светла",
-        "dark": "Тамна",
+        "dark": "Kortix Тамна",
         "pureDark": "Чиста тамна",
         "system": "Системска",
         "kortix": "Kortix",

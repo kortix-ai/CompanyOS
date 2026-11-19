@@ -618,9 +618,9 @@
       "wallpaperDescription": "The background behind your workspace.",
       "defaultWallpaper": "Default",
       "themes": {
-        "light": "Light",
+        "light": "Kortix light",
         "pureLight": "Pure light",
-        "dark": "Dark",
+        "dark": "Kortix dark",
         "pureDark": "Pure dark",
         "system": "System",
         "kortix": "Kortix",

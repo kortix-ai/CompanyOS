@@ -329,6 +329,8 @@
     "./workspace/review/mock-data",
     "./workspace/review/review-center",
     "./workspace/review/types",
+    "./workspace/session-spaces/space-detail-page",
+    "./workspace/session-spaces/spaces-page",
     "./workspace/settings/use-leave-workspace",
     "./workspace/setup/workspace-setup-page",
     "./workspace/sidebar/footer/project-apps-nav",

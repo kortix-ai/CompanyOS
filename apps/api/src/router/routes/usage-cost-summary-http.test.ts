@@ -22,6 +22,7 @@ let projectCapabilityInput: {
   action: string;
 } | null = null;
 let projectCapabilityDenied = false;
+let summaryGate: Promise<void> | null = null;
 
 interface TestContext {
   set(key: string, value: unknown): void;
@@ -100,6 +101,7 @@ mock.module('../../projects/lib/access', () => ({
 mock.module('../../shared/cost-rollups', () => ({
   getCostSummary: async (input: Record<string, unknown>) => {
     summaryInput = input;
+    if (summaryGate) await summaryGate;
     return summary;
   },
   listCostByProject: async () => ({
@@ -147,6 +149,7 @@ beforeEach(() => {
   projectAccessInput = null;
   projectCapabilityInput = null;
   projectCapabilityDenied = false;
+  summaryGate = null;
 });
 
 describe('GET /v1/usage/cost-summary', () => {
@@ -279,5 +282,43 @@ describe('GET /v1/usage/cost-summary', () => {
     }
     projectCapabilityDenied = true;
     expect((await app.request(`/v1/usage/cost-summary?project_id=${PROJECT_ID}`)).status).toBe(403);
+  });
+});
+
+describe('in-flight cap (KRTX-4889)', () => {
+  test('a second concurrent cost-summary of the same user gets 429 until the first settles', async () => {
+    let open: () => void = () => {};
+    summaryGate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    const app = createTestApp();
+    const first = app.request('/v1/usage/cost-summary');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const second = await app.request('/v1/usage/cost-summary');
+    expect(second.status).toBe(429);
+    expect(second.headers.get('Retry-After')).toBe('5');
+
+    open();
+    expect((await first).status).toBe(200);
+    expect((await app.request('/v1/usage/cost-summary')).status).toBe(200);
+  });
+
+  test('a different query of the same user is not a retry and runs in parallel', async () => {
+    let open: () => void = () => {};
+    summaryGate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    const app = createTestApp();
+    const first = app.request(`/v1/usage/cost-summary?project_id=${PROJECT_ID}`);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const other = app.request('/v1/usage/cost-summary?account_id=' + ACCOUNT_ID);
+    const repeat = await app.request(`/v1/usage/cost-summary?project_id=${PROJECT_ID}`);
+    expect(repeat.status).toBe(429);
+
+    open();
+    expect((await first).status).toBe(200);
+    expect((await other).status).toBe(200);
   });
 });

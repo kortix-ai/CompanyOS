@@ -28,6 +28,7 @@ interface TestContext {
   set(key: string, value: unknown): void;
   req: {
     query(key: string): string | undefined;
+    header(key: string): string | undefined;
   };
 }
 
@@ -48,7 +49,7 @@ const summary = {
 
 mock.module('../../middleware/auth', () => ({
   combinedAuth: async (c: TestContext, next: () => Promise<void>) => {
-    c.set('userId', USER_ID);
+    c.set('userId', c.req.header('x-test-user') ?? USER_ID);
     c.set('authType', authType);
     if (sandboxId) c.set('sandboxId', sandboxId);
     if (tokenProjectId) {
@@ -158,13 +159,19 @@ describe('GET /v1/usage/cost-summary read guard', () => {
     let release!: () => void;
     summaryGate = new Promise<void>((resolve) => (release = resolve));
     const app = createTestApp();
-    const running = Array.from({ length: 1 + COST_READ_MAX_WAITING }, () =>
-      app.request(`/v1/usage/cost-summary?account_id=${ACCOUNT_ID}`),
+    // Fill the replica-wide queue with distinct callers: one caller is now
+    // limited to two in-flight rollups before it can reach this guard.
+    const running = Array.from({ length: 1 + COST_READ_MAX_WAITING }, (_, index) =>
+      app.request(`/v1/usage/cost-summary?account_id=${ACCOUNT_ID}`, {
+        headers: { 'x-test-user': `cost-summary-caller-${index}` },
+      }),
     );
     await Promise.resolve();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    const refused = await app.request(`/v1/usage/cost-summary?account_id=${ACCOUNT_ID}`);
+    const refused = await app.request(`/v1/usage/cost-summary?account_id=${ACCOUNT_ID}`, {
+      headers: { 'x-test-user': 'cost-summary-overflow' },
+    });
     expect(refused.status).toBe(429);
     expect(await refused.json()).toEqual({ error: 'Too many cost reads are queued on this server. Retry shortly.' });
 

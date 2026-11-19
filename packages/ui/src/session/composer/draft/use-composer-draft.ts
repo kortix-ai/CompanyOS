@@ -131,6 +131,7 @@ export function useComposerDraft({
    * ends it.
    */
   const sentRef = useRef<string | null>(null);
+  const submittedRef = useRef(false);
 
   /**
    * Write whatever is pending, now.
@@ -182,7 +183,7 @@ export function useComposerDraft({
     };
   }, [active, flush, handoffScope, scopeRef, userIdRef]);
 
-  const handleDocChange = useCallback(
+  const scheduleSave = useCallback(
     (doc: JSONContent, isEmpty: boolean) => {
       if (!activeRef.current || !scopeRef.current || !userIdRef.current) return;
       if (sentRef.current === sentKey(doc, quotesRef.current, pastesRef.current)) return;
@@ -192,6 +193,14 @@ export function useComposerDraft({
       timerRef.current = setTimeout(flush, SAVE_DEBOUNCE_MS);
     },
     [flush, scopeRef, userIdRef],
+  );
+
+  const handleDocChange = useCallback(
+    (doc: JSONContent, isEmpty: boolean) => {
+      submittedRef.current = false;
+      scheduleSave(doc, isEmpty);
+    },
+    [scheduleSave],
   );
 
   /**
@@ -214,10 +223,17 @@ export function useComposerDraft({
     const editor = editorRef.current;
     if (!editorReady || !editor) return;
     const doc = editor.getDocument();
-    if (doc) handleDocChange(doc, editor.isEmpty());
-  }, [quotes, pastes, uploads, uploadsKey, editorReady, editorRef, handleDocChange]);
+    if (!doc) return;
+    if (sentRef.current === sentKey(doc, quotesRef.current, pastesRef.current)) return;
+    // Accessory cleanup must not persist text retained on screen after Send.
+    scheduleSave(
+      submittedRef.current ? { type: 'doc', content: [{ type: 'paragraph' }] } : doc,
+      submittedRef.current || editor.isEmpty(),
+    );
+  }, [quotes, pastes, uploads, uploadsKey, editorReady, editorRef, scheduleSave]);
 
   const clearSavedDraft = useCallback(() => {
+    submittedRef.current = true;
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
@@ -280,6 +296,7 @@ export function useComposerDraft({
   }, [active, scope, userId, editorReady, hasPrefill, editorRef, onRestore]);
 
   const sendRefused = useCallback(() => {
+    submittedRef.current = false;
     sentRef.current = null;
   }, []);
 

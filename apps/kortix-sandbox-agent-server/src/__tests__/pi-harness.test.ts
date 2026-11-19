@@ -6531,6 +6531,10 @@ describe('session-log actions (runtime.actions.v1)', () => {
     const all = (await call(r, '/log?limit=200', undefined, 'GET').then((res) => res.json())) as LogPage
     expect(all.thread_id).toBe(rt.rootId)
     expect(all.has_more).toBe(false)
+    expect(all.messages.some((m) => m.kind === 'context')).toBe(false)
+    const withContext = (await call(r, '/log?limit=200&include=context', undefined, 'GET').then((res) => res.json())) as LogPage
+    expect(withContext.messages.some((m) => m.kind === 'context')).toBe(true)
+    expect(withContext.messages.filter((m) => m.kind !== 'context')).toEqual(all.messages)
     const turns = all.messages.filter((m) => m.kind === 'turn').map((m) => [m.role, (m.blocks[0] as { text?: string })?.text])
     expect(turns).toEqual([['user', 'first'], ['assistant', 'one'], ['user', 'second'], ['assistant', 'two'], ['user', 'third'], ['assistant', 'three']])
     const seqs = all.messages.map((m) => m.seq)

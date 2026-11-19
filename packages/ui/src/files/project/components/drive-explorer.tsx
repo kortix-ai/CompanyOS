@@ -1302,9 +1302,12 @@ export function DriveExplorer({
       onDragOver={handlePageDragOver}
       onDrop={handlePageDrop}
     >
+      {/* An empty folder's empty state carries Upload and New folder itself, so the
+          New and view menus would only repeat it: the row keeps just what the host adds. */}
+      {isEmpty && !parked && !leading && !trailing ? null : (
       <DriveActionRow
         leading={leading}
-        actions={(() => {
+        actions={isEmpty && !parked ? trailing : (() => {
           const newMenu = (
             <DriveNewMenu
               compact={embedded}
@@ -1344,6 +1347,7 @@ export function DriveExplorer({
           );
         })()}
       />
+      )}
 
       <DrivePathBar as="row" rootLabel={rootLabel} rootIcon={rootIcon} base={pathBase} />
 

@@ -19,6 +19,7 @@ import {
 } from '../command-helpers.ts';
 import { C, help, pad, status } from '../style.ts';
 import {
+  changeRequestWebUrl,
   crDiff,
   crVersionDiff,
   displayBranch,
@@ -260,6 +261,7 @@ async function crShow(ref: string | undefined, opts: CtxOpts, json = false): Pro
   const cr = await resolveCr(ctx, ref);
   if (!cr) return 1;
 
+  const url = await changeRequestWebUrl(ctx, cr.cr_id);
   if (json) {
     let merge_preview: ChangeRequestMergePreview | null = null;
     if (cr.status === 'open') {
@@ -271,7 +273,7 @@ async function crShow(ref: string | undefined, opts: CtxOpts, json = false): Pro
         merge_preview = null;
       }
     }
-    emitJson({ change_request: cr, merge_preview });
+    emitJson({ change_request: cr, merge_preview, url });
     return 0;
   }
 
@@ -289,6 +291,7 @@ async function crShow(ref: string | undefined, opts: CtxOpts, json = false): Pro
   );
   process.stdout.write(`  ${C.dim}Base ${C.reset}${base}\n`);
   process.stdout.write(`  ${C.dim}Opened ${C.reset}${relativeTime(cr.created_at)}\n`);
+  process.stdout.write(`  ${C.dim}URL ${C.reset}${url}\n`);
   if (cr.merged_at) {
     const m = cr.merge_commit_sha?.slice(0, 7);
     process.stdout.write(
@@ -368,6 +371,8 @@ async function crOpen(argv: string[], opts: CtxOpts): Promise<number> {
   process.stdout.write(
     `  ${C.dim}${displayBranch(created.head_ref)} → ${displayBranch(created.base_ref)}${C.reset}\n\n`,
   );
+
+  process.stdout.write(`  ${await changeRequestWebUrl(ctx, created.cr_id)}\n\n`);
 
   // A CR whose head tip equals base shows "No changes detected" in the
   // dashboard and can't be applied — by far the most common cause is a

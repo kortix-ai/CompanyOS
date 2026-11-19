@@ -279,3 +279,5 @@ export {
 // domain that counts or stops live sessions).
 export { settleLiveSessionsOfAccounts, transitionSandbox, transitionSession } from './session-lifecycle/status-transitions';
 export { ACTIVE_SESSION_STATUSES, PROVISIONING_SESSION_STATUSES } from './lib/session-status';
+// Spaces (session groups): whether a Space the caller sees shares a session (the preview proxy's gate injects it).
+export { sessionSharedThroughSpace } from './lib/session-group-viewer';

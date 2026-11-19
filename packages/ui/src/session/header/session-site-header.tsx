@@ -96,7 +96,7 @@ import {
   PushPinIcon,
   PushPinSlashIcon,
   ArrowCounterClockwiseIcon as RotateCcw,
-  ShareIcon as Share,
+  ShareNetworkIcon as Share,
   SquareIcon as Square,
   TerminalIcon,
   TrashIcon,
@@ -859,7 +859,7 @@ export function SessionSiteHeader({
                 open={isMobileViewport ? undefined : false}
               >
                 <Button
-                  variant="ghost"
+                  variant="secondary"
                   size="xs"
                   aria-label={shareLabel}
                   onClick={() => setShareOpen(true)}

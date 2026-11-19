@@ -5,7 +5,6 @@ import {
   agentSessionStanding,
   isSessionTargetVisibleToCaller,
   isProjectSessionVisibleTo,
-  isSessionTargetVisibleToCaller,
   type SecretGrant,
   type ShareSubject,
 } from '../../connectors/share';

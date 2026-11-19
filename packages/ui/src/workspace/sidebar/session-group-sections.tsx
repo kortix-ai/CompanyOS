@@ -18,7 +18,6 @@ import {
   useCreateProjectSessionGroup,
   useDeleteProjectSessionGroup,
   useProjectSessions,
-  useRenameProjectSessionGroup,
   useReorderProjectSessionGroups,
   useSetProjectSessionGroup,
 } from '@kortix/sdk/react';
@@ -30,6 +29,7 @@ import {
   DotsThreeIcon,
   PencilSimpleIcon,
   PlusIcon,
+  StackIcon,
   TrashIcon,
 } from '@phosphor-icons/react';
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode, type SyntheticEvent } from 'react';
@@ -46,18 +46,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../../primitives/dropdown-menu';
-import { Input } from '../../primitives/input';
-import Loading from '../../primitives/loading';
-import {
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  ModalTitle,
-} from '../../primitives/modal';
+import Hint from '../../primitives/hint';
 import { errorToast, successToast } from '../../primitives/toast';
 import { moveGroupBy, moveGroupTo } from './session-group-order';
+import { SpaceIconBare } from '../session-spaces/space-icon';
 import {
   SESSION_MENU_TRIGGER_CLASS,
   SESSION_ROW_HEIGHT_CLASS,
@@ -65,6 +57,8 @@ import {
   ShowMoreButton,
 } from '../../session/list/session-list-chrome';
 import { CaretRightSolidIcon } from '../../icons/caret-right-solid';
+import { uiRoutes } from '../../lib/routes';
+import { UiLink, useUiPathname, useUiRouter } from '../../providers/ui-provider';
 
 /** A dragged session row carries its id under this type. */
 const SESSION_DRAG_TYPE = 'application/x-kortix-session';
@@ -103,7 +97,10 @@ export function keepFocusForNewGroup(event: Event): void {
 /** Keeps a click or key inside a group's menu or dialog (portals bubble through React) off the header's toggle. */
 const stopAtMenu = (event: SyntheticEvent) => event.stopPropagation();
 
-/** The collapsed-sections id of one group. */
+/**
+ * The sections-state id of one space. Spaces start collapsed: the id in the
+ * set means the space is open (unlike Pinned and Sessions, where it means closed).
+ */
 export function sessionGroupSectionId(groupId: string): string {
   return `group:${groupId}`;
 }
@@ -186,104 +183,6 @@ export function useSessionGroupActions(projectId: string, groups: readonly Proje
       },
     };
   }, [file, reorder, groups, t, queryClient, projectId]);
-}
-
-/**
- * Rename a group (a new group is named in place, `NewSessionGroupRow`). A
- * taken name shows in the dialog; the dialog closes with a toast once the
- * list holds the change.
- */
-export function SessionGroupNameModal({
-  projectId,
-  group,
-  open,
-  onOpenChange,
-}: {
-  projectId: string;
-  group: ProjectSessionGroup | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const t = useTranslations('sidebar.sessionGroups');
-  const rename = useRenameProjectSessionGroup(projectId);
-  const [value, setValue] = useState('');
-  const [problem, setProblem] = useState<string | null>(null);
-  const [syncedFor, setSyncedFor] = useState<[boolean, string | null]>([open, group?.group_id ?? null]);
-  if (syncedFor[0] !== open || syncedFor[1] !== (group?.group_id ?? null)) {
-    setSyncedFor([open, group?.group_id ?? null]);
-    if (open) {
-      setValue(group?.name ?? '');
-      setProblem(null);
-    }
-  }
-
-  const pending = rename.isPending;
-  const name = value.trim();
-  const unchanged = group !== null && name === group.name;
-
-  const submit = async () => {
-    if (!group || !name || unchanged || pending) return;
-    setProblem(null);
-    try {
-      await rename.mutateAsync({ groupId: group.group_id, name });
-      successToast(t('renamed'));
-      onOpenChange(false);
-    } catch (error) {
-      const code = error instanceof ApiError ? error.code : undefined;
-      setProblem(code === 'group_name_taken' ? t('nameTaken') : t('renameFailed'));
-    }
-  };
-
-  return (
-    <Modal open={open} onOpenChange={(next) => !pending && onOpenChange(next)}>
-      <ModalContent className="lg:max-w-md">
-        <ModalHeader>
-          <ModalTitle>{t('rename')}</ModalTitle>
-        </ModalHeader>
-        <ModalBody className="space-y-2">
-          <Input
-            autoFocus
-            value={value}
-            maxLength={GROUP_NAME_MAX}
-            placeholder={t('namePlaceholder')}
-            aria-label={t('namePlaceholder')}
-            aria-invalid={problem ? true : undefined}
-            onChange={(event) => {
-              setValue(event.target.value);
-              setProblem(null);
-            }}
-            onKeyDown={(event) => {
-              if (event.nativeEvent.isComposing) return;
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                void submit();
-              }
-            }}
-          />
-          {problem ? (
-            <p className="text-destructive text-xs" role="alert">
-              {problem}
-            </p>
-          ) : null}
-        </ModalBody>
-        <ModalFooter className="sm:justify-between">
-          <Button
-            variant="outline-ghost"
-            size="sm"
-            className="w-full sm:w-auto"
-            onClick={() => onOpenChange(false)}
-            disabled={pending}
-          >
-            {t('cancel')}
-          </Button>
-          <Button size="sm" className="w-full sm:w-auto" onClick={() => void submit()} disabled={!name || unchanged || pending}>
-            {pending ? <Loading className="size-4 shrink-0" /> : null}
-            {t('save')}
-          </Button>
-        </ModalFooter>
-      </ModalContent>
-    </Modal>
-  );
 }
 
 /** `base`, or `base 2`, `base 3`…: the first name no group of the project has (names are unique per project). */
@@ -380,6 +279,48 @@ export function NewSessionGroupRow({
   );
 }
 
+/**
+ * The Spaces heading over the spaces: its label opens the Spaces page, its "+"
+ * (on hover) names a new space in place, like the Sessions header's controls.
+ */
+export function SpacesHeading({ projectId, onNew }: { projectId: string; onNew: () => void }) {
+  const tGroups = useTranslations('sidebar.sessionGroups');
+  const href = uiRoutes().sessionSpaces?.(projectId) ?? null;
+  const label = 'text-muted-foreground group-hover/spaces-header:text-sidebar-foreground min-w-0 flex-1 truncate text-sm font-medium';
+  return (
+    <div className={cn('group/spaces-header hover:bg-sidebar-row flex items-center gap-1 rounded-md px-2 transition-colors', SESSION_ROW_HEIGHT_CLASS)}>
+      {href ? (
+        <Hint label={tGroups('allSpaces')} side="right">
+          <UiLink href={href} prefetch={false} className={cn(label, 'self-stretch leading-8 focus-visible:outline-none')}>
+            {tGroups('heading')}
+          </UiLink>
+        </Hint>
+      ) : (
+        <span className={label}>{tGroups('heading')}</span>
+      )}
+      <Hint label={tGroups('newGroup')} side="right">
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          type="button"
+          aria-label={tGroups('newGroup')}
+          onClick={() => {
+            markNewGroupFocus();
+            onNew();
+          }}
+          className={cn(
+            SESSION_MENU_TRIGGER_CLASS,
+            'relative opacity-0 before:absolute before:-inset-1',
+            'group-hover/spaces-header:opacity-100 focus-visible:opacity-100',
+          )}
+        >
+          <PlusIcon className="size-4" />
+        </Button>
+      </Hint>
+    </div>
+  );
+}
+
 interface SessionGroupSectionsProps {
   projectId: string;
   groups: readonly ProjectSessionGroup[];
@@ -427,7 +368,11 @@ function SessionGroupSection({
   const t = useTranslations('sidebar');
   const tGroups = useTranslations('sidebar.sessionGroups');
   const sectionId = sessionGroupSectionId(group.group_id);
-  const open = !collapsedSectionIds.has(sectionId);
+  const open = collapsedSectionIds.has(sectionId);
+  const spaceHref = uiRoutes().sessionSpace?.(projectId, group.group_id) ?? null;
+  // The space whose page is open reads as the current row, as a nav row does.
+  const pathname = useUiPathname();
+  const current = !!spaceHref && !!pathname && pathname.endsWith(spaceHref);
   // Any starter and any depth, like Pinned: a session is in a group because
   // someone put it there. Loaded only while the group is open.
   const query = useProjectSessions(projectId, {
@@ -435,8 +380,9 @@ function SessionGroupSection({
     labels,
     limit: SIDEBAR_PAGE_SIZE,
     enabled: open,
-    // No focus refetch: a new session never starts inside a group, and a
-    // project with dozens of open groups would refetch every one of them.
+    // No focus refetch: a project with dozens of open groups would refetch
+    // every one of them. A session started in a space refetches these lists
+    // itself (`use-project-home-send.ts`).
     refetchOnWindowFocus: false,
   });
   // A pinned row shows under Pinned only. The `group_id` check drops a row the
@@ -458,50 +404,74 @@ function SessionGroupSection({
         className="group/section space-y-1"
         transition={{ duration: 0.15, ease: 'easeOut' }}
       >
-        <DisclosureTrigger>
-          <div
-            draggable
-            onDragStart={(event) => {
-              event.dataTransfer.setData(GROUP_DRAG_TYPE, group.group_id);
-              event.dataTransfer.effectAllowed = 'move';
-              draggingGroupId = group.group_id;
-            }}
-            onDragEnd={() => {
-              draggingGroupId = null;
-            }}
-            className={cn(
-              // A group header reads like Pinned and the date headers (name,
-              // then a caret on hover), with the row hover fill and a `⋯` menu.
-              'group/section-header text-muted-foreground hover:bg-sidebar-row hover:text-sidebar-foreground relative flex cursor-pointer items-center gap-1 rounded-md px-2 text-sm font-medium',
-              SESSION_ROW_HEIGHT_CLASS,
-              drop.over === 'session' && 'bg-sidebar-row text-sidebar-foreground',
-              // A group dropped here takes this place: a line marks the side it
-              // lands on (below this group when it comes from above).
-              drop.over === 'group' &&
-                'before:bg-foreground/40 before:absolute before:inset-x-2 before:h-0.5 before:rounded-full',
-              drop.over === 'group' &&
-                (groupIds.indexOf(draggingGroupId ?? '') < index ? 'before:bottom-0' : 'before:top-0'),
-            )}
-          >
-            <span className="min-w-0 truncate">{group.name}</span>
-            <CaretRightSolidIcon
-              aria-hidden
-              // Always shown: the caret is what tells a group from a date header.
-              className="duration-normal size-4 shrink-0 transition-transform ease-out group-data-[state=open]/section:rotate-90"
-            />
-            <SessionGroupMenu
-              group={group}
-              onRename={() => onRename(group)}
-              onNewGroup={onNewGroup}
-              onCollapseOthers={groupIds.length > 1 ? () => onCollapseOthers(group.group_id) : null}
-              onMoveUp={moveGroupBy(groupIds, group.group_id, -1)}
-              onMoveDown={moveGroupBy(groupIds, group.group_id, 1)}
-              onReorder={(ids) => void actions.reorder(ids)}
-              projectId={projectId}
-            />
-          </div>
-        </DisclosureTrigger>
-        <DisclosureContent contentClassName="space-y-px">
+        <div
+          draggable
+          onDragStart={(event) => {
+            event.dataTransfer.setData(GROUP_DRAG_TYPE, group.group_id);
+            event.dataTransfer.effectAllowed = 'move';
+            draggingGroupId = group.group_id;
+          }}
+          onDragEnd={() => {
+            draggingGroupId = null;
+          }}
+          className={cn(
+            // A space reads like a nav row (Inbox, Drive): a 16px glyph slot, then its name, which opens the space.
+            // The glyph turns into the caret on hover; the caret folds the space's sessions under it.
+            'group/section-header text-sidebar-foreground/80 hover:bg-sidebar-row hover:text-sidebar-foreground relative flex items-center gap-2 rounded-md px-2 text-sm',
+            SESSION_ROW_HEIGHT_CLASS,
+            current && 'bg-active text-sidebar-accent-foreground font-medium hover:bg-active',
+            drop.over === 'session' && 'bg-sidebar-row text-sidebar-foreground',
+            // A group dropped here takes this place: a line marks the side it
+            // lands on (below this group when it comes from above).
+            drop.over === 'group' &&
+              'before:bg-foreground/40 before:absolute before:inset-x-2 before:h-0.5 before:rounded-full',
+            drop.over === 'group' &&
+              (groupIds.indexOf(draggingGroupId ?? '') < index ? 'before:bottom-0' : 'before:top-0'),
+          )}
+        >
+          <DisclosureTrigger>
+            <button
+              type="button"
+              aria-label={`${open ? tGroups('hideSessions') : tGroups('showSessions')}: ${group.name}`}
+              className="text-muted-foreground hover:text-sidebar-foreground hit-area-1.5 flex size-4 shrink-0 items-center justify-center rounded-sm"
+            >
+              {/* No tile: the glyph alone, 18px in the 15px slot. -mx-0.5 overhangs
+                  both sides equally, so the name keeps the sessions' text edge. */}
+              <SpaceIconBare
+                space={group}
+                className="-mx-0.5 size-5 group-hover/section-header:hidden group-focus-within/section-header:hidden"
+              />
+              <CaretRightSolidIcon
+                aria-hidden
+                className="duration-normal hidden size-4 transition-transform ease-out group-hover/section-header:block group-focus-within/section-header:block group-data-[state=open]/section:rotate-90"
+              />
+            </button>
+          </DisclosureTrigger>
+          {spaceHref ? (
+            <UiLink
+              href={spaceHref}
+              prefetch={false}
+              aria-current={current ? 'page' : undefined}
+              className="min-w-0 flex-1 truncate self-stretch leading-8 first-letter:uppercase focus-visible:outline-none"
+            >
+              {group.name}
+            </UiLink>
+          ) : (
+            <span className="min-w-0 flex-1 truncate first-letter:uppercase">{group.name}</span>
+          )}
+          <SessionGroupMenu
+            group={group}
+            onRename={() => onRename(group)}
+            onNewGroup={onNewGroup}
+            onCollapseOthers={groupIds.length > 1 ? () => onCollapseOthers(group.group_id) : null}
+            onMoveUp={moveGroupBy(groupIds, group.group_id, -1)}
+            onMoveDown={moveGroupBy(groupIds, group.group_id, 1)}
+            onReorder={(ids) => void actions.reorder(ids)}
+            projectId={projectId}
+          />
+        </div>
+        {/* The space's sessions, one step in under its name. */}
+        <DisclosureContent contentClassName="space-y-px pl-4">
           {rows.map(renderNode)}
           {query.data !== undefined && rows.length === 0 && !query.hasNextPage ? (
             // Aligned to the name's x (px-2), one row tall.
@@ -551,6 +521,9 @@ function SessionGroupMenu({
   onReorder: (groupIds: string[]) => void;
 }) {
   const tGroups = useTranslations('sidebar.sessionGroups');
+  const router = useUiRouter();
+  const spaceHref = uiRoutes().sessionSpace?.(projectId, group.group_id) ?? null;
+  const pathname = useUiPathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const remove = useDeleteProjectSessionGroup(projectId);
@@ -560,7 +533,7 @@ function SessionGroupMenu({
   };
 
   return (
-    // `contents`: the trigger stays a flex item of the header (`ml-auto`).
+    // `contents`: the trigger stays a flex item of the header, after the name.
     <span className="contents" onClick={stopAtMenu} onKeyDown={stopAtMenu}>
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
@@ -571,7 +544,7 @@ function SessionGroupMenu({
             aria-label={`${tGroups('groupOptions')}: ${group.name}`}
             className={cn(
               SESSION_MENU_TRIGGER_CLASS,
-              'relative ml-auto opacity-0',
+              'relative opacity-0',
               'before:absolute before:-inset-1',
               'group-hover/section-header:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100',
             )}
@@ -580,6 +553,15 @@ function SessionGroupMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="right" className="w-44" onCloseAutoFocus={keepFocusForNewGroup}>
+          {spaceHref ? (
+            <>
+              <DropdownMenuItem className="cursor-pointer" onSelect={() => router.push(spaceHref)}>
+                <StackIcon />
+                {tGroups('openSpace')}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          ) : null}
           <DropdownMenuItem
             className="cursor-pointer"
             onSelect={() => {
@@ -637,6 +619,11 @@ function SessionGroupMenu({
             onSuccess: () => {
               setConfirmOpen(false);
               successToast(tGroups('deleted'));
+              // Deleting the space you are looking at leaves its page for the spaces list,
+              // not a "This space does not exist" screen.
+              if (spaceHref && pathname?.endsWith(spaceHref)) {
+                router.push(uiRoutes().sessionSpaces?.(projectId) ?? uiRoutes().project(projectId));
+              }
             },
             onError: () => errorToast(tGroups('deleteFailed')),
           })

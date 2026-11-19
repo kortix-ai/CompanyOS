@@ -13,7 +13,7 @@ import type {
   RefObject,
   SetStateAction,
 } from 'react';
-import { lazy, Suspense, useContext, useMemo, useRef } from 'react';
+import { lazy, Suspense, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useToastClearance } from '../../primitives/toast-clearance';
 
 import { SpaceMentionContext } from './menus/space-mentions';
@@ -216,6 +216,8 @@ export function ComposerCard({
   slashMenuPlacement = 'above',
   cardClassName,
   call,
+  inline = false,
+  hideAgentPicker = false,
 }: ComposerCardProps) {
   const connectionsAbove = useContext(ModelConnectionLayoutContext) === 'above';
   const cardRef = useRef<HTMLDivElement>(null);
@@ -223,6 +225,33 @@ export function ComposerCard({
   useToastClearance(cardRef, slashMenuPlacement === 'above');
   const { attachAccept, modelPickerEnabled } = useUiHostConfig();
   const inlineUnderbar = underbarPlacement === 'inline';
+
+  // `inline`: one row while the text fits a line. Once it wraps, or anything is
+  // attached, the card opens to its two rows and stays open until the box is
+  // empty again: closing on width alone would flicker, since the one-row editor
+  // is narrower than the card's and wraps sooner.
+  const editorBoxRef = useRef<HTMLDivElement>(null);
+  const [wrapped, setWrapped] = useState(false);
+  useEffect(() => {
+    if (!inline) return;
+    if (isEmpty) {
+      setWrapped(false);
+      return;
+    }
+    const box = editorBoxRef.current;
+    const editable = box?.querySelector<HTMLElement>('[contenteditable]');
+    if (!editable) return;
+    const measure = () => {
+      const lineHeight = Number.parseFloat(getComputedStyle(editable).lineHeight) || 20;
+      if (editable.scrollHeight > lineHeight * 1.5) setWrapped(true);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(editable);
+    return () => observer.disconnect();
+  }, [inline, isEmpty]);
+  const collapsed =
+    inline && !wrapped && attachedFiles.length === 0 && pastes.length === 0 && commandAttachmentPlan.kind !== 'refuse';
 
   /*
     `chat_input` on: one control under the card for the agent, model, effort
@@ -303,7 +332,9 @@ export function ComposerCard({
         // arbitrary `shadow-[…oklch…]` that followed, which was the only
         // raw colour left in the composer.
         'bg-background border-border relative isolate z-10 w-full rounded-xl border',
-        'pt-3',
+        // `inline` draws its own even inset (below); the full composer keeps its top band,
+        // and so does `inline` while tiles sit above the text.
+        collapsed || (inline && attachedFiles.length === 0 && pastes.length === 0) ? 'pt-0' : 'pt-3',
         // The drag border swaps colour AND gains a ring. Without this it
         // snapped: a hard flash the moment a file crossed the card.
         'duration-normal ease-default transition-[border-color]',
@@ -392,7 +423,14 @@ export function ComposerCard({
 
         <div
           className={cn(
-            'flex min-w-0 flex-col px-2 pb-2',
+            // Collapsed: attach | text | send in one row. The toolbar's two halves
+            // take the outer columns (`ComposerToolbar collapsed`); the editor the middle.
+            collapsed
+              ? 'grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-0 p-1.5'
+              : inline
+                ? // Open: the same inset as one row on every side, and a shorter scroll (70% of the full composer's).
+                  'flex min-w-0 flex-col p-1.5 [&_[contenteditable]]:max-h-[31vh] sm:[&_[contenteditable]]:max-h-[28vh]'
+                : 'flex min-w-0 flex-col px-2 pb-2',
             lockForApproval && 'composer-locked-approval',
             (attachedFiles.length > 0 || pastes.length > 0) && 'pt-3',
           )}
@@ -410,7 +448,15 @@ export function ComposerCard({
             only a press that TERMINATES here may be forwarded.
           */}
           <div
-            className="relative min-w-0 cursor-text px-1 pb-9"
+            ref={editorBoxRef}
+            className={cn(
+              'relative min-w-0 cursor-text',
+              // Inline, the text starts where the paperclip's glyph starts: one left edge in both states.
+              collapsed
+                ? // One line, centred on the buttons: no empty min-height under it, and the paperclip's own inset as the gap.
+                  // Up 1px: the line box centres the descenders too, so the letters sat ~1.5px under the icons' centre.
+                  'col-start-2 row-start-1 -translate-y-px py-1 pr-1 pl-0 [&_[contenteditable]]:min-h-0' : inline ? 'px-1.5 pt-2 pb-3' : 'px-1 pb-9',
+            )}
             onMouseDown={(e) => {
               if (
                 !shouldFocusEditorFromPadding({
@@ -463,10 +509,12 @@ export function ComposerCard({
             onChange={handleFileSelect}
           />
           <ComposerToolbar
+            collapsed={collapsed}
             noModel={programAgent}
             leading={
               inlineUnderbar ? (
                 <ComposerUnderbar
+                  hideAgentPicker={hideAgentPicker}
                   variant="inline"
                   agentPickerCompact={agentPickerCompact}
                   onAttachClick={handleAttachClick}
@@ -556,6 +604,7 @@ export function ComposerCard({
     */}
     {inlineUnderbar ? null : (
       <ComposerUnderbar
+        hideAgentPicker={hideAgentPicker}
         onAttachClick={handleAttachClick}
         agents={primaryAgents}
         selectedAgent={selectedAgent}

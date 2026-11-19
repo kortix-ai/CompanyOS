@@ -57,3 +57,16 @@ export async function withCostReadGuard<T>(read: () => Promise<T>): Promise<T> {
     else running = false;
   }
 }
+
+// Drizzle builders execute on each then() call. Assimilate them once, then
+// drain those same executions before a failed report returns its permit.
+export function drainCostReadQueries<T extends readonly unknown[]>(queries: readonly [...T]): Promise<{ -readonly [K in keyof T]: Awaited<T[K]> }>;
+export async function drainCostReadQueries(queries: readonly unknown[]): Promise<unknown[]> {
+  const running = queries.map((query) => Promise.resolve(query));
+  try {
+    return await Promise.all(running);
+  } catch (error) {
+    await Promise.allSettled(running);
+    throw error;
+  }
+}

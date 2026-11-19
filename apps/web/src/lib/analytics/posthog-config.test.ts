@@ -21,8 +21,16 @@ import {
   sessionFraction,
   shouldRecordSession,
 } from './posthog-config';
+import { UiTextIndex } from './replay-text';
 
 const ORIGIN = 'https://kortix.com';
+
+/** Our interface text for these tests: two labels and a counted one. */
+function uiText(): UiTextIndex {
+  const ui = new UiTextIndex([]);
+  ui.addCatalog({ save: 'Save changes', close: 'Close', files: '{count} files' }, 'en');
+  return ui;
+}
 
 describe('posthogProjectForHost', () => {
   test('only kortix.com and loopmaxxing.sh report, as production', () => {
@@ -209,6 +217,39 @@ describe('scrubEvent', () => {
     );
     expect(event.properties.$el_text).toBe('Start free');
   });
+
+  test('a private-page click keeps interface text and loses customer text', () => {
+    const click = (elText: string, chain: string) =>
+      scrubEvent(
+        {
+          event: '$autocapture',
+          properties: {
+            $current_url: 'https://kortix.com/workspaces/p1/settings',
+            $pathname: '/workspaces/p1/settings',
+            $el_text: elText,
+            $elements_chain: chain,
+          },
+        },
+        ORIGIN,
+        uiText(),
+      ).properties;
+
+    const save = click(
+      'Save changes',
+      'button.primary:attr__aria-label="Close"nth-child="1"text="Save changes";form:text="Zephyrine Quillfeather"',
+    );
+    expect(save.$el_text).toBe('Save changes');
+    expect(String(save.$elements_chain)).toBe(
+      'button.primary:attr__aria-label="Close"nth-child="1"text="Save changes";form:',
+    );
+
+    const row = click(
+      'Zephyrine roadmap.xlsx',
+      'a.row:href="/workspaces/p1/files/x"text="12 files"',
+    );
+    expect(row.$el_text).toBeUndefined();
+    expect(String(row.$elements_chain)).toBe('a.row:text="12 files"');
+  });
 });
 
 describe('session replay: which sessions are recorded', () => {
@@ -290,6 +331,15 @@ describe('session replay: what a recording hides', () => {
     ]) {
       expect(replayAttribute(name, 'Acme roadmap', true, ORIGIN)).toBe('***');
     }
+  });
+
+  test('a text attribute keeps our interface text and hides the rest', () => {
+    const ui = uiText();
+    expect(replayAttribute('aria-label', 'Close', true, ORIGIN, ui)).toBe('Close');
+    expect(replayAttribute('title', '3 files', true, ORIGIN, ui)).toBe('3 files');
+    expect(replayAttribute('aria-label', 'Zephyrine Quillfeather', true, ORIGIN, ui)).toBe('***');
+    expect(replayAttribute('id', 'workspace-9f1e2d3c', true, ORIGIN, ui)).toBe('***');
+    expect(replayAttribute('value', 'Close', true, ORIGIN, ui)).toBe('***');
   });
 
   test('layout, state and styling attributes stay, so the replay renders', () => {

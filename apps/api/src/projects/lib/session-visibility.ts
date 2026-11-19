@@ -1,4 +1,4 @@
-import { mayReadTriggerSession, triggerReaderPrincipal } from '../trigger-reader-access';
+import { mayReadTriggerSession, triggerReaderPrincipal, triggerReaderSpaceKinds } from '../trigger-reader-access';
 import type { TriggerReaderPrincipal } from '../trigger-reader-policy';
 import {
   agentSessionStanding,
@@ -330,6 +330,7 @@ export type SessionReadOptions = {
   /** Audited content read only. Never set on mutation or writable proxy paths. */
   triggerReaderRead?: boolean;
   readerPrincipal?: TriggerReaderPrincipal;
+  readerSpaceKinds?: ReadonlyMap<string, string>;
 };
 
 async function sessionReadAccess(
@@ -406,8 +407,9 @@ async function sessionReadAccess(
     spaceVisible &&
     (await isSpawnAncestor(loaded.row.projectId, boundCredentialSessionId, sessionId));
   if (ancestor) visible = true;
-  const reader = opts.triggerReaderRead === true && spaceVisible && isSessionTargetVisibleToCaller(ownership) &&
-    await mayReadTriggerSession(row, opts.readerPrincipal ?? await triggerReaderPrincipal(loaded.actor, loaded.row.projectId, boundCredentialSessionId));
+  const reader = opts.triggerReaderRead === true &&
+    (!visible || (agentPrincipal && !agentSessionStanding(boundCredentialSessionId, row, visible, ancestor).visible)) && spaceVisible && isSessionTargetVisibleToCaller(ownership) &&
+    await mayReadTriggerSession(row, opts.readerPrincipal ?? await triggerReaderPrincipal(loaded.actor, loaded.row.projectId, boundCredentialSessionId), opts.readerSpaceKinds);
   if (!visible && !reader) return null;
   let isOwner = row.createdBy === loaded.userId;
   if (agentPrincipal) {
@@ -554,11 +556,14 @@ export async function loadVisibleSessionsForList(
   const readerPrincipal = opts.triggerReaderRead
     ? await triggerReaderPrincipal(loaded.actor, loaded.row.projectId, boundCredentialSessionId)
     : undefined;
+  const readerSpaceKinds = readerPrincipal && readerPrincipal.kind !== 'none'
+    ? await triggerReaderSpaceKinds(loaded.row.projectId, rows.flatMap((row) => row.spaceId ? [row.spaceId] : []))
+    : undefined;
   for (const sessionId of ids) {
     const row = byId.get(sessionId);
     if (!row) continue;
     const access = await sessionReadAccess(
-      loaded, row, sessionId, subject, grants.get(sessionId) ?? [], callerSessionId, boundCredentialSessionId, hidden, { ...opts, readerPrincipal },
+      loaded, row, sessionId, subject, grants.get(sessionId) ?? [], callerSessionId, boundCredentialSessionId, hidden, { ...opts, readerPrincipal, readerSpaceKinds },
     );
     if (!access) continue;
     out.set(sessionId, await finalizeVisibleAccess(loaded, row, subject, grants.get(sessionId) ?? [], access));

@@ -46,11 +46,12 @@ export const ROLE_TONE: Record<RoleRank, RoleTone> = {
 /**
  * The members table: flat rows, no borders, a full-width fill on hover. One grid so every row lines up: select gutter · name · email · role ·
  * actions. The gutter sits OUTSIDE the content edge (the table pulls left by
- * its width), so avatars align with the toolbar above. Below `sm` the email
+ * its width), so avatars align with the toolbar above. In a pane narrower than
+ * 42rem (`@2xl`, a container query on `AccountPane`) the email
  * column drops.
  */
 export const MEMBER_GRID =
-  'grid grid-cols-[calc(var(--spacing)*7)_minmax(0,1fr)_minmax(0,9rem)_2rem] items-center pr-1 sm:grid-cols-[calc(var(--spacing)*7)_minmax(0,1fr)_minmax(0,18rem)_11rem_2rem]';
+  'grid grid-cols-[calc(var(--spacing)*7)_minmax(0,1fr)_minmax(0,9rem)_2rem] items-center pr-1 @2xl:grid-cols-[calc(var(--spacing)*7)_minmax(0,1fr)_minmax(0,18rem)_11rem_2rem]';
 
 /** The name cell's handle: the email's local part, else the label. */
 export function memberHandle(email: string | null | undefined, fallback: string): string {
@@ -109,7 +110,7 @@ export function MemberTableHead({
       >
         {nameHeader ?? tI18nComplete.raw('textdcd1d5223f73')}
       </span>
-      <span role="columnheader" className={cn(head, 'max-sm:hidden')}>
+      <span role="columnheader" className={cn(head, '@max-2xl:hidden')}>
         {emailHeader ?? tI18nComplete.raw('text969ccbd3cf63')}
       </span>
       <span role="columnheader" className={head}>
@@ -175,7 +176,9 @@ export function MemberTableRow({
         />
       ) : null}
       <SelectCell select={select} />
-      <span role="cell" className="flex min-w-0 items-center gap-3">
+      {/* `pr-3`: the grid has no column gap, so at phone width the tags
+          ("You") would touch the role badge in the next column. */}
+      <span role="cell" className="flex min-w-0 items-center gap-3 pr-3">
         {avatar}
         <span
           className={cn(
@@ -189,7 +192,7 @@ export function MemberTableRow({
           <span className="relative z-10 flex shrink-0 items-center gap-1.5">{tags}</span>
         ) : null}
       </span>
-      <span role="cell" className="text-muted-foreground truncate pr-4 text-sm max-sm:hidden">
+      <span role="cell" className="text-muted-foreground truncate pr-4 text-sm @max-2xl:hidden">
         {email}
       </span>
       <span role="cell" className={cn('flex min-w-0', roleCell && 'relative z-10')}>

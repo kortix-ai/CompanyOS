@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
-import { loadFileSet } from './load-file-set';
+import { loadFileList, loadFileSet } from './load-file-set';
+import { sha256Hex } from './sha256';
 /**
  * Run squawk (https://squawkhq.com) — a deterministic Postgres migration
  * linter — against every migration file that is NOT in
@@ -21,7 +22,7 @@ import { loadFileSet } from './load-file-set';
  * ~/.cache/kortix-db/squawk-<version> on first run (or reads $SQUAWK_BIN if
  * already set, e.g. by CI after its own pinned install step).
  */
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -76,7 +77,9 @@ async function ensureSquawkBinary(): Promise<string> {
 
   const cacheDir = join(homedir(), '.cache', 'kortix-db');
   const cachedPath = join(cacheDir, `squawk-${SQUAWK_VERSION}-${key}`);
-  if (existsSync(cachedPath)) return cachedPath;
+  // A cache hit is trusted only when its bytes still match the pinned checksum.
+  const cached = readIfPresent(cachedPath);
+  if (cached && sha256Hex(cached) === entry.sha256) return cachedPath;
 
   mkdirSync(cacheDir, { recursive: true });
   const url = `https://github.com/sbdchd/squawk/releases/download/v${SQUAWK_VERSION}/${entry.asset}`;
@@ -85,20 +88,28 @@ async function ensureSquawkBinary(): Promise<string> {
   if (!res.ok) throw new Error(`squawk-lint: download failed: ${res.status} ${res.statusText} (${url})`);
   const buf = new Uint8Array(await res.arrayBuffer());
 
-  const hasher = new Bun.CryptoHasher('sha256');
-  hasher.update(buf);
-  const actual = hasher.digest('hex');
+  const actual = sha256Hex(buf);
   if (actual !== entry.sha256) {
     throw new Error(
       `squawk-lint: checksum mismatch for ${entry.asset} — expected ${entry.sha256}, got ${actual}. Refusing to run an unverified binary.`,
     );
   }
 
-  writeFileSync(cachedPath, buf);
-  chmodSync(cachedPath, 0o755);
+  // Write a fresh temp file, then rename it over the cache path in one step.
+  const tmpPath = `${cachedPath}.${process.pid}.tmp`;
+  writeFileSync(tmpPath, buf, { mode: 0o755, flag: 'wx' });
+  renameSync(tmpPath, cachedPath);
   return cachedPath;
 }
 
+function readIfPresent(path: string): Uint8Array | null {
+  try {
+    return readFileSync(path);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw err;
+  }
+}
 
 interface SquawkWaiver {
   file: string;
@@ -116,12 +127,7 @@ interface SquawkWaiver {
  * distinction between "predates the policy" and "violated the policy".
  */
 export function loadWaivers(): SquawkWaiver[] {
-  try {
-    const data = JSON.parse(readFileSync(WAIVER_FILE, 'utf8')) as { files: SquawkWaiver[] };
-    return Array.isArray(data.files) ? data.files : [];
-  } catch {
-    return [];
-  }
+  return loadFileList<SquawkWaiver>(WAIVER_FILE);
 }
 
 async function main(): Promise<void> {

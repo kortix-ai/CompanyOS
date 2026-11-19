@@ -13,12 +13,12 @@ theme, where every screen is a module of this package;
 [Team Console](../../apps/white-label/team-console), an internal tool; and
 [Lumen](../../apps/white-label/lumen), a legal AI SaaS with its own stack.
 
-<p align="center"><img src="https://github.com/kortix-ai/suna/raw/dev/apps/white-label/lumen/public/screenshots/assistant-source.png" width="720" alt="Lumen: the @kortix/ui session thread in Lumen's brand, with a cited answer and its source" /></p>
+<p align="center"><img src="https://github.com/kortix-ai/CompanyOS/raw/dev/apps/white-label/lumen/public/screenshots/assistant-source.png" width="720" alt="Lumen: the @kortix/ui session thread in Lumen's brand, with a cited answer and its source" /></p>
 
 Install: `npm i @kortix/ui @kortix/sdk`. Both packages carry the Kortix release
 version, so install the same version of each. The module entries (`session`,
 `workspace`, `theme` and the others below) ship from 0.14.4. 0.14.3 has the root,
-the component subpaths and the stylesheets. Inside kortix-ai/suna:
+the component subpaths and the stylesheets. Inside kortix-ai/CompanyOS:
 `"@kortix/ui": "workspace:*"`.
 `react` and `react-dom` 19 are peers (the PowerPoint preview needs React 19.2.7 or later).
 
@@ -186,7 +186,7 @@ The root `@kortix/ui` barrel holds only light core primitives. Toasts need one
 
 ### Routes
 
-Every URL the components link to comes from one route table, `setUiRoutes` (`@kortix/ui`), called once at module load. The defaults are Kortix's own paths: `project` `/projects/<id>`, `session` `/projects/<id>/sessions/<sessionId>`, `sessions` `/projects/<id>/sessions` (`?view=archived|deleted`), `files` `/projects/<id>/files`, `drive` `/projects/<id>/drive`, `apps` `/projects/<id>/apps`, `members` `/projects/<id>/members`, `sandboxSettings` `/projects/<id>/config?section=sandbox`, `customize` `/projects/<id>/customize/<page>` (agents, skills, connectors, triggers, reminders, models, secrets, review, settings), `channel` `/projects/<id>/c/<slug>` and `dm` `/projects/<id>/dm/<agent>` (the sidebar links them while the project's `project_channels` flag is on). Return your own path for a page you serve elsewhere. Return `null` for a page you do not serve: every link to it is hidden. `project`, `session`, `channel` and `dm` cannot be null.
+Every URL the components link to comes from one route table, `setUiRoutes` (`@kortix/ui`), called once at module load. The defaults are Kortix's own paths: `project` `/projects/<id>`, `session` `/projects/<id>/sessions/<sessionId>`, `sessions` `/projects/<id>/sessions` (`?view=archived|deleted`), `files` `/projects/<id>/files`, `drive` `/projects/<id>/drive`, `apps` `/projects/<id>/apps`, `members` `/projects/<id>/members`, `sandboxSettings` `/projects/<id>/config?section=sandbox`, `customize` `/projects/<id>/customize/<page>` (agents, skills, connectors, triggers, reminders, models, secrets, review, settings), `channel` `/projects/<id>/c/<slug>` and `dm` `/projects/<id>/dm/<agent>` (the sidebar links them while the project's `chat` flag is on). Return your own path for a page you serve elsewhere. Return `null` for a page you do not serve: every link to it is hidden. `project`, `session`, `channel` and `dm` cannot be null.
 
 ## Modules
 
@@ -310,9 +310,9 @@ How it stays themable:
   with their variable (`--text-sm`, `--shadow-md`, `--ease-default`, bare
   `rounded`) live in `@theme inline reference`, so Tailwind never emits the
   `--x: var(--x)` cycle into `:root`.
-- Every Radix portal goes through `withPortalContainer`
+- Every overlay portal goes through `withPortalContainer`
   (`src/lib/portal-container.tsx`). Without a `ThemeScope` it portals to
-  `document.body`, as before.
+  `document.body`.
 - A new component reads tokens only: no hex, no palette class, no fixed
   radius. `apps/web` must look identical: every new variable defaults to the
   value it replaces.
@@ -320,11 +320,11 @@ How it stays themable:
 ## Known issues
 
 - Server rendering: the entries that render sessions or files (`session`, `composer`, `session-panel`, `workspace`, `files`, `file-viewer`, `markdown`, `genui`, `customize`) import CSS (KaTeX and others) from JS, so plain Node cannot evaluate them (`ERR_UNKNOWN_FILE_EXTENSION ".css"`). A Vite SSR host adds `ssr: { noExternal: ['@kortix/ui'] }`. A Next.js host lists `@kortix/ui` in `transpilePackages`. Or load those blocks on the client only (`lazyClient`). The root, `theme`, `i18n`, `icons`, `diff`, `changes`, `terminal`, `browser`, `apps` and `access` entries evaluate in Node.
-- `cmdk@0.2.1` declares a React 18 peer and nests `@radix-ui/react-dialog@1.0.0`.
-  `Command` works on React 19. A host with `strict-peer-dependencies` must allow
-  `cmdk`'s React peer. `cmdk` 1.x
-  changes the selection model `command.tsx` is tuned to, and `apps/web` imports
-  `cmdk` directly, so the upgrade is its own change.
+- `Command` does not depend on the `cmdk` package. `src/primitives/command-core.tsx`
+  is a vendored MIT port of `cmdk` 0.2.1 without its Radix dialog. It keeps cmdk's
+  selection model, filter scoring and `[cmdk-*]` attributes, which `command.tsx`
+  and the ⌘K palette are tuned to. `useCommandState` is exported from
+  `@kortix/ui/command`.
 
 ## Rules
 

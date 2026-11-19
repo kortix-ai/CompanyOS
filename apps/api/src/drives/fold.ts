@@ -28,7 +28,7 @@
 // delete trigger queues their volumes for the cleanup worker.
 
 import { logger } from '../lib/logger';
-import { driveGrants, drives, projectSessions, projects, sessionSandboxes } from '@kortix/db';
+import { driveGrants, drives, projectSessions, sessionSandboxes } from '@kortix/db';
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../shared/db';
 import type { FolderLevel, FolderPrincipalType } from './folders';
@@ -53,6 +53,7 @@ import {
   writeVolumeFile,
 } from './volumes';
 import { ensureAgentServiceAccount } from '../repositories/service-accounts';
+import { projectsView } from '../workspaces/rows';
 
 export const FOLD_MARKER_DIR = '/.kortix-folded';
 const SINGLE_PUT_MAX = 64 * 1024 * 1024;
@@ -149,10 +150,10 @@ function segment(name: string): string {
 export async function foldTargets(source: DriveRow): Promise<FoldTarget[]> {
   const grants = await db.select().from(driveGrants).where(eq(driveGrants.driveId, source.driveId)).orderBy(asc(driveGrants.createdAt));
   const accountProjects = await db
-    .select({ projectId: projects.projectId })
-    .from(projects)
-    .where(eq(projects.accountId, source.accountId))
-    .orderBy(asc(projects.createdAt));
+    .select({ projectId: projectsView.projectId })
+    .from(projectsView)
+    .where(eq(projectsView.accountId, source.accountId))
+    .orderBy(asc(projectsView.createdAt));
   const inAccount = new Set(accountProjects.map((p) => p.projectId));
 
   if (source.kind === 'agent') {
@@ -160,11 +161,10 @@ export async function foldTargets(source: DriveRow): Promise<FoldTarget[]> {
     return [
       {
         projectId: source.projectId,
+        // A shared Drive added to its agent: its sessions mount it, and with
+        // `shared_drives` on everyone who may use the agent reaches it.
         path: `/Agents/${segment(source.agentName)}`,
-        grants: [
-          { principal: { type: 'agent', id: source.agentName }, level: 'write' },
-          { principal: { type: 'project', id: source.projectId }, level: 'write' },
-        ],
+        grants: [{ principal: { type: 'agent', id: source.agentName }, level: 'write' }],
       },
     ];
   }
@@ -176,10 +176,7 @@ export async function foldTargets(source: DriveRow): Promise<FoldTarget[]> {
       projectId,
       path: `/Shared/${segment(source.name)}`,
       grants: grants.flatMap<FoldTarget['grants'][number]>((g) => {
-        if (g.subjectType === 'user' && g.userId) return [{ principal: { type: 'user' as const, id: g.userId }, level: level(g.access) }];
-        if (g.subjectType === 'project' && g.projectId === projectId) {
-          return [{ principal: { type: 'project' as const, id: projectId }, level: level(g.access) }];
-        }
+        // Only agents hold folder grants: a person reaches the folder through an agent they may use.
         if (g.subjectType === 'agent' && g.projectId === projectId && g.agentName) {
           return [{ principal: { type: 'agent' as const, id: g.agentName }, level: level(g.access) }];
         }

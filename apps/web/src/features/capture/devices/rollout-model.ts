@@ -20,9 +20,9 @@ export function enrollmentUrl(backendUrl: string | undefined): string {
 }
 
 /** Where a computer downloads an installer: the dev build for the dev API, else the latest release. */
-export function installerUrl(url: string, file: string): string {
+function installerUrl(url: string, file: string): string {
   const tag = /\/\/dev-api\./.test(url) ? 'download/capture-dev-latest' : 'latest/download';
-  return `https://github.com/kortix-ai/suna/releases/${tag}/${file}`;
+  return `https://github.com/kortix-ai/CompanyOS/releases/${tag}/${file}`;
 }
 
 /** The Windows installer's download address. */
@@ -100,3 +100,6 @@ export function expiryDate(iso: string, locale: string): string {
     timeZone: 'UTC',
   });
 }
+
+export const errorText = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message ? error.message : fallback;

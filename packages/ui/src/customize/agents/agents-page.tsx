@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * /projects/[id]/customize/agents: the Agents index, where the sidebar's
+ * /workspaces/[id]/admin/agents (Workspace settings › Agents): the Agents index, where the sidebar's
  * Customize row lands.
  *
  * Customize is agent-first. My Kortix is not listed: the project home starts
@@ -9,6 +9,9 @@
  * agents call, as their own section: prod's catalog layout. Each card's facts
  * line reads what the configuration grants (KRTX-3025), never the agent's
  * prose. A space filter appears when the project splits into spaces.
+ *
+ * The page is the Customize libraries' shell (`CapabilityPageShell`), the
+ * same title, search and centered column as Skills and Connectors.
  *
  * New agent opens `CreateAgentModal`; `?new=1` opens it too (the sidebar's
  * New agent row links here).
@@ -54,8 +57,7 @@ import {
   InputGroupSearchIcon,
   InputGroupSearchInput,
 } from '../../primitives/input-group';
-import { Skeleton } from '../../primitives/skeleton';
-import { UiLink as Link, useUiPathname, useUiRouter, useUiSearchParams } from '../../providers/ui-provider';
+import { useUiPathname, useUiRouter, useUiSearchParams } from '../../providers/ui-provider';
 import { CatalogNoMatch } from '../shared/catalog/catalog-empty-state';
 import { CatalogGridSkeleton } from '../shared/catalog/catalog-grid';
 import { GRID_CLASSNAME } from '../shared/catalog/catalog-grid-tokens';
@@ -64,9 +66,8 @@ import { toArray } from '../shared/utils';
 import { AgentAccessText } from './agent-access-text';
 import { AgentCoverCard } from './agent-cover-card';
 import { agentInMode, filterAgents } from './agent-filter';
-import { AgentTabBody, CustomizeHeader } from './agent-page-chrome';
+import { CapabilityPageShell } from '../shared/capability-page-shell';
 import { CreateAgentModal } from './create-agent-modal';
-import { AgentPinButton } from './agent-pin-button';
 
 type Agent = ProjectConfigSummary['agents'][number];
 
@@ -114,7 +115,7 @@ export function AgentsPage({ projectId }: { projectId: string }) {
   });
   const triggerCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    const fallback = config?.default_agent ?? config?.open_code_default_agent ?? null;
+    const fallback = config?.default_agent ?? null;
     for (const trigger of triggersQuery.data?.triggers ?? []) {
       const owner = trigger.agent === 'default' && fallback ? fallback : trigger.agent;
       counts.set(owner, (counts.get(owner) ?? 0) + 1);
@@ -140,7 +141,7 @@ export function AgentsPage({ projectId }: { projectId: string }) {
 
   const agents = useMemo(() => toArray(config?.agents), [config]);
   const filtered = useMemo(() => filterAgents(agents, { mode: null, query }), [agents, query]);
-  const defaultAgent = config?.default_agent ?? config?.open_code_default_agent ?? null;
+  const defaultAgent = config?.default_agent ?? null;
   // The agents a person starts first (the default leading), subagents after.
   const work = useMemo(
     () =>
@@ -150,11 +151,11 @@ export function AgentsPage({ projectId }: { projectId: string }) {
           (a, b) =>
             Number(agentInMode(b, 'primary')) - Number(agentInMode(a, 'primary')) ||
             Number(b.name === defaultAgent) - Number(a.name === defaultAgent) ||
-            agentDisplayName(a.name).localeCompare(agentDisplayName(b.name)),
+            agentDisplayName(a.name, a.title).localeCompare(agentDisplayName(b.name, b.title)),
         ),
     [filtered, defaultAgent],
   );
-  // Spaces are Work in progress: with `project_channels` off, no space filter and no Space column.
+  // Spaces are Work in progress: with `chat` off, no space filter and no Space column.
   const spacesOn = useSpacesEnabled(projectId);
   const groups = useMemo(() => (spacesOn ? groupBySpace(work, config?.spaces) : []), [spacesOn, work, config?.spaces]);
   const [activeSpace, setActiveSpace] = useActiveSpace(projectId);
@@ -172,11 +173,10 @@ export function AgentsPage({ projectId }: { projectId: string }) {
       slug={agent.name}
       href={agentHref(projectId, agent.name)}
       onIntent={() => prefetchAgentConfig(queryClient, projectId, agent.name)}
-      title={agentDisplayName(agent.name)}
+      title={agentDisplayName(agent.name, agent.title)}
       description={agent.description}
       badges={<AgentCardBadges agent={agent} />}
       coverLabel={cover}
-      action={<AgentPinButton projectId={projectId} agent={agent.name} onCard />}
       meta={
         <AgentCardFacts
           agent={agent}
@@ -243,48 +243,40 @@ export function AgentsPage({ projectId }: { projectId: string }) {
     );
   })();
 
-  const search = (ref?: typeof searchRef) => (
-    <InputGroupSearch>
-      <InputGroupSearchIcon>
-        <MagnifyingGlassIcon />
-      </InputGroupSearchIcon>
-      <InputGroupSearchInput
-        ref={ref}
-        aria-label={tI18nComplete.raw('text212fd04a1d20')}
-        placeholder={tI18nComplete.raw('text212fd04a1d20')}
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        variant="popover"
-        size="sm"
-      />
-      {query ? <InputGroupSearchClear onClick={() => setQuery('')} /> : null}
-    </InputGroupSearch>
-  );
-
-  // The same header as the agent page, My Kortix and Review (`CustomizeHeader`),
-  // so the title never jumps between them. Search sits in it from `md`; below
-  // that it is the first row of the list.
+  // The Customize libraries' page shell (Skills, Connectors): the title and
+  // one line under it, search and actions on the right, then the card grid in
+  // a centered `max-w-5xl` column (2026-11-03: the earlier Agents page is back).
   return (
     <>
-      <div className="flex h-full min-h-0 flex-1 flex-col">
-        <CustomizeHeader
-          title={tI18nComplete.raw('text279b44d2ab4b')}
-          rule
-          actions={
-            <>
-              <div className="hidden w-64 md:block">{search(searchRef)}</div>
-              {config ? <DefaultAgentSelector projectId={projectId} config={config} canWrite={canWrite} /> : null}
-              {newButton}
-            </>
-          }
-        />
-        {/* A centered column: three cards across at most, never the whole window.
-            Equal top and bottom inset: this page has no save bar to clear. */}
-        <AgentTabBody className="mx-auto max-w-6xl space-y-5 pb-5">
-          <div className="md:hidden">{search()}</div>
-          {body}
-        </AgentTabBody>
-      </div>
+      <CapabilityPageShell
+        title={tI18nComplete.raw('text279b44d2ab4b')}
+        description={tI18nComplete.raw('text636453e23d69')}
+        action={
+          <>
+            {config ? <DefaultAgentSelector projectId={projectId} config={config} canWrite={canWrite} /> : null}
+            {newButton}
+          </>
+        }
+        search={
+          <InputGroupSearch>
+            <InputGroupSearchIcon>
+              <MagnifyingGlassIcon />
+            </InputGroupSearchIcon>
+            <InputGroupSearchInput
+              ref={searchRef}
+              aria-label={tI18nComplete.raw('text212fd04a1d20')}
+              placeholder={tI18nComplete.raw('text212fd04a1d20')}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              variant="popover"
+              size="sm"
+            />
+            {query ? <InputGroupSearchClear onClick={() => setQuery('')} /> : null}
+          </InputGroupSearch>
+        }
+      >
+        {body}
+      </CapabilityPageShell>
       {canWrite ? (
         <CreateAgentModal open={createOpen} onOpenChange={setCreateOpen} projectId={projectId} config={config} />
       ) : null}
@@ -371,7 +363,7 @@ function DefaultAgentSelector({
   const availableAgents = toArray(config.agents).filter(
     (agent) => agent.enabled !== false && agentInMode(agent, 'primary'),
   );
-  const current = config.default_agent ?? config.open_code_default_agent;
+  const current = config.default_agent;
   const mutation = useMutation({
     mutationFn: (agentName: string) => updateProjectDefaultAgent(projectId, agentName),
     onSuccess: async (result) => {
@@ -409,7 +401,7 @@ function DefaultAgentSelector({
             <SelectItem key={agent.name} value={agent.name}>
               <span className="flex min-w-0 items-center gap-2">
                 <AgentMark slug={agent.name} />
-                <span className="truncate">{agentDisplayName(agent.name)}</span>
+                <span className="truncate">{agentDisplayName(agent.name, agent.title)}</span>
               </span>
             </SelectItem>
           ))}

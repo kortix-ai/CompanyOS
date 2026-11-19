@@ -43,9 +43,9 @@ export const hero = {
   ctaPrimary: 'We are hiring',
   ctaPrimaryHref: '/careers',
   ctaSecondary: 'Read the code',
-  ctaSecondaryHref: 'https://github.com/kortix-ai/suna',
+  ctaSecondaryHref: 'https://github.com/kortix-ai/CompanyOS',
   imageAlt: 'The Kortix team',
-  starsCaption: 'stars on kortix-ai/suna',
+  starsCaption: 'stars on kortix-ai/CompanyOS',
 } as const;
 
 /**
@@ -133,11 +133,11 @@ export const future = {
    is the hiring call instead of the old thesis line. */
 export const closing = {
   title: 'Help us build it.',
-  titleMuted: 'We are hiring in Belgrade and San Francisco.',
+  titleMuted: 'We are hiring in Belgrade and the US.',
   ctaPrimary: 'See open positions',
   ctaPrimaryHref: '/careers',
   ctaSecondary: 'Read the code',
-  ctaSecondaryHref: 'https://github.com/kortix-ai/suna',
+  ctaSecondaryHref: 'https://github.com/kortix-ai/CompanyOS',
 } as const;
 
 export function getLocalizedAboutContent(tI18nComplete: UiTranslator) {

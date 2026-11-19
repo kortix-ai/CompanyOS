@@ -81,7 +81,7 @@ export const MEMBER_LABEL: Partial<Record<SandboxAlertSeverity, string>> = {
 };
 
 export const MEMBER_TEXT: Partial<Record<SandboxAlertSeverity, string>> = {
-  critical: 'New sessions can’t start right now. An owner or admin of this project can fix it.',
+  critical: 'New sessions can’t start right now. An owner or admin of this workspace can fix it.',
   building: 'Sessions can start once it’s ready.',
 };
 
@@ -107,7 +107,7 @@ export const CATEGORY_TEXT: Record<'critical' | 'warning', string> = {
 };
 
 export const CATEGORY_CAUSE: Record<string, string> = {
-  quota: 'This project has no room for another sandbox image. Removing an old one frees space.',
+  quota: 'Kortix’s image storage was full. Kortix frees space on its own. Retry in a few minutes.',
   dockerfile: 'A step in the project’s Dockerfile did not finish.',
   git: 'The build could not read the project’s repository. Its access may have expired.',
   tunnel: 'The sandbox could not reach Kortix while it was being built.',

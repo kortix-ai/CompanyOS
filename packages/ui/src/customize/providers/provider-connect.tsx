@@ -47,25 +47,40 @@ import { useTranslations } from '../../i18n';
 import { LLM_PROVIDERS, type LlmProviderEntry } from '../../internal/lib/llm-providers';
 import { cn } from '../../internal/lib/utils';
 import { PLATFORM_FEE_PERCENT } from '../../internal/billing/compute-pricing';
-import { getProjectDetail } from '@kortix/sdk';
+import {
+  FIRST_CLASS_PROVIDER_IDS,
+  PROVIDER_SUBSCRIPTIONS,
+  type ProviderConnectMethod,
+  type ProviderConnectedVia,
+  getProjectDetail,
+  providerConnectMethod,
+  providerConnectedVia,
+} from '@kortix/sdk';
 import {
   qk,
   useAccountSecretResources,
-  useFeatureFlag,
   useModelAccess,
   useProjectModelPickerCatalog,
 } from '@kortix/sdk/react';
 import { useQuery } from '@tanstack/react-query';
+import { useCanShareProviderAccounts } from '../sections/view/account-secret-resources-panel';
+import {
+  SUBSCRIPTION_ROW,
+  SubscriptionRowMeter,
+  summarizeSubscriptions,
+  useLiveSubscriptionUsages,
+  useSubscriptionLogins,
+  useSubscriptionRowSummary,
+  type UsageTone,
+} from '../sections/view/subscription-usage';
 
-/**
- * The three providers JAY-510 makes first-class: "Anthropic (Claude), OpenAI
- * (ChatGPT), Google Gemini". They lead the Available group after Kortix; every
- * other provider follows in catalogue order.
- */
-export const FIRST_CLASS_PROVIDER_IDS = ['anthropic', 'openai', 'google'] as const;
+export {
+  FIRST_CLASS_PROVIDER_IDS,
+  supportsPooledProviderKey,
+} from '@kortix/sdk';
 
 /** Providers whose sheet offers a subscription sign-in beside the API key. */
-export const SUBSCRIPTION_PROVIDER_IDS: ReadonlySet<string> = new Set(['openai', 'opencode-go', 'anthropic']);
+export const SUBSCRIPTION_PROVIDER_IDS: ReadonlySet<string> = new Set(Object.keys(PROVIDER_SUBSCRIPTIONS));
 
 /**
  * How many Available providers render before `Show more`, and how many each
@@ -74,28 +89,11 @@ export const SUBSCRIPTION_PROVIDER_IDS: ReadonlySet<string> = new Set(['openai',
  */
 export const PROVIDER_PAGE_SIZE = 12;
 
-// Mirrors the gateway's base-URL fallbacks in provider-registry.ts. A provider
-// without an API host or one of these fallbacks cannot create a gateway key.
-const GATEWAY_BASE_URL_FALLBACK_IDS = new Set([
-  'anthropic', 'openai', 'google', 'groq', 'x-ai', 'xai', 'mistral', 'deepseek',
-  'perplexity', 'cerebras', 'vercel', 'v0', 'deepinfra', 'togetherai',
-]);
-
-export function supportsPooledProviderKey(entry: LlmProviderEntry | undefined): boolean {
-  return Boolean(entry && entry.envVars.length === 1 &&
-    (entry.apiHost || GATEWAY_BASE_URL_FALLBACK_IDS.has(entry.id)));
-}
-
 export type ProviderStatus = 'included' | 'connected' | 'none';
 
 /** How a provider is connected: the row's meta and the sheet's subtitle. */
-export type ProviderMethod = 'included' | 'key' | 'signIn' | 'signInOrKey';
-
-export function providerMethod(entry: Pick<LlmProviderEntry, 'id' | 'envVars' | 'managed'>): ProviderMethod {
-  if (entry.managed || entry.id === 'kortix') return 'included';
-  if (SUBSCRIPTION_PROVIDER_IDS.has(entry.id)) return 'signInOrKey';
-  return entry.envVars.length === 0 ? 'signIn' : 'key';
-}
+export type ProviderMethod = ProviderConnectMethod;
+export const providerMethod = providerConnectMethod;
 
 /** Everything one provider row needs. Plain data — the view holds no hooks. */
 export interface ProviderListRow {
@@ -109,6 +107,8 @@ export interface ProviderListRow {
   via?: ConnectedVia;
   /** Inference turned off for this project; credentials are kept. */
   disabled?: boolean;
+  /** ChatGPT and Claude subscription usage across every login: the row's trailing line. */
+  usage?: { text: string; percent: number; tone: UsageTone } | null;
 }
 
 /**
@@ -154,18 +154,8 @@ export const SUBSCRIPTION_PLANS: Readonly<Record<string, string>> = {
 };
 
 /** How a connected two-way provider is connected. Undefined: not connected, or unknown. */
-export type ConnectedVia = 'signIn' | 'key' | 'both';
-
-/**
- * OpenAI's ChatGPT sign-in connects as provider `codex`, its API key as
- * `openai`, so the two can be told apart. Other providers report undefined.
- */
-export function connectedVia(providerId: string, connectedIds: ReadonlySet<string>): ConnectedVia | undefined {
-  if (providerId !== 'openai') return undefined;
-  const signIn = connectedIds.has('codex');
-  const key = connectedIds.has('openai');
-  return signIn && key ? 'both' : signIn ? 'signIn' : key ? 'key' : undefined;
-}
+export type ConnectedVia = ProviderConnectedVia;
+export const connectedVia = providerConnectedVia;
 
 /**
  * "API key · 14 models" — the same line under the row and the sheet title.
@@ -208,7 +198,7 @@ export interface ProviderConnectViewProps {
   /** The provider open in the host's sheet, if any. */
   selectedId?: string | null;
   onSelect: (providerId: string) => void;
-  /** One line above the list: read-only members and pooled-keys mode only. */
+  /** One line above the list: who the keys added here are shared with. */
   note?: string;
   className?: string;
 }
@@ -249,6 +239,8 @@ function ProviderRow({
       </span>
       {row.disabled ? (
         <span className="text-muted-foreground shrink-0 text-xs">{t('turnedOff')}</span>
+      ) : row.usage ? (
+        <SubscriptionRowMeter {...row.usage} />
       ) : null}
       <CaretRightIcon
         className={cn(
@@ -397,20 +389,41 @@ export function useManagedProvider(projectId: string | null): LlmProviderEntry {
   }, [pickerCatalog, tAccess]);
 }
 
+/**
+ * Every provider id with a usable credential: the project's own connections
+ * plus the usable pooled (account-level) ones. Ids stay raw, so a ChatGPT
+ * login is `codex` here and `connectedVia` can still say "signIn".
+ */
+export function providerConnectionIds(
+  connectedIds: Iterable<string | null | undefined>,
+  pooledProviderIds: Iterable<string | null | undefined>,
+): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const id of [...connectedIds, ...pooledProviderIds]) if (id) ids.add(id);
+  return ids;
+}
+
+/**
+ * True when a provider ROW is connected. A subscription login connects the
+ * row it belongs to under its own id (`codex` → OpenAI, `claude-agent` →
+ * Anthropic, `SUBSCRIPTION_ROW`), whether the project holds it or the
+ * account shares it. The usage meter maps through the same table.
+ */
+export function providerRowConnected(rowId: string, ids: ReadonlySet<string>): boolean {
+  if (ids.has(rowId)) return true;
+  for (const id of ids) if (SUBSCRIPTION_ROW[id] === rowId) return true;
+  return false;
+}
+
 /** Provider ids that hold a usable pooled (account-level) key for this project. */
 export function usePooledProviderIds(projectId: string, enabled: boolean) {
-  const pooledFlag = useFeatureFlag(enabled ? projectId : null, 'pooled_provider_secrets');
-  const pooledSecretsEnabled = pooledFlag.enabled;
   const project = useQuery({
     queryKey: qk.project.detail(projectId),
     queryFn: () => getProjectDetail(projectId),
-    enabled: enabled && pooledSecretsEnabled,
+    enabled,
   });
   const accountId = project.data?.project?.account_id;
-  const pooledResources = useAccountSecretResources(
-    enabled && pooledSecretsEnabled ? accountId : null,
-    projectId,
-  );
+  const pooledResources = useAccountSecretResources(enabled ? accountId : null, projectId);
   const pooledProviderIds = useMemo(
     () =>
       new Set(
@@ -421,12 +434,10 @@ export function usePooledProviderIds(projectId: string, enabled: boolean) {
     [pooledResources.data],
   );
   return {
-    pooledSecretsEnabled,
     accountId,
     pooledProviderIds,
-    isLoading:
-      pooledFlag.isLoading || (pooledSecretsEnabled && (project.isLoading || pooledResources.isLoading)),
-    isError: pooledSecretsEnabled && (project.isError || pooledResources.isError),
+    isLoading: project.isLoading || pooledResources.isLoading,
+    isError: project.isError || pooledResources.isError,
     isFetching: project.isFetching || pooledResources.isFetching,
     refetch: () => {
       void project.refetch();
@@ -437,6 +448,7 @@ export function usePooledProviderIds(projectId: string, enabled: boolean) {
 
 export interface ProviderConnectProps {
   projectId: string;
+  /** @deprecated Unused: every member sees who the keys added here are shared with. */
   canWrite?: boolean;
   /** Set while this surface is visible; drives the underlying queries. */
   enabled?: boolean;
@@ -447,22 +459,37 @@ export interface ProviderConnectProps {
 
 export function ProviderConnect({
   projectId,
-  canWrite = false,
   enabled = true,
   selectedId,
   onSelect,
   className,
 }: ProviderConnectProps) {
-  const t = useTranslations('providerSheet');
   const common = useTranslations('common');
   const tPooled = useTranslations('pooledSecrets');
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const access = useModelAccess(enabled ? projectId : null);
   const managedProvider = useManagedProvider(enabled ? projectId : null);
   const pooled = usePooledProviderIds(projectId, enabled);
+  const canShare = useCanShareProviderAccounts(projectId);
   useLiveLlmProviderCatalog(projectId, enabled);
   const catalogRevision = useLlmProviderCatalogRevision();
   const { connectedProviders, providerStateLoading } = useConnectedProviders(projectId, enabled);
+  const subscriptionAccountId = enabled ? pooled.accountId : null;
+  const subscriptions = useSubscriptionLogins(subscriptionAccountId, projectId);
+  const liveUsage = useLiveSubscriptionUsages(subscriptionAccountId, projectId, subscriptions.logins);
+  const rowSummary = useSubscriptionRowSummary();
+  // Each subscription login's live usage, summed per provider row (ChatGPT → OpenAI, Claude → Anthropic).
+  const now = Math.max(subscriptions.dataUpdatedAt, liveUsage.updatedAt);
+  const usageByRow = useMemo(() => {
+    const byRow = new Map<string, typeof liveUsage.usages>();
+    for (const login of liveUsage.usages) {
+      const row = SUBSCRIPTION_ROW[login.secret.provider_id ?? ''];
+      if (row) byRow.set(row, [...(byRow.get(row) ?? []), login]);
+    }
+    return new Map([...byRow].map(([row, logins]) => [row, rowSummary(summarizeSubscriptions(logins, now), now)]));
+  // `liveUsage.usages` is a fresh array each render; `now` moves with every read it holds.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, subscriptions.logins, rowSummary]);
 
   const [search, setSearch] = useState('');
   const [visibleCount, setVisibleCount] = useState(PROVIDER_PAGE_SIZE);
@@ -482,6 +509,7 @@ export function ProviderConnect({
   ], [access.data?.enforced, managedProvider, catalogRevision]);
 
   const { inUse, available } = useMemo(() => {
+    const ids = providerConnectionIds(connectedIds, pooled.pooledProviderIds);
     const ordered = orderProviderRows({
       providers: searchable,
       firstClassIds: ['kortix', ...FIRST_CLASS_PROVIDER_IDS],
@@ -502,21 +530,19 @@ export function ProviderConnect({
         status:
           method === 'included'
             ? entry.models.length > 0 ? 'included' : 'none'
-            : connectedIds.has(entry.id) ||
-                pooled.pooledProviderIds.has(entry.id) ||
-                // A ChatGPT sign-in connects OpenAI as provider `codex`.
-                (entry.id === 'openai' && connectedIds.has('codex'))
+            : providerRowConnected(entry.id, ids)
               ? 'connected'
               : 'none',
-        via: connectedVia(entry.id, connectedIds),
+        via: connectedVia(entry.id, ids),
         disabled: disabledProviders.has(entry.id),
+        usage: usageByRow.get(entry.id) ?? null,
       };
     });
     return {
       inUse: rows.filter((row) => row.status !== 'none'),
       available: rows.filter((row) => row.status === 'none'),
     };
-  }, [searchable, connectedIds, pooled.pooledProviderIds, search, access.data]);
+  }, [searchable, connectedIds, pooled.pooledProviderIds, search, access.data, usageByRow]);
 
   const searching = search.trim().length > 0;
   const limit = searching ? available.length : visibleCount;
@@ -559,13 +585,7 @@ export function ProviderConnect({
       onSearchChange={setSearch}
       selectedId={selectedId}
       onSelect={onSelect}
-      note={
-        pooled.pooledSecretsEnabled
-          ? tPooled('sharedDescription')
-          : canWrite
-            ? undefined
-            : t('readOnly')
-      }
+      note={tPooled(canShare ? 'sharedDescription' : 'sharedOnlyYouDescription')}
       className={className}
     />
   );

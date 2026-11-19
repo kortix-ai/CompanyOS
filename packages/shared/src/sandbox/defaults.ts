@@ -62,6 +62,34 @@ export const KORTIX_USER_PATH_DIRS =
   '/home/kortix/.local/bin:/home/kortix/.local/share/pnpm/bin:/home/kortix/.bun/bin';
 
 /**
+ * The uid of the `kortix` runtime user in every image whose base leaves it
+ * free. Boxes share Drive folders: the person's own folder mounts read-write
+ * into every session and into My Kortix, and the drive-owner helper in
+ * apps/sandbox/entrypoint.sh hands drive entries to the runtime user. Two
+ * images with two different `kortix` uids re-owned the same shared files back
+ * and forth, and every flip was a new version of every file in storage.
+ */
+export const KORTIX_RUNTIME_UID = 1000;
+
+/**
+ * Create the `kortix` runtime user at uid {@link KORTIX_RUNTIME_UID}.
+ *
+ * ubuntu:24.04 ships a stock `ubuntu` user at uid/gid 1000 that nothing uses,
+ * so `useradd` with no uid made `kortix` 1001 there. The stock user and its
+ * group are removed first; on a base without them both checks are no-ops. A
+ * custom template whose own Dockerfile already put another user at uid 1000
+ * keeps that user, and `kortix` takes the next free uid as before (the
+ * drive-owner helper never re-owns a shared file away from uid 1000, so such a
+ * box cannot start a fight). One line, no heredoc and no backslash: E2B's
+ * Dockerfile parser keeps it intact. apps/sandbox/Dockerfile carries it
+ * verbatim; `__tests__/defaults.test.ts` fails when the two differ.
+ */
+export const SANDBOX_RUNTIME_USER_COMMAND =
+  `if [ "$(getent passwd ${KORTIX_RUNTIME_UID} | cut -d: -f1)" = ubuntu ]; then userdel --remove ubuntu; fi` +
+  ` && if [ "$(getent group ${KORTIX_RUNTIME_UID} | cut -d: -f1)" = ubuntu ]; then groupdel ubuntu; fi` +
+  ` && useradd $(getent passwd ${KORTIX_RUNTIME_UID} >/dev/null || echo --uid ${KORTIX_RUNTIME_UID}) --create-home --shell /bin/bash --user-group kortix`;
+
+/**
  * Live project secrets on tmpfs. The kortix-agent daemon writes this file
  * (apps/kortix-sandbox-agent-server/src/harness/shared/agent-env-file.ts `AGENT_ENV_SH`).
  */
@@ -184,6 +212,28 @@ export function piSystemPackageWarmLines(packages: readonly string[]): string[] 
 }
 
 /**
+ * The `RUN case "$(uname -m)"` prologue every checksum-verified toolchain stage
+ * opens with: it picks the release artifact's arch name and checksum into
+ * `<prefix>_arch` / `<prefix>_sha`.
+ */
+function archSelect({ prefix, amd64Arch, arm64Arch, amd64Sha, arm64Sha, label }: {
+  prefix: string;
+  amd64Arch: string;
+  arm64Arch: string;
+  amd64Sha: string;
+  arm64Sha: string;
+  label: string;
+}): string[] {
+  return [
+    'RUN case "$(uname -m)" in \\',
+    `      x86_64) ${prefix}_arch=${amd64Arch}; ${prefix}_sha=${amd64Sha} ;; \\`,
+    `      aarch64|arm64) ${prefix}_arch=${arm64Arch}; ${prefix}_sha=${arm64Sha} ;; \\`,
+    `      *) echo "unsupported ${label} architecture: $(uname -m)" >&2; exit 1 ;; \\`,
+    '    esac \\',
+  ];
+}
+
+/**
  * The defaults' network half. Renders against an EMPTY build context and ends
  * as `USER kortix` with a trailing newline, so an image's own tooling or
  * `kortixDefaultsTail` concatenates directly onto it.
@@ -214,7 +264,7 @@ export function kortixDefaultsSetup(): string {
     '    && rm -rf /var/lib/apt/lists/* \\',
     `    && ${SANDBOX_SHELL_TOOL_LINK_COMMAND}`,
     '',
-    'RUN useradd --create-home --shell /bin/bash --user-group kortix \\',
+    `RUN ${SANDBOX_RUNTIME_USER_COMMAND} \\`,
     // E2B's Dockerfile parser removes the backslash from a quoted `\\n`.
     // Use echo so every provider writes the same valid sudoers line.
     "    && echo 'kortix ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/kortix \\",
@@ -229,11 +279,7 @@ export function kortixDefaultsSetup(): string {
     '',
     // One exact managed Python, exposed as python/python3. Agents use
     // `uv run --with` for dependencies instead of sharing a global venv.
-    `RUN case "$(uname -m)" in \\`,
-    `      x86_64) uv_arch=x86_64; uv_sha=${UV_SHA256_AMD64} ;; \\`,
-    `      aarch64|arm64) uv_arch=aarch64; uv_sha=${UV_SHA256_ARM64} ;; \\`,
-    `      *) echo "unsupported uv architecture: $(uname -m)" >&2; exit 1 ;; \\`,
-    '    esac \\',
+    ...archSelect({ prefix: 'uv', amd64Arch: 'x86_64', arm64Arch: 'aarch64', amd64Sha: UV_SHA256_AMD64, arm64Sha: UV_SHA256_ARM64, label: 'uv' }),
     '    && curl -fsSL --retry 3 --retry-delay 2 -o /tmp/uv.tar.gz \\',
     `         "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-\${uv_arch}-unknown-linux-gnu.tar.gz" \\`,
     '    && echo "${uv_sha}  /tmp/uv.tar.gz" | sha256sum -c - \\',
@@ -248,11 +294,7 @@ export function kortixDefaultsSetup(): string {
     // repository-controlled checksum; the public installer script is not part
     // of the trust path. pnpm then owns the JavaScript runtime floor: Node comes
     // from `pnpm runtime`, npm and global CLIs live in pnpm's global store.
-    'RUN case "$(uname -m)" in \\',
-    `      x86_64) pnpm_arch=x64; pnpm_sha=${PNPM_SHA256_AMD64} ;; \\`,
-    `      aarch64|arm64) pnpm_arch=arm64; pnpm_sha=${PNPM_SHA256_ARM64} ;; \\`,
-    `      *) echo "unsupported pnpm architecture: $(uname -m)" >&2; exit 1 ;; \\`,
-    '    esac \\',
+    ...archSelect({ prefix: 'pnpm', amd64Arch: 'x64', arm64Arch: 'arm64', amd64Sha: PNPM_SHA256_AMD64, arm64Sha: PNPM_SHA256_ARM64, label: 'pnpm' }),
     '    && curl -fsSL --retry 3 --retry-delay 2 -o /tmp/pnpm.tar.gz \\',
     `         "https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linux-\${pnpm_arch}.tar.gz" \\`,
     '    && echo "${pnpm_sha}  /tmp/pnpm.tar.gz" | sha256sum -c - \\',
@@ -267,11 +309,7 @@ export function kortixDefaultsSetup(): string {
     // Bun runs the Slack CLI shims and other agent CLIs. One versioned release
     // artifact, checksum-verified; the public installer script is not part of
     // the trust path.
-    'RUN case "$(uname -m)" in \\',
-    `      x86_64) bun_arch=x64; bun_sha=${BUN_SHA256_AMD64} ;; \\`,
-    `      aarch64|arm64) bun_arch=aarch64; bun_sha=${BUN_SHA256_ARM64} ;; \\`,
-    `      *) echo "unsupported Bun architecture: $(uname -m)" >&2; exit 1 ;; \\`,
-    '    esac \\',
+    ...archSelect({ prefix: 'bun', amd64Arch: 'x64', arm64Arch: 'aarch64', amd64Sha: BUN_SHA256_AMD64, arm64Sha: BUN_SHA256_ARM64, label: 'Bun' }),
     '    && curl -fsSL --retry 3 --retry-delay 2 -o /tmp/bun.zip \\',
     `         "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-\${bun_arch}.zip" \\`,
     '    && echo "${bun_sha}  /tmp/bun.zip" | sha256sum -c - \\',
@@ -385,9 +423,9 @@ export function kortixDefaultsTail(opts: KortixArtifactLayerOpts): string {
     // that tooling's build-cache key. See kortixShellProfileScript.
     kortixShellProfileRun(),
     '',
-    // The daemon clones the project workspace at boot using KORTIX_PROJECT_AUTO_CLONE
-    // — nothing project-specific is baked into the image. /workspace is created
-    // empty here; the daemon's materializeRepo path fills it.
+    // Nothing project-specific is baked into the image, and the daemon never
+    // clones the project at boot: /workspace is created empty here and stays
+    // empty until an agent runs `kortix workspaces clone`.
     'ENV KORTIX_WORKSPACE=/workspace',
     'USER kortix',
     ...piSystemPackageWarmLines(PI_SYSTEM_PACKAGES),

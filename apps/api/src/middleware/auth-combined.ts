@@ -23,6 +23,10 @@ import { presentedKortixToken, withTokenAttemptBudget } from './token-attempt-bu
 import { serviceAccountPrincipal, patPrincipal, jwtPrincipal } from './auth-principal';
 import { applyOAuthAccessTokenPrincipal } from './auth-oauth';
 import { deadCredential401 } from './auth';
+import {
+  INVALID_OR_EXPIRED_TOKEN_MESSAGE,
+  PREVIEW_SANDBOX_DENIED_MESSAGE,
+} from '../shared/dead-credential-log';
 import { enforceTokenProjectScope, extractPreviewSandboxId, setPreviewSessionCookie } from './auth-scope';
 import { bearerToken } from '../shared/bearer-token';
 
@@ -144,7 +148,7 @@ async function resolveServiceAccount(c: Context, next: Next, token: string, prev
         authType: 'service_account',
         accountId: sa.accountId,
       });
-      throw new HTTPException(403, { message: 'Not authorized to access this sandbox' });
+      throw new HTTPException(403, { message: PREVIEW_SANDBOX_DENIED_MESSAGE });
     }
     serviceAccountPrincipal(c, sa.serviceAccountId, sa.accountId, { token, enabled: isPreviewRoute });
     await next();
@@ -204,7 +208,7 @@ async function resolveKortixToken(c: Context, next: Next, token: string, preview
         authType: 'apiKey',
         accountId: result.accountId ?? null,
       });
-      throw new HTTPException(403, { message: 'Not authorized to access this sandbox' });
+      throw new HTTPException(403, { message: PREVIEW_SANDBOX_DENIED_MESSAGE });
     }
     // Map accountId → userId so route handlers work unchanged
     c.set('userId', result.accountId);
@@ -247,7 +251,7 @@ async function resolveJwt(c: Context, next: Next, token: string, previewSandboxI
         authType: 'jwt',
         userId: local.userId,
       });
-      throw new HTTPException(403, { message: 'Not authorized to access this sandbox' });
+      throw new HTTPException(403, { message: PREVIEW_SANDBOX_DENIED_MESSAGE });
     }
     await jwtPrincipal(c, local.userId, local.email, local.payload as Record<string, unknown>, 'local', { token, enabled: isPreviewRoute });
     await next();
@@ -258,7 +262,7 @@ async function resolveJwt(c: Context, next: Next, token: string, previewSandboxI
   // An inconclusive result falls through to the network path below instead.
   if (!isInconclusiveVerifyFailure(local.reason)) {
     auditLoginFail({ c, reason: `jwt_${local.reason}`, authType: 'jwt' });
-    throw new HTTPException(401, { message: 'Invalid or expired token' });
+    throw new HTTPException(401, { message: INVALID_OR_EXPIRED_TOKEN_MESSAGE });
   }
 
   // JWKS not yet loaded — fall back to network getUser() call
@@ -275,7 +279,7 @@ async function resolveJwt(c: Context, next: Next, token: string, previewSandboxI
         reason: error?.message ?? 'jwt_network_invalid',
         authType: 'jwt',
       });
-      throw new HTTPException(401, { message: 'Invalid or expired token' });
+      throw new HTTPException(401, { message: INVALID_OR_EXPIRED_TOKEN_MESSAGE });
     }
 
     if (
@@ -291,7 +295,7 @@ async function resolveJwt(c: Context, next: Next, token: string, previewSandboxI
         authType: 'jwt',
         userId: user.id,
       });
-      throw new HTTPException(403, { message: 'Not authorized to access this sandbox' });
+      throw new HTTPException(403, { message: PREVIEW_SANDBOX_DENIED_MESSAGE });
     }
 
     const payload = decodeSupabaseJwtPayload(token);

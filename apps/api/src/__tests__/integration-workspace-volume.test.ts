@@ -153,6 +153,31 @@ describe('workspace_volume', () => {
     expect(callLines()).toEqual([`PUT ${PT_US}/v1/volumes/kws-${sessionId}`]);
   });
 
+  test('KORTIX_WORKSPACE_VOLUMES=on: a project without its own choice is on (listed read-only) and gets a volume; one that chose off gets none', async () => {
+    config.KORTIX_WORKSPACE_VOLUMES = 'on';
+    const res = await app.request(`/v1/projects/${project.project_id}`, { headers: { Authorization: `Bearer ${ownerSecret}` } });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { experimental: Record<string, boolean>; experimental_features: Array<{ key: string }> };
+    expect(body.experimental.workspace_volume).toBe(true);
+    expect(body.experimental_features.find((f) => f.key === 'workspace_volume')).toMatchObject({
+      enabled: true,
+      overridden: false,
+      operator_only: true,
+    });
+
+    const sessionId = crypto.randomUUID();
+    const volume = startWorkspaceVolume({ sessionId, projectMetadata: {}, location: undefined });
+    expect(volume).toEqual({ name: `kws-${sessionId}`, location: null });
+    await newSessionWithId(sessionId, volume);
+    expect(await resolveWorkspaceVolume(sessionId)).toEqual(volume);
+    expect(callLines()).toEqual([`PUT ${PT}/v1/volumes/kws-${sessionId}`]);
+
+    calls = [];
+    const optedOut = { experimental: { workspace_volume: false } };
+    expect(startWorkspaceVolume({ sessionId: crypto.randomUUID(), projectMetadata: optedOut, location: undefined })).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
   test('flag off, kill switch on, no record or a forged record: no volume, no Platinum call', async () => {
     const id = crypto.randomUUID();
     expect(startWorkspaceVolume({ sessionId: id, projectMetadata: {}, location: undefined })).toBeNull();
@@ -181,6 +206,23 @@ describe('workspace_volume', () => {
     // Storage that did not answer is retried by the next /start.
     expect(classifySandboxProvisioningFailure(down)).toMatchObject({ category: 'drives-unavailable', transient: true });
   }, 20_000);
+
+  test('a 429 rate limit is waited out as Platinum asks (retry-after) and the volume opens; one that never clears stops after 4 waits', async () => {
+    // Platinum's org write budget (20/s, `org_mutation`) answers 429 with a Retry-After in seconds.
+    // `retry-after: 0` keeps the test off the real clock; the wait itself is the header's value.
+    const sessionId = await newSession('own');
+    const limited = () => new Response(JSON.stringify({ error: 'too many write requests for this org (20/s sustained) — retry shortly', code: 'rate_limited', bucket: 'org_mutation' }), { status: 429, headers: { 'retry-after': '0' } });
+    let n = 0;
+    answer = () => (++n <= 2 ? limited() : Response.json({ region: 'eu-west' }));
+    expect(await resolveWorkspaceVolume(sessionId)).toMatchObject({ name: `kws-${sessionId}` });
+    expect(callLines()).toEqual(Array(3).fill(`PUT ${PT}/v1/volumes/kws-${sessionId}`));
+
+    calls = [];
+    answer = limited;
+    const stuck = await resolveWorkspaceVolume(sessionId).catch((e) => e);
+    expect(calls).toHaveLength(5);
+    expect(classifySandboxProvisioningFailure(stuck)).toMatchObject({ category: 'drives-unavailable', transient: true });
+  });
 
   test('the box create mounts the volume privately in its region, without backup or branch restore', () => {
     const create = {

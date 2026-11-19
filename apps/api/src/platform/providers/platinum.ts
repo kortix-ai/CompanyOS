@@ -60,6 +60,7 @@ import { currentInstanceId } from '../../projects/instance-scope';
 import { isOpencodePort } from '../../shared/opencode-ports';
 import { logger } from '../../lib/logger';
 import { platinumJson, platinumJsonResponse, type PlatinumHttpError } from '../../shared/platinum';
+import { isPlatinumNotRunningVerdict } from '../../shared/platinum-not-running';
 import { sandboxFrontendBaseUrl } from '../sandbox-frontend-url';
 import { serviceKeyForExternalId } from '../service-key';
 import type {
@@ -83,7 +84,7 @@ import {
   sandboxWorkloadType,
 } from './contract';
 import { providerAutoStopBackstopMinutes } from './contract';
-import { classifyPtyWebSocketPath } from './pty-ingress';
+import { isPtyWebSocketPath } from './pty-ingress';
 import { sandboxOwnershipMarker } from '../sandbox-ownership';
 import { RESIDENTIAL_PROXY_NOT_OFFERED_MESSAGE } from '../services/sandbox-provisioning-error';
 
@@ -174,6 +175,15 @@ interface PlatinumSandbox {
   volume_mounts?: Array<Record<string, unknown>>;
   /** Optional mounts whose volume did not resolve: no mount row (#2427). */
   volume_mount_failures?: Array<Record<string, unknown>>;
+  /**
+   * The ports the create body's `expose` opened, when the box reached
+   * `running` inside the wait. Absent on a wait timeout (202), on an
+   * Idempotency-Key replay (Platinum stores no tokens twice) and on a Platinum
+   * without inline expose: the caller then calls `POST /:id/expose`.
+   */
+  exposed?: PlatinumExposedPort[];
+  /** `restore` (memory snapshot) or `cold-boot`. Absent on older Platinum. */
+  via?: string;
 }
 
 /** `GET /v1/sandboxes?paginated=true` — Platinum's list envelope. */
@@ -314,6 +324,31 @@ const MOUNT_REFUSAL_CODES = new Set([
 ]);
 
 /**
+ * Platinum's "the last box's writes on this volume are still being saved;
+ * retry shortly" (`409 volume_flushing`, `retry_after` in seconds): the box a
+ * session had a moment ago is still departing. Transient, so a create waits
+ * and tries again with the same mounts. Prod 2026-11-01: 33 sessions failed
+ * on it in one day, because a create treated it as a refusal.
+ */
+const FLUSHING_CODES = new Set(['volume_flushing', 'root_volume_flushing', 'exclusive_volume_flushing']);
+/** How long a create waits out a departing box's final save. Platinum measured 26 s, and 107 s at worst (rig 2026-11-01). */
+export const VOLUME_FLUSH_WAIT_MS = 120_000;
+
+/** The wait before the next create when `error` is a volume still saving, else null: `retry_after`, 1 to 15 s. */
+export function volumeFlushRetryMs(error: unknown): number | null {
+  const { status, code, body } = platinumHttp(error);
+  if (status !== 409 || !code || !FLUSHING_CODES.has(code)) return null;
+  let seconds = 5;
+  try {
+    const after = (JSON.parse(body ?? '') as { retry_after?: unknown }).retry_after;
+    if (typeof after === 'number' && after > 0) seconds = after;
+  } catch {
+    // not JSON: the default
+  }
+  return Math.min(15, Math.max(1, seconds)) * 1000;
+}
+
+/**
  * The optional mounts a refused create boots without, and why
  * (`metadata.droppedVolumes`): the ones the refusal names, else every
  * optional mount. The next create keeps the rest optional, so each refused
@@ -326,7 +361,7 @@ function droppedOptionalVolumes(opts: CreateSandboxOpts, error: unknown): Droppe
   if (typeof status !== 'number' || !((status >= 400 && status < 500) || status === 503)) return [];
   // A full fleet is capacity, not a mount: it is retried with every mount.
   if (/no capacity/i.test(body ?? '')) return [];
-  // A box that must run in its region (a warm box) fails fast, so a box
+  // A box that must run in its region fails fast, so a box
   // placed where the files live is booted instead of one without them.
   if (opts.locationRequired && code === 'volume_in_other_region') return [];
   let reason = body ?? '';
@@ -586,6 +621,7 @@ export class PlatinumProvider implements SandboxProvider {
   ): Promise<ProvisionResult> {
     const _t0 = Date.now();
     const workloadType = sandboxWorkloadType(opts);
+    const ingressPort = workloadType === 'app' ? 8080 : AGENT_PORT;
     const sandboxApiBase = config.KORTIX_URL
       .replace(/\/+$/, '')
       .replace(/\/v1\/router$/, '')
@@ -667,6 +703,10 @@ export class PlatinumProvider implements SandboxProvider {
         // environments.
         ...(currentInstanceId() ? { 'kortix.instance': currentInstanceId()! } : {}),
       },
+      // Open the ingress port in the create's own round trip (Platinum's inline
+      // expose: the same token and route as `POST /:id/expose`). The separate
+      // call below stays as the fallback for an answer without `exposed`.
+      expose: [{ port: ingressPort, public: false, ttl_seconds: PREVIEW_TOKEN_TTL_SECONDS }],
     };
     if (dedup) {
       createBody.name = dedup.name;
@@ -716,12 +756,28 @@ export class PlatinumProvider implements SandboxProvider {
     try {
       sandbox = await postCreate();
     } catch (err) {
+      // Before the optional-mount fallback: a volume still saving is not a
+      // folder to drop, and dropping folders would not make it finish sooner.
+      const flushWait = volumeFlushRetryMs(err);
+      const flushUntil = opts.volumeFlushDeadline ?? Date.now() + VOLUME_FLUSH_WAIT_MS;
+      if (flushWait !== null && Date.now() + flushWait <= flushUntil) {
+        // Stable message: alert on it.
+        logger.warn('[platinum] a volume still saves the last box\'s writes: the create waits and tries again', {
+          template,
+          sandboxId: opts.sandboxId ?? opts.name,
+          waitMs: flushWait,
+          code: platinumHttp(err).code,
+        });
+        await Bun.sleep(flushWait);
+        // A new attempt (a new name and Idempotency-Key), with the same mounts.
+        return this.provisionFromTemplate(template, { ...opts, createAttempt: dedupAttempt + 1, volumeFlushDeadline: flushUntil });
+      }
       const elsewhere = opts.location && createBody.volumes ? volumeRegionRefusal(err) : null;
       if (elsewhere && !opts.locationRequired) {
         // A box must run where its drives live. With no region the create goes
         // to the home control plane, which holds the drive (or routes the
         // create to the region that does). A drive missing everywhere still
-        // fails loudly there. A warm box keeps its region and fails below.
+        // fails loudly there. A box that must run in its region fails below.
         const fallback = {
           requested: opts.location!,
           state: 'volume_in_other_region',
@@ -805,8 +861,7 @@ export class PlatinumProvider implements SandboxProvider {
         // No copy is running, so waiting cannot help. `us_region` chooses
         // compute placement only: boot this session in the home region now.
         // The next regional create after Platinum's cooldown retries the copy.
-        // A speculative (warm) box must match its project's region, so it
-        // fails fast instead (warm-sessions.ts warmSessionPlacement).
+        // A box that must run in its region fails fast instead.
         // The recursion sends no region, so it cannot come back here.
         // ponytail: an ambiguous home create that fails, followed by a later
         // regional create that succeeds, leaves the home box orphaned for the
@@ -931,7 +986,6 @@ export class PlatinumProvider implements SandboxProvider {
       });
     }
 
-    const ingressPort = workloadType === 'app' ? 8080 : AGENT_PORT;
     const baseUrl = `${sandboxApiBase}/v1/p/${externalId}/${ingressPort}`;
 
     // Eagerly expose the agent port so the *.sbx edge route is LIVE the moment
@@ -940,9 +994,15 @@ export class PlatinumProvider implements SandboxProvider {
     // /agent, /session, /global/events calls hit an un-routed edge → 504s right
     // after runtime-ready. Best-effort: a failure here just falls back to the
     // lazy expose in resolveEndpoint.
-    let exposedUrl = '';
+    //
+    // The create body asked for it inline (`expose` above), so a create that
+    // answered `running` already opened the port and this costs no round trip.
+    // The standalone call runs only when the answer has no URL for it: a wait
+    // timeout, an Idempotency-Key replay, or a Platinum without inline expose.
+    const inlineExposed = sandbox.exposed?.find((port) => port.port === ingressPort && !!port.url);
+    let exposedUrl = (inlineExposed?.url ?? '').replace(/\/$/, '');
     const _tExpose0 = Date.now();
-    try {
+    if (!exposedUrl) try {
       const exposed = await platinumJson<PlatinumExposedPort>(
         `/v1/sandboxes/${externalId}/expose`,
         {
@@ -964,9 +1024,9 @@ export class PlatinumProvider implements SandboxProvider {
     const _exposeMs = Date.now() - _tExpose0;
 
     // Return as soon as the VM is running and the agent port is exposed — do NOT
-    // block on the in-guest runtime (repo clone + opencode). That readiness is
-    // polled by the frontend (useOpenCodeRuntimeReady + the react-query
-    // "opencode not ready" retry) EXACTLY as it is for Daytona, whose create()
+    // block on the in-guest runtime (repo clone + runtime start). That readiness
+    // is polled by the frontend (the SDK's `useRuntimeReady` gate) EXACTLY as it
+    // is for Daytona, whose create()
     // also returns a not-yet-usable box and defers readiness to the FE.
     //
     // Why this matters: the old code polled /kortix/health for runtimeReady up
@@ -980,7 +1040,7 @@ export class PlatinumProvider implements SandboxProvider {
     // becomes usable without any create-path hang.
     console.log(
       `[platinum-timing] ${externalId} ` +
-        `vm-running=${_vmMs}ms expose=${_exposeMs}ms ` +
+        `vm-running=${_vmMs}ms expose=${inlineExposed ? 'inline' : `${_exposeMs}ms`} via=${sandbox.via ?? 'unknown'} ` +
         `edge=${exposedUrl ? 'ready' : 'lazy'} total=${Date.now() - _t0}ms (runtime-ready deferred to FE poll, like daytona)` +
         (sandbox.replayed ? ' [S1: Idempotency-Key replay — adopted an already-committed box]' : ''),
     );
@@ -999,7 +1059,7 @@ export class PlatinumProvider implements SandboxProvider {
         ...(sandbox.region ? { platinumRegion: sandbox.region } : {}),
         ...(sandbox.api_url ? { platinumApiUrl: sandbox.api_url } : {}),
         // Always written, so a rebuilt box never keeps its predecessor's value
-        // (the row's metadata is merged). The warm pool matches on it.
+        // (the row's metadata is merged).
         residentialProxy: Boolean(opts.residentialProxy),
         // Optional folders Platinum holds (pending or failed) instead of
         // refusing the create: the session records them like the folders a
@@ -1343,6 +1403,18 @@ export class PlatinumProvider implements SandboxProvider {
       return 'unknown'; // provisioning / starting / resuming / migrating — transitional
     } catch (err) {
       if (isProviderNotFound(err)) return 'removed';
+      // The control plane's own not-running verdict (a GET answered 409
+      // sandbox_not_running — the same verdict its expose/exec give a box
+      // they refuse to serve) IS the stopped state, not a transitional one:
+      // a box this verdict describes never reaches `running` without a
+      // /start. Reading it as `unknown` made every wake a silent no-op while
+      // open session views polled the dead box through the preview proxy
+      // (502 bursts for as long as the view stayed open). A box that is
+      // STARTING answers 200 with a state body instead, so this branch
+      // cannot misread a boot. Matched by the pinned class NAME, not an
+      // instanceof: the expose-not-running tests establish the name as the
+      // contract, and a name survives every test's module mock.
+      if (isPlatinumNotRunningVerdict(err)) return 'stopped';
       return 'unknown';
     }
   }
@@ -1490,7 +1562,7 @@ export class PlatinumProvider implements SandboxProvider {
 
   routeIngress(request: SandboxIngressRequest) {
     const ptyWebsocket =
-      request.transport === 'websocket' && classifyPtyWebSocketPath(request.path) !== null;
+      request.transport === 'websocket' && isPtyWebSocketPath(request.path);
     return {
       // Either half of the opencode pair rewrites to the agent bridge —
       // Platinum cannot expose opencode's port directly. After a verified
@@ -1534,7 +1606,17 @@ export class PlatinumProvider implements SandboxProvider {
     return { url: ingress.url, headers };
   }
 
-  async ensureRunning(externalId: string): Promise<void> {
+  async ensureRunning(externalId: string, wakeReason?: unknown): Promise<void> {
+    // The freshest verdict wins: the caller may have just watched the control
+    // plane refuse an expose/exec with sandbox_not_running AFTER this box's
+    // GET last answered `running` — the control plane can contradict itself,
+    // and the verdict is the authoritative half. Start without re-trusting
+    // the GET.
+    if (isPlatinumNotRunningVerdict(wakeReason)) {
+      logger.warn(`[PLATINUM] Sandbox ${externalId} is stopped (control-plane verdict), waking up...`);
+      await this.start(externalId);
+      return;
+    }
     const status = await this.getStatus(externalId);
     if (status === 'running') return;
     // Only a stopped sandbox can be started; poking a transitional one would

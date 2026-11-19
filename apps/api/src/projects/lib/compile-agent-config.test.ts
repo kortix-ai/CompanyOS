@@ -46,6 +46,8 @@ mock.module('../git', () => ({
   // for a declared agent with no .md, so the predicate recognises exactly that
   // and treats anything else as a real failure — which is the distinction the
   // compiler now depends on.
+  // The last commit whose manifest parses (#11641); null: no fallback needed here.
+  findLastGoodManifestCommit: async () => null,
   isRepoFileNotFoundError: (err: unknown) =>
     /no such file/.test(String((err as Error)?.message ?? '')),
   // Unused here; present so the barrel keeps its shape for other modules.
@@ -56,10 +58,11 @@ mock.module('../git', () => ({
 
 const {
   CompileAgentConfigError,
-  OpencodeAgentConfigSchema,
+  AgentBehaviorConfigSchema,
   compileAgentConfig,
   compileSelectedAgentConfig,
   manifestPiCodemode,
+  manifestWorkspaceSetup,
   manifestPiPackageLists,
   manifestPiPackages,
   resolveCompiledAgentConfigForSession,
@@ -83,9 +86,9 @@ function parseYaml(raw: string): Record<string, unknown> {
   return parseManifestText(raw);
 }
 
-describe('OpencodeAgentConfigSchema (the agent editor\'s behavior half)', () => {
+describe('AgentBehaviorConfigSchema (the agent editor\'s behavior half)', () => {
   test('every field but `prompt` is an agent block key, so a save never writes a key the manifest refuses', () => {
-    const schemaKeys = Object.keys(OpencodeAgentConfigSchema.shape);
+    const schemaKeys = Object.keys(AgentBehaviorConfigSchema.shape);
     expect(schemaKeys).toContain('prompt');
     expect(schemaKeys.filter((key) => key !== 'prompt' && !(AGENT_BLOCK_KEYS_V3 as readonly string[]).includes(key))).toEqual([]);
   });
@@ -118,6 +121,14 @@ describe('a broken part of kortix.yaml is turned off, never fatal', () => {
     // A path outside the repository is never read.
     const escaped = compileAgentConfig({ default_agent: 'w', agents: { w: { prompt_file: '../secret.md' } } }, { '../secret.md': 'wrong' });
     expect(escaped.agent.w).toEqual({ disable: true });
+  });
+
+  test('a prompt_file that opens with frontmatter (a Claude Code agent) compiles to its body', () => {
+    const set = compileAgentConfig(
+      { default_agent: 'planner', agents: { planner: { prompt_file: '.claude/agents/planner.md' } } },
+      { '.claude/agents/planner.md': '---\nname: planner\ntools: Read, Grep\nmodel: opus\n---\nYou plan changes.\n' },
+    );
+    expect(set.agent.planner?.prompt).toBe('You plan changes.\n');
   });
 
   test('warnings never reach the session: only errors, at most 50', () => {
@@ -288,6 +299,27 @@ agents:
   });
 });
 
+describe('a program agent (`run`)', () => {
+  test('compiles its command, trimmed, and no prompt; the default model stays a model agent\'s', () => {
+    const manifest = parseYaml(`default_agent: janitor\nagents:\n  janitor:\n    run: "  pnpm tsx agents/janitor.ts  "\n    workspace:\n      setup: [pnpm install]\n  writer:\n    model: test/model\n    prompt: Be brief.\n`);
+    const compiled = compileAgentConfig(manifest, {});
+    expect(compiled.agent.janitor?.run).toBe('pnpm tsx agents/janitor.ts');
+    // A daemon older than program agents runs a model instead: it gets no tool and one line to say.
+    expect(compiled.agent.janitor?.tools).toEqual({ '*': false });
+    expect(compiled.agent.janitor?.prompt).toContain('cannot run program agents yet');
+    expect(compiled.agent.janitor?.disable).toBeUndefined();
+    expect(compiled.agent.writer?.run).toBeUndefined();
+    expect(compiled.model).toBeUndefined();
+  });
+
+  test('timeout compiles to seconds; omitted, it is the 30 min default', () => {
+    const manifest = parseYaml(`agents:\n  slow:\n    run: node s.js\n    timeout: 2h\n  quick:\n    run: node q.js\n`);
+    const compiled = compileAgentConfig(manifest, {});
+    expect(compiled.agent.slow?.timeout).toBe(7200);
+    expect(compiled.agent.quick?.timeout).toBe(1800);
+  });
+});
+
 // Prod 2026-10-14: a project whose declared agents held ~270 KB of prompts never
 // booted (one env string over 128 KiB). A project declares them in kortix.yaml.
 describe('a compiled config over 128 KiB', () => {
@@ -335,6 +367,31 @@ describe('agent tools', () => {
     expect(config.agent.researcher!.tools).toEqual({ '*': false, read: true, web_search: true, lookup_order: true });
     expect(config.agent.no_shell!.tools).toEqual({ bash: false, edit: false });
     expect(config.agent.unset!.tools).toBeUndefined();
+  });
+
+  test('"*", ["*"] and ALL compile exactly like `all`: every tool; `permission: all` / "*" is allow', () => {
+    const yaml = (tools: string, permission: string) =>
+      `default_agent: a\nskills:\n  review: skills/review\nagents:\n  a:\n    prompt: x\n    permission: ${permission}\n    tools: ${tools}\n    skills: ${tools}\n`;
+    const reference = compileAgentConfig(parseManifestText(yaml('all', 'allow'))).agent.a!;
+    expect(reference.tools).toBeUndefined();
+    for (const [tools, permission] of [['"*"', 'all'], ['["*"]', '"*"'], ['ALL', 'ALL'], ['[bash, "*"]', 'allow']] as const) {
+      const text = yaml(tools, permission);
+      expect(validateManifest(text).issues.filter((issue) => issue.severity === 'error')).toEqual([]);
+      expect(compileAgentConfig(parseManifestText(text)).agent.a).toEqual(reference);
+    }
+    // An omitted `tools` reads as `tools: "*"` (the tools-explicit rewrite) and compiles the same.
+    const omitted = parseManifestText('default_agent: a\nagents:\n  a:\n    prompt: x\n');
+    expect((omitted.agents as Record<string, { tools?: unknown }>).a!.tools).toBe('*');
+    expect(compileAgentConfig(omitted).agent.a!.tools).toBeUndefined();
+  });
+
+  test('a per-tool rule and a pattern action of all / "*" compile to allow', () => {
+    const permission = compileAgentConfig(
+      parseManifestText('default_agent: a\nagents:\n  a:\n    prompt: x\n    tools: "*"\n    permission:\n      bash: all\n      edit:\n        "*": "*"\n        "secret/*": deny\n'),
+    ).agent.a!.permission as Record<string, unknown>;
+    expect(permission.bash).toBe('allow');
+    expect(permission.edit).toEqual({ '*': 'allow', 'secret/*': 'deny' });
+    expect(JSON.stringify(permission)).not.toMatch(/"all"|:"\*"/);
   });
 
   test("an agent's exclude turns image_gen off for that agent only", () => {
@@ -451,7 +508,8 @@ agents:
     expect(set.project_tools).toEqual({ lookup_order: 'tools/lookup_order.ts' });
     expect(set.kortix_tools).toBeUndefined();
     expect(set.extensions).toEqual({
-      audit: { opencode: 'extensions/audit.opencode.ts', pi: 'extensions/audit.pi.ts' },
+      // The deprecated `opencode` module is not compiled: no session loads it.
+      audit: { pi: 'extensions/audit.pi.ts' },
       web: { pi: 'npm:pi-web-access@0.30.0' },
       adapter: { pi: { source: 'extensions/adapter', extensions: ['*.ts'] } },
     });
@@ -573,7 +631,7 @@ describe('allowlist rules put * first: OpenCode applies the last matching rule',
  * (key, pattern) rule in key order, the LAST match wins. `toEqual` ignores key
  * order, so only an evaluation like this one sees the order bug.
  */
-function openCodeAction(permission: unknown, name: string, subject: string): string | undefined {
+function permissionAction(permission: unknown, name: string, subject: string): string | undefined {
   const glob = (value: string, pattern: string) => new RegExp(`^${pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.').replace(/ \.\*$/, '( .*)?')}$`, 's').test(value);
   const block = typeof permission === 'string' ? { '*': permission } : (permission as Record<string, unknown>);
   const rules = Object.entries(block).flatMap(([key, rule]) =>
@@ -588,16 +646,16 @@ describe('compileAgentConfig — the most specific rule wins on OpenCode, whatev
   test('a skills list allows each listed skill and denies the rest (the prod failure shape)', () => {
     const set = wire(compileAgentConfig({ default_agent: 'a', skills: { 'aie-os': 'skills/aie-os', probe: 'skills/probe' }, agents: { a: { prompt: 'x', skills: ['aie-os', 'probe'] } } }));
     const permission = set.agent.a!.permission;
-    expect(openCodeAction(permission, 'skill', 'aie-os')).toBe('allow');
-    expect(openCodeAction(permission, 'skill', 'probe')).toBe('allow');
-    expect(openCodeAction(permission, 'skill', 'other')).toBe('deny');
+    expect(permissionAction(permission, 'skill', 'aie-os')).toBe('allow');
+    expect(permissionAction(permission, 'skill', 'probe')).toBe('allow');
+    expect(permissionAction(permission, 'skill', 'other')).toBe('deny');
   });
 
   test('a bash map with `*` last keeps its specific rule', () => {
     const set = wire(compileAgentConfig({ default_agent: 'a', agents: { a: { prompt: 'x', permission: { bash: { 'git push *': 'ask', '*': 'allow' } } } } }));
     const permission = set.agent.a!.permission;
-    expect(openCodeAction(permission, 'bash', 'git push origin main')).toBe('ask');
-    expect(openCodeAction(permission, 'bash', 'ls')).toBe('allow');
+    expect(permissionAction(permission, 'bash', 'git push origin main')).toBe('ask');
+    expect(permissionAction(permission, 'bash', 'ls')).toBe('allow');
   });
 
   test('a tool key outranks a `*` written after it', () => {
@@ -605,8 +663,42 @@ describe('compileAgentConfig — the most specific rule wins on OpenCode, whatev
       compileAgentConfig(parseYaml('default_agent: a\nagents:\n  a:\n    prompt: Hi.\n    permission:\n      bash: ask\n      edit:\n        "*.env": deny\n        "*": allow\n      "*": allow\n')),
     );
     const permission = set.agent.a!.permission;
-    expect(openCodeAction(permission, 'bash', 'ls')).toBe('ask');
-    expect(openCodeAction(permission, 'edit', 'apps/api/.env')).toBe('deny');
-    expect(openCodeAction(permission, 'read', 'x')).toBe('allow');
+    expect(permissionAction(permission, 'bash', 'ls')).toBe('ask');
+    expect(permissionAction(permission, 'edit', 'apps/api/.env')).toBe('deny');
+    expect(permissionAction(permission, 'read', 'x')).toBe('allow');
+  });
+});
+
+describe('manifestWorkspaceSetup', () => {
+  const raw = parseManifestText([
+    'default_agent: dev',
+    'agents:',
+    '  dev:',
+    '    prompt: hi',
+    '    workspace:',
+    '      repos:',
+    '        - {}',
+    '        - path: /workspace/web/',
+    '          sparse: [apps/web]',
+    '      setup: [pnpm install, { run: pnpm build, cwd: apps/web }]',
+    '  plain:',
+    '    prompt: hi',
+    '  machine-only:',
+    '    prompt: hi',
+    '    workspace: { sandbox: default }',
+    '',
+  ].join('\n'));
+  test('normalizes the declared clones and setup; a repo path defaults to /workspace', () => {
+    expect(manifestWorkspaceSetup(raw, 'dev')).toEqual({
+      repos: [{ path: '/workspace' }, { path: '/workspace/web', sparse: ['apps/web'] }],
+      setup: [{ run: 'pnpm install' }, { run: 'pnpm build', cwd: 'apps/web' }],
+    });
+    // `default` is "no agent chosen": the manifest's default_agent answers.
+    expect(manifestWorkspaceSetup(raw, 'default')).toEqual(manifestWorkspaceSetup(raw, 'dev'));
+  });
+  test('an agent that declares no clone and no setup prepares nothing', () => {
+    expect(manifestWorkspaceSetup(raw, 'plain')).toBeNull();
+    expect(manifestWorkspaceSetup(raw, 'machine-only')).toBeNull();
+    expect(manifestWorkspaceSetup(null, 'dev')).toBeNull();
   });
 });

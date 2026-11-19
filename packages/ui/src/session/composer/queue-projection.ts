@@ -56,6 +56,8 @@ export interface QueueRow {
   clientMessageId: string;
   text: string;
   attachmentCount: number;
+  /** Platform-generated context, never text typed by a person. */
+  synthetic?: true;
   state: QueueRowState;
   lastError?: string;
   /** The server can still remove this prompt, and this viewer may. */
@@ -68,8 +70,7 @@ export interface QueueRow {
   steer?: true;
   /** Why a steer prompt waits for the turn to end instead. */
   steerFallback?: SessionPromptSteerFallback;
-  /** "Stop and send" can turn it into Quick Queue: it is still waiting and
-   *  not yet on the wire. */
+  /** "Send now" can send it next: it is still waiting and not yet on the wire. */
   interruptible: boolean;
   /** A `/` command held in this tab until the session can run it
    *  (`held-commands.ts`). Not an inbox row. */
@@ -182,6 +183,7 @@ export function projectQueueRows(input: {
       clientMessageId: prompt.client_message_id,
       text: rowText(draft ? cleanPromptText(draft.text) : cleaned),
       attachmentCount,
+      ...(prompt.synthetic ? { synthetic: true as const } : {}),
       state,
       ...(state === 'failed' && prompt.last_error ? { lastError: prompt.last_error } : {}),
       // A steered prompt on the wire is still unread: the server takes it back.
@@ -223,17 +225,19 @@ export function projectQueueRows(input: {
 }
 
 /**
- * How a composer send reaches the session (D9.1).
+ * How a composer send reaches the session. One mode (2026-11-04):
  *
- * - Enter while a turn runs: `steer`. The running turn reads it at its next
- *   step. It waits in the list above the composer until the transcript has it.
- * - Cmd/Ctrl+Enter (`composer`): `queue` (Queue List).
- * - Enter while idle: unchanged. It starts a turn and paints in the transcript.
+ * - While a turn runs: `steer`. The running turn reads it after its current
+ *   tool call. It waits in the list above the composer until the transcript
+ *   has it.
+ * - While idle: it starts a turn and paints in the transcript.
+ *
+ * Enter and Cmd/Ctrl+Enter send the same way; `placement` is ignored. The
+ * server delivers every prompt as a steer whatever a client asks for.
  */
 export function composerSendDelivery(
-  placement: 'transcript' | 'composer',
+  _placement: 'transcript' | 'composer',
   busy: boolean,
 ): { placement: 'transcript' | 'composer'; delivery?: SessionPromptDelivery } {
-  if (placement === 'composer') return { placement, delivery: 'queue' };
-  return busy ? { placement: 'composer', delivery: 'steer' } : { placement };
+  return busy ? { placement: 'composer', delivery: 'steer' } : { placement: 'transcript' };
 }

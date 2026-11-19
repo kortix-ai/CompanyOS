@@ -113,7 +113,7 @@ from `npx skills add` and are pinned in `skills-lock.json`. The PR procedure is 
 
 The repository has no `docs/` tree. Put a runbook or spec in the skill that owns the
 surface (`.agents/skills/<name>/references/`). Put an incident rule in the learnings
-ledger. Put design detail and RCAs in the PR body. Never cite a repo path that does
+ledger. Link design detail and RCAs from the PR body to PR comments or evidence. Never cite a repo path that does
 not exist. The pre-commit hook and `tests/unit/no-docs-tree.test.ts` reject a new
 `docs/` file and any citation of one.
 
@@ -184,8 +184,9 @@ encrypted in `apps/api/.env` as `BLOCKED_COMMIT_TERMS`, comma-separated.
 - Add a customer the day they sign: `dotenvx set BLOCKED_COMMIT_TERMS
   "<existing>,<new>" -f apps/api/.env`. Read the current value first with
   `dotenvx get BLOCKED_COMMIT_TERMS -f apps/api/.env`.
-- In a worktree the guard decrypts with the primary checkout's
-  `apps/api/.env.keys`. Without a key it warns and allows.
+- The guard decrypts through the Armor login (`dotenvx armor login`, dotenvx
+  2.7.1+) or a checkout's `apps/api/.env.keys` (in a worktree, the primary's).
+  Without a key it warns and allows.
 - Deleting a line that contains a term is always allowed.
 - Never bypass the guard with `--no-verify`. If it fires, remove the term.
 - The hooks do not see PR titles, PR bodies, or comments. Those stay your
@@ -323,7 +324,7 @@ release, at Promote to Production, and nowhere else. The rules:
 |---|---|---|
 | Your box | T0 for the packages you touched, the targeted test, and the real surface: the route with curl, the CLI process, the page with agent-browser | your judgment |
 | Pull request into `dev` | nothing, unless a person adds `test` or `preview` | no |
-| Push to `dev` | only the seconds-long guards: `secret-scan`, `secrets-guard`, and path-gated `DB Migrations` / `i18n-catalogs` / `Terraform Apply Global` / `deploy-api-router-dev` | no |
+| Push to `dev` | seconds-long guards: `secret-scan`, `secrets-guard`; path-gated `DB Migrations` / `i18n-catalogs` / `Terraform Apply Global` / `deploy-api-router-dev`; requested mobile-input-gated `Mobile TestFlight` build | no |
 | Nightly on `dev` | `Tests` `core` and `packages` lanes, no browser: a red night comments the failures on the commit, so they are ready to fix before a promote | no |
 | Pull request into `staging` | nothing: Promote to Production opens and merges it | no |
 | Pull request into `prod` | the release suite, once (`full suite + quality gates`) | **yes, the only gate** |
@@ -340,7 +341,11 @@ or a name filter after `--`: `pnpm --filter <pkg> test -- -t <name>`. CI and
 Linux run the full suite.
 
 No hook or gate requires a test run before a push or a merge into `dev`. Write
-in the PR body what you ran and why. A diff that no test reads (docs, a skill,
+a short result under `## Quick verification`. Keep compact fenced commands and actual
+runner summaries there when evidence gates require them (collapsed blocks are allowed).
+Link verbose logs in PR comments or evidence. The body uses only `## Demo video` and `## Quick verification` (a few
+actionable bullets), as defined by `.github/pull_request_template.md`. This changes
+presentation only, not testing, safety or reviewer/merge gates. A diff that no test reads (docs, a skill,
 a standalone script) needs no run. When the nightly run or the release suite
 turns red on your change, you fix forward on `dev` the same day.
 
@@ -379,7 +384,7 @@ turns red on your change, you fix forward on `dev` the same day.
    again on dev after the merge (rule 8). Green tests are not the bar. Someone
    used it.
 7. After the merge, deploy dev yourself: `gh workflow run deploy-dev.yml
-   --repo kortix-ai/suna -f surface=changed` (`all` or `frontend` force a
+   --repo kortix-ai/CompanyOS -f surface=changed` (`all` or `frontend` force a
    rebuild). Deploys queue, they never cancel. Wait for the run to finish.
    `/health` on every changed surface must serve the merge SHA: a successful
    `/health` response alone is not deployment proof. The run comments "Live on
@@ -402,6 +407,17 @@ not replace dev, and a dev smoke test does not replace focused local tests.
 Record the branch, PR, local commands and output, merge SHA, deploy run,
 deployed SHA evidence, and the exact dev command or interaction in the final
 response.
+
+## Mobile versioning
+
+**Mobile changes require a version bump.** Follow `apps/mobile/AGENTS.md`:
+run `node apps/mobile/scripts/set-version.mjs --next` once per mobile task.
+For example: `1.6.2` → `1.6.21` → `1.6.22` → `1.6.23`.
+Keep major and minor unchanged. Commit every synchronized native version copy.
+This also applies when shared-package changes alter mobile behavior.
+Mobile changes merged into `dev` automatically build iOS for TestFlight with
+the production API. This dedicated workflow does not submit App Review or
+release to the App Store. See `apps/mobile/BUILD_GUIDE.md`.
 
 ## Architecture: `@kortix/sdk` is the source of truth
 
@@ -601,11 +617,13 @@ See `tests/e2e/helpers/session-auth.ts` for the exact calls.
   larger runner): Blacksmith billed ~$2.7k in September 2026 for minutes
   GitHub gives this repo for free. `tests/unit/image-build-speed-workflow.test.ts`
   enforces the free default.
-- `.github/workflows/tests.yml` holds the six contract lanes — `core-flows`,
+- `.github/workflows/tests.yml` holds the seven contract lanes — `core-flows`,
   `core-db`, `packages-api`, `packages-cli`, `packages-kortixd`,
-  `packages-rest` — one GitHub-hosted runner each (`CI_RUNNER_L`). `core-*`
-  split the core run (`--core-group=flows|db`); `packages-*` are slices of
-  package quality (`--packages-only --package-group=<g>`). The concurrency
+  `packages-publish`, `packages-rest` — one runner each (`CI_RUNNER_L`).
+  `core-*` split the core run (`--core-group=flows|db`); `packages-*` are
+  slices of package quality (`--packages-only --package-group=<g>`).
+  `publish` builds, packs and install-tests the npm packages; `rest` runs the
+  repo-wide checks and the tests of every other package. The concurrency
   settings in `tests/bin/package-quality.ts` must not be raised. Each lane is
   the unchanged root command at the exact requested SHA. Do not add CI-only
   test logic.

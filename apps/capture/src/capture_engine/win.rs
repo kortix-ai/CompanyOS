@@ -1,7 +1,12 @@
 //! Windows implementation of the capture engine.
 //!
-//! * Screen: GDI `BitBlt` of the monitor holding the focused window (works in
-//!   every interactive session, no consent prompt, no Graphics Capture border).
+//! * Screen: DXGI Desktop Duplication of the monitor holding the focused
+//!   window: the composed desktop, so GPU-rendered content (AutoCAD's drawing
+//!   area, games, video, flip-model DirectX apps) is in the frame. GDI `BitBlt`
+//!   misses that content and paints it black; it stays the fallback when
+//!   duplication is unavailable (a desktop switch, no GPU output, a rotated
+//!   monitor whose turn is not proven). Neither asks for consent or draws a
+//!   Graphics Capture border.
 //!   Hidden apps are painted black in `mod.rs::redact` from the z-ordered
 //!   window list, because a desktop grab cannot exclude windows.
 //! * Foreground / process: `GetForegroundWindow`, `QueryFullProcessImageNameW`,
@@ -29,8 +34,22 @@ use windows::Graphics::Imaging::{BitmapAlphaMode, BitmapPixelFormat, SoftwareBit
 use windows::Media::Ocr::OcrEngine;
 use windows::Storage::Streams::DataWriter;
 use windows::Win32::Foundation::{CloseHandle, BOOL, ERROR_SUCCESS, HWND, LPARAM, RECT, SIZE};
+use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_UNKNOWN;
+use windows::Win32::Graphics::Direct3D11::{
+    D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D, D3D11_CPU_ACCESS_READ,
+    D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_READ, D3D11_SDK_VERSION,
+    D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
+};
 use windows::Win32::Graphics::Dwm::{
     DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS,
+};
+use windows::Win32::Graphics::Dxgi::Common::{
+    DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_MODE_ROTATION, DXGI_MODE_ROTATION_ROTATE180,
+    DXGI_MODE_ROTATION_ROTATE270, DXGI_MODE_ROTATION_ROTATE90, DXGI_SAMPLE_DESC,
+};
+use windows::Win32::Graphics::Dxgi::{
+    CreateDXGIFactory1, IDXGIFactory1, IDXGIOutput1, IDXGIOutput5, IDXGIOutputDuplication,
+    IDXGIResource, DXGI_ERROR_ACCESS_LOST, DXGI_ERROR_WAIT_TIMEOUT, DXGI_OUTDUPL_FRAME_INFO,
 };
 use windows::Win32::Graphics::Gdi::{
     BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject,
@@ -59,8 +78,8 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::Accessibility::*;
 use windows::Win32::UI::HiDpi::{
-    GetDpiForMonitor, SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
-    MDT_EFFECTIVE_DPI,
+    GetDpiForMonitor, SetProcessDpiAwarenessContext, SetThreadDpiAwarenessContext,
+    DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, MDT_EFFECTIVE_DPI,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
 use windows::Win32::UI::Shell::PropertiesSystem::{
@@ -72,8 +91,9 @@ use windows::Win32::UI::Shell::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumChildWindows, EnumWindows, GetClassNameW, GetCursorPos, GetForegroundWindow,
-    GetWindowLongW, GetWindowRect, GetWindowTextW, GetWindowThreadProcessId, IsIconic,
-    IsWindowVisible, GWL_EXSTYLE, WS_EX_TOOLWINDOW,
+    GetWindowDisplayAffinity, GetWindowLongW, GetWindowRect, GetWindowTextW,
+    GetWindowThreadProcessId, IsIconic, IsWindowVisible, GWL_EXSTYLE, WDA_EXCLUDEFROMCAPTURE,
+    WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
 };
 
 pub fn init() {
@@ -472,6 +492,7 @@ pub fn windows(fg: &Foreground) -> Vec<WinInfo> {
             let title = window_text(hwnd);
             let class = class_name(hwnd);
             let ex = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
+            let overlay = WS_EX_LAYERED.0 | WS_EX_TRANSPARENT.0;
             let is_fg = hwnd_id(hwnd) == fg.id;
             // Titleless windows are shell chrome or invisible helpers; keep menus and the focused window.
             if title.is_empty() && class != "#32768" && !is_fg {
@@ -481,6 +502,13 @@ pub fn windows(fg: &Foreground) -> Vec<WinInfo> {
                 continue;
             }
             if class == "Progman" || class == "WorkerW" {
+                continue;
+            }
+            // A window excluded from capture is not in the image at all.
+            let mut affinity = 0u32;
+            if GetWindowDisplayAffinity(hwnd, &mut affinity).is_ok()
+                && affinity == WDA_EXCLUDEFROMCAPTURE.0
+            {
                 continue;
             }
             let pid = real_pid(hwnd, window_pid(hwnd));
@@ -494,6 +522,7 @@ pub fn windows(fg: &Foreground) -> Vec<WinInfo> {
                 title,
                 rect,
                 focused: is_fg,
+                overlay: ex & overlay == overlay,
             });
         }
     }
@@ -530,7 +559,7 @@ pub fn screenshot(focus: Option<Rect>) -> Result<Shot> {
         }
         let r = mi.rcMonitor;
         let (w, h) = (r.right - r.left, r.bottom - r.top);
-        let image = blit(r)?;
+        let image = grab(mon, r)?;
         Ok(Shot {
             image,
             display: Display {
@@ -543,6 +572,338 @@ pub fn screenshot(focus: Option<Rect>) -> Result<Shot> {
                 },
             },
         })
+    }
+}
+
+/// The pixels of one monitor: Desktop Duplication, else GDI `BitBlt`.
+fn grab(mon: HMONITOR, r: RECT) -> Result<RgbImage> {
+    let key = mon.0 as isize;
+    let now = unsafe { GetTickCount() };
+    let waiting = RETRY_AT.with(|t| {
+        t.borrow()
+            .get(&key)
+            .is_some_and(|at| (now.wrapping_sub(*at) as i32) < 0)
+    });
+    if waiting {
+        return blit(r);
+    }
+    match duplicate(mon, r) {
+        Ok(image) => Ok(image),
+        Err(e) => {
+            // A lost duplication (a desktop switch or mode change ends one) opens
+            // again on a later tick; until then BitBlt. Say why once per reason.
+            DUPS.with(|d| d.borrow_mut().remove(&key));
+            RETRY_AT.with(|t| t.borrow_mut().insert(key, now.wrapping_add(DUP_RETRY_MS)));
+            let why = format!("{e:#}");
+            FALLBACKS.with(|f| {
+                if f.borrow_mut().insert((key, why.clone())) {
+                    eprintln!("desktop duplication unavailable, using BitBlt: {why}");
+                }
+            });
+            blit(r)
+        }
+    }
+}
+
+/// One monitor's Desktop Duplication, kept open across ticks. `staging` holds
+/// the last frame, so a tick with no new frame (nothing changed) reads it again.
+struct Dup {
+    ctx: ID3D11DeviceContext,
+    device: ID3D11Device,
+    dup: IDXGIOutputDuplication,
+    staging: Option<ID3D11Texture2D>,
+    /// The monitor's rotation: the desktop texture is in the panel's own
+    /// orientation. `clockwise` is decided on the first frame of a 90/270 monitor.
+    rotation: DXGI_MODE_ROTATION,
+    clockwise: Option<bool>,
+    /// Counts the desktop images copied into `staging`. An equal value means
+    /// the monitor shows the same pixels as at the last read.
+    generation: u64,
+}
+
+/// How long a monitor whose duplication failed uses BitBlt before trying again.
+const DUP_RETRY_MS: u32 = 10_000;
+
+thread_local! {
+    static DUPS: RefCell<HashMap<isize, Dup>> = RefCell::new(HashMap::new());
+    static RETRY_AT: RefCell<HashMap<isize, u32>> = RefCell::new(HashMap::new());
+    static FALLBACKS: RefCell<std::collections::HashSet<(isize, String)>> =
+        RefCell::new(std::collections::HashSet::new());
+}
+
+/// Duplicate the output of the adapter that drives `mon`. On a hybrid-GPU
+/// laptop that is the integrated GPU even when the app draws on the discrete
+/// one; duplicating from any other adapter fails.
+fn open_dup(mon: HMONITOR) -> Result<Dup> {
+    unsafe {
+        let factory: IDXGIFactory1 = CreateDXGIFactory1()?;
+        let mut a = 0;
+        while let Ok(adapter) = factory.EnumAdapters1(a) {
+            a += 1;
+            let mut o = 0;
+            while let Ok(output) = adapter.EnumOutputs(o) {
+                o += 1;
+                let desc = output.GetDesc()?;
+                if desc.Monitor != mon {
+                    continue;
+                }
+                let mut device = None;
+                let mut ctx = None;
+                D3D11CreateDevice(
+                    &adapter,
+                    D3D_DRIVER_TYPE_UNKNOWN,
+                    None,
+                    D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                    None,
+                    D3D11_SDK_VERSION,
+                    Some(&mut device),
+                    None,
+                    Some(&mut ctx),
+                )?;
+                let device: ID3D11Device = device.ok_or_else(|| anyhow!("no D3D11 device"))?;
+                let ctx = ctx.ok_or_else(|| anyhow!("no D3D11 context"))?;
+                // DuplicateOutput1 converts an HDR desktop to 8-bit BGRA.
+                let dup1 = output
+                    .cast::<IDXGIOutput5>()
+                    .and_then(|o5| o5.DuplicateOutput1(&device, 0, &[DXGI_FORMAT_B8G8R8A8_UNORM]));
+                let dup = match dup1 {
+                    Ok(dup) => dup,
+                    Err(_) => output.cast::<IDXGIOutput1>()?.DuplicateOutput(&device)?,
+                };
+                return Ok(Dup {
+                    ctx,
+                    device,
+                    dup,
+                    staging: None,
+                    rotation: desc.Rotation,
+                    clockwise: None,
+                    generation: 0,
+                });
+            }
+        }
+        bail!("no DXGI output for the monitor")
+    }
+}
+
+/// A lost duplication (a mode change, a fullscreen switch, a UAC prompt) is
+/// opened again at once; a second loss in one tick falls back to BitBlt.
+fn duplicate(mon: HMONITOR, r: RECT) -> Result<RgbImage> {
+    match duplicate_once(mon, r) {
+        Err(e) if is_access_lost(&e) => {
+            DUPS.with(|d| d.borrow_mut().remove(&(mon.0 as isize)));
+            duplicate_once(mon, r)
+        }
+        other => other,
+    }
+}
+
+fn is_access_lost(e: &anyhow::Error) -> bool {
+    e.downcast_ref::<windows::core::Error>()
+        .is_some_and(|w| w.code() == DXGI_ERROR_ACCESS_LOST)
+}
+
+fn duplicate_once(mon: HMONITOR, r: RECT) -> Result<RgbImage> {
+    with_fresh_dup(mon, |d| unsafe { read_staging(d, r) })
+}
+
+/// Take the monitor's newest desktop image into `staging` when one is ready,
+/// then run `f` on the duplication.
+fn with_fresh_dup<T>(mon: HMONITOR, f: impl FnOnce(&mut Dup) -> Result<T>) -> Result<T> {
+    let key = mon.0 as isize;
+    DUPS.with(|cell| {
+        let mut dups = cell.borrow_mut();
+        let d = match dups.entry(key) {
+            std::collections::hash_map::Entry::Occupied(o) => o.into_mut(),
+            std::collections::hash_map::Entry::Vacant(v) => v.insert(open_dup(mon)?),
+        };
+        unsafe {
+            // Later ticks take a frame only when one is ready; none means nothing
+            // changed and the staging texture is still the screen. A fresh
+            // duplication waits up to ~600 ms for its first desktop image: some
+            // drivers first hand out a frame with none (LastPresentTime 0, black).
+            for attempt in 0..4 {
+                let wait = if d.staging.is_some() { 0 } else { 150 };
+                let mut info = DXGI_OUTDUPL_FRAME_INFO::default();
+                let mut res: Option<IDXGIResource> = None;
+                match d.dup.AcquireNextFrame(wait, &mut info, &mut res) {
+                    Ok(()) => {
+                        let fresh = d.staging.is_none();
+                        // LastPresentTime 0: only the pointer moved. The pointer is
+                        // not in the desktop image, so staging is still current.
+                        let copied = if info.LastPresentTime == 0 && (!fresh || attempt < 3) {
+                            Ok(!fresh)
+                        } else {
+                            copy_frame(d, res).map(|_| {
+                                d.generation += 1;
+                                true
+                            })
+                        };
+                        let _ = d.dup.ReleaseFrame();
+                        if copied? {
+                            break;
+                        }
+                    }
+                    Err(e) if e.code() == DXGI_ERROR_WAIT_TIMEOUT && d.staging.is_some() => break,
+                    Err(e) if e.code() == DXGI_ERROR_WAIT_TIMEOUT && attempt < 3 => {}
+                    Err(e) => return Err(anyhow::Error::new(e).context("AcquireNextFrame")),
+                }
+            }
+            f(d)
+        }
+    })
+}
+
+/// The desktop-image generation of display `d`: equal values mean the
+/// monitor shows the same pixels. None when the monitor is not duplicated
+/// (BitBlt fallback, no frame yet), so the caller must read the pixels.
+pub fn frame_generation(d: &DisplayInfo) -> Option<u64> {
+    let mon = HMONITOR(d.id as _);
+    let key = mon.0 as isize;
+    let now = unsafe { GetTickCount() };
+    let waiting = RETRY_AT.with(|t| {
+        t.borrow()
+            .get(&key)
+            .is_some_and(|at| (now.wrapping_sub(*at) as i32) < 0)
+    });
+    if waiting || !DUPS.with(|c| c.borrow().contains_key(&key)) {
+        return None;
+    }
+    match with_fresh_dup(mon, |d| Ok(d.staging.is_some().then_some(d.generation))) {
+        Ok(g) => g,
+        Err(_) => {
+            // The next read goes through `grab`, which reopens or falls back.
+            DUPS.with(|c| c.borrow_mut().remove(&key));
+            None
+        }
+    }
+}
+
+/// Copy the acquired desktop texture into the CPU-readable staging texture.
+unsafe fn copy_frame(d: &mut Dup, res: Option<IDXGIResource>) -> Result<()> {
+    let tex: ID3D11Texture2D = res.ok_or_else(|| anyhow!("no desktop image"))?.cast()?;
+    let mut desc = D3D11_TEXTURE2D_DESC::default();
+    tex.GetDesc(&mut desc);
+    if desc.Format != DXGI_FORMAT_B8G8R8A8_UNORM {
+        bail!("desktop format {}", desc.Format.0);
+    }
+    let fits = d.staging.as_ref().is_some_and(|s| {
+        let mut sd = D3D11_TEXTURE2D_DESC::default();
+        s.GetDesc(&mut sd);
+        sd.Width == desc.Width && sd.Height == desc.Height
+    });
+    if !fits {
+        let sd = D3D11_TEXTURE2D_DESC {
+            Width: desc.Width,
+            Height: desc.Height,
+            MipLevels: 1,
+            ArraySize: 1,
+            Format: desc.Format,
+            SampleDesc: DXGI_SAMPLE_DESC {
+                Count: 1,
+                Quality: 0,
+            },
+            Usage: D3D11_USAGE_STAGING,
+            CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
+            ..Default::default()
+        };
+        let mut staging = None;
+        d.device.CreateTexture2D(&sd, None, Some(&mut staging))?;
+        d.staging = staging;
+    }
+    let staging = d
+        .staging
+        .as_ref()
+        .ok_or_else(|| anyhow!("no staging texture"))?;
+    d.ctx.CopyResource(staging, &tex);
+    Ok(())
+}
+
+/// The staging texture as RGB, checked against the monitor size GDI reports.
+unsafe fn read_staging(d: &mut Dup, r: RECT) -> Result<RgbImage> {
+    let staging = d.staging.as_ref().ok_or_else(|| anyhow!("no frame yet"))?;
+    let mut desc = D3D11_TEXTURE2D_DESC::default();
+    staging.GetDesc(&mut desc);
+    let (w, h) = (desc.Width, desc.Height);
+    let quarter =
+        d.rotation == DXGI_MODE_ROTATION_ROTATE90 || d.rotation == DXGI_MODE_ROTATION_ROTATE270;
+    let (dw, dh) = if quarter { (h, w) } else { (w, h) };
+    if dw as i32 != r.right - r.left || dh as i32 != r.bottom - r.top {
+        bail!(
+            "duplicated {dw}x{dh}, monitor {}x{}",
+            r.right - r.left,
+            r.bottom - r.top
+        );
+    }
+    let mut map = D3D11_MAPPED_SUBRESOURCE::default();
+    d.ctx.Map(staging, 0, D3D11_MAP_READ, 0, Some(&mut map))?;
+    let pitch = map.RowPitch as usize;
+    let src = std::slice::from_raw_parts(map.pData as *const u8, pitch * h as usize);
+    let mut rgb = vec![0u8; (w * h * 3) as usize];
+    for (dst, row) in rgb
+        .chunks_exact_mut(w as usize * 3)
+        .zip(src.chunks_exact(pitch))
+    {
+        bgra_to_rgb(&row[..w as usize * 4], dst);
+    }
+    d.ctx.Unmap(staging, 0);
+    let panel = RgbImage::from_raw(w, h, rgb).ok_or_else(|| anyhow!("frame buffer size"))?;
+    use image::imageops::{rotate180, rotate270, rotate90};
+    Ok(if d.rotation == DXGI_MODE_ROTATION_ROTATE180 {
+        rotate180(&panel)
+    } else if quarter {
+        let cw = match d.clockwise {
+            Some(cw) => cw,
+            None => {
+                let cw = turns_clockwise(&panel, r)?;
+                d.clockwise = Some(cw);
+                cw
+            }
+        };
+        if cw {
+            rotate90(&panel)
+        } else {
+            rotate270(&panel)
+        }
+    } else {
+        panel
+    })
+}
+
+/// Which quarter turn of a rotated monitor's texture matches the desktop. A
+/// wrong turn would paint redaction at mirrored positions, so the direction is
+/// proven once against a GDI grab, which is always right side up: the better
+/// turn must match it closely and beat the other by a clear margin. Otherwise
+/// the error sends this monitor to BitBlt, and duplication is tried again later.
+fn turns_clockwise(panel: &RgbImage, r: RECT) -> Result<bool> {
+    let gdi = blit(r)?;
+    let thumb = |i: &RgbImage| image::imageops::thumbnail(&image::imageops::grayscale(i), 64, 64);
+    let g = thumb(&gdi);
+    // Mean absolute luma difference per thumbnail pixel.
+    let diff = |i: RgbImage| -> f64 {
+        let t = thumb(&i);
+        let sum: u64 = t
+            .as_raw()
+            .iter()
+            .zip(g.as_raw())
+            .map(|(a, b)| u64::from(a.abs_diff(*b)))
+            .sum();
+        sum as f64 / t.as_raw().len().max(1) as f64
+    };
+    let cw = diff(image::imageops::rotate90(panel));
+    let ccw = diff(image::imageops::rotate270(panel));
+    let (best, other) = (cw.min(ccw), cw.max(ccw));
+    if best > 24.0 || best * 2.0 > other {
+        bail!("rotation not proven (diff {cw:.1} clockwise, {ccw:.1} counterclockwise)");
+    }
+    Ok(cw < ccw)
+}
+
+/// BGRA pixels to RGB into a preallocated buffer (no per-pixel push).
+fn bgra_to_rgb(src: &[u8], dst: &mut [u8]) {
+    for (d, s) in dst.chunks_exact_mut(3).zip(src.chunks_exact(4)) {
+        d[0] = s[2];
+        d[1] = s[1];
+        d[2] = s[0];
     }
 }
 
@@ -588,10 +949,8 @@ fn blit(r: RECT) -> Result<RgbImage> {
         if lines == 0 {
             bail!("GetDIBits failed");
         }
-        let mut rgb = Vec::with_capacity((w * h * 3) as usize);
-        for px in buf.chunks_exact(4) {
-            rgb.extend_from_slice(&[px[2], px[1], px[0]]);
-        }
+        let mut rgb = vec![0u8; (w * h * 3) as usize];
+        bgra_to_rgb(&buf, &mut rgb);
         RgbImage::from_raw(w as u32, h as u32, rgb).ok_or_else(|| anyhow!("frame buffer size"))
     }
 }
@@ -613,6 +972,10 @@ pub fn displays() -> Vec<DisplayInfo> {
             LPARAM(&mut monitors as *mut _ as isize),
         );
     }
+    // A monitor that is gone keeps no duplication (a D3D device) open.
+    let live: std::collections::HashSet<isize> = monitors.iter().map(|m| m.0 as isize).collect();
+    DUPS.with(|d| d.borrow_mut().retain(|k, _| live.contains(k)));
+    RETRY_AT.with(|t| t.borrow_mut().retain(|k, _| live.contains(k)));
     monitors
         .into_iter()
         .filter_map(|mon| unsafe {
@@ -641,12 +1004,58 @@ pub fn displays() -> Vec<DisplayInfo> {
 }
 
 pub fn screenshot_display(d: &DisplayInfo) -> Result<RgbImage> {
-    blit(RECT {
-        left: d.rect.x,
-        top: d.rect.y,
-        right: d.rect.right(),
-        bottom: d.rect.bottom(),
-    })
+    grab(
+        HMONITOR(d.id as _),
+        RECT {
+            left: d.rect.x,
+            top: d.rect.y,
+            right: d.rect.right(),
+            bottom: d.rect.bottom(),
+        },
+    )
+}
+
+/// One monitor's pixels as the engine reads them (Desktop Duplication, else
+/// BitBlt), for the in-process action recorder. `mon` is an HMONITOR value.
+/// `unless`: a generation from an earlier call; when the monitor still shows
+/// that desktop image, returns None without reading the pixels. The returned
+/// generation is None when the image came from BitBlt.
+pub fn grab_monitor(mon: isize, unless: Option<u64>) -> Result<Option<(RgbImage, Option<u64>)>> {
+    // Physical pixels: Desktop Duplication hands them out, and the size check
+    // in `read_staging` compares against this thread's monitor rectangle.
+    unsafe {
+        let _ = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
+    let mon = HMONITOR(mon as _);
+    let mut mi = MONITORINFO {
+        cbSize: size_of::<MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    if !unsafe { GetMonitorInfoW(mon, &mut mi) }.as_bool() {
+        bail!("no_display");
+    }
+    let r = mi.rcMonitor;
+    let info = DisplayInfo {
+        id: mon.0 as i64,
+        rect: Rect {
+            x: r.left,
+            y: r.top,
+            w: r.right - r.left,
+            h: r.bottom - r.top,
+        },
+        name: String::new(),
+        main: false,
+        scale: 1.0,
+    };
+    if let (Some(g), Some(last)) = (frame_generation(&info), unless) {
+        if g == last {
+            return Ok(None);
+        }
+    }
+    let image = grab(mon, r)?;
+    let key = mon.0 as isize;
+    let generation = DUPS.with(|c| c.borrow().get(&key).map(|d| d.generation));
+    Ok(Some((image, generation)))
 }
 
 // ------------------------------------------------------ UI Automation (AX)
@@ -718,103 +1127,151 @@ fn role_name(id: UIA_CONTROLTYPE_ID) -> &'static str {
         .unwrap_or("Unknown")
 }
 
-fn element_value(el: &IUIAutomationElement) -> Option<String> {
+/// The longest one tree walk may take. Every UI Automation call is answered
+/// on the target app's UI thread, so a long walk stalls that app (a large
+/// ribbon, a docked pane, a dialog with many fields). A walk that hits the budget returns what it
+/// has, marked partial.
+const AX_BUDGET: Duration = Duration::from_millis(250);
+
+/// One cache request for every property a node records. A node then costs one
+/// cross-process call (`...BuildCache` on the walker) instead of one per property.
+fn ax_cache_request(auto: &IUIAutomation) -> Option<IUIAutomationCacheRequest> {
+    unsafe {
+        let req = auto.CreateCacheRequest().ok()?;
+        for id in [
+            UIA_ControlTypePropertyId,
+            UIA_NamePropertyId,
+            UIA_HelpTextPropertyId,
+            UIA_BoundingRectanglePropertyId,
+            UIA_IsOffscreenPropertyId,
+            UIA_IsEnabledPropertyId,
+            UIA_ValueValuePropertyId,
+        ] {
+            req.AddProperty(id).ok()?;
+        }
+        req.AddPattern(UIA_ValuePatternId).ok()?;
+        Some(req)
+    }
+}
+
+fn cached_value(el: &IUIAutomationElement) -> Option<String> {
     let pattern =
-        unsafe { el.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) }.ok()?;
-    let v = unsafe { pattern.CurrentValue() }.ok()?.to_string();
+        unsafe { el.GetCachedPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) }.ok()?;
+    let v = unsafe { pattern.CachedValue() }.ok()?.to_string();
     (!v.is_empty()).then_some(v)
 }
 
-fn ax_node(
-    auto: &IUIAutomation,
-    walker: &IUIAutomationTreeWalker,
-    el: &IUIAutomationElement,
-    depth: usize,
+struct AxWalk<'a> {
+    walker: &'a IUIAutomationTreeWalker,
+    cache: &'a IUIAutomationCacheRequest,
     max_depth: usize,
-    budget: &mut usize,
-) -> Option<Value> {
-    if *budget == 0 {
-        return None;
-    }
-    *budget -= 1;
-    let mut node = Map::new();
-    let ct = unsafe { el.CurrentControlType() }.unwrap_or_default();
-    node.insert("role".into(), json!(format!("UIA{}", role_name(ct))));
-    if let Ok(n) = unsafe { el.CurrentName() } {
-        if !n.is_empty() {
-            node.insert("title".into(), json!(n.to_string()));
+    budget: usize,
+    deadline: Instant,
+    /// Set when the node budget or the deadline cut the walk short.
+    cut: bool,
+}
+
+impl AxWalk<'_> {
+    fn spent(&mut self) -> bool {
+        if self.budget == 0 || Instant::now() >= self.deadline {
+            self.cut = true;
         }
+        self.cut
     }
-    if let Ok(n) = unsafe { el.CurrentHelpText() } {
-        if !n.is_empty() {
-            node.insert("description".into(), json!(n.to_string()));
+
+    /// `el` carries the cached properties of `ax_cache_request`.
+    fn node(&mut self, el: &IUIAutomationElement, depth: usize) -> Option<Value> {
+        if self.spent() {
+            return None;
         }
-    }
-    let valued = [
-        UIA_EditControlTypeId,
-        UIA_DocumentControlTypeId,
-        UIA_ComboBoxControlTypeId,
-        UIA_TextControlTypeId,
-        UIA_SpinnerControlTypeId,
-        UIA_SliderControlTypeId,
-        UIA_HyperlinkControlTypeId,
-    ];
-    if valued.contains(&ct) {
-        if let Some(v) = element_value(el) {
-            node.insert(
-                "value".into(),
-                json!(v.chars().take(4000).collect::<String>()),
-            );
+        self.budget -= 1;
+        let mut node = Map::new();
+        let ct = unsafe { el.CachedControlType() }.unwrap_or_default();
+        node.insert("role".into(), json!(format!("UIA{}", role_name(ct))));
+        if let Ok(n) = unsafe { el.CachedName() } {
+            if !n.is_empty() {
+                node.insert("title".into(), json!(n.to_string()));
+            }
         }
-    }
-    if let Ok(r) = unsafe { el.CurrentBoundingRectangle() } {
-        node.insert("x".into(), json!(r.left));
-        node.insert("y".into(), json!(r.top));
-        node.insert("w".into(), json!(r.right - r.left));
-        node.insert("h".into(), json!(r.bottom - r.top));
-    }
-    if unsafe { el.CurrentIsOffscreen() }
-        .map(|b| b.as_bool())
-        .unwrap_or(false)
-    {
-        node.insert("hidden".into(), json!(true));
-    }
-    if !unsafe { el.CurrentIsEnabled() }
-        .map(|b| b.as_bool())
-        .unwrap_or(true)
-    {
-        node.insert("disabled".into(), json!(true));
-    }
-    let first = unsafe { walker.GetFirstChildElement(el) }.ok();
-    if depth < max_depth {
-        let mut kids = Vec::new();
-        let mut child = first;
-        while let Some(c) = child {
-            let Some(k) = ax_node(auto, walker, &c, depth + 1, max_depth, budget) else {
-                break;
-            };
-            kids.push(k);
-            child = unsafe { walker.GetNextSiblingElement(&c) }.ok();
+        if let Ok(n) = unsafe { el.CachedHelpText() } {
+            if !n.is_empty() {
+                node.insert("description".into(), json!(n.to_string()));
+            }
         }
-        if !kids.is_empty() {
-            node.insert("children".into(), Value::Array(kids));
+        let valued = [
+            UIA_EditControlTypeId,
+            UIA_DocumentControlTypeId,
+            UIA_ComboBoxControlTypeId,
+            UIA_TextControlTypeId,
+            UIA_SpinnerControlTypeId,
+            UIA_SliderControlTypeId,
+            UIA_HyperlinkControlTypeId,
+        ];
+        if valued.contains(&ct) {
+            if let Some(v) = cached_value(el) {
+                node.insert(
+                    "value".into(),
+                    json!(v.chars().take(4000).collect::<String>()),
+                );
+            }
         }
-    } else if first.is_some() {
-        node.insert("truncated".into(), json!(true));
+        if let Ok(r) = unsafe { el.CachedBoundingRectangle() } {
+            node.insert("x".into(), json!(r.left));
+            node.insert("y".into(), json!(r.top));
+            node.insert("w".into(), json!(r.right - r.left));
+            node.insert("h".into(), json!(r.bottom - r.top));
+        }
+        if unsafe { el.CachedIsOffscreen() }
+            .map(|b| b.as_bool())
+            .unwrap_or(false)
+        {
+            node.insert("hidden".into(), json!(true));
+        }
+        if !unsafe { el.CachedIsEnabled() }
+            .map(|b| b.as_bool())
+            .unwrap_or(true)
+        {
+            node.insert("disabled".into(), json!(true));
+        }
+        if depth < self.max_depth {
+            let mut kids = Vec::new();
+            let mut child =
+                unsafe { self.walker.GetFirstChildElementBuildCache(el, self.cache) }.ok();
+            while let Some(c) = child {
+                let Some(k) = self.node(&c, depth + 1) else {
+                    break;
+                };
+                kids.push(k);
+                child = unsafe { self.walker.GetNextSiblingElementBuildCache(&c, self.cache) }.ok();
+            }
+            if !kids.is_empty() {
+                node.insert("children".into(), Value::Array(kids));
+            }
+        } else if unsafe { self.walker.GetFirstChildElement(el) }.is_ok() {
+            node.insert("truncated".into(), json!(true));
+        }
+        Some(Value::Object(node))
     }
-    Some(Value::Object(node))
 }
 
 pub fn ax_tree(fg: &Foreground, max_depth: usize, max_nodes: usize) -> Option<AxResult> {
     let auto = automation()?;
-    let root = unsafe { auto.ElementFromHandle(hwnd_from(fg.id)) }.ok()?;
+    let cache = ax_cache_request(&auto)?;
+    let root = unsafe { auto.ElementFromHandleBuildCache(hwnd_from(fg.id), &cache) }.ok()?;
     let walker = unsafe { auto.ControlViewWalker() }.ok()?;
-    let mut budget = max_nodes;
-    let tree = ax_node(&auto, &walker, &root, 0, max_depth, &mut budget)?;
+    let mut walk = AxWalk {
+        walker: &walker,
+        cache: &cache,
+        max_depth,
+        budget: max_nodes,
+        deadline: Instant::now() + AX_BUDGET,
+        cut: false,
+    };
+    let tree = walk.node(&root, 0)?;
     Some(AxResult {
         tree,
-        node_count: max_nodes - budget,
-        partial: budget == 0,
+        node_count: max_nodes - walk.budget,
+        partial: walk.cut,
     })
 }
 
@@ -836,14 +1293,69 @@ fn looks_like_url(v: &str) -> bool {
     !v.contains(' ') && (v.contains("://") || v.contains('.') || v.starts_with("localhost"))
 }
 
+thread_local! {
+    /// The address-bar element of the last browser window searched: (window, element).
+    static ADDRESS_BAR: RefCell<Option<(u64, IUIAutomationElement)>> = const { RefCell::new(None) };
+}
+
+/// The URL in a value read from an address bar, or None when it is not one.
+fn as_url(v: &str) -> Option<String> {
+    if !looks_like_url(v) {
+        return None;
+    }
+    let v = v.trim().to_string();
+    Some(if v.contains("://") { v } else { format!("https://{v}") })
+}
+
 /// Address-bar text of a browser window: first Edit control (breadth first,
 /// so the toolbar wins over page content) whose value looks like a URL.
+///
+/// Read fresh on every call: this text alone decides whether the page in front
+/// is on an excluded site, and whether record only included records it. What
+/// is kept between calls is the address-bar element, not its text, so a
+/// steady probe costs one or two calls into the browser instead of a walk of
+/// up to 900 elements. A stale element, or one that no longer holds a URL,
+/// starts a full search.
 pub fn browser_url(fg: &Foreground) -> Option<String> {
     if !BROWSERS.contains(&fg.bundle_id.to_lowercase().as_str()) {
         return None;
     }
+    let cached = ADDRESS_BAR.with(|c| {
+        c.borrow()
+            .as_ref()
+            .filter(|(w, _)| *w == fg.id)
+            .map(|(_, el)| el.clone())
+    });
+    if let Some(url) = cached.and_then(|el| current_value(&el)).and_then(|v| as_url(&v)) {
+        return Some(url);
+    }
+    let found = find_address_bar(fg);
+    ADDRESS_BAR.with(|c| {
+        *c.borrow_mut() = found.as_ref().map(|(_, el)| (fg.id, el.clone()));
+    });
+    found.map(|(url, _)| url)
+}
+
+fn current_value(el: &IUIAutomationElement) -> Option<String> {
+    let pattern =
+        unsafe { el.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) }.ok()?;
+    let v = unsafe { pattern.CurrentValue() }.ok()?.to_string();
+    (!v.is_empty()).then_some(v)
+}
+
+/// The whole search: breadth first over up to 900 elements, one cached call per
+/// element. No time budget: a search cut short would report no URL, and no URL
+/// must not let an excluded site through.
+fn find_address_bar(fg: &Foreground) -> Option<(String, IUIAutomationElement)> {
     let auto = automation()?;
-    let root = unsafe { auto.ElementFromHandle(hwnd_from(fg.id)) }.ok()?;
+    let cache = unsafe {
+        let req = auto.CreateCacheRequest().ok()?;
+        req.AddProperty(UIA_ControlTypePropertyId).ok()?;
+        req.AddProperty(UIA_ValueValuePropertyId).ok()?;
+        req.AddPattern(UIA_ValuePatternId).ok()?;
+        req
+    };
+    let root = unsafe { auto.ElementFromHandleBuildCache(hwnd_from(fg.id), &cache) }.ok()?;
     let walker = unsafe { auto.ControlViewWalker() }.ok()?;
     let mut queue = std::collections::VecDeque::from([root]);
     let mut visited = 0;
@@ -852,24 +1364,17 @@ pub fn browser_url(fg: &Foreground) -> Option<String> {
         if visited > 900 {
             break;
         }
-        if unsafe { el.CurrentControlType() }
+        if unsafe { el.CachedControlType() }
             .map(|c| c == UIA_EditControlTypeId)
             .unwrap_or(false)
         {
-            if let Some(v) = element_value(&el) {
-                if looks_like_url(&v) {
-                    let v = v.trim().to_string();
-                    return Some(if v.contains("://") {
-                        v
-                    } else {
-                        format!("https://{v}")
-                    });
-                }
+            if let Some(url) = cached_value(&el).and_then(|v| as_url(&v)) {
+                return Some((url, el));
             }
         }
-        let mut child = unsafe { walker.GetFirstChildElement(&el) }.ok();
+        let mut child = unsafe { walker.GetFirstChildElementBuildCache(&el, &cache) }.ok();
         while let Some(c) = child {
-            child = unsafe { walker.GetNextSiblingElement(&c) }.ok();
+            child = unsafe { walker.GetNextSiblingElementBuildCache(&c, &cache) }.ok();
             queue.push_back(c);
         }
     }
@@ -1481,4 +1986,55 @@ pub fn encode_audio(input: &str, out: &str, rate: u32, _bitrate: u32) -> Result<
         writer.Finalize()?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use windows::Win32::UI::WindowsAndMessaging::FindWindowW;
+
+    /// The cached walk reads a real window's tree (Notepad: a window, a menu
+    /// bar, an edit or document control) within its time budget.
+    #[test]
+    fn the_accessibility_tree_of_a_real_window_is_read_within_budget() {
+        init();
+        let mut child = std::process::Command::new("notepad.exe")
+            .spawn()
+            .expect("start notepad");
+        let mut hwnd = HWND::default();
+        for _ in 0..50 {
+            hwnd = unsafe { FindWindowW(&HSTRING::from("Notepad"), windows::core::PCWSTR::null()) }
+                .unwrap_or_default();
+            if !hwnd.is_invalid() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(200));
+        }
+        assert!(!hwnd.is_invalid(), "no Notepad window");
+        let fg = Foreground {
+            id: hwnd.0 as usize as u64,
+            pid: 0,
+            bundle_id: "notepad.exe".into(),
+            aliases: Vec::new(),
+            name: "Notepad".into(),
+            version: String::new(),
+            title: String::new(),
+            rect: None,
+        };
+        let started = Instant::now();
+        let ax = ax_tree(&fg, 40, 4000).expect("an accessibility tree");
+        let took = started.elapsed();
+        let _ = child.kill();
+        let text = ax.tree.to_string();
+        assert_eq!(ax.tree["role"], json!("UIAWindow"), "{text}");
+        assert!(ax.node_count > 3, "{} nodes: {text}", ax.node_count);
+        assert!(
+            text.contains("UIAEdit") || text.contains("UIADocument"),
+            "no text control: {text}"
+        );
+        assert!(
+            took < AX_BUDGET + Duration::from_millis(250),
+            "walk took {took:?}"
+        );
+    }
 }

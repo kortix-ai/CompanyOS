@@ -34,13 +34,16 @@ let claimed: SessionLifecycleCommandRow[] = [];
 let failedCalls: Array<{ commandId: string; message: string; retryable: boolean; attempts: number }> = [];
 let succeededCalls: string[] = [];
 
+const realConfig = await import('../../../config');
 mock.module('../../../config', () => ({
+  ...realConfig,
   config: cfg,
   SANDBOX_VERSION: 'test',
   KNOWN_PROVIDERS: ['platinum', 'daytona'],
 }));
 
 mock.module('../../../shared/db', () => ({
+  withDbTransaction: <T,>(action: () => Promise<T>): Promise<T> => action(),
   hasDatabase: () => true,
   db: {
     select: (projection?: Record<string, unknown>) => ({
@@ -142,8 +145,8 @@ mock.module('../instance-release', () => ({
   loadSandboxMetadataForSessions: async () => new Map(),
   releaseCommandToOwningInstance: async () => {},
 }));
-mock.module('../../opencode-mapping', () => ({
-  sandboxOpencodeEndpoint: async () => ({ url: 'https://sandbox.test', headers: {} }),
+mock.module('../../runtime-session-mapping', () => ({
+  sandboxRuntimeEndpoint: async () => ({ url: 'https://sandbox.test', headers: {} }),
 }));
 mock.module('../../../platform/service-key', () => ({
   serviceKeyForExternalId: async () => 'svc-key-1',

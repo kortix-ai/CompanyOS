@@ -32,7 +32,7 @@ import { UserAvatar } from '../../primitives/user-avatar';
 import { useUiViewerId } from '../../providers/ui-provider';
 import type { SessionDisplayStatus } from '../../session/actions/session-label';
 import { participantLabel } from '../../session/participants/session-participants';
-import { SessionStatusMark } from '../sidebar/session-status-mark';
+import { SessionStatusMark } from '../../session/list/session-status-mark';
 import {
   agentLabel,
   spaceRoster,
@@ -54,7 +54,7 @@ const SEARCH_MIN_CHARS = 2;
 /** The URL keys of the search and the filters. */
 const FILTER_PARAMS = ['q', 'status', 'by', 'agent', 'active'] as const;
 type FilterParam = (typeof FILTER_PARAMS)[number];
-/** The radio value of a facet's "Any" row (Radix needs a non-empty value). */
+/** The radio value of a facet's "Any" row (a radio item needs a non-empty value). */
 const ANY = 'any';
 
 /** The session list's mark for each Status value, so a row and its filter look the same. */

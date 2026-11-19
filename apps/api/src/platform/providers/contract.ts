@@ -44,7 +44,7 @@ export interface CreateSandboxOpts {
   /**
    * True ⇒ the box runs in `location` or not at all. False/absent ⇒ Platinum
    * boots it in its home region when `location` cannot hold the image and no
-   * copy is running (platinum.ts). Set for warm (speculative) session boxes.
+   * copy is running (platinum.ts). Set for a box that mounts the project's Files.
    */
   locationRequired?: boolean;
   /**
@@ -65,11 +65,16 @@ export interface CreateSandboxOpts {
   /** Monotonic across restarts; stable on retries of the same create attempt. */
   createAttempt?: number;
   /**
+   * Internal to the Platinum provider: until when a create keeps waiting out
+   * a volume that still saves the last box's writes (`409 volume_flushing`).
+   */
+  volumeFlushDeadline?: number;
+  /**
    * Runtime contract hosted by the provider object. Missing means `session`
    * for backward compatibility with every existing caller.
    *
    * `monitor` is the per-project monitor box: the SAME image and the SAME agent port as a session, running the
-   * daemon in monitor mode instead of opencode. It differs from a session only
+   * daemon in monitor mode instead of the session runtime. It differs from a session only
    * in lifecycle (`autoStopInterval: 0` → persistent) and in having no
    * `session_sandboxes` row.
    */
@@ -313,7 +318,7 @@ export interface SandboxProvider {
     externalId: string,
     request: SandboxIngressRequest,
   ): Promise<ResolvedSandboxIngress>;
-  ensureRunning(externalId: string): Promise<void>;
+  ensureRunning(externalId: string, wakeReason?: unknown): Promise<void>;
   getProvisioningStatus(sandboxId: string): Promise<ProvisioningStatus | null>;
   /**
    * List the running boxes this deployment owns, for the orphan-box reaper

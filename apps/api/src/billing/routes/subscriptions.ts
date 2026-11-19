@@ -17,16 +17,20 @@ import { resolveScopedAccountId } from '../../middleware/resolve-account';
 import { resolveBillingWriteAccountId } from '../http-require-billing-write';
 import { makeOpenApiApp, json, auth, errors } from '../../openapi';
 import { readJsonObject } from '../../shared/http-body';
+import { captureProductEvent } from '../../shared/product-analytics';
+import { analyticsSource } from '../../middleware/analytics-source';
+import { resolveAccountBilling } from '../services/billing-cache';
+import { notifySales } from '../services/enterprise-sales';
+import { createOfferCheckout } from '../services/enterprise-contracts';
+import { OpaqueBody, OpaqueSchema } from './opaque-schema';
 
 export const subscriptionsRouter = makeOpenApiApp<AppEnv>();
 
-// Opaque Stripe / service payloads — permissive on purpose.
-const OpaqueSchema = z.record(z.string(), z.any());
 // Request bodies carry an optional account_id (read by resolveScopedAccountId)
 // plus opaque, endpoint-specific fields. Manual parsing is kept everywhere here
 // because the body is consumed twice (account resolution + handler) and the
-// fields are forwarded to Stripe as-is.
-const AnyBody = z.record(z.string(), z.any());
+// fields are forwarded to Stripe as-is (the body schema is ./opaque-schema's
+// OpaqueBody).
 
 // The one plan change: any whole monthly amount on the credits plan. Starts a
 // hosted checkout for an account with no paid subscription, otherwise changes
@@ -38,7 +42,7 @@ subscriptionsRouter.openapi(
     tags: ['billing'],
     summary: 'Set the monthly credits plan amount',
     ...auth,
-    request: { body: { content: { 'application/json': { schema: AnyBody } } } },
+    request: { body: { content: { 'application/json': { schema: OpaqueBody } } } },
     responses: {
       200: json(OpaqueSchema, 'Plan change result'),
       ...errors(400, 429),
@@ -55,6 +59,14 @@ subscriptionsRouter.openapi(
       cancelUrl: String(body.cancel_url ?? ''),
       locale: typeof body.locale === 'string' ? body.locale : undefined,
     });
+    if (result.status === 'checkout_created') {
+      captureProductEvent({
+        userId: c.get('userId'),
+        accountId,
+        event: 'checkout_started',
+        properties: { kind: 'subscription', tier: 'credits', amount_usd: result.monthly_usd, source: analyticsSource(c) },
+      });
+    }
     return c.json(result);
   },
 );
@@ -68,7 +80,7 @@ subscriptionsRouter.openapi(
     tags: ['billing'],
     summary: 'Preview a change of the monthly credits plan amount',
     ...auth,
-    request: { body: { content: { 'application/json': { schema: AnyBody } } } },
+    request: { body: { content: { 'application/json': { schema: OpaqueBody } } } },
     responses: {
       200: json(OpaqueSchema, 'Plan change preview'),
       ...errors(400, 429),
@@ -90,7 +102,7 @@ subscriptionsRouter.openapi(
     tags: ['billing'],
     summary: 'Ask Kortix sales to get in touch about Enterprise',
     ...auth,
-    request: { body: { content: { 'application/json': { schema: AnyBody } } } },
+    request: { body: { content: { 'application/json': { schema: OpaqueBody } } } },
     responses: {
       200: json(z.object({ sent: z.boolean() }), 'Whether sales was emailed'),
       ...errors(401, 403),
@@ -100,8 +112,6 @@ subscriptionsRouter.openapi(
     const accountId = await resolveScopedAccountId(c, 'body');
     await assertAuthorized(await actorOf(c, accountId), ACCOUNT_ACTIONS.BILLING_READ);
     const body = await readJsonObject(c);
-    const { resolveAccountBilling } = await import('../services/billing-cache');
-    const { notifySales } = await import('../services/enterprise-sales');
     const sent = await notifySales({
       accountId,
       signal: 'contact',
@@ -123,7 +133,7 @@ subscriptionsRouter.openapi(
     tags: ['billing'],
     summary: 'Accept the Enterprise offer: start its Stripe Checkout',
     ...auth,
-    request: { body: { content: { 'application/json': { schema: AnyBody } } } },
+    request: { body: { content: { 'application/json': { schema: OpaqueBody } } } },
     responses: {
       200: json(z.object({ checkout_url: z.string(), contract_id: z.string() }), 'Checkout to accept the offer'),
       ...errors(400, 404, 409, 429),
@@ -132,7 +142,6 @@ subscriptionsRouter.openapi(
   async (c) => {
     const accountId = await resolveBillingWriteAccountId(c, 'body');
     const body = await readJsonObject(c);
-    const { createOfferCheckout } = await import('../services/enterprise-contracts');
     return c.json(
       await createOfferCheckout({
         accountId,
@@ -151,7 +160,7 @@ subscriptionsRouter.openapi(
     tags: ['billing'],
     summary: 'Create a Stripe customer portal session',
     ...auth,
-    request: { body: { content: { 'application/json': { schema: AnyBody } } } },
+    request: { body: { content: { 'application/json': { schema: OpaqueBody } } } },
     responses: { 200: json(OpaqueSchema, 'Portal session result'), ...errors(429) },
   }),
   async (c) => {
@@ -170,7 +179,7 @@ subscriptionsRouter.openapi(
     tags: ['billing'],
     summary: 'Cancel the active subscription',
     ...auth,
-    request: { body: { required: false, content: { 'application/json': { schema: AnyBody } } } },
+    request: { body: { required: false, content: { 'application/json': { schema: OpaqueBody } } } },
     responses: { 200: json(OpaqueSchema, 'Cancellation result'), ...errors(429) },
   }),
   async (c) => {
@@ -191,7 +200,7 @@ subscriptionsRouter.openapi(
     tags: ['billing'],
     summary: 'Reactivate a cancelled subscription',
     ...auth,
-    request: { body: { required: false, content: { 'application/json': { schema: AnyBody } } } },
+    request: { body: { required: false, content: { 'application/json': { schema: OpaqueBody } } } },
     responses: { 200: json(OpaqueSchema, 'Reactivation result'), ...errors(429) },
   }),
   async (c) => {
@@ -208,7 +217,7 @@ subscriptionsRouter.openapi(
     tags: ['billing'],
     summary: 'Sync subscription state from Stripe',
     ...auth,
-    request: { body: { required: false, content: { 'application/json': { schema: AnyBody } } } },
+    request: { body: { required: false, content: { 'application/json': { schema: OpaqueBody } } } },
     responses: { 200: json(OpaqueSchema, 'Sync result'), ...errors(404, 429) },
   }),
   async (c) => {

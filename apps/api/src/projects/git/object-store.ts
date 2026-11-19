@@ -30,7 +30,7 @@
  */
 
 import { execFile, spawn } from 'node:child_process';
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { childProcessEnv, config } from '../../config';
@@ -84,6 +84,28 @@ export function isObjectFetchTooLargeError(err: unknown): err is ObjectFetchTooL
   return err instanceof ObjectFetchTooLargeError;
 }
 
+/**
+ * The remote refused to serve a wanted object: `upload-pack: not our ref <id>`.
+ * The object is no longer reachable from any ref the remote advertises (a
+ * force-push or a deleted branch left the store pointing at it), or the remote
+ * has not replicated it yet. An expected state, never a defect of this code.
+ */
+export class ObjectNotOnRemoteError extends Error {
+  constructor(
+    readonly objectCount: number,
+    readonly stderr: string,
+  ) {
+    super(`git fetch of ${objectCount} objects failed (exit 128): ${stderr}`);
+    this.name = 'ObjectNotOnRemoteError';
+  }
+}
+
+export function isObjectNotOnRemoteError(err: unknown): err is ObjectNotOnRemoteError {
+  return err instanceof ObjectNotOnRemoteError;
+}
+
+const NOT_OUR_REF = /upload-pack: not our ref [0-9a-f]{40}/;
+
 const OID = /^[0-9a-f]{40}$/;
 
 /** The ids among `oids` the store does not hold. Never fetches. */
@@ -126,7 +148,7 @@ export function missingObjectIdsFromGitError(text: string): string[] {
   return [...ids];
 }
 
-export interface FetchObjectsOptions {
+interface FetchObjectsOptions {
   /** Credentials and other variables for the fetch (`gitAuthEnv`). */
   env: Record<string, string>;
   /** The fetch is stopped once the received pack passes this many bytes. */
@@ -223,7 +245,9 @@ async function fetchMissing(
   }
   if (code !== 0) {
     await removeNewPacks(packDir, before, /^tmp_/);
-    throw new Error(`git fetch of ${oids.length} objects failed (exit ${code}): ${stderr.trim().slice(0, 500)}`);
+    const detail = stderr.trim().slice(0, 500);
+    if (NOT_OUR_REF.test(stderr)) throw new ObjectNotOnRemoteError(oids.length, detail);
+    throw new Error(`git fetch of ${oids.length} objects failed (exit ${code}): ${detail}`);
   }
   return { receivedBytes: received };
 }
@@ -238,7 +262,6 @@ async function newPackBytes(packDir: string, before: Set<string>): Promise<numbe
 }
 
 async function removeNewPacks(packDir: string, before: Set<string>, only?: RegExp): Promise<void> {
-  const { rm } = await import('node:fs/promises');
   for (const name of await readdir(packDir).catch(() => [] as string[])) {
     if (before.has(name) || (only && !only.test(name))) continue;
     await rm(join(packDir, name), { force: true }).catch(() => {});
@@ -249,7 +272,7 @@ async function removeNewPacks(packDir: string, before: Set<string>, only?: RegEx
 const storeLocks = new Map<string, Promise<unknown>>();
 
 /** Run `fn` after every earlier fetch into the same store has settled. */
-export function withStoreLock<T>(repoPath: string, fn: () => Promise<T>): Promise<T> {
+function withStoreLock<T>(repoPath: string, fn: () => Promise<T>): Promise<T> {
   const previous = storeLocks.get(repoPath) ?? Promise.resolve();
   const next = previous.catch(() => {}).then(fn);
   const settled = next.catch(() => {});

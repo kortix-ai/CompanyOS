@@ -1,11 +1,17 @@
 import { HTTPException } from 'hono/http-exception';
+import {
+  DEAD_CREDENTIAL_BURST_SUPPRESSED,
+  PREVIEW_SANDBOX_DENIED_MESSAGE,
+} from '../../shared/dead-credential-log';
+import { logWindowDecision, logWindowWarnDecision } from '../../shared/log-window';
 import { PROJECT_ACTIONS, authorize } from '../../iam';
 import { actorForUser } from '../../iam/actor';
+import { logger } from '../../lib/logger';
 import { setContextField } from '../../lib/request-context';
 import { canAccessPreviewSandbox, canAccessSandboxSession, takeSessionAccessRefusal } from '../../shared/preview-ownership';
 import type { SandboxRecord } from '../backend';
 import { DEFAULT_AGENT_SENTINEL, jsonProxyError } from '../pre-prompt-env-sync';
-import { stripInBoxProxyPrefix } from '../runtime-request';
+import { classifyRuntimeRequest, stripInBoxProxyPrefix } from '../runtime-request';
 import { carriesSessionData } from '../session-data-ports';
 
 // Who may reach a sandbox through the proxy: the caller's access kind, the
@@ -45,6 +51,30 @@ export function principalUserId(access: PreviewProxyAccess): string {
 }
 
 /**
+ * Ship one `[preview] session access refused` line through the shared
+ * log-noise throttle (shared/dead-credential-log.ts); responses are never
+ * throttled — every refused request still 403s and still lands in the
+ * request-completion logs for exact accounting. A session-bound client
+ * polling a designed-refused surface emitted one warn per request: 416 lines
+ * in 14 h from ONE client against one box, 5.88x the pattern's baseline
+ * (KRTX-4683). First line per window ships; the next window's line carries
+ * `suppressed`; severity follows the window's volume (KRTX-4454) so designed
+ * churn ships at info and cannot keep a 0-baseline warn pattern alive for the
+ * infra sweep, while a client hammering the gate stays warn.
+ */
+export function reportSessionAccessRefusal(payload: Record<string, unknown>, now = Date.now()): void {
+  const message = '[preview] session access refused';
+  const { log, suppressed } = logWindowDecision(message, now);
+  if (!log) return;
+  const fields = { ...payload, suppressed };
+  // The escalation shares the hourly warn cap of the other burst-band sites
+  // (logWindowWarnDecision): a grind hour cannot ship every window's line at
+  // warn and re-trip the infra-sweep's 10/h new-warn-pattern bar (KRTX-4674).
+  if (suppressed >= DEAD_CREDENTIAL_BURST_SUPPRESSED && logWindowWarnDecision(message, now)) logger.warn(message, fields);
+  else logger.info(message, fields);
+}
+
+/**
  * Bind the provider-facing sandbox identifier to its canonical Kortix scope.
  * The request audit middleware runs after the proxy handler returns and reads
  * this request-local context. Without this binding, `/v1/p/...` activity is
@@ -76,7 +106,7 @@ export async function assertPreviewSandboxAccess(
     }))
   ) {
     throw new HTTPException(403, {
-      message: `Not authorized to access this sandbox, userId: ${userId}, sandboxId: ${sandboxId}`,
+      message: `${PREVIEW_SANDBOX_DENIED_MESSAGE}, userId: ${userId}, sandboxId: ${sandboxId}`,
     });
   }
 }
@@ -97,8 +127,15 @@ export async function refuseSessionOrControlAccess(input: {
   remainingPath: string;
   queryString: string;
   origin: string;
+  method: string;
 }): Promise<Response | null> {
-  const { access, record, sandboxId, userId, callerSessionId, boundCredentialSessionId, upstreamPort, remainingPath, queryString, origin } = input;
+  const { access, record, sandboxId, userId, callerSessionId, boundCredentialSessionId, upstreamPort, remainingPath, queryString, origin, method } = input;
+  // Reading the box's session log is the one proxied request a session token may
+  // aim at a session that spawned it (`kortix sessions log <parent>`): the REST
+  // route allows it, so this gate must too. Every other request stays strict.
+  const spawnAncestorRead = isSessionLogRead(upstreamPort, method, remainingPath)
+    ? async () => (await import('../../projects/surface')).isSpawnAncestor(record.projectId, boundCredentialSessionId, record.sessionId)
+    : undefined;
   // Every port serves this session: the daemon its conversation + owner-synced
   // secrets, a dev server or 3211 its workspace. Gate on SESSION visibility (mirrors loadVisibleSession on the
   // REST side), not just account membership — closes the window where a member
@@ -112,6 +149,7 @@ export async function refuseSessionOrControlAccess(input: {
       userId,
       callerSessionId: callerSessionId ?? null,
       boundCredentialSessionId,
+      spawnAncestorRead,
     }))
   ) {
     // Name the branch. See `takeSessionAccessRefusal`: six branches can refuse
@@ -122,8 +160,9 @@ export async function refuseSessionOrControlAccess(input: {
       userId,
       callerSessionId: callerSessionId ?? null,
       boundCredentialSessionId,
+      spawnAncestorRead,
     });
-    console.warn('[preview] session access refused', {
+    reportSessionAccessRefusal({
       userId,
       port: upstreamPort,
       ...(refusal ?? {
@@ -150,13 +189,18 @@ export async function refuseSessionOrControlAccess(input: {
   // The path itself must stay open: the SDK's `restart` mode is a plain
   // `/kortix/refresh`, and users legitimately reach it. Only the destructive
   // flag is refused, and refused HERE because this is the layer that knows the
-  // request came from a user at all. Its one legitimate caller is the
-  // warm-session workspace refresh at session create, which calls the daemon
-  // directly and never traverses this proxy.
+  // request came from a user at all. No API path sends the flag any more; an
+  // older daemon that still honors it must never get it from a user.
   //
   // The daemon enforces this independently (it also demands the stripped
   // service-call header) — a destructive primitive should not depend on a remote
   // allowlist staying correct.
+  // An ask exists so the agent yields to a person: the box's own credential
+  // never decides one here, as `POST /asks/:askId/answer` refuses it. Without
+  // this the proxy also records the agent's reply as decided by the launcher.
+  if (access.kind === 'principal' && access.sandboxAuthored && isProxiedAskDecision(upstreamPort, method, remainingPath)) {
+    return jsonProxyError({ error: "This ask waits for a person: the person the session works for answers it.", code: 'ASK_REQUIRES_HUMAN' }, 403, origin);
+  }
   if (isProxiedBaseReset(upstreamPort, remainingPath, queryString)) {
     console.warn(`[PREVIEW] Refused base=1 branch reset on ${sandboxId} from a proxied caller`);
     return jsonProxyError(
@@ -172,13 +216,36 @@ export async function refuseSessionOrControlAccess(input: {
 }
 
 /**
+ * Is this a read of the box's session log (`GET /kortix/runtime/log`, or one message of it)?
+ *
+ * Daemon port (8000) only: 4096/4097 are an old OpenCode box's own server, which this
+ * rule never covered. Matches the path as sent, never the `/proxy/{port}`-stripped one: kortixd pipes
+ * `/proxy/<any port>/…` to that user port, so stripping would call a read of a
+ * user's own dev server a log read.
+ */
+export function isSessionLogRead(upstreamPort: number, method: string, remainingPath: string): boolean {
+  if (method !== 'GET' || upstreamPort !== 8000) return false;
+  return /^\/kortix\/runtime\/log(?:\/messages\/[^/?#]+)?\/?$/.test(remainingPath);
+}
+
+/**
+ * Does this request decide an ask on the session runtime: a permission reply, a
+ * question reply or dismissal, or the session grants (`*` allows every call)?
+ */
+export function isProxiedAskDecision(upstreamPort: number, method: string, remainingPath: string): boolean {
+  if (!carriesSessionData(upstreamPort)) return false;
+  const kind = classifyRuntimeRequest(method, remainingPath).kind;
+  if (kind === 'permission-reply' || kind === 'question-answer') return true;
+  return method.toUpperCase() === 'PUT' && /^\/kortix\/runtime\/sessions\/[^/?#]+\/grants\/?$/.test(stripInBoxProxyPrefix(remainingPath));
+}
+
+/**
  * Is this a proxied attempt at the daemon's DESTRUCTIVE branch reset?
  *
  * `/kortix/refresh?base=1` runs `git checkout -B <branch> <sha>` in the box, and
  * the branch IS the session id — so it discards every commit the session made
- * and deletes the files they added. Its one legitimate caller is the
- * warm-session workspace refresh at session create, which calls the daemon
- * directly and never comes through here.
+ * and deletes the files they added. No API path sends the flag any more; an
+ * older daemon that still honors it must never get it from a user.
  *
  * The PATH stays open on purpose: a plain `/kortix/refresh` is the SDK's
  * `restart` mode and users legitimately reach it. Only the flag is refused.

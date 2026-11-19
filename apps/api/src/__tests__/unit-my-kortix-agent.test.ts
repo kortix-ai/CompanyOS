@@ -8,6 +8,7 @@ import {
   buildMyKortixConfig,
   builtinAgentConfigView,
   declaredBuiltinAgents,
+  disabledMyKortixAgentGrant,
   enabledBuiltinAgentKey,
   MY_KORTIX_DESCRIPTION,
   MY_KORTIX_PROMPT,
@@ -27,7 +28,7 @@ describe('My Kortix agent', () => {
         {
           name: 'mykortix',
           path: '/project/AGENTS.md',
-          source: 'opencode',
+          source: 'kortix.yaml',
           description: 'project override',
           mode: 'primary',
         },
@@ -40,10 +41,8 @@ describe('My Kortix agent', () => {
       manifest: {},
       manifest_health: manifestHealthWithout('missing'),
       env: { required: [], optional: [] },
-      open_code_raw: null,
       default_agent: null,
-      open_code_default_agent: null,
-      agent_discovery: 'opencode',
+      agent_discovery: 'declarative',
     });
 
     expect(config.agents.filter((agent) => agent.name === 'mykortix')).toHaveLength(1);
@@ -53,12 +52,11 @@ describe('My Kortix agent', () => {
       // Platform-owned: hosts render it read-only and never open the editor.
       platform: true,
       scope: {
-        env: [],
-        connectors: [],
+        env: 'all',
+        connectors: 'all',
         kortix_permissions: 'all',
       },
     });
-    expect(config.open_code_default_agent).toBe('mykortix');
     expect(config.default_agent).toBe('mykortix');
   });
 
@@ -90,6 +88,13 @@ describe('My Kortix agent', () => {
     );
   });
 
+  // A closing offer to check later is how My Kortix used to drop a wait: the voice rule must not ask for it.
+  test('the prompt owns the outcome and never ends with an offer to check later', () => {
+    expect(MY_KORTIX_PROMPT.indexOf('## You own the outcome')).toBeLessThan(MY_KORTIX_PROMPT.indexOf('## Your voice'));
+    expect(MY_KORTIX_PROMPT).toContain('End with what happens next, never with a question about it.');
+    expect(MY_KORTIX_PROMPT).not.toContain('phrased as an offer');
+  });
+
   // The follow-through rule names the kortixd `kortix_schedules` actions: a renamed action
   // there leaves My Kortix calling one that does not exist.
   test('the prompt sets a check-in after every wait, with the kortix_schedules actions', () => {
@@ -109,6 +114,29 @@ describe('My Kortix agent', () => {
     for (const name of ['`agent`', '`workflow`', '`kortix-goals`', '`task_stop`']) expect(section).toContain(name);
   });
 
+  // KRTX-4746: the reported session ended with "want me to check the thread for her answer in a
+  // couple of hours?" — a question where an action is available. The prompt bans the check-back
+  // offer by name, and a plainly stated outcome becomes a Goal the agent creates itself.
+  test('the prompt bans the check-back question and creates a plainly stated goal itself', () => {
+    const section = MY_KORTIX_PROMPT.slice(
+      MY_KORTIX_PROMPT.indexOf('## Follow through: never wait blind'),
+      MY_KORTIX_PROMPT.indexOf('## What you remember about this person'),
+    );
+    expect(section.length).toBeGreaterThan(0);
+    // The check-back question is banned by name; the check is set, not offered.
+    expect(section).toContain('Never ask whether you should check back');
+    expect(section).toContain('Set it instead of offering it');
+    expect(section).toContain('say when the answer will arrive');
+    // A missing trigger is said once and noted, never a fallback question.
+    expect(section).toContain('never fall back to asking');
+    // A plainly stated outcome ("get her answer") is a goal this chat owns (goal mode), created unasked.
+    expect(MY_KORTIX_PROMPT).toContain('A clear outcome that outlives this turn is a goal');
+    expect(MY_KORTIX_PROMPT).toContain('--here');
+    expect(MY_KORTIX_PROMPT).toContain('Never ask permission to track what they just asked for');
+    // The voice rule cannot reintroduce the check-back offer through its ending rule.
+    expect(MY_KORTIX_PROMPT).toContain('Never end with "Want me to check later?"');
+  });
+
   // The section names the kortixd `agent` inline spec, the workflow `agent()` options and the
   // kortix_agents `models` action: a rename there leaves My Kortix calling what does not exist.
   test('the prompt shapes colleagues on the fly: inline spec, workflow options, models, narrow tools, new tools through a change request', () => {
@@ -119,6 +147,8 @@ describe('My Kortix agent', () => {
       expect(section).toContain(name);
     }
     expect(section).toContain('A colleague never gets a tool or an extension you lack.');
+    // The access an inline colleague runs with is My Kortix's own (cloud-subagent.ts, session-create.ts).
+    expect(section).toContain('An inline colleague has your access, never another agent\'s');
     expect(section).toContain('opens a change request for the person to approve');
     expect(section).not.toMatch(/\$|price|cost/i);
   });
@@ -129,25 +159,40 @@ describe('My Kortix agent', () => {
     expect(() => resolveMyKortixSandbox('node22')).toThrow('META_SANDBOX_LOCKED');
   });
 
-  test('grants the coordinator every project action without secrets or connectors', () => {
+  test('acts with its person\'s rights: every action, connector and secret, each capped by the person', () => {
     expect(myKortixAgentGrant()).toEqual({
       agent: 'mykortix',
       permissions: 'all',
-      connectors: [],
-      env: [],
+      connectors: 'all',
+      env: 'all',
     });
   });
 
-  test('builtin_agents: the manifest boolean wins, else on', () => {
+  test('builtin_agents: on only when the manifest sets true, else off', () => {
     expect(declaredBuiltinAgents({})).toEqual({});
     expect(declaredBuiltinAgents({ builtin_agents: { my_kortix: false } })).toEqual({ my_kortix: false });
     expect(declaredBuiltinAgents({ builtin_agents: { my_kortix: 'no' } })).toEqual({});
     expect(declaredBuiltinAgents({ builtin_agents: ['my_kortix'] })).toEqual({});
-    expect(resolveBuiltinAgents({})).toEqual({ my_kortix: true });
+    expect(resolveBuiltinAgents({})).toEqual({ my_kortix: false });
     expect(resolveBuiltinAgents({ my_kortix: false })).toEqual({ my_kortix: false });
     expect(resolveBuiltinAgents({ my_kortix: true })).toEqual({ my_kortix: true });
-    expect(projectBuiltinAgents(null)).toEqual({ my_kortix: true });
-    expect(projectBuiltinAgents({ builtin_agents: { my_kortix: false } })).toEqual({ my_kortix: false });
+    const valid = { project: { name: 'p' }, default_agent: 'worker', agents: { worker: { mode: 'primary', tools: 'all' } } };
+    expect(projectBuiltinAgents(valid)).toEqual({ my_kortix: false });
+    expect(projectBuiltinAgents({ ...valid, builtin_agents: { my_kortix: true } })).toEqual({ my_kortix: true });
+    expect(projectBuiltinAgents({ ...valid, builtin_agents: { my_kortix: false } })).toEqual({ my_kortix: false });
+    expect(projectBuiltinAgents({ ...valid, builtin_agents: { my_kortix: 'yes' } })).toEqual({ my_kortix: false });
+    // No exception for a missing, empty or broken file: only the file's own `true` turns it on.
+    expect(projectBuiltinAgents(null)).toEqual({ my_kortix: false });
+    expect(projectBuiltinAgents({})).toEqual({ my_kortix: false });
+    expect(projectBuiltinAgents({ ...valid, sandbox: 42 })).toEqual({ my_kortix: false });
+    expect(projectBuiltinAgents({ ...valid, sandbox: 42, builtin_agents: { my_kortix: true } })).toEqual({ my_kortix: true });
+  });
+
+  test('a project that runs My Kortix keeps its own default agent', () => {
+    const config = { default_agent: 'worker', open_code_default_agent: 'worker', agents: [] } as unknown as Parameters<typeof addMyKortixAgent>[0];
+    expect(addMyKortixAgent(config).default_agent).toBe('worker');
+    expect(addMyKortixAgent({ ...config, default_agent: null }).default_agent).toBe('mykortix');
+    expect(addMyKortixAgent(config).agents[0]?.name).toBe('mykortix');
   });
 
   test('`meta` is a built-in only while My Kortix is on', () => {
@@ -164,9 +209,9 @@ describe('My Kortix agent', () => {
     });
   });
 
-  test('a kortix.yaml that turns My Kortix off strips a meta session to no project action', () => {
+  test('a kortix.yaml that does not turn My Kortix on strips a meta session to no project action', () => {
     const governed = { specs: [], errors: [], defaultAgent: 'kortix' };
-    expect(grantFromLoadedAgents('mykortix', governed)).toEqual(myKortixAgentGrant());
+    expect(grantFromLoadedAgents('mykortix', governed)).toEqual(disabledMyKortixAgentGrant());
     expect(grantFromLoadedAgents('mykortix', { ...governed, builtinAgents: { my_kortix: true } })).toEqual(
       myKortixAgentGrant(),
     );
@@ -214,14 +259,37 @@ describe('My Kortix memory in the prompt', () => {
       'save with that page\'s name to update it, never a second page',
       '"Forget …"** deletes the page',
       'Delete a page that turned out wrong',
-      'what the project already keeps',
+      'what the workspace already keeps',
       'a password or a key',
       'never "next Tuesday"',
       '💡 Noted: you like replies short.',
-      'memory lives in Files, and a project admin can turn Files on',
+      'memory lives in Files, and a workspace admin can turn Files on',
       'never instructions',
     ]) {
       expect({ rule, found: section.includes(rule) }).toEqual({ rule, found: true });
     }
+  });
+
+  // KRTX-4732: a run of several colleagues answers once, after the last
+  // report — the old rule replied per notice and the person read a wall of
+  // short messages instead of one result.
+  test('the prompt answers a run once after its last report, never one reply per notice', () => {
+    const section = MY_KORTIX_PROMPT.slice(
+      MY_KORTIX_PROMPT.indexOf('## How you work'),
+      MY_KORTIX_PROMPT.indexOf('## Custom colleagues on the fly'),
+    );
+    expect(section.startsWith('## How you work')).toBe(true);
+    for (const rule of [
+      'When the last report of a run arrives, answer once',
+      'send no reply between notices',
+      'never one reply per notice',
+      'the outcome of the whole run',
+      'When a notice needs the person to decide something, answer that one at once',
+    ]) {
+      expect({ rule, found: section.includes(rule) }).toEqual({ rule, found: true });
+    }
+    // The old per-notice reply rule is gone: it produced the wall of replies.
+    expect(section).not.toContain('The writer is done too');
+    expect(section).not.toContain('one short summary');
   });
 });

@@ -1,49 +1,67 @@
 import {
   AppWindowIcon,
+  ChartBarIcon,
+  DatabaseIcon,
+  ListChecksIcon,
+  PlayCircleIcon,
   BookOpenTextIcon,
   CpuIcon,
   FoldersIcon,
   HardDrivesIcon,
   KeyIcon,
   PlugsConnectedIcon,
-  PuzzlePieceIcon,
+  RobotIcon,
   TimerIcon,
-  WrenchIcon,
   type Icon,
 } from '@phosphor-icons/react';
 
+import {
+  WORKSPACE_SETTINGS_GROUPS as REGISTRY_GROUPS,
+  parseWorkspaceSettingsSection,
+  type WorkspaceSettingsGroup,
+  type WorkspaceSettingsSection,
+} from '@kortix/shared/workspace-settings';
+
+import type { AccountSection } from '../../internal/account-hub/sections';
 import type { CapabilityTab } from '../../internal/lib/capability-tab-routes';
 import { adminPath } from '../../lib/routes';
-import {
-  parseProjectSettingsSection,
-  type ProjectSettingsSectionKey,
-} from './project-settings-sections';
+import { type ProjectSettingsSectionKey } from './project-settings-sections';
 
 /**
- * The sections of Project admin (`/projects/<id>/admin`).
+ * The sections of Workspace settings (`/workspaces/<id>/admin/<section>`), the
+ * one Settings panel per workspace (design.md §3.2 C7). The order, the groups,
+ * the old ids and the English labels come from one registry,
+ * `@kortix/shared/workspace-settings`, which the CLI, the API emails and the
+ * My Kortix prompt read too. This file adds what only the web panel needs:
+ * which pane renders a section, and the library rows' capability gates.
  *
- * Customize is agent-first: each agent's page configures what THAT agent draws
- * on. Project admin is the other view: the project-wide libraries an agent is
- * granted from, plus every project setting. Two rail groups:
+ *  1. **Workspace** — General (name, icon, workspace id, Danger zone),
+ *     Security (MFA, session policy, key policy, oversight), Branding, Git,
+ *     Sandbox, Feature flags, API keys, Capture (while Capture is on).
+ *  2. **Library** — the global variant of each library page.
+ *     **Evals** (flag `evals`) — Overview, Datasets, Tasks, Jobs.
+ *  3. **People** — Members (one roster, one role per person), Groups, Roles,
+ *     Identity, Audit log.
+ *  4. **Billing** — Plan, Usage.
+ *  5. **Support** — Help.
  *
- *  1. **Project resources** — the global variant of each library page.
- *  2. **Settings** — the sections of `project-settings-sections.ts`, unchanged.
- *
- * A key IS its URL segment (`/admin/<key>`), so renaming one breaks live links. The
- * settings keys are the Settings page's own keys, so `?section=git` means the
- * same section on both surfaces.
+ * A key IS its URL segment (`/admin/<key>`), so renaming one breaks live links:
+ * rename it in the registry, which keeps the old id as an alias.
  */
-export type ProjectAdminResourceKey =
+export type ProjectAdminSectionKey = WorkspaceSettingsSection;
+
+export type ProjectAdminResourceKey = Extract<
+  WorkspaceSettingsSection,
+  | 'agents'
   | 'connectors'
   | 'skills'
-  | 'tools'
-  | 'extensions'
   | 'triggers'
-  | 'models'
-  | 'secrets'
-  | 'apps'
-  | 'drives'
-  | 'repo';
+  | 'evals'
+  | 'eval-datasets'
+  | 'eval-tasks'
+  | 'eval-jobs'
+  | 'models' | 'secrets' | 'apps' | 'drives' | 'repo'
+>;
 
 /**
  * The Settings sections this page lists. Review is not one: it is its own
@@ -51,7 +69,85 @@ export type ProjectAdminResourceKey =
  */
 export type ProjectAdminSettingsKey = Exclude<ProjectSettingsSectionKey, 'review'>;
 
-export type ProjectAdminSectionKey = ProjectAdminResourceKey | ProjectAdminSettingsKey;
+/** The sections whose pane is a host pane of the workspace's account (`apps/web`). */
+export type WorkspaceAccountSectionKey = Extract<
+  WorkspaceSettingsSection,
+  'security' | 'branding' | 'api-keys' | 'members' | 'groups' | 'roles' | 'identity' | 'audit' | 'help' | 'plan' | 'usage'
+>;
+
+export type WorkspaceSettingsGroupId = WorkspaceSettingsGroup;
+
+/** The rail, in order. Each row still follows its own visibility rule. */
+export const WORKSPACE_SETTINGS_GROUPS: readonly {
+  id: WorkspaceSettingsGroupId;
+  sections: readonly ProjectAdminSectionKey[];
+}[] = REGISTRY_GROUPS;
+
+/**
+ * The account pane each workspace section shows. Git is a project section
+ * that ALSO carries an account pane (the account's GitHub connections).
+ */
+export const ACCOUNT_TAB_FOR_SECTION: Partial<Record<ProjectAdminSectionKey, AccountSection>> = {
+  security: 'settings',
+  git: 'git',
+  branding: 'branding',
+  'api-keys': 'tokens',
+  members: 'members',
+  groups: 'groups',
+  roles: 'roles',
+  identity: 'identity',
+  audit: 'audit',
+  help: 'help',
+  plan: 'billing',
+  usage: 'transactions',
+};
+
+/**
+ * Old account hub link (`?accountTab=`) → the workspace section that took it
+ * over. Access merged into Members; the account Settings pane is Security.
+ */
+export const SECTION_FOR_ACCOUNT_TAB: Record<AccountSection, ProjectAdminSectionKey> = {
+  settings: 'security',
+  git: 'git',
+  branding: 'branding',
+  tokens: 'api-keys',
+  members: 'members',
+  groups: 'groups',
+  'access-projects': 'members',
+  roles: 'roles',
+  identity: 'identity',
+  audit: 'audit',
+  help: 'help',
+  billing: 'plan',
+  transactions: 'usage',
+};
+
+const ACCOUNT_SECTION_KEYS: readonly WorkspaceAccountSectionKey[] = [
+  'security',
+  'branding',
+  'api-keys',
+  'members',
+  'groups',
+  'roles',
+  'identity',
+  'audit',
+  'help',
+  'plan',
+  'usage',
+];
+
+export function isWorkspaceAccountSection(key: ProjectAdminSectionKey): key is WorkspaceAccountSectionKey {
+  return (ACCOUNT_SECTION_KEYS as readonly string[]).includes(key);
+}
+
+/**
+ * The catalog key of a section's rail label: `workspaces.settings.sections.<key>`.
+ * The en catalog holds the registry's English label (`WORKSPACE_SETTINGS_LABELS`);
+ * a web test keeps them equal.
+ */
+export function sectionLabelKey(section: ProjectAdminSectionKey): string {
+  return section.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+}
 
 export interface ProjectAdminResource {
   key: ProjectAdminResourceKey;
@@ -70,27 +166,40 @@ export interface ProjectAdminResource {
    * The flag the row needs. Repo is a library only with `drives` on; with it
    * off, the sidebar's Files row is the repo browser (`projectNavRows`).
    */
-  flag?: 'drives';
+  flag?: 'drives' | 'evals';
+  /**
+   * The row opens on its capability alone, without Settings access. Agents:
+   * a member who may read the agents browsed them under Customize before
+   * Customize became this panel (2026-11-08), and still does.
+   */
+  memberOpen?: true;
 }
 
 /** Rail order. Icons match the agent editor's tabs (`agent-page.tsx`). */
 export const PROJECT_ADMIN_RESOURCES: readonly ProjectAdminResource[] = [
+  { key: 'agents', icon: RobotIcon, capability: 'agent', host: false, memberOpen: true },
   { key: 'connectors', icon: PlugsConnectedIcon, capability: 'connectors', host: false },
   { key: 'secrets', icon: KeyIcon, capability: 'secrets', host: false },
   { key: 'skills', icon: BookOpenTextIcon, capability: 'skills', host: false },
-  { key: 'tools', icon: WrenchIcon, capability: 'agent', host: false },
-  { key: 'extensions', icon: PuzzlePieceIcon, capability: 'agent', host: false },
   { key: 'drives', icon: HardDrivesIcon, capability: null, host: false, flag: 'drives' },
   { key: 'apps', icon: AppWindowIcon, capability: null, host: true },
   // Triggers: kortix.yaml triggers and runtime triggers (loops) on one page.
   // The key stays `triggers`: it is the URL segment, and live links name it.
   { key: 'triggers', icon: TimerIcon, capability: 'triggers', host: false },
+  // Evals (flag `evals`): every member reads scores; starting a job needs project.session.start (the API's rule).
+  { key: 'evals', icon: ChartBarIcon, capability: null, host: false, flag: 'evals', memberOpen: true },
+  { key: 'eval-datasets', icon: DatabaseIcon, capability: null, host: false, flag: 'evals', memberOpen: true },
+  { key: 'eval-tasks', icon: ListChecksIcon, capability: null, host: false, flag: 'evals', memberOpen: true },
+  { key: 'eval-jobs', icon: PlayCircleIcon, capability: null, host: false, flag: 'evals', memberOpen: true },
   { key: 'models', icon: CpuIcon, capability: 'models', host: false },
   { key: 'repo', icon: FoldersIcon, capability: 'files', host: false, flag: 'drives' },
 ];
 
-/** `/projects/<id>/admin` with no section opens the first resource. */
-export const DEFAULT_PROJECT_ADMIN_SECTION: ProjectAdminSectionKey = 'connectors';
+/** Sections that no longer exist here: their links open the Agents list. */
+export const RETIRED_SECTIONS: readonly string[] = ['tools', 'extensions'];
+
+/** `/workspaces/<id>/admin` with no section opens General, else the first row the caller may open. */
+export const DEFAULT_PROJECT_ADMIN_SECTION: ProjectAdminSectionKey = 'general';
 
 export function isProjectAdminResource(key: ProjectAdminSectionKey): key is ProjectAdminResourceKey {
   return PROJECT_ADMIN_RESOURCES.some((r) => r.key === key);
@@ -99,17 +208,14 @@ export function isProjectAdminResource(key: ProjectAdminSectionKey): key is Proj
 export function parseProjectAdminSection(
   raw: string | null | undefined,
 ): ProjectAdminSectionKey | null {
-  if (!raw) return null;
-  // `/admin/loops` was the Loops page until 2026-10-28: loops are triggers now.
-  if (raw === 'loops') return 'triggers';
-  const resource = PROJECT_ADMIN_RESOURCES.find((r) => r.key === raw);
-  if (resource) return resource.key;
-  const setting = parseProjectSettingsSection(raw);
-  return setting === 'review' ? null : setting;
+  // The registry resolves the old ids (`access`, `loops`, `settings`, …).
+  // `/admin/tools` and `/admin/extensions` are not sections: the dashboard
+  // sends them to the Agents list (`RETIRED_SECTIONS`).
+  return parseWorkspaceSettingsSection(raw);
 }
 
 /**
- * The link to one section: `/projects/<id>/admin/<section>`. `extra` adds page
+ * The link to one section: `/workspaces/<id>/admin/<section>`. `extra` adds page
  * params (`scope=channels` for the Connectors page's Channels scope).
  */
 export function projectAdminHref(
@@ -129,26 +235,17 @@ export function projectAdminHref(
  * section here (`members`, `review`, a personal overlay tab).
  */
 export function projectAdminNavTarget(tab: string): ProjectAdminSectionKey | null {
+  // In the overlay vocabulary `settings` meant the project settings page.
+  if (tab === 'settings') return 'general';
   const direct = parseProjectAdminSection(tab);
-  if (direct) return direct;
+  // An account section id (`members`, …) means something else in the overlay
+  // vocabulary (`members` is the project roster): it keeps resolving there.
+  if (direct && !isWorkspaceAccountSection(direct)) return direct;
   if (tab.startsWith('llm-')) return 'models';
   if (tab === 'channels') return 'connectors';
   if (tab === 'reminders') return 'triggers';
-  if (tab === 'settings' || tab === 'workspace') return 'general';
+  if (tab === 'workspace') return 'general';
   if (tab === 'experimental') return 'feature-flags';
   if (tab === 'snapshots') return 'sandbox';
   return null;
 }
-
-/* Rail labels, keyed by section: the `hardcodedUi.i18nComplete` strings the
-   Customize bar and the sidebar already show for these libraries. */
-export const RESOURCE_LABEL_KEYS: Partial<Record<ProjectAdminResourceKey, string>> = {
-  connectors: 'textc3d2e79ebdd0',
-  skills: 'text66d0f523a379',
-  // "Triggers": kortix.yaml triggers and loops are one page (2026-10-28).
-  triggers: 'texte62f2148a64d',
-  models: 'textd17d2d78d76e',
-  secrets: 'textd8707d411d99',
-  apps: 'text89dd748442c1',
-  repo: 'text91dba14806eb',
-};

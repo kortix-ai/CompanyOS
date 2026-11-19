@@ -3,7 +3,16 @@ import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 // Existing fixtures have no project inference restrictions.
 mock.module('../repositories/project-model-access', () => ({
   getProjectModelAccess: async () => ({ disabledProviders: [], disabledModels: [] }),
-  getProjectGatewayResolution: async () => ({ access: { disabledProviders: [], disabledModels: [] }, pooledEnabled: false }),
+  getProjectGatewayResolution: async () => ({ access: { disabledProviders: [], disabledModels: [] } }),
+}));
+// No named key in this suite: the one key reader (credentials/gateway-keys.ts)
+// reads the named store first.
+const realAccountResource = await import('../secrets/account-resource');
+mock.module('../secrets/account-resource', () => ({
+  ...realAccountResource,
+  resolveProjectSharedProviderSecrets: async () => ({ coolingDown: false, secrets: [], withheld: 0 }),
+  listGrantedGatewaySecretNames: async () => [],
+  resolveDefaultCodexAccountSecret: async () => null,
 }));
 mock.module('../feature-flags/for-project', () => ({ projectFeatureFlagEnabled: async () => false }));
 import { tierGrantsAllModels } from '../billing/services/tiers';
@@ -287,7 +296,7 @@ describe('resolveCandidates free-tier premium gate', () => {
 });
 
 // Every managed id the catalog serves and retired ids sessions still carry,
-// bare and with the opencode `kortix/` prefix: a new managed model or a
+// bare and with the runtime's `kortix/` prefix: a new managed model or a
 // retired id cannot open a path for Free (2026-10-19, see the learnings ledger).
 const RETIRED_SAMPLE = ['kimi-k3', 'morph-dsv41flash', 'deepseek-v4-flash-0731'];
 

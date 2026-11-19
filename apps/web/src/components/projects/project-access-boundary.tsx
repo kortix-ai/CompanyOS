@@ -2,7 +2,7 @@
 
 import { ShieldWarningIcon } from '@phosphor-icons/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useTranslations } from '@/i18n/use-translations';
+import { useLocale, useTranslations } from '@/i18n/use-translations';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
@@ -21,10 +21,12 @@ import { PROJECT_LANDING_PATH } from '@kortix/ui/internal/lib/onboarding/landing
 import { forgetLastProjectId } from '@kortix/ui/internal/lib/onboarding/last-project-cookie';
 import { useAppHome } from '@kortix/ui/internal/lib/onboarding/use-app-home';
 import { focusWithoutScroll } from '@kortix/ui/internal/lib/utils/focus-without-scroll';
-import { getProject, requestProjectAccess } from '@kortix/sdk';
+import { getWorkspace, requestProjectAccess, restoreWorkspace, type WorkspaceState } from '@kortix/sdk';
+import { formatWorkspaceDate } from '@kortix/ui/workspace/project-selector/project-selector-model';
 import { prefetchSessionOpen, qk, useAdminImpersonate } from '@kortix/sdk/react';
 import { prefetchSessionRouteReads } from '@kortix/ui/session/status/session-route-prefetch';
 import { prefetchProjectShellReads } from '@/components/projects/project-shell-prefetch';
+import { useHomeTypingBuffer } from '@/components/projects/use-home-typing-buffer';
 
 /** How often the waiting screen re-checks whether a manager approved the request. */
 const APPROVAL_POLL_MS = 15_000;
@@ -154,7 +156,7 @@ export function gateAction(state: AccessGateState): GateAction {
  * the user can actually open (or renders its own inline empty state).
  */
 export function gateEscapePath(appHome: string, projectId: string): string {
-  return appHome === `/projects/${projectId}` ? PROJECT_LANDING_PATH : appHome;
+  return appHome === `/workspaces/${projectId}` ? PROJECT_LANDING_PATH : appHome;
 }
 
 /**
@@ -176,8 +178,8 @@ export function resolveGateState(
   return waiting ?? errorState ?? 'unavailable';
 }
 
-/** What the boundary renders: the pending frame, the project, or a gate screen. */
-export type BoundaryView = 'pending' | 'project' | 'gate';
+/** What the boundary renders: the pending frame, the project, a deleting workspace, or a gate screen. */
+export type BoundaryView = 'pending' | 'project' | 'deleting' | 'gate';
 
 /**
  * Unresolved auth outranks everything, a cached project included: no result
@@ -193,10 +195,14 @@ export function resolveBoundaryView(input: {
   authReady: boolean;
   isPending: boolean;
   hasData: boolean;
+  workspaceState?: WorkspaceState;
   errorState: AccessGateState | null;
 }): BoundaryView {
   if (!input.authReady || input.isPending) return 'pending';
   if (input.hasData && input.errorState !== 'request' && input.errorState !== 'notFound') {
+    // K2: a deleted workspace stays readable to its owners until it is erased
+    // (`state: 'deleting'`). It opens nothing; the owner restores it or leaves.
+    if (input.workspaceState === 'deleting') return 'deleting';
     return 'project';
   }
   return 'gate';
@@ -209,7 +215,7 @@ export function routeSessionIdFromParams(params: Record<string, unknown> | null 
 }
 
 /**
- * The gate's read. It uses the shell's canonical `getProject` slot, so the
+ * The gate's read. It uses the shell's canonical project slot, so the
  * shell, ⌘K and settings read this answer instead of asking again (2 GETs per
  * load before). A user switch empties the cache before the new user is
  * published (`resetClientState`).
@@ -217,7 +223,7 @@ export function routeSessionIdFromParams(params: Record<string, unknown> | null 
 export function projectGateQuery(projectId: string) {
   return {
     queryKey: qk.project.summary(projectId),
-    queryFn: () => getProject(projectId, { showErrors: false }),
+    queryFn: () => getWorkspace(projectId, { showErrors: false }),
     retry: false,
   } as const;
 }
@@ -232,6 +238,9 @@ interface ProjectAccessBoundaryProps {
 export function ProjectAccessBoundary(props: ProjectAccessBoundaryProps) {
   const { user } = useAuth();
   useSignedOutRedirect();
+  // Above the keyed child, so the buffer survives the remount when the user
+  // id resolves: keys typed before the home composer exists land in it.
+  useHomeTypingBuffer(user?.id ?? null);
   return <ProjectAccessForUser key={`${props.projectId}:${user?.id ?? "pending"}`} {...props} />;
 }
 
@@ -315,7 +324,7 @@ function ProjectAccessForUser({ projectId, children }: ProjectAccessBoundaryProp
   }, [unrenderable, projectId, user?.id]);
 
   // The full-page frame every "opening a project" surface shares — the Kortix
-  // mark, nothing else. This is what a hard refresh of `/projects/<id>` or of
+  // mark, nothing else. This is what a hard refresh of `/workspaces/<id>` or of
   // a session route shows for the length of one session check plus one
   // getProject, so it is the most-seen loading surface in the product.
   //
@@ -336,9 +345,21 @@ function ProjectAccessForUser({ projectId, children }: ProjectAccessBoundaryProp
     // still replaces it with the gate.
     isPending: query.isPending,
     hasData: query.data !== undefined,
+    workspaceState: query.data?.state,
     errorState,
   });
   if (view === 'pending') return <ProjectPendingScreen />;
+
+  if (view === 'deleting') {
+    return (
+      <DeletingWorkspaceScreen
+        projectId={projectId}
+        name={query.data?.name ?? ''}
+        deletionScheduledFor={query.data?.deletion_scheduled_for ?? null}
+        onRestored={() => void refetch()}
+      />
+    );
+  }
 
   if (view === 'project') return <>{children}</>;
 
@@ -350,6 +371,70 @@ function ProjectAccessForUser({ projectId, children }: ProjectAccessBoundaryProp
       onRecheck={recheckNow}
       onWaiting={setWaiting}
     />
+  );
+}
+
+// ─── Deleting ────────────────────────────────────────────────────────────────
+
+/**
+ * An owner opened a workspace inside its restore window (design.md K2).
+ * Restore (`POST /v1/workspaces/:id/restore`) brings it back for every member;
+ * the escape goes to the next workspace. The remembered landing target is
+ * forgotten, so `/` does not land here again.
+ */
+function DeletingWorkspaceScreen({
+  projectId,
+  name,
+  deletionScheduledFor,
+  onRestored,
+}: {
+  projectId: string;
+  name: string;
+  deletionScheduledFor: string | null;
+  onRestored: () => void;
+}) {
+  const t = useTranslations('workspaces.deleting');
+  const locale = useLocale();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const escapeHome = gateEscapePath(useAppHome(), projectId);
+  useEffect(() => {
+    forgetLastProjectId(user?.id, projectId);
+  }, [user?.id, projectId]);
+  const restore = useMutation({
+    mutationFn: () => restoreWorkspace(projectId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: qk.projects.scope() });
+      onRestored();
+    },
+  });
+  const date = formatWorkspaceDate(deletionScheduledFor, locale);
+  return (
+    <AuthFrame art={false}>
+      <Rise key="h-deleting">
+        <StepHeader title={t('title', { name })} description={t('body', { date })} />
+      </Rise>
+      <Rise key="b-deleting" delay={0.06}>
+        <div className="outline-none">
+          {restore.isError ? <ErrorStrip message={(restore.error as Error)?.message || t('restoreFailed')} /> : null}
+          <Button
+            type="button"
+            size="lg"
+            className="mt-5 w-full gap-1.5"
+            onClick={() => restore.mutate()}
+            disabled={restore.isPending}
+          >
+            {restore.isPending ? <Loading className="size-4 shrink-0" /> : null}
+            {t('restore')}
+          </Button>
+          <Button asChild variant="ghost" size="lg" className="mt-2 w-full">
+            <Link href={escapeHome} prefetch>
+              {t('back')}
+            </Link>
+          </Button>
+        </div>
+      </Rise>
+    </AuthFrame>
   );
 }
 
@@ -380,7 +465,7 @@ function AccessGateScreen({
   // Where both "Back to projects" controls below point. Leaving THIS project
   // (access denied, or the user just left it) is not a browse-the-list escape,
   // so it goes to the latest project this user has open, never the removed
-  // `/projects` list.
+  // `/workspaces` list.
   //
   // `useAppHome` reads a cookie, so it is browser-only. This screen never
   // reaches the server render — the boundary above returns the pending frame
@@ -448,7 +533,7 @@ function AccessGateScreen({
   const showAdminBypass = forbidden && !!adminRole?.isAdmin;
 
   return (
-    <AuthFrame>
+    <AuthFrame art={false}>
       {/*
         Keyed on `state` so a step change replays the same two-part rise the
         auth flow uses everywhere else: header first, body 60ms behind.
@@ -561,9 +646,10 @@ function AccessGateScreen({
                   </Link>
                 )}
                 {/*
-                  403 only. Acting as the account cannot resurrect a deleted
-                  project or clear a 500 — offering it on those screens is a
-                  dead control.
+                  403 only: the API answers a live workspace the caller cannot
+                  read with 403 workspace_access_denied, and a 404 means the
+                  workspace is gone. Acting as the account cannot resurrect a
+                  deleted workspace or clear a 500.
                 */}
                 {showAdminBypass ? (
                   <Button

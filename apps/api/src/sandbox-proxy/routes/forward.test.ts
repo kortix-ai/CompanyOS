@@ -17,6 +17,7 @@
 // `mock.module` is process-global; the `--isolate` runner gives this file its
 // own module graph.
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { PlatinumSandboxNotRunningError } from '../../shared/platinum';
 import * as realRequestContext from '../../lib/request-context';
 import { WIRE_MESSAGE_ID, mintWireMessageId, wireIdTime } from '../../projects/wire-message-id';
 import * as realKortixUserContext from '../../shared/kortix-user-context';
@@ -107,17 +108,26 @@ mock.module('../../projects/session-open', () => ({
   resumeStoppedSandboxByExternalId: async () => true,
   stoppedSandboxWakePending: async () => false,
 }));
+const touchedSandboxIds: string[] = [];
+const erroredSandboxIds: string[] = [];
+// Set per-test: the error the ingress resolve throws (the typed Platinum
+// not-running error, KRTX-4751).
+let ingressError: Error | null = null;
+
 // Daytona ingress is a pass-through: the effective port is the addressed port.
 mock.module('../backend', () => ({
   loadSandbox: async () => ({ ...ACTIVE_RECORD }),
   routeSandboxIngress: (_record: unknown, request: { port: number }) => ({
     effectivePort: request.port,
   }),
-  resolveSandboxIngress: async () => ({ url: 'http://sandbox.local', headers: {} }),
+  resolveSandboxIngress: async () => {
+    if (ingressError) throw ingressError;
+    return { url: 'http://sandbox.local', headers: {} };
+  },
   buildSandboxUpstreamHeaders: async () => ({}),
   invalidatePreviewLink: () => {},
-  markSandboxUsed: () => {},
-  markSandboxErrored: async () => {},
+  markSandboxUsed: (sandboxId: string) => { touchedSandboxIds.push(sandboxId); },
+  markSandboxErrored: async (sandboxId: string) => { erroredSandboxIds.push(sandboxId); },
   wakeSandbox: async () => {},
 }));
 
@@ -156,6 +166,8 @@ mock.module('../../projects/surface', () => ({
   // module LINK error, not a null.
   missingClaudeSubscription: async () => null,
   sessionModelPin: async () => null,
+  // The turn's origin block ("## Where you are") reads the session row here; inert in this suite.
+  sessionWhereTurn: async () => null,
 }));
 
 const { forwardToSandbox } = await import('./preview');
@@ -193,6 +205,8 @@ beforeEach(() => {
   begunTurns = [];
   boxKeepsMessageIds = false;
   keepsIdsAsks = [];
+  erroredSandboxIds.length = 0;
+  ingressError = null;
 });
 // Restore per TEST: a case that fails before installing its own fetch would
 // otherwise run against the previous case's exhausted queue.
@@ -323,7 +337,7 @@ describe('forwardToSandbox — a client abort asks who may stop the turn', () =>
   test('allowed: the stop is stamped under the stopper, then forwarded once', async () => {
     queueFetch(new Response('true', { status: 200 }));
     expect((await abort()).status).toBe(200);
-    expect(stopLog).toEqual([{ name: 'UserStop', scope: { opencodeSessionId: 'ses_root' }, by: 'u1' }]);
+    expect(stopLog).toEqual([{ name: 'UserStop', scope: { runtimeSessionId: 'ses_root' }, by: 'u1' }]);
     expect(fetchCalls).toBe(1);
   });
 
@@ -332,6 +346,39 @@ describe('forwardToSandbox — a client abort asks who may stop the turn', () =>
     expect((await abort({ ...principal, sandboxAuthored: true })).status).toBe(200);
     expect(abortAsks).toEqual([]);
     expect(stopLog).toEqual([]);
+  });
+});
+
+describe('forwardToSandbox — the box\'s own credential never decides an ask (GHSA-pm8p-gc5w-mjj4)', () => {
+  const decisions: Array<[string, string, unknown]> = [
+    ['POST', '/kortix/runtime/permissions/perm_1/reply', { reply: 'always' }],
+    ['POST', '/kortix/runtime/questions/que_1/reply', { answers: [['yes']] }],
+    ['POST', '/kortix/runtime/questions/que_1/reject', undefined],
+    ['POST', '/permission/perm_1/reply', { reply: 'once' }],
+    ['POST', '/question/que_1/reply', { answers: [['yes']] }],
+    ['PUT', '/kortix/runtime/sessions/ses_root/grants', { grants: ['*'] }],
+  ];
+  const send = (access: typeof principal, method: string, path: string, body: unknown) =>
+    forwardToSandbox('sb-1', 8000, access, method, path, '', jsonHeaders(), body === undefined ? undefined : bodyOf(body), 'http://app.local');
+
+  test.each(decisions)('sandbox-authored %s %s: 403 ASK_REQUIRES_HUMAN, nothing forwarded', async (method, path, body) => {
+    queueFetch();
+    const res = await send({ ...principal, sandboxAuthored: true }, method, path, body);
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { code?: string }).code).toBe('ASK_REQUIRES_HUMAN');
+    expect(fetchCalls).toBe(0);
+  });
+
+  test('a person\'s reply is forwarded to the box', async () => {
+    queueFetch(new Response('true', { status: 200 }));
+    expect((await send(principal, 'POST', '/kortix/runtime/questions/que_1/reject', undefined)).status).toBe(200);
+    expect(fetchCalls).toBe(1);
+  });
+
+  test('a sandbox-authored park is not a decision: forwarded', async () => {
+    queueFetch(new Response('{"parked":0}', { status: 200 }));
+    expect((await send({ ...principal, sandboxAuthored: true }, 'POST', '/kortix/runtime/asks/park', undefined)).status).toBe(200);
+    expect(fetchCalls).toBe(1);
   });
 });
 
@@ -366,7 +413,7 @@ describe('forwardToSandbox — a sandbox-down 400 on the LAST attempt releases t
     // to `{status:'duplicate'}` and the user's prompt was silently lost — the very
     // message-loss this PR exists to stop, surviving in the one path it missed.
     //
-    // Daytona rejects this BEFORE opencode ("no IP address found" means the box has
+    // Daytona rejects this BEFORE the runtime ("no IP address found" means the box has
     // no runner at all), so delivery is provably not-delivered and releasing is safe.
     const args = [
       'sb-1',
@@ -392,6 +439,54 @@ describe('forwardToSandbox — a sandbox-down 400 on the LAST attempt releases t
     expect(fetchCalls).toBe(1);
     expect(retry.status).toBe(200);
     expect(await retry.json()).not.toEqual({ status: 'duplicate', deduplicated: true });
+  });
+});
+
+describe('forwardToSandbox — the provider-confirmed not-running error marks the sandbox errored (KRTX-4751)', () => {
+  // Platinum's CP answers the expose inside resolveIngress with
+  // `409 {"code":"sandbox_not_running"}` when the box is stopped. Every
+  // attempt throws the typed error; the give-up must flip the row to 'error'
+  // (the Daytona confirmed-dead lane) so the NEXT request fast-fails with a
+  // retryable `sandbox not ready` instead of burning the same 50 s retry
+  // budget against a box the provider has already confirmed dead.
+  test('a Platinum 409 sandbox_not_running from the ingress resolve errors the row at give-up', async () => {
+    ingressError = new PlatinumSandboxNotRunningError(
+      'platinum POST /v1/sandboxes/ext-1/expose -> 409 {"code":"sandbox_not_running"}',
+    );
+    const res = await forwardToSandbox(
+      'sb-1',
+      8000,
+      principal,
+      'GET',
+      '/kortix/runtime/workflows',
+      '',
+      new Headers(),
+      undefined,
+      'http://app.local',
+    );
+    // Every attempt threw; the give-up answers the honest 502...
+    expect(res.status).toBe(502);
+    // ...and marks the sandbox errored, so later requests fast-fail.
+    expect(erroredSandboxIds).toEqual(['ext-1']);
+  });
+
+  test('a generic ingress failure (no confirmed-dead signal) leaves the row alone', async () => {
+    ingressError = new Error('connect ETIMEDOUT');
+    const res = await forwardToSandbox(
+      'sb-1',
+      8000,
+      principal,
+      'GET',
+      '/kortix/runtime/workflows',
+      '',
+      new Headers(),
+      undefined,
+      'http://app.local',
+    );
+    expect(res.status).toBe(502);
+    // A transient unreachable / RX stall must NEVER error a row — the
+    // 2026-06-14 bug this flag's guard exists for.
+    expect(erroredSandboxIds).toEqual([]);
   });
 });
 
@@ -461,6 +556,11 @@ function installFetch(transcript: unknown | 'unreachable') {
 }
 
 const NOW = Date.now();
+// The pre-fix CLI's high-bits mint put ids ~40 days ahead of the clock
+// (WIRE_ID_CLOCK_TOLERANCE). Built from `ms * 16` instead, the fixture sat on
+// the 48-bit ring wherever that product fell, and read as ahead only part of
+// the time: it flipped to "behind" at 2026-11-03 12:37 UTC and failed every run.
+const farAheadClock = (nowMs: number) => mintWireMessageId({ nowMs: nowMs + 40 * 86_400_000 }).id.slice(0, 16);
 
 describe('forwardToSandbox — wire id placement on the direct prompt path', () => {
   test('a STALE client id into a streaming CHILD session is re-minted above the tip, ledger + echo agree', async () => {
@@ -554,7 +654,7 @@ describe('forwardToSandbox — wire id placement on the direct prompt path', () 
     // Any client can send `X-Kortix-Wire-Id-Placed: 1`; the inbox drain is the
     // only intended sender. A far-future id (the pre-fix CLI's high-bits
     // mint) is re-minted on the id alone, without the transcript read.
-    const farFuture = `msg_${((BigInt(NOW) * BigInt(0x1000)) >> BigInt(8)).toString(16).slice(0, 12)}SyntheticCli07`;
+    const farFuture = `${farAheadClock(NOW)}SyntheticCli07`;
     installFetch([]);
     const placedHeaders = jsonHeaders();
     placedHeaders.set('X-Kortix-Wire-Id-Placed', '1');
@@ -576,7 +676,7 @@ describe('forwardToSandbox — wire id placement on the direct prompt path', () 
     const body = { messageID: stale.id, parts: [{ type: 'text', text: 'queued while busy' }] };
     const res = await forwardToSandbox('sb-1', 8000, principal, 'POST', '/session/ses_1/prompt_async', '', jsonHeaders(), bodyOf(body), 'http://app.local');
     expect(res.status).toBe(200);
-    expect(keepsIdsAsks).toEqual([{ externalId: 'sb-1', userId: 'u1' }]);
+    expect(keepsIdsAsks).toEqual([{ externalId: ACTIVE_RECORD.externalId, userId: 'u1' }]);
     expect(fetchLog.map((f) => f.method)).toEqual(['POST']);
     expect(fetchLog[0].body).toBe(JSON.stringify(body));
     expect(begunTurns[0]?.messageId).toBe(stale.id);
@@ -585,7 +685,7 @@ describe('forwardToSandbox — wire id placement on the direct prompt path', () 
 
   test('on a runtime that keeps message ids, a far-future id is still re-minted on the id alone', async () => {
     boxKeepsMessageIds = true;
-    const farFuture = `msg_${((BigInt(NOW) * BigInt(0x1000)) >> BigInt(8)).toString(16).slice(0, 12)}SyntheticCli08`;
+    const farFuture = `${farAheadClock(NOW)}SyntheticCli08`;
     installFetch([]);
     await forwardToSandbox('sb-1', 8000, principal, 'POST', '/session/ses_1/prompt_async', '', jsonHeaders(), bodyOf({ messageID: farFuture, parts: [{ type: 'text', text: 'hi' }] }), 'http://app.local');
     expect(fetchLog.map((f) => f.method)).toEqual(['POST']);
@@ -674,4 +774,20 @@ describe('forwardToSandbox — POST /kortix/env-rpc', () => {
     expect(res.status).toBe(502);
     expect(Math.max(...timerDelays)).toBeGreaterThan(PROXY_ATTEMPT_TIMEOUT_MS);
   });
+});
+
+test('UUID proxy alias uses provider ID for lifecycle but keeps the public redirect prefix', async () => {
+  touchedSandboxIds.length = 0;
+  queueFetch(new Response(null, { status: 302, headers: { location: '/login' } }));
+  const alias = '550e8400-e29b-41d4-a716-446655440000';
+  const response = await forwardToSandbox(
+    alias, 3000, principal, 'GET', '/', '', new Headers(), undefined, 'http://app.local',
+  );
+  expect(response.status).toBe(302);
+  expect(response.headers.get('location')).toBe(`/v1/p/${alias}/3000/login`);
+  queueFetch(new Response('ok'));
+  expect((await forwardToSandbox(
+    alias, 3000, principal, 'GET', '/', '', new Headers(), undefined, 'http://app.local',
+  )).status).toBe(200);
+  expect(touchedSandboxIds).toEqual([ACTIVE_RECORD.externalId]);
 });

@@ -7,6 +7,7 @@
 import type { Context } from 'hono';
 import { tokenCredential, type Actor, type TokenBinding } from '../iam/actor';
 import { requestClientIp } from './client-ip';
+import { enforceSessionPolicy } from './session-gate';
 
 /**
  * Build the Actor for this request from the Hono context.
@@ -25,12 +26,17 @@ export async function buildActor(c: Context, accountIdOverride?: string): Promis
 
   const ctx = {
     ip: requestClientIp(c) ?? undefined,
-    mfaAal: (c.get('mfaAal') as string | undefined) ?? undefined,
+    mfaAal: requestMfaAal(c, accountId),
   };
 
   const authType = c.get('authType') as string | undefined;
 
-  if (authType === 'service_account') {
+  const tokenId = c.get('iamTokenId') as string | undefined;
+  // A `kortix_sa_` bearer carries its own id as the token id
+  // (`serviceAccountPrincipal`). A workspace key that acts as a service
+  // account carries the key's row id: that one is classified from its row.
+  const serviceAccountKey = authType === 'service_account' && !!tokenId && tokenId !== userId;
+  if (authType === 'service_account' && !serviceAccountKey) {
     return { userId, accountId, credential: { kind: 'service_account', serviceAccountId: userId }, ctx };
   }
 
@@ -40,8 +46,9 @@ export async function buildActor(c: Context, accountIdOverride?: string): Promis
     return { userId, accountId, credential: { kind: 'sandbox' }, ctx };
   }
 
-  const tokenId = c.get('iamTokenId') as string | undefined;
-  if (authType === 'pat' && tokenId) {
+  // A PAT, or a workspace key that acts as a service account (an agent or bot
+  // key: `authType` service_account with a token id).
+  if ((authType === 'pat' || serviceAccountKey) && tokenId) {
     // The PAT branch of auth already read this token's row to validate it
     // (`patPrincipal` stores its binding fields). Same row, same request and
     // fresher than the memo, so a second `account_tokens` read is pure
@@ -60,7 +67,37 @@ export async function buildActor(c: Context, accountIdOverride?: string): Promis
     };
   }
 
+  // An OAuth access token whose consent named one workspace
+  // (middleware/auth-oauth.ts sets `tokenProjectId`): the engine confines it
+  // like a workspace key, so the route fence is not its only wall.
+  if (authType === 'oauth') {
+    const boundWorkspaceId = c.get('tokenProjectId') as string | undefined;
+    if (boundWorkspaceId) return { userId, accountId, credential: { kind: 'jwt', boundWorkspaceId }, ctx };
+  }
+
   return { userId, accountId, credential: { kind: 'jwt' }, ctx };
+}
+
+/**
+ * The MFA level this request carries for `accountId`.
+ *
+ * A browser session carries its own (`aal` claim). An OAuth token carries the
+ * level recorded on its row at mint time (`mfa_aal`), and only in the account
+ * the row names. Today only the Apps gate records one: for a viewer whose App
+ * cookie a browser session at aal2 opened. Without it, every App that acts as
+ * its viewer got `403 account_mfa_required` in an MFA account (2026-11-11).
+ *
+ * Never inferred from the kind of token: an App cookie that predates the MFA
+ * requirement, or a viewer token minted for a PAT or an agent session token,
+ * never passed a second factor. Never request-wide (`c.set('mfaAal')`):
+ * account secrets, notifications and the chat identity bind read that with no
+ * account check.
+ */
+function requestMfaAal(c: Context, accountId: string): string | undefined {
+  const own = c.get('mfaAal') as string | undefined;
+  if (own) return own;
+  const mfaAccountId = c.get('oauthMfaAccountId') as string | undefined;
+  return mfaAccountId && mfaAccountId === accountId ? 'aal2' : undefined;
 }
 
 /**
@@ -89,5 +126,11 @@ export async function actorFor(c: Context, accountId: string): Promise<Actor | n
  * every route at once, which is a contract change, not a refactor.
  */
 export async function actorOf(c: Context, accountId: string): Promise<Actor> {
-  return (await actorFor(c, accountId)) ?? { userId: '', accountId, credential: { kind: 'jwt' }, ctx: {} };
+  // The account's session policy (max lifetime, idle timeout, force-logout)
+  // covers EVERY route that authorizes against it, not only the account
+  // subtrees (design.md §3.2 C4, finding 12): a revoked browser session gets
+  // `401 session_token_revoked` here. Memoized per request and account, and
+  // run beside the actor build so it adds no depth.
+  const [actor] = await Promise.all([actorFor(c, accountId), enforceSessionPolicy(c, accountId)]);
+  return actor ?? { userId: '', accountId, credential: { kind: 'jwt' }, ctx: {} };
 }

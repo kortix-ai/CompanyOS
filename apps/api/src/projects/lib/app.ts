@@ -9,8 +9,6 @@ import {
   SessionCreateAcceptedSchema as ContractSessionCreateAcceptedSchema,
   SessionDeleteResultSchema as ContractSessionDeleteResultSchema,
   SessionStartResultSchema as ContractSessionStartResultSchema,
-  WarmProjectSessionResultSchema as ContractWarmProjectSessionResultSchema,
-  ClaimWarmProjectSessionInputSchema as ContractClaimWarmProjectSessionInputSchema,
   ChangeRequestSchema as ContractChangeRequestSchema,
   ChangeRequestListSchema as ContractChangeRequestListSchema,
   CreateSessionPromptResultSchema as ContractCreateSessionPromptResultSchema,
@@ -52,12 +50,6 @@ export const SessionCreateAcceptedSchema = ContractSessionCreateAcceptedSchema.o
 export const SessionCreateInputSchema = ContractSessionCreateInputSchema.openapi('SessionCreateInput');
 
 export const SessionDeleteResultSchema = ContractSessionDeleteResultSchema.openapi('SessionDeleteResult');
-
-export const WarmProjectSessionResultSchema =
-  ContractWarmProjectSessionResultSchema.openapi('WarmProjectSessionResult');
-
-export const ClaimWarmProjectSessionInputSchema =
-  ContractClaimWarmProjectSessionInputSchema.openapi('ClaimWarmProjectSessionInput');
 
 export const OkSchema = ContractOkResponseSchema.openapi('Ok');
 
@@ -131,7 +123,7 @@ export const AnyObject = z.record(z.string(), z.any());
 
 /** The prepare-branch body: the durable transition the UI polls. Mirrors
  *  `PreparationView` (provider-transition-service.ts) — carries `kind`. */
-export const PreparationViewSchema = z
+const PreparationViewSchema = z
   .object({
     kind: z.literal('preparation'),
     transition_id: z.string().nullable(),
@@ -156,7 +148,7 @@ export const PreparationViewSchema = z
   .openapi('PreparationView');
 
 /** The immediate-branch body: the updated project, tagged with `kind:'project'`. */
-export const SandboxProviderProjectResultSchema = ContractProjectSchema.extend({
+const SandboxProviderProjectResultSchema = ContractProjectSchema.extend({
   kind: z.literal('project'),
 }).openapi('SandboxProviderProjectResult');
 
@@ -169,7 +161,7 @@ export const SandboxProviderPatchResultSchema = z
 // PUBLIC projection — status / providers / generation / timestamps / user-safe
 // error class only. Never leaks lease_epoch, lease holder, internal error strings,
 // image names, or template ids (see toPublicTransitionView).
-export const SandboxProviderTransitionViewSchema = z
+const SandboxProviderTransitionViewSchema = z
   .object({
     transition_id: z.string().nullable(),
     project_id: z.string(),

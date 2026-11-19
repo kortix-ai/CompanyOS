@@ -84,8 +84,10 @@ describe('the starter manifest is the one kortix.yaml format', () => {
     }
   });
 
-  test('its default agent is the one worker agent', () => {
-    expect(manifestFor()).toContain('default_agent: worker');
+  test('it turns My Kortix on and makes it the default agent', () => {
+    const manifest = parseManifestText(manifestFor()) as { builtin_agents?: unknown; default_agent?: unknown };
+    expect(manifest.builtin_agents).toEqual({ my_kortix: true });
+    expect(manifest.default_agent).toBe('mykortix');
   });
 
   test('registers exactly the skill folders each template ships', () => {
@@ -136,7 +138,7 @@ describe('the starter manifest is the one kortix.yaml format', () => {
     const manifest = manifestFor();
     expect(manifest).not.toContain('harness-reflector');
     expect(manifest).not.toContain('session-reviewer');
-    expect(manifest).toContain('tools: all');
+    expect(manifest).toContain('tools: "*"');
   });
 });
 

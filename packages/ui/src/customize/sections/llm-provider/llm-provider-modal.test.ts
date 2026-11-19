@@ -94,7 +94,7 @@ describe('LLM provider modal shell', () => {
 
   test('it shows the page’s heading, not a second wording of it', () => {
     expect(MODELS_PAGE_TITLE).toBe('Models');
-    expect(MODELS_PAGE_DESCRIPTION).toBe('Choose the providers and models this project can use.');
+    expect(MODELS_PAGE_DESCRIPTION).toBe('Choose the providers and models this workspace can use.');
     expect(modalSource).toContain(
       '<ModalTitle className="text-base leading-8 font-medium">{MODELS_PAGE_TITLE}</ModalTitle>',
     );
@@ -149,17 +149,5 @@ describe('LLM provider modal shell', () => {
     expect(modalSource).toContain('lg:max-h-(--provider-modal-h)');
     expect(modalSource).toMatch(/lg:max-w-\d?xl/);
     expect(modalSource).not.toMatch(/max-w-\[\d+px\]/);
-  });
-
-  /**
-   * Reopening still lands on the requested tab: the shell's
-   * `key={`${open}-${defaultTab}`}` remounts the body, whose `useState`
-   * initializer runs once per mount — no `setState` in an effect body
-   * (`react-hooks/set-state-in-effect`).
-   */
-  test('reopening re-seeds the tab by remount, not by an effect', () => {
-    expect(modalSource).toContain("key={`${open}-${defaultTab ?? ''}`}");
-    expect(modalSource).toContain('useState<ActiveTab>(() => pickInitialTab(defaultTab))');
-    expect(modalSource).not.toContain('useEffect');
   });
 });

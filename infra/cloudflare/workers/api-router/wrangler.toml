@@ -29,6 +29,13 @@ name = "api-kortix-router"
 routes = [
   { pattern = "api.kortix.com", custom_domain = true },
   { pattern = "gateway.kortix.com/*", zone_name = "kortix.com" },
+  # api-yolo.kortix.com has no origin: the per-member YOLO endpoint is retired
+  # and its cfargotunnel connector is dead (530 / error 1033 on every path).
+  # A Worker ROUTE over the proxied DNS record — never a custom_domain, that
+  # would claim the record itself; same approach as staging-api below — lets
+  # worker fetch() answer 410 Gone for this host without touching the DNS.
+  # Deleting the record stays with the zone operator.
+  { pattern = "api-yolo.kortix.com/*", zone_name = "kortix.com" },
 ]
 
 [env.prod.vars]
@@ -38,12 +45,11 @@ ACTIVE_BACKEND = "ecs-fargate"
 BACKEND_ECS_FARGATE = "https://api-ecs-fargate.kortix.com"
 GATEWAY_ACTIVE_BACKEND = "ecs-fargate"
 GATEWAY_BACKEND_ECS_FARGATE = "https://gateway-ecs-fargate.kortix.com"
-# Vercel Edge Config is exposed through this web route. The Worker caches it
-# for two seconds and blocks mutating API/gateway requests at the edge when the
-# level is "blocking". The API origin and database are not part of this read.
-MAINTENANCE_STATE_URL = "https://kortix.com/api/maintenance/edge"
-# An operator sets this to "blocking" to keep the edge write gate closed
-# while Vercel is unavailable. The message falls back to the generic text in
+# The one API/gateway write freeze. An operator sets this to "blocking" and
+# redeploys the Worker: every POST/PUT/PATCH/DELETE then gets a 503
+# MAINTENANCE_MODE answer, and reads still reach the origin. It reads nothing
+# per request. The admin "Full lockdown" level does not set it; that level
+# locks the web app only. The message falls back to the generic text in
 # worker.mjs.
 MAINTENANCE_LEVEL_OVERRIDE = "none"
 MAINTENANCE_TITLE_OVERRIDE = "Scheduled maintenance"

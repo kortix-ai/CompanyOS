@@ -32,7 +32,7 @@ import {
   REVIEW_CONTROL_ACTIONS,
   reviewVerdictAllowed,
 } from '@kortix/sdk';
-import { clearStartStash, contract, qk, reviewItemsOf } from '@kortix/sdk/react';
+import { clearStartStash, contract, qk, reviewItemsOf, useSessionAsks } from '@kortix/sdk/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUiRouter, useUiSearchParams } from '../../../providers/ui-provider';
 import { useEffect, useMemo, useState } from 'react';
@@ -52,7 +52,9 @@ import {
   isApprovalExpiredError,
   itemDeepLink,
 } from '../../../workspace/review/review-actions';
+import { AskDeck, DECK_KINDS, deckOrder } from '../../../session/prompts/ask-deck';
 import { ReviewCenter } from '../../../workspace/review/review-center';
+import { REVIEW_VERDICT_ANNOUNCED } from '../../../workspace/review/review-reducer';
 
 /**
  * How many session deep links the inbox warms up front. A page holds up to 50
@@ -75,6 +77,17 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
   // role still sees the inbox, with no verdict control. The inbox stays live
   // for every viewer: an unresolved probe offers no verdict.
   const cans = useProjectCans(projectId, REVIEW_CONTROL_ACTIONS);
+  // The deck claims the inbox's empty pane only while an agent asks something
+  // (or the asks still load). With none, its own "Nothing waits on you" would
+  // sit beside rows that do wait, so the pane shows "Select an item" instead.
+  // Same query as the deck's own: a cache hit, not a second request.
+  const asks = useSessionAsks(projectId, { enabled: Boolean(projectId) });
+  const [selectedAskId, setSelectedAskId] = useState<string | null>(null);
+  const [currentAskId, setCurrentAskId] = useState<string | null>(null);
+  const [hiddenAskIds, setHiddenAskIds] = useState<ReadonlySet<string>>(() => new Set());
+  const deckAsks = deckOrder((asks.data?.asks ?? []).filter((ask) => DECK_KINDS.has(ask.kind)), [], hiddenAskIds);
+  const deckShows =
+    asks.isLoading || asks.isError || (asks.data?.asks ?? []).some((ask) => DECK_KINDS.has(ask.kind));
   const qc = useQueryClient();
   const router = useUiRouter();
   const closeCustomize = useSettingsPanelStore((s) => s.close);
@@ -145,7 +158,7 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
   //
   // Capped, and keyed by the hrefs rather than by `items`. Two reasons, both
   // measured against how this screen actually behaves:
-  //  - `/projects/[id]/sessions/[sessionId]` has a `loading.tsx`, so each
+  //  - `/workspaces/[id]/sessions/[sessionId]` has a `loading.tsx`, so each
   //    prefetch is a real dynamic RSC render on the server, not a no-op.
   //  - `useReviewItems` polls on an 8s `refetchInterval`, so `items` takes a new
   //    identity on every material change. Depending on it re-fired the whole
@@ -191,18 +204,36 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
     );
   }
 
-  function handleAct(id: string, verdict: ReviewVerdict, feedback?: string) {
+  // Each branch resolves when the server accepted the verdict and rejects when
+  // it refused, so the inbox can roll its optimistic status back. A branch
+  // that shows its own success toast resolves `REVIEW_VERDICT_ANNOUNCED`.
+  function handleAct(id: string, verdict: ReviewVerdict, feedback?: string): Promise<unknown> {
+    return new Promise<unknown>((settle, refuse) => {
+      actOnItem(id, verdict, feedback, () => settle(REVIEW_VERDICT_ANNOUNCED), () => settle(undefined), refuse);
+    });
+  }
+
+  function actOnItem(
+    id: string,
+    verdict: ReviewVerdict,
+    feedback: string | undefined,
+    announced: () => void,
+    accepted: () => void,
+    refused: (error: unknown) => void,
+  ) {
     // The shared parameter-review component calls this for one exact action.
     const executionId = connectorCallId(id);
     if (executionId) {
       resolve.mutate(
         { executionId, decision: verdict === 'approve' ? 'approve' : 'deny', note: feedback },
         {
-          onSuccess: () =>
-            verdict === 'approve'
-              ? successToast(tI18nComplete.raw('text2b2b0a697042'))
-              : infoToast(tI18nComplete.raw('textda404deb110f')),
+          onSuccess: () => {
+            if (verdict === 'approve') successToast(tI18nComplete.raw('text2b2b0a697042'));
+            else infoToast(tI18nComplete.raw('textda404deb110f'));
+            announced();
+          },
           onError: (e) => {
+            refused(e);
             if (!isApprovalExpiredError(e)) return errorToast(e.message);
             errorToast(tHardcodedUi('approvalPage.expiredHint'));
             refreshInbox();
@@ -220,8 +251,10 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
           onSuccess: () => {
             successToast(tI18nComplete.raw('text0cad31cba248'));
             refreshInbox();
+            announced();
           },
           onError: (e) => {
+            refused(e);
             if ((e as { code?: string }).code === 'MERGE_CONFLICT') {
               const item = items.find((candidate) => candidate.id === id);
               const conflicts = (e as { data?: { conflicts?: string[] } }).data?.conflicts ?? [];
@@ -248,8 +281,12 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
           onSuccess: () => {
             infoToast(tI18nComplete.raw('text67382c89fdde'));
             refreshInbox();
+            announced();
           },
-          onError: (e) => errorToast(e.message),
+          onError: (e) => {
+            refused(e);
+            errorToast(e.message);
+          },
         });
       } else {
         // "Request changes" → persist the note on the change AND deliver it to the
@@ -258,6 +295,7 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
         const note = (feedback ?? '').trim();
         if (!note) {
           infoToast(tI18nComplete.raw('text8918eace1b87'));
+          refused(new Error('A change request needs a note.'));
           return;
         }
         requestChanges.mutate(
@@ -270,14 +308,27 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
                   : tI18nComplete.raw('text871f77182091'),
               );
               refreshInbox();
+              announced();
             },
-            onError: (e) => errorToast(e.message),
+            onError: (e) => {
+              refused(e);
+              errorToast(e.message);
+            },
           },
         );
       }
       return;
     }
-    act.mutate({ id, verdict, feedback }, { onError: (e) => errorToast(e.message) });
+    act.mutate(
+      { id, verdict, feedback },
+      {
+        onSuccess: accepted,
+        onError: (e) => {
+          refused(e);
+          errorToast(e.message);
+        },
+      },
+    );
   }
 
   // Bulk verdicts send every id the inbox chose: native, and `call:` for
@@ -288,8 +339,44 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
     return res.results;
   }
 
+  function openSession(sessionId: string) {
+    // "See progress" only VIEWS the session — feedback delivery goes through
+    // the backend now. Clear any stale queued prompt so navigating can't
+    // auto-send a leftover message (e.g. from an earlier client-side attempt).
+    const href = itemDeepLink(projectId, sessionId);
+    if (!href) return;
+    clearStartStash(sessionId);
+    closeCustomize();
+    // nav-contract: prefetch-only — the shared inbox hands back only a
+    // sessionId through `onOpenSession`, so the control is a button there.
+    // The effect above has already warmed this href.
+    router.push(href);
+  }
+
   return (
     <ReviewCenter
+      sessionAsks={deckAsks}
+      selectedAskId={currentAskId}
+      onSelectAsk={setSelectedAskId}
+      needsYouDeck={
+        projectId && deckShows
+          ? ({ paused }) => (
+              // `empty={null}`: in the 5 s Undo window after the last card,
+              // the deck draws nothing (the inbox shows its own empty state)
+              // rather than "Nothing waits on you" beside rows that do.
+              <AskDeck
+                projectId={projectId}
+                onOpenSession={openSession}
+                empty={null}
+                paused={paused}
+                onCurrentAskChange={setCurrentAskId}
+                onHiddenAskIdsChange={setHiddenAskIds}
+                selectedAskId={selectedAskId}
+                onClearSelection={() => setSelectedAskId(null)}
+              />
+            )
+          : undefined
+      }
       initialItems={items}
       segment={segment}
       onSegmentChange={setSegment}
@@ -314,19 +401,7 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
       onRefresh={() => void refetch()}
       recoveringCrId={startingCrId}
       onRecoverChange={recoverChange}
-      onOpenSession={(sessionId) => {
-        // "See progress" only VIEWS the session — feedback delivery goes through
-        // the backend now. Clear any stale queued prompt so navigating can't
-        // auto-send a leftover message (e.g. from an earlier client-side attempt).
-        const href = itemDeepLink(projectId, sessionId);
-        if (!href) return;
-        clearStartStash(sessionId);
-        closeCustomize();
-        // nav-contract: prefetch-only — the shared inbox hands back only a
-        // sessionId through `onOpenSession`, so the control is a button there.
-        // The effect above has already warmed this href.
-        router.push(href);
-      }}
+      onOpenSession={openSession}
     />
   );
 }

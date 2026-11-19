@@ -21,8 +21,10 @@ import {
   recordTemplateBuilt,
   recordTemplateFailed,
   resolveTemplateBySlug,
+  templateSnapshotReferencedByAnotherRow,
   type ResolvedTemplate,
 } from './templates';
+import { isReapableTemplatePredecessor } from './predecessor-reap-policy';
 import { DEFAULT_SANDBOX_SLUG } from './dockerfile-layer';
 import {
   type ReadyImage,
@@ -38,10 +40,11 @@ import { config, type SandboxProviderName } from '../config';
 import { logger } from '../lib/logger';
 import type { SessionStartImageState } from '@kortix/api-contract';
 import { and, desc, eq } from 'drizzle-orm';
-import { projects, sessionSandboxes } from '@kortix/db';
+import { sessionSandboxes } from '@kortix/db';
 import { db } from '../shared/db';
 import { resolveSessionPlacement } from '../platform/services/sandbox-region';
 import { preparePlatinumTemplateRegion } from './providers/platinum-templates';
+import { projectsView } from '../workspaces/rows';
 
 type TemplateIdentity = Awaited<ReturnType<typeof computeTemplateIdentity>>;
 
@@ -54,7 +57,8 @@ export { resolveTemplateBySlug as resolveTemplate };
 export { listSnapshotBuilds, reconcileStaleBuilds, buildLogProviderCandidates, shouldReconcileProviderState, recentlyBuiltStrict } from './builder-log';
 export type { ProjectSnapshotBuildSummary } from './builder-log';
 export { MY_KORTIX_RUNTIME_SPEC, ensureMyKortixSandboxImage, myKortixSnapshotName, reapSupersededMyKortixSnapshots, settleMyKortixImageBuilds } from './runtime-images';
-export { kickPreBuild, kickRoutedPreBuild, templateBuildProviders, kickProjectTemplatePrebuilds } from './template-prebuilds';
+export { kickPreBuild, kickRoutedPreBuild, templateBuildProviders, kickProjectTemplatePrebuilds, reconcileProjectTemplates } from './template-prebuilds';
+export type { TemplateReconcileProvider, TemplateReconcileResult } from './template-prebuilds';
 
 export type SnapshotBuildSource =
   | 'session-start'
@@ -152,14 +156,23 @@ export async function findServableLastReadyImage(
 export const SESSION_IMAGE_BUDGET_MS = 8_000;
 
 /**
+ * A resolution in one of these states is waiting on a build, which takes
+ * minutes: the budget cannot end in the new image, so the session does not wait
+ * it out. Every new session in the window after a runtime change paid the full
+ * 8 s here (preview, 2026-11-02: `image:serving_last_ready=+8004ms`).
+ */
+const BUILD_WAIT_STATES: ReadonlySet<ImageStep['state']> = new Set(['waiting_for_build', 'building']);
+
+/**
  * The image for a session start, never a silent wait.
  *
  * `ensureSandboxImage` already boots the last ready image instead of waiting
  * for a build. This bounds everything else (a slow database, a slow provider,
- * a lock): past `budgetMs` the session boots the image its project's latest
- * session booted (`lastBootedImage`), says so through `onStep`, and logs the
- * step that was slow. The resolution keeps running behind it. With no earlier
- * boot to fall back to, the session waits, and `onStep` names what it waits on.
+ * a lock): past `budgetMs`, or as soon as the resolution reports a build, the
+ * session boots the image its project's latest session booted
+ * (`lastBootedImage`), says so through `onStep`, and logs the step. The
+ * resolution keeps running behind it. With no earlier boot to fall back to, the
+ * session waits, and `onStep` names what it waits on.
  */
 export async function ensureSessionImage(
   project: GitBackedProject,
@@ -174,18 +187,24 @@ export async function ensureSessionImage(
   const started = Date.now();
   let current: ImageStep = { state: 'resolving', image: null };
   let answered = false;
+  const OVER_BUDGET = Symbol('over-budget');
+  let buildNeeded = () => {};
+  const buildWait = new Promise<typeof OVER_BUDGET>((resolve) => {
+    buildNeeded = () => resolve(OVER_BUDGET);
+  });
   const resolution = (opts.resolve ?? ensureSandboxImage)(project, {
     ...opts,
     source: opts.source ?? 'session-start',
     onStep: (step) => {
       current = step;
       if (!answered) opts.onStep?.(step);
+      if (BUILD_WAIT_STATES.has(step.state)) buildNeeded();
     },
   });
-  const OVER_BUDGET = Symbol('over-budget');
   let timer: ReturnType<typeof setTimeout> | undefined;
   const first = await Promise.race([
     resolution,
+    buildWait,
     new Promise<typeof OVER_BUDGET>((resolve) => {
       timer = setTimeout(() => resolve(OVER_BUDGET), opts.budgetMs ?? SESSION_IMAGE_BUDGET_MS);
     }),
@@ -202,7 +221,10 @@ export async function ensureSessionImage(
     elapsedMs: Date.now() - started,
   };
   if (!fallback) {
-    logger.warn('[snapshots] image resolution over budget; no earlier boot to fall back to', context);
+    // Only past the budget: a project's first image build is not a slow step.
+    if (!BUILD_WAIT_STATES.has(current.state)) {
+      logger.warn('[snapshots] image resolution over budget; no earlier boot to fall back to', context);
+    }
     return resolution;
   }
   answered = true;
@@ -213,7 +235,12 @@ export async function ensureSessionImage(
       error: error instanceof Error ? error.message : String(error),
     }),
   );
-  logger.warn('[snapshots] image resolution over budget; booting the previous image', { ...context, image: fallback.snapshotName });
+  logger.warn(
+    BUILD_WAIT_STATES.has(current.state)
+      ? '[snapshots] session image is building; booting the previous image'
+      : '[snapshots] image resolution over budget; booting the previous image',
+    { ...context, image: fallback.snapshotName },
+  );
   opts.onStep?.({ state: 'serving_last_ready', image: fallback.snapshotName });
   return fallback;
 }
@@ -604,9 +631,9 @@ export async function templateRegionResident(
 
 async function readProjectMetadata(projectId: string): Promise<unknown> {
   const [row] = await db
-    .select({ metadata: projects.metadata })
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .select({ metadata: projectsView.metadata })
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1);
   return row?.metadata ?? null;
 }
@@ -669,7 +696,7 @@ async function runInlineBuild(
       // Built where its sessions boot, so they never wait for a copy.
       region: identity.region,
       // Cold-only, unified with Daytona: Platinum builds a cold rootfs template
-      // and cold-boots it (entrypoint re-runs → opencode re-inits, ~6s) on spawn
+      // and cold-boots it (entrypoint re-runs → the runtime re-inits) on spawn
       // AND on resume — the SAME path Daytona takes, no provider divergence.
       // Stateful/warm capture used to resume opencode mid-state off a CH memory
       // snapshot, which intermittently wedged it (virtio-net RX stall after
@@ -718,10 +745,25 @@ async function runInlineBuild(
           `[snapshots] keeping predecessor ${prevSnapshot}: it was built recently, so another ` +
           `live replica/code version likely still serves it; it is pruned once it stops being rebuilt`,
         );
-      } else {
+      } else if (
+        isReapableTemplatePredecessor(prevSnapshot) &&
+        !(await templateSnapshotReferencedByAnotherRow(prevSnapshot, template.templateId))
+      ) {
         await provider
           .deleteSnapshot(prevSnapshot)
           .catch((e) => console.warn(`[snapshots] prune predecessor ${prevSnapshot} failed: ${e?.message ?? e}`));
+      } else {
+        // Outside the reap-eligible namespaces, or another template row still
+        // points at it (pre-fix identities were content-addressed once per
+        // provider namespace: a legacy `kortix-tpl-<hash>` name can be the
+        // current name of rows in several projects; deleting it here deletes
+        // the image their sessions still boot, KRTX-4469). The ownership-aware
+        // per-project reaper handles scoped images; quota GC collects
+        // everything left unreferenced.
+        logger.info(
+          `[snapshots] keeping predecessor ${prevSnapshot}: it is not proven owned by this template's namespace ` +
+          `or another row still references it`,
+        );
       }
     }
     return {

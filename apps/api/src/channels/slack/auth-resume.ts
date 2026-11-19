@@ -1,11 +1,17 @@
-import { and, eq, gt, isNotNull, isNull, lt, sql } from 'drizzle-orm';
+import { and, eq, gt, isNotNull, lt } from 'drizzle-orm';
 import { chatPendingAuthMessages } from '@kortix/db';
 import { db } from '../../shared/db';
 import { respondViaUrl } from './util';
 import type { SlackEnvelope, SlackEvent } from './types';
-import { logger } from '../../lib/logger';
 
 const PENDING_AUTH_TTL_MS = 10 * 60 * 1000;
+
+async function persistPendingSlackMessage(values: () => typeof chatPendingAuthMessages.$inferInsert): Promise<string | null> {
+  await db.delete(chatPendingAuthMessages).where(lt(chatPendingAuthMessages.expiresAt, new Date()));
+  const rows = await db.insert(chatPendingAuthMessages).values(values())
+    .returning({ pendingId: chatPendingAuthMessages.pendingId });
+  return rows[0]?.pendingId ?? null;
+}
 
 export async function createPendingSlackAuthMessage(input: {
   projectId: string;
@@ -16,21 +22,15 @@ export async function createPendingSlackAuthMessage(input: {
 }): Promise<string | null> {
   if (!input.teamId || !input.slackUserId) return null;
   try {
-    const now = new Date();
-    await db.delete(chatPendingAuthMessages).where(lt(chatPendingAuthMessages.expiresAt, now));
-    const rows = await db
-      .insert(chatPendingAuthMessages)
-      .values({
+    return await persistPendingSlackMessage(() => ({
         projectId: input.projectId,
         platform: 'slack',
-        workspaceId: input.teamId,
+        platformTeamId: input.teamId,
         platformUserId: input.slackUserId,
         envelope: input.envelope as unknown as Record<string, unknown>,
         event: input.event as unknown as Record<string, unknown>,
         expiresAt: new Date(Date.now() + PENDING_AUTH_TTL_MS),
-      })
-      .returning({ pendingId: chatPendingAuthMessages.pendingId });
-    return rows[0]?.pendingId ?? null;
+      }));
   } catch (err) {
     console.warn('[slack-auth] failed to store pending Slack message', err);
     return null;
@@ -54,7 +54,7 @@ export async function consumePendingSlackAuthMessage(input: {
       .from(chatPendingAuthMessages)
       .where(and(
         eq(chatPendingAuthMessages.pendingId, input.pendingId),
-        eq(chatPendingAuthMessages.workspaceId, input.teamId),
+        eq(chatPendingAuthMessages.platformTeamId, input.teamId),
         eq(chatPendingAuthMessages.platformUserId, input.slackUserId),
         gt(chatPendingAuthMessages.expiresAt, new Date()),
         isNotNull(chatPendingAuthMessages.projectId),
@@ -76,64 +76,6 @@ export async function consumePendingSlackAuthMessage(input: {
   }
 }
 
-// The message that triggered a project picker, parked in the DB so the click
-// can replay it on whichever replica Slack delivers it to. The button value
-// carries only the returned id.
-export async function createPendingSlackPickerMessage(input: {
-  teamId: string;
-  envelope: SlackEnvelope;
-  ttlMs: number;
-}): Promise<string | null> {
-  const event = input.envelope.event;
-  if (!input.teamId || !event) return null;
-  try {
-    await db.delete(chatPendingAuthMessages).where(lt(chatPendingAuthMessages.expiresAt, new Date()));
-    const rows = await db
-      .insert(chatPendingAuthMessages)
-      .values({
-        projectId: null,
-        platform: 'slack',
-        workspaceId: input.teamId,
-        platformUserId: event.user ?? '',
-        envelope: input.envelope as unknown as Record<string, unknown>,
-        event: event as unknown as Record<string, unknown>,
-        expiresAt: new Date(Date.now() + input.ttlMs),
-      })
-      .returning({ pendingId: chatPendingAuthMessages.pendingId });
-    return rows[0]?.pendingId ?? null;
-  } catch (err) {
-    logger.warn('[slack-picker] failed to store pending picker message', { error: err instanceof Error ? err.message : String(err) });
-    return null;
-  }
-}
-
-// Take the parked picker message, once, and only in the channel it was sent
-// in: a click from elsewhere must not replay this message there.
-export async function consumePendingSlackPickerMessage(input: {
-  pendingId: string | undefined;
-  teamId: string;
-  channelId: string;
-}): Promise<SlackEnvelope | null> {
-  if (!input.pendingId || !input.teamId || !input.channelId) return null;
-  try {
-    const [row] = await db
-      .delete(chatPendingAuthMessages)
-      .where(and(
-        eq(chatPendingAuthMessages.pendingId, input.pendingId),
-        eq(chatPendingAuthMessages.platform, 'slack'),
-        eq(chatPendingAuthMessages.workspaceId, input.teamId),
-        isNull(chatPendingAuthMessages.projectId),
-        gt(chatPendingAuthMessages.expiresAt, new Date()),
-        sql`${chatPendingAuthMessages.event}->>'channel' = ${input.channelId}`,
-      ))
-      .returning({ envelope: chatPendingAuthMessages.envelope });
-    return (row?.envelope as unknown as SlackEnvelope | undefined) ?? null;
-  } catch (err) {
-    logger.warn('[slack-picker] failed to consume pending picker message', { error: err instanceof Error ? err.message : String(err) });
-    return null;
-  }
-}
-
 export async function attachPendingSlackAuthResponseUrl(input: {
   pendingId: string | undefined;
   teamId: string;
@@ -147,7 +89,7 @@ export async function attachPendingSlackAuthResponseUrl(input: {
       .set({ slackResponseUrl: input.responseUrl })
       .where(and(
         eq(chatPendingAuthMessages.pendingId, input.pendingId),
-        eq(chatPendingAuthMessages.workspaceId, input.teamId),
+        eq(chatPendingAuthMessages.platformTeamId, input.teamId),
         eq(chatPendingAuthMessages.platformUserId, input.slackUserId),
         gt(chatPendingAuthMessages.expiresAt, new Date()),
         isNotNull(chatPendingAuthMessages.projectId),
@@ -167,13 +109,13 @@ export async function replaceSlackAuthPromptConnected(
   const hasAccess = opts?.hasAccess !== false;
   const text = hasAccess
     ? '*Slack connected.*\nKortix is picking up your message now.'
-    : '*Slack connected.*\nYour Kortix account still needs access to this project. Head back to Slack and request access to continue.';
+    : '*Slack connected.*\nYour Kortix account still needs access to this Kortix workspace. Head back to Slack and request access to continue.';
   await respondViaUrl(responseUrl ?? undefined, {
     response_type: 'ephemeral',
     replace_original: true,
     text: hasAccess
       ? 'Slack connected. Kortix is picking up your message now.'
-      : 'Slack connected. Request project access in Slack to continue.',
+      : 'Slack connected. Request workspace access in Slack to continue.',
     blocks: [
       {
         type: 'section',

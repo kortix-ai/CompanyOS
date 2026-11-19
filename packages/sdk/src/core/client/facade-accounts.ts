@@ -4,11 +4,17 @@ export function bindAccounts() {
     list: P.listAccounts,
     get: P.getAccount,
     create: P.createAccount,
+    subscriptions: {
+      list: P.listSubscriptionConnections,
+      usage: P.refreshSubscriptionConnectionUsage,
+    },
     secretResources: {
       list: P.listAccountSecretResources,
       create: P.createAccountSecretResource,
       rotate: P.rotateAccountSecretResource,
       retry: P.retryAccountSecretResource,
+      verify: P.verifyAccountSecretResource,
+      usage: P.refreshAccountSecretUsage,
       remove: P.deleteAccountSecretResource,
       grant: P.grantAccountSecretResource,
       revoke: P.revokeAccountSecretResourceGrant,

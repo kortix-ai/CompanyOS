@@ -1,6 +1,7 @@
 /** Catalogue browse routes: Discover (the Kortix catalog: Kortix apps, integrations.sh, Composio), easy-connect toolkits, Pipedream apps. */
 import { withDirectIds, withDirectMcpUrls } from '../connect-direct-twins';
-import { CatalogInstallError, catalogInstallDraft, connectorIdentity, freeSlug, installedSlugs } from '../catalog-install';
+import { CatalogInstallError, CatalogInstallNeedsUrl, catalogInstallDraft, connectorIdentity, freeSlug, installedSlugs } from '../catalog-install';
+import { customSourceRefusal } from './custom-source';
 import { type ConnectorCatalogDetail, canonicalCatalogId } from '../connector-catalog';
 import { allowedSourceValidationResponse } from './admin';
 import { type OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
@@ -9,6 +10,7 @@ import { auth, errors, json } from '../../openapi';
 import type { ConnectorRouterDeps } from '../router';
 import { OpaqueSchema, ProjectParam, featureNotSupportedResponse } from './shared';
 import { rethrowDatabaseError } from '../../shared/database-errors';
+import { workspaceIdParam } from '../../shared/route-params';
 
 const OneClickParam = z.enum(['1', 'true', '0', 'false']).optional();
 const oneClickQuery = (c: { req: { query(name: string): string | undefined } }) =>
@@ -30,7 +32,7 @@ export function registerDiscoverRoutes(app: OpenAPIHono, deps: ConnectorRouterDe
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/projects/{projectId}/discover/connectors',
+      path: '/projects/{workspaceId}/discover/connectors',
       tags: ['connector'],
       summary: 'Browse the connectors catalog',
       ...auth,
@@ -53,7 +55,7 @@ export function registerDiscoverRoutes(app: OpenAPIHono, deps: ConnectorRouterDe
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
       if (!deps.listDiscoverConnectors) return c.json({ error: 'catalogue unavailable' }, 502);
@@ -86,7 +88,7 @@ export function registerDiscoverRoutes(app: OpenAPIHono, deps: ConnectorRouterDe
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/projects/{projectId}/discover/sections',
+      path: '/projects/{workspaceId}/discover/sections',
       tags: ['connector'],
       summary: 'Browse the connectors catalog by category',
       ...auth,
@@ -105,7 +107,7 @@ export function registerDiscoverRoutes(app: OpenAPIHono, deps: ConnectorRouterDe
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
       if (!deps.listDiscoverSections) return c.json({ error: 'catalogue unavailable' }, 502);
@@ -143,7 +145,7 @@ export function registerDiscoverDetailRoutes(app: OpenAPIHono, deps: ConnectorRo
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/projects/{projectId}/discover/connectors/detail',
+      path: '/projects/{workspaceId}/discover/connectors/detail',
       tags: ['connector'],
       summary: 'Resolve the ways to connect one catalog app',
       ...auth,
@@ -157,7 +159,7 @@ export function registerDiscoverDetailRoutes(app: OpenAPIHono, deps: ConnectorRo
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
       if (!deps.getDiscoverConnector) return c.json({ error: 'catalogue unavailable' }, 502);
@@ -181,6 +183,9 @@ const InstallBody = z.object({
   way: z.string().optional().openapi({ description: 'A variant id from the detail. Default: the recommended way.' }),
   name: z.string().optional().openapi({ description: 'Display name. Default: the app name.' }),
   slug: z.string().optional().openapi({ description: 'Slug in kortix.yaml. Default: from the name.' }),
+  url: z.string().optional().openapi({
+    description: 'The server URL of an MCP way the catalogue lists without one. From an agent session, a URL nobody approved yet answers 403 `custom_connector_needs_human` with `setup_url`.',
+  }),
   as_new_profile: z.boolean().optional().openapi({
     description: 'Add another profile of a way the project already has. Default: answer the existing profile (`existing: true`).',
   }),
@@ -191,7 +196,7 @@ function registerDiscoverToolsAndInstallRoutes(app: OpenAPIHono, deps: Connector
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/projects/{projectId}/discover/connectors/tools',
+      path: '/projects/{workspaceId}/discover/connectors/tools',
       tags: ['connector'],
       summary: 'List the tools one way to connect a catalogue app offers',
       ...auth,
@@ -206,7 +211,7 @@ function registerDiscoverToolsAndInstallRoutes(app: OpenAPIHono, deps: Connector
       responses: { 200: json(OpaqueSchema, 'Tools'), ...errors(403, 404, 502) },
     }),
     async (c: Context) => {
-      const projectId = c.req.param('projectId') ?? '';
+      const projectId = workspaceIdParam(c) ?? '';
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
       if (!deps.getDiscoverConnector || !deps.discoverConnectorTools) return c.json({ error: 'catalogue unavailable' }, 502);
@@ -237,7 +242,7 @@ function registerDiscoverToolsAndInstallRoutes(app: OpenAPIHono, deps: Connector
   app.openapi(
     createRoute({
       method: 'post',
-      path: '/projects/{projectId}/discover/install',
+      path: '/projects/{workspaceId}/discover/install',
       tags: ['connector'],
       summary: 'Install a catalogue app as a connector profile',
       description:
@@ -256,7 +261,7 @@ function registerDiscoverToolsAndInstallRoutes(app: OpenAPIHono, deps: Connector
       responses: { 200: json(OpaqueSchema, 'Installed'), ...errors(400, 403, 404, 409, 501, 502) },
     }),
     async (c: Context) => {
-      const projectId = c.req.param('projectId') ?? '';
+      const projectId = workspaceIdParam(c) ?? '';
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
       if (!deps.getDiscoverConnector || !deps.createConnector) return featureNotSupportedResponse(c, 'connector_create');
@@ -275,10 +280,29 @@ function registerDiscoverToolsAndInstallRoutes(app: OpenAPIHono, deps: Connector
       try {
         built = catalogInstallDraft(detail, body);
       } catch (error) {
+        if (error instanceof CatalogInstallNeedsUrl) {
+          // Not a refusal: the person who has the URL adds it, from the CLI
+          // with --url or on the page setup_url opens.
+          return c.json(
+            {
+              error: error.message,
+              code: 'connector_needs_url',
+              way: { id: error.way.id, kind: error.way.kind, name: error.way.name },
+              docs: error.way.docs,
+              setup_url:
+                deps.customConnectorSetupUrl?.(projectId, { provider: 'mcp', name: body.name?.trim() || error.appName }) ?? null,
+            },
+            409,
+          );
+        }
         if (error instanceof CatalogInstallError) return c.json({ error: error.message }, 400);
         throw error;
       }
       const { draft, way } = built;
+      if (body.url) {
+        const refused = await customSourceRefusal(c, deps, projectId, draft);
+        if (refused) return c.json(refused, 403);
+      }
       const summary = {
         name: draft.name,
         provider: draft.provider,
@@ -349,10 +373,14 @@ function registerDiscoverToolsAndInstallRoutes(app: OpenAPIHono, deps: Connector
 
 /**
  * The Kortix apps a project cannot use yet: Email is behind its own flag
- * (`email_channel`). Hidden from the listings, and its detail answers 404.
+ * (`email_channel`), Discord needs the deployment's Kortix Discord application.
+ * Hidden from the listings, and its detail answers 404.
  */
 async function hiddenKortixApps(deps: ConnectorRouterDeps, projectId: string): Promise<Set<string>> {
-  return (await deps.featureFlagEnabled(projectId, 'email_channel')) ? new Set() : new Set(['native:email']);
+  const hidden = new Set<string>();
+  if (!(await deps.featureFlagEnabled(projectId, 'email_channel'))) hidden.add('native:email');
+  if (deps.discordAvailable && !deps.discordAvailable()) hidden.add('native:discord');
+  return hidden;
 }
 
 /** The detail lookup, refusing a hidden app as unknown. */
@@ -393,7 +421,7 @@ export function registerConnectCatalogueRoutes(app: OpenAPIHono, deps: Connector
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/projects/{projectId}/connect/toolkits',
+      path: '/projects/{workspaceId}/connect/toolkits',
       tags: ['connector'],
       summary: 'Browse the configured easy-connect toolkit catalogue',
       ...auth,
@@ -409,7 +437,7 @@ export function registerConnectCatalogueRoutes(app: OpenAPIHono, deps: Connector
       responses: { 200: json(OpaqueSchema, 'Easy-connect toolkit page'), ...errors(403, 501) },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
       if (!deps.listConnectToolkits) return featureNotSupportedResponse(c, 'connect_toolkits');
@@ -433,7 +461,7 @@ export function registerConnectCatalogueRoutes(app: OpenAPIHono, deps: Connector
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/projects/{projectId}/connect/sections',
+      path: '/projects/{workspaceId}/connect/sections',
       tags: ['connector'],
       summary: 'Browse the easy-connect toolkit catalogue by category',
       ...auth,
@@ -450,7 +478,7 @@ export function registerConnectCatalogueRoutes(app: OpenAPIHono, deps: Connector
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
       if (!deps.listConnectSections) return featureNotSupportedResponse(c, 'connect_toolkits');
@@ -470,7 +498,7 @@ export function registerConnectCatalogueRoutes(app: OpenAPIHono, deps: Connector
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/projects/{projectId}/pipedream/apps',
+      path: '/projects/{workspaceId}/pipedream/apps',
       tags: ['connector'],
       summary: 'Browse the Pipedream app catalogue',
       ...auth,
@@ -490,7 +518,7 @@ export function registerConnectCatalogueRoutes(app: OpenAPIHono, deps: Connector
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
       if (!deps.listPipedreamApps) return featureNotSupportedResponse(c, 'pipedream_apps');
@@ -513,7 +541,7 @@ export function registerConnectCatalogueRoutes(app: OpenAPIHono, deps: Connector
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/projects/{projectId}/pipedream/sections',
+      path: '/projects/{workspaceId}/pipedream/sections',
       tags: ['connector'],
       summary: 'Browse the Pipedream catalogue by category',
       ...auth,
@@ -530,7 +558,7 @@ export function registerConnectCatalogueRoutes(app: OpenAPIHono, deps: Connector
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const admin = await deps.resolveAdmin(c, projectId);
       if (!admin) return c.json({ error: 'forbidden' }, 403);
       if (!deps.listPipedreamSections) return featureNotSupportedResponse(c, 'pipedream_apps');

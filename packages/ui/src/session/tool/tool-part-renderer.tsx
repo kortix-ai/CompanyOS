@@ -3,6 +3,7 @@
 import { Button } from '../../primitives/button';
 import { STATUS_TEXT } from '../../primitives/status';
 import { QuestionPrompt } from '../prompts/question-prompt';
+import { SessionConnectCard } from '../prompts/session-connect-card';
 import { GenericTool } from './generic-tool';
 import {
   BasicTool,
@@ -32,7 +33,13 @@ import {
   getChildSessionId,
   shouldShowToolPart,
 } from '../../internal/session-types';
-import { sessionLogCallStatus, sessionLogOpenCall, toolKind, type ToolCallBlock } from '@kortix/sdk';
+import {
+  sessionLogCallStatus,
+  sessionLogOpenCall,
+  toolCallConnectorSignIns,
+  toolKind,
+  type ToolCallBlock,
+} from '@kortix/sdk';
 import { useTranslations } from '../../i18n';
 import { memo, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
@@ -139,9 +146,14 @@ function ToolPartRendererImpl({
   }, [call]);
 
   const onActivate = useContext(ToolActivateContext);
+  // An agent's work (a sub-agent call, a workflow, an agent message, the team tools) opens in
+  // place, failed or not: never in the side panel. Its row and the agent dialog say it all.
+  const opensInPlace = isAgentTool(call.name);
   const boundActivate = useMemo(
-    () => (onActivate ? () => onActivate(call.call_id) : null),
-    [onActivate, call.call_id],
+    // `disableNavigation`: a call that is not this session's (a sub-agent's step) has no
+    // view in this session's panel; opening the panel on it showed an empty panel.
+    () => (onActivate && !opensInPlace && !disableNavigation ? () => onActivate(call.call_id) : null),
+    [onActivate, opensInPlace, disableNavigation, call.call_id],
   );
 
   const surface = useContext(ToolSurfaceContext);
@@ -156,6 +168,10 @@ function ToolPartRendererImpl({
   // tool that threw as far as the reader is concerned, so it must look
   // identical on the row too.
   const outcome = useMemo(() => partOutcome(call), [call]);
+  // The connector sign-ins this call started (`kortix connectors connect`, the
+  // `kortix_connectors` tool): their Connect card draws under the row. A call
+  // that failed (an error, a shell exit other than 0) started none.
+  const signIns = useMemo(() => toolCallConnectorSignIns(call), [call]);
 
   // The SDK's verdict on tools that never render (a todo read, context bookkeeping).
   if (!shouldShowToolPart(call)) return null;
@@ -277,6 +293,8 @@ function ToolPartRendererImpl({
                 <div className={cn('relative', fillsPanel && 'h-full')}>
                   {toolElement}
 
+                  {signIns.length > 0 && <SessionConnectCard calls={signIns} className="mt-1.5" />}
+
                   {permission && onPermissionReply && (
                     <div className="mt-1.5">
                       <PermissionPromptInline permission={permission} onReply={onPermissionReply} />
@@ -299,6 +317,22 @@ function ToolPartRendererImpl({
         </ToolOutcomeContext.Provider>
       </ToolRunningContext.Provider>
     </ToolNavigationContext.Provider>
+  );
+}
+
+
+/**
+ * The tools whose rows are an agent's work: they open in place, never in the side panel.
+ * That includes every My Kortix platform tool (`kortix_schedules`, `kortix_agents`, …):
+ * its card is one line and a few rows, and a failed call is the agent's own slip, which
+ * a full panel only turned into a wall of red.
+ */
+export function isAgentTool(name: string): boolean {
+  return (
+    toolKind(name) === 'task' ||
+    isWorkflowTool(name) ||
+    kortixCardTool(name) !== undefined ||
+    name === 'agent_spawn'
   );
 }
 

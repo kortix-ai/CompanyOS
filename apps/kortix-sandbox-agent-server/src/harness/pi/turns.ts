@@ -5,7 +5,6 @@
  */
 import { MESSAGE_READ_CODE, STEER_NO_ACTIVE_TURN_CODE, type RuntimeCommandInfo } from '@kortix/api-contract/runtime-relay'
 import type { SessionLogMessage } from '@kortix/api-contract/session-log'
-import { stripInlineAttachmentBytes } from '../shared/inline-attachments'
 import type { HarnessTurnResponse, HarnessTurnService, RuntimePromptInput } from '../contract/turns'
 import { CommandNotEnabled, PromptRejected, parsePromptBody, type PiRuntime, type PromptInput } from './runtime'
 import { sessionLogView } from '../shared/session-log-journal'
@@ -17,10 +16,12 @@ const READ = answer(409, { code: MESSAGE_READ_CODE, error: 'a model call read th
 const OK = answer(200, { ok: true })
 const NOT_ROOT = answer(404, { error: 'not the session root' })
 
-/** The box's own session log, built from the runtime's store, and its queued prompts; null while the runtime is down. */
+/** The box's own session log, built from the runtime's store, and its queued prompts; null while the runtime is down.
+ * No per-message hashing: a log read never consumes the hash map, and on a long session
+ * digesting every entry's JSON costs more than the derivation it wraps (KRTX-4488). */
 function sessionLogOf(rt: PiRuntime) {
   const snapshot = rt.sessionLogSnapshot()
-  return snapshot ? { ...piSessionLog(snapshot), queued: piQueued(snapshot) } : null
+  return snapshot ? { ...piSessionLog(snapshot, { hashes: false }), queued: piQueued(snapshot) } : null
 }
 
 /**
@@ -66,6 +67,8 @@ function toPrompt(input: RuntimePromptInput): PromptInput | HarnessTurnResponse 
       ...(input.variant ? { variant: input.variant } : {}),
       ...(input.noReply ? { noReply: true } : {}),
       ...(input.system ? { system: input.system } : {}),
+      ...(input.threadFiles ? { thread_files: input.threadFiles } : {}),
+      ...(input.spaceAgents ? { space_agents: input.spaceAgents } : {}),
     })
   } catch (err) {
     return answer(400, { error: err instanceof Error ? err.message : String(err) })
@@ -123,25 +126,6 @@ export function createPiTurnService(runtime: () => PiRuntime | null): HarnessTur
       return answer(200, true)
     },
 
-    async readMessage(sessionId, messageId) {
-      const rt = runtime()
-      if (!rt) return NOT_STARTED
-      const message = transcriptOf(rt, sessionId)?.messageById(messageId)
-      if (!message) return answer(404, { error: 'unknown message' })
-      const ref = (id: string, partId: string) =>
-        `/kortix/part/${encodeURIComponent(sessionId)}/${encodeURIComponent(id)}/${encodeURIComponent(partId)}`
-      return answer(200, stripInlineAttachmentBytes(message, ref).value)
-    },
-
-    // pi removes only what no model call has read, so a removal is a retract.
-    async removeMessage(sessionId, messageId) {
-      const rt = runtime()
-      if (!rt) return NOT_STARTED
-      const outcome = retract(rt, sessionId, messageId)
-      if (outcome === 'retracted') return answer(200, true)
-      return outcome === 'read' ? READ : answer(404, { error: 'unknown message' })
-    },
-
     async retractMessage(sessionId, messageId) {
       const rt = runtime()
       if (!rt) return NOT_STARTED
@@ -166,6 +150,12 @@ export function createPiTurnService(runtime: () => PiRuntime | null): HarnessTur
       const rt = runtime()
       if (!rt) return NOT_STARTED
       return rt.questions.reject(requestId) ? OK : answer(404, { error: 'no such question' })
+    },
+
+    async parkAsks() {
+      const rt = runtime()
+      if (!rt) return answer(200, { parked: 0 })
+      return answer(200, { parked: rt.parkOpenAsks() })
     },
 
     async compact(sessionId) {
@@ -235,7 +225,7 @@ export function createPiTurnService(runtime: () => PiRuntime | null): HarnessTur
       return rt ? answer(200, rt.pendingNow()) : NOT_STARTED
     },
 
-    async readLog({ threadId, afterSeq, beforeSeq, limit }) {
+    async readLog({ threadId, afterSeq, beforeSeq, limit, includeContext = false }) {
       const rt = runtime()
       if (!rt) return NOT_STARTED
       const exported = sessionLogOf(rt)
@@ -247,7 +237,10 @@ export function createPiTurnService(runtime: () => PiRuntime | null): HarnessTur
       // As apps/api stores the log (its seqs, its session fields), then the queued prompts at the queued seq.
       const view = sessionLogView()
       const queued = id === rt.rootId ? exported.queued : []
-      const ordered = [...thread.messages.map((m) => view.message(m)), ...queued].sort((a, b) => a.seq - b.seq)
+      // The system prompt (`kind: 'context'`, the agent's whole instructions) only for a reader that asks:
+      // no viewer renders it, and it was ~56 KB of a ~68 KB My Kortix page (finding 17).
+      const shown = includeContext ? thread.messages : thread.messages.filter((m) => m.kind !== 'context')
+      const ordered = [...shown.map((m) => view.message(m)), ...queued].sort((a, b) => a.seq - b.seq)
       let messages: SessionLogMessage[]
       let hasMore: boolean
       if (afterSeq !== null) {

@@ -1,4 +1,5 @@
 import { config, type SandboxProviderName } from '../config';
+import { aliasFrontendOrigins } from '../shared/domain-aliases';
 import { escapeHtml } from '../shared/html';
 
 // The `frame-ancestors` directive for App responses. It decides which origins
@@ -36,6 +37,8 @@ export function appFrameAncestors(): string {
   } catch {
     // FRONTEND_URL missing/invalid — the managed base list above still applies.
   }
+  // Self-host alias domains serve the same web app, which embeds Apps too.
+  for (const origin of aliasFrontendOrigins()) parts.add(origin);
   return 'frame-ancestors ' + [...parts].join(' ');
 }
 
@@ -85,7 +88,7 @@ const PUBLIC_STATUS_COPY: Record<PublicAppStatus, {
 }> = {
   waiting: {
     title: 'Waiting for first deployment',
-    message: 'Deploy from a linked project with kortix apps deploy .',
+    message: 'Deploy from a linked workspace with kortix apps deploy .',
     code: 'app_waiting_for_deployment',
     progress: true,
   },

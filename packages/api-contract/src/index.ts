@@ -17,9 +17,14 @@
  */
 import { z } from 'zod';
 import { SessionLogPageSchema } from './session-log/wire';
-import { SessionAttentionSchema, SessionBoardStateSchema, SessionInboundSchema } from './multi-agent';
+import { SessionAttentionSchema, SessionBoardStateSchema, SessionInboundSchema, SessionWorkStateSchema } from './multi-agent';
+import { SESSION_PROMPT_REASONS } from './wire-values';
 
 export * from './memory';
+export * from './goals';
+export * from './evals';
+export * from './calendar';
+export * from './wire-values';
 
 /** Loose JSON object — jsonb metadata/config columns surfaced as-is. */
 export const JsonObjectSchema = z.record(z.string(), z.unknown());
@@ -55,23 +60,25 @@ export type OkResponse = z.infer<typeof OkResponseSchema>;
 export const FeatureFlagMapSchema = z.object({
   marketplace: z.boolean(),
   reminders: z.boolean(),
-  warm_sessions: z.boolean(),
   secrets_egress: z.boolean(),
-  pooled_provider_secrets: z.boolean(),
   us_region: z.boolean(),
   event_triggers: z.boolean(),
-  notification_center: z.boolean(),
-  session_log_restore: z.boolean(),
-  project_channels: z.boolean(),
-  agent_rooms: z.boolean(),
+  chat: z.boolean(),
+  shared_drives: z.boolean(),
   goals: z.boolean(),
   workspace_volume: z.boolean(),
-  artifacts: z.boolean(),
-  artifact_comments: z.boolean(),
   email_channel: z.boolean(),
   session_groups: z.boolean(),
   chrome: z.boolean(),
   agent_teams: z.boolean(),
+  voice_call: z.boolean(),
+  chat_input: z.boolean(),
+  chat_front: z.boolean(),
+  spaces_proactive: z.boolean(),
+  program_agents: z.boolean(),
+  evals: z.boolean(),
+  desktop_tabs: z.boolean(),
+  calendar: z.boolean(),
 });
 export type FeatureFlagMap = z.infer<typeof FeatureFlagMapSchema>;
 
@@ -93,6 +100,8 @@ export const FeatureFlagViewSchema = z.object({
   available: z.boolean(),
   enabled: z.boolean(),
   overridden: z.boolean(),
+  /** What the flag resolves to without the project's choice: the state a reset returns it to. Absent on servers older than this field. */
+  default_enabled: z.boolean().optional(),
   /** Internal-only flag, listed only while on. Only a platform operator can change it. */
   operator_only: z.boolean().optional(),
   /** Work in progress: not recommended yet. Absent on servers older than this field. */
@@ -162,6 +171,8 @@ export type SharingIntent = z.infer<typeof SharingIntentSchema>;
 /** A project as serialized by `serializeProject`. */
 export const ProjectSchema = z.object({
   project_id: z.string(),
+  /** The workspace id. Equal to `project_id` (a workspace is its project); sent since 2026-11-05. */
+  workspace_id: z.string().optional(),
   account_id: z.string(),
   name: z.string(),
   repo_url: z.string(),
@@ -192,6 +203,8 @@ export const ProjectSchema = z.object({
     llm_gateway: z.literal(true).optional(),
     /** Not a flag (the session log is every session's saved history); always `true` for older SDK, CLI and mobile clients. */
     session_log: z.literal(true).optional(),
+    /** Not a flag since 2026-11-05 (every box restores from the session log when its store is behind); always `true` from this server. A server before then sent `false` for a project an operator turned off. */
+    session_log_restore: z.boolean().optional(),
     /** Not a flag (every new session runs pi; OpenCode is sunset); always `true` for older SDK, CLI and mobile clients. */
     pi_harness: z.literal(true).optional(),
     /** Not a flag (generative UI is always on); always `true` for older SDK, web and mobile clients, which render blocks only while it is on. */
@@ -202,10 +215,22 @@ export const ProjectSchema = z.object({
     connectors_api_discover: z.literal(true).optional(),
     /** Not a flag since 2026-11-02 (My Kortix follows kortix.yaml `builtin_agents.my_kortix` alone); always `true` for older SDK and hosts. */
     meta_agent: z.literal(true).optional(),
+    /** Not a flag since 2026-11-06 (notifications are on for every project; email is opt-in per kind); always `true` for older SDK, web, CLI and mobile clients. */
+    notification_center: z.literal(true).optional(),
+    /** Not a flag since 2026-11-12 (named provider keys, sharing and session key selection are on for every project); always `true` for older SDK, web, CLI and terminal UI clients. */
+    pooled_provider_secrets: z.literal(true).optional(),
+    /** Not a flag since 2026-11-03 (warm sessions were removed); always `false` for older SDK, web and mobile clients, which pre-create a session only while it is true. */
+    warm_sessions: z.literal(false).optional(),
     /** Not a flag since 2026-11-02 (every project has a Drive); `true` wherever the platform stores a Drive (Platinum), for older SDK, CLI and hosts. */
     volumes: z.boolean().optional(),
+    /** Not a flag since 2026-11-06 (every project has Artifacts); `true` wherever the platform stores a Drive (Platinum), for older SDK, CLI, TUI and hosts. */
+    artifacts: z.boolean().optional(),
+    /** Not a flag since 2026-11-06 (artifact comments were removed); always `false` for older SDK, web, TUI and mobile clients, which show comments only while it is true. */
+    artifact_comments: z.literal(false).optional(),
     /** Not a flag since 2026-11-02 (every project has a Drive); `true` wherever the platform stores a Drive (Platinum), for older SDK, CLI and hosts. */
     drives: z.boolean().optional(),
+    /** @deprecated Merged into `chat` (2026-11); equal to `chat`, for released TUI, mobile and CLI builds that show Channels only while it is true. */
+    project_channels: z.boolean().optional(),
   }),
   experimental_features: z.array(FeatureFlagViewSchema),
   /** Per-project provider pin, surfaced only while still usable. */
@@ -437,7 +462,7 @@ export const SessionScopeSchema = z
     connector_bindings_inherit_unbound: z.boolean(),
     /**
      * True when the new secrets scope was pushed to the live sandbox and
-     * OpenCode was restarted to pick it up — the change is in effect NOW.
+     * the runtime reloaded it — the change is in effect NOW.
      * False when there was no active sandbox to push to (the change is stored
      * and applies at the next boot), or when `secrets` was not part of this
      * request. Mirrors the model route's `applied_live`.
@@ -653,7 +678,7 @@ const OAuth2AdditionalTokenParametersSchema = z
     if (entries.length > 32) {
       ctx.addIssue({
         code: z.ZodIssueCode.too_big,
-        type: 'array',
+        origin: 'array',
         maximum: 32,
         inclusive: true,
         message: 'at most 32 additional token parameters are allowed',
@@ -754,8 +779,8 @@ const OAuth2ApplicationFields = {
   scopes: z.array(z.string().trim().min(1).max(2048)).max(64).optional(),
   resource: z.string().trim().min(1).max(4096).optional(),
   audience: z.string().trim().min(1).max(4096).optional(),
-  authorization_params: z.record(z.string().max(4096)).optional(),
-  token_params: z.record(z.string().max(4096)).optional(),
+  authorization_params: z.record(z.string(), z.string().max(4096)).optional(),
+  token_params: z.record(z.string(), z.string().max(4096)).optional(),
   // RFC 7591/7592: present when Kortix registered this client dynamically.
   registration_client_uri: OAuth2HttpsUrlSchema.optional(),
   registration_access_token: z.string().min(1).max(65536).optional(),
@@ -953,7 +978,7 @@ export const PendingSessionPromptSchema = z
     variant: z.string().min(1).nullable().optional(),
     attachment_names: z.array(z.string().min(1).max(512)).max(50).optional(),
     /**
-     * Full prompt parts, in OpenCode's own wire shape. Lets the first prompt
+     * Full prompt parts, in the runtime's prompt-part wire shape. Lets the first prompt
      * carry attachments as `data:` URLs — the session's sandbox does not exist
      * yet, so there is nowhere to upload into. The API converts the whole
      * pending prompt into a durable inbox row at create; the inbox's own
@@ -1021,10 +1046,11 @@ export const SessionCreateInputSchema = z
     sandbox_slug: z.string().min(1).optional(),
     initial_prompt: z.string().optional(),
     /**
-     * Harness context that rides beside `initial_prompt` and is delivered to
-     * the model as a synthetic (model-only) message part — e.g. the CLI's
-     * worker contract. The transcript keeps showing the caller's own words:
-     * every renderer already hides synthetic text parts.
+     * Harness context that rides beside `initial_prompt` — e.g. the CLI's
+     * worker contract. pi appends it to the first user message
+     * (kortixd `harness/pi/boot.ts`), so the transcript shows it after the
+     * caller's words. It is never a system prompt: an inline agent's
+     * instructions ride in `runtime_context` `kortix.agent.instructions`.
      */
     initial_context: z.string().min(1).max(SESSION_INITIAL_CONTEXT_MAX_CHARS).optional(),
     pending_prompt: PendingSessionPromptSchema.optional(),
@@ -1036,18 +1062,18 @@ export const SessionCreateInputSchema = z
     // rendered envelope (channel scaffolding, a coordinator's session
     // contract, a --with-file manifest) rather than the user's own words.
     title_source: z.string().optional(),
-    /** The session's `provider/model` pin. Wins over `opencode_model`. */
+    /** The session's `provider/model` pin. Wins over `model`. */
     model: z.string().min(1).optional(),
-    /** @deprecated The pre-W4 name of `model`. */
-    opencode_model: z.string().min(1).optional(),
     name: z.string().optional(),
     labels: SessionLabelsSchema.optional(),
     /**
      * The space (channel or the caller's own DM) the session belongs to.
-     * Read only while the project's `project_channels` flag is on; ignored
+     * Read only while the project's `chat` flag is on; ignored
      * otherwise. Absent: the parent session's space, else `#general`.
+     * `null` on a person's own create (no fork or parent): no space, as with
+     * the flag off; a session in no space is not a thread.
      */
-    space_id: z.string().uuid().optional(),
+    space_id: z.string().uuid().nullable().optional(),
     session_id: z
       .string()
       .regex(
@@ -1085,6 +1111,28 @@ export const SessionCreateInputSchema = z
     // means inject zero project secrets. Backend origin required — a non-backend
     // caller supplying it is rejected 403 (canOverride 'secrets').
     secrets: SessionSecretsAllowlistSchema.optional(),
+    /**
+     * Connectors (slugs) and project secrets (identifiers) My Kortix hands one
+     * colleague: an inline child that runs as My Kortix. Only a My Kortix
+     * session starting a colleague sends it. A person allows the exact list
+     * first; until then the create answers 409
+     * `COLLEAGUE_ACCESS_APPROVAL_REQUIRED` with the ask id, and no session exists.
+     */
+    colleague_access: z
+      .object({
+        connectors: z.array(z.string().min(1).max(128)).max(20).optional(),
+        secrets: z.array(z.string().min(1).max(128)).max(20).optional(),
+      })
+      .strict()
+      .optional(),
+    /**
+     * @deprecated The pre-W5 name of `model`. `kortix sessions new --model` in
+     * CLI v0.13.0–v0.14.19 sends `model` and `opencode_model` with the same
+     * value. This object is `.strict()`, so dropping the key (#11848) turned
+     * every such create into a 400. `model` wins; this is read only when
+     * `model` is absent.
+     */
+    opencode_model: z.string().min(1).optional(),
     // Deprecated camelCase compatibility accepted by the pre-contract route.
     // New SDK/API consumers use the snake_case fields above.
     baseRef: z.string().min(1).optional(),
@@ -1092,7 +1140,6 @@ export const SessionCreateInputSchema = z
     sandboxSlug: z.string().min(1).optional(),
     initialPrompt: z.string().optional(),
     initialContext: z.string().min(1).max(SESSION_INITIAL_CONTEXT_MAX_CHARS).optional(),
-    opencodeModel: z.string().min(1).optional(),
     sessionId: z
       .string()
       .regex(
@@ -1118,8 +1165,8 @@ export const SessionUpdateInputSchema = z.object({
 export type SessionUpdateInput = z.input<typeof SessionUpdateInputSchema>;
 
 /** A project session as serialized by `serializeSession`. */
-/** One conversation of a session's runtime, as the snapshot writer stores it
- *  (`apps/api/src/projects/opencode-session-snapshot.ts`). Times are epoch ms. */
+/** One conversation of a session's runtime, as the snapshot stores it
+ *  (`apps/api/src/projects/lib/runtime-session-snapshot.ts`). Times are epoch ms. */
 export const RuntimeSessionSnapshotSchema = z.object({
   id: z.string(),
   fork_source_id: z.string().optional(),
@@ -1150,6 +1197,8 @@ export const SessionWorkingSchema = z.object({
 export type SessionWorking = z.infer<typeof SessionWorkingSchema>;
 
 export const ProjectSessionSchema = z.object({
+  /** The workspace id: the same value as `project_id`. Optional: older servers omit it. */
+  workspace_id: z.string().optional(),
   /** Durable conversation selection, falling back to the creation pin before a log exists. */
   model: z.string().nullable().optional(),
   /** Work activity, independent of the computer lifecycle status. Older servers may omit it. */
@@ -1160,6 +1209,13 @@ export const ProjectSessionSchema = z.object({
    * older servers omit them.
    */
   board_state: SessionBoardStateSchema.optional(),
+  /**
+   * Is the work done: `running` (a live turn, or waiting for its person),
+   * `completed`, `failed`, `stopped` or `idle`. Read this to wait for a
+   * session. `status` is the stored row lifecycle and `runtime_status` the
+   * computer; neither says the work is done. Older servers omit it.
+   */
+  work_state: SessionWorkStateSchema.optional(),
   /** What the session waits for from its person: `question`, `approval`, or null. */
   attention: SessionAttentionSchema.optional(),
   /** The newest turn start, turn end or accepted prompt (ISO), or null. */
@@ -1180,23 +1236,20 @@ export const ProjectSessionSchema = z.object({
   sandbox_provider: SandboxProviderSchema,
   sandbox_id: z.string().nullable(),
   sandbox_url: z.string().nullable(),
-  /** The session's root conversation in its runtime (OpenCode or pi). */
+  /** The session's root conversation in its runtime. */
   runtime_session_id: z.string().nullable(),
-  /** @deprecated The pre-W4 name of `runtime_session_id`. Same value. */
-  opencode_session_id: z.string().nullable(),
   /** Resolved display name: the user-set override, else the auto title. */
   name: z.string().nullable(),
   /** The user-set override alone, so clients can tell it apart from the auto title. */
   custom_name: z.string().nullable(),
   labels: z.array(z.string()),
   agent_name: z.string(),
+  /** The stored row lifecycle (`running` from start until the computer stops), not whether the work is done: read `work_state`. */
   status: SessionStatusSchema,
   error: z.string().nullable(),
   metadata: JsonObjectSchema,
   /** The runtime's conversation tree snapshot; `[]` for a caller who cannot open the session. */
   runtime_sessions: z.array(RuntimeSessionSnapshotSchema),
-  /** @deprecated The pre-W4 name of `runtime_sessions`. Same value. */
-  opencode_sessions: z.array(RuntimeSessionSnapshotSchema),
   created_by: z.string().nullable(),
   owner_email: z.string().nullable(),
   owner_name: z.string().nullable().optional(),
@@ -1211,7 +1264,7 @@ export const ProjectSessionSchema = z.object({
   space_id: z.string().uuid().nullable(),
   /** The session group it is filed in (`session_groups`); null for a session in no group. */
   group_id: z.string().uuid().nullable(),
-  /** The first 500 characters of the first prompt; stored for sessions created while `project_channels` is on, else null. */
+  /** The first 500 characters of the first prompt; stored for sessions created while `chat` is on, else null. */
   first_prompt: z.string().nullable(),
   /** Who started the run this session belongs to (a child carries its parent's). Derived, never client-set. */
   initiator: z
@@ -1228,6 +1281,8 @@ export const ProjectSessionSchema = z.object({
    * every other read.
    */
   reply_count: z.number().int().nullable(),
+  /** A space's thread list: the agent of a child session (a router's hidden worker) working now, else null. Absent elsewhere. */
+  active_child_agent: z.string().nullable().optional(),
   /** List with `parent=root` only: the session's non-deleted children. */
   child_count: z.number().int().optional(),
   /** List with `parent=root&q=` only: the session matched itself, or only a child matched. */
@@ -1243,6 +1298,7 @@ export const ProjectSessionSchema = z.object({
   /** May publish one assistant response through a public link: a human owner or project manager who can read it. Single-session reads only. */
   can_publish_response: z.boolean().optional(),
   can_access: z.boolean().optional(),
+  /** The computer's state. `active` while the box runs, which outlives a finished turn by up to ~10 min. */
   runtime_status: z
     .enum(['provisioning', 'active', 'stopped', 'error', 'archived'])
     .nullable()
@@ -1272,45 +1328,77 @@ export const SessionDeleteResultSchema = z.object({
 });
 export type SessionDeleteResult = z.infer<typeof SessionDeleteResultSchema>;
 
-export const WarmProjectSessionWorkspaceRefreshSchema = z.object({
-  status: z.enum(['skipped', 'unchanged', 'updated', 'failed']),
-  before_sha: z.string().nullable().optional(),
-  after_sha: z.string().nullable().optional(),
-  error: z.string().optional(),
-});
-export type WarmProjectSessionWorkspaceRefresh = z.infer<
-  typeof WarmProjectSessionWorkspaceRefreshSchema
->;
 
-export const WarmProjectSessionResultSchema = z.object({
-  session: ProjectSessionSchema,
-  reused: z.boolean(),
-  workspace_refresh: WarmProjectSessionWorkspaceRefreshSchema,
-});
-export type WarmProjectSessionResult = z.infer<typeof WarmProjectSessionResultSchema>;
-
-export const ClaimWarmProjectSessionInputSchema = z
-  .object({
-    session_id: z
-      .string()
-      .regex(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-        'session_id must be an RFC 4122 v4 UUID',
-      ),
-    agent_name: z.string().min(1).optional(),
-    sandbox_slug: z.string().min(1).optional(),
-    pending_prompt: PendingSessionPromptSchema.optional(),
-  })
-  .strict();
-export type ClaimWarmProjectSessionInput = z.infer<typeof ClaimWarmProjectSessionInputSchema>;
 
 /**
  * A project space: a channel (product word "Channel") or the caller's DM with
- * one agent. `/projects/:id/spaces`, behind the `project_channels` flag.
+ * one agent. `/projects/:id/spaces`, behind the `chat` flag.
  */
 export const SPACE_KINDS = ['channel', 'dm'] as const;
 /** Who sees a channel: every project member (`public`) or only its members (`private`). */
 export const SPACE_VISIBILITIES = ['public', 'private'] as const;
+/**
+ * What a stored space tab shows. Chat is not a kind: it is always the first
+ * tab and is never stored. `threads` and `memory` were kinds before
+ * 2026-11-04; a stored row with one is dropped on read (no migration).
+ */
+export const SPACE_TAB_KINDS = ['file', 'folder', 'artifact', 'app', 'link'] as const;
+/** At most this many stored tabs per space (Chat not counted). */
+export const SPACE_TABS_MAX = 20;
+export const SPACE_TAB_TITLE_MAX = 60;
+
+/**
+ * One stored tab of a space, after Chat. `ref` (required): a Drive file path
+ * (`file`, any file: an `.html` page renders as the page), a Drive folder
+ * path (`folder`), an artifact id (`artifact`), an App slug (`app`) or an
+ * https URL (`link`). `embeddable`: `link` only, set by the server on every
+ * write (it fetches the URL once); a value sent in a request is ignored.
+ */
+export const SpaceTabSchema = z
+  .object({
+    /** Stable: the client's `?tab=` key. 1–64 of `A-Za-z0-9_-`. */
+    id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+    title: z.string().trim().min(1).max(SPACE_TAB_TITLE_MAX),
+    kind: z.enum(SPACE_TAB_KINDS),
+    ref: z.string().trim().min(1).max(2_048),
+    /**
+     * A `link` tab: the page lets the web app frame it (no `X-Frame-Options`
+     * DENY/SAMEORIGIN, a `frame-ancestors` that allows it) and the server
+     * reached it. False: the tab shows a link card instead of a frame.
+     */
+    embeddable: z.boolean().optional(),
+  })
+  .strict()
+  .superRefine((tab, ctx) => {
+    if (tab.kind === 'link' && !/^https:\/\/[^\s]+$/i.test(tab.ref)) {
+      ctx.addIssue({ code: 'custom', path: ['ref'], message: 'A link tab needs an https URL.' });
+    }
+    if ((tab.kind === 'file' || tab.kind === 'folder') && !tab.ref.startsWith('/')) {
+      ctx.addIssue({ code: 'custom', path: ['ref'], message: `A ${tab.kind} tab needs a Drive path that starts with "/".` });
+    }
+  });
+export type SpaceTab = z.infer<typeof SpaceTabSchema>;
+
+/**
+ * `PUT /projects/:id/spaces/:spaceId/tabs`: the whole ordered list, replacing
+ * the stored one (add, remove, rename and reorder in one call). Ids are unique.
+ */
+export const SpaceTabsInputSchema = z
+  .object({
+    tabs: z
+      .array(SpaceTabSchema)
+      .max(SPACE_TABS_MAX)
+      .superRefine((tabs, ctx) => {
+        const seen = new Set<string>();
+        tabs.forEach((tab, index) => {
+          if (seen.has(tab.id)) ctx.addIssue({ code: 'custom', path: [index, 'id'], message: `Tab id "${tab.id}" is in the list twice.` });
+          seen.add(tab.id);
+        });
+      }),
+  })
+  .strict();
+export type SpaceTabsInput = z.infer<typeof SpaceTabsInputSchema>;
+
 export const SpaceSchema = z
   .object({
     space_id: z.string(),
@@ -1344,6 +1432,8 @@ export const SpaceSchema = z
      * always `public`.
      */
     visibility: z.enum(SPACE_VISIBILITIES),
+    /** The tabs after Chat, in order. Chat is always first and never listed. */
+    tabs: z.array(SpaceTabSchema),
   })
   .strict();
 export type Space = z.infer<typeof SpaceSchema>;
@@ -1847,15 +1937,13 @@ export const SessionStartResultSchema = z.object({
   /** Serialized session_sandboxes row, or null while none is usable. */
   sandbox: ProjectSessionSandboxSchema.nullable(),
   /** Canonical runtime root pin, resolved server-side once the box is up. */
-  runtime_session_id: z.string().nullable().optional(),
-  /** @deprecated The pre-W4 name of `runtime_session_id`. Same value. */
-  opencode_session_id: z.string().nullable(),
+  runtime_session_id: z.string().nullable(),
   /** Stable terminal failure. Raw provider text remains in sandbox metadata. */
   failure: SessionStartFailureSchema.nullable().optional(),
-  /** Server-selected OpenCode REST transport. */
+  /** Server-selected runtime REST transport. */
   runtime_transport: z.literal('rest').optional(),
   /**
-   * Relative proxy path for this session's OpenCode runtime (port 8000),
+   * Relative proxy path for this session's runtime (the daemon, port 8000),
    * composed by the client against its configured backend URL. The server owns
    * the proxy scheme; absent until the box has an external_id.
    */
@@ -1943,8 +2031,14 @@ export const TriggerSchema = z.object({
   mode: z.enum(['poll', 'stream']).nullable(),
   /** For mode=poll only — the poll period, in whole seconds. */
   interval_seconds: z.number().nullable(),
-  /** For type=monitor only — the silence watchdog, in whole seconds. */
+  /** For type=app only — the silence alert (`expect_event_within`), in whole seconds. Null otherwise. */
   expect_event_within_seconds: z.number().nullable(),
+  /** For type=app only — when its App last posted to it (a deduplicated post and a heartbeat count). */
+  last_event_at: z.string().nullable().optional(),
+  /** Set while the App has been silent past `expect_event_within`: when the silence alert started. */
+  silent_since: z.string().nullable().optional(),
+  /** Set while the always-on App it names is down past its restart budget: when that alert started. */
+  crashed_since: z.string().nullable().optional(),
   /** For type=app only — the slug of the App whose emitted events fire the trigger. */
   app: z.string().nullable().optional(),
   /** A fire calls this App (method path) instead of running an agent. Null: an agent run. */
@@ -2009,17 +2103,20 @@ export const TriggerSchema = z.object({
   auto_paused_at: z.string().nullable().optional(),
   /** Why it paused, e.g. `auto-paused: ran at max_runs_per_hour 60 for 2 hours in a row`. */
   auto_paused_reason: z.string().nullable().optional(),
+  // A pause that ends by itself once the account can run the trigger (trigger-setup-pause.ts).
+  auto_paused_code: z.enum(['billing', 'no_usable_model']).nullable().optional(),
   /**
-   * Fresh session mode only (KRTX-1721): `skip` holds a fire while the
-   * trigger's previous run is still active. Null when unset: `skip` for a
-   * cron trigger, `allow` otherwise. Absent on older servers.
+   * (KRTX-1721) `skip` holds a fire while the trigger's previous run is still
+   * active; in reuse, pinned and keyed mode, while its previous prompt still
+   * waits in the session queue. Null when unset: `skip` for a cron trigger,
+   * `allow` otherwise. Absent on older servers.
    */
   overlap: z.enum(['skip', 'allow']).nullable().optional(),
   /** Account-local policy for sessions this trigger creates. */
   session_access: TriggerSessionAccessSchema,
   /**
    * The channel or DM its runs post to as threads; null = none (`#general`).
-   * Present only while the project's `project_channels` flag is on.
+   * Present only while the project's `chat` flag is on.
    */
   space_id: z.string().nullable().optional(),
   last_fired_at: z.string().nullable(),
@@ -2166,8 +2263,6 @@ const SessionTranscriptHeadShape = {
   /** When the mirror was last written. Null for a live read. */
   captured_at: z.string().nullable(),
   runtime_session_id: z.string().nullable(),
-  /** @deprecated The pre-W4 name of `runtime_session_id`. Same value. */
-  opencode_session_id: z.string().nullable(),
   /** Messages in THIS window. */
   message_count: z.number(),
 };
@@ -2215,8 +2310,6 @@ export const SessionTurnSchema = z.object({
   state: SessionTurnStateSchema,
   message_id: z.string().nullable(),
   runtime_session_id: z.string().nullable(),
-  /** @deprecated The pre-W4 name of `runtime_session_id`. Same value. */
-  opencode_session_id: z.string().nullable(),
   started_at: z.string().nullable(),
   accepted_at: z.string().nullable(),
 });
@@ -2267,25 +2360,24 @@ export const SessionPromptPlacementSchema = z.enum(['transcript', 'composer']);
 export type SessionPromptPlacement = z.infer<typeof SessionPromptPlacementSchema>;
 
 /**
- * How a prompt reaches a session whose turn is running.
- * - `steer`: the running turn reads it at its next step boundary; the turn
- *   does not stop. Needs the runtime capability `session.steer` and the
- *   turn's own prompter; otherwise the row falls back to `queue`.
- * - `queue` (Queue List): waits for the turn to end, then runs as its own turn.
- * - `interrupt` (Quick Queue, "Stop and send"): ends the turn after the
- *   running tool, then runs as its own turn.
- * With no turn running, all three start a turn. `placement` is derived:
- * `interrupt` is `transcript`, the other two are `composer`.
+ * How a prompt reaches a session whose turn is running. There is one mode:
+ * `steer`. The running turn reads the prompt at its next step, after the
+ * running tool call returns; the turn does not stop. With no turn running, the
+ * prompt starts a turn. The API serves `steer` for every row.
+ *
+ * `queue` and `interrupt` are accepted from older clients and delivered as
+ * `steer`. @deprecated values, removed in the next major.
  */
 export const SessionPromptDeliverySchema = z.enum(['steer', 'queue', 'interrupt']);
 export type SessionPromptDelivery = z.infer<typeof SessionPromptDeliverySchema>;
 
 /**
- * Why a `steer` row was delivered as `queue` instead:
+ * Why a prompt did not steer the running turn and waits for the next turn:
  * - `unsupported`: the session's runtime does not list `session.steer`
- *   (OpenCode 1.18.14 or earlier, or an older daemon).
- * - `not_prompter`: the running turn belongs to another member.
+ *   (an older daemon).
  * - `turn_ended`: the turn ended before the message reached it.
+ * - `not_prompter`: @deprecated, never written since 2026-11-04 (anyone who
+ *   may send to the session steers it); old rows may still carry it.
  */
 export const SessionPromptSteerFallbackSchema = z.enum(['unsupported', 'not_prompter', 'turn_ended']);
 export type SessionPromptSteerFallback = z.infer<typeof SessionPromptSteerFallbackSchema>;
@@ -2299,7 +2391,7 @@ export const SessionPromptSchema = z.object({
   placement: SessionPromptPlacementSchema,
   /** Absent from an API built before steering: read it as `placement` implies. */
   delivery: SessionPromptDeliverySchema.optional(),
-  /** Set when a `steer` row fell back to `queue`; `delivery` then reads `queue`. */
+  /** Set when a prompt could not steer the running turn and waits for the next one. */
   steer_fallback: SessionPromptSteerFallbackSchema.nullable().optional(),
   /** Full accepted text. `text` is the capped preview. */
   full_text: z.string(),
@@ -2311,8 +2403,8 @@ export const SessionPromptSchema = z.object({
   wire_message_id: z.string(),
   client_sent_at_ms: z.number().nullable(),
   state: SessionPromptStateSchema,
-  /** Why admission waits: `turn_active`, `older_prompt_pending` or `held`. */
-  reason: z.string().nullable(),
+  /** Why the row is in its state (`SESSION_PROMPT_REASONS`). `held` is not live work. */
+  reason: z.enum(SESSION_PROMPT_REASONS).nullable(),
   text: z.string(),
   attempts: z.number(),
   /** Automatic re-attempts a runtime-unreachable park has spent. */
@@ -2407,10 +2499,6 @@ export const RuntimeProjectionIdentitySchema = z.object({
   harness: z.string().nullable(),
   runtime_session_id: z.string().nullable(),
   harness_version: z.string().nullable(),
-  /** @deprecated The pre-W5 name of `runtime_session_id`. */
-  opencode_session_id: z.string().nullable(),
-  /** @deprecated The pre-W5 name of `harness_version`. */
-  opencode_version: z.string().nullable(),
   daemon_build: z.number().nullable(),
   agent_config_etag: z.string().nullable(),
   head_seq: z.record(z.string(), z.number()).nullable(),
@@ -2564,6 +2652,9 @@ export type AccountBranding = z.infer<typeof AccountBrandingSchema>;
  *  plan no longer allows it; create and rename omit it. */
 export const AccountSummarySchema = z.object({
   account_id: z.string(),
+  /** The workspace this account key belongs to: its one active project. Null for an
+   *  account with no project, or a legacy account with several (not split yet). Sent since 2026-11-05. */
+  workspace_id: z.string().nullable().optional(),
   name: z.string(),
   slug: z.string(),
   created_at: z.string(),
@@ -2691,6 +2782,8 @@ export const SecretSchema = z.object({
   /** The env var KEY injected into the sandbox. Not unique. */
   name: z.string(),
   project_id: z.string(),
+  /** The workspace id: the same value as `project_id`. Optional: older servers omit it. */
+  workspace_id: z.string().optional(),
   secret_id: z.string().nullable(),
   created_by: z.string().nullable(),
   created_at: z.string().nullable(),

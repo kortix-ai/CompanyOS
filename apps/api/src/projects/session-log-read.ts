@@ -23,7 +23,7 @@
  *   the whole text. A text over 256 kB is a preview in the row (F3, `session-log-blobs.ts`):
  *   this read puts the whole text back from its object, after the transaction.
  * Paging: a `fromV1` thread serves the mirror order (`created`, then id), which is its seq order
- * (the OpenCode adapter issues seqs in `fromV1`'s order). A cursor that names a message anchors on
+ * (the OpenCode adapter issued seqs in `fromV1`'s order). A cursor that names a message anchors on
  * the `created_at` column, while rows sort on `info.time.created` (`-Infinity` when absent; the
  * column then holds the ingest time). The two agree for every row with a creation time. A native
  * thread serves seq order, pi's append order: two of its messages can share a millisecond with ids
@@ -42,7 +42,8 @@ import {
 } from '@kortix/api-contract/session-log';
 import { KORTIX_TRANSCRIPT_SCHEMA } from '@kortix/api-contract/transcript';
 import { projectSessions, sessionLogMessages, sessionLogs, sessionLogThreads } from '@kortix/db';
-import { and, asc, desc, eq, inArray, isNull, lt, lte, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, max, sql, type SQL } from 'drizzle-orm';
+import { config } from '../config';
 import { db } from '../shared/db';
 import { qualifiedColumn } from '../shared/sql-qualified-column';
 import {
@@ -85,6 +86,43 @@ function readThreads(tx: Tx, sessionId: string): Promise<ThreadRow[]> {
 
 type PageInput = { sessionId: string; threadId: string | null; beforeSeq: number | null; limit: number };
 
+const threadScope = (input: PageInput, threadId: string) =>
+  and(
+    eq(sessionLogMessages.sessionId, input.sessionId),
+    eq(sessionLogMessages.threadId, threadId),
+    isNull(sessionLogMessages.deletedAt),
+    input.beforeSeq === null ? undefined : lt(sessionLogMessages.seq, input.beforeSeq),
+  ) as SQL;
+
+/** Rows the page window would carry, newest first, each with its stored record size (`pg_column_size`, bytes on disk ≈ a lower bound of the JSON payload). */
+type SizedWindowRow = { seq: number; bytes: number };
+
+/**
+ * How many window rows the page budget serves.
+ *
+ * Rows arrive seq-descending (newest first). The page keeps the newest whole
+ * messages and drops the tail rows that would overflow `budget`; the newest
+ * message is served however large it is (an empty page answers nothing, and the
+ * route's clients read that as no log). A dropped tail means older messages
+ * exist: the caller answers `has_more: true` and clients read on with `before_seq`.
+ */
+export function keptUnderBudget(rows: SizedWindowRow[], budget: number): {
+  keptCount: number;
+  /** The oldest kept row's `seq`; `null` when nothing was dropped (no lower bound needed). */
+  oldestKeptSeq: number | null;
+  dropped: boolean;
+} {
+  let acc = 0;
+  let keptCount = 0;
+  for (const row of rows) {
+    if (keptCount > 0 && acc + row.bytes > budget) break;
+    acc += row.bytes;
+    keptCount += 1;
+  }
+  const dropped = keptCount < rows.length;
+  return { keptCount, oldestKeptSeq: dropped ? rows[keptCount - 1]!.seq : null, dropped };
+}
+
 /** One page of one thread. Null when the session has no stored log (a new session). */
 export function readSessionLogPage(input: PageInput): Promise<SessionLogPage | 'unknown_thread' | null> {
   return db.transaction(async (tx) => {
@@ -108,22 +146,42 @@ export function readSessionLogPage(input: PageInput): Promise<SessionLogPage | '
       threadId = first?.threadId ?? null;
     }
     const threadRecord = threads.find((t) => t.threadId === threadId)?.record;
+    // The page budget bounds the read's wire cost: `GET …/log` serves a window of whole stored
+    // records and a heavy session's page carried tens of MB (the read scales with the page
+    // payload: 40 MB ran ~330 ms on loopback; prod `db;dur` was ~96 % of a 1–5 s read —
+    // KRTX-4508). Probe the window's seq and sizes first (TOAST pointers, no payload), keep
+    // the newest run under `SESSION_LOG_PAGE_MAX_BYTES`, then read only those records in full.
+    // A pointer read (`limit: 0` — the snapshot route's `?transcript=0`, documented "session,
+    // generation, threads, no messages") reads NO payload at all: it used to read the newest
+    // record whole and slice it away, which paid a heavy session's multi-MB detoast on every
+    // session open (KRTX-4733: prod slow rows 1.1–4.8 s, `db;dur` 90–98 % of wall).
+    let budgetCut = false;
+    let windowRows: SizedWindowRow[] = [];
     const rows =
       threadId === null
         ? []
-        : await tx
-            .select({ record: sessionLogMessages.record })
-            .from(sessionLogMessages)
-            .where(
-              and(
-                eq(sessionLogMessages.sessionId, input.sessionId),
-                eq(sessionLogMessages.threadId, threadId),
-                isNull(sessionLogMessages.deletedAt),
-                input.beforeSeq === null ? undefined : lt(sessionLogMessages.seq, input.beforeSeq),
-              ),
-            )
-            .orderBy(desc(sessionLogMessages.seq))
-            .limit(input.limit + 1);
+        : await (async () => {
+            const scope = threadScope(input, threadId);
+            windowRows = await tx
+              .select({ seq: sessionLogMessages.seq, bytes: sql<number>`pg_column_size(${sessionLogMessages.record})::int` })
+              .from(sessionLogMessages)
+              .where(scope)
+              .orderBy(desc(sessionLogMessages.seq))
+              .limit(input.limit + 1);
+            if (input.limit === 0) return [];
+            const kept = keptUnderBudget(windowRows, config.SESSION_LOG_PAGE_MAX_BYTES);
+            budgetCut = kept.dropped;
+            let payloadScope = scope;
+            if (kept.dropped) {
+              payloadScope = and(scope, gte(sessionLogMessages.seq, kept.oldestKeptSeq!)) as SQL;
+            }
+            return (await tx
+              .select({ record: sessionLogMessages.record })
+              .from(sessionLogMessages)
+              .where(payloadScope)
+              .orderBy(desc(sessionLogMessages.seq))
+              .limit(kept.keptCount));
+          })();
     return {
       session: log.record as SessionLogPage['session'],
       generation: log.generation,
@@ -133,7 +191,10 @@ export function readSessionLogPage(input: PageInput): Promise<SessionLogPage | '
         .slice(0, input.limit)
         .reverse()
         .map((r) => withKeptToolInputs(log.record as J, threadRecord, r.record as SessionLogMessage)),
-      has_more: rows.length > input.limit,
+      // The probe's row count is the truth for every limit: with `limit: 0` the page serves
+      // no messages, so "older messages exist" is just "the window holds a row" (the payload
+      // `rows` are empty and the budget never cut a one-row window).
+      has_more: budgetCut || windowRows.length > input.limit,
     };
   }, READ_ONLY);
 }
@@ -184,7 +245,7 @@ type WindowInput = {
   limit: number;
   before?: string | null;
   /** A runtime session inside this session (a sub-agent); omitted: the root. */
-  opencodeSessionId?: string | null;
+  runtimeSessionId?: string | null;
 };
 
 /** The mirror order: `created` (missing first), then id. */
@@ -218,7 +279,7 @@ export async function readStoredTranscriptWindow(input: WindowInput): Promise<Mi
   const root = rootOf(threads);
   const stated = v1Ext(log.record)?.data;
   const rootId = stated && 'root_id' in stated ? ((stated.root_id as string | null) ?? null) : root ? nativeOf(root) : null;
-  const target = input.opencodeSessionId || rootId;
+  const target = input.runtimeSessionId || rootId;
   // A runtime session that is no thread of its own is an old root, merged into the root thread.
   const thread = threads.find((t) => nativeOf(t) === target) ?? root;
   if (!target || !thread) return null;
@@ -252,7 +313,9 @@ export async function readStoredTranscriptWindow(input: WindowInput): Promise<Mi
         total: sql<number>`(count(*) + count(*) FILTER (WHERE CASE WHEN ${sessionLogMessages.kind} = 'compaction'
           THEN coalesce(jsonb_typeof(jsonb_path_query_first(${sessionLogMessages.record}, '$.blocks[*] ? (@.type == "compaction")') -> 'summary') <> 'null', false)
           ELSE false END))::int`,
-        writtenMs: sql<number | null>`(extract(epoch from max(${sessionLogMessages.updatedAt})) * 1000)::float8`,
+        // The column's own mapping (a Date, cut to the ms like `log.updatedAt`): an epoch float8
+        // needs 16 digits and came back rounded up to the next ms.
+        writtenAt: max(sessionLogMessages.updatedAt),
       })
       .from(sessionLogMessages)
       .where(scope);
@@ -287,9 +350,9 @@ export async function readStoredTranscriptWindow(input: WindowInput): Promise<Mi
     : nativeRows(records.flatMap((r) => toRows([r])), anchor?.inclusive ? input.before : null).reverse();
   const kept = rows.slice(0, input.limit);
   return {
-    opencode_session_id: target,
-    root_opencode_session_id: rootId,
-    captured_at: new Date(Math.max(new Date(log.updatedAt).getTime(), Math.floor(totals.writtenMs ?? 0))).toISOString(),
+    runtime_session_id: target,
+    root_runtime_session_id: rootId,
+    captured_at: new Date(Math.max(new Date(log.updatedAt).getTime(), totals.writtenAt?.getTime() ?? 0)).toISOString(),
     total: totals.total,
     head_complete: true,
     next_cursor: rows.length > input.limit ? idOf(kept.at(-1)!) : null,

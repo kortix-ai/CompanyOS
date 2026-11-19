@@ -147,6 +147,15 @@ describe('agents', () => {
     expect(errorPaths(swap('exclude: [lookup_order]', 'exclude: [nope]'))).toContain('agents.researcher.tools');
   });
 
+  test('a grant of a retired Rooms skill or permission validates with a warning', () => {
+    const skill = check(swap('skills: [triage-rules, kortix-system]', 'skills: [triage-rules, kortix-rooms]'));
+    expect(skill.errors).toEqual([]);
+    expect(skill.warnings.map((issue) => issue.path)).toContain('agents.researcher.skills');
+    const permission = check(swap('kortix_permissions: [project.session.start]', 'kortix_permissions: [project.session.start, project.room.read]'));
+    expect(permission.errors).toEqual([]);
+    expect(permission.warnings.some((issue) => issue.message.includes('project.room.read'))).toBe(true);
+  });
+
   test('subagents name other declared subagents', () => {
     expect(errorPaths(swap('subagents: [researcher]', 'subagents: [nobody]'))).toContain('agents.assistant.subagents');
     expect(errorPaths(swap('subagents: [researcher]', 'subagents: [assistant]'))).toContain('agents.assistant.subagents');
@@ -227,18 +236,63 @@ describe('builtin_agents (My Kortix switch)', () => {
     expect(errorPaths(declared.replace('agents:', 'builtin_agents:\n  my_kortix: false\nagents:'))).toEqual(['agents.meta']);
     expect(errorPaths(declared.replace('agents:', 'builtin_agents:\n  my_kortix: true\nagents:'))).toEqual(['agents.meta']);
   });
-});
 
-describe('agents.<name>.workspace.project_repository default', () => {
-  test('defaults to false; an explicit value wins', async () => {
-    const { resolveProjectRepository } = await import('../index.ts');
-    expect(resolveProjectRepository({})).toEqual({ ok: true, value: false, legacyRead: false });
-    expect(resolveProjectRepository({ workspace: {} })).toEqual({ ok: true, value: false, legacyRead: false });
-    expect(resolveProjectRepository({ workspace: { project_repository: true } })).toEqual({ ok: true, value: true, legacyRead: false });
+  test('`default_agent: mykortix` is valid only when builtin_agents turns My Kortix on', () => {
+    const withDefault = (builtin: string) => `default_agent: mykortix\n${builtin}agents:\n  worker:\n    prompt: hi\n`;
+    expect(errorPaths(withDefault('builtin_agents:\n  my_kortix: true\n'))).toEqual([]);
+    expect(errorPaths(withDefault(''))).toEqual(['default_agent']);
+    expect(errorPaths(withDefault('builtin_agents:\n  my_kortix: false\n'))).toEqual(['default_agent']);
+    expect(check(withDefault('')).errors[0]?.message).toContain('builtin_agents.my_kortix: true');
   });
 });
 
-describe('spaces (a channel: a room plus configurable tabs)', () => {
+describe('agents.<name>.workspace is obsolete', () => {
+  test('every old shape validates with one fix-able warning and leaves the parsed agent without it', () => {
+    for (const shape of ['workspace: { project_repository: true }', 'workspace: runtime', 'repository_access: false']) {
+      const result = validateManifest(`agents:\n  worker:\n    prompt: hi\n    ${shape}\n`);
+      expect(result.valid).toBe(true);
+      expect(result.issues.some((issue) => issue.fix === 'agent-workspace')).toBe(true);
+      const worker = (result.parsed?.agents as Record<string, Record<string, unknown>>).worker;
+      expect(worker.workspace).toBeUndefined();
+      expect(worker.repository_access).toBeUndefined();
+    }
+  });
+});
+
+describe('agents.<name>.workspace: { sandbox, repos, setup }', () => {
+  const yaml = (workspace: string, extra = '') => `sandbox:\n  templates:\n    - slug: node\n      image: node:22\nagents:\n  dev:\n    prompt: hi\n${extra}    workspace:\n${workspace}`;
+  test('the full shape validates and is read as written', () => {
+    const result = validateManifest(yaml('      sandbox: node\n      repos:\n        - path: /workspace\n        - path: /workspace/web\n          sparse: [apps/web]\n      setup: [pnpm install, pnpm build]\n'));
+    expect(result.issues.filter((issue) => issue.severity === 'error')).toEqual([]);
+    expect((result.parsed?.agents as any).dev.workspace).toEqual({
+      sandbox: 'node',
+      repos: [{ path: '/workspace' }, { path: '/workspace/web', sparse: ['apps/web'] }],
+      setup: ['pnpm install', 'pnpm build'],
+    });
+  });
+  test('a setup step is a command or { run, cwd } (relative, or absolute under /workspace)', () => {
+    const result = validateManifest(yaml('      setup:\n        - pnpm install\n        - { run: pnpm build, cwd: apps/web }\n        - { run: make, cwd: /workspace/other }\n'));
+    expect(result.issues.filter((issue) => issue.severity === 'error')).toEqual([]);
+    expect((result.parsed?.agents as any).dev.workspace.setup).toEqual(['pnpm install', { run: 'pnpm build', cwd: 'apps/web' }, { run: 'make', cwd: '/workspace/other' }]);
+  });
+  test('each wrong value names its path', () => {
+    const paths = (workspace: string, extra = '') => validateManifest(yaml(workspace, extra)).issues.filter((i) => i.severity === 'error').map((i) => i.path);
+    expect(paths('      repos:\n        - path: /etc\n')).toEqual(['agents.dev.workspace.repos[0].path']);
+    expect(paths('      repos:\n        - path: /workspace/../etc\n')).toEqual(['agents.dev.workspace.repos[0].path']);
+    expect(paths('      repos:\n        - path: /workspace\n        - {}\n')).toEqual(['agents.dev.workspace.repos[1].path']);
+    expect(paths('      repos:\n        - sparse: [/abs]\n')).toEqual(['agents.dev.workspace.repos[0].sparse']);
+    expect(paths('      setup: pnpm install\n')).toEqual(['agents.dev.workspace.setup']);
+    expect(paths('      setup:\n        - { cwd: apps/web }\n')).toEqual(['agents.dev.workspace.setup[0].run']);
+    expect(paths('      setup:\n        - { run: x, cwd: ../etc }\n')).toEqual(['agents.dev.workspace.setup[0].cwd']);
+    expect(paths('      setup:\n        - { run: x, cwd: /etc }\n')).toEqual(['agents.dev.workspace.setup[0].cwd']);
+    expect(paths('      setup:\n        - { run: x, shell: zsh }\n')).toEqual(['agents.dev.workspace.setup[0].shell']);
+    expect(paths('      setup:\n        - ""\n')).toEqual(['agents.dev.workspace.setup[0]']);
+    expect(paths('      clone: true\n')).toEqual(['agents.dev.workspace.clone']);
+    expect(paths('      sandbox: node\n', '    sandbox: other\n')).toEqual(['agents.dev.workspace.sandbox']);
+  });
+});
+
+describe('spaces (a channel with configurable tabs)', () => {
   test('golden has no space and stays valid', () => {
     expect(check(GOLDEN).errors).toEqual([]);
   });
@@ -342,10 +396,143 @@ describe('spaces (a channel: a room plus configurable tabs)', () => {
     expect(errorPaths(yaml)).toContain('spaces.eng.tabs[0].blocks[0].type');
   });
 
-  test('a space slug is also a room name: at most 63 characters', () => {
+  test('a space slug is at most 63 characters', () => {
     const long = 'a'.repeat(64);
     expect(errorPaths(swap('agents:', `spaces:\n  ${long}:\n    label: Long\nagents:`))).toContain(`spaces.${long}`);
     expect(check(swap('agents:', `spaces:\n  ${'a'.repeat(63)}:\n    label: Ok\nagents:`)).errors).toEqual([]);
     expect(errorPaths(swap('codemode: on', `codemode: on\n    space: ${long}`))).toContain('agents.assistant.space');
+  });
+});
+
+describe('"*" is the canonical "every" value; `all` stays its alias', () => {
+  test('tools: "*", ["*"] and ALL are every tool, like `all`', () => {
+    expect(check(swap('    tools: all\n', '    tools: "*"\n')).errors).toEqual([]);
+    expect(check(swap('    tools: all\n', '    tools: ["*"]\n')).errors).toEqual([]);
+    expect(check(swap('    tools: all\n', '    tools: [bash, "*"]\n')).errors).toEqual([]);
+    expect(check(swap('    tools: all\n', '    tools: ALL\n')).errors).toEqual([]);
+    expect(check(GOLDEN).errors).toEqual([]);
+  });
+
+  test('every grant takes "*" and `all`', () => {
+    for (const key of ['skills', 'connectors']) {
+      expect(check(swap(`    ${key}: all\n`, `    ${key}: "*"\n`)).errors).toEqual([]);
+      expect(check(swap(`    ${key}: all\n`, `    ${key}: ["*"]\n`)).errors).toEqual([]);
+    }
+    for (const [from, key] of [['subagents: [researcher]', 'subagents'], ['commands: [weekly-report, summarize]', 'commands'], ['extensions: [audit, web-access]', 'extensions'], ['secrets: [HELPDESK_TOKEN]', 'secrets'], ['kortix_permissions: [project.session.start]', 'kortix_permissions']] as const) {
+      expect(check(swap(from, `${key}: "*"`)).errors).toEqual([]);
+      expect(check(swap(from, `${key}: all`)).errors).toEqual([]);
+    }
+  });
+
+  test('a list with "*" and other names warns that the other names do nothing', () => {
+    const tools = check(swap('    tools: all\n', '    tools: [bash, "*"]\n')).warnings.find((i) => i.path === 'agents.assistant.tools');
+    expect(tools?.message).toBe('"*" grants every name, so the other entries do nothing: bash. Write `"*"` alone.');
+    const skills = check(swap('    skills: all\n', '    skills: ["*", typo]\n')).warnings.find((i) => i.path === 'agents.assistant.skills');
+    expect(skills?.message).toBe('"*" grants every name, so the other entries do nothing: typo. Write `"*"` alone.');
+    expect(check(swap('    skills: all\n', '    skills: ["*"]\n')).warnings.filter((i) => i.path === 'agents.assistant.skills')).toEqual([]);
+  });
+
+  test('a wrong tools value names "*" first', () => {
+    const issue = check(swap('    tools: all\n', '    tools: everything\n')).errors.find((i) => i.path === 'agents.assistant.tools');
+    expect(issue?.message).toBe('tools must be `"*"` (every tool), `none`, a list of tool names, or `{ exclude: [names] }`.');
+  });
+
+  test('an agent without tools is told to write tools: "*"', () => {
+    const warning = check(swap('    tools: all\n', '')).warnings.find((i) => i.path === 'agents.assistant.tools');
+    expect(warning?.message).toContain('Write `tools: "*"`');
+  });
+
+  test('permission: "*" / all, and a rule value "*" / all, mean allow', () => {
+    expect(check(swap('    permission:\n      bash:\n        "*": allow\n        "git push *": ask\n      external_directory: deny\n', '    permission: "*"\n')).errors).toEqual([]);
+    expect(check(swap('    permission:\n      bash:\n        "*": allow\n        "git push *": ask\n      external_directory: deny\n', '    permission: all\n')).errors).toEqual([]);
+    expect(check(swap('        "*": allow\n', '        "*": all\n')).errors).toEqual([]);
+    expect(check(swap('      external_directory: deny\n', '      external_directory: deny\n      edit: "*"\n')).errors).toEqual([]);
+    expect(errorPaths(swap('      external_directory: deny', '      external_directory: maybe'))).toContain('agents.assistant.permission.external_directory');
+  });
+
+  test('a bare * (a YAML alias) tells you to quote it, with the line', () => {
+    const result = validateManifest(swap('    tools: all\n', '    tools: *\n'));
+    expect(result.valid).toBe(false);
+    const issue = result.issues[0]!;
+    expect(issue.path).toBe('<yaml>');
+    expect(issue.message).toContain('YAML reads a bare `*` as an alias. Quote it: `tools: "*"`');
+    expect(issue.line).toBe(GOLDEN.split('\n').findIndex((line) => line === '    tools: all') + 1);
+    expect(validateManifest('agents:\n  a:\n    tools:\n      - *\n').issues[0]!.message).toContain('Quote it: `- "*"`');
+  });
+});
+
+describe('agents.<name>.run: a program agent', () => {
+  const yaml = (block: string) => `agents:\n  janitor:\n${block}`;
+
+  test('is valid with run alone, and with run beside workspace and grants', () => {
+    expect(check(yaml('    run: pnpm tsx agents/janitor.ts\n')).errors).toEqual([]);
+    expect(check(yaml('    run: node janitor.js\n    secrets: [GITHUB_TOKEN]\n    workspace:\n      setup: [pnpm install]\n')).errors).toEqual([]);
+    expect((validateManifest(yaml('    run: "  node janitor.js "\n')).parsed?.agents as any).janitor.run).toBe('  node janitor.js ');
+  });
+
+  test('must be a non-empty command', () => {
+    expect(errorPaths(yaml('    run: ""\n'))).toEqual(['agents.janitor.run']);
+    expect(errorPaths(yaml('    run: [node, x.js]\n'))).toEqual(['agents.janitor.run']);
+    expect(errorPaths(yaml(`    run: ${'x'.repeat(4097)}\n`))).toEqual(['agents.janitor.run']);
+  });
+
+  test('refuses a model, a prompt and a prompt file: a program agent has no model', () => {
+    expect(errorPaths(yaml('    run: node x.js\n    model: kortix/kimi\n'))).toEqual(['agents.janitor.model']);
+    expect(errorPaths(yaml('    run: node x.js\n    prompt: be nice\n'))).toEqual(['agents.janitor.prompt']);
+    expect(errorPaths(yaml('    run: node x.js\n    prompt_file: agents/x.md\n'))).toEqual(['agents.janitor.prompt_file']);
+  });
+
+  test('warns on a model-only key: it has no effect', () => {
+    const { errors, warnings } = check(yaml('    run: node x.js\n    codemode: off\n    variant: high\n'));
+    expect(errors).toEqual([]);
+    const ignored = warnings.filter((issue) => issue.message.includes('program agent'));
+    expect(ignored.map((issue) => issue.path).sort()).toEqual(['agents.janitor.codemode', 'agents.janitor.variant']);
+  });
+});
+
+describe('program agents: timeout and trigger input', () => {
+  const base = (agentExtra: string, triggers: string) =>
+    `agents:\n  janitor:\n    run: node j.js\n${agentExtra}  writer:\n    prompt: Write.\n    tools: "*"\ntriggers:\n${triggers}`;
+
+  test('timeout is a duration from 1s to 6h, only on a program agent', () => {
+    expect(check(base('    timeout: 45m\n', '')).errors).toEqual([]);
+    expect(errorPaths(base('    timeout: 7h\n', ''))).toEqual(['agents.janitor.timeout']);
+    expect(errorPaths(base('    timeout: soon\n', ''))).toEqual(['agents.janitor.timeout']);
+    expect(errorPaths(`agents:\n  writer:\n    prompt: Write.\n    tools: "*"\n    timeout: 5m\n`)).toEqual(['agents.writer.timeout']);
+  });
+
+  test('a trigger of a program agent may omit prompt; a model agent still needs one', () => {
+    const hourly = (agent: string) => `  - slug: hourly\n    on: { every: 1h }\n    run: { agent: ${agent} }\n`;
+    expect(check(base('', hourly('janitor'))).errors).toEqual([]);
+    expect(errorPaths(base('', hourly('writer')))).toEqual(['triggers[0].prompt']);
+  });
+
+  test('default_agent decides when the trigger names no agent', () => {
+    const yaml = `default_agent: janitor\n${base('', '  - slug: hourly\n    on: { every: 1h }\n    run: {}\n')}`;
+    expect(check(yaml).errors).toEqual([]);
+  });
+
+  test('run.payload on an agent run is a table of static input', () => {
+    const t = (payload: string) => `  - slug: nightly\n    on: { cron: "0 3 * * *" }\n    run: { agent: janitor, payload: ${payload} }\n`;
+    expect(check(base('', t('{ days: 30, mode: full }'))).errors).toEqual([]);
+    expect(errorPaths(base('', t('[1, 2]')))).toEqual(['triggers[0].payload']);
+  });
+});
+
+describe('agents.<name>.title', () => {
+  const titled = (value: string) => swap("  assistant:\n    description: The project's main agent.\n", `  assistant:\n    title: ${value}\n    description: The project's main agent.\n`);
+
+  test('a display name is valid and keeps its casing in the parsed block', () => {
+    const yaml = titled('"GitHub PR Reviewer"');
+    expect(check(yaml).errors).toEqual([]);
+    const agents = validateManifest(yaml).parsed?.agents as Record<string, { title?: string }> | undefined;
+    expect(agents?.assistant?.title).toBe('GitHub PR Reviewer');
+  });
+
+  test('a blank, too long or non-string title is an error at agents.<name>.title', () => {
+    expect(errorPaths(titled('"  "'))).toContain('agents.assistant.title');
+    expect(errorPaths(titled(`"${'x'.repeat(81)}"`))).toContain('agents.assistant.title');
+    expect(errorPaths(titled('42'))).toContain('agents.assistant.title');
+    expect(errorPaths(titled('[a, b]'))).toContain('agents.assistant.title');
   });
 });

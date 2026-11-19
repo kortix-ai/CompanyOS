@@ -4,7 +4,8 @@ import { attachmentMime } from '../../internal/lib/attachment-mime';
 import { AttachmentPreview } from './attachment-preview';
 import { getFileCategory } from '../../files/viewer/preview-policy';
 import { uiRoutes } from '../../lib/routes';
-import { remindersHref } from '../../internal/lib/capability-tab-routes';
+import { triggerHref } from '../../internal/lib/capability-tab-routes';
+import { useTriggersPageOpen } from '../../internal/layout/project-settings-nav';
 import { MessageSenderAbove } from '../participants/session-participants';
 import { MessageAuthorLabel } from './message-author-label';
 import { MESSAGE_TEXT_CLASS, RowToolbar } from './message-row';
@@ -37,8 +38,8 @@ import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   PencilSimpleIcon,
   AlarmIcon,
-  ChatsTeardropIcon,
   LightningIcon,
+  PhoneIcon,
 } from '@phosphor-icons/react';
 
 import { CopyButton } from '../../markdown/copy-button';
@@ -84,6 +85,7 @@ import {
 } from '../thread/mention-segments';
 import { parseChannelMessage, slackConversationName, type ChannelMessageInfo } from './channel-message';
 import { SourceCard, SourcePill } from './source-pill';
+import { parseVoiceTurn, type VoiceTurnInfo } from './voice-turn';
 import { PeerMessageRow } from './peer-message-row';
 import { NoticeBatchGroup } from './notice-batch-group';
 import { parseNoticeBatch } from './subagent-notice';
@@ -101,10 +103,6 @@ import {
   parseSystemNotifications,
   parseReminderPrompt,
   type ReminderPromptInfo,
-  parseRoomDigest,
-  parseRoomPrompt,
-  type RoomDigestInfo,
-  type RoomPromptInfo,
   parseTriggerEvent,
   type TriggerEventInfo,
   QUOTE_MARKER_RE,
@@ -269,14 +267,47 @@ function PlatformPromptMessage({
 
 /**
  * A loop fire (`[REMINDER reminder.<id> …]`, the wire name). The pill says
- * Loop and whether it repeats; its card carries the id and a link to the
- * project's Loops page, filtered to this session.
+ * Loop and whether it repeats; its card carries the id and a Manage link to
+ * the loop's own row on the Triggers page (`?id=<reminder id>`).
  */
+/**
+ * A voice call's turn the voice answered itself (voice-turn.ts): the caller's words as their own bubble under a Call
+ * pill, and the voice's answer below it, as the agent's line, not the note the session keeps for the agent.
+ */
+function VoiceTurnMessage({ info, actions }: { info: VoiceTurnInfo; actions?: React.ReactNode }) {
+  const t = useTranslations('voiceCall');
+  return (
+    <div className="flex w-full flex-col gap-1.5" data-testid="voice-turn">
+      {info.user ? (
+        <PlatformPromptMessage
+          text={info.user}
+          actions={actions}
+          pill={
+            <SourcePill
+              mark={<PhoneIcon weight="fill" className="size-3 shrink-0" aria-hidden />}
+              source={t('call')}
+              sender={t('you')}
+              card={<SourceCard mark={<PhoneIcon weight="fill" className="size-3.5 shrink-0" aria-hidden />} title={t('title')} footer={<span className="text-muted-foreground">{t('turnNote')}</span>} />}
+            />
+          }
+        />
+      ) : null}
+      {info.said ? (
+        <p className="text-foreground max-w-[80%] self-start text-sm leading-relaxed text-pretty">
+          {info.user ? null : <PhoneIcon weight="fill" className="text-muted-foreground mr-1.5 inline size-3 align-[-1px]" aria-label={t('call')} />}
+          {info.said}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function ReminderMessage({ info, actions }: { info: ReminderPromptInfo; actions?: React.ReactNode }) {
   const t = useTranslations('reminders');
   const ids = useSessionIds();
-  const loopsHref = ids.projectId ? remindersHref(ids.projectId) : null;
-  const manageHref = loopsHref && ids.sessionId ? `${loopsHref}?session=${ids.sessionId}` : null;
+  // The loop's own row on the Triggers page, shown only to a caller that page lets in.
+  const canOpenTriggers = useTriggersPageOpen(ids.projectId ?? undefined);
+  const manageHref = ids.projectId && canOpenTriggers ? triggerHref(ids.projectId, info.id) : null;
   return (
     <PlatformPromptMessage
       data-testid="reminder-turn"
@@ -305,78 +336,6 @@ function ReminderMessage({ info, actions }: { info: ReminderPromptInfo; actions?
                   )}
                 </div>
               }
-            />
-          }
-        />
-      }
-    />
-  );
-}
-
-/**
- * A room message (`[room dev · #42 · from …]`, `[direct message · #3 · from …]`).
- * The pill names the room and the sender; the card carries the seq. The bubble
- * shows the message text only: the reply instructions in the footer are for
- * the agent, not the reader. The parsed text has no room id, so there is no link.
- */
-function RoomMessage({ info, actions }: { info: RoomPromptInfo; actions?: React.ReactNode }) {
-  const t = useTranslations('rooms');
-  const source = info.room;
-  const sender = info.senderKind === 'session' ? t('agentSender', { name: info.sender }) : info.sender;
-  return (
-    <PlatformPromptMessage
-      data-testid="room-turn"
-      data-room-seq={String(info.seq)}
-      text={info.text}
-      actions={actions}
-      pill={
-        <SourcePill
-          mark={<ChatsTeardropIcon className="size-3 shrink-0" aria-hidden />}
-          source={source}
-          sender={sender}
-          card={
-            <SourceCard
-              mark={<ChatsTeardropIcon className="size-3.5 shrink-0" aria-hidden />}
-              title={t('cardRoom', { name: source })}
-              rows={[
-                { label: t('cardFrom'), value: sender },
-                { label: t('cardMessage'), value: `#${info.seq}` },
-                { label: t('cardReplyTo'), value: info.replyTo ? `#${info.replyTo}` : null },
-              ]}
-            />
-          }
-        />
-      }
-    />
-  );
-}
-
-/**
- * A room digest: room traffic not addressed to this agent, batched into one
- * turn. The pill names the room and the count; the bubble lists each message's
- * sender and first line.
- */
-function RoomDigestMessage({ info, actions }: { info: RoomDigestInfo; actions?: React.ReactNode }) {
-  const t = useTranslations('rooms');
-  const range = info.fromSeq === info.toSeq ? `#${info.toSeq}` : `#${info.fromSeq}–#${info.toSeq}`;
-  const count = t('digestCount', { count: info.count });
-  const lines = info.lines.map((line) => `#${line.seq} ${line.sender}: ${line.text}`);
-  if (info.more) lines.push(t('digestMore', { count: info.more }));
-  return (
-    <PlatformPromptMessage
-      data-testid="room-digest-turn"
-      text={lines.join('\n')}
-      actions={actions}
-      pill={
-        <SourcePill
-          mark={<ChatsTeardropIcon className="size-3 shrink-0" aria-hidden />}
-          source={info.room}
-          sender={count}
-          card={
-            <SourceCard
-              mark={<ChatsTeardropIcon className="size-3.5 shrink-0" aria-hidden />}
-              title={t('cardRoom', { name: info.room })}
-              rows={[{ label: t('cardMessage'), value: range }]}
             />
           }
         />
@@ -1779,10 +1738,8 @@ export function UserMessage({
   // A reminder fire: platform-written `[REMINDER …]` header + the reminder text.
   const reminderInfo = useMemo(() => parseReminderPrompt(rawText), [rawText]);
 
-  // A room message (flag `agent_rooms`): `[room <name> · #<seq> · from …]` or `[direct message · …]`.
-  const roomInfo = useMemo(() => parseRoomPrompt(rawText), [rawText]);
-  // A batched digest of room traffic: `[room <name> · #a–#b · N new messages]`.
-  const roomDigestInfo = useMemo(() => parseRoomDigest(rawText), [rawText]);
+  // A voice call's turn the voice answered itself (its note in the session: voice-turn.ts).
+  const voiceTurnInfo = useMemo(() => (message.origin === 'automation' || message.origin === 'steer' || message.origin === 'prompt' || !message.origin ? parseVoiceTurn(rawText) : null), [message.origin, rawText]);
   // A message from another Kortix session (`send_message`): `[message from reviewer · session 3f2a1b9c · #m_1]`.
   const peerInfo = useMemo(() => parsePeerMessagePrompt(rawText), [rawText]);
   // Several notices in one prompt (`session-notice-batch.ts`), whatever the first one is: a peer
@@ -1916,7 +1873,7 @@ export function UserMessage({
   const shallowNavigate = useUiShallowNavigate();
 
   const openSessionMention = (raw: string) => {
-    // `/projects/<id>/sessions/<id>`, not `/sessions/<id>`. The latter is not a
+    // `/workspaces/<id>/sessions/<id>`, not `/sessions/<id>`. The latter is not a
     // route — the tab stays mounted so the click looks fine, but the URL it
     // writes into history 404s on reload or Back. See `session-href.ts`.
     // Direct session ID (ses_...) — navigate without title lookup
@@ -2023,6 +1980,10 @@ export function UserMessage({
     return <ChannelMessage info={channelMessageInfo} attachments={channelAttachments} actions={actions} />;
   }
 
+  if (voiceTurnInfo) {
+    return <VoiceTurnMessage info={voiceTurnInfo} actions={actions} />;
+  }
+
   if (reminderInfo) {
     return <ReminderMessage info={reminderInfo} actions={actions} />;
   }
@@ -2033,14 +1994,6 @@ export function UserMessage({
 
   if (peerInfo) {
     return <PeerMessageRow info={peerInfo} actions={actions} />;
-  }
-
-  if (roomInfo) {
-    return <RoomMessage info={roomInfo} actions={actions} />;
-  }
-
-  if (roomDigestInfo) {
-    return <RoomDigestMessage info={roomDigestInfo} actions={actions} />;
   }
 
   if (triggerEventInfo) {
@@ -2135,9 +2088,12 @@ export function UserMessage({
           the bubble used to render anyway — a padded surface with nothing in
           it, hanging under the attachments. The attachments ARE the message. */}
       {(bodyText || quotedPieces || effectiveCommandInfo) && (
-        <MessageSenderAbove sender={showAuthor && author?.kind === 'member' ? author : null}>
+        <MessageSenderAbove
+          sender={showAuthor && author?.kind === 'member' ? author : null}
+          reserve={showAuthor && !author}
+        >
           <UserMessageBubble
-            tail={showAuthor && author?.kind === 'member'}
+            tail={showAuthor && author?.kind !== 'session'}
             canExpand={canExpand}
             expanded={expanded}
             onToggle={() => setExpanded(!expanded)}

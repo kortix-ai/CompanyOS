@@ -11,9 +11,12 @@ import {
   REQUIRED_RUNTIME_CAPABILITIES,
   bootstrapExecCommand,
   bootstrapLegacyRuntime,
+  type LegacyBootstrapInput,
+  type LegacyBootstrapOutcome,
   classifyDaemonHealth,
   DEAD_DAEMON_REPAIR_BUDGET_MS,
   DEAD_DAEMON_REPAIR_REQUESTED_KEY,
+  decideDeadDaemonOnEdgeRefusal,
   decideDeadDaemonOnOpen,
   describeLegacyBootstrapRetry,
   legacyBootstrapCooldownMs,
@@ -37,12 +40,12 @@ const MANIFEST: ExpectedRunningAssets = {
 // routed into a repair.
 const CURRENT_HEALTH = {
   daemon: 'ok',
-  opencode: 'ok',
+  harness: { id: 'pi', version: null, state: 'ok', ready: true, error: null, session: { id: null, required: false }, turn: null, details: {} },
   capabilities: [...REQUIRED_RUNTIME_CAPABILITIES],
   uptime_s: 600,
   runtime: {
     build: 1788044234,
-    components: { agent: 'current', opencode: 'current', cli: 'current', skills: 'current' },
+    components: { agent: 'current', cli: 'current', skills: 'current' },
     agentSwapPending: false,
     pinned: false,
     running: {
@@ -89,8 +92,7 @@ describe('classifyDaemonHealth', () => {
     expect(c).toEqual({
       klass: 'current',
       runtimeBuild: 1788044234,
-      opencode: 'ok',
-      opencodeComponent: 'current',
+      runtimeState: 'ok',
       staleReasons: [],
       detail: [],
     });
@@ -221,15 +223,15 @@ describe('classifyDaemonHealth', () => {
     expect(classifyDaemonHealth(health).klass).toBe('stale');
   });
 
-  test('missing the required capability alone is enough to classify stale', () => {
-    const health = { ...CURRENT_HEALTH, capabilities: [] };
+  test('an OpenCode daemon missing the required capability alone is enough to classify stale', () => {
+    const health = { ...CURRENT_HEALTH, harness: 'opencode', capabilities: [] };
     const c = classifyDaemonHealth(health, MANIFEST);
     expect(c.klass).toBe('stale');
     expect(c.staleReasons).toEqual(['missing_capability']);
   });
 
   test('a pi box is not stale for lacking config.release.v1: pi has no config releases', () => {
-    // Only the OpenCode runtime advertises the capability. Requiring it of pi
+    // An older pi daemon does not advertise the capability. Requiring it of pi
     // relaunched every idle pi box on each session open, and the relaunch could
     // never converge, so /start answered `starting` until the retries ran out.
     const pi = classifyDaemonHealth({ ...CURRENT_HEALTH, harness: 'pi', capabilities: ['file.import', 'file.append'] }, MANIFEST);
@@ -241,9 +243,9 @@ describe('classifyDaemonHealth', () => {
 
   test('a W3 daemon names its harness in the closed block; the classifier reads id and state from it', () => {
     const block = (id: string) => ({ id, version: null, state: 'ok', ready: true, error: null, session: { id: null, required: false }, turn: null, details: {} });
-    const pi = classifyDaemonHealth({ ...CURRENT_HEALTH, harness: block('pi'), opencode: undefined, capabilities: ['file.import'] }, MANIFEST);
+    const pi = classifyDaemonHealth({ ...CURRENT_HEALTH, harness: block('pi'), capabilities: ['file.import'] }, MANIFEST);
     expect(pi.klass).toBe('current');
-    expect(pi.opencode).toBe('ok');
+    expect(pi.runtimeState).toBe('ok');
     const opencode = classifyDaemonHealth({ ...CURRENT_HEALTH, harness: block('opencode'), capabilities: [] }, MANIFEST);
     expect(opencode.staleReasons).toEqual(['missing_capability']);
   });
@@ -255,12 +257,12 @@ describe('classifyDaemonHealth', () => {
     expect(c.staleReasons).toEqual(['agent_swap_pending']);
   });
 
-  test('ANY failed component makes the box stale, opencode included — the classifier no longer allowlists which components count', () => {
-    const health = { ...CURRENT_HEALTH, runtime: { ...CURRENT_HEALTH.runtime, components: { ...CURRENT_HEALTH.runtime.components, opencode: 'failed' } } };
+  test('ANY failed component makes the box stale — the classifier does not allowlist which components count', () => {
+    const health = { ...CURRENT_HEALTH, runtime: { ...CURRENT_HEALTH.runtime, components: { ...CURRENT_HEALTH.runtime.components, skills: 'failed' } } };
     const c = classifyDaemonHealth(health, MANIFEST);
     expect(c.klass).toBe('stale');
     expect(c.staleReasons).toEqual(['component_failed']);
-    expect(c.detail[0]).toContain('opencode');
+    expect(c.detail[0]).toContain('skills');
   });
 
   test('pinned: true = blocked, not stale — never repaired, regardless of how many other checks would also fail', () => {
@@ -319,6 +321,36 @@ describe('decideDeadDaemonOnOpen', () => {
   });
 });
 
+describe('decideDeadDaemonOnEdgeRefusal', () => {
+  const now = Date.parse('2026-11-07T06:42:54Z');
+  const at = (ms: number) => new Date(ms).toISOString();
+  const proven = { runtimeProvenAt: at(now - 3_600_000) };
+
+  test('a Platinum box never asked for a relaunch gets one', () => {
+    expect(decideDeadDaemonOnEdgeRefusal({ provider: 'platinum', metadata: proven, nowMs: now })).toBe('request');
+  });
+
+  test('a box whose daemon never answered this boot is booting, not dead', () => {
+    expect(decideDeadDaemonOnEdgeRefusal({ provider: 'platinum', metadata: null, nowMs: now })).toBe('skip');
+    const resumed = { ...proven, runtimeWakeStartedAt: at(now - 5_000) };
+    expect(decideDeadDaemonOnEdgeRefusal({ provider: 'platinum', metadata: resumed, nowMs: now })).toBe('skip');
+  });
+
+  test('a relaunch asked for within its budget is not asked for again', () => {
+    const metadata = { ...proven, [DEAD_DAEMON_REPAIR_REQUESTED_KEY]: at(now - 30_000) };
+    expect(decideDeadDaemonOnEdgeRefusal({ provider: 'platinum', metadata, nowMs: now })).toBe('skip');
+  });
+
+  test('a relaunch asked for longer ago than its budget is asked for again', () => {
+    const metadata = { ...proven, [DEAD_DAEMON_REPAIR_REQUESTED_KEY]: at(now - DEAD_DAEMON_REPAIR_BUDGET_MS) };
+    expect(decideDeadDaemonOnEdgeRefusal({ provider: 'platinum', metadata, nowMs: now })).toBe('request');
+  });
+
+  test('providers that relaunch on their own start are left alone', () => {
+    expect(decideDeadDaemonOnEdgeRefusal({ provider: 'daytona', metadata: proven, nowMs: now })).toBe('skip');
+  });
+});
+
 describe('renderLegacyBootstrapScript', () => {
   test('carries no secret, verifies every download, keeps the baked binary, restores on failure', () => {
     const s = renderLegacyBootstrapScript({ relaunch: 'pt-app' });
@@ -333,7 +365,7 @@ describe('renderLegacyBootstrapScript', () => {
     expect(s).toContain('/sbin/pt-app');
     expect(s).toContain('restoring the legacy chain');
     expect(s).toContain('global-bin-dir=');
-    expect(s).toContain('npm install -g "pnpm@$want"');
+    expect(s).not.toContain('npm install -g "pnpm@');
     expect(s).toContain("RELAUNCH='pt-app'");
   });
   test('pt-app re-checks the daemon turn state after the download, before the token swap and the kill', () => {
@@ -436,13 +468,21 @@ describe('bootstrapLegacyRuntime', () => {
     expect((calls.audits[0] as { outcome: string }).outcome).toBe('success');
   });
 
-  test('an install during the boot pass (opencode=updated) triggers exactly one more relaunch', async () => {
+  test('a relaunch onto a current pi daemon converges in the same pass', async () => {
+    // Today's daemon: the W3 `harness` block, no flat `opencode` field, and
+    // runtime components for agent, cli and skills only.
     const calls: Calls = { patches: [], audits: [], execs: [] };
-    const updated = { daemon: 'ok', opencode: 'ok', capabilities: [...REQUIRED_RUNTIME_CAPABILITIES], runtime: { build: 1788044234, components: { agent: 'current', opencode: 'updated' }, agentSwapPending: false, pinned: false, running: {} } };
-    const r = await bootstrapLegacyRuntime(input(), makeDeps({ health: [LEGACY_HEALTH, updated, updated, updated] }, calls));
+    const pi = {
+      daemon: 'ok',
+      harness: { id: 'pi', version: 'pi-agent-core@1.4.0', state: 'ok', ready: true, error: null, session: null, turn: null, details: {} },
+      capabilities: [...REQUIRED_RUNTIME_CAPABILITIES],
+      runtime: { build: 1788044234, components: { agent: 'current', cli: 'current', skills: 'current' }, agentSwapPending: false, pinned: false, running: {} },
+    };
+    const r = await bootstrapLegacyRuntime(input(), makeDeps({ health: [LEGACY_HEALTH, pi] }, calls));
     expect(r.outcome).toBe('converged');
-    expect(calls.execs).toHaveLength(2);
-    expect(calls.audits).toHaveLength(2);
+    expect(calls.execs).toHaveLength(1);
+    const states = calls.patches.map((p) => (p[LEGACY_BOOTSTRAP_METADATA_KEY] as { state?: string } | undefined)?.state).filter(Boolean);
+    expect(states).toEqual(['running', 'converged']);
   });
 
   test('current box: stamps the check and does nothing else', async () => {
@@ -574,18 +614,9 @@ describe('bootstrapLegacyRuntime', () => {
     expect((calls.patches.at(-1)![LEGACY_BOOTSTRAP_METADATA_KEY] as { error: string }).error).toContain('not converged');
   });
 
-  test('daemon relaunched but its OpenCode install failed = failed, not converged', async () => {
-    const calls: Calls = { patches: [], audits: [], execs: [] };
-    const failedOc = { daemon: 'ok', opencode: 'ok', capabilities: [...REQUIRED_RUNTIME_CAPABILITIES], runtime: { build: 1788044234, components: { agent: 'current', opencode: 'failed' }, agentSwapPending: false, pinned: false, running: {} } };
-    const r = await bootstrapLegacyRuntime(input(), makeDeps({ health: [LEGACY_HEALTH, failedOc] }, calls));
-    expect(r.outcome).toBe('failed');
-    expect(r.detail).toBe('opencode convergence failed');
-    expect((calls.patches.at(-1)![LEGACY_BOOTSTRAP_METADATA_KEY] as { error: string }).error).toContain('OpenCode install failed');
-  });
-
   test('a daemon with a runtime block but no convergence pass yet is left alone', async () => {
     const calls: Calls = { patches: [], audits: [], execs: [] };
-    const pending = { daemon: 'ok', opencode: 'ok', capabilities: [...REQUIRED_RUNTIME_CAPABILITIES], runtime: { build: null, components: {}, agentSwapPending: false, pinned: false, running: {} } };
+    const pending = { daemon: 'ok', harness: CURRENT_HEALTH.harness, capabilities: [...REQUIRED_RUNTIME_CAPABILITIES], runtime: { build: null, components: {}, agentSwapPending: false, pinned: false, running: {} } };
     const r = await bootstrapLegacyRuntime(input(), makeDeps({ health: [pending] }, calls));
     expect(r.outcome).toBe('not-legacy');
     expect(calls.patches).toHaveLength(0);
@@ -674,6 +705,73 @@ describe('bootstrapLegacyRuntime', () => {
     );
     expect(calls.execs).toHaveLength(1);
     expect(r.outcome).toBe('converged');
+  });
+});
+
+describe('every skipped repair says why (KRTX-4754)', () => {
+  // 2026-11-11 prod: 43 dead-daemon relaunch requests, ZERO repair runs and
+  // ZERO log lines all day — every skip returned silently and a dead box was
+  // unexplainable from logs alone. Each decision that touches nothing must
+  // leave one line; the converged `not-legacy` answers stay silent.
+  const capture = (over: Parameters<typeof makeDeps>[0], calls: Calls, clock?: { t: number }) => {
+    const logs: string[] = [];
+    const deps = makeDeps(
+      { ...over, log: (message: string) => logs.push(String(message)) },
+      calls,
+      clock,
+    );
+    return { deps, logs };
+  };
+
+  test('a box the provider does not report running is skipped, and the skip is logged', async () => {
+    const calls: Calls = { patches: [], audits: [], execs: [] };
+    const { deps, logs } = capture({ health: [null, null] }, calls);
+    const r = await bootstrapLegacyRuntime(input(), deps);
+    expect(r.outcome).toBe('unreachable');
+    expect(calls.execs).toHaveLength(0);
+    expect(logs).toEqual(['legacy runtime bootstrap skipped: unreachable']);
+  });
+
+  test('cooldown, exhausted, busy, recent-check and unsupported skips are logged', async () => {
+    const clock = { t: Date.parse('2026-09-01T12:00:00Z') };
+    const failedRecord = (attempts: number, ageMs: number) => ({
+      [LEGACY_BOOTSTRAP_METADATA_KEY]: {
+        state: 'failed',
+        attempts,
+        manifestBuild: 1788044234,
+        lastAttemptAt: new Date(clock.t - ageMs).toISOString(),
+      },
+    });
+    const outcomes: Array<[() => LegacyBootstrapInput, Parameters<typeof makeDeps>[0], LegacyBootstrapOutcome]> = [
+      [() => input(failedRecord(1, 60_000)), {}, 'skipped-cooldown'],
+      [() => input(failedRecord(LEGACY_BOOTSTRAP_MAX_ATTEMPTS, LEGACY_BOOTSTRAP_COOLDOWN_MS * 2)), {}, 'skipped-exhausted'],
+      [() => input(), { turn: true }, 'skipped-busy'],
+      [() => input({ [LEGACY_CHECK_METADATA_KEY]: { at: new Date(clock.t - LEGACY_CHECK_TTL_MS / 2).toISOString(), klass: 'current', manifestBuild: 1788044234, externalId: 'sbx_1' } }), {}, 'skipped-recent-check'],
+      [() => input(null, 'local'), {}, 'skipped-unsupported'],
+    ];
+    for (const [meta, over, outcome] of outcomes) {
+      const calls: Calls = { patches: [], audits: [], execs: [] };
+      const { deps, logs } = capture(over, calls, clock);
+      const r = await bootstrapLegacyRuntime(meta(), deps);
+      expect(r.outcome).toBe(outcome);
+      expect(logs).toEqual([`legacy runtime bootstrap skipped: ${outcome}`]);
+    }
+  });
+
+  test('a fresh running claim is not duplicated, and the skip is logged', async () => {
+    const calls: Calls = { patches: [], audits: [], execs: [] };
+    const clock = { t: Date.parse('2026-09-01T12:00:00Z') };
+    const meta = { [LEGACY_BOOTSTRAP_METADATA_KEY]: { state: 'running', attempts: 1, manifestBuild: 1788044234, lastAttemptAt: new Date(clock.t - 60_000).toISOString() } };
+    const { deps, logs } = capture({}, calls, clock);
+    expect((await bootstrapLegacyRuntime(input(meta), deps)).outcome).toBe('skipped-in-progress');
+    expect(logs).toEqual(['legacy runtime bootstrap skipped: skipped-in-progress']);
+  });
+
+  test('a converged (current) box stays silent — the fleet-normal answer', async () => {
+    const calls: Calls = { patches: [], audits: [], execs: [] };
+    const { deps, logs } = capture({ health: [CURRENT_HEALTH] }, calls);
+    expect((await bootstrapLegacyRuntime(input(), deps)).outcome).toBe('not-legacy');
+    expect(logs).toEqual([]);
   });
 });
 

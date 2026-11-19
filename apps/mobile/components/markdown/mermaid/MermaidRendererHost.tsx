@@ -18,13 +18,12 @@
  * every unanswered request.
  */
 import { Portal } from '@rn-primitives/portal';
-import { Asset } from 'expo-asset';
-import { File } from 'expo-file-system';
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import { log } from '@/lib/logger';
+import { loadBundledText } from '@/lib/utils/asset-text';
 
 import { allowInlineDocumentLoad, rendererBootScript, rendererHtml } from './mermaid-html';
 import { mermaidRenderQueue } from './mermaid-render-queue';
@@ -32,22 +31,14 @@ import { mermaidRenderQueue } from './mermaid-render-queue';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const MERMAID_ASSET = require('@/assets/mermaid/mermaid.min.webjs');
 
-let sourcePromise: Promise<string> | null = null;
 let loadedSource: string | null = null;
 
 /** Reads the Mermaid bundle once per app session; a failed read retries next time. */
 function loadMermaidSource(): Promise<string> {
-  sourcePromise ??= (async () => {
-    const asset = Asset.fromModule(MERMAID_ASSET);
-    await asset.downloadAsync();
-    const uri = asset.localUri ?? asset.uri;
-    loadedSource = await new File(uri).text();
-    return loadedSource;
-  })().catch((error: unknown) => {
-    sourcePromise = null;
-    throw error;
+  return loadBundledText(MERMAID_ASSET).then((text) => {
+    loadedSource = text;
+    return text;
   });
-  return sourcePromise;
 }
 
 const RENDERER_SOURCE = { html: rendererHtml(), baseUrl: '' };
@@ -94,7 +85,7 @@ export function MermaidRendererHost() {
   const [source, setSource] = useState<string | null>(loadedSource);
   // Bumped to remount the WebView after its content process dies.
   const [generation, setGeneration] = useState(0);
-  const webViewRef = useRef<WebView>(null);
+  const webViewRef = useRef<React.ElementRef<typeof WebView>>(null);
 
   useEffect(() => {
     if (!wanted || source) return;

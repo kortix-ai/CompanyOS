@@ -1,4 +1,5 @@
 /** A project's repository contents: files, archive, search, history, branches, commits, and diffs. */
+import { isManifestSyntaxError, manifestCandidatePaths, parseManifestText } from '@kortix/manifest-schema';
 import { createHash } from 'node:crypto';
 import { canonicalTreePath, normalizeTreePath } from '../git/mirror';
 import { callerKortixSessionId } from '../../middleware/caller-session';
@@ -44,6 +45,7 @@ import { projectReadView } from '../lib/project-read-view';
 import { withSessionLabels } from '../lib/session-branch-labels';
 import { normalizeString } from '../lib/serializers';
 import { rethrowDatabaseError } from '../../shared/database-errors';
+import { workspaceIdParam } from '../../shared/route-params';
 
 function isMissingGitPathError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error || '');
@@ -88,16 +90,29 @@ const DirectoryListingSchema = z
   })
   .openapi('ProjectDirectoryListing');
 
+/** Why `content` may not be saved as the manifest at `path`, or null (not the manifest, or valid YAML). */
+function manifestSyntaxErrorOf(path: string, content: string, manifestPath: string | null): string | null {
+  if (!manifestCandidatePaths(manifestPath).includes(path)) return null;
+  try {
+    parseManifestText(content);
+    return null;
+  } catch (err) {
+    if (!isManifestSyntaxError(err)) return null;
+    const at = err.line ? `${path}:${err.line}${err.column ? `:${err.column}` : ''}` : path;
+    return `${at} is not valid YAML (${err.message}). Fix it and save again.`;
+  }
+}
+
 export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'put',
-      path: '/{projectId}/files/content',
+      path: '/{workspaceId}/files/content',
       tags: ['files'],
       summary: 'Commit an edited repository file',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string() }),
+        params: z.object({ workspaceId: z.string() }),
         body: { required: true, content: { 'application/json': { schema: z.object({
           path: z.string().min(1), ref: z.string().regex(/^[A-Za-z0-9._\-/]+$/).refine((ref) => !ref.startsWith('-') && !ref.includes('..')),
           content: z.string().max(2_000_000),
@@ -107,7 +122,7 @@ export function registerProjectFilesRoutes(): void {
       responses: { 200: json(z.object({ commit_sha: z.string() }), 'Committed'), ...errors(400, 403, 404, 409) },
     }),
     async (c) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
       await assertAgentSessionWorkspaceAllowsRepository(c, loaded.row.accountId, projectId);
@@ -130,6 +145,10 @@ export function registerProjectFilesRoutes(): void {
         actingTokenId: c.get('iamTokenId'), row: loaded.row,
       });
       if (denier?.isDenied(path)) return c.json({ error: 'File not found' }, 404);
+      // The push gate's rule for an edit made here: the default branch never
+      // gets a kortix.yaml that is not YAML (the git proxy checks pushes).
+      const syntaxError = body.ref === loaded.row.defaultBranch ? manifestSyntaxErrorOf(path, body.content, loaded.row.manifestPath) : null;
+      if (syntaxError) return c.json({ error: syntaxError, code: 'manifest_invalid' }, 409);
       try {
         const gitProject = await withProjectGitAuth(loaded.row);
         if (!(await remoteBranchExists(gitProject, body.ref))) return c.json({ error: 'Branch not found' }, 404);
@@ -151,7 +170,7 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/files',
+      path: '/{workspaceId}/files',
       tags: ['files'],
       summary: 'List files in the project repository',
       description:
@@ -160,7 +179,7 @@ export function registerProjectFilesRoutes(): void {
         'Without `depth`: every file under `path`, recursively, cut at 1,000; a cut list carries `X-Kortix-Truncated: 1`.',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           // Documented, not enforced: every field reads as text, as
           // `c.req.query()` read it before (a repeated key keeps its first
           // value). Only the `depth=1` branch checks `limit` and `cursor`, so
@@ -189,7 +208,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_FILE_READ);
@@ -262,12 +281,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/files/archive',
+      path: '/{workspaceId}/files/archive',
       tags: ['files'],
       summary: 'Download the project repository as an archive',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           query: z.object({}).passthrough(),
         },
       responses: {
@@ -276,7 +295,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_FILE_READ);
@@ -328,12 +347,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/files/search',
+      path: '/{workspaceId}/files/search',
       tags: ['files'],
       summary: 'Search files in the project repository',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           query: z.object({}).passthrough(),
         },
       responses: {
@@ -342,7 +361,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const query = normalizeString(c.req.query('q'));
     if (!query) return c.json({ error: 'q query param is required' }, 400);
 
@@ -392,12 +411,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/files/content',
+      path: '/{workspaceId}/files/content',
       tags: ['files'],
       summary: 'Read a file from the project repository',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           query: z.object({}).passthrough(),
         },
       responses: {
@@ -414,7 +433,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const path = normalizeString(c.req.query('path'));
     if (!path) return c.json({ error: 'path query param is required' }, 400);
     const treePath = repoFilePath(path);
@@ -469,12 +488,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/files/raw',
+      path: '/{workspaceId}/files/raw',
       tags: ['files'],
       summary: 'Read a file\u2019s raw bytes from the project repository',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           query: z.object({}).passthrough(),
         },
       responses: {
@@ -483,7 +502,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const path = normalizeString(c.req.query('path'));
     if (!path) return c.json({ error: 'path query param is required' }, 400);
     const treePath = repoFilePath(path);
@@ -531,12 +550,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/files/history',
+      path: '/{workspaceId}/files/history',
       tags: ['files'],
       summary: 'List the commit history of a file',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           query: z.object({}).passthrough(),
         },
       responses: {
@@ -545,7 +564,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const path = normalizeString(c.req.query('path'));
     if (!path) return c.json({ error: 'path query param is required' }, 400);
     const treePath = repoFilePath(path);
@@ -596,12 +615,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/branches',
+      path: '/{workspaceId}/branches',
       tags: ['files'],
       summary: 'List repository branches',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           query: z.object({
             q: z.string().optional(),
             limit: z.coerce.number().int().min(1).max(BRANCH_LIST_MAX_LIMIT).optional(),
@@ -615,7 +634,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_GITOPS_READ);
@@ -666,12 +685,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/commits',
+      path: '/{workspaceId}/commits',
       tags: ['files'],
       summary: 'List repository commits',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           query: z.object({}).passthrough(),
         },
       responses: {
@@ -680,7 +699,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_GITOPS_READ);
@@ -707,12 +726,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/commits/{sha}',
+      path: '/{workspaceId}/commits/{sha}',
       tags: ['files'],
       summary: 'Get a repository commit',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string(), sha: z.string() }),
+          params: z.object({ workspaceId: z.string(), sha: z.string() }),
         },
       responses: {
           200: json(z.any(), 'OK'),
@@ -720,7 +739,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const sha = c.req.param('sha');
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -745,12 +764,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/commits/{sha}/diff',
+      path: '/{workspaceId}/commits/{sha}/diff',
       tags: ['files'],
       summary: 'Get the diff of a commit',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string(), sha: z.string() }),
+          params: z.object({ workspaceId: z.string(), sha: z.string() }),
           query: z.object({}).passthrough(),
         },
       responses: {
@@ -759,7 +778,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const sha = c.req.param('sha');
     const path = normalizeString(c.req.query('path'));
     const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -788,12 +807,12 @@ export function registerProjectFilesRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/version-diff',
+      path: '/{workspaceId}/version-diff',
       tags: ['files'],
       summary: 'Compare two repository versions',
       ...auth,
         request: {
-          params: z.object({ projectId: z.string() }),
+          params: z.object({ workspaceId: z.string() }),
           query: z.object({}).passthrough(),
         },
       responses: {
@@ -802,7 +821,7 @@ export function registerProjectFilesRoutes(): void {
       },
     }),
     async (c: any) => {
-    const projectId = c.req.param('projectId');
+    const projectId = workspaceIdParam(c);
     const fromRef = normalizeString(c.req.query('from') ?? c.req.query('head'));
     const intoRef = normalizeString(c.req.query('into') ?? c.req.query('base'));
     if (!fromRef || !intoRef) {

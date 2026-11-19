@@ -25,7 +25,7 @@
  * has closed — never two overlays at once (design.md). "Request changes" asks
  * for its text in the sheet. `planReviewVerdict` picks the call.
  *
- * The verdict row is the sheet's pinned footer (`BottomSheetFooter`), so Merge
+ * The verdict row is the sheet's pinned footer (`SheetFooter`), so Merge
  * stays on screen over a long change. The scroll content pads by its height.
  *
  * Each verdict shows only for a viewer who holds the leaves its route asserts
@@ -42,12 +42,8 @@
  */
 import * as React from 'react';
 import { View, useWindowDimensions } from 'react-native';
-import {
-  BottomSheetModal,
-  BottomSheetFooter,
-  BottomSheetScrollView,
-  type BottomSheetFooterProps,
-} from '@gorhom/bottom-sheet';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { SheetFooter, SheetScrollView, type SheetFooterProps } from '@/components/kortix/sheet-parts';
 import {
   REVIEW_CONTROL_ACTIONS,
   reviewItemTarget,
@@ -62,7 +58,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SheetTextInput } from '@/components/kortix/SheetInput';
 import { SettingsGroup, SettingsRow } from '@/components/kortix/settings-list';
-import { KortixBottomSheetModal, useCloseThen, useSheetBackground, type SheetRef } from '@/components/kortix/sheet';
+import { KortixBottomSheetModal, useCloseThen, useSheetSurface, useContentSheetBottomInset, type SheetRef } from '@/components/kortix/sheet';
 import { SheetBackButton } from '@/components/kortix/sheet-push';
 import { useToast } from '@/components/kortix/toast-provider';
 import { ReviewFileDiff } from '@/components/review/ReviewFileDiff';
@@ -78,10 +74,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { haptics } from '@/lib/haptics';
-import { Icon } from '@/components/ui/icon';
 import { ChatsTeardropIcon, GlobeIcon, XCircleIcon } from '@/lib/icons';
 import { useChangeRequestDiff, useChangeRequestMergePreview } from '@/lib/projects/hooks';
-import type { ChangeRequestDiff } from '@/lib/projects/projects-client';
 import { hasMergeConflicts, resolveConflictsPrompt } from '@/lib/review/change-request-recovery';
 import { changeRequestWebUrl, reviewDetailRows, splitFilePath } from '@/lib/review/review-detail';
 import { ReviewBody } from '@/components/review/ReviewItemBody';
@@ -129,25 +123,25 @@ function VerdictFooter({
   footerProps,
   item,
   verdicts,
-  background,
   bottomPadding,
   onVerdict,
   conflicted,
   originSessionId,
   resolveConflicts,
 }: {
-  footerProps: BottomSheetFooterProps;
+  footerProps: SheetFooterProps;
   item: ReviewItem;
   verdicts: ReviewVerdict[];
-  background: string;
   bottomPadding: number;
   onVerdict: (verdict: ReviewVerdict) => void;
   conflicted: boolean;
   originSessionId: string | null | undefined;
   resolveConflicts: () => void;
 }) {
+  // The sheet's own surface: none on the iOS 26 native glass.
+  const background = useSheetSurface() ?? undefined;
   return (
-    <BottomSheetFooter {...footerProps}>
+    <SheetFooter {...footerProps}>
       <View
         className={verdicts.length > 2 ? 'gap-3 px-4' : 'flex-row-reverse gap-3 px-4'}
         style={{ backgroundColor: background, paddingTop: FOOTER_TOP, paddingBottom: bottomPadding }}>
@@ -169,7 +163,7 @@ function VerdictFooter({
           );
         })}
       </View>
-    </BottomSheetFooter>
+    </SheetFooter>
   );
 }
 
@@ -274,9 +268,9 @@ SheetRef, ReviewDetailSheetProps>(
     const modalRef = React.useRef<BottomSheetModal>(null);
     const { height } = useWindowDimensions();
     const insets = useSafeAreaInsets();
+    const sheetBottomInset = useContentSheetBottomInset();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === 'dark';
-    const background = useSheetBackground();
     const toast = useToast();
     const { t } = useTranslation();
     const cans = useCans({ projectId }, REVIEW_CONTROL_ACTIONS);
@@ -436,17 +430,17 @@ SheetRef, ReviewDetailSheetProps>(
       closeSheet();
       onOpenSession?.(originSessionId);
     }, [item, originSessionId, previewQuery.data, onOpenSession, closeSheet]);
-    const footerPadding = Math.max(insets.bottom, 16) + 8;
+    // Content-sized: above the home indicator in the iOS native sheet.
+    const footerPadding = Math.max(sheetBottomInset, 16) + 8;
     const footerHeight = verdictFooterHeight(showFooter, verdicts.length, footerPadding);
 
     const renderFooter = React.useCallback(
-      (props: BottomSheetFooterProps) =>
+      (props: SheetFooterProps) =>
         showFooter && item ? (
           <VerdictFooter
             footerProps={props}
             item={item}
             verdicts={verdicts}
-            background={background}
             bottomPadding={footerPadding}
             onVerdict={handleVerdict}
             conflicted={conflicted}
@@ -454,7 +448,7 @@ SheetRef, ReviewDetailSheetProps>(
             resolveConflicts={resolveConflicts}
           />
         ) : null,
-      [showFooter, item, verdicts, background, footerPadding, handleVerdict, conflicted, originSessionId, resolveConflicts],
+      [showFooter, item, verdicts, footerPadding, handleVerdict, conflicted, originSessionId, resolveConflicts],
     );
 
     return (
@@ -480,7 +474,7 @@ SheetRef, ReviewDetailSheetProps>(
               bottomInset={footerPadding}
             />
           ) : (
-          <BottomSheetScrollView
+          <SheetScrollView
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{
@@ -568,7 +562,7 @@ SheetRef, ReviewDetailSheetProps>(
                 ) : null}
               </>
             ) : null}
-          </BottomSheetScrollView>
+          </SheetScrollView>
           )}
         </KortixBottomSheetModal>
 

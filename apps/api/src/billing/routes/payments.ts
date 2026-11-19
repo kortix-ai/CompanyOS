@@ -15,11 +15,11 @@ import { BillingError } from '../../errors';
 import { resolveBillingReadAccountId, resolveBillingWriteAccountId } from '../http-require-billing-write';
 import { makeOpenApiApp, json, auth, errors } from '../../openapi';
 import { formatUsdAsCredits } from '@kortix/shared';
+import { captureProductEvent } from '../../shared/product-analytics';
+import { analyticsSource } from '../../middleware/analytics-source';
+import { OpaqueSchema } from './opaque-schema';
 
 export const paymentsRouter = makeOpenApiApp<AppEnv>();
-
-// Opaque service/Stripe payloads — permissive on purpose.
-const OpaqueSchema = z.record(z.string(), z.any());
 
 paymentsRouter.openapi(
   createRoute({
@@ -105,6 +105,12 @@ paymentsRouter.openapi(
       },
     });
 
+    captureProductEvent({
+      userId: c.get('userId'),
+      accountId,
+      event: 'checkout_started',
+      properties: { kind: 'credits', amount_usd: amount, source: analyticsSource(c) },
+    });
     return c.json({ checkout_url: session.url });
   },
 );
@@ -224,6 +230,11 @@ paymentsRouter.openapi(
   }),
   async (c) => {
     const accountId = await resolveBillingReadAccountId(c);
+    // Dynamic on purpose: a static import loads auto-topup → top-up-bonus →
+    // tiers at router-link time, and payments-checkout.test.ts mocks tiers with
+    // only resolveCreditPriceId — bun's named-import link check fails on the
+    // missing exports. The subscriptions router's imports flattened; this
+    // chain's unit-test mocks stay narrow.
     const { getAutoTopupSettings } = await import('../services/auto-topup');
     const settings = await getAutoTopupSettings(accountId);
     return c.json(settings);

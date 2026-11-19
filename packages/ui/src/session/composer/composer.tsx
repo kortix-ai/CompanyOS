@@ -16,7 +16,7 @@ import { useProjectConfig, usePromptAttachments, useRuntimeSessions } from '@kor
 import { useActiveSpace } from '../../internal/stores/active-space-store';
 import { MoonIcon, WarningIcon } from '@phosphor-icons/react';
 import { SESSION_NOTICE, type SessionLogMessage } from '@kortix/sdk';
-import { newPastedContentId, type PastedContent, splitPastedContent, trimPastedText } from '@kortix/shared';
+import { agentDisplayName, newPastedContentId, type PastedContent, splitPastedContent, trimPastedText } from '@kortix/shared';
 import type { JSONContent } from '@tiptap/core';
 import type { RefObject } from 'react';
 import {
@@ -24,6 +24,7 @@ import {
   memo,
   Suspense,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useLayoutEffect,
@@ -95,6 +96,7 @@ import {
   planDraftSubmission,
   planFailedSendRecovery,
   planPrefillMerge,
+  appendTextToDocument,
   planQuoteRequests,
   type QuoteRequest,
   removeComposerQuote,
@@ -114,9 +116,12 @@ import { useComposerFocus } from './hooks/use-composer-focus';
 import { useMenuRevalidation } from './hooks/use-file-search';
 import { controlToOpenFor, hostSlashActions, localizedSlashActions, slashActionShown, type SlashAction } from './menus/slash-actions';
 import type { SlashFile } from './menus/slash-files';
+import { outsideAgentMentions, SpaceMentionContext } from './menus/space-mentions';
+import { promptHistoryEntries, stepPromptHistory } from './prompt-history';
 import { QuoteList } from './quote-list';
 import { createSubmitLatch } from './submit-latch';
 import type { AttachedFile, TrackedMention } from './types';
+import type { ComposerCall } from '../voice/composer-call';
 
 /** A draft captured out of the editor at Enter time — see `createSubmitLatch`. */
 interface StashedDraft {
@@ -198,6 +203,8 @@ export interface SessionChatInputProps {
    * `composer-agent-access.ts`.
    */
   noAccessibleAgents?: boolean;
+  /** The agent is fixed (a DM): the picker names it and offers no other. Pass no `onAgentChange` with it. */
+  agentLocked?: boolean;
   commands?: Command[];
   /**
    * Whether the live command list has EVER resolved — the hook's `data`
@@ -244,6 +251,13 @@ export interface SessionChatInputProps {
   selectedModel?: { providerID: string; modelID: string } | null;
   onModelChange?: (model: { providerID: string; modelID: string } | null) => void;
   modelDefaultControls?: ModelDefaultControls;
+  /**
+   * The model the selected agent runs on when nothing overrides it
+   * (`inheritedModelFor` in `chat-input/chat-input-summary.ts`). Read only by
+   * the `chat_input` control: its model row says "Auto (from <agent>)" while
+   * `selectedModel` is this one, and "Reset to auto" picks it.
+   */
+  inheritedModel?: { providerID: string; modelID: string } | null;
   variants?: string[];
   selectedVariant?: string | null;
   onVariantChange?: (variant: string | null | undefined) => void;
@@ -259,6 +273,7 @@ export interface SessionChatInputProps {
    * marketing-demo composers rely on.
    */
   draftScope?: DraftScope | null;
+  draftHandoffScope?: RefObject<DraftScope | null>;
   draftActive?: boolean;
   disabled?: boolean;
   /**
@@ -304,6 +319,13 @@ export interface SessionChatInputProps {
     id: number;
     files?: AttachedFile[];
     mode?: 'replace' | 'merge';
+    /**
+     * Restore the saved draft first, then merge this text after it. Only the
+     * home typing buffer sets it (`use-home-typing-buffer.ts`): keys typed
+     * while the page loaded continue the draft. Any other prefill still wins
+     * over the draft.
+     */
+    restoreDraft?: boolean;
     /**
      * Submit the prefill once it has landed, exactly as if the person pressed
      * Enter. For one-click starters (the first chat's "Update memory"): the
@@ -395,6 +417,14 @@ export interface SessionChatInputProps {
   cardClassName?: string;
 
   /**
+   * A voice call, offered in the Send button's place while there is nothing to
+   * send (flag `voice_call`; `session/voice/composer-call.ts`). Hosts opt in:
+   * project home calls a new session, a session page calls its own session.
+   * Omitted, Send is the only action, as before.
+   */
+  call?: ComposerCall;
+
+  /**
    * Reply quotes to add — transcript selections the user clicked "Reply" on,
    * oldest first. Id-keyed like `prefill`: each id appends ONE quote to the
    * list drawn above the input (`QuoteList`), in array order. Accepted at any
@@ -462,8 +492,8 @@ export interface SessionChatInputProps {
  *
  * The gutter is equal on both sides. It used to carry `md:pr-1`, a right-side
  * trim against the collapsed action-panel chevron rail, which then took ~37px
- * of the row's width. That rail now takes no width (`COLLAPSED_RAIL_OFFSET` in
- * `session-action-panel-column.tsx`), so the trim only shifted the card 5.5px
+ * of the row's width. Collapsed, the column now takes no width at all
+ * (`session-action-panel-column.tsx`), so the trim only shifted the card 5.5px
  * right of center. A breakpoint may never ZERO this gutter — zero is what let
  * the card touch the panel divider, and `composer-underbar.test.tsx` guards
  * exactly that line.
@@ -509,13 +539,9 @@ function setDocumentWithoutStealingFocus(
   doc: JSONContent,
 ): void {
   if (!handle) return;
-  const el = handle.getElement();
-  const wasFocused = !!el && (document.activeElement === el || el.contains(document.activeElement));
-  const previouslyFocused = wasFocused ? null : (document.activeElement as HTMLElement | null);
-  handle.setDocument(doc);
-  if (!wasFocused) {
-    previouslyFocused?.focus?.();
-  }
+  // A focus command schedules a later animation frame. Restoring DOM focus
+  // immediately after it cannot cancel that scheduled focus.
+  handle.setDocument(doc, false);
 }
 
 function ComposerImpl(props: SessionChatInputProps) {
@@ -550,6 +576,7 @@ function ComposerImpl(props: SessionChatInputProps) {
   sessionId,
   projectId,
   draftScope = null,
+  draftHandoffScope,
   draftActive = true,
   disabled = false,
   notice = null,
@@ -590,6 +617,15 @@ function ComposerImpl(props: SessionChatInputProps) {
   const tThreads = useTranslations('threads');
 
   const dockId = `composer-slash-dock-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+
+  // Inside a space (flag `chat`): the agents a sent message named from outside
+  // it. Mentioning one never adds it; the line above the card asks first.
+  const spaceMentions = useContext(SpaceMentionContext);
+  const spaceMentionsRef = useRef(spaceMentions);
+  useEffect(() => {
+    spaceMentionsRef.current = spaceMentions;
+  }, [spaceMentions]);
+  const [outsideAsk, setOutsideAsk] = useState<string[]>([]);
 
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   // Synchronous mirror of `attachedFiles`, for the one reader that cannot
@@ -688,7 +724,8 @@ function ComposerImpl(props: SessionChatInputProps) {
   useMenuRevalidation(menuOpen, projectId);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { takeFiles, modelPickerEnabled, contextMeterEnabled, runtimeSlashEnabled, useSlashActions } = useUiHostConfig();
+  const { takeFiles, modelPickerEnabled, contextMeterEnabled, runtimeSlashEnabled, useSlashActions, agentLabels } =
+    useUiHostConfig();
   // The host's own `/` rows. The config is fixed for the app's life, so the hook is the same one every render.
   const hostSlashRows = (useSlashActions ?? useNoSlashActions)();
   // A host that hides the harness lists none of its commands, and a typed "/init" stays text.
@@ -802,16 +839,17 @@ function ComposerImpl(props: SessionChatInputProps) {
     [restoreQuoteTexts, restorePastes, tComposerAttachments],
   );
 
-  const { handleDocChange, clearSavedDraft } = useComposerDraft({
+  const { handleDocChange, clearSavedDraft, sendRefused } = useComposerDraft({
     active: draftActive,
     scope: draftScope,
+    handoffScope: draftHandoffScope,
     editorRef,
     editorReady: editorElement != null,
     attachedFiles,
     quotes: quoteTexts,
     pastes,
     uploads: draftUploads,
-    hasPrefill: !!prefill,
+    hasPrefill: !!prefill && !prefill.restoreDraft,
     onRestore: handleDraftRestore,
   });
 
@@ -821,9 +859,22 @@ function ComposerImpl(props: SessionChatInputProps) {
    * any document change clears them, and undo is the editor's again.
    */
   const pasteUndoRef = useRef<string[]>([]);
+  /**
+   * The recalled prompt on screen (`prompt-history.ts`), `null` for the draft.
+   * Any document change history did not make itself — typing, a send, a
+   * prefill — ends the walk, and Up/Down are caret keys again.
+   */
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const historyIndexRef = useRef<number | null>(null);
+  const applyingHistoryRef = useRef(false);
+  const historyEntries = useMemo(() => promptHistoryEntries(messages), [messages]);
   const handleEditorDocChange = useCallback(
     (doc: JSONContent, isEmpty: boolean) => {
       pasteUndoRef.current = [];
+      if (!applyingHistoryRef.current && historyIndexRef.current !== null) {
+        historyIndexRef.current = null;
+        setHistoryIndex(null);
+      }
       handleDocChange(doc, isEmpty);
     },
     [handleDocChange],
@@ -1295,11 +1346,14 @@ function ComposerImpl(props: SessionChatInputProps) {
   const prefillText = prefill?.text ?? '';
   const prefillFiles = prefill?.files;
   const prefillMode = prefill?.mode;
+  const prefillRestoreDraft = prefill?.restoreDraft === true;
   const prefillSubmit = prefill?.submit === true;
   // `handleSubmit` is declared further down; the prefill effect reaches it
   // through this ref, bound in an effect right after that declaration.
   const handleSubmitRef = useRef<() => void>(() => undefined);
   const submittedPrefillIdRef = useRef<number | null>(null);
+  // An append is not idempotent: each `restoreDraft` prefill lands once.
+  const appendedPrefillIdRef = useRef<number | null>(null);
   // The prefill id that landed in the editor: `'when-ready'` submits only after it.
   const [landedPrefillId, setLandedPrefillId] = useState<number | null>(null);
   const onPrefillAppliedRef = useRef(onPrefillApplied);
@@ -1328,7 +1382,18 @@ function ComposerImpl(props: SessionChatInputProps) {
     const quoted = extractReplyQuotes(prefillText);
     const pasted = splitPastedContent(quoted.text);
     const incoming = { quotes: quoted.quotes, text: pasted.text };
-    if (prefillMode === 'merge') {
+    if (prefillRestoreDraft) {
+      // Keys typed while the page loaded continue the restored draft, at its
+      // end, where the caret lands (`setDocument` focuses the end). The draft
+      // is already in the editor: `useComposerDraft`'s restore effect is
+      // declared above this one, so it runs first in the same commit.
+      if (incoming.text && appendedPrefillIdRef.current !== prefillId) {
+        appendedPrefillIdRef.current = prefillId as number;
+        editorRef.current?.setDocument(
+          appendTextToDocument(editorRef.current?.getDocument() ?? EMPTY_DOCUMENT, incoming.text),
+        );
+      }
+    } else if (prefillMode === 'merge') {
       const merged = planPrefillMerge({
         prefillDoc: textToDocument(incoming.text),
         prefillIsEmpty: incoming.text.length === 0,
@@ -1416,6 +1481,7 @@ function ComposerImpl(props: SessionChatInputProps) {
     prefillText,
     prefillFiles,
     prefillMode,
+    prefillRestoreDraft,
     prefillSubmit,
     editorElement,
     addPromptAttachments,
@@ -1458,20 +1524,12 @@ function ComposerImpl(props: SessionChatInputProps) {
   }, [quoteRequests, appendQuoteTexts]);
 
   /**
-   * The model popover's open state, hoisted out of `ModelSelector` so the `/`
-   * palette can open it. `focusSection` is what separates the palette's two
-   * model-related rows: reasoning effort is a footer row INSIDE this popover
-   * rather than a control of its own (see `model-selector.tsx`), so both rows
-   * open the same element and only the landing point differs.
-   */
-  /**
-   * Open state for the two toolbar controls the `/` palette can reach.
-   * Hoisted out of the controls themselves so a palette row can open them;
-   * both stay uncontrolled for every other consumer.
+   * Open state for the pickers the `/` palette can reach, hoisted so a
+   * palette row can open them.
    *
-   * Two separate flags, not one with a "which section" discriminator: model
-   * and reasoning effort are now two distinct dropdowns, so a single flag
-   * would open both or neither.
+   * Two flags for model and reasoning effort: the toolbar opens its one
+   * merged model + effort popover for either, and the `chat_input` control
+   * uses them to pick which row opens highlighted (`initialRow`).
    */
   const [agentMenuOpen, setAgentMenuOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
@@ -1543,7 +1601,8 @@ function ComposerImpl(props: SessionChatInputProps) {
     });
     return available.map((action) => {
       if (action.id === 'switch-agent' && selectedAgent) {
-        return { ...action, value: selectedAgent };
+        // The name the agent chip shows, not the slug.
+        return { ...action, value: agentLabels?.[selectedAgent] ?? agentDisplayName(selectedAgent, agents.find((a) => a.name === selectedAgent)?.title) };
       }
       // The ring icon (via `context`) plus the reading as the row's
       // "current setting" text — same grammar as the agent row's value.
@@ -1553,7 +1612,7 @@ function ComposerImpl(props: SessionChatInputProps) {
       return action;
     }).concat(hostSlashActions(hostSlashRows));
   }, [
-    selectedAgent, canSwitchAgent, onCompactClick, onContextClick, contextUsage, tI18nComplete,
+    selectedAgent, agents, agentLabels, canSwitchAgent, onCompactClick, onContextClick, contextUsage, tI18nComplete,
     modelPickerEnabled, contextMeterEnabled, runtimeSlashEnabled, hostSlashRows,
   ]);
 
@@ -1796,6 +1855,8 @@ function ComposerImpl(props: SessionChatInputProps) {
       // right after the paint (`deliverAfterPaint`), so the next Send never waits
       // behind them. The host releases the uploads after its POST; a send it keeps
       // on screen as failed still holds them for its Retry.
+      const outside = spaceMentionsRef.current ? outsideAgentMentions(spaceMentionsRef.current, trimmed) : [];
+      if (outside.length > 0) setOutsideAsk(outside);
       await runComposerSend({
         submission: attachmentSubmission,
         controller: promptAttachments,
@@ -1809,6 +1870,7 @@ function ComposerImpl(props: SessionChatInputProps) {
           // The host refused the send before anything durable happened. Its uploads
           // are back in the tray, and the draft returns: a failed file shows its
           // Retry; a ready one sends again without re-upload.
+          sendRefused();
           const currentDoc = editorRef.current?.getDocument() ?? null;
           const currentIsEmpty = editorRef.current?.isEmpty() ?? true;
           const sentFiles = filesToSend ?? [];
@@ -1871,6 +1933,7 @@ function ComposerImpl(props: SessionChatInputProps) {
       onCommand,
       onHoldCommand,
       clearSavedDraft,
+      sendRefused,
       handleDocChange,
       setQuoteList,
       restoreQuoteTexts,
@@ -2005,10 +2068,45 @@ function ComposerImpl(props: SessionChatInputProps) {
     handleSubmitRef.current();
   }, [submitWhenReady, prefillId, landedPrefillId, submitDisabled, modelsLoading, entitlementsPending]);
 
+  /**
+   * Up/Down through prompt history. Only from an empty composer, or while a
+   * recalled prompt is still on screen untouched. Returns whether it acted.
+   */
+  const stepHistory = useCallback(
+    (direction: 'up' | 'down') => {
+      const editor = editorRef.current;
+      const current = historyIndexRef.current;
+      if (!editor || (current === null && !editor.isEmpty())) return false;
+      const next = stepPromptHistory(current, direction, historyEntries.length);
+      if (next === undefined) return false;
+      if (next === current) return true;
+      historyIndexRef.current = next;
+      setHistoryIndex(next);
+      applyingHistoryRef.current = true;
+      try {
+        if (next === null) editor.clear();
+        // The caret lands on the edge the walk is heading to, so a repeat
+        // press steps again; the other arrow still moves through the lines.
+        else editor.setContent(historyEntries[next], direction === 'up' ? 'start' : 'end');
+      } finally {
+        applyingHistoryRef.current = false;
+      }
+      return true;
+    },
+    [historyEntries],
+  );
+
   // A question lock owns the editor: Up there is a caret move, never a take-back.
-  const handleArrowUpAtStart = useCallback(
-    () => (lockForQuestion ? false : (onArrowUpAtStart?.() ?? false)),
-    [lockForQuestion, onArrowUpAtStart],
+  // A queued message to take back outranks history.
+  const handleArrowUpAtStart = useCallback(() => {
+    if (lockForQuestion) return false;
+    if (historyIndexRef.current === null && onArrowUpAtStart?.()) return true;
+    return stepHistory('up');
+  }, [lockForQuestion, onArrowUpAtStart, stepHistory]);
+
+  const handleArrowDownAtEnd = useCallback(
+    () => (lockForQuestion ? false : stepHistory('down')),
+    [lockForQuestion, stepHistory],
   );
 
   const editorPlaceholder = resolveEditorPlaceholder({
@@ -2062,6 +2160,9 @@ function ComposerImpl(props: SessionChatInputProps) {
     animatePlaceholder,
     handleSubmit,
     handleArrowUpAtStart,
+    handleArrowDownAtEnd,
+    historyPosition:
+      historyIndex === null ? null : { index: historyIndex + 1, total: historyEntries.length },
     setIsEmpty,
     handleDocChange: handleEditorDocChange,
     allSessions,
@@ -2095,6 +2196,10 @@ function ComposerImpl(props: SessionChatInputProps) {
     quotes,
     quoteListLabels,
     handleRemoveQuote,
+    spaceAsk:
+      outsideAsk.length > 0 && spaceMentions?.renderOutsideAsk
+        ? spaceMentions.renderOutsideAsk(outsideAsk[0]!, () => setOutsideAsk((list) => list.slice(1)))
+        : null,
   };
 
   return (

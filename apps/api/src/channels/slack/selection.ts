@@ -1,19 +1,28 @@
 import { and, eq } from 'drizzle-orm';
-import { chatChannelBindings, projects } from '@kortix/db';
+import { chatChannelBindings } from '@kortix/db';
 import { db } from '../../shared/db';
 import { withProjectGitAuth } from '../../projects/lib/git';
 import { listRepoFiles, loadProjectConfig } from '../../projects/git';
+import { savedProjectConfig } from '../../projects/surface';
+import { projectsView } from '../../workspaces/rows';
 
-// Per-channel agent + model selection. A Slack channel is bound to a project
-// (chat_channel_bindings); these helpers read/write the optional agent + model
-// overrides on that binding. A session started from the channel inherits them
+// Per-channel agent + model selection. A Slack channel's settings row
+// (chat_channel_bindings) belongs to the Kortix workspace its Slack workspace
+// is linked to; these helpers read/write the optional agent + model overrides
+// on that row. A session started from the channel inherits them
 // (see session.ts) — null means "use the project/platform default".
 
 export interface ChannelSelection {
   projectId: string;
   agentName: string | null;
-  opencodeModel: string | null;
+  sessionModel: string | null;
   conversationPolicy: string | null;
+  /**
+   * The channel's settings row belongs to another Kortix workspace (its own
+   * Slack app here): these are the caller's defaults, and the caller may not
+   * change that row.
+   */
+  foreignRow?: boolean;
 }
 
 export interface ChannelCtx {
@@ -23,24 +32,50 @@ export interface ChannelCtx {
    *  Channels API (routes/channel-bindings.ts) passes the binding's own
    *  platform so these setters stay reusable without duplicating the queries. */
   platform?: string;
+  /**
+   * The Kortix workspace the caller runs for, when it is fixed already (a
+   * session being launched or joined). A channel row of another Kortix
+   * workspace then sets nothing: one Slack workspace can run the shared app
+   * for one Kortix workspace and another's own app beside it, and each runs
+   * with its own settings.
+   */
+  projectId?: string;
 }
 
-/** The channel's bound project + its agent/model overrides, or null if unbound. */
+/**
+ * The channel's Kortix workspace and its agent/model overrides, or null when
+ * the channel runs in none. A Slack channel runs in the Kortix workspace its
+ * Slack workspace is linked to: its settings row is recorded for that
+ * workspace first (slack/link.ts), so every channel has settings, with no
+ * binding step.
+ */
+/** `foreignRow` when a row exists and names another Kortix workspace. */
+const foreign = (binding: { projectId: string | null } | undefined) => (binding?.projectId ? { foreignRow: true } : {});
+
 export async function currentChannelSelection(ctx: ChannelCtx): Promise<ChannelSelection | null> {
   if (!ctx.channelId) return null;
-  let binding: { projectId: string | null; agentName: string | null; opencodeModel: string | null; conversationPolicy: string | null } | undefined;
+  let linked: string | null = null;
+  if ((ctx.platform ?? 'slack') === 'slack') {
+    const { linkedSlackProject, recordSlackChannel } = await import('./link');
+    linked = await linkedSlackProject(ctx.teamId);
+    // The row is recorded for the workspace the caller runs for (an own app's
+    // request), else for the linked one.
+    const recorder = ctx.projectId ?? linked;
+    if (recorder) await recordSlackChannel(recorder, ctx.teamId, ctx.channelId);
+  }
+  let binding: { projectId: string | null; agentName: string | null; sessionModel: string | null; conversationPolicy: string | null } | undefined;
   try {
     [binding] = await db
       .select({
         projectId: chatChannelBindings.projectId,
         agentName: chatChannelBindings.agentName,
-        opencodeModel: chatChannelBindings.model,
+        sessionModel: chatChannelBindings.model,
         conversationPolicy: chatChannelBindings.conversationPolicy,
       })
       .from(chatChannelBindings)
       .where(and(
         eq(chatChannelBindings.platform, ctx.platform ?? 'slack'),
-        eq(chatChannelBindings.workspaceId, ctx.teamId),
+        eq(chatChannelBindings.platformTeamId, ctx.teamId),
         eq(chatChannelBindings.channelId, ctx.channelId),
       ))
       .limit(1);
@@ -48,13 +83,23 @@ export async function currentChannelSelection(ctx: ChannelCtx): Promise<ChannelS
     if (!isMissingSelectionColumnError(err)) throw err;
     console.warn('[slack-selection] optional channel override columns missing; falling back to project-only routing');
     const projectId = await currentChannelProjectId(ctx);
-    return projectId ? { projectId, agentName: null, opencodeModel: null, conversationPolicy: null } : null;
+    return projectId ? { projectId, agentName: null, sessionModel: null, conversationPolicy: null } : null;
+  }
+  // The caller runs for a Kortix workspace that is not the row's: its own
+  // defaults apply, never another workspace's agent, model or policy.
+  if (ctx.projectId && binding?.projectId !== ctx.projectId) {
+    return { projectId: ctx.projectId, agentName: null, sessionModel: null, conversationPolicy: null, ...foreign(binding) };
+  }
+  // A row of another Kortix workspace (one running its own Slack app in this
+  // Slack workspace) never sets the linked workspace's agent, model or policy.
+  if (!ctx.projectId && linked && binding?.projectId !== linked) {
+    return { projectId: linked, agentName: null, sessionModel: null, conversationPolicy: null, ...foreign(binding) };
   }
   if (!binding?.projectId) return null;
   return {
     projectId: binding.projectId,
     agentName: binding.agentName ?? null,
-    opencodeModel: binding.opencodeModel ?? null,
+    sessionModel: binding.sessionModel ?? null,
     conversationPolicy: binding.conversationPolicy ?? null,
   };
 }
@@ -67,7 +112,7 @@ export async function setChannelConversationPolicy(ctx: ChannelCtx, conversation
       .set({ conversationPolicy })
       .where(and(
         eq(chatChannelBindings.platform, ctx.platform ?? 'slack'),
-        eq(chatChannelBindings.workspaceId, ctx.teamId),
+        eq(chatChannelBindings.platformTeamId, ctx.teamId),
         eq(chatChannelBindings.channelId, ctx.channelId),
       ))
       .returning({ id: chatChannelBindings.bindingId });
@@ -114,7 +159,7 @@ export async function setChannelAgent(
       .set({ agentName })
       .where(and(
         eq(chatChannelBindings.platform, ctx.platform ?? 'slack'),
-        eq(chatChannelBindings.workspaceId, ctx.teamId),
+        eq(chatChannelBindings.platformTeamId, ctx.teamId),
         eq(chatChannelBindings.channelId, ctx.channelId),
       ))
       .returning({ id: chatChannelBindings.bindingId });
@@ -127,15 +172,15 @@ export async function setChannelAgent(
 }
 
 /** Update the channel binding's model (null clears → project/platform default). */
-export async function setChannelModel(ctx: ChannelCtx, opencodeModel: string | null): Promise<boolean> {
+export async function setChannelModel(ctx: ChannelCtx, sessionModel: string | null): Promise<boolean> {
   if (!ctx.channelId) return false;
   try {
     const rows = await db
       .update(chatChannelBindings)
-      .set({ model: opencodeModel })
+      .set({ model: sessionModel })
       .where(and(
         eq(chatChannelBindings.platform, ctx.platform ?? 'slack'),
-        eq(chatChannelBindings.workspaceId, ctx.teamId),
+        eq(chatChannelBindings.platformTeamId, ctx.teamId),
         eq(chatChannelBindings.channelId, ctx.channelId),
       ))
       .returning({ id: chatChannelBindings.bindingId });
@@ -153,7 +198,7 @@ async function currentChannelProjectId(ctx: ChannelCtx): Promise<string | null> 
     .from(chatChannelBindings)
     .where(and(
       eq(chatChannelBindings.platform, ctx.platform ?? 'slack'),
-      eq(chatChannelBindings.workspaceId, ctx.teamId),
+      eq(chatChannelBindings.platformTeamId, ctx.teamId),
       eq(chatChannelBindings.channelId, ctx.channelId),
     ))
     .limit(1);
@@ -168,7 +213,7 @@ function isMissingSelectionColumnError(err: unknown): boolean {
   ].filter(Boolean).join('\n');
   return (
     parts.includes('column "agent_name" does not exist') ||
-    parts.includes('column "opencode_model" does not exist') ||
+    parts.includes('column "model" does not exist') ||
     parts.includes('column "conversation_policy" does not exist')
   );
 }
@@ -194,26 +239,19 @@ export interface ProjectAgentGovernance {
 }
 
 /**
- * The project's launchable agents from the server-side config summary:
- * declarative `kortix.yaml` `agents:` for adopted projects, OpenCode markdown
- * discovery for legacy projects. Touches git, so callers must use the async
+ * The project's launchable agents from the server-side config summary (the
+ * `kortix.yaml` `agents:` block). Touches git, so callers must use the async
  * slash response path (response_url) to stay inside Slack's 3s window.
  */
 export async function loadProjectAgentGovernance(projectId: string): Promise<ProjectAgentGovernance> {
   const [row] = await db
     .select()
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1);
   if (!row) return { agents: [], declared: false };
-  const gitProject = await withProjectGitAuth(row);
-  let files: Awaited<ReturnType<typeof listRepoFiles>> = [];
-  try {
-    files = await listRepoFiles(gitProject, row.defaultBranch);
-  } catch {
-    // Repo unreachable — fall back to whatever loadProjectConfig can infer.
-  }
-  const config = await loadProjectConfig(gitProject, files);
+  // The saved config summary first: no git inside Slack's 3 s window.
+  const config = (await savedProjectConfig(row))?.config ?? (await loadLiveConfig(row));
   return {
     // Launchable agents only: the config summary lists every registered agent
     // (a disabled one with `enabled: false`, for the project's own management
@@ -244,7 +282,7 @@ export interface ChannelBindingRow {
   channelName: string | null;
   channelType: string | null;
   agentName: string | null;
-  opencodeModel: string | null;
+  sessionModel: string | null;
   conversationPolicy: string;
   installedAt: Date;
 }
@@ -256,12 +294,12 @@ export async function listChannelBindingsForProject(projectId: string): Promise<
       bindingId: chatChannelBindings.bindingId,
       projectId: chatChannelBindings.projectId,
       platform: chatChannelBindings.platform,
-      workspaceId: chatChannelBindings.workspaceId,
+      workspaceId: chatChannelBindings.platformTeamId,
       channelId: chatChannelBindings.channelId,
       channelName: chatChannelBindings.channelName,
       channelType: chatChannelBindings.channelType,
       agentName: chatChannelBindings.agentName,
-      opencodeModel: chatChannelBindings.model,
+      sessionModel: chatChannelBindings.model,
       conversationPolicy: chatChannelBindings.conversationPolicy,
       installedAt: chatChannelBindings.installedAt,
     })
@@ -283,12 +321,12 @@ export async function getChannelBindingById(
       bindingId: chatChannelBindings.bindingId,
       projectId: chatChannelBindings.projectId,
       platform: chatChannelBindings.platform,
-      workspaceId: chatChannelBindings.workspaceId,
+      workspaceId: chatChannelBindings.platformTeamId,
       channelId: chatChannelBindings.channelId,
       channelName: chatChannelBindings.channelName,
       channelType: chatChannelBindings.channelType,
       agentName: chatChannelBindings.agentName,
-      opencodeModel: chatChannelBindings.model,
+      sessionModel: chatChannelBindings.model,
       conversationPolicy: chatChannelBindings.conversationPolicy,
       installedAt: chatChannelBindings.installedAt,
     })
@@ -297,4 +335,15 @@ export async function getChannelBindingById(
     .limit(1);
   if (!row?.projectId) return null;
   return row as ChannelBindingRow;
+}
+
+async function loadLiveConfig(row: typeof projectsView.$inferSelect) {
+  const gitProject = await withProjectGitAuth(row);
+  let files: Awaited<ReturnType<typeof listRepoFiles>> = [];
+  try {
+    files = await listRepoFiles(gitProject, row.defaultBranch);
+  } catch {
+    // Repo unreachable — fall back to whatever loadProjectConfig can infer.
+  }
+  return loadProjectConfig(gitProject, files);
 }

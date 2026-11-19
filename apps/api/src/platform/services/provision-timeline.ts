@@ -2,7 +2,7 @@
  * Lightweight provisioning timeline for benchmarking session boot.
  *
  * Session creation fans out across several detached steps (branch push,
- * snapshot resolve, Daytona create, in-sandbox boot, opencode ready). Until now
+ * snapshot resolve, Daytona create, in-sandbox boot, runtime ready). Until now
  * there was no end-to-end timing, so "new session takes 30s" was unattributable.
  * This records monotonic marks (perf.now) at each step, emits one structured log
  * line, and returns a serializable summary that gets persisted into the sandbox
@@ -62,6 +62,20 @@ export class ProvisionTimeline {
   note(label: string): void {
     const atMs = Math.round(performance.now() - this.startedAt);
     this.marks.push({ label, atMs, deltaMs: atMs });
+  }
+
+  /**
+   * Time a step that runs CONCURRENTLY with others: its mark carries its OWN
+   * duration (`deltaMs`, from when `run` started) and the time it ended
+   * (`atMs`). The sequential cursor `mark()` uses is left alone. A failed step
+   * leaves no mark: the caller's error says what failed.
+   */
+  async span<T>(label: string, run: () => Promise<T>): Promise<T> {
+    const started = performance.now();
+    const value = await run();
+    const now = performance.now();
+    this.marks.push({ label, atMs: Math.round(now - this.startedAt), deltaMs: Math.round(now - started) });
+    return value;
   }
 
   get totalMs(): number {

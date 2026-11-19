@@ -42,7 +42,7 @@ Hermes set out to be a personal agent, and for that job these defaults are right
 
 ## A review gate needs a repo underneath
 
-Reviewing an agent's work assumes the work has a readable shape, and that the reader can be someone else. In Kortix the project is that shape. Agents, the skills they load, company memory, connector grants and triggers live as files in a git repo the company owns ([Kortix on GitHub](https://github.com/kortix-ai/suna)).
+Reviewing an agent's work assumes the work has a readable shape, and that the reader can be someone else. In Kortix the project is that shape. Agents, the skills they load, company memory, connector grants and triggers live as files in a git repo the company owns ([Kortix on GitHub](https://github.com/kortix-ai/CompanyOS)).
 
 ```yaml
 # kortix.yaml
@@ -77,7 +77,7 @@ Where Hermes keeps a hash of before and after, Kortix keeps the change itself on
 
 The review gate comes with the product, wherever you run it. Run it on Kortix Cloud, in your VPC, or on your own on-prem network. Self-host is free. The cloud bills credits. A reviewer who never runs an agent still needs an account. As published on [Kortix pricing](https://kortix.com/pricing), checked October 2026:
 
-Free is $0 with 500 credits per month, every feature and 1 project, on the user's own provider keys or ChatGPT subscription. Managed models are on the Credits plan only. The paid plan is credits at one rate: 100 credits per dollar, so 5,000 credits a month costs $50. A larger monthly amount buys more credits, never a cheaper credit.
+Free is $0 with 500 credits per month on your first workspace and every feature, on your own provider keys or ChatGPT subscription. Managed models are on the Credits plan only. The paid plan is credits at one rate: 100 credits per dollar, so 5,000 credits a month costs $50. A larger monthly amount buys more credits, never a cheaper credit.
 
 Members are unlimited and free, and the account shares one credit pool. Unused monthly credits roll over one month. A reviewer adds no charge. The pricing page puts the last piece plainly: "Credits pay for the agent computer." Model usage goes straight to your provider on your own keys.
 
@@ -87,7 +87,7 @@ One person who wants an assistant that learns their habits can install Hermes on
 
 ## Side by side
 
-Both columns follow each project's own documentation in October 2026: [Hermes on GitHub](https://github.com/nousresearch/hermes-agent) and the [Hermes docs](https://hermes-agent.nousresearch.com/docs), against [Kortix on GitHub](https://github.com/kortix-ai/suna) and [Kortix pricing](https://kortix.com/pricing).
+Both columns follow each project's own documentation in October 2026: [Hermes on GitHub](https://github.com/nousresearch/hermes-agent) and the [Hermes docs](https://hermes-agent.nousresearch.com/docs), against [Kortix on GitHub](https://github.com/kortix-ai/CompanyOS) and [Kortix pricing](https://kortix.com/pricing).
 
 ```compare
 them: Hermes

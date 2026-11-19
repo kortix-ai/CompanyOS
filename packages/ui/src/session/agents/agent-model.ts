@@ -53,6 +53,9 @@ const STATE_ORDER: Record<AgentRowState, number> = {
 
 /** Board state of a session row: the API's `board_state`, else derived from the older fields. */
 export function boardStateOf(session: ProjectSession): AgentRowState {
+  // A session whose computer could not start is failed, even while its first prompt still
+  // waits to be delivered (the API then reports `board_state: working`).
+  if (session.status === 'failed' && session.board_state === 'working') return 'failed';
   if (session.board_state) return session.board_state;
   if (session.attention) return 'needs_input';
   switch (session.status) {
@@ -171,9 +174,10 @@ export interface LineSummary extends StripCounts {
 }
 
 /** What the agents line says: `2 agents · 1 working`, `2 agents · poet done`, `1 workflow running`. */
-export function lineSummary(rows: readonly AgentRow[], runs: readonly { status: string }[]): LineSummary {
+export function lineSummary(rows: readonly AgentRow[], runs: readonly { status: string; awaitingApproval?: boolean }[]): LineSummary {
   const counts = stripCounts(rows);
-  const runningRuns = runs.filter((run) => run.status === 'running').length;
+  // A run whose approval is still open has not started: it is not running.
+  const runningRuns = runs.filter((run) => run.status === 'running' && run.awaitingApproval !== true).length;
   let newest: AgentRow | null = null;
   for (const row of rows) if (!newest || row.activityMs > newest.activityMs) newest = row;
   const mark: LineMark =

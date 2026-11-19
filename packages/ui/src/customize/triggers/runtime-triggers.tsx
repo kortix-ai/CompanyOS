@@ -13,7 +13,7 @@
 import type { UnifiedTrigger } from '@kortix/sdk';
 import { useUnifiedTriggers } from '@kortix/sdk/react';
 import { PlayIcon, TrashIcon } from '@phosphor-icons/react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useLocale, useTranslations } from '../../i18n';
 import { relativeTime } from '../../internal/lib/relative-time';
@@ -26,6 +26,9 @@ import { Label } from '../../primitives/label';
 import Loading from '../../primitives/loading';
 import { Switch } from '../../primitives/switch';
 import { errorToast } from '../../primitives/toast';
+import { cn } from '../../internal/lib/utils';
+import { useUiSearchParams } from '../../providers/ui-provider';
+import { readTriggerSheet } from './schedule/trigger-filter';
 
 /** Source labels: the strings the trigger kinds already show, plus the merge. */
 const SOURCE_KEY: Record<UnifiedTrigger['source']['type'], string> = {
@@ -48,12 +51,32 @@ function scheduleText(source: UnifiedTrigger['source']): string | null {
   return source.cron ?? source.every ?? null;
 }
 
+/** A one-shot schedule's run time (`source.at`) in the viewer's locale, or null. */
+export function oneShotText(source: UnifiedTrigger['source'], locale: string): string | null {
+  if (source.type !== 'schedule' || source.cron || source.every || !source.at) return null;
+  const at = new Date(source.at);
+  if (Number.isNaN(at.getTime())) return null;
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(at);
+}
+
+/** Active and paused rows first, then the one-shots that already fired. Stable within each group. */
+export function sortRuntimeRows(rows: readonly UnifiedTrigger[]): UnifiedTrigger[] {
+  return [...rows.filter((a) => a.state !== 'done'), ...rows.filter((a) => a.state === 'done')];
+}
+
 export function RuntimeTriggers({ projectId, agentName = null }: { projectId: string; agentName?: string | null }) {
   const t = useTranslations('hardcodedUi.i18nComplete');
   const locale = useLocale();
   const triggers = useUnifiedTriggers(projectId);
   const [deleteTarget, setDeleteTarget] = useState<UnifiedTrigger | null>(null);
-  const rows = runtimeRowsFor(triggers.data?.triggers ?? [], agentName);
+  const rows = sortRuntimeRows(runtimeRowsFor(triggers.data?.triggers ?? [], agentName));
+  // `?id=<runtime id>` names one row (a loop's Manage link): mark it and bring it into view once.
+  const openId = readTriggerSheet(useUiSearchParams()).slug;
+  const openRow = rows.some((a) => a.id === openId) ? openId : null;
+  const openRef = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (openRow) openRef.current?.scrollIntoView({ block: 'center' });
+  }, [openRow]);
   if (rows.length === 0) return null;
 
   const onError = (error: unknown) => errorToast((error as Error)?.message ?? String(error));
@@ -75,14 +98,29 @@ export function RuntimeTriggers({ projectId, agentName = null }: { projectId: st
           const busy =
             (triggers.update.isPending && triggers.update.variables?.triggerId === a.id) ||
             (triggers.run.isPending && triggers.run.variables?.triggerId === a.id);
+          const done = a.state === 'done';
+          const once = oneShotText(a.source, locale);
+          // The API runs a fired one-shot again on request (POST …/run has no state gate).
+          const runLabel = done ? t.raw('text3e310b75051c') : t.raw('text0991397702fa');
           return (
-            <li key={a.id} className="bg-popover flex items-center gap-3 rounded-md border px-4 py-2">
+            <li
+              key={a.id}
+              ref={a.id === openRow ? openRef : undefined}
+              data-trigger-id={a.id}
+              aria-current={a.id === openRow ? 'true' : undefined}
+              className={cn(
+                'flex items-center gap-3 rounded-md border px-4 py-2',
+                a.id === openRow ? 'bg-hover' : 'bg-popover',
+              )}
+            >
               <div className="min-w-0 flex-1 space-y-0.5">
                 <p className="text-foreground truncate text-sm font-medium">{a.name ?? a.prompt}</p>
                 <InlineMeta>
                   <span>{t.raw(SOURCE_KEY[a.source.type])}</span>
                   {scheduleText(a.source) ? <span className="font-mono">{scheduleText(a.source)}</span> : null}
-                  <span className="truncate">{target(a)}</span>
+                  {once ? <span>{t.raw('textd88f6d8372f4')}</span> : null}
+                  {once ? <time dateTime={a.source.at ?? undefined}>{once}</time> : null}
+                  <span className="min-w-0 truncate">{target(a)}</span>
                   {a.state === 'active' && a.next_fire_at ? (
                     <span>
                       {t.raw('textb3c0ab96930c')} {relativeTime(a.next_fire_at, locale)}
@@ -96,20 +134,25 @@ export function RuntimeTriggers({ projectId, agentName = null }: { projectId: st
                 {a.last_error ? <p className="text-destructive truncate text-xs">{a.last_error}</p> : null}
               </div>
               {busy ? <Loading className="size-4 shrink-0" /> : null}
-              <Switch
-                checked={a.state === 'active'}
-                disabled={a.state === 'done' || busy}
-                aria-label={a.state === 'active' ? t.raw('text858e4ba7a29f') : t.raw('textd640c7421da0')}
-                onCheckedChange={(enabled) =>
-                  triggers.update.mutate({ triggerId: a.id, enabled }, { onError })
-                }
-              />
+              {done ? (
+                // A fired one-shot has nothing to turn on: a label, not a dead switch.
+                <span className="text-muted-foreground shrink-0 text-xs">{t.raw('text11a6767d5674')}</span>
+              ) : (
+                <Switch
+                  checked={a.state === 'active'}
+                  disabled={busy}
+                  aria-label={a.state === 'active' ? t.raw('text858e4ba7a29f') : t.raw('textd640c7421da0')}
+                  onCheckedChange={(enabled) =>
+                    triggers.update.mutate({ triggerId: a.id, enabled }, { onError })
+                  }
+                />
+              )}
               <ButtonGroup>
-                <Hint label={t.raw('text0991397702fa')}>
+                <Hint label={runLabel}>
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label={t.raw('text0991397702fa')}
+                    aria-label={runLabel}
                     disabled={busy}
                     onClick={() => triggers.run.mutate({ triggerId: a.id }, { onError })}
                   >

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { sessionSandboxes } from '@kortix/db';
+import { MAX_IN_PLACE_RECOVERY_ATTEMPTS } from '../runtime-identity';
 import {
   decideParkedRuntime,
   decideRemovedParkedOutcome,
@@ -213,7 +214,12 @@ describe('decideRemovedParkedOutcome', () => {
     expect(outcome).toBe('recovery-in-flight');
   });
 
-  test('a provider throw is read as unavailable, not as a recovery', async () => {
+  // A THROWN probe is a failed round-trip, not a provider statement: the gate's
+  // own contract is that only an explicit `unavailable` answer authorizes the
+  // loss. Mapping the throw to `unavailable` turned one rate-limited or 5xx
+  // `/start` during a convergence pass into an irreversible "computer was
+  // lost" for a recoverable identity (2026-11-09, the governing error class).
+  test('a provider throw is not a verdict — the row waits for the next pass', async () => {
     const outcome = await decideRemovedParkedOutcome({
       externalId: 'sbx_test',
       recoverInPlace: async () => {
@@ -222,7 +228,43 @@ describe('decideRemovedParkedOutcome', () => {
       claim: async () => true,
       markRecovered: never,
     });
+    expect(outcome).toBe('recovery-in-flight');
+  });
+
+  // 2026-11-08..11: Platinum accepted every recovery of four `failed-start`
+  // boxes that could never boot, so the sweep restarted each one about 20
+  // times an hour for 3 days.
+  test('an identity whose accepted recoveries never booted is preserved as lost, with no further start', async () => {
+    const outcome = await decideRemovedParkedOutcome({
+      externalId: 'sbx_test',
+      priorAttempts: MAX_IN_PLACE_RECOVERY_ATTEMPTS,
+      recoverInPlace: never,
+      claim: async () => true,
+      markRecovered: never,
+    });
     expect(outcome).toBe('preserve-lost');
+  });
+
+  test('below the cap the provider is still asked', async () => {
+    const outcome = await decideRemovedParkedOutcome({
+      externalId: 'sbx_test',
+      priorAttempts: MAX_IN_PLACE_RECOVERY_ATTEMPTS - 1,
+      recoverInPlace: async () => 'recovering',
+      claim: async () => true,
+      markRecovered: async () => true,
+    });
+    expect(outcome).toBe('recovered');
+  });
+
+  test('a recovery another caller owns is not condemned at the cap', async () => {
+    const outcome = await decideRemovedParkedOutcome({
+      externalId: 'sbx_test',
+      priorAttempts: MAX_IN_PLACE_RECOVERY_ATTEMPTS,
+      recoverInPlace: never,
+      claim: async () => false,
+      markRecovered: never,
+    });
+    expect(outcome).toBe('recovery-in-flight');
   });
 });
 

@@ -87,7 +87,7 @@ describe('draftToSpec — new trigger spec path uses the real manifest file', ()
     slug: 'nightly', name: 'Nightly', type: 'cron' as const, agent: 'kortix', model: null,
     enabled: true, promptTemplate: 'do it', cron: '0 0 3 * * *', runAt: null,
     timezone: 'UTC', secretEnv: null, run: null, monitorMode: null, intervalSeconds: null,
-    expectEventWithinSeconds: null, sessionMode: 'fresh' as const, pinnedSessionId: null,
+    sessionMode: 'fresh' as const, pinnedSessionId: null,
         sessionKey: null,
         filter: null,
   };
@@ -190,8 +190,8 @@ describe('a non-trigger edit keeps the file as written', () => {
     'agents:',
     '  worker:',
     '    tools: [read, bash]',
-    '    # Full checkout: this agent edits files.',
-    '    workspace: { project_repository: true }',
+    '    # Its own machine: the platform image.',
+    '    sandbox: default',
     '    secrets: all',
     '',
   ].join('\n');
@@ -206,7 +206,7 @@ describe('a non-trigger edit keeps the file as written', () => {
     const written = serializeManifest(manifest);
     for (const comment of SOURCE.match(/#.*/g) ?? []) expect(written).toContain(comment);
     expect(written).toContain('    tools: [read, bash]\n');
-    expect(written).toContain('    workspace: { project_repository: true }\n');
+    expect(written).toContain('    sandbox: default\n');
     expect(parseManifestString(written, 'kortix.yaml').raw).toEqual(manifest.raw);
   });
 });

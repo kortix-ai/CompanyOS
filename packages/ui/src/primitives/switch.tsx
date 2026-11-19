@@ -1,12 +1,22 @@
 'use client';
 
-import { spring } from '../lib/springs';
-import { cn } from '../lib/utils';
-import * as SwitchPrimitive from '@radix-ui/react-switch';
+import { Switch as SwitchPrimitive } from '@base-ui/react/switch';
 import { animate, m, useMotionValue } from 'motion/react';
 import { forwardRef, useCallback, useEffect, useRef, useState, type ComponentProps } from 'react';
+import { checkedState, stateRender, controlRender } from '../lib/base-ui-compat';
+import { spring } from '../lib/springs';
+import { cn } from '../lib/utils';
 
-type SwitchProps = Omit<ComponentProps<typeof SwitchPrimitive.Root>, 'asChild'> & {
+type SwitchProps = Omit<
+  ComponentProps<'button'>,
+  'value' | 'checked' | 'defaultChecked' | 'onChange' | 'ref'
+> & {
+  checked?: boolean;
+  defaultChecked?: boolean;
+  onCheckedChange?: (checked: boolean) => void;
+  name?: string;
+  value?: string;
+  required?: boolean;
   label?: string;
 };
 
@@ -40,13 +50,16 @@ const Switch = forwardRef<HTMLButtonElement, SwitchProps>(
       hasMounted.current = true;
     }, []);
 
-    const thumbWidth = pressed
+    // A disabled switch does not move under the pointer: no hover pill, no press squash.
+    const isPressed = pressed && !disabled;
+    const isHovered = hovered && !disabled;
+    const thumbWidth = isPressed
       ? THUMB_SIZE + PRESS_EXTEND
-      : hovered
+      : isHovered
         ? THUMB_SIZE + PILL_EXTEND
         : THUMB_SIZE;
-    const thumbHeight = pressed ? THUMB_SIZE - PRESS_SHRINK : THUMB_SIZE;
-    const thumbY = pressed ? THUMB_OFFSET + PRESS_SHRINK / 2 : THUMB_OFFSET;
+    const thumbHeight = isPressed ? THUMB_SIZE - PRESS_SHRINK : THUMB_SIZE;
+    const thumbY = isPressed ? THUMB_OFFSET + PRESS_SHRINK / 2 : THUMB_OFFSET;
     const extraWidth = thumbWidth - THUMB_SIZE;
     const thumbX = isChecked ? THUMB_OFFSET + THUMB_TRAVEL - extraWidth : THUMB_OFFSET;
 
@@ -60,7 +73,7 @@ const Switch = forwardRef<HTMLButtonElement, SwitchProps>(
     }, [thumbX, motionX]);
 
     const handlePointerDown = useCallback(
-      (e: React.PointerEvent<HTMLButtonElement>) => {
+      (e: React.PointerEvent<HTMLElement>) => {
         if (disabled) return;
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         setPressed(true);
@@ -76,7 +89,7 @@ const Switch = forwardRef<HTMLButtonElement, SwitchProps>(
     );
 
     const handlePointerMove = useCallback(
-      (e: React.PointerEvent<HTMLButtonElement>) => {
+      (e: React.PointerEvent<HTMLElement>) => {
         if (!pointerStart.current) return;
         const delta = e.clientX - pointerStart.current.clientX;
 
@@ -135,17 +148,21 @@ const Switch = forwardRef<HTMLButtonElement, SwitchProps>(
         className={cn(
           'group/switch relative h-[20px] w-[34px] shrink-0 touch-none rounded-full outline-none', // pointer comes from the global rule; disabled keeps the default cursor
           'transition-colors duration-80',
+          // Disabled reads as unavailable: half opacity (a labelled switch dims
+          // its whole row below instead). The cursor stays default: globals.css
+          // forces it on every disabled control.
+          !label && 'disabled:opacity-50',
           'focus-visible:ring-ring focus-visible:ring-offset-background focus-visible:ring-1 focus-visible:ring-offset-2',
-          // Colours come from Radix's `data-state`, never from JS state.
+          // Colours come from `data-state` (checked / unchecked), never from JS state.
           // Off is translucent ink, so one class reads in both themes and on
           // any panel. Thumb vs track (WCAG 1.4.11, 3:1), worst of page /
           // card / muted: rest 3.13:1, hover 4.13:1. On: white thumb 3.23:1.
           'data-[state=checked]:bg-kortix-blue',
-          'data-[state=unchecked]:bg-foreground/10 data-[state=unchecked]:hover:bg-foreground/15',
+          'data-[state=unchecked]:bg-foreground/10 data-[state=unchecked]:enabled:hover:bg-foreground/15',
           !label && className,
         )}
         onPointerEnter={(e) => {
-          if (e.pointerType === 'mouse') setHovered(true);
+          if (e.pointerType === 'mouse' && !disabled) setHovered(true);
         }}
         onPointerLeave={() => setHovered(false)}
         onPointerDown={handlePointerDown}
@@ -155,27 +172,34 @@ const Switch = forwardRef<HTMLButtonElement, SwitchProps>(
           if (didDrag.current) return;
           onCheckedChange?.(nextChecked);
         }}
-        {...props}
+        // The root renders a <button> (`nativeButton`), so button props are right at runtime.
+        {...(props as unknown as ComponentProps<typeof SwitchPrimitive.Root>)}
+        nativeButton
+        render={controlRender(checkedState)}
       >
-        <SwitchPrimitive.Thumb asChild>
-          <m.span
-            className={cn(
-              'duration-fast absolute top-0 left-0 rounded-full shadow-sm transition-colors',
-              'data-[state=checked]:bg-white',
-              // A white thumb on the light off track would be ~1.25:1.
-              'data-[state=unchecked]:bg-foreground/45 group-hover/switch:data-[state=unchecked]:bg-foreground/55',
-            )}
-            initial={false}
-            // Motion value binding for drag, not a colour or layout style.
-            style={{ x: motionX }}
-            animate={{
-              y: thumbY,
-              width: thumbWidth,
-              height: thumbHeight,
-            }}
-            transition={hasMounted.current ? spring.moderate : { duration: 0 }}
-          />
-        </SwitchPrimitive.Thumb>
+        <SwitchPrimitive.Thumb
+          render={stateRender(
+            'span',
+            checkedState,
+            <m.span
+              className={cn(
+                'duration-fast absolute top-0 left-0 rounded-full shadow-sm transition-colors',
+                'data-[state=checked]:bg-white',
+                // A white thumb on the light off track would be ~1.25:1.
+                'data-[state=unchecked]:bg-foreground/45 group-enabled/switch:group-hover/switch:data-[state=unchecked]:bg-foreground/55',
+              )}
+              initial={false}
+              // Motion value binding for drag, not a colour or layout style.
+              style={{ x: motionX }}
+              animate={{
+                y: thumbY,
+                width: thumbWidth,
+                height: thumbHeight,
+              }}
+              transition={hasMounted.current ? spring.moderate : { duration: 0 }}
+            />,
+          )}
+        />
       </SwitchPrimitive.Root>
     );
 

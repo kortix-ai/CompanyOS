@@ -75,19 +75,9 @@ export function groupChangeRequestsBySession(
 }
 
 /** Whether the session list should keep polling — true while any session is
- *  still mid-provisioning (queued/branching/provisioning).
- *
- *  A warm row (pre-created, never prompted) is skipped: the API reports its
- *  idle, billed shell as `provisioning` for as long as the box lives
- *  (KRTX-1466), and polling that static status 5s-fast for up to the warm
- *  grant would buy nothing — the next real change is the marker drop at the
- *  first accepted turn, which the open-session interval covers. */
+ *  still mid-provisioning (queued/branching/provisioning). */
 export function shouldPollProjectSessions(sessions: ProjectSession[] | undefined): boolean {
-  return (sessions ?? []).some(
-    (session) =>
-      LIVE_SESSION_STATUSES.includes(session.status) &&
-      (session.metadata as Record<string, unknown> | null)?.warm !== true,
-  );
+  return (sessions ?? []).some((session) => LIVE_SESSION_STATUSES.includes(session.status));
 }
 
 /** Fast poll: a provisioning session changes status within seconds. */
@@ -103,6 +93,28 @@ const PENDING_TITLE_POLL_MS = 3_000;
  *  follow the conversation you are having, slow enough to be one cheap request
  *  a minute. */
 const OPEN_SESSION_POLL_MS = 60_000;
+/**
+ * Poll while a row works and no stream speaks for it: a session the person is
+ * not in (a workflow runner, a colleague, a second chat). On /drive a runner
+ * row said "Working" for 3+ minutes after the run ended (audit finding 04).
+ * Bounded by the condition: the moment no such row works, this stops.
+ */
+export const BACKGROUND_WORK_POLL_MS = 10_000;
+
+/**
+ * Does a listed session work where no stream reaches it? `working.state` is
+ * the server's verdict; the open session's stream patches its own row
+ * (`patchCachedSessionWorking`), so it does not count. A row without
+ * `working` (an older API) adds no poll.
+ */
+export function sessionsWorkingInBackground(
+  sessions: readonly ProjectSession[] | undefined,
+  openSessionId: string | null | undefined,
+): boolean {
+  return (sessions ?? []).some(
+    (session) => session.working?.state === 'working' && session.session_id !== openSessionId,
+  );
+}
 
 /**
  * How often the sidebar refetches the session list, or false for not at all.
@@ -118,6 +130,8 @@ const OPEN_SESSION_POLL_MS = 60_000;
 export function projectSessionsRefetchInterval(params: {
   sessions: ProjectSession[] | undefined;
   hasOpenSession: boolean;
+  /** The open session's id: its own stream keeps its row live, so its work adds no poll. */
+  openSessionId?: string | null;
   /** Injected so the title window below is asserted rather than raced. */
   now?: number;
 }): number | false {
@@ -136,6 +150,7 @@ export function projectSessionsRefetchInterval(params: {
   if (hasSessionAwaitingTitle(params.sessions, params.now ?? Date.now())) {
     return PENDING_TITLE_POLL_MS;
   }
+  if (sessionsWorkingInBackground(params.sessions, params.openSessionId)) return BACKGROUND_WORK_POLL_MS;
   return params.hasOpenSession ? OPEN_SESSION_POLL_MS : false;
 }
 
@@ -161,7 +176,7 @@ function promptActivityMs(session: ProjectSession): number | null {
  *  when the session carries no usable snapshot. */
 function conversationActivityMs(session: ProjectSession): number | null {
   let latest: number | null = null;
-  for (const runtimeSession of session.runtime_sessions ?? session.opencode_sessions ?? []) {
+  for (const runtimeSession of session.runtime_sessions ?? []) {
     const parsed = activityMs(runtimeSession.updated_at);
     if (parsed === null) continue;
     latest = latest === null ? parsed : Math.max(latest, parsed);
@@ -278,13 +293,9 @@ const TITLE_WAIT_WINDOW_MS = 2 * 60_000;
  * be proven young, and guessing wrong in that direction is the unbounded poll
  * this window exists to prevent.
  *
- * The window opens from the LATER of creation and last activity. An adopted
- * warm session was created when the user landed on the project home —
- * possibly long before the send — but its title generation starts at the
- * first prompt, i.e. at adoption, which stamps `metadata.last_activity_at`
- * (apps/api/src/projects/routes/warm-sessions.ts). Windowing on `created_at`
- * alone skipped the fast poll for exactly the sessions the home send
- * produces.
+ * The window opens from the LATER of creation and last activity: a session
+ * created empty gets its title from its first prompt, which stamps
+ * `metadata.last_activity_at` and can come long after the create.
  */
 export function isAwaitingTitle(session: ProjectSession, now: number): boolean {
   if (sessionTitleHasLanded(session)) return false;

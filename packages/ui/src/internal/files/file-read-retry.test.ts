@@ -1,6 +1,14 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
 import {
+  MISSING_FILE_SUPPRESS_MS,
+  clearMissingFileRead,
+  clearMissingFileReadsForTests,
+  clearMissingFileReadsUnder,
+  missingFileReadEpoch,
+  missingFileSuppressed,
+  noteMissingFileRead,
+  setMissingFileClockForTests,
   IMAGE_WAKING_ATTEMPTS,
   imageWaitedOut,
   imageWakingRefetchInterval,
@@ -13,6 +21,95 @@ import {
   SANDBOX_PARKED_REFETCH_INTERVAL_MS,
   SANDBOX_WAKING_REFETCH_INTERVAL_MS,
 } from './file-read-retry';
+
+/**
+ * The missing-file gate's registry, unit-pinned: both file hooks call these
+ * with the same `<serverUrl>|<path>` key, so this block is the contract a
+ * refactor of either hook must keep — a miss marks only when the failure is
+ * missing-shaped, a found file clears the mark while fresh, an expired mark
+ * evicts on its next read (no sweeper).
+ */
+describe('missing-file gate registry', () => {
+  let now = 1_000_000;
+
+  beforeEach(() => {
+    now = 1_000_000;
+    setMissingFileClockForTests(() => now);
+    clearMissingFileReadsForTests();
+  });
+
+  test('a 404 read marks only its own path, and never a non-missing failure', () => {
+    noteMissingFileRead(null, '/drives/me/dead.png', { status: 404 });
+    expect(missingFileSuppressed(null, '/drives/me/dead.png')).toBe(true);
+    expect(missingFileSuppressed(null, '/drives/me/live.png')).toBe(false);
+    noteMissingFileRead(null, '/drives/me/other.png', { status: 403 });
+    expect(missingFileSuppressed(null, '/drives/me/other.png')).toBe(false);
+  });
+
+  test('a found file clears the mark while the mark is still fresh', () => {
+    noteMissingFileRead('https://srv-1', '/a.png', { status: 404 });
+    expect(missingFileSuppressed('https://srv-1', '/a.png')).toBe(true);
+    clearMissingFileRead('https://srv-1', '/a.png');
+    expect(missingFileSuppressed('https://srv-1', '/a.png')).toBe(false);
+  });
+
+  test('a different server URL does not share the mark', () => {
+    noteMissingFileRead('https://srv-1', '/a.png', { status: 404 });
+    expect(missingFileSuppressed('https://srv-2', '/a.png')).toBe(false);
+  });
+
+  test('no sweeper: an expired mark evicts on its next read', () => {
+    noteMissingFileRead(null, '/dead.png', { status: 404 });
+    expect(missingFileSuppressed(null, '/dead.png')).toBe(true);
+    expect(MISSING_FILE_SUPPRESS_MS).toBe(5 * 60_000);
+    now += MISSING_FILE_SUPPRESS_MS + 1;
+    expect(missingFileSuppressed(null, '/dead.png')).toBe(false);
+    // Evicted, not just expired: the mark is gone, not refreshed.
+    expect(missingFileSuppressed(null, '/dead.png')).toBe(false);
+  });
+
+  // D-08: a write (New file, upload, copy, rename, mkdir) brings a path into
+  // existence. A miss noted before the write must not keep the new file's
+  // card and viewer on "File not found" for the whole window.
+  test('a write clears the mark of its own path and of every path under it', () => {
+    noteMissingFileRead('https://srv-1', 'notes/new.md', { status: 404 });
+    noteMissingFileRead('https://srv-1', 'notes/deep/a.md', { status: 404 });
+    noteMissingFileRead('https://srv-1', 'notes-other.md', { status: 404 });
+    noteMissingFileRead('https://srv-2', 'notes/new.md', { status: 404 });
+    clearMissingFileReadsUnder('https://srv-1', 'notes');
+    expect(missingFileSuppressed('https://srv-1', 'notes/new.md')).toBe(false);
+    expect(missingFileSuppressed('https://srv-1', 'notes/deep/a.md')).toBe(false);
+    // A sibling that only shares the prefix keeps its mark, as does another server.
+    expect(missingFileSuppressed('https://srv-1', 'notes-other.md')).toBe(true);
+    expect(missingFileSuppressed('https://srv-2', 'notes/new.md')).toBe(true);
+  });
+
+  test('the mark is keyed by the daemon path: relative, /workspace and leading-slash spellings match', () => {
+    noteMissingFileRead(null, 'src/new.md', { status: 404 });
+    expect(missingFileSuppressed(null, '/workspace/src/new.md')).toBe(true);
+    clearMissingFileReadsUnder(null, '/workspace/src/new.md');
+    expect(missingFileSuppressed(null, 'src/new.md')).toBe(false);
+
+    noteMissingFileRead(null, '/workspace/x.md', { status: 404 });
+    clearMissingFileRead(null, 'x.md');
+    expect(missingFileSuppressed(null, '/workspace/x.md')).toBe(false);
+  });
+
+  // Council C1: a read that started before a write and answers 404 after it
+  // raced the create; its miss is stale and must not re-mark the new file.
+  test('a 404 from a read that began before a write is not remembered', () => {
+    const before = missingFileReadEpoch();
+    clearMissingFileReadsUnder('https://srv-1', 'notes/new.md');
+    noteMissingFileRead('https://srv-1', 'notes/new.md', { status: 404 }, before);
+    expect(missingFileSuppressed('https://srv-1', 'notes/new.md')).toBe(false);
+
+    const after = missingFileReadEpoch();
+    noteMissingFileRead('https://srv-1', 'notes/new.md', { status: 404 }, after);
+    expect(missingFileSuppressed('https://srv-1', 'notes/new.md')).toBe(true);
+  });
+
+  afterEach(clearMissingFileReadsForTests);
+});
 
 describe('file read retry policy', () => {
   test('detects uploaded workspace paths', () => {
@@ -42,13 +139,13 @@ describe('file read retry policy', () => {
     );
   });
 
-  test('does not retry a directory read (400 "Path is a directory") — the .opencode loop', () => {
-    // Reading a directory like `.opencode` as a file returns 400; it must fail
+  test('does not retry a directory read (400 "Path is a directory")', () => {
+    // Reading a directory like `.kortix` as a file returns 400; it must fail
     // fast, not retry on a loop.
-    expect(shouldRetryFileRead('.opencode', 0, new Error('Path is a directory'))).toBe(false);
-    expect(shouldRetryFileRead('.opencode', 0, new Error('HTTP 400: Bad Request'))).toBe(false);
+    expect(shouldRetryFileRead('.kortix', 0, new Error('Path is a directory'))).toBe(false);
+    expect(shouldRetryFileRead('.kortix', 0, new Error('HTTP 400: Bad Request'))).toBe(false);
     const eisdir = new Error('EISDIR: illegal operation on a directory');
-    expect(shouldRetryFileRead('.opencode', 0, eisdir)).toBe(false);
+    expect(shouldRetryFileRead('.kortix', 0, eisdir)).toBe(false);
   });
 
   test('does not retry when the error carries a 4xx HTTP status', () => {

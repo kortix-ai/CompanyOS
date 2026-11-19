@@ -7,6 +7,8 @@ export * as schema from './schema';
 export {
   // Schema namespace
   kortixSchema,
+  contactForms,
+  salesEventOutbox,
   usedRefreshTokens,
   cliDeviceGrants,
   // Enums
@@ -31,11 +33,19 @@ export {
   accountRoleEnum,
   accountsRelations,
   accountGithubInstallationsRelations,
+  // Workspaces (one account + its one active project)
+  workspaces,
+  workspaceNameBackups,
+  personDeletionRequests,
+  workspaceSplitRuns,
+  workspaceSplitEmails,
   auditEvents,
   auditEventsAll,
   auditArchiveChunks,
+  auditArchiveParts,
   auditSessionSequences,
   usageEvents,
+  gatewayIdempotencyReplays,
   gatewayRequestLogs,
   gatewayApiKeys,
   gatewayBudgets,
@@ -50,6 +60,7 @@ export {
   configReleases,
   configReleaseFailures,
   configReleaseHeads,
+  projectConfigSummaries,
   baseTipChecks,
   projectMembers,
   projectAccessRequests,
@@ -59,6 +70,8 @@ export {
   accountSecretResources,
   accountSecretGrants,
   sessionProviderSecretPools,
+  llmCredentialBackfill,
+  legacyCredentialBackfill,
   projectSessionSecretHandles,
   projectSecretHandleStatusEnum,
   projectSecretConsumerEnum,
@@ -90,6 +103,16 @@ export {
   projectSpaces,
   projectSpaceLinks,
   projectSpaceMembers,
+  projectSpaceWatchers,
+  projectSpaceEvents,
+  projectGoals,
+  evalJobs,
+  evalTrials,
+  evalTrialWorkspaces,
+  calendarItems,
+  calendarItemPeople,
+  calendarComments,
+  projectGoalEvents,
   projectSpaceKindEnum,
   projectSpaceVisibilityEnum,
   // Memory ("Used memory" records)
@@ -143,6 +166,8 @@ export {
   creditLedger,
   creditUsage,
   accountDeletionRequests,
+  freeCreditClaims,
+  retentionErasures,
   creditPurchases,
   // Mobile push notification device tokens
   pushDeviceTokens,
@@ -177,6 +202,10 @@ export {
   artifactCommentScreenshotObjects,
   artifactCommentWriteLimits,
   artifactEvents,
+  artifactDocState,
+  artifactDocUpdates,
+  artifactDocRoots,
+  artifactDocClients,
   driveCommitAuthors,
   sessionSandboxIdentities,
   claudeSubscriptionLogins,
@@ -203,6 +232,8 @@ export {
   appSiteBlobs,
   appDeploymentEvents,
   sessionPendingQuestions,
+  sessionPendingPermissions,
+  sessionColleagueAccess,
   yoloMemberTokens,
   stripeWebhookEventsProcessed,
   // Tunnel
@@ -316,7 +347,7 @@ export {
   captureDevices,
   captureEnrollmentTokens,
   captureEnrollments,
-  captureWorkspaces,
+  captureTenants,
   timelineChunks,
   timelineFrames,
   timelineActions,
@@ -328,11 +359,15 @@ export {
   connectorPoliciesRelations,
   connectorProjectPoliciesRelations,
   connectorProjectSettingsRelations,
+  selfHostSignupPolicy,
+  creditCodes,
+  creditCodeRedemptions,
 } from './schema/kortix';
-export type { AgentGrant, StoredAgentGrant, ArtifactCommentMention } from './schema/kortix';
+export type { AgentGrant, StoredAgentGrant, StoredKeyScopes, ArtifactCommentMention } from './schema/kortix';
 export { readStoredAgentGrant } from './schema/kortix';
 export type { AccountBrandingRecord, DriveVolumeMoveRecord } from './schema/kortix';
 export type { MemoryThreadLoadLayer } from './schema/kortix';
+export type { ProjectGoalCriterion, ProjectGoalSessionRef, ProjectGoalVerification } from './schema/kortix';
 export type { SecretEgressPolicy, SecretEgressRule, SecretInjectionSlot } from './schema/kortix';
 
 export type {
@@ -343,8 +378,6 @@ export type {
   TunnelPermissionScope,
 } from './schema/kortix';
 
-// Public tables
-export { apiKeys } from './schema/public';
 
 export type {
   Account,
@@ -369,9 +402,7 @@ export type {
   NewSandbox,
   SessionSandbox,
   NewSessionSandbox,
-  ApiKey,
   CreditAccount,
-  NewApiKey,
   SandboxSelect,
   KortixApiKey,
   NewKortixApiKey,

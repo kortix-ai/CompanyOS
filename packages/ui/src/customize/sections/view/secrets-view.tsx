@@ -34,7 +34,7 @@ import { Field, FieldDescription, FieldLabel } from '../../../primitives/field';
 import Hint from '../../../primitives/hint';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '../../../primitives/hover-card';
 import { Alert, AlertDescription, AlertTitle } from '../../../primitives/alert';
-import { InfoBanner } from '../../../primitives/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription, AlertMedia as BannerAlertMedia } from '../../../primitives/alert';
 import { Input } from '../../../primitives/input';
 import {
   InputGroup,
@@ -414,7 +414,7 @@ export function SecretsView({
               variant="popover"
               size="sm"
             />
-            <InputGroupSearchClear onClick={() => setQuery('')} />
+            {query ? <InputGroupSearchClear onClick={() => setQuery('')} /> : null}
           </InputGroupSearch>
         ) : undefined
       }
@@ -458,16 +458,12 @@ export function SecretsView({
         ) : (
           <>
             {missingRequired.length > 0 && (
-              <InfoBanner
-                tone="warning"
-                icon={<DangerTriangleSolid weight="fill" />}
-                title={tI18nComplete('text10d33709a797', {
+              <BannerAlert variant="warning" ><BannerAlertMedia>{<DangerTriangleSolid weight="fill" />}</BannerAlertMedia><BannerAlertTitle>{tI18nComplete('text10d33709a797', {
                   value0: missingRequired.length,
                   value1: missingRequired.length === 1 ? 'secret' : 'secrets',
-                })}
-              >
+                })}</BannerAlertTitle><BannerAlertDescription>
                 {tI18nComplete.raw('textc18dc13ca821')}
-              </InfoBanner>
+              </BannerAlertDescription></BannerAlert>
             )}
 
             {filtered.length === 0 && orphans.length === 0 ? (
@@ -614,14 +610,14 @@ function SecretsAccessInfo({ showEnforced }: { showEnforced: boolean }) {
       </HoverCardTrigger>
       <HoverCardContent
         align="start"
-        className="max-h-[min(36rem,70vh)] w-[26rem] max-w-[calc(100vw-2rem)] space-y-3 overflow-y-auto p-4"
+        className="max-h-[min(36rem,var(--radix-hover-card-content-available-height))] w-[26rem] max-w-[calc(100vw-2rem)] space-y-3 overflow-y-auto p-4"
       >
         <p className="text-foreground text-sm font-medium">{heading}</p>
         <dl className="space-y-2.5">
           {secretDeliveryLegend(showEnforced, tI18nComplete).map((mode) => (
             <div key={mode.key} className="space-y-1">
               <dt>
-                <Badge variant={mode.tone} size="sm">
+                <Badge variant={mode.tone} size="sm" className="normal-case">
                   {mode.label}
                 </Badge>
               </dt>
@@ -659,7 +655,7 @@ function SecretsAccessInfo({ showEnforced }: { showEnforced: boolean }) {
               {tI18nComplete.raw('text49e63b9b35ec')} <code className="font-mono">secrets</code>{' '}
               {tI18nComplete.raw('text582967534d0f')}{' '}
               <code className="font-mono">kortix.yaml</code>;{' '}
-              <code className="font-mono">secrets: all</code>{' '}
+              <code className="font-mono">secrets: "*"</code>{' '}
               {tI18nComplete.raw('text17313fb7bf82')}
             </>
           ) : null}{' '}
@@ -673,7 +669,7 @@ function SecretsAccessInfo({ showEnforced }: { showEnforced: boolean }) {
         </p>
         {/* New tab: this page is often open over live work. */}
         <Link
-          href="/docs/project/secrets"
+          href="/docs/guide#secrets-you-choose-who-uses-them-and-how"
           target="_blank"
           rel="noreferrer"
           className="text-foreground inline-flex items-center gap-1.5 text-xs font-medium hover:underline"
@@ -882,7 +878,7 @@ function MissingSecretRow({
   );
 }
 
-function SecretTableRow({
+export function SecretTableRow({
   row,
   grantSwitch,
   canManage,
@@ -943,13 +939,21 @@ function SecretTableRow({
           />
         ) : row.undecryptable ? (
           <UndecryptableValue onAction={canManageShared ? onEdit : undefined} />
+        ) : !row.configured && canManageShared ? (
+          // An unset secret's one next step, on the row rather than only in the menu.
+          <span className="flex items-center gap-2">
+            {statusLabel(row)}
+            <Button variant="ghost" size="xs" onClick={onEdit}>
+              {tI18nComplete.raw('text58bf3410b028')}
+            </Button>
+          </span>
         ) : (
           statusLabel(row)
         )}
       </TableCell>
       <TableCell className="max-w-[220px] align-middle whitespace-normal">
         <div className="flex flex-col items-start gap-1">
-          <Badge variant={delivery.tone} size="sm">
+          <Badge variant={delivery.tone} size="sm" className="normal-case">
             {delivery.label}
           </Badge>
           {row.requiresRotation && (
@@ -981,7 +985,15 @@ function SecretTableRow({
               <span className="text-muted-foreground text-xs">{tSharing('notSharedWithYou')}</span>
             )}
           </div>
-        ) : null}
+        ) : (
+          // No value, so nobody receives it yet: say so instead of a blank cell.
+          <Hint label={tSecrets('deliveredOnceSet')} side="top">
+            <span className="text-muted-foreground text-xs">
+              <span aria-hidden="true">—</span>
+              <span className="sr-only">{tSecrets('deliveredOnceSet')}</span>
+            </span>
+          </Hint>
+        )}
       </TableCell>
       {grantSwitch ? (
         <TableCell className="text-right align-middle">
@@ -1145,14 +1157,27 @@ function SecretDialog({
    */
   const [pickedExposure, setPickedExposure] = useState<SecretExposure | null>(null);
   const exposure = pickedExposure ?? defaultSecretExposure(row, classification);
-  const { strategy, consumer: nextConsumer } = secretDeliveryTarget(exposure, row);
+  /**
+   * A connector-only row that no connector resolves (a value typed into a
+   * connector-scoped setup link, never bound) has no owning flow: its owner
+   * may move it to environment delivery. Unknown while connectors load.
+   */
+  const connectorBound =
+    row?.consumer !== 'connector' ||
+    connectorsLoading ||
+    connectors.some((connector) => connector.secretIdentifier === row?.identifier);
+  const unboundConnectorRow = row?.consumer === 'connector' && !connectorBound;
+  const usageContext = { connectorBound, picked: pickedExposure !== null };
+  const { strategy, consumer: nextConsumer } = secretDeliveryTarget(exposure, row, usageContext);
   /**
    * The LLM gateway, a connector, or the git connection owns this row's
    * usage, so the picker must not be shown at all. It writes three
    * `(strategy, consumer)` pairs and none of them is the one this row has;
    * rendering it would silently disconnect whatever assigned it.
    */
-  const usageAssigned = secretUsageIsAssigned(row?.consumer);
+  const usageAssigned = secretUsageIsAssigned(row?.consumer, usageContext);
+  /** The picker's value: an unbound connector row reads as Connector until moved. */
+  const pickerValue = unboundConnectorRow && pickedExposure === null ? 'connector' : exposure;
   const [selectedConnectorSlugs, setSelectedConnectorSlugs] = useState<string[] | null>(null);
   const effectiveSelectedConnectorSlugs =
     selectedConnectorSlugs ??
@@ -1199,7 +1224,8 @@ function SecretDialog({
   const prepareSavePlan = (): SecretSavePlan => {
     const finalKey = (row?.key ?? key).trim().toUpperCase();
     const finalIdentifier = (row?.identifier ?? identifier).trim() || finalKey;
-    const nextConnectorSlugs = row?.consumer === 'connector' ? effectiveSelectedConnectorSlugs : [];
+    const keepsConnector = row?.consumer === 'connector' && nextConsumer === 'connector';
+    const nextConnectorSlugs = keepsConnector ? effectiveSelectedConnectorSlugs : [];
     const bindingChanges = connectorBindingChanges(connectors, finalIdentifier, nextConnectorSlugs);
     if (!SECRET_NAME_REGEX.test(finalKey)) {
       throw new Error('Key: use A-Z, 0-9, _ only. Must start with a letter or _. Max 64 chars.');
@@ -1219,7 +1245,9 @@ function SecretDialog({
     if (needsHosts && !enforcedPolicy) {
       throw new Error('Add at least one exact HTTPS host.');
     }
-    if (row?.consumer === 'connector' && nextConnectorSlugs.length === 0) {
+    // An unbound connector row may be saved unbound (a new value); a bound one
+    // keeps at least one connector.
+    if (keepsConnector && connectorBound && nextConnectorSlugs.length === 0) {
       throw new Error('Select at least one connector.');
     }
     if (!nextSharedWith) {
@@ -1431,6 +1459,7 @@ function SecretDialog({
       ? `Edit ${row.identifier}`
       : `Set ${row.identifier}`;
   const selectedDelivery = secretDeliveryPresentation(strategy, nextConsumer, { tI18nComplete });
+  const connectorOnlyDelivery = secretDeliveryPresentation('broker', 'connector', { tI18nComplete });
   const bindingIdentifier = (row?.identifier ?? identifier).trim() || key.trim().toUpperCase();
   const connectorOptions = connectorBindingOptions(connectors, bindingIdentifier, tI18nComplete);
   // Offer "Enforce at the network" only when the experimental flag is on, or
@@ -1604,17 +1633,14 @@ function SecretDialog({
                   user can act on them. Both only ever change a DEFAULT — the
                   picker below stays free. */}
               {!isEdit && classification.signingNote && (
-                <InfoBanner tone="warning" title={tI18nComplete.raw('text28cd762621a4')}>
+                <BannerAlert variant="warning" ><BannerAlertTitle>{tI18nComplete.raw('text28cd762621a4')}</BannerAlertTitle><BannerAlertDescription>
                   {classification.signingNote} {tI18nComplete.raw('text4d737ad2895f')}
-                </InfoBanner>
+                </BannerAlertDescription></BannerAlert>
               )}
               {!isEdit && classification.modelProvider && exposure === 'enforced' && (
-                <InfoBanner
-                  tone="neutral"
-                  title={tI18nComplete('text04b204d5535c', {
+                <BannerAlert variant="default" ><BannerAlertTitle>{tI18nComplete('text04b204d5535c', {
                     value0: classification.modelProvider.label,
-                  })}
-                >
+                  })}</BannerAlertTitle><BannerAlertDescription>
                   {classification.hosts.length > 0
                     ? tI18nComplete('texta1827e131521', {
                         value0: classification.hosts[0],
@@ -1625,7 +1651,7 @@ function SecretDialog({
                       })}{' '}
                   {tI18nComplete.raw('textf0e27f45cf6a')} {classification.modelProvider.label}{' '}
                   {tI18nComplete.raw('text137f1b68d2c8')}
-                </InfoBanner>
+                </BannerAlertDescription></BannerAlert>
               )}
 
               <Field>
@@ -1640,7 +1666,7 @@ function SecretDialog({
                     id="secret-dialog-delivery"
                     className="border-border bg-sidebar rounded-md border p-3"
                   >
-                    <Badge variant={selectedDelivery.tone} size="sm">
+                    <Badge variant={selectedDelivery.tone} size="sm" className="normal-case">
                       {selectedDelivery.label}
                     </Badge>
                     <p className="text-muted-foreground mt-2 text-xs text-pretty">
@@ -1649,8 +1675,10 @@ function SecretDialog({
                   </div>
                 ) : (
                   <Select
-                    value={exposure}
-                    onValueChange={(next) => setPickedExposure(next as SecretExposure)}
+                    value={pickerValue}
+                    onValueChange={(next) =>
+                      setPickedExposure(next === 'connector' ? null : (next as SecretExposure))
+                    }
                     disabled={save.isPending}
                   >
                     <SelectTrigger id="secret-dialog-delivery" className="min-h-10 w-full">
@@ -1659,6 +1687,11 @@ function SecretDialog({
                     {/* One list, three values, no second screen and no
                         grouping: every item answers the label's question. */}
                     <SelectContent>
+                      {unboundConnectorRow && (
+                        <SelectItem value="connector" description={connectorOnlyDelivery.description}>
+                          {connectorOnlyDelivery.label}
+                        </SelectItem>
+                      )}
                       {exposureOptions.map((option) => (
                         <SelectItem
                           key={option.exposure}
@@ -1684,12 +1717,7 @@ function SecretDialog({
               )}
 
               {grantNotice && (
-                <InfoBanner
-                  tone="warning"
-                  icon={<DangerTriangleSolid weight="fill" />}
-                  title={grantNotice.title}
-                  className="[&_[data-slot=alert-content]]:min-w-0"
-                >
+                <BannerAlert variant="warning" className="[&_[data-slot=alert-content]]:min-w-0"><BannerAlertMedia>{<DangerTriangleSolid weight="fill" />}</BannerAlertMedia><BannerAlertTitle>{grantNotice.title}</BannerAlertTitle><BannerAlertDescription>
                   <span className="block text-pretty">{grantNotice.body}</span>
                   {grantPlan.candidates.length > 0 && (
                     <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -1747,7 +1775,7 @@ function SecretDialog({
                   <pre className="border-border bg-muted mt-2 overflow-x-auto rounded-sm border p-2 font-mono text-xs leading-relaxed">
                     {grantManifest}
                   </pre>
-                </InfoBanner>
+                </BannerAlertDescription></BannerAlert>
               )}
 
               {needsHosts && (
@@ -1763,11 +1791,7 @@ function SecretDialog({
                       child shrink below the <pre>'s intrinsic (white-space: pre)
                       width, so the probe scrolls inside its own overflow-x-auto
                       box instead of forcing the whole dialog to scroll. */}
-                  <InfoBanner
-                    tone="neutral"
-                    title={echoNotice.title}
-                    className="[&_[data-slot=alert-content]]:min-w-0"
-                  >
+                  <BannerAlert variant="default" className="[&_[data-slot=alert-content]]:min-w-0"><BannerAlertTitle>{echoNotice.title}</BannerAlertTitle><BannerAlertDescription>
                     <span className="block text-pretty">{echoNotice.body}</span>
                     <pre className="border-border bg-muted mt-2 overflow-x-auto rounded-sm border p-2 font-mono text-xs leading-relaxed">
                       {echoNotice.probe}
@@ -1780,7 +1804,7 @@ function SecretDialog({
                     >
                       {echoNotice.docsLabel}
                     </Link>
-                  </InfoBanner>
+                  </BannerAlertDescription></BannerAlert>
 
                   <Field>
                     <FieldLabel htmlFor="secret-dialog-hosts">
@@ -1832,7 +1856,7 @@ function SecretDialog({
               {/* The connector binding keeps its own control: the usage above
                   is read-only, but WHICH connectors resolve this secret is a
                   real choice and this is where it is made. */}
-              {row?.consumer === 'connector' && (
+              {row?.consumer === 'connector' && nextConsumer === 'connector' && (
                 <div className="border-border bg-sidebar space-y-4 rounded-md border p-3">
                   <Field>
                     <FieldLabel>{tI18nComplete.raw('textc3d2e79ebdd0')}</FieldLabel>
@@ -1842,9 +1866,9 @@ function SecretDialog({
                         <Skeleton className="h-12 rounded-md" />
                       </div>
                     ) : connectorOptions.length === 0 ? (
-                      <InfoBanner tone="neutral" title={tI18nComplete.raw('text10798ef769fd')}>
+                      <BannerAlert variant="default" ><BannerAlertTitle>{tI18nComplete.raw('text10798ef769fd')}</BannerAlertTitle><BannerAlertDescription>
                         {tI18nComplete.raw('text0b834e60371f')}
-                      </InfoBanner>
+                      </BannerAlertDescription></BannerAlert>
                     ) : (
                       <div className="bg-popover overflow-hidden rounded-md border">
                         {connectorOptions.map((option, index) => (
@@ -1892,9 +1916,9 @@ function SecretDialog({
               )}
 
               {row?.requiresRotation && (
-                <InfoBanner tone="warning" title={tI18nComplete.raw('text640b080e1d85')}>
+                <BannerAlert variant="warning" ><BannerAlertTitle>{tI18nComplete.raw('text640b080e1d85')}</BannerAlertTitle><BannerAlertDescription>
                   {tI18nComplete.raw('text90c889e0b6ff')}
-                </InfoBanner>
+                </BannerAlertDescription></BannerAlert>
               )}
     </>
   );

@@ -14,10 +14,12 @@
  * it never widens what an agent can enumerate — the verdict comes from the
  * grant, not from which secrets exist.
  */
-import { projectSessions, projects } from '@kortix/db';
+import { projectSessions } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 import { db } from '../../shared/db';
+import { loadGitProjectRow } from './project-git-row';
 import { DEFAULT_AGENT_SENTINEL } from '../agents';
+import { listAdmits } from '../../secrets/strategy';
 import { resolveSessionSecretGrant } from './secret-grant';
 
 export type SecretWithheldReason = 'agent_grant' | 'session_allowlist';
@@ -34,11 +36,6 @@ export interface SessionSecretReach {
   allowlist: string[] | null;
 }
 
-function admits(list: string[], name: string): boolean {
-  const target = name.toUpperCase();
-  return list.some((entry) => entry.toUpperCase() === target);
-}
-
 /**
  * The names in `names` that a session with this grant and allowlist never
  * receives. The agent grant is reported first: it is the durable setting a
@@ -52,9 +49,9 @@ export function withheldSecrets(
 ): WithheldSecret[] {
   const withheld: WithheldSecret[] = [];
   for (const name of names) {
-    if (grantEnv !== undefined && grantEnv !== 'all' && !admits(grantEnv, name)) {
+    if (grantEnv !== undefined && grantEnv !== 'all' && !listAdmits(grantEnv, name)) {
       withheld.push({ name, reason: 'agent_grant' });
-    } else if (allowlist != null && !admits(allowlist, name)) {
+    } else if (allowlist != null && !listAdmits(allowlist, name)) {
       withheld.push({ name, reason: 'session_allowlist' });
     }
   }
@@ -80,15 +77,7 @@ export async function resolveSessionSecretReach(
     .where(eq(projectSessions.sessionId, sessionId))
     .limit(1);
   if (!session) return null;
-  const [project] = await db
-    .select({
-      repoUrl: projects.repoUrl,
-      defaultBranch: projects.defaultBranch,
-      manifestPath: projects.manifestPath,
-    })
-    .from(projects)
-    .where(eq(projects.projectId, session.projectId))
-    .limit(1);
+  const project = await loadGitProjectRow(session.projectId);
   if (!project) return null;
   const agent = session.agentName ?? DEFAULT_AGENT_SENTINEL;
   const grantEnv = await resolveSessionSecretGrant({
@@ -97,6 +86,7 @@ export async function resolveSessionSecretReach(
     defaultBranch: project.defaultBranch,
     manifestPath: project.manifestPath,
     sessionAgent: agent,
+    sessionId,
     // The human may have just changed the grant in Customize; read it fresh.
     forceRefresh: true,
   });
@@ -144,7 +134,8 @@ export function withheldSecretsFix(agent: string, withheld: WithheldSecret[]): s
     parts.push(
       `${byGrant.join(', ')} ${byGrant.length === 1 ? 'is' : 'are'} not in agent "${agent}"'s secrets grant, ` +
         'so this session never receives the value, even when it is set. ' +
-        'An agent session cannot widen its own grant; a person with project access must. ' +
+        'Widening the grant needs project.agent.write and project.secret.read: an owner, admin or manager holds both, ' +
+        'and so does an agent session acting for one when its kortix_permissions list them. ' +
         `Fix: in the web app open Customize → Agents → ${agent} → Secrets and enable ` +
         `${byGrant.length === 1 ? 'it' : 'them'} (or, from their own CLI: \`${grantCommand}\`). ` +
         'Kortix pushes the change to this session when it is saved; run `kortix secrets sync` ' +

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Env } from "../core/env";
-import type { CreatedProject } from "../core/types";
+import type { CreatedProject, FlowContext } from "../core/types";
+import { lockProjectFirst } from './token-binding-lock';
 
 interface ProjectDb {
   query(text: string, values?: unknown[]): Promise<unknown>;
@@ -92,7 +93,21 @@ export async function createDatabaseProject(
   open: OpenProjectDb = openProjectDb,
 ): Promise<CreatedProject> {
   const projectId = randomUUID();
-  return withProjectDb(env, "create", open, async (client) => {
+  // An account holds ONE active project that is not split-pending
+  // (`uq_projects_workspace_account`, Workspaces). The run's owner account
+  // carries many fixture projects, so a second project makes it a legacy
+  // multi-project account: every active project in it, the new one included,
+  // is marked `split_pending`, as the workspace migration marks a real one.
+  // The advisory lock serializes concurrent fixture creates in one account.
+  return withProjectTx(env, "create", open, async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('ke2e:project-fixture:' || $1, 0))", [input.accountId]);
+      const marked = (await client.query(
+        `UPDATE kortix.projects SET split_pending = true
+          WHERE account_id = $1::uuid AND status = 'active'
+          RETURNING project_id`,
+        [input.accountId],
+      )) as { rowCount?: number | null };
+      const legacy = (marked.rowCount ?? 0) > 0;
       await client.query(
         `WITH inserted_project AS (
            INSERT INTO kortix.projects (
@@ -103,7 +118,8 @@ export async function createDatabaseProject(
              default_branch,
              manifest_path,
              status,
-             metadata
+             metadata,
+             split_pending
            )
            VALUES (
              $1::uuid,
@@ -113,7 +129,8 @@ export async function createDatabaseProject(
              'main',
              'kortix.yaml',
              'active'::kortix.project_status,
-             $6::jsonb
+             $6::jsonb,
+             $7::boolean
            )
            RETURNING project_id
          )
@@ -143,6 +160,7 @@ export async function createDatabaseProject(
             onboarding_completed_at: "2026-01-01T00:00:00.000Z",
             ...(input.metadata ?? {}),
           }),
+          legacy,
         ],
       );
     return { id: projectId, name: input.name };
@@ -198,6 +216,27 @@ export async function setDatabaseProjectFeature(
         [projectId, feature, enabled],
       );
   
+  });
+}
+
+/**
+ * Record a provider check result on one saved provider key, as
+ * `POST /v1/accounts/:accountId/secret-resources/:secretId/verify` does after
+ * the provider answers. The local profile has no provider to ask.
+ */
+export async function setDatabaseKeyVerification(
+  env: Env,
+  secretId: string,
+  status: "verified" | "invalid" | "unknown",
+  open: OpenProjectDb = openProjectDb,
+): Promise<void> {
+  return withProjectDb(env, "record a key check for", open, async (client) => {
+    await client.query(
+      `UPDATE kortix.account_secret_resources
+       SET verify_status = $2, verify_message = 'set by the test', verified_at = now()
+       WHERE secret_id = $1::uuid`,
+      [secretId, status],
+    );
   });
 }
 
@@ -290,7 +329,7 @@ export async function seedDatabaseRunningTurn(
       );
       await client.query(
         `INSERT INTO kortix.session_turns
-           (turn_token, session_id, sandbox_id, project_id, account_id, opencode_session_id, message_id, state, accepted_at)
+           (turn_token, session_id, sandbox_id, project_id, account_id, runtime_session_id, message_id, state, accepted_at)
          VALUES ($1, $2::text, $2::uuid, $3::uuid, $4::uuid, 'ses_ke2e_root', $5, 'active', now())`,
         [turnToken, input.sessionId, input.projectId, input.accountId, input.messageId],
       );
@@ -515,9 +554,9 @@ export async function bindDatabaseSessionCredential(
         [input.sessionId, input.accountId, input.projectId],
       );
       await client.query(
-        `UPDATE kortix.account_tokens
+        lockProjectFirst(`UPDATE kortix.account_tokens
          SET session_id = $2
-         WHERE token_id = $1::uuid`,
+         WHERE token_id = $1::uuid`),
         [input.tokenId, input.sessionId],
       );
       await client.query(
@@ -551,4 +590,18 @@ export async function deleteDatabaseProject(
       );
   
   });
+}
+
+/** A project-scoped PAT for a fresh project, as a client: mints through the owner and tracks the token. */
+export async function createProjectPat(ctx: FlowContext, label: string) {
+  const project = await ctx.fixtures.project();
+  const response = await ctx.client.as(ctx.P.OWNER).post(
+    '/v1/workspaces/:projectId/cli-token',
+    { name: ctx.fixtures.name(label) },
+    { params: { projectId: project.id } },
+  );
+  response.status(201).body().exists('$.secret_key').exists('$.token_id');
+  const body = response.json<{ secret_key: string; token_id: string }>();
+  ctx.track('token', body.token_id);
+  return ctx.client.withBearer(body.secret_key, 'PAT_PROJ');
 }

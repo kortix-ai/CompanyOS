@@ -103,8 +103,8 @@ describe('interface theme model', () => {
     expect(new Set(INTERFACE_THEME_IDS).size).toBe(INTERFACE_THEME_IDS.length);
   });
 
-  test('with nothing chosen, System resolves to Pure light and Pure dark', () => {
-    expect(DEFAULT_THEME_CHOICE).toEqual({ light: 'pure-light', dark: 'pure-dark' });
+  test('with nothing chosen, System resolves to Kortix light and Kortix dark', () => {
+    expect(DEFAULT_THEME_CHOICE).toEqual({ light: 'light', dark: 'dark' });
   });
 
   test('every picker row round-trips through mode + palette', () => {
@@ -149,24 +149,24 @@ describe('interface theme model', () => {
   });
 
   test('legacy or unknown stored palettes read as the defaults', () => {
-    expect(normalizeLightTheme(undefined)).toBe('pure-light');
-    expect(normalizeLightTheme('soft')).toBe('pure-light');
-    expect(normalizeLightTheme('dark')).toBe('pure-light');
+    expect(normalizeLightTheme(undefined)).toBe('light');
+    expect(normalizeLightTheme('soft')).toBe('light');
+    expect(normalizeLightTheme('dark')).toBe('light');
     expect(normalizeLightTheme('light')).toBe('light');
-    expect(normalizeDarkTheme('pure')).toBe('pure-dark');
-    expect(normalizeDarkTheme('light')).toBe('pure-dark');
+    expect(normalizeDarkTheme('pure')).toBe('dark');
+    expect(normalizeDarkTheme('light')).toBe('dark');
     expect(normalizeDarkTheme('dark')).toBe('dark');
     // The pre-generated `jellybean` id now aliases to its terminal-theme id.
     expect(normalizeDarkTheme('jellybean')).toBe('jellybeans-default');
     expect(normalizeDarkTheme('iceberg-dark')).toBe('iceberg-dark');
     expect(normalizeLightTheme('iceberg-light')).toBe('iceberg-light');
     // A light palette is never a dark one, and vice versa.
-    expect(normalizeDarkTheme('iceberg-light')).toBe('pure-dark');
-    expect(normalizeDarkTheme('dark-blue')).toBe('pure-dark');
+    expect(normalizeDarkTheme('iceberg-light')).toBe('dark');
+    expect(normalizeDarkTheme('dark-blue')).toBe('dark');
     // Palettes that were removed, or never existed, read as the default.
-    expect(normalizeLightTheme('light-blue')).toBe('pure-light');
-    expect(normalizeDarkTheme('midnight')).toBe('pure-dark');
-    expect(normalizeDarkTheme('graphite-blue')).toBe('pure-dark');
+    expect(normalizeLightTheme('light-blue')).toBe('light');
+    expect(normalizeDarkTheme('midnight')).toBe('dark');
+    expect(normalizeDarkTheme('graphite-blue')).toBe('dark');
   });
 });
 
@@ -174,7 +174,7 @@ describe('interface theme model', () => {
 function runInitScript(
   stored: string | null,
   throwOnRead = false,
-  pathname = '/projects',
+  pathname = '/workspaces',
 ): Record<string, string> {
   const attributes: Record<string, string> = {};
   const document = {
@@ -219,7 +219,7 @@ describe('INTERFACE_THEME_INIT_SCRIPT', () => {
   });
 
   test('a first visit, a legacy blob or an unknown id gets the defaults', () => {
-    const defaults = { 'data-light-theme': 'pure-light', 'data-dark-theme': 'pure-dark' };
+    const defaults = { 'data-light-theme': 'light', 'data-dark-theme': 'dark' };
     expect(runInitScript(null)).toEqual(defaults);
     expect(runInitScript(blob({ lightTone: 'soft', darkTone: 'soft' }))).toEqual(defaults);
     expect(runInitScript(blob({ lightTheme: 'dark', darkTheme: 'neon' }))).toEqual(defaults);
@@ -228,10 +228,10 @@ describe('INTERFACE_THEME_INIT_SCRIPT', () => {
     );
   });
 
-  test('themes only /new, /projects/** and /settings, before first paint', () => {
+  test('themes only /new, /workspaces/** and /settings, before first paint', () => {
     const stored = blob({ lightTheme: 'light', darkTheme: 'dracula-default' });
     const themed = { 'data-light-theme': 'light', 'data-dark-theme': 'dracula-default' };
-    for (const path of ['/new', '/projects', '/projects/p1/sessions/s1', '/settings/appearance']) {
+    for (const path of ['/workspaces/new', '/workspaces', '/workspaces/p1/sessions/s1', '/settings/appearance']) {
       expect(runInitScript(stored, false, path)).toEqual(themed);
     }
     for (const path of [
@@ -241,9 +241,33 @@ describe('INTERFACE_THEME_INIT_SCRIPT', () => {
       '/checkout',
       '/invites/x',
       '/newsroom',
-      '/projectsx',
+      '/workspacesx',
     ]) {
       expect(runInitScript(stored, false, path)).toEqual({});
+    }
+  });
+
+  test('the "Reduce motion" switch marks <html> on workspace routes, before first paint', () => {
+    const stored = blob({ reduceMotion: true });
+    for (const path of ['/workspaces/p1/sessions/s1', '/projects/p1', '/new', '/settings/preferences']) {
+      expect(runInitScript(stored, false, path)).toEqual({
+        'data-light-theme': 'light',
+        'data-dark-theme': 'dark',
+        'data-reduce-motion': '',
+      });
+    }
+  });
+
+  test('marketing, auth and other public pages keep their motion with the switch on', () => {
+    const stored = blob({ reduceMotion: true });
+    for (const path of ['/', '/pricing', '/auth', '/developers', '/invites/x']) {
+      expect(runInitScript(stored, false, path)).toEqual({});
+    }
+  });
+
+  test('the switch off, a legacy blob or a non-boolean leaves motion on', () => {
+    for (const stored of [blob({ reduceMotion: false }), blob({}), blob({ reduceMotion: 'true' }), null]) {
+      expect(runInitScript(stored, false, '/workspaces')).not.toHaveProperty('data-reduce-motion');
     }
   });
 
@@ -316,7 +340,7 @@ describe('themed surface', () => {
   });
 
   test('the decision is the URL: themed routes in, everything else out', () => {
-    for (const path of ['/new', '/projects', '/projects/p1', '/settings', '/de/projects/p1']) {
+    for (const path of ['/workspaces/new', '/workspaces', '/workspaces/p1', '/settings', '/de/workspaces/p1']) {
       expect(isThemedPath(path)).toBe(true);
     }
     for (const path of ['/', '/auth', '/pricing', '/checkout', '/connections', '/invites/x']) {
@@ -329,7 +353,7 @@ describe('themed surface', () => {
   test('syncing themes a themed route and clears any other page', () => {
     const { attrs, element } = fakeRoot({ class: 'dark' });
     const choice = { light: 'iceberg-light', dark: 'dracula-default' };
-    syncInterfaceThemes(element, '/projects/p1', choice);
+    syncInterfaceThemes(element, '/workspaces/p1', choice);
     expect(Object.fromEntries(attrs)).toEqual({
       class: 'dark',
       'data-light-theme': 'iceberg-light',

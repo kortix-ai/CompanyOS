@@ -8,12 +8,13 @@ import createNextIntlPlugin from 'next-intl/plugin';
 import path from 'path';
 import { buildBlumeDocs, getBlumeDocsOutputPaths } from './scripts/blume-docs.mjs';
 import { BLOG_ORIGIN } from './src/config/blog-origin';
+import { resolveTurbopackFileSystemCacheForBuild } from './src/config/turbopack-build-cache';
 import { locales } from './src/i18n/catalog.mjs';
+import { workspaceRedirects } from './src/lib/workspace-redirects';
 import { SHIPPED_ICON_WEIGHTS } from '@kortix/ui/lib/icon-config';
 import {
   embedContentSecurityPolicy,
   enforcedContentSecurityPolicy,
-  reportOnlyContentSecurityPolicy,
 } from './src/lib/security/content-security-policy';
 import { refreshContentTimestamps } from './scripts/build-content-timestamps.mjs';
 import { copyEmojibaseData, getEmojibaseDataOutputPaths } from './scripts/emojibase-data.mjs';
@@ -295,6 +296,10 @@ const nextConfig = (): NextConfig => ({
   // file. Disable standalone on Vercel, where the platform does not use it.
   // See https://github.com/vercel/next.js/issues/96646.
   output: IS_PREVIEW_BUILD || process.env.VERCEL ? undefined : 'standalone',
+  // Skew Protection on Vercel. The deploy builds on a GitHub runner
+  // (infra/scripts/vercel-deploy-prebuilt.sh), where Vercel does not supply a
+  // deployment ID, so the script sets a unique one. Unset everywhere else.
+  deploymentId: process.env.KORTIX_VERCEL_DEPLOYMENT_ID || undefined,
   // Inline the resolved version so NEXT_PUBLIC_KORTIX_VERSION is available in
   // both the server (runtime-config) and client bundles, even on Vercel.
   env: {
@@ -321,11 +326,13 @@ const nextConfig = (): NextConfig => ({
 
   // --- Next.js 16.3 posture ------------------------------------------------
   // Recording WHY each 16.3 knob is set or left alone, so nobody "adds the
-  // missing config" later or wonders whether we missed the release. The only
-  // knobs we set are turbopackMemoryEviction and turbopackFileSystemCacheForDev
+  // missing config" later or wonders whether we missed the release. The knobs
+  // we set are turbopackMemoryEviction and turbopackFileSystemCacheForDev
   // (both below) — and both only as escape hatches that default to upstream's
   // value when their env var is unset. 16.4 adds turbopackGc (below), which we
-  // turn on: upstream defaults it off.
+  // turn on: upstream defaults it off. turbopackFileSystemCacheForBuild (also
+  // below) defaults to upstream's on, except on machines that cannot hold its
+  // memory: it OOM-killed the build on an 11 GB sandbox (KRTX-4741).
   //
   // Already default-ON in 16.3 — restating them here would be dead config that
   // silently diverges the day upstream changes a default:
@@ -416,8 +423,14 @@ const nextConfig = (): NextConfig => ({
 
   // Performance optimizations
   experimental: {
+    // Next 16.4 stops `next dev` under a coding agent (it reads the agent's
+    // environment) to print an upgrade notice, and lets it start only on a
+    // retry within 5 minutes. `pnpm dev` and `pnpm worktree start` take longer
+    // than that to reach the web server, so every agent session's stack died
+    // at the notice. Next.js upgrades arrive through Dependabot and PRs.
+    agentUpgrade: false,
     // Next 16 gives a dynamic page segment a client-cache TTL of 0, so every
-    // navigation to a route under `projects/[id]/layout.tsx` (which awaits
+    // navigation to a route under `workspaces/[id]/layout.tsx` (which awaits
     // cookies(), making the whole subtree dynamic) discards the segment and
     // repaints its `loading.tsx`. Returning to a tab you visited ten seconds
     // ago cost a full server roundtrip and a full-page skeleton.
@@ -426,7 +439,7 @@ const nextConfig = (): NextConfig => ({
     // only covers layout-to-boundary and the TTL stays in the `dynamic` bucket
     // (node_modules/next/dist/docs/01-app/02-guides/prefetching.md:61).
     //
-    // 300s is safe here because every page under `projects/[id]` is a client
+    // 300s is safe here because every page under `workspaces/[id]` is a client
     // component — its RSC payload references a chunk and carries no rendered
     // data. Page data comes from React Query under its own contract.
     staleTimes: { dynamic: 300, static: 300 },
@@ -459,6 +472,12 @@ const nextConfig = (): NextConfig => ({
     // aborts the dev server and takes the whole browser shard with it — the
     // full rationale is on resolveTurbopackFileSystemCacheForDev above.
     turbopackFileSystemCacheForDev: resolveTurbopackFileSystemCacheForDev(),
+    // One-shot sandbox builds (11 GB RAM, no swap) cannot hold the persistent
+    // build cache in memory: it pushed the build to 9.5 GB RSS and the kernel
+    // OOM killer SIGKILLed it (exit 137, KRTX-4741). Small machines default the
+    // build cache off; 16 GB CI runners keep it (and its warm 36.3 s -> 1.9 s
+    // compile). KORTIX_TURBOPACK_BUILD_CACHE=on|off overrides.
+    turbopackFileSystemCacheForBuild: resolveTurbopackFileSystemCacheForBuild(),
     // Without GC (the default, and the only mode before 16.4) the persistent
     // cache keeps every task it ever computed. Each `git merge origin/dev`
     // adds a new set, so a busy worktree's .next/dev/cache/turbopack reached
@@ -472,7 +491,6 @@ const nextConfig = (): NextConfig => ({
       'recharts',
       'date-fns',
       '@tanstack/react-query',
-      'cmdk',
       'next-intl',
     ],
   },
@@ -497,12 +515,12 @@ const nextConfig = (): NextConfig => ({
   async redirects() {
     return [
       // The desktop shell historically launched at /dashboard, which never
-      // existed. The signed-in home is /projects (see middleware). Desktop
+      // existed. The signed-in home is /workspaces (see middleware). Desktop
       // builds that baked the old URL in, and old links, land there instead
       // of on the 404 page (KRTX-3232).
       {
         source: '/dashboard',
-        destination: '/projects',
+        destination: '/workspaces',
         permanent: false,
       },
       // The paths people type to sign in or up (KRTX-3154). /auth asks for the
@@ -520,81 +538,9 @@ const nextConfig = (): NextConfig => ({
         destination: '/changelog/releases/page/:page',
         permanent: true,
       },
-      // Capability tabs moved under /customize/ (2026-09-03). The old
-      // top-level segments were shared in Slack, saved as bookmarks and baked
-      // into agent transcripts, so every one keeps resolving. `agent` became
-      // `agents`, `config` became `settings`; the rest kept their names.
-      // `review` is NOT in this list: Review left Customize on 2026-10-02 and
-      // `/projects/:id/review` is its own page again. Redirecting it here
-      // would loop with `customize/review/page.tsx`, which sends it back.
-      {
-        source: '/projects/:id/agent/:path*',
-        destination: '/projects/:id/customize/agents/:path*',
-        permanent: false,
-      },
-      {
-        source: '/projects/:id/agent',
-        destination: '/projects/:id/customize/agents',
-        permanent: false,
-      },
-      // The project-wide libraries and settings have one home, Project admin
-      // (`/projects/:id/admin/<section>`, 2026-10-27). Customize keeps Agents
-      // and Review. Every older address lands there in one hop: the
-      // top-level tabs, their `/customize/` successors, and the Project admin
-      // `?section=` form.
-      {
-        source: '/projects/:id/config',
-        destination: '/projects/:id/admin/general',
-        permanent: false,
-      },
-      {
-        source: '/projects/:id/:tab(skills|connectors|triggers|models|secrets)',
-        destination: '/projects/:id/admin/:tab',
-        permanent: false,
-      },
-      {
-        source: '/projects/:id/customize/:tab(skills|tools|extensions|drives|triggers|models|secrets)',
-        destination: '/projects/:id/admin/:tab',
-        permanent: false,
-      },
-      {
-        source: '/projects/:id/customize/connectors/:path*',
-        destination: '/projects/:id/admin/connectors/:path*',
-        permanent: false,
-      },
-      {
-        source: '/projects/:id/customize/reminders',
-        destination: '/projects/:id/admin/triggers',
-        permanent: false,
-      },
-      {
-        source: '/projects/:id/customize/repo',
-        destination: '/projects/:id/admin/repo',
-        permanent: false,
-      },
-      {
-        source: '/projects/:id/customize/settings',
-        has: [{ type: 'query', key: 'section', value: '(?<section>[a-z-]+)' }],
-        destination: '/projects/:id/admin/:section',
-        permanent: false,
-      },
-      {
-        source: '/projects/:id/customize/settings',
-        destination: '/projects/:id/admin/general',
-        permanent: false,
-      },
-      {
-        source: '/projects/:id/:prefix(customize|admin)/apps',
-        destination: '/projects/:id/apps',
-        permanent: false,
-      },
-      // Backends became Apps (2026-10-09), and a migrated
-      // App keeps its backend's id. The retired Backends pages and the
-      // Customize tab land on the Apps page, the one with an id opening that App.
-      ...['/projects/:id/backends', '/projects/:id/customize/backends'].flatMap((retired) => [
-        { source: `${retired}/:appId`, destination: '/projects/:id/apps?app=:appId', permanent: false },
-        { source: retired, destination: '/projects/:id/apps', permanent: false },
-      ]),
+      // Every workspace page moved from /projects to /workspaces (2026-11-06):
+      // src/lib/workspace-redirects.ts, with its mapping test beside it.
+      ...workspaceRedirects(locales),
       // Decks moved from the single /presentation route to the /presentations
       // framework (index + one route per registered deck). The old paths were
       // shared in Slack and calendar invites, so they keep working.
@@ -887,7 +833,7 @@ const nextConfig = (): NextConfig => ({
       },
       {
         source: '/docs/project/legacy-toml',
-        destination: '/docs/developers#migrate-to-v3',
+        destination: '/docs/developers#older-formats',
         permanent: true,
       },
       {
@@ -1033,6 +979,11 @@ const nextConfig = (): NextConfig => ({
       { source: '/cli', destination: '/docs/developers#cli', permanent: true },
       { source: `/:locale(${locales.join('|')})/cli`, destination: '/docs/developers#cli', permanent: true },
       { source: '/markdown/cli.md', destination: '/markdown/index.md', permanent: true },
+      // The old /app path served the 404 page: it is neither a public nor a
+      // protected app route, so the middleware rewrote it onto the localized
+      // catch-all (KRTX-4462). It lands on the download page. Exact path only,
+      // query string kept (the destination has none, so Next forwards it).
+      { source: '/app', destination: '/download', permanent: true },
       // Removed pages that may live on in old links and search indexes.
       // /credits-explained became the credits guide in the docs tree; the
       // /compare section was retired with no direct replacement.
@@ -1127,17 +1078,18 @@ const nextConfig = (): NextConfig => ({
             },
           ]
         : []),
+      // PostHog, same origin (lib/analytics/posthog-client.ts): fewer requests
+      // lost to ad blockers, no third-party host in connect-src. Static
+      // assets (recorder, surveys) come from the assets host.
       {
         source: '/ingest/static/:path*',
         destination: 'https://eu-assets.i.posthog.com/static/:path*',
       },
       {
         source: '/ingest/:path*',
-        destination: 'https://eu.i.posthog.com/:path*',
-      },
-      {
-        source: '/ingest/flags',
-        destination: 'https://eu.i.posthog.com/flags',
+        // POSTHOG_INGEST_ORIGIN points a local run at a capture sink
+        // (product-analytics skill, "Verify an event"). Production leaves it unset.
+        destination: `${process.env.POSTHOG_INGEST_ORIGIN || 'https://eu.i.posthog.com'}/:path*`,
       },
       // /docs is a Blume static build in public/docs/. Astro writes clean URLs as
       // directories, and Next's static handler does not resolve a directory index,
@@ -1184,16 +1136,11 @@ const nextConfig = (): NextConfig => ({
       {
         source: '/:path*',
         headers: [
-          // Enforced: framing, plugins and <base>. The script allowlist is
-          // report-only until its reports are clean; see
-          // src/lib/security/content-security-policy.ts.
+          // Enforced: framing, plugins, <base> and the script allowlist, with
+          // a report-uri; see src/lib/security/content-security-policy.ts.
           {
             key: 'Content-Security-Policy',
             value: enforcedContentSecurityPolicy(),
-          },
-          {
-            key: 'Content-Security-Policy-Report-Only',
-            value: reportOnlyContentSecurityPolicy(),
           },
           // No X-Frame-Options: it cannot allowlist the Kortix extension's side panel.
           // CSP frame-ancestors above is the framing gate.
@@ -1201,9 +1148,14 @@ const nextConfig = (): NextConfig => ({
             key: 'X-Content-Type-Options',
             value: 'nosniff',
           },
+          // The microphone for this origin only: a voice call (an agent page's
+          // Call button, project flag `voice_call`) asks for it, and the browser
+          // still asks the person. Set on every document, not the session route
+          // alone: a session opened by client-side navigation keeps the policy of
+          // the page the app first loaded. Frames from other origins stay without it.
           {
             key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()',
+            value: 'camera=(), microphone=(self), geolocation=()',
           },
           {
             key: 'Referrer-Policy',
@@ -1268,11 +1220,11 @@ const nextConfig = (): NextConfig => ({
       // authenticated session. Cookies and existing project/session permissions
       // still determine access. Both canonical URL forms are covered.
       {
-        source: '/projects/:projectId/sessions/:sessionId',
+        source: '/workspaces/:projectId/sessions/:sessionId',
         headers: embedFrameHeaders(),
       },
       {
-        source: '/:locale/projects/:projectId/sessions/:sessionId',
+        source: '/:locale/workspaces/:projectId/sessions/:sessionId',
         headers: embedFrameHeaders(),
       },
       // Apple reads this file as JSON (Universal Links for /share and

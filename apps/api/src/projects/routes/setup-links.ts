@@ -28,6 +28,7 @@ import { parseConnectorConnectOwner } from '../lib/connection-access';
 import { PROJECT_ACTIONS } from '../../iam';
 import { CODEX_AUTH_JSON_SECRET_NAME, normalizeString } from '../lib/serializers';
 import { readJsonObject } from '../../shared/http-body';
+import { workspaceIdParam } from '../../shared/route-params';
 
 function frontendBase(): string {
   return (config.FRONTEND_URL || 'http://localhost:3000').replace(/\/+$/, '');
@@ -41,20 +42,20 @@ export function registerSetupLinksRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/secret-requests',
+      path: '/{workspaceId}/secret-requests',
       tags: ['secrets'],
       summary: 'Create a link where a person enters a secret',
       description:
         'Create a one-time link where a person types secret values. Use it when you need a secret you do not have.',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string() }),
+        params: z.object({ workspaceId: z.string() }),
         body: { content: { 'application/json': { schema: lenientBody({
             names: z.array(z.string()).optional().openapi({ description: 'Secret names (env vars) the person must enter. Send names or a single name.' }),
             name: z.string().optional().openapi({ description: 'A single secret name. Alternative to names.' }),
             labels: z.record(z.string(), z.any()).optional().openapi({ description: 'Map of secret name to a label shown to the person.' }),
             descriptions: z.record(z.string(), z.any()).optional().openapi({ description: 'Map of secret name to a help text shown to the person.' }),
-            scope: z.string().optional().openapi({ description: 'Where the secret applies.' }),
+            scope: z.string().optional().openapi({ description: 'Where the secret applies: `runtime` (default) delivers it to the agent as an environment variable; `connector` keeps it server-side for a connector.' }),
             expires_in_minutes: z.number().optional().openapi({ description: 'Link lifetime in minutes.' }),
           }) } } },
       },
@@ -64,7 +65,7 @@ export function registerSetupLinksRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const body = await readJsonObject(c);
       // Floor 'read'; project.secret.write is the real gate — the same leaf as
       // POST /secrets. Was 'manage' → project.write, so unchecking secret.write
@@ -112,10 +113,11 @@ export function registerSetupLinksRoutes(): void {
       if (requestedScope && requestedScope !== 'runtime' && requestedScope !== 'connector') {
         return c.json({ error: 'scope must be "runtime" or "connector"' }, 400);
       }
-      // Setup links are commonly minted by connector tooling. Omission must not
-      // turn a server-side credential into plaintext sandbox environment state.
-      // Runtime delivery remains available only through an explicit opt-in.
-      const scope = requestedScope === 'runtime' ? 'runtime' : 'connector';
+      // Omitted scope is runtime, the same default as POST /secrets: a person
+      // asked to store a key for the agent to use, so the agent must receive it.
+      // A key only a connector consumes stays server-side through an explicit
+      // `scope: "connector"`, which connector tooling always sends.
+      const scope = requestedScope === 'connector' ? 'connector' : 'runtime';
       const sessionId = (c.get('sessionId') as string | undefined) ?? null;
       const { token, expiresAt } = await mintSecretLink(
         projectId,
@@ -156,12 +158,12 @@ export function registerSetupLinksRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/connect-requests',
+      path: '/{workspaceId}/connect-requests',
       tags: ['connectors'],
       summary: 'Create a link where a person connects an app',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string() }),
+        params: z.object({ workspaceId: z.string() }),
         body: { content: { 'application/json': { schema: lenientBody({
             slug: z.string().openapi({ description: 'Connector slug from the project connectors list.' }),
             owner: z.enum(['me', 'project']).optional().openapi({ description: 'Whose account the link authorizes: me (the caller) or project (shared).' }),
@@ -175,7 +177,7 @@ export function registerSetupLinksRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const body = await readJsonObject(c);
       // Floor 'read'; project.connector.write is the real gate (minting a Pipedream
       // Quick Connect link is a connector operation). Was 'manage' → project.write.

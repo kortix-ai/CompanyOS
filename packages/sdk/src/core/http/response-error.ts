@@ -11,6 +11,7 @@ import type { ApiResponse, ErrorContext } from './api-client';
 import {
   ApiError,
   FEATURE_DISABLED_CODE,
+  NO_WORKSPACE_CODE,
   REPOSITORY_DISCONNECTED_CODE,
   RequestTooLargeError,
   parseBillingError,
@@ -121,11 +122,28 @@ async function readErrorBody(
   return { message, data };
 }
 
+/**
+ * Whether the request layer reports this failed write to `onError`: an HTTP
+ * failure that is not an expected response (`handleErrorResponse`), or a
+ * dropped connection. Never a timeout, a signed-out caller or an abort
+ * (`request.ts`). For a write the SDK sends again with `showErrors: false`,
+ * which reports its final failure itself.
+ */
+export function isReportedWriteFailure(error: ApiError): boolean {
+  if (error.code === 'TIMEOUT' || error.code === 'NO_SESSION' || error.code === 'ABORTED' || error.name === 'AbortError') {
+    return false;
+  }
+  if (error.status === undefined) return true;
+  return !isExpectedResponse(error.status, error.data, error.message);
+}
+
 function isExpectedResponse(status: number, data: any, message: string): boolean {
   return (
     isRequestDeadlineResponse(status, data, message) ||
     isGitMirrorUnavailableResponse(status, data, message) ||
     isConnectorsProviderUnavailableResponse(status, data) ||
+    // Cost queries own the retry; a busy permit is not a global error toast.
+    (status === 429 && data?.code === 'cost_read_busy') ||
     // Flag gates are expected disabled states; callers still receive the ApiError.
     (status === 403 && data?.code === FEATURE_DISABLED_CODE) ||
     (status === 501 && data?.code === FEATURE_NOT_SUPPORTED_CODE) ||
@@ -135,8 +153,12 @@ function isExpectedResponse(status: number, data: any, message: string): boolean
         data?.code === SANDBOX_STATE_CHANGE_IN_PROGRESS_CODE ||
         // A stale save: the editor that sent it shows the conflict.
         data?.code === 'version_conflict' ||
+        // A goal write on a stale revision: the goal page refreshes and says what changed.
+        data?.error === 'goal_conflict' ||
         // A state a GitHub owner fixes, not a defect: the host shows the fix.
-        data?.code === REPOSITORY_DISCONNECTED_CODE)) ||
+        data?.code === REPOSITORY_DISCONNECTED_CODE ||
+        // No workspace yet: the host shows "Create a workspace or join one".
+        data?.code === NO_WORKSPACE_CODE)) ||
     (status === 503 &&
       (data?.code === ANALYTICS_UNAVAILABLE_CODE || data?.code === ACCOUNTS_LIST_UNAVAILABLE_CODE))
   );

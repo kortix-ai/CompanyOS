@@ -1,4 +1,5 @@
 'use client';
+import type { EditorState } from '@tiptap/pm/state';
 
 import { useTranslations } from '../../../i18n';
 import { cn } from '../../../lib/utils';
@@ -11,6 +12,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { textToParagraphs } from '../composer-logic';
 import { COMPOSER_TEXT_METRICS } from '../composer-text-metrics';
 import { useLatestRef } from '../hooks/use-latest-ref';
+import type { SpaceMentionSource } from '../menus/space-mentions';
 import { createMentionSuggestion } from '../menus/mention-controller';
 import type { SlashAction } from '../menus/slash-actions';
 import { localizedSlashActions } from '../menus/slash-actions';
@@ -18,7 +20,7 @@ import { createSlashSuggestion } from '../menus/slash-controller';
 import type { SlashFile } from '../menus/slash-files';
 import type { TrackedMention } from '../types';
 import { baseExtensions } from './extensions';
-import { isCursorOnFirstVisualLine } from './first-visual-line';
+import { isCursorOnFirstVisualLine, isCursorOnLastVisualLine } from './first-visual-line';
 import { MentionNode } from './mention-node';
 import { serializeDocument } from './serialize';
 import { createSuggestionExtension } from './suggestion';
@@ -52,7 +54,8 @@ export interface ComposerEditorHandle {
    * `composer-logic.ts` and written back with a plain replace, so this
    * never needed a second mode of its own. Removed as dead code.
    */
-  setContent(text: string): void;
+  /** `caret` defaults to `'end'`. Prompt history puts it at the start on Up, so the next Up steps again. */
+  setContent(text: string, caret?: 'start' | 'end'): void;
   /**
    * The JSON-content-aware counterpart to `getContent`/`setContent` — Task
    * 13. `getContent().mentions` is a ONE-WAY projection: it's derived by
@@ -69,6 +72,7 @@ export interface ComposerEditorHandle {
    * blocks (built from the STRUCTURED `mentions` array, not the text) would
    * then be missing entirely.
    */
+  getEditingState(): EditorState | null;
   getDocument(): JSONContent;
   /**
    * Always replaces the whole document, same as `setContent`. A `mode`
@@ -80,7 +84,7 @@ export interface ComposerEditorHandle {
    * merge, unlike `setContent`'s `textToParagraphs`, which only ever knows
    * how to build plain text) and written back through this method.
    */
-  setDocument(doc: JSONContent): void;
+  setDocument(doc: JSONContent, focus?: boolean): void;
   /**
    * Insert literal text at the CURRENT cursor/selection — Task 13. The old
    * plain `<textarea>` gave this for free via `setRangeText`; nothing here
@@ -122,6 +126,8 @@ export interface ComposerEditorProps {
   onSubmit: (placement: 'transcript' | 'composer') => void;
   /** Up with the caret on the first visual row — see `createSubmitOnEnterHandler`. */
   onArrowUpAtStart?: () => boolean;
+  /** Down with the caret on the last visual row. Returns whether it acted. */
+  onArrowDownAtEnd?: () => boolean;
   /**
    * Fires ONLY on the empty↔non-empty boundary — once when the first character
    * is typed, once when the last is deleted, never in between. This is the
@@ -150,6 +156,8 @@ export interface ComposerEditorProps {
   sessions?: Session[];
   /** Excluded from the `@` session list — you can't mention the session you're in. */
   currentSessionId?: string;
+  /** Inside a space: the `@` menu lists the space's people and agents only. */
+  spaceMentions?: SpaceMentionSource | null;
 
   /** `/` menu data + the two things a row selection can produce — see `menus/slash-controller.ts`. */
   commands?: Command[];
@@ -279,6 +287,8 @@ export function createSubmitOnEnterHandler(
    * to take back.
    */
   onArrowUpAtStart?: () => boolean,
+  /** Down from the last visual row, under the same rules as Up. */
+  onArrowDownAtEnd?: () => boolean,
 ): (view: EditorView, event: KeyboardEvent) => boolean {
   return (view, event) => {
     if (isDisabled() || event.isComposing || event.keyCode === 229) return false;
@@ -299,6 +309,19 @@ export function createSubmitOnEnterHandler(
       !event.isComposing &&
       isCursorOnFirstVisualLine(view) &&
       onArrowUpAtStart()
+    ) {
+      event.preventDefault();
+      return true;
+    }
+    if (
+      event.key === 'ArrowDown' &&
+      onArrowDownAtEnd &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      isCursorOnLastVisualLine(view) &&
+      onArrowDownAtEnd()
     ) {
       event.preventDefault();
       return true;
@@ -329,14 +352,15 @@ export function getEditorDocument(editor: Editor | null): JSONContent {
   return editor ? (editor.getJSON() as JSONContent) : EMPTY_DOC;
 }
 
-export function setEditorDocument(editor: Editor | null, doc: JSONContent): void {
+export function setEditorDocument(editor: Editor | null, doc: JSONContent, focus = true): void {
   if (!editor) return;
   const content = doc.content ?? [];
   editor.commands.setContent({ type: 'doc', content });
   // `scrollIntoView: false` — see the note on the `setContent` handle below.
   // This is the same programmatic whole-document replace, so it wants the same
   // treatment: put the caret at the end, move nothing.
-  editor.commands.focus('end', { scrollIntoView: false });
+  if (focus) editor.commands.focus('end', { scrollIntoView: false });
+  else editor.commands.setTextSelection(editor.state.doc.content.size);
 }
 
 /**
@@ -375,11 +399,13 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       autoFocus = false,
       onSubmit,
       onArrowUpAtStart,
+      onArrowDownAtEnd,
       onEmptyChange,
       onDocChange,
       agents,
       sessions,
       currentSessionId,
+      spaceMentions,
       commands,
       onSelectCommand,
       onSelectAction,
@@ -406,6 +432,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     const onDocChangeRef = useLatestRef(onDocChange);
     const onSubmitRef = useLatestRef(onSubmit);
     const onArrowUpAtStartRef = useLatestRef(onArrowUpAtStart);
+    const onArrowDownAtEndRef = useLatestRef(onArrowDownAtEnd);
     const disabledRef = useLatestRef(disabled ?? false);
     const placeholderRef = useLatestRef(placeholder);
 
@@ -417,6 +444,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     // whatever was current the moment the editor first mounted.
     const agentsRef = useLatestRef(agents ?? []);
     const sessionsRef = useLatestRef(sessions ?? []);
+    const spaceMentionsRef = useLatestRef(spaceMentions ?? null);
     const currentSessionIdRef = useLatestRef(currentSessionId);
     const commandsRef = useLatestRef(commands ?? []);
 
@@ -522,8 +550,9 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
           // An open `@`/`/` menu claims arrow keys through `mentionOwnsEnterRef`
           // / `slashOwnsEnterRef` above, so Up never reaches this while one is open.
           () => onArrowUpAtStartRef.current?.() ?? false,
+          () => onArrowDownAtEndRef.current?.() ?? false,
         ),
-      [disabledRef, onArrowUpAtStartRef, onSubmitRef],
+      [disabledRef, onArrowDownAtEndRef, onArrowUpAtStartRef, onSubmitRef],
     );
 
     const editor = useEditor({
@@ -548,6 +577,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
             getAgents: () => agentsRef.current,
             getSessions: () => sessionsRef.current,
             getCurrentSessionId: () => currentSessionIdRef.current,
+            getSpaceMentions: () => spaceMentionsRef.current,
             onOwnsEnterChange: (ownsEnter) => {
               mentionOwnsEnterRef.current = ownsEnter;
             },
@@ -588,6 +618,9 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
           role: 'textbox',
           'aria-multiline': 'true',
           'aria-label': t('messageInput'),
+          // A locale-free hook for code outside the composer that must know
+          // the editor exists (`use-home-typing-buffer.ts` in apps/web).
+          'data-composer-editor': '',
           /**
            * `min-h-[3.5em]` — taller than one line by design. History: was
            * `1.5em` (exactly one line) on the reasoning that a taller floor
@@ -635,10 +668,9 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
        * dev.kortix.com: clear at T, phantom write at T+406ms, and the next
        * visit to project home restored "Hi" into the composer.
        *
-       * That composer clears now (`clearOnSend="text-only"`), so its phantom
-       * write would carry an empty document. The guard stays: it is about
-       * `setEditable`, and every composer that flips `disabled` mid-send is one
-       * debounce away from the same bug.
+       * Project home keeps the sent text in the locked box again, so this
+       * guard is what keeps the message out of the saved draft. Every composer
+       * that flips `disabled` mid-send is one debounce away from the same bug.
        *
        * The view still refreshes — `setOptions` calls `view.updateState`
        * whether or not the event is emitted.
@@ -656,7 +688,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       (): ComposerEditorHandle => ({
         getContent: () =>
           editor ? serializeDocument(editor.state.doc) : { text: '', mentions: [] },
-        setContent: (text) => {
+        setContent: (text, caret = 'end') => {
           if (!editor) return;
           const paragraphs = textToParagraphs(text);
           editor.commands.setContent({ type: 'doc', content: paragraphs });
@@ -685,10 +717,11 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
            * fire while the composer is genuinely scrolled out of view in a long
            * session — there the scroll is the point.
            */
-          editor.commands.focus('end', { scrollIntoView: false });
+          editor.commands.focus(caret, { scrollIntoView: false });
         },
         getDocument: () => getEditorDocument(editor),
-        setDocument: (doc) => setEditorDocument(editor, doc),
+        getEditingState: () => editor?.state ?? null,
+        setDocument: (doc, focus) => setEditorDocument(editor, doc, focus),
         insertAtCursor: (text) => insertTextAtCursor(editor, text),
         clear: () => editor?.commands.setContent(EMPTY_DOC),
         focus: () => editor?.commands.focus('end'),
@@ -707,7 +740,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
             // page on focus for any input under 16px, and the composer is the one
             // field on the screen. `sm:text-sm` above 640px, which is the size
             // `styles/components.css`'s slash-trigger rule already documents.
-            'kortix-composer-editor w-full text-sm',
+            'kortix-composer-editor w-full text-base sm:text-sm',
             disabled && 'opacity-50',
           )}
         />

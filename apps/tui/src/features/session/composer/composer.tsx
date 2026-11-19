@@ -1,6 +1,6 @@
 /**
  * The open session's composer: the one input, its three selection pickers,
- * the server-side prompt queue, and the tray row under it.
+ * the server-side prompt inbox, and the tray row under it.
  *
  * It takes the whole `useSession` result as a prop (SPEC §5.3) and owns no
  * session state of its own. Every write goes back through the SDK — `send`,
@@ -15,12 +15,14 @@
  * goes up to the app through `onCommand`, which switches on `CommandName`.
  *
  * ── How a prompt reaches the server ──
- * `useSession.send` does NOT queue: it posts straight to the runtime and is
- * refused when the runtime is not ready. The queue is the SERVER-SIDE prompt
- * inbox (`useSessionPrompts`), which is the durable, cross-client one. So: an
- * idle session with an empty inbox sends directly, and anything else
- * enqueues, which keeps SEND ORDER — a direct send would otherwise jump the
- * rows already waiting. The tray reads the count straight off the inbox.
+ * Every prompt is a row in the session's durable prompt inbox, and the server
+ * decides delivery. There is one mode: a prompt sent while a turn runs STEERS
+ * it (the agent reads it after its current tool call, inside the same turn);
+ * a prompt sent while idle starts a turn. `useSession.send` posts to the
+ * inbox too, but it refuses while the runtime is not ready and pins no picks,
+ * so a busy session or a non-empty inbox goes through `inbox.enqueue`, which
+ * pins the picks of the moment the user pressed Enter. The tray reads the
+ * count straight off the inbox.
  */
 
 import { type SessionPromptOverrides, type SessionPromptPart, runtimeSupports } from '@kortix/sdk';
@@ -41,7 +43,11 @@ import type {
   RuntimeCommand,
 } from '../../../commands/registry.ts';
 import { AgentsSegment, useAgentsSummary } from '../../agents/agents-segment.tsx';
+import { OutputsPicker } from '../../artifacts/outputs-picker.tsx';
+import { type SessionOutput, outputReference, outputsSummary } from '../../artifacts/session-outputs.ts';
+import { useSessionOutputs } from '../../artifacts/use-session-outputs.ts';
 import { copyToClipboard } from '../../../lib/clipboard.ts';
+import { openUrl as openUrlDefault } from '../../../lib/open-url.ts';
 import { contextModel, contextReading } from '../../../lib/context-usage.ts';
 import { theme } from '../../../theme.ts';
 import { lastReplyText, transcriptMarkdown } from '../transcript-export.ts';
@@ -82,9 +88,12 @@ export interface ComposerProps {
   messages?: readonly SessionLogMessage[];
   /** The session's title, for the `/export` heading and file name. */
   title?: string;
+  /** The Kortix web origin: an artifact's browser link is built on it. */
+  webBaseUrl?: string;
   /** Test seams. Production copies with the system tool and writes with Bun. */
   copyText?: (text: string) => Promise<{ ok: boolean; error?: string }>;
   writeFile?: (path: string, text: string) => Promise<unknown>;
+  openUrl?: (url: string) => Promise<unknown>;
 }
 
 /** `kortix-fix-the-login-bug-1a2b3c4d.md`: the title, slugged, and the id. */
@@ -97,10 +106,13 @@ export function exportFileName(title: string, sessionId: string): string {
   return `kortix-${slug ? `${slug}-` : ''}${sessionId.slice(0, 8)}.md`;
 }
 
-type Picker = 'model' | 'effort' | 'agent' | null;
+type Picker = 'model' | 'effort' | 'agent' | 'outputs' | null;
 
 /** The built-ins this composer runs on its own session. */
-const LOCAL_COMMANDS = new Set<string>(['model', 'effort', 'agent', 'stop', 'copy', 'export']);
+const LOCAL_COMMANDS = new Set<string>(['model', 'effort', 'agent', 'shown', 'stop', 'copy', 'export']);
+
+/** What `/shown` says when the session has handed over nothing yet. */
+export const NO_OUTPUTS = 'Nothing to open yet. Artifacts, pages and files this session shows appear here.';
 
 export function Composer({
   session,
@@ -119,12 +131,15 @@ export function Composer({
   messages = [],
   title = 'Kortix session',
   showTray = true,
+  webBaseUrl = '',
   copyText = copyToClipboard,
   writeFile = (path, text) => Bun.write(path, text),
+  openUrl = openUrlDefault,
 }: ComposerProps) {
   const [picker, setPicker] = useState<Picker>(null);
   const [queueError, setQueueError] = useState<string | null>(null);
   const [restore, setRestore] = useState<{ text: string; seq: number } | null>(null);
+  const [insert, setInsert] = useState<{ text: string; seq: number } | null>(null);
   const [inputMetrics, setInputMetrics] = useState<PromptInputMetrics>({
     rows: 1,
     aboveRows: 0,
@@ -134,7 +149,18 @@ export function Composer({
   const inbox = useSessionPrompts(projectId, sessionId);
   // What this session started (agents, workflow runs) and held messages; `/agents` lists them.
   const agentsSummary = useAgentsSummary(projectId, sessionId);
-  const selection = useComposerSelection(session, projectId);
+  // The model the session's newest message ran on: the server pins every
+  // prompt without a pick to the session's own model, so this is what the
+  // next prompt uses. Computed before the selection, which labels it.
+  const answeredBy = contextModel({ messages: messages as SessionLogMessage[] });
+  const selection = useComposerSelection(
+    session,
+    projectId,
+    answeredBy ? { providerID: answeredBy.provider, modelID: answeredBy.model } : null,
+  );
+  // What this session handed over (shown + published); `/shown` lists it.
+  const outputs = useSessionOutputs({ projectId, sessionId, messages, webBaseUrl });
+  const outputsLine = outputsSummary(outputs);
 
   const covered = picker !== null || panel !== null;
 
@@ -200,7 +226,7 @@ export function Composer({
         const message = error instanceof Error ? error.message : String(error);
         setQueueError(message);
         setRestore((current) => ({ text, seq: (current?.seq ?? 0) + 1 }));
-        onToast?.(`Could not queue: ${message}`, 'error');
+        onToast?.(`Could not send: ${message}`, 'error');
       });
     },
     [session, inbox.prompts.length, enqueue, onToast],
@@ -248,26 +274,94 @@ export function Composer({
             );
           return;
         }
+        if (entry.name === 'shown') {
+          if (outputs.length === 0) return void onToast?.(NO_OUTPUTS);
+          setPicker('outputs');
+          return;
+        }
         setPicker(entry.name as Exclude<Picker, null>);
         return;
       }
       onCommand(entry.name as CommandName, args);
     },
-    [session, stop, onCommand, onToast, messages, title, sessionId, copyText, writeFile],
+    [session, stop, onCommand, onToast, messages, title, sessionId, copyText, writeFile, outputs.length],
   );
 
-  // Alt+M / Alt+E / Alt+G open the pickers from anywhere in the input.
-  const onKey = useCallback((key: KeyEvent) => {
-    const opened: Picker = matchesComposerBinding(key, 'composer.model')
-      ? 'model'
-      : matchesComposerBinding(key, 'composer.effort')
-        ? 'effort'
-        : matchesComposerBinding(key, 'composer.agent')
-          ? 'agent'
-          : null;
-    if (opened) setPicker(opened);
-    return opened !== null;
-  }, []);
+  // Alt+M / Alt+E / Alt+G / Alt+O open the pickers from anywhere in the input.
+  const onKey = useCallback(
+    (key: KeyEvent) => {
+      const opened: Picker = matchesComposerBinding(key, 'composer.model')
+        ? 'model'
+        : matchesComposerBinding(key, 'composer.effort')
+          ? 'effort'
+          : matchesComposerBinding(key, 'composer.agent')
+            ? 'agent'
+            : matchesComposerBinding(key, 'composer.outputs')
+              ? 'outputs'
+              : null;
+      if (opened === 'outputs' && outputs.length === 0) {
+        onToast?.(NO_OUTPUTS);
+        return true;
+      }
+      if (opened) setPicker(opened);
+      return opened !== null;
+    },
+    [outputs.length, onToast],
+  );
+
+  // ── outputs ───────────────────────────────────────────────────────────────
+
+  const openOutput = useCallback(
+    (output: SessionOutput) => {
+      if (output.url) {
+        const url = output.url;
+        closePicker();
+        void Promise.resolve(openUrl(url)).then(
+          () => onToast?.(`Opened ${url}`),
+          (error: unknown) =>
+            onToast?.(`Could not open ${url}: ${error instanceof Error ? error.message : String(error)}`, 'error'),
+        );
+        return;
+      }
+      if (output.path) {
+        closePicker();
+        onCommand('files', output.path);
+      }
+    },
+    [openUrl, onToast, onCommand, closePicker],
+  );
+
+  const referenceOutput = useCallback(
+    (output: SessionOutput) => {
+      setInsert((current) => ({ text: outputReference(output), seq: (current?.seq ?? 0) + 1 }));
+      closePicker();
+    },
+    [closePicker],
+  );
+
+  const copyOutput = useCallback(
+    (output: SessionOutput) => {
+      const text = output.url ?? output.path ?? output.title;
+      void copyText(text).then((result) =>
+        result.ok
+          ? onToast?.(`Copied ${text}`)
+          : onToast?.(`Copy failed: ${result.error ?? 'no clipboard tool'}. ${text}`, 'error'),
+      );
+    },
+    [copyText, onToast],
+  );
+
+  const outputDetails = useCallback(
+    (output: SessionOutput) => {
+      if (!output.artifactId) {
+        onToast?.(output.path ? 'A file opens in /files: press Enter.' : 'A web page has no details: press Enter to open it.');
+        return;
+      }
+      closePicker();
+      onCommand('artifacts', output.artifactId);
+    },
+    [onToast, onCommand, closePicker],
+  );
 
   // ── render ────────────────────────────────────────────────────────────────
 
@@ -282,16 +376,16 @@ export function Composer({
   const errorLine = sendError
     ? `${sendError.kind}: ${sendError.message}`
     : queueError
-      ? `queue: ${queueError}`
+      ? `send: ${queueError}`
       : null;
 
   const status: string[] = [];
-  if (queuedCount > 0) status.push(`${queuedCount} queued`);
+  // A busy session reads these at its next step; an idle one is starting them.
+  if (queuedCount > 0) status.push(`${queuedCount} ${session.isBusy ? 'steering' : 'sending'}`);
   if (session.isSending) status.push('sending');
 
   // Context in use, against the window of the model that answered last (or
   // the picked one): the one reading the tray adds to model and agent.
-  const answeredBy = contextModel({ messages: messages as SessionLogMessage[] });
   const windowModel = (session.models ?? []).find((entry) =>
     session.picks.model
       ? entry.providerID === session.picks.model.providerID &&
@@ -328,6 +422,9 @@ export function Composer({
       </text>
       <text fg={theme.dim} wrapMode="none">
         {status.length ? <span fg={theme.busy}>{`${status.join(' · ')}  `}</span> : null}
+        {outputsLine ? <span fg={theme.fg}>{'▣ '}</span> : null}
+        {outputsLine ? <span fg={theme.dim}>{outputsLine}</span> : null}
+        {outputsLine ? <span fg={theme.faint}>{' · '}</span> : null}
         {agentsSummary.text ? <AgentsSegment summary={agentsSummary} /> : null}
         {agentsSummary.text ? <span fg={theme.faint}>{' · '}</span> : null}
         <span fg={selection.modelIsDefault ? theme.dim : theme.fg}>{selection.modelLabel}</span>
@@ -364,7 +461,7 @@ export function Composer({
           width={pickerWidth}
           onClose={closePicker}
           onUnavailable={(model) =>
-            onToast?.(`${model.modelName} is turned off for this project.`, 'error')
+            onToast?.(`${model.modelName} is turned off for this workspace.`, 'error')
           }
           onPick={(key) => {
             selection.setModel(key);
@@ -399,6 +496,19 @@ export function Composer({
         />
       ) : null}
 
+      {picker === 'outputs' ? (
+        <OutputsPicker
+          outputs={outputs}
+          now={Date.now()}
+          width={pickerWidth}
+          onClose={closePicker}
+          onOpen={openOutput}
+          onReference={referenceOutput}
+          onCopy={copyOutput}
+          onDetails={outputDetails}
+        />
+      ) : null}
+
       {errorLine ? (
         <text fg={theme.danger} wrapMode="none">
           {errorLine}
@@ -410,7 +520,7 @@ export function Composer({
         width={width}
         placeholder={
           session.isBusy
-            ? 'Type to queue the next prompt · / for commands'
+            ? 'Type to steer · the agent reads it after its current step · / for commands'
             : 'Type a prompt · / for commands'
         }
         context={context}
@@ -424,6 +534,7 @@ export function Composer({
         onMetrics={setInputMetrics}
         onActivate={onRequestFocus}
         seed={seed}
+        insert={insert}
         footer={showTray ? tray : null}
       />
     </box>

@@ -1,5 +1,11 @@
 'use client';
 
+import { appLink } from './app-links';
+import { ArtifactLink, isArtifactLink } from './artifact-link';
+import { Github } from '../internal/icons/github';
+import { SlackLogoIcon } from '@phosphor-icons/react';
+import { LinearMark, FigmaMark, NotionMark, GoogleDocsMark, GoogleSheetsMark, GoogleSlidesMark } from './app-link-icons';
+
 import { toSandboxAbsolutePath } from '@kortix/sdk';
 
 import { useTranslations } from '../i18n';
@@ -30,9 +36,11 @@ import {
   isStreamingLinkPlaceholder,
   prepareMarkdownSource,
   remoteImageHost,
+  sameOriginAppPath,
   shouldUseNextLink,
 } from './unified-markdown-utils';
 import { remarkSetupLinkBlocks } from './setup-link-blocks';
+import { remarkSoftBreaks } from './soft-breaks';
 import {
   rehypeStreamWords,
   STREAM_WORD_CLASS,
@@ -48,9 +56,13 @@ import { useSandboxProxy } from '../internal/hooks/use-sandbox-proxy';
 import { useOpenPreviewLink } from '../internal/hooks/use-open-preview-link';
 import { cn } from '../lib/utils';
 import { ImageIcon } from '@phosphor-icons/react';
-import { useUiLink } from '../providers/ui-provider';
+import { useUiLink, useUiRouter } from '../providers/ui-provider';
 import React, { useCallback, useContext, useMemo, useState } from 'react';
 import { parseMarkdownIntoBlocks, Streamdown } from 'streamdown';
+
+function SlackMark({ className }: { className?: string }) {
+  return <SlackLogoIcon weight="fill" className={className} />;
+}
 
 const LINK_CLASS = cn(
   'font-medium text-kortix-blue',
@@ -58,6 +70,61 @@ const LINK_CLASS = cn(
   'transition-colors hover:decoration-kortix-blue',
   '[overflow-wrap:anywhere]',
 );
+
+// No underline at rest: the app mark is the link affordance. Hover underlines
+// the label only. The mark is inline-block, so the underline skips it, and its
+// color stays fixed.
+const APP_LINK_CLASS = cn(
+  'font-medium text-kortix-blue no-underline',
+  'decoration-kortix-blue decoration-[1px] underline-offset-[3px] hover:underline',
+  '[overflow-wrap:anywhere]',
+);
+
+const TEXT_WRAPPER_TAGS = new Set(['strong', 'em', 'b', 'i', 'del', 's']);
+
+/** The first user-perceived character: a flag or a vowel sign stays whole. */
+function firstGrapheme(text: string): string | undefined {
+  if (typeof Intl.Segmenter === 'function') {
+    return new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+      .segment(text)[Symbol.iterator]().next().value?.segment;
+  }
+  return Array.from(text)[0];
+}
+
+/**
+ * Splits a link label after its first character: `"PR #123"` → `["P", "R #123"]`.
+ * A text wrapper (a stream-word span, `**bold**`) is copied around each half,
+ * so the label renders the same while it streams and after. Any other element
+ * (inline code) stays whole and keeps its own wrapping. There is no break
+ * opportunity between the halves: whole words still wrap together, and the
+ * rest still breaks anywhere. Returns null when the label opens with no text.
+ */
+function splitLeadingChar(label: React.ReactNode): [React.ReactNode, React.ReactNode] | null {
+  const [first, ...others] = React.Children.toArray(label);
+  let lead: React.ReactNode;
+  let tail: React.ReactNode;
+  if (typeof first === 'string' || typeof first === 'number') {
+    const text = String(first);
+    const char = firstGrapheme(text);
+    if (!char) return null;
+    lead = char;
+    tail = text.slice(char.length);
+  } else if (React.isValidElement<{ children?: React.ReactNode; className?: string; node?: { tagName?: string } }>(first)) {
+    const tag = typeof first.type === 'string' ? first.type : first.props.node?.tagName;
+    if (first.props.className === STREAM_WORD_CLASS || (tag && TEXT_WRAPPER_TAGS.has(tag))) {
+      const inner = splitLeadingChar(first.props.children);
+      if (!inner) return null;
+      lead = React.cloneElement(first, { key: 'lead' }, inner[0]);
+      tail = React.cloneElement(first, { key: 'tail' }, inner[1]);
+    } else {
+      lead = <span key="lead" className="whitespace-normal">{first}</span>;
+      tail = null;
+    }
+  } else {
+    return null;
+  }
+  return [lead, <>{tail}{others}</>];
+}
 
 function handleHashClick(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
   if (!href.startsWith('#')) return;
@@ -88,8 +155,41 @@ const MarkdownRenderContext = React.createContext<MarkdownRenderContextValue>({
   genui: false,
 });
 
+/** Only streaming word wrappers are transparent; formatting remains custom content. */
+function bareLinkText(children: React.ReactNode): string | null {
+  let text = '';
+  for (const child of React.Children.toArray(children)) {
+    if (typeof child === 'string') { text += child; continue; }
+    if (!React.isValidElement<{ className?: string; children?: React.ReactNode }>(child) ||
+        child.props.className !== STREAM_WORD_CLASS) return null;
+    const word = bareLinkText(child.props.children);
+    if (word === null) return null;
+    text += word;
+  }
+  return text;
+}
+
 export function MarkdownLink({ href, children }: { href?: string; children?: React.ReactNode }) {
+  const { variant } = useContext(MarkdownRenderContext);
+  if (variant !== 'document' && href && isArtifactLink(href)) {
+    return <ArtifactLink href={href} raw={bareLinkText(children) === href}>
+      {(label) => <PlainMarkdownLink href={href}>{label ?? children}</PlainMarkdownLink>}
+    </ArtifactLink>;
+  }
+  return <PlainMarkdownLink href={href}>{children}</PlainMarkdownLink>;
+}
+
+function PlainMarkdownLink({
+  href,
+  children,
+  ...anchorProps
+}: {
+  href?: string;
+  children?: React.ReactNode;
+} & React.ComponentPropsWithRef<'a'>) {
+  const tAppLink = useTranslations('markdownAppLinks');
   const Link = useUiLink();
+  const router = useUiRouter();
   const { proxy, policy, variant } = useContext(MarkdownRenderContext);
   const openPreview = useOpenPreviewLink();
   // Only agent content may turn a setup link into the in-app card. From any
@@ -105,7 +205,9 @@ export function MarkdownLink({ href, children }: { href?: string; children?: Rea
 
   // A setup link whose URL is still streaming: the card it will
   // become, with nothing to click yet (see `holdPendingSetupLink`).
-  const pendingSetupLink = policy.setupLinks ? parsePendingSetupLinkHref(href) : null;
+  const pendingSetupLink = policy.setupLinks
+    ? parsePendingSetupLinkHref(href)
+    : null;
   if (pendingSetupLink) {
     return (
       <SetupLinkButton kind={pendingSetupLink} token={null}>
@@ -117,13 +219,15 @@ export function MarkdownLink({ href, children }: { href?: string; children?: Rea
   // A file in the session's workspace opens the file preview, the same
   // as a path in prose (see `remarkWorkspaceFileLinks`).
   const decodedFilePath = policy.fileLinks ? parseFileLinkHref(href) : null;
-  const filePath = policy.fileLinks ? parseFileLinkHref(href, variant === 'document') : null;
+  const filePath = policy.fileLinks
+    ? parseFileLinkHref(href, variant === 'document')
+    : null;
   if (decodedFilePath && !filePath) {
-    return <span className={LINK_CLASS}>{children}</span>;
+    return <span className={cn(LINK_CLASS, 'group')}>{children}</span>;
   }
   if (filePath) {
     return (
-      <ClickablePath filePath={filePath} className={LINK_CLASS}>
+      <ClickablePath filePath={filePath} className={cn(LINK_CLASS, 'group')}>
         {children}
       </ClickablePath>
     );
@@ -132,10 +236,58 @@ export function MarkdownLink({ href, children }: { href?: string; children?: Rea
   // The URL is still streaming: show the label in link style, with
   // nothing to click until the real href arrives.
   if (isStreamingLinkPlaceholder(href)) {
-    return <span className={LINK_CLASS}>{children}</span>;
+    return <span className={cn(LINK_CLASS, 'group')}>{children}</span>;
   }
 
   const resolvedHref = proxy(href) ?? href ?? '#';
+  const presentation = href === resolvedHref ? appLink(resolvedHref) : null;
+  const Mark = presentation
+    ? {
+        github: Github,
+        slack: SlackMark,
+        linear: LinearMark,
+        figma: FigmaMark,
+        notion: NotionMark,
+        google: presentation.kind === 'googleDoc' ? GoogleDocsMark : presentation.kind === 'googleSheet' ? GoogleSheetsMark : GoogleSlidesMark,
+      }[presentation.app]
+    : null;
+  const plainText = bareLinkText(children);
+  const compactLabel = presentation?.name ?? (presentation &&
+    presentation.kind !== 'commit' && presentation.kind !== 'linearIssue'
+      ? tAppLink(presentation.kind, { number: presentation.number ?? '' }) : '');
+  const appName = presentation ? {
+    github: 'GitHub', linear: 'Linear', slack: 'Slack', figma: 'Figma', notion: 'Notion', google: 'Google',
+  }[presentation.app] : '';
+  const labelNamesApp = plainText === href && !presentation?.name && presentation && ['slack', 'notion', 'figma', 'google'].includes(presentation.app);
+  // A compact app link is the app mark plus a short label, never underlined.
+  // The mark is 1em and sits at -0.15em: Roobert cap height is 0.7em, so the
+  // mark centers on the cap height at every text size. A label built from an
+  // identifier ("PR #123", "ENG-42", a commit) is short and never breaks. A title or
+  // custom label (Notion and Figma allow 48 characters, CJK has no spaces) is
+  // glued to the mark by its first character only, so the mark never ends a
+  // line alone and the title still wraps inside the column.
+  const label = plainText === href ? compactLabel : children;
+  // Figma, Notion and GitHub account labels are titles; every other compact label is an
+  // identifier, even when `appLink` stores it as `name` (ENG-42, a commit).
+  // GitHub account and repo names (up to 39 and 140 characters) wrap like titles.
+  const isTitle = presentation?.app === 'figma' || presentation?.app === 'notion' ||
+    presentation?.kind === 'githubUser' || presentation?.kind === 'githubRepo';
+  const split = plainText === href && !isTitle
+    ? [label, null] as const
+    : splitLeadingChar(label);
+  const linkContent = presentation && Mark ? (
+    <>
+      <span className="whitespace-nowrap">
+        <span aria-hidden="true" className="pointer-events-none mr-1 inline-block size-[1em] align-[-0.15em] text-muted-foreground">
+          <Mark className="block size-full" />
+        </span>
+        {!labelNamesApp && <span className="sr-only">{appName}: </span>}
+        {split ? split[0] : null}
+      </span>
+      {split ? split[1] : label}
+    </>
+  ) : children;
+  const anchorClass = presentation && Mark ? APP_LINK_CLASS : LINK_CLASS;
   const isHash = resolvedHref.startsWith('#');
   const isExternal = !isInternalUrl(resolvedHref);
   // A sandbox address under a host preview resolver: the proxied href would
@@ -143,13 +295,17 @@ export function MarkdownLink({ href, children }: { href?: string; children?: Rea
   if (openPreview && href && resolvedHref !== href) {
     return (
       <a
+        {...anchorProps}
         href={href}
-        className={LINK_CLASS}
+        className={anchorClass}
+        title={presentation ? resolvedHref : undefined}
         target="_blank"
         rel="noopener noreferrer"
         onClick={(e) => openPreview(e, href, resolvedHref)}
       >
-        <InsideLinkContext.Provider value={true}>{children}</InsideLinkContext.Provider>
+        <InsideLinkContext.Provider value={true}>
+          {linkContent}
+        </InsideLinkContext.Provider>
       </a>
     );
   }
@@ -158,26 +314,45 @@ export function MarkdownLink({ href, children }: { href?: string; children?: Rea
   // treats those as app routes and prefetches them, including typos such
   // as `/legal/terms.`. Only trusted root-relative/hash paths belong in
   // the app router; every other href stays a plain anchor.
+  // An absolute URL on this app's own origin (an agent writes
+  // `https://kortix.com/workspaces/…`) navigates in place through the app
+  // router on a plain click. Decided at click time, so the server markup and
+  // the prefetcher never see it; a modified click keeps the native new tab.
   if (!shouldUseNextLink(resolvedHref)) {
     return (
       <a
+        {...anchorProps}
         href={resolvedHref}
-        className={LINK_CLASS}
+        className={anchorClass}
+        title={presentation ? resolvedHref : undefined}
         {...(isExternal && !isHash ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+        onClick={(e) => {
+          if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+          const appPath = sameOriginAppPath(resolvedHref);
+          if (!appPath) return;
+          e.preventDefault();
+          router.push(appPath);
+        }}
       >
-        <InsideLinkContext.Provider value={true}>{children}</InsideLinkContext.Provider>
+        <InsideLinkContext.Provider value={true}>
+          {linkContent}
+        </InsideLinkContext.Provider>
       </a>
     );
   }
 
   return (
     <Link
+      {...anchorProps}
       href={resolvedHref}
       onClick={isHash ? (e) => handleHashClick(e, resolvedHref) : undefined}
-      className={LINK_CLASS}
+      className={anchorClass}
+      title={presentation ? resolvedHref : undefined}
       {...(isExternal && !isHash ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
     >
-      <InsideLinkContext.Provider value={true}>{children}</InsideLinkContext.Provider>
+      <InsideLinkContext.Provider value={true}>
+        {linkContent}
+      </InsideLinkContext.Provider>
     </Link>
   );
 }
@@ -510,6 +685,14 @@ export interface UnifiedMarkdownProps {
    * (the transcript and the share view); everywhere else such a fence is an ordinary code block.
    */
   genui?: boolean;
+  /**
+   * `chat`: every single newline is a line break, as chat text is written
+   * (one item per line stays one per line). Only chat transcript text sets it
+   * (assistant replies, peer messages). The default, `commonmark`, joins
+   * wrapped lines, as a README or a scraped page expects. Ignored for
+   * `variant="document"`.
+   */
+  lineBreaks?: 'commonmark' | 'chat';
 }
 
 /**
@@ -519,6 +702,12 @@ export interface UnifiedMarkdownProps {
  */
 const REMARK_PLUGINS_WITH_SETUP_LINKS = [...katexRemarkPlugins, remarkSetupLinkBlocks];
 const REMARK_PLUGINS_WITH_FILE_LINKS = [...REMARK_PLUGINS_WITH_SETUP_LINKS, remarkWorkspaceFileLinks];
+// Chat text keeps every line the author wrote (one `\n` = one line break,
+// `lineBreaks="chat"`). Everything else stays strict CommonMark. Module-level
+// so no render builds a new array.
+const MESSAGE_REMARK_PLUGINS = [...katexRemarkPlugins, remarkSoftBreaks];
+const MESSAGE_REMARK_PLUGINS_WITH_SETUP_LINKS = [...REMARK_PLUGINS_WITH_SETUP_LINKS, remarkSoftBreaks];
+const MESSAGE_REMARK_PLUGINS_WITH_FILE_LINKS = [...REMARK_PLUGINS_WITH_FILE_LINKS, remarkSoftBreaks];
 // Last, so the words it wraps are the final, sanitized text.
 const STREAMING_REHYPE_PLUGINS = [...katexRehypePlugins, rehypeStreamWords];
 const STREAMING_REHYPE_PLUGINS_NO_RAW = [...katexRehypePluginsNoRaw, rehypeStreamWords];
@@ -526,7 +715,7 @@ const STREAMING_REHYPE_PLUGINS_NO_RAW = [...katexRehypePluginsNoRaw, rehypeStrea
 // Single source of truth for markdown rendering across the app — clean, minimal,
 // readable in both themes.
 export const UnifiedMarkdown = React.memo<UnifiedMarkdownProps>(
-  ({ content, trust, variant = 'message', className, isStreaming = false, documentPath, genui = false }) => {
+  ({ content, trust, variant = 'message', className, isStreaming = false, documentPath, genui = false, lineBreaks = 'commonmark' }) => {
     const tHardcodedUi = useTranslations('hardcodedUi');
     const { proxyUrl } = useSandboxProxy();
     const proxy = useCallback((url: string | undefined) => proxyUrl(url), [proxyUrl]);
@@ -551,12 +740,19 @@ export const UnifiedMarkdown = React.memo<UnifiedMarkdownProps>(
       if (documentBaseDir) {
         return [...REMARK_PLUGINS_WITH_SETUP_LINKS, [remarkWorkspaceFileLinks, { baseDir: documentBaseDir }]];
       }
+      if (variant === 'document' || lineBreaks !== 'chat') {
+        return effectivePolicy.fileLinks
+          ? REMARK_PLUGINS_WITH_FILE_LINKS
+          : policy.setupLinks
+            ? REMARK_PLUGINS_WITH_SETUP_LINKS
+            : katexRemarkPlugins;
+      }
       return effectivePolicy.fileLinks
-        ? REMARK_PLUGINS_WITH_FILE_LINKS
+        ? MESSAGE_REMARK_PLUGINS_WITH_FILE_LINKS
         : policy.setupLinks
-          ? REMARK_PLUGINS_WITH_SETUP_LINKS
-          : katexRemarkPlugins;
-    }, [documentBaseDir, effectivePolicy, policy.setupLinks]);
+          ? MESSAGE_REMARK_PLUGINS_WITH_SETUP_LINKS
+          : MESSAGE_REMARK_PLUGINS;
+    }, [documentBaseDir, effectivePolicy, policy.setupLinks, variant, lineBreaks]);
 
     // Streamdown renders streaming text block by block and settled text as one
     // document: two different React trees. Switching trees when the turn ends

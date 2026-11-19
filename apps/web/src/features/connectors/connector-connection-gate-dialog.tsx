@@ -74,7 +74,7 @@ export function ConnectorConnectionGateContent({
                 <div className="flex min-w-0 items-center gap-2">
                   <span className="truncate text-sm font-medium">{connection.name}</span>
                   <Badge variant="muted" size="xs">
-                    {connection.authorization_strategy === 'user' ? 'Private' : 'Project'}
+                    {connection.authorization_strategy === 'user' ? 'Private' : 'Workspace'}
                   </Badge>
                 </div>
                 <p className="text-muted-foreground mt-0.5 text-xs">
@@ -216,7 +216,7 @@ export function ConnectorConnectionGateDialog() {
     if (!isOpen || connectorConnections.length === 0) return;
     if (!connectorConnections.every((connection) => connectedIds.has(connection.id))) return;
     const run = retry;
-    closeConnectorGate();
+    closeConnectorGate(true);
     run?.();
   }, [closeConnectorGate, connectedIds, connectorConnections, isOpen, retry]);
 
@@ -242,7 +242,7 @@ export function ConnectorConnectionGateDialog() {
               />
             ) : null
           }
-          onCancel={closeConnectorGate}
+          onCancel={() => closeConnectorGate()}
         />
       </ModalContent>
     </Modal>

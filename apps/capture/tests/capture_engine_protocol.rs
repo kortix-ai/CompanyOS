@@ -1,6 +1,7 @@
 //! Protocol conformance for the Rust capture engine (Windows and Linux).
 //! Spawns the real binary, speaks JSON lines, and checks ping, permissions,
-//! ocr on a synthetic PNG, convert/crop, and the error path.
+//! ocr on a synthetic PNG, convert/crop, the error path, and (Windows) a real
+//! screen capture through Desktop Duplication.
 #![cfg(all(
     feature = "capture-engine",
     any(target_os = "windows", target_os = "linux")
@@ -19,10 +20,14 @@ struct Engine {
 
 impl Engine {
     fn start() -> Self {
+        Self::start_with(Stdio::inherit())
+    }
+
+    fn start_with(stderr: Stdio) -> Self {
         let mut child = Command::new(env!("CARGO_BIN_EXE_kortix-capture-engine"))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
+            .stderr(stderr)
             .spawn()
             .expect("spawn engine");
         let stdin = child.stdin.take().unwrap();
@@ -215,4 +220,102 @@ fn convert_crops_and_ocr_reads_synthetic_png() {
         }
     }
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Every display is grabbed by Desktop Duplication, not the GDI fallback: GDI
+/// paints GPU-rendered content (a CAD canvas, a game, video) black. Two ticks:
+/// the first opens the duplication, the second reads it again (a static screen
+/// hands out no new frame). Each frame is a real picture, not one flat color.
+#[cfg(target_os = "windows")]
+#[test]
+fn windows_captures_every_display_through_desktop_duplication() {
+    let dir = std::env::temp_dir().join(format!("kce-dup-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let log = dir.join("engine.stderr");
+    let mut e = Engine::start_with(Stdio::from(std::fs::File::create(&log).unwrap()));
+    for tick in 0..2 {
+        let out = dir.join(format!("tick{tick}.jpg"));
+        let res = e.call(
+            json!({"cmd": "capture", "all_displays": true, "record_unknown": true,
+            "out": out.to_str().unwrap(), "max_width": 0, "max_height": 0}),
+        );
+        assert_eq!(res["ok"], json!(true), "{res}");
+        let displays = res["displays"].as_array().expect("displays");
+        assert!(!displays.is_empty(), "{res}");
+        for d in displays {
+            let path = d["path"]
+                .as_str()
+                .unwrap_or_else(|| panic!("no frame: {d}"));
+            let img = image::open(path).unwrap().to_luma8();
+            let (lo, hi) = img
+                .pixels()
+                .fold((255u8, 0u8), |(lo, hi), p| (lo.min(p.0[0]), hi.max(p.0[0])));
+            assert!(hi - lo > 32, "tick {tick}: a flat frame ({lo}..{hi}): {d}");
+            assert_eq!(
+                (img.width() as i64, img.height() as i64),
+                (
+                    d["display"]["w"].as_i64().unwrap(),
+                    d["display"]["h"].as_i64().unwrap()
+                ),
+                "the frame is the whole display"
+            );
+        }
+    }
+    drop(e);
+    let stderr = std::fs::read_to_string(&log).unwrap();
+    assert!(
+        !stderr.contains("desktop duplication unavailable"),
+        "the engine fell back to GDI: {stderr}"
+    );
+}
+
+/// A display whose desktop image did not change since the last read is not
+/// read again: fed back its own content hash, the engine answers `unchanged`
+/// and `reused` without reading the pixels. A runner desktop can change (a
+/// clock), so one of several ticks must reuse.
+#[cfg(target_os = "windows")]
+#[test]
+fn windows_skips_reading_a_display_that_did_not_change() {
+    let dir = std::env::temp_dir().join(format!("kce-reuse-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut e = Engine::start();
+    let mut unchanged = json!({});
+    let mut reused = 0;
+    for tick in 0..6 {
+        let out = dir.join(format!("tick{tick}.jpg"));
+        let res = e.call(
+            json!({"cmd": "capture", "all_displays": true, "record_unknown": true,
+            "out": out.to_str().unwrap(), "unchanged": unchanged}),
+        );
+        assert_eq!(res["ok"], json!(true), "{res}");
+        let mut next = json!({});
+        for d in res["displays"].as_array().expect("displays") {
+            if d["reused"] == json!(true) {
+                assert_eq!(d["unchanged"], json!(true), "{d}");
+                reused += 1;
+            }
+            if let Some(h) = d["content_hash"].as_str() {
+                next[d["display"]["id"].to_string()] = json!(h);
+            }
+        }
+        unchanged = next;
+        std::thread::sleep(std::time::Duration::from_millis(300));
+    }
+    assert!(reused > 0, "no tick reused an unchanged display");
+}
+
+/// `status.json` `resources` sees a running Kortix Capture process with its
+/// CPU time and memory: the real engine binary, read by the OS process reader.
+#[test]
+fn the_resource_reader_sees_a_running_engine() {
+    let mut e = Engine::start();
+    assert_eq!(e.call(json!({"cmd": "ping"}))["ok"], json!(true));
+    let pid = e.child.id();
+    let procs = kortix_backend::self_usage::processes().expect("a process reader on this OS");
+    let engine = procs
+        .iter()
+        .find(|p| p.pid == pid)
+        .unwrap_or_else(|| panic!("engine pid {pid} not in {procs:?}"));
+    assert_eq!(engine.name, "kortix-capture-engine");
+    assert!(engine.memory_bytes > 1_000_000, "{engine:?}");
 }

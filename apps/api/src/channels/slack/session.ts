@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { chatEventDedup, chatThreads, projectSessions, projects } from '@kortix/db';
+import { chatEventDedup, chatThreads, projectSessions } from '@kortix/db';
 import { slackFollowUpHeader, slackPlainText } from '@kortix/shared';
 import { db } from '../../shared/db';
 import { config } from '../../config';
@@ -14,6 +14,8 @@ import { normalizeString } from '../../projects/lib/serializers';
 import { chooseEffectiveAgent } from '../../llm-gateway/resolution/effective';
 import { EVENT_DEDUPE_TTL_MS } from './app';
 import { buildAgentUnavailablePickerBlocks, loadScopedChannelAgents } from './agent-picker';
+import { claimExpiringKey } from './dedup';
+import { slackChannelIsDm } from './util';
 import { currentChannelSelection } from './selection';
 import { startErrorMessage } from './start-error';
 import {
@@ -36,6 +38,7 @@ import {
   planChannelSessionStart,
   projectChannelModelScope,
 } from '../model-access';
+import { projectsView } from '../../workspaces/rows';
 
 const defaultSlackSessionLifecycle = {
   deliverFollowUp: deliverThroughQueue,
@@ -122,7 +125,7 @@ export async function slackFollowUpModel(input: {
         .where(eq(projectSessions.sessionId, input.sessionId))
         .limit(1)
     )[0];
-  const raw = (row?.metadata as Record<string, unknown> | null)?.opencode_model;
+  const raw = (row?.metadata as Record<string, unknown> | null)?.model;
   const pinned = typeof raw === 'string' && raw.trim() ? raw.trim() : null;
   const hasImage = slackMessageHasImage(input.event);
   const model = await planChannelFollowUp({
@@ -155,8 +158,8 @@ export async function createOrJoinThreadSession(input: {
 
   const [project] = await db
     .select()
-    .from(projects)
-    .where(eq(projects.projectId, projectId))
+    .from(projectsView)
+    .where(eq(projectsView.projectId, projectId))
     .limit(1);
   if (!project) return;
 
@@ -181,9 +184,12 @@ export async function createOrJoinThreadSession(input: {
     return;
   }
 
+  // The create runs inline, so it ends `created` or `failed`. `queued` and
+  // `pending` come only from an earlier delivery of this same message, whose
+  // create still runs or waits for a retry under the same idempotency key.
   if (result.status === 'queued' || result.status === 'pending') {
     if (handle) {
-      await finalizeTurn(handle, { answer: queuedMessage() });
+      await finalizeTurn(handle, { answer: CREATE_IN_FLIGHT_MESSAGE });
     }
     return;
   }
@@ -235,7 +241,7 @@ async function reportSlackStartError(
 }
 
 async function launchSlackSession(
-  project: typeof projects.$inferSelect,
+  project: typeof projectsView.$inferSelect,
   { projectId, teamId, threadId, envelope, event, revived, actorUserId: userId }: Parameters<typeof createOrJoinThreadSession>[0],
   { conversationPolicy, launchAgent, start }: NonNullable<Awaited<ReturnType<typeof planSlackLaunch>>>,
   claimKey: string | null,
@@ -249,14 +255,13 @@ async function launchSlackSession(
     body: {
       base_ref: project.defaultBranch,
       agent_name: launchAgent,
-      ...(start.model ? { opencode_model: start.model } : {}),
+      ...(start.model ? { model: start.model } : {}),
       ...(start.pools ? { provider_secret_pools: start.pools } : {}),
       initial_prompt: renderAgentPrompt(envelope, event, revived, labels),
       // Keep scaffolded prompt details out of the project-visible title, and
       // Slack markup with them: `<@U0…>` reads `@Sam`, as Slack shows it.
       title_source: event.text ? slackPlainText(labels.text) : null,
     },
-    queuePolicy: 'on_backpressure',
     // Per-message key allows retry after a failed first start; claim serializes races.
     idempotencyKey: teamId && threadId && event.ts ? `slack:create:${teamId}:${threadId}:${event.ts}` : claimKey,
     postCreate: teamId && threadId
@@ -281,7 +286,7 @@ async function launchSlackSession(
 }
 
 async function planSlackLaunch(
-  project: typeof projects.$inferSelect,
+  project: typeof projectsView.$inferSelect,
   event: SlackEvent,
   teamId: string,
   userId: string,
@@ -289,7 +294,7 @@ async function planSlackLaunch(
 ) {
   const projectId = project.projectId;
   const selection = event.channel
-    ? await currentChannelSelection({ teamId, channelId: event.channel })
+    ? await currentChannelSelection({ teamId, channelId: event.channel, projectId })
     : null;
   const conversationPolicy = normalizeConversationPolicy(selection?.conversationPolicy);
 
@@ -310,7 +315,7 @@ async function planSlackLaunch(
   if (allowedAgents.length === 0) {
     if (handle) {
       await finalizeTurn(handle, {
-        error: `You don't have access to the \`${launchAgent}\` agent in this project. Ask a project manager to grant it, or switch the agent with \`/kortix agents\`.`,
+        error: `You don't have access to the \`${launchAgent}\` agent in this Kortix workspace. Ask a workspace manager to grant it, or switch the agent with \`/kortix agents\`.`,
       });
     }
     return null;
@@ -321,7 +326,7 @@ async function planSlackLaunch(
     accountId: project.accountId,
     userId,
     scope: await slackTurnScope(project, event, userId),
-    chosenModel: selection?.opencodeModel,
+    chosenModel: selection?.sessionModel,
     agentName: launchAgent,
     hasImage: slackMessageHasImage(event),
   });
@@ -339,7 +344,7 @@ async function planSlackLaunch(
 
 /** Return undefined when a mapped thread took the follow-up; otherwise its claim key. */
 async function joinExistingThread(
-  project: typeof projects.$inferSelect,
+  project: typeof projectsView.$inferSelect,
   { projectId, teamId, threadId, envelope, event, actorUserId }: Parameters<typeof createOrJoinThreadSession>[0],
 ): Promise<string | null | undefined> {
   // Claim the thread-create. Losers wait; winners check for a mapping left
@@ -376,23 +381,15 @@ async function joinExistingThread(
   return claimKey;
 }
 
-function queuedMessage(): string {
-  return "I've queued your task behind the sessions already starting up in this project, and I'll reply right here the moment it begins.";
-}
+const CREATE_IN_FLIGHT_MESSAGE =
+  'Kortix is still starting a session for this message. The agent replies here when it is ready.';
 
 // Fail open on DB errors rather than dropping a message.
-async function claimThreadCreate(key: string): Promise<boolean> {
-  try {
-    const inserted = await db
-      .insert(chatEventDedup)
-      .values({ eventId: key, expiresAt: new Date(Date.now() + EVENT_DEDUPE_TTL_MS) })
-      .onConflictDoNothing({ target: chatEventDedup.eventId })
-      .returning({ eventId: chatEventDedup.eventId });
-    return inserted.length > 0;
-  } catch (err) {
-    console.warn('[slack-webhook] thread-create claim failed (fail-open)', err);
-    return true;
-  }
+export async function claimThreadCreate(key: string): Promise<boolean> {
+  return claimExpiringKey(key, EVENT_DEDUPE_TTL_MS, {
+    onDbError: true,
+    log: 'thread-create claim failed (fail-open)',
+  });
 }
 
 async function releaseThreadCreate(key: string): Promise<void> {
@@ -416,7 +413,7 @@ async function waitForThreadSession(teamId: string, threadId: string, projectId:
       .where(
         and(
           eq(chatThreads.platform, 'slack'),
-          eq(chatThreads.workspaceId, teamId),
+          eq(chatThreads.platformTeamId, teamId),
           eq(chatThreads.threadId, threadId),
           eq(chatThreads.projectId, projectId),
         ),
@@ -464,8 +461,9 @@ export const TURN_INSTRUCTIONS = [
   '  divider, context, image, actions). Plain text via `slack send "..."` is fine',
   '  for one-liners, but prefer blocks when there\'s real structure to convey.',
   '- One `slack send` per turn. It finalizes the live stream and can\'t be undone.',
-  '- In a channel thread only a message that @mentions you reaches you. When you ask an',
-  '  open-ended question with `slack send`, ask the person to @mention you in the reply.',
+  '- In a channel thread, the person who started it reaches you with a plain reply;',
+  '  anyone else @mentions you. When you ask someone else an open-ended question with',
+  '  `slack send`, ask them to @mention you in the reply.',
   '  (Button questions are unaffected: clicks arrive through interactivity.)',
 ].join('\n');
 
@@ -521,7 +519,7 @@ export function renderFollowUpPrompt(
     'This session may serve several threads. Reply to THIS message in its originating channel and thread:',
     slackReplyCommand(event.channel ?? 'unknown', event.thread_ts ?? event.ts ?? 'unknown'),
     'The live slack step stream follows this message automatically. Do not use the session\'s original Slack thread for this reply.',
-    ...(event.channel_type !== 'im' && !event.channel?.startsWith('D') ? [readThreadInstruction(event)] : []),
+    ...(event.channel_type !== 'im' && !(event.channel && slackChannelIsDm(event.channel)) ? [readThreadInstruction(event)] : []),
     '',
     text,
     renderFileInfo(event),

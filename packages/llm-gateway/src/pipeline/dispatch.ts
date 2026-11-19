@@ -11,6 +11,7 @@ import { noteBedrockOpenAiRejectsReasoningEffort } from '../transports/ai-sdk/re
 import { resolveTransportKind } from '../transports/route-kind';
 import { MAX_RELAYED_RETRY_AFTER_SECONDS, clampRetryAfterSeconds, providerClientErrorBody } from './error-response';
 import { applyGenerationDefaults } from './generation-defaults';
+import { type SubscriptionUsage, subscriptionUsageFromHeaders } from '../usage/subscription-usage';
 import { type CircuitBreakers, breakerKey, tripsBreaker, upstreamBreakers } from './circuit-breaker';
 import { publicUpstreamError, shownModel, shownProvider } from './public-identity';
 
@@ -70,6 +71,8 @@ export interface DispatchContext {
   /** Resolves a fallback model's candidates. Called only when the plan reaches that model. */
   resolveCandidates: (model: string) => Promise<UpstreamDescriptor[]>;
   notePoolRateLimit?: (secretId: string, seconds: number) => Promise<void>;
+  /** `GatewayHooks.notePoolUsage`, bound to the request's principal. */
+  notePoolUsage?: (secretId: string, usage: SubscriptionUsage) => Promise<void>;
   /** `GatewayHooks.refreshCredential`, bound to the request's principal. */
   refreshCredential?: (descriptor: UpstreamDescriptor) => Promise<UpstreamDescriptor | null>;
   /**
@@ -148,15 +151,35 @@ export function withUpstreamHeadersTimeout(
   };
 }
 
-/** The provider's own error, relayed with its status and a `retry-after` when it sent one. */
-export function rawProviderError(error: UpstreamHttpError): Response {
-  return new Response(providerClientErrorBody(error.status, error.body || JSON.stringify({ error: { message: error.message } })), {
+/** The provider's own error, relayed with its status and a `retry-after` when it sent one. `sentBytes` is the body's size, for `request_too_large`. */
+export function rawProviderError(error: UpstreamHttpError, sentBytes = 0): Response {
+  return new Response(providerClientErrorBody(error.status, error.body || JSON.stringify({ error: { message: error.message } }), sentBytes, error.provider), {
     status: error.status,
     headers: {
       'content-type': 'application/json',
       ...(error.headers?.['retry-after'] ? { 'retry-after': error.headers['retry-after'] } : {}),
     },
   });
+}
+
+/**
+ * The most output tokens a request on a customer's own provider key asks for.
+ * A provider reserves funds for the whole `max_tokens`: OpenRouter refuses a
+ * funded key a request it cannot afford ("requires more credits, or fewer
+ * max_tokens", HTTP 402), and pi asked for up to the model's whole context
+ * window. 32,000 is the ceiling OpenCode sent for every model
+ * (`OUTPUT_TOKEN_MAX`). An answer that reaches it ends with
+ * `finish_reason: length`, which the session shows as a cut-off answer.
+ */
+export const BYOK_MAX_OUTPUT_TOKENS = 32_000;
+
+const OUTPUT_TOKEN_FIELDS = ['max_tokens', 'max_completion_tokens', 'max_output_tokens'] as const;
+
+/** `body` with every output-token field above `cap` lowered to `cap`. */
+function capOutputTokens(body: Record<string, unknown>, cap: number): Record<string, unknown> {
+  const over = OUTPUT_TOKEN_FIELDS.filter((field) => typeof body[field] === 'number' && (body[field] as number) > cap);
+  if (!over.length) return body;
+  return { ...body, ...Object.fromEntries(over.map((field) => [field, cap])) };
 }
 
 /** Fallback models beyond this many are ignored. The API accepts at most 8 per chain. */
@@ -322,6 +345,23 @@ function retryAfterOf(failure: Failure): string | null | undefined {
   return failure.error instanceof UpstreamHttpError ? failure.error.headers?.['retry-after'] : undefined;
 }
 
+/**
+ * A pooled subscription account's every response, 200 or 429, names its plan
+ * usage in headers. The transport may translate the response and drop them, so
+ * they are read here, at the fetch.
+ */
+function withUsageReport(
+  fetchImpl: FetchImpl, secretId: string | undefined, note: DispatchContext['notePoolUsage'],
+): FetchImpl {
+  if (!secretId || !note) return fetchImpl;
+  return async (input, init) => {
+    const response = await fetchImpl(input, init);
+    const usage = subscriptionUsageFromHeaders(response.headers);
+    if (usage) void note(secretId, usage).catch(() => undefined);
+    return response;
+  };
+}
+
 export async function dispatch(
   body: Record<string, unknown> | null,
   plan: DispatchPlan,
@@ -333,7 +373,8 @@ export async function dispatch(
   const fallbackModels = fallbackModelsOf(plan);
 
   const withDefaults = (source: Record<string, unknown>, attempt: Attempt): Record<string, unknown> => {
-    const next = applyGenerationDefaults({ ...source, model: attempt.model }, plan.defaultsFor?.(attempt.model));
+    const defaulted = applyGenerationDefaults({ ...source, model: attempt.model }, plan.defaultsFor?.(attempt.model));
+    const next = attempt.descriptor.billingMode === 'none' ? capOutputTokens(defaulted, BYOK_MAX_OUTPUT_TOKENS) : defaulted;
     if (!attempt.withoutEffort) return next;
     const { reasoning_effort: _dropped, ...stripped } = next;
     return stripped;
@@ -378,7 +419,7 @@ export async function dispatch(
     let payload: Record<string, unknown> | null = firstBody ?? withDefaults(retained!, attempt);
     firstBody = null;
     const fetchImpl = withUpstreamHeadersTimeout(
-      ctx.fetchImpl,
+      withUsageReport(ctx.fetchImpl, attempt.descriptor.poolSecretId, ctx.notePoolUsage),
       upstreamHeadersTimeoutMs(payload, attempt.descriptor, payload.stream === true),
     );
     try {
@@ -397,7 +438,7 @@ export async function dispatch(
     const secretId = failure.attempt.descriptor.poolSecretId;
     if (!secretId || failure.status !== 429) return;
     const seconds = (await usageLimitResetSeconds(failure)) ?? clampRetryAfterSeconds(retryAfterOf(failure)) ?? 30;
-    // OpenCode waits out a retry-after verbatim, so the client hears at most a minute.
+    // A client can wait out a retry-after verbatim (OpenCode did), so the client hears at most a minute.
     const clientSeconds = Math.min(seconds, MAX_RELAYED_RETRY_AFTER_SECONDS);
     earliestPoolRetryAt = Math.min(earliestPoolRetryAt, Date.now() + clientSeconds * 1000);
     if (!ctx.notePoolRateLimit) return;
@@ -533,7 +574,8 @@ export async function dispatch(
   let attempt = first;
   for (;;) {
     const key = breakerKey(attempt.descriptor, attempt.model);
-    if (!breakers.allow(key)) {
+    const admitted = breakers.allow(key);
+    if (!admitted) {
       // The circuit is open: skip this upstream without an attempt, as a
       // rate limit would (pool peers and fallback models take over). With
       // nothing else to try, it is tried anyway.
@@ -555,21 +597,34 @@ export async function dispatch(
         continue;
       }
     }
-    const result = await run(attempt);
-    if (result instanceof Response) {
-      breakers.success(key);
-      const { descriptor, model: servedModel } = attempt;
-      return { descriptor, model: servedModel, attempts, candidatesTried, attemptFailures, response: result };
-    }
-    if (result.error instanceof ClientAbortError || ctx.signal?.aborted) return finish(result);
-    if (tripsBreaker(result.status)) {
-      const state = breakers.failure(key, {
-        provider: attempt.descriptor.provider,
-        model: attempt.descriptor.resolvedModel ?? attempt.model,
-        reason: result.status === undefined ? 'network_error' : String(result.status),
-        publicListing: attempt.descriptor.billingMode !== 'none',
-      });
-      if (state === 'open') logger.warn(`[gateway] ${requestId}: ${attempt.descriptor.provider} circuit OPEN for ${attempt.descriptor.resolvedModel ?? attempt.model} (${result.status ?? 'network error'})`);
+    // Every attempt reports exactly one outcome to its circuit: success,
+    // failure, or release (no verdict). A half-open probe that ends with no
+    // verdict would otherwise refuse every later caller. Only an admitted
+    // attempt can hold the probe, so only it releases one.
+    const admittedAt = breakers.now();
+    let reported = false;
+    let result: Response | Failure;
+    try {
+      result = await run(attempt);
+      if (result instanceof Response) {
+        breakers.success(key, admittedAt);
+        reported = true;
+        const { descriptor, model: servedModel } = attempt;
+        return { descriptor, model: servedModel, attempts, candidatesTried, attemptFailures, response: result };
+      }
+      if (result.error instanceof ClientAbortError || ctx.signal?.aborted) return finish(result);
+      if (tripsBreaker(result.status)) {
+        const state = breakers.failure(key, {
+          provider: attempt.descriptor.provider,
+          model: attempt.descriptor.resolvedModel ?? attempt.model,
+          reason: result.status === undefined ? 'network_error' : String(result.status),
+          publicListing: attempt.descriptor.billingMode !== 'none',
+        });
+        reported = true;
+        if (state === 'open') logger.warn(`[gateway] ${requestId}: ${attempt.descriptor.provider} circuit OPEN for ${attempt.descriptor.resolvedModel ?? attempt.model} (${result.status ?? 'network error'})`);
+      }
+    } finally {
+      if (!reported && admitted) breakers.release(key);
     }
     await notePoolRateLimit(result);
     const next = await nextAttempt(result);

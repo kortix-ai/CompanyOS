@@ -24,8 +24,8 @@ const SpeedInsights = dynamic(
   () => import('@vercel/speed-insights/next').then((mod) => mod.SpeedInsights),
   { ssr: false },
 );
-const PostHogIdentify = dynamic(
-  () => import('@/components/posthog-identify').then((mod) => mod.PostHogIdentify),
+const PostHogHost = dynamic(
+  () => import('@/components/analytics/posthog-host').then((mod) => mod.PostHogHost),
   { ssr: false },
 );
 const RouteChangeTracker = dynamic(
@@ -41,6 +41,9 @@ const LocalhostLinkInterceptor = dynamic(
     import('@/components/localhost-link-interceptor').then((mod) => mod.LocalhostLinkInterceptor),
   { ssr: false },
 );
+const PwaClient = dynamic(() => import('@/components/pwa/pwa-client').then((mod) => mod.PwaClient), {
+  ssr: false,
+});
 const DesktopUrlPrompt = dynamic(
   () => import('@/components/desktop/desktop-url-prompt').then((mod) => mod.DesktopUrlPrompt),
   { ssr: false },
@@ -50,10 +53,6 @@ const MaintenanceBannerHost = dynamic(
     import('@/components/announcements/maintenance-banner-host').then(
       (mod) => mod.MaintenanceBannerHost,
     ),
-  { ssr: false },
-);
-const NotificationHost = dynamic(
-  () => import('@/features/notifications/notification-host').then((mod) => mod.NotificationHost),
   { ssr: false },
 );
 const ImpersonationBanner = dynamic(
@@ -82,10 +81,12 @@ export function RootClientHosts({ vercel }: { vercel: boolean }) {
       {desktop ? <DesktopUrlPrompt /> : null}
       {vercel ? <Analytics /> : null}
       {vercel ? <SpeedInsights /> : null}
-      <PostHogIdentify />
+      <PostHogHost />
       <RouteChangeTracker />
       <AuthEventTracker />
       <LocalhostLinkInterceptor />
+      {/* The desktop shell neither registers the worker nor installs the app. */}
+      {desktop ? null : <PwaClient />}
     </>
   );
 }
@@ -105,10 +106,6 @@ export function RootQueryHosts() {
           banner has to be true everywhere too. Renders nothing when no grant
           is held. */}
       <ImpersonationBanner />
-      {/* Web Push for this browser, new-notification toasts, and
-          `?notification=<id>` read marks. Signed-in only, and only with the
-          `notification_center` flag on (KRTX-1742). */}
-      <NotificationHost />
     </>
   );
 }

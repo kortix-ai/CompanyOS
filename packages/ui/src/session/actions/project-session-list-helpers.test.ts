@@ -9,6 +9,7 @@ import {
   sessionLastActivityAt,
   shortRelative,
   shouldPollProjectSessions,
+  sessionsWorkingInBackground,
   sortSessionsByLastActivity,
   starterSectionOf,
 } from './project-session-list-helpers';
@@ -115,31 +116,6 @@ describe('shouldPollProjectSessions', () => {
     expect(shouldPollProjectSessions([makeSession({ status: 'provisioning' })])).toBe(true);
   });
 
-  // A warm session (`metadata.warm`, pre-created and never prompted) reports
-  // `provisioning` for as long as its idle box lives (KRTX-1466). That status
-  // is not a transition in flight — the next real change is the marker drop at
-  // the first accepted turn, which happens while the user is in the session
-  // and the open-session interval covers it — so a warm row must not hold the
-  // 5s provisioning poll for up to the warm grant (~60 min).
-  test('does not poll for a warm row serialized as provisioning', () => {
-    expect(
-      shouldPollProjectSessions([
-        makeSession({ status: 'provisioning', metadata: { warm: true } }),
-      ]),
-    ).toBe(false);
-  });
-
-  test('still polls a warm row that is genuinely booting alongside a live row', () => {
-    // The warm skip is per row: a live provisioning row in the same list keeps
-    // the fast poll alive.
-    expect(
-      shouldPollProjectSessions([
-        makeSession({ status: 'provisioning', metadata: { warm: true } }),
-        makeSession({ session_id: 's2', status: 'provisioning' }),
-      ]),
-    ).toBe(true);
-  });
-
   test('does not poll when every session has settled', () => {
     const sessions = [
       makeSession({ status: 'running' }),
@@ -182,6 +158,37 @@ describe('projectSessionsRefetchInterval', () => {
       false,
     );
   });
+
+  // Audit finding 04: on /drive a workflow runner row said "Working" for 3+ min
+  // after the run ended. Nothing polled: no session was open, and no stream
+  // speaks for a session the person is not in.
+  const busy = { state: 'working' as const, since: null, turn_token: 't', pending_delivery: false };
+  const idle = { state: 'idle' as const, since: null, turn_token: null, pending_delivery: false };
+  test('a row that works in the background polls every 10 s, open session or not', () => {
+    const sessions = [makeSession({ session_id: 'bg', status: 'running', name: 'Run', working: busy })];
+    expect(projectSessionsRefetchInterval({ sessions, hasOpenSession: false })).toBe(10_000);
+    expect(projectSessionsRefetchInterval({ sessions, hasOpenSession: true, openSessionId: 'other' })).toBe(10_000);
+  });
+
+  test('the open session working is not background work: its stream patches the row', () => {
+    const sessions = [makeSession({ session_id: 'open', status: 'running', name: 'Chat', working: busy })];
+    expect(projectSessionsRefetchInterval({ sessions, hasOpenSession: true, openSessionId: 'open' })).toBe(60_000);
+  });
+
+  test('an idle row, or an older API without `working`, adds no poll', () => {
+    const sessions = [makeSession({ status: 'running', name: 'Run', working: idle }), makeSession({ session_id: 's2', status: 'running', name: 'Old' })];
+    expect(projectSessionsRefetchInterval({ sessions, hasOpenSession: false })).toBe(false);
+  });
+});
+
+describe('sessionsWorkingInBackground', () => {
+  const busy = { state: 'working' as const, since: null, turn_token: 't', pending_delivery: false };
+  test('true only for a working row that is not the open session', () => {
+    expect(sessionsWorkingInBackground([makeSession({ session_id: 'a', working: busy })], null)).toBe(true);
+    expect(sessionsWorkingInBackground([makeSession({ session_id: 'a', working: busy })], 'a')).toBe(false);
+    expect(sessionsWorkingInBackground([makeSession({ session_id: 'a' })], null)).toBe(false);
+    expect(sessionsWorkingInBackground(undefined, null)).toBe(false);
+  });
 });
 
 function openCodeSession(updatedAt: string | null, id = 'oc-1') {
@@ -201,7 +208,7 @@ describe('session last activity', () => {
     const session = makeSession({
       created_at: '2026-01-01T00:00:00.000Z',
       updated_at: '2026-01-08T08:00:09.000Z',
-      opencode_sessions: [openCodeSession('2026-01-03T04:05:06.000Z')],
+      runtime_sessions: [openCodeSession('2026-01-03T04:05:06.000Z')],
     });
 
     expect(sessionLastActivityAt(session)).toBe('2026-01-03T04:05:06.000Z');
@@ -212,7 +219,7 @@ describe('session last activity', () => {
       created_at: '2026-01-01T00:00:00.000Z',
       updated_at: '2026-01-01T00:00:00.000Z',
       metadata: { last_activity_at: '2026-01-09T10:00:00.000Z' },
-      opencode_sessions: [],
+      runtime_sessions: [],
     });
 
     expect(sessionLastActivityAt(session)).toBe('2026-01-09T10:00:00.000Z');
@@ -221,13 +228,13 @@ describe('session last activity', () => {
   test('the newer of the prompt stamp and the conversation snapshot wins', () => {
     const staleSnapshot = makeSession({
       metadata: { last_activity_at: '2026-01-09T10:00:00.000Z' },
-      opencode_sessions: [openCodeSession('2026-01-02T00:00:00.000Z')],
+      runtime_sessions: [openCodeSession('2026-01-02T00:00:00.000Z')],
     });
     // The agent keeps replying after the prompt was stamped, so the snapshot
     // legitimately leads the stamp.
     const stalePrompt = makeSession({
       metadata: { last_activity_at: '2026-01-09T10:00:00.000Z' },
-      opencode_sessions: [openCodeSession('2026-01-09T10:04:00.000Z')],
+      runtime_sessions: [openCodeSession('2026-01-09T10:04:00.000Z')],
     });
 
     expect(sessionLastActivityAt(staleSnapshot)).toBe('2026-01-09T10:00:00.000Z');
@@ -239,7 +246,7 @@ describe('session last activity', () => {
       created_at: '2026-01-01T00:00:00.000Z',
       updated_at: '2026-01-01T00:00:00.000Z',
       metadata: { last_activity_at: 'not a date' },
-      opencode_sessions: [openCodeSession('2026-01-03T00:00:00.000Z')],
+      runtime_sessions: [openCodeSession('2026-01-03T00:00:00.000Z')],
     });
 
     expect(sessionLastActivityAt(session)).toBe('2026-01-03T00:00:00.000Z');
@@ -247,7 +254,7 @@ describe('session last activity', () => {
 
   test('a snapshot entry with no timestamp does not mask a later one', () => {
     const session = makeSession({
-      opencode_sessions: [
+      runtime_sessions: [
         openCodeSession(null, 'oc-a'),
         openCodeSession('2026-01-05T00:00:00.000Z', 'oc-b'),
       ],
@@ -262,7 +269,7 @@ describe('session last activity', () => {
     const session = makeSession({
       created_at: '2026-01-01T00:00:00.000Z',
       updated_at: '2026-01-08T08:00:09.000Z',
-      opencode_sessions: [],
+      runtime_sessions: [],
     });
 
     expect(sessionLastActivityAt(session)).toBe('2026-01-08T08:00:09.000Z');
@@ -272,7 +279,7 @@ describe('session last activity', () => {
     const session = makeSession({
       created_at: '2026-01-01T00:00:00.000Z',
       updated_at: undefined,
-      opencode_sessions: [],
+      runtime_sessions: [],
     });
 
     expect(sessionLastActivityAt(session)).toBe('2026-01-01T00:00:00.000Z');
@@ -284,7 +291,7 @@ describe('session last activity', () => {
     const session = makeSession({
       created_at: '2026-01-01T00:00:00.000Z',
       updated_at: '2026-01-20T00:00:00.000Z',
-      opencode_sessions: [openCodeSession('2026-01-03T00:00:00.000Z')],
+      runtime_sessions: [openCodeSession('2026-01-03T00:00:00.000Z')],
     });
 
     expect(sessionLastActivityAt(session)).toBe('2026-01-03T00:00:00.000Z');
@@ -297,20 +304,20 @@ describe('session last activity', () => {
       session_id: 'a',
       created_at: '2026-01-03T00:00:00.000Z',
       updated_at: '2026-01-20T00:00:00.000Z',
-      opencode_sessions: [openCodeSession('2026-01-04T00:00:00.000Z', 'oc-a')],
+      runtime_sessions: [openCodeSession('2026-01-04T00:00:00.000Z', 'oc-a')],
     });
     const middle = makeSession({
       session_id: 'b',
       created_at: '2026-01-02T00:00:00.000Z',
       updated_at: '2026-01-19T00:00:00.000Z',
-      opencode_sessions: [openCodeSession('2026-01-05T00:00:00.000Z', 'oc-b')],
+      runtime_sessions: [openCodeSession('2026-01-05T00:00:00.000Z', 'oc-b')],
     });
     const newest = makeSession({
       session_id: 'c',
       created_at: '2026-01-01T00:00:00.000Z',
       updated_at: '2026-01-18T00:00:00.000Z',
       metadata: { last_activity_at: '2026-01-06T00:00:00.000Z' },
-      opencode_sessions: [],
+      runtime_sessions: [],
     });
 
     const result = sortSessionsByLastActivity([oldest, newest, middle]);

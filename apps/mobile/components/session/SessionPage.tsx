@@ -11,6 +11,7 @@
  * thread sends to that sub-agent's own runtime session.
  */
 
+import { HeldMessages } from './HeldMessages';
 import React, { useMemo, useCallback, useRef, useEffect, useLayoutEffect, useState } from 'react';
 import {
   View,
@@ -38,7 +39,6 @@ import Reanimated, {
   useReducedMotion,
   useSharedValue,
   withTiming,
-  interpolate,
 } from 'react-native-reanimated';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
@@ -77,7 +77,7 @@ import { requestPushPermissionOnce } from '@/lib/notifications/registration';
 import { Icon } from '@/components/ui/icon';
 import { MOTION, THEME, withAlpha } from '@/lib/utils/theme';
 import { ComposerBottomFade, composerSafeAreaPadding } from '@/components/session/composer-bottom-fade';
-import { LIQUID_GLASS_AVAILABLE, LiquidGlassCapsule } from '@/components/kortix/liquid-glass-capsule';
+import { GlassButtons, LIQUID_GLASS_AVAILABLE } from '@/components/kortix/liquid-glass';
 
 import {
   addOptimisticMessage,
@@ -147,6 +147,7 @@ import {
   anchorSpan,
   chevronVisible,
   distanceFromEnd,
+  extentShortfall,
   isAtEnd,
   momentumFollows,
   nextFollow,
@@ -201,6 +202,7 @@ import { useLiveUpdates } from '@/hooks/useLiveUpdates';
 import { OLDER_HOLD_POSITION_MS, olderHistoryControl } from '@/lib/session/older-history';
 import { useRouter } from 'expo-router';
 import { SessionTurn } from './SessionTurn';
+import { useAgentRunLayout } from '@/lib/session/agent-runs';
 import { SessionBusyIndicator } from './session-busy-indicator';
 import { CompactionMarker } from './turn/compaction-divider';
 import { QuestionPrompt } from './QuestionPrompt';
@@ -626,7 +628,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
     delivery: SessionPromptDelivery = 'steer',
   ) => {
     if (!projectId || !projectSessionId) {
-      toast.error('No project session to queue a prompt');
+      toast.error('No session to queue a prompt');
       throw new Error('No project session to queue a prompt');
     }
     const nowMs = Date.now();
@@ -658,6 +660,8 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
   const [queueExpanded, setQueueExpanded] = useState(false);
   const [savedInputText, setSavedInputText] = useState('');
   const inputTextRef = useRef('');
+  // Wire ids this device sent: their author is the viewer before the server records it.
+  const sentHereIds = useRef(new Set<string>());
 
   // The first pending question for this session (if any)
   const activeQuestion: QuestionRequest | undefined = pendingQuestions[0];
@@ -734,6 +738,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
       // file with its device URI: the bubble shows the local thumbnail until
       // the server echo replaces the message.
       const sentAtMs = Date.now();
+      sentHereIds.current.add(messageId);
       addOptimisticMessage(sessionId, {
         info: { id: messageId, role: 'user', sessionID: sessionId, time: { created: sentAtMs } },
         parts: optimisticUserParts(finalText, attachments?.files ?? [], sentAtMs),
@@ -947,9 +952,8 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
     () => ({ projectId: projectId ?? null, requestConnect: requestConnectorConnect }),
     [projectId, requestConnectorConnect],
   );
-  // Only a runtime with a config document (OpenCode) is asked for it; pi
-  // has none, and the project's model defaults cover the composer.
-  // (the SDK asks only a runtime that lists `session.config`).
+  // Only a runtime that lists `session.config` is asked for it (the SDK's
+  // rule); pi does not, and the project's model defaults cover the composer.
   const { data: config } = useRuntimeConfig();
   // A runtime without slash commands (pi) gets no list: no "/" or "#"
   // suggestions and no AutoContinue, so nothing dispatches to /command (E1).
@@ -962,7 +966,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
     agents: rawAgents,
     boundAgent: boundAgentName,
     latestAgent,
-    defaultAgent: projectConfig?.default_agent ?? projectConfig?.open_code_default_agent,
+    defaultAgent: projectConfig?.default_agent,
     models,
     providers,
     modelDefaults,
@@ -1001,7 +1005,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
     const request = store.take(sessionId) ?? (projectSessionId ? store.take(projectSessionId) : null);
     if (!request) return;
     if (isBusy || hasQuestion) {
-      void handleEnqueue(request.text, {}, undefined, 'queue').catch(() => {});
+      void handleEnqueue(request.text, {}, undefined, 'steer').catch(() => {});
       return;
     }
     const { agent, modelKey, variant } = resolvedRef.current;
@@ -1111,6 +1115,8 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
     () => reuseStableTurns(prevTurnsRef.current, thread ? sessionLogTurns(thread, { busy: isBusy }) : EMPTY_TURNS),
     [thread, isBusy],
   );
+  // A person's agents report back as one unit: the turns of a run fold into the turn that answers it.
+  const agentRunLayout = useAgentRunLayout(turns);
   useEffect(() => {
     prevTurnsRef.current = turns;
   }, [turns]);
@@ -1151,6 +1157,8 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
     () => sessionChanges.find((item) => item.id === selectedChangeId) ?? null,
     [sessionChanges, selectedChangeId],
   );
+  // A run's anchor draws its members' change requests too (KRTX-4732).
+  const changeRequestsOf = useCallback((turnId: string) => changesByTurn.get(turnId), [changesByTurn]);
   const openChangeRequest = useCallback((id: string) => {
     setSelectedChangeId(id);
     changeSheetRef.current?.open();
@@ -1170,7 +1178,20 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
   const messageAuthors = useSessionMessageAuthors(projectId, projectSessionId, wantedAuthorIds, isBusy).data;
   const viewerId = participants?.participants.find((person) => person.is_viewer)?.user_id;
   // The signed-in user: the participants list holds at most 20 people.
-  const signedInUserId = useAuthContext().user?.id;
+  const authUser = useAuthContext().user;
+  const signedInUserId = authUser?.id;
+  // The viewer's own avatar: it stands in above a message this device sent
+  // until the server records its author, so the bubble does not move.
+  const viewerPerson = useMemo((): AvatarPerson | null => {
+    if (!authUser) return null;
+    const meta = authUser.user_metadata ?? {};
+    const name = meta.full_name ?? meta.name;
+    return {
+      name: typeof name === 'string' ? name : '',
+      email: authUser.email ?? null,
+      avatar_url: typeof meta.avatar_url === 'string' ? meta.avatar_url : null,
+    };
+  }, [authUser]);
   // The sender of a message, built once per message while the authors and the
   // participants stay the same: the same object each render keeps the memoized
   // rows from rendering again.
@@ -1178,11 +1199,12 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
     const cache = new Map<string, AvatarPerson | null>();
     return (messageId: string) => {
       if (!cache.has(messageId)) {
-        cache.set(messageId, messageAvatarPerson(messageAuthors, participants, viewerId, messageId));
+        const recorded = messageAvatarPerson(messageAuthors, messageId);
+        cache.set(messageId, recorded ?? (sentHereIds.current.has(messageId) ? viewerPerson : null));
       }
       return cache.get(messageId) ?? null;
     };
-  }, [messageAuthors, participants, viewerId]);
+  }, [messageAuthors, viewerPerson]);
   // The Kortix session that sent a message (a coordinator, a spawn), same
   // memo rule as `senderOf`.
   // Keyed by the ids, not by `turns`: a stream delta makes a new `turns` array
@@ -1208,8 +1230,10 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
   // re-minted under; either finds its author.
   const queuedSender = useCallback(
     (prompt: SessionPrompt) =>
-      senderOf(prompt.message_id) ?? (prompt.wire_message_id ? senderOf(prompt.wire_message_id) : null),
-    [senderOf],
+      senderOf(prompt.message_id) ??
+      (prompt.wire_message_id ? senderOf(prompt.wire_message_id) : null) ??
+      (signedInUserId && prompt.author_user_id === signedInUserId ? viewerPerson : null),
+    [senderOf, signedInUserId, viewerPerson],
   );
   // A queued prompt runs as its author: only they send it now, and they or a
   // session manager remove it. The API answers 403 to anyone else. The
@@ -1299,6 +1323,14 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
   const [room, setRoom] = useState(0);
   const roomRef = useRef(0);
   const renderedRoomRef = useRef(0);
+  // iOS (KRTX-4899): the native scroll extent (scroll events' `contentSize`)
+  // can end short of the laid-out content (`onContentSizeChange`). The list
+  // then rests with the newest answer's tail under the composer, and a swipe
+  // to it springs back. The gap pads the list's native bottom inset until the
+  // native extent catches up.
+  const [extentInset, setExtentInset] = useState(0);
+  const extentInsetRef = useRef(0);
+  const extentContentInset = useMemo(() => ({ bottom: extentInset }), [extentInset]);
   // The last room handed to `setRoom`. While the keyboard moves, the list's
   // height changes every frame (the page's `keyboardInset` padding), and a
   // room per frame is a page render per frame. A room that shrinks is blank
@@ -1485,6 +1517,26 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
       settleRef.current();
     });
   }, []);
+
+  /** Compare the native extent of a scroll event with the layout (iOS). */
+  const checkExtent = useCallback((nativeHeight: number) => {
+    if (Platform.OS !== 'ios') return;
+    const next = extentShortfall({ laidOutHeight: contentHeightRef.current, nativeHeight });
+    if (next === extentInsetRef.current) return;
+    extentInsetRef.current = next;
+    setExtentInset(next);
+    if (next > 0) {
+      log.error('[SessionPage] native scroll extent short of layout', {
+        laidOutHeight: contentHeightRef.current,
+        nativeHeight,
+        shortfall: next,
+      });
+    }
+  }, []);
+  // Once the inset is on screen, a following list moves to the laid-out end.
+  useEffect(() => {
+    if (extentInset > 0) scheduleSettle();
+  }, [extentInset, scheduleSettle]);
 
   // A taller or shorter composer moves the end padding: settle once, like any layout change.
   const handleComposerAreaLayout = useCallback(
@@ -1734,9 +1786,10 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
       const offset = Math.max(0, contentOffset.y || 0);
       currentOffsetRef.current = offset;
+      checkExtent(contentSize.height);
       const distance = distanceFromEnd({
         offset,
-        contentHeight: contentSize.height,
+        contentHeight: contentSize.height + extentInsetRef.current,
         viewportHeight: layoutMeasurement.height,
       });
       if (!isOwnScroll()) settledAtEndRef.current = isAtEnd(distance);
@@ -1745,7 +1798,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
       updateScrollButton(distance);
       persistScrollOffset(sessionId, offset);
     },
-    [sessionId, persistScrollOffset, isOwnScroll, setFollow, updateScrollButton],
+    [sessionId, persistScrollOffset, isOwnScroll, setFollow, updateScrollButton, checkExtent],
   );
 
   const handleScrollEndDrag = useCallback(
@@ -1809,11 +1862,16 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
       const geometryChanged =
         contentSize.height !== last.contentHeight || layoutMeasurement.height !== last.viewportHeight;
       scrollGeometryRef.current = { contentHeight: contentSize.height, viewportHeight: layoutMeasurement.height };
-      const distance = distanceFromEnd({
+      // At the native end with no finger down: is that the laid-out end too?
+      const nativeDistance = distanceFromEnd({
         offset,
         contentHeight: contentSize.height,
         viewportHeight: layoutMeasurement.height,
       });
+      if (!draggingRef.current && (extentInsetRef.current > 0 || isAtEnd(nativeDistance))) {
+        checkExtent(contentSize.height);
+      }
+      const distance = nativeDistance + extentInsetRef.current;
 
       const wasFollowing = followRef.current;
       const next = nextFollow(wasFollowing, {
@@ -1844,7 +1902,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
         }
       }
     },
-    [isOwnScroll, setFollow, updateScrollButton, endGlide],
+    [isOwnScroll, setFollow, updateScrollButton, endGlide, checkExtent],
   );
 
   const handleContentSizeChange = useCallback(
@@ -2004,14 +2062,17 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
         });
       // The turn list is read through the ref: depending on `turns` would
       // re-render every row on each stream delta.
-      const gap = suppressed ? 0 : turnGapAt(layoutInputsRef.current.turns, index);
+      // An agent run's other turns draw nothing: the run's anchor folds them (KRTX-4732).
+      const absorbed = agentRunLayout.absorbed.has(id);
+      const gap = suppressed || absorbed ? 0 : turnGapAt(layoutInputsRef.current.turns, index);
       return (
         <View
           style={gap > 0 ? { marginTop: gap } : undefined}
           onLayout={(e) => handleTurnLayout(id, e.nativeEvent.layout.height)}>
-          {suppressed ? null : (
+          {suppressed || absorbed ? null : (
           <SessionTurn
             turn={item}
+            {...agentRunLayout.propsOf(id)}
             sessionStatus={isWorkingTurn ? sessionStatus : undefined}
             suppressBusyIndicator={isWorkingTurn && suppressWorkingBusy}
             sessionId={sessionId}
@@ -2035,13 +2096,14 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
             stoppedBy={stoppedByOf(id)}
             onScreen={isWorkingTurn ? workingTurnOnScreen : true}
             changeRequests={changesByTurn.get(id)}
+            changeRequestsOf={agentRunLayout.propsOf(id).runTurns ? changeRequestsOf : undefined}
             onOpenChangeRequest={openChangeRequest}
           />
           )}
         </View>
       );
     },
-    [lastCompactionTurnIndex, suppressWorkingBusy, turnGapAt, handleTurnLayout, sessionStatus, sessionId, pendingPermissions, pendingQuestions, handlePermissionReply, agentNames, handleFileMention, handleSessionMention, commands, rewindTarget, editPending, handleEditStart, handleEditCancel, handleEditSend, rewindDisabled, interruptedIds, failedSends, handleRetrySend, senderOf, workingTurnOnScreen, changesByTurn, openChangeRequest, sessionAuthorOf, stoppedByOf],
+    [agentRunLayout, lastCompactionTurnIndex, suppressWorkingBusy, turnGapAt, handleTurnLayout, sessionStatus, sessionId, pendingPermissions, pendingQuestions, handlePermissionReply, agentNames, handleFileMention, handleSessionMention, commands, rewindTarget, editPending, handleEditStart, handleEditCancel, handleEditSend, rewindDisabled, interruptedIds, failedSends, handleRetrySend, senderOf, workingTurnOnScreen, changesByTurn, changeRequestsOf, openChangeRequest, sessionAuthorOf, stoppedByOf],
   );
 
   const keyExtractor = useCallback((item: SessionLogTurn) => item.id, []);
@@ -2244,6 +2306,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
         <FlatList
           ref={flatListRef}
           style={LIST_DRAWS_UNDER_KEYBOARD}
+          contentInset={extentContentInset}
           data={turns}
           renderItem={renderTurn}
           keyExtractor={keyExtractor}
@@ -2254,7 +2317,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
           windowSize={11}
           updateCellsBatchingPeriod={32}
           contentContainerStyle={{ paddingTop: listTopInset }}
-          ListHeaderComponent={olderHistoryHeader}
+          ListHeaderComponent={olderHistoryHeader ?? undefined}
           maintainVisibleContentPosition={holdPosition ? MAINTAIN_FIRST_VISIBLE : undefined}
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
@@ -2297,6 +2360,8 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
                     style={turns.length > 0 ? { marginTop: webSpace(6) } : undefined}
                   />
                 ) : null}
+                {/* Web `HeldMessageList` above the composer: messages another agent sent that wait on the person. */}
+                {projectId && projectSessionId ? <HeldMessages projectId={projectId} sessionId={projectSessionId} live={isBusy} /> : null}
               </View>
               {/* The room (FACT 1): lets the newest turn pin near the top. */}
               <View onLayout={handleSpacerLayout} style={{ height: room }} />
@@ -2466,8 +2531,8 @@ const SCROLL_BUTTON_EASING = ReanimatedEasing.bezier(0.23, 1, 0.32, 1);
  * of content away from the end. Opacity + scale 0.97 → 1, `duration-normal`
  * in, `duration-fast` out. Tapping glides to the end and follows from there.
  *
- * iOS 26+: a glass circle (`LiquidGlassCapsule`, 40pt) behind the ghost
- * button and caret, the same recipe as every hamburger (`MenuButton`) and the
+ * iOS 26+: the ghost button draws its caret inside the system glass
+ * (`GlassButtons`, 40pt circle, system press response), the same recipe as every hamburger (`MenuButton`) and the
  * composer card it sits above (Jay, 2026-10-20). Android, older iOS and a
  * binary without `ExpoUI` keep the `secondary` round button with a 1pt
  * `border-border` ring (Jay, 2026-09-22), so it separates from the prose
@@ -2498,16 +2563,17 @@ function ScrollToBottomButton({ visible, onPress }: { visible: boolean; onPress:
       // list (`zIndex`).
       style={[{ position: 'absolute', right: 16, bottom: 10, zIndex: 20 }, style]}
     >
-      <Button
-        variant={LIQUID_GLASS_AVAILABLE ? 'ghost' : 'secondary'}
-        size="icon"
-        className={LIQUID_GLASS_AVAILABLE ? 'rounded-full' : 'rounded-full border border-border'}
-        accessibilityLabel="Scroll to bottom"
-        onPress={onPress}
-      >
-        {LIQUID_GLASS_AVAILABLE ? <LiquidGlassCapsule /> : null}
-        <Icon as={CaretDownIcon} size={20} className="text-foreground" />
-      </Button>
+      <GlassButtons>
+        <Button
+          variant={LIQUID_GLASS_AVAILABLE ? 'ghost' : 'secondary'}
+          size="icon"
+          className={LIQUID_GLASS_AVAILABLE ? 'rounded-full' : 'rounded-full border border-border'}
+          accessibilityLabel="Scroll to bottom"
+          onPress={onPress}
+        >
+          <Icon as={CaretDownIcon} size={20} className="text-foreground" />
+        </Button>
+      </GlassButtons>
     </Reanimated.View>
   );
 }

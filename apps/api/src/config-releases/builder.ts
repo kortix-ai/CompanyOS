@@ -40,6 +40,7 @@ import {
   readComposedRelease,
   readFileTree,
   resolveReleaseTreeSource,
+  skillFolderFiles,
   toolModuleFiles,
 } from './release-tree';
 
@@ -85,8 +86,8 @@ type ConfigMode = 'follow-base';
  * commit and variant) nor of `release_id`.
  *
  * LANE D / daemon: render `reason` verbatim into the session notice
- * (`config-provider/notice.ts` in kortixd, composed into OpenCode `instructions` at
- * `lifecycle.ts:399-407`). It is written as a finished sentence for the agent
+ * (`config-provider/notice.ts` in kortixd; pi adds it to the system prompt in
+ * `harness/pi/runtime.ts`). It is written as a finished sentence for the agent
  * and the user; the daemon adds no wording of its own.
  */
 export interface ConfigReleaseAgentRepoint {
@@ -240,7 +241,7 @@ export async function storeConfigArchive(
   return outcome;
 }
 
-/** The `none` variant's compiled governance: a valid, empty OpenCode config. */
+/** The `none` variant's compiled governance: an empty config object, which kortixd accepts. */
 const EMPTY_GOVERNANCE = '{}';
 
 async function compileGovernance(
@@ -317,13 +318,22 @@ async function build(
   let treeId = source.rootTree;
   let files: ConfigReleaseFile[] | null = null;
   let freshArchive: Buffer | null = null;
-  // A project over the cap in the last 6 h is taken to be over it still: an
-  // archive build would download every file of the tree first, only to
-  // throw it away (`over-limit-memo.ts`).
+  // A project over the cap in the last 6 h is taken to be over it still while
+  // its tree holds every blob of the tree that was over: an archive build
+  // would download every file first, only to throw it away. A tree that
+  // dropped one of them is measured again (`over-limit-memo.ts`). Listing a
+  // tree reads tree objects only. A composed tree is known only once
+  // composed, so it keeps the 6 h rule.
+  const plainTreeBlobs =
+    !composed &&
+    !archiveBytes.has(configArchiveKey(project.projectId, treeId)) &&
+    recentOverLimit(project.projectId, 'config-archive')
+      ? (await listConfigFiles(mirror, treeId)).map(([, , blob]) => blob)
+      : undefined;
   let remembered = false;
   const archiveNeeded = (id: string) => {
     if (archiveBytes.has(configArchiveKey(project.projectId, id))) return false;
-    const recent = recentOverLimit(project.projectId, 'config-archive');
+    const recent = recentOverLimit(project.projectId, 'config-archive', { blobIds: plainTreeBlobs });
     remembered = recent !== null;
     if (recent) throw new ConfigArchiveTooLargeError(archiveLimit ?? MAX_CONFIG_ARCHIVE_BYTES, recent.bytes);
     return true;
@@ -341,19 +351,24 @@ async function build(
     }
   } catch (error) {
     if (error instanceof ConfigArchiveTooLargeError) {
-      // Only a measured result starts the 6 h: a remembered one must expire.
-      if (!remembered) noteOverLimit(project.projectId, 'config-archive', error.actualBytes ?? error.limit);
       // The release exists; only the API-built archive does not. A v3 box
       // builds it from its checkout or the project snapshot. The answer is a
       // fact of the commit, so it is cached like any release: each miss tars
       // and gzips the whole tree again (~1.5 s for 36 MB).
       const read = composed ? await readComposedRelease(mirror, source, { archive: false }) : null;
       treeId = read?.treeId ?? treeId;
+      const overFiles = read?.files ?? (await listConfigFiles(mirror, treeId));
+      // Only a measured result starts the 6 h: a remembered one must expire.
+      if (!remembered) {
+        noteOverLimit(project.projectId, 'config-archive', error.actualBytes ?? error.limit, {
+          blobIds: overFiles.map(([, , blob]) => blob),
+        });
+      }
       return {
         ...withGovernance,
         release_id: configReleaseId(treeId, etag),
         config_tree_id: treeId,
-        files: read?.files ?? (await listConfigFiles(mirror, treeId)),
+        files: overFiles,
         archive_reason:
           `the repository at ${commit.slice(0, 12)} exceeds the ${archiveLimit ?? MAX_CONFIG_ARCHIVE_BYTES}-byte config archive limit. ` +
           'Move large static files out of Git into object storage (S3, R2, GCS), or mark paths no agent reads ' +
@@ -382,9 +397,36 @@ async function build(
 /**
  * The release of a session without repository access (`agent:<name>`, `none`):
  * the modules of the project tools its agent may call and the files they
- * import by a relative path, nothing else. A session whose agent calls no
- * project tool gets governance only.
+ * import by a relative path, and every file of the registered skill folders
+ * an agent of the compiled set is granted (`permission.skill`). Nothing else.
+ * A session whose agents call no project tool and hold no project skill gets
+ * governance only.
  */
+/**
+ * May an agent with this compiled `permission` see the skill `name`? The
+ * compiler writes `permission.skill` as `allow`, `deny`, or a map of `*` and
+ * exact names (`skillsRule`); only a `deny` hides a skill, as on the box.
+ */
+export function compiledSkillGranted(permission: unknown, name: string): boolean {
+  if (typeof permission === 'string') return permission !== 'deny';
+  if (!permission || typeof permission !== 'object') return true;
+  const rule = (permission as Record<string, unknown>).skill;
+  if (rule === undefined) return true;
+  if (typeof rule === 'string') return rule !== 'deny';
+  if (!rule || typeof rule !== 'object') return true;
+  const map = rule as Record<string, unknown>;
+  const action = Object.hasOwn(map, name) ? map[name] : map['*'];
+  return action !== 'deny';
+}
+
+/** The folders of the registered skills that any enabled agent of the compiled set is granted. */
+function grantedSkillFolders(compiled: Partial<CompiledAgentSet>): string[] {
+  const agents = Object.values(compiled.agent ?? {}).filter((agent) => agent && !agent.disable);
+  return Object.entries(compiled.skills ?? {})
+    .filter(([name]) => agents.some((agent) => compiledSkillGranted(agent.permission, name)))
+    .map(([, folder]) => folder);
+}
+
 async function toolsRelease(
   project: GitBackedProject,
   mirror: string,
@@ -400,11 +442,17 @@ async function toolsRelease(
   const modules = agent
     ? Object.entries(compiled.project_tools ?? {}).filter(([name]) => toolAllowed(agent.tools, name)).map(([, path]) => path)
     : [];
-  const rootTree = modules.length > 0 ? await commitRootTree(mirror, commit) : null;
-  const tooLarge = { ...withGovernance, reason: `the project tool modules exceed the ${archiveLimit ?? MAX_CONFIG_ARCHIVE_BYTES}-byte config archive limit` };
+  const skillFolders = grantedSkillFolders(compiled);
+  const rootTree = modules.length > 0 || skillFolders.length > 0 ? await commitRootTree(mirror, commit) : null;
+  const tooLarge = { ...withGovernance, reason: `the project tool modules and skills exceed the ${archiveLimit ?? MAX_CONFIG_ARCHIVE_BYTES}-byte config archive limit` };
   let files: ConfigReleaseFile[] = [];
   try {
-    files = rootTree ? await toolModuleFiles(mirror, rootTree, modules) : [];
+    if (rootTree) {
+      const byPath = new Map<string, ConfigReleaseFile>();
+      for (const file of await toolModuleFiles(mirror, rootTree, modules)) byPath.set(file[0], file);
+      for (const file of await skillFolderFiles(mirror, rootTree, skillFolders)) byPath.set(file[0], file);
+      files = [...byPath.values()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+    }
   } catch (error) {
     // The modules it parses did not fit the default download bound.
     if (isObjectFetchTooLarge(error)) return tooLarge;

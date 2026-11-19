@@ -61,7 +61,7 @@ import {
 } from '../shared/infrastructure';
 import { ToolRegistry } from '../shared/registry';
 import { InlineSessionMessagesList, SessionMetadataList } from '../shared/session-helpers';
-import { TURN_SPACE, TURN_TYPE, fg, monoFont, muted, useTurnPalette } from '../shared/styles';
+import { TURN_SPACE, TURN_TYPE, monoFont, useTurnPalette } from '../shared/styles';
 import type { ToolProps } from '../shared/types';
 import { ToolScroll } from '../shared/surface';
 
@@ -96,7 +96,7 @@ function CommandBlock({
     <View style={[{ position: 'relative', overflow: 'hidden' }, frame]}>
       <ToolScroll
         maxHeight={BASH_PANE.commandMaxHeight}
-        style={{ backgroundColor: frame ? palette.muted40Bg : undefined }}
+        style={{ backgroundColor: palette.muted40Bg }}
         showsVerticalScrollIndicator
       >
         <View style={paneInset}>

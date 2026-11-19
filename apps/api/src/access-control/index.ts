@@ -1,7 +1,7 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { accessRequests } from '@kortix/db';
-import { sql } from 'drizzle-orm';
-import { config } from '../config';
+import { EffectiveBrandingSchema } from '../accounts/core/app';
+import { instanceBranding } from '../accounts/instance-branding';
 import { errors, json, makeOpenApiApp } from '../openapi';
 import { ssoEnforcedForEmail } from '../repositories/sso';
 import { areSignupsEnabled, canSignUp } from '../shared/access-control-cache';
@@ -9,21 +9,6 @@ import { db } from '../shared/db';
 import { createCheckEmailRateLimitMiddleware } from '../middleware/rate-limit';
 
 export const accessControlApp = makeOpenApiApp();
-
-async function userExistsInAuth(email: string): Promise<boolean> {
-  if (!config.DATABASE_URL) return false;
-  // The shared pool: a public, rate-limited route must not open and close a
-  // Postgres connection per request.
-  try {
-    const result = await db.execute(
-      sql`SELECT 1 AS found FROM auth.users WHERE email = ${email.trim().toLowerCase()} LIMIT 1`,
-    );
-    const rows = Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? []);
-    return rows.length > 0;
-  } catch {
-    return false;
-  }
-}
 
 // ─── Public endpoints (no auth) ───────────────────────────────────────────────
 
@@ -40,15 +25,42 @@ accessControlApp.openapi(
   (c) => c.json({ signupsEnabled: areSignupsEnabled() }),
 );
 
-// `mode` drives the unified auth flow: 'signin' when the address already has
-// an account, 'signup' when it may register, 'closed' when signups are off and
-// the address isn't allowlisted, 'sso' when the domain's org enforces SSO-only
-// sign-in on a verified domain (the password/email-code paths must refuse; the
-// API's headless sign-in routes refuse too). This is deliberately a
-// flow directive, not a raw "exists" boolean — and the per-IP rate limit above
-// it is what keeps the endpoint useless for bulk account enumeration
-// (`allowed` already implied existence whenever signups were closed, so this
-// widens nothing new).
+// The instance branding for signed-out pages (see accounts/instance-branding.ts).
+// Public: a product name and logo URLs are what the sign-in page shows anyway.
+// `null` on every instance without the enterprise license, the cloud included.
+accessControlApp.openapi(
+  createRoute({
+    method: 'get',
+    path: '/branding',
+    tags: ['access'],
+    summary: 'Instance branding for the sign-in page',
+    responses: {
+      200: json(
+        z.object({ branding: EffectiveBrandingSchema }),
+        'The instance branding, or null for default Kortix',
+      ),
+    },
+  }),
+  async (c) => c.json({ branding: await instanceBranding() }),
+);
+
+// KRTX-3504: this endpoint is public, so its answer must not depend on whether
+// the address already has an account — that was an account-existence oracle an
+// anonymous caller could sweep against the user base. The answer therefore
+// splits only on instance/domain policy, never on account history, and comes
+// with no `mode` when the address is simply eligible:
+//   { allowed: true }        — every address that may hold an account here
+//   { allowed: false, mode:"closed" } — signups closed, address not allowlisted
+//   { allowed: true,  mode:"sso" }    — the domain's org enforces SSO-only
+//                                       sign-in (the password/email-code paths
+//                                       refuse; the headless routes refuse too)
+// Eligibility is re-enforced at account creation (web actions, headless
+// /auth/signup), and the sign-in door exists for every address: GoTrue answers
+// an unknown address exactly like a wrong password. A web client that gets no
+// `mode` renders its neutral/adaptive step and signs the visitor in through
+// the sign-up path, which falls back to sign-in when the account exists.
+// `mode` values 'signin'/'signup' remain in the enum for older deployments;
+// a client may still receive them from an API predating this change.
 accessControlApp.openapi(
   createRoute({
     method: 'post',
@@ -63,8 +75,8 @@ accessControlApp.openapi(
     },
     responses: {
       200: json(
-        z.object({ allowed: z.boolean(), mode: z.enum(['signin', 'signup', 'closed', 'sso']) }),
-        'Whether the email may sign up, and which auth-flow mode applies',
+        z.object({ allowed: z.boolean(), mode: z.enum(['signin', 'signup', 'closed', 'sso']).optional() }),
+        'Whether the email may sign up, and which auth-flow mode applies; `mode` is absent while the address is simply eligible (no account-history signal)',
       ),
       ...errors(400, 429),
     },
@@ -83,8 +95,14 @@ accessControlApp.openapi(
     if (await ssoEnforcedForEmail(email).catch(() => null)) {
       return c.json({ allowed: true, mode: 'sso' as const });
     }
-    if (await userExistsInAuth(email)) return c.json({ allowed: true, mode: 'signin' as const });
-    if (canSignUp(email)) return c.json({ allowed: true, mode: 'signup' as const });
+    // Eligibility, not account history: an address that holds an account and
+    // one that may create one get the identical body. The one-email-per-minute
+    // cooldown is enforced (and answered 429) on the email-sending routes
+    // (auth/email-cooldown.ts) — disclosing it HERE would re-open the oracle:
+    // its only source is the auth DB, which exists for accounts and not for
+    // the rest, so a triggered send plus this answer would again say who
+    // holds an account.
+    if (canSignUp(email)) return c.json({ allowed: true });
     return c.json({ allowed: false, mode: 'closed' as const });
   },
 );
@@ -121,11 +139,16 @@ accessControlApp.openapi(
     if (!body || typeof body.email !== 'string') {
       return c.json({ error: true, message: 'Validation failed', status: 400 }, 400);
     }
-    await db.insert(accessRequests).values({
-      email: body.email.trim().toLowerCase(),
-      company: body.company || null,
-      useCase: body.useCase || null,
-    });
+    // Idempotent (KRTX-4699): a replayed identical submission collapses into
+    // the existing row (unique index on email) and answers the same 200.
+    await db
+      .insert(accessRequests)
+      .values({
+        email: body.email.trim().toLowerCase(),
+        company: body.company || null,
+        useCase: body.useCase || null,
+      })
+      .onConflictDoNothing();
     return c.json({ success: true, message: 'Access request submitted' });
   },
 );

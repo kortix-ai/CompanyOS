@@ -34,20 +34,8 @@ import { stopTeamsTurn } from './stop';
 import { applyTeamsModelChoice } from './model-choice';
 import type { TeamsActivity, TeamsConversationRef } from './types';
 
-export interface TeamsInvokeResponse {
-  statusCode: number;
-  type: string;
-  value: unknown;
-}
-
-export function cardResponse(card: unknown): TeamsInvokeResponse {
-  return { statusCode: 200, type: 'application/vnd.microsoft.card.adaptive', value: card };
-}
-
-/** An answer to the presser alone: the card keeps its buttons for anyone else. */
-export function messageResponse(text: string): TeamsInvokeResponse {
-  return { statusCode: 200, type: 'application/vnd.microsoft.activity.message', value: text };
-}
+import { type TeamsInvokeResponse, cardResponse, messageResponse } from './invoke-response';
+export { type TeamsInvokeResponse, cardResponse, messageResponse } from './invoke-response';
 
 function tenantOf(activity: TeamsActivity): string | null {
   return activity.conversation?.tenantId ?? activity.channelData?.tenant?.id ?? null;
@@ -60,7 +48,7 @@ function parseAction(activity: TeamsActivity): { verb: string; data: Record<stri
   return { verb, data: value?.action?.data ?? {} };
 }
 
-const OTHER_PROJECT_NOTICE = 'This bot is connected to a different Kortix project.';
+const OTHER_PROJECT_NOTICE = 'This bot is connected to a different Kortix workspace.';
 
 export async function handleAdaptiveCardAction(
   activity: TeamsActivity,
@@ -231,7 +219,7 @@ async function handleOpenPanel(
   // A per-project bot runs only its own project: it has no project list to offer.
   if (panel === 'projects' && inbound.kind === 'project') return cardResponse(buildNoticeCard(OTHER_PROJECT_NOTICE));
   const projectId = await conversationProjectFor(inbound, convo.tenantId, convo.conversationId);
-  if (!projectId) return cardResponse(buildNoticeCard('Connect a project to this conversation first — try /projects.', '📁'));
+  if (!projectId) return cardResponse(buildNoticeCard('Connect a Kortix workspace to this conversation first — try /projects.', '📁'));
   // Loaded on press: `commands.ts` pulls the whole command surface, which no
   // other card action needs.
   const { buildTeamsPanel } = await import('./commands');
@@ -250,7 +238,7 @@ async function handlePickProject(
 ): Promise<TeamsInvokeResponse> {
   const convo = convoOf(activity);
   const projectId = typeof data.projectId === 'string' ? data.projectId : null;
-  if (!convo || !projectId) return cardResponse(buildNoticeCard("I couldn't switch project."));
+  if (!convo || !projectId) return cardResponse(buildNoticeCard("I couldn't switch the Kortix workspace."));
   const switched = await switchChannelProject(
     presser(activity, convo),
     teamsSettingsChannel(activity, convo.tenantId, convo.conversationId),
@@ -260,7 +248,7 @@ async function handlePickProject(
     return cardResponse(
       buildNoticeCard(
         switched.reason === 'not_installed'
-          ? "That project isn't connected to this Teams tenant."
+          ? "That Kortix workspace isn't connected to this Teams tenant."
           : teamsSettingsRefusal(switched.reason, ''),
       ),
     );
@@ -282,10 +270,10 @@ async function handlePickProject(
         activity: parked,
         ownThreadsOnly: inbound.kind === 'project',
       }).catch((err) => console.error('[teams-webhook] picker replay failed', err));
-      return cardResponse(buildNoticeCard('This conversation now runs the selected project — on it.', '✅'));
+      return cardResponse(buildNoticeCard('This conversation now runs the selected Kortix workspace — on it.', '✅'));
     }
   }
-  return cardResponse(buildNoticeCard('This conversation now runs the selected project.', '✅'));
+  return cardResponse(buildNoticeCard('This conversation now runs the selected Kortix workspace.', '✅'));
 }
 
 /**
@@ -312,7 +300,7 @@ async function handleAnswer(
   if (!answer) return cardResponse(buildNoticeCard("I couldn't record that answer."));
 
   const target = await decisionTarget(inbound, convo);
-  if (!target) return cardResponse(buildNoticeCard("This conversation isn't connected to a project."));
+  if (!target) return cardResponse(buildNoticeCard("This conversation isn't connected to a Kortix workspace."));
   if (!target.sessionId) return cardResponse(buildNoticeCard(QUESTION_EARLIER));
   const unlinked = await (await import('./question-press')).unlinkedPresser(activity, target.projectId, convo.tenantId);
   if (unlinked) return unlinked;
@@ -382,7 +370,7 @@ async function handleForm(
   }
 
   const target = await decisionTarget(inbound, convo);
-  if (!target) return cardResponse(buildNoticeCard("This conversation isn't connected to a project."));
+  if (!target) return cardResponse(buildNoticeCard("This conversation isn't connected to a Kortix workspace."));
   if (!target.sessionId) return cardResponse(buildNoticeCard(QUESTION_EARLIER));
   const unlinked = await (await import('./question-press')).unlinkedPresser(activity, target.projectId, convo.tenantId);
   if (unlinked) return unlinked;
@@ -437,7 +425,7 @@ async function handleReview(
   if (!convo || !reviewItemId || !verdict) return cardResponse(buildNoticeCard("I couldn't apply that decision."));
 
   const target = await decisionTarget(inbound, convo);
-  if (!target) return cardResponse(buildNoticeCard("This conversation isn't connected to a project."));
+  if (!target) return cardResponse(buildNoticeCard("This conversation isn't connected to a Kortix workspace."));
   const { projectId } = target;
 
   const item = await getReviewItemById(reviewItemId, projectId);
@@ -458,7 +446,7 @@ async function handleReview(
       buildNoticeCard(
         actor.reason === 'unlinked'
           ? 'Connect your Kortix account (`/login`) to act on reviews.'
-          : "You don't have access to act on this project's reviews.",
+          : "You don't have access to act on this Kortix workspace's reviews.",
       ),
     );
   }
@@ -467,7 +455,9 @@ async function handleReview(
   // whichever button was pressed.
   const raw = data[REVIEW_FEEDBACK_INPUT];
   const feedback = typeof raw === 'string' && raw.trim() ? raw.trim().slice(0, 2000) : null;
-  await applyVerdict(reviewItemId, projectId, { verdict, feedback, actingUserId: actor.userId });
+  const decided = await applyVerdict(reviewItemId, projectId, { verdict, feedback, actingUserId: actor.userId });
+  // Someone decided it first (another press, the web inbox): change nothing.
+  if (decided === null) return cardResponse(buildNoticeCard(`"${item.title}" was already decided.`));
 
   const base =
     verdict === 'approve'
@@ -513,7 +503,7 @@ async function handleApproval(
   if (!convo || !executionId || !decision) return cardResponse(buildNoticeCard("I couldn't apply that decision."));
 
   const target = await decisionTarget(inbound, convo);
-  if (!target) return cardResponse(buildNoticeCard("This conversation isn't connected to a project."));
+  if (!target) return cardResponse(buildNoticeCard("This conversation isn't connected to a Kortix workspace."));
   const { projectId } = target;
   const note = normalizeApprovalNote(data[APPROVAL_NOTE_INPUT]);
   const result = await decideChatApproval({
@@ -620,6 +610,6 @@ async function handleRequestAccess(
     case 'no-identity':
       return cardResponse(buildNoticeCard('Connect your Kortix account first, then request access.'));
     case 'no-project':
-      return cardResponse(buildNoticeCard("That project isn't connected to this Teams tenant."));
+      return cardResponse(buildNoticeCard("That Kortix workspace isn't connected to this Teams tenant."));
   }
 }

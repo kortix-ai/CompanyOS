@@ -95,6 +95,42 @@ describe('parseWorkflowRun', () => {
     expect(parsed?.agents[0]).toEqual({ id: 'a1', label: 'Go', status: 'done' });
   });
 
+  test('the approval, a declined run, a person\'s Stop and a quiet agent: read when well-formed, dropped otherwise', () => {
+    const parsed = parseWorkflowRun(
+      run({
+        awaitingApproval: true,
+        declined: 'chat',
+        approvalWaitMs: 50_000,
+        agents: [
+          { id: 'a1', label: 'Stopped', status: 'stopped', stoppedBy: 'person' },
+          { id: 'a2', label: 'Quiet', status: 'running', quietSince: 1_790_000_060_000 },
+        ],
+      }),
+    );
+    expect(parsed).toMatchObject({ awaitingApproval: true, declined: 'chat', approvalWaitMs: 50_000 });
+    expect(parsed?.agents).toEqual([
+      { id: 'a1', label: 'Stopped', status: 'stopped', stoppedBy: 'person' },
+      { id: 'a2', label: 'Quiet', status: 'running', quietSince: 1_790_000_060_000 },
+    ]);
+    const odd = parseWorkflowRun(
+      run({ awaitingApproval: 'yes', declined: 'later', approvalWaitMs: -1, agents: [{ id: 'a1', label: 'Go', status: 'stopped', stoppedBy: 'robot', quietSince: 'now' }] }),
+    );
+    expect(odd).not.toHaveProperty('awaitingApproval');
+    expect(odd).not.toHaveProperty('declined');
+    expect(odd).not.toHaveProperty('approvalWaitMs');
+    expect(odd?.agents[0]).toEqual({ id: 'a1', label: 'Go', status: 'stopped' });
+  });
+
+  test('an agent restarted or retried keeps its earlier attempts\' sessions; non-strings are dropped', () => {
+    const parsed = parseWorkflowRun(
+      run({ agents: [{ id: 'a1', label: 'Retry', status: 'running', sessionId: 's3', earlierSessionIds: ['s1', 7, '', 's2'] }] }),
+    );
+    expect(parsed?.agents[0]).toMatchObject({ sessionId: 's3', earlierSessionIds: ['s1', 's2'] });
+    expect(parseWorkflowRun(run({ agents: [{ id: 'a1', label: 'Once', status: 'running', earlierSessionIds: 'no' }] }))?.agents[0]).not.toHaveProperty(
+      'earlierSessionIds',
+    );
+  });
+
   test('null without a run status or an agents list', () => {
     expect(parseWorkflowRun(undefined)).toBeNull();
     expect(parseWorkflowRun({})).toBeNull();
@@ -182,5 +218,67 @@ describe('parseWorkflowResult', () => {
     expect(parseWorkflowResult('<workflow_result>\n{"cut": \n</workflow_result>')).toEqual({ kind: 'markdown', text: '{"cut":' });
     expect(parseWorkflowResult('<workflow_error>\nboom\n</workflow_error>')).toBeNull();
     expect(parseWorkflowResult('plain text')).toBeNull();
+  });
+});
+
+describe('parseWorkflowResult — a JSON result that carries a document', () => {
+  // Synthetic values. A workflow script may return `{ report: '# …' }`: the person reads the
+  // document, never the JSON that wraps it.
+  const doc = '# Growth plan\n\nOne pack. Ten pilots.\n\n## Priorities\n\n1. **Prove it.** Ten paid pilots.';
+
+  test('one prose field is the result itself, as Markdown', () => {
+    expect(parseWorkflowResult(`<workflow_result>\n${JSON.stringify({ strategy: doc })}\n</workflow_result>`)).toEqual({
+      kind: 'markdown',
+      text: doc,
+    });
+  });
+
+  test('several prose fields read as sections in their order', () => {
+    const body = JSON.stringify({ summary: 'Two of nine blockers are real.\nThe rest are fixed.', risks: '- Safari 17 checkout\n- Export drops a row' });
+    expect(parseWorkflowResult(`<workflow_result>${body}</workflow_result>`)).toEqual({
+      kind: 'markdown',
+      text: '## Summary\n\nTwo of nine blockers are real.\nThe rest are fixed.\n\n## Risks\n\n- Safari 17 checkout\n- Export drops a row',
+    });
+  });
+
+  test('data stays JSON: short strings, numbers and arrays are not a document', () => {
+    expect(parseWorkflowResult('<workflow_result>{"status":"ok","count":3}</workflow_result>')?.kind).toBe('json');
+    expect(parseWorkflowResult('<workflow_result>{"status":"ok"}</workflow_result>')?.kind).toBe('json');
+  });
+
+  test('a cut block whose next field holds data is not a document: nothing is dropped silently', () => {
+    const full = JSON.stringify({ report: doc, count: 3, details: 'more prose\nhere' });
+    expect(parseWorkflowResult(`<workflow_result>${full.slice(0, -10)}`)?.text.startsWith('{')).toBe(true);
+  });
+
+  test('deeply nested JSON never throws and never blows up: it falls back to the raw body', () => {
+    for (const depth of [10_000, 100_000]) {
+      const body = '['.repeat(depth) + ']'.repeat(depth);
+      const result = parseWorkflowResult(`<workflow_result>${body}</workflow_result>`);
+      expect(result?.kind).toBe('json');
+      expect(result!.text.length).toBeLessThanOrEqual(body.length * 4 + 10_000);
+    }
+  });
+
+  test('a long token or URL is data, not prose', () => {
+    expect(parseWorkflowResult(`<workflow_result>${JSON.stringify({ download_url: `https://example.com/${'a'.repeat(140)}` })}</workflow_result>`)?.kind).toBe('json');
+  });
+
+  test('a cut block of whitespace after a key reads in linear time (CodeQL js/polynomial-redos)', () => {
+    // Before the fix, 40 000 spaces took ~2.5 s: the tail check backtracked `\s*:?\s*` quadratically.
+    for (const body of [`{""${' '.repeat(40_000)}x`, `{${' '.repeat(40_000)}x`, `{"a":"b"${' '.repeat(40_000)}x`]) {
+      const started = performance.now();
+      expect(parseWorkflowResult(`<workflow_result>${body}`)).toEqual({ kind: 'markdown', text: body });
+      expect(performance.now() - started).toBeLessThan(250);
+    }
+  });
+
+  test('a result cut inside its document still reads as the document, escapes decoded', () => {
+    const full = JSON.stringify({ strategy: doc });
+    const cut = full.slice(0, full.indexOf('Ten paid'));
+    expect(parseWorkflowResult(`<workflow_result>\n${cut}`)).toEqual({
+      kind: 'markdown',
+      text: '# Growth plan\n\nOne pack. Ten pilots.\n\n## Priorities\n\n1. **Prove it.**',
+    });
   });
 });

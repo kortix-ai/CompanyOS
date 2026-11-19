@@ -38,7 +38,7 @@ That gap does not close with a release, because review needs two versions of the
 
 ## The record is a branch, and the branch outlives the session
 
-The starter project's own agent file puts the difference plainly. The path is `packages/starter/templates/base/agents/kortix.md` in [Kortix on GitHub](https://github.com/kortix-ai/suna/blob/dev/packages/starter/templates/base/agents/kortix.md) (checked October 2026). It tells the agent that the session is "an ephemeral branch of this repo", and that "Only what you commit + push survives".
+The starter project's own agent file puts the difference plainly. The path is `packages/starter/templates/base/agents/kortix.md` in [Kortix on GitHub](https://github.com/kortix-ai/CompanyOS/blob/dev/packages/starter/templates/base/agents/kortix.md) (checked October 2026). It tells the agent that the session is "an ephemeral branch of this repo", and that "Only what you commit + push survives".
 
 The file addresses the agent directly, and it treats the branch, not the conversation, as the thing that lasts. A session that runs six hours and edits forty files leaves a diff against `main` and nothing else. When the sandbox is gone, that diff is what a colleague opens. Approval attaches to the same object the work lives in, which is why the gate is a merge and not a message. Session work reaches `main` through a [change request](/docs/git). Merge is default-deny for agents.
 
@@ -85,7 +85,7 @@ rows:
 
 ## One bill counts people, the other counts machines
 
-The two bills charge for different units. Kortix charges for the machine: free is $0 with 500 credits a month, every feature and one project, on your own provider keys or a ChatGPT subscription. The rate is 100 credits per dollar, so 5,000 credits a month costs $50 ([Kortix pricing](https://kortix.com/pricing), checked October 2026). Members are unlimited and free, and the account shares one credit pool. OpenWork charges per person once a team passes five: the control plane self-hosts free to five people, the first five Cloud seats cost nothing, and the Team plan is $10 per seat per month with SSO. Enterprise is custom-priced and adds SCIM, desktop policies, version controls and the audit log ([OpenWork pricing](https://openworklabs.com/pricing), checked October 2026). Adding a sixth reviewer moves that bill and does nothing to the credits.
+The two bills charge for different units. Kortix charges for the machine: free is $0 with 500 credits a month on your first workspace and every feature, on your own provider keys or a ChatGPT subscription. The rate is 100 credits per dollar, so 5,000 credits a month costs $50 ([Kortix pricing](https://kortix.com/pricing), checked October 2026). Members are unlimited and free, and the account shares one credit pool. OpenWork charges per person once a team passes five: the control plane self-hosts free to five people, the first five Cloud seats cost nothing, and the Team plan is $10 per seat per month with SSO. Enterprise is custom-priced and adds SCIM, desktop policies, version controls and the audit log ([OpenWork pricing](https://openworklabs.com/pricing), checked October 2026). Adding a sixth reviewer moves that bill and does nothing to the credits.
 
 ```verdict
 themLabel: OpenWork

@@ -61,11 +61,15 @@ flow('INIT-1', { domain: 'cli', routes: [] }, async (ctx) => {
         check('no harnesses/ folder', !sb.exists('init-one/harnesses'), false, sb.exists('init-one/harnesses'));
         check('no .kortix/ folder', !sb.exists('init-one/.kortix'), false, sb.exists('init-one/.kortix'));
         const manifest = readFileSync(join(sb.cwd, 'init-one', 'kortix.yaml'), 'utf8');
+        const starterShape =
+          manifest.includes('builtin_agents:\n  my_kortix: true') &&
+          manifest.includes('default_agent: mykortix') &&
+          manifest.includes('prompt_file: agents/worker.md');
         check(
-          'kortix.yaml declares the worker agent as the default and names its prompt file',
-          manifest.includes('default_agent: worker') && manifest.includes('prompt_file: agents/worker.md'),
+          'kortix.yaml turns My Kortix on as the default agent and names the worker prompt file',
+          starterShape,
           true,
-          manifest.includes('default_agent: worker') && manifest.includes('prompt_file: agents/worker.md'),
+          starterShape,
         );
         check('kortix.yaml has no kortix_version', !manifest.includes('kortix_version'), true, !manifest.includes('kortix_version'));
         // codex is the default primary → AGENTS.md pointer is wired.
@@ -210,8 +214,8 @@ flow('CREATE-1', { domain: 'cli', routes: [] }, async (ctx) => {
         const r = await sb.run(['mywidget']);
         check('exit 2', r.exitCode === 2, 2, r.exitCode);
         check(
-          'explains explicit init command',
-          /kortix init <name>/i.test(r.all),
+          'names the explicit create command',
+          /kortix workspaces create <name>/i.test(r.all),
           true,
           r.stderr.slice(0, 240),
         );
@@ -373,7 +377,7 @@ flow('HOSTS-6', { domain: 'cli', routes: [] }, async (ctx) => {
 
 flow('LOGOUT-1', { domain: 'cli', routes: [] }, async (ctx) => {
   await ctx.step(
-    'kortix logout → removes host creds (no API); not-logged-in is a no-op',
+    'kortix logout → removes host creds (revokes first, offline-safe); not-logged-in is a no-op',
     async () => {
       const sb = new CliSandbox('logout1');
       ctx.track('cli-sandbox', sb.cwd);
@@ -418,7 +422,7 @@ flow('LOGOUT-1', { domain: 'cli', routes: [] }, async (ctx) => {
 // These hit GET /accounts/me. They self-skip if the auth'd matrix isn't
 // provisioned (the OWNER PAT mint requires Supabase-admin world setup).
 
-flow('LOGIN-1', { domain: 'cli', routes: ['GET /v1/accounts/me'] }, async (ctx) => {
+flow('LOGIN-1', { domain: 'cli', routes: ['GET /v1/me'] }, async (ctx) => {
   const pat = await ctx.fixtures.pat({
     name: ctx.fixtures.name('cli-login1'),
   });
@@ -445,7 +449,7 @@ flow('LOGIN-1', { domain: 'cli', routes: ['GET /v1/accounts/me'] }, async (ctx) 
   }
 });
 
-flow('LOGIN-2', { domain: 'cli', routes: ['GET /v1/accounts/me'] }, async (ctx) => {
+flow('LOGIN-2', { domain: 'cli', routes: ['GET /v1/me'] }, async (ctx) => {
   const pat = await ctx.fixtures.pat({
     name: ctx.fixtures.name('cli-login2'),
   });
@@ -491,7 +495,7 @@ flow('LOGIN-2', { domain: 'cli', routes: ['GET /v1/accounts/me'] }, async (ctx) 
   });
 });
 
-flow('LOGIN-3', { domain: 'cli', routes: ['GET /v1/accounts/me'] }, async (ctx) => {
+flow('LOGIN-3', { domain: 'cli', routes: ['GET /v1/me'] }, async (ctx) => {
   await ctx.step(
     'kortix login --token <bad valid-prefix> → /accounts/me 401 → exit 1',
     async () => {
@@ -526,7 +530,7 @@ flow('LOGIN-3', { domain: 'cli', routes: ['GET /v1/accounts/me'] }, async (ctx) 
   );
 });
 
-flow('LOGIN-4', { domain: 'cli', routes: ['GET /v1/accounts/me'] }, async (ctx) => {
+flow('LOGIN-4', { domain: 'cli', routes: ['GET /v1/me'] }, async (ctx) => {
   const pat = await ctx.fixtures.pat({
     name: ctx.fixtures.name('cli-login4'),
   });
@@ -558,7 +562,7 @@ flow('LOGIN-4', { domain: 'cli', routes: ['GET /v1/accounts/me'] }, async (ctx) 
   );
 });
 
-flow('WHOAMI-1', { domain: 'cli', routes: ['GET /v1/accounts/me'] }, async (ctx) => {
+flow('WHOAMI-1', { domain: 'cli', routes: ['GET /v1/me'] }, async (ctx) => {
   const pat = await ctx.fixtures.pat({
     name: ctx.fixtures.name('cli-whoami'),
   });

@@ -29,23 +29,34 @@ import { startAuditWebhookWorker, stopAuditWebhookWorker } from './audit-webhook
 import { startBillingRotation, stopBillingRotation } from './billing-rotation';
 import { startCaptureWorkers, stopCaptureWorkers } from './capture';
 import { startCaptureHealthWorker, stopCaptureHealthWorker } from './capture-health';
+import { startDiscordGateway, stopDiscordGateway } from './discord-gateway';
 import { startDriveWorkers, stopDriveWorkers } from './drive';
 import { startGatewaySpendBackfillWorker, stopGatewaySpendBackfillWorker } from './gateway-spend-backfill';
 import { startGrantExpirySweeper, stopGrantExpirySweeper } from './grant-expiry';
 import { startNotificationWorker, stopNotificationWorker } from './notification';
 import { startOAuthSweeper, stopOAuthSweeper } from './oauth-sweep';
+import { startReplaySweeper, stopReplaySweeper } from './replay-sweep';
 import { startProjectMaintenance, stopProjectMaintenance } from './project-maintenance';
 import { startProjectSnapshotWorker, stopProjectSnapshotWorker } from './project-snapshot';
 import { startProviderTransitionWorker, stopProviderTransitionWorker } from './provider-transition';
 import { startResidentialProxyBillingWorker, stopResidentialProxyBillingWorker } from './residential-proxy-billing';
+import { startRetentionErasureWorker, stopRetentionErasureWorker } from './retention-erasure';
 import { startSessionLogPurgeWorker, stopSessionLogPurgeWorker } from './session-log-purge';
 import { startStorageBillingWorker, stopStorageBillingWorker } from './storage-billing';
 import { startSessionModelFallbackWorker, stopSessionModelFallbackWorker } from './session-model-fallback';
+import { startSpaceWatcher, stopSpaceWatcher } from './space-watcher';
+import { startGoalReconciler, stopGoalReconciler } from './goal-reconciler';
+import { startEvalRunner, stopEvalRunner } from './eval-runner';
 import { startSlackTurnGc, stopSlackTurnGc } from './slack-turn-gc';
 import { startTeamsTurnGc, stopTeamsTurnGc } from './teams-turn-gc';
 import { startProjectTriggerScheduler, stopProjectTriggerScheduler, triggerSweepStalled } from './trigger-scheduler';
 import { startTunnelCleanup, stopTunnelCleanup } from './tunnel-cleanup';
 import { startTunnelForwardExpiry, stopTunnelForwardExpiry } from './tunnel-forward-expiry';
+import { startWorkspaceIdFillWorker, stopWorkspaceIdFillWorker } from './workspace-id-fill';
+import { startWorkspaceSplitWorker, stopWorkspaceSplitWorker } from './workspace-split';
+import { startLegacyCredentialBackfillWorker, stopLegacyCredentialBackfillWorker } from './legacy-credential-backfill';
+
+import { startSalesOutbox, stopSalesOutbox } from './sales-outbox';
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -54,6 +65,7 @@ const HOUR = 60 * MIN;
 // successful tick the heartbeat reports it stale (the longest wait between two
 // ticks, plus the longest legitimate tick, with margin; at least 10 min).
 export const JOBS: readonly Job[] = [
+  { ticks: { 'sales-outbox': 10 * MIN }, start: startSalesOutbox, stop: stopSalesOutbox },
   { ticks: { 'active-turn-renewal': 10 * MIN }, start: () => startActiveTurnRenewal(), stop: stopActiveTurnRenewal },
   { ticks: { 'project-maintenance': 20 * MIN }, start: startProjectMaintenance, stop: stopProjectMaintenance },
   {
@@ -65,6 +77,9 @@ export const JOBS: readonly Job[] = [
   // Mint the platform-default sandbox image once per leadership term, so the
   // first session anywhere lands on a cache hit. One shot, no timer.
   { ticks: { 'startup-prebuild': null }, start: kickStartupPreBuild, stop: () => {} },
+  // Move legacy LLM keys and connector rows to their canonical stores: at
+  // boot, then daily. On by default on self-host, off on Kortix cloud.
+  { ticks: { 'legacy-credential-backfill': 26 * HOUR }, start: startLegacyCredentialBackfillWorker, stop: stopLegacyCredentialBackfillWorker },
   // Resume durable sandbox-provider migrations a stop left mid-flight.
   { ticks: { 'provider-transition': 30 * MIN }, start: startProviderTransitionWorker, stop: stopProviderTransitionWorker },
   { ticks: { 'app-deployments': 60 * MIN }, start: startAppDeploymentWorker, stop: stopAppDeploymentWorker },
@@ -91,6 +106,8 @@ export const JOBS: readonly Job[] = [
   // Connector approvals past expires_at. Never resumes a session.
   { ticks: { 'approval-expiry': 10 * MIN }, start: startApprovalExpirySweeper, stop: stopApprovalExpirySweeper },
   { ticks: { 'oauth-sweep': 3 * HOUR }, start: startOAuthSweeper, stop: stopOAuthSweeper },
+  // Expired shared Idempotency-Key model answers (KRTX-4612) leave the table.
+  { ticks: { 'gateway-replay-sweep': 30 * MIN }, start: startReplaySweeper, stop: stopReplaySweeper },
   {
     ticks: { 'drive-conflict-scan': 10 * MIN, 'volume-deletions': 3 * HOUR, 'drive-mount-revocations': 10 * MIN, 'drive-index': 20 * MIN },
     start: startDriveWorkers,
@@ -105,12 +122,21 @@ export const JOBS: readonly Job[] = [
   // Close Slack/Teams live cards whose run ended without a reply.
   { ticks: { 'slack-turn-gc': 20 * MIN }, start: startSlackTurnGc, stop: stopSlackTurnGc },
   { ticks: { 'teams-turn-gc': 20 * MIN }, start: startTeamsTurnGc, stop: stopTeamsTurnGc },
+  // The Discord Gateway: the one connection that delivers the bot's messages (channels/discord/gateway.ts).
+  { ticks: { 'discord-gateway': 10 * MIN }, start: startDiscordGateway, stop: stopDiscordGateway },
   // Scheduled account deletions past their 14-day grace; the first tick drains the backlog.
   { ticks: { 'account-deletion': 2 * HOUR }, start: startAccountDeletionSchedule, stop: stopAccountDeletionSchedule },
   // The unread-row email digest and the 90-day retention sweep.
   { ticks: { 'notification-digest': 10 * MIN }, start: startNotificationWorker, stop: stopNotificationWorker },
   // Retention purge of session content.
   { ticks: { 'session-log-purge': 3 * HOUR }, start: startSessionLogPurgeWorker, stop: stopSessionLogPurgeWorker },
+  // The 90-day retention backstop: closures still open 80 days after their date. Daily; a minute apart while a backlog lasts.
+  { ticks: { 'retention-erasure': 26 * HOUR }, start: startRetentionErasureWorker, stop: stopRetentionErasureWorker },
+  // Proactive spaces (flag `spaces_proactive`): wake each watched space's watcher on new events, at most every 10 min.
+  { ticks: { 'space-watcher': 10 * MIN }, start: startSpaceWatcher, stop: stopSpaceWatcher },
+  // Goals (flag `goals`): finishes partial creates, repairs heartbeats, flags lost owners and stalled verifications.
+  { ticks: { 'goal-reconciler': 10 * MIN }, start: startGoalReconciler, stop: stopGoalReconciler },
+  { ticks: { 'eval-runner': 10 * MIN }, start: startEvalRunner, stop: stopEvalRunner },
   // Idle sessions off a fallback model once their own model serves again.
   { ticks: { 'session-model-fallback': 10 * MIN }, start: startSessionModelFallbackWorker, stop: stopSessionModelFallbackWorker },
   // Closed pending days of the gateway spend running total.
@@ -126,4 +152,8 @@ export const JOBS: readonly Job[] = [
   // Database-wide tunnel sweeps; every API process ran them before the worker split.
   { ticks: { 'tunnel-cleanup': 20 * MIN }, start: startTunnelCleanup, stop: stopTunnelCleanup },
   { ticks: { 'tunnel-forward-expiry': 10 * MIN }, start: startTunnelForwardExpiry, stop: stopTunnelForwardExpiry },
+  // Legacy multi-project accounts → one workspace per project. Dry-run plans every 6 h.
+  { ticks: { 'workspace-split': 8 * HOUR }, start: startWorkspaceSplitWorker, stop: stopWorkspaceSplitWorker },
+  // The Release 1 workspace_id fill, batch by batch after the deploy (never the migrate job). Hourly while paused or done.
+  { ticks: { 'workspace-id-fill': 3 * HOUR }, start: startWorkspaceIdFillWorker, stop: stopWorkspaceIdFillWorker },
 ];

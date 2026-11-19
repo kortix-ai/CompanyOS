@@ -99,8 +99,8 @@ and the box asks the descriptor route as before, when: there is no row; the
 row is older than 20 days (`REPUBLISH_AFTER_MS`, under the 30-day lifecycle; a
 republish starts); the session's agent is not declared at the row's commit
 (only the route re-points); the release is quarantined; the store URL is not
-reachable from a cloud box (local Supabase); the session is OpenCode, the meta
-coordinator, or has no repository access; or the tree is over the archive cap.
+reachable from a cloud box (local Supabase); the session is the meta
+coordinator or has no repository access; or the tree is over the archive cap.
 The box falls back the same way when the URLs expired or the store cannot
 deliver the descriptor, and to the API archive route when the store cannot
 deliver the archive.
@@ -131,7 +131,7 @@ unbootable.
    release: each box keeps what it runs, and `fallback_reason` says why.
 
 **The meta coordinator is the exception.** A session whose agent is `meta`
-(My Kortix, on unless kortix.yaml sets `builtin_agents.my_kortix: false`) is never assigned the project's release. It gets the `meta`
+(My Kortix, on when kortix.yaml sets `builtin_agents.my_kortix: true`) is never assigned the project's release. It gets the `meta`
 variant: the platform's own governance (`buildMyKortixConfig`) on
 the image default config dir, with no archive. Its release ID does not change
 when the base branch moves. Its box holds no project checkout and the meta
@@ -143,8 +143,8 @@ quarantine (`notFromMetaSession` in `quarantine.ts`).
 1. The API's desired release, from the copy on disk, the checkout, the
    project snapshot or the archive, verified against its manifest.
 2. The last release **this box** proved, if the desired release cannot be
-   verified or applied (a new OpenCode fails its proven check, or pi refuses
-   the config — the running config is kept, nothing is torn down).
+   verified or applied (pi refuses the config — the running config is kept,
+   nothing is torn down).
 3. The platform's image default, if this box has never proved any release.
 
 **Archive store side — cache, not source of truth:** a config archive miss or

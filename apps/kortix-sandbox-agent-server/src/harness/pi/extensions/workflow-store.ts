@@ -13,7 +13,7 @@
  *  - A runner session's spent hand-off: `<state>/handoff.json`, written
  *    before the runner runs its one workflow. A runner that holds it runs no
  *    other hand-off, also after its box restarts.
- *  - Saved workflows: `.kortix/workflows/<name>.js` in the project repository,
+ *  - Saved workflows: `workflows/<name>.js` in the project repository,
  *    read only. A box with a project checkout reads the working tree. A box
  *    without one (My Kortix) reads the default branch through the Kortix API
  *    with the session token (`GET /v1/projects/:id/files/content?path=…`).
@@ -24,11 +24,13 @@ import { createHash } from 'node:crypto'
 import type { WorkflowRunMetadata } from '@kortix/api-contract/kortix-tool-card'
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { kortixApiFetch } from '@/lib/kortix-api/workspace-routes'
 
-/** The repository folder of saved workflows. */
-export const SAVED_WORKFLOWS_DIR = '.kortix/workflows'
+/** The repository folder of saved workflows, at the root next to `agents/` and
+ *  `skills/` (`packages/manifest-schema/src/layout.ts`, `WORKFLOWS_DIR`). */
+export const SAVED_WORKFLOWS_DIR = 'workflows'
 /** A saved workflow's name: its file is `<name>.js`. */
-export const SAVED_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/
+const SAVED_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/
 const RUN_ID = /^[A-Za-z0-9_-]{8,64}$/
 
 /**
@@ -236,7 +238,7 @@ export function listCheckout(root: string): string[] {
   }
 }
 
-export interface ProjectApi {
+interface ProjectApi {
   apiUrl: string
   projectId: string
   token: string
@@ -245,13 +247,13 @@ export interface ProjectApi {
 /** Saved workflows on the project's default branch, read through the Kortix API. */
 export function apiWorkflows(api: ProjectApi): SavedWorkflows {
   const origin = api.apiUrl.trim().replace(/\/+$/, '').replace(/\/v1$/, '')
-  const base = `${origin}/v1/projects/${encodeURIComponent(api.projectId)}/files`
+  const base = `${origin}/v1/workspaces/${encodeURIComponent(api.projectId)}/files`
   const headers = { authorization: `Bearer ${api.token}` }
   return {
     where: `${SAVED_WORKFLOWS_DIR}/ on the project's default branch`,
     read: async (name) => {
       const path = `${SAVED_WORKFLOWS_DIR}/${checkSavedName(name)}.js`
-      const res = await fetch(`${base}/content?path=${encodeURIComponent(path)}`, { headers })
+      const res = await kortixApiFetch(`${base}/content?path=${encodeURIComponent(path)}`, { headers })
       if (res.status === 404) return null
       if (res.status !== 200) throw new Error(`${path} could not be read: the API answered ${res.status}`)
       const body = (await res.json().catch(() => null)) as { content?: unknown } | null

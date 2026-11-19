@@ -6,11 +6,15 @@
  * vendor with that client, and a URL outside the catalogue gets no client.
  */
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { accounts, connectorConnections, connectors, projects } from '@kortix/db';
+import { createHash } from 'node:crypto';
+import { HTTPException } from 'hono/http-exception';
+import { accounts, connectionCredentials, connectorConnections, connectors, projects } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 import { config } from '../config';
 import { db } from '../shared/db';
+import { resolveConnectionCredentialValue } from './credentials';
 import {
+  completeAuthorizationCodeSession,
   createAuthorizationCodeSession,
   loadOAuth2Application,
   registerConnectionOAuth2Client,
@@ -39,6 +43,7 @@ beforeAll(async () => {
   previousClients = config.KORTIX_OAUTH_CLIENTS;
   (config as { KORTIX_OAUTH_CLIENTS: string }).KORTIX_OAUTH_CLIENTS = JSON.stringify({
     google: { client_id: 'kortix-google-client', client_secret: 'kortix-google-secret' },
+    x: { client_id: 'kortix-x-client', client_secret: 'kortix-x-secret' },
   });
   await db.insert(accounts).values({ accountId: ACCOUNT, name: 'mcp-apps-test' });
   await db.insert(projects).values({ projectId: PROJECT, accountId: ACCOUNT, name: 'mcp-apps', repoUrl: 'https://example.test/m.git' });
@@ -51,7 +56,7 @@ afterAll(async () => {
 });
 
 test('registering a catalogue app without dynamic registration saves Kortix’s client and the catalogue’s endpoints', async () => {
-  const gmail = await connection('gmail', 'https://gmailmcp.googleapis.com/mcp/v1');
+  const gmail = await connection('gmail', 'https://google.mcp.kortix.com/gmail');
   await registerConnectionOAuth2Client({
     identity: gmail,
     // Everything a caller could send is ignored: the catalogue is the trust anchor.
@@ -76,7 +81,7 @@ test('registering a catalogue app without dynamic registration saves Kortix’s 
   expect(url.searchParams.get('redirect_uri')).toBe(CALLBACK);
   expect(url.searchParams.get('access_type')).toBe('offline');
   expect(url.searchParams.get('prompt')).toBe('consent');
-  expect(url.searchParams.get('scope')).toContain('https://www.googleapis.com/auth/gmail.readonly');
+  expect(url.searchParams.get('scope')).toContain('https://www.googleapis.com/auth/gmail.modify');
   expect(url.searchParams.get('code_challenge_method')).toBe('S256');
   expect(started.authorizationUrl).not.toContain('kortix-google-secret');
 });
@@ -92,4 +97,110 @@ test('a server outside the catalogue gets no Kortix client, even when it names G
     }),
   ).rejects.toThrow('Kortix has no OAuth client for this server');
   expect(await loadOAuth2Application(evil.connectionId)).toBeNull();
+});
+
+test('an authorization server that refuses dynamic registration fails as a typed 400 and saves nothing (KRTX-4709)', async () => {
+  const refused = await connection('refusing', 'https://mcp.refusing.example/mcp');
+  const error = await registerConnectionOAuth2Client(
+    {
+      identity: refused,
+      registration: {
+        registration_endpoint: 'https://authn.refusing.example/oauth/register',
+        token_url: 'https://authn.refusing.example/oauth/token',
+        authorization_url: 'https://authn.refusing.example/oauth/authorize',
+      },
+      callbackUrl: CALLBACK,
+      createdBy: USER,
+    },
+    {
+      fetchImpl: async () =>
+        Response.json({ error: 'invalid_client_metadata' }, { status: 400 }),
+    },
+  ).catch((e: unknown) => e);
+  // A typed 400 the connect flow answers to the user, not an unhandled 500.
+  expect(error).toBeInstanceOf(HTTPException);
+  expect((error as HTTPException).status).toBe(400);
+  expect((error as Error).message).toContain('invalid_client_metadata');
+  // The refusal leaves no half-registered application behind.
+  expect(await loadOAuth2Application(refused.connectionId)).toBeNull();
+});
+
+test('X: start, callback, stored credential and refresh with Kortix’s X client, against a stubbed X token endpoint', async () => {
+  const x = await connection('x', 'https://api.x.com/mcp');
+  await registerConnectionOAuth2Client({ identity: x, registration: {}, callbackUrl: CALLBACK, createdBy: USER });
+  expect((await loadOAuth2Application(x.connectionId))?.application).toMatchObject({
+    client_id: 'kortix-x-client',
+    token_url: 'https://api.x.com/2/oauth2/token',
+    token_endpoint_auth_method: 'client_secret_basic',
+    scopes: ['tweet.read', 'tweet.write', 'users.read', 'offline.access'],
+  });
+
+  const started = await createAuthorizationCodeSession({ connectionId: x.connectionId, initiatedBy: USER, callbackUrl: CALLBACK });
+  const authorize = new URL(started.authorizationUrl);
+  expect(authorize.origin + authorize.pathname).toBe('https://x.com/i/oauth2/authorize');
+  expect(authorize.searchParams.get('scope')).toBe('tweet.read tweet.write users.read offline.access');
+  const state = authorize.searchParams.get('state');
+  if (!state) throw new Error('no state');
+  // An agent asked for this sign-in: the callback is what tells it, once.
+  const waitingSession = crypto.randomUUID();
+  await db
+    .update(connectorConnections)
+    .set({ metadata: { requesting_session_id: waitingSession } })
+    .where(eq(connectorConnections.connectionId, x.connectionId));
+
+  // X's token endpoint: the first call redeems the code, the second refreshes.
+  // safeEgressFetch pins the resolved address, so match on the Host header.
+  const grants: URLSearchParams[] = [];
+  const basic = `Basic ${Buffer.from('kortix-x-client:kortix-x-secret').toString('base64')}`;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    const url = new URL(String(input instanceof Request ? input.url : input));
+    const host = headers.get('host') ?? url.host;
+    if (host === 'api.x.com' && url.pathname === '/2/oauth2/token') {
+      if (headers.get('authorization') !== basic) return new Response('{"error":"invalid_client"}', { status: 401 });
+      const body = new URLSearchParams(String(init?.body));
+      grants.push(body);
+      const n = grants.length;
+      // A 30 s lifetime: the next read is inside the refresh window.
+      return Response.json({ token_type: 'bearer', expires_in: 30, access_token: `x-access-${n}`, refresh_token: `x-refresh-${n}`, scope: 'tweet.read tweet.write users.read offline.access' });
+    }
+    if (host === 'api.x.com') return new Response('{}', { status: 401 });
+    return realFetch(input, init);
+  }) as typeof fetch;
+  try {
+    const done = await completeAuthorizationCodeSession({
+      stateHash: createHash('sha256').update(state).digest('hex'),
+      code: 'x-code',
+      callbackUrl: CALLBACK,
+      issuer: 'https://api.x.com',
+    });
+    expect(done.ok).toBe(true);
+    // The return page names the connector.
+    expect(done.connector?.name).toBe('x');
+    expect(grants[0]?.get('grant_type')).toBe('authorization_code');
+    expect(grants[0]?.get('code')).toBe('x-code');
+    expect(grants[0]?.get('code_verifier')).toBeTruthy();
+    expect(grants[0]?.has('client_id')).toBe(false);
+
+    const accessToken = await resolveConnectionCredentialValue({ connectorId: x.connectorId, connectionId: x.connectionId });
+    expect(accessToken).toBe('x-access-2');
+    expect(grants[1]?.get('grant_type')).toBe('refresh_token');
+    expect(grants[1]?.get('refresh_token')).toBe('x-refresh-1');
+    // X rotates the refresh token: the stored credential carries the new one.
+    expect(await resolveConnectionCredentialValue({ connectorId: x.connectorId, connectionId: x.connectionId })).toBe('x-access-3');
+    expect(grants[2]?.get('refresh_token')).toBe('x-refresh-2');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  const [row] = await db
+    .select({ kind: connectionCredentials.kind })
+    .from(connectionCredentials)
+    .where(eq(connectionCredentials.connectionId, x.connectionId));
+  expect(row?.kind).toBe('oauth2_delegated');
+  const [waiting] = await db
+    .select({ metadata: connectorConnections.metadata })
+    .from(connectorConnections)
+    .where(eq(connectorConnections.connectionId, x.connectionId));
+  expect((waiting?.metadata as Record<string, unknown>).requesting_session_id).toBeUndefined();
 });

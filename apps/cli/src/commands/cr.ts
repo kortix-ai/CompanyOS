@@ -6,7 +6,7 @@ import type {
   ChangeRequestStatus,
   ChangeRequestsListResponse,
 } from '../api/types.ts';
-import { splitHelp } from '../command-argv.ts';
+import { type ReportArgError, rejectUnknownArgs, splitHelp } from '../command-argv.ts';
 import {
   emitJson,
   fail,
@@ -23,6 +23,7 @@ import {
   crVersionDiff,
   displayBranch,
   listAllChangeRequests,
+  listChangeRequestPage,
   printMergeVerdict,
   resolveCr,
 } from './cr-diff.ts';
@@ -30,12 +31,16 @@ import {
 const HELP = help`Usage: kortix cr <subcommand> [options]
 
 Open, review, and merge Kortix change requests. A CR proposes merging one
-version (branch) into another inside a project. The CR layer is Kortix-
+version (branch) into another inside a workspace. The CR layer is Kortix-
 native — it works on top of any git host (GitHub, GitLab, plain
 git) without a per-host adapter.
 
 Subcommands:
-  ls [--status open|merged|closed|all]   List CRs. Default: open.
+  ls [--status open|merged|closed|all]   List CRs, newest first. Default: open.
+     [--limit <n>] [--cursor <c>]        One page of at most <n> CRs. With
+                                         --json, \`next_cursor\` continues it
+                                         (null on the last page). Without
+                                         --limit or --cursor, ls lists every CR.
      [--json]                            Print the raw CR list as JSON.
   show <cr> [--json]                     Show one CR's metadata.
   diff <cr> [--no-color] [--json]        Show the CR's unified diff.
@@ -56,12 +61,12 @@ session, booting its sandbox if it is asleep. It needs project.review.act —
 the same leaf the Review Center uses, not gitops.push.
 
 Global options:
-  --project <id>     Operate on this project id (default: linked).
+  --workspace <id>   Operate on this workspace id (default: linked).
   --host <name>      Operate against a non-default Kortix host.
   -h, --help         Show this help.
 
-One principal: a project the CLI config supplies (.kortix/link.json in cwd or
-the active host's default project) is always paired with THAT host's login —
+One principal: a workspace the CLI config supplies (the checkout's link or
+the active host's default workspace) is always paired with THAT host's login —
 never with the sandbox's ambient session token, which cannot act on it. When
 that host is not logged in here, the command stops and asks for
 kortix login --host <name>.
@@ -81,7 +86,7 @@ export async function runCr(argv: string[]): Promise<number> {
   let hostFlag: string | undefined;
   let json = false;
   try {
-    projectFlag = takeFlagValue(rest, ['--project']);
+    projectFlag = takeFlagValue(rest, ['--project', '--workspace']);
     hostFlag = takeFlagValue(rest, ['--host']);
     json = takeFlagBool(rest, ['--json']);
   } catch (err) {
@@ -91,6 +96,14 @@ export async function runCr(argv: string[]): Promise<number> {
   // project, so its credential travels with it — never the ambient sandbox
   // session token.
   const ctxOpts: CtxOpts = { projectArg: projectFlag, hostArg: hostFlag, onePrincipal: true };
+
+  // The subcommands that take only a <cr> reference: any flag left is a typo,
+  // never silently ignored (a caller would believe it applied).
+  if (['show', 'info', 'merge-preview', 'preview', 'close', 'reopen'].includes(sub)) {
+    const unknown = rest.filter((arg) => arg.startsWith('-'));
+    const code = rejectUnknownArgs(unknown, HELP, argError);
+    if (code !== null) return code;
+  }
 
   switch (sub) {
     case 'ls':
@@ -127,6 +140,9 @@ export async function runCr(argv: string[]): Promise<number> {
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
+/** An argument error: one line and a help pointer on stderr, exit 2 (the full help is long). */
+const argError: ReportArgError = (message) => fail(`${message}. Run \`kortix cr --help\`.`);
+
 function statusBadge(s: ChangeRequestStatus): string {
   if (s === 'open') return `${C.green}● open${C.reset}`;
   if (s === 'merged') return `${C.cyan}✔ merged${C.reset}`;
@@ -147,27 +163,58 @@ function relativeTime(iso: string): string {
 
 // ── subcommands ────────────────────────────────────────────────────────────
 
+/** The largest page `cr ls --limit` asks for in one request (the API's CHANGE_REQUEST_LIST_MAX_LIMIT). */
+const CR_PAGE_MAX = 500;
+
 async function crLs(argv: string[], opts: CtxOpts, json = false): Promise<number> {
   let statusFilter: string | undefined;
+  let limitArg: string | undefined;
+  let cursor: string | undefined;
   try {
     statusFilter = takeFlagValue(argv, ['--status']);
+    limitArg = takeFlagValue(argv, ['--limit', '-n']);
+    cursor = takeFlagValue(argv, ['--cursor']);
   } catch (err) {
-    return fail((err as Error).message);
+    return argError((err as Error).message, HELP);
   }
+  const unknown = rejectUnknownArgs(argv, HELP, argError);
+  if (unknown !== null) return unknown;
   const filter = (statusFilter ?? 'open').toLowerCase();
   if (!['open', 'merged', 'closed', 'all'].includes(filter))
-    return fail('--status must be open|merged|closed|all');
+    return argError('--status must be open|merged|closed|all', HELP);
+  let limit: number | undefined;
+  if (limitArg !== undefined) {
+    limit = Number(limitArg);
+    if (!Number.isInteger(limit) || limit < 1) return argError('--limit must be a positive integer', HELP);
+  }
+  if (cursor !== undefined && !/^\d+$/.test(cursor)) return argError('--cursor must be the next_cursor of a previous page', HELP);
 
   const ctx = await resolveProjectContext(opts);
   if (!ctx) return 1;
 
+  const paged = limit !== undefined || cursor !== undefined;
   let crs: ChangeRequestsListResponse['change_requests'];
+  let nextCursor: string | null = null;
   try {
-    crs = await listAllChangeRequests(ctx, filter);
+    if (paged) {
+      ({ change_requests: crs, next_cursor: nextCursor } = await listChangeRequestPage(
+        ctx,
+        filter,
+        limit ?? 50,
+        cursor,
+        CR_PAGE_MAX,
+      ));
+    } else {
+      crs = await listAllChangeRequests(ctx, filter);
+    }
   } catch (err) {
     return surfaceApiError(err);
   }
 
+  if (json && paged) {
+    emitJson({ change_requests: crs, next_cursor: nextCursor });
+    return 0;
+  }
   if (json) {
     emitJson({ change_requests: crs });
     return 0;
@@ -198,8 +245,12 @@ async function crLs(argv: string[], opts: CtxOpts, json = false): Promise<number
     );
   }
   process.stdout.write(
-    `\n  ${C.dim}${crs.length} change request${crs.length === 1 ? '' : 's'}${C.reset}\n\n`,
+    `\n  ${C.dim}${crs.length} change request${crs.length === 1 ? '' : 's'}${C.reset}\n`,
   );
+  if (nextCursor) {
+    process.stdout.write(`  ${C.dim}More: kortix cr ls --status ${filter} --limit ${limit ?? 50} --cursor ${nextCursor}${C.reset}\n`);
+  }
+  process.stdout.write('\n');
   return 0;
 }
 
@@ -214,7 +265,7 @@ async function crShow(ref: string | undefined, opts: CtxOpts, json = false): Pro
     if (cr.status === 'open') {
       try {
         merge_preview = await ctx.client.get<ChangeRequestMergePreview>(
-          `/projects/${ctx.projectId}/change-requests/${cr.cr_id}/merge-preview`,
+          `/workspaces/${ctx.projectId}/change-requests/${cr.cr_id}/merge-preview`,
         );
       } catch {
         merge_preview = null;
@@ -252,7 +303,7 @@ async function crShow(ref: string | undefined, opts: CtxOpts, json = false): Pro
   if (cr.status === 'open') {
     try {
       const preview = await ctx.client.get<ChangeRequestMergePreview>(
-        `/projects/${ctx.projectId}/change-requests/${cr.cr_id}/merge-preview`,
+        `/workspaces/${ctx.projectId}/change-requests/${cr.cr_id}/merge-preview`,
       );
       printMergeVerdict(preview);
     } catch (err) {
@@ -304,7 +355,7 @@ async function crOpen(argv: string[], opts: CtxOpts): Promise<number> {
   let created: ChangeRequest;
   try {
     created = await ctx.client.post<ChangeRequest>(
-      `/projects/${ctx.projectId}/change-requests`,
+      `/workspaces/${ctx.projectId}/change-requests`,
       body,
     );
   } catch (err) {
@@ -326,7 +377,7 @@ async function crOpen(argv: string[], opts: CtxOpts): Promise<number> {
   // SAME CR — no need to reopen. Best-effort: never fail the open over it.
   try {
     const diff = await ctx.client.get<ChangeRequestDiffResponse>(
-      `/projects/${ctx.projectId}/change-requests/${created.cr_id}/diff`,
+      `/workspaces/${ctx.projectId}/change-requests/${created.cr_id}/diff`,
     );
     if (diff.files_changed === 0) {
       process.stderr.write(
@@ -355,7 +406,7 @@ async function crMerge(argv: string[], opts: CtxOpts): Promise<number> {
   let result: ChangeRequestMergeResponse;
   try {
     result = await ctx.client.post<ChangeRequestMergeResponse>(
-      `/projects/${ctx.projectId}/change-requests/${cr.cr_id}/merge`,
+      `/workspaces/${ctx.projectId}/change-requests/${cr.cr_id}/merge`,
       message ? { message } : {},
     );
   } catch (err) {
@@ -398,7 +449,7 @@ async function crMergePreview(
   let preview: ChangeRequestMergePreview;
   try {
     preview = await ctx.client.get<ChangeRequestMergePreview>(
-      `/projects/${ctx.projectId}/change-requests/${cr.cr_id}/merge-preview`,
+      `/workspaces/${ctx.projectId}/change-requests/${cr.cr_id}/merge-preview`,
     );
   } catch (err) {
     return surfaceApiError(err);
@@ -441,7 +492,7 @@ async function crRequestChanges(argv: string[], opts: CtxOpts, json = false): Pr
   let resp: { change_request: ChangeRequest; delivering: boolean };
   try {
     resp = await ctx.client.post<{ change_request: ChangeRequest; delivering: boolean }>(
-      `/projects/${ctx.projectId}/change-requests/${cr.cr_id}/request-changes`,
+      `/workspaces/${ctx.projectId}/change-requests/${cr.cr_id}/request-changes`,
       { feedback },
     );
   } catch (err) {
@@ -470,7 +521,7 @@ async function crClose(ref: string | undefined, opts: CtxOpts): Promise<number> 
 
   try {
     await ctx.client.post<ChangeRequest>(
-      `/projects/${ctx.projectId}/change-requests/${cr.cr_id}/close`,
+      `/workspaces/${ctx.projectId}/change-requests/${cr.cr_id}/close`,
       {},
     );
   } catch (err) {
@@ -488,7 +539,7 @@ async function crReopen(ref: string | undefined, opts: CtxOpts): Promise<number>
 
   try {
     await ctx.client.post<ChangeRequest>(
-      `/projects/${ctx.projectId}/change-requests/${cr.cr_id}/reopen`,
+      `/workspaces/${ctx.projectId}/change-requests/${cr.cr_id}/reopen`,
       {},
     );
   } catch (err) {

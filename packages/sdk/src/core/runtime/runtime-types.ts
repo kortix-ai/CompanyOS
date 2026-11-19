@@ -135,6 +135,7 @@ export type Event =
   | EventLspUpdated
   | EventPermissionAsked
   | EventPermissionReplied
+  | EventPermissionParked
   | EventMcpToolsChanged
   | EventProjectUpdated
   | EventSessionStatus
@@ -142,6 +143,7 @@ export type Event =
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
+  | EventQuestionParked
   | EventSessionCompacted
   | EventVcsBranchUpdated
   | EventWorktreeReady
@@ -768,6 +770,9 @@ export type Command = {
 };
 export type Agent = {
     name: string;
+    /** Kortix: `kortix.yaml` `agents.<name>.title`, the name people read. Set on
+     *  agents read from the project config; `name` stays the id. */
+    title?: string;
     description?: string;
     mode: "subagent" | "primary" | "all";
     native?: boolean;
@@ -1157,6 +1162,15 @@ export type EventPermissionReplied = {
         reply: "once" | "always" | "reject";
     };
 };
+/** Nobody answered the permission request live: the call did not run, and the ask waits in Review (`listSessionAsks`). */
+export type EventPermissionParked = {
+    id: string;
+    type: "permission.parked";
+    properties: {
+        sessionID: string;
+        requestID: string;
+    };
+};
 /** @deprecated OpenCode only: pi does not serve it (OpenCode is sunset, 2026-10-23). Removed with OpenCode support. */
 export type EventMcpToolsChanged = {
     id: string;
@@ -1219,6 +1233,15 @@ export type EventQuestionReplied = {
 export type EventQuestionRejected = {
     id: string;
     type: "question.rejected";
+    properties: {
+        sessionID: string;
+        requestID: string;
+    };
+};
+/** Nobody answered the question live: it waits in Review, and its answer arrives as a new message. */
+export type EventQuestionParked = {
+    id: string;
+    type: "question.parked";
     properties: {
         sessionID: string;
         requestID: string;

@@ -124,7 +124,7 @@ const FIXTURES: Fixture[] = [
   {
     name: 'agent block kortix_permissions non-grantable action',
     valid: false,
-    input: 'agents:\n  w:\n    kortix_permissions:\n      - billing.read\n',
+    input: 'agents:\n  w:\n    kortix_permissions:\n      - billing.not_an_action\n',
   },
 
   // ─── shared sections: path traversal ───────────────────────────────────
@@ -290,6 +290,21 @@ const FIXTURES: Fixture[] = [
     input: 'triggers:\n  - slug: t\n    type: app\n    app: bank-replies\n    event: X\n    prompt: go\n',
   },
   {
+    name: 'app: expect_event_within on an app trigger is valid',
+    valid: true,
+    input: 'triggers:\n  - slug: t\n    type: app\n    app: bank-replies\n    expect_event_within: 30m\n    prompt: go\n',
+  },
+  {
+    name: 'app: expect_event_within in the on/run shape is valid',
+    valid: true,
+    input: 'triggers:\n  - slug: t\n    on: { event: reply.received, app: bank-replies }\n    run: { prompt: go }\n    expect_event_within: 2h\n',
+  },
+  {
+    name: 'app: expect_event_within on a cron trigger is rejected',
+    valid: false,
+    input: 'triggers:\n  - slug: t\n    type: cron\n    cron: \"0 0 9 * * *\"\n    expect_event_within: 1h\n    prompt: go\n',
+  },
+  {
     name: 'app: app key on a cron trigger is rejected',
     valid: false,
     input: 'triggers:\n  - slug: t\n    type: cron\n    cron: \"0 0 9 * * *\"\n    app: bank-replies\n    prompt: go\n',
@@ -399,11 +414,6 @@ const FIXTURES: Fixture[] = [
     name: 'on/run: type with on is rejected',
     valid: false,
     input: 'triggers:\n  - slug: t\n    type: cron\n    on: { every: 5m }\n    run: { prompt: go }\n',
-  },
-  {
-    name: 'on/run: run needs a prompt or an app',
-    valid: false,
-    input: 'triggers:\n  - slug: t\n    on: { every: 5m }\n    run: { agent: default }\n',
   },
   {
     name: 'on/run: a webhook needs its secret',
@@ -721,7 +731,7 @@ const FIXTURES: Fixture[] = [
   {
     name: 'kortix_permissions rejects a non-grantable action',
     valid: false,
-    input: 'default_agent: w\nagents:\n  w:\n    kortix_permissions: [billing.read]\n',
+    input: 'default_agent: w\nagents:\n  w:\n    kortix_permissions: [billing.not_an_action]\n',
   },
   {
     name: 'kortix_permissions accepts the wildcard',
@@ -737,19 +747,11 @@ const FIXTURES: Fixture[] = [
   {
     name: 'deprecated kortix_cli alias still rejects a non-grantable action',
     valid: false,
-    input: 'default_agent: w\nagents:\n  w:\n    kortix_cli: [billing.read]\n',
+    input: 'default_agent: w\nagents:\n  w:\n    kortix_cli: [billing.not_an_action]\n',
   },
-  { name: 'workspace.project_repository false', valid: true, input: 'default_agent: a\nagents:\n  a:\n    workspace:\n      project_repository: false\n' },
-  { name: 'workspace.project_repository true', valid: true, input: 'default_agent: a\nagents:\n  a:\n    workspace:\n      project_repository: true\n' },
-  { name: 'empty workspace map', valid: true, input: 'default_agent: a\nagents:\n  a:\n    workspace: {}\n' },
-  { name: 'workspace.project_repository "false"', valid: false, input: 'default_agent: a\nagents:\n  a:\n    workspace:\n      project_repository: "false"\n' },
-  { name: 'unknown workspace key', valid: false, input: 'default_agent: a\nagents:\n  a:\n    workspace:\n      project_repo: false\n' },
-  { name: 'workspace list', valid: false, input: 'default_agent: a\nagents:\n  a:\n    workspace: [project_repository]\n' },
-  {
-    name: 'unknown workspace value rejected',
-    valid: false,
-    input: 'default_agent: w\nagents:\n  w:\n    workspace: everywhere\n',
-  },
+  // `workspace` is obsolete: every old shape is accepted and ignored (deprecation `agent-workspace`).
+  { name: 'obsolete workspace map accepted', valid: true, input: 'default_agent: a\nagents:\n  a:\n    workspace:\n      project_repository: true\n' },
+  { name: 'obsolete workspace string accepted', valid: true, input: 'default_agent: w\nagents:\n  w:\n    workspace: everywhere\n' },
   {
     name: 'declarative agent egress policy accepted (not enforced)',
     valid: true,
@@ -1075,6 +1077,24 @@ for (const image of ['', '   ', '\t\n', '\u00a0', 'python:3.12']) {
     FIXTURES.push({ name: `trigger ${name}`, valid, input: JSON.stringify({ ...base, triggers: [{ slug: 'tick', type: 'cron', cron: '0 9 * * *', prompt: 'Go', ...fields }] }) });
   }
 }
+// "*" is the canonical "every" value on every grant; `all` stays its alias; both mean allow as a permission action.
+{
+  const PERMISSION = '    permission:\n      bash:\n        "*": allow\n        "git push *": ask\n      external_directory: deny\n';
+  const cases: Array<[string, string, string, boolean]> = [
+    ['tools "*"', '    tools: all\n', '    tools: "*"\n', true],
+    ['tools ["*"]', '    tools: all\n', '    tools: ["*"]\n', true],
+    ['tools ALL', '    tools: all\n', '    tools: ALL\n', true],
+    ['tools everything', '    tools: all\n', '    tools: everything\n', false],
+    ['skills "*"', '    skills: all\n', '    skills: "*"\n', true],
+    ['connectors ["*"]', '    connectors: all\n', '    connectors: ["*"]\n', true],
+    ['permission "*"', PERMISSION, '    permission: "*"\n', true],
+    ['permission all', PERMISSION, '    permission: all\n', true],
+    ['permission rule all', PERMISSION, '    permission:\n      bash: all\n      edit: "*"\n', true],
+    ['permission pattern all', PERMISSION, '    permission:\n      bash:\n        "*": all\n', true],
+    ['permission maybe', PERMISSION, '    permission: maybe\n', false],
+  ];
+  for (const [name, from, to, valid] of cases) FIXTURES.push({ name: `every-grant: ${name}`, valid, input: swapV3(from, to) });
+}
 describe('JSON Schema vs. imperative validator — accept/reject conformance', () => {
   for (const fixture of FIXTURES) {
     test(fixture.name, () => {
@@ -1263,6 +1283,16 @@ describe('Known divergence: cross-field rules only the imperative validator enfo
     const yaml = 'default_agent: ghost\nagents:\n  w: {}\n';
     expect(validateManifest(yaml).valid).toBe(false);
     expect(validateCombined(parseYaml(yaml))).toBe(true);
+  });
+
+  // `prompt` may be omitted when the trigger's agent is a program agent (`run`): which agents have `run` is another section.
+  test('a run with no prompt and no app: imperative rejects for a model agent, accepts for a program agent; schema accepts both', () => {
+    const model = 'triggers:\n  - slug: t\n    on: { every: 5m }\n    run: { agent: default }\n';
+    const program = 'agents:\n  j:\n    run: node j.js\ntriggers:\n  - slug: t\n    on: { every: 5m }\n    run: { agent: j }\n';
+    expect(validateManifest(model).valid).toBe(false);
+    expect(validateCombined(parseYaml(model))).toBe(true);
+    expect(validateManifest(program).valid).toBe(true);
+    expect(validateCombined(parseYaml(program))).toBe(true);
   });
 
   test("a trigger's agent naming an undeclared agent: imperative rejects, schema accepts", () => {

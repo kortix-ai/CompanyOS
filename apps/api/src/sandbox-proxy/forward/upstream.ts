@@ -8,10 +8,17 @@ import {
   previewGrantMs,
 } from '../../projects/sandbox-deadline';
 import { markSandboxUsed } from '../backend';
-import { stripInlineAttachmentBytes } from '../inline-attachments';
 import { jsonProxyError } from '../pre-prompt-env-sync';
+import { recordDaemonTiming } from './daemon-timing';
 import { appCookieHeader } from '../preview-session';
 import { STRIP_FORWARD_HEADERS, clientResponseHeaders } from '../preview-response';
+import {
+  injectPreviewBridge,
+  previewBridgeScript,
+  shouldInjectPreviewBridge,
+  varyOnFetchDest,
+} from '../preview-bridge';
+import { previewParentOrigins } from '../preview-hosts';
 import { EFFECTIVE_MESSAGE_ID_HEADER } from '../prompt-wire-id-repair';
 import { proxyAttemptTimeoutMs } from '../preview-retry-budget';
 import { releasePromptDelivery } from '../prompt-dedupe';
@@ -23,6 +30,7 @@ import { canAccessSandboxSession } from '../../shared/preview-ownership';
 import { sessionStreamAccessCheck } from '../../shared/space-access';
 import { endStreamOnRevoke } from '../../shared/stream-access-recheck';
 import type { ForwardRequest, ForwardState } from './context';
+import { upstreamOrigin } from './upstream-origin';
 
 // The upstream hop itself: the request headers sent to the box, the bounded
 // fetch, and the response handed back to the client.
@@ -36,7 +44,7 @@ import type { ForwardRequest, ForwardState } from './context';
  * produces garbage. Forcing identity is what makes that safe without every
  * future rewrite having to remember to decompress.
  *
- * The daemon's Runtime API (`/kortix/runtime/*`, `/kortix/opencode/*` before W3) is the exception, and it earns it:
+ * The daemon's Runtime API (`/kortix/runtime/*`) is the exception, and it earns it:
  *   • nothing on this proxy rewrites those bodies — the projection is already
  *     the trimmed shape, so there is nothing left to strip;
  *   • the whole point of the namespace is byte reduction across THIS hop.
@@ -49,9 +57,8 @@ import type { ForwardRequest, ForwardState } from './context';
  */
 export function forwardsClientEncoding(port: number, remainingPath: string): boolean {
   if (port !== 8000) return false;
-  // `/kortix/runtime` since W3; `/kortix/opencode` on a daemon built before it.
-  if (!/^\/kortix\/(?:runtime|opencode)(?:$|\/)/.test(remainingPath)) return false;
-  return !/^\/kortix\/(?:runtime|opencode)\/events(?:$|[/?#])/.test(remainingPath);
+  if (!/^\/kortix\/runtime(?:$|\/)/.test(remainingPath)) return false;
+  return !/^\/kortix\/runtime\/events(?:$|[/?#])/.test(remainingPath);
 }
 
 // One deadline write per minute per box for HUMAN preview traffic. Mirrors
@@ -59,6 +66,12 @@ export function forwardsClientEncoding(port: number, remainingPath: string): boo
 // load is hundreds of requests and the extend is monotone, so collapsing them
 // loses nothing.
 const previewUseThrottle = createExtendThrottle(60_000);
+
+/** The connect timer's abort reason (see `sendUpstreamAttempt`). `retry.ts`
+ *  matches this exact message to tell the proxy's own connect timeout from any
+ *  other TimeoutError — a client abort reuses the DOMException name with a
+ *  different message. */
+export const PROXY_CONNECT_TIMEOUT_MESSAGE = 'proxy attempt connect timeout';
 
 /**
  * Build forwarding headers: copy the client's (minus stripped), force
@@ -113,7 +126,9 @@ export function buildUpstreamRequestHeaders(
   // origin makes this proxy transparent to ANY framework — no per-project config.
   const upstreamUrl = new URL(previewUrl);
   if (headers.has('origin')) {
-    headers.set('origin', upstreamUrl.origin);
+    const origin = upstreamOrigin(port, previewUrl);
+    if (origin) headers.set('origin', origin);
+    else headers.delete('origin');
   }
   headers.set('x-forwarded-host', upstreamUrl.host);
 
@@ -169,7 +184,7 @@ export async function sendUpstreamAttempt(
   const connectTimer = setTimeout(
     () =>
       attemptController.abort(
-        new DOMException('proxy attempt connect timeout', 'TimeoutError'),
+        new DOMException(PROXY_CONNECT_TIMEOUT_MESSAGE, 'TimeoutError'),
       ),
     proxyAttemptTimeoutMs(budgetRemainingMs, {
       method,
@@ -180,7 +195,7 @@ export async function sendUpstreamAttempt(
   let upstream: Response;
   try {
     // Begin after every pre-prompt refusal point, but before the first byte
-    // can reach OpenCode. A fast session.idle can now delete this record;
+    // can reach the runtime. A fast session.idle can now delete this record;
     // the success path below promotes it with a token CAS and cannot revive
     // a turn that already ended.
     const turnLifecycleStart = await turn.begin();
@@ -240,14 +255,18 @@ export async function respondFromUpstream(
 ): Promise<Response> {
   const { sandboxId, method, remainingPath, origin, access, sandboxAuthored, upstreamPort, promptDelivery, promptDedupeKey, ptl, record, turnIdentity, turn, isSseEventStreamRequest } = req;
   void markSandboxUsed(sandboxId);
+  // The box stamps its own Server-Timing on `/kortix/runtime/*` turn-verb
+  // answers (routes/kortix/runtime.ts's `answer`); record it so a slow row's
+  // log line names box-side vs ingress-edge (KRTX-4459). One parse, no await.
+  recordDaemonTiming(upstream.headers);
   // A 2xx confirms acceptance. A 5xx on a non-replayable turn is ambiguous:
-  // OpenCode may hold the message even though the response was lost. Both
+  // the runtime may hold the message even though the response was lost. Both
   // cases must preserve the turn. A definitive 4xx abandons delivery.
   if (upstream.ok || (turnIdentity && upstream.status >= 500)) {
     await turn.accept();
   } else {
     await turn.abandon();
-    // A definitive 4xx never reached OpenCode's queue: free the claim so a
+    // A definitive 4xx never reached the runtime's queue: free the claim so a
     // same-key retry delivers instead of answering `duplicate` for 10 minutes.
     if (promptDedupeKey && upstream.status < 500) releasePromptDelivery(promptDedupeKey);
   }
@@ -259,7 +278,7 @@ export async function respondFromUpstream(
     // second header — see that module's doc for why.
     recordTurnStageMarks(summary.marks);
   }
-  await closeAnsweredQuestion(req, upstream);
+  await closeAnsweredAsk(req, state, upstream);
   // A HUMAN IS USING THIS BOX'S PREVIEW. The turn-start observation already
   // happened before the forward (see above); this is the other
   // control-plane-observed signal: an authenticated account member driving
@@ -348,50 +367,6 @@ export async function respondFromUpstream(
     });
   }
 
-  // The transcript list leaves the API WITHOUT its attachment bytes.
-  //
-  // The daemon strips these too (kortix-sandbox-agent-server/src/app/server.ts)
-  // and that is the right home. This second pass exists for every sandbox
-  // still running an older daemon image — a self-host does not rebuild
-  // its templates on our schedule, and the read that motivated this
-  // (20 messages = 7-19 MB, dying on a 30s browser deadline, retried
-  // forever) was on exactly such a box. Idempotent by construction: a
-  // reference is not a `data:` url, so a list the daemon already stripped
-  // passes through with zero work.
-  const listRequest = upstream.ok ? classifyRuntimeRequest(method, remainingPath) : null;
-  if (
-    listRequest?.kind === 'message-list' &&
-    (upstream.headers.get('content-type') ?? '').includes('application/json')
-  ) {
-    const sessionID = listRequest.runtimeSessionId;
-    const text = await upstream.text();
-    let body = text;
-    try {
-      const stripped = stripInlineAttachmentBytes(
-        JSON.parse(text),
-        (messageID, partID) =>
-          `/kortix/part/${encodeURIComponent(sessionID)}/${encodeURIComponent(messageID)}/${encodeURIComponent(partID)}`,
-      );
-      if (stripped.stripped > 0) {
-        body = JSON.stringify(stripped.value);
-        console.info(
-          `[PREVIEW] stripped ${stripped.stripped} inline attachment part(s), ${stripped.savedBytes} bytes, from ${sandboxId} ${remainingPath}`,
-        );
-      }
-    } catch {
-      // Not the JSON we expected — pass it through untouched. This path
-      // must never be the reason a transcript read fails.
-    }
-    respHeaders.delete('content-length');
-    respHeaders.delete('content-encoding');
-    respHeaders.set('content-type', 'application/json; charset=utf-8');
-    return new Response(body, {
-      status: upstream.status,
-      statusText: upstream.statusText,
-      headers: respHeaders,
-    });
-  }
-
   // SSE gets the byte-counting passthrough (chunks untouched, backpressure
   // preserved): a stream that ends having delivered ZERO bytes marks this
   // sandbox so the next connect re-resolves ingress — see `sse-stall.ts`.
@@ -435,32 +410,71 @@ export async function respondFromUpstream(
   // go to the client untouched. The API's compress middleware skips a body
   // that is already encoded (preview-encoding-passthrough.test.ts).
 
-  return new Response(upstream.body, {
+  varyOnFetchDest(upstream.status, respHeaders);
+  const passthrough = new Response(upstream.body, {
     status: upstream.status,
     statusText: upstream.statusText,
     headers: respHeaders,
   });
+  // A framed HTML page reports its address to the panel (preview-bridge.ts).
+  const parentOrigins = previewParentOrigins();
+  if (
+    upstream.body &&
+    shouldInjectPreviewBridge({
+      method,
+      status: upstream.status,
+      upstreamPort,
+      requestHeaders: req.incomingHeaders,
+      responseHeaders: respHeaders,
+      parentOrigins,
+    })
+  ) {
+    return await injectPreviewBridge(
+      passthrough,
+      previewBridgeScript({ prefix: req.originMode ? '' : req.redirectPrefix, origins: parentOrigins }),
+    );
+  }
+  return passthrough;
 }
 
 /**
- * A client answered or dismissed an agent question (web, mobile, SDK and CLI
- * all reply through this proxy). The runtime no longer waits on it, so its
- * stored copy stops counting as waiting on a person (KRTX-1739). A 404 means
- * the runtime holds no such question any more: that wait is over too. Awaited
- * before the client hears the answer, so its next needs-input read is current.
+ * A client answered or dismissed an agent ask (web, mobile, SDK and CLI all
+ * reply through this proxy). The runtime no longer waits on it, so its stored
+ * copy stops counting as waiting on a person (KRTX-1739). Awaited before the
+ * client hears the answer, so its next needs-input read is current.
+ *
+ * A 404 means the runtime holds no such request any more. For an older
+ * question that wait is over. A parked ask (session-asks.ts) is still open:
+ * the person answers it from its stored card, so a 404 leaves it.
  */
-async function closeAnsweredQuestion(req: ForwardRequest, upstream: Response): Promise<void> {
+async function closeAnsweredAsk(req: ForwardRequest, state: ForwardState, upstream: Response): Promise<void> {
   if (!(upstream.ok || upstream.status === 404) || !carriesSessionData(req.upstreamPort)) return;
   const answered = classifyRuntimeRequest(req.method, req.remainingPath);
-  if (answered.kind !== 'question-answer') return;
   try {
-    const { clearOpenQuestions } = await import('../../projects/surface');
-    await clearOpenQuestions(req.record.sessionId, { requestId: answered.requestId });
+    if (answered.kind === 'question-answer') {
+      const { clearOpenQuestions } = await import('../../projects/surface');
+      await clearOpenQuestions(req.record.sessionId, { requestId: answered.requestId, keepParked: !upstream.ok });
+    } else if (answered.kind === 'permission-reply' && upstream.ok) {
+      const reply = permissionReplyOf(state.requestBody);
+      if (!reply) return;
+      const { closeRepliedPermission } = await import('../../projects/surface');
+      await closeRepliedPermission({ sessionId: req.record.sessionId, requestId: answered.requestId, reply, decidedBy: req.userId || null });
+    }
   } catch (err) {
-    logger.warn('[turn-question] answered question not closed', {
+    logger.warn('[turn-question] answered ask not closed', {
       session_id: req.record.sessionId,
       error: err instanceof Error ? err.message : String(err),
     });
+  }
+}
+
+function permissionReplyOf(body: ArrayBuffer | undefined): 'once' | 'always' | 'reject' | null {
+  if (!body) return null;
+  try {
+    const reply = (JSON.parse(new TextDecoder().decode(body)) as { reply?: unknown }).reply;
+    return reply === 'once' || reply === 'always' || reply === 'reject' ? reply : null;
+  } catch {
+    return null;
   }
 }
 

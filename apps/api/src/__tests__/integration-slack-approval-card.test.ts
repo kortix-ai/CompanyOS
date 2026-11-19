@@ -11,6 +11,7 @@
 import { afterAll, beforeAll, beforeEach, expect, mock, test } from 'bun:test';
 import {
   accountMembers,
+  chatInstalls,
   chatThreads,
   chatUserIdentities,
   connectorCalls,
@@ -124,6 +125,8 @@ beforeAll(async () => {
       projectRole: 'member',
     });
   }
+  // This Kortix workspace holds the Slack workspace: a card answers only there.
+  await db.insert(chatInstalls).values({ platform: 'slack', platformTeamId: TEAM, projectId: project.project_id });
   sessionId = crypto.randomUUID();
   otherSessionId = crypto.randomUUID();
   for (const [id, thread] of [
@@ -141,15 +144,15 @@ beforeAll(async () => {
     await db.insert(chatThreads).values({
       projectId: project.project_id,
       platform: 'slack',
-      workspaceId: TEAM,
+      platformTeamId: TEAM,
       threadId: thread,
       sessionId: id,
     });
   }
   await db.insert(chatUserIdentities).values([
-    { platform: 'slack', workspaceId: TEAM, platformUserId: SLACK.owner, userId: OWNER },
-    { platform: 'slack', workspaceId: TEAM, platformUserId: SLACK.launcher, userId: LAUNCHER },
-    { platform: 'slack', workspaceId: TEAM, platformUserId: SLACK.bystander, userId: BYSTANDER },
+    { platform: 'slack', platformTeamId: TEAM, platformUserId: SLACK.owner, userId: OWNER },
+    { platform: 'slack', platformTeamId: TEAM, platformUserId: SLACK.launcher, userId: LAUNCHER },
+    { platform: 'slack', platformTeamId: TEAM, platformUserId: SLACK.bystander, userId: BYSTANDER },
   ]);
 });
 
@@ -162,7 +165,7 @@ beforeEach(() => {
 });
 
 afterAll(async () => {
-  await db.delete(chatUserIdentities).where(eq(chatUserIdentities.workspaceId, TEAM));
+  await db.delete(chatUserIdentities).where(eq(chatUserIdentities.platformTeamId, TEAM));
   await db.delete(jobQueue).where(eq(jobQueue.queue, HELD_CALL_QUEUE));
   await db.delete(connectorCalls).where(eq(connectorCalls.projectId, project.project_id));
   await db.delete(sessionLifecycleCommands).where(eq(sessionLifecycleCommands.projectId, project.project_id));
@@ -222,6 +225,22 @@ test('a session with no Slack thread posts nothing', async () => {
   expect(posted).toHaveLength(0);
 });
 
+test('a card of a Kortix workspace that no longer holds the Slack workspace decides nothing', async () => {
+  const executionId = await pending({
+    args_preview: { draft_id: 'r-1' },
+    args_preview_complete: true,
+    chat_card: { platform: 'slack', team_id: TEAM, channel: CHANNEL, ts: '200.0001' },
+  });
+  await db.delete(chatInstalls).where(eq(chatInstalls.projectId, project.project_id));
+  try {
+    await click('approve', executionId, SLACK.owner);
+  } finally {
+    await db.insert(chatInstalls).values({ platform: 'slack', platformTeamId: TEAM, projectId: project.project_id });
+  }
+  expect(await loadApprovalRow(project.project_id, executionId)).toMatchObject({ status: 'pending_approval' });
+  expect(spawned).toEqual([]);
+});
+
 test('a manager denies in the thread: the call is denied, the card shows it, the agent resumes in Slack', async () => {
   const executionId = await pending({
     args_preview: { draft_id: 'r-1' },
@@ -254,7 +273,7 @@ test('a member who neither manages the project nor started the session cannot de
   await click('approve', executionId, SLACK.bystander);
 
   expect((await loadApprovalRow(project.project_id, executionId))?.status).toBe('pending_approval');
-  expect(ephemeral).toEqual(['Only a project manager or the person who started this session can decide.']);
+  expect(ephemeral).toEqual(['Only a workspace manager or the person who started this session can decide.']);
   expect(spawned).toHaveLength(0);
 });
 
@@ -298,6 +317,28 @@ test('the launcher replies with a message: approve plus note reaches the agent',
       user: SLACK.launcher,
     },
   ]);
+});
+
+test('a reply modal opened before the Slack link moved decides nothing when submitted', async () => {
+  const executionId = await pending();
+  await click('reply', executionId, SLACK.launcher);
+  const view = modals[0] as { callback_id: string; private_metadata: string };
+  await db.delete(chatInstalls).where(eq(chatInstalls.projectId, project.project_id));
+  try {
+    await handleViewSubmission({
+      type: 'view_submission',
+      user: { id: SLACK.launcher },
+      view: {
+        callback_id: view.callback_id,
+        private_metadata: view.private_metadata,
+        state: { values: { approval_decision_block: { approval_decision_input: { selected_option: { value: 'approve' } } } } },
+      },
+    } as never);
+  } finally {
+    await db.insert(chatInstalls).values({ platform: 'slack', platformTeamId: TEAM, projectId: project.project_id });
+  }
+  expect((await loadApprovalRow(project.project_id, executionId))?.status).toBe('pending_approval');
+  expect(spawned).toHaveLength(0);
 });
 
 test('a call with nothing to review cannot be approved from the card', async () => {
@@ -370,7 +411,7 @@ test.each(['absent', 'revoked', 'other-workspace', 'expired'] as const)(
     const workspaceId = scenario === 'other-workspace' ? `${TEAM}OTHER` : TEAM;
     if (scenario !== 'absent') {
       await db.insert(chatUserIdentities).values({
-        platform: 'slack', workspaceId, platformUserId: `U${scenario}`, userId: actorUserId,
+        platform: 'slack', platformTeamId: workspaceId, platformUserId: `U${scenario}`, userId: actorUserId,
         revokedAt: scenario === 'revoked' ? new Date() : null,
       });
     }
@@ -499,7 +540,7 @@ test('a held call approved from a follow-up thread resumes the agent with that t
   await db.insert(chatThreads).values({
     projectId: project.project_id,
     platform: 'slack',
-    workspaceId: TEAM,
+    platformTeamId: TEAM,
     threadId: FOLLOW_UP,
     sessionId,
   });

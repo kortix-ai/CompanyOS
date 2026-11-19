@@ -67,6 +67,8 @@ export interface PromptInputProps {
   onMetrics?(metrics: PromptInputMetrics): void;
   /** Replace the draft. A new `seq` applies it again (e.g. `/rename ` prefill). */
   seed?: { text: string; seq: number } | null;
+  /** Text added at the cursor once per `seq` (`/shown` → Tab). The draft stays. */
+  insert?: { text: string; seq: number } | null;
   /** Drawn under the box: the tray. */
   footer?: ReactNode;
   /** A click on the input: the host gives it the keyboard (a click never moves focus by itself). */
@@ -134,6 +136,7 @@ export function PromptInput({
   onKey,
   onMetrics,
   seed = null,
+  insert = null,
   footer,
   onActivate,
 }: PromptInputProps) {
@@ -172,6 +175,24 @@ export function PromptInput({
     if (seed) setText(seed.text);
   }, [seedSeq, setText]);
 
+  // An insert lands at the cursor once per `seq`, after a space when it would
+  // otherwise glue onto the word before it.
+  const insertSeq = insert?.seq;
+  // biome-ignore lint/correctness/useExhaustiveDependencies(insert): only a new seq inserts.
+  useEffect(() => {
+    if (!insert) return;
+    const renderable = textareaRef.current;
+    if (!renderable) {
+      const before = draftRef.current;
+      setText(before && !/\s$/.test(before) ? `${before} ${insert.text}` : `${before}${insert.text}`);
+      return;
+    }
+    const before = renderable.plainText.slice(0, renderable.cursorOffset);
+    renderable.insertText(before && !/\s$/.test(before) ? ` ${insert.text}` : insert.text);
+    draftRef.current = renderable.plainText;
+    setDraft(renderable.plainText);
+  }, [insertSeq, setText]);
+
   const query = menuQuery(draft);
   const entries = useMemo(
     () => (query === null ? [] : menuEntries(query, context, runtimeCommands)),
@@ -204,7 +225,7 @@ export function PromptInput({
     onMetrics?.({ rows, aboveRows, menuOpen });
   }, [rows, aboveRows, menuOpen, onMetrics]);
 
-  const run = useCallback(
+  const runEntry = useCallback(
     (entry: MenuEntry, args: string) => {
       if (entry.unavailable) {
         onToast?.(`/${entry.name}: ${entry.unavailable}.`, 'error');
@@ -233,15 +254,15 @@ export function PromptInput({
       const row = exact
         ? rows.find((entry) => entry.source === 'builtin' && entry.name === exact.name)
         : (rows.find((entry) => entry.name === typed) ?? rows[text === draft ? selected : 0]);
-      if (row) return run(row, '');
+      if (row) return runEntry(row, '');
     }
     const decision = decideSubmit(text, context, runtimeCommands);
     if (decision.kind === 'empty') return;
     if (decision.kind === 'refuse') return void onToast?.(decision.message, 'error');
-    if (decision.kind === 'command') return run(decision.entry, decision.args);
+    if (decision.kind === 'command') return runEntry(decision.entry, decision.args);
     setText('');
     onSubmit(decision.text);
-  }, [draft, entries, selected, context, runtimeCommands, run, onToast, onSubmit, setText]);
+  }, [draft, entries, selected, context, runtimeCommands, runEntry, onToast, onSubmit, setText]);
 
   const onKeyDown = useCallback(
     (key: KeyEvent) => {

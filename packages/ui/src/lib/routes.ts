@@ -8,7 +8,7 @@
  * it is hidden and no navigation goes there. `project` and `session` are the
  * two pages every session host serves, so they cannot be null. `channel` and
  * `dm` cannot be null either: the sidebar links them only while the project's
- * `project_channels` flag is on.
+ * `chat` flag is on.
  *
  * Defaults: apps/web's paths.
  */
@@ -22,13 +22,15 @@ export interface UiRoutes {
   files: (projectId: string, panel?: 'proposed-changes') => string | null;
   drive: (projectId: string) => string | null;
   apps: (projectId: string) => string | null;
-  /** The project's chat rooms (flag `agent_rooms`). */
-  rooms: (projectId: string) => string | null;
+  /** @deprecated Rooms were removed (2026-11); ignored. Removed in the next major. */
+  rooms?: (projectId: string) => string | null;
   /** The project's goals (flag `goals`); a goal is `<goals>/<scope>/<slug>`. */
   goals: (projectId: string) => string | null;
   /** The project's artifacts (flag `artifacts`); one is `<artifacts>/<artifact_id>`. */
   artifacts: (projectId: string) => string | null;
-  /** One space: a channel, its room and its tabs (`?tab=` opens one). */
+  /** The workspace calendar (flag `calendar`); `?item=<id>` opens one item. Absent: the host has no calendar route. */
+  calendar?: (projectId: string) => string | null;
+  /** One space: a channel and its tabs (`?tab=` opens one). */
   space: (projectId: string, slug: string) => string | null;
   members: (projectId: string) => string | null;
   /** The project settings page, on its sandbox section. */
@@ -45,32 +47,49 @@ export interface UiRoutes {
    * `path` is the section and anything below it (`connectors/<app>`).
    */
   admin: (projectId: string, path?: string) => string | null;
-  /** A channel of the project, by slug (`project_channels` flag). */
+  /** A channel of the project, by slug (`chat` flag). */
   channel: (projectId: string, slug: string) => string;
-  /** The caller's direct messages with one agent, by agent name (`project_channels` flag). */
+  /** The caller's direct messages with one agent, by agent name (`chat` flag). */
   dm: (projectId: string, agentName: string) => string;
-  /** The project's Company memory (`project_channels` flag); a page is `?page=<page_id>`. */
+  /** The project's Company memory (`chat` flag); a page is `?page=<page_id>`. */
   memory: (projectId: string) => string | null;
+  /**
+   * Review: the workspace's Review queue, beside the app sidebar. Since
+   * KRTX-4799 it lives at the workspace Inbox address; the person's
+   * notifications are not a view of it (they span every workspace). Absent:
+   * the host serves Review only inside its `customize` route.
+   */
+  review?: (projectId: string) => string | null;
+  /**
+   * The person's notification Inbox (`/inbox` on apps/web). It spans every
+   * workspace, so it takes no project. The workspace sidebar links it. A host
+   * that maps any route with `setUiRoutes` links it only when it maps `inbox`
+   * too, so it never links a page it does not serve.
+   */
+  inbox?: () => string | null;
 }
 
 const DEFAULT_ROUTES = {
-  project: (p: string) => `/projects/${p}`,
-  session: (p: string, s: string) => `/projects/${p}/sessions/${s}`,
-  sessions: (p: string, view?: 'archived' | 'deleted') => `/projects/${p}/sessions${view ? `?view=${view}` : ''}`,
-  files: (p: string, panel?: 'proposed-changes') => `/projects/${p}/files${panel ? `?panel=${panel}` : ''}`,
-  drive: (p: string) => `/projects/${p}/drive`,
-  apps: (p: string) => `/projects/${p}/apps`,
-  rooms: (p: string) => `/projects/${p}/rooms`,
-  goals: (p: string) => `/projects/${p}/goals`,
-  artifacts: (p: string) => `/projects/${p}/artifacts`,
-  space: (p: string, slug: string) => `/projects/${p}/spaces/${encodeURIComponent(slug)}`,
-  members: (p: string) => `/projects/${p}/members`,
-  sandboxSettings: (p: string) => `/projects/${p}/admin/sandbox`,
-  customize: (p: string, path?: string) => `/projects/${p}/customize${path ? `/${path}` : ''}`,
-  admin: (p: string, path?: string) => `/projects/${p}/admin${path ? `/${path}` : ''}`,
-  channel: (p: string, slug: string) => `/projects/${p}/c/${slug}`,
-  dm: (p: string, agentName: string) => `/projects/${p}/dm/${encodeURIComponent(agentName)}`,
-  memory: (p: string) => `/projects/${p}/memory`,
+  project: (p: string) => `/workspaces/${p}`,
+  session: (p: string, s: string) => `/workspaces/${p}/sessions/${s}`,
+  sessions: (p: string, view?: 'archived' | 'deleted') => `/workspaces/${p}/sessions${view ? `?view=${view}` : ''}`,
+  files: (p: string, panel?: 'proposed-changes') => `/workspaces/${p}/files${panel ? `?panel=${panel}` : ''}`,
+  drive: (p: string) => `/workspaces/${p}/drive`,
+  apps: (p: string) => `/workspaces/${p}/apps`,
+  goals: (p: string) => `/workspaces/${p}/goals`,
+  artifacts: (p: string) => `/workspaces/${p}/artifacts`,
+  calendar: (p: string) => `/workspaces/${p}/calendar`,
+  space: (p: string, slug: string) => `/workspaces/${p}/spaces/${encodeURIComponent(slug)}`,
+  members: (p: string) => `/workspaces/${p}/members`,
+  sandboxSettings: (p: string) => `/workspaces/${p}/admin/sandbox`,
+  customize: (p: string, path?: string) => `/workspaces/${p}/customize${path ? `/${path}` : ''}`,
+  admin: (p: string, path?: string) => `/workspaces/${p}/admin${path ? `/${path}` : ''}`,
+  channel: (p: string, slug: string) => `/workspaces/${p}/c/${slug}`,
+  dm: (p: string, agentName: string) => `/workspaces/${p}/dm/${encodeURIComponent(agentName)}`,
+  memory: (p: string) => `/workspaces/${p}/memory`,
+  // The workspace Review queue has its own page.
+  review: (p: string) => `/workspaces/${p}/review`,
+  inbox: () => '/inbox',
 };
 
 export const defaultUiRoutes: UiRoutes = DEFAULT_ROUTES;
@@ -85,11 +104,32 @@ let routes: UiRoutes = DEFAULT_ROUTES;
  */
 export function setUiRoutes(overrides: Partial<UiRoutes>): void {
   const admin = overrides.admin ?? overrides.customize;
-  routes = { ...DEFAULT_ROUTES, ...overrides, ...(admin ? { admin } : {}) };
+  // A host that routes its own customize pages serves Review there unless it also routes `review`.
+  const review = overrides.review ?? (overrides.customize ? undefined : DEFAULT_ROUTES.review);
+  // Inbox is apps/web's page: a host that maps any route links it only when it maps `inbox`.
+  const inbox = overrides.inbox ?? (Object.keys(overrides).length === 0 ? DEFAULT_ROUTES.inbox : undefined);
+  routes = { ...DEFAULT_ROUTES, ...overrides, ...(admin ? { admin } : {}), review, inbox };
 }
 
 export function uiRoutes(): UiRoutes {
   return routes;
+}
+
+/**
+ * The query that asks the project home for its new-session composer. With the
+ * `chat` flag on, the bare project home opens the default channel instead.
+ */
+const NEW_SESSION_PARAM = 'new';
+
+/** The project home's new-session composer (sidebar Sessions `+`, Cmd+J, "New session"), not the default channel. */
+export function newSessionHref(projectId: string): string {
+  const home = routes.project(projectId);
+  return `${home}${home.includes('?') ? '&' : '?'}${NEW_SESSION_PARAM}=1`;
+}
+
+/** True when the project home was opened with `newSessionHref`. */
+export function isNewSessionRequested(params: Pick<URLSearchParams, 'get'> | null | undefined): boolean {
+  return params?.get(NEW_SESSION_PARAM) === '1';
 }
 
 /** A channel slug or DM agent name from its URL segment; null when a hand-typed escape is malformed. */

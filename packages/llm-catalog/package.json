@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "description": "The Kortix LLM model catalog — the models the Kortix gateway supports and the managed-model set and defaults. Generated from models.dev; consumed across the Kortix platform and by the @kortix/sdk.",
   "license": "Elastic-2.0",
-  "homepage": "https://github.com/kortix-ai/suna/tree/dev/packages/llm-catalog",
+  "homepage": "https://github.com/kortix-ai/CompanyOS/tree/dev/packages/llm-catalog",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kortix-ai/suna.git",
+    "url": "git+https://github.com/kortix-ai/CompanyOS.git",
     "directory": "packages/llm-catalog"
   },
   "keywords": ["kortix", "llm-catalog", "models", "ai", "sdk"],
@@ -15,7 +15,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./lite": "./src/lite.ts"
+    "./lite": "./src/lite.ts",
+    "./codex-seed": "./src/codex-seed.ts"
   },
   "publishConfig": {
     "access": "public",
@@ -30,6 +31,10 @@
       "./lite": {
         "types": "./dist/lite.d.ts",
         "import": "./dist/lite.js"
+      },
+      "./codex-seed": {
+        "types": "./dist/codex-seed.d.ts",
+        "import": "./dist/codex-seed.js"
       }
     },
     "files": ["dist", "README.md"]

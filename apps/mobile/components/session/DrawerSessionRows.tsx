@@ -118,7 +118,7 @@ function ProjectSessionListItem({
           }}
         />
       )}
-      <SessionStatusMark status={status} />
+      <SessionStatusMark status={status} waitingOn={needsYou?.waitingOn} />
       {needsYou || starter ? (
         <View className="min-w-0 flex-1">
           <Text numberOfLines={1}>{title}</Text>
@@ -135,10 +135,14 @@ function ProjectSessionListItem({
           {title}
         </Text>
       )}
-      <SubsessionCountBadge count={subsessionCount} />
+      {/* One count per row. The expand control counts what it opens, the
+          spawned sessions; sub-sessions always show below the row, and their
+          badge shows only when there is no control. */}
       {childCount > 0 && onToggleChildren ? (
         <ExpandControl count={childCount} expanded={expanded} onToggle={onToggleChildren} title={title} />
-      ) : null}
+      ) : (
+        <SubsessionCountBadge count={subsessionCount} />
+      )}
     </Pressable>
   );
 }

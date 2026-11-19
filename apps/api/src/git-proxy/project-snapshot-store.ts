@@ -18,14 +18,20 @@
  * a concurrent producer never overwrites a published object and a reader
  * never sees a manifest whose archive is still uploading.
  */
-import type { S3Client } from '@aws-sdk/client-s3';
+import {
+  CreateBucketCommand,
+  GetBucketLifecycleConfigurationCommand,
+  HeadBucketCommand,
+  PutBucketLifecycleConfigurationCommand,
+  type S3Client,
+} from '@aws-sdk/client-s3';
 import { config } from '../config';
 import { ObjectStore, type ObjectBody, type PutOutcome, resolvePresignTarget } from '../object-store/s3';
 
 export { resolvePresignTarget };
 
 export const PROJECT_SNAPSHOT_FORMAT = 'project-snapshot-v2';
-export const PROJECT_SNAPSHOT_MANIFEST_NAME = 'manifest.json';
+const PROJECT_SNAPSHOT_MANIFEST_NAME = 'manifest.json';
 export const PROJECT_SNAPSHOT_ARCHIVE_CONTENT_TYPE = 'application/gzip';
 export const PROJECT_SNAPSHOT_BLOBS_CONTENT_TYPE = 'application/x-git-pack';
 
@@ -94,16 +100,23 @@ export function projectSnapshotObjectPrefix(
   );
 }
 
+/**
+ * One object key behind a 64-hex content digest: the guard and the
+ * prefix+digest+suffix layout, with the caller's error label.
+ */
+function digestKey(prefix: string, sha256: string, suffix: string, label: string): string {
+  if (!/^[0-9a-f]{64}$/.test(sha256)) throw new Error(`project snapshot ${label} digest must be 64 hex`);
+  return `${prefix}${sha256}${suffix}`;
+}
+
 /** The boot object (working tree + blobless `.git`). */
 export function projectSnapshotTreeKey(prefix: string, sha256: string): string {
-  if (!/^[0-9a-f]{64}$/.test(sha256)) throw new Error('project snapshot archive digest must be 64 hex');
-  return `${prefix}${sha256}.tree.tar.gz`;
+  return digestKey(prefix, sha256, '.tree.tar.gz', 'archive');
 }
 
 /** The hydration object (the tip's blob pack). */
 export function projectSnapshotBlobsKey(prefix: string, sha256: string): string {
-  if (!/^[0-9a-f]{64}$/.test(sha256)) throw new Error('project snapshot blob pack digest must be 64 hex');
-  return `${prefix}${sha256}.blobs.pack`;
+  return digestKey(prefix, sha256, '.blobs.pack', 'blob pack');
 }
 
 export function projectSnapshotManifestKey(prefix: string): string {
@@ -134,6 +147,55 @@ export function projectSnapshotS3Client(): S3Client {
 
 export function __resetProjectSnapshotS3ClientForTests(): void {
   store.reset();
+}
+
+/**
+ * Days before an object expires in a bucket this API creates. The same value
+ * as the Terraform module's `expiration_days` default
+ * (infra/terraform/modules/project-snapshots-bucket), which owns the AWS buckets.
+ */
+const CREATED_BUCKET_EXPIRATION_DAYS = 30;
+
+function httpStatus(error: unknown): number | undefined {
+  return (error as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode;
+}
+
+/**
+ * Creates the bucket and its expiry rule when `KORTIX_PROJECT_SNAPSHOT_S3_CREATE_BUCKET`
+ * is on: self-host's bundled MinIO, which starts empty. Idempotent: a bucket
+ * that exists, or that a second replica created first, keeps its objects. The
+ * rule is written only when the bucket has none, so an operator's own rule
+ * stays. Expiry is safe: a `ready` row whose object is gone is re-queued, never
+ * served (project-snapshot-ledger.ts). AWS: Terraform owns the bucket and rule.
+ */
+export async function ensureProjectSnapshotBucket(): Promise<void> {
+  if (!config.KORTIX_PROJECT_SNAPSHOT_S3_CREATE_BUCKET || !projectSnapshotStorageConfigured()) return;
+  const client = store.client();
+  const Bucket = store.bucket;
+  try {
+    await client.send(new HeadBucketCommand({ Bucket }));
+  } catch (error) {
+    if (httpStatus(error) !== 404) throw error;
+    try {
+      await client.send(new CreateBucketCommand({ Bucket }));
+    } catch (createError) {
+      if (!['BucketAlreadyOwnedByYou', 'BucketAlreadyExists'].includes((createError as { name?: string })?.name ?? '')) throw createError;
+    }
+  }
+  try {
+    await client.send(new GetBucketLifecycleConfigurationCommand({ Bucket }));
+    return;
+  } catch (error) {
+    if (httpStatus(error) !== 404) throw error;
+  }
+  await client.send(
+    new PutBucketLifecycleConfigurationCommand({
+      Bucket,
+      LifecycleConfiguration: {
+        Rules: [{ ID: 'snapshot-retention', Status: 'Enabled', Filter: { Prefix: '' }, Expiration: { Days: CREATED_BUCKET_EXPIRATION_DAYS } }],
+      },
+    }),
+  );
 }
 
 /**

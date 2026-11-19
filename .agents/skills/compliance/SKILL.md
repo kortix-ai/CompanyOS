@@ -1,16 +1,19 @@
 ---
 name: compliance
-description: "Customer-facing compliance duties that code runs: the subprocessor list and its automatic 30-day DPA notice, Terms of Service changes, customer logo use (publicity), and the audit evidence it leaves. Load WHENEVER you add, remove or change a subprocessor (a new model provider, host, email or analytics vendor), route customer data to a new third party, touch apps/web/.../legal/subprocessors, packages/shared/src/subprocessors.ts or apps/api/src/billing/services/subprocessor-notices.ts, the Terms of Service text or packages/shared/src/terms.ts, or need proof for an auditor that customers were notified. Load too for staff access to a customer account: act-as impersonation, 'Open as admin', and its audit trail; and for a penetration test report: the status of each finding and the risks Kortix accepts."
+description: "Customer-facing compliance duties that code runs: the subprocessor list and its automatic 30-day DPA notice, Terms of Service changes, customer logo use (publicity), and the audit evidence it leaves. Load WHENEVER you add, remove or change a subprocessor (a new model provider, host, email or analytics vendor), route customer data to a new third party, touch apps/web/.../legal/subprocessors, packages/shared/src/subprocessors.ts or apps/api/src/billing/services/subprocessor-notices.ts, the Terms of Service text or packages/shared/src/terms.ts, or need proof for an auditor that customers were notified. Load too for staff access to a customer account: act-as impersonation, 'Open as admin', and its audit trail; and for a penetration test report: the status of each finding and the risks Kortix accepts. Load too for the 90-day deletion of a terminated account's data (the retention backstop, kortix.retention_erasures, RETENTION_ERASURE_MODE) and its monthly evidence. Load too for the Google OAuth verification of the Kortix Google connectors: a Google scope change, the privacy policy's Google user data section, the demo video, the yearly CASA security assessment."
 ---
 
 # Compliance
 
-The Data Processing Addendum (DPA) promises two things that code keeps:
+The Data Processing Addendum (DPA) promises three things that code keeps:
 
 - Section 7.2 / Annex III: `/legal/subprocessors` lists every third party that
   processes customer personal data.
 - Section 7.3: a new subprocessor gets at least 30 days' notice before it
   processes customer personal data.
+- The DPA and the Data Retention Policy: a terminated account's personal data
+  is deleted within 90 days of the termination (section "Delete a terminated
+  account within 90 days").
 
 ## Add a subprocessor
 
@@ -51,6 +54,14 @@ runs hourly in the billing worker, on prod only (`INTERNAL_KORTIX_ENV=prod`).
   vendor until 30 days after that report and move `addedOn`.
 
 ## Evidence for an auditor
+
+`kortix.audit_events` holds the last 14 days (`HOT_DAYS`,
+`apps/api/src/shared/audit-archive/format.ts`). Older weeks, up to 365 days,
+are in the account's archive: read them with
+`GET /v1/accounts/<account_id>/audit/export?action=legal.subprocessor_notice.sent`
+(owner or admin, Enterprise), or from the `<env>-audit-archive` bucket
+(`audit/<account_id>/<yyyy>/<week>.<part>.jsonl.gz`). The query below finds
+the last 14 days only.
 
 ```sql
 select account_id, created_at, output_summary
@@ -101,6 +112,46 @@ remove the name and logo from Kortix websites within 30 days. Never use a
 logo before `TERMS_EFFECTIVE`, or for a customer whose signed Order excludes
 it.
 
+## Delete a terminated account within 90 days
+
+Terminated means closed (decision D6b, 2026-10-14): an open
+`kortix.account_deletion_requests` row. `POST /v1/account/request-deletion`
+writes it with a 14-day grace; deleting the auth user writes it due now. The
+account closes at `scheduled_for`. A plan cancellation, a downgrade to Free, a
+payment failure or an idle account is not a termination.
+
+Two workers delete a closed account, both through `runAccountDeletion`
+(`apps/api/src/billing/services/account-deletion.ts`):
+
+1. `account-deletion` (every 15 min): a request due within the last 2 days.
+2. `retention-erasure` (daily, `apps/api/src/billing/services/retention-erasure.ts`):
+   every request still open `RETENTION_ERASURE_AFTER_DAYS` (default 80) after
+   `scheduled_for`. It skips an account that still acts live (a paid plan whose
+   payment is not cancelled, or a session or turn after the close) and records
+   `skipped_live` for a person.
+
+`RETENTION_ERASURE_MODE`: `dry_run` (default) records `would_erase` and
+deletes nothing; `execute` deletes; `off` stops the tick.
+`ACCOUNT_DELETION_SWEEP_PAUSED=true` forces `dry_run`.
+
+### Monthly evidence
+
+One `kortix.retention_erasures` row per account, UTC day and mode: ids, dates,
+outcome, no personal data. It outlives the account.
+
+```sql
+select account_id, request_id, requested_at, closed_at, run_on, mode, outcome, error,
+       run_on - closed_at::date as days_after_close
+from kortix.retention_erasures
+where run_on >= date '<YYYY-MM-01>' and run_on < date '<YYYY-MM-01>' + interval '1 month'
+order by run_on, account_id;
+```
+
+An `erased` row is the proof. A `failed` or `skipped_live` row past day 80 is
+an open item for a person: fix the failure, or decide the live account.
+
+Tests: `pnpm test -- --db-only integration-retention-erasure`.
+
 ## Staff access to a customer account (act-as)
 
 A platform admin enters a customer account only through an act-as grant
@@ -128,7 +179,21 @@ where account_id = '<account_id>' and action like 'admin.impersonate.%'
 order by created_at desc;
 ```
 
+That query reaches 14 days back. Older events: the export,
+`GET /v1/accounts/<account_id>/audit/export?action=admin.impersonate.`.
+
 Contract: flows `IMP-1` and `IMP-2` (`pnpm test -- --id IMP-2`).
+
+## Google OAuth verification
+
+The Kortix Google connectors (Gmail, Calendar, Drive, Docs, Sheets) use the
+GCP project `kortix-connectors`. Google must verify it before prod uses it,
+and its restricted scopes need a CASA security assessment every 12 months.
+Scopes, justifications, the demo video, the privacy policy section, the
+obligations and the status log are in
+[references/google-oauth-verification.md](references/google-oauth-verification.md).
+A new Google scope changes that file, the privacy policy and the Data Access
+page in the same PR.
 
 ## Penetration test findings
 

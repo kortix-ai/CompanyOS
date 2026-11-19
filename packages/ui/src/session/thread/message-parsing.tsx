@@ -217,7 +217,6 @@ export {
 export { parseTriggerEvent, type TriggerEventInfo } from '@kortix/shared';
 // The reminder fire header, also shared with the API that writes it.
 export { parseReminderPrompt, type ReminderPromptInfo } from '@kortix/shared';
-export { parseRoomDigest, parseRoomPrompt, type RoomDigestInfo, type RoomPromptInfo } from '@kortix/shared';
 
 // ── Generic XML notification parsing ──────────────────────────────────
 //
@@ -379,7 +378,7 @@ export function SystemNotificationCard({ notification }: { notification: SystemN
             </div>
           )}
           {notification.body && (
-            <div className="text-muted-foreground/50 max-h-48 overflow-y-auto font-mono text-xs break-all whitespace-pre-wrap">
+            <div className="text-muted-foreground max-h-48 overflow-y-auto font-mono text-xs break-all whitespace-pre-wrap">
               {notification.body.slice(0, 2000)}
             </div>
           )}

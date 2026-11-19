@@ -2,8 +2,8 @@
  * Manifest imports — split one `kortix.yaml` across several YAML files.
  *
  *     imports:
- *       - .kortix/triggers/          # a directory: every .yaml/.yml under it
- *       - .kortix/agents.yaml        # a single file
+ *       - triggers/                  # a directory: every .yaml/.yml under it
+ *       - software-factory.yaml      # a single file
  *
  * An imported file declares only the COLLECTIONS — `triggers`, `connectors`,
  * `agents`, `apps`, `tools`, `skills`, `commands`, `extensions` — and may itself
@@ -172,9 +172,6 @@ const ALL_IMPORTABLE_KEYS: readonly ImportableKey[] = [
   ...IMPORTABLE_LIST_KEYS,
   ...IMPORTABLE_MAP_KEYS,
 ];
-
-/** v2 imports merge only the collections v2 had: skills, commands and
- *  extensions are v3 keys, and a v2 root's own value for them stays as written. */
 
 /**
  * Resolve `imports:` for a parsed root manifest. A root without `imports`

@@ -17,10 +17,11 @@ mock.module('@tanstack/react-query', () => ({
   },
 }));
 
-const { useProjectName, useProjectAccountId, useProjectIcon } = await import(
+const { useWorkspaceName, useWorkspaceAccountId, useWorkspaceIcon } = await import(
   './use-project-name'
 );
 const { qk } = await import('./query-keys');
+
 const { contract } = await import('./query-contracts');
 
 beforeEach(() => {
@@ -29,92 +30,92 @@ beforeEach(() => {
 });
 
 describe('useProjectName', () => {
-  test('reads through qk.project.detail on the config contract', () => {
-    useProjectName('proj-1');
-    expect(lastConfig?.queryKey).toEqual(qk.project.detail('proj-1'));
+  test('reads the bare project row (qk.project.summary), never the git-backed detail', () => {
+    useWorkspaceName('proj-1');
+    expect(lastConfig?.queryKey).toEqual(qk.project.summary('proj-1'));
     expect(lastConfig?.staleTime).toBe(contract('config').staleTime);
     expect(lastConfig?.gcTime).toBe(contract('config').gcTime);
     expect(lastConfig?.refetchOnMount).toBe(true);
   });
 
   test('is disabled without a projectId', () => {
-    useProjectName(undefined);
+    useWorkspaceName(undefined);
     expect(lastConfig?.enabled).toBe(false);
   });
 
   test('is enabled once a projectId is supplied', () => {
-    useProjectName('proj-1');
+    useWorkspaceName('proj-1');
     expect(lastConfig?.enabled).toBe(true);
   });
 
-  test('returns the name off the detail response', () => {
-    mockData = { project: { project_id: 'proj-1', name: 'Renamed' } };
-    expect(useProjectName('proj-1')).toBe('Renamed');
+  test('returns the name off the project row', () => {
+    mockData = { project_id: 'proj-1', name: 'Renamed' };
+    expect(useWorkspaceName('proj-1')).toBe('Renamed');
   });
 
-  test('returns undefined when the detail cache is empty', () => {
+  test('returns undefined when the project row cache is empty', () => {
     mockData = undefined;
-    expect(useProjectName('proj-1')).toBeUndefined();
+    expect(useWorkspaceName('proj-1')).toBeUndefined();
   });
 });
 
 describe('useProjectAccountId', () => {
-  test('reads the SAME qk.project.detail key useProjectName does, on the config contract', () => {
-    useProjectAccountId('proj-1');
-    expect(lastConfig?.queryKey).toEqual(qk.project.detail('proj-1'));
+  test('reads the SAME qk.project.summary key useProjectName does, on the config contract', () => {
+    useWorkspaceAccountId('proj-1');
+    expect(lastConfig?.queryKey).toEqual(qk.project.summary('proj-1'));
     expect(lastConfig?.staleTime).toBe(contract('config').staleTime);
     expect(lastConfig?.gcTime).toBe(contract('config').gcTime);
     expect(lastConfig?.refetchOnMount).toBe(true);
   });
 
   test('is disabled without a projectId', () => {
-    useProjectAccountId(undefined);
+    useWorkspaceAccountId(undefined);
     expect(lastConfig?.enabled).toBe(false);
   });
 
   test('is enabled once a projectId is supplied', () => {
-    useProjectAccountId('proj-1');
+    useWorkspaceAccountId('proj-1');
     expect(lastConfig?.enabled).toBe(true);
   });
 
-  test('returns the account id off the detail response', () => {
-    mockData = { project: { project_id: 'proj-1', account_id: 'acct-9' } };
-    expect(useProjectAccountId('proj-1')).toBe('acct-9');
+  test('returns the account id off the project row', () => {
+    mockData = { project_id: 'proj-1', account_id: 'acct-9' };
+    expect(useWorkspaceAccountId('proj-1')).toBe('acct-9');
   });
 
-  test('returns undefined when the detail cache is empty', () => {
+  test('returns undefined when the project row cache is empty', () => {
     mockData = undefined;
-    expect(useProjectAccountId('proj-1')).toBeUndefined();
+    expect(useWorkspaceAccountId('proj-1')).toBeUndefined();
   });
 });
 
 describe('useProjectIcon', () => {
-  test('reads the SAME qk.project.detail key useProjectName does, on the config contract', () => {
-    useProjectIcon('proj-1');
-    expect(lastConfig?.queryKey).toEqual(qk.project.detail('proj-1'));
+  test('reads the SAME qk.project.summary key useProjectName does, on the config contract', () => {
+    useWorkspaceIcon('proj-1');
+    expect(lastConfig?.queryKey).toEqual(qk.project.summary('proj-1'));
     expect(lastConfig?.staleTime).toBe(contract('config').staleTime);
     expect(lastConfig?.gcTime).toBe(contract('config').gcTime);
     expect(lastConfig?.refetchOnMount).toBe(true);
   });
 
   test('is disabled without a projectId', () => {
-    useProjectIcon(undefined);
+    useWorkspaceIcon(undefined);
     expect(lastConfig?.enabled).toBe(false);
   });
 
   test('is enabled once a projectId is supplied', () => {
-    useProjectIcon('proj-1');
+    useWorkspaceIcon('proj-1');
     expect(lastConfig?.enabled).toBe(true);
   });
 
-  test('returns the emoji off the detail response', () => {
-    mockData = { project: { project_id: 'proj-1', icon: '🐢' } };
-    expect(useProjectIcon('proj-1')).toEqual({ icon: '🐢', icon_glyph: null });
+  test('returns the emoji off the project row', () => {
+    mockData = { project_id: 'proj-1', icon: '🐢' };
+    expect(useWorkspaceIcon('proj-1')).toEqual({ icon: '🐢', icon_glyph: null });
   });
 
-  test('returns the glyph off the detail response', () => {
-    mockData = { project: { project_id: 'proj-1', icon_glyph: { name: 'Heart', color: 'red' } } };
-    expect(useProjectIcon('proj-1')).toEqual({
+  test('returns the glyph off the project row', () => {
+    mockData = { project_id: 'proj-1', icon_glyph: { name: 'Heart', color: 'red' } };
+    expect(useWorkspaceIcon('proj-1')).toEqual({
       icon: null,
       icon_glyph: { name: 'Heart', color: 'red' },
     });
@@ -125,12 +126,12 @@ describe('useProjectIcon', () => {
   // apart from "the cache has not answered yet", because those two render
   // differently (the initial tile vs. nothing at all).
   test('normalises an icon-less project to an explicit null pair', () => {
-    mockData = { project: { project_id: 'proj-1' } };
-    expect(useProjectIcon('proj-1')).toEqual({ icon: null, icon_glyph: null });
+    mockData = { project_id: 'proj-1' };
+    expect(useWorkspaceIcon('proj-1')).toEqual({ icon: null, icon_glyph: null });
   });
 
-  test('returns undefined when the detail cache is empty', () => {
+  test('returns undefined when the project row cache is empty', () => {
     mockData = undefined;
-    expect(useProjectIcon('proj-1')).toBeUndefined();
+    expect(useWorkspaceIcon('proj-1')).toBeUndefined();
   });
 });

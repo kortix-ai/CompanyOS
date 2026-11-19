@@ -16,8 +16,9 @@
 
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
-import { getToolInfo, partOutcome, sessionLogOpenCall, stripAnsi, type ToolCallBlock } from '@kortix/sdk';
+import { getChildSessionId, getToolInfo, kortixPlatformTool, parseKortixToolResult, parseWorkflowRun, partOutcome, sessionLogOpenCall, stripAnsi, toolKind, type ToolCallBlock } from '@kortix/sdk';
 import { Text } from '@/components/ui/text';
+import { hasPlatformCardBody, PlatformCardBody } from './tools/platform-card-body';
 import type { PermissionRequest } from '@/lib/session/types';
 import { usePendingPermissions } from '@/lib/session/session-store';
 import { getDiffStats } from '@/lib/session/diff-utils';
@@ -42,7 +43,7 @@ import {
 } from './shared/infrastructure';
 import { TURN_SPACE, TURN_TYPE, useTurnPalette } from './shared/styles';
 import { getToolIconByName } from './shared/tool-icons';
-import { partError, partInput, partRawOutput, partStatus } from '@/lib/session/tool-part-accessors';
+import { partError, partInput, partMetadata, partRawOutput, partStatus } from '@/lib/session/tool-part-accessors';
 import { ToolError } from './tool-error';
 import { ToolRegistry } from './shared/registry';
 export type PermissionReply = 'once' | 'always' | 'reject';
@@ -183,6 +184,15 @@ function ToolPartRendererImpl({
     return { projectId };
   }, [call, input]);
 
+  // A My Kortix platform tool answers with one JSON card. The person reads its title and
+  // subtitle; the JSON and the error message are the model's and never render (as on web).
+  const platformCard = useMemo(() => {
+    if (!kortixPlatformTool(call.name)) return null;
+    const status = partStatus(call);
+    if (status !== 'completed' && status !== 'error') return null;
+    return parseKortixToolResult(status === 'error' ? (partError(call) ?? '') : partRawOutput(call), call.name)?.card ?? null;
+  }, [call]);
+
   const openProject = useCallback(() => {
     if (!projectTarget) return;
     useTabStore.getState().navigateToPage(`page:project:${projectTarget.projectId}`);
@@ -190,8 +200,34 @@ function ToolPartRendererImpl({
 
   if (call.name === 'todoread') return null;
 
-  // The image card draws its own failure and a stop in place of the image.
-  if (partStatus(call) === 'error' && call.name !== 'image_gen') {
+  if (platformCard) {
+    const body = hasPlatformCardBody(platformCard);
+    // A sign-in or save link is the card's action: the row opens itself, as on web.
+    const attention = platformCard.links.some((link) => link.external);
+    return (
+      <RowAmbient running={false} stale={false} turnLive={turnLive} outcome={outcome} durationMs={durationMs} permission={permission} onPermissionReply={onPermissionReply}>
+        <BasicTool
+          disclosureId={rowKey}
+          icon={getToolIconByName(info.icon)}
+          trigger={{ title: platformCard.title, subtitle: platformCard.subtitle }}
+          defaultOpen={defaultOpen || attention}
+          forceOpen={forceOpen}
+          locked={forceOpen}
+        >
+          {body ? <PlatformCardBody card={platformCard} /> : null}
+        </BasicTool>
+      </RowAmbient>
+    );
+  }
+
+  // The image card draws its own failure and a stop in place of the image. As on web
+  // (`drawsOwnError`), an agent call with a child session keeps its row (Open, why it did not
+  // finish), and a failed workflow keeps its agents' rows.
+  const drawsOwnError =
+    call.name === 'image_gen' ||
+    (toolKind(call.name) === 'task' && Boolean(getChildSessionId(call))) ||
+    (call.name === 'workflow' && parseWorkflowRun(partMetadata(call)) !== null);
+  if (partStatus(call) === 'error' && !drawsOwnError) {
     const { display, server } = toolDisplayName(call.name);
     return (
       <RowAmbient running={false} stale={false} turnLive={turnLive} outcome={outcome} durationMs={durationMs}>

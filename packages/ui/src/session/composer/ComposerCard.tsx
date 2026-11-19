@@ -13,8 +13,13 @@ import type {
   RefObject,
   SetStateAction,
 } from 'react';
-import { lazy, Suspense, useRef } from 'react';
+import { lazy, Suspense, useContext, useMemo, useRef } from 'react';
+import { useToastClearance } from '../../primitives/toast-clearance';
 
+import { SpaceMentionContext } from './menus/space-mentions';
+import { useFeatureFlag } from '@kortix/sdk/react';
+
+import { ModelConnectionLayoutContext } from '../models/model-connection-layout';
 import { ImagesUnsupportedBar, ModelConnectionBar } from '../models/model-connection-gate';
 import { AnimatedComposerPlaceholder } from './animated-placeholder';
 import { AttachmentTiles } from './attachment-tiles';
@@ -28,10 +33,12 @@ import {
 } from './composer';
 import { shouldFocusEditorFromPadding } from './composer-logic';
 import { ComposerToolbar } from './composer-toolbar';
-import { ComposerUnderbar } from './composer-underbar';
+import { ComposerUnderbar, type ComposerUnderbarProps } from './composer-underbar';
+import { ChatInputOverridesProvider } from './chat-input/chat-input-overrides';
 import type { ComposerEditorHandle } from './editor/composer-editor';
 import type { SlashAction } from './menus/slash-actions';
 import type { AttachedFile } from './types';
+import { resolveProgramAgent } from './agent-selector';
 import { useUiHostConfig } from '../../providers/ui-provider';
 
 /** What the attach picker offers when the host names no list. */
@@ -78,6 +85,9 @@ export interface ComposerCardDerived {
   animatePlaceholder: boolean;
   handleSubmit: (placement?: 'transcript' | 'composer') => Promise<void>;
   handleArrowUpAtStart: () => boolean;
+  handleArrowDownAtEnd: () => boolean;
+  /** The recalled prompt on screen, 1-based, oldest first; `null` for the draft. */
+  historyPosition: { index: number; total: number } | null;
   setIsEmpty: Dispatch<SetStateAction<boolean>>;
   handleDocChange: (doc: JSONContent, isEmpty: boolean) => void;
   allSessions: ReturnType<typeof useRuntimeSessions>['data'];
@@ -131,6 +141,8 @@ export function ComposerCard({
   animatePlaceholder,
   handleSubmit,
   handleArrowUpAtStart,
+  handleArrowDownAtEnd,
+  historyPosition,
   setIsEmpty,
   handleDocChange,
   allSessions,
@@ -184,6 +196,7 @@ export function ComposerCard({
   modelRequired = false,
   onModelChange,
   modelDefaultControls,
+  inheritedModel,
   providers,
   variants = EMPTY_VARIANTS,
   selectedVariant = null,
@@ -195,20 +208,89 @@ export function ComposerCard({
   selectedAgent = null,
   onAgentChange,
   noAccessibleAgents = false,
+  agentLocked = false,
   onContextClick,
   messages,
   underbarPlacement = 'below',
   agentPickerCompact = false,
   slashMenuPlacement = 'above',
   cardClassName,
-  onArrowUpAtStart,
+  call,
 }: ComposerCardProps) {
+  const connectionsAbove = useContext(ModelConnectionLayoutContext) === 'above';
   const cardRef = useRef<HTMLDivElement>(null);
-  const { attachAccept } = useUiHostConfig();
+  // A composer docked at the window bottom keeps toasts above its Send/Stop button.
+  useToastClearance(cardRef, slashMenuPlacement === 'above');
+  const { attachAccept, modelPickerEnabled } = useUiHostConfig();
   const inlineUnderbar = underbarPlacement === 'inline';
 
+  /*
+    `chat_input` on: one control under the card for the agent, model, effort
+    and every session override (`chat-input/chat-input-control.tsx`). The
+    toolbar then draws no model or effort picker, and the overrides gear the
+    host puts in `toolbarSlot` publishes its rows to the control instead of
+    drawing itself (`ChatInputOverridesProvider`). Off, nothing here changes.
+  */
+  const chatInputEnabled = useFeatureFlag(projectId ?? null, 'chat_input').enabled;
+  // Inside a space the `@` menu is its people and agents (`menus/space-mentions.ts`).
+  const spaceMentions = useContext(SpaceMentionContext);
+  const chatInputOpen = agentMenuOpen || modelMenuOpen || reasoningMenuOpen;
+  // A program agent (`run` in kortix.yaml) has no model: its listing names provider `program`.
+  const programAgent = resolveProgramAgent(primaryAgents, selectedAgent);
+  const chatInput = useMemo<ComposerUnderbarProps['chatInput']>(() => {
+    if (!chatInputEnabled) return undefined;
+    return {
+      // The `/` palette's "Switch agent", "Switch model" and "Set reasoning
+      // effort" rows all open this one control, on the row they name.
+      open: chatInputOpen,
+      onOpenChange: (next: boolean) => {
+        setAgentMenuOpen(next);
+        if (!next) {
+          setModelMenuOpen(false);
+          setReasoningMenuOpen(false);
+        }
+      },
+      initialRow: modelMenuOpen ? 'model' : reasoningMenuOpen ? 'effort' : null,
+      // The same predicates the toolbar's pickers render on.
+      showModel: modelPickerEnabled && (models.length > 0 || modelRequired) && !!onModelChange,
+      models,
+      modelsLoading,
+      selectedModel: availableSelectedModel,
+      inheritedModel,
+      onModelChange,
+      providers,
+      modelDefaultControls,
+      projectId,
+      variants,
+      selectedVariant,
+      onVariantChange: modelPickerEnabled ? onVariantChange : undefined,
+    };
+  }, [
+    chatInputEnabled,
+    chatInputOpen,
+    modelMenuOpen,
+    reasoningMenuOpen,
+    setAgentMenuOpen,
+    setModelMenuOpen,
+    setReasoningMenuOpen,
+    modelPickerEnabled,
+    models,
+    modelRequired,
+    onModelChange,
+    modelsLoading,
+    availableSelectedModel,
+    inheritedModel,
+    providers,
+    modelDefaultControls,
+    projectId,
+    variants,
+    selectedVariant,
+    onVariantChange,
+  ]);
+
   return (
-    <>
+    <ChatInputOverridesProvider enabled={chatInputEnabled}>
+    {connectionsAbove ? <ModelConnectionBar show={noModelsConnected} /> : null}
     <div
       ref={cardRef}
       onDragEnter={handleDragEnter}
@@ -261,6 +343,15 @@ export function ComposerCard({
         )}
       >
         {/* Inline chips: thread context, todos, queue — unified spacing */}
+
+        {historyPosition && (
+          <div
+            aria-live="polite"
+            className="text-muted-foreground px-4 pb-1 text-xs tabular-nums select-none"
+          >
+            {tHardcodedUi('promptHistory', historyPosition)}
+          </div>
+        )}
 
         <AttachmentTiles
           files={attachedFiles}
@@ -345,12 +436,14 @@ export function ComposerCard({
                 placeholder={animatePlaceholder ? '' : editorPlaceholder}
                 disabled={editorDisabled}
                 onSubmit={handleSubmit}
-                onArrowUpAtStart={onArrowUpAtStart ? handleArrowUpAtStart : undefined}
+                onArrowUpAtStart={handleArrowUpAtStart}
+                onArrowDownAtEnd={handleArrowDownAtEnd}
                 onEmptyChange={setIsEmpty}
                 onDocChange={handleDocChange}
                 agents={agents}
                 sessions={allSessions ?? []}
                 currentSessionId={sessionId}
+                spaceMentions={spaceMentions}
                 commands={commands}
                 actions={slashActions}
                 files={slashFiles}
@@ -370,6 +463,7 @@ export function ComposerCard({
             onChange={handleFileSelect}
           />
           <ComposerToolbar
+            noModel={programAgent}
             leading={
               inlineUnderbar ? (
                 <ComposerUnderbar
@@ -382,14 +476,17 @@ export function ComposerCard({
                   agentMenuOpen={agentMenuOpen}
                   onAgentMenuOpenChange={setAgentMenuOpen}
                   noAccessibleAgents={noAccessibleAgents}
+                  agentLocked={agentLocked}
                   messages={messages}
                   models={models}
                   selectedModel={availableSelectedModel}
                   onContextClick={onContextClick}
                   agentsSlot={underbarSlot}
+                  chatInput={chatInput}
                 />
               ) : null
             }
+            pickersInChatInput={chatInputEnabled}
             modelsLoading={modelsLoading}
             models={models}
             selectedModel={availableSelectedModel}
@@ -434,6 +531,7 @@ export function ComposerCard({
             disabled={disabled}
             modelUnavailable={modelUnavailable}
             agentUnavailable={agentUnavailable}
+            call={call}
             onSubmit={() => handleSubmit()}
           />
         </div>
@@ -442,14 +540,12 @@ export function ComposerCard({
 
     {/*
       Directly under the card, and BEFORE the underbar — the bar is a tray
-      that hangs off the card's bottom edge (see `ModelConnectionBar` for the
-      overlap), so it has to be the card's next sibling. Below the underbar it
-      was a third detached box under a second detached box.
+      that hangs off the card's bottom edge (see `ComposerTray` for the
+      overlap), so it has to be the card's next sibling.
 
       The card is `isolate z-10` and this is `z-0`, so the card paints over
       the overlap and only the tray's exposed strip shows.
     */}
-    <ModelConnectionBar show={noModelsConnected} />
     <ImagesUnsupportedBar modelName={noModelsConnected ? null : modelRejectingImages} />
 
     {/*
@@ -467,14 +563,23 @@ export function ComposerCard({
         agentMenuOpen={agentMenuOpen}
         onAgentMenuOpenChange={setAgentMenuOpen}
         noAccessibleAgents={noAccessibleAgents}
+        agentLocked={agentLocked}
         messages={messages}
         models={models}
         selectedModel={availableSelectedModel}
         onContextClick={onContextClick}
         toolbarSlot={toolbarSlot}
         agentsSlot={underbarSlot}
+        chatInput={chatInput}
       />
     )}
+
+    {/*
+      The connect prompt is NOT a tray: it is the next step, so it sits a gap
+      below everything the composer owns (card and underbar) as a row of its
+      own. See `ModelConnectionBar`.
+    */}
+    {connectionsAbove ? null : <ModelConnectionBar show={noModelsConnected} />}
 
     {/*
       The `'below'` dock. Absolute, not in flow: `top-full` hangs it off the
@@ -495,6 +600,6 @@ export function ComposerCard({
     {slashMenuPlacement === 'below' && (
       <div id={dockId} className="absolute top-full right-4 left-4 z-99 mt-3.5" />
     )}
-    </>
+    </ChatInputOverridesProvider>
   );
 }

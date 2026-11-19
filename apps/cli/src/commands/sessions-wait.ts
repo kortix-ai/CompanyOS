@@ -1,6 +1,7 @@
 import type { RuntimeThreadStatus } from '@kortix/sdk';
 import { sleep } from '@kortix/shared/guards';
 import { kortixFromAuth } from '../api/sdk.ts';
+import { splitHelp } from '../command-argv.ts';
 import {
   emitJson,
   fail,
@@ -30,7 +31,7 @@ Exit codes:
 
 Options:
   --timeout <seconds>   Give up after this long (default 300).
-  --project <id>        Operate on this project id (default: linked).
+  --workspace <id>      Operate on this workspace id (default: linked).
   --host <name>         Operate against a non-default Kortix host.
   --json                Print {settled, blocked, waited_ms, failed?, error?} as JSON.
   -h, --help            Show this help.
@@ -107,17 +108,15 @@ export function isAuthoritativelySettled(status: string): boolean {
 }
 
 export async function runSessionsWaitFor(argv: string[]): Promise<number> {
+  const helped = splitHelp(argv, HELP);
+  if (helped !== null) return helped;
   const rest = [...argv];
-  if (rest.length === 0 || rest.includes('-h') || rest.includes('--help')) {
-    process.stdout.write(HELP);
-    return rest.length === 0 ? 2 : 0;
-  }
   let projectArg: string | undefined;
   let hostArg: string | undefined;
   let timeoutRaw: string | undefined;
   let json = false;
   try {
-    projectArg = takeFlagValue(rest, ['--project']);
+    projectArg = takeFlagValue(rest, ['--project', '--workspace']);
     hostArg = takeFlagValue(rest, ['--host']);
     timeoutRaw = takeFlagValue(rest, ['--timeout', '-t']);
     json = takeFlagBool(rest, ['--json']);

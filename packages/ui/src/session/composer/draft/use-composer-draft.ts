@@ -1,5 +1,7 @@
 'use client';
 
+import { completeHomeComposerFocus, registerHomeComposerEditor } from './home-composer-focus-handoff';
+
 import type { PastedContent } from '@kortix/shared';
 import type { JSONContent } from '@tiptap/core';
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
@@ -30,8 +32,15 @@ const NO_QUOTES: readonly string[] = [];
 const NO_PASTES: readonly PastedContent[] = [];
 const NO_UPLOADS: readonly StoredUpload[] = [];
 
+/** A composer's sendable content, compared to tell a sent message from a new draft. */
+function sentKey(doc: JSONContent, quotes: readonly string[], pastes: readonly PastedContent[]): string {
+  return JSON.stringify([doc, quotes, pastes]);
+}
+
 export interface UseComposerDraftInput {
   active?: boolean;
+  /** Move the remaining home draft into the created session on unmount. */
+  handoffScope?: RefObject<DraftScope | null>;
   /** Omitted or null → the composer persists nothing (marketing demo, tests). */
   scope: DraftScope | null | undefined;
   editorRef: RefObject<ComposerEditorHandle | null>;
@@ -63,6 +72,8 @@ export interface UseComposerDraftResult {
   handleDocChange: (doc: JSONContent, isEmpty: boolean) => void;
   /** Call on a SUCCESSFUL send. Never on a refusal — those keep the text. */
   clearSavedDraft: () => void;
+  /** The host refused the send: what is on screen is a draft again. */
+  sendRefused: () => void;
 }
 
 /**
@@ -76,6 +87,7 @@ export interface UseComposerDraftResult {
  */
 export function useComposerDraft({
   active = true,
+  handoffScope,
   scope,
   editorRef,
   editorReady,
@@ -86,6 +98,11 @@ export function useComposerDraft({
   hasPrefill,
   onRestore,
 }: UseComposerDraftInput): UseComposerDraftResult {
+  useLayoutEffect(() => {
+    if (scope?.kind !== 'project' || !editorReady) return;
+    registerHomeComposerEditor(editorRef.current);
+    return () => registerHomeComposerEditor(null);
+  }, [scope, editorReady, editorRef]);
   const viewerId = useUiViewerId();
   const userId = viewerId ?? '';
   const enabled = !!scope && !!userId;
@@ -105,6 +122,15 @@ export function useComposerDraft({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoredKeyRef = useRef<string | null>(null);
   const activeRef = useRef(active);
+  /**
+   * What the last send left on screen (`clearOnSend={false}`, project home):
+   * `sentKey` of its document, quotes and tiles. That is sent, not a draft: an
+   * attachment released or finishing after Send must not save it again, or
+   * the home handoff carries it into the new session's composer. The first
+   * change to any of them (typing, clearing, a new quote) or a refused send
+   * ends it.
+   */
+  const sentRef = useRef<string | null>(null);
   const submittedRef = useRef(false);
 
   /**
@@ -143,15 +169,25 @@ export function useComposerDraft({
     // Flush before the replacement composer's passive restore effect runs.
     activeRef.current = active;
     if (!active) flush();
+    const source = scopeRef.current;
+    const ownerId = userIdRef.current;
     return () => {
       flush();
+      const target = handoffScope?.current;
+      if (target && source && ownerId) {
+        const draft = readDraft(source, ownerId);
+        if (draft) writeDraft(target, draft);
+        clearDraft(source);
+      }
       activeRef.current = false;
     };
-  }, [active, flush]);
+  }, [active, flush, handoffScope, scopeRef, userIdRef]);
 
   const scheduleSave = useCallback(
     (doc: JSONContent, isEmpty: boolean) => {
       if (!activeRef.current || !scopeRef.current || !userIdRef.current) return;
+      if (sentRef.current === sentKey(doc, quotesRef.current, pastesRef.current)) return;
+      sentRef.current = null;
       pendingRef.current = { doc, isEmpty };
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(flush, SAVE_DEBOUNCE_MS);
@@ -186,13 +222,14 @@ export function useComposerDraft({
     uploadsKeyRef.current = uploadsKey;
     const editor = editorRef.current;
     if (!editorReady || !editor) return;
-    // A home composer can retain submitted text until navigation. Accessory
-    // cleanup must not turn that text back into an unsent draft. New accessories
-    // still persist, but without the spent document, until the next editor edit.
-    const doc = submittedRef.current
-      ? { type: 'doc', content: [{ type: 'paragraph' }] }
-      : editor.getDocument();
-    if (doc) scheduleSave(doc, submittedRef.current || editor.isEmpty());
+    const doc = editor.getDocument();
+    if (!doc) return;
+    if (sentRef.current === sentKey(doc, quotesRef.current, pastesRef.current)) return;
+    // Accessory cleanup must not persist text retained on screen after Send.
+    scheduleSave(
+      submittedRef.current ? { type: 'doc', content: [{ type: 'paragraph' }] } : doc,
+      submittedRef.current || editor.isEmpty(),
+    );
   }, [quotes, pastes, uploads, uploadsKey, editorReady, editorRef, scheduleSave]);
 
   const clearSavedDraft = useCallback(() => {
@@ -202,9 +239,14 @@ export function useComposerDraft({
       timerRef.current = null;
     }
     pendingRef.current = null;
+    const editor = editorRef.current;
+    sentRef.current =
+      editor && !editor.isEmpty()
+        ? sentKey(editor.getDocument(), quotesRef.current, pastesRef.current)
+        : null;
     const activeScope = scopeRef.current;
     if (activeRef.current && activeScope) clearDraft(activeScope);
-  }, [scopeRef]);
+  }, [editorRef, scopeRef]);
 
   /**
    * Flush on every way a page can go away without unmounting cleanly.
@@ -244,12 +286,19 @@ export function useComposerDraft({
         alreadyRestored: restoredKeyRef.current === key,
       })
     ) {
+      if (active && editorReady && editorRef.current) completeHomeComposerFocus(scope, editorRef.current);
       return;
     }
     restoredKeyRef.current = key;
     const stored = readDraft(scope, userId);
     if (stored) onRestore(stored);
+    if (editorRef.current) completeHomeComposerFocus(scope, editorRef.current);
   }, [active, scope, userId, editorReady, hasPrefill, editorRef, onRestore]);
 
-  return { handleDocChange, clearSavedDraft };
+  const sendRefused = useCallback(() => {
+    submittedRef.current = false;
+    sentRef.current = null;
+  }, []);
+
+  return { handleDocChange, clearSavedDraft, sendRefused };
 }

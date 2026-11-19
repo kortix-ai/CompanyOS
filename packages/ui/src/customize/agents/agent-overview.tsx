@@ -4,8 +4,9 @@
  * The agent page's Overview tab: the agent at a glance.
  *
  * One centered column, in reading order: the description, then the
- * instructions (edited in place as a formatted document), then Properties
- * (the switches a person flips most) and Source (where the agent is saved).
+ * instructions (edited in place as a formatted document). The rail's Basics
+ * row (`part="basics"`) shows Properties (the switches a person flips most)
+ * and Source (where the agent is saved).
  * What it may touch, its model, workspace and triggers are tabs, and who may
  * use it is the header's Share: the Overview repeats none of them. The
  * description and the instructions write the page's draft in place; there is
@@ -44,6 +45,7 @@ import { useState } from 'react';
 import { useTranslations as useI18nTranslations } from '../../i18n';
 import { agentDisplayName } from '../../internal/components/agent-mark';
 import { cn } from '../../internal/lib/utils';
+import { InlineCodeText } from '../../markdown/inline-code-text';
 import { Input } from '../../primitives/input';
 import {
   Select,
@@ -54,12 +56,14 @@ import {
   SelectValue,
 } from '../../primitives/select';
 import { StatusDot } from '../../primitives/status';
+import { SettingsSectionHeader } from '../../primitives/settings-section-header';
 import { Switch } from '../../primitives/switch';
 import { AGENT_MODE_LABEL, AGENT_MODES } from '../sections/view/agent-editor-catalog';
 import { EditorSection, EditorSectionStyleProvider, SettingRow } from '../sections/view/agent-editor-primitives';
 import {
   type AgentConfigSectionKey,
   type AgentDraft,
+  useLocalizedAgentConfigCatalog,
 } from '../sections/view/agent-editor';
 import { AgentInstructions } from './agent-instructions';
 
@@ -148,7 +152,7 @@ function fitHeight(el: HTMLTextAreaElement | null) {
  * it becomes a field in the same box; Enter or leaving keeps the edit in the
  * draft, Escape puts back what was there.
  */
-function AboutDescription({
+export function AboutDescription({
   value,
   onChange,
   subagent,
@@ -163,7 +167,9 @@ function AboutDescription({
   const box = 'bg-popover block w-full rounded-md border px-3 py-2.5 text-left text-sm text-pretty';
   if (!onChange) {
     return value ? (
-      <p className={cn(box, 'text-foreground')}>{value}</p>
+      <p className={cn(box, 'text-foreground')}>
+        <InlineCodeText text={value} />
+      </p>
     ) : (
       <p className="text-muted-foreground text-sm">{tTabs('noDescription')}</p>
     );
@@ -220,7 +226,8 @@ function AboutDescription({
         value ? 'text-foreground' : 'text-muted-foreground',
       )}
     >
-      <span className="min-w-0 flex-1">{value || t('descriptionPlaceholder')}</span>
+      {/* Code spans as chips, as the Instructions below draw them; the field keeps the raw text. */}
+      <span className="min-w-0 flex-1">{value ? <InlineCodeText text={value} /> : t('descriptionPlaceholder')}</span>
       <PencilSimpleIcon className="text-muted-foreground group-hover/about:text-foreground mt-1.5 size-3.5 shrink-0 transition-colors duration-fast" />
     </button>
   );
@@ -398,7 +405,7 @@ function OverviewSettings({
   config: ProjectConfigSummary;
   block: AgentConfigBlock;
   editor?: AgentDraft;
-  /** The Space row: only with spaces on (`project_channels`, Work in progress). */
+  /** The Space row: only with spaces on (`chat`, Work in progress). */
   showSpace: boolean;
   sourcePath: string;
 }) {
@@ -419,7 +426,7 @@ function OverviewSettings({
   return (
     <>
       <EditorSection title={t('properties')}>
-        <SettingRow label={t('enabled')} help={t('enabledHelp', { name: agentDisplayName(agent.name) })}>
+        <SettingRow label={t('enabled')} help={t('enabledHelp', { name: agentDisplayName(agent.name, agent.title) })}>
           <div className="flex sm:justify-end">
             {editor ? (
               <Switch aria-label={t('enabled')} checked={enabled} onCheckedChange={(v) => editor.set('enabled', v ? undefined : false)} />
@@ -540,6 +547,7 @@ export function AgentOverview({
   onAskMyKortix,
   focusInstructions = false,
   showSpace = false,
+  part = 'about',
 }: {
   agent: Agent;
   config: ProjectConfigSummary;
@@ -554,9 +562,29 @@ export function AgentOverview({
   focusInstructions?: boolean;
   /** Show the Space row. Spaces are Work in progress: pass `useSpacesEnabled(projectId)`. */
   showSpace?: boolean;
+  /** The rail row: Overview (description and instructions) or Basics (properties and source). */
+  part?: 'about' | 'basics';
 }) {
   const t = useI18nTranslations('agentEditor.tabs');
   const tPage = useI18nTranslations('agentEditor.page');
+  const catalog = useLocalizedAgentConfigCatalog();
+  if (part === 'basics') {
+    return (
+      <EditorSectionStyleProvider value="panel">
+        <div className="mx-auto w-full max-w-3xl space-y-8">
+          <SettingsSectionHeader title={catalog.sections.find((s) => s.key === 'basics')?.label ?? 'Basics'} className="pb-1" />
+          <OverviewSettings
+            agent={agent}
+            config={config}
+            block={block}
+            editor={editor}
+            showSpace={showSpace}
+            sourcePath={sourcePath}
+          />
+        </div>
+      </EditorSectionStyleProvider>
+    );
+  }
   // Editable: the draft alone, so clearing the description shows it cleared.
   const description = (editor ? editor.oc.description : (block.behavior?.description ?? agent.description)) ?? '';
   return (
@@ -579,14 +607,6 @@ export function AgentOverview({
           onChange={editor ? (next) => editor.setOc('prompt', next) : undefined}
           onAskMyKortix={onAskMyKortix}
           autoFocus={focusInstructions}
-        />
-        <OverviewSettings
-          agent={agent}
-          config={config}
-          block={block}
-          editor={editor}
-          showSpace={showSpace}
-          sourcePath={sourcePath}
         />
       </div>
     </EditorSectionStyleProvider>

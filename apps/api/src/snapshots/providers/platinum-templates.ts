@@ -1,7 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import { platinumJson, platinumJsonResponse, isPlatinumConfigured } from '../../shared/platinum';
 import type { BuildLogTap } from './index';
-import { classifyPlatinumPollError, isTerminalPollError, retryAfterMsFromError } from './platinum-poll-classify';
+import { classifyPlatinumPollError, httpStatusFromMessage, isTerminalPollError, retryAfterMsFromError } from './platinum-poll-classify';
 import { exponentialBackoffMs } from '../../shared/backoff';
 
 const ACTIVATE_DEADLINE_MS = 12 * 60 * 1000; // build + activate ceiling
@@ -11,6 +11,10 @@ export interface PlatinumTemplate {
   id: string;
   name?: string;
   state?: string;
+  /** ISO time. The quota GC's only age signal: Platinum records no last use. */
+  createdAt?: string;
+  /** A Platinum-owned template every org can boot; not counted in the org cap. */
+  global?: boolean;
   /** Echoed by /from-build since Platinum #1326; absent on an older API. */
   kernel_modules?: string;
   /** Redacted podman output. Only on the by-id detail row (the list strips it);
@@ -285,7 +289,8 @@ export async function findTemplateById(
   try {
     return await client.json<PlatinumTemplate>(`/v1/templates/${id}`);
   } catch (err) {
-    if (/ -> 404(?:\s|$)/.test(err instanceof Error ? err.message : String(err))) return null;
+    // One status parser for the whole unit: any `->404` spacing variant counts.
+    if (httpStatusFromMessage(err instanceof Error ? err.message : String(err)) === 404) return null;
     throw err;
   }
 }
@@ -498,5 +503,6 @@ export async function preparePlatinumTemplateRegion(
  */
 export function isPlatinumAuthFailure(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
-  return /-> (401|403)\b/.test(err.message);
+  const status = httpStatusFromMessage(err.message);
+  return status === 401 || status === 403;
 }

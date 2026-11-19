@@ -4,18 +4,19 @@
  * Prod, 2026-11-02: one free project had 22 cron triggers pinned to models the
  * account could not use. Every fire was refused ("Model … is not available
  * for this account"), about 1,250 times a day for a month, and nothing
- * stopped them. With the project's `notification_center` flag off, nobody was
+ * stopped them. The project had no notification center then, so nobody was
  * told.
  *
  * The rule: when every run of a trigger for at least 24 hours failed with a
  * refusal only its owner can fix (the model, the plan, the manifest), and at
  * least 3 runs failed in a row, the trigger pauses itself
  * (`project_trigger_runtime.auto_paused_at`, the run-cap pause, KRTX-1721)
- * and its watchers hear once, flag or not. Resuming (`PATCH enabled: true`)
+ * and its watchers hear once. Resuming (`PATCH enabled: true`)
  * starts a new 24 hours.
  *
  * Deliberately NOT a reason to pause:
- * - credits: a top-up must bring the trigger back without a person resuming it;
+ * - credits, and no usable model at all: those pause at the first refused
+ *   fire and resume by themselves (trigger-setup-pause.ts);
  * - any platform fault (a git clone timeout, a box that never came up): the
  *   platform recovers, and the owner must not have to resume every trigger.
  *
@@ -29,6 +30,7 @@ import { logger } from '../../lib/logger';
 import { db } from '../../shared/db';
 import { alertTriggerAutoPaused } from './trigger-alerts';
 import { autoPauseTrigger, readTriggerAutoPause } from './trigger-run-caps';
+import { errorMessage } from '../../shared/error-message';
 
 /** The refusals only the trigger's owner can fix. */
 const OWNER_FIXABLE_SOURCES = [
@@ -36,6 +38,8 @@ const OWNER_FIXABLE_SOURCES = [
   'is not available for this account',
   // no_usable_model: 'No usable model for this account. Connect a provider key …'
   'no usable model for this account',
+  // no_usable_model, only private keys: 'Automations run without a person, so they use only …'
+  'automations run without a person',
   // The gateway's plan_upgrade_required: '"deepseek-v4.1-flash" requires a paid plan.'
   'requires a paid plan',
   // The manifest: 'workspace mode "read" requires restricted workspace artifacts'
@@ -142,7 +146,7 @@ export async function pauseTriggerIfAlwaysFailing(input: {
     logger.warn('[trigger-failure-pause] check failed', {
       project_id: input.projectId,
       slug: input.slug,
-      error: err instanceof Error ? err.message : String(err),
+      error: errorMessage(err),
     });
     return false;
   }

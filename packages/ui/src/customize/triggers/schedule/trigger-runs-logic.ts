@@ -78,9 +78,11 @@ export function bucketRuns(runs: readonly BucketRun[], count: number): RunBucket
   const timed = runs.filter((r) => Number.isFinite(at(r)));
   if (timed.length === 0 || count < 1) return [];
   const times = timed.map(at);
-  const min = Math.min(...times);
   const max = Math.max(...times);
-  const size = Math.max(1, max - min) / count;
+  // At least one minute per slice, ending at the newest run: runs inside one
+  // minute otherwise drew an axis that read "11:58 PM – 11:58 PM" on every tick.
+  const min = Math.min(Math.min(...times), max - count * 60_000);
+  const size = (max - min) / count;
   const groups: BucketRun[][] = Array.from({ length: count }, () => []);
   for (const run of timed)
     groups[Math.min(count - 1, Math.floor((at(run) - min) / size))]!.push(run);
@@ -130,4 +132,16 @@ export function isDefaultSource(
   source: ProjectTriggerRun['source'],
 ): boolean {
   return source === triggerType;
+}
+
+/** The App event a run fired on (an App event trigger), from its payload: name, the App's own id, the App. Null for any other run. */
+export function appEventOf(payload: Record<string, unknown>): { name: string; id: string | null; app: string } | null {
+  const event = payload.event;
+  const app = payload.app;
+  if (!event || typeof event !== 'object' || !app || typeof app !== 'object') return null;
+  const name = (event as { name?: unknown }).name;
+  const slug = (app as { slug?: unknown }).slug;
+  if (typeof name !== 'string' || !name || typeof slug !== 'string' || !slug) return null;
+  const id = (event as { id?: unknown }).id;
+  return { name, id: typeof id === 'string' && id ? id : null, app: slug };
 }

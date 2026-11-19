@@ -1,10 +1,11 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto';
 import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
-import { accountSecretGrants, accountSecretResources, sessionProviderSecretPools } from '@kortix/db';
+import { accountSecretGrants, accountSecretResources, projectSessions, sessionProviderSecretPools } from '@kortix/db';
 import type { SecretValueStatus } from '@kortix/api-contract';
 import { config } from '../config';
 import { db } from '../shared/db';
 import { accountMemberJoin } from '../iam/membership-read';
+import { routeAccounts } from './account-routing';
 
 const envelopeVersion = 'v1';
 
@@ -116,6 +117,17 @@ export async function clearAccountSecretCooldown(secretId: string, accountId: st
   return cleared.length > 0;
 }
 
+/** Store the outcome of a provider key check on its row (`verify_status`). Never changes the value. */
+export async function recordAccountKeyVerification(
+  secretId: string,
+  accountId: string,
+  result: { status: 'verified' | 'invalid' | 'unknown'; message: string; checkedAt: Date },
+): Promise<void> {
+  await db.update(accountSecretResources)
+    .set({ verifyStatus: result.status, verifyMessage: result.message.slice(0, 500), verifiedAt: result.checkedAt })
+    .where(and(eq(accountSecretResources.secretId, secretId), eq(accountSecretResources.accountId, accountId)));
+}
+
 /** Provider names visible to a member for model discovery. Never reads secret values. */
 export function secretUsableInProject(row: { projectId: string | null; accessMode: string }, projectId: string, granted: boolean): boolean {
   return (row.projectId === null || row.projectId === projectId) && (row.accessMode === 'project' || granted);
@@ -175,6 +187,8 @@ export interface UsableGatewaySecret {
   name: string;
   label: string;
   accessMode: string;
+  /** The last provider check of the key (`verify_status`): null when never checked. */
+  verifyStatus: string | null;
 }
 
 /** Which active gateway keys to read, and whose member grants count. */
@@ -203,6 +217,7 @@ function gatewaySecretRows(q: GatewaySecretQuery) {
     label: accountSecretResources.label,
     projectId: accountSecretResources.projectId,
     accessMode: accountSecretResources.accessMode,
+    verifyStatus: accountSecretResources.verifyStatus,
     grantUserId: accountSecretGrants.userId,
   }).from(accountSecretResources)
     .leftJoin(accountSecretGrants, and(
@@ -232,7 +247,10 @@ function usableRows(
     if (seen.has(row.secretId)) continue;
     if (!secretUsableInProject(row, q.projectId, personalKeyGranted(row.grantUserId, q.grantUserId))) continue;
     seen.add(row.secretId);
-    usable.push({ secretId: row.secretId, providerId: row.providerId, name: row.name, label: row.label, accessMode: row.accessMode });
+    usable.push({
+      secretId: row.secretId, providerId: row.providerId, name: row.name, label: row.label,
+      accessMode: row.accessMode, verifyStatus: row.verifyStatus,
+    });
   }
   return usable;
 }
@@ -359,19 +377,37 @@ export async function resolveDefaultProviderAccountSecret(
  * earliest one to free up.
  *
  * Resolved at use time, so a revoked grant or a deleted key affects the next call.
+ *
+ * With no usable key, `withheld` counts the provider's active keys in the
+ * project that the caller may not use (private to other members), so a
+ * refusal can say why instead of "not connected".
  */
 export async function resolveProjectSharedProviderSecrets(input: Omit<GatewaySecretQuery, 'providerId'> & {
   userId: string;
   providerId: string;
-}): Promise<{ coolingDown: boolean; retryAfterSeconds?: number; secrets: ResolvedAccountSecret[] }> {
+  /** The session whose call this is: its pinned account serves first (`account-routing.ts`). */
+  sessionId?: string | null;
+  /** A probe (a turn gate, the picker) never moves the session's pin. */
+  probe?: boolean;
+}): Promise<{ coolingDown: boolean; retryAfterSeconds?: number; withheld?: number; secrets: ResolvedAccountSecret[] }> {
   const usable = await listUsableGatewaySecrets(input);
-  if (!usable.length) return { coolingDown: false, secrets: [] };
+  if (!usable.length) {
+    // Only a member who may read the project learns that keys are withheld
+    // from them. Anyone else gets nothing, not even the count.
+    if (!(await memberMayReadProject(input.accountId, input.projectId, input.userId))) {
+      return { coolingDown: false, secrets: [] };
+    }
+    const inProject = (await gatewaySecretRows({ ...input, grantUserId: null }))
+      .filter((row) => row.projectId === null || row.projectId === input.projectId);
+    return { coolingDown: false, secrets: [], withheld: inProject.length };
+  }
   const rows = await db.select({
     secretId: accountSecretResources.secretId,
     valueEnc: accountSecretResources.valueEnc,
     updatedAt: accountSecretResources.updatedAt,
     cooldownUntil: accountSecretResources.cooldownUntil,
     cooldownProbeAt: accountSecretResources.cooldownProbeAt,
+    usage: accountSecretResources.usage,
   }).from(accountSecretResources).where(and(
     eq(accountSecretResources.accountId, input.accountId),
     eq(accountSecretResources.active, true),
@@ -389,9 +425,40 @@ export async function resolveProjectSharedProviderSecrets(input: Omit<GatewaySec
     const earliest = Math.min(...ordered.map((row) => row.cooldownUntil!.getTime()));
     return { coolingDown: true, retryAfterSeconds: Math.max(1, Math.ceil((earliest - now) / 1000)), secrets: [] };
   }
-  return { coolingDown: false, secrets: ready.map((row) => ({
+  const routed = await routeSessionAccounts(ready, { sessionId: input.sessionId, providerId: input.providerId, probe: input.probe });
+  return { coolingDown: false, secrets: routed.map((row) => ({
     secretId: row.secretId, label: row.label, value: readAccountSecret(input.accountId, row.secretId, row.valueEnc), updatedAt: row.updatedAt,
   })) };
+}
+
+/** `project_sessions.metadata` key: the account each provider's calls of the session use (`account-routing.ts`). */
+const ACCOUNT_PINS_KEY = 'provider_account_pins';
+
+async function sessionAccountPin(sessionId: string, providerId: string): Promise<string | undefined> {
+  const [row] = await db.select({ pin: sql<string | null>`${projectSessions.metadata} -> ${ACCOUNT_PINS_KEY} ->> ${providerId}` })
+    .from(projectSessions).where(eq(projectSessions.sessionId, sessionId)).limit(1);
+  return row?.pin ?? undefined;
+}
+
+/** Move the session to `secretId` for this provider. Atomic: other providers' pins stay. */
+async function pinSessionAccount(sessionId: string, providerId: string, secretId: string): Promise<void> {
+  await db.update(projectSessions).set({
+    metadata: sql`coalesce(${projectSessions.metadata}, '{}'::jsonb) || jsonb_build_object(${ACCOUNT_PINS_KEY}::text, coalesce(${projectSessions.metadata} -> ${ACCOUNT_PINS_KEY}, '{}'::jsonb) || jsonb_build_object(${providerId}::text, ${secretId}::text))`,
+  }).where(eq(projectSessions.sessionId, sessionId));
+}
+
+/**
+ * Route one call of a session (`account-routing.ts`): its pinned account first while that
+ * one has headroom, else the account with the most. A probe reads the pin and never moves it.
+ */
+async function routeSessionAccounts<T extends { secretId: string; usage?: unknown }>(
+  ready: T[],
+  route: { sessionId?: string | null; providerId: string; probe?: boolean },
+): Promise<T[]> {
+  const pinned = route.sessionId ? await sessionAccountPin(route.sessionId, route.providerId) : undefined;
+  const { ordered, pin } = routeAccounts(ready, pinned);
+  if (route.sessionId && !route.probe && pin && pin !== pinned) await pinSessionAccount(route.sessionId, route.providerId, pin);
+  return ordered;
 }
 
 /** Resolve at use time so grant revocation and deletion affect the next call. */
@@ -409,18 +476,15 @@ export async function resolveSessionProviderSecrets(input: {
   advanceIndex?: boolean;
 } & ({ sessionId: string; secretIds?: never } | { secretIds: string[]; sessionId?: never })): Promise<{ configured: boolean; coolingDown: boolean; retryAfterSeconds?: number; secrets: ResolvedAccountSecret[] }> {
   const grantUserId = input.grantUserId === undefined ? input.userId : input.grantUserId;
-  let pool: { secretIds: string[]; nextIndex: number } | undefined;
+  // The pool is the session's selection; which of its accounts serves is routed (sticky,
+  // usage-aware), no longer rotated per call (`nextIndex` is kept but unused).
+  let pool: { secretIds: string[] } | undefined;
   if (input.secretIds !== undefined) {
-    pool = { secretIds: input.secretIds, nextIndex: 1 };
-  } else if (input.advanceIndex === false) {
-    [pool] = await db.select({ secretIds: sessionProviderSecretPools.secretIds, nextIndex: sessionProviderSecretPools.nextIndex })
+    pool = { secretIds: input.secretIds };
+  } else {
+    [pool] = await db.select({ secretIds: sessionProviderSecretPools.secretIds })
       .from(sessionProviderSecretPools)
       .where(and(eq(sessionProviderSecretPools.sessionId, input.sessionId), eq(sessionProviderSecretPools.providerId, input.providerId))).limit(1);
-  } else {
-    [pool] = await db.update(sessionProviderSecretPools)
-      .set({ nextIndex: sql`case when ${sessionProviderSecretPools.nextIndex} >= 2147483646 then 0 else ${sessionProviderSecretPools.nextIndex} + 1 end` })
-      .where(and(eq(sessionProviderSecretPools.sessionId, input.sessionId), eq(sessionProviderSecretPools.providerId, input.providerId)))
-      .returning({ secretIds: sessionProviderSecretPools.secretIds, nextIndex: sessionProviderSecretPools.nextIndex });
   }
   if (!pool) return { configured: false, coolingDown: false, secrets: [] };
   if (!pool.secretIds.length) return { configured: true, coolingDown: false, secrets: [] };
@@ -432,6 +496,7 @@ export async function resolveSessionProviderSecrets(input: {
     updatedAt: accountSecretResources.updatedAt,
     cooldownUntil: accountSecretResources.cooldownUntil,
     cooldownProbeAt: accountSecretResources.cooldownProbeAt,
+    usage: accountSecretResources.usage,
     projectId: accountSecretResources.projectId,
     accessMode: accountSecretResources.accessMode,
     grantUserId: accountSecretGrants.userId,
@@ -466,9 +531,10 @@ export async function resolveSessionProviderSecrets(input: {
       secrets: [],
     };
   }
-  const first = (pool.nextIndex - 1) % ready.length;
-  const rotated = [...ready.slice(first), ...ready.slice(0, first)];
-  return { configured: true, coolingDown: false, secrets: rotated.map((row) => ({
+  const routed = await routeSessionAccounts(ready, {
+    sessionId: input.sessionId, providerId: input.providerId, probe: input.advanceIndex === false,
+  });
+  return { configured: true, coolingDown: false, secrets: routed.map((row) => ({
     secretId: row.secretId, label: row.label, value: readAccountSecret(input.accountId, row.secretId, row.valueEnc), updatedAt: row.updatedAt,
   })) };
 }

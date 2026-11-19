@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import type { ProjectSessionRow } from './lib/serializers';
 import {
   type GenerateSessionTitleOptions,
+  type TitleAttempt,
   extractPromptInfo,
   generateSessionTitleFromFirstPrompt,
   sanitizeGeneratedTitle,
@@ -182,7 +183,7 @@ describe('paste markup in title sources', () => {
         loadRow: async () => row({}),
         generate: async (_m, _a, promptText) => {
           seen.push(promptText);
-          return 'Red Build';
+          return { content: 'Red Build', transient: false };
         },
         mintKey: async () => ({ secret: 'sk', keyId: 'k' }),
         revokeKey: async () => {},
@@ -207,13 +208,13 @@ describe('generateSessionTitleFromFirstPrompt', () => {
     let generateCalls = 0;
     const options: GenerateSessionTitleOptions = {
       loadRow: async () =>
-        over.row ?? row({ opencode_model: 'amazon-bedrock/jp.anthropic.claude-opus-5' }),
+        over.row ?? row({ model: 'amazon-bedrock/jp.anthropic.claude-opus-5' }),
       generate:
         over.generate ??
         (async (model) => {
           generateCalls += 1;
           models.push(model);
-          return '"Set Up MS Graph"';
+          return { content: '"Set Up MS Graph"', transient: false };
         }),
       mintKey:
         over.mintKey ??
@@ -250,8 +251,8 @@ describe('generateSessionTitleFromFirstPrompt', () => {
     firstPromptText: 'Please set up the MS Graph OAuth2 connector',
   };
 
-  it('titles with the LIVE picked model (modelHint), not the stale opencode_model', async () => {
-    const h = harness(); // row.opencode_model is the stale/broken bedrock default
+  it('titles with the LIVE picked model (modelHint), not the stale model', async () => {
+    const h = harness(); // row.model is the stale/broken bedrock default
     await generateSessionTitleFromFirstPrompt(
       { ...input, modelHint: 'codex/gpt-5.6-sol' },
       h.options,
@@ -261,9 +262,9 @@ describe('generateSessionTitleFromFirstPrompt', () => {
     expect(h.revoked).toEqual(['key-1']);
   });
 
-  it('falls back to opencode_model, ahead of the resolved fallback, when the prompt carries no model', async () => {
+  it('falls back to model, ahead of the resolved fallback, when the prompt carries no model', async () => {
     const h = harness({
-      row: row({ opencode_model: 'kortix/glm-5.3-flash' }),
+      row: row({ model: 'kortix/glm-5.3-flash' }),
       fallbackModel: async () => 'never/used',
     });
     await generateSessionTitleFromFirstPrompt(input, h.options);
@@ -273,11 +274,14 @@ describe('generateSessionTitleFromFirstPrompt', () => {
   it('retries once with the servable fallback when the session model is rejected', async () => {
     const attempts: string[] = [];
     const h = harness({
-      row: row({ opencode_model: 'anthropic/claude-opus-4-8' }),
+      row: row({ model: 'anthropic/claude-opus-4-8' }),
       fallbackModel: async () => 'glm-5.3-flash',
       generate: async (model) => {
         attempts.push(model);
-        return model === 'glm-5.3-flash' ? '"Fallback Title"' : null;
+        return {
+          content: model === 'glm-5.3-flash' ? '"Fallback Title"' : null,
+          transient: true,
+        };
       },
     });
 
@@ -291,9 +295,9 @@ describe('generateSessionTitleFromFirstPrompt', () => {
 
   it('uses the first prompt as a deterministic title when both model attempts fail', async () => {
     const h = harness({
-      row: row({ opencode_model: 'anthropic/claude-opus-4-8' }),
+      row: row({ model: 'anthropic/claude-opus-4-8' }),
       fallbackModel: async () => 'glm-5.3-flash',
-      generate: async () => null,
+      generate: async () => ({ content: null, transient: true }),
     });
 
     await generateSessionTitleFromFirstPrompt(input, h.options);
@@ -305,14 +309,19 @@ describe('generateSessionTitleFromFirstPrompt', () => {
   // A dev session titled "can u build a website about marko kraemer": the one
   // title model closed the connection after 14.8 s, the account had no other
   // servable model, and the next call to the same model succeeded 3 s later.
+  // A CLOSED CONNECTION is transient — the same-model retry is right. A
+  // deterministic refusal (a 4xx) never is: see the no-retry case below.
   it('retries the same model once when no other model can serve', async () => {
     const attempts: string[] = [];
     const h = harness({
-      row: row({ opencode_model: 'kortix/deepseek-v4.1-flash' }),
+      row: row({ model: 'kortix/deepseek-v4.1-flash' }),
       fallbackModel: async () => null,
       generate: async (model) => {
         attempts.push(model);
-        return attempts.length === 1 ? null : 'Build Marko Kraemer Website';
+        return {
+          content: attempts.length === 1 ? null : 'Build Marko Kraemer Website',
+          transient: attempts.length === 1,
+        };
       },
     });
 
@@ -323,8 +332,56 @@ describe('generateSessionTitleFromFirstPrompt', () => {
     expect(h.fallbacks).toEqual([undefined]);
   });
 
+  // KRTX-4500: a deterministic refusal (a 400/401/402/404 — a disconnected
+  // provider key, an unpaid or unknown model) fails twice. Retrying the same
+  // model doubled the doomed calls and their warn lines on every session
+  // create (90 doubled 400s in 7 prod days).
+  it('does not repeat the same model when the first failure is deterministic', async () => {
+    const attempts: string[] = [];
+    const h = harness({
+      row: row({ model: 'codex/gpt-6.1-sol' }),
+      fallbackModel: async () => null,
+      generate: async (model) => {
+        attempts.push(model);
+        return { content: null, transient: false };
+      },
+    });
+
+    await generateSessionTitleFromFirstPrompt(input, h.options);
+
+    expect(attempts).toEqual(['codex/gpt-6.1-sol']);
+    expect(h.persisted).toEqual(['Please set up the MS Graph OAuth2 connector']);
+    expect(h.revoked).toEqual(['key-1']);
+  });
+
+  it('still tries a DIFFERENT servable model when the first failure is deterministic', async () => {
+    const calls: string[] = [];
+    const h = harness({
+      row: row({ model: 'codex/gpt-6.1-sol' }),
+      fallbackModel: async (_input, excluded) => {
+        calls.push(`fallback:excluded=${excluded}`);
+        return 'glm-5.3-flash';
+      },
+      generate: async (model) => {
+        calls.push(model);
+        return model === 'glm-5.3-flash'
+          ? { content: '"Fallback Title"', transient: false }
+          : { content: null, transient: false };
+      },
+    });
+
+    await generateSessionTitleFromFirstPrompt(input, h.options);
+
+    expect(calls).toEqual([
+      'codex/gpt-6.1-sol',
+      'fallback:excluded=codex/gpt-6.1-sol',
+      'glm-5.3-flash',
+    ]);
+    expect(h.persisted).toEqual(['Fallback Title']);
+  });
+
   it('marks a prompt-excerpt title as a fallback that a later prompt or turn end replaces', async () => {
-    const h = harness({ generate: async () => null });
+    const h = harness({ generate: async () => ({ content: null, transient: true }) });
 
     await generateSessionTitleFromFirstPrompt(input, h.options);
 
@@ -338,14 +395,17 @@ describe('generateSessionTitleFromFirstPrompt', () => {
     const fallbackRow = row({
       name: 'Please set up the MS Graph OAuth2 connector',
       title_fallback_attempts: 1,
-      opencode_model: 'kortix/glm-5.3-flash',
+      model: 'kortix/glm-5.3-flash',
     });
     const upgraded = harness({ row: fallbackRow });
     await generateSessionTitleFromFirstPrompt(input, upgraded.options);
     expect(upgraded.persisted).toEqual(['Set Up MS Graph']);
     expect(upgraded.fallbacks).toEqual([undefined]);
 
-    const failedAgain = harness({ row: fallbackRow, generate: async () => null });
+    const failedAgain = harness({
+      row: fallbackRow,
+      generate: async () => ({ content: null, transient: true }),
+    });
     await generateSessionTitleFromFirstPrompt(input, failedAgain.options);
     expect(failedAgain.fallbacks).toEqual([
       { attempts: 2, source: 'Please set up the MS Graph OAuth2 connector' },
@@ -357,7 +417,7 @@ describe('generateSessionTitleFromFirstPrompt', () => {
       row: row({
         name: 'Please set up the MS Graph OAuth2 connector',
         title_fallback_attempts: 3,
-        opencode_model: 'kortix/glm-5.3-flash',
+        model: 'kortix/glm-5.3-flash',
       }),
     });
     await generateSessionTitleFromFirstPrompt(input, h.options);
@@ -376,7 +436,7 @@ describe('generateSessionTitleFromFirstPrompt', () => {
   });
 
   it('never turns a placeholder-shaped first prompt back into the placeholder', async () => {
-    const h = harness({ generate: async () => null });
+    const h = harness({ generate: async () => ({ content: null, transient: true }) });
 
     await generateSessionTitleFromFirstPrompt(
       { ...input, firstPromptText: 'New agent planning document' },
@@ -390,9 +450,9 @@ describe('generateSessionTitleFromFirstPrompt', () => {
     'bounds model attempts and uses the deterministic title when the gateway hangs',
     async () => {
       const h = harness({
-        row: row({ opencode_model: 'anthropic/claude-opus-4-8' }),
+        row: row({ model: 'anthropic/claude-opus-4-8' }),
         fallbackModel: async () => 'glm-5.3-flash',
-        generate: async () => new Promise<string | null>(() => {}),
+        generate: async () => new Promise<TitleAttempt>(() => {}),
       });
       const options = { ...h.options, generationTimeoutMs: 5 } as GenerateSessionTitleOptions;
 
@@ -406,7 +466,7 @@ describe('generateSessionTitleFromFirstPrompt', () => {
 
   it('is idempotent — skips a session that already has a real title', async () => {
     const h = harness({
-      row: row({ name: 'Existing Title', opencode_model: 'codex/gpt-5.6-sol' }),
+      row: row({ name: 'Existing Title', model: 'codex/gpt-5.6-sol' }),
     });
     await generateSessionTitleFromFirstPrompt(input, h.options);
     expect(h.persisted).toEqual([]);
@@ -415,19 +475,19 @@ describe('generateSessionTitleFromFirstPrompt', () => {
 
   it('skips a user-named session (custom_name) but re-titles placeholder names', async () => {
     const custom = harness({
-      row: row({ custom_name: 'My Name', opencode_model: 'codex/gpt-5.6-sol' }),
+      row: row({ custom_name: 'My Name', model: 'codex/gpt-5.6-sol' }),
     });
     await generateSessionTitleFromFirstPrompt(input, custom.options);
     expect(custom.persisted).toEqual([]);
 
     const placeholder = harness({
-      row: row({ name: 'New session - 2026-07-28', opencode_model: 'codex/gpt-5.6-sol' }),
+      row: row({ name: 'New session - 2026-07-28', model: 'codex/gpt-5.6-sol' }),
     });
     await generateSessionTitleFromFirstPrompt(input, placeholder.options);
     expect(placeholder.persisted).toEqual(['Set Up MS Graph']);
 
     const agentPlaceholder = harness({
-      row: row({ name: 'New agent', opencode_model: 'codex/gpt-5.6-sol' }),
+      row: row({ name: 'New agent', model: 'codex/gpt-5.6-sol' }),
     });
     await generateSessionTitleFromFirstPrompt(input, agentPlaceholder.options);
     expect(agentPlaceholder.persisted).toEqual(['Set Up MS Graph']);
@@ -435,7 +495,7 @@ describe('generateSessionTitleFromFirstPrompt', () => {
 
   it('falls back to a resolved SERVABLE model when neither the turn nor the row names one', async () => {
     // Create-time and every server-side delivery arrive with no modelHint, and
-    // `opencode_model` is absent whenever session create resolved no default —
+    // `model` is absent whenever session create resolved no default —
     // without this fallback those sessions would stay untitled forever.
     const h = harness({ row: row({}), fallbackModel: async () => 'glm-5.3-flash' });
     await generateSessionTitleFromFirstPrompt(input, h.options);
@@ -461,10 +521,10 @@ describe('generateSessionTitleFromFirstPrompt', () => {
     // and raw workspace/channel ids — on a project-visible session.
     const prompts: string[] = [];
     const h = harness({
-      row: row({ opencode_model: 'kortix/glm-5.3-flash', title_source: 'bump the node version in CI' }),
+      row: row({ model: 'kortix/glm-5.3-flash', title_source: 'bump the node version in CI' }),
       generate: async (_model, _auth, promptText) => {
         prompts.push(promptText);
-        return 'Bump Node In CI';
+        return { content: 'Bump Node In CI', transient: false };
       },
     });
     await generateSessionTitleFromFirstPrompt(
@@ -479,14 +539,14 @@ describe('generateSessionTitleFromFirstPrompt', () => {
     // `metadata->>'name'` stringifies any jsonb scalar, so a row the TS gate
     // waved through would fail the UPDATE silently and re-bill on every prompt.
     const numericName = harness({
-      row: row({ name: 123, opencode_model: 'kortix/glm-5.3-flash' }),
+      row: row({ name: 123, model: 'kortix/glm-5.3-flash' }),
     });
     await generateSessionTitleFromFirstPrompt(input, numericName.options);
     expect(numericName.persisted).toEqual([]);
     expect(numericName.generateCalls()).toBe(0);
 
     const numericCustom = harness({
-      row: row({ custom_name: 123, opencode_model: 'kortix/glm-5.3-flash' }),
+      row: row({ custom_name: 123, model: 'kortix/glm-5.3-flash' }),
     });
     await generateSessionTitleFromFirstPrompt(input, numericCustom.options);
     expect(numericCustom.persisted).toEqual([]);
@@ -501,7 +561,7 @@ describe('generateSessionTitleFromFirstPrompt', () => {
     const h = harness({
       generate: async () => {
         await gate;
-        return 'Set Up MS Graph';
+        return { content: 'Set Up MS Graph', transient: false };
       },
     });
 

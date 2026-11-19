@@ -9,7 +9,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { haptics } from '@/lib/haptics';
-import { BottomSheetModal, BottomSheetTextInput, BottomSheetView } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { SheetRawTextInput, SheetView } from '@/components/kortix/sheet-parts';
 import {
   CheckIcon as Check,
   GlobeIcon as Globe,
@@ -120,7 +121,7 @@ export default function InstancesScreen() {
         className="flex-1 bg-background"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
       >
         <View className="px-4 pt-1">
           {/* Instances */}
@@ -310,7 +311,7 @@ const AddInstanceSheet = React.forwardRef<
       backdropComponent={(p) => <SheetBackdrop {...p} opacity={0.35} />}
       onDismiss={resetState}
     >
-      <BottomSheetView style={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: Math.max(insets.bottom, 20) + 16 }}>
+      <SheetView style={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: Math.max(insets.bottom, 20) + 16 }}>
         {isCreating && progress ? (
           <View className="px-1">
             <Text className="mb-2 text-[13px] font-roobert-medium uppercase tracking-wider text-muted-foreground/80">
@@ -375,7 +376,7 @@ const AddInstanceSheet = React.forwardRef<
               Enter the address of your Kortix instance.
             </Text>
 
-            <BottomSheetTextInput
+            <SheetRawTextInput
               value={customUrl}
               onChangeText={setCustomUrl}
               placeholder="http://localhost:8008/v1/p/sandbox/8000"
@@ -392,7 +393,7 @@ const AddInstanceSheet = React.forwardRef<
               }}
             />
 
-            <BottomSheetTextInput
+            <SheetRawTextInput
               value={customLabel}
               onChangeText={setCustomLabel}
               placeholder="Display name (optional)"
@@ -443,7 +444,7 @@ const AddInstanceSheet = React.forwardRef<
             </Pressable>
           </View>
         )}
-      </BottomSheetView>
+      </SheetView>
     </KortixBottomSheetModal>
   );
 });

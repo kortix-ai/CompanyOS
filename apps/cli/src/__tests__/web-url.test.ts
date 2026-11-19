@@ -75,19 +75,38 @@ describe('webDashboardUrl — authoritative env wins over derivation', () => {
 describe('projectWebUrl / sessionWebUrl', () => {
   test('prefers the server-provided dashboard_url', () => {
     expect(
-      projectWebUrl('https://api-prod.kortix.com/v1', 'p1', 'https://kortix.com/projects/p1'),
-    ).toBe('https://kortix.com/projects/p1');
+      projectWebUrl('https://api-prod.kortix.com/v1', 'p1', 'https://kortix.com/workspaces/p1'),
+    ).toBe('https://kortix.com/workspaces/p1');
   });
 
   test('without dashboard_url, derived host still never leaks api-prod', () => {
     expect(projectWebUrl('https://api-prod.kortix.com/v1', 'p1')).toBe(
-      'https://kortix.com/projects/p1',
+      'https://kortix.com/workspaces/p1',
     );
   });
 
   test('session url is built on the project url', () => {
     expect(sessionWebUrl('https://api-prod.kortix.com/v1', 'p1', 's1')).toBe(
-      'https://kortix.com/projects/p1/sessions/s1',
+      'https://kortix.com/workspaces/p1/sessions/s1',
+    );
+  });
+});
+
+describe('dashboard origins with a trailing slash are stripped, never doubled', () => {
+  // Characterization (KRTX-4813): the one trailing-slash strip the CLI applies
+  // to a dashboard origin — an authoritative value that ends in `/` must not
+  // leak the slash into a composed link.
+  test('an authoritative dashboardUrl ending in / loses the slash', () => {
+    expect(webDashboardUrl('https://api-prod.kortix.com/v1', 'https://dashboard.example.test/')).toBe(
+      'https://dashboard.example.test',
+    );
+  });
+
+  test('a server-provided dashboard_url ending in / is returned stripped, verbatim', () => {
+    // The third argument is the project's FULL dashboard URL when the server
+    // knows it — returned as-is (stripped), not composed with /workspaces.
+    expect(projectWebUrl('https://api-prod.kortix.com/v1', 'p1', 'https://kortix.com/')).toBe(
+      'https://kortix.com',
     );
   });
 });
@@ -98,10 +117,10 @@ describe('dashboard environment belongs to its API host', () => {
     process.env.KORTIX_FRONTEND_URL = 'https://kortix.com';
     process.env.KORTIX_DASHBOARD_URL = 'https://kortix.com';
     expect(sessionWebUrl('https://dev-api.kortix.com', 'p1', 's1')).toBe(
-      'https://dev.kortix.com/projects/p1/sessions/s1',
+      'https://dev.kortix.com/workspaces/p1/sessions/s1',
     );
     expect(projectWebUrl('https://staging-api.kortix.com', 'p1')).toBe(
-      'https://staging.kortix.com/projects/p1',
+      'https://staging.kortix.com/workspaces/p1',
     );
   });
 

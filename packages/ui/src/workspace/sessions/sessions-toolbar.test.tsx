@@ -7,7 +7,7 @@
  * type-checks, lints, renders a perfectly normal-looking button — and drops the
  * trigger's onClick and ref on the floor. Clicking it does nothing at all.
  *
- * Radix stamps `aria-haspopup="menu"` onto whatever DOM node the trigger
+ * The menu trigger stamps `aria-haspopup="menu"` onto whatever DOM node it
  * resolves to. If that lands on the <button>, the composition is right; if the
  * order is inverted the attribute never reaches the button.
  */
@@ -21,8 +21,8 @@ import type { ProjectSession } from '@kortix/sdk';
 import { SessionsToolbar } from './sessions-toolbar';
 
 const SESSIONS = [
-  { session_id: 's1', project_id: 'p1', status: 'running', metadata: {}, opencode_sessions: [] },
-  { session_id: 's2', project_id: 'p1', status: 'completed', metadata: {}, opencode_sessions: [] },
+  { session_id: 's1', project_id: 'p1', status: 'running', metadata: {}, runtime_sessions: [] },
+  { session_id: 's2', project_id: 'p1', status: 'completed', metadata: {}, runtime_sessions: [] },
 ] as unknown as ProjectSession[];
 
 function render(overrides: Partial<Parameters<typeof SessionsToolbar>[0]> = {}) {

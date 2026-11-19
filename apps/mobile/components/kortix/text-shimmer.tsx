@@ -29,20 +29,25 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
-import MaskedView from '@react-native-masked-view/masked-view';
+import MaskedViewNative from '@react-native-masked-view/masked-view';
+// masked-view 0.3.2 types its class on `NativeMethods`, which react-native
+// 0.88's strict types no longer export, so its JSX type does not resolve.
+const MaskedView = MaskedViewNative as unknown as React.ComponentType<
+  React.ComponentProps<typeof View> & { maskElement: React.ReactElement }
+>;
 import { LinearGradient } from 'expo-linear-gradient';
 import { useColorScheme } from 'nativewind';
 import Animated, {
   Easing,
   cancelAnimation,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withRepeat,
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
 import { KortixLoader } from '@/components/kortix/kortix-loader';
-import { useReduceMotion } from '@/components/session/dot-matrix/use-reduce-motion';
 import { Text } from '@/components/ui/text';
 import { SHIMMER, shimmerBandCenter, shimmerSpread } from '@/lib/session/activity';
 import { THEME, withAlpha } from '@/lib/utils/theme';
@@ -118,7 +123,7 @@ export const TextShimmer = memo(function TextShimmer({
   const { base, highlight } = useMemo(() => shimmerColors(tone, colorScheme === 'dark'), [tone, colorScheme]);
   const toolMotion = useContext(ToolMotionContext);
   const loopMotion = useContext(LoopMotionContext);
-  const reduceMotion = useReduceMotion();
+  const reduceMotion = useReducedMotion();
   // All hooks run every render: a mounted label's contexts flip when a turn
   // ends or a segment is appended. With motion off the sweep never starts.
   const motionOn = toolMotion && loopMotion && !reduceMotion;

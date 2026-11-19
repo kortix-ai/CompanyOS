@@ -3,12 +3,14 @@
 // byte-identical. The `unwrap` helper in `./shared` stays internal.
 
 export * from './accounts';
+export * from './workspaces';
 export * from './spaces';
 export * from './projects';
 export * from './skills';
 export * from './github';
 export * from './git-backend';
 export * from './access';
+export * from './asks';
 export * from './secrets';
 export * from './claude-subscription';
 export * from './account-secret-resources';
@@ -22,7 +24,6 @@ export * from './git-history';
 export * from './change-requests';
 export * from './sessions';
 export * from './manifest-spaces';
-export * from './spaces';
 export * from './session-groups';
 export * from './memory';
 export * from './session-prompt-actions';
@@ -63,6 +64,8 @@ export * from './apps-fleet';
 export * from './drives';
 export * from './project-search';
 export * from './goals';
+export * from './evals';
+export * from './calendar';
 export * from './goal-file';
 export * from './notifications';
 export * from './chrome';
@@ -73,8 +76,8 @@ export type {
   AccountRole,
   ProjectRole,
   ConnectorSharing,
-  ProjectGitConnection,
-  ProjectFileEntry,
+  ProjectGitConnection, WorkspaceGitConnection,
+  ProjectFileEntry, WorkspaceFileEntry,
 } from './shared';
 
 export * from './model-access';

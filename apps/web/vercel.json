@@ -1,7 +1,6 @@
 {
   "buildCommand": "next build",
   "installCommand": "pnpm install --frozen-lockfile",
-  "ignoreCommand": "bash scripts/vercel-ignore.sh",
   "regions": ["lhr1"],
   "rewrites": [
     {
@@ -10,10 +9,6 @@
     }
   ],
   "git": {
-    "deploymentEnabled": {
-      "main": false,
-      "staging": true,
-      "prod": false
-    }
+    "deploymentEnabled": false
   }
 }

@@ -31,7 +31,7 @@ import { useCopy } from '../../../internal/hooks/use-copy';
 import { Badge } from '../../../primitives/badge';
 import { Button } from '../../../primitives/button';
 import { Field, FieldDescription, FieldLabel } from '../../../primitives/field';
-import { InfoBanner } from '../../../primitives/info-banner';
+import { Alert as BannerAlert, AlertDescription as BannerAlertDescription} from '../../../primitives/alert';
 import { Input } from '../../../primitives/input';
 import Loading from '../../../primitives/loading';
 import { RadioGroup, RadioGroupItem } from '../../../primitives/radio-group';
@@ -122,6 +122,8 @@ export function EmailConnectForm({
   const managedAvailable = mode.data?.managed_available === true;
   // An older server omits it; the address preview then shows "…".
   const managedDomain = mode.data?.managed_domain || '…';
+  // Outside prod the server ends a managed address in `.<env>` (`agent.dev@`).
+  const managedSuffix = mode.data?.managed_suffix ?? '';
   const [homeChoice, setHome] = useState<Home | null>(null);
   // Until the user picks, the home follows what the deployment offers.
   const home: Home = managedAvailable ? (homeChoice ?? 'own') : 'own';
@@ -161,7 +163,7 @@ export function EmailConnectForm({
 
   const selected = home === 'own' ? ownDomains.find((d) => d.domain === domain) : undefined;
   const addressDomain = home === 'managed' ? managedDomain : !domain || domain === ADD_DOMAIN ? '…' : domain;
-  const address = `${username || 'agent'}@${addressDomain}`;
+  const address = `${username || 'agent'}${home === 'managed' ? managedSuffix : ''}@${addressDomain}`;
   const domainReady = home === 'managed' || (Boolean(domain) && domain !== ADD_DOMAIN && selected?.verified !== false);
 
   const submit = () => {
@@ -255,11 +257,14 @@ export function EmailConnectForm({
               aria-label={t('usernameLabel')}
               value={username}
               onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
-              placeholder="support"
+              placeholder="orders"
               autoComplete="off"
               spellCheck={false}
               className="min-w-0 flex-1"
             />
+            {home === 'managed' && managedSuffix ? (
+              <span className="text-muted-foreground text-sm">{managedSuffix}</span>
+            ) : null}
             <span className="text-muted-foreground text-sm">@</span>
             {home === 'managed' ? (
               <span className="bg-muted text-foreground flex h-9 min-w-0 flex-1 items-center rounded-md px-3 text-sm">
@@ -380,7 +385,7 @@ export function EmailConnectForm({
         ) : null}
       </section>
 
-      {error ? <InfoBanner tone="destructive">{error}</InfoBanner> : null}
+      {error ? <BannerAlert variant="destructive" ><BannerAlertDescription>{error}</BannerAlertDescription></BannerAlert> : null}
       <div className="flex justify-end">
         <Button onClick={submit} disabled={connect.isPending || mode.isLoading || (!attachOpen && !domainReady)}>
           {connect.isPending ? <Loading className="size-3.5 shrink-0" /> : null}

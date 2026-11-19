@@ -11,6 +11,14 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
+/** The checkout's workspace link: the `[kortix]` keys of its git config. */
+function gitLink(dir: string): Record<string, string> {
+  const out = Bun.spawnSync(['git', '-C', dir, 'config', '--local', '--get-regexp', '^kortix\\.'], { stdout: 'pipe' }).stdout.toString();
+  return Object.fromEntries(
+    out.split('\n').filter(Boolean).map((line) => [line.slice(0, line.indexOf(' ')), line.slice(line.indexOf(' ') + 1)]),
+  );
+}
+
 const CLI_ROOT = resolve(import.meta.dir, '..', '..');
 const CLI_ENTRY = join(CLI_ROOT, 'src', 'index.ts');
 const ORIGINAL_ENV = { ...process.env };
@@ -208,7 +216,7 @@ function startAppsServer(appsEnabled = true, serverGate = false) {
         authorization: req.headers.get('authorization'),
         body,
       });
-      if (url.pathname === '/v1/projects/proj_e2e' && req.method === 'GET') {
+      if (url.pathname === '/v1/workspaces/proj_e2e' && req.method === 'GET') {
         return Response.json({
           project_id: 'proj_e2e',
           account_id: 'account_1',
@@ -216,19 +224,19 @@ function startAppsServer(appsEnabled = true, serverGate = false) {
           experimental: { apps: appsEnabled },
         });
       }
-      if (serverGate && url.pathname.startsWith('/v1/projects/proj_e2e/apps')) {
+      if (serverGate && url.pathname.startsWith('/v1/workspaces/proj_e2e/apps')) {
         return Response.json(APPS_FEATURE_DISABLED_BODY, { status: 403 });
       }
-      if (url.pathname === '/v1/projects/proj_e2e/apps' && req.method === 'GET') {
+      if (url.pathname === '/v1/workspaces/proj_e2e/apps' && req.method === 'GET') {
         return Response.json({ apps: [{ ...app, access_mode: appAccessMode, access_revision: appAccessRevision }] });
       }
-      if (url.pathname === '/v1/projects/proj_e2e/apps' && req.method === 'POST') {
+      if (url.pathname === '/v1/workspaces/proj_e2e/apps' && req.method === 'POST') {
         return Response.json(app, { status: 201 });
       }
-      if (url.pathname === '/v1/projects/proj_e2e/apps/app_1' && req.method === 'GET') {
+      if (url.pathname === '/v1/workspaces/proj_e2e/apps/app_1' && req.method === 'GET') {
         return Response.json({ ...app, access_mode: appAccessMode, access_revision: appAccessRevision });
       }
-      if (url.pathname === '/v1/projects/proj_e2e/apps/app_1/access' && req.method === 'GET') {
+      if (url.pathname === '/v1/workspaces/proj_e2e/apps/app_1/access' && req.method === 'GET') {
         return Response.json({
           mode: 'private',
           revision: 1,
@@ -237,7 +245,7 @@ function startAppsServer(appsEnabled = true, serverGate = false) {
           password_configured: false,
         });
       }
-      if (url.pathname === '/v1/projects/proj_e2e/apps/app_1/access' && req.method === 'PATCH') {
+      if (url.pathname === '/v1/workspaces/proj_e2e/apps/app_1/access' && req.method === 'PATCH') {
         appAccessMode = String((body as Record<string, unknown>)?.mode ?? appAccessMode);
         appAccessRevision += 1;
         return Response.json({
@@ -248,13 +256,13 @@ function startAppsServer(appsEnabled = true, serverGate = false) {
           password_configured: false,
         });
       }
-      if (url.pathname === '/v1/projects/proj_e2e/apps/app_1/access-session' && req.method === 'POST') {
+      if (url.pathname === '/v1/workspaces/proj_e2e/apps/app_1/access-session' && req.method === 'POST') {
         return Response.json({
           url: 'https://dev-demo-route.apps.kortix.com/?__kortix_access=signed-test-token',
           expires_at: '2026-08-07T01:00:00.000Z',
         });
       }
-      if (url.pathname === '/v1/projects/proj_e2e/apps/artifacts' && req.method === 'POST') {
+      if (url.pathname === '/v1/workspaces/proj_e2e/apps/artifacts' && req.method === 'POST') {
         return Response.json({
           artifact: {
             artifact_id: 'artifact_1',
@@ -271,7 +279,7 @@ function startAppsServer(appsEnabled = true, serverGate = false) {
           upload: null,
         }, { status: 201 });
       }
-      if (url.pathname === '/v1/projects/proj_e2e/apps/app_1/deployments' && req.method === 'POST') {
+      if (url.pathname === '/v1/workspaces/proj_e2e/apps/app_1/deployments' && req.method === 'POST') {
         return Response.json({
           deployment_id: 'deployment_1',
           app_id: 'app_1',
@@ -343,6 +351,9 @@ function startCliE2eServer() {
     port: 0,
     fetch: async (req) => {
       const url = new URL(req.url);
+      // A port probe from the dev box (PTXP sends HEAD / and GET / to every new
+      // listening port) is not the CLI: the CLI never requests the bare root.
+      if (url.pathname === '/') return new Response(null, { status: 404 });
       const entry: { method: string; path: string; authorization: string | null; body?: unknown } = {
         method: req.method,
         path: `${url.pathname}${url.search}`,
@@ -360,17 +371,24 @@ function startCliE2eServer() {
       }
       requests.push(entry);
 
-      if (url.pathname === '/v1/projects' && req.method === 'GET') {
+      if (url.pathname === '/v1/me' && req.method === 'GET') {
+        return Response.json({
+          user_id: 'user_1',
+          email: 'user@example.test',
+          accounts: [{ account_id: 'account_1', slug: 'acct', name: 'Account', role: 'owner' }],
+        });
+      }
+      if (url.pathname === '/v1/workspaces' && req.method === 'GET') {
         return Response.json(archived ? [] : [projectSummary()]);
       }
-      if (url.pathname === '/v1/projects/proj_e2e' && req.method === 'GET') {
+      if (url.pathname === '/v1/workspaces/proj_e2e' && req.method === 'GET') {
         if (archived) return Response.json({ error: 'Not found' }, { status: 404 });
         return Response.json(projectSummary());
       }
-      if (url.pathname === '/v1/projects/missing' && req.method === 'GET') {
+      if (url.pathname === '/v1/workspaces/missing' && req.method === 'GET') {
         return Response.json({ error: 'Not found' }, { status: 404 });
       }
-      if (url.pathname === '/v1/projects/proj_e2e' && req.method === 'DELETE') {
+      if (url.pathname === '/v1/workspaces/proj_e2e' && req.method === 'DELETE') {
         archived = true;
         return Response.json({ ok: true, archived: true, repo_deleted: true });
       }
@@ -518,15 +536,14 @@ describe('kortix CLI black-box behavior', () => {
     expect(result.code).toBe(0);
     // Tier bands lead with the navigable hierarchy, then the linked project,
     // then the CLI tool itself (rendered as a labeled divider).
-    for (const tier of ['Where you are', 'The linked project', 'CLI']) {
+    for (const tier of ['Where you are', 'The linked workspace', 'CLI']) {
       expect(result.stdout).toContain(`\n  ${tier}`);
     }
     // Section headings within the tiers — the hierarchy comes first, top-down.
     for (const heading of [
       'Sign in — per host',
-      'Account — within the host',
-      'Project — within the account',
-      'Session — within the project',
+      'Workspace — within the host',
+      'Session — within the workspace',
       'Author & ship',
       'Agents & connectors',
       'Files, changes & triggers',
@@ -606,15 +623,15 @@ describe('kortix CLI black-box behavior', () => {
     });
     expect(requests.map((request) => [request.method, request.path])).toEqual([
       // `--help` reads the linked project's feature flags: flagged commands are listed only while on.
-      ['GET', '/v1/projects/proj_e2e'],
-      ['GET', '/v1/projects/proj_e2e'],
-      ['GET', '/v1/projects/proj_e2e/apps'],
-      ['GET', '/v1/projects/proj_e2e'],
-      ['GET', '/v1/projects/proj_e2e/apps'],
-      ['PATCH', '/v1/projects/proj_e2e/apps/app_1/access'],
-      ['GET', '/v1/projects/proj_e2e/apps/app_1'],
-      ['POST', '/v1/projects/proj_e2e/apps/artifacts'],
-      ['POST', '/v1/projects/proj_e2e/apps/app_1/deployments'],
+      ['GET', '/v1/workspaces/proj_e2e'],
+      ['GET', '/v1/workspaces/proj_e2e'],
+      ['GET', '/v1/workspaces/proj_e2e/apps'],
+      ['GET', '/v1/workspaces/proj_e2e'],
+      ['GET', '/v1/workspaces/proj_e2e/apps'],
+      ['PATCH', '/v1/workspaces/proj_e2e/apps/app_1/access'],
+      ['GET', '/v1/workspaces/proj_e2e/apps/app_1'],
+      ['POST', '/v1/workspaces/proj_e2e/apps/artifacts'],
+      ['POST', '/v1/workspaces/proj_e2e/apps/app_1/deployments'],
     ]);
     expect(requests[5]?.body).toEqual({ mode: 'password', password: 'test-password-123' });
     expect(requests[7]?.body).toEqual({ kind: 'oci_image', image: 'ghcr.io/kortix/demo:1' });
@@ -679,7 +696,7 @@ describe('kortix CLI black-box behavior', () => {
     });
     expect(requests.at(-2)).toMatchObject({
       method: 'PATCH',
-      path: '/v1/projects/proj_e2e/apps/app_1/access',
+      path: '/v1/workspaces/proj_e2e/apps/app_1/access',
       body: {
         mode: 'restricted',
         member_ids: ['11111111-1111-4111-8111-111111111111'],
@@ -688,7 +705,7 @@ describe('kortix CLI black-box behavior', () => {
     });
     expect(requests.at(-1)).toMatchObject({
       method: 'GET',
-      path: '/v1/projects/proj_e2e/apps/app_1',
+      path: '/v1/workspaces/proj_e2e/apps/app_1',
     });
 
     const accessLink = await runCli([
@@ -709,11 +726,11 @@ describe('kortix CLI black-box behavior', () => {
     });
     expect(requests.at(-2)).toMatchObject({
       method: 'GET',
-      path: '/v1/projects/proj_e2e/apps',
+      path: '/v1/workspaces/proj_e2e/apps',
     });
     expect(requests.at(-1)).toMatchObject({
       method: 'POST',
-      path: '/v1/projects/proj_e2e/apps/app_1/access-session',
+      path: '/v1/workspaces/proj_e2e/apps/app_1/access-session',
     });
   }, 20_000);
 
@@ -733,13 +750,13 @@ describe('kortix CLI black-box behavior', () => {
     const help = await runCli(['apps', '--help', '--project', 'proj_e2e'], tmp, env);
     expect(help.code).toBe(0);
     expect(help.stdout).toContain('Usage: kortix apps');
-    expect(help.stdout).toContain('private (default), project, restricted, public, or password');
+    expect(help.stdout).toContain('private (default), workspace, restricted, public, or password');
 
     const listed = await runCli(['apps', 'list', '--project', 'proj_e2e'], tmp, env);
     expect(listed.code).toBe(0);
     expect(listed.stdout).toContain('demo');
     expect(listed.stderr).not.toContain('not enabled');
-    expect(requests.some((r) => r.method === 'GET' && r.path === '/v1/projects/proj_e2e/apps')).toBe(
+    expect(requests.some((r) => r.method === 'GET' && r.path === '/v1/workspaces/proj_e2e/apps')).toBe(
       true,
     );
   }, 20_000);
@@ -761,8 +778,8 @@ describe('kortix CLI black-box behavior', () => {
     expect(listed.stderr).not.toContain('HTTP 403');
     expect(listed.stdout).not.toContain('No Apps deployed');
     expect(requests.map((request) => [request.method, request.path])).toEqual([
-      ['GET', '/v1/projects/proj_e2e'],
-      ['GET', '/v1/projects/proj_e2e/apps'],
+      ['GET', '/v1/workspaces/proj_e2e'],
+      ['GET', '/v1/workspaces/proj_e2e/apps'],
     ]);
   }, 20_000);
 
@@ -783,7 +800,7 @@ describe('kortix CLI black-box behavior', () => {
 
     expect(result.code).toBe(2);
     expect(result.stderr).toContain('unknown command `use`');
-    expect(result.stderr).toContain('kortix init <name>');
+    expect(result.stderr).toContain('kortix workspaces create <name>');
     expect(result.stdout).not.toContain('Scaffolded');
     expect(existsSync(join(tmp, 'use'))).toBe(false);
   });
@@ -912,11 +929,16 @@ describe('kortix CLI black-box behavior', () => {
     expect(listBeforeLink.code).toBe(0);
     expect(JSON.parse(listBeforeLink.stdout)).toEqual([expect.objectContaining({ project_id: 'proj_e2e', name: 'E2E Project' })]);
 
+    // The link lives in the checkout's git config, so linking needs a git checkout.
+    const notGit = await runCli(['projects', 'link', 'proj_e2e'], root, { KORTIX_CONFIG_FILE: configFile });
+    expect(notGit.code).toBe(1);
+    expect(notGit.stderr).toContain('not inside a git checkout');
+    expect(Bun.spawnSync(['git', 'init', '-q', '-b', 'main'], { cwd: root }).exitCode).toBe(0);
     const link = await runCli(['projects', 'link', 'proj_e2e'], root, { KORTIX_CONFIG_FILE: configFile });
     expect(link.code).toBe(0);
     expect(link.stdout).toContain('Linked');
-    const linked = JSON.parse(readFileSync(join(root, '.kortix', 'link.json'), 'utf8'));
-    expect(linked).toMatchObject({ project_id: 'proj_e2e', account_id: 'account_1', host: 'test', host_url: apiBase });
+    expect(gitLink(root)).toMatchObject({ 'kortix.workspace': 'proj_e2e', 'kortix.account': 'account_1', 'kortix.host': 'test', 'kortix.host-url': apiBase });
+    expect(existsSync(join(root, '.kortix'))).toBe(false);
 
     const info = await runCli(['projects', 'info', '--json'], root, { KORTIX_CONFIG_FILE: configFile });
     expect(info.code).toBe(0);
@@ -939,11 +961,11 @@ describe('kortix CLI black-box behavior', () => {
 
     const unlink = await runCli(['projects', 'unlink'], root, { KORTIX_CONFIG_FILE: configFile });
     expect(unlink.code).toBe(0);
-    expect(existsSync(join(root, '.kortix', 'link.json'))).toBe(false);
+    expect(gitLink(root)).toEqual({});
 
     const relink = await runCli(['projects', 'link', 'proj_e2e'], root, { KORTIX_CONFIG_FILE: configFile });
     expect(relink.code).toBe(0);
-    expect(existsSync(join(root, '.kortix', 'link.json'))).toBe(true);
+    expect(gitLink(root)['kortix.workspace']).toBe('proj_e2e');
 
     const removeProject = await runCli(['projects', 'rm', 'proj_e2e', '--yes'], root, { KORTIX_CONFIG_FILE: configFile });
     expect(removeProject.code).toBe(0);
@@ -952,19 +974,20 @@ describe('kortix CLI black-box behavior', () => {
     expect(removeProject.stdout).toContain('Deleted');
     expect(removeProject.stdout).not.toContain('Archived');
     expect(removeProject.stdout).toContain('managed git repo deleted');
-    expect(existsSync(join(root, '.kortix', 'link.json'))).toBe(false);
+    expect(gitLink(root)).toEqual({});
 
     expect(requests.map((r) => [r.method, r.path, r.body ?? null])).toEqual([
-      // `projects ls` is scoped to the active account; by-id routes are not.
-      ['GET', '/v1/projects?account_id=account_1', null],
-      ['GET', '/v1/projects/proj_e2e', null],
-      ['GET', '/v1/projects/proj_e2e', null],
-      ['GET', '/v1/projects/proj_e2e/git/connection', null],
+      // `projects ls` (the older name) is scoped to the active account; by-id
+      // routes are not.
+      ['GET', '/v1/workspaces?account_id=account_1', null],
+      ['GET', '/v1/workspaces/proj_e2e', null],
+      ['GET', '/v1/workspaces/proj_e2e', null],
+      ['GET', '/v1/workspaces/proj_e2e/git/connection', null],
       ['GET', '/v1/marketplace/items?query=agent-browser&source=kortix', null],
       ['GET', '/v1/marketplace/items/agent-browser', null],
-      ['GET', '/v1/projects/proj_e2e', null],
-      ['GET', '/v1/projects/proj_e2e', null],
-      ['DELETE', '/v1/projects/proj_e2e', null],
+      ['GET', '/v1/workspaces/proj_e2e', null],
+      ['GET', '/v1/workspaces/proj_e2e', null],
+      ['DELETE', '/v1/workspaces/proj_e2e', null],
     ]);
     expect(requests.every((r) => r.authorization === 'Bearer tok_blackbox')).toBe(true);
   }, 30_000);
@@ -980,6 +1003,7 @@ describe('kortix CLI black-box behavior', () => {
     const init = await runCli(['init', 'edge-e2e', '--yes', '--no-git']);
     expect(init.code).toBe(0);
     const root = join(tmp, 'edge-e2e');
+    expect(Bun.spawnSync(['git', 'init', '-q', '-b', 'main'], { cwd: root }).exitCode).toBe(0);
 
     const missingProject = await runCli(['projects', 'link', 'missing'], root, { KORTIX_CONFIG_FILE: configFile });
     expect(missingProject.code).toBe(1);
@@ -994,7 +1018,7 @@ describe('kortix CLI black-box behavior', () => {
     expect(add.stderr).toContain('unknown command `add`');
 
     expect(requests.map((r) => [r.method, r.path, r.body ?? null])).toEqual([
-      ['GET', '/v1/projects/missing', null],
+      ['GET', '/v1/workspaces/missing', null],
       ['GET', '/v1/marketplace/items/does-not-exist', null],
       ['GET', '/v1/marketplace/items?query=does-not-exist', null],
     ]);

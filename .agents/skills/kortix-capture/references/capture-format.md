@@ -185,6 +185,16 @@ null), `domain_icon`, `display` (`x`, `y`, `w`, `h`, and since multi-display
 
 `displays` lists every connected display at the last capture, the focused one first.
 
+`machine` (optional, every field nullable) describes the computer for support:
+`os_name` (`Windows 11 Pro 24H2`, `macOS 26.0`, `Ubuntu 24.04.1 LTS`), `os_build`
+(Windows `26200.9448`, macOS `25A354`, Linux the kernel release), `cpu`, `cpu_cores`
+(logical), `memory_bytes`, `disk_free_bytes` and `disk_total_bytes` (the library's
+volume), `gpus` (Windows display adapters; empty elsewhere), `booted_at_ms` (to the
+minute), `timezone`, `utc_offset`, `locale`. It holds no names. The app collects it
+at most hourly on the sync thread (`src/machine_info.rs`). `os_version` is the version
+number (Windows `10.0.26200.9448`); an older app sent the raw
+`Microsoft Windows [Version …]` line, which the API cleans.
+
 `device_id` is 32 hex characters of SHA-256(`kortix-capture/device/v2\n`,
 machine key, `\n`, prefix): one machine keeps one id under one prefix, and a
 different prefix gives a different id. With credentials from an issuer the device
@@ -207,11 +217,40 @@ every connected display, the focused one first), `appVersion`, `actionsRecording
 `capture` (`intervalMs`, `maxHeight`: the rate and size in force),
 `policy` (null, or the policy in force: `source`, `updatedAtMs`, `fetchedAtMs`),
 `host` (`awakeSinceMs`: when the computer last woke from sleep, or the app started),
-plus `reportedAtMs`. status.json goes out every 15 s. A reader
+`update` (null without the machine service, else its self-update state: see the
+release runbook, section Updater), `resources` (below), plus `reportedAtMs`. status.json goes out every 15 s. A reader
 shows a device as offline when `reportedAtMs` is older than 120 s. After the
 policy in force changes, the device writes status.json about 15 s later (once its
 recorders followed the change), so a policy change shows within ~80 s. status.json is
 plaintext JSON even when encryption is on; it holds no recorded content.
+
+`resources` is what Kortix Capture itself costs the computer (`src/self_usage.rs`).
+The sync thread reads the process table once a minute and reports the last 10
+samples. It counts every process whose executable starts with `kortix-capture` or
+`kortix-backend` (`.exe` on Windows), or is `Kortix Capture` (the macOS app), and
+that this user can read: on Windows this session and session 0, on macOS and Linux
+this user's processes. A machine service that runs as SYSTEM or root is not
+readable, so it is not counted.
+
+```json
+"resources": {
+  "windowMs": 600000, "samples": 10,
+  "cpuPercentAvg": 4.2, "cpuPercentPeak": 18.0,
+  "memoryBytes": 325058560, "memoryBytesPeak": 331350016, "processCount": 7,
+  "processes": [{"name": "kortix-capture-engine", "count": 2, "cpuPercentAvg": 3.1, "memoryBytes": 184549376}],
+  "sampledAtMs": 1790845320000, "readMicros": 310
+}
+```
+
+- CPU is a percentage of one core (100 = one core busy), averaged over the window
+  (`cpuPercentAvg`) and for its busiest minute (`cpuPercentPeak`).
+- Memory is the working set (Windows) or resident size (macOS, Linux) at the last
+  sample; `memoryBytesPeak` is the highest total in the window.
+- `processes`: one entry per executable name (lower case, no `.exe`), the most CPU
+  first, at most 16. `count` 0: every process of that name exited.
+- `readMicros`: the wall time of the last process table read.
+- null during the first minute after the app starts, and after `sync now` from
+  the command line. Absent from app versions without it.
 
 ## policy.json
 
@@ -224,7 +263,7 @@ exclusions or pause. A device never widens what the policy allows.
 ```json
 {"schema": 2, "layers": {"screen": true, "actions": true, "audio": false},
  "privacy": {"redact_pii": false}, "retention": {"local_hours": 0, "remote_days": 0},
- "recording": {"paused": false, "paused_until_ms": null, "interval_ms": 1000, "max_height": 1440},
+ "recording": {"paused": false, "paused_until_ms": null, "interval_ms": 1000, "max_height": 1440, "text_recognition": null},
  "notice": "Text the device shows the person being recorded", "updated_at_ms": 0}
 ```
 
@@ -238,11 +277,14 @@ exclusions or pause. A device never widens what the policy allows.
   items stay in the bucket (`sync.remote_retention_days`).
 - `recording.paused` pauses every layer, until `paused_until_ms` or, when null,
   until the operator lifts it.
-- `recording.interval_ms` (500..10000, clamped) and `recording.max_height`
-  (720, 1080, 1440 or 2160; the width follows: 1280, 1920, 2560, 3840) set the
-  screen capture rate and size on every device, higher or lower than the
-  device's own value. Absent or null keeps the device's own setting.
+- `recording.max_height` (720, 1080, 1440 or 2160; the width follows: 1280,
+  1920, 2560, 3840) sets the screenshot size on every device. Absent or null
+  keeps the device's own setting. `recording.interval_ms` is read and ignored
+  by Capture 0.15.5 and later: the app sets its own frame rate.
   `status.json` `capture` reports the values in force.
+- `recording.text_recognition` (`accurate`, `fast` or `off`) sets screen text
+  recognition on every device. `off` reads no screen text, the least CPU per
+  frame. Absent or null keeps the device's own setting.
 - `notice` is shown in the tray menu and the settings window. The person on the
   device always sees that recording is on and which layers run.
 - The policy applies while the device syncs to the bucket. Without a reachable

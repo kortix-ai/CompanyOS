@@ -1,9 +1,11 @@
-import { connectors, projectTriggerRuntime, projects } from '@kortix/db';
+import { connectors, projectTriggerRuntime } from '@kortix/db';
 import { and, eq, gt, or, sql } from 'drizzle-orm';
 import { qualifiedColumn } from '../../shared/sql-qualified-column';
 import { db } from '../../shared/db';
 import type { ProjectRow } from './serializers';
 import { schedulerHealth, connectorProjectConcurrency, connectorProjectTimeoutMs, manifestCatalogBatchSize, manifestDiscoveryBatchSize, mapWithConcurrency, withTimeout } from './trigger-scheduler-state';
+import { projectsView } from '../../workspaces/rows';
+import { errorMessage } from '../../shared/error-message';
 
 // A new leader starts both cursors at a random project. They live in this
 // process, and autoscaling moves the leader every few hours: from a fixed start
@@ -19,25 +21,25 @@ async function selectManifestCatalogProjects(): Promise<ProjectRow[]> {
     sql`exists (
       select 1
       from ${projectTriggerRuntime}
-      where ${projectTriggerRuntime.projectId} = ${qualifiedColumn(projects.projectId)}
+      where ${projectTriggerRuntime.projectId} = ${qualifiedColumn(projectsView.projectId)}
     )`,
     sql`exists (
       select 1
       from ${connectors}
-      where ${connectors.projectId} = ${qualifiedColumn(projects.projectId)}
+      where ${connectors.projectId} = ${qualifiedColumn(projectsView.projectId)}
     )`,
   );
   const rows = await db
     .select()
-    .from(projects)
+    .from(projectsView)
     .where(
       and(
-        eq(projects.status, 'active'),
-        manifestCatalogCursor ? gt(projects.projectId, manifestCatalogCursor) : undefined,
+        eq(projectsView.status, 'active'),
+        manifestCatalogCursor ? gt(projectsView.projectId, manifestCatalogCursor) : undefined,
         catalogPredicate,
       ),
     )
-    .orderBy(projects.projectId)
+    .orderBy(projectsView.projectId)
     .limit(limit);
 
   manifestCatalogCursor = rows.length < limit ? null : (rows.at(-1)?.projectId ?? null);
@@ -56,13 +58,13 @@ async function selectManifestDiscoveryProjects(): Promise<ProjectRow[]> {
   const limit = manifestDiscoveryBatchSize();
   const rows = await db
     .select()
-    .from(projects)
+    .from(projectsView)
     .where(
       manifestDiscoveryCursor
-        ? and(eq(projects.status, 'active'), gt(projects.projectId, manifestDiscoveryCursor))
-        : eq(projects.status, 'active'),
+        ? and(eq(projectsView.status, 'active'), gt(projectsView.projectId, manifestDiscoveryCursor))
+        : eq(projectsView.status, 'active'),
     )
-    .orderBy(projects.projectId)
+    .orderBy(projectsView.projectId)
     .limit(limit);
 
   manifestDiscoveryCursor = rows.length < limit ? null : (rows.at(-1)?.projectId ?? null);
@@ -107,7 +109,7 @@ export async function runProjectConnectorSweep(): Promise<{
         } catch (error) {
           console.warn('[project-connectors] project reconcile failed', {
             projectId: project.projectId,
-            error: error instanceof Error ? error.message : String(error),
+            error: errorMessage(error),
           });
           return { synced: 0, errors: 1 };
         }
@@ -123,9 +125,9 @@ export async function runProjectConnectorSweep(): Promise<{
   } catch (error) {
     status = 'failed';
     out.errors += 1;
-    schedulerHealth.lastCatalogSweepError = error instanceof Error ? error.message : String(error);
+    schedulerHealth.lastCatalogSweepError = errorMessage(error);
     console.error('[project-connectors] sweep failed', {
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
     });
     return out;
   } finally {

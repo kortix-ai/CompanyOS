@@ -1,9 +1,7 @@
-import { ledgerExists } from '../src/ledger-exists';
-import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type pg from 'pg';
+import { LEDGER_TABLE, ledgerExists, renameMigration, reorderMigration, withLedgerLock } from './migration-ledger';
 import { withClient } from '../src/with-client';
+import { verifyMigrationChecksum } from './ledger-repair';
 
 const CONNECTOR_POLICY_MIGRATION = {
   // Historical migration identity. The cutover migration runs later and must
@@ -106,15 +104,8 @@ export function planMigrationLedgerRepair(
 }
 
 function verifyRepairArtifacts(migrationsDir: string): void {
-  const artifacts = [CONNECTOR_POLICY_MIGRATION, ...MIGRATION_RENAMES];
-  for (const artifact of artifacts) {
-    const path = join(migrationsDir, artifact.filename);
-    const actual = createHash('sha256').update(readFileSync(path)).digest('hex');
-    if (actual !== artifact.sha256) {
-      throw new Error(
-        `Migration ledger repair checksum mismatch for ${artifact.filename}: ${actual}.`,
-      );
-    }
+  for (const artifact of [CONNECTOR_POLICY_MIGRATION, ...MIGRATION_RENAMES]) {
+    verifyMigrationChecksum(migrationsDir, artifact);
   }
 }
 
@@ -123,7 +114,7 @@ async function readRepairRows(client: pg.Client): Promise<MigrationLedgerRow[]> 
 
   const result = await client.query<{ name: string; run_on: Date }>(
     `select name, run_on
-       from kortix_migrations.pgmigrations
+       from ${LEDGER_TABLE}
       where name = any($1::text[])
       order by run_on, id`,
     [REPAIR_NAMES],
@@ -138,15 +129,9 @@ async function inspectRepairPlan(databaseUrl: string): Promise<MigrationLedgerRe
 }
 
 async function reconcileRepairPlan(databaseUrl: string): Promise<boolean> {
-  return withClient(databaseUrl, async (client) => {
-  try {
-    await client.query('begin');
-    await client.query('lock table kortix_migrations.pgmigrations in exclusive mode');
+  return withLedgerLock(databaseUrl, false, async (client) => {
     const plan = planMigrationLedgerRepair(await readRepairRows(client));
-    if (!plan) {
-      await client.query('commit');
-      return false;
-    }
+    if (!plan) return false;
     if (plan.connectorMigrationIsMissing) {
       throw new Error(
         `Migration ledger repair requires ${CONNECTOR_POLICY_MIGRATION.name} to be applied first.`,
@@ -154,42 +139,22 @@ async function reconcileRepairPlan(databaseUrl: string): Promise<boolean> {
     }
 
     for (const { legacyName, currentName } of plan.renames) {
-      const result = await client.query(
-        `update kortix_migrations.pgmigrations
-            set name = $2
-          where name = $1
-            and not exists (
-              select 1
-                from kortix_migrations.pgmigrations
-               where name = $2
-            )`,
-        [legacyName, currentName],
-      );
-      if (result.rowCount !== 1) {
+      if ((await renameMigration(client, legacyName, currentName)) !== 1) {
         throw new Error(`Migration ledger repair could not rename ${legacyName}.`);
       }
     }
 
     if (plan.legacyRunOn) {
-      const orderResult = await client.query(
-        `update kortix_migrations.pgmigrations
-            set run_on = $2::timestamptz - interval '1 millisecond'
-          where name = $1`,
-        [CONNECTOR_POLICY_MIGRATION.name, plan.legacyRunOn.toISOString()],
-      );
-      if (orderResult.rowCount !== 1) {
+      if (
+        (await reorderMigration(client, CONNECTOR_POLICY_MIGRATION.name, plan.legacyRunOn.toISOString())) !== 1
+      ) {
         throw new Error(
           `Migration ledger repair could not reorder ${CONNECTOR_POLICY_MIGRATION.name}.`,
         );
       }
     }
 
-    await client.query('commit');
     return true;
-  } catch (error) {
-    await client.query('rollback');
-    throw error;
-  }
   });
 }
 

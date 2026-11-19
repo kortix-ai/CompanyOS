@@ -4,7 +4,7 @@
  * as the animated "working" shimmer. A live running call keeps the shimmer.
  */
 
-import { afterEach, beforeAll, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { toolCallBlock, type ToolPart } from '@kortix/sdk';
@@ -90,7 +90,6 @@ mock.module('../shared/result-card', () => ({ ToolResultCard: Passthrough }));
 mock.module('../tool-error', () => ({ ToolError: none }));
 mock.module('../shared/surface', () => ({
   TOOL_INDENT: 0,
-  ToolCardFrame: Passthrough,
   ToolCaret: none,
   ToolCopyButton: none,
   ToolDetailContext: React.createContext(null),
@@ -98,7 +97,7 @@ mock.module('../shared/surface', () => ({
   ToolRowVariantContext: React.createContext({ chain: false, hideIcon: false }),
   ToolScroll: Passthrough,
   ToolSurfaceContext: React.createContext('inline'),
-  useToolCardFrame: () => null,
+  useToolCardFrame: () => ({ borderWidth: 1, borderColor: 'bd', backgroundColor: 'bg', borderRadius: 8 }),
   useToolCardPad: () => 0,
   useToolIndent: () => 0,
   useToolRowVariant: () => ({ chain: false, hideIcon: false }),
@@ -246,5 +245,29 @@ describe('empty-output bodies (project-get, triggers)', () => {
       expect(shimmers()).toHaveLength(0);
       expect(words()).toContain('No output');
     });
+  }
+});
+
+
+test('a tool row changes from settled to live without changing Hook order', () => {
+  const errors: string[] = [];
+  const error = spyOn(console, 'error').mockImplementation((...args) => {
+    errors.push(args.map(String).join(' '));
+  });
+  const call = toolCallBlock({ type: 'tool', id: 'p', callID: 'c', tool: 'triggers', state: { status: 'running', input: {} } } as unknown as ToolPart);
+  const row = (running: boolean) => React.createElement(
+    infrastructure.ToolRunningContext.Provider,
+    { value: running },
+    React.createElement(ToolMotionContext.Provider, { value: true },
+      React.createElement(TriggersTool as unknown as React.ComponentType<Record<string, unknown>>, { call })),
+  );
+  try {
+    act(() => { tree = create(row(false)); });
+    expect(shimmers()).toHaveLength(0);
+    act(() => { tree!.update(row(true)); });
+    expect(shimmers().length).toBeGreaterThan(0);
+    expect(errors.some((message) => message.includes('change in the order of Hooks'))).toBe(false);
+  } finally {
+    error.mockRestore();
   }
 });

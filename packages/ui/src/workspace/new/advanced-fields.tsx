@@ -50,7 +50,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 /**
- * The repository fields on `/new`: a git account manager, then the action.
+ * The repository fields on `/workspaces/new`: a git account manager, then the action.
  *
  * ## Whose account, then what to do there
  *
@@ -90,6 +90,7 @@ const ADD_ACCOUNT_VALUE = '__add_github_account__';
 export function AdvancedFields({
   state,
   accountId,
+  noGitHubSourceAccount = false,
   onChange,
   connectComputer,
 }: {
@@ -100,6 +101,9 @@ export function AdvancedFields({
    *  account-scoped, so they cannot run on `state.accountId` alone: that is
    *  legitimately null for a single-account user. */
   accountId: string | null;
+  /** The caller owns or administers no account yet (a first workspace), so
+   *  there is no GitHub connection to add here: say where GitHub connects. */
+  noGitHubSourceAccount?: boolean;
   onChange: (next: NewWorkspaceFormState) => void;
 }) {
   const t = useTranslations('newWorkspace');
@@ -186,7 +190,7 @@ export function AdvancedFields({
       accountId={accountId}
       installUrl={installUrl}
       // Round trip: the setup page reads this path back on completion, so
-      // the user lands on `/new` with the same source AND the same account.
+      // the user lands on `/workspaces/new` with the same source AND the same account.
       returnPath={newWorkspaceReturnPath(state.source, accountId, connectComputer)}
     />
   ) : null;
@@ -274,6 +278,10 @@ export function AdvancedFields({
             {selected?.kind === 'managed' ? (
               <p className="text-muted-foreground text-xs">
                 {t('repository.sources.managed.description')}
+                {/* GitHub installations are account-scoped: with no account
+                    to connect one to, say where GitHub connects instead of
+                    leaving a one-option list unexplained. */}
+                {noGitHubSourceAccount ? <> {t('repository.githubAfterCreate')}</> : null}
               </p>
             ) : null}
             {installationsQuery.isError ? (
@@ -317,6 +325,7 @@ export function AdvancedFields({
         // fields share the in-field gap rather than the gap between fields.
         <div className="flex flex-col space-y-3">
           <ImportRepositoryField state={state} accountId={accountId} onChange={onChange} />
+          <p className="text-muted-foreground text-xs">{t('repository.importHint')}</p>
           {/* A branch belongs to a repository: until one is picked there is
               nothing to choose from, so the field waits rather than sitting
               there disabled. */}

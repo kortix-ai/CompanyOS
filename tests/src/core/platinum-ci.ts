@@ -12,7 +12,7 @@ export const PLATINUM_CI_TEMPLATE_VERSION = 'v15';
 const PLATINUM_CI_BASE_TEMPLATE_VERSION = 'v13';
 export const PLATINUM_CI_NODE_IMAGE =
   'node:22.22.2-bookworm@sha256:62e4daa6819762bbd3072af77cc282ab72c631c4aed30dd7980192babaf385b3';
-export const PLATINUM_CI_BUN_VERSION = '1.4.3';
+export const PLATINUM_CI_BUN_VERSION = '1.4.4';
 export const PLATINUM_CI_PNPM_VERSION = '8.11.0';
 export const CI_DOCKER_COMPOSE_VERSION = 'v2.40.3';
 export const CI_DOCKER_COMPOSE_AMD64_SHA256 =
@@ -278,7 +278,10 @@ export function buildPlatinumTemplateSpec(input: {
     default_cpu: 8,
     default_ram_mb: PREVIEW_HOST_RAM_MB,
     default_disk_gb: 50,
-    size_mb: 20_480,
+    // The build refuses an image larger than this cap minus its headroom. On
+    // 2026-11-02 the lockfile at dev deab382f8d built a 14,560 MB image that
+    // needed 20,640 MB, and every preview deploy failed at the template step.
+    size_mb: 24_576,
   };
 }
 

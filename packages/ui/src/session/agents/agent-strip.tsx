@@ -6,7 +6,7 @@ import { CountBadge } from '../../primitives/count-badge';
 import { Hint } from '../../primitives/hint';
 import Loading from '../../primitives/loading';
 import { Popover, PopoverContent, PopoverTrigger } from '../../primitives/popover';
-import { Tabs, TabsContent, TabsListCompact, TabsTriggerCompact } from '../../primitives/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../primitives/tabs';
 import { errorToast } from '../../primitives/toast';
 import { useTranslations } from '../../i18n';
 import { agentDisplayName } from '../../internal/components/agent-mark';
@@ -14,19 +14,21 @@ import { cn } from '../../lib/utils';
 import { AgentStateMark } from './agent-state-mark';
 import { SubagentDialog } from './subagent-view';
 import { ArrowUpRightIcon, CaretUpIcon, SquareIcon } from '@phosphor-icons/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { stopProjectSession, type SessionTask, type WorkflowRunMetadata } from '@kortix/sdk';
 import {
   qk,
   useFeatureFlag,
+  useNow,
   useSessionChildren,
   useSessionWorkflows,
   useTeamTasks,
   useTeammates,
 } from '@kortix/sdk/react';
 import { countAgents, parseWorkflowRun, type WorkflowRun, type WorkflowRunAgent } from '../tool/tools/workflow-run';
-import { WorkflowProgress, type AgentStopState } from '../tool/tools/workflow-progress';
+import { RunProgressRing, type AgentStopState } from '../tool/tools/workflow-progress';
+import { WorkflowRunRows } from '../tool/tools/workflow-run-card';
 import {
   isActive,
   lineSummary,
@@ -41,8 +43,8 @@ import {
   isLargeRun,
   LargeRunBadge,
   useLiveWorkflowRun,
-  useNow,
   useRestartAgent,
+  useStopAgent,
   WorkflowRunControls,
 } from './workflow-run-controls';
 
@@ -60,8 +62,10 @@ import {
  * sessions, and the person keeps talking to this one.
  */
 
-/** How often the child list polls while the line is mounted. */
+/** How often the child list polls while the session works. */
 const CHILDREN_POLL_MS = 5_000;
+/** An idle session starts no agent: its children poll every 30 s. */
+const IDLE_CHILDREN_POLL_MS = 30_000;
 /** A finished workflow run stays listed this long after it ended. */
 const RECENT_RUN_MS = 60 * 60_000;
 /** The popover lists at most this many runs. */
@@ -157,6 +161,25 @@ export function AgentsLineView({
 
   if (rows.length === 0 && runs.length === 0) return null;
 
+  // One agent and nothing else to list: the line opens it, not a one-row popover.
+  const only = rows.length === 1 && runs.length === 0 && !tasks ? rows[0]! : null;
+  if (only) {
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        data-testid="agents-line"
+        aria-label={t('openAgent', { name: only.handle })}
+        onClick={() => onOpen({ sessionId: only.sessionId, title: only.handle })}
+        className="text-muted-foreground hit-area-y-3 min-w-0 shrink gap-1.5 rounded-lg px-2 text-xs font-normal tabular-nums"
+      >
+        <AgentStateMark state={LINE_STATE[summary.mark]} />
+        <span className="max-w-64 min-w-0 truncate">{text}</span>
+      </Button>
+    );
+  }
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -217,7 +240,7 @@ export interface AgentsPanelProps extends Omit<AgentsLineViewProps, 'compact' | 
 export function AgentsPanel({ projectId, sessionId, agents, team, runs, tasks, onOpen, onStop, stopping, live }: AgentsPanelProps) {
   const t = useTranslations('multiAgent.strip');
   const anyWorking = live && [...agents, ...team].some((row) => row.state === 'working');
-  const now = useNow(anyWorking);
+  const now = useNow(1_000, anyWorking);
   const sections = [agents.length > 0, team.length > 0, runs.length > 0].filter(Boolean).length;
 
   const renderRows = (list: AgentRow[], teammate: boolean) => (
@@ -272,13 +295,13 @@ export function AgentsPanel({ projectId, sessionId, agents, team, runs, tasks, o
         <TasksPanel tasks={tasks} />
       </TabsContent>
       <div className="border-t p-1">
-        <TabsListCompact animate="none" className="w-full">
-          <TabsTriggerCompact value="agents">{t('label')}</TabsTriggerCompact>
-          <TabsTriggerCompact value="tasks" className="gap-1.5">
+        <TabsList size="xs" animate="none" className="w-full">
+          <TabsTrigger value="agents">{t('label')}</TabsTrigger>
+          <TabsTrigger value="tasks" className="gap-1.5">
             {t('tasks')}
             {openTasks > 0 && <CountBadge count={openTasks} />}
-          </TabsTriggerCompact>
-        </TabsListCompact>
+          </TabsTrigger>
+        </TabsList>
       </div>
     </Tabs>
   );
@@ -416,11 +439,12 @@ function WorkflowLineRow({
   const [open, setOpen] = useState(false);
   // A background run's progress is read from its runner, so it keeps moving after this turn ended.
   const { run, controlSessionId } = useLiveWorkflowRun(projectId, sessionId, listed);
-  const now = useNow(open && run?.status === 'running');
+  const now = useNow(1_000, open && run?.status === 'running');
   const restart = useRestartAgent(projectId, controlSessionId, run);
+  const stopWorkflowAgent = useStopAgent(projectId, controlSessionId, run);
   const queryClient = useQueryClient();
   const stopAgent = useMutation({
-    mutationFn: (agent: WorkflowRunAgent) => stopProjectSession(projectId!, agent.sessionId!),
+    mutationFn: (agent: WorkflowRunAgent) => stopWorkflowAgent(agent),
     onSuccess: () => projectId && queryClient.invalidateQueries({ queryKey: qk.project.sessionsScope(projectId) }),
     onError: (error) => errorToast(t('stopFailed'), { description: error instanceof Error ? error.message : undefined }),
   });
@@ -429,7 +453,7 @@ function WorkflowLineRow({
   const progress = counts.total > 0 ? t('runProgress', { done: counts.done, total: counts.total }) : undefined;
   const line = (
     run.status === 'running'
-      ? [run.paused ? tw('paused') : run.background ? t('runBackground') : t('runRunning'), progress]
+      ? [run.paused ? tw('holding') : run.background ? t('runBackground') : t('runRunning'), progress]
       : [progress]
   )
     .filter(Boolean)
@@ -451,7 +475,12 @@ function WorkflowLineRow({
           onClick={() => setOpen((value) => !value)}
           className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-1.5 pl-2 text-left text-xs outline-none"
         >
-          <AgentStateMark state={RUN_STATE[run.status]} />
+          <RunProgressRing
+            done={counts.done}
+            failed={counts.failed}
+            total={Math.max(counts.total, 1)}
+            ended={run.status === 'done' ? 'done' : run.status === 'stopped' ? 'stopped' : undefined}
+          />
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-baseline gap-2">
               <span className="text-foreground min-w-0 truncate font-medium" title={title}>
@@ -488,13 +517,12 @@ function WorkflowLineRow({
       </div>
       {open && run.agents.length > 0 && (
         <div className="pl-5">
-          <WorkflowProgress
+          {/* The same rows as the run's card in the chat. */}
+          <WorkflowRunRows
             run={run}
             live={live}
             now={now}
-            onOpen={(agent) =>
-              agent.sessionId && onOpen({ sessionId: agent.sessionId, title: agent.agent ? `${agent.label} · ${agent.agent}` : agent.label })
-            }
+            onOpen={(agent) => agent.sessionId && onOpen({ sessionId: agent.sessionId, title: agent.label })}
             stop={stop}
           />
         </div>
@@ -509,23 +537,54 @@ function WorkflowLineRow({
 }
 
 /**
- * The agents of one session, read live: its children (polled every 5 s), its
- * teammates and team tasks (flag `agent_teams`) and its workflow runs; and the
- * stop of one agent.
+ * The agents of one session, read live: its children, its teammates and team
+ * tasks (flag `agent_teams`) and its workflow runs; and the stop of one agent.
+ * The lists poll every 5 s while the session works (`live`) and every 30 s
+ * while it is idle.
  */
-export function useAgentsLine(projectId: string | undefined, sessionId: string | undefined) {
+export function useAgentsLine(
+  projectId: string | undefined,
+  sessionId: string | undefined,
+  { live = false }: { live?: boolean } = {},
+) {
   const t = useTranslations('multiAgent.strip');
   const pid = projectId ?? '';
   const sid = sessionId ?? '';
   const ready = !!projectId && !!sessionId;
   const teams = useFeatureFlag(projectId, 'agent_teams').enabled;
-  const childList = useSessionChildren(pid, sid, { enabled: ready, refetchInterval: CHILDREN_POLL_MS, limit: 50 });
+  // A child or teammate can keep working after the lead's turn ends: the lists
+  // stay at 5 s while any of them works.
+  const [agentsActive, setAgentsActive] = useState(false);
+  const fast = live || agentsActive;
+  const childList = useSessionChildren(pid, sid, {
+    enabled: ready,
+    refetchInterval: fast ? CHILDREN_POLL_MS : IDLE_CHILDREN_POLL_MS,
+    limit: 50,
+  });
   const children = childList.sessions;
-  const { data: teammates, dataUpdatedAt: teammatesAt } = useTeammates(projectId, sessionId, { enabled: ready && teams });
-  const { data: tasks } = useTeamTasks(projectId, sessionId, { enabled: ready && teams });
-  const { data: runData, dataUpdatedAt: runsAt } = useSessionWorkflows(projectId, sessionId, { enabled: ready });
+  const { data: teammates, dataUpdatedAt: teammatesAt } = useTeammates(projectId, sessionId, {
+    enabled: ready && teams,
+    live: fast,
+  });
+  const { data: tasks } = useTeamTasks(projectId, sessionId, { enabled: ready && teams, live: fast });
+  const { data: runData, dataUpdatedAt: runsAt } = useSessionWorkflows(projectId, sessionId, { enabled: ready, live: fast });
   const [stopping, setStopping] = useState<ReadonlySet<string>>(() => new Set());
   const queryClient = useQueryClient();
+  // A turn that ends may have started an agent or a run in its last seconds:
+  // read the lists once now instead of waiting for the next idle poll.
+  const wasLive = useRef(live);
+  useEffect(() => {
+    if (wasLive.current && !live && ready) {
+      void queryClient.invalidateQueries({ queryKey: qk.project.sessionChildren(pid, sid) });
+      void queryClient.invalidateQueries({ queryKey: qk.project.sessionAgents(pid, sid) });
+      // Each child's own row (the colleague row in the chat reads it): exact, so
+      // its multi-agent reads nested under the same key are not refetched too.
+      for (const child of children) {
+        void queryClient.invalidateQueries({ queryKey: qk.project.session(pid, child.session_id), exact: true });
+      }
+    }
+    wasLive.current = live;
+  }, [live, ready, pid, sid, queryClient, children]);
   const stopMutation = useMutation({
     mutationFn: (row: AgentRow) => stopProjectSession(pid, row.sessionId),
     onSettled: (_data, _error, row) => {
@@ -554,6 +613,9 @@ export function useAgentsLine(projectId: string | undefined, sessionId: string |
       }),
     [sid, children, teammates, runs, now],
   );
+  const anyActive = [...groups.agents, ...groups.team].some((row) => row.state === 'working');
+  // Adjusted during render (React's derived-state pattern): the lists read it next render.
+  if (anyActive !== agentsActive) setAgentsActive(anyActive);
   const leadsTeam = teams && ((teammates?.length ?? 0) > 0 || (tasks?.length ?? 0) > 0);
   return {
     ready,
@@ -578,12 +640,15 @@ export function AgentsLine({
   projectId,
   sessionId,
   compact = false,
+  live = false,
 }: {
   projectId: string | undefined;
   sessionId: string | undefined;
   compact?: boolean;
+  /** The session works now: its agent lists poll every 5 s instead of every 30 s. */
+  live?: boolean;
 }) {
-  const line = useAgentsLine(projectId, sessionId);
+  const line = useAgentsLine(projectId, sessionId, { live });
   const [open, setOpen] = useState<OpenTarget | null>(null);
   if (!line.ready) return null;
   return (

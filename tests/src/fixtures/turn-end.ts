@@ -15,6 +15,7 @@ import { Client as PgClient } from 'pg';
 import { mintAccountToken, type Client } from '../core/client';
 import type { Env } from '../core/env';
 import type { FlowContext, Principal } from '../core/types';
+import { lockProjectFirst } from './token-binding-lock';
 
 /** A pg connection to the target database (TLS off only for a local one). */
 export async function openFlowDb(env: Env): Promise<PgClient> {
@@ -68,7 +69,7 @@ async function bindTurnSession(
     );
     // SESS-35: a token bound to the session is that session sandbox's credential.
     await db.query(
-      'UPDATE kortix.account_tokens SET account_id = $2, user_id = $3, project_id = $4, session_id = $5 WHERE token_id = $1',
+      lockProjectFirst('UPDATE kortix.account_tokens SET account_id = $2, user_id = $3, project_id = $4, session_id = $5 WHERE token_id = $1'),
       [tokenId, ids.accountId, ids.creatorId, ids.projectId, ids.sessionId],
     );
   } catch (error) {
@@ -143,6 +144,7 @@ export async function seedTurnSession(
       'notification_watchers',
       'session_presence_leases',
       'session_pending_questions',
+      'session_pending_permissions',
       'permission_push_claims',
       'session_turns',
       'session_lifecycle_commands',
@@ -181,4 +183,27 @@ export async function seedTurnSession(
     },
     cleanup,
   };
+}
+
+/**
+ * A seeded turn session for the length of `run`: opens the connection, seeds,
+ * and on the way out deletes the session's rows and closes the connection,
+ * whether the seed, `run` or the cleanup threw.
+ */
+export async function withTurnSession<T>(
+  ctx: FlowContext,
+  input: Parameters<typeof seedTurnSession>[2],
+  run: (turn: TurnSession, db: PgClient) => Promise<T>,
+): Promise<T> {
+  const db = await openFlowDb(ctx.env);
+  try {
+    const turn = await seedTurnSession(ctx, db, input);
+    try {
+      return await run(turn, db);
+    } finally {
+      await turn.cleanup();
+    }
+  } finally {
+    await db.end();
+  }
 }

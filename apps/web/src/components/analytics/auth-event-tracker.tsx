@@ -1,7 +1,8 @@
 'use client';
 
 import { AuthMethod, trackLogin, trackSignUp } from '@/lib/analytics/gtm';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { track } from '@/lib/track';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect } from 'react';
 
 /**
@@ -10,12 +11,15 @@ import { useEffect } from 'react';
  */
 export function AuthEventTracker() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    const authEvent = searchParams?.get('auth_event');
-    const authMethod = searchParams?.get('auth_method');
+    // The live URL, not the hook's snapshot: once a run below strips the
+    // params, a second run of this effect (a re-render, React's dev double
+    // mount) finds none and reports nothing twice.
+    const live = new URLSearchParams(window.location.search);
+    const authEvent = live.get('auth_event');
+    const authMethod = live.get('auth_method');
 
     if (authEvent && authMethod) {
       // Map provider to AuthMethod format
@@ -33,9 +37,12 @@ export function AuthEventTracker() {
       } else if (authEvent === 'login') {
         trackLogin(method);
       }
+      if (authEvent === 'signup' || authEvent === 'login') {
+        track('auth_completed', { kind: authEvent, method: method.toLowerCase() });
+      }
 
       // Clean up URL params after tracking
-      const params = new URLSearchParams(searchParams?.toString() || '');
+      const params = live;
       params.delete('auth_event');
       params.delete('auth_method');
 
@@ -44,7 +51,7 @@ export function AuthEventTracker() {
       // Replace URL without triggering navigation
       window.history.replaceState({}, '', newUrl);
     }
-  }, [searchParams, pathname, router]);
+  }, [searchParams, pathname]);
 
   return null;
 }

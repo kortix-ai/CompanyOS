@@ -11,8 +11,6 @@
 //              archiveRepoSubtree, getFileAtRef, getFileHistory
 //   commits  — resolveCommitSha, listCommits, getCommit, getCommitDiff,
 //              resolveBranchTip (+ shared git-log parsing primitives)
-//   fast-boot-bundle — resolveFastBootGitHint and the scaffold-delta bundle
-//              builders (session fast-boot provisioning)
 //   branches — listBranches, deleteRemoteSessionBranch, commitFileToBranch
 //   merge    — getMergeBase, getBranchDiff, getDiffBetweenShas, previewMerge,
 //              mergeBranches, diffStat
@@ -44,12 +42,14 @@ export {
 } from './git/mirror';
 
 export {
+  listRepoDirectory,
   listRepoFiles,
   searchRepoFileNames,
   grepRepoFiles,
   readRepoFile,
   readRepoFileBytes,
   readManifestFromRepo,
+  findLastGoodManifestCommit,
   archiveRepoSubtree,
   getFileHistory,
   RepoFileNotFoundError,
@@ -64,7 +64,6 @@ export {
   resolveBranchTip,
 } from './git/commits';
 
-export { resolveFastBootGitHint } from './git/fast-boot-bundle';
 
 export {
   listBranches,
@@ -90,4 +89,4 @@ export {
   resolveBranchAheadState,
 } from './git/merge';
 
-export { loadProjectConfig } from './git/config';
+export { loadProjectConfig, readProjectSkillDescriptions } from './git/config';

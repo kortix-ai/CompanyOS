@@ -140,6 +140,7 @@ mock.module('react-native-reanimated', () => ({
   // `SHEET_MOTION.close` builds its curve at module load.
   Easing: { bezier: () => (t: number) => t },
   useSharedValue: <T,>(value: T) => React.useRef(shared(value)).current,
+  useReducedMotion: () => false,
   // Registers with its output: sorted before every mapper that reads it.
   useDerivedValue: <T,>(updater: () => T, deps: unknown[] = []) => {
     const ref = React.useRef<Shared<T> | null>(null);
@@ -167,7 +168,7 @@ mock.module('react-native-reanimated', () => ({
     return style;
   },
 }));
-mock.module('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 20 }) }));
+mock.module('react-native-safe-area-context', () => ({ SafeAreaInsetsContext: React.createContext(null), useSafeAreaInsets: () => ({ top: 0, bottom: 20 }) }));
 mock.module('expo-linear-gradient', () => ({ LinearGradient: host('linear-gradient') }));
 mock.module('nativewind', () => ({ useColorScheme: () => ({ colorScheme: 'light' }) }));
 mock.module('@/lib/theme-colors', () => ({ getSheetBg: () => 'sheet-bg' }));
@@ -181,7 +182,11 @@ mock.module('@/components/ui/text', () => ({ Text: host('text') }));
 mock.module('expo-clipboard', () => ({ setStringAsync: async () => {} }));
 mock.module('@/lib/haptics', () => ({ haptics: { success: () => {} } }));
 mock.module('@/lib/icons', () => ({ CheckIcon: 'check', CopyIcon: 'copy', XIcon: 'x' }));
-mock.module('@/components/kortix/liquid-glass-capsule', () => ({ LIQUID_GLASS_AVAILABLE: false, LiquidGlassCapsule: () => null }));
+mock.module('@/components/kortix/liquid-glass', () => ({
+  LIQUID_GLASS_AVAILABLE: false,
+  LiquidGlass: ({ children }: { children: React.ReactNode }) => children,
+  GlassButtons: ({ children }: { children: React.ReactNode }) => children,
+}));
 
 let mod: typeof import('./sheet');
 let bar: typeof import('./pinned-bar');

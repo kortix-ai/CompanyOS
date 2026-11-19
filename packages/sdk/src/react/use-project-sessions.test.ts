@@ -6,10 +6,11 @@ import { configureKortix } from '../core/http/config';
 import { qk } from './query-keys';
 import {
   EMPTY_SESSION_PAGE_SCAN_LIMIT,
-  flattenProjectSessionPages,
-  projectSessionsPageParam,
+  flattenWorkspaceSessionPages,
+  workspaceSessionsPageParam,
   shouldScanPastEmptySessionPages,
-  useProjectSessions,
+  useSessionChildren,
+  useWorkspaceSessions,
 } from './use-project-sessions';
 import type { ProjectSessionPage } from '../core/rest/projects-client/sessions';
 
@@ -34,7 +35,7 @@ describe('paged session-list query key', () => {
 describe('projectSessionsPageParam', () => {
   test('hands back the cursor the server issued', () => {
     const page: ProjectSessionPage = { items: [], next_cursor: 'NEXT1' };
-    expect(projectSessionsPageParam(page)).toBe('NEXT1');
+    expect(workspaceSessionsPageParam(page)).toBe('NEXT1');
   });
 
   test('returns undefined on the last page so react-query stops asking', () => {
@@ -42,7 +43,7 @@ describe('projectSessionsPageParam', () => {
     // hasNextPage stay true and the sidebar offer a Load-more that fetches
     // page one again, forever.
     const page: ProjectSessionPage = { items: [], next_cursor: null };
-    expect(projectSessionsPageParam(page)).toBeUndefined();
+    expect(workspaceSessionsPageParam(page)).toBeUndefined();
   });
 });
 
@@ -52,7 +53,7 @@ describe('flattenProjectSessionPages', () => {
       { items: [{ session_id: 'S1' }, { session_id: 'S2' }] as never, next_cursor: 'C1' },
       { items: [{ session_id: 'S3' }] as never, next_cursor: null },
     ];
-    expect(flattenProjectSessionPages({ pages, pageParams: [] }).map((s) => s.session_id)).toEqual([
+    expect(flattenWorkspaceSessionPages({ pages, pageParams: [] }).map((s) => s.session_id)).toEqual([
       'S1',
       'S2',
       'S3',
@@ -60,7 +61,7 @@ describe('flattenProjectSessionPages', () => {
   });
 
   test('is an empty list before the first page arrives', () => {
-    expect(flattenProjectSessionPages(undefined)).toEqual([]);
+    expect(flattenWorkspaceSessionPages(undefined)).toEqual([]);
   });
 
   test('drops a row a later page repeats', () => {
@@ -72,7 +73,7 @@ describe('flattenProjectSessionPages', () => {
       { items: [{ session_id: 'S1' }, { session_id: 'S2' }] as never, next_cursor: 'C1' },
       { items: [{ session_id: 'S2' }, { session_id: 'S3' }] as never, next_cursor: null },
     ];
-    expect(flattenProjectSessionPages({ pages, pageParams: [] }).map((s) => s.session_id)).toEqual([
+    expect(flattenWorkspaceSessionPages({ pages, pageParams: [] }).map((s) => s.session_id)).toEqual([
       'S1',
       'S2',
       'S3',
@@ -144,7 +145,7 @@ describe('useProjectSessions reads past empty pages (KRTX-1727)', () => {
   // A network that answers after React rendered the fetch (ms); 0 answers at once.
   let latency = 0;
   let root: ReturnType<typeof create> | undefined;
-  let list: ReturnType<typeof useProjectSessions>;
+  let list: ReturnType<typeof useWorkspaceSessions>;
 
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -172,7 +173,7 @@ describe('useProjectSessions reads past empty pages (KRTX-1727)', () => {
   async function mount() {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     function Probe() {
-      list = useProjectSessions('P1', { scope: 'project', q: 'deploy', limit: 20 });
+      list = useWorkspaceSessions('P1', { scope: 'project', q: 'deploy', limit: 20 });
       return null;
     }
     await act(async () => {
@@ -227,9 +228,9 @@ describe('useProjectSessions spaceId', () => {
       return Response.json([{ session_id: 'S1', space_id: 'SPACE-1' }]);
     }) as unknown as typeof fetch;
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    let list: ReturnType<typeof useProjectSessions> | undefined;
+    let list: ReturnType<typeof useWorkspaceSessions> | undefined;
     function Probe() {
-      list = useProjectSessions('P1', { parent: 'root', spaceId: 'SPACE-1' });
+      list = useWorkspaceSessions('P1', { parent: 'root', spaceId: 'SPACE-1' });
       return null;
     }
     let root: ReturnType<typeof create> | undefined;
@@ -259,7 +260,7 @@ describe('useProjectSessions thread filters', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const filters = { parent: 'root', spaceId: 'SPACE-1', createdBy: 'U1', agent: 'researcher', updatedAfter: '2026-10-18T00:00:00.000Z' } as const;
     function Probe() {
-      useProjectSessions('P1', filters);
+      useWorkspaceSessions('P1', filters);
       return null;
     }
     let root: ReturnType<typeof create> | undefined;
@@ -291,12 +292,12 @@ describe('useProjectSessions keepPreviousData', () => {
       return Response.json([{ session_id: agent ?? 'ALL', space_id: 'SPACE-1' }]);
     }) as unknown as typeof fetch;
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    let list: ReturnType<typeof useProjectSessions> | undefined;
+    let list: ReturnType<typeof useWorkspaceSessions> | undefined;
     let setAgent: (agent: string | undefined) => void = () => {};
     function Probe() {
       const [agent, set] = React.useState<string | undefined>(undefined);
       setAgent = set;
-      list = useProjectSessions('P1', { spaceId: 'SPACE-1', agent, keepPreviousData: true });
+      list = useWorkspaceSessions('P1', { spaceId: 'SPACE-1', agent, keepPreviousData: true });
       return null;
     }
     let root: ReturnType<typeof create> | undefined;
@@ -326,7 +327,7 @@ describe('useProjectSessions pollFirstPageOnly', () => {
   let pages: Array<{ ids: string[]; next: string | null }> = [];
   const cursors: Array<string | null> = [];
   let root: ReturnType<typeof create> | undefined;
-  let list: ReturnType<typeof useProjectSessions>;
+  let list: ReturnType<typeof useWorkspaceSessions>;
 
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -366,7 +367,7 @@ describe('useProjectSessions pollFirstPageOnly', () => {
     ];
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     function Probe() {
-      list = useProjectSessions('P1', { spaceId: 'SPACE-1', parent: 'root', refetchInterval: 40, pollFirstPageOnly: true });
+      list = useWorkspaceSessions('P1', { spaceId: 'SPACE-1', parent: 'root', refetchInterval: 40, pollFirstPageOnly: true });
       return null;
     }
     await act(async () => {
@@ -389,5 +390,71 @@ describe('useProjectSessions pollFirstPageOnly', () => {
     // N is new; A stays (its page-two cursor starts after it); Z stays loaded.
     expect(list.sessions.map((s) => s.session_id)).toEqual(['N', 'B', 'A', 'Z']);
     expect(list.hasNextPage).toBe(false);
+  });
+});
+
+describe('useSessionChildren keeps each child\'s own row live (audit finding 06)', () => {
+  // A colleague row reads `qk.project.session(child)`; the agents line polls
+  // `sessionChildren(parent)`. Nothing copied one into the other, so a row read
+  // while the child worked said "Working" for minutes after it finished.
+  let children: Array<Record<string, unknown>> = [];
+  let root: ReturnType<typeof create> | undefined;
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    configureKortix({ backendUrl: 'http://test.local', getToken: async () => 'token' });
+    globalThis.fetch = mock(async () => Response.json(children)) as unknown as typeof fetch;
+  });
+  afterEach(async () => {
+    if (root) await act(async () => root!.unmount());
+    root = undefined;
+  });
+  const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+  const idle = { state: 'idle', since: null, turn_token: null, pending_delivery: false };
+  const busy = { state: 'working', since: '2026-11-15T10:00:00.000Z', turn_token: 't1', pending_delivery: false };
+
+  async function mount(client: QueryClient) {
+    function Probe() {
+      useSessionChildren('P1', 'PARENT');
+      return null;
+    }
+    await act(async () => {
+      root = create(React.createElement(QueryClientProvider, { client }, React.createElement(Probe)));
+    });
+    for (let i = 0; i < 5; i++) await settle();
+  }
+
+  test('a child read puts its live state on the cached detail row and keeps detail-only fields', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData<unknown>(qk.project.session('P1', 'C1'), {
+      session_id: 'C1',
+      status: 'running',
+      working: busy,
+      board_state: 'working',
+      result_excerpt: null,
+      can_publish_response: true,
+      updated_at: '2026-11-15T10:00:00.000Z',
+    });
+    children = [
+      { session_id: 'C1', status: 'running', working: idle, board_state: 'completed', result_excerpt: 'FERN', updated_at: '2026-11-15T10:01:00.000Z' },
+      { session_id: 'C2', status: 'running', working: idle, board_state: 'completed', updated_at: '2026-11-15T10:01:00.000Z' },
+    ];
+    await mount(client);
+
+    const row = client.getQueryData<Record<string, unknown>>(qk.project.session('P1', 'C1'));
+    expect(row?.board_state).toBe('completed');
+    expect(row?.working).toEqual(idle);
+    expect(row?.result_excerpt).toBe('FERN');
+    expect(row?.can_publish_response).toBe(true);
+    // A child nobody reads by id gets no entry: the first read by id still rides the session-open bundle.
+    expect(client.getQueryData(qk.project.session('P1', 'C2'))).toBeUndefined();
+  });
+
+  test('a cached row newer than the list answer is left alone', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const newer = { session_id: 'C1', working: busy, board_state: 'working', updated_at: '2026-11-15T10:05:00.000Z' };
+    client.setQueryData<unknown>(qk.project.session('P1', 'C1'), newer);
+    children = [{ session_id: 'C1', working: idle, board_state: 'completed', updated_at: '2026-11-15T10:01:00.000Z' }];
+    await mount(client);
+    expect(client.getQueryData<unknown>(qk.project.session('P1', 'C1'))).toBe(newer);
   });
 });

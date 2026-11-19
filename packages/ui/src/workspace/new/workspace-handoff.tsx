@@ -1,7 +1,8 @@
 'use client';
 
 import type { ProvisionPhase } from '@kortix/sdk';
-import { m, useReducedMotion } from 'motion/react';
+import { m } from 'motion/react';
+import { useReducedMotion } from '../../internal/hooks/use-reduced-motion';
 
 import { KortixLogo } from '../../primitives/kortix-logo';
 import { TextShimmer } from '../../primitives/text-shimmer';
@@ -38,11 +39,11 @@ export const HANDOFF_STEPS = [
 ] as const satisfies readonly ProvisionPhase[];
 
 /**
- * The bridge between `/new`'s create form and the created workspace's page.
+ * The bridge between `/workspaces/new`'s create form and the created workspace's page.
  *
  * It holds the page for the ONE waiting window there is: the create is in
  * flight and no project id exists yet. On success the orchestration stamps the
- * project onboarded and navigates straight to `/projects/<id>` (KRTX-1419), so
+ * project onboarded and navigates straight to `/workspaces/<id>` (KRTX-1419), so
  * there is no second window to cover and no moment where the successful create
  * is rendered as the UI being torn down and replaced.
  *

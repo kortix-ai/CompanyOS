@@ -34,8 +34,11 @@ import {
   transitionSandbox,
   transitionSession,
 } from '../session-lifecycle/status-transitions';
+import { stripMetadataKeys } from '../session-lifecycle/sandbox-metadata-sql';
 import { evaluateUnattendedRecovery } from '../session-lifecycle/unattended-runtime-recovery';
 import type { StopReason } from '../stop-reason';
+import { captureProductEvent } from '../../shared/product-analytics';
+import { runtimeBootEpochMs } from '../session-lifecycle/readiness-clocks';
 
 /** Merge keys into a jsonb metadata column without clobbering siblings. */
 export function mergeMetadata(patch: Record<string, unknown>) {
@@ -194,7 +197,7 @@ export async function clearPendingStopObservation(sandboxId: string): Promise<vo
   await db
     .update(sessionSandboxes)
     .set({
-      metadata: sql`coalesce(${sessionSandboxes.metadata}, '{}'::jsonb) - 'pendingStopObservedAtMs'`,
+      metadata: stripMetadataKeys(['pendingStopObservedAtMs']),
       updatedAt: new Date(),
     })
     .where(eq(sessionSandboxes.sandboxId, sandboxId))
@@ -525,6 +528,47 @@ export async function applyStoppedState(write: StoppedStateWrite): Promise<void>
       .catch(() => undefined);
   }
   if (write.externalId) invalidateSandbox(write.externalId);
+  void reportSessionStopped(write, before?.metadata, now);
+}
+
+/**
+ * `session_stopped` for a session a person started, with how long its runtime
+ * ran this boot. Trigger, channel and agent sessions run under a stand-in owner
+ * and send nothing. One event per boot: the uuid is keyed on the boot clock.
+ */
+async function reportSessionStopped(
+  write: StoppedStateWrite,
+  metadata: unknown,
+  now: Date,
+): Promise<void> {
+  try {
+    const [session] = await db
+      .select({
+        accountId: projectSessions.accountId,
+        projectId: projectSessions.projectId,
+        createdBy: projectSessions.createdBy,
+        initiatorType: projectSessions.initiatorType,
+      })
+      .from(projectSessions)
+      .where(eq(projectSessions.sessionId, write.sessionId))
+      .limit(1);
+    if (!session?.createdBy || session.initiatorType !== 'member') return;
+    const bootEpochMs = runtimeBootEpochMs((metadata ?? {}) as Parameters<typeof runtimeBootEpochMs>[0]);
+    captureProductEvent({
+      userId: session.createdBy,
+      accountId: session.accountId,
+      event: 'session_stopped',
+      dedupeKey: `${write.sandboxId}:${bootEpochMs ?? now.getTime()}`,
+      properties: {
+        project_id: session.projectId,
+        session_id: write.sessionId,
+        reason: write.stopReason ?? 'unknown',
+        active_ms: bootEpochMs === null ? null : Math.max(0, now.getTime() - bootEpochMs),
+      },
+    });
+  } catch {
+    // Analytics never fails a stop.
+  }
 }
 
 export interface StoppedReconcileOptions {

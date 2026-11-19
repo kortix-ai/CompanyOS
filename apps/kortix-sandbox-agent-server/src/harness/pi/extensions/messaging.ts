@@ -36,12 +36,12 @@ import {
 import { Type } from 'typebox'
 import { apiErrorMessage, BOARD_STATE_BADGE, callApi, errorKind, failure, sessionPath, toolReturn, type ControlPlane, type MultiAgentToolResult } from './control-plane'
 
-export const SEND_MESSAGE_TOOL = 'send_message'
-export const LIST_AGENTS_TOOL = 'list_agents'
+const SEND_MESSAGE_TOOL = 'send_message'
+const LIST_AGENTS_TOOL = 'list_agents'
 export const MESSAGING_TOOLS = [SEND_MESSAGE_TOOL, LIST_AGENTS_TOOL] as const
 
 /** What the messaging tools need from the runtime. */
-export interface MessagingHost {
+interface MessagingHost {
   /** The API with this session's token, or null without a control plane. */
   controlPlane(): ControlPlane | null
 }
@@ -142,14 +142,15 @@ export async function sendMessage(host: MessagingHost, params: SendParams, signa
   if (params.message.length > PEER_MESSAGE_MAX_CHARS) {
     return invalid(`The message is ${params.message.length} characters; one message takes at most ${PEER_MESSAGE_MAX_CHARS}. Send the essentials, or split it.`)
   }
-  if (params.approve !== undefined && params.type !== 'shutdown_response') return invalid('approve goes only with type "shutdown_response".')
+  // `approve` belongs to a shutdown answer only. A model that fills it on an ordinary message still sends the message: the field is dropped, never a refusal.
+  const approve = params.type === 'shutdown_response' ? params.approve : undefined
   const body: PeerMessageSendBody = {
     to,
     message: params.message,
     ...(params.summary?.trim() ? { summary: params.summary.trim().slice(0, PEER_MESSAGE_SUMMARY_MAX_CHARS) } : {}),
     ...(params.notify_when_idle ? { notify_when_idle: true } : {}),
     ...(params.type ? { type: params.type } : {}),
-    ...(params.approve !== undefined ? { approve: params.approve } : {}),
+    ...(approve !== undefined ? { approve } : {}),
     ...(params.project_id?.trim() ? { project_id: params.project_id.trim() } : {}),
   }
   let answer
@@ -200,7 +201,7 @@ function continuesLine(to: ReachableAgent | null): string {
 
 // ── list_agents ───────────────────────────────────────────────────────────
 
-export async function listAgents(host: MessagingHost, params: ListParams, signal?: AbortSignal): Promise<MultiAgentToolResult> {
+async function listAgents(host: MessagingHost, params: ListParams, signal?: AbortSignal): Promise<MultiAgentToolResult> {
   const scope: ReachableScope = params.scope === 'mine' ? 'mine' : 'project'
   const plane = host.controlPlane()
   if (!plane) return failure('list_agents', scope, 'No sessions to reach', { kind: 'failed', message: NO_CONTROL_PLANE })
@@ -252,6 +253,6 @@ function agentRow(agent: ReachableAgent): KortixCardRow {
     title: agent.handle,
     ...(detail.length ? { detail: detail.join(' · ') } : {}),
     badge: BOARD_STATE_BADGE[agent.state] ?? agent.state,
-    href: `/projects/${agent.project_id}/sessions/${agent.session_id}`,
+    href: `/workspaces/${agent.project_id}/sessions/${agent.session_id}`,
   }
 }

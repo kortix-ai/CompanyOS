@@ -28,7 +28,7 @@ export const hero = {
   title: 'Sovereign and open.',
   titleMuted: 'Open source, on your infrastructure, with any model.',
   sub: 'Read every line of Kortix. Run it on Kortix Cloud, in your VPC or on your own on-prem network. Bring any model with your own keys, and keep your company in a git repository you own.',
-  github: { label: 'View on GitHub', href: 'https://github.com/kortix-ai/suna' },
+  github: { label: 'View on GitHub', href: 'https://github.com/kortix-ai/CompanyOS' },
   selfHost: { label: 'Self-host Kortix', href: '/self-hosted' },
   caption: 'Kortix Cloud or your own server.',
   captionMuted: 'The same images either way.',
@@ -99,9 +99,9 @@ export const modelSources = [
   },
 ] as const;
 
-/** `kortix projects clone`, then the starter's top level. */
+/** `kortix workspaces clone`, then the starter's top level. */
 export const cloneLines = [
-  '$ kortix projects clone <project_id> arcadia',
+  '$ kortix workspaces clone <workspace_id> arcadia',
   '$ ls arcadia',
   'kortix.yaml  agents/  skills/  memory/  README.md',
 ] as const;
@@ -266,17 +266,17 @@ export const updateTracks = [
 export const modelOrder = [
   'The session, channel or automation',
   'The agent',
-  'The project default',
+  'The workspace default',
   'The account default',
   'The platform default',
 ] as const;
 
 export const filesLines = [
   '# with the kortix CLI',
-  '$ kortix projects clone <project_id> arcadia',
+  '$ kortix workspaces clone <workspace_id> arcadia',
   '',
   '# with any git client',
-  '$ git clone https://api.kortix.com/v1/git/<project_id>.git',
+  '$ git clone https://api.kortix.com/v1/git/<workspace_id>.git',
   '',
   '# as a zip',
   '$ kortix files download -o arcadia.zip',
@@ -323,7 +323,7 @@ export const faqItems = [
     id: 'open-source',
     question: 'Is Kortix open source?',
     answer:
-      'Yes. The web app, the API, the LLM gateway, the CLI and @kortix/sdk live in one public repository, kortix-ai/suna. Every new session runs an open-source agent harness.',
+      'Yes. The web app, the API, the LLM gateway, the CLI and @kortix/sdk live in one public repository, kortix-ai/CompanyOS. Every new session runs an open-source agent harness.',
   },
   {
     id: 'self-host-where',

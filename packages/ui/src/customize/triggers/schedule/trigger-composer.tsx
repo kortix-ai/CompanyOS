@@ -16,8 +16,9 @@
  * are off (the beta flag `event_triggers`, Project admin › Feature flags).
  */
 
+import { resolveProgramAgent } from '../../../session/composer/agent-selector';
 import { Button } from '../../../primitives/button';
-import { InfoBanner } from '../../../primitives/info-banner';
+import { Alert as BannerAlert, AlertDescription as BannerAlertDescription, AlertActions as BannerAlertActions} from '../../../primitives/alert';
 import { Input } from '../../../primitives/input';
 import { Label } from '../../../primitives/label';
 import Loading from '../../../primitives/loading';
@@ -35,7 +36,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../primitives/ta
 import { successToast } from '../../../primitives/toast';
 import { agentDisplayLabel } from '../../../session/composer/session-chat-input';
 import { useTranslations as useI18nTranslations } from '../../../i18n';
-import { useProjectFeatureFlags } from '../../../internal/lib/use-project-feature-flags';
 import { UiLink as Link, useUiViewerId } from '../../../providers/ui-provider';
 import { uiRoutes } from '../../../lib/routes';
 import { projectSettingsSectionHref } from '../../project-settings/project-settings-sections';
@@ -45,6 +45,7 @@ import {
   useProjectApps,
   useProjectTriggerEventApps,
   useVisibleAgents,
+  useFeatureFlags,
 } from '@kortix/sdk/react';
 import { AppWindowIcon, GitMergeIcon, LightningIcon, TimerIcon, WebhooksLogoIcon } from '@phosphor-icons/react';
 import { useMutation } from '@tanstack/react-query';
@@ -76,6 +77,7 @@ import {
   spaceTriggerAccess,
   summarize,
   triggerConnection,
+  targetInput,
   triggerFilter,
   triggerName,
   validate,
@@ -159,9 +161,9 @@ const KIND_LABEL_KEY = {
 /** A source this project cannot use yet: one sentence on why, and the link that fixes it. */
 function Unavailable({ children, action }: { children: ReactNode; action: ReactNode }) {
   return (
-    <InfoBanner tone="info" className="text-xs" action={action}>
+    <BannerAlert variant="default" className="text-xs"><BannerAlertDescription>
       {children}
-    </InfoBanner>
+    </BannerAlertDescription><BannerAlertActions>{action}</BannerAlertActions></BannerAlert>
   );
 }
 
@@ -181,7 +183,7 @@ function ComposerForm({
   const tComposer = useI18nTranslations('triggerComposer');
   // Connector events are a beta feature behind the project flag `event_triggers`. Off: the tab
   // stays and its panel says how to turn it on; no catalog request is sent.
-  const eventsOn = useProjectFeatureFlags(projectId).flags.event_triggers === true;
+  const eventsOn = useFeatureFlags(projectId).flags.event_triggers === true;
   const [draft, setDraft] = useState<ComposerDraft>(() => ({
     ...initialDraft({
       kind: initialKind ?? (initialApp || initialConnector ? 'event' : null),
@@ -234,7 +236,7 @@ function ComposerForm({
   );
   const name = triggerName(draft, tI18nComplete);
 
-  const problems = validate(draft, { name, configFields, app }, tI18nComplete);
+  const problems = validate(draft, { name, configFields, app, programAgent: resolveProgramAgent(agents, draft.agent) }, tI18nComplete);
   const shown = showProblems ? problems : [];
   const blockError = (block: ComposerBlock) =>
     shown.find((p) => p.block === block && !p.field)?.message;
@@ -311,7 +313,8 @@ function ComposerForm({
             name: trimmedName,
             slug,
             type: draft.kind,
-            prompt_template: draft.instruction.trim(),
+            prompt_template: draft.thenKind === 'app' ? '' : draft.instruction.trim(),
+            ...(draft.thenKind === 'app' && targetInput(draft) ? { target: targetInput(draft)! } : {}),
             enabled: draft.startActive,
             ...(draft.agent ? { agent: draft.agent } : {}),
             ...(draft.model ? { model: modelKeyToWire(draft.model) } : {}),
@@ -327,7 +330,9 @@ function ComposerForm({
             ...(draft.mode === 'keyed' ? { session_key: draft.sessionKey.trim() } : {}),
             ...(!isCron && filter ? { filter } : {}),
             ...(isCron
-              ? draft.runAt
+              ? draft.every !== null
+                ? { every: draft.every.trim() }
+                : draft.runAt
                 ? { run_at: draft.runAt, timezone: draft.timezone.trim() || 'UTC' }
                 : { cron: draft.cron.trim(), timezone: draft.timezone.trim() || 'UTC' }
               : isEvent
@@ -358,7 +363,9 @@ function ComposerForm({
         : undefined;
       const isChangeRequest = draft.kind === 'change_request';
       successToast(
-        isEvent || isApp
+        isEvent
+          ? tI18nComplete.raw('textd6fa1626e3af')
+          : isApp
           ? tI18nComplete.raw('text840993da3129')
           : isCron
             ? tI18nComplete.raw('text84e98b45ad8b')
@@ -530,6 +537,7 @@ function ComposerForm({
           <section data-block="then" className="space-y-3">
             <SectionTitle>{tI18nComplete.raw('text0597f441dcca')}</SectionTitle>
             <ThenFields
+              projectId={projectId}
               agents={agents}
               draft={draft}
               patch={patch}
@@ -575,9 +583,9 @@ function ComposerForm({
 
           {error ? (
             <div ref={errorRef}>
-              <InfoBanner tone="destructive" className="text-xs">
+              <BannerAlert variant="destructive" className="text-xs"><BannerAlertDescription>
                 {error}
-              </InfoBanner>
+              </BannerAlertDescription></BannerAlert>
             </div>
           ) : null}
         </div>

@@ -106,6 +106,7 @@ import type { SessionLogChanges, SessionLogPort, SessionLogRestoreResult } from 
 import { logChanges } from '../shared/session-log-journal'
 import { isRestoreNote } from '../shared/session-log-boot'
 import type { BytesReader } from '../shared/session-log-restore'
+import { isHiddenNote } from './extensions/follow-through'
 import { restorePiSessionLog, type PiRestoreTarget } from './session-log-restore'
 import { assistantMessageError } from './turn-events'
 import { PI_HARNESS_VERSION } from './version'
@@ -316,7 +317,7 @@ function deriveThread(input: {
     const own = edits.get(e.id) ?? []
     const latest = own.at(-1)
     const replacement = own.findLast((x) => x.replacement !== null)?.replacement
-    const msg: J | undefined = e.type === 'message' ? e.message : e.type === 'custom_message' ? { role: 'custom', ...e } : undefined
+    const msg: J | undefined = e.type === 'message' ? e.message : e.type === 'custom_message' && !isHiddenNote(e) ? { role: 'custom', ...e } : undefined
 
     if (e.type === 'compaction') {
       const id = idOf(e)
@@ -348,7 +349,9 @@ function deriveThread(input: {
     const nativeParts: unknown[] = [e, ...own, row ?? null]
 
     if (msg.role === 'user' || msg.role === 'custom' || msg.role === 'system') {
-      const m = message(threadId, id, msg.role === 'system' ? 'system' : 'user', iso(msg.timestamp || input.createdAt))
+      // A custom message's time is its entry's, an ISO string (a message's own is epoch ms): read as a number it was
+      // 0, and every extension's message was dated 1970 (a voice call's turns showed "Worked for 29895800m").
+      const m = message(threadId, id, msg.role === 'system' ? 'system' : 'user', isoOf(msg.timestamp || input.createdAt))
       if (msg.role === 'system') m.kind = 'context'
       if (msg.role === 'custom') m.origin = 'automation'
       if (input.child && msg.role === 'user' && !out.some((x) => x.message.role === 'user')) m.origin = 'subagent'
@@ -475,7 +478,7 @@ function firstKept(entries: J[], c: J, idOf: (e: J) => string): string | null {
   const end = entries.indexOf(c)
   if (start < 0 || start >= end) return null
   for (const e of entries.slice(start, end)) {
-    if ((e.type === 'message' && e.message?.role !== 'toolResult') || e.type === 'custom_message' || e.type === 'compaction') return idOf(e)
+    if ((e.type === 'message' && e.message?.role !== 'toolResult') || (e.type === 'custom_message' && !isHiddenNote(e)) || e.type === 'compaction') return idOf(e)
   }
   return null
 }
@@ -518,13 +521,21 @@ function close(block: ToolCallBlock): void {
 }
 
 /** The whole session as a log, each message's native hash, and each image's base64 data by sha256. */
-export function piSessionLog(s: PiSessionSnapshot): { log: SessionLog; hashes: Map<string, string>; images: Map<string, string> } {
+export function piSessionLog(
+  s: PiSessionSnapshot,
+  /** False skips the per-message hashing: a read (`GET /kortix/runtime/log`) never uses
+   * the hashes — only the journal relay (`changes`) and a restore do — and digesting every
+   * entry's JSON on a long session costs hundreds of milliseconds per read (KRTX-4488:
+   * ~75% of a scaled-up export).*/
+  opts: { hashes?: boolean } = {},
+): { log: SessionLog; hashes: Map<string, string>; images: Map<string, string> } {
   const created = s.header?.timestamp ?? iso(0)
+  const hashMessages = opts.hashes !== false
   const hashes = new Map<string, string>()
   const images = new Map<string, string>()
   const finish = (derived: Derived[]) =>
     derived.map(({ message, native }) => {
-      hashes.set(message.message_id, sha256(JSON.stringify([message.seq, native])))
+      if (hashMessages) hashes.set(message.message_id, sha256(JSON.stringify([message.seq, native])))
       return message
     })
   const all = s.entries as J[]

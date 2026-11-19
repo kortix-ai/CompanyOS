@@ -46,6 +46,7 @@ export type AccountStateLike = Pick<
     total?: number | null;
     lifetime_granted?: number | null;
     lifetime_purchased?: number | null;
+    free_grant?: { eligible: boolean; claimed_workspace_id: string | null } | null;
   } | null;
   subscription?: { subscription_id?: string | null; status?: string | null } | null;
   tier?: { can_purchase_credits?: boolean | null; monthly_credits?: number | null } | null;
@@ -102,6 +103,51 @@ export function billingStateAllowsRun(state: BillingState | null): boolean {
 /** Whether adding credits (not subscribing) is what unblocks the account. */
 export function billingStateNeedsTopUp(state: BillingState | null): boolean {
   return state === 'out_of_credits' || state === 'payment_failed';
+}
+
+/** The server's run floor in USD (`MINIMUM_CREDIT_FOR_RUN`, billing/services/tier-facts.ts). */
+export const RUN_FLOOR_USD = 0.01;
+
+/**
+ * Whether the billing modal opens on the compact out-of-credits view. True
+ * when the account cannot run: out of credits, a failed payment, or a Free
+ * account below the run floor. The last case is a further workspace that gets
+ * no free credits, or a Free account that spent them: the modal offers the
+ * subscription there, never only "Continue on Free" (review finding 10).
+ */
+export function billingModalNeedsTopUp(
+  accountState: AccountStateLike | null | undefined,
+  state: BillingState | null,
+): boolean {
+  if (billingStateNeedsTopUp(state)) return true;
+  if (state !== 'no_subscription') return false;
+  const balance = accountState?.credits?.total;
+  return typeof balance === 'number' && balance < RUN_FLOOR_USD;
+}
+
+/**
+ * Whether the person's free credits are unspent while THIS workspace has none
+ * (KRTX-4713). A further workspace on Free holds no grant by design — the
+ * person's free credits live in their first workspace, reported as
+ * `free_grant: { eligible: false, claimed_workspace_id }`. Opening that
+ * workspace must never greet them with the Out-of-credits modal while those
+ * credits still cover a run: the modal waits for an actual blocked turn (the
+ * send gate, a 402). Returns
+ *
+ * - `false` — not the case: no claim elsewhere, or the claimed wallet is dry
+ *   (a true zero balance — the modal may open);
+ * - `true` — the claimed workspace's wallet still runs: hold the modal;
+ * - `undefined` — a claim exists but the claimed workspace's state has not
+ *   loaded: hold the modal until it does (`useFreeGrantUnspent` reads it).
+ */
+export function freeGrantUnspentElsewhere(
+  state: AccountStateLike | null | undefined,
+  claimedState: AccountStateLike | null | undefined,
+): boolean | undefined {
+  const grant = state?.credits?.free_grant;
+  if (grant?.eligible !== false || !grant.claimed_workspace_id) return false;
+  const canRun = claimedState?.credits?.can_run;
+  return typeof canRun === 'boolean' ? canRun : undefined;
 }
 
 /**
@@ -170,8 +216,8 @@ export function walletAlertCopy(
   action: string;
 } {
   return severity === 'blocked'
-    ? { label: tI18nComplete.raw('textf1c24ec92034'), action: 'Top up' }
-    : { label: tI18nComplete.raw('text9757b0277bb1'), action: 'Top up' };
+    ? { label: tI18nComplete.raw('textf1c24ec92034'), action: 'Add credits' }
+    : { label: tI18nComplete.raw('text9757b0277bb1'), action: 'Add credits' };
 }
 
 export interface BillingModalCopy {
@@ -246,7 +292,7 @@ export function billingGateCopy(
       return {
         title: tI18nComplete.raw('textf1c24ec92034'),
         message: tI18nComplete.raw('text6821e42be2c1'),
-        ctaLabel: 'Top up credits',
+        ctaLabel: 'Add credits',
         dialogReason: 'insufficient_credits',
       };
     case 'payment_failed':

@@ -102,6 +102,7 @@ const projectRow: typeof projects.$inferSelect = {
   accountId: ACCOUNT_ID,
   name: 'Trigger Project',
   sandboxProviderGeneration: 0,
+  splitPending: false,
   secretDefaultStrategy: 'runtime' as const,
   repoUrl: 'https://github.com/kortix-ai/trigger-project.git',
   defaultBranch: 'main',
@@ -149,8 +150,10 @@ function resetState() {
   watcherFailure = null;
 }
 
-function sign(rawBody: string, secret: string) {
-  return `sha256=${createHmac('sha256', secret).update(rawBody).digest('hex')}`;
+// KRTX-4098: signature auth requires X-Kortix-Timestamp and signs `<ts>.<body>`.
+const webhookTimestamp = () => String(Math.floor(Date.now() / 1000));
+function sign(rawBody: string, timestamp: string, secret: string) {
+  return `sha256=${createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex')}`;
 }
 
 mockIamEngineAllowAll();
@@ -364,6 +367,16 @@ mock.module('../platform/services/provider-balancer', () => ({
 // than served by the db shim: the gate's contract is the catalog's `enabled`
 // stamps, not the read models beneath them.
 const realServableCatalog = await import('../llm-gateway/models/servable-catalog');
+// The fire's model gate also asks for a Claude subscription account
+// (trigger-model-gate.ts). No trigger here has one, and the hermetic db shim
+// cannot run that query.
+const realClaudeAccounts = await import('../claude-subscription/accounts');
+mock.module('../claude-subscription/accounts', () => ({
+  ...realClaudeAccounts,
+  hasClaudeCredential: async () => false,
+  countUsableClaudeAccounts: async () => 0,
+}));
+
 mock.module('../llm-gateway/models/servable-catalog', () => ({
   ...realServableCatalog,
   servableProjectCatalog: async (input: Record<string, unknown>) => {
@@ -374,6 +387,8 @@ mock.module('../llm-gateway/models/servable-catalog', () => ({
 
 mock.module('../shared/resolve-account', () => ({
   resolveAccountId: async () => ACCOUNT_ID,
+  // No workspace id resolves to an account key in this suite.
+  accountKeyForWorkspaceId: async () => null,
 }));
 
 mock.module('../shared/supabase', () => ({
@@ -711,6 +726,16 @@ mock.module('../shared/db', () => ({
   db: triggerDbMock,
 }));
 
+// The fake db has no joins, and no project here holds a named provider key: the
+// one key reader (llm-gateway/credentials/gateway-keys.ts) finds none.
+const realAccountResource = await import('../secrets/account-resource');
+mock.module('../secrets/account-resource', () => ({
+  ...realAccountResource,
+  resolveProjectSharedProviderSecrets: async () => ({ coolingDown: false, secrets: [], withheld: 0 }),
+  resolveDefaultCodexAccountSecret: async () => null,
+  listGrantedGatewaySecretNames: async () => [],
+}));
+
 // The fake db has no joins: no trigger in these tests posts to a channel or DM.
 const realTriggerSpace = await import('../projects/lib/trigger-space');
 mock.module('../projects/lib/trigger-space', () => ({ ...realTriggerSpace, loadTriggerSpace: async () => null }));
@@ -883,11 +908,16 @@ const {
 const { config } = await import('../config');
 registerAllProjectRoutes();
 const { resetRateLimiters } = await import('../middleware/rate-limit');
+const { webhookWorkspacesApp } = await import('../workspaces/index');
 
 function createApp() {
   const app = new Hono();
   app.route('/v1/projects', projectsApp);
   app.route('/v1/webhooks', projectWebhooksApp);
+  // The canonical name of the same trigger ingress, mounted exactly as app.ts
+  // mounts it: the alias re-registers routes and drops app middleware, so a
+  // route-level guard must hold on both URLs.
+  app.route('/v1/webhooks', webhookWorkspacesApp(projectWebhooksApp));
   app.onError((err, c) => {
     if (err instanceof HTTPException) {
       return c.json({ error: true, message: err.message, status: err.status }, err.status);
@@ -1040,8 +1070,8 @@ describe('git-backed triggers — runtime fire paths', () => {
     expect(sandboxProvisionCalls).toBe(1);
     expect(sessionRows.at(-1)?.agentName).toBe('asana-refresher');
     expect(sessionRows.at(-1)?.metadata).toMatchObject({
-      opencode_model: 'kortix/glm-5.3-flash',
-      opencode_model_source: 'project',
+      model: 'kortix/glm-5.3-flash',
+      model_source: 'project',
     });
   });
 
@@ -1215,23 +1245,23 @@ describe('git-backed triggers — runtime fire paths', () => {
     ]);
   });
 
-  test('a failed attempt the cron retries raises nothing; the fifth dead-letters and raises once', async () => {
+  // isTerminalFireFailure (#12645): a fire that says `retryable: false` is final on its
+  // first attempt. The five-attempt retry budget itself is trigger-execution-store's
+  // (trigger-execution-store.integration.test.ts).
+  test('a fire with no account owner to run as dead-letters on its first attempt and raises once', async () => {
     seedManifest(cronEntry({ slug: 'flaky', name: 'Flaky', cron: '* * * * * *', prompt: 'Report' }));
     const slot = new Date('2026-01-01T00:00:30Z');
     seedRuntimeCron({ slug: 'flaky', prompt: 'Report', nextFireAt: slot });
-    // No owner to run as: a failure with no permanent code, so it retries.
+    // No owner to run as: no retry can find one.
     automationActor = null;
 
     await runProjectTriggerSweep(slot);
-    expect(await drainTriggerExecutionQueue(slot)).toMatchObject({ queued: 1, failed: 0 });
+    expect(await drainTriggerExecutionQueue(slot)).toMatchObject({ queued: 0, failed: 1 });
     expect(runtimeRows[0]).toMatchObject({ lastStatus: 'failed' });
-    expect(alertCalls).toEqual([]);
-
-    // Each retry is due 2 s after its failure; claim each one well after that.
-    for (let attempt = 2; attempt <= 5; attempt += 1) {
-      await drainTriggerExecutionQueue(new Date(Date.now() + attempt * 60_000));
-    }
-    expect(triggerExecutionRows[0]).toMatchObject({ status: 'dead_lettered', attempts: 5 });
+    expect(triggerExecutionRows[0]).toMatchObject({ status: 'dead_lettered', attempts: 1 });
+    // A later drain claims nothing and raises nothing more.
+    await drainTriggerExecutionQueue(new Date(Date.now() + 5 * 60_000));
+    expect(triggerExecutionRows[0]).toMatchObject({ status: 'dead_lettered', attempts: 1 });
     expect(alertCalls).toEqual([
       {
         kind: 'raise',
@@ -1248,7 +1278,6 @@ describe('git-backed triggers — runtime fire paths', () => {
   test('the person who creates or edits a trigger follows it; deleting it drops its followers', async () => {
     seedManifest();
     testAuthType = 'supabase';
-    projectRow.metadata = { experimental: { notification_center: true } };
     const app = createApp();
     const created = await app.request(`/v1/projects/${PROJECT_ID}/triggers`, {
       method: 'POST',
@@ -1273,11 +1302,11 @@ describe('git-backed triggers — runtime fire paths', () => {
     ]);
   });
 
-  // The notification_center flag off (the default): a created or edited trigger
-  // records no follower; deleting one still drops followers from an earlier on period.
-  test('with the notification_center flag off, nobody follows a created or edited trigger', async () => {
+  // The flag graduated on 2026-11-06: a stored override changes no follow.
+  test('a stored notification_center: false override is inert: the creator still follows the trigger', async () => {
     seedManifest();
     testAuthType = 'supabase';
+    projectRow.metadata = { experimental: { notification_center: false } };
     const app = createApp();
     const created = await app.request(`/v1/projects/${PROJECT_ID}/triggers`, {
       method: 'POST',
@@ -1294,13 +1323,17 @@ describe('git-backed triggers — runtime fire paths', () => {
     const deleted = await app.request(`/v1/projects/${PROJECT_ID}/triggers/nightly`, { method: 'DELETE' });
     expect(deleted.status).toBe(200);
 
-    expect(watcherCalls).toEqual([{ kind: 'drop', ref: { projectId: PROJECT_ID, slug: 'nightly' } }]);
+    const follow = { accountId: ACCOUNT_ID, projectId: PROJECT_ID, slug: 'nightly', userId: USER_ID };
+    expect(watcherCalls).toEqual([
+      { kind: 'follow', ref: follow },
+      { kind: 'follow', ref: follow },
+      { kind: 'drop', ref: { projectId: PROJECT_ID, slug: 'nightly' } },
+    ]);
   });
 
   test('an API key that creates a trigger names no person, so nobody follows it', async () => {
     seedManifest();
     testAuthType = 'apiKey';
-    projectRow.metadata = { experimental: { notification_center: true } };
     const created = await createApp().request(`/v1/projects/${PROJECT_ID}/triggers`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1334,11 +1367,13 @@ describe('git-backed triggers — runtime fire paths', () => {
     secretValues.set('HOOK_SECRET', 'shhh');
     automationActor = null;
     const rawBody = JSON.stringify({ action: 'opened' });
+    const stamp = webhookTimestamp();
     const res = await createApp().request(`/v1/webhooks/projects/${PROJECT_ID}/hook`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Kortix-Signature': sign(rawBody, 'shhh'),
+        'X-Kortix-Timestamp': stamp,
+        'X-Kortix-Signature': sign(rawBody, stamp, 'shhh'),
         'X-Kortix-Delivery-Id': 'failing-delivery-1',
       },
       body: rawBody,
@@ -1364,11 +1399,13 @@ describe('git-backed triggers — runtime fire paths', () => {
     seedManifest(webhookEntry({ slug: 'hook', name: 'Hook', secretEnv: 'HOOK_SECRET', prompt: 'New {{ body.action }}' }));
     secretValues.set('HOOK_SECRET', 'shhh');
     const rawBody = JSON.stringify({ action: 'opened' });
+    const stamp = webhookTimestamp();
     const res = await createApp().request(`/v1/webhooks/projects/${PROJECT_ID}/hook`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Kortix-Signature': sign(rawBody, 'shhh'),
+        'X-Kortix-Timestamp': stamp,
+        'X-Kortix-Signature': sign(rawBody, stamp, 'shhh'),
         'X-Kortix-Delivery-Id': 'model-less-1',
       },
       body: rawBody,
@@ -1405,11 +1442,13 @@ describe('git-backed triggers — runtime fire paths', () => {
     seedManifest(webhookEntry({ slug: 'hook', name: 'Hook', secretEnv: 'HOOK_SECRET', prompt: 'New {{ body.action }}' }));
     secretValues.set('HOOK_SECRET', 'shhh');
     const rawBody = JSON.stringify({ action: 'opened' });
+    const stamp = webhookTimestamp();
     const res = await createApp().request(`/v1/webhooks/projects/${PROJECT_ID}/hook`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Kortix-Signature': sign(rawBody, 'shhh'),
+        'X-Kortix-Timestamp': stamp,
+        'X-Kortix-Signature': sign(rawBody, stamp, 'shhh'),
         'X-Kortix-Delivery-Id': 'model-ok-1',
       },
       body: rawBody,
@@ -1453,6 +1492,7 @@ describe('git-backed triggers — runtime fire paths', () => {
     secretValues.set('HOOK_SECRET', 'shhh');
     walletBalance = 0;
     const rawBody = JSON.stringify({ action: 'opened' });
+    const stamp = webhookTimestamp();
     const billingWasEnabled = config.KORTIX_BILLING_INTERNAL_ENABLED;
     config.KORTIX_BILLING_INTERNAL_ENABLED = true;
     try {
@@ -1460,7 +1500,8 @@ describe('git-backed triggers — runtime fire paths', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Kortix-Signature': sign(rawBody, 'shhh'),
+          'X-Kortix-Timestamp': stamp,
+          'X-Kortix-Signature': sign(rawBody, stamp, 'shhh'),
           'X-Kortix-Delivery-Id': 'empty-wallet-1',
         },
         body: rawBody,
@@ -1484,6 +1525,7 @@ describe('git-backed triggers — runtime fire paths', () => {
     const app = createApp();
 
     const rawBody = JSON.stringify({ action: 'opened' });
+    const stamp = webhookTimestamp();
     const missing = await app.request(`/v1/webhooks/projects/${PROJECT_ID}/hook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1497,7 +1539,8 @@ describe('git-backed triggers — runtime fire paths', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Kortix-Signature': sign(rawBody, 'wrong-secret'),
+        'X-Kortix-Timestamp': stamp,
+        'X-Kortix-Signature': sign(rawBody, stamp, 'wrong-secret'),
       },
       body: rawBody,
     });
@@ -1509,13 +1552,111 @@ describe('git-backed triggers — runtime fire paths', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Kortix-Signature': sign(rawBody, 'another-wrong-secret'),
+        'X-Kortix-Timestamp': stamp,
+        'X-Kortix-Signature': sign(rawBody, stamp, 'another-wrong-secret'),
       },
       body: rawBody,
     });
     expect(repeated.status).toBe(401);
     expect(mirrorInvalidationCalls).toBe(1);
     expect(manifestReadCalls).toBe(2);
+  });
+
+  // KRTX-4098 (CWE-294): the body-only HMAC verified forever, so a captured
+  // signed delivery replayed on every window. The timestamp is now required.
+  test('a signed delivery with no timestamp is refused, so a captured signature cannot replay', async () => {
+    seedManifest(webhookEntry({ slug: 'hook', name: 'Hook', secretEnv: 'HOOK_SECRET', prompt: 'New {{ body.action }}' }));
+    secretValues.set('HOOK_SECRET', 'shhh');
+    const app = createApp();
+    const rawBody = JSON.stringify({ action: 'opened' });
+    const stamp = webhookTimestamp();
+
+    const bodyOnly = await app.request(`/v1/webhooks/projects/${PROJECT_ID}/hook`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // The pre-KRTX-4098 scheme: HMAC of the bare body.
+        'X-Kortix-Signature': `sha256=${createHmac('sha256', 'shhh').update(rawBody).digest('hex')}`,
+      },
+      body: rawBody,
+    });
+    expect(bodyOnly.status).toBe(401);
+    expect((await bodyOnly.json()).error).toBe('Invalid webhook signature');
+
+    const stale = await app.request(`/v1/webhooks/projects/${PROJECT_ID}/hook`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Kortix-Timestamp': String(Number(stamp) - 3600),
+        'X-Kortix-Signature': sign(rawBody, String(Number(stamp) - 3600), 'shhh'),
+      },
+      body: rawBody,
+    });
+    expect(stale.status).toBe(401);
+  });
+
+  // KRTX-4473 (CWE-770): the public trigger ingress read the whole body before
+  // it verified the signature, so any caller with a credential header made the
+  // API buffer a body of the sender's chosen size. The cap enforces the same
+  // bound the sibling `/events` ingress has, in the handler so both route names
+  // answer it.
+  describe('webhook body cap (KRTX-4473)', () => {
+    // The cap is the contract, so the test states it and checks the router
+    // agrees, rather than trusting the router's own number.
+    const TRIGGER_INGRESS_MAX_BYTES = 1024 * 1024;
+    const oversized = `{"pad":"${'x'.repeat(TRIGGER_INGRESS_MAX_BYTES)}"}`;
+
+    test('an over-cap body is refused with 413 before authentication, under both route names', async () => {
+      seedManifest(webhookEntry({ slug: 'hook', name: 'Hook', secretEnv: 'HOOK_SECRET', prompt: 'New {{ body.action }}' }));
+      const app = createApp();
+      expect(oversized.length > TRIGGER_INGRESS_MAX_BYTES).toBe(true);
+      for (const url of [
+        `/v1/webhooks/projects/${PROJECT_ID}/hook`,
+        `/v1/webhooks/workspaces/${PROJECT_ID}/hook`,
+      ]) {
+        const res = await app.request(url, {
+          method: 'POST',
+          // No valid signature: only the size cap can refuse this one.
+          headers: { 'Content-Type': 'application/json', 'X-Kortix-Token': 'wrong-token' },
+          body: oversized,
+        });
+        expect(res.status, url).toBe(413);
+        expect(await res.json()).toEqual({ error: 'Payload too large' });
+      }
+      // Refused on size alone: no project lookup, no manifest read, no session.
+      expect(manifestReadCalls).toBe(0);
+      expect(sandboxProvisionCalls).toBe(0);
+    });
+
+    test('the router ships the cap the ingress enforces', async () => {
+      const { TRIGGER_INGRESS_MAX_BYTES: shipped } = await import('../projects/routes/trigger-webhooks');
+      expect(shipped).toBe(TRIGGER_INGRESS_MAX_BYTES);
+    });
+
+    test('a body inside the cap fires exactly as before', async () => {
+      seedManifest(webhookEntry({ slug: 'hook', name: 'Hook', secretEnv: 'HOOK_SECRET', prompt: 'New {{ body.action }}' }));
+      secretValues.set('HOOK_SECRET', 'shhh');
+      const app = createApp();
+      const rawBody = JSON.stringify({ action: 'opened' });
+      const stamp = webhookTimestamp();
+      for (const url of [
+        `/v1/webhooks/projects/${PROJECT_ID}/hook`,
+        `/v1/webhooks/workspaces/${PROJECT_ID}/hook`,
+      ]) {
+        const res = await app.request(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Kortix-Timestamp': stamp,
+            'X-Kortix-Signature': sign(rawBody, stamp, 'shhh'),
+            'X-Kortix-Delivery-Id': `at-cap-${url.includes('/workspaces/') ? 'canonical' : 'legacy'}`,
+          },
+          body: rawBody,
+        });
+        expect(res.status, url).toBe(202);
+        expect((await res.json()).status).toBe('fired');
+      }
+    });
   });
 
   test('webhook fires with a valid HMAC spawn a session', async () => {
@@ -1529,11 +1670,13 @@ describe('git-backed triggers — runtime fire paths', () => {
     const app = createApp();
 
     const rawBody = JSON.stringify({ action: 'opened' });
+    const stamp = webhookTimestamp();
     const res = await app.request(`/v1/webhooks/projects/${PROJECT_ID}/hook`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Kortix-Signature': sign(rawBody, 'shhh'),
+        'X-Kortix-Timestamp': stamp,
+        'X-Kortix-Signature': sign(rawBody, stamp, 'shhh'),
         'X-Kortix-Delivery-Id': 'delivery-1',
       },
       body: rawBody,
@@ -1555,7 +1698,8 @@ describe('git-backed triggers — runtime fire paths', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Kortix-Signature': sign(rawBody, 'shhh'),
+        'X-Kortix-Timestamp': stamp,
+        'X-Kortix-Signature': sign(rawBody, stamp, 'shhh'),
         'X-Kortix-Delivery-Id': 'delivery-1',
       },
       body: rawBody,
@@ -1579,11 +1723,13 @@ describe('git-backed triggers — runtime fire paths', () => {
     const app = createApp();
 
     const rawBody = JSON.stringify({ action: 'opened' });
+    const stamp = webhookTimestamp();
     const res = await app.request(`/v1/webhooks/projects/${PROJECT_ID}/hook`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Kortix-Signature': sign(rawBody, 'shhh'),
+        'X-Kortix-Timestamp': stamp,
+        'X-Kortix-Signature': sign(rawBody, stamp, 'shhh'),
         'X-Kortix-Delivery-Id': 'queued-delivery-1',
       },
       body: rawBody,
@@ -1613,11 +1759,13 @@ describe('git-backed triggers — runtime fire paths', () => {
       seedManifest(webhookEntry({ slug: 'hook', name: 'Hook', secretEnv: 'HOOK_SECRET', prompt: 'New {{ body.action }}' }));
       secretValues.set('HOOK_SECRET', 'shhh');
       const rawBody = JSON.stringify({ action: 'opened' });
+      const stamp = webhookTimestamp();
       return createApp().request(`/v1/webhooks/projects/${PROJECT_ID}/hook`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Kortix-Signature': sign(rawBody, 'shhh'),
+          'X-Kortix-Timestamp': stamp,
+          'X-Kortix-Signature': sign(rawBody, stamp, 'shhh'),
           'X-Kortix-Delivery-Id': deliveryId,
         },
         body: rawBody,
@@ -1647,9 +1795,16 @@ describe('git-backed triggers — runtime fire paths', () => {
         metadata: { trigger_slug: 'hook', trigger_kind: 'git' },
       });
       const rawBody = JSON.stringify({ action: 'opened' });
+      const stamp = webhookTimestamp();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-Kortix-Timestamp': stamp,
+        'X-Kortix-Signature': sign(rawBody, stamp, 'shhh'),
+        'X-Kortix-Delivery-Id': 'reuse-alert-1',
+      };
       const res = await createApp().request(`/v1/webhooks/projects/${PROJECT_ID}/hook`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Kortix-Signature': sign(rawBody, 'shhh'), 'X-Kortix-Delivery-Id': 'reuse-alert-1' },
+        headers,
         body: rawBody,
       });
       expect(res.status).toBe(202);
@@ -1689,7 +1844,6 @@ describe('git-backed triggers — runtime fire paths', () => {
     test('a failed watcher write does not fail the trigger create or delete', async () => {
       seedManifest();
       testAuthType = 'supabase';
-      projectRow.metadata = { experimental: { notification_center: true } };
       watcherFailure = new Error('connection terminated');
       const app = createApp();
       const created = await app.request(`/v1/projects/${PROJECT_ID}/triggers`, {

@@ -30,7 +30,7 @@ export interface PanelContext {
   quote?: string;
 }
 
-export type ExtensionMessage =
+type ExtensionMessage =
   | { type: 'kortix.panel.tab'; tab: PanelTab | null }
   | { type: 'kortix.panel.context'; tab: PanelTab | null; quote?: string }
   | { type: 'kortix.panel.tabs.result'; requestId: string; tabs: PanelTab[] }
@@ -98,7 +98,7 @@ export function readExtensionMessage(
 
 /** The session a panel path shows, for the extension's Act hand-off. */
 export function sessionIdFromPath(pathname: string): string | undefined {
-  return /\/projects\/[^/]+\/sessions\/([^/?#]+)/.exec(pathname)?.[1];
+  return /\/(?:workspaces|projects)\/[^/]+\/sessions\/([^/?#]+)/.exec(pathname)?.[1];
 }
 
 function post(message: Record<string, unknown>) {

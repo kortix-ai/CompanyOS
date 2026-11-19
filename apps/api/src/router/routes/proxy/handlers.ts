@@ -3,7 +3,6 @@ import { type ProxyServiceConfig } from '../../config/proxy-services';
 import { timeUpstream } from '../../../middleware/upstream-timing';
 import { config } from '../../../config';
 import { logger as appLogger } from '../../../lib/logger';
-import { resolveActorFromRequest } from '../../../shared/actor-context';
 import { assertSafeEgressUrl, UnsafeEgressError } from '../../../shared/ssrf-guard';
 import {
   matchAllowedRoute,
@@ -14,7 +13,7 @@ import {
   refundToolReservation,
   injectApiKey,
 } from './helpers';
-import { capFirecrawlCrawlLimit } from './crawl-limit';
+import { boundFirecrawlRequest } from './firecrawl-budget';
 
 // === Core Proxy Handler ===
 //
@@ -256,8 +255,6 @@ async function handleKortixProxy(
     });
   }
 
-  const actor = resolveActorFromRequest(c, { logPrefix: '[PROXY]' });
-
   const targetUrl = `${service.targetBaseUrl}${subPath}${queryString}`;
   const headers = buildForwardHeaders(c);
   // Strip Kortix-specific and auth headers — upstream gets injected key only
@@ -267,13 +264,12 @@ async function handleKortixProxy(
   let body = await getRequestBody(c, method);
 
   body = injectApiKey(service, headers, body);
-  body = capFirecrawlCrawlLimit(service, method, subPath, body, headers);
+  body = boundFirecrawlRequest(service, method, subPath, body, headers);
   // Route-specific billing overrides service default.
   const billingToolName = matchedRoute.billingToolName || service.billingToolName;
   const toolReservation = await reserveToolProxyCredits(
     accountId,
     billingToolName,
-    actor,
     `Proxy ${service.name}: ${method} ${subPath}`,
   );
 
@@ -304,7 +300,6 @@ async function handleKortixPassthrough(
   const toolReservation = await reserveToolProxyCredits(
     accountId,
     service.billingToolName,
-    null,
     `Passthrough ${service.name}: ${method} ${subPath}`,
   );
 

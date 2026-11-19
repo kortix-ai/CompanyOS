@@ -6,7 +6,7 @@
  */
 import type { CaptureDevice, CaptureHealthReason, CaptureLayer } from '@kortix/sdk';
 
-export type DeviceTone = 'green' | 'orange' | 'red' | 'none';
+type DeviceTone = 'green' | 'orange' | 'red' | 'none';
 export type DeviceStatusKey =
   | 'recording'
   | 'paused'
@@ -20,7 +20,7 @@ export type DeviceStatusKey =
 /** status.json `reason`s that stop recording without anyone pausing it (the engine's words). */
 const LOCKED = new Set(['locked']);
 const EXCLUDED = new Set(['excluded_app', 'excluded_domain', 'not_included', 'private_browsing', 'unknown_bundle']);
-export type DeviceLayer = CaptureLayer;
+type DeviceLayer = CaptureLayer;
 
 export interface DeviceStatusView {
   key: DeviceStatusKey;
@@ -94,6 +94,10 @@ export function deviceStatus(device: CaptureDevice): DeviceStatusView {
     if (code === 'stalled' || code === 'error') return { code, timeMs: lastFrameMs ?? undefined };
     if (code === 'backlog') return { code, count: num(sync.pending) ?? undefined };
     if (code === 'behind_version') return { code, version: health.latest_version ?? undefined, current: device.app_version ?? undefined };
+    if (code === 'update_failed') {
+      const update = device.diagnostics?.update;
+      return { code, version: update?.last_result?.to ?? update?.latest ?? health.latest_version ?? undefined };
+    }
     return { code };
   });
   if (health?.idle && key === 'offline') lines.push({ code: 'asleep', timeMs: reportedAtMs ?? undefined });

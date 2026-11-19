@@ -1,3 +1,4 @@
+import type { SubscriptionUsage } from '../usage/subscription-usage';
 import type { ClaudeCodeHooks } from '../claude-code/passthrough';
 import type { ModelCatalog } from './catalog';
 import type { UpstreamDescriptor } from './descriptor';
@@ -58,6 +59,11 @@ export interface GatewayHooks {
   resolveUpstream: (principal: AuthedPrincipal, model: string) => Promise<UpstreamDescriptor[]>;
   notePoolRateLimit?: (principal: AuthedPrincipal, secretId: string, seconds: number) => Promise<void>;
   /**
+   * The plan usage a subscription account's response reported (ChatGPT, Claude).
+   * `createGateway` throttles it per account; a failure never reaches the response.
+   */
+  notePoolUsage?: (principal: AuthedPrincipal, secretId: string, usage: SubscriptionUsage) => Promise<void>;
+  /**
    * A fresh descriptor for a refreshable login the provider refused with 401,
    * or null when the login cannot be refreshed (the host marks it for
    * reconnection). Called once per request.
@@ -75,6 +81,10 @@ export interface GatewayHooks {
   // return a `holdUsd` when it took an atomic admission hold against the
   // wallet — the handler attaches it to the principal so settle() can
   // reconcile it to the real cost (see AuthedPrincipal.billingHold).
+  // A refusal throws an error whose `reason` is the 402 code
+  // (`subscription_required`, `insufficient_credits`, ...). Any other error
+  // means the check got no answer: the request is a retryable
+  // `503 admission_unavailable` (pipeline/simple-handler.ts `billingRefusal`).
   assertBillingActive: (accountId: string) => Promise<{ holdUsd?: number } | void>;
   assertBudget?: (principal: AuthedPrincipal) => Promise<void>;
   recordUsage: (event: UsageEvent) => Promise<void>;

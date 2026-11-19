@@ -6,9 +6,81 @@ Each entry has six fields: **Date** (ISO, the day the decision was recorded or m
 
 How to add an entry: change the value in `visual/visual-system.json`, run `scripts/generate-tokens.ts`, update the guidance file, then write the entry here, at the top of its date group. Do not put a color literal in this file: write the token name. `tests/unit/brand-kit.test.ts` fails on a literal. A value that was removed is written in code font, which the test skips.
 
-Ids: `D1` to `D8` and `D4a` to `D4k` come from the 2026-10-01 brand-kit build. `J-1` to `J-9` also live in `visual-system.json` (`decisions`). `K1` and up are kit-build decisions. `D9` comes from the OpenCode decoupling plan (2026-10-02). `E1` and `E2` are errata moved from the old skills. `Q1` and up come from fresh-agent QA rounds (Q1 to Q21 round 1, Q22 to Q32 round 2, Q33 to Q45 the full judge input and the surface agents, Q46 to Q57 the final kit pass on round 3).
+Ids: `D1` to `D8` and `D4a` to `D4k` come from the 2026-10-01 brand-kit build. `J-1` to `J-9` also live in `visual-system.json` (`decisions`). `K1` and up are kit-build decisions. `D9` comes from the OpenCode decoupling plan (2026-10-02); D39 answers it. `E1` and `E2` are errata moved from the old skills. `Q1` and up come from fresh-agent QA rounds (Q1 to Q21 round 1, Q22 to Q32 round 2, Q33 to Q45 the full judge input and the surface agents, Q46 to Q57 the final kit pass on round 3).
 
 ---
+
+## 2026-11-09
+
+### D42 The home hero has no trait line: title, then subhead
+- **Date:** 2026-11-09
+- **Decision:** The home hero renders no trait block above the title. It is the nav, then the title "The CompanyOS" (D35), then the subhead (D37), then the CTAs and the session-window band. No carousel, badges or replacement line goes in the freed space.
+- **Why:** two teammates in #kortix-triage, 2026-11-09: the two-by-two icon-and-label line ("Open Source, Extensible, Multiplayer, Sovereign", D35) reads as clutter and eats about a quarter of a phone's first screen; the follow-up ask was to remove the section outright, with no substitute.
+- **Where:** `apps/web/src/features/marketing/landing-hero/sand-band-hero.tsx`. The trait words stay in [positioning.md](verbal/positioning.md) "The three lengths" (the Short line), which the hero no longer spells out.
+- **Supersedes:** the trait-line part of D35 (D35's subhead part was already superseded by D37; the title and the positioning line stand).
+- **Source:** KRTX-4560 (the `krtx-4560-remove-hero-traits` branch).
+
+## 2026-11-06
+
+### D41 One workspace role, one Settings panel, and the workspace code names
+- **Date:** 2026-11-06
+- **Decision:** (1) A person holds ONE role per workspace, read from one ladder: Owner, Admin, Manager, Member. The UI never shows "account owner", "account admin", "account member", "project member" or "project manager", and never a second "access role" beside the workspace role. An invite reads "Invite people to {workspace}" and carries one role (Owner only by a transfer). (2) "Workspace settings" is the workspace's one Settings panel (`/workspaces/<id>/admin/<section>`, rail Workspace · Library · People · Billing · Support). "Preferences" is the person's own settings (profile, security, appearance, notifications, personal keys); the menu row that opens it says "Preferences" and keeps Mod+,. No surface has two rows labelled "Settings". (3) The code now has workspace names (`/v1/workspaces`, `workspace_id`, `kortix workspaces`, `KORTIX_WORKSPACE_ID`): copy that cites a code name uses the workspace name; the project and account names stay valid aliases and appear only where the reader's tool still prints them. (4) A key the workspace mints says "This workspace"; a personal key says "Every workspace". Never "Whole workspace" for a key that reaches more than one.
+- **Why:** founder, 2026-11-05 and 2026-11-06: "there will just be Workspace scopes not the account level or project level shit, just 1 type", "Hardcore treat everything 100% like SLACK Workspace", "1 Settings panel with all from top to bottom things". The review of the `workspaces` branch (findings 19 to 21) found the invite dialog still offering "Account member" plus an optional "Project member" row, two rows labelled "Settings" with different meanings, and copy that called the viewer's email "Workspace".
+- **Where:** [voice-and-tone.md](verbal/voice-and-tone.md) (the workspace and role rows of the noun table, the code-name rule), `packages/ui/src/access/access/role-select.tsx`, `packages/ui/src/access/access/invite-people-dialog.tsx`, `packages/shared/src/workspace-settings.ts` (the section names), `apps/web/translations/*.json`, `.agents/skills/learnings/work/workspaces/ux.md` sections 3 and 4.
+- **Supersedes:** the two-level access sentence of D40 ("the owner, admin and member role is the 'workspace role', and the Manager, Editor and Viewer grant is the 'access role'"), and D39 rule (4) where it kept `project` code names in copy that now has a workspace name. The rest of D39 stands.
+- **Source:** the `workspaces` branch (sub-branch `ws-r1-web`).
+
+### D39 Copy never names OpenCode as the harness; it names pi only where the sentence needs the name
+- **Date:** 2026-11-06
+- **Decision:** D9 has an answer. Customer copy names no harness product: it writes "agents", "the agent harness" or "the agent runtime". It names pi only where the sentence needs the name (D20, D24 and D27 say where). It never names OpenCode as a harness. OpenCode Zen and OpenCode Go stay as model-provider names.
+- **Why:** D9's premise is gone. Every session runs pi inside the Kortix daemon. The daemon has had no OpenCode adapter since 2026-10-30: a box that OpenCode booted before then boots pi (`apps/kortix-sandbox-agent-server/src/harness/README.md`, section "OpenCode is deleted"). The `registeredHarnesses` list, the `pi_harness` flag and the `runtime:` choice that D9 cites no longer exist. D9's "Until answered" line (name OpenCode on marketing surfaces) contradicted the harness rule in `verbal/claims.md` (user decision, 2026-10-28). This entry records that rule as the answer.
+- **Where:** `verbal/claims.md` (the harness rule and the row "Harness"), `verbal/voice-and-tone.md` (the brand-name row "OpenCode", the product noun `kortix.yaml`), `verbal/concepts.md` (beat 1, move 4).
+- **Supersedes:** D9.
+- **Source:** the `opencode-removal` branch.
+
+## 2026-11-05
+
+### D38 The email footer sits on the left edge and links the mobile apps
+- **Date:** 2026-11-05
+- **Decision:** The email footer (tagline, social icons, app links) is left-aligned on the frame edge, the same edge as the header symbol and the card. The first social icon has no left padding, so it starts on that edge; the icons are 16 px apart. The last footer line links "iOS app" and "Android app" (`/download/ios`, `/download/android` on the deployment's own host); the `kortix.com` link is gone.
+- **Why:** founder, 2026-11-05: the logo, the body and the footer must share one alignment. A centered footer under a left-aligned header and card "looks a bit weird" and breaks the hierarchy. The same day the founder asked to replace `kortix.com` with download links for the iOS and Android apps.
+- **Where:** `apps/api/src/lib/email/template.tsx`.
+- **Supersedes:** the last sentence of D26 ("The footer is centered: tagline, social icons, `kortix.com`"). The rest of D26 stands.
+- **Source:** the `email-footer-left` branch.
+
+### D40 "Workspace" is the one container noun; "project", "account" and "organization" leave the copy
+- **Date:** 2026-11-05
+- **Decision:** A workspace is a company's place in Kortix: its people, agents, sessions, connectors, files and billing. One workspace = one company, each one independent, the Slack model. It is the only top-level noun in every surface: the web app, mobile, the CLI help, the docs and marketing. "Project", "account" (as the container) and "organization" (as the container) move to the Never column of the noun table in [voice-and-tone.md](verbal/voice-and-tone.md). The copy follows four rules: (1) "Slack workspace", "Teams tenant" and "GitHub organization" stay, always qualified; (2) "your Kortix account" stays for a person's sign-in identity only (sign in, profile, delete my account); (3) the session's machine is a "sandbox", never a "workspace"; (4) a code name stays exact and in mono (`kortix projects use`, `--project`, `KORTIX_PROJECT_ID`, `/v1/projects`, `project.gitops.merge`, ICU placeholder names such as `{project}`). In the two-level access copy, the owner, admin and member role is the "workspace role", and the Manager, Editor and Viewer grant is the "access role" ("workspace access"). Positioning keeps the repo: "A Kortix workspace is backed by a git repo, and that repo is the company."
+- **Why:** founder, 2026-11-05: "can we somehow rename projects into workspaces? ... unify one organization and one project just into one primitive called a workspace", then "'Project' disappears from the UI, CLI and docs ... Hardcore treat everything 100% like SLACK Workspace, each being independent & all is per Workspace". Users read "project" as a small unit of work and asked whether a new task needs a new project. The data already has the Slack shape: 95.3% of accounts that have a project have exactly one (prod aggregates, 2026-11-05). Before this entry, "workspace" meant four things in `apps/web/translations/en.json`: the account, the project, a Slack workspace and the sandbox.
+- **Where:** [voice-and-tone.md](verbal/voice-and-tone.md) (the noun table and the three rules after it), [claims.md](verbal/claims.md) (the price, secrets, channels and audience rows), [positioning.md](verbal/positioning.md), [concepts.md](verbal/concepts.md), `apps/web/translations/en.json`, `packages/ui/src/i18n/en.ts`, `apps/web/content/docs/`, `apps/web/src/i18n/workspace-vocabulary.test.ts` (the ratchet). The plan and the UX contract: `.agents/skills/learnings/work/workspaces/`.
+- **Supersedes:** the `project` and `account` rows of the product noun table, and the rule that wrote "project" exactly as the code names it.
+- **Source:** the `workspaces` branch (sub-branch `workspaces-ws-copy`).
+
+## 2026-11-02
+
+### D37 The home hero subhead merges the positioning line with "Hand it an outcome"
+- **Date:** 2026-11-02
+- **Decision:** The home hero subhead is: "The cloud-native agent harness for companies. Hand it an outcome and agents run it 24/7 on your tools and context. Open source, in our cloud or yours." The positioning line leads; the earlier hero line follows as its mechanism, cut to one sentence plus where it runs (the founder asked for it more concise the same day; a first merge ran to about 240 characters). The title ("The CompanyOS") and the four traits stay as D35 set them.
+- **Why:** founder, 2026-11-02: "improve the HERO text merge it with the og 'Hand it an outcome and AI agents run it 24/7…'". The D35 mechanism sentence ("Always-on agents that start on events, run in parallel and share one memory of your company") said the same thing in words buyers do not use.
+- **Where:** `apps/web/src/features/marketing/landing-hero/sand-band-hero.tsx`.
+- **Supersedes:** the subhead sentence of D35. The rest of D35 stands.
+- **Source:** the `case-studies` branch.
+
+### D36 Case-study cards show a drawn mark, never a firm name
+- **Date:** 2026-11-02
+- **Decision:** A case study that names only a class (a firm, not its name) may carry a mark that Kortix drew for that card: a symbol, sometimes with one or two invented letters, never a firm name, a real client's initials or a likeness of the firm's real logo. It sits on the white logo tile like a third-party logo, in its own colors, so the row reads as a row of logos. The AI-run asset manager is a pinwheel of four quarter-discs turning around the center (a diversified portfolio), deep navy and azure; it replaced two forward slashes on the founder's ask. The executive search firm is two discs, deep emerald (the firm) and a lighter green (the candidate), whose overlap is cut out where they meet (the match); it replaced two ink-blue rings on the founder's ask for a better symbol and its own color. The founder chose both from twelve options. The five industry lifecycle cards each carry a drawn mark in its own style and colors, so no two marks look alike and the row never reads as an icon set. Some carry one or two invented letters, set as outlines, never a real client's initials: banking a minimal "N." : a burgundy high-contrast serif N with one gold full stop, the N the sole focus; insurance an editorial, consulting-style monogram: a white high-contrast serif "Ry" on an ink-navy square over one electric-blue rule (the founder asked for "hardcore McKinsey style": the register, never McKinsey's own mark); airlines an H on a tail fin with livery stripes (blue), healthcare an "m" between two gradient crescents (teal), retail "ro" on a pink badge. A client that allows its logo shows its own symbol only, with the wordmark cut out. No card shows a client name: the line under the category is gone.
+- **Why:** founder, 2026-11-02: "create 2 logos frm scratch for the ai run hedge fund & the executive search firm, so there is a proper logo, dont make a name clear but give a clear logo", then on symbol-only marks: "MAKE IT LEGIT, better looking LOGOS" and "these look ass", then on the lockups: "NO TXTS ONLY SUMBOL!!!" and "only have category alwasys not client name". A symbol alone at card size reads as an icon. A symbol with set type reads as a firm's logo. Before, the two cards showed a Phosphor glyph on a grey tile beside the CityU, WRITER and Wring logos.
+- **Where:** `apps/web/public/media/case-studies/asset-management.svg`, `apps/web/public/media/case-studies/executive-search.svg`, `apps/web/src/features/marketing/case-studies/content.ts`, [art-direction.md](visual/art-direction.md) (the "invented logos" rule).
+- **Supersedes:** nothing. It is an exception to the "invented logos" item in [art-direction.md](visual/art-direction.md), for anonymous case-study cards only.
+- **Source:** the `case-studies` branch.
+
+### D35 The home hero is "The CompanyOS", four traits above it, and the positioning line "the cloud-native agent harness for companies"
+- **Date:** 2026-11-02
+- **Decision:** The home hero title is the fixed line "The CompanyOS". Above it, a quiet muted line of four traits in this order: Open Source, Extensible, Multiplayer, Sovereign, each with its Phosphor glyph (`GitForkIcon`, then the home pillars' own `CodeIcon`, `UsersThreeIcon`, `ShieldCheckIcon`). No check marks, no divider; a two-by-two grid below `sm`. The subhead is the positioning line plus its mechanism: "The cloud-native agent harness for companies. Always-on agents that start on events, run in parallel and share one memory of your company." The same positioning line is the README tagline ("The open-source CompanyOS: the cloud-native agent harness for companies.") and opens the docs index, the Guide and the Developers page. The README and the docs carry the deeper mechanism (pi agents, My Kortix routing, triggers and loops, one cloud computer per session, persistent state).
+- **Why:** founder, 2026-11-02. On the README: "add that its a Harness Platform allowing u to deploy custom agents in pi to the cloud and orchestrate them with event driven design to form 24/7 loops and let agents run in swarms", as "a fundamental description change". On the hero: "The CompanyOS as the title", "put open Source first", "put Sovereign last", "instead of ticks something more suitable", the right-aligned list read as detached (the line-above-title layout won), and on "Hand it an outcome and AI agents run it 24/7. They work in your tools…": "so fluffy. it can apply to everything… call it company-based like harness, cloud-native like deepseek branding". A first harness-first draft that listed cloud computers and swarms was "too technical": the line names the category and three mechanisms in plain verbs, nothing more.
+- **Where:** `apps/web/src/features/marketing/landing-hero/sand-band-hero.tsx`, `README.md`, `apps/web/content/docs/index.mdx`, `apps/web/content/docs/guide.mdx`, `apps/web/content/docs/developers.mdx`, [positioning.md](verbal/positioning.md) section 1.
+- **Supersedes:** D21 (the cycling hero word). D18's Promise leaves the hero subhead; it stays a sanctioned line for pitches and the Outcomes section.
+- **Source:** the `harness-platform-copy` branch.
 
 ## 2026-10-31
 
@@ -60,7 +132,7 @@ Ids: `D1` to `D8` and `D4a` to `D4k` come from the 2026-10-01 brand-kit build. `
 - **Date:** 2026-10-29
 - **Decision:** Every surface that names the product says "Kortix CompanyOS": the page-title suffix (`<page> | Kortix CompanyOS`), the session tab title, Open Graph `siteName`, the PWA manifest `name`, the docs title, the MCP server title, the OAuth resource name, the agent-discovery title, the desktop window title, the sign-in and trial welcome screens, the README, the GitHub repo description and topics, and the GitHub org description. "AI Operating System" and "AI OS" leave the structured data (`alternateName`), the keywords, the launch film and the test fixtures too. Running text keeps "Kortix" as the short name ("Sign in with Kortix", "Connect Slack to Kortix"). Four names stay "Kortix" because a longer name truncates or breaks: the PWA `short_name`, the mobile home-screen name (`app.json`), the desktop `productName` (it names the user-data folder and the installer files), and the Slack and Teams bot mention name (`@Kortix`); the Slack app name and the Teams full name are "Kortix CompanyOS". The agent is still named Kortix. The Promise line reads "Hand it an outcome, AI agents run it 24/7".
 - **Why:** founder, 2026-10-29: "lets call it CompanyOS everywhere-- lets rename everywhere lets rename the entire product into Kortix CompanyOS hardcore", "even the README of the repo & the git repo itself we will rename to company-os or similar, dont do rename yet there but like all GH descriptions, the readme itself etc.", and on the hero subhead: "say Ai Agents".
-- **Where:** `packages/ui/src/internal/lib/site-metadata.ts`, `apps/web/src/app/[locale]/layout.tsx`, `apps/web/public/manifest.json`, `apps/web/blume.config.ts`, `apps/api/src/mcp/index.ts`, `apps/api/src/oauth/discovery.ts`, `apps/web/src/lib/agent-discovery.ts`, `apps/desktop-electron/src/main.js`, the `welcome` strings in every locale catalog, `apps/mobile/locales/en.json`, the Slack and Teams manifests, `README.md`, the hero subhead (`sand-band-hero.tsx`), [positioning.md](verbal/positioning.md) Promise row. The repository is still `kortix-ai/suna`; renaming it is a later step.
+- **Where:** `packages/ui/src/internal/lib/site-metadata.ts`, `apps/web/src/app/[locale]/layout.tsx`, `apps/web/public/manifest.json`, `apps/web/blume.config.ts`, `apps/api/src/mcp/index.ts`, `apps/api/src/oauth/discovery.ts`, `apps/web/src/lib/agent-discovery.ts`, `apps/desktop-electron/src/main.js`, the `welcome` strings in every locale catalog, `apps/mobile/locales/en.json`, the Slack and Teams manifests, `README.md`, the hero subhead (`sand-band-hero.tsx`), [positioning.md](verbal/positioning.md) Promise row. The repository is still `kortix-ai/CompanyOS`; renaming it is a later step.
 - **Supersedes:** D28's "old names kept in `alternateName` and keywords" and its launch-film exclusion; D18's Promise wording ("agents" becomes "AI agents").
 - **Source:** the `framework-pi` branch.
 
@@ -264,7 +336,7 @@ Ids: `D1` to `D8` and `D4a` to `D4k` come from the 2026-10-01 brand-kit build. `
 
 ## 2026-10-02
 
-### D9 (OPEN) Harness naming when pi is the default
+### D9 (SUPERSEDED by D39) Harness naming when pi is the default
 - **Decision:** Open. The copy names OpenCode as the agent harness: "An agent is an OpenCode agent", "OpenCode-native". A second harness, pi, ships in the product. The plan is that pi replaces OpenCode. The founder has not decided what the copy says when a project's default harness is pi: name pi, name no harness, or keep OpenCode until it is removed.
 - **Why:** The old reason for the rule was false. It said that OpenCode is the only shipped harness and that the other harnesses are behind `KORTIX_ACP_RUNTIME`. No code reads that variable. The code has two harnesses (`registeredHarnesses` in `apps/kortix-sandbox-agent-server/src/harness/harness.ts`): OpenCode, the default, and pi, which a project selects with the experimental `pi_harness` flag or `runtime: pi` in `kortix.yaml`. No Claude Code or Codex harness exists in code. On 2026-10-02 pi does not have rewind, compaction, slash commands, MCP servers or a todo tool, so OpenCode stays the default and the OpenCode copy is true for a default project.
 - **Where:** `verbal/claims.md` (the harness rule), the accuracy gates in `apps/web/src/features/marketing/agents-and-skills/content.ts`, `faq/content.ts`, `how-it-work/how-it-works-content.ts` and `how-it-work/step/step-harness.tsx`. 11 marketing files name OpenCode.
@@ -378,7 +450,7 @@ Ids: `D1` to `D8` and `D4a` to `D4k` come from the 2026-10-01 brand-kit build. `
 - **Source:** surface agents S1 and S2 (2026-10-01).
 
 ### Q40 Status chips, banners, spinners and the Badge
-- **Decision:** A filled banner has `border-transparent`. A chip label is `text-foreground`, with the hue on its glyph and tint. A diff counter or git status letter may paint `STATUS_TEXT` (contrast OPEN under J-7). `Badge` has no `color` prop: the 17-hue showcase map is deleted. `update` is `kortix-orange`. `destructive` stays the one red chip variant and still paints red text: debt. Paused and budget-reached states are `kortix-orange`. Badge geometry (`rounded-[5px] py-[0.1rem] text-[0.8rem]`) is recorded as debt with the nearest steps, not allowlisted. A test that pins `animate-spinner-spin` is changed with the code it pins. Why: S4 hit each gap while moving the primitives to tokens.
+- **Decision:** A filled banner has `border-transparent`. A chip label is `text-foreground`, with the hue on its glyph and tint. A diff counter or git status letter may paint `STATUS_TEXT` (green and red pass 4.5:1 on every light ground, J-7). `Badge` has no `color` prop: the 17-hue showcase map is deleted. `update` is `kortix-orange`. `destructive` stays the one red chip variant and still paints red text: debt. Paused and budget-reached states are `kortix-orange`. Badge geometry (`rounded-[5px] py-[0.1rem] text-[0.8rem]`) is recorded as debt with the nearest steps, not allowlisted. A test that pins `animate-spinner-spin` is changed with the code it pins. Why: S4 hit each gap while moving the primitives to tokens.
 - **Where:** `visual/color.md`, `visual/motion.md`, `visual/typography.md` (known drift).
 - **Source:** surface agents S4 and S6 (2026-10-01).
 
@@ -663,7 +735,7 @@ Ids: `D1` to `D8` and `D4a` to `D4k` come from the 2026-10-01 brand-kit build. `
 - **Where:** `visual/color.md`.
 - **Supersedes:** the Tailwind palette classes in `status.tsx`, and the yellow-as-info mapping.
 - **Source:** brand-kit build 2026-10-01.
-- **Related:** J-4 (mobile status parity, resolved), J-7 (light and dark accent pairs for text, open).
+- **Related:** J-4 (mobile status parity, resolved), J-7 (light and dark accent pairs, resolved).
 
 ### D4a Floating panels open and close with no animation
 - **Decision:** Menus, selects, popovers, tooltips, submenus and the command palette open and close with no animation. Modals, sheets and toasts keep 200 to 300ms. The hover card is the only animated floating panel.
@@ -795,7 +867,7 @@ Eight decisions made while the generator replaced the hand-written token blocks.
 - **J-4.** Resolved: web status uses `kortix-green` and `kortix-orange`; mobile semantic status aliases these accents.
 - **J-5.** Mobile keeps stock spacing (decided). It also keeps stock type (`text-xs` is 12px on mobile, 13px on web) and stock radius (`rounded-xl` 12px against 14px). Decide whether type and radius follow web.
 - **J-6.** `text-md` sets line height with a denominator of 0.9375 against a 0.9rem size (21.12px, not 22px). Fix the denominator or delete `text-md` (8 uses). Until then add no use.
-- **J-7.** `kortix-*` accents are theme-invariant and measure 2.4 to 4.0:1 on white. Decide on light and dark pairs for text use.
+- **J-7.** Resolved 2026-11-19: each `kortix-*` accent has a light and a dark value. See J-7 below.
 - **CLI banner.** The ASCII "KORTIX" banner ignores `NO_COLOR` and ships inside customer-site templates. Decide whether it is a sanctioned treatment.
 - **App icons.** The favicon, mobile icon and desktop icon do not match. One icon spec is OPEN.
 - **Outlined `Card`.** It ships `rounded-xl` and a `border-border/60`. Both conflict with `rounded-md` and one border color.
@@ -822,11 +894,11 @@ Eight decisions made while the generator replaced the hand-written token blocks.
 - **Supersedes:** none.
 - **Source:** `visual-system.json` `J-6`.
 
-### J-7 (OPEN) Light and dark accent pairs for text
-- **Decision:** Open. See the J-7 bullet in K4. Paint accents on glyphs, dots, tints and charts only.
-- **Why:** Every `kortix-*` accent measures 2.4 to 4.0:1 on white.
-- **Where:** `visual/color.md`.
-- **Supersedes:** none.
+### J-7 Light and dark accent pairs
+- **Decision:** Each `kortix-*` accent has a light and a dark value at the same OKLCH hue. Dark keeps the old values. Light: green `#037225` and red `#c21425` (4.55:1 on `#dedede`, the darkest light fill token, so hovered and selected rows pass, for diff counters); orange `#b47508`, yellow `#9f7f02`, blue `#1784e9` and purple `#9b70c5` (3.8:1 on white, 3.05:1 on `#e6e6e6`, the 3:1 glyph floor). Accents still paint glyphs, dots, tints and charts only. The hand-written `pure-light` and `light` palettes in `globals.css` take the same light values. Mobile keeps one value through `mobile_value` until native `theme.ts` resolves accents per theme: OPEN.
+- **Why:** The theme-invariant accents measured 2.38 to 3.98:1 on white. Orange (2.83:1) and yellow (2.38:1) failed the 3:1 floor for a status glyph (WCAG 1.4.11). Green and red at 4.5:1 also make `STATUS_TEXT` legal.
+- **Where:** `visual/color.md`, `visual-system.json` `color.accents`.
+- **Supersedes:** "Theme-invariant today" in `color.accents.rule`.
 - **Source:** `visual-system.json` `J-7`.
 
 ### J-8 Duration tokens compile

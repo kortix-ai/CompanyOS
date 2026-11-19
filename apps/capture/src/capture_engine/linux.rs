@@ -365,6 +365,7 @@ pub fn windows(fg: &Foreground) -> Vec<WinInfo> {
                 title: window_title(k, w),
                 rect,
                 focused: w as u64 == fg.id,
+                overlay: false,
             });
         }
         Ok(out)
@@ -522,6 +523,11 @@ pub fn displays() -> Vec<DisplayInfo> {
         Ok(out)
     })
     .unwrap_or_default()
+}
+
+/// No frame generation here: every capture reads the pixels.
+pub fn frame_generation(_: &DisplayInfo) -> Option<u64> {
+    None
 }
 
 pub fn screenshot_display(d: &DisplayInfo) -> Result<RgbImage> {

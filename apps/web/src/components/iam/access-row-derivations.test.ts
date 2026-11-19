@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
+import { testUiTranslator } from '@/i18n/test-translator';
 import { accessVia, agentsMetaPart } from './access-projects-tab';
 
 /**
@@ -29,7 +30,7 @@ describe('accessVia', () => {
   test('an owner/admin row says the access comes from the account role', () => {
     expect(
       accessVia(member({ effective_project_role: 'manager', effective_source: 'implicit' })),
-    ).toBe('via account admin');
+    ).toBe('Admin');
   });
 
   test('a single group source names the group', () => {
@@ -71,17 +72,17 @@ describe('accessVia', () => {
 
 describe('agentsMetaPart', () => {
   test('no resource grants means every agent in the project', () => {
-    expect(agentsMetaPart(0, 5)).toBe('Agents: all');
+    expect(agentsMetaPart(testUiTranslator, 0, 5)).toBe('Agents: all');
     // A member with no grant rows can use NO agent — agents are closed by
     // default and only the manager tier bypasses that.
-    expect(agentsMetaPart(0, 5, false)).toBe('Agents: none');
+    expect(agentsMetaPart(testUiTranslator, 0, 5, false)).toBe('Agents: none');
   });
 
   test('a subset reads as a fraction of the project roster', () => {
-    expect(agentsMetaPart(3, 5)).toBe('Agents: 3 of 5');
+    expect(agentsMetaPart(testUiTranslator, 3, 5)).toBe('Agents: 3 of 5');
   });
 
   test('without a readable roster it degrades to the bare count, never "of undefined"', () => {
-    expect(agentsMetaPart(3, undefined)).toBe('Agents: 3');
+    expect(agentsMetaPart(testUiTranslator, 3, undefined)).toBe('Agents: 3');
   });
 });

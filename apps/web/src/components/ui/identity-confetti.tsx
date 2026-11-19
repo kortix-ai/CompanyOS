@@ -41,7 +41,7 @@
  *
  * ## Why the canvas is portalled
  *
- * The production host renders this INSIDE a Radix dialog, and a `fixed`
+ * The production host renders this INSIDE a dialog, and a `fixed`
  * element does not reliably escape one. `ModalContent`
  * (`packages/ui/src/primitives/modal.tsx:124-125`) is `fixed ... overflow-y-auto` and, from
  * the `lg` breakpoint up, `-translate-x-1/2 -translate-y-1/2`. A transform
@@ -62,7 +62,7 @@ import { createPortal } from 'react-dom';
 
 import { Confetti, type ConfettiRef } from '@/components/magicui/confetti';
 import { glyphFace as glyphDrawing } from '@kortix/ui/glyph-face';
-import { glyphForeground } from '@kortix/ui/glyph-tint';
+import { glyphForeground, glyphStyle } from '@kortix/ui/glyph-tint';
 import { resolveConfettiFace, type ConfettiIdentity } from '@/lib/confetti-identity';
 import {
   IDENTITY_SCALAR,
@@ -70,7 +70,7 @@ import {
   glyphConfettiShape,
   initialConfettiShape,
 } from '@/lib/confetti-shapes';
-import { DEFAULT_ICON_WEIGHT, floatingZ, useDialogDepth } from '@kortix/ui';
+import { floatingZ, useDialogDepth } from '@kortix/ui';
 import { chalkColors } from '@kortix/shared';
 import type confetti from 'canvas-confetti';
 
@@ -213,11 +213,11 @@ export function IdentityConfetti({
   return (
     <>
       {glyphFace ? (
-        <span ref={probeRef} hidden aria-hidden className={glyphForeground(glyphFace.color)}>
+        <span ref={probeRef} hidden aria-hidden className={glyphForeground(glyphFace.color)} style={glyphStyle(glyphFace.color)}>
           {/* The weight is passed explicitly rather than inherited from
               `IconProvider`: the probe is read one frame after mount and must
               produce the same `d` no matter where in the tree it is hung. */}
-          <glyphFace.GlyphComponent weight={DEFAULT_ICON_WEIGHT} />
+          <glyphFace.GlyphComponent weight="fill" />
         </span>
       ) : null}
       {portalReady

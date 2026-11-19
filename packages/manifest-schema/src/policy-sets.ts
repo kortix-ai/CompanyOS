@@ -5,6 +5,7 @@
  * Dependency-free (like `connector-headers.ts`) so the validator, the JSON
  * Schema and apps/api's parser share one ruleset without an import cycle.
  */
+import { CONNECTOR_POLICY_ACTIONS, isEveryGrant } from './constants';
 import type { ManifestIssue } from './index';
 
 /** A set name. `base` is reserved: it names the connector's base rules. */
@@ -14,8 +15,6 @@ export const MAX_POLICY_SETS_PER_CONNECTOR = 32;
 export const MAX_RULES_PER_POLICY_SET = 200;
 /** Providers whose connectors have no manifest entry sync writes back. */
 export const POLICY_SETS_UNSUPPORTED_PROVIDERS = ['channel', 'computer'] as const;
-
-const ACTIONS = ['always_run', 'require_approval', 'block'];
 
 function isTable(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -47,10 +46,10 @@ export function validatePolicyRuleList(policies: unknown, where: string, issues:
       issues.push({ path: `${pwhere}.match`, message: 'match glob is required.', severity: 'error' });
     }
     const action = typeof p.action === 'string' ? p.action.trim().toLowerCase() : '';
-    if (!ACTIONS.includes(action)) {
+    if (!CONNECTOR_POLICY_ACTIONS.some((known) => known === action)) {
       issues.push({
         path: `${pwhere}.action`,
-        message: `action must be one of: ${ACTIONS.join(', ')} (got "${action || 'unset'}").`,
+        message: `action must be one of: ${CONNECTOR_POLICY_ACTIONS.join(', ')} (got "${action || 'unset'}").`,
         severity: 'error',
       });
     }
@@ -114,12 +113,11 @@ function declaredSets(connectors: unknown): Map<string, Set<string>> {
   return out;
 }
 
-/** The connector slugs an agent block grants: `'all'`, or a list. */
+/** The connector slugs an agent block grants: `'all'` (`"*"` / `all`), or a list. */
 function grantedConnectors(block: Record<string, unknown>): 'all' | Set<string> {
   const value = block.connectors;
-  if (value === 'all' || value === '*') return 'all';
+  if (isEveryGrant(value)) return 'all';
   if (Array.isArray(value)) {
-    if (value.includes('*')) return 'all';
     return new Set(value.filter((v): v is string => typeof v === 'string').map((v) => v.trim()));
   }
   return new Set();

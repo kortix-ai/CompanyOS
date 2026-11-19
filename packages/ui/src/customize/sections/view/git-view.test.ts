@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { projectRepoFallback, RepositoryValue } from './git-view';
+import { OwnGitClient, projectRepoFallback, RepositoryValue } from './git-view';
 import {
   BRANCH_PICKER_LIMIT,
   connectionStatusLabel,
@@ -108,8 +108,8 @@ test('does not name internal mechanisms in user-facing copy', () => {
 });
 
 test('every technical setting carries a docs link', () => {
-  expect(code).toContain("const DOCS_CLI = '/docs/cli'");
-  expect(code).toContain("const DOCS_MANIFEST = '/docs/project/manifest'");
+  expect(code).toContain("const DOCS_CLI = '/docs/developers#cli'");
+  expect(code).toContain("const DOCS_MANIFEST = '/docs/developers#kortixyaml-reference'");
   expect(code).toContain('<DocsLink href={DOCS_MANIFEST} />');
   expect(code).toContain('action={<DocsLink href={DOCS_CLI} />}');
 });
@@ -323,7 +323,19 @@ test('the branch picker shows the current branch before /branches answers', () =
   expect(filterBranchNames([], 'main', '')).toEqual({ visible: ['main'], hidden: 0 });
 });
 
-test('the default branch is never a Radix <Select> of every remote branch', () => {
+test('the default branch is never a <Select> of every remote branch', () => {
   expect(code).toContain('<BranchPicker');
   expect(code).not.toMatch(/branchNames\.map\(\(branch\) => \(\s*<SelectItem/);
+});
+
+test('the own-Git-client row reads "plain git" as whole sentences, with git as code', () => {
+  const project = {
+    project_id: 'project-1',
+    git_origin_url: 'https://example.test/v1/git/project-1.git',
+  } as unknown as Parameters<typeof OwnGitClient>[0]['project'];
+  const html = renderToStaticMarkup(createElement(OwnGitClient, { project }));
+  expect(html).toContain('Clone with plain <code class="font-mono">git</code> instead of the Kortix command line.');
+  const text = html.replace(/<[^>]+>/g, '');
+  expect(text).toContain('plain git instead');
+  expect(text).not.toContain('plaingit');
 });

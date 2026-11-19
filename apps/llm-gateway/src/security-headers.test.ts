@@ -24,8 +24,10 @@ describe('standalone gateway security headers', () => {
         ...(method === 'POST' ? { body: '{}' } : {}),
       });
       expect(response.status).toBe(status);
+      expect(response.headers.get('cache-control')).toBe('private, no-store');
       expect(response.headers.get('content-security-policy')).toBe("default-src 'none';frame-ancestors 'none'");
       expect(response.headers.get('x-frame-options')).toBe('DENY');
+      expect(response.headers.get('referrer-policy')).toBe('strict-origin-when-cross-origin');
       const policy = response.headers.get('permissions-policy');
       expect(policy).not.toBeNull();
       for (const feature of ['camera', 'microphone', 'geolocation', 'sync-xhr', 'payment', 'usb', 'fullscreen', 'display-capture', 'publickey-credentials-get']) {
@@ -36,14 +38,60 @@ describe('standalone gateway security headers', () => {
     });
   }
 
+  for (const status of [200, 403]) {
+    test(`credential-bearing ${status} responses override cacheable upstream headers`, async () => {
+      const { app: responseApp } = buildServer();
+      responseApp.get('/test-response', () => new Response('synthetic response', {
+        status,
+        headers: { 'cache-control': 'public, max-age=3600' },
+      }));
+      const response = await responseApp.request('/test-response', {
+        headers: { authorization: 'Bearer synthetic-token' },
+      });
+      expect(response.status).toBe(status);
+      expect(response.headers.get('cache-control')).toBe('private, no-store');
+      expect(await response.text()).toBe('synthetic response');
+    });
+  }
+
+  test('streaming responses retain their body and cannot be cached', async () => {
+    const { app: streamApp } = buildServer();
+    streamApp.get('/test-stream', () => new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: synthetic\n\n'));
+        controller.close();
+      },
+    }), { headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' } }));
+    const response = await streamApp.request('/test-stream', {
+      headers: { 'x-api-key': 'synthetic-token' },
+    });
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('content-type')).toBe('text/event-stream');
+    expect(await response.text()).toBe('data: synthetic\n\n');
+  });
+
   test('unhandled errors also carry the policy', async () => {
     const { app: errorApp } = buildServer();
     errorApp.get('/test-error', () => { throw new Error('synthetic failure'); });
     const response = await errorApp.request('/test-error');
     expect(response.status).toBe(500);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(response.headers.get('x-frame-options')).toBe('DENY');
     expect(response.headers.get('content-security-policy')).toBe("default-src 'none';frame-ancestors 'none'");
     expect(response.headers.get('permissions-policy')).toContain('camera=()');
+    expect(response.headers.get('referrer-policy')).toBe('strict-origin-when-cross-origin');
+    await response.text();
+  });
+
+  test('a route-set stricter referrer policy survives the global header', async () => {
+    const { app: strictApp } = buildServer();
+    strictApp.get('/test-strict-referrer', (c) => {
+      c.header('Referrer-Policy', 'no-referrer');
+      return c.text('ok');
+    });
+    const response = await strictApp.request('/test-strict-referrer');
+    expect(response.status).toBe(200);
+    expect(response.headers.get('referrer-policy')).toBe('no-referrer');
     await response.text();
   });
 });

@@ -15,14 +15,24 @@
  */
 import { flow } from '../core/flow';
 
+interface CatalogRow {
+  key: string;
+  enabled: boolean;
+  overridden: boolean;
+  default_enabled?: boolean;
+}
+
+const marketplaceRow = (body: { experimental_features: CatalogRow[] }) =>
+  body.experimental_features.find((f) => f.key === 'marketplace');
+
 flow(
   'EXP-1',
   {
     domain: 'projects',
     tags: ['experimental', 'feature-flags'],
     routes: [
-      'PATCH /v1/projects/:projectId/features',
-      'PATCH /v1/projects/:projectId/experimental',
+      'PATCH /v1/workspaces/:projectId/features',
+      'PATCH /v1/workspaces/:projectId/experimental',
     ],
   },
   async (ctx) => {
@@ -32,18 +42,23 @@ flow(
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/features',
+          '/v1/workspaces/:projectId/features',
           { feature: 'marketplace', enabled: false },
           { params: { projectId: p.id } },
         );
       r.status(200).body().exists('$.experimental_features').exists('$.experimental');
+      // An override still names the platform default a reset returns to.
+      const row = marketplaceRow(r.json());
+      if (!row?.overridden || row.enabled !== false || row.default_enabled !== true) {
+        throw new Error(`override row: ${JSON.stringify(row)}`);
+      }
     });
 
     await ctx.step('the deprecated /experimental alias writes the same state → 200', async () => {
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/experimental',
+          '/v1/workspaces/:projectId/experimental',
           { feature: 'marketplace', enabled: true },
           { params: { projectId: p.id } },
         );
@@ -54,18 +69,22 @@ flow(
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/features',
+          '/v1/workspaces/:projectId/features',
           { feature: 'marketplace', enabled: null },
           { params: { projectId: p.id } },
         );
       r.status(200);
+      const row = marketplaceRow(r.json());
+      if (row?.overridden !== false || row.enabled !== true || row.default_enabled !== true) {
+        throw new Error(`reset row: ${JSON.stringify(row)}`);
+      }
     });
 
     await ctx.step('connectors_v2 and connectors_api_discover graduated (one catalog for every project) → 400 unknown feature', async () => {
       for (const feature of ['connectors_v2', 'connectors_api_discover']) {
         const r = await ctx.client
           .as(ctx.P.OWNER)
-          .patch('/v1/projects/:projectId/features', { feature, enabled: true }, { params: { projectId: p.id } });
+          .patch('/v1/workspaces/:projectId/features', { feature, enabled: true }, { params: { projectId: p.id } });
         r.status(400);
       }
     });
@@ -74,7 +93,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/features',
+          '/v1/workspaces/:projectId/features',
           { feature: 'agent_tunnel', enabled: true },
           { params: { projectId: p.id } },
         );
@@ -85,7 +104,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/features',
+          '/v1/workspaces/:projectId/features',
           { feature: 'pi_worker', enabled: true },
           { params: { projectId: p.id } },
         );
@@ -93,8 +112,8 @@ flow(
       const project = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/features',
-          { feature: 'agent_rooms', enabled: null },
+          '/v1/workspaces/:projectId/features',
+          { feature: 'voice_call', enabled: null },
           { params: { projectId: p.id } },
         );
       project.status(200);
@@ -112,7 +131,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/features',
+          '/v1/workspaces/:projectId/features',
           { feature: 'pi_harness', enabled: false },
           { params: { projectId: p.id } },
         );
@@ -120,8 +139,8 @@ flow(
       const project = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/features',
-          { feature: 'agent_rooms', enabled: null },
+          '/v1/workspaces/:projectId/features',
+          { feature: 'voice_call', enabled: null },
           { params: { projectId: p.id } },
         );
       project.status(200);
@@ -139,7 +158,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/features',
+          '/v1/workspaces/:projectId/features',
           { feature: 'genui', enabled: false },
           { params: { projectId: p.id } },
         );
@@ -147,8 +166,8 @@ flow(
       const project = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/features',
-          { feature: 'agent_rooms', enabled: null },
+          '/v1/workspaces/:projectId/features',
+          { feature: 'voice_call', enabled: null },
           { params: { projectId: p.id } },
         );
       project.status(200);
@@ -166,7 +185,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/experimental',
+          '/v1/workspaces/:projectId/experimental',
           { feature: 'not_a_feature', enabled: true },
           { params: { projectId: p.id } },
         );
@@ -177,7 +196,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
-          '/v1/projects/:projectId/experimental',
+          '/v1/workspaces/:projectId/experimental',
           { feature: 'reminders', enabled: 'yes' },
           { params: { projectId: p.id } },
         );
@@ -188,7 +207,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.NONMEMBER)
         .patch(
-          '/v1/projects/:projectId/experimental',
+          '/v1/workspaces/:projectId/experimental',
           { feature: 'reminders', enabled: true },
           { params: { projectId: p.id } },
         );
@@ -199,7 +218,7 @@ flow(
       const r = await ctx.client
         .as(ctx.P.ANON)
         .patch(
-          '/v1/projects/:projectId/experimental',
+          '/v1/workspaces/:projectId/experimental',
           { feature: 'reminders', enabled: true },
           { params: { projectId: p.id } },
         );

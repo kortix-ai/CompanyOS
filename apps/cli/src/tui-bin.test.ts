@@ -105,7 +105,7 @@ describe('tui-bin — asset names and URLs', () => {
 
   test('the asset URL is <base>/<tag>/<asset>, the scheme scripts/install.sh uses', () => {
     expect(tuiAssetUrl('0.13.24', 'kortix-tui-darwin-arm64', {})).toBe(
-      'https://github.com/kortix-ai/suna/releases/download/v0.13.24/kortix-tui-darwin-arm64',
+      'https://github.com/kortix-ai/CompanyOS/releases/download/v0.13.24/kortix-tui-darwin-arm64',
     );
   });
 
@@ -169,7 +169,7 @@ describe('tui-bin — resolution order', () => {
     expect(findTuiBin({ env: { ...env, KORTIX_TUI_BIN: '   ' }, exists: () => false })).toBeNull();
   });
 
-  test('the cache root defaults under ~/.kortix, beside the managed opencode', () => {
+  test('the cache root defaults under ~/.kortix/tui', () => {
     expect(tuiCacheRoot({})).toMatch(/\/\.kortix\/tui$/);
     expect(managedTuiPath('1.2.3', {})).toMatch(/\/\.kortix\/tui\/1\.2\.3\/kortix-tui$/);
   });

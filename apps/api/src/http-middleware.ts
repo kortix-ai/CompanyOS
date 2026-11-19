@@ -1,6 +1,7 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { HTTPException } from 'hono/http-exception';
 import { logger } from 'hono/logger';
+import { redactUrlSecrets } from './lib/redact-url-secrets';
 import { prettyJSON } from 'hono/pretty-json';
 import { config } from './config';
 import { logger as appLogger } from './lib/logger';
@@ -24,16 +25,19 @@ import { compressResponse } from './middleware/compress';
 import { protectResponseCache } from './middleware/cache-control';
 import { createCorsMiddleware } from './middleware/cors';
 import { requestDeadline } from './middleware/request-deadline';
+import { rejectOutdatedCli } from './middleware/cli-min-version';
 import { createPublicEdgeRateLimitMiddleware } from './middleware/public-edge-rate-limit';
 import { shouldSuppressRequestLog } from './sandbox-proxy/request-log-suppression';
 import { PROXY_HOP_HEADER, PROXY_UPSTREAM_STATUS_HEADER } from './sandbox-proxy/proxy-hop';
 import { upstreamTiming } from './middleware/upstream-timing';
 import { auditApiRequest } from './middleware/audit';
 import { isUuid } from './shared/validate';
+import { aliasForHost, configuredCorsOrigins, DOMAIN_ALIAS_CONTEXT_FIELD } from './shared/domain-aliases';
 
 // The global middleware chain, in the registration order the request sees it.
-// Every line inside installHttpMiddleware is moved verbatim from the former
-// index.ts; the chain order is the behavior, so nothing is reordered.
+// The lines inside installHttpMiddleware come from the former index.ts, except
+// the "Malformed JSON request bodies" block below; the chain order is the
+// behavior, so nothing is reordered.
 export function installHttpMiddleware(app: OpenAPIHono) {
 // Defense in depth when requests reach the origin without Cloudflare's method filtering.
 app.use('*', async (c, next) => {
@@ -46,6 +50,10 @@ app.use('*', async (c, next) => {
 app.use('*', async (c, next) => {
   await next();
   c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  // Uniform referrer policy on every origin-served response (KRTX-4702). Set only
+  // when absent: a route may choose a stricter value (the public share proxy's
+  // no-referrer) and must keep it.
+  if (!c.res.headers.has('Referrer-Policy')) c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
 });
 app.use('*', async (c, next) => {
   const path = c.req.path;
@@ -87,11 +95,8 @@ app.use("*", protectResponseCache);
 // kilobyte of the body, never by buffering it. See middleware/compress.ts.
 app.use('*', compressResponse);
 
-const extraOrigins = config.CORS_ALLOWED_ORIGINS
-  ? config.CORS_ALLOWED_ORIGINS.split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-  : [];
+// `CORS_ALLOWED_ORIGINS` and the self-host alias domains (shared/domain-aliases.ts).
+const extraOrigins = configuredCorsOrigins();
 
 app.use(
   '*',
@@ -129,6 +134,28 @@ app.use('*', async (c, next) => {
   await next();
 });
 
+// ─── Malformed JSON request bodies ──────────────────────────────────────────
+// `c.req.json()` rejects with a bare SyntaxError on a body that is not JSON, and
+// the error handler answered every route that calls it with a 500. That is a
+// client fault: scope the translation to the body read itself, so a SyntaxError
+// from anywhere else in a handler (an upstream parse) stays a 500. A literal
+// `null` body parses fine but every handler dereferences the result, so it is
+// rejected the same way instead of surfacing as a TypeError 500.
+app.use('*', async (c, next) => {
+  const readJson = c.req.json.bind(c.req);
+  c.req.json = async <T>() => {
+    try {
+      const body = await readJson<T>();
+      if (body === null) throw new HTTPException(400, { message: 'Request body must not be null' });
+      return body;
+    } catch (err) {
+      if (err instanceof SyntaxError) throw new HTTPException(400, { message: 'Malformed JSON in request body' });
+      throw err;
+    }
+  };
+  await next();
+});
+
 // ─── Request context (AsyncLocalStorage) ────────────────────────────────────
 // Must be FIRST — wraps the entire request lifecycle so all downstream code
 // (auth, route handlers, console.error calls) automatically gets context fields
@@ -149,6 +176,9 @@ app.use('*', async (c, next) => {
     }
     const sbMatch = path.match(/\/sandbox(?:es)?\/([^/]+)/) || path.match(/\/p\/([^/]+)/);
     if (sbMatch) setContextField('sandboxId', sbMatch[1]);
+    // A self-host alias domain: URLs built for this request stay on it.
+    const alias = aliasForHost(c.req.header('host'));
+    if (alias) setContextField(DOMAIN_ALIAS_CONTEXT_FIELD, alias);
     await next();
     const ctx = getRequestContext();
     if (ctx) {
@@ -175,7 +205,9 @@ app.use('*', upstreamTiming);
 installFetchTiming(config.SUPABASE_URL);
 
 // Request logger — uses Hono's built-in logger for stdout (Docker captures these)
-app.use('*', logger());
+// The access line prints the path WITH its query: a credential in it (an
+// Artifact live socket's `?ticket=`) is redacted before it is written.
+app.use('*', logger((message, ...rest) => void process.stdout.write(`${[redactUrlSecrets(message), ...rest].join(' ')}\n`)));
 
 /**
  * `X-Kortix-Upstream-Status` as a number, or null when the header is absent,
@@ -330,6 +362,10 @@ app.use('*', auditApiRequest);
 
 // Before route validation and authentication; inside request logging and audit.
 app.use('/v1/*', createPublicEdgeRateLimitMiddleware());
+
+// A CLI below CLI_MIN_VERSION reads routes this server no longer serves: tell it
+// to update before auth, so a stale token does not hide the reason.
+app.use('/v1/*', rejectOutdatedCli);
 
 // Wall-clock deadline for non-streaming requests — returns 503 before the 30s
 // client abort instead of hanging. Streaming/proxy/WS surfaces are exempted

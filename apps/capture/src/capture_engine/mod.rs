@@ -45,6 +45,9 @@ use linux as os;
 mod win;
 #[cfg(target_os = "windows")]
 use win as os;
+/// The engine's monitor grab, for the action recorder in `kortix-backend`.
+#[cfg(target_os = "windows")]
+pub use win::grab_monitor;
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
 mod unsupported;
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
@@ -101,7 +104,7 @@ pub fn process_aliases(exe: &str, cgroup: &str, environ: &[u8]) -> Vec<String> {
     out
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Rect {
     pub x: i32,
     pub y: i32,
@@ -159,6 +162,11 @@ pub struct WinInfo {
     pub title: String,
     pub rect: Rect,
     pub focused: bool,
+    /// A click-through layered window (Windows: a game or GPU overlay, a screen
+    /// dimmer). It may be opaque, so a hidden one is still painted out. It never
+    /// names a frame or covers a window under it: a mostly transparent overlay
+    /// would hide what is really on screen and leave a hidden window unpainted.
+    pub overlay: bool,
 }
 
 pub struct Display {
@@ -265,7 +273,9 @@ pub fn plan_displays<'a>(
                 }
                 continue;
             }
-            top.entry(d.id).or_insert(w);
+            if !w.overlay {
+                top.entry(d.id).or_insert(w);
+            }
         }
         if include.on && !top.contains_key(&d.id) {
             covered.insert(d.id);
@@ -276,6 +286,12 @@ pub fn plan_displays<'a>(
         covered,
         top,
     }
+}
+
+thread_local! {
+    /// Per display: (desktop-image generation, layout, content hash) of the last read.
+    static LAST_READ: std::cell::RefCell<HashMap<i64, (u64, u64, String)>> =
+        std::cell::RefCell::new(HashMap::new());
 }
 
 /// FNV-1a over a 256-pixel-wide grayscale, area-averaged copy: an equal hash
@@ -325,6 +341,8 @@ pub fn run() -> Result<()> {
         std::process::exit(audio::run(&args[2..]));
     }
     os::init();
+    // Capture, OCR and video encoding are background work (audio returned above).
+    crate::os_proc::efficiency_mode();
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     for line in stdin.lock().lines() {
@@ -726,6 +744,17 @@ fn capture_all(req: &Value) -> Result<Value> {
         .filter(|w| !plan.hidden.contains(&w.id))
         .collect();
     res["windows"] = windows_json(&visible.iter().map(|w| (*w).clone()).collect::<Vec<_>>());
+    // Everything besides the pixels that shapes a display's image: the size
+    // limit and the windows redaction paints out or keeps (with their z-order).
+    let layout = {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        (max_width, max_height).hash(&mut h);
+        for w in &windows {
+            (w.id, w.rect, w.overlay, plan.hidden.contains(&w.id)).hash(&mut h);
+        }
+        h.finish()
+    };
     let stem = out.strip_suffix(".jpg").unwrap_or(out);
     let mut entries = Vec::new();
     let mut timings = Vec::new();
@@ -735,8 +764,24 @@ fn capture_all(req: &Value) -> Result<Value> {
             "id": d.id, "name": d.name, "x": d.rect.x, "y": d.rect.y, "w": d.rect.w, "h": d.rect.h,
             "scale": d.scale, "main": d.main, "focused": d.id == focused_id,
         }});
+        let generation = os::frame_generation(d);
+        let reused = generation.and_then(|g| {
+            let sent = unchanged.get(d.id.to_string()).and_then(Value::as_str)?;
+            LAST_READ.with(|c| {
+                c.borrow()
+                    .get(&d.id)
+                    .is_some_and(|(lg, ll, lh)| *lg == g && *ll == layout && lh == sent)
+                    .then(|| sent.to_string())
+            })
+        });
         if plan.covered.contains(&d.id) {
             entry["skipped"] = json!("excluded");
+        } else if let Some(hash) = reused {
+            // The monitor has no new desktop image and nothing on it was redacted
+            // differently: the image would hash the same. Skip the read entirely.
+            entry["content_hash"] = json!(hash);
+            entry["unchanged"] = json!(true);
+            entry["reused"] = json!(true);
         } else {
             let mut image =
                 os::screenshot_display(d).map_err(|e| anyhow!("capture_failed: {e:#}"))?;
@@ -745,6 +790,9 @@ fn capture_all(req: &Value) -> Result<Value> {
             });
             let image = fit(image, max_width, max_height);
             let hash = content_hash(&image);
+            if let Some(g) = generation {
+                LAST_READ.with(|c| c.borrow_mut().insert(d.id, (g, layout, hash.clone())));
+            }
             entry["content_hash"] = json!(hash);
             if unchanged.get(d.id.to_string()).and_then(Value::as_str) == Some(hash.as_str()) {
                 entry["unchanged"] = json!(true);
@@ -866,7 +914,7 @@ pub fn redact(
             continue;
         };
         let mut visible = vec![r];
-        for above in &windows[..i] {
+        for above in windows[..i].iter().filter(|a| !a.overlay) {
             visible = visible
                 .into_iter()
                 .flat_map(|v| subtract(v, &above.rect))
@@ -911,8 +959,75 @@ pub fn fit(img: RgbImage, max_width: u32, max_height: u32) -> RgbImage {
     }
     let w = ((img.width() as f64 * scale).round() as u32).max(2);
     let h = ((img.height() as f64 * scale).round() as u32).max(2);
-    image::imageops::resize(&img, w, h, FilterType::Triangle)
+    area_resize(&img, w, h)
 }
+
+/// Per output index: the first input index and the fixed-point weights
+/// (sum 1 << 14) of the input pixels its area covers.
+fn area_taps(src: u32, dst: u32) -> Vec<(usize, Vec<u32>)> {
+    let scale = src as f64 / dst as f64;
+    (0..dst)
+        .map(|o| {
+            let (a, b) = (o as f64 * scale, ((o + 1) as f64 * scale).min(src as f64));
+            let first = a.floor() as usize;
+            let last = (b.ceil() as usize).max(first + 1).min(src as usize);
+            let mut w: Vec<f64> = (first..last)
+                .map(|i| (b.min(i as f64 + 1.0) - a.max(i as f64)).max(0.0))
+                .collect();
+            let total: f64 = w.iter().sum();
+            w.iter_mut().for_each(|v| *v /= total);
+            let mut fixed: Vec<u32> = w.iter().map(|v| (v * 16384.0).round() as u32).collect();
+            // Exact sum: put the rounding error on the largest weight.
+            let sum: i64 = fixed.iter().map(|&v| v as i64).sum();
+            let (imax, _) = fixed.iter().enumerate().max_by_key(|(_, v)| **v).unwrap();
+            fixed[imax] = (fixed[imax] as i64 + 16384 - sum) as u32;
+            (first, fixed)
+        })
+        .collect()
+}
+
+/// Shrink `img` to `w` x `h` by area averaging (each output pixel is the
+/// mean of the input area it covers): two separable passes in fixed point.
+pub fn area_resize(img: &RgbImage, w: u32, h: u32) -> RgbImage {
+    let (sw, sh) = img.dimensions();
+    let xt = area_taps(sw, w);
+    let yt = area_taps(sh, h);
+    let src = img.as_raw();
+    // Horizontal pass: sh rows of w pixels, kept as u16 (value << 6) for precision.
+    let mut mid = vec![0u16; sh as usize * w as usize * 3];
+    for (row, out) in src.chunks_exact(sw as usize * 3).zip(mid.chunks_exact_mut(w as usize * 3)) {
+        for ((first, weights), px) in xt.iter().zip(out.chunks_exact_mut(3)) {
+            let mut acc = [0u32; 3];
+            for (k, &wt) in weights.iter().enumerate() {
+                let i = (first + k) * 3;
+                acc[0] += row[i] as u32 * wt;
+                acc[1] += row[i + 1] as u32 * wt;
+                acc[2] += row[i + 2] as u32 * wt;
+            }
+            for c in 0..3 {
+                px[c] = ((acc[c] + (1 << 7)) >> 8) as u16; // value << 6
+            }
+        }
+    }
+    // Vertical pass.
+    let stride = w as usize * 3;
+    let mut out = vec![0u8; h as usize * stride];
+    let mut acc = vec![0u32; stride];
+    for ((first, weights), dst) in yt.iter().zip(out.chunks_exact_mut(stride)) {
+        acc.iter_mut().for_each(|a| *a = 0);
+        for (k, &wt) in weights.iter().enumerate() {
+            let row = &mid[(first + k) * stride..][..stride];
+            for (a, &v) in acc.iter_mut().zip(row) {
+                *a += v as u32 * wt;
+            }
+        }
+        for (d, &a) in dst.iter_mut().zip(acc.iter()) {
+            *d = ((a + (1 << 19)) >> 20).min(255) as u8;
+        }
+    }
+    RgbImage::from_raw(w, h, out).expect("area buffer size")
+}
+
 
 pub fn write_jpeg(img: &DynamicImage, path: &str, quality: f64) -> Result<()> {
     let q = (quality * 100.0).round().clamp(1.0, 100.0) as u8;
@@ -1229,6 +1344,8 @@ pub fn load_rgb_fit(path: &str, w: u32, h: u32) -> Result<RgbImage> {
         .to_rgb8();
     if img.width() == w && img.height() == h {
         Ok(img)
+    } else if w <= img.width() && h <= img.height() {
+        Ok(area_resize(&img, w, h))
     } else {
         Ok(image::imageops::resize(&img, w, h, FilterType::Triangle))
     }
@@ -1277,6 +1394,7 @@ mod tests {
             title: String::new(),
             rect: Rect { x, y, w, h },
             focused: false,
+            overlay: false,
         }
     }
 
@@ -1536,6 +1654,22 @@ mod tests {
     }
 
     #[test]
+    fn area_resize_keeps_flat_colors_and_averages_blocks() {
+        let flat = RgbImage::from_pixel(3840, 2160, image::Rgb([200, 100, 7]));
+        let small = area_resize(&flat, 2560, 1440);
+        assert_eq!(small.dimensions(), (2560, 1440));
+        assert!(small.pixels().all(|p| p.0 == [200, 100, 7]));
+        // Halving: each output pixel is the mean of its 2x2 block.
+        let checker = RgbImage::from_fn(4, 2, |x, _| {
+            image::Rgb(if x % 2 == 0 { [0, 0, 0] } else { [200, 200, 200] })
+        });
+        let half = area_resize(&checker, 2, 1);
+        assert!(half.pixels().all(|p| p.0 == [100, 100, 100]), "{:?}", half);
+        // Odd ratios land on the asked size.
+        assert_eq!(area_resize(&flat, 1281, 721).dimensions(), (1281, 721));
+    }
+
+    #[test]
     fn redact_paints_only_visible_part() {
         // Hidden window 0..100 wide, covered on the right half by a top window.
         let mut img = RgbImage::from_pixel(100, 100, image::Rgb([255, 255, 255]));
@@ -1556,6 +1690,60 @@ mod tests {
         );
         assert_eq!(img.get_pixel(10, 10).0, [0, 0, 0]);
         assert_eq!(img.get_pixel(90, 90).0, [255, 255, 255]);
+    }
+
+    #[test]
+    fn a_click_through_overlay_is_painted_out_when_hidden_and_covers_nothing() {
+        let display = Rect {
+            x: 0,
+            y: 0,
+            w: 100,
+            h: 100,
+        };
+        let overlay = |id, bundle: &str, x, w| WinInfo {
+            overlay: true,
+            ..win(id, bundle, x, 0, w, 100)
+        };
+        // A visible overlay over a hidden window: the hidden window is painted in full.
+        let mut img = RgbImage::from_pixel(100, 100, image::Rgb([255, 255, 255]));
+        let windows = vec![
+            overlay(1, "hud.exe", 0, 100),
+            win(2, "secret.exe", 0, 0, 100, 100),
+        ];
+        redact(&mut img, &display, &windows, &|w| w.bundle_id == "secret.exe");
+        assert!(img.pixels().all(|p| p.0 == [0, 0, 0]));
+        // A hidden overlay is painted out itself; the window under it stays.
+        let mut img = RgbImage::from_pixel(100, 100, image::Rgb([255, 255, 255]));
+        let windows = vec![
+            overlay(1, "secret.exe", 0, 50),
+            win(2, "app.exe", 0, 0, 100, 100),
+        ];
+        redact(&mut img, &display, &windows, &|w| w.bundle_id == "secret.exe");
+        assert_eq!(img.get_pixel(10, 10).0, [0, 0, 0]);
+        assert_eq!(img.get_pixel(90, 90).0, [255, 255, 255]);
+        // An overlay never names the frame: the window under it does.
+        let displays = vec![DisplayInfo {
+            id: 1,
+            rect: display,
+            name: "d".into(),
+            main: true,
+            scale: 1.0,
+        }];
+        let windows = vec![
+            overlay(1, "hud.exe", 0, 100),
+            win(2, "app.exe", 0, 0, 100, 100),
+        ];
+        let plan = plan_displays(
+            &windows,
+            &displays,
+            &|_| None,
+            &|_, _| false,
+            &[],
+            true,
+            false,
+            &Include::default(),
+        );
+        assert_eq!(plan.top[&1].bundle_id, "app.exe");
     }
 
     #[test]

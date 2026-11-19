@@ -9,6 +9,7 @@ import {
 } from '../../session/actions/session-label';
 import { Button } from '../../primitives/button';
 import { Checkbox } from '../../primitives/checkbox';
+import { CountBadge } from '../../primitives/count-badge';
 import { Disclosure, DisclosureContent, DisclosureTrigger } from '../../primitives/disclosure';
 import Hint from '../../primitives/hint';
 import {
@@ -34,7 +35,6 @@ import {
 import {
   ArchiveIcon,
   ArrowCounterClockwiseIcon,
-  CaretRightIcon,
   ChatTeardropTextIcon,
   DotsThreeIcon,
   PencilSimpleIcon,
@@ -91,8 +91,9 @@ function SessionOwnerChip({ session }: { session: ProjectSession }) {
   );
 }
 
-/** Chevron + count of the sessions this one spawned. Sits inside the row's own
- *  toggle, so it stops the event before it opens the detail panel. */
+/** The count of the sessions this one spawned, as the toggle. No caret, as in
+ *  the sidebar. Sits inside the row's own toggle, so it stops the event before
+ *  it opens the detail panel. */
 function SessionChildrenToggle({
   count,
   open,
@@ -113,11 +114,10 @@ function SessionChildrenToggle({
         aria-expanded={open}
         aria-label={label}
         data-session-children-toggle="true"
-        className="text-muted-foreground gap-1 tabular-nums"
+        className="text-muted-foreground px-1"
         onClick={onToggle}
       >
-        <CaretRightIcon aria-hidden className={cn('size-3 transition-transform', open && 'rotate-90')} />
-        {count}
+        <CountBadge count={count} className={cn(open && 'bg-foreground/12')} />
       </Button>
     </span>
   );
@@ -318,7 +318,7 @@ function SessionRowImpl({
   if (selectMode) {
     return (
       // A label, not a button: the row wraps a real Checkbox, and nesting a
-      // button (Radix renders one) inside a button is invalid.
+      // button (the Checkbox renders one) inside a button is invalid.
       <label
         className={cn(
           'hover:bg-muted/40 flex h-11 w-full cursor-pointer items-center gap-3 rounded-md px-3 text-left',

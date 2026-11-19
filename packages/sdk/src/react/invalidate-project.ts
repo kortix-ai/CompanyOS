@@ -2,9 +2,12 @@ import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { qk } from './query-keys';
 
 /** Everything belonging to one project. Use after a write with broad effect. */
-export async function invalidateProject(qc: QueryClient, projectId: string): Promise<void> {
+export async function invalidateWorkspace(qc: QueryClient, projectId: string): Promise<void> {
   await qc.invalidateQueries({ queryKey: qk.project.scope(projectId) });
 }
+
+/** @deprecated Use `invalidateWorkspace`. Kept permanently. */
+export const invalidateProject = invalidateWorkspace;
 
 /**
  * A project's NAME lives in two caches: every projects-LIST entry and the
@@ -19,18 +22,26 @@ export async function invalidateProject(qc: QueryClient, projectId: string): Pro
  * two-element `qk.projects.scope()` PREFIX, not the three-element `list()`
  * key. Both invalidations, always, or the bug returns.
  */
-export async function invalidateProjectIdentity(
+export async function invalidateWorkspaceIdentity(
   qc: QueryClient,
   projectId: string,
 ): Promise<void> {
   await Promise.all([
     qc.invalidateQueries({ queryKey: qk.projects.scope() }),
     qc.invalidateQueries({ queryKey: qk.project.detail(projectId) }),
+    // The name readers (`useProjectName`) read the bare row.
+    qc.invalidateQueries({ queryKey: qk.project.summary(projectId) }),
+    // `useWorkspace` holds the same name.
+    qc.invalidateQueries({ queryKey: qk.project.workspace(projectId) }),
   ]);
 }
 
+/** @deprecated Use `invalidateWorkspaceIdentity`. Kept permanently. */
+export const invalidateProjectIdentity = invalidateWorkspaceIdentity;
+
 type ProjectsListEntry = { project_id: string; name: string };
 type ProjectDetailEntry = { project?: { name?: string } };
+type ProjectRowEntry = { name?: string };
 
 /**
  * Exactly what `writeProjectNameOptimistically` overwrote, restorable with
@@ -39,11 +50,18 @@ type ProjectDetailEntry = { project?: { name?: string } };
  * `invalidateProjectIdentity`'s doc comment for why that's a prefix, not a
  * single key. A key with no snapshot row was never cached at write time, and
  * `restoreProjectName` will correctly leave it alone.
+ *
+ * @deprecated Use `WorkspaceNameSnapshot`. Kept permanently.
  */
 export interface ProjectNameSnapshot {
   detail: ProjectDetailEntry | undefined;
+  /** The bare project row (`qk.project.summary`), which `useProjectName` reads. */
+  row?: ProjectRowEntry | undefined;
   lists: Array<{ queryKey: QueryKey; data: ProjectsListEntry[] | undefined }>;
 }
+
+/** The workspace name of {@link ProjectNameSnapshot}: the same type. */
+export type WorkspaceNameSnapshot = ProjectNameSnapshot;
 
 /**
  * Paint the new name in the same frame the rename dialog closes, instead of a
@@ -60,7 +78,7 @@ export interface ProjectNameSnapshot {
  * engine: two sibling list keys both update, an unrelated
  * `qk.project.detail` entry does not).
  */
-export function writeProjectNameOptimistically(
+export function writeWorkspaceNameOptimistically(
   qc: QueryClient,
   projectId: string,
   name: string,
@@ -73,6 +91,7 @@ export function writeProjectNameOptimistically(
   const lists = qc.getQueriesData<ProjectsListEntry[]>(listQueries);
   const snapshot: ProjectNameSnapshot = {
     detail: qc.getQueryData<ProjectDetailEntry>(qk.project.detail(projectId)),
+    row: qc.getQueryData<ProjectRowEntry>(qk.project.summary(projectId)),
     lists: lists.map(([queryKey, data]) => ({ queryKey, data })),
   };
 
@@ -85,9 +104,15 @@ export function writeProjectNameOptimistically(
     (prev: ProjectDetailEntry | undefined) =>
       prev?.project ? { ...prev, project: { ...prev.project, name } } : prev,
   );
+  qc.setQueryData(qk.project.summary(projectId), (prev: ProjectRowEntry | undefined) =>
+    prev ? { ...prev, name } : prev,
+  );
 
   return snapshot;
 }
+
+/** @deprecated Use `writeWorkspaceNameOptimistically`. Kept permanently. */
+export const writeProjectNameOptimistically = writeWorkspaceNameOptimistically;
 
 /**
  * Put back exactly what `writeProjectNameOptimistically` overwrote. THE
@@ -105,7 +130,7 @@ export function writeProjectNameOptimistically(
  * `setQueryData(key, undefined)` is a verified no-op (does not evict an
  * existing entry), so a snapshot that captured nothing is safely a no-op too.
  */
-export function restoreProjectName(
+export function restoreWorkspaceName(
   qc: QueryClient,
   projectId: string,
   snapshot: ProjectNameSnapshot,
@@ -114,4 +139,8 @@ export function restoreProjectName(
     qc.setQueryData(queryKey, data);
   }
   qc.setQueryData(qk.project.detail(projectId), snapshot.detail);
+  qc.setQueryData(qk.project.summary(projectId), snapshot.row);
 }
+
+/** @deprecated Use `restoreWorkspaceName`. Kept permanently. */
+export const restoreProjectName = restoreWorkspaceName;

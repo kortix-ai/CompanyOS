@@ -1,3 +1,4 @@
+import { splitHelp } from '../command-argv.ts';
 import {
   fail,
   locateSessionAnywhere,
@@ -32,7 +33,7 @@ one. A stopped session's remedy is printed for you: run
 \`kortix sessions restart <session-id>\` first.
 
   --port <sandbox>[:<local>]  Forward a sandbox port (repeatable, required).
-  --project <id>              Pin this project id (skips the cross-host scan).
+  --workspace <id>            Pin this workspace id (skips the cross-host scan).
   --host <name>                Pin this Kortix host (skips the cross-host scan).
   -h, --help                  Show this help.
 
@@ -42,17 +43,15 @@ Examples:
   kortix sessions forward <session-id> --port 3000 --port 5173:0`;
 
 export async function runSessionsForward(argv: string[]): Promise<number> {
+  const helped = splitHelp(argv, FORWARD_HELP);
+  if (helped !== null) return helped;
   const rest = [...argv];
-  if (rest.includes('-h') || rest.includes('--help')) {
-    process.stdout.write(`${FORWARD_HELP}\n`);
-    return 0;
-  }
 
   let projectArg: string | undefined;
   let hostArg: string | undefined;
   let portArgs: string[];
   try {
-    projectArg = takeFlagValue(rest, ['--project']);
+    projectArg = takeFlagValue(rest, ['--project', '--workspace']);
     hostArg = takeFlagValue(rest, ['--host']);
     portArgs = takeFlagValues(rest, ['--port']);
   } catch (err) {

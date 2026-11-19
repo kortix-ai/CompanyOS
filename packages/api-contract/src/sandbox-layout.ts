@@ -15,14 +15,15 @@ export const MANAGED_SKILLS_DIR = '/opt/kortix/managed-skills';
 export const RUNTIME_ASSETS_STATE_PATH = '/opt/kortix/runtime-assets-state.json';
 
 /**
- * The files outside `apps/kortix-sandbox-agent-server` that kortixd bundles
- * into its binary, repo-relative. apps/api fingerprints them with the daemon
+ * The files (and source directories) outside `apps/kortix-sandbox-agent-server`
+ * that kortixd bundles into its binary, repo-relative. apps/api fingerprints them with the daemon
  * source, so a change to one rebuilds sandbox images, and the Dockerfiles copy
  * them. A kortixd test fails when the daemon imports a file not listed here.
  */
 export const KORTIXD_SHARED_SOURCES = [
+  // The voice runtime (`@kortix/voice/kortix`), loaded with a dynamic import: one directory.
+  'packages/voice/src',
   'packages/shared/src/peer-message-prompt.ts',
-  'packages/shared/src/room-prompt.ts',
   'packages/shared/src/ssrf-guard.ts',
   'packages/api-contract/src/claude-agent.ts',
   'packages/api-contract/src/compiled-agent-config-env.ts',
@@ -44,5 +45,7 @@ export const KORTIXD_SHARED_SOURCES = [
   'packages/api-contract/src/session-log/v1.ts',
   'packages/api-contract/src/session-log/wire.ts',
   'packages/api-contract/src/transcript.ts',
+  'packages/api-contract/src/wire-values.ts',
+  'packages/sdk/src/core/wire-values.ts',
   'packages/sdk/src/core/session/wire-message-id.ts',
 ] as const;

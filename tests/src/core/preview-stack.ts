@@ -41,7 +41,7 @@ export interface PreviewStackInput {
   instanceId?: string;
 }
 
-const PREVIEW_INSTANCE_ID = /^kortix-(preview-pr-[1-9][0-9]*|env-[a-z0-9][a-z0-9-]*)$/;
+export const PREVIEW_INSTANCE_ID = /^kortix-(preview-pr-[1-9][0-9]*|env-[a-z0-9][a-z0-9-]*)$/;
 
 /**
  * Background workers for a preview API.
@@ -82,10 +82,11 @@ export function previewWorkerEnvironment(instanceId: string | undefined): Record
   };
 }
 
-function validatedOrigin(value: string): string {
+/** A preview origin is a credential-free HTTPS origin with no path. */
+export function previewOrigin(value: string): string {
   const url = new URL(value);
-  if (url.protocol !== 'https:' || url.pathname !== '/' || url.search || url.hash) {
-    throw new Error('preview origin must be an HTTPS origin without a path');
+  if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
+    throw new Error('preview origin must be a credential-free HTTPS origin without a path');
   }
   return url.origin;
 }
@@ -158,8 +159,11 @@ export function buildPreviewCaddyfile(publicHost: string): string {
   # serves reaches it. A preview shares ONE origin with the frontend and splits
   # by prefix, so each API route mounted outside \`/v1\` has to be listed here or
   # it falls through to the frontend, which answers 307 -> /auth. Keep in sync
-  # with the non-\`/v1\` mounts in \`apps/api/src/index.ts\`.
-  @api path /v1* /health /health/* /metrics /scim/v2/* /internal/* /.well-known/oauth-authorization-server
+  # with the non-\`/v1\` mounts in \`apps/api/src/index.ts\`. The two bucket
+  # prefixes are the API's passthrough to the bundled MinIO (a preview runs the
+  # self-host stack without a domain): Capture uploads, and the presigned
+  # project snapshot URLs a sandbox downloads.
+  @api path /v1* /health /health/* /metrics /scim/v2/* /internal/* /.well-known/oauth-authorization-server /kortix-capture /kortix-capture/* /kortix-project-snapshots /kortix-project-snapshots/*
   handle @api {
     reverse_proxy kortix-api:8008 {
       import swap_tolerant
@@ -404,17 +408,27 @@ function buildPreviewRuntimeEnvironment(
   });
 }
 
-function buildPreviewTestEnvironment(
-  input: PreviewStackInput,
-  origin: string,
-  runtime: Record<string, string>,
-  rawSecrets: Record<string, string>,
-  postgresPassword: string,
-  anonKey: string,
-  serviceRoleKey: string,
-  internalServiceKey: string,
-  managedGitEnabled: boolean,
-): Record<string, string> {
+function buildPreviewTestEnvironment({
+  input,
+  origin,
+  runtime,
+  rawSecrets,
+  postgresPassword,
+  anonKey,
+  serviceRoleKey,
+  internalServiceKey,
+  managedGitEnabled,
+}: {
+  input: PreviewStackInput;
+  origin: string;
+  runtime: Record<string, string>;
+  rawSecrets: Record<string, string>;
+  postgresPassword: string;
+  anonKey: string;
+  serviceRoleKey: string;
+  internalServiceKey: string;
+  managedGitEnabled: boolean;
+}): Record<string, string> {
   return {
     CI: '1',
     KE2E_TARGET: 'preview',
@@ -444,7 +458,9 @@ function buildPreviewTestEnvironment(
     KE2E_CAP_SANDBOX: rawSecrets.PLATINUM_API_KEY ? '1' : '0',
     KE2E_CAP_MANAGED_GIT: managedGitEnabled ? '1' : '0',
     KE2E_CAP_MANAGED_GIT_PUSH: managedGitEnabled ? '1' : '0',
-    // A preview publishes no project snapshots (no KORTIX_PROJECT_SNAPSHOT_S3_BUCKET).
+    // The self-host stack publishes project snapshots to its bundled MinIO. The
+    // snapshot flows (CFG-15, CFG-16) stay off here until a preview
+    // `--target-full` run proves them on this stack.
     KE2E_CAP_PROJECT_SNAPSHOTS: '0',
     KE2E_DEFAULT_FLOW_ATTEMPTS: '1',
   };
@@ -458,7 +474,7 @@ export function applyPreviewEnvironment(
   validatePreviewRuntimeSecrets(rawSecrets);
   if (!/^[0-9a-f]{40}$/.test(input.sha))
     throw new Error('preview SHA must contain 40 hex characters');
-  const origin = validatedOrigin(input.origin);
+  const origin = previewOrigin(input.origin);
   const runtime = parseEnvironment(baseEnvironmentText);
   const postgresPassword = runtime.POSTGRES_PASSWORD;
   const anonKey = runtime.SUPABASE_ANON_KEY;
@@ -478,7 +494,7 @@ export function applyPreviewEnvironment(
   return {
     runtimeEnv: renderEnvironment(runtime),
     testEnv: renderEnvironment(
-      buildPreviewTestEnvironment(
+      buildPreviewTestEnvironment({
         input,
         origin,
         runtime,
@@ -488,7 +504,7 @@ export function applyPreviewEnvironment(
         serviceRoleKey,
         internalServiceKey,
         managedGitEnabled,
-      ),
+      }),
     ),
   };
 }

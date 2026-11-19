@@ -25,6 +25,79 @@ function text(id: string, body: string): Part {
 const segments = (parts: Part[]) => groupShowSegments(segmentTurn(parts));
 
 describe('splitTurnWork', () => {
+  test('a refused `kortix_connectors` connect (`ok: false`) folds into the work: it started no sign-in', () => {
+    const refused = {
+      ...tool('2', 'kortix_connectors'),
+      state: {
+        status: 'completed',
+        input: { action: 'connect', slug: 'googlecalendar' },
+        output: JSON.stringify({ ok: false, tool: 'kortix_connectors', action: 'connect', card: { title: 'Could not start the sign-in for googlecalendar', status: 'error' }, error: { kind: 'not_found', message: 'Connector not found' } }),
+      },
+    } as unknown as ToolPart;
+    const connect = tool('3', 'kortix_connectors', { action: 'connect', slug: 'google-calendar' });
+    const split = splitTurnWork(segments([tool('1', 'read'), refused, connect, text('4', 'Click Connect.')]), { working: false });
+    expect(split?.work.map((x) => (x.kind === 'standalone' ? x.part.id : x.kind))).toEqual(['burst', '2']);
+    expect(split?.hoisted.map((x) => (x.kind === 'standalone' ? x.part.id : x.kind))).toEqual(['3']);
+  });
+
+  test('a connector sign-in call stays out of the fold: the person still has to click Connect', () => {
+    const connect = tool('2', 'kortix_connectors', { action: 'connect', slug: 'gmail' });
+    const s = segments([tool('1', 'read'), connect, text('3', 'Click Connect on the card.')]);
+    const split = splitTurnWork(s, { working: false });
+    expect(split?.work.map((x) => x.kind)).toEqual(['burst']);
+    expect(split?.hoisted.map((x) => (x.kind === 'standalone' ? x.part.id : x.kind))).toEqual(['2']);
+    expect(split?.final.map((x) => (x.kind === 'text' ? x.part.id : null))).toEqual(['3']);
+  });
+
+  test('interim text carrying a generative-UI block stays out of the fold, in call order', () => {
+    const card = text('2', 'Here is the summary so far:\n\n```openui\nroot = Card([])\n```');
+    const s = segments([tool('1', 'bash'), card, tool('3', 'read'), shown('4'), text('5', 'Done.')]);
+    const split = splitTurnWork(s, { working: false });
+    expect(split?.work.map((x) => x.kind)).toEqual(['burst', 'burst']);
+    expect(split?.hoisted.map((x) => (x.kind === 'text' ? x.part.id : x.kind))).toEqual(['2', 'standalone']);
+    expect(split?.final.map((x) => (x.kind === 'text' ? x.part.id : null))).toEqual(['5']);
+  });
+
+  test('a generative-UI fence nested in a list item or a blockquote stays out of the fold', () => {
+    const bodies = [
+      'Next steps:\n\n1. ```openui\n   root = Card([])\n   ```',
+      'Next steps:\n\n- ~~~openui-v2\n  root = Card([])\n  ~~~',
+      'Summary:\n\n> ```openui\n> root = Card([])\n> ```',
+    ];
+    for (const body of bodies) {
+      const s = segments([text('1', body), tool('2', 'bash'), text('3', 'Done.')]);
+      expect(splitTurnWork(s, { working: false })?.hoisted.map((x) => (x.kind === 'text' ? x.part.id : null))).toEqual(['1']);
+    }
+  });
+
+  test('interim text carrying a setup link stays out of the fold', () => {
+    const bodies = [
+      'Add the key here: [Add key](https://kortix.com/secret-intake/ksl_abc)',
+      'Add the key here: [Add key](/connect/ksl_xyz)',
+      'Add the key here: `https://kortix.com/secret-intake/ksl_abc`',
+      'Add the key here: https://kortix.com/connect/ksl_abc',
+      'Add the key here: <https://kortix.com/connect/ksl_abc>',
+    ];
+    for (const body of bodies) {
+      const s = segments([text('1', body), tool('2', 'bash'), text('3', 'Done.')]);
+      const split = splitTurnWork(s, { working: false });
+      expect(split?.hoisted.map((x) => (x.kind === 'text' ? x.part.id : null))).toEqual(['1']);
+      expect(split?.work.map((x) => x.kind)).toEqual(['burst']);
+    }
+  });
+
+  test('a foreign link to a /connect/ path is not a setup link', () => {
+    const s = segments([text('1', 'See https://example.com/connect/github for details.'), tool('2', 'bash'), text('3', 'Done.')]);
+    expect(splitTurnWork(s, { working: false })?.hoisted).toEqual([]);
+  });
+
+  test('plain interim text and an ordinary code fence still fold', () => {
+    const s = segments([text('1', 'Checking.\n\n```ts\nconst a = 1;\n```'), tool('2', 'bash'), text('3', 'Done.')]);
+    const split = splitTurnWork(s, { working: false });
+    expect(split?.work.map((x) => x.kind)).toEqual(['text', 'burst']);
+    expect(split?.hoisted).toEqual([]);
+  });
+
   test('a working turn is never split', () => {
     const s = segments([tool('1', 'bash'), text('2', 'Done.')]);
     expect(splitTurnWork(s, { working: true })).toBeNull();
@@ -82,6 +155,37 @@ describe('splitTurnWork', () => {
     expect((split!.final[0] as { part: { id: string } }).part.id).toBe('6');
   });
 
+  test('a call that started an agent or a workflow is hoisted: the person tracks it after the turn', () => {
+    const s = segments([
+      tool('1', 'list_agents'),
+      tool('2', 'agent', { description: 'Research', run_in_background: true }),
+      tool('3', 'bash'),
+      tool('4', 'workflow'),
+      tool('5', 'task'),
+      tool('6', 'agent_spawn'),
+      text('7', 'I asked a researcher to look into it.'),
+    ]);
+    const split = splitTurnWork(s, { working: false });
+
+    expect(split!.hoisted.map((seg) => (seg as { part: ToolPart }).part.id)).toEqual(['2', '4', '5', '6']);
+    // Checking the roster is work, not something to track.
+    expect(split!.work.map((seg) => (seg.kind === 'standalone' ? seg.part.id : seg.kind))).toEqual(['1', 'burst']);
+    expect((split!.final[0] as { part: { id: string } }).part.id).toBe('7');
+  });
+
+  test('foldStartedWork: once every agent reported, the calls that started them fold; deliverables stay', () => {
+    const s = segments([tool('1', 'agent'), tool('2', 'agent'), shown('3'), text('4', 'Three colleagues are on it.')]);
+    const split = splitTurnWork(s, { working: false, foldStartedWork: true });
+    expect(split!.work.map((seg) => (seg as { part: ToolPart }).part.id)).toEqual(['1', '2']);
+    expect(split!.hoisted.map((seg) => seg.kind)).toEqual(['standalone']);
+    expect((split!.final[0] as { part: { id: string } }).part.id).toBe('4');
+  });
+
+  test('a turn whose only work started an agent has nothing left to fold', () => {
+    const s = segments([tool('1', 'agent'), text('2', 'On it.')]);
+    expect(splitTurnWork(s, { working: false })).toBeNull();
+  });
+
   test('a settled turn hoists an image_gen card above the final text', () => {
     const s = segments([
       tool('1', 'bash'),
@@ -115,12 +219,14 @@ describe('splitTurnWork', () => {
     expect(split!.work.map((seg) => seg.kind)).toEqual(['burst']);
   });
 
-  test('a sub-agent standalone stays in work', () => {
-    const s = segments([tool('1', 'agent_spawn'), text('2', 'Done.')]);
+  test('a sub-agent call beside other work is hoisted, the other work stays folded', () => {
+    // #9558 folded sub-agent calls; since the agent pane, the call that started
+    // an agent stays in view so the person can open it after the turn.
+    const s = segments([tool('1', 'bash'), tool('2', 'agent_spawn'), text('3', 'Done.')]);
     const split = splitTurnWork(s, { working: false });
 
-    expect(split!.work.map((seg) => seg.kind)).toEqual(['standalone']);
-    expect(split!.hoisted).toEqual([]);
+    expect(split!.work.map((seg) => seg.kind)).toEqual(['burst']);
+    expect(split!.hoisted.map((seg) => (seg as { part: ToolPart }).part.id)).toEqual(['2']);
   });
 
   test('whitespace-only text is not final', () => {

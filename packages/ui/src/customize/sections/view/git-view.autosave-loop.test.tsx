@@ -21,7 +21,7 @@
  * `components/projects/schedule/schedule-detail-sheet.mutations.test.tsx`:
  * the real SDK transport (`updateProject` against a `configureKortix` fetch
  * override), the real `useDebounce` (real 500 ms settle), the real query
- * cache wiring — only the IAM probe, the Radix-tooltip hint and the toast
+ * cache wiring — only the IAM probe, the tooltip hint and the toast
  * sink are stubbed. The manifest `Input` (`id="manifest-path"`) drives the
  * shared effect; the branch picker edits the same two-field patch through a
  * closed popover, so the input exercises both fields.
@@ -57,7 +57,7 @@ const uiToastMock = () => ({
 mock.module('../../../primitives/toast', uiToastMock);
 mock.module('../../../primitives/toast', uiToastMock);
 // The IAM probe is a collaborator, not the subject: the effect under test
-// reads `canManage`, which this stub answers directly. `Hint` (a Radix
+// reads `canManage`, which this stub answers directly. `Hint` (a
 // tooltip, reached through `CopyButton`) needs a real DOM for its portal — a
 // passthrough keeps the harness DOM-free.
 const uiHintMock = () => ({ default: Passthrough });
@@ -98,9 +98,7 @@ const detail: ProjectDetail = {
     is_kortix_repo: false,
     signals: {},
     manifest_raw: null,
-    open_code_raw: null,
-    open_code_default_agent: null,
-    agent_discovery: 'opencode' as const,
+    agent_discovery: 'declarative' as const,
     agents: [],
     skills: [],
     commands: [],
@@ -146,7 +144,7 @@ beforeEach(() => {
     fetch: async (url, init = {}) => {
       const method = init.method ?? 'GET';
       const path = String(url).split('?')[0];
-      if (method === 'PATCH' && path.endsWith('/v1/projects/proj-1')) {
+      if (method === 'PATCH' && path.endsWith('/v1/workspaces/proj-1')) {
         await networkTick();
         const body = typeof init.body === 'string' ? JSON.parse(init.body) : undefined;
         const status = failNextPatch ? 500 : 200;
@@ -162,13 +160,13 @@ beforeEach(() => {
           headers: { 'content-type': 'application/json' },
         });
       }
-      if (method === 'GET' && path.endsWith('/v1/projects/proj-1/detail')) {
+      if (method === 'GET' && path.endsWith('/v1/workspaces/proj-1/detail')) {
         return new Response(JSON.stringify(detail), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       }
-      if (method === 'GET' && path.endsWith('/v1/projects/proj-1/branches')) {
+      if (method === 'GET' && path.endsWith('/v1/workspaces/proj-1/branches')) {
         return new Response(JSON.stringify({ branches: [{ name: 'main' }] }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
@@ -236,7 +234,7 @@ describe('GitView repository-settings autosave: one attempt per edit', () => {
 
     expect(patches()).toEqual([
       {
-        url: 'http://api.test/v1/projects/proj-1',
+        url: 'http://api.test/v1/workspaces/proj-1',
         method: 'PATCH',
         body: { default_branch: 'main', manifest_path: 'k.yaml' },
         status: 200,
@@ -283,13 +281,13 @@ describe('GitView repository-settings autosave: one attempt per edit', () => {
 
     expect(patches()).toEqual([
       {
-        url: 'http://api.test/v1/projects/proj-1',
+        url: 'http://api.test/v1/workspaces/proj-1',
         method: 'PATCH',
         body: { default_branch: 'main', manifest_path: 'k.yaml' },
         status: 500,
       },
       {
-        url: 'http://api.test/v1/projects/proj-1',
+        url: 'http://api.test/v1/workspaces/proj-1',
         method: 'PATCH',
         body: { default_branch: 'main', manifest_path: 'k2.yaml' },
         status: 200,

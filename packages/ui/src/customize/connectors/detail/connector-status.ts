@@ -1,24 +1,43 @@
 import type { AdminConnector } from '@kortix/sdk';
 
-import {
-  connectorSetupStatus,
-  type ConnectorSetupStatus,
-} from '../../sections/connector-connection-form';
+/** The connector states and their rules live in `@kortix/sdk`. */
+export {
+  connectorDerivedState,
+  connectorStatusTone,
+  connectorUsable,
+  type ConnectorDerivedState,
+  type ConnectorStatusTone,
+} from '@kortix/sdk';
+
+import { connectorStatusTone, type ConnectorStatusTone } from '@kortix/sdk';
 
 import { providerLabel } from '../provider-label';
 
 /**
- * The three states a connector shows, everywhere it shows one (the list card,
- * the connector header, the app page): Connected, Needs account, Error. A
- * sign-in still to finish and a missing credential are both "Needs account":
- * adding or signing in an account is the fix in either case.
+ * The tone a connector shows. `no_tools`: an HTTP connector that works but has
+ * no routes, so agents have nothing to call. It reads "No tools", not
+ * "Connected" with a 0 beside it.
  */
-export type ConnectorStatusTone = 'connected' | 'account' | 'error';
+export type ConnectorTone = ConnectorStatusTone | 'no_tools';
 
-export const STATUS_DOT: Record<ConnectorStatusTone, string> = {
+/** An HTTP connector with no routes: it gives agents no tools. */
+export function connectorHasNoTools(connector: Pick<AdminConnector, 'provider' | 'actions'>): boolean {
+  return connector.provider === 'http' && (connector.actions?.length ?? 0) === 0;
+}
+
+export function connectorTone(
+  connector: Parameters<typeof connectorStatusTone>[0] & Pick<AdminConnector, 'provider' | 'actions'>,
+  accountCount?: number,
+): ConnectorTone {
+  const tone = connectorStatusTone(connector, accountCount);
+  return tone === 'connected' && connectorHasNoTools(connector) ? 'no_tools' : tone;
+}
+
+export const STATUS_DOT: Record<ConnectorTone, string> = {
   connected: 'bg-kortix-green',
   account: 'bg-kortix-orange',
   error: 'bg-kortix-red',
+  no_tools: 'bg-kortix-orange',
 };
 
 /** The `connectorPages` key of each state's word. */
@@ -26,49 +45,8 @@ export const STATUS_WORD = {
   connected: 'statusConnected',
   account: 'statusNeedsAccount',
   error: 'statusError',
+  no_tools: 'statusNoTools',
 } as const;
-
-/** The server's derived state (`state` on the connector). `disabled` reads as an error. */
-export type ConnectorDerivedState = 'needs_account' | 'connected' | 'error';
-
-export function connectorDerivedState(connector: object): ConnectorDerivedState | null {
-  const state = (connector as { state?: unknown }).state;
-  if (state === 'disabled') return 'error';
-  return state === 'needs_account' || state === 'connected' || state === 'error' ? state : null;
-}
-
-/**
- * The server's `state` when it sends one. An older API: the same rule from the
- * fields, where zero accounts (once loaded) is Needs account.
- */
-export function connectorStatusTone(
-  connector: Pick<AdminConnector, 'authorizationStrategy' | 'authSecret' | 'secretSet' | 'status'> &
-    Partial<Pick<AdminConnector, 'provider' | 'lastError'>>,
-  /** The accounts the caller can see, once loaded. */
-  accountCount?: number,
-): ConnectorStatusTone {
-  const state = connectorDerivedState(connector);
-  if (state === 'error') return 'error';
-  if (state === 'needs_account') return 'account';
-  // A channel or computer has no accounts to count. Anything else with zero
-  // loaded accounts has nothing to run as, whatever else it reports.
-  const counted = connector.provider !== 'channel' && connector.provider !== 'computer';
-  if (counted && accountCount === 0) return 'account';
-  if (state === 'connected') return 'connected';
-  const status = connectorSetupStatus(connector);
-  if (status === 'error') return 'error';
-  if (status === 'pending' || status === 'needs_setup') return 'account';
-  return 'connected';
-}
-
-/**
- * Agents can use the connector now: it is signed in, it runs on per-person
- * accounts, or it needs no sign-in and has an account to run as.
- */
-export function connectorUsable(status: ConnectorSetupStatus, accountCount: number): boolean {
-  if (status === 'connected') return true;
-  return status === 'no_auth' && accountCount > 0;
-}
 
 /** What the connector runs over: its provider, named the way a person says it. */
 export function connectorRunsOver(provider: AdminConnector['provider']): string {

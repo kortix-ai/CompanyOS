@@ -1,18 +1,19 @@
 /**
- * The agent page's address: four tabs, and a view inside Access and Runtime.
- * The page draws them as ONE rail (2026-10-28): Overview, Triggers, then the
- * Access views and the Runtime views under their group labels. The address
- * keeps its two levels, so every link still resolves.
+ * The agent page's address: five tabs, and a view inside Access and Runtime.
+ * The page draws them as ONE left rail in three groups (2026-11-03, the
+ * Settings-style rail is back): General (Overview, Basics, People, Triggers),
+ * Access (one row per grant) and Runtime (Model, Tools, Workspace). The
+ * address keeps its two levels, so every link still resolves.
  *
- *   ?tab=overview | access | runtime | triggers
+ *   ?tab=overview | basics | access | runtime | triggers
  *   ?tab=access&view=connectors | secrets | skills | tools | extensions | drives | apps | permissions | …
  *   ?tab=runtime&view=model | workspace
  *
  * The page used to be a rail of seventeen `?section=<key>` topics, then six
  * tabs. Tools moved from Runtime to Access (2026-10-27): `?tab=runtime&view=tools`
- * opens Access. Every old link still resolves: `resolveAgentLocation` maps
- * `?section=` onto a tab and a view (Basics became the Overview's
- * Availability panel). Instructions and People are no tabs any more: the
+ * opens Access; the rail still lists Tools under Runtime. Every old link still
+ * resolves: `resolveAgentLocation` maps `?section=` onto a tab and a view.
+ * Instructions and People are no tabs: the
  * instructions are edited on the Overview, and People is the header's Share
  * dialog. Their old links open the Overview with the instructions in focus or
  * the Share dialog open (`open`).
@@ -22,7 +23,7 @@ import type { AGENT_BLOCK_KEYS_V3 } from '@kortix/manifest-schema';
 
 import type { AgentConfigSectionKey } from '../sections/view/agent-editor';
 
-export const AGENT_TABS = ['overview', 'access', 'runtime', 'triggers'] as const;
+export const AGENT_TABS = ['overview', 'basics', 'access', 'runtime', 'triggers'] as const;
 export type AgentTab = (typeof AGENT_TABS)[number];
 
 /** Access views, in the order of an `agents.<name>` block in kortix.yaml. */
@@ -59,7 +60,7 @@ function viewFromParam(value: string | null): AgentConfigSectionKey | null {
 function tabOfSection(section: AgentConfigSectionKey): AgentTab {
   if ((ACCESS_VIEWS as readonly string[]).includes(section)) return 'access';
   if ((RUNTIME_VIEWS as readonly string[]).includes(section)) return 'runtime';
-  if (section === 'basics' || section === 'instructions' || section === 'people') return 'overview';
+  if (section === 'instructions' || section === 'people') return 'overview';
   return section as AgentTab;
 }
 
@@ -125,20 +126,23 @@ export function sectionLocationHref(pathname: string, section: AgentConfigSectio
 const OVERVIEW_ROW = 'overview';
 
 export const YAML_KEY_ROW = {
+  title: OVERVIEW_ROW,
   description: OVERVIEW_ROW,
   prompt: OVERVIEW_ROW,
   prompt_file: 'overview',
-  enabled: 'overview',
-  hidden: 'overview',
-  mode: 'overview',
-  space: 'overview',
-  color: 'overview',
+  enabled: 'basics',
+  hidden: 'basics',
+  mode: 'basics',
+  space: 'basics',
+  color: 'basics',
   model: 'model',
   variant: 'model',
   temperature: 'model',
   top_p: 'model',
   steps: 'model',
   options: 'model',
+  run: 'model',
+  timeout: 'model',
   tools: 'tools',
   codemode: 'tools',
   context: 'tools',
@@ -153,15 +157,14 @@ export const YAML_KEY_ROW = {
   secrets: 'secrets',
   apps: 'apps',
   kortix_permissions: 'actions',
-  workspace: 'workspace',
   sandbox: 'workspace',
+  workspace: 'workspace',
   network_egress: 'workspace',
 } as const satisfies Record<(typeof AGENT_BLOCK_KEYS_V3)[number], AgentRailKey>;
 
 /** The editor draft's wire names for a kortix.yaml key (v2 aliases included). */
 const WIRE_KEY: Record<string, string> = {
   file: 'prompt_file',
-  repository_access: 'workspace',
   kortix_cli: 'kortix_permissions',
   connectors_personal: 'connectors_required',
 };
@@ -181,7 +184,8 @@ export type AgentRailKey = 'overview' | 'triggers' | AgentConfigSectionKey;
 
 /** The rail row a location shows. */
 export function railKeyOf(location: AgentLocation): AgentRailKey {
-  return location.view ?? (location.tab === 'triggers' ? 'triggers' : 'overview');
+  if (location.view) return location.view;
+  return location.tab === 'triggers' || location.tab === 'basics' ? location.tab : 'overview';
 }
 
 /**

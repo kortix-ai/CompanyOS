@@ -1,4 +1,5 @@
 import type { Agent, Session } from '@kortix/sdk/react';
+import { agentDisplayName } from '@kortix/shared';
 import { translateUiCatalogText } from '../../../i18n/ui-catalog/localize-ui-catalog';
 import { REMAINING_UI_TRANSLATION_KEYS } from '../../../i18n/ui-catalog/remaining-ui-translation-keys.generated';
 import type { UiTranslator } from '../../../i18n';
@@ -11,6 +12,10 @@ export interface MenuRow {
   label: string;
   value: string;
   description?: string;
+  /** A space's `@` menu: the row's face (a person round, an agent its mark). */
+  avatar?: { kind: 'person' | 'agent'; key: string; name: string; url: string | null };
+  /** A space's `@` menu: an agent not in the space yet; picking it adds it. */
+  addToSpace?: boolean;
 }
 
 export interface MentionSection {
@@ -90,8 +95,11 @@ export function buildMentionSections({
   // something to fold into this refactor — see the pinning test below.
   const agentRows: MenuRow[] = [];
   for (const a of agents) {
-    if (!(a.name || '').toLowerCase().includes(q)) continue;
-    agentRows.push({ index: index++, kind: 'agent', label: a.name || '', value: a.name || '' });
+    const name = a.name || '';
+    // The row reads the name every other surface shows; the slug stays the value.
+    const label = name ? agentDisplayName(name, a.title) : '';
+    if (!name.toLowerCase().includes(q) && !label.toLowerCase().includes(q)) continue;
+    agentRows.push({ index: index++, kind: 'agent', label, value: name });
   }
   if (agentRows.length) sections.push({ kind: 'agent', heading: heading('Agents'), items: agentRows });
 

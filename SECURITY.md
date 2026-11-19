@@ -3,7 +3,7 @@
 ## Report a vulnerability
 
 Report suspected vulnerabilities privately through
-[GitHub private vulnerability reporting](https://github.com/kortix-ai/suna/security/advisories/new).
+[GitHub private vulnerability reporting](https://github.com/kortix-ai/CompanyOS/security/advisories/new).
 Sign in to GitHub, then select **Report a vulnerability** in this repository's
 **Security** tab. Do not report vulnerabilities in public issues or pull requests.
 
@@ -25,3 +25,10 @@ We aim to acknowledge reports within **5 business days**. This is a target, not 
 guarantee or a resolution deadline. We assess impact, coordinate a fix, and discuss
 disclosure timing with the reporter in the private report. Keep vulnerability
 details private until we agree on disclosure timing.
+
+## Security maintainers
+
+[@kubet](https://github.com/kubet) (Vukašin Kubet) reviews security-sensitive changes,
+triages vulnerability reports, and coordinates fixes. Pull requests that touch
+authentication, IAM, cryptography, or secrets request review from the code owners
+listed in [`.github/CODEOWNERS`](.github/CODEOWNERS).

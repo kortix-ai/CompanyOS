@@ -16,7 +16,7 @@ import {
   InputGroupSearchIcon,
   InputGroupSearchInput,
 } from '../../primitives/input-group';
-import { Tabs, TabsListCompact, TabsTriggerCompact } from '../../primitives/tabs';
+import { Tabs, TabsList, TabsTrigger } from '../../primitives/tabs';
 import { useTranslations } from '../../i18n';
 import type { SessionLogMessage } from '@kortix/sdk';
 import { CaretDownIcon, CheckIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
@@ -134,7 +134,7 @@ export function CopyAllButton({
 // Raw message accordion item
 // ============================================================================
 
-/** Stringifies only while its accordion item is open — Radix unmounts closed content. */
+/** Stringifies only while its accordion item is open — the accordion unmounts closed content. */
 function RawMessageJson({ value }: { value: unknown }) {
   const json = useMemo(() => JSON.stringify(value, null, 2), [value]);
   return (
@@ -173,7 +173,7 @@ const RawMessage = memo(function RawMessage({
             </Badge>
             <span className="text-muted-foreground">{row.id}</span>
           </div>
-          <div className="text-muted-foreground/60 shrink-0 text-xs tabular-nums">
+          <div className="text-muted-foreground shrink-0 text-xs tabular-nums">
             {formatTime(row.created)}
           </div>
         </div>
@@ -283,13 +283,13 @@ export function SessionContextMessageExplorer({
                   onValueChange={(value) => setRawRole(value as typeof rawRole)}
                   className="w-fit"
                 >
-                  <TabsListCompact type="default">
-                    <TabsTriggerCompact value="all">{t.raw('rawFilterAll')}</TabsTriggerCompact>
-                    <TabsTriggerCompact value="user">{t.raw('rawFilterUser')}</TabsTriggerCompact>
-                    <TabsTriggerCompact value="assistant">
+                  <TabsList size="xs" type="default">
+                    <TabsTrigger value="all">{t.raw('rawFilterAll')}</TabsTrigger>
+                    <TabsTrigger value="user">{t.raw('rawFilterUser')}</TabsTrigger>
+                    <TabsTrigger value="assistant">
                       {t.raw('rawFilterAssistant')}
-                    </TabsTriggerCompact>
-                  </TabsListCompact>
+                    </TabsTrigger>
+                  </TabsList>
                 </Tabs>
               </div>
               {filteredRawMessages.length === 0 ? (

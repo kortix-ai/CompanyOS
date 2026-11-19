@@ -13,7 +13,7 @@ import {
   CommandPopoverContent,
   CommandPopoverTrigger,
 } from '../../../primitives/command';
-import { InfoBanner } from '../../../primitives/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription, AlertMedia as BannerAlertMedia } from '../../../primitives/alert';
 import { Input } from '../../../primitives/input';
 import Loading from '../../../primitives/loading';
 import { Modal, ModalBody, ModalContent, ModalDescription, ModalFooter, ModalHeader, ModalTitle } from '../../../primitives/modal';
@@ -37,6 +37,7 @@ import { requestGitHubUserProof } from '../../../internal/lib/github-user-proof'
 import { PROJECT_ACTIONS } from '../../../internal/lib/project-actions';
 import { useDeploymentCliInstallCommand } from '../../../internal/lib/use-deployment-cli-install-command';
 import { useProjectCans } from '../../../internal/lib/use-project-can';
+import { ManifestIssuesRow } from './manifest-issues-row';
 import { cn } from '../../../internal/lib/utils';
 import {
   getProjectDetail,
@@ -90,8 +91,8 @@ const GIT_VIEW_ACTIONS = [
   PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
 ] as const;
 
-const DOCS_CLI = '/docs/cli';
-const DOCS_MANIFEST = '/docs/project/manifest';
+const DOCS_CLI = '/docs/developers#cli';
+const DOCS_MANIFEST = '/docs/developers#kortixyaml-reference';
 
 type ProjectWithOrigin = KortixProject & { git_origin_url?: string };
 
@@ -298,7 +299,7 @@ function SaveStatus() {
  * The default-branch picker: a searchable list, not a `<Select>`.
  *
  * A long-lived project's remote holds one branch per session, thousands of
- * refs. A Radix `<Select>` mounts every option, so opening this pane on such
+ * refs. A `<Select>` mounts every option, so opening this pane on such
  * a project froze the tab and then crashed it. This list renders at most
  * `BRANCH_PICKER_LIMIT` rows (`filterBranchNames`) and filters as the person
  * types. The current value always renders, also before `/branches` answers.
@@ -541,9 +542,9 @@ function RepositoryGroup({
       {repositoryDisconnectOf(connection) ? (
         <RepositoryDisconnectedBanner projectId={project.project_id} disconnect={repositoryDisconnectOf(connection)} />
       ) : connection?.last_error_message ? (
-        <InfoBanner tone="warning" icon={WarningIcon} title={tI18nComplete.raw('textcb25ff313d81')}>
+        <BannerAlert variant="warning" ><BannerAlertMedia><WarningIcon /></BannerAlertMedia><BannerAlertTitle>{tI18nComplete.raw('textcb25ff313d81')}</BannerAlertTitle><BannerAlertDescription>
           {connection.last_error_message}
-        </InfoBanner>
+        </BannerAlertDescription></BannerAlert>
       ) : null}
 
       <SettingsRowGroup>
@@ -596,6 +597,8 @@ function RepositoryGroup({
             className="h-8 w-44 font-mono text-xs"
           />
         </SettingsRow>
+        {/* The manifest's open issues, under the row that names the file. */}
+        <ManifestIssuesRow projectId={project.project_id} canWrite={canManage} />
       </SettingsRowGroup>
       <Modal open={changeOpen} onOpenChange={(open) => {
         if (changeRepository.isPending) return;
@@ -715,7 +718,7 @@ function LocalSetup({ projectId }: { projectId: string }) {
         </Step>
         <Step index={2} title={tI18nComplete.raw('text7114f5d2fafa')} hint={tGit('cloneHint')}>
           <CommandLine
-            value={`kortix projects clone ${projectId}`}
+            value={`kortix workspaces clone ${projectId}`}
             label={tI18nComplete.raw('text6264f3bfdd91')}
           />
         </Step>
@@ -739,8 +742,11 @@ function LocalSetup({ projectId }: { projectId: string }) {
  * unusual about it (no token to create or store), not with how Kortix resolves
  * the credential.
  */
-function OwnGitClient({ project }: { project: ProjectWithOrigin }) {
+export function OwnGitClient({ project }: { project: ProjectWithOrigin }) {
   const tI18nComplete = useI18nTranslations('hardcodedUi.i18nComplete');
+  const tGit = useI18nTranslations('settings.git');
+  // Whole sentences, so every locale keeps its own word order and spacing.
+  const code = (chunks: ReactNode) => <code className="font-mono">{chunks}</code>;
   const [open, setOpen] = useState(false);
 
   return (
@@ -771,8 +777,7 @@ function OwnGitClient({ project }: { project: ProjectWithOrigin }) {
                 {tI18nComplete.raw('textd29222de0472')}
               </span>
               <span className="text-muted-foreground block text-xs font-normal text-pretty">
-                {tI18nComplete.raw('text7760401b25c7')}
-                <code className="font-mono">git</code> {tI18nComplete.raw('text2f72fafe0ce1')}
+                {tGit.rich('ownClientDescription', { code })}
               </span>
             </span>
             <CaretDownIcon
@@ -786,8 +791,7 @@ function OwnGitClient({ project }: { project: ProjectWithOrigin }) {
         <DisclosureContent variant="outline" contentClassName="border-border border-t">
           <div className="space-y-2 px-4 py-3.5">
             <p className="text-muted-foreground text-xs text-pretty">
-              {tI18nComplete.raw('texte327e6c1348b')}
-              <code className="font-mono">git</code> {tI18nComplete.raw('textb74106e21108')}
+              {tGit.rich('ownClientHelp', { code })}
             </p>
             <CommandLine
               value={gitCloneUrl(project)}

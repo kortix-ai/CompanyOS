@@ -18,7 +18,7 @@ import { AgentMark } from '../../internal/components/agent-mark';
 import { Button } from '../../primitives/button';
 import { EntityAvatar } from '../../primitives/entity-avatar';
 import { Field, FieldLabel } from '../../primitives/field';
-import { InfoBanner } from '../../primitives/info-banner';
+import { Alert as BannerAlert, AlertDescription as BannerAlertDescription, AlertMedia as BannerAlertMedia } from '../../primitives/alert';
 import Loading from '../../primitives/loading';
 import {
   Modal,
@@ -34,11 +34,14 @@ import { UserAvatar } from '../../primitives/user-avatar';
 import { useTranslations as useI18nTranslations } from '../../i18n';
 import { cn } from '../../internal/lib/utils';
 import {
-  createAssignment,
+  connectionSharedWithEveryoneAfter as sharedWithEveryoneAfter,
+  grantConnectionAccess,
+  planConnectionShare as planShare,
+  planPrivateConnectionShare as planPrivateShare,
   revokeAssignment,
   shareConnection,
   type ConnectionShare,
-  type ConnectionSharePrincipal,
+  type ConnectionSharePlan as SharePlan,
 } from '@kortix/sdk';
 import { invalidatePermissionProbes, qk } from '@kortix/sdk/react';
 import { LockIcon, RobotIcon, UsersIcon, UsersThreeIcon, XIcon } from '@phosphor-icons/react';
@@ -51,6 +54,7 @@ import {
   PrincipalPicker,
   type PrincipalSelection,
 } from './principal-picker';
+import { applyShareSelection, shareSelectionView } from './share-selection';
 
 /** The object a `share` dialog narrows. Connections are the one kind today. */
 export interface ShareableObject {
@@ -65,104 +69,8 @@ export interface ShareableObject {
   privateOwner?: { userId: string; label: string };
 }
 
-export interface SharePlan {
-  /** Principals to grant, in the canonical assignment vocabulary. An agent is
-   *  its service account. */
-  add: Array<{ type: 'user' | 'group' | 'project' | 'service_account'; id: string }>;
-  /** Assignment ids to revoke. */
-  revoke: string[];
-}
-
-function repicked(grant: ConnectionShare, picked: PrincipalSelection): boolean {
-  if (grant.principal_type === 'member') return picked.memberIds.includes(grant.principal_id);
-  if (grant.principal_type === 'group') return picked.groupIds.includes(grant.principal_id);
-  if (grant.principal_type === 'agent') return (picked.agentIds ?? []).includes(grant.principal_id);
-  return picked.everyone === true;
-}
-
-/**
- * What Save writes. A principal already granted is never granted twice, and a
- * grant marked for removal but picked again is left alone (neither write).
- */
-export function planShare(
-  current: readonly ConnectionShare[],
-  removed: ReadonlySet<string>,
-  picked: PrincipalSelection,
-  projectId: string,
-): SharePlan {
-  const granted = (type: ConnectionShare['principal_type'], id: string) =>
-    current.some((grant) => grant.principal_type === type && grant.principal_id === id);
-  const add: SharePlan['add'] = [];
-  for (const id of picked.memberIds) if (!granted('member', id)) add.push({ type: 'user', id });
-  for (const id of picked.groupIds) if (!granted('group', id)) add.push({ type: 'group', id });
-  for (const id of picked.agentIds ?? []) if (!granted('agent', id)) add.push({ type: 'service_account', id });
-  if (picked.everyone && !current.some((grant) => grant.principal_type === 'project')) {
-    add.push({ type: 'project', id: projectId });
-  }
-  const revoke = current
-    .filter((grant) => removed.has(grant.grant_id) && !repicked(grant, picked))
-    .map((grant) => grant.grant_id);
-  return { add, revoke };
-}
-
-/**
- * Who a private account is shared with on Save, or `null` when nothing is
- * picked (it stays private). Everyone in the project is the empty audience.
- */
-export function planPrivateShare(
-  picked: PrincipalSelection,
-  keepOwner: boolean,
-  ownerId: string,
-): ConnectionSharePrincipal[] | null {
-  if (picked.everyone) return [];
-  const others = [
-    ...picked.memberIds
-      .filter((id) => id !== ownerId)
-      .map((id) => ({ principal_type: 'user' as const, principal_id: id })),
-    ...picked.groupIds.map((id) => ({ principal_type: 'group' as const, principal_id: id })),
-  ];
-  const ownerPicked = picked.memberIds.includes(ownerId);
-  if (others.length === 0 && !ownerPicked) return null;
-  return keepOwner || ownerPicked
-    ? [{ principal_type: 'user', principal_id: ownerId }, ...others]
-    : others;
-}
-
-/** Grant each principal the use of one shared connector account, in parallel.
- *  The one write both the share dialog and the Add account flow make. */
-export async function grantConnectionAccess(
-  accountId: string,
-  projectId: string,
-  connectionId: string,
-  principals: SharePlan['add'],
-): Promise<void> {
-  await Promise.all(
-    principals.map((principal) =>
-      createAssignment(accountId, {
-        principal,
-        roleKey: 'agent-user',
-        scope: { type: 'project', id: projectId },
-        object: { type: 'connection', id: connectionId },
-      }),
-    ),
-  );
-}
-
-/** After Save, may everyone in the project use the account? No grant left, or
- *  a grant to the project, means yes. */
-export function sharedWithEveryoneAfter(
-  current: readonly ConnectionShare[],
-  removed: ReadonlySet<string>,
-  picked: PrincipalSelection,
-): boolean {
-  if (picked.everyone) return true;
-  const kept = current.filter((grant) => !removed.has(grant.grant_id) || repicked(grant, picked));
-  if (kept.some((grant) => grant.principal_type === 'project')) return true;
-  return (
-    kept.length === 0 &&
-    picked.memberIds.length + picked.groupIds.length + (picked.agentIds?.length ?? 0) === 0
-  );
-}
+/** What Save writes. The rules live in `@kortix/sdk`. */
+export { grantConnectionAccess, planPrivateShare, planShare, sharedWithEveryoneAfter, type SharePlan };
 
 export function ShareAccessBody({
   open,
@@ -250,11 +158,15 @@ export function ShareAccessBody({
       return next;
     });
 
-  const grantedMemberIds = privateOwner
-    ? [privateOwner.userId]
-    : current
-        .filter((grant) => grant.principal_type === 'member' && !removed.has(grant.grant_id))
-        .map((grant) => grant.principal_id);
+  // A shared account: the picker shows who has access as checked, and
+  // unchecking one is the same as its Remove button (`share-selection.ts`).
+  const pickerValue = privateOwner ? picked : shareSelectionView(current, removed, picked);
+  const onPickerChange = (next: PrincipalSelection) => {
+    if (privateOwner) return setPicked(next);
+    const split = applyShareSelection(current, removed, next);
+    setPicked(split.picked);
+    setRemoved(split.removed);
+  };
 
   return (
     <Modal
@@ -390,9 +302,9 @@ export function ShareAccessBody({
               // which takes people and groups; an agent joins once it is shared.
               kinds={privateOwner ? ['member', 'group'] : ['member', 'group', 'agent']}
               everyone={{ label: everyoneLabel }}
-              excludeUserIds={grantedMemberIds}
-              value={picked}
-              onChange={setPicked}
+              excludeUserIds={privateOwner ? [privateOwner.userId] : undefined}
+              value={pickerValue}
+              onChange={onPickerChange}
               disabled={save.isPending}
               autoFocus={false}
               emptyLabel={tI18nComplete.raw('textd2600c68a9ff')}
@@ -403,7 +315,7 @@ export function ShareAccessBody({
             ) : null}
           </Field>
 
-          <InfoBanner tone="neutral" icon={everyoneAfter ? UsersThreeIcon : LockIcon}>
+          <BannerAlert variant="default" ><BannerAlertMedia>{everyoneAfter ? <UsersThreeIcon /> : <LockIcon />}</BannerAlertMedia><BannerAlertDescription>
             <span data-testid="share-result">
               {everyoneAfter
                 ? t('resultEveryone', { project: projectName })
@@ -411,7 +323,7 @@ export function ShareAccessBody({
                   ? t('onlyYouDescription')
                   : t('resultNarrowed')}
             </span>
-          </InfoBanner>
+          </BannerAlertDescription></BannerAlert>
         </ModalBody>
 
         <ModalFooter className="sm:justify-between">

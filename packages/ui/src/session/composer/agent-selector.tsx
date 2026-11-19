@@ -17,10 +17,11 @@ import { useUiHostConfig } from '../../providers/ui-provider';
 import { cn } from '../../lib/utils';
 import { TRIGGER_CARET_CLASS, triggerVariants } from '../../primitives/trigger-variants';
 import type { Agent } from '@kortix/sdk/react';
-import { capitalizeWords, isMyKortixAgentName, MY_KORTIX_DISPLAY_NAME } from '@kortix/shared';
+import { agentDisplayName, isMyKortixAgentName } from '@kortix/shared';
+import { InlineCodeText } from '../../markdown/inline-code-text';
 import { CaretDownIcon, CheckIcon } from '@phosphor-icons/react';
 import { AgentMark } from '../../internal/components/agent-mark';
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { composerSelectableAgents } from './composer-agent-access';
 
 /**
@@ -49,16 +50,46 @@ const SEARCH_MIN_AGENTS = 7;
  * The agent a selector shows: the selected one, even before the roster has it,
  * else the first selectable agent. One rule for the trigger and the chat composer.
  */
-function resolveDisplayedAgentName(primaryAgents: Agent[], selectedAgent: string | null) {
+export function resolveDisplayedAgentName(primaryAgents: Agent[], selectedAgent: string | null) {
   const current = primaryAgents.find((a) => a.name === selectedAgent);
   return current?.name ?? selectedAgent ?? primaryAgents[0]?.name;
+}
+
+/** Is the displayed agent a program agent (`run`)? Its runtime listing names provider `program`: it has no model to pick. */
+export function resolveProgramAgent(primaryAgents: Agent[], selectedAgent: string | null): boolean {
+  const name = resolveDisplayedAgentName(primaryAgents, selectedAgent);
+  return primaryAgents.find((a) => a.name === name)?.model?.providerID === 'program';
 }
 
 /** The label `AgentSelector` shows for a selection (null = nothing picked). Other surfaces that name the agent reuse it. */
 export function agentDisplayLabel(agents: Agent[], selectedAgent: string | null): string {
   const name = resolveDisplayedAgentName(composerSelectableAgents(agents), selectedAgent);
   if (!name) return 'Agent';
-  return isMyKortixAgentName(name) ? MY_KORTIX_DISPLAY_NAME : capitalizeWords(name);
+  return agentDisplayName(name, agents.find((a) => a.name === name)?.title);
+}
+
+/**
+ * The agents a composer picker offers and the name it shows for each. One
+ * rule for `AgentSelector` and the `chat_input` control: a host that lists its
+ * agents (`offeredAgents`) offers only those and names them with `agentLabels`.
+ */
+export function useComposerAgentChoices(agents: Agent[]) {
+  const { offeredAgents, agentLabels } = useUiHostConfig();
+  const offered = useMemo(
+    () => {
+      if (!offeredAgents) return agents;
+      const offeredNames = new Set(offeredAgents);
+      return agents.filter((a) => offeredNames.has(a.name));
+    },
+    [agents, offeredAgents],
+  );
+  const primaryAgents = useMemo(() => composerSelectableAgents(offered), [offered]);
+  const label = useCallback(
+    (name: string) =>
+      agentLabels?.[name] ?? agentDisplayName(name, agents.find((a) => a.name === name)?.title),
+    [agentLabels, agents],
+  );
+  return { offered, primaryAgents, label, agentLabels };
 }
 
 export function AgentSelector({
@@ -104,19 +135,7 @@ export function AgentSelector({
   const setOpen = onOpenChange ?? setInternalOpen;
   const [search, setSearch] = useState('');
 
-  const { offeredAgents, agentLabels } = useUiHostConfig();
-  // A host that lists its agents (`offeredAgents`) offers only those; it names them with `agentLabels`.
-  const offered = useMemo(
-    () => {
-      if (!offeredAgents) return agents;
-      const offeredNames = new Set(offeredAgents);
-      return agents.filter((a) => offeredNames.has(a.name));
-    },
-    [agents, offeredAgents],
-  );
-  const primaryAgents = useMemo(() => composerSelectableAgents(offered), [offered]);
-  const label = (name: string) =>
-    agentLabels?.[name] ?? (isMyKortixAgentName(name) ? MY_KORTIX_DISPLAY_NAME : capitalizeWords(name));
+  const { offered, primaryAgents, label, agentLabels } = useComposerAgentChoices(agents);
 
   // A `flash` state, a `prevAgentRef` feeding it, two effects and a 400ms
   // timer used to live here. Nothing ever READ `flash` — it was written on
@@ -134,6 +153,7 @@ export function AgentSelector({
       (a) =>
         a.name.toLowerCase().includes(q) ||
         (agentLabels?.[a.name] ?? '').toLowerCase().includes(q) ||
+        (a.title ?? '').toLowerCase().includes(q) ||
         (a.description || '').toLowerCase().includes(q),
     );
   }, [primaryAgents, search, agentLabels]);
@@ -234,7 +254,9 @@ export function AgentSelector({
           {meta ? (
             <p className="text-muted-foreground text-xs">{t('myKortixRoutes')}</p>
           ) : agent.description ? (
-            <p className="text-muted-foreground line-clamp-2 text-xs text-pretty">{agent.description}</p>
+            <p className="text-muted-foreground line-clamp-2 text-xs text-pretty">
+              <InlineCodeText text={agent.description} />
+            </p>
           ) : null}
         </div>
         {isSelected && (
@@ -369,8 +391,8 @@ export function AgentSelector({
           It stays MOUNTED either way, just visually hidden, and that is
           deliberate: cmdk drives arrow-key navigation from a keydown handler
           on its own root, and the input is the only focusable descendant
-          inside it. Unmounting it would leave focus on the Radix content
-          wrapper — the parent — where keydown never reaches cmdk at all, so
+          inside it. Unmounting it would leave focus on the popover content
+          — the parent — where keydown never reaches cmdk at all, so
           the arrow keys would silently stop working on exactly the short
           lists this is meant to simplify.
         */}

@@ -4,6 +4,8 @@
  * creating an index.ts <-> classify.ts import cycle.
  */
 
+import { tryParseJson } from './text-scan';
+
 const GENERIC_ERROR_MESSAGE = 'An error occurred';
 
 /**
@@ -42,15 +44,6 @@ function stripErrorPrefixes(str: string): string {
     s = next;
   }
   return s;
-}
-
-function tryParseJson(value: unknown): unknown {
-  if (typeof value !== 'string' || !value) return undefined;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return undefined;
-  }
 }
 
 /**
@@ -299,6 +292,23 @@ export function unwrapError(raw: unknown): string {
   if (typeof raw === 'string') return unwrapString(raw, 0) ?? GENERIC_ERROR_MESSAGE;
   if (typeof raw === 'object') return unwrapObject(raw, 0) ?? GENERIC_ERROR_MESSAGE;
   return String(raw);
+}
+
+/**
+ * The sentence a session-error notification shows — the rule every path that
+ * announces a failed turn composes from: the gateway's structured message
+ * when the error carries its envelope, else `unwrapError`'s plain sentence.
+ *
+ * Prefers `extractGatewayErrorDetails` because a gateway or provider failure
+ * often carries its human sentence only inside the envelope — a serialized
+ * body behind the HTTP status text (`429: {"message": …}`), or an
+ * `APIError` whose `data.message` is `Bad Request` while `data.responseBody`
+ * holds the real wording. `unwrapError` alone reads that outer status text,
+ * so the live-stream path (`use-runtime-events`), the turn-end hand-off and
+ * the /debug/toasts gallery must all compose the sentence here.
+ */
+export function sessionErrorSentence(error: unknown): string {
+  return extractGatewayErrorDetails(error)?.message || unwrapError(error);
 }
 
 /**

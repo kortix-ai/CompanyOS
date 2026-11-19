@@ -10,6 +10,7 @@ export type { FileContentRendererProps } from './file-content-renderer';
 export { FilePreviewModal } from './file-preview-modal';
 export type { FilePreviewModalProps, FilePreviewState } from './file-preview-modal';
 export { FileSourceProvider, useFileSource } from './file-source';
+export { FileAnnotationsProvider, useFileAnnotations } from './file-annotations';
 export type {
   BinaryBlobResult,
   FileContent,
@@ -18,7 +19,7 @@ export type {
   FilePatchHunk,
   FileSource,
 } from './file-source';
-export { HtmlPreview } from './html-preview';
+export { HTML_PREVIEW_IFRAME_CLASS, HtmlPreview } from './html-preview';
 export { PreviewFitProvider, isUsableIntrinsicSize } from './preview-fit';
 export { SaveAsPdfButton } from './save-as-pdf-button';
 export { framePolicy, getFileCategory, getLanguageFromExt } from './preview-policy';

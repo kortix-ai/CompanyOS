@@ -12,13 +12,12 @@ import React, { useMemo, useState } from 'react';
 import {
   View,
   Pressable,
-  ScrollView,
 } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BottomSheetModal, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { SheetScrollView } from '@/components/kortix/sheet-parts';
 import {
-  KeyIcon as Key,
   UserIcon as User,
   LockIcon as Lock,
   UsersIcon as Users,
@@ -26,8 +25,8 @@ import {
   CheckIcon as Check,
   CaretRightIcon as ChevronRight,
   TrashIcon as Trash2,
-  XIcon as X,
   ShieldWarningIcon as ShieldAlert,
+  PlusIcon,
   type AppIcon,
 } from '@/lib/icons';
 import { Text } from '@/components/ui/text';
@@ -35,6 +34,8 @@ import { KortixLoader } from '@/components/kortix/kortix-loader';
 import { PageHeader } from '@/components/kortix/page-header';
 import { PageContent } from '@/components/kortix/page-content';
 import { SearchListHeader } from '@/components/kortix/search-list-header';
+import { BottomSearchBar, useBottomSearchInset, usesBottomSearch } from '@/components/kortix/bottom-search-bar';
+import { filterByQuery, noResultsLabel } from '@/lib/ui/search-filter';
 import Animated from 'react-native-reanimated';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -281,7 +282,7 @@ function SharedSecretForm({
     <View style={{ flex: 1 }}>
       <SheetTitleRow title={nameEditable ? 'Add a secret' : configured ? 'Edit shared value' : 'Set shared value'} onClose={() => { haptics.tap(); onClose(); }} leading={pushed ? <SheetBackButton onPress={() => { haptics.tap(); onClose(); }} /> : undefined} />
 
-      <BottomSheetScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 16, gap: 8 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <SheetScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 16, gap: 8 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Label>Name</Label>
         <SheetTextInput mono
           value={name}
@@ -314,7 +315,7 @@ function SharedSecretForm({
 
         <Label>Who can use it</Label>
         <SharingField projectId={projectId} value={sharing} onChange={setSharing} isDark={isDark} />
-      </BottomSheetScrollView>
+      </SheetScrollView>
 
       {/* Pinned under the form: always reachable above the keyboard. */}
       <View className="px-4 pt-3" style={{ paddingBottom: insets.bottom + 16 }}>
@@ -376,7 +377,7 @@ function PersonalSecretForm({
     <View style={{ flex: 1 }}>
       <SheetTitleRow title={nameEditable ? 'Add your value' : 'Your value'} onClose={() => { haptics.tap(); onClose(); }} leading={pushed ? <SheetBackButton onPress={() => { haptics.tap(); onClose(); }} /> : undefined} />
 
-      <BottomSheetScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 16, gap: 8 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <SheetScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 16, gap: 8 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Label>Name</Label>
         <SheetTextInput mono
           value={name}
@@ -401,7 +402,7 @@ function PersonalSecretForm({
         <Text variant="muted">
           Only used in your own sessions. Other members never see it.
         </Text>
-      </BottomSheetScrollView>
+      </SheetScrollView>
 
       {/* Pinned under the form: always reachable above the keyboard. */}
       <View className="px-4 pt-3" style={{ paddingBottom: insets.bottom + 16 }}>
@@ -414,35 +415,6 @@ function PersonalSecretForm({
 }
 
 // ─── Secret detail sheet (status · source · actions) ──────────────────────────
-
-function ActionRow({
-  label,
-  destructive,
-  onPress,
-  isDark,
-  busy,
-}: {
-  label: string;
-  destructive?: boolean;
-  onPress: () => void;
-  isDark: boolean;
-  busy?: boolean;
-}) {
-  const fg = isDark ? THEME.dark.foreground : THEME.light.foreground;
-  const border = isDark ? withAlpha(THEME.dark.foreground, 0.08) : withAlpha(THEME.light.foreground, 0.08);
-  const color = destructive ? (isDark ? THEME.dark.destructive : THEME.light.destructive) : fg;
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={busy}
-      style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: border, opacity: busy ? 0.5 : 1 }}
-    >
-      {destructive && <Trash2 size={16} color={color} style={{ marginRight: 10 }} />}
-      <Text style={{ flex: 1, fontSize: 15, fontFamily: 'Roobert-Medium', color }}>{label}</Text>
-      {busy ? <KortixLoader size="small" /> : !destructive && <ChevronRight size={18} color={isDark ? THEME.dark.mutedForeground : THEME.light.mutedForeground} />}
-    </Pressable>
-  );
-}
 
 function SecretDetailSheet({
   projectId,
@@ -563,7 +535,7 @@ function SecretDetailSheet({
     <Animated.View key="detail" entering={returning ? POP_IN : undefined} style={{ flex: 1 }}>
       <SheetTitleRow title={row.name} onClose={() => { haptics.tap(); onClose(); }} />
 
-      <BottomSheetScrollView
+      <SheetScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: insets.bottom + 32, gap: 16 }}
         showsVerticalScrollIndicator={false}>
@@ -612,7 +584,7 @@ function SecretDetailSheet({
             ) : null}
           </SettingsGroup>
         ) : null}
-      </BottomSheetScrollView>
+      </SheetScrollView>
       {confirmDialog}
     </Animated.View>
   );
@@ -664,10 +636,7 @@ export function SecretsNavPage({
     () => buildRows(data?.items ?? [], data?.required ?? [], data?.optional ?? []),
     [data],
   );
-  const filtered = useMemo(() => {
-    const q = search.trim().toUpperCase();
-    return q ? rows.filter((r) => r.name.includes(q)) : rows;
-  }, [rows, search]);
+  const filtered = useMemo(() => filterByQuery(rows, search, (r) => [r.name]), [rows, search]);
 
   const missingRequired = useMemo(
     () => rows.filter((r) => r.required && (r.secret?.effective_source ?? 'none') === 'none').length,
@@ -678,6 +647,11 @@ export function SecretsNavPage({
     () => rows.find((r) => r.name === selectedName) ?? null,
     [rows, selectedName],
   );
+
+  // iOS: search and New secret sit at the bottom (`BottomSearchBar`); elsewhere
+  // the search pill under the header and the header's `+`.
+  const bottomSearch = usesBottomSearch();
+  const bottomInset = useBottomSearchInset();
 
   const openRow = (name: string) => {
     haptics.tap();
@@ -691,7 +665,7 @@ export function SecretsNavPage({
         title={page.label}
         onBack={onBack}
         onOpenDrawer={onBack ? undefined : onOpenDrawer}
-        onAdd={() => { haptics.tap(); addSheetRef.current?.present(); }}
+        onAdd={bottomSearch ? undefined : () => { haptics.tap(); addSheetRef.current?.present(); }}
         addLabel="New secret"
       />
 
@@ -707,21 +681,24 @@ export function SecretsNavPage({
           </View>
         )}
 
-        <SearchListHeader
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search secrets"
-        />
+        {bottomSearch ? null : (
+          <SearchListHeader
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search secrets"
+          />
+        )}
 
         <PageList<Row>
           isLoading={isLoading}
           errorMessage={isError && rows.length === 0 ? ((error as Error)?.message ?? 'Unable to load secrets') : null}
           onRetry={() => void refetch()}
           onRefresh={() => refetch()}
-          emptyLabel={filtered.length === 0 ? (rows.length === 0 ? 'No secrets yet' : 'No matching secrets') : null}
+          emptyLabel={filtered.length === 0 ? (rows.length === 0 ? 'No secrets yet' : noResultsLabel(search)) : null}
           // Settings rows in a group (Jay, 2026-09-22), the Agents list's
           // layout; virtualised, one `SettingsGroupItem` per row (COR-155).
           header={<View className="h-1" />}
+          bottomInset={bottomSearch ? bottomInset : undefined}
           data={filtered}
           keyExtractor={(row) => row.name}
           renderItem={(row, index) => {
@@ -754,6 +731,14 @@ export function SecretsNavPage({
           }}
         />
       </PageContent>
+
+      <BottomSearchBar
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Search secrets"
+        action={{ label: 'New secret', icon: PlusIcon, onPress: () => addSheetRef.current?.present() }}
+        background={bgColor}
+      />
 
       {/* Add */}
       <KortixBottomSheetModal

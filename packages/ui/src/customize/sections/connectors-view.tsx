@@ -34,7 +34,7 @@ import {
 } from '../../primitives/dropdown-menu';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '../../primitives/field';
 import Hint from '../../primitives/hint';
-import { InfoBanner } from '../../primitives/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription, AlertActions as BannerAlertActions, AlertMedia as BannerAlertMedia } from '../../primitives/alert';
 import { InlineMeta } from '../../primitives/inline-meta';
 import { Input } from '../../primitives/input';
 import { Label } from '../../primitives/label';
@@ -93,6 +93,8 @@ import {
   type ConnectorConfig,
   type ConnectorDraftInput,
   type ConnectorRequestAuthType,
+  connectionSignInSteps,
+  connectorAccountSignInStarted,
   createConnector,
   discoverConnectionOAuth2,
   discoverConnectionOAuth2Resource,
@@ -104,7 +106,6 @@ import {
   listConnections,
   listProjectAccess,
   type OAuth2DeviceAuthorizationStartResult,
-  pollConnectionOAuth2DeviceAuthorization,
   putConnectionOAuth2Application,
   reconcileMemberConnection,
   renameConnection,
@@ -114,6 +115,7 @@ import {
   startConnectionOAuth2Authorization,
   startConnectionOAuth2DeviceAuthorization,
   updateConnectionCredential,
+  waitForConnectionOAuth2,
 } from '@kortix/sdk';
 import { contract, qk, useFeatureFlag, useProjectAccountId } from '@kortix/sdk/react';
 import { AddAccountFields } from './add-account-fields';
@@ -235,6 +237,7 @@ function ConnectionRow({
   onShare,
   onConnect,
   needsSignIn,
+  signsIn = false,
   pending,
   disabled = false,
   meta,
@@ -265,6 +268,9 @@ function ConnectionRow({
   onConnect?: () => void;
   /** Not signed in, on a connector that has a sign-in (`accountNeedsSignIn`). */
   needsSignIn: boolean;
+  /** The account signs in through a provider window (managed, one-click OAuth
+   *  MCP), so its button says "Sign in", not "Connect". */
+  signsIn?: boolean;
   pending: boolean;
   disabled?: boolean;
 }) {
@@ -272,6 +278,9 @@ function ConnectionRow({
   const tSharing = useTranslations('accessSharing');
   const tComputers = useTranslations('computers');
   const tConnectorPages = useTranslations('connectorPages');
+  const tSignIn = useTranslations('connectSignIn');
+  // A sign-in someone started (an agent's link) and nobody finished.
+  const signInStarted = needsSignIn && connectorAccountSignInStarted(connection);
   const isProjectAuthorization = connection.owner_type === 'project';
   const active = connection.status === 'active';
   // Only the owner of a connection may change it: your own personal connection,
@@ -316,7 +325,7 @@ function ConnectionRow({
           {/* An account nobody has signed in yet, such as the shared one a new
               connector starts with: say so beside its Connect button. */}
           {active && needsSignIn ? (
-            <span>{tConnectorPages('notSignedIn')}</span>
+            <span>{signInStarted ? tSignIn('signInUnfinished') : tConnectorPages('notSignedIn')}</span>
           ) : null}
           {/* The upstream answered 401 to the stored credential (gateway mark;
               a new credential or an ok call clears it). */}
@@ -350,7 +359,11 @@ function ConnectionRow({
           gets its next step on the row, not behind the menu. */}
       {onConnect && mayMutate && needsSignIn ? (
         <Button size="sm" className="shrink-0" onClick={onConnect} disabled={pending || disabled}>
-          {tConnectorPages('connectAccount')}
+          {signInStarted
+            ? tSignIn('finishSignIn')
+            : signsIn
+              ? tConnectorPages('noticeSignInAction')
+              : tConnectorPages('connectAccount')}
         </Button>
       ) : null}
       <ButtonGroup className="shrink-0">
@@ -472,6 +485,7 @@ export function ConnectionsList({
   onStartSession,
   onSetCredential,
   onConnect,
+  signsIn = false,
   titleAddon,
   addVariant = 'secondary',
   addRequest = 0,
@@ -493,6 +507,9 @@ export function ConnectionsList({
   onSetCredential?: (target: { connectionId: string; owner: 'project' | 'me' }) => void;
   /** Sign an unsigned account in. Omitted = no Connect on the rows. */
   onConnect?: (connection: Connection) => void;
+  /** An MCP server with one-click OAuth: rows say "Sign in". A managed
+   *  provider always does. */
+  signsIn?: boolean;
   /** Bumped to open "Add account" from outside the list (a header button,
    *  or the connector page right after Install). */
   addRequest?: number;
@@ -564,6 +581,33 @@ export function ConnectionsList({
   // An inbox account always has an inbox behind it: there is no empty slot.
   const slot = isEmail ? null : emptyProjectSlot(connector, allRows);
   const rows = slot ? allRows.filter((row) => row !== slot) : allRows;
+  // A managed account whose sign-in started and never finished may be done at
+  // the provider (the person used an agent's link outside Kortix). Ask once
+  // per account when the list shows it; a finished one is recorded and the
+  // row turns signed in without a click.
+  const unfinishedIds = isManagedConnectorProvider(connector.provider)
+    ? rows
+        .filter((row) => row.status === 'active' && row.authorized === false && connectorAccountSignInStarted(row))
+        .map((row) => row.connection_id)
+        .sort()
+    : [];
+  useQuery({
+    queryKey: ['connection-sign-in-check', projectId, connector.slug, unfinishedIds],
+    enabled: unfinishedIds.length > 0,
+    staleTime: Infinity,
+    retry: false,
+    queryFn: async () => {
+      const results = await Promise.allSettled(
+        unfinishedIds.map((connectionId) => {
+          const row = rows.find((candidate) => candidate.connection_id === connectionId)!;
+          return connectionSignInSteps(projectId, connector.slug, row).finalize();
+        }),
+      );
+      const recorded = results.some((result) => result.status === 'fulfilled' && result.value.connected);
+      if (recorded) refresh();
+      return recorded;
+    },
+  });
 
   const openCredential = onSetCredential ?? setCredentialTarget;
   // "Add account" asks the account's name and who may use it: only you,
@@ -596,7 +640,9 @@ export function ConnectionsList({
       setEmailOpen(true);
       return;
     }
-    setDraft({ ...EMPTY_NEW_ACCOUNT, label: addAccount.proposedLabel() });
+    // "Everyone in this workspace" for a person who may share, as model keys
+    // default: a trigger runs only on a shared account. "Only you" otherwise.
+    setDraft({ ...EMPTY_NEW_ACCOUNT, audience: canManageConnections ? 'project' : 'private', label: addAccount.proposedLabel() });
     setLabelEdited(false);
     setAddOpen(true);
   };
@@ -713,6 +759,7 @@ export function ConnectionsList({
       onSetCredential={setCredential ? () => setCredential(connection) : undefined}
       onConnect={onConnect ? () => onConnect(connection) : undefined}
       needsSignIn={!isEmail && accountNeedsSignIn(connection, connector)}
+      signsIn={signsIn || isManagedConnectorProvider(connector.provider)}
       onShare={
         accountId
           ? () => {
@@ -1134,7 +1181,7 @@ export function ChannelConnectionSection({
     <section className="space-y-4">
       <Label>{tI18nComplete.raw('text639a40e82b9a')}</Label>
       <div className="bg-popover rounded-md border px-4 py-3">
-        <InfoBanner tone="warning">{tI18nComplete.raw('text53f76274b923')}</InfoBanner>
+        <BannerAlert variant="warning" ><BannerAlertDescription>{tI18nComplete.raw('text53f76274b923')}</BannerAlertDescription></BannerAlert>
       </div>
     </section>
   );
@@ -1170,13 +1217,9 @@ function SlackChannelConnection({
         ) : canWrite ? (
           <SlackConnectForm projectId={projectId} onConnected={onChanged} />
         ) : (
-          <InfoBanner
-            tone="neutral"
-            icon={<SlackLogo />}
-            title={tI18nComplete.raw('textb36d622566f6')}
-          >
+          <BannerAlert variant="default" ><BannerAlertMedia>{<SlackLogo />}</BannerAlertMedia><BannerAlertTitle>{tI18nComplete.raw('textb36d622566f6')}</BannerAlertTitle><BannerAlertDescription>
             {tI18nComplete.raw('text98d27bdc2fa7')}
-          </InfoBanner>
+          </BannerAlertDescription></BannerAlert>
         )}
       </div>
     </section>
@@ -1199,10 +1242,10 @@ function ConnectedSlackConnection({
   const [confirming, setConfirming] = useState(false);
   return (
     <div className="space-y-4">
-      <InfoBanner tone="success" icon={Check} title={tI18nComplete.raw('text4fce550efde4')}>
+      <BannerAlert variant="success" ><BannerAlertMedia><Check /></BannerAlertMedia><BannerAlertTitle>{tI18nComplete.raw('text4fce550efde4')}</BannerAlertTitle><BannerAlertDescription>
         {tI18nComplete.raw('text87bb59ba2f92')}{' '}
         <code className="font-mono">{installation.workspaceName || installation.workspaceId}</code>
-      </InfoBanner>
+      </BannerAlertDescription></BannerAlert>
       {canWrite && (
         <div className="flex items-center justify-end gap-2">
           {confirming ? (
@@ -1291,29 +1334,18 @@ export function SlackConnectForm({
         (mode.isLoading ? (
           <Skeleton className="h-24 w-full rounded-md" />
         ) : installUrl ? (
-          <InfoBanner
-            tone="info"
-            icon={<SlackLogo />}
-            title={tI18nComplete.raw('text0e671041e03f')}
-            action={
-              <Button size="sm" className="shrink-0 gap-1.5" asChild>
+          <BannerAlert variant="default" ><BannerAlertMedia>{<SlackLogo />}</BannerAlertMedia><BannerAlertTitle>{tI18nComplete.raw('text0e671041e03f')}</BannerAlertTitle><BannerAlertDescription>
+            {tI18nComplete.raw('text8b3305c40176')}
+          </BannerAlertDescription><BannerAlertActions>{<Button size="sm" className="shrink-0 gap-1.5" asChild>
                 <a href={installUrl}>
                   {tI18nComplete.raw('text3357cd3d0cee')}
                   <ChevronRight className="h-4 w-4" />
                 </a>
-              </Button>
-            }
-          >
-            {tI18nComplete.raw('text8b3305c40176')}
-          </InfoBanner>
+              </Button>}</BannerAlertActions></BannerAlert>
         ) : (
-          <InfoBanner
-            tone="warning"
-            icon={<SlackLogo />}
-            title={tI18nComplete.raw('text36e7df856716')}
-          >
+          <BannerAlert variant="warning" ><BannerAlertMedia>{<SlackLogo />}</BannerAlertMedia><BannerAlertTitle>{tI18nComplete.raw('text36e7df856716')}</BannerAlertTitle><BannerAlertDescription>
             {tI18nComplete.raw('text51e0d22747d7')}
-          </InfoBanner>
+          </BannerAlertDescription></BannerAlert>
         ))}
       <div className={cn(!customOnly && 'space-y-3')}>
         {!customOnly && (
@@ -1391,9 +1423,9 @@ export function SlackConnectForm({
               {manifest.isLoading ? (
                 <Skeleton className={cn('h-52 w-full', !customOnly && 'rounded-md')} />
               ) : manifest.isError ? (
-                <InfoBanner tone="destructive">
+                <BannerAlert variant="destructive" ><BannerAlertDescription>
                   {(manifest.error as Error)?.message || tI18nComplete.raw('text65a8ec4a4a48')}
-                </InfoBanner>
+                </BannerAlertDescription></BannerAlert>
               ) : manifest.data ? (
                 <div className={cn('max-h-[26rem] overflow-auto', !customOnly && 'rounded-md')}>
                   <CodeSnippet code={manifest.data} language="json" />
@@ -1453,7 +1485,7 @@ export function SlackConnectForm({
                   />
                 </Field>
               </div>
-              {error ? <InfoBanner tone="destructive">{error}</InfoBanner> : null}
+              {error ? <BannerAlert variant="destructive" ><BannerAlertDescription>{error}</BannerAlertDescription></BannerAlert> : null}
               <div className="flex justify-end">
                 <Button
                   size="sm"
@@ -1578,20 +1610,14 @@ export function ConnectionSection({
       </p>
       <div className="bg-popover rounded-md border px-4 py-3">
         {configQuery.isError ? (
-          <InfoBanner
-            tone="destructive"
-            title={tI18nHardcoded.raw(
+          <BannerAlert variant="destructive" ><BannerAlertTitle>{tI18nHardcoded.raw(
               'autoComponentsProjectsCustomizeSectionsConnectorsViewJsxAttrTitleCouldn277b73a0',
-            )}
-            action={
-              <Button size="sm" variant="outline" onClick={() => configQuery.refetch()}>
-                {tI18nHardcoded.raw('i18nComplete.text942087cc2d41')}
-              </Button>
-            }
-          >
+            )}</BannerAlertTitle><BannerAlertDescription>
             {(configQuery.error as Error)?.message ??
               tI18nHardcoded.raw('i18nComplete.text27c2ccd962c2')}
-          </InfoBanner>
+          </BannerAlertDescription><BannerAlertActions>{<Button size="sm" variant="outline" onClick={() => configQuery.refetch()}>
+                {tI18nHardcoded.raw('i18nComplete.text942087cc2d41')}
+              </Button>}</BannerAlertActions></BannerAlert>
         ) : configQuery.isLoading || !draft ? (
           <div className="space-y-3">
             <Skeleton className="h-9 w-full rounded-md" />
@@ -2317,9 +2343,9 @@ export function CustomConnectorForm({
           />
           {oauth2Selected && (
             <div className="space-y-4">
-              <InfoBanner tone="info" title={tI18nHardcoded.raw('i18nComplete.textc2a08c85f9d8')}>
+              <BannerAlert variant="default" ><BannerAlertTitle>{tI18nHardcoded.raw('i18nComplete.textc2a08c85f9d8')}</BannerAlertTitle><BannerAlertDescription>
                 {tI18nHardcoded.raw('i18nComplete.text9dedee588b5e')}
-              </InfoBanner>
+              </BannerAlertDescription></BannerAlert>
               <OAuth2CredentialFields
                 value={oauth2}
                 onChange={setOauth2}
@@ -2328,32 +2354,32 @@ export function CustomConnectorForm({
             </div>
           )}
           {draft.auth === undefined && discovery.isFetching && (
-            <InfoBanner tone="info">
+            <BannerAlert variant="default" ><BannerAlertDescription>
               {tI18nHardcoded.raw('i18nComplete.text0fc5f970755c')}
-            </InfoBanner>
+            </BannerAlertDescription></BannerAlert>
           )}
           {draft.auth === undefined && discovery.data?.status === 'none' && (
-            <InfoBanner tone="neutral">
+            <BannerAlert variant="default" ><BannerAlertDescription>
               {tI18nHardcoded.raw('i18nComplete.textcec52b040075')}
-            </InfoBanner>
+            </BannerAlertDescription></BannerAlert>
           )}
           {draft.auth === undefined && discovery.data?.status === 'unsupported' && (
-            <InfoBanner tone="warning">
+            <BannerAlert variant="warning" ><BannerAlertDescription>
               {tI18nHardcoded.raw('i18nComplete.text028f0773776c')}
-            </InfoBanner>
+            </BannerAlertDescription></BannerAlert>
           )}
           {draft.auth === undefined && discovery.error && (
-            <InfoBanner tone="warning">
+            <BannerAlert variant="warning" ><BannerAlertDescription>
               {tI18nHardcoded.raw('i18nComplete.textf26a5845c994')}{' '}
               {(discovery.error as Error).message}
-            </InfoBanner>
+            </BannerAlertDescription></BannerAlert>
           )}
           {authActive && !oauth2Selected && (
-            <InfoBanner tone="info">
+            <BannerAlert variant="default" ><BannerAlertDescription>
               {tI18nHardcoded.raw(
                 'autoComponentsProjectsCustomizeSectionsConnectorsViewJsxTextYouLle5def626',
               )}
-            </InfoBanner>
+            </BannerAlertDescription></BannerAlert>
           )}
           <div className="border-border/60 flex justify-end border-t pt-5">
             <Button
@@ -2457,49 +2483,63 @@ export function SetCredentialModal({
   const [device, setDevice] = useState<OAuth2DeviceAuthorizationStartResult | null>(null);
   const [deviceConnectionId, setDeviceConnectionId] = useState<string | null>(null);
   const [manualSetup, setManualSetup] = useState(false);
+  // The callers pass inline lambdas. Read them through refs, so a parent
+  // re-render does not tear the poll down and fire an extra poll.
+  const onSavedRef = useRef(onSaved);
+  const onOpenChangeRef = useRef(onOpenChange);
   useEffect(() => {
-    if (!device || !deviceConnectionId) return;
-    let stopped = false;
-    const poll = async () => {
-      try {
-        const status = await pollConnectionOAuth2DeviceAuthorization(
-          projectId,
-          deviceConnectionId,
-          device.session_id,
-        );
-        if (stopped || status.status === 'pending') return;
-        stopped = true;
-        if (status.status === 'active') {
-          successToast(tI18nHardcoded.raw('i18nComplete.textc2a5f8398f12'));
-          onSaved();
-          onOpenChange(false);
-        } else {
-          errorToast(status.error_code || tI18nHardcoded.raw('i18nComplete.text911a1cde90bc'));
-        }
-      } catch (error) {
-        if (!stopped)
-          errorToast(
-            error instanceof Error
-              ? error.message
-              : tI18nHardcoded.raw('i18nComplete.textfa23c868781d'),
-          );
-      }
-    };
-    void poll();
-    const timer = window.setInterval(() => void poll(), device.interval_seconds * 1000);
-    const expiryTimer = window.setTimeout(
-      () => {
-        stopped = true;
-        errorToast(tI18nHardcoded.raw('i18nComplete.text02c1d7b545ea'));
+    onSavedRef.current = onSaved;
+    onOpenChangeRef.current = onOpenChange;
+  });
+  // A closed dialog has no sign-in in progress: the code goes, and the poll
+  // below stops. It used to keep polling and call `onSaved` on a dialog the
+  // user had left.
+  useEffect(() => {
+    if (!open) setDevice(null);
+  }, [open]);
+  // The device-code wait is the SDK's (`waitForConnectionOAuth2`): it polls at
+  // the server's interval, one request at a time, keeps polling on
+  // `pending`/`ready`/`not_configured`, and fails on `expired`/`error`/
+  // `revoked`. Bounded by the code's own expiry.
+  useEffect(() => {
+    if (!open || !device || !deviceConnectionId) return;
+    const controller = new AbortController();
+    const expiresAtMs = new Date(device.expires_at).getTime();
+    waitForConnectionOAuth2(
+      projectId,
+      deviceConnectionId,
+      {
+        kind: 'device',
+        sessionId: device.session_id,
+        userCode: device.user_code,
+        url: device.verification_uri_complete ?? device.verification_uri,
+        expiresAt: device.expires_at,
+        intervalSeconds: device.interval_seconds,
       },
-      Math.max(0, new Date(device.expires_at).getTime() - Date.now()),
+      { signal: controller.signal, timeoutMs: Math.max(0, expiresAtMs - Date.now()) },
+    ).then(
+      () => {
+        if (controller.signal.aborted) return;
+        setDevice(null);
+        successToast(tI18nHardcoded.raw('i18nComplete.textc2a5f8398f12'));
+        onSavedRef.current();
+        onOpenChangeRef.current(false);
+      },
+      (error: unknown) => {
+        if (controller.signal.aborted) return;
+        // A terminal answer clears the code, so Save starts a fresh one.
+        setDevice(null);
+        errorToast(
+          Date.now() >= expiresAtMs
+            ? tI18nHardcoded.raw('i18nComplete.text02c1d7b545ea')
+            : error instanceof Error && error.message
+              ? error.message
+              : tI18nHardcoded.raw('i18nComplete.text911a1cde90bc'),
+        );
+      },
     );
-    return () => {
-      stopped = true;
-      window.clearInterval(timer);
-      window.clearTimeout(expiryTimer);
-    };
-  }, [device, deviceConnectionId, onOpenChange, onSaved, projectId, tI18nHardcoded]);
+    return () => controller.abort();
+  }, [open, device, deviceConnectionId, projectId, tI18nHardcoded]);
   const resolveConnectionId = async (): Promise<string> => {
     if (connectionId) return connectionId;
     if (owner === 'me') {
@@ -2738,23 +2778,23 @@ export function SetCredentialModal({
       </TabsContent>
       <TabsContent value="oauth2" className="space-y-4">
         {discoveryPending ? (
-          <InfoBanner tone="neutral" title={tI18nHardcoded.raw('i18nComplete.text1ead5326bbb8')}>
+          <BannerAlert variant="default" ><BannerAlertTitle>{tI18nHardcoded.raw('i18nComplete.text1ead5326bbb8')}</BannerAlertTitle><BannerAlertDescription>
             {tI18nHardcoded.raw('i18nComplete.textc9b1c409642d')}
-          </InfoBanner>
+          </BannerAlertDescription></BannerAlert>
         ) : plan.kind === 'no_authorization' ? (
-          <InfoBanner tone="neutral" title={tI18nHardcoded.raw('i18nComplete.text24f46f717cfa')}>
+          <BannerAlert variant="default" ><BannerAlertTitle>{tI18nHardcoded.raw('i18nComplete.text24f46f717cfa')}</BannerAlertTitle><BannerAlertDescription>
             {tI18nHardcoded.raw('i18nComplete.text93bc06df8dd8')}
-          </InfoBanner>
+          </BannerAlertDescription></BannerAlert>
         ) : plan.kind === 'register' && !manualSetup ? (
           <div className="space-y-3">
-            <InfoBanner tone="neutral" title={tI18nHardcoded.raw('i18nComplete.text477d50f7ddbf')}>
+            <BannerAlert variant="default" ><BannerAlertTitle>{tI18nHardcoded.raw('i18nComplete.text477d50f7ddbf')}</BannerAlertTitle><BannerAlertDescription>
               {tI18nHardcoded.raw('i18nComplete.text07fdd059f8a1')}
               {plan.scopes.length
                 ? tI18nHardcoded('i18nComplete.text1d42883b00c1', {
                     value0: plan.scopes.join(', '),
                   })
                 : ''}
-            </InfoBanner>
+            </BannerAlertDescription></BannerAlert>
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -2777,33 +2817,27 @@ export function SetCredentialModal({
             </div>
           </div>
         ) : plan.kind === 'client_id_required' ? (
-          <InfoBanner tone="neutral" title={tI18nHardcoded.raw('i18nComplete.textcb7c06207756')}>
+          <BannerAlert variant="default" ><BannerAlertTitle>{tI18nHardcoded.raw('i18nComplete.textcb7c06207756')}</BannerAlertTitle><BannerAlertDescription>
             {tI18nHardcoded.raw('i18nComplete.text0dbb23e7febb')}
-          </InfoBanner>
+          </BannerAlertDescription></BannerAlert>
         ) : plan.kind === 'manual' && !manualSetup ? (
-          <InfoBanner
-            tone="neutral"
-            title={tI18nHardcoded.raw('i18nComplete.texteb99bb9a22f3')}
-            action={
-              <Button
+          <BannerAlert variant="default" ><BannerAlertTitle>{tI18nHardcoded.raw('i18nComplete.texteb99bb9a22f3')}</BannerAlertTitle><BannerAlertDescription>
+            {plan.reason}
+          </BannerAlertDescription><BannerAlertActions>{<Button
                 type="button"
                 size="sm"
                 variant="outline"
                 onClick={() => setManualSetup(true)}
               >
                 {tI18nHardcoded.raw('i18nComplete.textb1d877ab2f51')}
-              </Button>
-            }
-          >
-            {plan.reason}
-          </InfoBanner>
+              </Button>}</BannerAlertActions></BannerAlert>
         ) : (
-          <InfoBanner tone="info">{tI18nHardcoded.raw('i18nComplete.text67dc9c4395f1')}</InfoBanner>
+          <BannerAlert variant="default" ><BannerAlertDescription>{tI18nHardcoded.raw('i18nComplete.text67dc9c4395f1')}</BannerAlertDescription></BannerAlert>
         )}
         {discoveryError && (
-          <InfoBanner tone="neutral" title={tI18nHardcoded.raw('i18nComplete.textdc258e9a953b')}>
+          <BannerAlert variant="default" ><BannerAlertTitle>{tI18nHardcoded.raw('i18nComplete.textdc258e9a953b')}</BannerAlertTitle><BannerAlertDescription>
             {discoveryError}
-          </InfoBanner>
+          </BannerAlertDescription></BannerAlert>
         )}
         {showManualOAuth2Fields && (
           <>
@@ -2853,13 +2887,13 @@ export function SetCredentialModal({
           </>
         )}
         {device && (
-          <InfoBanner
-            tone="neutral"
-            title={tI18nHardcoded('i18nComplete.textbfd271fe6ead', {
+          <BannerAlert variant="default" ><BannerAlertTitle>{tI18nHardcoded('i18nComplete.textbfd271fe6ead', {
               value0: device.user_code,
-            })}
-            action={
-              <Button
+            })}</BannerAlertTitle><BannerAlertDescription>
+            {tI18nHardcoded.raw('i18nComplete.text9c67cc26222a')} {device.interval_seconds}{' '}
+            {tI18nHardcoded.raw('i18nComplete.text4616b90a6d94')}{' '}
+            {new Date(device.expires_at).toLocaleTimeString()}.
+          </BannerAlertDescription><BannerAlertActions>{<Button
                 type="button"
                 size="sm"
                 variant="outline"
@@ -2873,13 +2907,7 @@ export function SetCredentialModal({
               >
                 <ExternalLink className="size-4" />
                 {tI18nHardcoded.raw('i18nComplete.text97fc3d60fab5')}
-              </Button>
-            }
-          >
-            {tI18nHardcoded.raw('i18nComplete.text9c67cc26222a')} {device.interval_seconds}{' '}
-            {tI18nHardcoded.raw('i18nComplete.text4616b90a6d94')}{' '}
-            {new Date(device.expires_at).toLocaleTimeString()}.
-          </InfoBanner>
+              </Button>}</BannerAlertActions></BannerAlert>
         )}
       </TabsContent>
     </Tabs>

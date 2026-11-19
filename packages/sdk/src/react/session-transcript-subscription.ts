@@ -14,8 +14,8 @@ import { useCurrentRuntime } from './use-current-runtime';
 /**
  * Internal. Not re-exported from any barrel.
  *
- * The one rule for "which OpenCode id may this tab READ": a transcript cached
- * for another runtime (equal OpenCode ids in different sandboxes) is not this
+ * The one rule for "which runtime session id may this tab READ": a transcript cached
+ * for another runtime (equal runtime session ids in different sandboxes) is not this
  * session's, so it reads as absent. `useSessionSync` and `useSessionMessages`
  * both gate on it, so the two can never disagree.
  */
@@ -37,7 +37,13 @@ type SyncSnapshot = ReturnType<typeof useSyncStore.getState>;
  */
 export function selectSessionRows(state: SyncSnapshot, sessionId: string): MessageWithParts[] {
   const rows = state.buildSessionMessages(sessionId, state.messages[sessionId], state.parts);
-  return sessionLogRowsFor(state.sessionLogs, sessionId, rows, (id) => state.optimisticEchoOf(sessionId, id));
+  return sessionLogRowsFor(
+    state.sessionLogs,
+    sessionId,
+    rows,
+    (id) => state.optimisticEchoOf(sessionId, id),
+    (id) => state.isFragment(sessionId, id),
+  );
 }
 
 /** Each part array's tool signature, computed once per array identity. */

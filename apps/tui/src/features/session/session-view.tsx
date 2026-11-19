@@ -23,6 +23,7 @@
  * ordinary typing is exact and only the overlay case is an estimate.
  */
 
+import { webDashboardUrl } from '@kortix/cli/src/web-url.ts';
 import {
   type SessionHealthResult,
   type SessionLogMessage,
@@ -37,6 +38,7 @@ import { printable } from '../../lib/printable.ts';
 import { hintFor } from '../../keymap.ts';
 import { kortix } from '../../kortix.ts';
 import { extractUrls, extractUrlsFromScreen } from '../../lib/links.ts';
+import { clip } from '../../lib/text.ts';
 import { glyph, theme } from '../../theme.ts';
 import type { CommandContext, CommandName } from '../../commands/registry.ts';
 import { Panel, Splash, type SplashLine, type ToastKind } from '../../ui/index.ts';
@@ -381,7 +383,7 @@ export function SessionView({
                   <span fg={session.phase === 'error' ? theme.danger : theme.accent}>
                     {`${phaseGlyph(session.phase)} `}
                   </span>
-                  {truncate(printable(title ?? 'Session'), Math.max(innerWidth - 28, 8))}
+                  {clip(printable(title ?? 'Session'), Math.max(innerWidth - 28, 8))}
                   <span fg={theme.faint}>{header ? `  ${header}` : ''}</span>
                 </text>
                 <text fg={theme.faint} wrapMode="none">
@@ -459,6 +461,7 @@ export function SessionView({
               messages={thread?.messages}
               title={title}
               showTray={showTray}
+              webBaseUrl={webDashboardUrl(host.backendUrl)}
             />
               </>
             )}
@@ -500,7 +503,3 @@ export function terminalWidth(total: number): number {
   return Math.max(Math.round(total * 0.4), 32);
 }
 
-function truncate(text: string, width: number): string {
-  if (width <= 1 || text.length <= width) return text;
-  return `${text.slice(0, width - 1)}…`;
-}

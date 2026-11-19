@@ -27,6 +27,7 @@ import {
 } from '../fixtures/session-run';
 import { withTransientGitRetry } from '../fixtures/git-transient';
 import { isKe2eRetryableError, transientRetryDelayMs } from '../core/client';
+import { lockProjectFirst } from '../fixtures/token-binding-lock';
 
 /**
  * `fetch` for the idempotent reads and descriptor mints of this file. Bun
@@ -146,10 +147,9 @@ const MANIFEST = [
   '    description: main agent',
   '    mode: primary',
   '    prompt_file: agents/kortix.md',
-  // An agent boots without a checkout unless it opts in. The box flows run a
-  // repository-backed session, whose release carries an archive.
-  '    workspace:',
-  '      project_repository: true',
+  // The box flows run a repository-backed session (its agent may read the
+  // repository), whose release carries an archive.
+  '    kortix_permissions: [workspace.gitops.read]',
   '    skills: all',
   '    tools: all',
   '  reviewer:',
@@ -379,9 +379,9 @@ async function setup(ctx: FlowContext): Promise<Fixture> {
       );
       // Bind the API-minted credential exactly as the sandbox's KORTIX_TOKEN is bound.
       await db.query(
-        `UPDATE kortix.account_tokens
+        lockProjectFirst(`UPDATE kortix.account_tokens
             SET account_id = $2, user_id = $3, project_id = $4, session_id = $5, agent_grant = $6::jsonb
-          WHERE token_id = $1`,
+          WHERE token_id = $1`),
         [
           tokenId,
           team.id,
@@ -802,7 +802,7 @@ flow(
     domain: 'config-releases',
     requires: ['database'],
     timeoutMs: 180_000,
-    routes: [MINT, DESCRIPTOR, ARCHIVE, 'POST /v1/projects/:projectId/secrets', ...GIT_PROXY],
+    routes: [MINT, DESCRIPTOR, ARCHIVE, 'POST /v1/workspaces/:projectId/secrets', ...GIT_PROXY],
   },
   async (ctx) => {
     const { randomBytes } = await import('node:crypto');
@@ -813,7 +813,7 @@ flow(
         const r = await ctx.client
           .as(ctx.P.OWNER)
           .post(
-            '/v1/projects/:projectId/secrets',
+            '/v1/workspaces/:projectId/secrets',
             { name: 'KE2E_CFG_SECRET', value },
             { params: { projectId: fixture.projectId } },
           );
@@ -1043,7 +1043,7 @@ flow(
       const generation = randomUUID();
       let newTip = '';
       await ctx.step("the project repository is replaced by a second project's repository with a new generation", async () => {
-        // OWNER's funded personal account: the free team account holds one project.
+        // OWNER's funded account: the free team account holds one project.
         const other = await ctx.fixtures.project({ managedGit: true });
         const otherRepo = await fixture.openRepo(other.id);
         newTip = await commitTo(
@@ -1224,7 +1224,7 @@ flow(
       const own = await fixture.mint();
 
       await ctx.step('the project reports no `config_releases` flag at all', async () => {
-        const r = await ctx.client.as(ctx.P.OWNER).get('/v1/projects/:projectId', { params: { projectId: fixture.projectId } });
+        const r = await ctx.client.as(ctx.P.OWNER).get('/v1/workspaces/:projectId', { params: { projectId: fixture.projectId } });
         r.status(200);
         const experimental = r.json<{ experimental: Record<string, boolean> }>().experimental;
         if ('config_releases' in experimental) {
@@ -1241,7 +1241,7 @@ flow(
         for (const enabled of [false, true, null]) {
           const r = await ctx.client
             .as(ctx.P.OWNER)
-            .patch('/v1/projects/:projectId/features', { feature: 'config_releases', enabled }, {
+            .patch('/v1/workspaces/:projectId/features', { feature: 'config_releases', enabled }, {
               params: { projectId: fixture.projectId },
             });
           r.status(400);
@@ -1593,7 +1593,7 @@ async function boxSession(ctx: FlowContext, fixture: Fixture) {
     async () => {
       const r = await ctx.client
         .as(ctx.P.OWNER)
-        .post('/v1/projects/:projectId/sessions/:sessionId/start', {}, {
+        .post('/v1/workspaces/:projectId/sessions/:sessionId/start', {}, {
           params: { projectId: fixture.projectId, sessionId },
           query: { wait_ms: '8000' },
           timeoutMs: 25_000,
@@ -1701,7 +1701,7 @@ const MARKER_PROMPT =
  * check.
  *
  * WHY. `MARKER_PROMPT` is fixed text. Asking it more than once in the SAME
- * OpenCode conversation is confounded: proven on a real box 2026-09-27, a
+ * conversation is confounded: proven on a real box 2026-09-27, a
  * model answering a LITERALLY REPEATED question sometimes echoes its own
  * PRIOR turn's answer instead of re-reading the current system prompt — the
  * exact wrong-marker signature this flow throws on — even though the daemon's
@@ -1768,10 +1768,10 @@ harnessFlow(
     routes: [
       FEATURES,
       CONFIG_STATE,
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
       ...GIT_PROXY,
     ],
   },
@@ -1780,7 +1780,7 @@ harnessFlow(
     try {
       // The box's session runs a managed model (spec, `boxSession`). A free-tier
       // account cannot use one at all — every turn 400s `plan_upgrade_required`
-      // before it ever reaches OpenCode, which reads exactly like a stale/empty
+      // before it ever reaches the runtime, which reads exactly like a stale/empty
       // config answer in this flow's own assertions (2026-09-27: this is what
       // actually produced "the answer does not come from the new release: "
       // on preview run 36279090948 and on #7796's control run 36287293649,
@@ -1956,10 +1956,10 @@ harnessFlow(
 
 // ── CFG-12 — a base move and a prompt in the same instant ──────────────────
 //
-// DEF-DEV-1, on a real box. A convergence retires the OpenCode process that is
-// serving the session. If a prompt lands between the turn gate and the swap,
-// the process writing that turn is killed: the client gets `HTTP 503` and the
-// assistant row stays `completed = null` for ever.
+// DEF-DEV-1, on a real OpenCode box: a convergence retired the process that
+// served the session. If a prompt landed between the turn gate and the swap,
+// the process writing that turn was killed: the client got `HTTP 503` and the
+// assistant row stayed `completed = null` for ever.
 //
 // Two ways to land in that window, both here:
 //
@@ -1993,10 +1993,10 @@ harnessFlow(
     routes: [
       FEATURES,
       CONFIG_STATE,
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
       ...GIT_PROXY,
     ],
   },
@@ -2005,7 +2005,7 @@ harnessFlow(
     try {
       // See CFG-11's identical step for why: a free-tier account 400s
       // `plan_upgrade_required` on the box's managed model before a prompt
-      // ever reaches OpenCode, and that reads exactly like a stale/empty
+      // ever reaches the runtime, and that reads exactly like a stale/empty
       // config answer here — the actual cause of the CFG-11/CFG-12 preview
       // failures attributed to config releases on 2026-09-26/27.
       await ctx.step('the account is entitled to the managed lineup', async () => {
@@ -2211,10 +2211,10 @@ flow(
       CONFIG_STATE,
       DESCRIPTOR,
       MINT,
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
       ...GIT_PROXY,
     ],
   },
@@ -2229,10 +2229,10 @@ flow(
         await subscribe(ctx.env, ctx.client.as(ctx.P.OWNER), fixture.team.id);
       });
 
-      await ctx.step('the project runs My Kortix (no builtin_agents key), and its config holds a tool with a dependency', async () => {
+      await ctx.step('the project runs My Kortix as its default agent (builtin_agents.my_kortix: true, default_agent: mykortix), and its config holds a tool with a dependency', async () => {
         await fixture.commit(
           {
-            'kortix.yaml': MANIFEST.replace('agents:\n', 'tools:\n  needs_dep: tools/needs_dep.ts\nagents:\n'),
+            'kortix.yaml': MANIFEST.replace('default_agent: kortix\n', 'default_agent: mykortix\n').replace('agents:\n', 'builtin_agents:\n  my_kortix: true\ntools:\n  needs_dep: tools/needs_dep.ts\nagents:\n'),
             'tools/needs_dep.ts': DEPENDENT_TOOL('one'),
           },
           'a tool that imports a dependency',
@@ -2365,15 +2365,43 @@ flow(
         if (r.status !== 413) throw new Error(`expected 413, got ${r.status}`);
       });
 
-      await ctx.step('back under the cap, v2 and v3 assign the same release, and both carry the archive', async () => {
-        await commitTo(fixture.repo, {}, 'back under the cap', ['data']);
+      await ctx.step('a new tip that keeps the oversized blobs preserves v2 fallback and a distinct v3 release', async () => {
+        const memoTip = await fixture.commit({ 'notes.md': 'The large file remains.\n' }, 'keep oversized data');
         const v2r = await fixture.descriptor(own.secret, own.sessionId);
         const v3r = await fixture.descriptor(own.secret, own.sessionId, V3);
         if (v2r.status !== 200 || v3r.status !== 200) throw new Error(`statuses ${v2r.status}/${v3r.status}`);
-        if (!HEX64.test(v2r.body.release_id ?? '') || v2r.body.release_id !== v3r.body.release_id) {
-          throw new Error(`v2 ${v2r.body.release_id} and v3 ${v3r.body.release_id} disagree`);
+        if (v2r.body.release_id !== null || v2r.body.files !== null || v2r.body.archive !== null) {
+          throw new Error('v2 assigned a release while the oversized blobs remain');
         }
-        if (!v2r.body.archive || !v3r.body.archive) throw new Error('a release under the cap has no archive');
+        if (!v2r.body.reason?.includes('exceeds the 33554432-byte config archive limit')) {
+          throw new Error(`v2 reason ${v2r.body.reason}`);
+        }
+        const memo: Descriptor = v3r.body;
+        if (memo.source_commit !== memoTip || memo.release_id !== (await releaseIdOf(memo)) || memo.release_id === v3.release_id) {
+          throw new Error('v3 did not assign the changed oversized tree its own release');
+        }
+        if (memo.archive !== null || memo.reason !== null) throw new Error('v3 did not preserve the archive fallback');
+        if (!memo.files?.some(([path]) => path === 'data/large.bin')) throw new Error('v3 lost the oversized file');
+      });
+
+      await ctx.step('dropping oversized blobs restores both descriptors and the smaller tree archive immediately', async () => {
+        const smallTip = await commitTo(fixture.repo, {}, 'back under the cap', ['data']);
+        const v2r = await fixture.descriptor(own.secret, own.sessionId);
+        const v3r = await fixture.descriptor(own.secret, own.sessionId, V3);
+        if (v2r.status !== 200 || v3r.status !== 200) throw new Error(`statuses ${v2r.status}/${v3r.status}`);
+        const small: Descriptor = v3r.body;
+        if (small.source_commit !== smallTip || !HEX40.test(small.config_tree_id ?? '') ||
+            small.release_id !== (await releaseIdOf(small)) || small.release_id === v3.release_id ||
+            small.release_id !== v2r.body.release_id) {
+          throw new Error('v2 and v3 did not assign the smaller tree its distinct release');
+        }
+        if (!v2r.body.archive || !small.archive || small.reason !== null) throw new Error('the smaller tree has no archive');
+        if (!small.files?.some(([path]) => path === 'agents/kortix.md') || small.files.some(([path]) => path.startsWith('data/'))) {
+          throw new Error('v3 does not list the smaller tree');
+        }
+        if (!small.config_tree_id) throw new Error('the smaller tree has no tree ID');
+        const archive = await fixture.download(own.secret, small.config_tree_id);
+        if (archive.status !== 200 || archive.bytes.byteLength === 0) throw new Error(`explicit small-tree archive: ${archive.status}`);
       });
     } finally {
       await fixture.cleanup();
@@ -2473,11 +2501,11 @@ harnessFlow(
     routes: [
       FEATURES,
       CONFIG_STATE,
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'POST /v1/projects/:projectId/sessions/:sessionId/prompts',
-      'GET /v1/projects/:projectId/sessions/:sessionId/turn',
-      'GET /v1/projects/:projectId/sessions/:sessionId/transcript',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
       ...GIT_PROXY,
     ],
   },

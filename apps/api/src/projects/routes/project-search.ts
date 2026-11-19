@@ -10,14 +10,17 @@ import { createRoute, z } from '@hono/zod-openapi';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { normalizeDrivePath } from '../../drives/access';
+import { usableDriveAgents } from '../../drives/agent-drives';
 import { decodeCursor, parseLimit, parseSearchQuery, SEARCH_LIMITS } from '../../drives/search-index/query';
 import { personSearchReader, searchDriveIndex, sessionSearchReader } from '../../drives/search-index/search';
 import { findProjectDrive } from '../../drives/service';
+import { actorFor } from '../../middleware/actor';
 import { callerKortixSessionId } from '../../middleware/caller-session';
 import { auth, errors, json } from '../../openapi';
 import type { AppEnv } from '../../types';
 import { loadProjectForUser } from '../lib/access';
 import { projectsApp } from '../lib/app';
+import { workspaceIdParam } from '../../shared/route-params';
 
 const HitSchema = z.object({
   /** The path in the project's Files, e.g. `/Company/plans/q3.md`. */
@@ -52,14 +55,14 @@ export function registerProjectSearchRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/search',
+      path: '/{workspaceId}/search',
       tags: ['projects'],
       summary: "Search the project's Files",
       description:
         "Finds files and folders in the project's Files by name and by text (Markdown, text, CSV, JSON, YAML, HTML, code; the first 256 KiB of each file). Name hits come first, then by text rank. A person sees only what their folder access lets them read; a session sees only the folders it may mount, including the ones that did not fit in its mount slots. A file written in the last ~20 s may not be found yet. `q`: 1-200 characters, every word must match (as a prefix). `path`: only below this folder. `limit`: 1-100, default 20. `next_cursor` is set while more hits may follow: pass it back as `cursor`.",
       ...auth,
       request: {
-        params: z.object({ projectId: z.string() }),
+        params: z.object({ workspaceId: z.string() }),
         query: z.object({
           q: z.string().optional(),
           path: z.string().optional(),
@@ -70,7 +73,7 @@ export function registerProjectSearchRoutes(): void {
       responses: { 200: json(SearchBody, 'Hits'), ...errors(400, 401, 403, 404) },
     }),
     async (c) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const query = parseSearchQuery(c.req.query('q'));
       if (!query) return invalid(c, `q is required: 1-${SEARCH_LIMITS.qMax} characters`);
       const limit = parseLimit(c.req.query('limit'));
@@ -90,7 +93,9 @@ export function registerProjectSearchRoutes(): void {
       const sessionId = callerKortixSessionId(c);
       const reader = sessionId
         ? await sessionSearchReader({ accountId: loaded.row.accountId, projectId, sessionId })
-        : await personSearchReader(drive, loaded.userId, mayOn(c, projectId));
+        : await personSearchReader(drive, loaded.userId, mayOn(c, projectId), async () =>
+            usableDriveAgents((await actorFor(c, loaded.row.accountId)) ?? null, projectId),
+          );
       const result = await searchDriveIndex({ driveId: drive.driveId, query, under, limit, offset, reader });
       return c.json({ hits: result.hits, next_cursor: result.nextCursor }, 200);
     },

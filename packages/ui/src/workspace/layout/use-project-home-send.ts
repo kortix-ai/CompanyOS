@@ -9,8 +9,9 @@ import {
   writeStartStash,
 } from '@kortix/sdk/react';
 import { type QueryClient, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
+import type { DraftScope } from '../../session/composer/draft/composer-draft';
 import { useTranslations } from '../../i18n';
 import { useNewProjectSession } from '../../internal/hooks/projects/use-new-project-session';
 import { type UiViewer, useUiViewer } from '../../providers/ui-provider';
@@ -23,6 +24,7 @@ import {
 import type { AttachedFile } from '../../session/composer/session-chat-input';
 import { useFirstPromptPreviewStore } from '../../session/composer/stores/session-composer-handoff-store';
 import { promptFileParts } from '../../session/composer/uploaded-file-refs';
+import { handoffHomeComposerFocus } from '../../session/composer/draft/home-composer-focus-handoff';
 import { buildNewSessionCreateInput } from './new-session-create';
 import type { ProjectHomeSendOptions } from './project-home';
 
@@ -36,7 +38,12 @@ export interface UseProjectHomeSendOptions {
    * A channel or DM composer: file each send in this space as a new thread.
    * The page stays: `onOpen(sessionId)` runs instead of the navigation.
    */
-  space?: { spaceId: string; onOpen: (sessionId: string) => void };
+  space?: {
+    spaceId: string;
+    onOpen: (sessionId: string) => void;
+    /** The new thread's id the instant Enter is pressed (the create keeps it): a chat opens its thread from here. */
+    onCreating?: (sessionId: string) => void;
+  };
 }
 
 /**
@@ -54,6 +61,8 @@ export function useProjectHomeSend(projectId: string, { beforeSend, space }: Use
   // Composer sending state: spans Enter → create confirmed → navigation. Reset
   // only on create failure (success navigates this page away).
   const [sending, setSending] = useState(false);
+  const creatingRef = useRef(false);
+  const draftHandoffScope = useRef<DraftScope | null>(null);
 
   const send = useCallback(
     async (
@@ -63,7 +72,16 @@ export function useProjectHomeSend(projectId: string, { beforeSend, space }: Use
       attachments?: AttachmentSubmission,
     ) => {
       if (!text.trim() && !files?.length) return;
-      await beforeSend?.();
+      // A follow-up belongs to the session being created. Refuse it so the
+      // composer restores the draft for the navigation handoff.
+      if (!space && creatingRef.current) throw new Error('Session creation in progress');
+      creatingRef.current = true;
+      try {
+        await beforeSend?.();
+      } catch (error) {
+        creatingRef.current = false;
+        throw error;
+      }
 
       // Identical create-first path to every other new-session entry point: the
       // composer shows a sending spinner for the create RTT (~one round trip),
@@ -88,6 +106,7 @@ export function useProjectHomeSend(projectId: string, { beforeSend, space }: Use
           parts = promptFileParts(files, attachmentParts);
         } catch (error) {
           errorToast(error instanceof Error ? error.message : tI18nComplete.raw('texta9c0123d9962'));
+          creatingRef.current = false;
           setSending(false);
           throw error;
         }
@@ -119,13 +138,11 @@ export function useProjectHomeSend(projectId: string, { beforeSend, space }: Use
           (error) => sentFailureMessage(error, tComposerAttachments),
         );
       };
-      // A refused create can still open the session: the connector gate's Retry
-      // creates it with these same options. By then the Promise below has
-      // rejected, so nothing after the `await` runs.
-      let refused = false;
+      // The connector gate keeps this submission pending until retry or cancel.
       let optimisticId: string | null = null;
       const sessionId = await new Promise<string>((resolve, reject) => {
         newSession({
+          deferConnectorRecovery: true,
           // A space draws the new thread the instant Enter is pressed; the
           // create's server row replaces it in place (same id).
           onCreating: space
@@ -140,11 +157,13 @@ export function useProjectHomeSend(projectId: string, { beforeSend, space }: Use
                   viewer,
                   sentAtMs,
                 });
+                space.onCreating?.(id);
               }
             : undefined,
           create: {
             ...buildNewSessionCreateInput(options),
-            ...(space ? { space_id: space.spaceId } : {}),
+            // No space: a regular session, filed in no space under `chat` too.
+            space_id: space ? space.spaceId : null,
             ...(heldAttachments
               ? {}
               : {
@@ -164,12 +183,16 @@ export function useProjectHomeSend(projectId: string, { beforeSend, space }: Use
           // Create failed (already surfaced by the hook). Reject so the
           // composer restores its submitted draft and keeps every handle.
           onError: () => {
-            refused = true;
             if (optimisticId) removeCachedProjectSession(queryClient, projectId, optimisticId);
+            creatingRef.current = false;
             setSending(false);
             reject(new Error('Session creation failed'));
           },
           onNavigate: (sessionId) => {
+            if (!space) {
+              draftHandoffScope.current = { kind: 'session', sessionId };
+              if (viewer?.id) handoffHomeComposerFocus(sessionId, viewer.id);
+            }
             // PICKS only: the prompt is already a durable inbox row via
             // create.pending_prompt above. The session page's `migrateStash`
             // hands this stash off onto the resolved runtime session.
@@ -182,12 +205,6 @@ export function useProjectHomeSend(projectId: string, { beforeSend, space }: Use
             // RENDER-only copy for the boot shell, so the bubble is on screen
             // from the session page's first frame.
             useFirstPromptPreviewStore.getState().setFirstPromptPreview(sessionId, text, files ?? []);
-            // A connector-gate Retry of a held send: hand the uploads off again
-            // and POST from here. A ready send's create carried the prompt.
-            if (refused && heldAttachments) {
-              heldAttachments.resubmit();
-              startHeldPost(heldAttachments, sessionId);
-            }
             // A space opens the thread beside its timeline (a gate Retry too).
             space?.onOpen(sessionId);
             resolve(sessionId);
@@ -195,7 +212,10 @@ export function useProjectHomeSend(projectId: string, { beforeSend, space }: Use
         });
       });
       // A space composer stays on screen: it is ready for the next message.
-      if (space) setSending(false);
+      if (space) {
+        creatingRef.current = false;
+        setSending(false);
+      }
       if (!heldAttachments) {
         attachments?.release();
         return;
@@ -205,7 +225,7 @@ export function useProjectHomeSend(projectId: string, { beforeSend, space }: Use
     [beforeSend, space, newSession, projectId, tI18nComplete, tComposerAttachments, queryClient, viewer],
   );
 
-  return { send, sending };
+  return { send, sending, draftHandoffScope };
 }
 
 /**
@@ -255,8 +275,8 @@ function seedOptimisticThread(
     sandbox_provider: null,
     sandbox_id: null,
     sandbox_url: null,
-    opencode_session_id: null,
-    opencode_sessions: [],
+    runtime_session_id: null,
+    runtime_sessions: [],
     name: null,
     custom_name: null,
     agent_name: agent,

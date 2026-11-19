@@ -17,7 +17,56 @@
   "reason": null,
   "recording": "recording",
   "reportedAtMs": 1790845320000,
+  "resources": {
+    "cpuPercentAvg": 8.0,
+    "cpuPercentPeak": 8.0,
+    "memoryBytes": 383778816,
+    "memoryBytesPeak": 383778816,
+    "processCount": 3,
+    "processes": [
+      {
+        "count": 1,
+        "cpuPercentAvg": 6.0,
+        "memoryBytes": 184549376,
+        "name": "kortix-capture-engine"
+      },
+      {
+        "count": 1,
+        "cpuPercentAvg": 1.5,
+        "memoryBytes": 148897792,
+        "name": "kortix-capture"
+      },
+      {
+        "count": 1,
+        "cpuPercentAvg": 0.5,
+        "memoryBytes": 50331648,
+        "name": "kortix-backend"
+      }
+    ],
+    "readMicros": 310,
+    "sampledAtMs": 1790845320000,
+    "samples": 1,
+    "windowMs": 60000
+  },
   "sync": {
     "state": "off"
+  },
+  "update": {
+    "status": "current",
+    "installed": "0.1.0",
+    "channel": "stable",
+    "latest": "0.1.0",
+    "lastCheckMs": 1790845300000,
+    "lastCheck": "up to date (0.1.0; newest is 0.1.0)",
+    "updatingTo": null,
+    "lastResult": {
+      "at_ms": 1790841900000,
+      "from": "0.0.9",
+      "to": "0.1.0",
+      "outcome": "updated",
+      "detail": null
+    },
+    "badVersions": [],
+    "skipped": []
   }
 }

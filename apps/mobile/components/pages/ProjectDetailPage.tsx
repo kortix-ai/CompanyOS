@@ -3,7 +3,7 @@
  * Ported from web's /projects/[id]/page.tsx.
  */
 
-import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Pressable,
@@ -15,6 +15,7 @@ import {
   Platform,
   Image,
   Text as RNText,
+  type ScrollViewInstance
 } from 'react-native';
 import { Pressable as GestureHandlerPressable } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
@@ -33,13 +34,14 @@ import { Switch } from '@/components/kortix/switch';
 import { Icon } from '@/components/ui/icon';
 import { useColorScheme } from 'nativewind';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BottomSheetModal, BottomSheetView, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { SheetView, SheetScrollView, SheetRawTextInput } from '@/components/kortix/sheet-parts';
 // `BottomSheetTouchable` used to come from `@gorhom/bottom-sheet`'s re-exported
 // legacy touchable, which itself just proxies react-native-gesture-handler's
 // touchable on Android (and RN's own on iOS) for correct gesture arbitration
 // inside a BottomSheetModal. Use the gesture-handler `Pressable` directly.
 const BottomSheetTouchable = GestureHandlerPressable;
-import { getSheetBg, useThemeColors } from '@/lib/theme-colors';
+import { useThemeColors } from '@/lib/theme-colors';
 import { MONO_FONT_FAMILY } from '@/lib/utils/mono-font';
 import { THEME, withAlpha } from '@/lib/utils/theme';
 import {
@@ -99,9 +101,23 @@ import {
   useProjectSessionStats,
   totalTokens as sumTokens,
 } from '@/hooks/useProjectSessionStats';
-import { SheetBackdrop, KortixBottomSheetModal } from '@/components/kortix/sheet';
+import { SheetBackdrop, KortixBottomSheetModal, useSheetSurface } from '@/components/kortix/sheet';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Markdown inside the task sheet, filled with the sheet's own surface: no fill
+ * on the iOS 26 native glass, where the sheet colour drew an opaque block.
+ * Rendered inside the sheet, so it reads that sheet's context.
+ */
+function SheetMarkdownText({ isDark, children }: { isDark: boolean; children: string }) {
+  const surface = useSheetSurface();
+  return (
+    <SelectableMarkdownText isDark={isDark} surface={surface ?? undefined}>
+      {children}
+    </SelectableMarkdownText>
+  );
+}
 
 function ago(t?: string | number) {
   if (!t) return '';
@@ -172,7 +188,7 @@ export function ProjectDetailPage({
   const taskSheetRef = useRef<BottomSheetModal>(null);
   const newTaskSheetRef = useRef<BottomSheetModal>(null);
   const sheetPadding = useSheetBottomPadding();
-  const tabScrollRef = useRef<ScrollView>(null);
+  const tabScrollRef = useRef<ScrollViewInstance>(null);
   const tabLayoutsRef = useRef<Record<number, { x: number; width: number }>>({});
   const [editField, setEditField] = useState<'name' | 'description'>('name');
   const [editValue, setEditValue] = useState('');
@@ -416,7 +432,6 @@ export function ProjectDetailPage({
   const {
     data: files,
     isLoading: filesLoading,
-    refetch: refetchFiles,
   } = useSandboxFiles(hasFiles && tab === 'files' ? sandboxUrl : undefined, filePath);
   const [viewerFile, setViewerFile] = useState<SandboxFile | null>(null);
   const [viewerVisible, setViewerVisible] = useState(false);
@@ -709,7 +724,7 @@ export function ProjectDetailPage({
       {/* Content */}
       <ScrollView
         style={{ flex: 1 }}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={refetch} tintColor={muted} />}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={() => void refetch()} tintColor={muted} />}
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         {/* ── Files Tab ── */}
         {tab === 'files' &&
@@ -793,7 +808,6 @@ export function ProjectDetailPage({
                 loading={statsLoading}
                 isDark={isDark}
                 fg={fg}
-                muted={muted}
                 cardBg={cardBg}
                 border={border}
               />
@@ -1324,19 +1338,6 @@ export function ProjectDetailPage({
                   </RNText>
                 </View>
               )}
-              {project.opencode_id && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <FolderGit2 size={14} color={mutedStrong} />
-                  <RNText
-                    style={{
-                      fontSize: 12,
-                      fontFamily: monoFont,
-                      color: isDark ? THEME.light.mutedForeground : THEME.dark.mutedForeground,
-                    }}>
-                    {project.opencode_id}
-                  </RNText>
-                </View>
-              )}
             </View>
           </View>
         )}
@@ -1365,7 +1366,7 @@ export function ProjectDetailPage({
         backdropComponent={(p) => <SheetBackdrop {...p} opacity={0.35} />}
         onDismiss={() => setSelectedTask(null)}
 >
-        <BottomSheetScrollView
+        <SheetScrollView
           contentContainerStyle={{
             paddingHorizontal: 20,
             paddingTop: 8,
@@ -1586,9 +1587,9 @@ export function ProjectDetailPage({
                         }}>
                         Description
                       </RNText>
-                      <SelectableMarkdownText isDark={isDark} surface={getSheetBg(isDark)}>
+                      <SheetMarkdownText isDark={isDark}>
                         {selectedTask.description}
-                      </SelectableMarkdownText>
+                      </SheetMarkdownText>
                     </View>
                   )}
 
@@ -1606,9 +1607,9 @@ export function ProjectDetailPage({
                         }}>
                         Verification condition
                       </RNText>
-                      <SelectableMarkdownText isDark={isDark} surface={getSheetBg(isDark)}>
+                      <SheetMarkdownText isDark={isDark}>
                         {selectedTask.verification_condition}
-                      </SelectableMarkdownText>
+                      </SheetMarkdownText>
                     </View>
                   )}
 
@@ -1642,9 +1643,9 @@ export function ProjectDetailPage({
                           Input needed
                         </RNText>
                       </View>
-                      <SelectableMarkdownText isDark={isDark} surface={getSheetBg(isDark)}>
+                      <SheetMarkdownText isDark={isDark}>
                         {selectedTask.blocking_question}
-                      </SelectableMarkdownText>
+                      </SheetMarkdownText>
                     </View>
                   )}
 
@@ -1670,9 +1671,9 @@ export function ProjectDetailPage({
                         }}>
                         Result
                       </RNText>
-                      <SelectableMarkdownText isDark={isDark} surface={getSheetBg(isDark)}>
+                      <SheetMarkdownText isDark={isDark}>
                         {selectedTask.result}
-                      </SelectableMarkdownText>
+                      </SheetMarkdownText>
                       {!!selectedTask.verification_summary && (
                         <View
                           style={{
@@ -1694,9 +1695,9 @@ export function ProjectDetailPage({
                             }}>
                             Verification
                           </RNText>
-                          <SelectableMarkdownText isDark={isDark} surface={getSheetBg(isDark)}>
+                          <SheetMarkdownText isDark={isDark}>
                             {selectedTask.verification_summary}
-                          </SelectableMarkdownText>
+                          </SheetMarkdownText>
                         </View>
                       )}
                     </View>
@@ -1798,7 +1799,7 @@ export function ProjectDetailPage({
                 </>
               );
             })()}
-        </BottomSheetScrollView>
+        </SheetScrollView>
       </KortixBottomSheetModal>
 
       {/* Edit sheet — matches FilesPage rename sheet pattern */}
@@ -1813,7 +1814,7 @@ export function ProjectDetailPage({
           setEditValue('');
         }}
 >
-        <BottomSheetView
+        <SheetView
           style={{
             paddingHorizontal: 24,
             paddingTop: 8,
@@ -1848,7 +1849,7 @@ export function ProjectDetailPage({
           </View>
 
           {/* Input */}
-          <BottomSheetTextInput
+          <SheetRawTextInput
             value={editValue}
             onChangeText={setEditValue}
             placeholder={editField === 'name' ? 'Enter project name' : 'Enter description'}
@@ -1908,7 +1909,7 @@ export function ProjectDetailPage({
               </BottomSheetTouchable>
             );
           })()}
-        </BottomSheetView>
+        </SheetView>
       </KortixBottomSheetModal>
 
       {/* New task sheet — ported from web new-task-dialog */}
@@ -1920,7 +1921,7 @@ export function ProjectDetailPage({
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
 >
-        <BottomSheetScrollView
+        <SheetScrollView
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{
             paddingHorizontal: 24,
@@ -1964,7 +1965,7 @@ export function ProjectDetailPage({
           </View>
 
           {/* Title — big, bold */}
-          <BottomSheetTextInput
+          <SheetRawTextInput
             value={newTaskTitle}
             onChangeText={setNewTaskTitle}
             autoFocus
@@ -1982,7 +1983,7 @@ export function ProjectDetailPage({
           />
 
           {/* Description */}
-          <BottomSheetTextInput
+          <SheetRawTextInput
             value={newTaskDescription}
             onChangeText={setNewTaskDescription}
             multiline
@@ -2037,7 +2038,7 @@ export function ProjectDetailPage({
                   </RNText>
                 </Pressable>
               </View>
-              <BottomSheetTextInput
+              <SheetRawTextInput
                 value={newTaskVerification}
                 onChangeText={setNewTaskVerification}
                 multiline
@@ -2311,7 +2312,7 @@ export function ProjectDetailPage({
               </BottomSheetTouchable>
             );
           })()}
-        </BottomSheetScrollView>
+        </SheetScrollView>
       </KortixBottomSheetModal>
       </PageContent>
     </View>
@@ -2328,7 +2329,6 @@ function ProjectTotalsCard({
   loading,
   isDark,
   fg,
-  muted,
   cardBg,
   border,
 }: {
@@ -2339,7 +2339,6 @@ function ProjectTotalsCard({
   loading: boolean;
   isDark: boolean;
   fg: string;
-  muted: string;
   cardBg: string;
   border: string;
 }) {

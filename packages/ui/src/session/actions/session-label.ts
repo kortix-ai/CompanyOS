@@ -24,7 +24,7 @@ import {
 /**
  * Where a session came from, derived from the creation metadata stamped by
  * the API: channel sessions carry `metadata.source` ('slack' | 'telegram' |
- * 'teams' | 'email'),
+ * 'teams' | 'email' | 'discord'),
  * trigger fires carry `metadata.trigger_source` ('cron' | 'webhook' | 'event' |
  * 'manual') + `trigger_type`/`trigger_slug`. Everything else is a regular
  * chat the user started.
@@ -33,6 +33,7 @@ export type SessionSourceKind =
   | 'chat'
   | 'slack'
   | 'telegram'
+  | 'discord'
   | 'teams'
   | 'email'
   | 'schedule'
@@ -71,6 +72,8 @@ export function sessionSource(session: ProjectSession, tI18nComplete: UiTranslat
     return { kind: 'slack', label: tI18nComplete.raw('textb27fb38ba323'), triggerSlug: null };
   if (source === 'telegram')
     return { kind: 'telegram', label: tI18nComplete.raw('textacdd1e734125'), triggerSlug: null };
+  if (source === 'discord')
+    return { kind: 'discord', label: tI18nComplete.raw('text053bc65874ad'), triggerSlug: null };
   if (source === 'teams')
     return { kind: 'teams', label: tI18nComplete.raw('texta7b52b269a23'), triggerSlug: null };
   if (source === 'email')
@@ -87,7 +90,7 @@ export function sessionSource(session: ProjectSession, tI18nComplete: UiTranslat
     const type = typeof meta.trigger_type === 'string' ? meta.trigger_type : meta.trigger_source;
     if (type === 'cron')
       return { kind: 'schedule', label: tI18nComplete.raw('text4724f344c1c0'), triggerSlug };
-    if (type === 'event') return { kind: 'event', label: tI18nComplete.raw('text5441e7146193'), triggerSlug };
+    if (type === 'event') return { kind: 'event', label: tI18nComplete.raw('textca395c4d19b2'), triggerSlug };
     return { kind: 'webhook', label: tI18nComplete.raw('text4814f62c108d'), triggerSlug };
   }
   return { kind: 'chat', label: tI18nComplete.raw('text460b3a7da007'), triggerSlug: null };
@@ -157,19 +160,11 @@ export { isLegacyMigratedSession };
 /**
  * Whether the row's lifecycle menu and the session header may offer Stop.
  *
- * `running` is the classic case. A warm shell (`metadata.warm`, pre-created
- * and never prompted) is reported `provisioning` for as long as its idle box
- * lives (KRTX-1466), but it still bills compute the owner can stop — the stop
- * route reads the sandbox row, not this word — so it keeps its Stop control.
- * A genuinely booting session (no warm marker) does not: its box is not up
- * yet, and stopping one answers 409 "Session is not running".
+ * Only a `running` session. A booting session's box is not up yet, and
+ * stopping one answers 409 "Session is not running".
  */
 export function sessionCanBeStopped(session: ProjectSession): boolean {
-  if (session.status === 'running') return true;
-  return (
-    session.status === 'provisioning' &&
-    ((session.metadata ?? {}) as Record<string, unknown>).warm === true
-  );
+  return session.status === 'running';
 }
 
 /**
@@ -192,6 +187,7 @@ export type SessionSourceFilter =
   | 'shared'
   | 'slack'
   | 'telegram'
+  | 'discord'
   | 'teams'
   | 'email'
   | 'schedule'
@@ -204,11 +200,12 @@ export const SESSION_SOURCE_FILTERS: Array<{ value: SessionSourceFilter; label: 
   { value: 'shared', label: 'Shared' },
   { value: 'slack', label: 'Slack' },
   { value: 'telegram', label: 'Telegram' },
+  { value: 'discord', label: 'Discord' },
   { value: 'teams', label: 'Teams' },
   { value: 'email', label: 'Email' },
   { value: 'schedule', label: 'Scheduled' },
   { value: 'webhook', label: 'Webhook' },
-  { value: 'event', label: 'App event' },
+  { value: 'event', label: 'Connector event' },
   { value: 'manual', label: 'Manual' },
 ];
 

@@ -31,8 +31,12 @@ export const POPULAR_SECTION = 'popular';
  * third-party strings nothing in this repo enumerates or controls, so matching
  * them literally would break the first time Pipedream shipped `Sales & CRM`
  * where the Discover feed ships `sales-crm`.
+ *
+ * A slug or display name folds the same way: `Google Sheets`, `google_sheets`
+ * and `google-sheets` all become `googlesheets`. Every token in
+ * `CATEGORY_PICKS` is already in this form, asserted in the tests.
  */
-function foldCategory(value: string): string {
+function fold(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
@@ -286,7 +290,7 @@ function sectionRank(key: string): number {
  */
 export function sectionKeyForCategory(raw: string): string {
   const trimmed = raw.trim();
-  return CLAIMED_BY.get(foldCategory(trimmed)) ?? trimmed;
+  return CLAIMED_BY.get(fold(trimmed)) ?? trimmed;
 }
 
 /**
@@ -406,19 +410,6 @@ export function humanizeCategory(raw: string): string {
 }
 
 /**
- * Fold a slug or display name into one comparable token: `Google Sheets`,
- * `google_sheets` and `google-sheets` all become `googlesheets`.
- *
- * Same transform `connector-categories.ts` applies to categories, and for the
- * same reason — these are third-party strings from two feeds that spell the
- * same product differently. Every token in `CATEGORY_PICKS` is already in this
- * form, asserted in the tests.
- */
-function fold(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-/**
  * The tools a person browsing a category should meet first, in the order they
  * should meet them.
  *
@@ -442,7 +433,7 @@ function fold(value: string): string {
  * pinning `slack` under both communication and productivity is not a conflict;
  * whichever section Slack actually lands in is the one where its pin applies.
  */
-export const CATEGORY_PICKS: Record<string, readonly string[]> = {
+const CATEGORY_PICKS: Record<string, readonly string[]> = {
   productivity: [
     'notion',
     'googledrive',

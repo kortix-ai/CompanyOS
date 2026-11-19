@@ -5,6 +5,7 @@ import {
 } from '@kortix/sdk';
 import { formatRelative } from '@kortix/shared';
 
+import { splitHelp } from '../command-argv.ts';
 import type { Auth } from '../api/auth.ts';
 import type { ApiClient } from '../api/client.ts';
 import { kortixFromAuth, withKortixScope } from '../api/sdk.ts';
@@ -19,7 +20,7 @@ import {
   fail,
 } from '../command-helpers.ts';
 import { resolveSessionRuntime } from '../session-runtime.ts';
-import { C, help, pad } from '../style.ts';
+import { C, help, pad, trim } from '../style.ts';
 import { liveThreadOf, withLiveTurn } from './sessions-chat.ts';
 
 type CtxOpts = { projectArg?: string; hostArg?: string };
@@ -39,7 +40,7 @@ digest stays readable.
                        (default 700).
   --all                Ignore --since and include every listable session.
   --json               Emit structured JSON for scripting.
-  --project <id>       Operate on this project id (default: linked).
+  --workspace <id>     Operate on this workspace id (default: linked).
   --host <name>        Operate against a non-default Kortix host.
   -h, --help           Show this help.
 
@@ -82,14 +83,10 @@ interface SessionDigest {
     created_at: string;
     updated_at: string;
     error: string | null;
-    /** The session's root conversation in its runtime (OpenCode or pi). */
+    /** The session's root conversation in its runtime. */
     runtime_session_id: string | null;
     /** Titles of the runtime's conversations. */
     runtime_titles: string[];
-    /** @deprecated The pre-W4 name of `runtime_session_id`. Same value. */
-    opencode_session_id: string | null;
-    /** @deprecated The pre-W4 name of `runtime_titles`. Same value. */
-    opencode_titles: string[];
   };
   transcript: {
     available: boolean;
@@ -101,19 +98,17 @@ interface SessionDigest {
      *  every row it holds. Never a guess — see `mirrorIsComplete`. */
     complete: boolean;
     runtime_session_id: string | null;
-    /** @deprecated The pre-W4 name of `runtime_session_id`. Same value. */
-    opencode_session_id: string | null;
     message_count: number;
     messages: CompactMessage[];
   };
 }
 
 export async function runSessionsDigest(argv: string[]): Promise<number> {
+  // A bare `sessions digest` digests the workspace's recent activity; only a
+  // help FLAG shows help.
+  const helped = argv.length > 0 ? splitHelp(argv, DIGEST_HELP) : null;
+  if (helped !== null) return helped;
   const rest = [...argv];
-  if (rest.includes('-h') || rest.includes('--help')) {
-    process.stdout.write(`${DIGEST_HELP}\n`);
-    return 0;
-  }
 
   let projectArg: string | undefined;
   let hostArg: string | undefined;
@@ -123,7 +118,7 @@ export async function runSessionsDigest(argv: string[]): Promise<number> {
   let json = false;
   let all = false;
   try {
-    projectArg = takeFlagValue(rest, ['--project']);
+    projectArg = takeFlagValue(rest, ['--project', '--workspace']);
     hostArg = takeFlagValue(rest, ['--host']);
     sinceRaw = takeFlagValue(rest, ['--since']);
     messageLimitRaw = takeFlagValue(rest, ['--messages', '--limit', '-n']);
@@ -154,7 +149,7 @@ export async function runSessionsDigest(argv: string[]): Promise<number> {
   let sessions: ProjectSession[];
   try {
     sessions = await ctx.client.get<ProjectSession[]>(
-      `/projects/${ctx.projectId}/sessions`,
+      `/workspaces/${ctx.projectId}/sessions`,
     );
   } catch (err) {
     return surfaceApiError(err);
@@ -270,8 +265,6 @@ function baseDigest(s: ProjectSession): SessionDigest {
       error: s.error,
       runtime_session_id: runtimeSessionIdOf(s),
       runtime_titles: runtimeTitles(s),
-      opencode_session_id: runtimeSessionIdOf(s),
-      opencode_titles: runtimeTitles(s),
     },
     transcript: {
       available: false,
@@ -279,7 +272,6 @@ function baseDigest(s: ProjectSession): SessionDigest {
       source: 'none',
       complete: false,
       runtime_session_id: runtimeSessionIdOf(s),
-      opencode_session_id: runtimeSessionIdOf(s),
       message_count: 0,
       messages: [],
     },
@@ -312,7 +304,7 @@ function printHumanDigest(
     process.stdout.write(`  ${C.dim}created${C.reset} ${s.created_at}  ${C.dim}updated${C.reset} ${s.updated_at}\n`);
     if (s.error) process.stdout.write(`  ${C.red}error${C.reset} ${s.error}\n`);
     if (s.runtime_titles.length > 0) {
-      process.stdout.write(`  ${C.dim}runtime titles${C.reset} ${s.runtime_titles.map((t) => truncate(t, 80)).join(' | ')}\n`);
+      process.stdout.write(`  ${C.dim}runtime titles${C.reset} ${s.runtime_titles.map((t) => trim(t, 80)).join(' | ')}\n`);
     }
 
     if (!d.transcript.available) {
@@ -358,13 +350,13 @@ function summarizeTools(tools: CompactToolCall[]): string {
   return parts.length > 12 ? `${parts.slice(0, 12).join(', ')}, … +${parts.length - 12}` : parts.join(', ');
 }
 
-/** The runtime root id: a W4 API serves `runtime_session_id`, an older one `opencode_session_id`. */
+/** The session's runtime root id. */
 function runtimeSessionIdOf(s: ProjectSession): string | null {
-  return s.runtime_session_id ?? s.opencode_session_id ?? null;
+  return s.runtime_session_id ?? null;
 }
 
 function runtimeTitles(s: ProjectSession): string[] {
-  const raw = s.runtime_sessions ?? s.metadata?.opencode_sessions;
+  const raw = s.runtime_sessions;
   if (!Array.isArray(raw)) return [];
   return raw
     .map((entry) => {
@@ -402,10 +394,6 @@ async function mapLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<v
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
-}
-
-function truncate(s: string, max: number): string {
-  return s.length <= max ? s : `${s.slice(0, Math.max(0, max - 1))}…`;
 }
 
 function statusLabel(s: string): string {

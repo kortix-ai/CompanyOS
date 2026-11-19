@@ -8,10 +8,10 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { UnifiedMarkdown } from './unified-markdown';
 
 /**
- * Minimal YAML frontmatter rendering for markdown files (opencode-style agent
- * and skill definitions, but generic). The parser handles flat key/value pairs
- * plus a single level of nested objects — enough for the patterns documented
- * at https://opencode.ai/docs/agents/ and similar conventions.
+ * Minimal YAML frontmatter rendering for markdown files (agent and skill
+ * definitions, but generic). The parser handles flat key/value pairs plus a
+ * single level of nested objects — enough for agent and skill frontmatter
+ * (`description`, `mode`, `permission`, ...) and similar conventions.
  */
 
 export type FrontmatterValue = string | Record<string, string>;
@@ -24,6 +24,43 @@ export interface ParsedMarkdown {
 /** Extract a leading `---\n…\n---` frontmatter block. Returns the parsed
  *  object plus the markdown body. If no block is found, returns the original
  *  content untouched. */
+
+/**
+ * `key: value` with a bare `[\w.-]` key at column 0, split at the first colon.
+ * String scanning, not a `\s*:\s*(.*)` regex: that one backtracked
+ * quadratically on a long run of spaces (CodeQL js/polynomial-redos).
+ */
+function topEntry(line: string): [string, string] | null {
+  const colon = line.indexOf(':');
+  if (colon <= 0) return null;
+  const key = line.slice(0, colon).trimEnd();
+  return /^[\w.-]+$/.test(key) ? [key, line.slice(colon + 1)] : null;
+}
+
+/** An indented `key: value`; the key may be quoted (`"*": allow`) or bare: word characters, `.`, `*`, `/` and `-`. */
+function nestedEntry(line: string): [string, string] | null {
+  const rest = line.trimStart();
+  if (rest.length === line.length) return null;
+  const quote = rest[0];
+  let key: string;
+  let after: string;
+  if (quote === '"' || quote === "'") {
+    const close = rest.indexOf(quote, 1);
+    if (close <= 1) return null;
+    key = rest.slice(1, close);
+    after = rest.slice(close + 1).trimStart();
+    if (!after.startsWith(':')) return null;
+    after = after.slice(1);
+  } else {
+    const colon = rest.indexOf(':');
+    if (colon <= 0) return null;
+    key = rest.slice(0, colon).trimEnd();
+    if (!/^[\w.*/-]+$/.test(key)) return null;
+    after = rest.slice(colon + 1);
+  }
+  return [key, after];
+}
+
 export function parseFrontmatter(content: string): ParsedMarkdown {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   if (!match) return { frontmatter: null, body: content };
@@ -40,20 +77,19 @@ export function parseFrontmatter(content: string): ParsedMarkdown {
     const line = rawLine.trimEnd();
     if (!line.trim() || line.trim().startsWith('#')) continue;
 
-    // A nested key may be QUOTED, and in the opencode permission idiom it
+    // A nested key may be QUOTED, and in the agent permission idiom it
     // usually is — `"*": allow`. Matching only [\w.-] dropped that line, left
     // the parent an empty object, and printed a bare em-dash where the
     // permissions belong. Wildcards and path-ish keys are accepted bare too.
-    const nested = line.match(/^\s+(?:"([^"]+)"|'([^']+)'|([\w.*/-]+))\s*:\s*(.*)$/);
+    const nested = nestedEntry(line);
     if (nested && currentParent && typeof result[currentParent] === 'object') {
-      const key = nested[1] ?? nested[2] ?? nested[3];
-      (result[currentParent] as Record<string, string>)[key] = nested[4].trim();
+      (result[currentParent] as Record<string, string>)[nested[0]] = nested[1].trim();
       continue;
     }
 
-    const top = line.match(/^([\w.-]+)\s*:\s*(.*)$/);
+    const top = topEntry(line);
     if (top) {
-      const [, key, value] = top;
+      const [key, value] = top;
       const trimmed = value.trim();
       if (!trimmed) {
         result[key] = {};
@@ -86,13 +122,13 @@ function ScalarValue({ value }: { value: string }) {
 function NestedTable({ data }: { data: Record<string, string> }) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const entries = Object.entries(data);
-  if (entries.length === 0) return <span className="text-muted-foreground/60">—</span>;
+  if (entries.length === 0) return <span className="text-muted-foreground">—</span>;
   return (
     <div className="inline-flex flex-wrap gap-x-3 gap-y-1">
       {entries.map(([k, v]) => (
         <Badge key={k} size="sm" variant="secondary" className="gap-1">
-          <span className="text-muted-foreground/70">{k}</span>
-          <span className="text-muted-foreground/30">{tI18nComplete.raw('text3b9453dad42b')}</span>
+          <span className="text-muted-foreground">{k}</span>
+          <span className="text-muted-foreground">{tI18nComplete.raw('text3b9453dad42b')}</span>
           <ScalarValue value={v} />
         </Badge>
       ))}
@@ -169,8 +205,8 @@ function FrontmatterValueBody({ value }: { value: FrontmatterValue }) {
 
 /**
  * Render markdown content; if a leading YAML frontmatter block is present, it
- * renders as a small metadata card above the prose. Used for opencode-style
- * agent / skill markdown files (and any other frontmatter-prefixed `.md`).
+ * renders as a small metadata card above the prose. Used for agent / skill
+ * markdown files (and any other frontmatter-prefixed `.md`).
  */
 export function MarkdownWithFrontmatter({
   content,
@@ -211,7 +247,7 @@ export function MarkdownFrontmatterCard({
       <div className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-xs leading-relaxed">
         {entries.map(([key, value]) => (
           <React.Fragment key={key}>
-            <span className="text-muted-foreground/70 select-none">{key}</span>
+            <span className="text-muted-foreground select-none">{key}</span>
             <FrontmatterValueBody value={value} />
           </React.Fragment>
         ))}

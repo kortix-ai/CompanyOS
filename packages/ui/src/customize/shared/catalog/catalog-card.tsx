@@ -1,9 +1,10 @@
 'use client';
 
-import type { CSSProperties, ReactNode } from 'react';
+import { useId, type CSSProperties, type ReactNode } from 'react';
 
-import { UiLink as Link } from '../../../providers/ui-provider';
+import { HoverPrefetchLink } from '../../../internal/components/hover-prefetch-link';
 
+import { plainTextFromMarkdown, shortSummary } from '../../../markdown/inline-code-text';
 import { Checkbox } from '../../../primitives/checkbox';
 import { cn } from '../../../internal/lib/utils';
 
@@ -26,10 +27,15 @@ export interface CatalogCardProps {
    *  then renders the link and the control as siblings: a button inside an
    *  anchor is invalid HTML and a hydration error. */
   trailingInteractive?: boolean;
-  /** A card that NAVIGATES renders as a real `next/link` — prefetched, middle-
-   *  clickable, and a client transition rather than a `router.push` from a
-   *  button (see the no-hard-refresh nav contract). Cards that open a modal
-   *  in place keep `onClick`. Exactly one of the two. */
+  /** A card that NAVIGATES renders as a real `next/link` — middle-clickable,
+   *  and a client transition rather than a `router.push` from a button (see
+   *  the no-hard-refresh nav contract). Cards that open a modal in place keep
+   *  `onClick`. Exactly one of the two.
+   *
+   *  The link prefetches its page on intent (hover, focus, touch), never on
+   *  sight. A grid shows hundreds of cards, and every prefetch is a dynamic
+   *  server render. On 2026-11-02 one visit to the connector catalogue
+   *  prefetched 372 connector pages: 937 renders on Vercel in 10 minutes. */
   href?: string;
   /** Pointer or keyboard intent on a navigating card, before the click. Used
    *  to start the destination's data read ~200–500 ms early. */
@@ -83,22 +89,37 @@ export function CatalogCard({
   // toggle), so in select mode it is a SIBLING of the body button, never a
   // child — a <button> inside a <button> is invalid HTML and a hydration error.
   const trailingSlot = trailing ? <span className="shrink-0">{trailing}</span> : null;
+  // The control's name is the title alone; the summary is its description.
+  // Without these, the name is every word inside the card (a whole SKILL.md
+  // summary on each Tab stop).
+  const id = useId();
+  const titleId = `${id}-title`;
+  const descriptionId = `${id}-description`;
+  const summary = description ? plainTextFromMarkdown(description) : '';
+  const a11y = { 'aria-labelledby': titleId, 'aria-describedby': summary ? descriptionId : undefined };
   const content = (
     <>
       {leading ? <span className="shrink-0">{leading}</span> : null}
       <span className={cn('min-w-0 flex-1', variant === 'plain' ? 'space-y-0' : 'space-y-1')}>
         <span className="flex items-center gap-1.5">
-          <span className="text-foreground truncate text-sm font-medium">{title}</span>
+          <span id={titleId} className="text-foreground truncate text-sm font-medium">
+            {title}
+          </span>
           {badges}
         </span>
         {subtitle ? <span className="flex flex-wrap items-center gap-1.5">{subtitle}</span> : null}
-        {description ? (
-          <span className="text-muted-foreground line-clamp-2 text-xs text-pretty">
-            {description}
-          </span>
+        {summary ? (
+          <>
+            <span className="text-muted-foreground line-clamp-2 text-xs text-pretty">{summary}</span>
+            {/* The description a Tab stop reads: one sentence, not the whole text the clamp hides.
+               Hidden from browse mode, which already reads the visible summary. */}
+            <span id={descriptionId} className="sr-only" aria-hidden>
+              {shortSummary(description ?? '')}
+            </span>
+          </>
         ) : null}
         {meta ? (
-          <span className="text-muted-foreground/80 flex flex-wrap items-center gap-x-2 gap-y-0.5 pt-1 text-xs">
+          <span className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5 pt-1 text-xs">
             {meta}
           </span>
         ) : null}
@@ -130,6 +151,7 @@ export function CatalogCard({
           type="button"
           onClick={onClick}
           disabled={disabled}
+          {...a11y}
           className="flex min-w-0 flex-1 items-start gap-3 text-left focus-visible:outline-none"
         >
           {content}
@@ -151,37 +173,46 @@ export function CatalogCard({
           'has-[a:focus-visible]:ring-ring/50 relative has-[a:focus-visible]:ring-2',
         )}
       >
-        <Link
+        <HoverPrefetchLink
           href={href}
           prefetch
           aria-disabled={disabled || undefined}
           onPointerEnter={onIntent}
           onFocus={onIntent}
+          {...a11y}
           className="flex min-w-0 flex-1 items-start gap-3 text-left after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
         >
           {content}
-        </Link>
+        </HoverPrefetchLink>
         {trailing ? <span className="relative shrink-0">{trailing}</span> : null}
       </div>
     );
   }
   if (href) {
     return (
-      <Link
+      <HoverPrefetchLink
         href={href}
         prefetch
         aria-disabled={disabled || undefined}
         onPointerEnter={onIntent}
         onFocus={onIntent}
+        {...a11y}
         style={style}
         className={classes}
       >
         {body}
-      </Link>
+      </HoverPrefetchLink>
     );
   }
   return (
-    <button type="button" onClick={onClick} disabled={disabled} style={style} className={classes}>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      {...a11y}
+      style={style}
+      className={classes}
+    >
       {body}
     </button>
   );

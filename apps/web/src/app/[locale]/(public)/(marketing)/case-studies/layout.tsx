@@ -1,12 +1,6 @@
-import { localizedMarketingMetadata } from '@/lib/seo/metadata';
-import { requireServicesPages } from '@/lib/services-pages-gate';
-import type { ReactNode } from 'react';
+import { marketingMetadataLayout } from '@/lib/seo/metadata';
 
-export function generateMetadata() {
-  return localizedMarketingMetadata('/case-studies');
-}
+const { generateMetadata, Layout } = marketingMetadataLayout('/case-studies');
 
-export default async function CaseStudiesLayout({ children }: { children: ReactNode }) {
-  await requireServicesPages();
-  return children;
-}
+export { generateMetadata };
+export default Layout;

@@ -212,6 +212,15 @@ describe('pi session-log export', () => {
     expect(context).toMatchObject({ role: 'system', created_at: at(50), completed_at: at(50) })
   })
 
+  test('an extension\'s custom message is dated when pi appended it, not 1970', () => {
+    const s = fixture()
+    const note = entry({ type: 'custom_message', customType: 'voice', content: 'Voice turn answered by the voice directly.', display: false })
+    s.entries = [...s.entries, note] as never
+    s.leafId = note.id
+    const m = root(s).find((x) => x.origin === 'automation')!
+    expect(m).toMatchObject({ role: 'user', created_at: note.timestamp, completed_at: note.timestamp })
+  })
+
   test('a compaction keeps pi shape: summary, first kept message, trigger', () => {
     const c = byId(root(fixture()), 'msg_i')
     expect(c).toMatchObject({ role: 'user', kind: 'compaction', in_context: true })
@@ -236,6 +245,16 @@ describe('pi session-log export', () => {
     await port.changes([])
     expect(port.blob!(digest)).toEqual(bytes)
     expect(port.blob!('0'.repeat(64))).toBeNull()
+  })
+
+  test('a read skips the per-message hashing (the log-route read, KRTX-4488): log equal, hashes empty', () => {
+    const hashed = piSessionLog(fixture())
+    const read = piSessionLog(fixture(), { hashes: false })
+    expect(read.hashes.size).toBe(0)
+    expect(read.log).toEqual(hashed.log)
+    expect(read.images.size).toBe(hashed.images.size)
+    // The relay's default still hashes: changes() needs them.
+    expect(piSessionLog(fixture()).hashes).toEqual(hashed.hashes)
   })
 
   test('a sub-agent child is a thread spawned by the task call', () => {

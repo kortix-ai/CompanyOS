@@ -26,11 +26,11 @@ import { z } from 'zod';
 
 // ── Limits ───────────────────────────────────────────────────────────────
 
-/** Largest message body, in characters. Same as a room message. */
+/** Largest message body, in characters. */
 export const PEER_MESSAGE_MAX_CHARS = 16_000;
 /** Largest `summary` (the preview line), in characters. */
 export const PEER_MESSAGE_SUMMARY_MAX_CHARS = 200;
-/** Messages one sender session may send in one minute. Same as a room. */
+/** Messages one sender session may send in one minute. */
 export const PEER_MESSAGE_PER_MINUTE = 30;
 /** The same text to the same session within this window is dropped. */
 export const PEER_MESSAGE_DUPLICATE_WINDOW_MS = 60_000;
@@ -73,6 +73,16 @@ export const SessionBoardStateSchema = z.enum([
   'stopped',
 ]);
 export type SessionBoardState = z.infer<typeof SessionBoardStateSchema>;
+
+/**
+ * Is the session's work done: the field a script waits on. The same verdict
+ * as `board_state` (`working` and `needs_input` are `running`). Not `status`
+ * (the stored row lifecycle) and not `runtime_status` (the computer): a child
+ * that answered keeps `status: running` and `runtime_status: active` until
+ * its idle computer stops.
+ */
+export const SessionWorkStateSchema = z.enum(['running', 'completed', 'failed', 'stopped', 'idle']);
+export type SessionWorkState = z.infer<typeof SessionWorkStateSchema>;
 
 /** What a session waits for from its person, or null. */
 export const SessionAttentionSchema = z.enum(['question', 'approval']).nullable();
@@ -241,12 +251,13 @@ export const SESSION_TASK_BLOCKED_CODE = 'task_blocked' as const;
  * - `pause`: no new `agent()` starts; running agents finish.
  * - `resume`: starts resume.
  * - `restart_agent`: stop that agent's session and start it again.
+ * - `stop_agent`: stop that agent for good, as the person's stop; the run goes on.
  * - `stop`: stop every agent and end the run.
  */
 export const WorkflowControlBodySchema = z
   .object({
-    action: z.enum(['pause', 'resume', 'restart_agent', 'stop']),
-    /** `restart_agent` only: the agent's child session id. */
+    action: z.enum(['pause', 'resume', 'restart_agent', 'stop_agent', 'stop']),
+    /** `restart_agent` and `stop_agent` only: the agent's child session id. */
     session_id: z.string().optional(),
   })
   .strict();

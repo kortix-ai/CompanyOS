@@ -2,12 +2,14 @@
 
 import { CommandPaletteBoundary } from '@/features/workspace/command-palette-boundary';
 import { DriveUploadTray } from '@kortix/ui/files';
-import { AppPreviewPoolLoader } from '@/features/apps/app-preview-pool-loader';
+import { VoiceCallCard } from '@kortix/ui/session/voice/voice-call-card';
+import { AppPreviewPoolLoader, usePreviewPoolProject } from '@/features/apps/app-preview-pool-loader';
 import { ArtifactFramePreloader } from '@/features/artifacts/artifact-frame-preloader';
+import { previewPoolAllowed } from './preview-pool-route';
 import { useTranslations } from '@/i18n/use-translations';
 import { useQuery } from '@tanstack/react-query';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect } from 'react';
+import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useState } from 'react';
 
 import { TITLEBAR_CONTROL_CLASS } from '@kortix/ui/internal/desktop/titlebar-control';
 import { PersonalOnboardingWelcome } from '@/components/projects/personal-onboarding-welcome';
@@ -24,6 +26,7 @@ import { useDesktopShell } from '@kortix/ui/internal/layout/sidebar-opener';
 import { openCommandPalette } from '@kortix/ui/internal/layout/open-command-palette';
 import { ProjectSidebar } from '@kortix/ui/workspace';
 import { WorkspaceSwitcher } from '@/features/workspace/project-sidebar/workspace-switcher';
+import { DownloadModal } from '@/features/marketing/download/download-modal';
 import { SettingsPanel } from '@/features/workspace/settings/settings-panel';
 import {
   isAccountGraduatedSection,
@@ -31,23 +34,33 @@ import {
 } from '@kortix/ui/customize/settings/settings-tabs';
 import { useSettingsAccountId } from '@/features/workspace/settings/use-settings-account-id';
 import { useNewProjectSession } from '@kortix/ui/internal/hooks/projects/use-new-project-session';
-import { useProjectCanRun } from '@kortix/ui/internal/hooks/projects/use-project-can-run';
 import { useProjectShellShortcuts } from '@/hooks/projects/use-project-shell-shortcuts';
-import { useWarmProjectSession } from '@kortix/ui/internal/hooks/projects/use-warm-project-session';
 import { useSignedOutRedirect } from '@/lib/auth/use-signed-out-redirect';
 import { writeLastProjectId } from '@kortix/ui/internal/lib/onboarding/last-project-cookie';
 import { cn, uiRoutes } from '@kortix/ui';
 import { BillingAccountProvider } from '@kortix/ui/internal/stores/billing-account-context';
 import { useProjectSessionTabsStore } from '@/stores/project-session-tabs-store';
+import { GlobalUpgradeModal } from '@/features/billing/global-upgrade-modal';
+import { isBillingEnabled } from '@/lib/config';
+import { ConnectModelStep } from '@kortix/ui/session/models/connect-model-step';
+import { useWorkspaceModelGate } from '@kortix/ui/session/models/use-workspace-model-gate';
 import { getProject, getProjectDetail } from '@kortix/sdk';
 import {
   contract,
   qk,
   useFeatureFlag,
   useGatewayCatalogSync,
-  useProjectSpaces,
 } from '@kortix/sdk/react';
 import { SidebarGlyph as PanelLeft } from '@kortix/ui/icons';
+import {
+  DesktopTabStrip,
+  useDesktopTabsVisible,
+} from '@/features/desktop-tabs/desktop-tab-strip';
+import {
+  DesktopTabsBoundary,
+  useDesktopTabsEnabled,
+} from '@/features/desktop-tabs/desktop-tabs-gate';
+import { keepActivePreview } from '@/features/desktop-tabs/desktop-tabs-store';
 
 const CommandPalette = lazy(() =>
   import('@/features/workspace/command-palette').then((mod) => ({
@@ -84,7 +97,8 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
   const searchParams = useSearchParams();
   const { user, isLoading: authLoading, bootstrapError } = useAuth();
 
-  const { data: projectDetail, error: projectDetailError, isStale: projectDetailStale } = useQuery({
+  // Warms the config cache for the capability pages; nothing in the shell waits on it.
+  const { data: projectDetail } = useQuery({
     queryKey: qk.project.detail(projectId),
     queryFn: () => getProjectDetail(projectId),
     enabled: !!projectId,
@@ -93,7 +107,7 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
   // The owning account rides the bare project row (~10 ms on the server).
   // `/detail` reads git (0.5–2.6 s on prod) and every billing read on the
   // page, the model picker's gate included, waited behind it.
-  const { data: projectRow } = useQuery({
+  const { data: projectRow, error: projectRowError, isStale: projectRowStale } = useQuery({
     queryKey: qk.project.summary(projectId),
     queryFn: () => getProject(projectId),
     enabled: !!projectId,
@@ -107,41 +121,20 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
   useCustomizePrefetch(projectId);
   // GET needs-input is polled by the session lists (`useSessionNeedsYouCounts`), once per project.
 
-  // Presence: this shell is mounted for EVERY /projects/[id] route and survives
-  // in-project navigation, so mounting the warm hook here means "one ensure
-  // while the user is on this project", not one per page they click through.
-  // Gated on the `warm_sessions` flag (a warm sandbox is billed compute) and on
-  // the account being able to run at all. The server enforces the flag too —
-  // this is the client short-circuit that avoids a 403 on every project visit.
-  const warmSessions = useFeatureFlag(projectId, 'warm_sessions');
-  // Channels on: every thread is created in its space and never claims a warm
-  // session, so holding one would bill an idle computer nobody uses.
-  const channels = useFeatureFlag(projectId, 'project_channels').enabled;
-  const { canRun, isLoading: billingLoading } = useProjectCanRun(projectId);
-  // `params.sessionId` (read again below for the tabs store) doubles as the
-  // hook's adoption signal: navigating to a session — from ANY surface,
-  // including the manager inventory's unbadged warm rows or a direct URL —
-  // consumes a matching held warm entry and publishes the id cross-tab.
-  const routeParams = useParams<{ sessionId?: string }>();
-  useWarmProjectSession(
-    projectId,
-    warmSessions.enabled && !channels && !billingLoading && canRun,
-    routeParams?.sessionId ?? null,
-  );
-
   useSignedOutRedirect();
 
   // Remember the project so the next `/` hit and the next sign-in land straight
   // back here instead of going through the id-free landing door. Gated on a
-  // detail read the server confirmed: recording a project the user cannot
+  // project-row read the server confirmed (`GET /projects/:id` asserts read
+  // access, like the detail, without waiting on git): recording a project the user cannot
   // actually read would send them into a 404 bounce loop on their next visit.
   // A copy restored from this device's cache is stale until it refetches, and
   // it outlives a deleted project: never remember that stale copy again.
   // ProjectAccessBoundary owns terminal errors and forgetting unreadable projects.
   useEffect(() => {
-    if (!projectDetail || projectDetailError || projectDetailStale) return;
+    if (!projectRow || projectRowError || projectRowStale) return;
     writeLastProjectId(user?.id, projectId);
-  }, [projectDetail, projectDetailError, projectDetailStale, projectId, user?.id]);
+  }, [projectRow, projectRowError, projectRowStale, projectId, user?.id]);
 
   // The project's owning account, falling back to the app-wide selected one
   // — the same resolution every account-scoped surface uses. Feeds the
@@ -182,16 +175,16 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
     // stale query key the shell already ignores, so there is no server data to
     // fetch. Dropping a param changes the router cache key, so `router.replace`
     // would miss the segment cache and run a cold RSC fetch for nothing — on
-    // the component every `/projects/*` page mounts. Next patches
+    // the component every `/workspaces/*` page mounts. Next patches
     // `replaceState` and updates its own canonical URL, so `useSearchParams`
     // still reports the stripped URL. Same mechanism as `openTabAndNavigate` in
     // `packages/ui/src/internal/stores/tab-store.ts`.
     //
     // The path comes from `window.location.pathname`, never a hardcoded
-    // `/projects/<id>`. This shell is mounted by
-    // `app/(app)/projects/[id]/layout.tsx`, so the effect runs on EVERY route
+    // `/workspaces/<id>`. This shell is mounted by
+    // `app/(app)/workspaces/[id]/layout.tsx`, so the effect runs on EVERY route
     // beneath it, and rewriting the address bar to the project root while
-    // `/projects/<id>/files` is still the rendered view desyncs the two: the
+    // `/workspaces/<id>/files` is still the rendered view desyncs the two: the
     // sidebar's active-row test stops matching, Back leaves for somewhere the
     // user never was, and a reload lands on a different screen. Only the query
     // key is being dropped here — the path must not move.
@@ -220,6 +213,11 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
     }
   }, []);
 
+  // The sidebar's Download app row opens this; a stable callback keeps the
+  // sidebar from re-rendering on every shell render.
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const openDownloadApp = useCallback(() => setDownloadOpen(true), []);
+
   // New-session navigation opens the project composer. The first send creates
   // the durable session.
   const newSession = useNewProjectSession(projectId);
@@ -227,22 +225,26 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
     newSession();
   }, [newSession]);
 
-  // Channels on: "New session" (Mod+T, the desktop File menu) opens the
-  // default channel and focuses its composer, where a message starts a thread.
-  const spaces = useProjectSpaces(projectId, { enabled: channels });
-  const defaultChannelSlug = spaces.data?.find((space) => space.kind === 'channel' && space.is_default)?.slug;
+  // Spaces on: "New session" (Mod+T, the desktop File menu) opens the
+  // person's own space and focuses its composer, where a message starts a thread.
+  const channels = useFeatureFlag(projectId, 'chat').enabled;
   const openDefaultChannel = useCallback(() => {
-    if (!defaultChannelSlug) return;
-    router.push(uiRoutes().channel(projectId, defaultChannelSlug));
-    // Already on that channel the composer does not remount; ask it for focus.
+    router.push(`${uiRoutes().project(projectId)}/chat`);
+    // Already on that space the composer does not remount; ask it for focus.
     window.dispatchEvent(new CustomEvent('focus-session-textarea'));
-  }, [defaultChannelSlug, projectId, router]);
+  }, [projectId, router]);
   useProjectShellShortcuts({ projectId, onNewSession: channels ? openDefaultChannel : handleNewSession });
 
   const params = useParams<{ sessionId?: string }>();
   const activeSessionId = params?.sessionId ?? null;
 
   const openTab = useProjectSessionTabsStore((s) => s.openTab);
+
+  // No workspace page opens until the viewer can run a model: a new workspace
+  // lands on "Connect a model" right after setup, and so does any workspace
+  // whose models are all gone (Free plan, nothing connected). Paid plans run
+  // on Kortix models and pass.
+  const modelGate = useWorkspaceModelGate(projectId);
 
   useLayoutEffect(() => {
     if (activeSessionId) openTab(projectId, activeSessionId);
@@ -252,6 +254,20 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
 
   if (authLoading || !user) {
     return <div className="bg-background min-h-screen" />;
+  }
+
+  // The same frame the access check and the route loaders paint, so a
+  // workspace that waits for its model answer shows one continuous screen.
+  if (modelGate === 'pending') return <ProjectPendingScreen />;
+
+  if (modelGate === 'blocked') {
+    return (
+      // The account the upgrade dialog and the plan check read: this workspace's.
+      <BillingAccountProvider accountId={projectAccountId ?? null} resolved={!!projectAccountId}>
+        <ConnectModelStep projectId={projectId} workspaceName={projectRow?.name} />
+        {isBillingEnabled() && <GlobalUpgradeModal />}
+      </BillingAccountProvider>
+    );
   }
 
   return (
@@ -272,6 +288,7 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
             projectId={projectId}
             menu={<WorkspaceSwitcher projectId={projectId} />}
             onOpenSearch={openCommandPalette}
+            onOpenDownloadApp={openDownloadApp}
           />
         }
       >
@@ -280,21 +297,27 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
             <CommandPalette />
           </CommandPaletteBoundary>
 
-          <ProjectSheelLayout>{children}</ProjectSheelLayout>
+          <ProjectSheelLayout projectId={projectId}>{children}</ProjectSheelLayout>
         </div>
 
         <SettingsPanel projectId={projectId} />
+
+        {/* Outside the sidebar: on a phone the sidebar sheet unmounts its rows. */}
+        <DownloadModal open={downloadOpen} onOpenChange={setDownloadOpen} />
 
         {/* Drive uploads report here, on every page of the project, so a batch
             started in one folder still shows its progress after the user moves
             on. Empty, it renders nothing. */}
         <DriveUploadTray />
 
-        {/* App previews load here in the background and stay loaded while
-            the project is open, so the Apps page shows them at once. */}
-        <AppPreviewPoolLoader projectId={projectId} />
-        {/* Artifact pages too, in the same frame pool (flag `artifacts`). */}
-        <ArtifactFramePreloader projectId={projectId} />
+        {/* A voice call placed from an agent's page (flag `voice_call`): it goes on wherever the person goes in the
+            project. Without a call, nothing. */}
+        <VoiceCallCard />
+
+        {/* App previews and artifact pages load here in the background and
+            stay loaded while the project is open, so the Apps and Artifacts
+            pages show them at once. Not started by a settings page. */}
+        <PreviewPool projectId={projectId} />
 
         <Suspense fallback={null}>
           <PresentationViewerWrapper />
@@ -306,7 +329,43 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
   );
 }
 
-const ProjectSheelLayout = ({ children }: { children: React.ReactNode }) => {
+/**
+ * The background preview pool, started by the first project route that is not
+ * a settings page (`previewPoolAllowed`) and kept mounted after that, so a move
+ * into settings keeps the warm frames and a move back loads nothing again.
+ */
+function PreviewPool({ projectId }: { projectId: string }) {
+  usePreviewPoolProject(projectId);
+  const allowed = previewPoolAllowed(usePathname());
+  // Started per project. A project switch normally remounts the shell, but
+  // if a shell is ever reused, any project change resets the latch (a
+  // settings page included): the old project's frames are gone
+  // (`usePreviewPoolProject`).
+  const [pool, setPool] = useState({ projectId, started: allowed });
+  if (pool.projectId !== projectId || (allowed && !pool.started)) {
+    setPool({ projectId, started: allowed });
+  }
+  if (pool.projectId !== projectId || !pool.started) return null;
+  return (
+    <>
+      <AppPreviewPoolLoader projectId={projectId} />
+      {/* Artifact pages too, in the same frame pool (flag `artifacts`). */}
+      <ArtifactFramePreloader projectId={projectId} />
+    </>
+  );
+}
+
+/** A control of the page (not a link): pressing one is working in the page. */
+const PAGE_CONTROLS =
+  'button, input, select, textarea, summary, [role="switch"], [role="checkbox"], [role="radio"], [role="tab"], [role="combobox"], [role="menuitem"]';
+
+const ProjectSheelLayout = ({
+  projectId,
+  children,
+}: {
+  projectId: string;
+  children: React.ReactNode;
+}) => {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const { state, isMobile, toggleSidebar, peek, peekEnter, peekLeave } = useSidebar();
   const isExpanded = !isMobile && state === 'expanded';
@@ -316,8 +375,31 @@ const ProjectSheelLayout = ({ children }: { children: React.ReactNode }) => {
   // OS title-bar band; on the web each view draws its own. Shared gate so the
   // two can never both render — see sidebar-opener.ts.
   const desktopShell = useDesktopShell();
+  // The desktop window's tab strip owns the title-bar band; every project view
+  // renders below it. Every window width, down to the 720 × 480 minimum (where
+  // the sidebar is a sheet and the shell's toggle still opens it).
+  // Behind the project's `desktop_tabs` flag. A strip that throws turns
+  // itself off for this window (`stripFailed`), and the title bar is back.
+  const [stripFailed, setStripFailed] = useState(false);
+  const tabsEnabled = useDesktopTabsEnabled(projectId);
+  const tabs = !!desktopShell && tabsEnabled && !stripFailed;
+  const tabsVisible = useDesktopTabsVisible(projectId);
   return (
     <div
+      // The page's own header moves below the strip only while the strip shows.
+      data-kx-desktop-tabs-on={tabs && tabsVisible ? '' : undefined}
+      // Typing in the page, or pressing one of its controls, is working in it:
+      // the preview tab becomes a kept tab. A link is not: it navigates.
+      onInputCapture={tabs ? () => keepActivePreview(projectId) : undefined}
+      onClickCapture={
+        tabs
+          ? (event) => {
+              const target = event.target as Element;
+              if (target.closest('[data-kx-desktop-tabs]')) return;
+              if (target.closest(PAGE_CONTROLS)) keepActivePreview(projectId);
+            }
+          : undefined
+      }
       className={cn(
         'bg-background relative flex min-h-0 flex-1 flex-col overflow-hidden',
         isExpanded && 'border-border border-l',
@@ -334,6 +416,11 @@ const ProjectSheelLayout = ({ children }: { children: React.ReactNode }) => {
           views that already own the band. CSS disables this fallback whenever
           the active view contains `.kx-titlebar-row`. */}
       <div aria-hidden="true" className="kx-project-shell-drag-region" />
+      {tabs && (
+        <DesktopTabsBoundary onError={() => setStripFailed(true)}>
+          <DesktopTabStrip projectId={projectId} />
+        </DesktopTabsBoundary>
+      )}
       {/* Mobile: the sidebar is a sheet with no docked affordance, and view
           headers come and go (sessions render theirs only once booted) — so
           the opener lives here, always mounted, on every project view. The

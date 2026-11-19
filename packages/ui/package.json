@@ -195,6 +195,8 @@
     "./entity-avatar": "./src/primitives/entity-avatar.tsx",
     "./error-boundary": "./src/primitives/error-boundary.tsx",
     "./error-state": "./src/primitives/error-state.tsx",
+    "./expandable-search": "./src/primitives/expandable-search.tsx",
+    "./sort-menu": "./src/primitives/sort-menu.tsx",
     "./faded-scroll-area": "./src/primitives/faded-scroll-area.tsx",
     "./favicon-avatar": "./src/primitives/favicon-avatar.tsx",
     "./field": "./src/primitives/field.tsx",
@@ -423,6 +425,7 @@
     "./portal": "./src/primitives/portal.tsx",
     "./preview-image": "./src/primitives/preview-image.tsx",
     "./print.css": "./src/styles/print.css",
+    "./profile-hover-card": "./src/primitives/profile-hover-card.tsx",
     "./progress": "./src/primitives/progress.tsx",
     "./progress-ring": "./src/primitives/progress-ring.tsx",
     "./project-icon-picker": "./src/primitives/project-icon-picker.tsx",
@@ -560,6 +563,8 @@
     "./workspace/review/mock-data": "./src/workspace/review/mock-data.ts",
     "./workspace/review/review-center": "./src/workspace/review/review-center.tsx",
     "./workspace/review/types": "./src/workspace/review/types.ts",
+    "./workspace/session-spaces/space-detail-page": "./src/workspace/session-spaces/space-detail-page.tsx",
+    "./workspace/session-spaces/spaces-page": "./src/workspace/session-spaces/spaces-page.tsx",
     "./workspace/settings/use-leave-workspace": "./src/workspace/settings/use-leave-workspace.tsx",
     "./workspace/setup/workspace-setup-page": "./src/workspace/setup/workspace-setup-page.tsx",
     "./workspace/sidebar/footer/project-apps-nav": "./src/workspace/sidebar/footer/project-apps-nav.tsx",
@@ -1266,6 +1271,10 @@
       "./error-state": {
         "types": "./dist/primitives/error-state.d.ts",
         "import": "./dist/primitives/error-state.js"
+      },
+      "./expandable-search": {
+        "types": "./dist/primitives/expandable-search.d.ts",
+        "import": "./dist/primitives/expandable-search.js"
       },
       "./faded-scroll-area": {
         "types": "./dist/primitives/faded-scroll-area.d.ts",
@@ -2170,6 +2179,10 @@
         "import": "./dist/primitives/preview-image.js"
       },
       "./print.css": "./dist/styles/print.css",
+      "./profile-hover-card": {
+        "types": "./dist/primitives/profile-hover-card.d.ts",
+        "import": "./dist/primitives/profile-hover-card.js"
+      },
       "./progress": {
         "types": "./dist/primitives/progress.d.ts",
         "import": "./dist/primitives/progress.js"
@@ -2705,6 +2718,14 @@
       "./workspace/review/types": {
         "types": "./dist/workspace/review/types.d.ts",
         "import": "./dist/workspace/review/types.js"
+      },
+      "./workspace/session-spaces/space-detail-page": {
+        "types": "./dist/workspace/session-spaces/space-detail-page.d.ts",
+        "import": "./dist/workspace/session-spaces/space-detail-page.js"
+      },
+      "./workspace/session-spaces/spaces-page": {
+        "types": "./dist/workspace/session-spaces/spaces-page.d.ts",
+        "import": "./dist/workspace/session-spaces/spaces-page.js"
       },
       "./workspace/settings/use-leave-workspace": {
         "types": "./dist/workspace/settings/use-leave-workspace.d.ts",

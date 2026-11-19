@@ -1694,6 +1694,24 @@ export const SessionGroupIconSchema = z.union([
 ]);
 export type SessionGroupIcon = z.infer<typeof SessionGroupIconSchema>;
 
+/** One person who sees a private group: its creator or a member, with their profile. */
+export const SessionGroupPersonSchema = z
+  .object({
+    user_id: z.string(),
+    /** The profile's display name; null when they set none. */
+    name: z.string().nullable(),
+    email: z.string().nullable(),
+    avatar_url: z.string().nullable(),
+    /** The group's creator. */
+    is_creator: z.boolean(),
+    /** Their role in the workspace; null when they are no longer in it. */
+    workspace_role: z.enum(['owner', 'admin', 'member']).nullable(),
+    /** When they were added to the group; null for its creator. */
+    added_at: z.string().nullable(),
+  })
+  .strict();
+export type SessionGroupPerson = z.infer<typeof SessionGroupPersonSchema>;
+
 export const SessionGroupSchema = z
   .object({
     group_id: z.string(),
@@ -1709,6 +1727,8 @@ export const SessionGroupSchema = z
     visibility: z.enum(SESSION_GROUP_VISIBILITIES),
     /** The people a `private` group is shared with (its creator not listed). */
     member_ids: z.array(z.string()),
+    /** Its creator, then `member_ids`, each with a profile: every viewer of the group can read it. */
+    people: z.array(SessionGroupPersonSchema),
     /** The tabs after Sessions, in order: a channel's tab shape (`SpaceTabSchema`). */
     tabs: z.array(SpaceTabSchema),
     /** The caller may change its sharing and delete it: its creator, or an owner or admin under account session oversight. */

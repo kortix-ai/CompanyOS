@@ -134,7 +134,7 @@ apply to product UI, not only to the styleguide.
 | Banned                                                                                                                                       | Use instead                                                                                                                                                                                                                                                                                  |
 | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`SectionCard`** (`packages/ui/src/primitives/section-card.tsx`)                                                                            | `Card` (`card.tsx`), `Label` + `bg-popover rounded-md border` panel, or `Disclosure` — see `project-settings-page.tsx`                                                                                                                                                                       |
-| **`List` / `ListRow`** (`packages/ui/src/primitives/list.tsx`)                                                                               | `<ul className="space-y-2">` + entity row classes — see `access-row.tsx`, `review-detail.tsx`                                                                                                                                                                                                |
+| **`List` / `ListRow`** (`packages/ui/src/primitives/list.tsx`)                                                                               | In a modal, popover or sheet: one grouped container (see _Grouped rows_). On a page: `<ul className="space-y-2">` + entity row classes — see `access-row.tsx`, `review-detail.tsx`                                                                                                                                                                                                |
 | **`Dialog` / `DialogContent`** in feature code                                                                                               | **`Modal`** from `packages/ui/src/primitives/modal.tsx` — see `secrets-view.tsx`, `channels-view.tsx`                                                                                                                                                                                        |
 | **`Tooltip` / `TooltipTrigger` / `TooltipContent`** in feature code                                                                          | **`Hint`** from `packages/ui/src/primitives/hint.tsx`                                                                                                                                                                                                                                        |
 | **`@/lib/toast`** (deleted; never recreate it), raw `sonner`, `toast.success/error/info/warning()`, `toast.custom()`                         | Named helpers from `packages/ui/src/primitives/toast.tsx`. An action button is the `button` option (a `Button`), not sonner's `action`. `tests/unit/toast-single-source.test.ts` fails on any other `sonner` import                                                                          |
@@ -304,6 +304,69 @@ Panels are **flat**: border, no shadow — elevation is for overlays (see _Eleva
   </div>
 </section>
 ```
+
+### Composition: one grid per surface
+
+Tokens and primitives do not make a surface look finished. A surface looks
+cheap when every part is correct alone and the parts do not agree with each
+other. Before you ship a modal, a popover, a sheet or a settings panel, check
+these six rules. Each one is a number you can measure.
+
+1. **One inset.** Choose one horizontal inset for the surface (`px-3` in a
+   modal, `px-4` in a page panel). Every row, field and group uses it. The
+   text of every row starts on the same vertical line.
+2. **One control height.** A field and the button beside it have the same
+   height (`Input size="md"` with `Button size="lg"`, or `sm` with the
+   default). A copy field, a search field and an add field in one surface
+   are the same height.
+3. **One leading slot.** Every row in a surface has the same leading box
+   (`size-8` avatar or `size-8` icon tile). Never a `size-9` tile under a
+   `size-8` avatar: the titles then start 4px apart.
+4. **One row height.** Rows in one group have one height. Give the row a
+   `min-h-*` that fits the two-line case, so a one-line row and a two-line
+   row are equal. Name over meta uses `leading-tight` on both lines.
+5. **One trailing edge.** The last glyph of every trailing slot ends on the
+   same vertical line: a role word, a `Role ▾` button, a caret. A text
+   button there takes a negative end margin equal to its padding
+   (`-mr-2.5` for `size="sm"`), so its label ends on the edge, not its
+   padding. A control that changes a row sits in the trailing slot, never
+   in the title position.
+6. **An inset button fills its field.** A button inside a field sits one
+   inset from the top, the bottom and the end (`p-1`, `h-full`) and keeps
+   the `Button`'s default radius: never a one-off radius. Never a small
+   button floating in a tall field.
+
+### Grouped rows: one container, not a card per row
+
+Rows of the same kind that belong to one question ("who has access", "which
+keys") are **one bordered container with a hairline between rows**:
+
+```tsx
+<section className="space-y-2">
+  <h3 className="text-muted-foreground text-xs font-medium">People with access</h3>
+  <ul className="divide-border border-border divide-y rounded-md border">
+    <li className="flex min-h-14 items-center gap-3 px-3 py-2">
+      {/* leading: size-8 avatar or tile */}
+      {/* body: min-w-0 flex-1, name over meta, leading-tight */}
+      {/* trailing: role word, or Button variant="ghost" size="sm" className="-mr-2.5" */}
+    </li>
+  </ul>
+</section>
+```
+
+- The container has no fill: it sits on the surface it is in. A filled card
+  per row puts N outlines and N gaps where one outline reads as one list.
+- A group with one row (a single setting, such as general access) is the
+  same container and the same row. It is not a different component.
+- Sections are `space-y-5` apart; a label is `space-y-2` above its group.
+- Inside a `Modal`, a popover or a sheet, always use the group.
+
+Use the separate **entity row** below only for a page-level list where each
+row is its own object with its own actions, state and navigation (agents,
+connectors, secrets). Never mix the two in one surface.
+
+**Reference:** `packages/ui/src/workspace/session-spaces/space-share-modal.tsx`
+(`GROUP`, `ROW`, `TRAILING_BUTTON`, and the copy-link field).
 
 ### Entity row (list item)
 

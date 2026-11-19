@@ -27548,6 +27548,36 @@
     "today": "Today",
     "yesterday": "Yesterday",
     "thisWeek": "This week",
-    "earlier": "Earlier"
+    "earlier": "Earlier",
+    "shareAddPlaceholder": "Add people by name or email…",
+    "sharePeopleWithAccess": "People with access",
+    "shareOwner": "Owner",
+    "shareRemove": "Remove",
+    "shareGeneralAccess": "General access",
+    "shareRestricted": "Only people added",
+    "shareRestrictedHint": "Only the people above can open this space.",
+    "shareEveryoneHint": "Everyone in this workspace can open this space.",
+    "copyLink": "Copy link",
+    "linkCopied": "Link copied",
+    "linkCopyFailed": "Could not copy the link",
+    "shareRemoveTitle": "Remove access?",
+    "shareRemoveDescription": "{name} can no longer open this space, its sessions or its files. You can add them again later.",
+    "roleMember": "Member",
+    "shareChange": "Change",
+    "spaceMember": "Member of this space",
+    "workspaceOwner": "Workspace owner",
+    "workspaceAdmin": "Workspace admin",
+    "addedOn": "Added to this space {date}"
+  },
+  "sessionShare": {
+    "addPlaceholder": "Add people or groups by name or email…",
+    "peopleWithAccess": "People with access",
+    "owner": "Owner",
+    "member": "Member",
+    "group": "Group",
+    "groupMembers": "{count, plural, one {# member} other {# members}}",
+    "remove": "Remove",
+    "share": "Share",
+    "notMember": "Share a session only with members of this workspace."
   }
 }

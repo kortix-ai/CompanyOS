@@ -27548,6 +27548,36 @@
     "today": "Danas",
     "yesterday": "Juče",
     "thisWeek": "Ove nedelje",
-    "earlier": "Ranije"
+    "earlier": "Ranije",
+    "shareAddPlaceholder": "Додај особе по имену или имејлу…",
+    "sharePeopleWithAccess": "Особе са приступом",
+    "shareOwner": "Власник",
+    "shareRemove": "Уклони",
+    "shareGeneralAccess": "Општи приступ",
+    "shareRestricted": "Само додате особе",
+    "shareRestrictedHint": "Само особе изнад могу да отворе овај простор.",
+    "shareEveryoneHint": "Сви у овом радном простору могу да отворе овај простор.",
+    "copyLink": "Копирај линк",
+    "linkCopied": "Линк је копиран",
+    "linkCopyFailed": "Линк није могуће копирати",
+    "shareRemoveTitle": "Уклонити приступ?",
+    "shareRemoveDescription": "{name} више неће моћи да отвори овај простор, његове сесије ни датотеке. Можете га поново додати касније.",
+    "roleMember": "Члан",
+    "shareChange": "Промени",
+    "spaceMember": "Члан овог простора",
+    "workspaceOwner": "Власник радног простора",
+    "workspaceAdmin": "Администратор радног простора",
+    "addedOn": "Додат у овај простор {date}"
+  },
+  "sessionShare": {
+    "addPlaceholder": "Додај особе или групе по имену или имејлу…",
+    "peopleWithAccess": "Особе са приступом",
+    "owner": "Власник",
+    "member": "Члан",
+    "group": "Група",
+    "groupMembers": "{count, plural, one {# члан} few {# члана} other {# чланова}}",
+    "remove": "Уклони",
+    "share": "Подели",
+    "notMember": "Сесију делите само са члановима овог радног простора."
   }
 }

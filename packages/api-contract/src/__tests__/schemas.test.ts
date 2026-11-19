@@ -470,6 +470,7 @@ describe('session group contracts', () => {
     icon: { glyph: { name: 'Storefront', color: 'blue' } },
     visibility: 'private' as const,
     member_ids: [],
+    people: [{ user_id: '99999999-8888-4777-8666-555555555555', name: 'Ana', email: 'ana@example.test', avatar_url: null, is_creator: true, workspace_role: 'owner', added_at: null }],
     tabs: [],
     can_manage: true,
     position: 0,

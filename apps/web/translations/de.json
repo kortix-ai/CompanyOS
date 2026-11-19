@@ -27548,6 +27548,36 @@
     "today": "Heute",
     "yesterday": "Gestern",
     "thisWeek": "Diese Woche",
-    "earlier": "Früher"
+    "earlier": "Früher",
+    "shareAddPlaceholder": "Personen nach Name oder E-Mail hinzufügen…",
+    "sharePeopleWithAccess": "Personen mit Zugriff",
+    "shareOwner": "Inhaber",
+    "shareRemove": "Entfernen",
+    "shareGeneralAccess": "Allgemeiner Zugriff",
+    "shareRestricted": "Nur hinzugefügte Personen",
+    "shareRestrictedHint": "Nur die Personen oben können diesen Space öffnen.",
+    "shareEveryoneHint": "Alle in diesem Workspace können diesen Space öffnen.",
+    "copyLink": "Link kopieren",
+    "linkCopied": "Link kopiert",
+    "linkCopyFailed": "Link konnte nicht kopiert werden",
+    "shareRemoveTitle": "Zugriff entfernen?",
+    "shareRemoveDescription": "{name} kann diesen Space, seine Sitzungen und Dateien nicht mehr öffnen. Du kannst die Person später wieder hinzufügen.",
+    "roleMember": "Mitglied",
+    "shareChange": "Ändern",
+    "spaceMember": "Mitglied dieses Space",
+    "workspaceOwner": "Workspace-Inhaber",
+    "workspaceAdmin": "Workspace-Admin",
+    "addedOn": "Zu diesem Space hinzugefügt am {date}"
+  },
+  "sessionShare": {
+    "addPlaceholder": "Personen oder Gruppen nach Name oder E-Mail hinzufügen…",
+    "peopleWithAccess": "Personen mit Zugriff",
+    "owner": "Inhaber",
+    "member": "Mitglied",
+    "group": "Gruppe",
+    "groupMembers": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
+    "remove": "Entfernen",
+    "share": "Teilen",
+    "notMember": "Teile eine Sitzung nur mit Mitgliedern dieses Workspace."
   }
 }

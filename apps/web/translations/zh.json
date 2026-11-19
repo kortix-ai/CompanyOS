@@ -27548,6 +27548,36 @@
     "today": "今天",
     "yesterday": "昨天",
     "thisWeek": "本周",
-    "earlier": "更早"
+    "earlier": "更早",
+    "shareAddPlaceholder": "按姓名或邮箱添加成员…",
+    "sharePeopleWithAccess": "有权访问的成员",
+    "shareOwner": "所有者",
+    "shareRemove": "移除",
+    "shareGeneralAccess": "常规访问权限",
+    "shareRestricted": "仅限已添加的成员",
+    "shareRestrictedHint": "只有上方的成员可以打开此空间。",
+    "shareEveryoneHint": "此工作区中的所有人都可以打开此空间。",
+    "copyLink": "复制链接",
+    "linkCopied": "链接已复制",
+    "linkCopyFailed": "无法复制链接",
+    "shareRemoveTitle": "移除访问权限？",
+    "shareRemoveDescription": "{name} 将无法再打开此空间及其会话和文件。你之后可以再次添加。",
+    "roleMember": "成员",
+    "shareChange": "更改",
+    "spaceMember": "此空间成员",
+    "workspaceOwner": "工作区所有者",
+    "workspaceAdmin": "工作区管理员",
+    "addedOn": "{date} 加入此空间"
+  },
+  "sessionShare": {
+    "addPlaceholder": "按姓名或邮箱添加成员或群组…",
+    "peopleWithAccess": "有权访问的成员",
+    "owner": "所有者",
+    "member": "成员",
+    "group": "群组",
+    "groupMembers": "{count} 名成员",
+    "remove": "移除",
+    "share": "共享",
+    "notMember": "会话只能与此工作区的成员共享。"
   }
 }

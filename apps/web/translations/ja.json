@@ -27548,6 +27548,36 @@
     "today": "今日",
     "yesterday": "昨日",
     "thisWeek": "今週",
-    "earlier": "それ以前"
+    "earlier": "それ以前",
+    "shareAddPlaceholder": "名前またはメールでユーザーを追加…",
+    "sharePeopleWithAccess": "アクセスできるユーザー",
+    "shareOwner": "オーナー",
+    "shareRemove": "削除",
+    "shareGeneralAccess": "一般的なアクセス",
+    "shareRestricted": "追加したユーザーのみ",
+    "shareRestrictedHint": "上記のユーザーだけがこのスペースを開けます。",
+    "shareEveryoneHint": "このワークスペースの全員がこのスペースを開けます。",
+    "copyLink": "リンクをコピー",
+    "linkCopied": "リンクをコピーしました",
+    "linkCopyFailed": "リンクをコピーできませんでした",
+    "shareRemoveTitle": "アクセスを削除しますか？",
+    "shareRemoveDescription": "{name} はこのスペース、そのセッションやファイルを開けなくなります。後で再度追加できます。",
+    "roleMember": "メンバー",
+    "shareChange": "変更",
+    "spaceMember": "このスペースのメンバー",
+    "workspaceOwner": "ワークスペースのオーナー",
+    "workspaceAdmin": "ワークスペースの管理者",
+    "addedOn": "{date} にこのスペースに追加"
+  },
+  "sessionShare": {
+    "addPlaceholder": "名前またはメールでユーザーやグループを追加…",
+    "peopleWithAccess": "アクセスできるユーザー",
+    "owner": "オーナー",
+    "member": "メンバー",
+    "group": "グループ",
+    "groupMembers": "{count} 人のメンバー",
+    "remove": "削除",
+    "share": "共有",
+    "notMember": "セッションはこのワークスペースのメンバーとだけ共有できます。"
   }
 }

@@ -37,6 +37,7 @@ export function ProfileHoverCard({
   className,
 }: {
   person: ProfilePerson;
+  /** One short line under the profile, such as "Created this space". */
   detail?: ReactNode;
   children: ReactNode;
   side?: 'top' | 'right' | 'bottom' | 'left';
@@ -49,17 +50,19 @@ export function ProfileHoverCard({
     <HoverCard openDelay={300} closeDelay={100}>
       <HoverCardTrigger asChild>{children}</HoverCardTrigger>
       <HoverCardContent side={side} align={align} sideOffset={8} animated={false} className={cn('w-64 p-3', className)}>
-        <div className="flex min-w-0 items-center gap-3">
+        {/* The picture is exactly as tall as the two lines beside it (size-9 = 17.5 + 15 px of tight leading, rounded up). */}
+        <div className="flex min-w-0 items-center gap-2.5">
           <UserAvatar
             email={email ?? ''}
             name={person.name ?? email ?? label}
             avatarUrl={person.avatarUrl}
             colorKey={person.userId}
             size="lg"
+            className="size-9"
           />
           <div className="min-w-0 flex-1">
-            <p className="text-foreground truncate text-sm font-medium">{label}</p>
-            {email && email !== label ? <p className="text-muted-foreground truncate text-xs">{email}</p> : null}
+            <p className="text-foreground truncate text-sm leading-tight font-medium">{label}</p>
+            {email && email !== label ? <p className="text-muted-foreground truncate text-xs leading-tight">{email}</p> : null}
           </div>
         </div>
         {detail ? <div className="text-muted-foreground border-border mt-3 border-t pt-3 text-xs">{detail}</div> : null}

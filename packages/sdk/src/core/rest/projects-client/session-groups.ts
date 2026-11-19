@@ -33,6 +33,18 @@ export interface ProjectSessionGroup {
   visibility?: WorkspaceSessionGroupVisibility;
   /** The people a `private` group is shared with (its creator not listed). Absent on older APIs. */
   member_ids?: string[];
+  /** Its creator, then `member_ids`, each with a profile; every viewer of the group can read it. Absent on older APIs. */
+  people?: Array<{
+    user_id: string;
+    name: string | null;
+    email: string | null;
+    avatar_url: string | null;
+    is_creator: boolean;
+    /** Their role in the workspace; null when they left it. Absent on older APIs. */
+    workspace_role?: 'owner' | 'admin' | 'member' | null;
+    /** When they were added to the group; null for its creator. Absent on older APIs. */
+    added_at?: string | null;
+  }>;
   /** The tabs after Sessions, in order: a channel's tab shape. Absent on older APIs. */
   tabs?: ProjectSpaceTab[];
   /** The caller may change its sharing and delete it. Absent on older APIs. */

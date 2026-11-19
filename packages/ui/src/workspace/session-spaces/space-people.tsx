@@ -37,6 +37,19 @@ export interface WorkspacePerson {
   avatarUrl: string | null;
 }
 
+/**
+ * The space's own people (creator, then members) with their profiles, as the
+ * API returns them on the space: every viewer of the space can read these,
+ * unlike the workspace access list, which only managers can.
+ */
+export function spacePeople(space: ProjectSessionGroup): Map<string, WorkspacePerson> {
+  const out = new Map<string, WorkspacePerson>();
+  for (const person of space.people ?? []) {
+    out.set(person.user_id, { email: person.email ?? '', name: person.name?.trim() || null, avatarUrl: person.avatar_url });
+  }
+  return out;
+}
+
 /** The workspace's people by id, for avatars: email, name and picture. A viewer who may not read the list gets an empty map. */
 export function useWorkspacePeople(projectId: string, enabled: boolean): Map<string, WorkspacePerson> {
   const access = useQuery({
@@ -48,8 +61,7 @@ export function useWorkspacePeople(projectId: string, enabled: boolean): Map<str
   });
   const people = new Map<string, WorkspacePerson>();
   for (const member of access.data?.members ?? []) {
-    if (!member.email) continue;
-    people.set(member.user_id, { email: member.email, name: member.name?.trim() || null, avatarUrl: member.avatar_url ?? null });
+    people.set(member.user_id, { email: member.email ?? '', name: member.name?.trim() || null, avatarUrl: member.avatar_url ?? null });
   }
   return people;
 }
@@ -60,9 +72,9 @@ export function useWorkspacePeople(projectId: string, enabled: boolean): Map<str
  * may not read the people list sees the count beside the people glyph, never
  * a "?" avatar.
  */
-export function SpaceAudienceMark({ projectId, space, max = 4, className }: { projectId: string; space: ProjectSessionGroup; max?: number; className?: string }) {
+export function SpaceAudienceMark({ space, max = 4, className }: { space: ProjectSessionGroup; max?: number; className?: string }) {
   const audience = spaceAudience(space);
-  const people = useWorkspacePeople(projectId, audience.kind === 'people');
+  const people = spacePeople(space);
   if (audience.kind === 'everyone') return <UsersThreeIcon aria-hidden className={cn('text-muted-foreground size-4 shrink-0', className)} />;
   if (audience.kind === 'private') return <LockSimpleIcon aria-hidden className={cn('text-muted-foreground size-4 shrink-0', className)} />;
   const shown = audience.ids.slice(0, max);

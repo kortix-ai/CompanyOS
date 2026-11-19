@@ -7,6 +7,8 @@ import { suggestSpaceIcon } from '@kortix/shared';
 import { useTranslations } from '../../i18n';
 import { cn } from '../../internal/lib/utils';
 import { EntityAvatar, type EntityAvatarSize } from '../../primitives/entity-avatar';
+import { glyphFace } from '../../primitives/glyph-face';
+import { glyphForeground, glyphStyle } from '../../primitives/glyph-tint';
 import { errorToast } from '../../primitives/toast';
 import { ProjectIconField, type ProjectIconValue } from '../projects/modal/project-icon-field';
 
@@ -21,7 +23,33 @@ export function spaceIconValue(space: SpaceIconSource): Exclude<ProjectIconValue
   return space.icon ?? suggestSpaceIcon(space.name);
 }
 
-/** A space's icon as a tile: the sidebar, the spaces list, the picker. */
+/**
+ * A space's icon with no tile: the glyph in its colour, or the emoji, sized by
+ * `className` (default `size-4`). For dense rows such as the sidebar, where a
+ * filled tile reads heavier than the name beside it.
+ */
+export function SpaceIconBare({ space, className }: { space: SpaceIconSource; className?: string }) {
+  const icon = spaceIconValue(space);
+  if ('emoji' in icon) {
+    return (
+      <span aria-hidden className={cn('inline-flex size-4 shrink-0 items-center justify-center text-sm leading-none', className)}>
+        {icon.emoji}
+      </span>
+    );
+  }
+  const Glyph = glyphFace(icon.glyph.name) ?? glyphFace(suggestSpaceIcon(space.name).glyph.name);
+  if (!Glyph) return null;
+  return (
+    <Glyph
+      aria-hidden
+      weight="fill"
+      style={glyphStyle(icon.glyph.color)}
+      className={cn('size-4 shrink-0', glyphForeground(icon.glyph.color), className)}
+    />
+  );
+}
+
+/** A space's icon as a tile: the spaces list, the picker. */
 export function SpaceIcon({
   space,
   size = 'sm',

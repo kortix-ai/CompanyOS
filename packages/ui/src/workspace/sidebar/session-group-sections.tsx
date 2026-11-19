@@ -60,7 +60,7 @@ import {
 } from '../../primitives/modal';
 import { errorToast, successToast } from '../../primitives/toast';
 import { moveGroupBy, moveGroupTo } from './session-group-order';
-import { SpaceIcon } from '../session-spaces/space-icon';
+import { SpaceIconBare } from '../session-spaces/space-icon';
 import {
   SESSION_MENU_TRIGGER_CLASS,
   SESSION_ROW_HEIGHT_CLASS,
@@ -544,12 +544,11 @@ function SessionGroupSection({
               aria-label={`${open ? tGroups('hideSessions') : tGroups('showSessions')}: ${group.name}`}
               className="text-muted-foreground hover:text-sidebar-foreground hit-area-1.5 flex size-4 shrink-0 items-center justify-center rounded-sm"
             >
-              {/* An 18px tile in the 15px slot: -mx-0.5 lets it overhang both sides
-                  equally, so the name keeps the sessions' text edge. */}
-              <SpaceIcon
+              {/* No tile: the glyph alone, 18px in the 15px slot. -mx-0.5 overhangs
+                  both sides equally, so the name keeps the sessions' text edge. */}
+              <SpaceIconBare
                 space={group}
-                size="sm"
-                className="-mx-0.5 size-5 shrink-0 rounded-[calc(var(--radius)-3px)] group-hover/section-header:hidden group-focus-within/section-header:hidden"
+                className="-mx-0.5 size-5 group-hover/section-header:hidden group-focus-within/section-header:hidden"
               />
               <CaretRightSolidIcon
                 aria-hidden
@@ -562,12 +561,12 @@ function SessionGroupSection({
               href={spaceHref}
               prefetch={false}
               aria-current={current ? 'page' : undefined}
-              className="min-w-0 flex-1 truncate self-stretch leading-8 focus-visible:outline-none"
+              className="min-w-0 flex-1 truncate self-stretch leading-8 first-letter:uppercase focus-visible:outline-none"
             >
               {group.name}
             </UiLink>
           ) : (
-            <span className="min-w-0 flex-1 truncate">{group.name}</span>
+            <span className="min-w-0 flex-1 truncate first-letter:uppercase">{group.name}</span>
           )}
           <SessionGroupMenu
             group={group}

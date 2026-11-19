@@ -27548,6 +27548,36 @@
     "today": "Oggi",
     "yesterday": "Ieri",
     "thisWeek": "Questa settimana",
-    "earlier": "Prima"
+    "earlier": "Prima",
+    "shareAddPlaceholder": "Aggiungi persone per nome o email…",
+    "sharePeopleWithAccess": "Persone con accesso",
+    "shareOwner": "Proprietario",
+    "shareRemove": "Rimuovi",
+    "shareGeneralAccess": "Accesso generale",
+    "shareRestricted": "Solo le persone aggiunte",
+    "shareRestrictedHint": "Solo le persone sopra possono aprire questo spazio.",
+    "shareEveryoneHint": "Tutti in questo workspace possono aprire questo spazio.",
+    "copyLink": "Copia link",
+    "linkCopied": "Link copiato",
+    "linkCopyFailed": "Impossibile copiare il link",
+    "shareRemoveTitle": "Rimuovere l'accesso?",
+    "shareRemoveDescription": "{name} non potrà più aprire questo spazio, le sue sessioni o i suoi file. Puoi aggiungerla di nuovo in seguito.",
+    "roleMember": "Membro",
+    "shareChange": "Cambia",
+    "spaceMember": "Membro di questo spazio",
+    "workspaceOwner": "Proprietario del workspace",
+    "workspaceAdmin": "Amministratore del workspace",
+    "addedOn": "Aggiunto a questo spazio il {date}"
+  },
+  "sessionShare": {
+    "addPlaceholder": "Aggiungi persone o gruppi per nome o email…",
+    "peopleWithAccess": "Persone con accesso",
+    "owner": "Proprietario",
+    "member": "Membro",
+    "group": "Gruppo",
+    "groupMembers": "{count, plural, one {# membro} other {# membri}}",
+    "remove": "Rimuovi",
+    "share": "Condividi",
+    "notMember": "Condividi una sessione solo con i membri di questo workspace."
   }
 }

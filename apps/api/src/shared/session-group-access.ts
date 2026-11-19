@@ -51,6 +51,22 @@ export async function groupMemberIds(groupIds: readonly string[]): Promise<Map<s
   return out;
 }
 
+/** When each member was added to each group: group id -> user id -> time. */
+export async function groupMemberAddedAt(groupIds: readonly string[]): Promise<Map<string, Map<string, Date>>> {
+  const out = new Map<string, Map<string, Date>>();
+  if (groupIds.length === 0) return out;
+  const rows = await db
+    .select({ groupId: projectSessionGroupMembers.groupId, userId: projectSessionGroupMembers.userId, addedAt: projectSessionGroupMembers.addedAt })
+    .from(projectSessionGroupMembers)
+    .where(inArray(projectSessionGroupMembers.groupId, [...groupIds]));
+  for (const row of rows) {
+    const group = out.get(row.groupId) ?? new Map<string, Date>();
+    group.set(row.userId, row.addedAt);
+    out.set(row.groupId, group);
+  }
+  return out;
+}
+
 /**
  * The project's groups whose sessions this person sees through the group: a
  * `project` group, one they created, or one shared with them. The caller

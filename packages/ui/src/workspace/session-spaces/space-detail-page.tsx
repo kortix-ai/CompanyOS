@@ -10,9 +10,9 @@ import {
 } from '@kortix/sdk/react';
 import { MY_KORTIX_SANDBOX_SLUG, isMyKortixAgentName, sessionGroupDriveFolder } from '@kortix/shared';
 import {
-  CaretDownIcon,
-  ChatCircleIcon,
   FileTextIcon,
+  GearSixIcon,
+  ShareNetworkIcon,
   LockSimpleIcon,
   MagnifyingGlassIcon,
   PencilSimpleIcon,
@@ -29,6 +29,7 @@ import { useDebounce } from '../../internal/hooks/use-debounced-value';
 import { SidebarToggle } from '../../internal/layout/sidebar-toggle';
 import { ProjectScope } from '../../internal/project-scope';
 import { uiRoutes } from '../../lib/routes';
+import { cn } from '../../lib/utils';
 import { Button } from '../../primitives/button';
 import { ConfirmDialog } from '../../primitives/confirm-dialog';
 import {
@@ -61,7 +62,8 @@ import { useProjectHomeSend } from '../layout/use-project-home-send';
 import { AddTabMenu, StoredTabBody, StoredTabTrigger, type SpaceTabsState } from '../spaces/space-tabs';
 import { SpaceIconButton } from './space-icon';
 import { SpaceFormModal } from './space-form-modal';
-import { SpaceAudienceMark, spaceAudience, useSpaceAudienceLabel, useWorkspacePeople } from './space-people';
+import { useSpaceAudienceLabel } from './space-people';
+import { SessionParticipantStack } from '../../session/participants/session-participants';
 import { SpaceShareModal } from './space-share-modal';
 
 /** Rows per page of the space's session history. */
@@ -181,7 +183,11 @@ function SpaceView({ projectId, space, renderFolder, renderFile }: { projectId: 
             <SidebarToggle />
           </div>
           {/* Full height, so the active tab's underline lands on the header's bottom border. */}
-          <TabsList type="underline" size="sm" className="h-full min-w-0 flex-1 justify-start gap-4 overflow-x-auto border-b-0 px-1">
+          <TabsList type="underline" size="sm" className={cn(
+              'h-full min-w-0 flex-1 justify-start gap-5 overflow-x-auto border-b-0 px-1',
+              // The underline hugs the word: no side padding on a tab.
+              '**:data-[slot=tabs-trigger]:px-0',
+            )}>
             <TabsTrigger value={HOME_TAB} className="w-fit flex-none">
               {t('tabHome')}
             </TabsTrigger>
@@ -191,10 +197,19 @@ function SpaceView({ projectId, space, renderFolder, renderFile }: { projectId: 
             {state.tabs.map((stored, index) => (
               <StoredTabTrigger key={stored.id} tab={stored} index={index} active={stored.id === tab} state={state} />
             ))}
-            <AddTabMenu projectId={projectId} ownFolder={ownFolder} ownFolderTab={false} state={state} onAdded={setTab} />
+            <AddTabMenu
+              projectId={projectId}
+              ownFolder={ownFolder}
+              ownFolderTab={false}
+              state={state}
+              onAdded={setTab}
+              // A quiet affordance, not a peer of the tabs: muted, a smaller plus, closer in.
+              triggerClassName="text-muted-foreground hover:text-foreground -ml-1.5 [&_svg]:size-3.5"
+            />
           </TabsList>
-          <div className="flex shrink-0 items-center">
-            <AudienceShare projectId={projectId} space={space} onShare={canManage ? () => setSharing(true) : undefined} />
+          <div className="flex shrink-0 items-center gap-1">
+            <AudienceShare space={space} onShare={canManage ? () => setSharing(true) : undefined} />
+            <SpaceSettingsMenu projectId={projectId} space={space} onEdit={() => setEditing(true)} />
           </div>
         </header>
         <TabsContent value={HOME_TAB} className="min-h-0 flex-1 overflow-y-auto">
@@ -244,7 +259,7 @@ function useSessionSpaceTabs(projectId: string, space: ProjectSessionGroup): Spa
 }
 
 /** The name, with its menu: Edit details for everyone who sees the space, Delete for whoever may manage it. */
-function SpaceTitleMenu({ projectId, space, onEdit }: { projectId: string; space: ProjectSessionGroup; onEdit: () => void }) {
+function SpaceSettingsMenu({ projectId, space, onEdit }: { projectId: string; space: ProjectSessionGroup; onEdit: () => void }) {
   const t = useTranslations('sessionSpaces');
   const router = useUiRouter();
   const remove = useDeleteWorkspaceSessionGroup(projectId);
@@ -252,13 +267,14 @@ function SpaceTitleMenu({ projectId, space, onEdit }: { projectId: string; space
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="text-foreground min-w-0 shrink gap-1 px-1.5 text-base font-medium" aria-label={t('options')}>
-            <span className="truncate">{space.name}</span>
-            <CaretDownIcon className="text-muted-foreground size-3 shrink-0" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-48">
+        <Hint label={t('options')}>
+          <DropdownMenuTrigger asChild>
+            <Button variant="secondary" size="icon-base" className="shrink-0" aria-label={t('options')}>
+              <GearSixIcon className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+        </Hint>
+        <DropdownMenuContent align="end" className="w-48">
           <DropdownMenuItem className="cursor-pointer" onSelect={onEdit}>
             <PencilSimpleIcon />
             {t('editDetails')}
@@ -303,25 +319,26 @@ function SpaceTitleMenu({ projectId, space, onEdit }: { projectId: string; space
  * the people (or the lock, or the workspace glyph) then "Share". Whoever may
  * not change the sharing sees the people alone, named on hover.
  */
-function AudienceShare({ projectId, space, onShare }: { projectId: string; space: ProjectSessionGroup; onShare?: () => void }) {
+function AudienceShare({ space, onShare }: { space: ProjectSessionGroup; onShare?: () => void }) {
   const t = useTranslations('sessionSpaces');
   const label = useSpaceAudienceLabel(space);
-  if (!onShare) {
-    return (
-      <Hint label={label}>
-        <span aria-label={label} className="flex h-8 items-center px-1.5">
-          <SpaceAudienceMark projectId={projectId} space={space} />
-        </span>
-      </Hint>
-    );
-  }
+  const people = space.people ?? [];
+  // The session header's stack: overlapping faces, the full list on hover. It draws for two or more people.
+  const participants = {
+    participants: people.map((person) => ({ user_id: person.user_id, name: person.name, email: person.email, avatar_url: person.avatar_url, is_viewer: false })),
+    total: people.length,
+    multi_user: people.length > 1,
+  };
   return (
-    <Hint label={label}>
-      <Button size="sm" variant="outline" className="gap-2" onClick={onShare}>
-        <SpaceAudienceMark projectId={projectId} space={space} max={3} />
-        {t('share')}
-      </Button>
-    </Hint>
+    <div className="flex items-center gap-2">
+      <SessionParticipantStack participants={participants} label={label} />
+      {onShare ? (
+        <Button size="sm" variant="secondary" className="gap-1.5" onClick={onShare}>
+          <ShareNetworkIcon className="size-4 shrink-0" />
+          {t('share')}
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -349,7 +366,7 @@ function SpaceHome({
           <div className="space-y-1">
             <div className="flex min-w-0 items-center gap-2">
               <SpaceIconButton projectId={projectId} space={space} />
-              <SpaceTitleMenu projectId={projectId} space={space} onEdit={onEdit} />
+              <h1 className="text-foreground min-w-0 truncate text-xl font-medium first-letter:uppercase">{space.name}</h1>
             </div>
             {space.description ? (
               // The About rail shows it on wide screens; this line is for every width.
@@ -398,7 +415,7 @@ function SpaceAbout({
         )}
       </AboutBlock>
       <AboutBlock title={t('people')} action={onShare ? <AboutAction onClick={onShare}>{t('share')}</AboutAction> : null}>
-        <SpacePeopleList projectId={projectId} space={space} />
+        <SpacePeopleList space={space} />
       </AboutBlock>
       <SpaceRecentFiles projectId={projectId} space={space} onOpenFiles={onOpenFiles} />
     </aside>
@@ -425,51 +442,57 @@ function AboutAction({ onClick, children }: { onClick: () => void; children: Rea
   );
 }
 
-/** Who is in the space, one row each: the whole workspace, its creator alone, or the people it is shared with. */
-function SpacePeopleList({ projectId, space }: { projectId: string; space: ProjectSessionGroup }) {
+/**
+ * The hover card's lines for a person of the space, one fact per line: their
+ * part in it (the creator; or a member, with the day they were added) and
+ * their workspace role when it is more than member.
+ */
+function SpacePersonMeta({ person }: { person: NonNullable<ProjectSessionGroup['people']>[number] }) {
   const t = useTranslations('sessionSpaces');
-  const audience = spaceAudience(space);
-  const people = useWorkspacePeople(projectId, audience.kind !== 'everyone');
-  if (audience.kind === 'everyone') {
-    return (
-      <p className="text-foreground flex items-center gap-2 text-sm">
-        <UsersThreeIcon className="text-muted-foreground size-4 shrink-0" />
-        {t('visibility')}
-      </p>
-    );
-  }
-  const ids = audience.kind === 'private' ? [space.created_by].filter((id): id is string => !!id) : audience.ids;
-  // A viewer who may not read the people list sees how many, never a partial list.
-  const known = ids.every((id) => people.has(id)) ? ids : [];
-  if (known.length === 0) {
-    return (
-      <p className="text-foreground flex items-center gap-2 text-sm">
-        {audience.kind === 'private' ? <LockSimpleIcon className="text-muted-foreground size-4 shrink-0" /> : <UsersThreeIcon className="text-muted-foreground size-4 shrink-0" />}
-        {audience.kind === 'private' ? (space.can_manage === true ? t('onlyYou') : t('private')) : t('peopleCount', { count: ids.length })}
-      </p>
-    );
-  }
+  const added = person.added_at ? new Date(person.added_at) : null;
+  const addedLabel =
+    added && !Number.isNaN(added.getTime()) ? added.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+  let role: string | null = null;
+  if (person.workspace_role === 'owner') role = t('workspaceOwner');
+  else if (person.workspace_role === 'admin') role = t('workspaceAdmin');
+  return (
+    <div className="space-y-1">
+      <p>{person.is_creator ? t('createdSpace') : addedLabel ? t('addedOn', { date: addedLabel }) : t('spaceMember')}</p>
+      {role ? <p>{role}</p> : null}
+    </div>
+  );
+}
+
+/** Who is in the space, one row each: its creator and everyone it is shared with, or the whole workspace. */
+function SpacePeopleList({ space }: { space: ProjectSessionGroup }) {
+  const t = useTranslations('sessionSpaces');
+  const people = space.people ?? [];
   return (
     <ul className="space-y-0.5">
-      {known.slice(0, PEOPLE_MAX).map((id) => {
-        const person = people.get(id)!;
-        const profile = { userId: id, name: person.name, email: person.email, avatarUrl: person.avatarUrl };
+      {people.slice(0, PEOPLE_MAX).map((person) => {
+        const profile = { userId: person.user_id, name: person.name, email: person.email, avatarUrl: person.avatar_url };
         return (
-          <li key={id}>
-            <ProfileHoverCard person={profile} detail={id === space.created_by ? t('createdSpace') : undefined}>
+          <li key={person.user_id}>
+            <ProfileHoverCard person={profile} detail={<SpacePersonMeta person={person} />}>
               {/* Focusable, so the keyboard opens the card too. */}
               <div
                 tabIndex={0}
                 className="hover:bg-hover focus-visible:ring-ring duration-fast -mx-1.5 flex min-w-0 cursor-default items-center gap-2 rounded-md px-1.5 py-1 transition-colors outline-none focus-visible:ring-2"
               >
-                <UserAvatar email={person.email} name={person.name ?? person.email} avatarUrl={person.avatarUrl} colorKey={id} size="xs" />
+                <UserAvatar email={person.email ?? person.user_id} name={person.name ?? person.email} avatarUrl={person.avatar_url} colorKey={person.user_id} size="xs" />
                 <span className="text-foreground min-w-0 truncate text-sm">{profileLabel(profile)}</span>
               </div>
             </ProfileHoverCard>
           </li>
         );
       })}
-      {ids.length > PEOPLE_MAX ? <li className="text-muted-foreground text-xs tabular-nums">{t('morePeople', { count: ids.length - PEOPLE_MAX })}</li> : null}
+      {people.length > PEOPLE_MAX ? <li className="text-muted-foreground px-0 pt-1 text-xs tabular-nums">{t('morePeople', { count: people.length - PEOPLE_MAX })}</li> : null}
+      {space.visibility === 'project' ? (
+        <li className="text-muted-foreground flex items-center gap-2 py-1 text-sm">
+          <UsersThreeIcon className="size-4 shrink-0" />
+          {t('visibility')}
+        </li>
+      ) : null}
     </ul>
   );
 }
@@ -556,6 +579,10 @@ function SpaceHistory({ projectId, space }: { projectId: string; space: ProjectS
     ...(q ? { q } : {}),
   });
   const rows = query.sessions.filter((session) => session.group_id === space.group_id);
+  // A space with no sessions shows just the composer: no heading, no search, no empty state.
+  // A search with no match keeps the section, so the filter stays visible.
+  const settled = !query.isLoading && !query.isScanning && !query.isError;
+  if (settled && rows.length === 0 && !search.trim() && !q) return null;
   return (
     <section className="space-y-3" aria-label={t('sessionsHeading')}>
       {/* Every text edge in this section lines up with the heading; rows bleed their hover fill 2 units out (-mx-2 px-2). */}
@@ -588,9 +615,9 @@ function SpaceHistory({ projectId, space }: { projectId: string; space: ProjectS
       ) : rows.length === 0 ? (
         <EmptyState
           size="sm"
-          media={<EmptyArt icon={q ? MagnifyingGlassIcon : ChatCircleIcon} />}
-          title={q ? t('noSessionsMatch') : t('sessionsEmptyTitle')}
-          description={q ? t('noResultsDescription') : t('sessionsEmptyDescription')}
+          media={<EmptyArt icon={MagnifyingGlassIcon} />}
+          title={t('noSessionsMatch')}
+          description={t('noResultsDescription')}
         />
       ) : (
         <>

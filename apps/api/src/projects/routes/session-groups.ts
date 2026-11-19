@@ -50,8 +50,10 @@ import {
   type SessionGroupRow,
 } from '../lib/session-groups';
 import { serializeTabs } from '../lib/project-spaces';
-import { canManageGroup, canSeeGroup, groupMemberIds, type GroupViewer } from '../../shared/session-group-access';
+import { canManageGroup, canSeeGroup, groupMemberAddedAt, groupMemberIds, type GroupViewer } from '../../shared/session-group-access';
 import { groupViewerFor } from '../lib/session-group-viewer';
+import { resolveUserIdentities, type UserIdentity } from '../lib/user-identity';
+import { accountMemberRolesAmong } from '../../iam/membership-read';
 import { workspaceIdParam } from '../../shared/route-params';
 
 const projectParams = z.object({ workspaceId: z.string() });
@@ -65,8 +67,41 @@ const INVALID_ICON = {
   code: 'invalid_icon',
 } as const;
 
-function serializeGroup(row: SessionGroupRow, memberIds: readonly string[], viewer: GroupViewer): SessionGroup {
+type Profiles = {
+  identities: Map<string, UserIdentity>;
+  roles: Map<string, 'owner' | 'admin' | 'member'>;
+  addedAt: Map<string, Map<string, Date>>;
+};
+
+/** The people of each group (creator, then members): profiles, workspace roles and when each was added, in three reads for all of them. */
+async function profilesOf(groups: ReadonlyArray<readonly [SessionGroupRow, readonly string[]]>): Promise<Profiles> {
+  const ids = [...new Set(groups.flatMap(([row, memberIds]) => [row.createdBy, ...memberIds]).filter((id): id is string => !!id))];
+  const accountId = groups[0]?.[0].accountId;
+  const [identities, rows, addedAt] = await Promise.all([
+    resolveUserIdentities(ids),
+    accountId && ids.length ? accountMemberRolesAmong(accountId, ids.filter(isUuid)) : Promise.resolve([]),
+    groupMemberAddedAt(groups.map(([row]) => row.groupId)),
+  ]);
+  const roles: Profiles['roles'] = new Map();
+  for (const row of rows) roles.set(row.userId, row.accountRole === 'owner' || row.accountRole === 'admin' ? row.accountRole : 'member');
+  return { identities, roles, addedAt };
+}
+
+function serializeGroup(row: SessionGroupRow, memberIds: readonly string[], viewer: GroupViewer, profiles: Profiles): SessionGroup {
+  const peopleIds = [row.createdBy, ...memberIds.filter((id) => id !== row.createdBy)].filter((id): id is string => !!id);
   return {
+    people: peopleIds.map((id) => {
+      const profile = profiles.identities.get(id);
+      return {
+        user_id: id,
+        name: profile?.displayName ?? null,
+        email: profile?.email ?? null,
+        avatar_url: profile?.avatarUrl ?? null,
+        is_creator: id === row.createdBy,
+        workspace_role: profiles.roles.get(id) ?? null,
+        added_at: id === row.createdBy ? null : (profiles.addedAt.get(row.groupId)?.get(id)?.toISOString() ?? null),
+      };
+    }),
     group_id: row.groupId,
     name: row.name,
     description: row.description,
@@ -156,12 +191,13 @@ export function registerSessionGroupsRoutes(): void {
       const viewer = await groupViewerFor(loaded.userId, loaded.row.accountId);
       const { rows, members } = await visibleGroups(loaded.row.projectId, viewer);
       const activity = await sessionGroupActivity(loaded.row.projectId, rows.map((row) => row.groupId));
+      const profiles = await profilesOf(rows.map((row) => [row, members.get(row.groupId) ?? []] as const));
       return c.json(
         {
           groups: rows.map((row) => {
             const seen = activity.get(row.groupId);
             return {
-              ...serializeGroup(row, members.get(row.groupId) ?? [], viewer),
+              ...serializeGroup(row, members.get(row.groupId) ?? [], viewer, profiles),
               session_count: seen?.sessionCount ?? 0,
               last_activity_at: seen?.lastActivityAt?.toISOString() ?? null,
             };
@@ -207,7 +243,10 @@ export function registerSessionGroupsRoutes(): void {
       }
       // Its Files folder, best effort and off the response path.
       void makeSessionGroupFolder(loaded.row.accountId, loaded.row.projectId, result.group.groupId);
-      return c.json(serializeGroup(result.group, [], await groupViewerFor(loaded.userId, loaded.row.accountId)), 201);
+      return c.json(
+        serializeGroup(result.group, [], await groupViewerFor(loaded.userId, loaded.row.accountId), await profilesOf([[result.group, []]])),
+        201,
+      );
     },
   );
 
@@ -237,7 +276,8 @@ export function registerSessionGroupsRoutes(): void {
         return c.json({ error: 'The group list changed. Read it again and resend the order.', code: 'group_order_stale' }, 409);
       }
       const after = await visibleGroups(loaded.row.projectId, viewer);
-      return c.json({ groups: after.rows.map((row) => serializeGroup(row, after.members.get(row.groupId) ?? [], viewer)) }, 200);
+      const profiles = await profilesOf(after.rows.map((row) => [row, after.members.get(row.groupId) ?? []] as const));
+      return c.json({ groups: after.rows.map((row) => serializeGroup(row, after.members.get(row.groupId) ?? [], viewer, profiles)) }, 200);
     },
   );
 
@@ -264,7 +304,7 @@ export function registerSessionGroupsRoutes(): void {
       if (body.icon != null && icon === null) return c.json(INVALID_ICON, 400);
       const result = await updateSessionGroup(loaded.row.projectId, found.group.groupId, { ...body, icon });
       if (!result.ok) return result.code === 'group_not_found' ? c.json(GROUP_NOT_FOUND, 404) : c.json(NAME_TAKEN, 409);
-      return c.json(serializeGroup(result.group, found.memberIds, found.viewer), 200);
+      return c.json(serializeGroup(result.group, found.memberIds, found.viewer, await profilesOf([[result.group, found.memberIds]])), 200);
     },
   );
 
@@ -325,7 +365,7 @@ export function registerSessionGroupsRoutes(): void {
           ? c.json({ error: 'Share a space only with members of this workspace.', code: 'not_a_member' }, 400)
           : c.json(GROUP_NOT_FOUND, 404);
       }
-      return c.json(serializeGroup(result.group, result.memberIds, found.viewer), 200);
+      return c.json(serializeGroup(result.group, result.memberIds, found.viewer, await profilesOf([[result.group, result.memberIds]])), 200);
     },
   );
 
@@ -351,7 +391,7 @@ export function registerSessionGroupsRoutes(): void {
       if (found instanceof Response) return found;
       const updated = await setSessionGroupTabs(loaded.row.projectId, found.group, c.req.valid('json').tabs);
       if (!updated) return c.json(GROUP_NOT_FOUND, 404);
-      return c.json(serializeGroup(updated, found.memberIds, found.viewer), 200);
+      return c.json(serializeGroup(updated, found.memberIds, found.viewer, await profilesOf([[updated, found.memberIds]])), 200);
     },
   );
 

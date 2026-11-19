@@ -24,6 +24,7 @@ import { type FormEvent, type ReactNode, useState } from 'react';
 import { framePolicy } from '../../files/viewer/preview-policy';
 import { useProjectDrive } from '../../files/drives/use-drives';
 import { useTranslations } from '../../i18n';
+import { cn } from '../../lib/utils';
 import { Button } from '../../primitives/button';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from '../../primitives/context-menu';
 import {
@@ -200,6 +201,7 @@ export function AddTabMenu({
   state,
   onAdded,
   label,
+  triggerClassName,
 }: {
   projectId: string;
   /** A channel or DM: its own folder is the first folder offered. */
@@ -212,6 +214,8 @@ export function AddTabMenu({
   onAdded: (id: string) => void;
   /** A text trigger ("Add tab", the details panel) instead of the tab row's "+". */
   label?: string;
+  /** Extra classes for the "+" trigger, for a host whose tab row has its own rhythm. */
+  triggerClassName?: string;
 }) {
   const t = useTranslations('spaces.view.tabEdit');
   const artifactsOn = useFeatureFlag(projectId, 'artifacts').enabled;
@@ -247,7 +251,7 @@ export function AddTabMenu({
                 {label}
               </Button>
             ) : (
-              <Button size="icon-xs" variant="ghost" aria-label={t('add')} disabled={full} className="ml-1 shrink-0">
+              <Button size="icon-xs" variant="ghost" aria-label={t('add')} disabled={full} className={cn('ml-1 shrink-0', triggerClassName)}>
                 <PlusIcon />
               </Button>
             )}

@@ -165,7 +165,7 @@ function SpaceTile({ projectId, space }: { projectId: string; space: ProjectSess
           {count !== undefined && active ? <span aria-hidden> · </span> : null}
           {active ? t('activeAgo', { when: active }) : null}
         </span>
-        <SpaceAudienceMark projectId={projectId} space={space} className="ml-auto" />
+        <SpaceAudienceMark space={space} className="ml-auto" />
       </span>
     </Link>
   );

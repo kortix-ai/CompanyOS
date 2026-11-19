@@ -790,20 +790,11 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
         secondary ? (listOpen ? 'flex-1' : 'shrink-0') : 'h-full',
       )}
     >
-      {/* Pinned, then the groups, sit above Sessions, outside it: they stay in
+      {/* The spaces, then Pinned, sit above Sessions, outside it: they stay in
           view while the list is closed. Capped at half the column so they
           never push Sessions out of view; past that they scroll. */}
       {listsReady && (pinnedQuery.sessions.length > 0 || pinnedQuery.hasNextPage || groupsEnabled || groups.length > 0 || groupCreate) && (
         <div className="max-h-[50%] min-h-0 shrink-0 space-y-px overflow-y-auto">
-          <StarterSection
-            title={tPinArchive('section')}
-            query={pinnedQuery}
-            sessions={visiblePinned}
-            open={!collapsedSectionIds.has(PINNED_SECTION_ID)}
-            onToggle={() => toggleSectionCollapsed(projectId, PINNED_SECTION_ID)}
-            renderNode={(session) => renderSessionNode(session, false)}
-            caretOnHover
-          />
           {groupsEnabled && <SpacesHeading projectId={projectId} onNew={() => setGroupCreate({ fileSessionId: null })} />}
           {groups.length > 0 && (
             <SessionGroupSections
@@ -840,6 +831,15 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
               }}
             />
           )}
+          <StarterSection
+            title={tPinArchive('section')}
+            query={pinnedQuery}
+            sessions={visiblePinned}
+            open={!collapsedSectionIds.has(PINNED_SECTION_ID)}
+            onToggle={() => toggleSectionCollapsed(projectId, PINNED_SECTION_ID)}
+            renderNode={(session) => renderSessionNode(session, false)}
+            caretOnHover
+          />
         </div>
       )}
       {/* The header collapses the sessions in no group: the time or status
@@ -1255,7 +1255,8 @@ function StarterSection({
     <Disclosure
       open={open}
       onOpenChange={onToggle}
-      className="group/section space-y-1"
+      // The rows' own 1px rhythm under the header, the same as Spaces and Sessions.
+      className="group/section space-y-px"
       transition={{ duration: 0.15, ease: 'easeOut' }}
     >
       <DisclosureTrigger>

@@ -20,7 +20,7 @@ import { EyeIcon as Eye, EyeSlashIcon as EyeOff } from '@phosphor-icons/react';
 import { m, useReducedMotion } from 'motion/react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { type FormEvent, Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { EmailLinkStep } from './email-link-step';
 import { resolveAuthMode } from './actions';
 import {
@@ -67,14 +67,16 @@ import {
   passwordFailureCopy,
 } from '@/lib/auth/unified-auth-flow';
 import { authRedirectUrl } from '@kortix/ui/internal/lib/desktop';
+// Static, not lazy: the server renders the button, and a lazy chunk that is
+// still loading when the page hydrates makes React delete that button and
+// render it again once the chunk arrives (a blink of up to ~360 ms).
+import GoogleSignIn from '@/features/auth/google-signin';
 import { getEnv } from '@/lib/env-config';
 import { emailDomain, isWorkEmail } from '@/lib/personal-email';
 import {
   createClient as createBrowserSupabaseClient,
   fetchSamlEnabled,
 } from '@/lib/supabase/client';
-
-const GoogleSignIn = lazy(() => import('@/features/auth/google-signin'));
 
 type Step = 'entry' | 'sso' | 'credentials' | 'link';
 
@@ -1113,12 +1115,10 @@ function AuthCardForm({
 
         {googleEnabled && (
           <>
-            <Suspense fallback={null}>
-              <GoogleSignIn
-                returnUrl={returnUrl}
-                mobileCallbackState={mobileCallbackState ?? undefined}
-              />
-            </Suspense>
+            <GoogleSignIn
+              returnUrl={returnUrl}
+              mobileCallbackState={mobileCallbackState ?? undefined}
+            />
             <OrDivider label={t('or')} />
           </>
         )}

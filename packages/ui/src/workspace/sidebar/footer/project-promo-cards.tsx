@@ -30,13 +30,13 @@ export function ProjectPromoCards({
   onOpenChrome,
   onOpenDownloadApp,
   variant = 'inline',
-  besideComposer = false,
+  composer,
 }: {
   projectId: string;
   /** `floating` pins the card to the window's bottom-right corner (desktop). */
   variant?: 'inline' | 'floating';
-  /** Floating only: the page has a bottom composer (see `PromoSwitcher`). */
-  besideComposer?: boolean;
+  /** Floating only: the page's bottom composer (see `PromoSwitcher`). */
+  composer?: 'centered' | 'full';
   onOpenMcp: () => void;
   onOpenComputer: () => void;
   /** Absent when Kortix in Chrome is off for this workspace. */
@@ -55,7 +55,7 @@ export function ProjectPromoCards({
     <PromoSwitcher
       label={t('promos')}
       variant={variant}
-      besideComposer={besideComposer}
+      composer={composer}
       slides={[mcp, computer, chrome, desktop, phone].filter(
         (slide): slide is PromoSlide => slide !== null,
       )}

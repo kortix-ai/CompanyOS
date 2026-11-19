@@ -41,17 +41,19 @@ export function PromoSwitcher({
   slides,
   label,
   variant = 'inline',
-  besideComposer = false,
+  composer,
 }: {
   slides: readonly PromoSlide[];
   label: string;
   /** `floating`: a card pinned to the window's bottom-right corner, over the page. */
   variant?: 'inline' | 'floating';
   /**
-   * Floating only: the page has a bottom composer. The 320px card clears a
-   * centered composer only from a 1700px window, so below that it hides.
+   * Floating only: the page's bottom composer. `centered` (home, a session):
+   * the card clears it only from a 1700px window, so below that it hides.
+   * `full` (chat, DMs, channels, Spaces): the composer runs to the window's
+   * right edge, so the card never shows.
    */
-  besideComposer?: boolean;
+  composer?: 'centered' | 'full';
 }) {
   const id = useId();
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -65,7 +67,7 @@ export function PromoSwitcher({
         slides={slides}
         active={active}
         label={label}
-        besideComposer={besideComposer}
+        composer={composer}
         onSelect={setActiveId}
       />
     );
@@ -188,14 +190,14 @@ function FloatingPromo({
   slides,
   active,
   label,
-  besideComposer,
+  composer,
   onSelect,
 }: {
   id: string;
   slides: readonly PromoSlide[];
   active: PromoSlide;
   label: string;
-  besideComposer: boolean;
+  composer?: 'centered' | 'full';
   onSelect: (slideId: string) => void;
 }) {
   // `false` on the server and while hydrating, `true` after: the portal mounts
@@ -205,7 +207,7 @@ function FloatingPromo({
     () => true,
     () => false,
   );
-  if (!hydrated) return null;
+  if (!hydrated || composer === 'full') return null;
   return createPortal(
     <div
       role="region"
@@ -213,7 +215,7 @@ function FloatingPromo({
       aria-label={label}
       className={cn(
         'bg-popover text-popover-foreground smooth-shadow-ring-lg fixed right-4 bottom-4 z-40 w-80 rounded-xl p-1.5',
-        besideComposer && 'hidden min-[1700px]:block',
+        composer === 'centered' && 'hidden min-[1700px]:block',
       )}
     >
       <div className="grid">

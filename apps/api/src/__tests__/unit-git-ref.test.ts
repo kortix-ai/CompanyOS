@@ -37,7 +37,8 @@ describe('validateRef', () => {
         throw new Error('expected a throw');
       } catch (err) {
         expect(err).toBeInstanceOf(HTTPException);
-        expect((err as HTTPException).status).toBe(400);
+        if (!(err instanceof HTTPException)) throw err;
+        expect(err.status).toBe(400);
       }
     }
   });

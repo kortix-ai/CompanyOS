@@ -48,7 +48,7 @@ import {
 } from 'react';
 import { ToolPartRenderer, ToolSurfaceContext } from '../../tool/tool-renderers';
 import { PanelWidthButton } from '../../../files/viewer/viewer-actions';
-import { DOCKED_LAYER_CLASS, SESSION_BAR_CLASS } from '../panel-chrome';
+import { DOCKED_LAYER_CLASS, SESSION_BAR_CLASS } from '../../../internal/layout/panel-chrome';
 
 import { CloseButton, DetailSidebarToggle } from '../../../files/viewer/viewer-chrome';
 

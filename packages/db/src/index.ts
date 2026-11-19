@@ -108,6 +108,7 @@ export {
   projectGoals,
   evalJobs,
   evalTrials,
+  evalTrialWorkspaces,
   calendarItems,
   calendarItemPeople,
   calendarComments,

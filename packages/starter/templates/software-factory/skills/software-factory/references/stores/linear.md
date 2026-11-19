@@ -6,11 +6,28 @@ dedicated member, never a person's own account).
 
 ## Access, first match wins
 
-1. The `linear` connector: `kortix connectors show linear` once per session to
-   read the tool names and argument shape, then
-   `kortix connectors call linear <tool> '<json>' --json`. A GraphQL tool
-   (`run_query_or_mutation` or similar) takes every query below.
-2. The secret `LINEAR_API_KEY`:
+1. The `linear` connector (Composio). `software-factory.yaml` declares it
+   (onboarding step D), and the person signs in once on the setup page:
+
+   ```yaml
+   connectors:
+     - slug: linear
+       name: Linear
+       provider: composio
+       app: linear
+   ```
+
+   Its action `run_query_or_mutation` takes every query below:
+
+   ```sh
+   mkdir -p /tmp/factory
+   jq -n --arg q "$QUERY" --argjson v "$VARS" '{query_or_mutation: $q, variables: $v}' > /tmp/factory/q.json
+   kortix connectors call linear run_query_or_mutation "$(cat /tmp/factory/q.json)" --json
+   ```
+
+   Exit 1 (`status: tool_error`) carries Linear's error. Linear's own MCP
+   server (`mcp.linear.app`) has no GraphQL action: it cannot run this store.
+2. The secret `LINEAR_API_KEY`, only when the person refused the connector:
    `curl -s https://api.linear.app/graphql -H "Authorization: $LINEAR_API_KEY" -H 'Content-Type: application/json' -d @<query.json>`.
 
 Check every response for a top-level `errors` array and `success: true` on a

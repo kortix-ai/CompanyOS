@@ -51,6 +51,7 @@ import {
   CardsThreeIcon,
   ChartBarIcon,
   ChatsCircleIcon,
+  CheckCircleIcon,
   ClockCounterClockwiseIcon,
   CpuIcon,
   CreditCardIcon,
@@ -1269,7 +1270,6 @@ const ADMIN_ICONS: Record<string, Icon> = {
   'eval-jobs': ChartBarIcon,
   'eval-tasks': ChartBarIcon,
   'eval-datasets': ChartBarIcon,
-  'eval-trials': ChartBarIcon,
   settings: GearSixIcon,
 };
 
@@ -1337,6 +1337,8 @@ function staticLabel(
         inbox: TrayIcon,
         memory: BrainIcon,
         members: UsersIcon,
+        review: GitDiffIcon,
+        setup: CheckCircleIcon,
       };
       return { icon: icons[route.page], title: t(`pages.${route.page}`) };
     }

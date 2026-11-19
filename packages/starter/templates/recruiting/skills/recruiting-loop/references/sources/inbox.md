@@ -1,6 +1,6 @@
 # Source: the jobs inbox
 
-Trigger `recruiting-inbox` (connector event `GMAIL_NEW_GMAIL_MESSAGE` on the
+Trigger `recruiting-inbox` (connector event `gmail.message.received` on the
 `gmail` connector). Disabled by default. Connector events are experimental
 and off for a workspace until a person turns on `event_triggers` in
 **Workspace admin** → **Feature flags**. `kortix triggers events --connector gmail`

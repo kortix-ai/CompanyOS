@@ -65,7 +65,7 @@ Global options:
   --host <name>      Operate against a non-default Kortix host.
   -h, --help         Show this help.
 
-One principal: a workspace the CLI config supplies (.kortix/link.json in cwd or
+One principal: a workspace the CLI config supplies (the checkout's link or
 the active host's default workspace) is always paired with THAT host's login —
 never with the sandbox's ambient session token, which cannot act on it. When
 that host is not logged in here, the command stops and asks for

@@ -66,7 +66,9 @@ export function useSettingsPageTitle(): string | null {
  * library, none a table) and centers that box with `mx-auto`, the brand's
  * page container (`mx-auto w-full max-w-2xl`). The text stays left aligned.
  */
-export const SETTINGS_PAGE_COLUMN_CLASS = 'w-full px-4 pt-12 pb-20 sm:px-12';
+// `[&>*]:mx-auto`: each page caps its own width (`max-w-2xl` … `max-w-7xl`) on
+// the column's child, and that child sits centered in the pane.
+export const SETTINGS_PAGE_COLUMN_CLASS = 'w-full px-4 pt-12 pb-20 sm:px-12 [&>*]:mx-auto';
 
 /**
  * The one page-title rung of Workspace settings: the brand's section page

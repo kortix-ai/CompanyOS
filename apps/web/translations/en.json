@@ -618,9 +618,9 @@
       "wallpaperDescription": "The background behind your workspace.",
       "defaultWallpaper": "Default",
       "themes": {
-        "light": "Light",
+        "light": "Kortix light",
         "pureLight": "Pure light",
-        "dark": "Dark",
+        "dark": "Kortix dark",
         "pureDark": "Pure dark",
         "system": "System",
         "kortix": "Kortix",
@@ -1575,6 +1575,22 @@
     "referralShareTitle": "Refer Friends",
     "referralShareSubtitle": "Get 400 credits",
     "new": "New",
+    "mcpPromo": {
+      "title": "Use Kortix in ChatGPT and Claude",
+      "description": "Add Kortix to the AI chat you already use. Start agents, follow their work and use your connectors from there.",
+      "cta": "Connect"
+    },
+    "desktopPromo": {
+      "title": "Get the desktop app",
+      "description": "Hand Kortix a task from any app with Quick Entry, and connect this computer in one click.",
+      "cta": "Download"
+    },
+    "phonePromo": {
+      "title": "Kortix on your phone",
+      "description": "Every session in your pocket. A push tells you when one finishes or needs your answer.",
+      "cta": "Get the app"
+    },
+    "promos": "Ways to use Kortix",
     "upgrade": "Upgrade",
     "chats": "Chats",
     "library": "Files",
@@ -1859,6 +1875,7 @@
       "deleteFailed": "Could not delete the group",
       "moveUp": "Move up",
       "moveDown": "Move down",
+      "collapseOthers": "Collapse others",
       "reorderFailed": "Could not reorder the groups",
       "moveTo": "Move to group",
       "removeFromGroup": "Remove from group",
@@ -2209,6 +2226,11 @@
       "resume": "Resume",
       "agentIsWorking": "{agent} is working",
       "needsYouOn": "Needs you: {header}"
+    },
+    "panel": {
+      "outputNew": "New",
+      "outputUpdated": "Updated",
+      "resizePane": "Resize pane"
     }
   },
   "agents": {
@@ -11001,7 +11023,7 @@
       "text0f096c40454e": "Profile the dataset, plot the distributions, check for leakage and imbalance, and write the first honest paragraph about what is in the data. You start from a briefed position rather than from an empty cell.",
       "text0f16342ee1c1": "32%",
       "text0f308cfb7ef3": "0 auto",
-      "text0f4827ef74ea": "Open positions at Kortix — FDE, GTM and MTS. Belgrade, Serbia and San Francisco. We hire for prolonged ownership.",
+      "text0f4827ef74ea": "Open positions at Kortix — FDE, GTM and MTS. Belgrade, Serbia and the US. We hire for prolonged ownership.",
       "text0f600458e375": "SSO, members, groups and role-based access come built in, with per-resource permissions for people and agents, encrypted secrets and a full audit trail. Self-host so the entire platform runs inside your own environment.",
       "text0f64c7d16c28": "# check it compiles, ask for the missing secrets,",
       "text0f656790976e": "Open any agent platform — they are architecturally identical. The marginal differences are not defensible. The only thing that diverges is the learning loop.",
@@ -16620,7 +16642,7 @@
       "textb2a8625a332e": "Three scheduled triggers on a time axis with a present-moment marker, and the next run called out.",
       "textb2ac0da7c543": "Whole team",
       "textb2c0cab20dc3": "JSON-RPC batches are not supported",
-      "textb2c293b68745": ".kortix/connectors/routes.toml",
+      "textb2c293b68745": "connectors/routes.toml",
       "textb2c5bc52374a": "Secret deleted",
       "textb2d544129223": "It is not done if",
       "textb2e30caf44ee": "Use hardcoded hex colors in components",
@@ -18694,7 +18716,7 @@
       "textecbd276ebec2": "Try a search.",
       "textecc7ed048b32": "month end close",
       "texteccba86b787c": "A laptop, a VPS, or your own network.",
-      "textecccd43d1878": ".kortix/connectors/schema.graphql",
+      "textecccd43d1878": "connectors/schema.graphql",
       "texteccce15347a4": "You do not have access to preview this App.",
       "textecd3c555ab44": "Failed to save permissions",
       "textecdcf83028e7": "Review parameters",
@@ -22266,6 +22288,7 @@
     "installProfileHint": "The name people see for this connector in Kortix.",
     "wayComposio": "Connects through Composio, a third-party partner that runs the sign-in for you: you sign in to {name} in one click, and Composio keeps the login.",
     "wayMcpOneClick": "Connects to {name}'s own MCP server. You only sign in to {name}.",
+    "wayKortixGoogle": "Kortix connects to {name} through Google's API. You only sign in to Google.",
     "wayMcpSetup": "Connects to {name}'s own MCP server. It needs your own OAuth app or an API key, set after install.",
     "wayApi": "Connects to {name}'s {kind} directly. Add an account with its API key or token after install.",
     "installsWay": "Installs via {kind}",
@@ -22284,8 +22307,8 @@
     "toolsAfterInstall": "This {kind} lists its tools after install.",
     "typeFilterLabel": "Connector type",
     "typeFilterAll": "All types",
-    "moveComposioTitle": "{app} has its own MCP server",
-    "moveComposioBody": "This connector runs through Composio. You can switch it to {app}'s own MCP server: sign in once and it switches. Agents, triggers and kortix.yaml keep using {slug}.",
+    "moveComposioTitle": "{app} can connect without Composio",
+    "moveComposioBody": "This connector runs through Composio. Kortix can connect it directly: sign in once and it switches. Agents, triggers and kortix.yaml keep using {slug}.",
     "moveComposioAction": "Switch to MCP",
     "wayChannel": "Built into Kortix: people message the agent in {name}, with no third party. Set it up once on its page.",
     "waySetUp": "Set up",
@@ -22426,7 +22449,7 @@
   },
   "connectMcp": {
     "title": "Connect Kortix over MCP",
-    "description": "Use Kortix from Claude, Claude Code, Cursor, Codex, or any MCP client. You sign in once. Nothing to install.",
+    "description": "Use Kortix from Claude, ChatGPT, Claude Code, Cursor, Codex, or any MCP client. You sign in once. Nothing to install.",
     "docs": "Docs",
     "done": "Done",
     "copy": "Copy",
@@ -22436,6 +22459,7 @@
     "copyUrl": "Copy URL",
     "via": {
       "claude": "Settings → Connectors",
+      "chatgpt": "Developer mode → custom connector",
       "claude-code": "One terminal command",
       "cursor": "One-click install",
       "codex": "Two terminal commands",
@@ -22711,6 +22735,13 @@
     "onlyYouDescription": "Only you, in every workspace, in your private sessions.",
     "everyoneDescription": "Everyone in the workspace can use it, including automations.",
     "promoLine": "Let Kortix work with your local files and take control of your computer.",
+    "promo": {
+      "title": "Connect your work computer",
+      "titleThis": "Connect this computer",
+      "description": "Agents work with your local files, run programs and use the apps on your screen. You decide what they may do.",
+      "cta": "Connect",
+      "ctaOneClick": "Connect in one click"
+    },
     "dismissPromo": "Dismiss",
     "useCliInstead": "Use the CLI instead",
     "cliHint": "The command shows a code and opens a page where you approve this device. It then runs in the background.",
@@ -26850,8 +26881,7 @@
         "dangerZone": "Danger zone",
         "evalDatasets": "Datasets",
         "evalTasks": "Tasks",
-        "evalJobs": "Jobs",
-        "evalTrials": "Trials"
+        "evalJobs": "Jobs"
       },
       "accessTitle": "Access",
       "accessDescription": "Who can open this workspace, and with which role.",
@@ -27105,9 +27135,7 @@
       "queued": "Queued",
       "running": "Running",
       "completed": "Completed",
-      "cancelled": "Cancelled",
-      "paused": "Paused",
-      "cancelling": "Cancelling"
+      "cancelled": "Cancelled"
     },
     "trialStatus": {
       "queued": "Queued",
@@ -27116,8 +27144,7 @@
       "verifying": "Verifying",
       "completed": "Completed",
       "errored": "Errored",
-      "cancelled": "Cancelled",
-      "paused": "Paused"
+      "cancelled": "Cancelled"
     },
     "rerunFailed": "Re-run failed",
     "rerunAll": "Re-run all",
@@ -27174,8 +27201,7 @@
       "error": "Error",
       "running": "Running",
       "queued": "Queued",
-      "cancelled": "Cancelled",
-      "paused": "Paused"
+      "cancelled": "Cancelled"
     },
     "colMeanScore": "Mean score",
     "metricsHint": "Each trial’s score is the mean of its rewards; this is their mean. Harbor’s metrics per reward key: {metrics}",
@@ -27361,49 +27387,7 @@
       "files": "Files",
       "results": "Results"
     },
-    "colTaskCount": "Tasks",
-    "pause": "Pause",
-    "resume": "Resume",
-    "paused": "Job paused",
-    "resumed": "Job resumed",
-    "cancelNow": "Stop now",
-    "cancelNowHint": "Running trials stop and the job ends.",
-    "cancelDrain": "Let running trials finish",
-    "cancelDrainHint": "Nothing new starts or retries. The job ends after its running trials.",
-    "cancelDrainStarted": "The job ends after its running trials",
-    "trialsTitle": "Trials",
-    "trialsDescription": "Every trial of every job, filtered on the server.",
-    "trialsInfo": "Each filter lists its values with how many trials have them, counted among the trials the other filters keep. A row opens the trial beside its job.",
-    "searchTrials": "Search trials",
-    "sortLabel": "Sort",
-    "trialSort": {
-      "desc_created_at": "Newest first",
-      "created_at": "Oldest first",
-      "desc_finished_at": "Last finished",
-      "desc_reward": "Highest reward",
-      "reward": "Lowest reward",
-      "task": "Task A–Z"
-    },
-    "trialFacet": {
-      "status": "Status",
-      "job": "Job",
-      "task": "Task",
-      "agent": "Agent",
-      "model": "Model",
-      "exception_type": "Error"
-    },
-    "trialFacetAny": {
-      "status": "Any status",
-      "job": "All jobs",
-      "task": "All tasks",
-      "agent": "Any agent",
-      "model": "Any model",
-      "exception_type": "Any error"
-    },
-    "noTrialsYet": "No trial has run yet",
-    "displayingRange": "{from}–{to} of {total} trials",
-    "previousPage": "Previous page",
-    "nextPage": "Next page"
+    "colTaskCount": "Tasks"
   },
   "desktopTabs": {
     "tabs": "Open tabs",
@@ -27435,7 +27419,9 @@
       "goals": "Goals",
       "inbox": "Inbox",
       "memory": "Memory",
-      "members": "Members"
+      "members": "Members",
+      "review": "Review",
+      "setup": "Finish setup"
     },
     "sections": {
       "agents": "Agents",
@@ -27452,5 +27438,29 @@
       "members": "Members",
       "settings": "Settings"
     }
+  },
+  "workspaceSetup": {
+    "title": "Finish setup",
+    "description": "{done} of {total} done. A row turns done as soon as it is set up.",
+    "descriptionIdle": "What the agents of this workspace need from you.",
+    "tryAgain": "Try again",
+    "loadFailed": "Could not load the setup steps.",
+    "emptyTitle": "Nothing left to set up",
+    "emptyDescription": "This workspace needs no sign-in, secret or Slack from you.",
+    "openWorkspace": "Open workspace",
+    "completeTitle": "Setup is complete",
+    "completeDescription": "If you started the setup in a terminal, it continues there by itself.",
+    "slackName": "Slack",
+    "kindConnector": "Connector",
+    "kindSecret": "Secret",
+    "kindSlack": "Channel",
+    "done": "Done",
+    "connect": "Connect {name}",
+    "reconnect": "Reconnect {name}",
+    "setSecret": "Set {name}",
+    "addSlack": "Add Kortix to Slack",
+    "connectSlack": "Connect Slack",
+    "bannerTitle": "{left, plural, one {# setup step is left} other {# setup steps are left}}",
+    "bannerDismiss": "Dismiss"
   }
 }

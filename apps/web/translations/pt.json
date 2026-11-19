@@ -798,9 +798,9 @@
       "wallpaperDescription": "O fundo por trás do seu espaço de trabalho.",
       "defaultWallpaper": "Padrão",
       "themes": {
-        "light": "Claro",
+        "light": "Kortix Claro",
         "pureLight": "Claro puro",
-        "dark": "Escuro",
+        "dark": "Kortix Escuro",
         "pureDark": "Escuro puro",
         "system": "Sistema",
         "kortix": "Kortix",
@@ -1575,6 +1575,22 @@
     "referralShareTitle": "Indicar Amigos",
     "referralShareSubtitle": "Ganhe 400 créditos",
     "new": "Novo",
+    "mcpPromo": {
+      "title": "Use o Kortix no ChatGPT e no Claude",
+      "description": "Adicione o Kortix ao chat de IA que você já usa. Inicie agentes, acompanhe o trabalho e use seus conectores de lá.",
+      "cta": "Conectar"
+    },
+    "desktopPromo": {
+      "title": "Baixe o app para desktop",
+      "description": "Passe uma tarefa ao Kortix de qualquer app com o Quick Entry e conecte este computador com um clique.",
+      "cta": "Baixar"
+    },
+    "phonePromo": {
+      "title": "Kortix no seu celular",
+      "description": "Todas as sessões no seu bolso. Uma notificação avisa quando uma termina ou precisa da sua resposta.",
+      "cta": "Baixar o app"
+    },
+    "promos": "Formas de usar o Kortix",
     "upgrade": "Melhorar",
     "chats": "Chats",
     "library": "Arquivos",
@@ -1859,6 +1875,7 @@
       "deleteFailed": "Não foi possível excluir o grupo",
       "moveUp": "Mover para cima",
       "moveDown": "Mover para baixo",
+      "collapseOthers": "Recolher os outros",
       "reorderFailed": "Não foi possível reordenar os grupos",
       "moveTo": "Mover para um grupo",
       "removeFromGroup": "Remover do grupo",
@@ -2209,6 +2226,11 @@
       "resume": "Retomar",
       "agentIsWorking": "{agent} está trabalhando",
       "needsYouOn": "Precisa de você: {header}"
+    },
+    "panel": {
+      "outputNew": "Novo",
+      "outputUpdated": "Atualizado",
+      "resizePane": "Redimensionar painel"
     }
   },
   "agents": {
@@ -10956,7 +10978,7 @@
       "text0f096c40454e": "Perfila o dataset, plota as distribuições, verifica vazamento e desequilíbrio e escreve o primeiro parágrafo honesto sobre os dados. Você começa com contexto, não com uma célula vazia.",
       "text0f16342ee1c1": "32%",
       "text0f308cfb7ef3": "0 automático",
-      "text0f4827ef74ea": "Vagas abertas na Kortix — FDE, GTM e MTS. Belgrado, Sérvia e São Francisco. Contratamos para responsabilidade prolongada.",
+      "text0f4827ef74ea": "Vagas abertas na Kortix — FDE, GTM e MTS. Belgrado, Sérvia e EUA. Contratamos para responsabilidade prolongada.",
       "text0f600458e375": "SSO, membros, grupos e acesso baseado em funções já vêm integrados, com permissões por recurso para pessoas e agentes, segredos criptografados e uma trilha de auditoria completa. Hospede por conta própria para executar toda a plataforma dentro do seu ambiente.",
       "text0f64c7d16c28": "# verifique se compila, peça os secrets ausentes,",
       "text0f656790976e": "Abra qualquer plataforma de agentes — todas são arquitetonicamente idênticas. As diferenças marginais não são defensáveis. A única coisa que diverge é o loop de aprendizado.",
@@ -16575,7 +16597,7 @@
       "textb2a8625a332e": "Três gatilhos agendados em um eixo temporal com um marcador do momento presente e a próxima execução destacada.",
       "textb2ac0da7c543": "Toda a equipe",
       "textb2c0cab20dc3": "Lotes JSON-RPC não são compatíveis",
-      "textb2c293b68745": ".kortix/connectors/routes.toml",
+      "textb2c293b68745": "connectors/routes.toml",
       "textb2c5bc52374a": "Segredo excluído",
       "textb2d544129223": "Não está concluído se",
       "textb2e30caf44ee": "Use cores hexadecimais codificadas diretamente nos componentes",
@@ -18649,7 +18671,7 @@
       "textecbd276ebec2": "Tente uma busca.",
       "textecc7ed048b32": "fechamento do mês",
       "texteccba86b787c": "Um laptop, uma VPS ou sua própria rede.",
-      "textecccd43d1878": ".kortix/connectors/schema.graphql",
+      "textecccd43d1878": "connectors/schema.graphql",
       "texteccce15347a4": "Você não tem acesso para visualizar este App.",
       "textecd3c555ab44": "Falha ao salvar as permissões",
       "textecdcf83028e7": "Revisar parâmetros",
@@ -22266,6 +22288,7 @@
     "installProfileHint": "O nome que as pessoas veem para este conector no Kortix.",
     "wayComposio": "Conecta pelo Composio, um parceiro terceiro que faz o login por você: você entra no {name} com um clique e o Composio mantém o login.",
     "wayMcpOneClick": "Conecta ao servidor MCP do próprio {name}. Você só entra no {name}.",
+    "wayKortixGoogle": "O Kortix se conecta ao {name} pela API do Google. Você só entra no Google.",
     "wayMcpSetup": "Conecta ao servidor MCP do próprio {name}. Precisa do seu próprio app OAuth ou de uma chave de API, definidos após a instalação.",
     "wayApi": "Conecta diretamente à {kind} do {name}. Após a instalação, adicione uma conta com a chave de API ou o token.",
     "installsWay": "Instala via {kind}",
@@ -22284,8 +22307,8 @@
     "toolsAfterInstall": "Esta {kind} lista as ferramentas após a instalação.",
     "typeFilterLabel": "Tipo de conector",
     "typeFilterAll": "Todos os tipos",
-    "moveComposioTitle": "{app} tem um servidor MCP próprio",
-    "moveComposioBody": "Este conector passa pelo Composio. Você pode mudá-lo para o servidor MCP do próprio {app}: entre uma vez e ele muda. Agentes, gatilhos e kortix.yaml continuam usando {slug}.",
+    "moveComposioTitle": "{app} pode se conectar sem o Composio",
+    "moveComposioBody": "Este conector passa pelo Composio. O Kortix pode conectá-lo diretamente: entre uma vez e ele muda. Agentes, gatilhos e kortix.yaml continuam usando {slug}.",
     "moveComposioAction": "Mudar para MCP",
     "wayChannel": "Integrado ao Kortix: as pessoas falam com o agente no {name}, sem terceiros. Configure uma vez na página dele.",
     "waySetUp": "Configurar",
@@ -22426,7 +22449,7 @@
   },
   "connectMcp": {
     "title": "Conecte o Kortix via MCP",
-    "description": "Use o Kortix no Claude, Claude Code, Cursor, Codex ou qualquer cliente MCP. Você entra uma vez. Nada para instalar.",
+    "description": "Use o Kortix no Claude, ChatGPT, Claude Code, Cursor, Codex ou qualquer cliente MCP. Você entra uma vez. Nada para instalar.",
     "docs": "Docs",
     "done": "Concluir",
     "copy": "Copiar",
@@ -22436,6 +22459,7 @@
     "copyUrl": "Copiar URL",
     "via": {
       "claude": "Configurações → Conectores",
+      "chatgpt": "Modo de desenvolvedor → conector personalizado",
       "claude-code": "Um comando no terminal",
       "cursor": "Instalação com um clique",
       "codex": "Dois comandos no terminal",
@@ -22711,6 +22735,13 @@
     "onlyYouDescription": "Só você, em todos os espaços de trabalho, nas suas sessões privadas.",
     "everyoneDescription": "Todos no espaço de trabalho podem usá-lo, incluindo automações.",
     "promoLine": "Deixe o Kortix trabalhar com seus arquivos locais e controlar seu computador.",
+    "promo": {
+      "title": "Conecte seu computador de trabalho",
+      "titleThis": "Conectar este computador",
+      "description": "Os agentes trabalham com seus arquivos locais, executam programas e usam os apps da sua tela. Você decide o que eles podem fazer.",
+      "cta": "Conectar",
+      "ctaOneClick": "Conectar com um clique"
+    },
     "dismissPromo": "Dispensar",
     "useCliInstead": "Usar a CLI em vez disso",
     "cliHint": "O comando mostra um código e abre uma página onde você aprova este dispositivo. Depois ele roda em segundo plano.",
@@ -26850,8 +26881,7 @@
         "dangerZone": "Zona de perigo",
         "evalDatasets": "Conjuntos de dados",
         "evalTasks": "Tarefas",
-        "evalJobs": "Jobs",
-        "evalTrials": "Execuções"
+        "evalJobs": "Jobs"
       },
       "accessTitle": "Acesso",
       "accessDescription": "Quem pode abrir este espaço de trabalho e com qual função.",
@@ -27105,9 +27135,7 @@
       "queued": "Na fila",
       "running": "Em execução",
       "completed": "Concluído",
-      "cancelled": "Cancelado",
-      "paused": "Pausado",
-      "cancelling": "Cancelando"
+      "cancelled": "Cancelado"
     },
     "trialStatus": {
       "queued": "Na fila",
@@ -27116,8 +27144,7 @@
       "verifying": "Verificando",
       "completed": "Concluída",
       "errored": "Com erro",
-      "cancelled": "Cancelada",
-      "paused": "Pausado"
+      "cancelled": "Cancelada"
     },
     "rerunFailed": "Executar as falhas de novo",
     "rerunAll": "Executar tudo de novo",
@@ -27174,8 +27201,7 @@
       "error": "Erro",
       "running": "Em execução",
       "queued": "Na fila",
-      "cancelled": "Cancelada",
-      "paused": "Pausado"
+      "cancelled": "Cancelada"
     },
     "colMeanScore": "Pontuação média",
     "metricsHint": "A pontuação de cada execução é a média de suas recompensas; esta é a média delas. Métricas do Harbor por chave: {metrics}",
@@ -27361,49 +27387,7 @@
       "files": "Arquivos",
       "results": "Resultados"
     },
-    "colTaskCount": "Tarefas",
-    "pause": "Pausar",
-    "resume": "Retomar",
-    "paused": "Job pausado",
-    "resumed": "Job retomado",
-    "cancelNow": "Parar agora",
-    "cancelNowHint": "As execuções em andamento param e o job termina.",
-    "cancelDrain": "Deixar terminar as execuções em andamento",
-    "cancelDrainHint": "Nada novo começa nem é repetido. O job termina depois das execuções em andamento.",
-    "cancelDrainStarted": "O job termina depois das execuções em andamento",
-    "trialsTitle": "Execuções",
-    "trialsDescription": "Todas as execuções de todos os jobs, filtradas no servidor.",
-    "trialsInfo": "Cada filtro lista seus valores com quantas execuções os têm, contadas entre as que os outros filtros mantêm. Uma linha abre a execução ao lado do seu job.",
-    "searchTrials": "Pesquisar execuções",
-    "sortLabel": "Ordenar",
-    "trialSort": {
-      "desc_created_at": "Mais recentes",
-      "created_at": "Mais antigas",
-      "desc_finished_at": "Terminadas por último",
-      "desc_reward": "Maior recompensa",
-      "reward": "Menor recompensa",
-      "task": "Tarefa A–Z"
-    },
-    "trialFacet": {
-      "status": "Status",
-      "job": "Job",
-      "task": "Tarefa",
-      "agent": "Agente",
-      "model": "Modelo",
-      "exception_type": "Erro"
-    },
-    "trialFacetAny": {
-      "status": "Qualquer status",
-      "job": "Todos os jobs",
-      "task": "Todas as tarefas",
-      "agent": "Qualquer agente",
-      "model": "Qualquer modelo",
-      "exception_type": "Qualquer erro"
-    },
-    "noTrialsYet": "Ainda não há execuções",
-    "displayingRange": "{from}–{to} de {total} execuções",
-    "previousPage": "Página anterior",
-    "nextPage": "Próxima página"
+    "colTaskCount": "Tarefas"
   },
   "desktopTabs": {
     "tabs": "Abas abertas",
@@ -27435,7 +27419,9 @@
       "goals": "Objetivos",
       "inbox": "Caixa de entrada",
       "memory": "Memória",
-      "members": "Membros"
+      "members": "Membros",
+      "review": "Revisão",
+      "setup": "Concluir a configuração"
     },
     "sections": {
       "agents": "Agentes",
@@ -27452,5 +27438,29 @@
       "members": "Membros",
       "settings": "Configurações"
     }
+  },
+  "workspaceSetup": {
+    "title": "Concluir a configuração",
+    "description": "{done} de {total} concluídos. Uma linha fica concluída assim que é configurada.",
+    "descriptionIdle": "O que os agentes deste workspace precisam de você.",
+    "tryAgain": "Tentar novamente",
+    "loadFailed": "Não foi possível carregar as etapas de configuração.",
+    "emptyTitle": "Nada a configurar",
+    "emptyDescription": "Este workspace não precisa de login, secret ou Slack seu.",
+    "openWorkspace": "Abrir workspace",
+    "completeTitle": "Configuração concluída",
+    "completeDescription": "Se você iniciou a configuração em um terminal, ela continua lá sozinha.",
+    "slackName": "Slack",
+    "kindConnector": "Conector",
+    "kindSecret": "Secret",
+    "kindSlack": "Canal",
+    "done": "Concluído",
+    "connect": "Conectar {name}",
+    "reconnect": "Reconectar {name}",
+    "setSecret": "Definir {name}",
+    "addSlack": "Adicionar o Kortix ao Slack",
+    "connectSlack": "Conectar Slack",
+    "bannerTitle": "{left, plural, one {Falta # etapa de configuração} other {Faltam # etapas de configuração}}",
+    "bannerDismiss": "Dispensar"
   }
 }

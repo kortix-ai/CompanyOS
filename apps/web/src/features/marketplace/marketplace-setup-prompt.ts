@@ -2,7 +2,7 @@
  * The prompt a freshly-installed project/template gets seeded with as its first
  * session, so an agent wires up the thing you just installed instead of dumping
  * you on an empty project. Deliberately generic — the agent reads the project's
- * own `kortix.yaml` + `.kortix/` files in the sandbox rather than us parsing the
+ * own `kortix.yaml`, `agents/` and `skills/` in the sandbox rather than us parsing the
  * config here — and it defers to the installed agent's own guardrails (so e.g.
  * Website Studio still never contacts anyone or spends money without approval).
  */
@@ -13,7 +13,7 @@ export function buildTemplateSetupPrompt(title: string): string {
     '',
     'Set it up so it is ready to run:',
     '1. If the template includes an `install.md`, read it first and follow it as the template-specific setup guide.',
-    '2. Read `kortix.yaml` and the files under `.kortix/` to understand what this project is and what it needs.',
+    '2. Read `kortix.yaml`, `agents/` and `skills/` to understand what this project is and what it needs.',
     '3. Create the connections it requires (connectors + secrets). Always mint a setup link with `kortix secrets request` / `kortix connectors connect` — never ask me to paste a raw key into chat.',
     '4. Leave any triggers that are off by default off, and ask before enabling anything that sends messages, spends money, or contacts people.',
     '5. When it is wired up, tell me in plain language what now works and what (if anything) you still need from me to go live.',

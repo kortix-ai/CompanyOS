@@ -10430,13 +10430,7 @@ export const evalJobs = kortixSchema.table('eval_jobs', {
   /** The `evals:` suite of kortix.yaml the job ran; null for an ad-hoc config. */
   suite: text('suite'),
   jobName: text('job_name').notNull(),
-  status: text('status').$type<'queued' | 'running' | 'paused' | 'completed' | 'cancelled'>().default('queued').notNull(),
-  /**
-   * Set by a cancel. `hard`: running trials stop now. `soft`: queued trials
-   * are cancelled and running ones finish without a retry; the job then ends
-   * `cancelled`. Null: not cancelled.
-   */
-  cancelMode: text('cancel_mode').$type<'soft' | 'hard'>(),
+  status: text('status').$type<'queued' | 'running' | 'completed' | 'cancelled'>().default('queued').notNull(),
   /** The commit the config and the tasks were read at. */
   commitSha: text('commit_sha'),
   ref: text('ref'),
@@ -10466,8 +10460,7 @@ export const evalJobs = kortixSchema.table('eval_jobs', {
   index('idx_eval_jobs_project_created').on(table.projectId, table.createdAt),
   uniqueIndex('uniq_eval_jobs_project_name').on(table.projectId, table.jobName),
   index('idx_eval_jobs_active').on(table.status).where(sql`${table.status} in ('queued', 'running')`),
-  check('eval_jobs_status_check', sql`${table.status} in ('queued', 'running', 'paused', 'completed', 'cancelled')`),
-  check('eval_jobs_cancel_mode_check', sql`${table.cancelMode} in ('soft', 'hard')`),
+  check('eval_jobs_status_check', sql`${table.status} in ('queued', 'running', 'completed', 'cancelled')`),
 ]).enableRLS();
 
 export const evalTrials = kortixSchema.table('eval_trials', {
@@ -10486,7 +10479,7 @@ export const evalTrials = kortixSchema.table('eval_trials', {
   attempt: integer('attempt').notNull(),
   retry: integer('retry').default(0).notNull(),
   status: text('status')
-    .$type<'queued' | 'paused' | 'starting' | 'agent_running' | 'verifying' | 'completed' | 'errored' | 'cancelled'>()
+    .$type<'queued' | 'starting' | 'agent_running' | 'verifying' | 'completed' | 'errored' | 'cancelled'>()
     .default('queued')
     .notNull(),
   sessionId: text('session_id'),
@@ -10515,8 +10508,42 @@ export const evalTrials = kortixSchema.table('eval_trials', {
   index('idx_eval_trials_project_created').on(table.projectId, table.createdAt),
   check(
     'eval_trials_status_check',
-    sql`${table.status} in ('queued', 'paused', 'starting', 'agent_running', 'verifying', 'completed', 'errored', 'cancelled')`,
+    sql`${table.status} in ('queued', 'starting', 'agent_running', 'verifying', 'completed', 'errored', 'cancelled')`,
   ),
+]).enableRLS();
+
+/**
+ * A workspace made for one eval trial (`[metadata.kortix] workspace = "fresh"`,
+ * apps/api/src/projects/evals/trial-workspace.ts). The row is written before
+ * the account exists and outlives it: the workspace switcher hides its account,
+ * the runner's sweep deletes the workspace once the trial ended, and the money
+ * moved for it (budget out of the payer, refund back) stays on record.
+ * No foreign keys: the trial account, its project and the job are deleted
+ * while this row stays.
+ */
+export const evalTrialWorkspaces = kortixSchema.table('eval_trial_workspaces', {
+  trialAccountId: uuid('trial_account_id').primaryKey(),
+  trialProjectId: uuid('trial_project_id').notNull(),
+  trialId: uuid('trial_id').notNull(),
+  jobId: uuid('job_id').notNull(),
+  /** The job's workspace: it pays for the trial and keeps its results. */
+  payerAccountId: uuid('payer_account_id').notNull(),
+  jobProjectId: uuid('job_project_id').notNull(),
+  /** The person the trial acts as: the owner of the trial workspace. */
+  ownerUserId: uuid('owner_user_id').notNull(),
+  budgetUsd: numeric('budget_usd', { precision: 12, scale: 4 }).default('0').notNull(),
+  fundedAt: timestamp('funded_at', { withTimezone: true }),
+  /** What went back to the payer (negative: the trial spent past its budget, and the payer paid the rest). */
+  refundUsd: numeric('refund_usd', { precision: 12, scale: 4 }),
+  settledAt: timestamp('settled_at', { withTimezone: true }),
+  /** The sweep deletes the workspace after this: late compute and model charges land first. */
+  cleanupAfter: timestamp('cleanup_after', { withTimezone: true }),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  lastError: text('last_error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('uniq_eval_trial_workspaces_trial').on(table.trialId),
+  index('idx_eval_trial_workspaces_live').on(table.cleanupAfter).where(sql`${table.deletedAt} is null`),
 ]).enableRLS();
 
 // ─── Calendar (flag `calendar`) ─────────────────────────────────────────────

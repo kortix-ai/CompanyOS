@@ -104,7 +104,6 @@ import type { TurnServedModel } from '../turn/served-model';
 import { SessionBusyIndicator } from '../status/session-busy-indicator';
 import { useAnswerStreaming } from '../turn/answer-streaming';
 import { SessionTurnMeta } from './session-turn-meta';
-import { TurnShareButton } from './turn-share';
 import {
   sessionTurnDurationMs,
   sessionTurnEndedAt,
@@ -432,8 +431,7 @@ interface SessionTurnProps {
   isLast: boolean;
   ownsPlan: boolean;
   sessionId: string;
-  /** The Kortix project and project-session ids. With both, a settled turn
-   *  offers Share (`TurnShareButton`). Absent (a child session): no Share. */
+  /** The Kortix project and project-session ids. */
   projectId?: string;
   projectSessionId?: string;
   sessionStatus: import('../../internal/session-types').SessionStatus | undefined;
@@ -2474,7 +2472,7 @@ function TurnFooter(
           duration / cost would be permanently invisible, and tap-emulated
           `:hover` would leave exactly one arbitrary turn's bar lit. */}
       {/* A turn that ended in tool calls alone ("Worked for 13s") has nothing to
-          copy or share: no bar, so no empty hover band under it. */}
+          copy: no bar, so no empty hover band under it. */}
       {!working && !props.hideActionBar && hasCopyableResponse(response, answered.inlineContentParts) && (
         <TurnActionBar
           response={response}
@@ -2484,17 +2482,6 @@ function TurnFooter(
           costInfo={costInfo}
           servedModel={servedModel}
           tHardcodedUi={tHardcodedUi}
-          // A continuation turn's id names a compaction marker, not a user
-          // message, so it has no response of its own to share.
-          share={
-            turn.continues
-              ? undefined
-              : {
-                  projectId,
-                  sessionId: projectSessionId,
-                  turnId: turn.id,
-                }
-          }
         />
       )}
     <ConnectProviderDialog
@@ -2652,7 +2639,6 @@ function TurnActionBar({
   servedModel,
   tHardcodedUi,
   inToolbar = false,
-  share,
 }: {
   /** Inside a message row's toolbar, which owns the hover reveal. */
   inToolbar?: boolean;
@@ -2663,7 +2649,6 @@ function TurnActionBar({
   costInfo: TurnSettledMeta['costInfo'];
   servedModel?: TurnServedModel;
   tHardcodedUi: ReturnType<typeof useTranslations>;
-  share?: { projectId?: string; sessionId?: string; turnId: string };
 }) {
   const [copied, setCopied] = useState(false);
 // ---- Copy response ----
@@ -2726,9 +2711,6 @@ const handleCopy = async () => {
               </AnimatePresence>
             </span>
           </Button>
-      ) : null}
-      {response && share ? (
-        <TurnShareButton projectId={share.projectId} sessionId={share.sessionId} turnId={share.turnId} />
       ) : null}
         <SessionTurnMeta
           endedAt={turnEndedAt}
@@ -3020,11 +3002,6 @@ function SessionTurnImpl(props: SessionTurnProps) {
                   costInfo={meta.costInfo}
                   servedModel={props.servedModel}
                   tHardcodedUi={tHardcodedUi}
-                  share={
-                    turn.continues
-                      ? undefined
-                      : { projectId: props.projectId, sessionId: props.projectSessionId, turnId: turn.id }
-                  }
                 />
               )
             }

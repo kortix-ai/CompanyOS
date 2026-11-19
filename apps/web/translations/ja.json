@@ -798,9 +798,9 @@
       "wallpaperDescription": "ワークスペースの背景です。",
       "defaultWallpaper": "デフォルト",
       "themes": {
-        "light": "ライト",
+        "light": "Kortix ライト",
         "pureLight": "ピュアライト",
-        "dark": "ダーク",
+        "dark": "Kortix ダーク",
         "pureDark": "ピュアダーク",
         "system": "システム",
         "kortix": "Kortix",
@@ -1575,6 +1575,22 @@
     "referralShareTitle": "友達を紹介",
     "referralShareSubtitle": "400クレジット獲得",
     "new": "新規",
+    "mcpPromo": {
+      "title": "ChatGPT や Claude から Kortix を使う",
+      "description": "いつもの AI チャットに Kortix を追加しましょう。エージェントの起動、作業の確認、コネクタの利用がそこからできます。",
+      "cta": "接続"
+    },
+    "desktopPromo": {
+      "title": "デスクトップアプリを入手",
+      "description": "Quick Entry でどのアプリからでも Kortix にタスクを渡せます。このコンピューターもワンクリックで接続できます。",
+      "cta": "ダウンロード"
+    },
+    "phonePromo": {
+      "title": "スマートフォンで Kortix",
+      "description": "すべてのセッションをポケットに。終わったときや回答が必要なときはプッシュ通知でお知らせします。",
+      "cta": "アプリを入手"
+    },
+    "promos": "Kortix の使い方",
     "upgrade": "アップグレード",
     "chats": "チャット",
     "library": "ファイル",
@@ -1859,6 +1875,7 @@
       "deleteFailed": "グループを削除できませんでした",
       "moveUp": "上へ移動",
       "moveDown": "下へ移動",
+      "collapseOthers": "他を折りたたむ",
       "reorderFailed": "グループを並べ替えできませんでした",
       "moveTo": "グループに移動",
       "removeFromGroup": "グループから外す",
@@ -2209,6 +2226,11 @@
       "resume": "再開",
       "agentIsWorking": "{agent} が作業中",
       "needsYouOn": "あなたの対応が必要: {header}"
+    },
+    "panel": {
+      "outputNew": "新規",
+      "outputUpdated": "更新済み",
+      "resizePane": "ペインのサイズを変更"
     }
   },
   "agents": {
@@ -10956,7 +10978,7 @@
       "text0f096c40454e": "データセットをプロファイリングし、分布を可視化し、リーケージと不均衡を確認し、データの内容について最初の率直な段落を書きます。空のセルからではなく、概要を把握した状態から始められます。",
       "text0f16342ee1c1": "32%",
       "text0f308cfb7ef3": "0 自動",
-      "text0f4827ef74ea": "Kortixの募集中ポジション：FDE、GTM、MTS。セルビアのベオグラードとサンフランシスコ。長期的なオーナーシップを担える人材を採用しています。",
+      "text0f4827ef74ea": "Kortixの募集中ポジション：FDE、GTM、MTS。セルビアのベオグラードと米国。長期的なオーナーシップを担える人材を採用しています。",
       "text0f600458e375": "SSO、メンバー、グループ、ロールベースアクセスを標準搭載。人とエージェントごとのリソース権限、暗号化されたシークレット、完全な監査証跡にも対応します。セルフホストすれば、プラットフォーム全体を自社環境内で運用できます。",
       "text0f64c7d16c28": "# コンパイルを確認し、不足しているシークレットを尋ね、",
       "text0f656790976e": "どのエージェントプラットフォームを開いても、アーキテクチャは同じです。わずかな違いは守れる優位性になりません。差がつくのは学習ループだけです。",
@@ -16575,7 +16597,7 @@
       "textb2a8625a332e": "時間軸上に3つのスケジュール済みトリガーがあり、現在時点のマーカーと次回実行が表示されています。",
       "textb2ac0da7c543": "チーム全体",
       "textb2c0cab20dc3": "JSON-RPCバッチはサポートされていません",
-      "textb2c293b68745": ".kortix/connectors/routes.toml",
+      "textb2c293b68745": "connectors/routes.toml",
       "textb2c5bc52374a": "シークレットが削除されました",
       "textb2d544129223": "次の状態では完了とは言えません",
       "textb2e30caf44ee": "コンポーネント内で16進カラーをハードコードしない",
@@ -18649,7 +18671,7 @@
       "textecbd276ebec2": "検索してみてください。",
       "textecc7ed048b32": "月末締め処理",
       "texteccba86b787c": "ノートPC、VPS、またはあなた自身のネットワーク。",
-      "textecccd43d1878": ".kortix/connectors/schema.graphql",
+      "textecccd43d1878": "connectors/schema.graphql",
       "texteccce15347a4": "このAppをプレビューするアクセス権がありません。",
       "textecd3c555ab44": "権限の保存に失敗しました",
       "textecdcf83028e7": "パラメーターを確認",
@@ -22266,6 +22288,7 @@
     "installProfileHint": "Kortix でこのコネクタに表示される名前。",
     "wayComposio": "Composio 経由で接続します。Composio はサインインを代行するサードパーティのパートナーです。{name} にワンクリックでサインインし、Composio がログインを保持します。",
     "wayMcpOneClick": "{name} 自身の MCP サーバーに接続します。{name} にサインインするだけです。",
+    "wayKortixGoogle": "Kortix は Google の API を通じて {name} に接続します。Google にサインインするだけです。",
     "wayMcpSetup": "{name} 自身の MCP サーバーに接続します。自分の OAuth アプリか API キーが必要で、インストール後に設定します。",
     "wayApi": "{name} の {kind} に直接接続します。インストール後に API キーかトークンでアカウントを追加します。",
     "installsWay": "{kind} でインストール",
@@ -22284,8 +22307,8 @@
     "toolsAfterInstall": "この {kind} はインストール後にツールを一覧します。",
     "typeFilterLabel": "コネクターの種類",
     "typeFilterAll": "すべての種類",
-    "moveComposioTitle": "{app} には独自の MCP サーバーがあります",
-    "moveComposioBody": "このコネクターは Composio 経由で動いています。{app} 自身の MCP サーバーに切り替えられます。一度サインインすると切り替わります。エージェント、トリガー、kortix.yaml は引き続き {slug} を使います。",
+    "moveComposioTitle": "{app} は Composio なしで接続できます",
+    "moveComposioBody": "このコネクターは Composio 経由で動いています。Kortix が直接接続できます。一度サインインすると切り替わります。エージェント、トリガー、kortix.yaml は引き続き {slug} を使います。",
     "moveComposioAction": "MCP に切り替え",
     "wayChannel": "Kortix に組み込み：{name} でエージェントにメッセージできます。第三者は不要です。そのページで一度設定します。",
     "waySetUp": "設定",
@@ -22426,7 +22449,7 @@
   },
   "connectMcp": {
     "title": "MCP で Kortix に接続",
-    "description": "Claude、Claude Code、Cursor、Codex、または任意の MCP クライアントから Kortix を使えます。サインインは一度だけ。インストールは不要です。",
+    "description": "Claude、ChatGPT、Claude Code、Cursor、Codex、または任意の MCP クライアントから Kortix を使えます。サインインは一度だけ。インストールは不要です。",
     "docs": "ドキュメント",
     "done": "完了",
     "copy": "コピー",
@@ -22436,6 +22459,7 @@
     "copyUrl": "URL をコピー",
     "via": {
       "claude": "設定 → コネクタ",
+      "chatgpt": "開発者モード → カスタムコネクタ",
       "claude-code": "ターミナルコマンド 1 つ",
       "cursor": "ワンクリックでインストール",
       "codex": "ターミナルコマンド 2 つ",
@@ -22711,6 +22735,13 @@
     "onlyYouDescription": "あなただけ。すべてのワークスペースの、あなたのプライベートセッションで使えます。",
     "everyoneDescription": "ワークスペースの全員が使えます。自動化も含みます。",
     "promoLine": "Kortix がローカルファイルを扱い、コンピューターを操作できるようにします。",
+    "promo": {
+      "title": "仕事用のコンピューターを接続",
+      "titleThis": "このコンピューターを接続",
+      "description": "エージェントがローカルファイルを扱い、プログラムを実行し、画面上のアプリを操作します。何を許可するかはあなたが決めます。",
+      "cta": "接続",
+      "ctaOneClick": "ワンクリックで接続"
+    },
     "dismissPromo": "閉じる",
     "useCliInstead": "代わりに CLI を使う",
     "cliHint": "コマンドはコードを表示し、このデバイスを承認するページを開きます。その後はバックグラウンドで動作します。",
@@ -26850,8 +26881,7 @@
         "dangerZone": "危険な操作",
         "evalDatasets": "データセット",
         "evalTasks": "タスク",
-        "evalJobs": "ジョブ",
-        "evalTrials": "トライアル"
+        "evalJobs": "ジョブ"
       },
       "accessTitle": "アクセス",
       "accessDescription": "このワークスペースを開ける人と、そのロール。",
@@ -27105,9 +27135,7 @@
       "queued": "キュー待機中",
       "running": "実行中",
       "completed": "完了",
-      "cancelled": "キャンセル済み",
-      "paused": "一時停止中",
-      "cancelling": "キャンセル中"
+      "cancelled": "キャンセル済み"
     },
     "trialStatus": {
       "queued": "キュー待機中",
@@ -27116,8 +27144,7 @@
       "verifying": "検証中",
       "completed": "完了",
       "errored": "エラー",
-      "cancelled": "キャンセル済み",
-      "paused": "一時停止中"
+      "cancelled": "キャンセル済み"
     },
     "rerunFailed": "失敗したものを再実行",
     "rerunAll": "すべて再実行",
@@ -27174,8 +27201,7 @@
       "error": "エラー",
       "running": "実行中",
       "queued": "待機中",
-      "cancelled": "キャンセル",
-      "paused": "一時停止中"
+      "cancelled": "キャンセル"
     },
     "colMeanScore": "平均スコア",
     "metricsHint": "各トライアルのスコアは報酬の平均で、これはその平均です。報酬キーごとの Harbor の指標: {metrics}",
@@ -27361,49 +27387,7 @@
       "files": "ファイル",
       "results": "結果"
     },
-    "colTaskCount": "タスク",
-    "pause": "一時停止",
-    "resume": "再開",
-    "paused": "ジョブを一時停止しました",
-    "resumed": "ジョブを再開しました",
-    "cancelNow": "今すぐ停止",
-    "cancelNowHint": "実行中のトライアルを停止し、ジョブを終了します。",
-    "cancelDrain": "実行中のトライアルを完了させる",
-    "cancelDrainHint": "新しい開始や再試行は行いません。実行中のトライアルが終わるとジョブも終了します。",
-    "cancelDrainStarted": "実行中のトライアルが終わるとジョブが終了します",
-    "trialsTitle": "トライアル",
-    "trialsDescription": "すべてのジョブのすべてのトライアル。サーバー側で絞り込みます。",
-    "trialsInfo": "各フィルターは値と該当するトライアル数を表示します。数は他のフィルターで残ったトライアルの中で数えます。行を開くと、ジョブの横にトライアルが表示されます。",
-    "searchTrials": "トライアルを検索",
-    "sortLabel": "並べ替え",
-    "trialSort": {
-      "desc_created_at": "新しい順",
-      "created_at": "古い順",
-      "desc_finished_at": "最後に終了した順",
-      "desc_reward": "報酬が高い順",
-      "reward": "報酬が低い順",
-      "task": "タスク名順"
-    },
-    "trialFacet": {
-      "status": "ステータス",
-      "job": "ジョブ",
-      "task": "タスク",
-      "agent": "エージェント",
-      "model": "モデル",
-      "exception_type": "エラー"
-    },
-    "trialFacetAny": {
-      "status": "すべてのステータス",
-      "job": "すべてのジョブ",
-      "task": "すべてのタスク",
-      "agent": "すべてのエージェント",
-      "model": "すべてのモデル",
-      "exception_type": "すべてのエラー"
-    },
-    "noTrialsYet": "まだトライアルはありません",
-    "displayingRange": "{total} 件中 {from}–{to} 件",
-    "previousPage": "前のページ",
-    "nextPage": "次のページ"
+    "colTaskCount": "タスク"
   },
   "desktopTabs": {
     "tabs": "開いているタブ",
@@ -27435,7 +27419,9 @@
       "goals": "ゴール",
       "inbox": "受信トレイ",
       "memory": "メモリ",
-      "members": "メンバー"
+      "members": "メンバー",
+      "review": "レビュー",
+      "setup": "セットアップを完了する"
     },
     "sections": {
       "agents": "エージェント",
@@ -27452,5 +27438,29 @@
       "members": "メンバー",
       "settings": "設定"
     }
+  },
+  "workspaceSetup": {
+    "title": "セットアップを完了する",
+    "description": "{total} 件中 {done} 件完了。各行は設定が済むと完了になります。",
+    "descriptionIdle": "このワークスペースのエージェントに必要な設定です。",
+    "tryAgain": "再試行",
+    "loadFailed": "セットアップの手順を読み込めませんでした。",
+    "emptyTitle": "設定する項目はありません",
+    "emptyDescription": "このワークスペースではサインイン、シークレット、Slack の設定は不要です。",
+    "openWorkspace": "ワークスペースを開く",
+    "completeTitle": "セットアップが完了しました",
+    "completeDescription": "ターミナルでセットアップを開始した場合、そちらで自動的に続行されます。",
+    "slackName": "Slack",
+    "kindConnector": "コネクタ",
+    "kindSecret": "シークレット",
+    "kindSlack": "チャンネル",
+    "done": "完了",
+    "connect": "{name} を接続",
+    "reconnect": "{name} を再接続",
+    "setSecret": "{name} を設定",
+    "addSlack": "Kortix を Slack に追加",
+    "connectSlack": "Slack を接続",
+    "bannerTitle": "{left, plural, other {セットアップの手順があと # 件あります}}",
+    "bannerDismiss": "閉じる"
   }
 }

@@ -10,9 +10,10 @@
  *
  * ACCURACY GATE for this page specifically:
  *  - INVENT NOTHING about employment. No salary band, no equity, no benefits,
- *    no headcount, no remote policy beyond "US remote" on a location.
+ *    no headcount, no remote policy beyond the locations below.
  *    Locations (founder, 2026-11-19): Founding GTM is New York/San Francisco
- *    or US remote; MTS and FDE add Belgrade.
+ *    or US remote; MTS and FDE are Belgrade,
+ *    New York/San Francisco or remote.
  *  - The three openings (Founding GTM, MTS, FDE, 2026-11-18) are the founder's own list and
  *    order. The board names the role and its location only: no summary line, no role pages,
  *    no spec. A spec belongs in a conversation.
@@ -53,13 +54,13 @@ export const openings = [
     id: 'mts',
     name: 'MTS',
     full: 'Member of Technical Staff',
-    location: 'Belgrade, NYC/SF or US remote',
+    location: 'Belgrade, NYC/SF or remote',
   },
   {
     id: 'fde',
     name: 'FDE',
     full: 'Forward Deployed Engineer',
-    location: 'Belgrade, NYC/SF or US remote',
+    location: 'Belgrade, NYC/SF or remote',
   },
 ] as const;
 

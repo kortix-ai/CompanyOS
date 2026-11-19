@@ -105,11 +105,8 @@ mock.module('@kortix/ui/internal/tunnel/computer-connect', () => ({
 mock.module('@kortix/ui/internal/layout/connect-mcp-modal', () => ({
   ConnectMcpModal: () => null,
 }));
-mock.module('@kortix/ui/workspace/sidebar/footer/project-mcp-nav', () => ({
-  ProjectMcpNavItem: () => null,
-}));
-mock.module('@kortix/ui/workspace/sidebar/footer/project-computer-nav', () => ({
-  ProjectComputerNavItem: () => null,
+mock.module('@kortix/ui/workspace/sidebar/footer/project-promo-cards', () => ({
+  ProjectPromoCards: () => null,
 }));
 mock.module('@kortix/ui/workspace/sidebar/footer/project-manifest-issues-alert', () => ({
   ProjectManifestIssuesAlert: () => null,
@@ -226,7 +223,7 @@ test('with chat on, the sidebar is Spaces only (Cmd+J still opens the new-sessio
   expect(html).not.toContain('oneChat');
   expect(html).not.toContain('spaces.directMessages');
   // Review first, then the person's own space (their chat with My Kortix, at /chat), then the channels.
-  const review = html.indexOf('href="/workspaces/synthetic-project/inbox?view=review"');
+  const review = html.indexOf('href="/workspaces/synthetic-project/review"');
   const personal = html.indexOf('href="/workspaces/synthetic-project/chat"');
   const general = html.indexOf('href="/workspaces/synthetic-project/c/general"');
   expect(review).toBeGreaterThan(-1);

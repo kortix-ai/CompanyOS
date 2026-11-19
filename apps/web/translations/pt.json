@@ -206,7 +206,8 @@
     },
     "agentAccess": "Agentes: {agents}",
     "allAgents": "Todos os agentes",
-    "noAgents": "Nenhum agente"
+    "noAgents": "Nenhum agente",
+    "deliveredOnceSet": "Entregue assim que um valor for definido"
   },
   "useCases": {
     "headline": "Os ciclos que mantêm uma empresa em funcionamento",
@@ -598,7 +599,7 @@
         },
         "preferences": {
           "label": "Idioma e atalhos",
-          "description": "Idioma e atalhos de teclado."
+          "description": "Idioma, movimento e atalhos de teclado."
         },
         "connected": {
           "label": "Contas conectadas"
@@ -635,9 +636,11 @@
     },
     "preferences": {
       "title": "Idioma e atalhos",
-      "description": "Atalhos de idioma e teclado.",
+      "description": "Idioma, movimento e atalhos de teclado.",
       "languageTitle": "Linguagem",
       "languageDescription": "O idioma Kortix é exibido em todos os lugares do aplicativo.",
+      "motionTitle": "Reduzir movimento",
+      "motionDescription": "Interrompe brilhos, pulsos e transições em todo o app. Os indicadores de carregamento continuam girando.",
       "keyboardTitle": "Atalhos de teclado",
       "keyboardDescription": "A tecla modificadora usada para alternar guias e todos os atalhos do aplicativo.",
       "modifierKey": "Tecla modificadora",
@@ -931,6 +934,7 @@
       "secretsCommand": "Comando de segredos",
       "ownClientTitle": "Use seu próprio cliente Git",
       "ownClientDescription": "Clone com o <code>git</code> comum em vez da linha de comando do Kortix.",
+      "ownClientHelp": "Clone deste endereço com qualquer cliente Git. Quando o git pedir, insira qualquer nome de usuário e uma chave de API do Kortix como senha — a linha de comando do Kortix faz isso por você com seu auxiliar de credenciais; o <code>git</code> comum não faz.",
       "cloneAddressDescription": "Clone deste endereço com qualquer cliente Git. O Kortix assina a solicitação, portanto não é necessário criar ou guardar um token de acesso.",
       "cloneAddress": "Endereço de clonagem",
       "peopleTitle": "Pessoas com acesso",
@@ -1145,15 +1149,16 @@
         "startup": "Inicialização"
       },
       "statuses": {
-        "ready": "pronto",
-        "building": "criando",
-        "failed": "falhou"
+        "ready": "Pronto",
+        "building": "Criando",
+        "failed": "Falhou"
       },
       "stale": {
         "superseded": "Não terminou e uma configuração mais recente o substituiu",
         "recovered": "Não terminou, mas o ambiente já está pronto",
         "retrying": "Não terminou — uma nova tentativa está em andamento"
       },
+      "supersededGroup": "{count, plural, one {# compilação anterior substituída} other {# compilações anteriores substituídas}}",
       "outcomes": {
         "ready": "Pronto para novas sessões",
         "building": "Sendo preparado agora",
@@ -1255,6 +1260,7 @@
       "search": "Pesquisar recursos",
       "loadFailed": "Não foi possível carregar o espaço de trabalho",
       "retry": "Tentar novamente",
+      "reset": "Redefinir para o padrão",
       "noMatches": "Nenhum resultado para {query}.",
       "emptyTitle": "Nenhum recurso experimental",
       "emptyDescription": "Esta instalação não oferece sinalizadores de recurso por espaço de trabalho.",
@@ -1336,6 +1342,14 @@
         "evals": {
           "name": "Evals",
           "description": "Run your agents on a list of tasks and score the results. A task is an instruction, a sandbox and a test script that writes a score (the Harbor task format). Declare a set of tasks under `evals:` in kortix.yaml, run it against any agent and model, and compare runs to see whether a change made the agent better or worse."
+        },
+        "desktop_tabs": {
+          "name": "Abas no desktop",
+          "description": "O app de desktop mostra abas como as de um navegador na barra de título: cada sessão, artefato e página abre em sua própria aba, e ⌘T, ⌘W e ⌘1–9 funcionam como em um navegador. O app web não muda."
+        },
+        "calendar": {
+          "name": "Calendário",
+          "description": "Um calendário compartilhado para pessoas e agentes: itens com data, participantes e comentários, ao lado dos gatilhos e Loops agendados. Mencione alguém com @ para notificá-lo. Os agentes usam `kortix calendar`."
         }
       },
       "channelsSwitch": {
@@ -1561,6 +1575,22 @@
     "referralShareTitle": "Indicar Amigos",
     "referralShareSubtitle": "Ganhe 400 créditos",
     "new": "Novo",
+    "mcpPromo": {
+      "title": "Use o Kortix no ChatGPT e no Claude",
+      "description": "Adicione o Kortix ao chat de IA que você já usa. Inicie agentes, acompanhe o trabalho e use seus conectores de lá.",
+      "cta": "Conectar"
+    },
+    "desktopPromo": {
+      "title": "Baixe o app para desktop",
+      "description": "Passe uma tarefa ao Kortix de qualquer app com o Quick Entry e conecte este computador com um clique.",
+      "cta": "Baixar"
+    },
+    "phonePromo": {
+      "title": "Kortix no seu celular",
+      "description": "Todas as sessões no seu bolso. Uma notificação avisa quando uma termina ou precisa da sua resposta.",
+      "cta": "Baixar o app"
+    },
+    "promos": "Formas de usar o Kortix",
     "upgrade": "Melhorar",
     "chats": "Chats",
     "library": "Arquivos",
@@ -1647,6 +1677,7 @@
         "status": "Estado",
         "subAgent": "Subagente",
         "spawned": "Sessão iniciada",
+        "spawnedBy": "Iniciada por {title}",
         "subAgentCount": "{count, plural, one {# subagente} other {# subagentes}}",
         "spawnedCount": "{count, plural, one {# sessão iniciada} other {# sessões iniciadas}}",
         "created": "Criada em",
@@ -1666,8 +1697,8 @@
         "needsInput": "Precisa da sua resposta",
         "starting": "A acordar",
         "running": "A trabalhar",
-        "done": "Pronta",
-        "stopped": "Em repouso",
+        "done": "Concluída",
+        "stopped": "Interrompida",
         "failed": "Falhou",
         "legacy": "Antiga"
       }
@@ -1696,6 +1727,9 @@
       "title": "{file} tem {errors, plural, one {# erro} other {# erros}} e {warnings, plural, one {# aviso} other {# avisos}}",
       "titleErrors": "{file} tem {errors, plural, one {# erro} other {# erros}}",
       "titleWarnings": "{file} tem {warnings, plural, one {# aviso} other {# avisos}}",
+      "count": "{errors, plural, one {# erro} other {# erros}} e {warnings, plural, one {# aviso} other {# avisos}}",
+      "countErrors": "{errors, plural, one {# erro} other {# erros}}",
+      "countWarnings": "{warnings, plural, one {# aviso} other {# avisos}}",
       "errorsOff": "Os agentes e triggers com um erro ficam desativados até ser corrigido.",
       "warningsOnly": "Tudo continua a funcionar.",
       "error": "Erro",
@@ -1841,6 +1875,7 @@
       "deleteFailed": "Não foi possível excluir o grupo",
       "moveUp": "Mover para cima",
       "moveDown": "Mover para baixo",
+      "collapseOthers": "Recolher os outros",
       "reorderFailed": "Não foi possível reordenar os grupos",
       "moveTo": "Mover para um grupo",
       "removeFromGroup": "Remover do grupo",
@@ -1875,7 +1910,16 @@
       "private": "Privado",
       "noMessages": "Nenhuma mensagem ainda",
       "more": "Mais"
-    }
+    },
+    "calendar": "Calendário",
+    "running": "Em execução",
+    "runningCount": "{count, plural, one {# sessão em execução} other {# sessões em execução}}",
+    "runningTitle": "Em execução agora",
+    "runningEmpty": "Nada está em execução.",
+    "runningFailed": "Não foi possível ler o que está em execução.",
+    "runningRetry": "Tentar novamente",
+    "runningIn": "em {title}",
+    "runningFirst": "A mostrar as primeiras {count}."
   },
   "dashboard": {
     "title": "Painel",
@@ -2182,6 +2226,11 @@
       "resume": "Retomar",
       "agentIsWorking": "{agent} está trabalhando",
       "needsYouOn": "Precisa de você: {header}"
+    },
+    "panel": {
+      "outputNew": "Novo",
+      "outputUpdated": "Atualizado",
+      "resizePane": "Redimensionar painel"
     }
   },
   "agents": {
@@ -2344,6 +2393,8 @@
     "chatInputMachine": "Máquina",
     "chatInputMachineDescription": "O modelo de máquina com que esta sessão inicia.",
     "sending": "Enviando",
+    "notSentYet": "Ainda não enviado · será enviado quando você voltar a ficar online",
+    "offlineReconnecting": "Offline — reconectando…",
     "stop": "Parar",
     "startingSession": "A iniciar a sessão…",
     "sessionStarted": "Sessão iniciada",
@@ -2883,7 +2934,7 @@
       "featuresGrace": "O SSO e o SCIM continuam ativos até {date}. Fale com vendas para manter o Enterprise.",
       "featuresOn": "Ativo",
       "featuresOff": "Desativado",
-      "featuresOffDescription": "SSO, SCIM, funções avançadas, logs de auditoria e marca própria.",
+      "featuresOffDescription": "SSO, SCIM, funções avançadas e logs de auditoria.",
       "featuresDemo": "Ativo como demonstração. Fale com vendas para obter uma licença.",
       "featuresLicensed": "Licenciado",
       "featuresLicensedRenews": "Licenciado · renova em {date}",
@@ -2908,7 +2959,11 @@
       "action": "Adicione créditos ou escolha um plano para executar sessões aqui."
     },
     "costs": {
-      "billedElsewhere": "{amount} créditos deste custo foram cobrados do espaço de trabalho de onde ele foi movido."
+      "billedElsewhere": "{amount} créditos deste custo foram cobrados do espaço de trabalho de onde ele foi movido.",
+      "allWorkspaces": "Todos os workspaces",
+      "usageDescriptionWorkspace": "Cobranças da Kortix deste workspace. Os créditos são um saldo único para todos os workspaces.",
+      "usageDescriptionAll": "Cobranças da Kortix e registro de créditos de todos os workspaces.",
+      "planDescriptionAll": "Plano, créditos e gastos de todos os workspaces."
     }
   },
   "ssoRequired": {
@@ -3015,40 +3070,35 @@
       "sending": "Enviando…",
       "oneMoment": "Aguarde um momento…",
       "useDifferentEmail": "Usar outro e-mail",
-      "usePasswordInstead": "Usar uma senha",
-      "emailLinkInstead": "Enviar um link por e-mail",
-      "forgotPassword": "Esqueceu sua senha?",
-      "automaticAccount": "É novo por aqui? Ao continuar, sua conta será criada automaticamente.",
+      "usePasswordInstead": "Usar senha",
+      "emailLinkInstead": "Enviar-me um código",
+      "forgotPassword": "Esqueceu a senha?",
+      "automaticAccount": "Entre ou crie uma conta.",
       "sso": {
         "title": "Usar login único",
-        "description": "<address>{email}</address> pode entrar usando o provedor de identidade da sua organização.",
+        "description": "Entre como <address>{email}</address> pela sua organização.",
         "continue": "Continuar com SSO",
         "enterWorkEmail": "Digite seu e-mail corporativo acima e escolha o login único.",
         "notConfigured": "O login único não está configurado para “{domain}”. Peça ao administrador para configurá-lo ou continue com seu e-mail.",
         "lookingUp": "Buscando seu provedor de identidade…",
-        "use": "Usar login único (SSO)"
+        "use": "Usar SSO"
       },
       "link": {
         "title": "Verifique seu e-mail",
-        "description": "Enviamos um link para <address>{email}</address>. Abra-o para continuar.",
-        "confirmDescription": "Enviamos um e-mail de confirmação para <address>{email}</address>. Confirme seu e-mail para continuar.",
-        "unknownDescription": "Enviamos um e-mail para <address>{email}</address> — um link de acesso ou um link de confirmação para uma nova conta.",
-        "closedDescription": "Se <address>{email}</address> tem uma conta, o link de acesso está a caminho.",
-        "notReceived": "Não recebeu o link?",
-        "confirmNotReceived": "Não recebeu o e-mail de confirmação?",
-        "resendIn": "Reenviar em {seconds}",
-        "resend": "Reenviar",
-        "checkSpam": "Não está lá? Verifique a pasta de spam ou lixo eletrónico."
+        "description": "Digite o código enviado para <address>{email}</address>.",
+        "confirmDescription": "Confirme o e-mail enviado para <address>{email}</address> para continuar.",
+        "unknownDescription": "Digite o código enviado para <address>{email}</address>.",
+        "closedDescription": "Se <address>{email}</address> tiver uma conta, um código está a caminho.",
+        "resendIn": "Reenviar em {seconds} s",
+        "resend": "Reenviar"
       },
       "credentials": {
         "signin": {
           "title": "Que bom ter você de volta",
-          "description": "Digite sua senha para continuar.",
           "passwordPlaceholder": "Sua senha"
         },
         "signup": {
           "title": "Crie sua conta",
-          "description": "Escolha uma senha para começar.",
           "passwordPlaceholder": "Crie uma senha"
         },
         "unknown": {
@@ -3062,22 +3112,19 @@
         "networkFailed": "Não foi possível enviar a solicitação. Tente novamente.",
         "signupsClosed": "As inscrições estão fechadas no momento. Entre em contato com o administrador ou solicite acesso.",
         "ssoRequired": "Sua organização exige login único. Continue com SSO.",
-        "incorrectPassword": "Senha incorreta. Tente novamente ou redefina-a em “Esqueceu sua senha?”.",
-        "existingAccountWrongPassword": "Você já tem uma conta — digite sua senha atual para entrar.",
+        "incorrectPassword": "Senha incorreta.",
+        "existingAccountWrongPassword": "Este e-mail já tem uma conta. Digite a senha.",
         "confirmAccount": "Verifique seu e-mail para confirmar sua conta",
         "invalidCode": "Código inválido ou expirado"
       },
-      "legal": {
-        "signup": "Ao criar uma conta, você concorda com os <termsOfService>Termos de Serviço</termsOfService> e a <privacyPolicy>Política de Privacidade</privacyPolicy>",
-        "default": "<termsOfService>Termos de Serviço</termsOfService> e <privacyPolicy>Política de Privacidade</privacyPolicy>"
-      }
+      "or": "ou"
     },
     "passwordReset": {
       "loading": "Carregando",
       "resetting": "Redefinindo senha",
       "request": {
         "title": "Redefina sua senha",
-        "description": "Digite seu e-mail e enviaremos um link para redefinir sua senha.",
+        "description": "Enviaremos um link de redefinição.",
         "email": "E-mail",
         "emailPlaceholder": "Seu endereço de e-mail",
         "sending": "Enviando link…",
@@ -3085,8 +3132,7 @@
       },
       "sent": {
         "title": "Confira seu e-mail",
-        "description": "Enviamos um link para redefinir sua senha.",
-        "address": "Link de redefinição enviado para <address>{email}</address>"
+        "address": "Enviamos um link de redefinição para <address>{email}</address>."
       },
       "expired": {
         "title": "Link expirado",
@@ -3096,12 +3142,11 @@
       "success": {
         "title": "Senha atualizada",
         "description": "Agora você pode entrar com sua nova senha.",
-        "changed": "Sua senha foi alterada.",
         "signIn": "Ir para o login"
       },
       "form": {
         "title": "Defina uma nova senha",
-        "description": "Escolha uma nova senha para sua conta.",
+        "description": "Escolha uma nova senha.",
         "newPassword": "Nova senha",
         "newPasswordPlaceholder": "Sua nova senha",
         "confirmPassword": "Confirme a senha",
@@ -3337,7 +3382,17 @@
       "jsonKeys": "{count, plural, one {JSON · # chave} other {JSON · # chaves}}",
       "jsonItems": "{count, plural, one {JSON · # item} other {JSON · # itens}}",
       "failedSentence": "O fluxo de trabalho parou antes de terminar.",
-      "runningCount": "{count} em execução"
+      "runningCount": "{count} em execução",
+      "spent": "{credits} créditos gastos",
+      "spentHint": "O que a Kortix cobrou até agora por esta execução: chamadas ao modelo e tempo de computação da execução e dos seus agentes.",
+      "waitingForYou": "Aguardando você · não iniciado",
+      "cancelled": "Cancelado — nada foi executado",
+      "answeredInChat": "Respondido no chat — nada foi executado",
+      "stoppedByYou": "Parado por você",
+      "attempt": "tentativa {count}",
+      "quietFor": "Sem saída há {minutes} min",
+      "quietCount": "{count} sem saída",
+      "holdingWorking": "Em espera · {count} ainda trabalhando"
     },
     "agent": {
       "backgroundWorking": "Trabalhando em segundo plano",
@@ -3422,7 +3477,8 @@
       "automation_failed": "Alerta de falha",
       "automation_recovered": "Alerta de recuperação",
       "capture_device_down": "Computador do Capture parado",
-      "capture_device_recovered": "Computador do Capture gravando de novo"
+      "capture_device_recovered": "Computador do Capture gravando de novo",
+      "mention": "Menções"
     },
     "kindDescription": {
       "turn_done": "Um turno termina.",
@@ -3433,7 +3489,8 @@
       "automation_failed": "Um trigger ou ciclo começa a falhar.",
       "automation_recovered": "Um trigger ou ciclo que falhava volta a funcionar.",
       "capture_device_down": "Um computador do Kortix Capture não está gravando. Enviado a quem gerencia o Capture.",
-      "capture_device_recovered": "Um computador do Kortix Capture que parou voltou a gravar."
+      "capture_device_recovered": "Um computador do Kortix Capture que parou voltou a gravar.",
+      "mention": "Outra pessoa menciona você ou adiciona você a um item do calendário."
     },
     "inbox": {
       "title": "Caixa de entrada",
@@ -10418,6 +10475,7 @@
       "text38e64d6a8162": "Faz commit de um SKILL.md no branch padrão do espaço de trabalho. Não precisa de modelo nem de chat.",
       "text39cfc32bd12c": "Texto colado",
       "text23d0bb29fca0": "{count, plural, one {# palavra} other {# palavras}}",
+      "text3e310b75051c": "Executar novamente",
       "text426699d5a8c0": "{count, plural, one {# caractere} other {# caracteres}}",
       "text40078a553439": "Bloco do anexo enviado",
       "text4c7f8000aabd": "Envio do anexo concluído",
@@ -10781,6 +10839,10 @@
       "text0b2e0f1bf47e": "Cada chamada feita e quem a liberou",
       "text0b2ecc210632": "O único canal ao vivo. Faça a pergunta na thread onde ela surgiu; a resposta, o gráfico e a consulta retornam à mesma thread.",
       "text0b348466332c": "Nada mudou ainda",
+      "textf83916135509": "em uso",
+      "texta251c18205f1": "Em cache",
+      "text64cd989efc14": "Espaço livre",
+      "textcc6d004b577f": "Este arquivo não tem alterações em relação à base.",
       "text0b38e3daeb93": "Todos os segredos",
       "text0b3dbab0c668": "- Publique a correção e escreva o postmortem",
       "text0b495c90447a": "O calendário, a caixa de entrada e o sistema de candidatos.",
@@ -10916,7 +10978,7 @@
       "text0f096c40454e": "Perfila o dataset, plota as distribuições, verifica vazamento e desequilíbrio e escreve o primeiro parágrafo honesto sobre os dados. Você começa com contexto, não com uma célula vazia.",
       "text0f16342ee1c1": "32%",
       "text0f308cfb7ef3": "0 automático",
-      "text0f4827ef74ea": "Vagas abertas na Kortix — FDE, GTM e MTS. Belgrado, Sérvia e São Francisco. Contratamos para responsabilidade prolongada.",
+      "text0f4827ef74ea": "Vagas abertas na Kortix — FDE, GTM e MTS. Belgrado, Sérvia e EUA. Contratamos para responsabilidade prolongada.",
       "text0f600458e375": "SSO, membros, grupos e acesso baseado em funções já vêm integrados, com permissões por recurso para pessoas e agentes, segredos criptografados e uma trilha de auditoria completa. Hospede por conta própria para executar toda a plataforma dentro do seu ambiente.",
       "text0f64c7d16c28": "# verifique se compila, peça os secrets ausentes,",
       "text0f656790976e": "Abra qualquer plataforma de agentes — todas são arquitetonicamente idênticas. As diferenças marginais não são defensáveis. A única coisa que diverge é o loop de aprendizado.",
@@ -11650,6 +11712,7 @@
       "text2522f9d16f3b": "O CompanyOS",
       "text25330787f710": "+3",
       "text2534086de9fe": "Mostrar painel",
+      "text40cd6293d193": "Ocultar painel",
       "text2534e74d5120": "O que o agente deve alterar?",
       "text253923d0f0c5": "Conexões → Aplicações → +",
       "text253b18a02165": "Iniciando",
@@ -11985,7 +12048,6 @@
       "text2f6a48c637a9": "Webhook removido",
       "text2f6c00ce1d58": "Os grupos enviados pelas regras do OneLogin são criados no Kortix com os nomes do OneLogin.",
       "text2f6e9daec8e9": "Estados",
-      "text2f72fafe0ce1": "em vez da linha de comando Kortix.",
       "text2f77668a9dfb": "Mensagem",
       "text2f77dafd3fcc": "conectar um provedor",
       "text2f80158a9d89": "research/",
@@ -14200,7 +14262,7 @@
       "text6ff3bff5952a": "precisa de permissão para:",
       "text6ffb34d0baed": "git push origin HEAD",
       "text700e7474f9a9": "Link de indicação indisponível",
-      "text702391f5d071": "Isso cria um token de acesso pessoal. Você pode revogá-lo a qualquer momento em",
+      "text702391f5d071": "Revogue o acesso a qualquer momento em",
       "text702ef921ed1d": "Nome",
       "text7031306d3dd8": "O provedor deste modelo não está conectado a este espaço de trabalho — as solicitações encaminhadas para ele falham imediatamente",
       "text7031edbcf9c4": "Falha",
@@ -14467,7 +14529,6 @@
       "text7743ce348d92": "rascunho",
       "text775ddc2119ab": "Copie abaixo o \"Identifier (Entity ID)\" e o \"Reply URL (Assertion Consumer Service URL)\" e cole-os no painel \"Basic SAML Configuration\" — marque o Identifier como padrão e defina \"Sign on URL\" como a página de login do Kortix. Deixe Relay State e Logout URL vazios. Clique em \"Save\" e feche o painel de edição.",
       "text775f96fcc9db": "Token revogado",
-      "text7760401b25c7": "Clone com planície",
       "text7761b572aba8": "Notificações do navegador",
       "text77793c7508f1": "será redefinida.",
       "text7779bc2ac4be": "skills/claims/SKILL.md",
@@ -16536,7 +16597,7 @@
       "textb2a8625a332e": "Três gatilhos agendados em um eixo temporal com um marcador do momento presente e a próxima execução destacada.",
       "textb2ac0da7c543": "Toda a equipe",
       "textb2c0cab20dc3": "Lotes JSON-RPC não são compatíveis",
-      "textb2c293b68745": ".kortix/connectors/routes.toml",
+      "textb2c293b68745": "connectors/routes.toml",
       "textb2c5bc52374a": "Segredo excluído",
       "textb2d544129223": "Não está concluído se",
       "textb2e30caf44ee": "Use cores hexadecimais codificadas diretamente nos componentes",
@@ -16690,7 +16751,6 @@
       "textb7297226fd1f": "Salvar nome",
       "textb7396994492d": "Adicionar app SAML personalizado → Mapeamento de atributos",
       "textb73ce9104ddb": "Falha ao copiar — selecione e copie manualmente",
-      "textb74106e21108": "não.",
       "textb7416a669c6b": "Retirado",
       "textb74399647bf0": "Dê a ela o nome da tarefa que executa, para que uma linha de auditoria se identifique sozinha.",
       "textb743a712efa8": "Uma thread é uma sessão. Uma, e somente uma.",
@@ -17047,7 +17107,7 @@
       "textc18ce3e6b5e0": "enterpriseAccordionSelfhostBody",
       "textc18dc13ca821": "As sessões ainda podem começar, mas estes valores estarão ausentes para o agente.",
       "textc19b5dc4376a": "\"O que alguém já disse sobre exportação?\"",
-      "textc19c3fc65916": "no seu terminal está aguardando sua aprovação deste login.",
+      "textc19c3fc65916": "aguarda sua aprovação.",
       "textc1a5d4982c10": "não para contorná-la.",
       "textc1abcf2a909a": "≈ {value0} créditos",
       "textc1ada08ce138": "Trilha de auditoria",
@@ -18267,7 +18327,6 @@
       "texte3190ee3d8a8": "Não foi possível exibir a pasta de trabalho",
       "texte31ab643c44f": "membro",
       "texte31c7af1f424": "Cada pessoa conecta a própria conta.",
-      "texte327e6c1348b": "Clone deste endereço com qualquer cliente Git. Quando o git perguntar, insira qualquer nome de usuário e uma chave de API Kortix como senha - a linha de comando Kortix faz isso para você por meio de seu auxiliar de credencial, simples",
       "texte3311b311078": "Quer CSV além de xlsx",
       "texte335ed040bfe": "Um rascunho em um branch, revisado como diff.",
       "texte339fc8e7d89": "Uma resposta de chat não pode ser verificada nem repetida. Por isso a sessão faz commit do trabalho: a consulta, o script, o gráfico e uma nota sobre o que foi verificado.",
@@ -18612,7 +18671,7 @@
       "textecbd276ebec2": "Tente uma busca.",
       "textecc7ed048b32": "fechamento do mês",
       "texteccba86b787c": "Um laptop, uma VPS ou sua própria rede.",
-      "textecccd43d1878": ".kortix/connectors/schema.graphql",
+      "textecccd43d1878": "connectors/schema.graphql",
       "texteccce15347a4": "Você não tem acesso para visualizar este App.",
       "textecd3c555ab44": "Falha ao salvar as permissões",
       "textecdcf83028e7": "Revisar parâmetros",
@@ -20707,7 +20766,7 @@
       "text5f6ba69d66d1": "Habilidade removida",
       "textcb8d6b0c94c9": " e todos os arquivos nela, incluindo edições, e remove a habilidade de todos os agentes que a usam. Um commit no branch padrão.",
       "cliDeviceTitle": "Autorizar Kortix CLI",
-      "cliDeviceWarning": "Aprove apenas um início de sessão que você iniciou. Confira se este código é igual ao exibido no seu terminal.",
+      "cliDeviceWarning": "Aprove apenas se este código corresponder ao seu terminal.",
       "cliDeviceCode": "Código de acesso",
       "cliDeviceApproved": "Acesso aprovado. Volte ao terminal.",
       "cliDeviceAction": "Autorizar CLI",
@@ -21278,7 +21337,7 @@
       "text05ee1d6181f3": "Quando uma solicitação de mudança é mesclada, {agent} executa sua instrução.",
       "texte608495c45ce": "Mesclada em {branch}",
       "text80ca527b0d55": "Gatilho de solicitação de mudança criado",
-      "authEmailAlreadySent": "Enviamos este e-mail há menos de um minuto. Verifique a sua caixa de entrada e a pasta de spam antes de pedir outro.",
+      "authEmailAlreadySent": "Já enviado. Verifique sua caixa de entrada e o spam.",
       "textfe0dab79db43": "Converse com o Kortix em um único chat: cada mensagem é uma conversa, e a resposta mais recente do Kortix aparece abaixo dela.",
       "text2e914b62b832": "Links em Markdown",
       "text7bed093239f3": "Recursos reconhecidos mostram um ícone do app e um rótulo compacto. Passe o mouse para ver o URL original.",
@@ -21374,7 +21433,19 @@
       "text458ceb31019b": "Gatilhos de eventos de conector",
       "text27ca9df9dbaa": "Os gatilhos de eventos de conector estão desativados",
       "textfff553f218c7": "Evals",
-      "textd5b5d846044e": "evals eval benchmark pontuação harbor terminal-bench tarefas classificação"
+      "textd5b5d846044e": "evals eval benchmark pontuação harbor terminal-bench tarefas classificação",
+      "textdb6ee6610b15": "calendário agenda programação semana mês prazo vencimento itens gatilhos",
+      "text9b041fd0dfb7": "Itens do calendário listados",
+      "text968ff709bd3d": "Item do calendário criado",
+      "textd115ffd5e3a4": "Pessoas do calendário listadas",
+      "texta268bab502cf": "Item do calendário visualizado",
+      "text16d71c4d10a2": "Item do calendário editado",
+      "text14580c9900ac": "Item do calendário excluído",
+      "text96386c724e21": "Comentou um item do calendário",
+      "textf543a9f99ce7": "Barra de ações",
+      "textca4067071fcf": "Seleção",
+      "text4cea356a17a1": "Alterações não salvas",
+      "text2358f7b37c07": "A barra flutuante de um modo temporário: uma seleção, alterações não salvas, uma colagem pendente. Um título, uma descrição discreta, ações com atalhos de teclado e um botão de fechar."
     },
     "publicShareConfirm": {
       "title": "Criar um link público?",
@@ -21791,11 +21862,14 @@
     "noCapUnlimited": "Sem limite · gasto ilimitado",
     "tokensSub": "{in} entrada · {out} saída",
     "unknownValue": "Desconhecido",
-    "estimateCoverageUnavailable": "Cobertura da estimativa indisponível.",
     "estimatesSeparate": "O gasto real acima é separado. As estimativas nunca são somadas às cobranças.",
     "estimatedUsageValueLabel": "Valor de uso estimado do LLM (não é uma fatura):",
-    "pricedRequests": "{count} solicitações com preço",
-    "unpricedRequests": "{count} solicitações sem preço",
+    "pricedRequests": "{count, number} solicitações com preço",
+    "unpricedRequests": "{count, number} solicitações sem preço",
+    "failedRequests": "{count, number} solicitações com falha",
+    "estimateInfoLabel": "Sobre esta estimativa",
+    "estimateDetail": "Chamadas de modelo bem-sucedidas avaliadas pelos preços de tabela públicos. Solicitações com falha e modelos sem preço conhecido não são precificados.",
+    "estimateRateVersion": "Tabela de preços: {version}",
     "llmEstimateLabel": "Estimativa do LLM:"
   },
   "triggerComposer": {
@@ -22214,6 +22288,7 @@
     "installProfileHint": "O nome que as pessoas veem para este conector no Kortix.",
     "wayComposio": "Conecta pelo Composio, um parceiro terceiro que faz o login por você: você entra no {name} com um clique e o Composio mantém o login.",
     "wayMcpOneClick": "Conecta ao servidor MCP do próprio {name}. Você só entra no {name}.",
+    "wayKortixGoogle": "O Kortix se conecta ao {name} pela API do Google. Você só entra no Google.",
     "wayMcpSetup": "Conecta ao servidor MCP do próprio {name}. Precisa do seu próprio app OAuth ou de uma chave de API, definidos após a instalação.",
     "wayApi": "Conecta diretamente à {kind} do {name}. Após a instalação, adicione uma conta com a chave de API ou o token.",
     "installsWay": "Instala via {kind}",
@@ -22232,8 +22307,8 @@
     "toolsAfterInstall": "Esta {kind} lista as ferramentas após a instalação.",
     "typeFilterLabel": "Tipo de conector",
     "typeFilterAll": "Todos os tipos",
-    "moveComposioTitle": "{app} tem um servidor MCP próprio",
-    "moveComposioBody": "Este conector passa pelo Composio. Você pode mudá-lo para o servidor MCP do próprio {app}: entre uma vez e ele muda. Agentes, gatilhos e kortix.yaml continuam usando {slug}.",
+    "moveComposioTitle": "{app} pode se conectar sem o Composio",
+    "moveComposioBody": "Este conector passa pelo Composio. O Kortix pode conectá-lo diretamente: entre uma vez e ele muda. Agentes, gatilhos e kortix.yaml continuam usando {slug}.",
     "moveComposioAction": "Mudar para MCP",
     "wayChannel": "Integrado ao Kortix: as pessoas falam com o agente no {name}, sem terceiros. Configure uma vez na página dele.",
     "waySetUp": "Configurar",
@@ -22368,11 +22443,13 @@
     "areaDescription": "Conecte apps e canais aos seus agentes e decida o que eles podem fazer.",
     "wayMoreNamed": "Mais para {name}",
     "otherWaysLead": "Outras formas:",
-    "typeFilterKortix": "Kortix"
+    "typeFilterKortix": "Kortix",
+    "scopeAll": "Todos",
+    "scopeAdded": "Adicionados"
   },
   "connectMcp": {
     "title": "Conecte o Kortix via MCP",
-    "description": "Use o Kortix no Claude, Claude Code, Cursor, Codex ou qualquer cliente MCP. Você entra uma vez. Nada para instalar.",
+    "description": "Use o Kortix no Claude, ChatGPT, Claude Code, Cursor, Codex ou qualquer cliente MCP. Você entra uma vez. Nada para instalar.",
     "docs": "Docs",
     "done": "Concluir",
     "copy": "Copiar",
@@ -22382,6 +22459,7 @@
     "copyUrl": "Copiar URL",
     "via": {
       "claude": "Configurações → Conectores",
+      "chatgpt": "Modo de desenvolvedor → conector personalizado",
       "claude-code": "Um comando no terminal",
       "cursor": "Instalação com um clique",
       "codex": "Dois comandos no terminal",
@@ -22657,6 +22735,13 @@
     "onlyYouDescription": "Só você, em todos os espaços de trabalho, nas suas sessões privadas.",
     "everyoneDescription": "Todos no espaço de trabalho podem usá-lo, incluindo automações.",
     "promoLine": "Deixe o Kortix trabalhar com seus arquivos locais e controlar seu computador.",
+    "promo": {
+      "title": "Conecte seu computador de trabalho",
+      "titleThis": "Conectar este computador",
+      "description": "Os agentes trabalham com seus arquivos locais, executam programas e usam os apps da sua tela. Você decide o que eles podem fazer.",
+      "cta": "Conectar",
+      "ctaOneClick": "Conectar com um clique"
+    },
     "dismissPromo": "Dispensar",
     "useCliInstead": "Usar a CLI em vez disso",
     "cliHint": "O comando mostra um código e abre uma página onde você aprova este dispositivo. Depois ele roda em segundo plano.",
@@ -24682,6 +24767,86 @@
     "waitNoCost": "Nenhuma verificação roda enquanto ela aguarda uma resposta.",
     "chaseAt": "Faz o acompanhamento {time}"
   },
+  "calendar": {
+    "title": "Calendário",
+    "gateDescription": "Um calendário compartilhado para pessoas e agentes: itens com data, participantes e comentários, ao lado dos seus gatilhos e Loops agendados.",
+    "newItem": "Novo item",
+    "today": "Hoje",
+    "previousWeek": "Semana anterior",
+    "nextWeek": "Próxima semana",
+    "previousMonth": "Mês anterior",
+    "nextMonth": "Próximo mês",
+    "week": "Semana",
+    "month": "Mês",
+    "view": "Visualização",
+    "triggers": "Gatilhos",
+    "filter": {
+      "everyone": "Todos",
+      "me": "Meus"
+    },
+    "people": "Pessoas",
+    "agents": "Agentes",
+    "searchPeople": "Buscar pessoas e agentes",
+    "noDate": "Sem data",
+    "noDateHint": "Itens sem data esperam aqui.",
+    "allDay": "Dia inteiro",
+    "startTime": "Hora de início",
+    "endTime": "Hora de término",
+    "overdue": "Atrasado",
+    "status": {
+      "done": "Concluído"
+    },
+    "comments": "{count, plural, one {# comentário} other {# comentários}}",
+    "formerMember": "Ex-membro",
+    "lastRun": "Última execução",
+    "lastRunFailed": "A última execução falhou",
+    "loop": "Loop",
+    "trigger": "Gatilho",
+    "addOn": "Novo item em {day}",
+    "dayEntries": "{day}, {count, plural, one {# entrada} other {# entradas}}",
+    "showWeekOf": "Mostrar a semana de {day}",
+    "more": "mais {count}",
+    "when": "Quando",
+    "created": "Criado",
+    "clearDate": "Remover data",
+    "saveFailed": "A alteração não foi salva.",
+    "close": "Fechar",
+    "goneTitle": "Item excluído",
+    "goneBody": "Este item não existe mais.",
+    "loadFailed": "O calendário não carregou.",
+    "itemLoadFailed": "Este item não carregou.",
+    "tryAgain": "Tentar novamente",
+    "commentFailed": "O comentário não foi adicionado.",
+    "reopen": "Reabrir",
+    "markDone": "Marcar como concluído",
+    "moreActions": "Mais ações",
+    "delete": "Excluir",
+    "deleteTitle": "Excluir este item?",
+    "deleteBody": "“{title}” e seus comentários são excluídos para todos.",
+    "deleteFailed": "O item não foi excluído.",
+    "titleLabel": "Título",
+    "titlePlaceholder": "O que precisa acontecer",
+    "openSession": "Abrir sessão",
+    "notes": "Notas",
+    "notesPlaceholder": "Adicione detalhes. Digite @ para mencionar alguém.",
+    "commentsTitle": "Comentários",
+    "commentLabel": "Comentário",
+    "commentPlaceholder": "Escreva um comentário. Digite @ para mencionar alguém.",
+    "comment": "Comentar",
+    "kind": "Tipo",
+    "target": "Executa",
+    "session": "Sessão",
+    "schedule": "Agendamento",
+    "thisDay": "Neste dia",
+    "nextRun": "Próxima execução",
+    "failed": "falhou",
+    "succeeded": "concluída",
+    "prompt": "Prompt",
+    "openTriggers": "Abrir em Gatilhos",
+    "cancel": "Cancelar",
+    "create": "Criar",
+    "runs": "{capped, select, yes {{count}+ execuções} other {{count, plural, one {# execução} other {# execuções}}}}"
+  },
   "agentEditor": {
     "manage": "Gerenciar",
     "overviewTitle": "Visão geral",
@@ -24838,7 +25003,7 @@
       "newAgent": "New agent",
       "newAgentHelp": "My Kortix escreve o agente em kortix.yaml e abre uma solicitação de alteração.",
       "name": "Name",
-      "namePlaceholder": "market-scan",
+      "namePlaceholder": "Análise de mercado",
       "nameHelp": "Lowercase letters, digits and dashes. Saved as <slug></slug>.",
       "nameTaken": "Já existe um agente com este nome.",
       "howToStart": "How to start",
@@ -26437,7 +26602,11 @@
         "resume": "Não foi possível retomar a execução",
         "stop": "Não foi possível parar a execução",
         "restart": "Não foi possível reiniciar {label}"
-      }
+      },
+      "hold": "Segurar novos agentes",
+      "holdShort": "Segurar novos agentes",
+      "holdHint": "Segurar novos agentes: nenhum começa até você retomar; os que já trabalham continuam (p)",
+      "holding": "Novos agentes em espera"
     },
     "board": {
       "layoutLabel": "Layout",
@@ -26540,7 +26709,10 @@
     "googleSheet": "Planilha Google",
     "googleSlides": "Google Slides",
     "pullRequest": "PR #{number}",
-    "issue": "Problema #{number}"
+    "issue": "Problema #{number}",
+    "artifactDocument": "Documento",
+    "artifactPage": "Página",
+    "artifactUpdated": "Atualizado em {date}"
   },
   "subscriptionUsage": {
     "fiveHour": "5 horas",
@@ -26737,6 +26909,9 @@
       "personalKeysEmpty": "Nenhuma chave pessoal. kortix login cria uma; chaves para um script são criadas em Configurações › Chaves de API de um espaço de trabalho.",
       "securityDescription": "Regras de login, quem pode abrir as sessões de quem e as regras de cada chave de API.",
       "rolesDescription": "Funções integradas e personalizadas. Atribua-as em Membros.",
+      "builtInRoles": "Funções integradas",
+      "memberGroupsEnterprise": "Os grupos fazem parte do Enterprise.",
+      "openGroups": "Abrir Grupos",
       "workspaceId": "ID do espaço de trabalho",
       "workspaceIdDescription": "Para a CLI, a API e o suporte.",
       "leaveWorkspace": "Sair do espaço de trabalho",
@@ -26750,7 +26925,7 @@
       "apiKeysDescription": "Chaves para scripts, CI e integrações. Uma chave age como você, como um agente ou como um bot. As regras de cada chave estão em Segurança.",
       "keys": {
         "title": "Chaves de API",
-        "description": "Chaves para scripts, CI e integrações. Uma chave age como você, um agente ou um bot; «Funciona em» define quais workspaces ela alcança.",
+        "description": "Chaves para scripts, CI e integrações. Uma chave age como você, um agente ou um bot. Ela funciona neste workspace, a menos que você escolha todos os seus workspaces.",
         "newKey": "Nova chave",
         "count": "{count, plural, one {# chave} other {# chaves}}",
         "emptyTitle": "Nenhuma chave de API",
@@ -27130,7 +27305,7 @@
     "progressLabel": "Progresso",
     "ranFor": "Executou por {time}",
     "recentJobs": "Jobs recentes",
-    "registryGroup": "Registro do Harbor",
+    "registryGroup": "Harbor",
     "registryTasksHint": "Os conjuntos de dados do registro do Harbor listam as tarefas na própria página",
     "registryUnavailable": "Não foi possível ler o registro do Harbor ({reason}). Suas suítes e os conjuntos de dados integrados estão listados.",
     "retryN": "nova tentativa {n}",
@@ -27204,7 +27379,7 @@
       "all": "Todos",
       "suite": "Seus",
       "builtin": "Integrados",
-      "registry": "Registro do Harbor"
+      "registry": "Harbor"
     },
     "taskTab": {
       "instruction": "Instrução",
@@ -27213,5 +27388,79 @@
       "results": "Resultados"
     },
     "colTaskCount": "Tarefas"
+  },
+  "desktopTabs": {
+    "tabs": "Abas abertas",
+    "newTab": "Nova aba",
+    "newTabToRight": "Nova aba à direita",
+    "duplicate": "Duplicar",
+    "pin": "Fixar aba",
+    "unpin": "Desafixar aba",
+    "closeTab": "Fechar aba",
+    "closeOthers": "Fechar outras abas",
+    "closeToRight": "Fechar abas à direita",
+    "reopenClosed": "Reabrir aba fechada",
+    "session": "Sessão",
+    "artifact": "Artefato",
+    "page": "Página",
+    "unavailable": "Indisponível",
+    "newSession": "Nova sessão",
+    "sessions": "Sessões",
+    "artifacts": "Artefatos",
+    "customize": "Personalizar",
+    "goal": "Objetivo",
+    "settings": "Configurações",
+    "pages": {
+      "apps": "Apps",
+      "calendar": "Calendário",
+      "chat": "Chat",
+      "drive": "Drive",
+      "files": "Arquivos",
+      "goals": "Objetivos",
+      "inbox": "Caixa de entrada",
+      "memory": "Memória",
+      "members": "Membros",
+      "review": "Revisão",
+      "setup": "Concluir a configuração"
+    },
+    "sections": {
+      "agents": "Agentes",
+      "connectors": "Conectores",
+      "secrets": "Segredos",
+      "skills": "Skills",
+      "drives": "Drives",
+      "apps": "Apps",
+      "triggers": "Gatilhos",
+      "models": "Modelos",
+      "repo": "Repositório",
+      "review": "Revisão",
+      "reminders": "Loops",
+      "members": "Membros",
+      "settings": "Configurações"
+    }
+  },
+  "workspaceSetup": {
+    "title": "Concluir a configuração",
+    "description": "{done} de {total} concluídos. Uma linha fica concluída assim que é configurada.",
+    "descriptionIdle": "O que os agentes deste workspace precisam de você.",
+    "tryAgain": "Tentar novamente",
+    "loadFailed": "Não foi possível carregar as etapas de configuração.",
+    "emptyTitle": "Nada a configurar",
+    "emptyDescription": "Este workspace não precisa de login, secret ou Slack seu.",
+    "openWorkspace": "Abrir workspace",
+    "completeTitle": "Configuração concluída",
+    "completeDescription": "Se você iniciou a configuração em um terminal, ela continua lá sozinha.",
+    "slackName": "Slack",
+    "kindConnector": "Conector",
+    "kindSecret": "Secret",
+    "kindSlack": "Canal",
+    "done": "Concluído",
+    "connect": "Conectar {name}",
+    "reconnect": "Reconectar {name}",
+    "setSecret": "Definir {name}",
+    "addSlack": "Adicionar o Kortix ao Slack",
+    "connectSlack": "Conectar Slack",
+    "bannerTitle": "{left, plural, one {Falta # etapa de configuração} other {Faltam # etapas de configuração}}",
+    "bannerDismiss": "Dispensar"
   }
 }

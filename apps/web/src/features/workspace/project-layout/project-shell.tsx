@@ -3,11 +3,12 @@
 import { CommandPaletteBoundary } from '@/features/workspace/command-palette-boundary';
 import { DriveUploadTray } from '@kortix/ui/files';
 import { VoiceCallCard } from '@kortix/ui/session/voice/voice-call-card';
-import { AppPreviewPoolLoader } from '@/features/apps/app-preview-pool-loader';
+import { AppPreviewPoolLoader, usePreviewPoolProject } from '@/features/apps/app-preview-pool-loader';
 import { ArtifactFramePreloader } from '@/features/artifacts/artifact-frame-preloader';
+import { previewPoolAllowed } from './preview-pool-route';
 import { useTranslations } from '@/i18n/use-translations';
 import { useQuery } from '@tanstack/react-query';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useState } from 'react';
 
 import { TITLEBAR_CONTROL_CLASS } from '@kortix/ui/internal/desktop/titlebar-control';
@@ -51,6 +52,15 @@ import {
   useGatewayCatalogSync,
 } from '@kortix/sdk/react';
 import { SidebarGlyph as PanelLeft } from '@kortix/ui/icons';
+import {
+  DesktopTabStrip,
+  useDesktopTabsVisible,
+} from '@/features/desktop-tabs/desktop-tab-strip';
+import {
+  DesktopTabsBoundary,
+  useDesktopTabsEnabled,
+} from '@/features/desktop-tabs/desktop-tabs-gate';
+import { keepActivePreview } from '@/features/desktop-tabs/desktop-tabs-store';
 
 const CommandPalette = lazy(() =>
   import('@/features/workspace/command-palette').then((mod) => ({
@@ -287,7 +297,7 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
             <CommandPalette />
           </CommandPaletteBoundary>
 
-          <ProjectSheelLayout>{children}</ProjectSheelLayout>
+          <ProjectSheelLayout projectId={projectId}>{children}</ProjectSheelLayout>
         </div>
 
         <SettingsPanel projectId={projectId} />
@@ -304,11 +314,10 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
             project. Without a call, nothing. */}
         <VoiceCallCard />
 
-        {/* App previews load here in the background and stay loaded while
-            the project is open, so the Apps page shows them at once. */}
-        <AppPreviewPoolLoader projectId={projectId} />
-        {/* Artifact pages too, in the same frame pool (flag `artifacts`). */}
-        <ArtifactFramePreloader projectId={projectId} />
+        {/* App previews and artifact pages load here in the background and
+            stay loaded while the project is open, so the Apps and Artifacts
+            pages show them at once. Not started by a settings page. */}
+        <PreviewPool projectId={projectId} />
 
         <Suspense fallback={null}>
           <PresentationViewerWrapper />
@@ -320,7 +329,43 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
   );
 }
 
-const ProjectSheelLayout = ({ children }: { children: React.ReactNode }) => {
+/**
+ * The background preview pool, started by the first project route that is not
+ * a settings page (`previewPoolAllowed`) and kept mounted after that, so a move
+ * into settings keeps the warm frames and a move back loads nothing again.
+ */
+function PreviewPool({ projectId }: { projectId: string }) {
+  usePreviewPoolProject(projectId);
+  const allowed = previewPoolAllowed(usePathname());
+  // Started per project. A project switch normally remounts the shell, but
+  // if a shell is ever reused, any project change resets the latch (a
+  // settings page included): the old project's frames are gone
+  // (`usePreviewPoolProject`).
+  const [pool, setPool] = useState({ projectId, started: allowed });
+  if (pool.projectId !== projectId || (allowed && !pool.started)) {
+    setPool({ projectId, started: allowed });
+  }
+  if (pool.projectId !== projectId || !pool.started) return null;
+  return (
+    <>
+      <AppPreviewPoolLoader projectId={projectId} />
+      {/* Artifact pages too, in the same frame pool (flag `artifacts`). */}
+      <ArtifactFramePreloader projectId={projectId} />
+    </>
+  );
+}
+
+/** A control of the page (not a link): pressing one is working in the page. */
+const PAGE_CONTROLS =
+  'button, input, select, textarea, summary, [role="switch"], [role="checkbox"], [role="radio"], [role="tab"], [role="combobox"], [role="menuitem"]';
+
+const ProjectSheelLayout = ({
+  projectId,
+  children,
+}: {
+  projectId: string;
+  children: React.ReactNode;
+}) => {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const { state, isMobile, toggleSidebar, peek, peekEnter, peekLeave } = useSidebar();
   const isExpanded = !isMobile && state === 'expanded';
@@ -330,8 +375,31 @@ const ProjectSheelLayout = ({ children }: { children: React.ReactNode }) => {
   // OS title-bar band; on the web each view draws its own. Shared gate so the
   // two can never both render — see sidebar-opener.ts.
   const desktopShell = useDesktopShell();
+  // The desktop window's tab strip owns the title-bar band; every project view
+  // renders below it. Every window width, down to the 720 × 480 minimum (where
+  // the sidebar is a sheet and the shell's toggle still opens it).
+  // Behind the project's `desktop_tabs` flag. A strip that throws turns
+  // itself off for this window (`stripFailed`), and the title bar is back.
+  const [stripFailed, setStripFailed] = useState(false);
+  const tabsEnabled = useDesktopTabsEnabled(projectId);
+  const tabs = !!desktopShell && tabsEnabled && !stripFailed;
+  const tabsVisible = useDesktopTabsVisible(projectId);
   return (
     <div
+      // The page's own header moves below the strip only while the strip shows.
+      data-kx-desktop-tabs-on={tabs && tabsVisible ? '' : undefined}
+      // Typing in the page, or pressing one of its controls, is working in it:
+      // the preview tab becomes a kept tab. A link is not: it navigates.
+      onInputCapture={tabs ? () => keepActivePreview(projectId) : undefined}
+      onClickCapture={
+        tabs
+          ? (event) => {
+              const target = event.target as Element;
+              if (target.closest('[data-kx-desktop-tabs]')) return;
+              if (target.closest(PAGE_CONTROLS)) keepActivePreview(projectId);
+            }
+          : undefined
+      }
       className={cn(
         'bg-background relative flex min-h-0 flex-1 flex-col overflow-hidden',
         isExpanded && 'border-border border-l',
@@ -348,6 +416,11 @@ const ProjectSheelLayout = ({ children }: { children: React.ReactNode }) => {
           views that already own the band. CSS disables this fallback whenever
           the active view contains `.kx-titlebar-row`. */}
       <div aria-hidden="true" className="kx-project-shell-drag-region" />
+      {tabs && (
+        <DesktopTabsBoundary onError={() => setStripFailed(true)}>
+          <DesktopTabStrip projectId={projectId} />
+        </DesktopTabsBoundary>
+      )}
       {/* Mobile: the sidebar is a sheet with no docked affordance, and view
           headers come and go (sessions render theirs only once booted) — so
           the opener lives here, always mounted, on every project view. The

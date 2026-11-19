@@ -28,8 +28,9 @@ export interface WorkspaceEvalAgentConfig {
 export interface WorkspaceEvalTaskSource {
   /** A repository path: one task folder, or a folder of task folders. */
   path?: string | null;
-  /** A dataset of the Harbor registry, such as `terminal-bench`. */
+  /** A Harbor Hub package `org/name` (a task under `tasks`, a dataset under `datasets`), or a legacy Harbor registry dataset such as `terminal-bench`. */
   name?: string | null;
+  /** A registry version (`2.0`), or a Hub ref: a tag (`latest`), a revision (`3`) or `sha256:<digest>`. */
   version?: string | null;
   /** A public git repository (https); `path` is inside it. */
   git_url?: string | null;
@@ -240,14 +241,14 @@ export interface WorkspaceEvalTaskResultSummary {
   mean_reward: number | null;
 }
 
-/** A dataset a job names by `name` and `version`: built-in (`kortix/…`) or Harbor registry. */
+/** A dataset a job names by `name` and `version`: built-in (`kortix/…`), Harbor Hub (`org/name`) or the legacy Harbor registry. */
 export interface WorkspaceEvalDataset {
   name: string;
   /** The version a job without one runs. */
   version: string;
   /** Every version, newest first. */
   versions: string[];
-  kind: 'builtin' | 'registry';
+  kind: 'builtin' | 'hub' | 'registry';
   description: string;
   /** Null when not known without reading the dataset. */
   n_tasks: number | null;
@@ -382,7 +383,7 @@ export async function listWorkspaceEvalTaskResults(
   );
 }
 
-/** The datasets a job can name: built-in (`kortix/…`) first, then the Harbor registry. `registry_error` says why the registry is missing. */
+/** The datasets a job can name: built-in (`kortix/…`) first, then Harbor Hub, then the legacy Harbor registry. `registry_error` says why a Harbor source is missing. */
 export async function listWorkspaceEvalDatasets(projectId: string): Promise<{ datasets: WorkspaceEvalDataset[]; registry_error: string | null }> {
   return unwrap(await backendApi.get<{ datasets: WorkspaceEvalDataset[]; registry_error: string | null }>(`${evalsPath(projectId)}/datasets`), 'Eval datasets request failed');
 }

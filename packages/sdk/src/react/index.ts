@@ -192,6 +192,12 @@ export {
   useWorkspaceEvalTrial,
   useWorkspaceEvalTrialFile,
 } from './use-evals';
+export {
+  useWorkspaceCalendarActions,
+  useWorkspaceCalendarItem,
+  useWorkspaceCalendarItems,
+  useWorkspaceCalendarPeople,
+} from './use-calendar';
 export { useRoom, useRoomConversations, useRoomMessages, useRoomThread, useRooms, useSpaceRoom } from './use-rooms';
 export { usePeerMessages, useReachableAgents, useSessionWorkflows, useTeamTasks, useTeammates } from './use-multi-agent';
 export { prefetchArtifact, useArtifact, useArtifactMutations, useArtifactText, useArtifactTypes, useArtifactVersions, useArtifacts } from './use-artifacts';
@@ -223,6 +229,7 @@ export {
 export { useSessionMessageAuthors } from './use-session-message-authors';
 export { useSessionModelUsage } from './use-session-model-usage';
 export { useSessionUsage } from './use-session-usage';
+export { RUNNING_SESSIONS_LIMIT, useRunningSessions } from './use-running-sessions';
 export { useChangeRequests, changeRequestsKey } from './use-change-requests';
 export { useGatewayRoutingPolicy, gatewayRoutingPolicyKey } from './use-gateway-routing-policy';
 export {
@@ -332,6 +339,7 @@ export * from './use-review-summary';
 export * from './use-notifications';
 export * from './use-session-list-state';
 export * from './session-cache-write';
+export * from './use-cached-workspace-sessions';
 export * from './invalidate-project';
 export * from './use-feature-flag';
 export * from './use-project-memory';

@@ -206,11 +206,12 @@ function defineSessionParity(desktop: boolean): void {
         if (desktop) {
           expect(box!.y, "workspace selector shares the traffic-light row").toBeLessThan(40);
         }
-        // The Download app row sits in the sidebar footer, never in the
-        // desktop app (it is the download).
-        await expect(
-          page.getByRole("button", { name: "Download app", exact: true }),
-        ).toHaveCount(desktop ? 0 : 1);
+        // The desktop app is a slide of the sidebar's promo card (its dot
+        // carries the slide title), never inside the desktop app (it is the
+        // download).
+        const desktopSlide = page.getByRole("button", { name: "Get the desktop app", exact: true });
+        if (desktop) await expect(desktopSlide).toHaveCount(0);
+        else await expect(desktopSlide.first()).toBeVisible();
         await switcher.click();
         await page.getByRole("menuitem", { name: /^Settings/ }).click();
         const dialog = page.getByRole("dialog");

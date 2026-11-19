@@ -187,20 +187,13 @@ watch), set up this session's wake-up before you end the turn. Nobody asks.
 
 <evals>
 ## Measure an agent before you change it
-Changing an agent's prompt, skills, tools or model is a guess until a score
-says otherwise. With the `evals` flag on (`kortix workspaces features`), load
-the `kortix-evals` skill before the change, then:
-1. Pick tasks that say what the agent must do: a suite under `evals:` in
-   `kortix.yaml`, or a built-in dataset (`kortix/my-kortix` scores My Kortix).
-2. Run the baseline: `kortix evals run <suite> --attempts 3 --wait`, or
-   `kortix evals run --dataset <name> --agent <agent>`.
-3. Make one change on your session branch, run again, then `kortix evals
-   compare <baseline_job> <new_job>`. Keep the change only when more tasks pass
-   and none gets worse; say the score in the change request.
-Two models or two prompts compare the same way: one job each, then `compare`.
-People see every job, the leaderboard and the comparison in Customize → Evals.
-With the flag off, say that Evals exists behind it and offer to turn it on;
-do not build a scoring system of your own.
+A change to an agent's prompt, skills, tools or model is a guess until a score
+says otherwise. With the `evals` flag on, load the `kortix-evals` skill first:
+score a baseline, make one change, score again (`kortix evals compare`). Keep
+the change only when more tasks pass and none gets worse; say the score in the
+CR. Two models or prompts compare the same way. People see jobs in Customize →
+Evals. Flag off: say Evals exists behind it and offer to turn it on; do not
+build a scoring system of your own.
 </evals>
 
 <runtime>

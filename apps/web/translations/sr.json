@@ -206,7 +206,8 @@
     },
     "agentAccess": "Agenti: {agents}",
     "allAgents": "Svi agenti",
-    "noAgents": "Nema agenata"
+    "noAgents": "Nema agenata",
+    "deliveredOnceSet": "Isporučuje se kada se postavi vrednost"
   },
   "useCases": {
     "headline": "Циклуси који покрећу компанију",
@@ -451,7 +452,7 @@
         },
         "preferences": {
           "label": "Језик и пречице",
-          "description": "Језик и пречице на тастатури."
+          "description": "Језик, покрети и пречице на тастатури."
         },
         "connected": {
           "label": "Повезани налози"
@@ -488,9 +489,11 @@
     },
     "preferences": {
       "title": "Језик и пречице",
-      "description": "Језик и пречице на тастатури.",
+      "description": "Језик, покрети и пречице на тастатури.",
       "languageTitle": "Језик",
       "languageDescription": "Језик који Kortix приказује у целој апликацији.",
+      "motionTitle": "Смањи покрете",
+      "motionDescription": "Зауставља светлуцање, пулсирање и прелазе у целој апликацији. Индикатори учитавања се и даље окрећу.",
       "keyboardTitle": "Пречице на тастатури",
       "keyboardDescription": "Тастер за измену картица и све пречице у апликацији.",
       "modifierKey": "Тастер модификатора",
@@ -931,6 +934,7 @@
       "secretsCommand": "Команда за тајне",
       "ownClientTitle": "Користите свој Git клијент",
       "ownClientDescription": "Клонирајте обичним <code>git</code>-ом уместо Kortix командном линијом.",
+      "ownClientHelp": "Клонирајте са ове адресе било којим Git клијентом. Када git затражи, унесите било које корисничко име и Kortix API кључ као лозинку — Kortix командна линија то ради уместо вас преко свог помоћника за акредитиве, обичан <code>git</code> не.",
       "cloneAddressDescription": "Клонирајте са ове адресе било којим Git клијентом. Kortix потписује захтев, па не морате да правите нити чувате приступни токен.",
       "cloneAddress": "Адреса за клонирање",
       "peopleTitle": "Особе са приступом",
@@ -1145,15 +1149,16 @@
         "startup": "Покретање"
       },
       "statuses": {
-        "ready": "спремно",
-        "building": "изградња",
-        "failed": "неуспело"
+        "ready": "Спремно",
+        "building": "Изградња",
+        "failed": "Неуспело"
       },
       "stale": {
         "superseded": "Није завршено, а новије подешавање га је заменило",
         "recovered": "Није завршено, али је окружење сада спремно",
         "retrying": "Није завршено — нови покушај је у току"
       },
+      "supersededGroup": "{count, plural, one {# старија изградња замењена} few {# старије изградње замењене} other {# старијих изградњи замењено}}",
       "outcomes": {
         "ready": "Спремно за нове сесије",
         "building": "Припрема је у току",
@@ -1255,6 +1260,7 @@
       "search": "Претражи функције",
       "loadFailed": "Није могуће учитати радни простор",
       "retry": "Покушај поново",
+      "reset": "Врати на подразумевано",
       "noMatches": "Нема резултата за {query}.",
       "emptyTitle": "Нема експерименталних функција",
       "emptyDescription": "Ова инсталација не нуди функције које се укључују по радном простору.",
@@ -1336,6 +1342,14 @@
         "evals": {
           "name": "Evals",
           "description": "Run your agents on a list of tasks and score the results. A task is an instruction, a sandbox and a test script that writes a score (the Harbor task format). Declare a set of tasks under `evals:` in kortix.yaml, run it against any agent and model, and compare runs to see whether a change made the agent better or worse."
+        },
+        "desktop_tabs": {
+          "name": "Kartice na desktopu",
+          "description": "Desktop aplikacija prikazuje kartice kao u pregledaču na naslovnoj traci: svaka sesija, artefakt i stranica otvara se u svojoj kartici, a ⌘T, ⌘W i ⌘1–9 rade kao u pregledaču. Veb aplikacija se ne menja."
+        },
+        "calendar": {
+          "name": "Kalendar",
+          "description": "Zajednički kalendar za ljude i agente: stavke sa datumom, učesnicima i komentarima, pored zakazanih okidača i petlji. Pomeni nekoga sa @ da ga obavestiš. Agenti koriste `kortix calendar`."
         }
       },
       "channelsSwitch": {
@@ -1561,6 +1575,22 @@
     "referralShareTitle": "Препоручите пријатеље",
     "referralShareSubtitle": "Освојите 400 кредита",
     "new": "Ново",
+    "mcpPromo": {
+      "title": "Користите Kortix у ChatGPT-у и Claude-у",
+      "description": "Додајте Kortix у AI чет који већ користите. Покрећите агенте, пратите њихов рад и користите своје конекторе одатле.",
+      "cta": "Повежи"
+    },
+    "desktopPromo": {
+      "title": "Преузмите десктоп апликацију",
+      "description": "Дајте Kortix-у задатак из било које апликације уз Quick Entry и повежите овај рачунар једним кликом.",
+      "cta": "Преузми"
+    },
+    "phonePromo": {
+      "title": "Kortix на вашем телефону",
+      "description": "Свака сесија у вашем џепу. Обавештење вам јавља када се нека заврши или чека ваш одговор.",
+      "cta": "Преузми апликацију"
+    },
+    "promos": "Начини да користите Kortix",
     "upgrade": "Надоградња",
     "chats": "Ћаскања",
     "library": "Датотеке",
@@ -1647,6 +1677,7 @@
         "status": "Статус",
         "subAgent": "Подагент",
         "spawned": "Покренута сесија",
+        "spawnedBy": "Pokrenula ju je {title}",
         "subAgentCount": "{count, plural, one {# подагент} few {# подагента} other {# подагената}}",
         "spawnedCount": "{count, plural, one {# покренута сесија} few {# покренуте сесије} other {# покренутих сесија}}",
         "created": "Креирано",
@@ -1666,8 +1697,8 @@
         "needsInput": "Чека ваш одговор",
         "starting": "Буди се",
         "running": "Ради",
-        "done": "Спремно",
-        "stopped": "Мирује",
+        "done": "Готово",
+        "stopped": "Заустављено",
         "failed": "Неуспело",
         "legacy": "Застарело"
       }
@@ -1696,6 +1727,9 @@
       "title": "{file} има {errors, plural, one {# грешку} few {# грешке} other {# грешака}} и {warnings, plural, one {# упозорење} few {# упозорења} other {# упозорења}}",
       "titleErrors": "{file} има {errors, plural, one {# грешку} few {# грешке} other {# грешака}}",
       "titleWarnings": "{file} има {warnings, plural, one {# упозорење} few {# упозорења} other {# упозорења}}",
+      "count": "{errors, plural, one {# грешка} few {# грешке} other {# грешака}} и {warnings, plural, one {# упозорење} few {# упозорења} other {# упозорења}}",
+      "countErrors": "{errors, plural, one {# грешка} few {# грешке} other {# грешака}}",
+      "countWarnings": "{warnings, plural, one {# упозорење} few {# упозорења} other {# упозорења}}",
       "errorsOff": "Агенти и окидачи са грешком су искључени док се она не исправи.",
       "warningsOnly": "Све и даље ради.",
       "error": "Грешка",
@@ -1841,6 +1875,7 @@
       "deleteFailed": "Групу није могуће обрисати",
       "moveUp": "Помери нагоре",
       "moveDown": "Помери надоле",
+      "collapseOthers": "Skupi ostale",
       "reorderFailed": "Групе није могуће преуредити",
       "moveTo": "Премести у групу",
       "removeFromGroup": "Уклони из групе",
@@ -1875,7 +1910,16 @@
       "private": "Приватно",
       "noMessages": "Још нема порука",
       "more": "Још"
-    }
+    },
+    "calendar": "Kalendar",
+    "running": "У току",
+    "runningCount": "{count, plural, one {# сесија у току} few {# сесије у току} other {# сесија у току}}",
+    "runningTitle": "Тренутно у току",
+    "runningEmpty": "Ништа није у току.",
+    "runningFailed": "Није могуће прочитати шта је у току.",
+    "runningRetry": "Покушај поново",
+    "runningIn": "у {title}",
+    "runningFirst": "Приказано је првих {count}."
   },
   "dashboard": {
     "title": "Контролна табла",
@@ -2182,6 +2226,11 @@
       "resume": "Настави",
       "agentIsWorking": "{agent} ради",
       "needsYouOn": "Потребан си: {header}"
+    },
+    "panel": {
+      "outputNew": "Ново",
+      "outputUpdated": "Ажурирано",
+      "resizePane": "Промени величину окна"
     }
   },
   "agents": {
@@ -2344,6 +2393,8 @@
     "chatInputMachine": "Mašina",
     "chatInputMachineDescription": "Šablon mašine na kojoj ova sesija počinje.",
     "sending": "Слање",
+    "notSentYet": "Још није послато · биће послато када поново будеш на мрежи",
+    "offlineReconnecting": "Ван мреже — поновно повезивање…",
     "stop": "Заустави",
     "startingSession": "Покретање сесије…",
     "sessionStarted": "Сесија је покренута",
@@ -2883,7 +2934,7 @@
       "featuresGrace": "SSO и SCIM остају укључени до {date}. Разговарајте са продајом да задржите Enterprise.",
       "featuresOn": "Укључено",
       "featuresOff": "Искључено",
-      "featuresOffDescription": "SSO, SCIM, напредне улоге, евиденције ревизије и брендирање.",
+      "featuresOffDescription": "SSO, SCIM, напредне улоге и евиденције ревизије.",
       "featuresDemo": "Укључено као демо. Разговарајте са продајом о лиценци.",
       "featuresLicensed": "Лиценцирано",
       "featuresLicensedRenews": "Лиценцирано · обнавља се {date}",
@@ -2908,7 +2959,11 @@
       "action": "Додај кредите или изабери план да би овде покретао сесије."
     },
     "costs": {
-      "billedElsewhere": "{amount} кредита овог трошка наплаћено је радном простору из ког је премештен."
+      "billedElsewhere": "{amount} кредита овог трошка наплаћено је радном простору из ког је премештен.",
+      "allWorkspaces": "Сви workspace-ови",
+      "usageDescriptionWorkspace": "Kortix трошкови за овај workspace. Кредити су једно стање за све workspace-ове.",
+      "usageDescriptionAll": "Kortix трошкови и књига кредита за све workspace-ове.",
+      "planDescriptionAll": "План, кредити и потрошња за све workspace-ове."
     }
   },
   "ssoRequired": {
@@ -3016,39 +3071,34 @@
       "oneMoment": "Само тренутак…",
       "useDifferentEmail": "Користи другу имејл адресу",
       "usePasswordInstead": "Користи лозинку",
-      "emailLinkInstead": "Пошаљи ми линк имејлом",
-      "forgotPassword": "Заборавили сте лозинку?",
-      "automaticAccount": "Нови сте овде? Кликом на „Настави“ налог ће бити аутоматски направљен.",
+      "emailLinkInstead": "Пошаљи ми код",
+      "forgotPassword": "Заборавио си лозинку?",
+      "automaticAccount": "Пријави се или направи налог.",
       "sso": {
         "title": "Користи јединствену пријаву",
-        "description": "<address>{email}</address> може да се пријави преко добављача идентитета ваше организације.",
+        "description": "Пријави се као <address>{email}</address> преко своје организације.",
         "continue": "Настави са SSO пријавом",
         "enterWorkEmail": "Унесите пословни имејл изнад, а затим изаберите јединствену пријаву.",
         "notConfigured": "Јединствена пријава није подешена за „{domain}“. Замолите администратора да је подеси или наставите путем имејла.",
         "lookingUp": "Проналажење добављача идентитета…",
-        "use": "Користи јединствену пријаву (SSO)"
+        "use": "Користи SSO"
       },
       "link": {
         "title": "Проверите имејл",
-        "description": "Послали смо линк на <address>{email}</address>. Отворите га да наставите.",
-        "confirmDescription": "Послали смо имејл за потврду на <address>{email}</address>. Потврдите свој имејл да наставите.",
-        "unknownDescription": "Poslali smo e-mail na <address>{email}</address> — link za prijavu ili link za potvrdu novog naloga.",
-        "closedDescription": "Ako <address>{email}</address> ima nalog, link za prijavu je na putu.",
-        "notReceived": "Нисте добили линк?",
-        "confirmNotReceived": "Нисте добили имејл за потврду?",
-        "resendIn": "Поново пошаљи за {seconds}",
-        "resend": "Пошаљи поново",
-        "checkSpam": "Nije stigla? Proverite fasciklu za neželjenu poštu."
+        "description": "Унеси код послат на <address>{email}</address>.",
+        "confirmDescription": "Потврди имејл који смо послали на <address>{email}</address> да наставиш.",
+        "unknownDescription": "Унеси код послат на <address>{email}</address>.",
+        "closedDescription": "Ако <address>{email}</address> има налог, код стиже.",
+        "resendIn": "Поново пошаљи за {seconds} s",
+        "resend": "Пошаљи поново"
       },
       "credentials": {
         "signin": {
           "title": "Добродошли назад",
-          "description": "Унесите лозинку да бисте наставили.",
           "passwordPlaceholder": "Ваша лозинка"
         },
         "signup": {
           "title": "Направите налог",
-          "description": "Изаберите лозинку да бисте започели.",
           "passwordPlaceholder": "Направите лозинку"
         },
         "unknown": {
@@ -3062,22 +3112,19 @@
         "networkFailed": "Захтев није могао бити послат. Покушајте поново.",
         "signupsClosed": "Регистрације су тренутно затворене. Обратите се администратору или затражите приступ.",
         "ssoRequired": "Ваша организација захтева јединствену пријаву. Уместо тога наставите са SSO пријавом.",
-        "incorrectPassword": "Нетачна лозинка. Покушајте поново или је ресетујте путем опције „Заборавили сте лозинку?“.",
-        "existingAccountWrongPassword": "Већ имате налог — унесите постојећу лозинку да бисте се пријавили.",
+        "incorrectPassword": "Нетачна лозинка.",
+        "existingAccountWrongPassword": "Овај имејл већ има налог. Унеси лозинку.",
         "confirmAccount": "Проверите имејл да бисте потврдили налог",
         "invalidCode": "Неважећи или истекао код"
       },
-      "legal": {
-        "signup": "Креирањем налога прихватате <termsOfService>Услове коришћења</termsOfService> и <privacyPolicy>Политику приватности</privacyPolicy>",
-        "default": "<termsOfService>Услови коришћења</termsOfService> и <privacyPolicy>Политика приватности</privacyPolicy>"
-      }
+      "or": "или"
     },
     "passwordReset": {
       "loading": "Учитавање",
       "resetting": "Ресетовање лозинке",
       "request": {
         "title": "Ресетујте лозинку",
-        "description": "Унесите своју адресу е-поште и послаћемо вам линк за ресетовање лозинке.",
+        "description": "Послаћемо ти линк за ресетовање.",
         "email": "Е-пошта",
         "emailPlaceholder": "Ваша адреса е-поште",
         "sending": "Слање линка…",
@@ -3085,8 +3132,7 @@
       },
       "sent": {
         "title": "Проверите е-пошту",
-        "description": "Послали смо вам линк за ресетовање лозинке.",
-        "address": "Линк за ресетовање послат је на <address>{email}</address>"
+        "address": "Послали смо линк за ресетовање на <address>{email}</address>."
       },
       "expired": {
         "title": "Линк је истекао",
@@ -3096,12 +3142,11 @@
       "success": {
         "title": "Лозинка је ажурирана",
         "description": "Сада можете да се пријавите са новом лозинком.",
-        "changed": "Ваша лозинка је промењена.",
         "signIn": "Иди на пријаву"
       },
       "form": {
         "title": "Поставите нову лозинку",
-        "description": "Изаберите нову лозинку за свој налог.",
+        "description": "Изабери нову лозинку.",
         "newPassword": "Нова лозинка",
         "newPasswordPlaceholder": "Ваша нова лозинка",
         "confirmPassword": "Потврдите лозинку",
@@ -3337,7 +3382,17 @@
       "jsonKeys": "{count, plural, one {JSON · # кључ} few {JSON · # кључа} other {JSON · # кључева}}",
       "jsonItems": "{count, plural, one {JSON · # ставка} few {JSON · # ставке} other {JSON · # ставки}}",
       "failedSentence": "Tok rada je stao pre nego što je završio.",
-      "runningCount": "{count} radi"
+      "runningCount": "{count} radi",
+      "spent": "Потрошено {credits} кредита",
+      "spentHint": "Колико је Kortix до сада наплатио за ово покретање: позиви модела и рачунарско време покретања и његових агената.",
+      "waitingForYou": "Чека тебе · није покренуто",
+      "cancelled": "Отказано — ништа није покренуто",
+      "answeredInChat": "Одговорено у ћаскању — ништа није покренуто",
+      "stoppedByYou": "Ти си зауставио",
+      "attempt": "покушај {count}",
+      "quietFor": "Тихо већ {minutes} мин",
+      "quietCount": "{count} тихо",
+      "holdingWorking": "Задржано · {count} још ради"
     },
     "agent": {
       "backgroundWorking": "Ради у позадини",
@@ -3422,7 +3477,8 @@
       "automation_failed": "Упозорење о грешци",
       "automation_recovered": "Обавештење о опоравку",
       "capture_device_down": "Capture рачунар је стао",
-      "capture_device_recovered": "Capture рачунар поново снима"
+      "capture_device_recovered": "Capture рачунар поново снима",
+      "mention": "Pominjanja"
     },
     "kindDescription": {
       "turn_done": "Потез се завршава.",
@@ -3433,7 +3489,8 @@
       "automation_failed": "Окидач или петља почиње да не успева.",
       "automation_recovered": "Окидач или петља који нису успевали поново раде.",
       "capture_device_down": "Kortix Capture рачунар не снима. Шаље се људима који управљају Capture-ом.",
-      "capture_device_recovered": "Kortix Capture рачунар који је стао поново снима."
+      "capture_device_recovered": "Kortix Capture рачунар који је стао поново снима.",
+      "mention": "Neko drugi te pomene ili te doda u stavku u kalendaru."
     },
     "inbox": {
       "title": "Пријемно сандуче",
@@ -10418,6 +10475,7 @@
       "text38e64d6a8162": "Комитује SKILL.md на подразумевани грану радног простора. Није потребан модел ни ћаскање.",
       "text39cfc32bd12c": "Налепљени текст",
       "text23d0bb29fca0": "{count, plural, one {# реч} few {# речи} other {# речи}}",
+      "text3e310b75051c": "Покрени поново",
       "text426699d5a8c0": "{count, plural, one {# знак} few {# знака} other {# знакова}}",
       "text40078a553439": "Блок прилога је отпремљен",
       "text4c7f8000aabd": "Отпремање прилога је завршено",
@@ -10781,6 +10839,10 @@
       "text0b2e0f1bf47e": "Сваки позив који је направио и ко га је дозволио",
       "text0b2ecc210632": "Једини live канал. Поставите питање у thread-у где се појавило; одговор, графикон и упит враћају се у исти thread.",
       "text0b348466332c": "Још ништа није промењено",
+      "textf83916135509": "искоришћено",
+      "texta251c18205f1": "Кеширано",
+      "text64cd989efc14": "Слободан простор",
+      "textcc6d004b577f": "Ова датотека нема измена у односу на основу.",
       "text0b38e3daeb93": "Све тајне",
       "text0b3dbab0c668": "- Испоручи исправку и напиши постмортем",
       "text0b495c90447a": "Календар, пријемно сандуче, систем кандидата.",
@@ -10916,7 +10978,7 @@
       "text0f096c40454e": "Профилише скуп података, црта дистрибуције, проверава цурење података и неравнотежу и пише први искрени пасус о томе шта се налази у подацима. Почињете са припремљеном сликом, а не од празне ћелије.",
       "text0f16342ee1c1": "32%",
       "text0f308cfb7ef3": "0 аутоматски",
-      "text0f4827ef74ea": "Отворене позиције у Kortix-у — FDE, GTM и MTS. Београд, Србија и Сан Франциско. Запошљавамо за дугорочно власништво.",
+      "text0f4827ef74ea": "Отворене позиције у Kortix-у — FDE, GTM и MTS. Београд, Србија и САД. Запошљавамо за дугорочно власништво.",
       "text0f600458e375": "SSO, чланови, групе и приступ заснован на улогама су уграђени, уз дозволе по ресурсу за људе и агенте, шифроване тајне и потпун ревизорски траг. Хостујте сами тако да цела платформа ради у вашем окружењу.",
       "text0f64c7d16c28": "# проверите да ли се компајлира, затражите недостајуће тајне,",
       "text0f656790976e": "Отворите било коју агентску платформу — архитектонски су исте. Маргиналне разлике нису одбрањиве. Једино што се разликује јесте петља учења.",
@@ -11650,6 +11712,7 @@
       "text2522f9d16f3b": "CompanyOS",
       "text25330787f710": "+3",
       "text2534086de9fe": "Прикажи панел",
+      "text40cd6293d193": "Сакриј панел",
       "text2534e74d5120": "Шта агент треба да измени?",
       "text253923d0f0c5": "Везе → Апликације → +",
       "text253b18a02165": "Покретање",
@@ -11985,7 +12048,6 @@
       "text2f6a48c637a9": "Webhook је уклоњен",
       "text2f6c00ce1d58": "Групе послате из OneLogin Rules креирају се у Kortix-у под својим OneLogin називима.",
       "text2f6e9daec8e9": "Стања",
-      "text2f72fafe0ce1": "уместо командне линије Кортик.",
       "text2f77668a9dfb": "Порука",
       "text2f77dafd3fcc": "повежите провајдера",
       "text2f80158a9d89": "research/",
@@ -14200,7 +14262,7 @@
       "text6ff3bff5952a": "захтева дозволу за:",
       "text6ffb34d0baed": "git push origin HEAD",
       "text700e7474f9a9": "Линк препоруке није доступан",
-      "text702391f5d071": "Ово креира лични приступни токен. Можете га опозвати у било ком тренутку у",
+      "text702391f5d071": "Опозови приступ било када у",
       "text702ef921ed1d": "Име",
       "text7031306d3dd8": "Провајдер овог модела није повезан за овај радни простор — захтеви усмерени овде одмах прелазе на резерву",
       "text7031edbcf9c4": "Неуспех",
@@ -14467,7 +14529,6 @@
       "text7743ce348d92": "нацрт",
       "text775ddc2119ab": "Копирајте „Identifier (Entity ID)“ и „Reply URL (Assertion Consumer Service URL)“ испод и налепите их у панел „Basic SAML Configuration“ — означите Identifier као Default, а „Sign on URL“ подесите на Kortix страницу за пријављивање. Оставите Relay State и Logout URL празне. Кликните на „Save“ и затворите панел за измену.",
       "text775f96fcc9db": "Токен је опозван",
-      "text7760401b25c7": "Клон са обичним",
       "text7761b572aba8": "Обавештења претраживача",
       "text77793c7508f1": "биће ресетовано.",
       "text7779bc2ac4be": "skills/claims/SKILL.md",
@@ -16536,7 +16597,7 @@
       "textb2a8625a332e": "Три заказана окидача на временској оси са маркером тренутног тренутка и истакнутим следећим покретањем.",
       "textb2ac0da7c543": "Цео тим",
       "textb2c0cab20dc3": "JSON-RPC пакети нису подржани",
-      "textb2c293b68745": ".kortix/connectors/routes.toml",
+      "textb2c293b68745": "connectors/routes.toml",
       "textb2c5bc52374a": "Тајна избрисана",
       "textb2d544129223": "Није завршено ако",
       "textb2e30caf44ee": "Немојте користити хексадецималне боје хардкодоване у компонентама",
@@ -16690,7 +16751,6 @@
       "textb7297226fd1f": "Сачувај назив",
       "textb7396994492d": "Додај прилагођену SAML апликацију → Мапирање атрибута",
       "textb73ce9104ddb": "Копирање није успело — изаберите и копирајте ручно",
-      "textb74106e21108": "не.",
       "textb7416a669c6b": "Опозвано",
       "textb74399647bf0": "Назовите га по послу који обавља, како би ред у евиденцији ревизије говорио сам за себе.",
       "textb743a712efa8": "Нит је сесија. Једна, и само једна.",
@@ -17047,7 +17107,7 @@
       "textc18ce3e6b5e0": "enterpriseAccordionSelfhostBody",
       "textc18dc13ca821": "Сесије и даље могу да се покрену, али ће агенту недостајати ове вредности.",
       "textc19b5dc4376a": "„Шта је ико рекао о извозу?“",
-      "textc19c3fc65916": "у вашем терминалу чека да одобрите ово пријављивање.",
+      "textc19c3fc65916": "чека твоје одобрење.",
       "textc1a5d4982c10": "а не да је заобиђе.",
       "textc1abcf2a909a": "≈ {value0} кредита",
       "textc1ada08ce138": "Ревизорски траг",
@@ -18267,7 +18327,6 @@
       "texte3190ee3d8a8": "Није могуће приказати радну свеску",
       "texte31ab643c44f": "члан",
       "texte31c7af1f424": "Свако повезује свој налог.",
-      "texte327e6c1348b": "Клонирајте са ове адресе са било којим Гит клијентом. Када гит затражи, унесите било које корисничко име и Кортик АПИ кључ као лозинку — Кортик командна линија то ради за вас преко свог помоћника акредитива, једноставно",
       "texte3311b311078": "Жели CSV поред xlsx формата",
       "texte335ed040bfe": "Нацрт на грани, прегледан као diff.",
       "texte339fc8e7d89": "Одговор у разговору не може да се провери или понови. Зато сесија предаје свој рад: упит, скрипту, графикон и белешку о ономе што је проверила.",
@@ -18612,7 +18671,7 @@
       "textecbd276ebec2": "Пробајте претрагу.",
       "textecc7ed048b32": "закључење месеца",
       "texteccba86b787c": "Лаптоп, VPS или ваша сопствена мрежа.",
-      "textecccd43d1878": ".kortix/connectors/schema.graphql",
+      "textecccd43d1878": "connectors/schema.graphql",
       "texteccce15347a4": "Немате приступ прегледу ове апликације.",
       "textecd3c555ab44": "Чување дозвола није успело",
       "textecdcf83028e7": "Прегледај параметре",
@@ -20707,7 +20766,7 @@
       "text5f6ba69d66d1": "Вештина је уклоњена",
       "textcb8d6b0c94c9": " и све датотеке у њој, укључујући измене, и уклања вештину из сваког агента који је користи. Један commit на подразумеваној грани.",
       "cliDeviceTitle": "Ovlasti Kortix CLI",
-      "cliDeviceWarning": "Odobrite samo prijavu koju ste sami pokrenuli. Proverite da li se ovaj kod poklapa sa kodom koji prikazuje vaš terminal.",
+      "cliDeviceWarning": "Одобри само ако се овај код поклапа са твојим терминалом.",
       "cliDeviceCode": "Kod za prijavu",
       "cliDeviceApproved": "Prijava je odobrena. Vratite se u terminal.",
       "cliDeviceAction": "Ovlasti CLI",
@@ -21278,7 +21337,7 @@
       "text05ee1d6181f3": "Када се захтев за измену споји, {agent} извршава ваше упутство.",
       "texte608495c45ce": "Спојено у {branch}",
       "text80ca527b0d55": "Окидач за захтев за измену је направљен",
-      "authEmailAlreadySent": "Ovu e-poruku smo poslali pre manje od minut. Proverite prijemno sanduče i fasciklu za neželjenu poštu pre nego što zatražite novu.",
+      "authEmailAlreadySent": "Већ послато. Провери пријемно сандуче и спам.",
       "textfe0dab79db43": "Разговарајте са Kortix-ом у једном чету: свака порука је нит, а најновији одговор Kortix-а приказује се испод ње.",
       "text2e914b62b832": "Markdown везе",
       "text7bed093239f3": "Препознати ресурси приказују иконицу апликације и сажету ознаку. Задржите показивач да бисте видели оригинални URL.",
@@ -21374,7 +21433,19 @@
       "text458ceb31019b": "Okidači događaja konektora",
       "text27ca9df9dbaa": "Okidači događaja konektora su isključeni",
       "textfff553f218c7": "Evals",
-      "textd5b5d846044e": "evals eval бенчмарк оцена harbor terminal-bench задаци ранг-листа"
+      "textd5b5d846044e": "evals eval бенчмарк оцена harbor terminal-bench задаци ранг-листа",
+      "textdb6ee6610b15": "kalendar raspored agenda nedelja mesec rok stavke okidači",
+      "text9b041fd0dfb7": "Izlistane stavke kalendara",
+      "text968ff709bd3d": "Napravljena stavka kalendara",
+      "textd115ffd5e3a4": "Izlistani ljudi kalendara",
+      "texta268bab502cf": "Pregledana stavka kalendara",
+      "text16d71c4d10a2": "Izmenjena stavka kalendara",
+      "text14580c9900ac": "Obrisana stavka kalendara",
+      "text96386c724e21": "Komentarisana stavka kalendara",
+      "textf543a9f99ce7": "Traka radnji",
+      "textca4067071fcf": "Izbor",
+      "text4cea356a17a1": "Nesačuvane izmene",
+      "text2358f7b37c07": "Plutajuća traka za privremeni režim: izbor, nesačuvane izmene, lepljenje na čekanju. Naslov, prigušen opis, radnje sa prečicama na tastaturi i dugme za zatvaranje."
     },
     "publicShareConfirm": {
       "title": "Направити јавни линк?",
@@ -21791,11 +21862,14 @@
     "noCapUnlimited": "Без ограничења · потрошња је неограничена",
     "tokensSub": "{in} улаз · {out} излаз",
     "unknownValue": "Nepoznato",
-    "estimateCoverageUnavailable": "Pokrivenost procene nije dostupna.",
     "estimatesSeparate": "Stvarna potrošnja iznad je odvojena. Procene se nikada ne dodaju troškovima.",
     "estimatedUsageValueLabel": "Procenjena vrednost LLM upotrebe (nije račun):",
-    "pricedRequests": "{count} zahteva sa cenom",
-    "unpricedRequests": "{count} zahteva bez cene",
+    "pricedRequests": "{count, number} zahteva sa cenom",
+    "unpricedRequests": "{count, number} zahteva bez cene",
+    "failedRequests": "{count, number} neuspelih zahteva",
+    "estimateInfoLabel": "O ovoj proceni",
+    "estimateDetail": "Uspešni pozivi modela po javnim cenovnicima. Neuspeli zahtevi i modeli bez poznate cene nemaju cenu.",
+    "estimateRateVersion": "Cenovnik: {version}",
     "llmEstimateLabel": "LLM procena:"
   },
   "triggerComposer": {
@@ -22214,6 +22288,7 @@
     "installProfileHint": "Назив под којим се овај конектор види у Kortix-у.",
     "wayComposio": "Povezuje se preko Composio, partnera treće strane koji obavlja prijavu umesto tebe: prijaviš se na {name} jednim klikom, a Composio čuva prijavu.",
     "wayMcpOneClick": "Povezuje se na sopstveni MCP server aplikacije {name}. Samo se prijaviš na {name}.",
+    "wayKortixGoogle": "Kortix se povezuje na {name} preko Google API-ja. Samo se prijaviš na Google.",
     "wayMcpSetup": "Povezuje se na sopstveni MCP server aplikacije {name}. Potrebna je tvoja OAuth aplikacija ili API ključ, podešava se posle instalacije.",
     "wayApi": "Povezuje se direktno na {kind} aplikacije {name}. Posle instalacije dodaj nalog sa API ključem ili tokenom.",
     "installsWay": "Instalira preko {kind}",
@@ -22232,8 +22307,8 @@
     "toolsAfterInstall": "Ova {kind} navodi svoje alate posle instalacije.",
     "typeFilterLabel": "Tip konektora",
     "typeFilterAll": "Svi tipovi",
-    "moveComposioTitle": "{app} ima sopstveni MCP server",
-    "moveComposioBody": "Ovaj konektor radi preko Composio. Možeš ga prebaciti na sopstveni MCP server aplikacije {app}: prijavi se jednom i prebacuje se. Agenti, okidači i kortix.yaml i dalje koriste {slug}.",
+    "moveComposioTitle": "{app} može da se poveže bez Composio",
+    "moveComposioBody": "Ovaj konektor radi preko Composio. Kortix može da ga poveže direktno: prijavi se jednom i prebacuje se. Agenti, okidači i kortix.yaml i dalje koriste {slug}.",
     "moveComposioAction": "Prebaci na MCP",
     "wayChannel": "Ugrađeno u Kortix: ljudi pišu agentu u aplikaciji {name}, bez trećih strana. Podesi jednom na njegovoj stranici.",
     "waySetUp": "Podesi",
@@ -22368,11 +22443,13 @@
     "areaDescription": "Повежите апликације и канале са агентима и одредите шта смеју да раде.",
     "wayMoreNamed": "Још за {name}",
     "otherWaysLead": "Други начини:",
-    "typeFilterKortix": "Kortix"
+    "typeFilterKortix": "Kortix",
+    "scopeAll": "Сви",
+    "scopeAdded": "Додати"
   },
   "connectMcp": {
     "title": "Povežite Kortix preko MCP-a",
-    "description": "Koristite Kortix iz Claude, Claude Code, Cursor, Codex ili bilo kog MCP klijenta. Prijavljujete se jednom. Ništa ne morate da instalirate.",
+    "description": "Koristite Kortix iz Claude, ChatGPT, Claude Code, Cursor, Codex ili bilo kog MCP klijenta. Prijavljujete se jednom. Ništa ne morate da instalirate.",
     "docs": "Dokumentacija",
     "done": "Gotovo",
     "copy": "Kopiraj",
@@ -22382,6 +22459,7 @@
     "copyUrl": "Kopiraj URL",
     "via": {
       "claude": "Podešavanja → Konektori",
+      "chatgpt": "Režim za programere → prilagođeni konektor",
       "claude-code": "Jedna komanda u terminalu",
       "cursor": "Instalacija jednim klikom",
       "codex": "Dve komande u terminalu",
@@ -22657,6 +22735,13 @@
     "onlyYouDescription": "Само ви, у сваком радном простору, у својим приватним сесијама.",
     "everyoneDescription": "Сви у радном простору могу да га користе, укључујући аутоматизације.",
     "promoLine": "Дозволите Kortix-у да ради са вашим локалним датотекама и управља вашим рачунаром.",
+    "promo": {
+      "title": "Повежите свој пословни рачунар",
+      "titleThis": "Повежите овај рачунар",
+      "description": "Агенти раде са вашим локалним датотекама, покрећу програме и користе апликације на вашем екрану. Ви одлучујете шта смеју.",
+      "cta": "Повежи",
+      "ctaOneClick": "Повежи једним кликом"
+    },
     "dismissPromo": "Одбаци",
     "useCliInstead": "Користи CLI уместо тога",
     "cliHint": "Команда приказује код и отвара страницу на којој одобравате овај уређај. Затим ради у позадини.",
@@ -24682,6 +24767,86 @@
     "waitNoCost": "Dok čeka odgovor, nijedna provera se ne pokreće.",
     "chaseAt": "Proverava ponovo {time}"
   },
+  "calendar": {
+    "title": "Kalendar",
+    "gateDescription": "Zajednički kalendar za ljude i agente: stavke sa datumom, učesnicima i komentarima, pored zakazanih okidača i petlji.",
+    "newItem": "Nova stavka",
+    "today": "Danas",
+    "previousWeek": "Prethodna nedelja",
+    "nextWeek": "Sledeća nedelja",
+    "previousMonth": "Prethodni mesec",
+    "nextMonth": "Sledeći mesec",
+    "week": "Nedelja",
+    "month": "Mesec",
+    "view": "Prikaz",
+    "triggers": "Okidači",
+    "filter": {
+      "everyone": "Svi",
+      "me": "Moje"
+    },
+    "people": "Ljudi",
+    "agents": "Agenti",
+    "searchPeople": "Pretraži ljude i agente",
+    "noDate": "Bez datuma",
+    "noDateHint": "Stavke bez datuma čekaju ovde.",
+    "allDay": "Ceo dan",
+    "startTime": "Vreme početka",
+    "endTime": "Vreme završetka",
+    "overdue": "Kasni",
+    "status": {
+      "done": "Završeno"
+    },
+    "comments": "{count, plural, one {# komentar} few {# komentara} other {# komentara}}",
+    "formerMember": "Bivši član",
+    "lastRun": "Poslednje pokretanje",
+    "lastRunFailed": "Poslednje pokretanje nije uspelo",
+    "loop": "Petlja",
+    "trigger": "Okidač",
+    "addOn": "Nova stavka za {day}",
+    "dayEntries": "{day}, {count, plural, one {# stavka} few {# stavke} other {# stavki}}",
+    "showWeekOf": "Prikaži nedelju od {day}",
+    "more": "još {count}",
+    "when": "Kada",
+    "created": "Napravljeno",
+    "clearDate": "Ukloni datum",
+    "saveFailed": "Izmena nije sačuvana.",
+    "close": "Zatvori",
+    "goneTitle": "Stavka obrisana",
+    "goneBody": "Ova stavka više ne postoji.",
+    "loadFailed": "Kalendar se nije učitao.",
+    "itemLoadFailed": "Ova stavka se nije učitala.",
+    "tryAgain": "Pokušaj ponovo",
+    "commentFailed": "Komentar nije dodat.",
+    "reopen": "Ponovo otvori",
+    "markDone": "Označi kao završeno",
+    "moreActions": "Još radnji",
+    "delete": "Obriši",
+    "deleteTitle": "Obrisati ovu stavku?",
+    "deleteBody": "„{title}“ i njeni komentari se brišu za sve.",
+    "deleteFailed": "Stavka nije obrisana.",
+    "titleLabel": "Naslov",
+    "titlePlaceholder": "Šta treba da se desi",
+    "openSession": "Otvori sesiju",
+    "notes": "Beleške",
+    "notesPlaceholder": "Dodaj detalje. Ukucaj @ da pomeneš nekoga.",
+    "commentsTitle": "Komentari",
+    "commentLabel": "Komentar",
+    "commentPlaceholder": "Napiši komentar. Ukucaj @ da pomeneš nekoga.",
+    "comment": "Komentariši",
+    "kind": "Vrsta",
+    "target": "Pokreće",
+    "session": "Sesija",
+    "schedule": "Raspored",
+    "thisDay": "Ovog dana",
+    "nextRun": "Sledeće pokretanje",
+    "failed": "nije uspelo",
+    "succeeded": "uspelo",
+    "prompt": "Prompt",
+    "openTriggers": "Otvori u Okidačima",
+    "cancel": "Otkaži",
+    "create": "Napravi",
+    "runs": "{capped, select, yes {{count}+ pokretanja} other {{count, plural, one {# pokretanje} few {# pokretanja} other {# pokretanja}}}}"
+  },
   "agentEditor": {
     "manage": "Upravljaj",
     "overviewTitle": "Pregled",
@@ -24838,7 +25003,7 @@
       "newAgent": "New agent",
       "newAgentHelp": "My Kortix уписује агента у kortix.yaml и отвара захтев за измену.",
       "name": "Name",
-      "namePlaceholder": "market-scan",
+      "namePlaceholder": "Анализа тржишта",
       "nameHelp": "Lowercase letters, digits and dashes. Saved as <slug></slug>.",
       "nameTaken": "Агент са овим именом већ постоји.",
       "howToStart": "How to start",
@@ -26437,7 +26602,11 @@
         "resume": "Није могуће наставити покретање",
         "stop": "Није могуће зауставити покретање",
         "restart": "Није могуће поново покренути {label}"
-      }
+      },
+      "hold": "Задржи нове агенте",
+      "holdShort": "Задржи нове агенте",
+      "holdHint": "Задржи нове агенте: ниједан се не покреће док не наставиш; агенти који раде настављају (p)",
+      "holding": "Нови агенти задржани"
     },
     "board": {
       "layoutLabel": "Распоред",
@@ -26540,7 +26709,10 @@
     "googleSheet": "Google табела",
     "googleSlides": "Google слајдови",
     "pullRequest": "PR #{number}",
-    "issue": "Проблем #{number}"
+    "issue": "Проблем #{number}",
+    "artifactDocument": "Dokument",
+    "artifactPage": "Stranica",
+    "artifactUpdated": "Ažurirano {date}"
   },
   "subscriptionUsage": {
     "fiveHour": "5 sati",
@@ -26737,6 +26909,9 @@
       "personalKeysEmpty": "Нема личних кључева. kortix login прави један; кључеви за скрипту праве се у подешавањима радног простора › API кључеви.",
       "securityDescription": "Правила пријаве, ко сме да отвори чије сесије и правила за сваки API кључ.",
       "rolesDescription": "Уграђене и прилагођене улоге. Доделите их из Чланова.",
+      "builtInRoles": "Уграђене улоге",
+      "memberGroupsEnterprise": "Групе су део пакета Enterprise.",
+      "openGroups": "Отвори Групе",
       "workspaceId": "ID радног простора",
       "workspaceIdDescription": "За CLI, API и подршку.",
       "leaveWorkspace": "Напусти радни простор",
@@ -26750,7 +26925,7 @@
       "apiKeysDescription": "Кључеви за скрипте, CI и интеграције. Кључ делује као ви, као агент или као бот. Правила за сваки кључ су у Безбедности.",
       "keys": {
         "title": "API кључеви",
-        "description": "Ključevi za skripte, CI i integracije. Ključ deluje kao ti, agent ili bot; „Važi za“ određuje koje radne prostore doseže.",
+        "description": "Кључеви за скрипте, CI и интеграције. Кључ делује као ти, агент или бот. Ради у овом workspace-у, осим ако не изабереш све своје workspace-ове.",
         "newKey": "Нови кључ",
         "count": "{count, plural, one {# кључ} few {# кључа} other {# кључева}}",
         "emptyTitle": "Нема API кључева",
@@ -27130,7 +27305,7 @@
     "progressLabel": "Напредак",
     "ranFor": "Трајало {time}",
     "recentJobs": "Недавни послови",
-    "registryGroup": "Harbor регистар",
+    "registryGroup": "Harbor",
     "registryTasksHint": "Скупови података из Harbor регистра приказују своје задатке на сопственој страници",
     "registryUnavailable": "Harbor регистар није прочитан ({reason}). Приказани су ваши скупови и уграђени скупови података.",
     "retryN": "поновни покушај {n}",
@@ -27204,7 +27379,7 @@
       "all": "Сви",
       "suite": "Ваши",
       "builtin": "Уграђени",
-      "registry": "Harbor регистар"
+      "registry": "Harbor"
     },
     "taskTab": {
       "instruction": "Упутство",
@@ -27213,5 +27388,79 @@
       "results": "Резултати"
     },
     "colTaskCount": "Задаци"
+  },
+  "desktopTabs": {
+    "tabs": "Otvorene kartice",
+    "newTab": "Nova kartica",
+    "newTabToRight": "Nova kartica desno",
+    "duplicate": "Dupliraj",
+    "pin": "Zakači karticu",
+    "unpin": "Otkači karticu",
+    "closeTab": "Zatvori karticu",
+    "closeOthers": "Zatvori ostale kartice",
+    "closeToRight": "Zatvori kartice desno",
+    "reopenClosed": "Ponovo otvori zatvorenu karticu",
+    "session": "Sesija",
+    "artifact": "Artefakt",
+    "page": "Stranica",
+    "unavailable": "Nije dostupno",
+    "newSession": "Nova sesija",
+    "sessions": "Sesije",
+    "artifacts": "Artefakti",
+    "customize": "Prilagodi",
+    "goal": "Cilj",
+    "settings": "Podešavanja",
+    "pages": {
+      "apps": "Aplikacije",
+      "calendar": "Kalendar",
+      "chat": "Čet",
+      "drive": "Disk",
+      "files": "Fajlovi",
+      "goals": "Ciljevi",
+      "inbox": "Prijemno sanduče",
+      "memory": "Memorija",
+      "members": "Članovi",
+      "review": "Pregled",
+      "setup": "Završi podešavanje"
+    },
+    "sections": {
+      "agents": "Agenti",
+      "connectors": "Konektori",
+      "secrets": "Tajne",
+      "skills": "Veštine",
+      "drives": "Diskovi",
+      "apps": "Aplikacije",
+      "triggers": "Okidači",
+      "models": "Modeli",
+      "repo": "Repozitorijum",
+      "review": "Pregled",
+      "reminders": "Petlje",
+      "members": "Članovi",
+      "settings": "Podešavanja"
+    }
+  },
+  "workspaceSetup": {
+    "title": "Završi podešavanje",
+    "description": "Završeno {done} od {total}. Red je završen čim se podesi.",
+    "descriptionIdle": "Šta agentima ovog workspace-a treba od tebe.",
+    "tryAgain": "Pokušaj ponovo",
+    "loadFailed": "Koraci podešavanja nisu mogli da se učitaju.",
+    "emptyTitle": "Nema više ničega za podešavanje",
+    "emptyDescription": "Ovom workspace-u od tebe ne treba prijava, tajna ni Slack.",
+    "openWorkspace": "Otvori workspace",
+    "completeTitle": "Podešavanje je završeno",
+    "completeDescription": "Ako si podešavanje pokrenuo u terminalu, tamo se nastavlja samo.",
+    "slackName": "Slack",
+    "kindConnector": "Konektor",
+    "kindSecret": "Tajna",
+    "kindSlack": "Kanal",
+    "done": "Gotovo",
+    "connect": "Poveži {name}",
+    "reconnect": "Ponovo poveži {name}",
+    "setSecret": "Podesi {name}",
+    "addSlack": "Dodaj Kortix u Slack",
+    "connectSlack": "Poveži Slack",
+    "bannerTitle": "{left, plural, one {Ostao je # korak podešavanja} few {Ostala su # koraka podešavanja} other {Ostalo je # koraka podešavanja}}",
+    "bannerDismiss": "Odbaci"
   }
 }

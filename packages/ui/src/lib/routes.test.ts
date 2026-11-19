@@ -74,7 +74,7 @@ test('a route the host maps to null hides its row; the customize pages keep thei
 
 test('review and reminders links follow the host customize route', () => {
   // Review is its own page by default; a host that routes its own customize pages serves it there.
-  expect(reviewHref('p')).toBe('/workspaces/p/inbox?view=review');
+  expect(reviewHref('p')).toBe('/workspaces/p/review');
   setUiRoutes({ customize: (p, path) => `/w/${p}/setup/${path ?? ''}` });
   expect(remindersHref('p')).toBe('/w/p/setup/triggers');
   expect(reviewHref('p')).toBe('/w/p/setup/review');
@@ -91,4 +91,14 @@ test('the open session and project are read through the host routes', () => {
   expect(sessionIdFromPath('/workspaces/p/sessions/s1', 'p')).toBeNull();
   expect(isProjectPath('/w/p/chat/s1', 'p')).toBe(true);
   expect(isProjectPath('/workspaces/p', 'p')).toBe(false);
+});
+
+test('the Inbox route is apps/web\'s /inbox; a host that maps routes links it only when it maps inbox', () => {
+  expect(uiRoutes().inbox?.()).toBe('/inbox');
+  setUiRoutes({ files: () => null });
+  expect(uiRoutes().inbox).toBeUndefined();
+  setUiRoutes({ files: () => null, inbox: () => '/notifications' });
+  expect(uiRoutes().inbox?.()).toBe('/notifications');
+  setUiRoutes({});
+  expect(uiRoutes().inbox?.()).toBe('/inbox');
 });

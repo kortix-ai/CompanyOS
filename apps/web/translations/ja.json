@@ -206,7 +206,8 @@
     },
     "agentAccess": "エージェント: {agents}",
     "allAgents": "すべてのエージェント",
-    "noAgents": "エージェントなし"
+    "noAgents": "エージェントなし",
+    "deliveredOnceSet": "値を設定すると配信されます"
   },
   "useCases": {
     "headline": "会社を動かすループ",
@@ -598,7 +599,7 @@
         },
         "preferences": {
           "label": "言語とショートカット",
-          "description": "言語とキーボードショートカット。"
+          "description": "言語、モーション、キーボードショートカット。"
         },
         "connected": {
           "label": "接続済みアカウント"
@@ -635,9 +636,11 @@
     },
     "preferences": {
       "title": "言語とショートカット",
-      "description": "言語とキーボード ショートカット。",
+      "description": "言語、モーション、キーボードショートカット。",
       "languageTitle": "言語",
       "languageDescription": "アプリ内のあらゆる場所に言語「0」が表示されます。",
+      "motionTitle": "モーションを減らす",
+      "motionDescription": "アプリ全体のシマー、パルス、トランジションを止めます。読み込みスピナーは回り続けます。",
       "keyboardTitle": "キーボードショートカット",
       "keyboardDescription": "タブの切り替えとアプリ内のすべてのショートカットに使用される修飾キー。",
       "modifierKey": "修飾キー",
@@ -931,6 +934,7 @@
       "secretsCommand": "シークレット取得コマンド",
       "ownClientTitle": "任意の Git クライアントを使用",
       "ownClientDescription": "Kortix コマンドラインの代わりに通常の <code>git</code> でクローンします。",
+      "ownClientHelp": "任意の Git クライアントでこのアドレスからクローンします。git に求められたら、任意のユーザー名と、パスワードとして Kortix API キーを入力します。Kortix コマンドラインは認証情報ヘルパーでこれを自動で行いますが、通常の <code>git</code> は行いません。",
       "cloneAddressDescription": "任意の Git クライアントでこのアドレスからクローンできます。Kortix がリクエストに署名するため、アクセストークンの作成や保存は不要です。",
       "cloneAddress": "クローンアドレス",
       "peopleTitle": "アクセスできるユーザー",
@@ -1154,6 +1158,7 @@
         "recovered": "完了しませんでしたが、環境は現在準備完了です",
         "retrying": "完了せず、新しい試行が実行中です"
       },
+      "supersededGroup": "{count, plural, other {置き換えられた古いビルド # 件}}",
       "outcomes": {
         "ready": "新しいセッションを開始できます",
         "building": "現在準備中です",
@@ -1255,6 +1260,7 @@
       "search": "機能を検索",
       "loadFailed": "ワークスペースを読み込めませんでした",
       "retry": "再試行",
+      "reset": "デフォルトに戻す",
       "noMatches": "{query} に一致する結果はありません。",
       "emptyTitle": "試験運用機能はありません",
       "emptyDescription": "この環境にはワークスペース単位の機能フラグがありません。",
@@ -1336,6 +1342,14 @@
         "evals": {
           "name": "Evals",
           "description": "Run your agents on a list of tasks and score the results. A task is an instruction, a sandbox and a test script that writes a score (the Harbor task format). Declare a set of tasks under `evals:` in kortix.yaml, run it against any agent and model, and compare runs to see whether a change made the agent better or worse."
+        },
+        "desktop_tabs": {
+          "name": "デスクトップのタブ",
+          "description": "デスクトップアプリのタイトルバーにブラウザのようなタブを表示します。セッション、アーティファクト、ページはそれぞれ専用のタブで開き、⌘T、⌘W、⌘1〜9 はブラウザと同じように動作します。Web アプリは変わりません。"
+        },
+        "calendar": {
+          "name": "カレンダー",
+          "description": "人とエージェントの共有カレンダー：日付・参加者・コメント付きの項目を、スケジュール済みのトリガーとループと並べて表示します。@ でメンションすると通知されます。エージェントは `kortix calendar` を使います。"
         }
       },
       "channelsSwitch": {
@@ -1561,6 +1575,22 @@
     "referralShareTitle": "友達を紹介",
     "referralShareSubtitle": "400クレジット獲得",
     "new": "新規",
+    "mcpPromo": {
+      "title": "ChatGPT や Claude から Kortix を使う",
+      "description": "いつもの AI チャットに Kortix を追加しましょう。エージェントの起動、作業の確認、コネクタの利用がそこからできます。",
+      "cta": "接続"
+    },
+    "desktopPromo": {
+      "title": "デスクトップアプリを入手",
+      "description": "Quick Entry でどのアプリからでも Kortix にタスクを渡せます。このコンピューターもワンクリックで接続できます。",
+      "cta": "ダウンロード"
+    },
+    "phonePromo": {
+      "title": "スマートフォンで Kortix",
+      "description": "すべてのセッションをポケットに。終わったときや回答が必要なときはプッシュ通知でお知らせします。",
+      "cta": "アプリを入手"
+    },
+    "promos": "Kortix の使い方",
     "upgrade": "アップグレード",
     "chats": "チャット",
     "library": "ファイル",
@@ -1647,6 +1677,7 @@
         "status": "状態",
         "subAgent": "サブエージェント",
         "spawned": "起動されたセッション",
+        "spawnedBy": "{title} から起動",
         "subAgentCount": "{count, plural, other {サブエージェント #件}}",
         "spawnedCount": "{count, plural, other {起動されたセッション #件}}",
         "created": "作成日時",
@@ -1666,8 +1697,8 @@
         "needsInput": "回答待ち",
         "starting": "起動中",
         "running": "作業中",
-        "done": "準備完了",
-        "stopped": "スリープ中",
+        "done": "完了",
+        "stopped": "停止",
         "failed": "失敗",
         "legacy": "旧形式"
       }
@@ -1696,6 +1727,9 @@
       "title": "{file} に {errors, plural, other {# 件のエラー}}と{warnings, plural, other {# 件の警告}}があります",
       "titleErrors": "{file} に {errors, plural, other {# 件のエラー}}があります",
       "titleWarnings": "{file} に {warnings, plural, other {# 件の警告}}があります",
+      "count": "{errors, plural, other {# 件のエラー}}と{warnings, plural, other {# 件の警告}}",
+      "countErrors": "{errors, plural, other {# 件のエラー}}",
+      "countWarnings": "{warnings, plural, other {# 件の警告}}",
       "errorsOff": "エラーのあるエージェントとトリガーは、修正されるまでオフになります。",
       "warningsOnly": "すべて引き続き動作します。",
       "error": "エラー",
@@ -1841,6 +1875,7 @@
       "deleteFailed": "グループを削除できませんでした",
       "moveUp": "上へ移動",
       "moveDown": "下へ移動",
+      "collapseOthers": "他を折りたたむ",
       "reorderFailed": "グループを並べ替えできませんでした",
       "moveTo": "グループに移動",
       "removeFromGroup": "グループから外す",
@@ -1875,7 +1910,16 @@
       "private": "非公開",
       "noMessages": "まだメッセージはありません",
       "more": "その他"
-    }
+    },
+    "calendar": "カレンダー",
+    "running": "実行中",
+    "runningCount": "{count, plural, other {# 件のセッションが実行中}}",
+    "runningTitle": "実行中",
+    "runningEmpty": "実行中のものはありません。",
+    "runningFailed": "実行中のものを読み込めませんでした。",
+    "runningRetry": "再試行",
+    "runningIn": "{title} 内",
+    "runningFirst": "最初の {count} 件を表示しています。"
   },
   "dashboard": {
     "title": "ダッシュボード",
@@ -2182,6 +2226,11 @@
       "resume": "再開",
       "agentIsWorking": "{agent} が作業中",
       "needsYouOn": "あなたの対応が必要: {header}"
+    },
+    "panel": {
+      "outputNew": "新規",
+      "outputUpdated": "更新済み",
+      "resizePane": "ペインのサイズを変更"
     }
   },
   "agents": {
@@ -2344,6 +2393,8 @@
     "chatInputMachine": "マシン",
     "chatInputMachineDescription": "このセッションを起動するマシンテンプレート。",
     "sending": "送信中",
+    "notSentYet": "未送信 · オンラインに戻ると送信されます",
+    "offlineReconnecting": "オフライン — 再接続中…",
     "stop": "停止",
     "startingSession": "セッションを開始しています…",
     "sessionStarted": "セッションを開始しました",
@@ -2883,7 +2934,7 @@
       "featuresGrace": "SSO と SCIM は {date} まで有効のままです。エンタープライズを続けるには営業にお問い合わせください。",
       "featuresOn": "オン",
       "featuresOff": "オフ",
-      "featuresOffDescription": "SSO、SCIM、高度なロール、監査ログ、ブランディング。",
+      "featuresOffDescription": "SSO、SCIM、高度なロール、監査ログ。",
       "featuresDemo": "デモとしてオンです。ライセンスは営業にお問い合わせください。",
       "featuresLicensed": "ライセンス済み",
       "featuresLicensedRenews": "ライセンス済み · {date} に更新",
@@ -2908,7 +2959,11 @@
       "action": "ここでセッションを実行するには、クレジットを追加するかプランを選んでください。"
     },
     "costs": {
-      "billedElsewhere": "このコストのうち {amount} クレジットは、移動元のワークスペースに請求されました。"
+      "billedElsewhere": "このコストのうち {amount} クレジットは、移動元のワークスペースに請求されました。",
+      "allWorkspaces": "すべてのワークスペース",
+      "usageDescriptionWorkspace": "このワークスペースの Kortix 料金。クレジットはすべてのワークスペースで共通の残高です。",
+      "usageDescriptionAll": "すべてのワークスペースの Kortix 料金とクレジット台帳。",
+      "planDescriptionAll": "すべてのワークスペースのプラン、クレジット、利用額。"
     }
   },
   "ssoRequired": {
@@ -3016,39 +3071,34 @@
       "oneMoment": "少々お待ちください…",
       "useDifferentEmail": "別のメールアドレスを使用",
       "usePasswordInstead": "パスワードを使用",
-      "emailLinkInstead": "代わりにメールでリンクを受け取る",
+      "emailLinkInstead": "コードをメールで受け取る",
       "forgotPassword": "パスワードをお忘れですか？",
-      "automaticAccount": "初めての方は、「続行」を選ぶとアカウントが自動的に作成されます。",
+      "automaticAccount": "ログインまたはアカウントを作成します。",
       "sso": {
         "title": "シングルサインオンを使用",
-        "description": "<address>{email}</address>では、組織のIDプロバイダーを通じてサインインできます。",
+        "description": "<address>{email}</address> として組織経由でログインします。",
         "continue": "SSOで続行",
         "enterWorkEmail": "上に勤務先のメールアドレスを入力し、シングルサインオンを選択してください。",
         "notConfigured": "“{domain}”ではシングルサインオンが設定されていません。管理者に設定を依頼するか、メールアドレスで続行してください。",
         "lookingUp": "IDプロバイダーを確認中…",
-        "use": "シングルサインオン（SSO）を使用"
+        "use": "SSOを使用"
       },
       "link": {
         "title": "メールを確認してください",
-        "description": "<address>{email}</address> にリンクを送信しました。リンクを開いて続行してください。",
-        "confirmDescription": "<address>{email}</address> に確認メールを送信しました。メールを確認して続行してください。",
-        "unknownDescription": "<address>{email}</address> にメールを送信しました — サインイン用リンク、または新規アカウント用の確認リンクです。",
-        "closedDescription": "<address>{email}</address> のアカウントがある場合、サインイン用リンクを送信しました。",
-        "notReceived": "リンクが届きませんか？",
-        "confirmNotReceived": "確認メールが届きませんか？",
+        "description": "<address>{email}</address> に送信したコードを入力してください。",
+        "confirmDescription": "<address>{email}</address> に送信したメールを確認して続行してください。",
+        "unknownDescription": "<address>{email}</address> に送信したコードを入力してください。",
+        "closedDescription": "<address>{email}</address> にアカウントがある場合、コードが届きます。",
         "resendIn": "{seconds}秒後に再送信",
-        "resend": "再送信",
-        "checkSpam": "見つからない場合は、迷惑メールフォルダを確認してください。"
+        "resend": "再送信"
       },
       "credentials": {
         "signin": {
           "title": "おかえりなさい",
-          "description": "続行するにはパスワードを入力してください。",
           "passwordPlaceholder": "パスワードを入力"
         },
         "signup": {
           "title": "アカウントを作成",
-          "description": "開始するにはパスワードを設定してください。",
           "passwordPlaceholder": "パスワードを作成"
         },
         "unknown": {
@@ -3062,22 +3112,19 @@
         "networkFailed": "リクエストを送信できませんでした。もう一度お試しください。",
         "signupsClosed": "現在、新規登録を停止しています。管理者に連絡するか、アクセスを申請してください。",
         "ssoRequired": "組織でシングルサインオンが必須です。SSOで続行してください。",
-        "incorrectPassword": "パスワードが正しくありません。もう一度お試しいただくか、「パスワードをお忘れですか？」からリセットしてください。",
-        "existingAccountWrongPassword": "すでにアカウントがあります。既存のパスワードを入力してサインインしてください。",
+        "incorrectPassword": "パスワードが正しくありません。",
+        "existingAccountWrongPassword": "このメールアドレスにはアカウントがあります。パスワードを入力してください。",
         "confirmAccount": "メールを確認してアカウントを認証してください",
         "invalidCode": "コードが無効か、有効期限が切れています"
       },
-      "legal": {
-        "signup": "アカウントを作成すると、<termsOfService>利用規約</termsOfService>および<privacyPolicy>プライバシーポリシー</privacyPolicy>に同意したものとみなされます",
-        "default": "<termsOfService>利用規約</termsOfService>および<privacyPolicy>プライバシーポリシー</privacyPolicy>"
-      }
+      "or": "または"
     },
     "passwordReset": {
       "loading": "読み込み中",
       "resetting": "パスワードをリセット中",
       "request": {
         "title": "パスワードをリセット",
-        "description": "メールアドレスを入力すると、パスワードリセット用のリンクをお送りします。",
+        "description": "リセット用のリンクをメールで送信します。",
         "email": "メールアドレス",
         "emailPlaceholder": "メールアドレスを入力",
         "sending": "リンクを送信中…",
@@ -3085,8 +3132,7 @@
       },
       "sent": {
         "title": "メールを確認してください",
-        "description": "パスワードリセット用のリンクを送信しました。",
-        "address": "リセットリンクを<address>{email}</address>に送信しました"
+        "address": "<address>{email}</address> にリセットリンクを送信しました。"
       },
       "expired": {
         "title": "リンクの有効期限が切れています",
@@ -3096,12 +3142,11 @@
       "success": {
         "title": "パスワードを更新しました",
         "description": "新しいパスワードでサインインできるようになりました。",
-        "changed": "パスワードが変更されました。",
         "signIn": "サインイン画面へ"
       },
       "form": {
         "title": "新しいパスワードを設定",
-        "description": "アカウント用の新しいパスワードを設定してください。",
+        "description": "新しいパスワードを設定してください。",
         "newPassword": "新しいパスワード",
         "newPasswordPlaceholder": "新しいパスワードを入力",
         "confirmPassword": "パスワードを確認",
@@ -3337,7 +3382,17 @@
       "jsonKeys": "{count, plural, other {JSON · # 個のキー}}",
       "jsonItems": "{count, plural, other {JSON · # 個の項目}}",
       "failedSentence": "ワークフローは完了前に停止しました。",
-      "runningCount": "{count} 件実行中"
+      "runningCount": "{count} 件実行中",
+      "spent": "{credits} クレジット使用",
+      "spentHint": "この実行でこれまでに Kortix が請求した額：実行とそのエージェントのモデル呼び出しと計算時間。",
+      "waitingForYou": "あなたの返答待ち · 未開始",
+      "cancelled": "キャンセル — 何も実行されていません",
+      "answeredInChat": "チャットで回答 — 何も実行されていません",
+      "stoppedByYou": "あなたが停止",
+      "attempt": "{count} 回目",
+      "quietFor": "{minutes} 分間出力なし",
+      "quietCount": "{count} 件が出力なし",
+      "holdingWorking": "保留中 · {count} 件が作業中"
     },
     "agent": {
       "backgroundWorking": "バックグラウンドで作業中",
@@ -3422,7 +3477,8 @@
       "automation_failed": "失敗アラート",
       "automation_recovered": "復旧アラート",
       "capture_device_down": "Capture のコンピューターが停止",
-      "capture_device_recovered": "Capture のコンピューターが復旧"
+      "capture_device_recovered": "Capture のコンピューターが復旧",
+      "mention": "メンション"
     },
     "kindDescription": {
       "turn_done": "ターンが終了します。",
@@ -3433,7 +3489,8 @@
       "automation_failed": "トリガーまたはループが失敗し始めます。",
       "automation_recovered": "失敗していたトリガーまたはループが再び動作します。",
       "capture_device_down": "Kortix Capture のコンピューターが記録していません。Capture の管理者に送られます。",
-      "capture_device_recovered": "停止していた Kortix Capture のコンピューターが再び記録しています。"
+      "capture_device_recovered": "停止していた Kortix Capture のコンピューターが再び記録しています。",
+      "mention": "他の人があなたをメンションするか、カレンダーの項目にあなたを追加したとき。"
     },
     "inbox": {
       "title": "受信トレイ",
@@ -10418,6 +10475,7 @@
       "text38e64d6a8162": "ワークスペースのデフォルトブランチに SKILL.md をコミットします。モデルもチャットも不要です。",
       "text39cfc32bd12c": "貼り付けたテキスト",
       "text23d0bb29fca0": "{count, plural, other {# 語}}",
+      "text3e310b75051c": "再実行",
       "text426699d5a8c0": "{count, plural, other {# 文字}}",
       "text40078a553439": "添付ファイルのチャンクをアップロードしました",
       "text4c7f8000aabd": "添付ファイルのアップロードが完了しました",
@@ -10781,6 +10839,10 @@
       "text0b2e0f1bf47e": "行ったすべての呼び出しと、許可した人",
       "text0b2ecc210632": "唯一のライブチャネル。質問が生まれたスレッドで尋ねれば、答え、グラフ、クエリが同じスレッドに戻ります。",
       "text0b348466332c": "まだ変更はありません",
+      "textf83916135509": "使用中",
+      "texta251c18205f1": "キャッシュ済み",
+      "text64cd989efc14": "空き容量",
+      "textcc6d004b577f": "このファイルにはベースからの変更がありません。",
       "text0b38e3daeb93": "すべての秘密",
       "text0b3dbab0c668": "- 修正をリリースし、ポストモーテムを書く",
       "text0b495c90447a": "カレンダー、受信トレイ、応募者システム。",
@@ -10916,7 +10978,7 @@
       "text0f096c40454e": "データセットをプロファイリングし、分布を可視化し、リーケージと不均衡を確認し、データの内容について最初の率直な段落を書きます。空のセルからではなく、概要を把握した状態から始められます。",
       "text0f16342ee1c1": "32%",
       "text0f308cfb7ef3": "0 自動",
-      "text0f4827ef74ea": "Kortixの募集中ポジション：FDE、GTM、MTS。セルビアのベオグラードとサンフランシスコ。長期的なオーナーシップを担える人材を採用しています。",
+      "text0f4827ef74ea": "Kortixの募集中ポジション：FDE、GTM、MTS。セルビアのベオグラードと米国。長期的なオーナーシップを担える人材を採用しています。",
       "text0f600458e375": "SSO、メンバー、グループ、ロールベースアクセスを標準搭載。人とエージェントごとのリソース権限、暗号化されたシークレット、完全な監査証跡にも対応します。セルフホストすれば、プラットフォーム全体を自社環境内で運用できます。",
       "text0f64c7d16c28": "# コンパイルを確認し、不足しているシークレットを尋ね、",
       "text0f656790976e": "どのエージェントプラットフォームを開いても、アーキテクチャは同じです。わずかな違いは守れる優位性になりません。差がつくのは学習ループだけです。",
@@ -11650,6 +11712,7 @@
       "text2522f9d16f3b": "CompanyOS",
       "text25330787f710": "+3",
       "text2534086de9fe": "パネルを表示",
+      "text40cd6293d193": "パネルを非表示",
       "text2534e74d5120": "エージェントに何を変更させますか？",
       "text253923d0f0c5": "接続 → アプリケーション → +",
       "text253b18a02165": "起動中",
@@ -11985,7 +12048,6 @@
       "text2f6a48c637a9": "Webhookを削除しました",
       "text2f6c00ce1d58": "OneLogin Rules からプッシュされたグループは、OneLogin の名前で Kortix に作成されます。",
       "text2f6e9daec8e9": "状態",
-      "text2f72fafe0ce1": "Kortix コマンドラインの代わりに。",
       "text2f77668a9dfb": "メッセージ",
       "text2f77dafd3fcc": "プロバイダーを接続",
       "text2f80158a9d89": "research/",
@@ -14200,7 +14262,7 @@
       "text6ff3bff5952a": "次の権限が必要です:",
       "text6ffb34d0baed": "git push origin HEAD",
       "text700e7474f9a9": "紹介リンクを利用できません",
-      "text702391f5d071": "個人アクセストークンが作成されます。いつでも取り消せます：",
+      "text702391f5d071": "アクセスはいつでも次の場所で取り消せます:",
       "text702ef921ed1d": "名",
       "text7031306d3dd8": "このモデルのプロバイダーはこのワークスペースに接続されていません — ここにルーティングされたリクエストは直ちにフォールバックします",
       "text7031edbcf9c4": "失敗",
@@ -14467,7 +14529,6 @@
       "text7743ce348d92": "下書き",
       "text775ddc2119ab": "下の「Identifier (Entity ID)」と「Reply URL (Assertion Consumer Service URL)」をコピーし、「Basic SAML Configuration」パネルに貼り付けます。Identifier を Default に設定し、「Sign on URL」には Kortix のサインインページを指定します。Relay State と Logout URL は空欄のままにします。「Save」をクリックして編集パネルを閉じます。",
       "text775f96fcc9db": "トークンを無効化しました",
-      "text7760401b25c7": "プレーンでクローンを作成する",
       "text7761b572aba8": "ブラウザ通知",
       "text77793c7508f1": "設定はリセットされます。",
       "text7779bc2ac4be": "skills/claims/SKILL.md",
@@ -16536,7 +16597,7 @@
       "textb2a8625a332e": "時間軸上に3つのスケジュール済みトリガーがあり、現在時点のマーカーと次回実行が表示されています。",
       "textb2ac0da7c543": "チーム全体",
       "textb2c0cab20dc3": "JSON-RPCバッチはサポートされていません",
-      "textb2c293b68745": ".kortix/connectors/routes.toml",
+      "textb2c293b68745": "connectors/routes.toml",
       "textb2c5bc52374a": "シークレットが削除されました",
       "textb2d544129223": "次の状態では完了とは言えません",
       "textb2e30caf44ee": "コンポーネント内で16進カラーをハードコードしない",
@@ -16690,7 +16751,6 @@
       "textb7297226fd1f": "名前を保存",
       "textb7396994492d": "カスタムSAMLアプリを追加 → 属性マッピング",
       "textb73ce9104ddb": "コピーに失敗しました — 選択して手動でコピーしてください",
-      "textb74106e21108": "しません。",
       "textb7416a669c6b": "取り消し済み",
       "textb74399647bf0": "監査ログに処理内容がそのまま表示されるよう、実行するジョブにちなんだ名前を付けてください。",
       "textb743a712efa8": "スレッドはセッションです。1つだけです。",
@@ -17047,7 +17107,7 @@
       "textc18ce3e6b5e0": "enterpriseAccordionSelfhostBody",
       "textc18dc13ca821": "セッションは開始できますが、エージェントにはこれらの値がありません。",
       "textc19b5dc4376a": "「exportについて誰か何か言っていた？」",
-      "textc19c3fc65916": "ターミナルで承認待ちです。",
+      "textc19c3fc65916": "があなたの承認を待っています。",
       "textc1a5d4982c10": "すり抜けるためのものではありません。",
       "textc1abcf2a909a": "≈ {value0} クレジット",
       "textc1ada08ce138": "監査証跡",
@@ -18267,7 +18327,6 @@
       "texte3190ee3d8a8": "ワークブックを表示できません",
       "texte31ab643c44f": "メンバー",
       "texte31c7af1f424": "各自のアカウントを接続します。",
-      "texte327e6c1348b": "任意の Git クライアントを使用して、このアドレスからクローンを作成します。 git が尋ねたら、任意のユーザー名とパスワードとして Kortix API キーを入力します。Kortix コマンドラインは、資格情報ヘルパー (プレーン) を通じてこれを行います。",
       "texte3311b311078": "xlsxだけでなくCSVも希望",
       "texte335ed040bfe": "ブランチ上の下書きを、diffとしてレビュー。",
       "texte339fc8e7d89": "チャットの回答は検証も再実行もできません。そこでセッションはクエリ、スクリプト、グラフ、検証内容のメモをコミットします。",
@@ -18612,7 +18671,7 @@
       "textecbd276ebec2": "検索してみてください。",
       "textecc7ed048b32": "月末締め処理",
       "texteccba86b787c": "ノートPC、VPS、またはあなた自身のネットワーク。",
-      "textecccd43d1878": ".kortix/connectors/schema.graphql",
+      "textecccd43d1878": "connectors/schema.graphql",
       "texteccce15347a4": "このAppをプレビューするアクセス権がありません。",
       "textecd3c555ab44": "権限の保存に失敗しました",
       "textecdcf83028e7": "パラメーターを確認",
@@ -20707,7 +20766,7 @@
       "text5f6ba69d66d1": "スキルを削除しました",
       "textcb8d6b0c94c9": " とその中のすべてのファイル（編集内容を含む）。このスキルを使うすべてのエージェントからも外します。デフォルトブランチへの 1 回のコミットです。",
       "cliDeviceTitle": "Kortix CLI を認証",
-      "cliDeviceWarning": "自分で開始したログインのみ承認してください。このコードがターミナルに表示されたコードと一致することを確認してください。",
+      "cliDeviceWarning": "このコードがターミナルの表示と一致する場合のみ承認してください。",
       "cliDeviceCode": "ログインコード",
       "cliDeviceApproved": "ログインを承認しました。ターミナルに戻ってください。",
       "cliDeviceAction": "CLI を認証",
@@ -21278,7 +21337,7 @@
       "text05ee1d6181f3": "変更リクエストがマージされると、{agent}があなたの指示を実行します。",
       "texte608495c45ce": "{branch} にマージ",
       "text80ca527b0d55": "変更リクエストのトリガーを作成しました",
-      "authEmailAlreadySent": "このメールは1分以内に送信済みです。再送信する前に、受信トレイと迷惑メールフォルダを確認してください。",
+      "authEmailAlreadySent": "送信済みです。受信トレイと迷惑メールフォルダを確認してください。",
       "textfe0dab79db43": "1つのチャットでKortixと会話できます。メッセージはすべてスレッドになり、Kortixの最新の返信がその下に表示されます。",
       "text2e914b62b832": "Markdownリンク",
       "text7bed093239f3": "認識されたリソースにはアプリアイコンと簡易ラベルが表示されます。ホバーすると元のURLを確認できます。",
@@ -21374,7 +21433,19 @@
       "text458ceb31019b": "コネクタイベントのトリガー",
       "text27ca9df9dbaa": "コネクタイベントのトリガーはオフです",
       "textfff553f218c7": "Evals",
-      "textd5b5d846044e": "evals eval ベンチマーク スコア harbor terminal-bench タスク リーダーボード"
+      "textd5b5d846044e": "evals eval ベンチマーク スコア harbor terminal-bench タスク リーダーボード",
+      "textdb6ee6610b15": "カレンダー 予定 スケジュール 週 月 期限 締め切り 項目 トリガー",
+      "text9b041fd0dfb7": "カレンダーの項目を一覧表示",
+      "text968ff709bd3d": "カレンダーの項目を作成",
+      "textd115ffd5e3a4": "カレンダーのメンバーを一覧表示",
+      "texta268bab502cf": "カレンダーの項目を表示",
+      "text16d71c4d10a2": "カレンダーの項目を編集",
+      "text14580c9900ac": "カレンダーの項目を削除",
+      "text96386c724e21": "カレンダーの項目にコメント",
+      "textf543a9f99ce7": "アクションバー",
+      "textca4067071fcf": "選択",
+      "text4cea356a17a1": "未保存の編集",
+      "text2358f7b37c07": "一時的なモードのためのフローティングバー：選択、未保存の編集、保留中の貼り付け。タイトル、控えめな説明、キーヒント付きのアクション、閉じるボタン。"
     },
     "publicShareConfirm": {
       "title": "公開リンクを作成しますか？",
@@ -21791,11 +21862,14 @@
     "noCapUnlimited": "上限なし · 支出は無制限",
     "tokensSub": "入力 {in} · 出力 {out}",
     "unknownValue": "不明",
-    "estimateCoverageUnavailable": "見積もりの対象範囲を取得できません。",
     "estimatesSeparate": "上の実際の支出は別に扱われます。見積もりが請求額に加算されることはありません。",
     "estimatedUsageValueLabel": "LLM の推定利用額(請求ではありません):",
-    "pricedRequests": "料金計算済みリクエスト {count} 件",
-    "unpricedRequests": "料金未計算リクエスト {count} 件",
+    "pricedRequests": "料金計算済みリクエスト {count, number} 件",
+    "unpricedRequests": "料金未計算リクエスト {count, number} 件",
+    "failedRequests": "失敗したリクエスト {count, number} 件",
+    "estimateInfoLabel": "この見積もりについて",
+    "estimateDetail": "成功したモデル呼び出しを公開定価で計算しています。失敗したリクエストと料金が不明なモデルは計算に含まれません。",
+    "estimateRateVersion": "料金表: {version}",
     "llmEstimateLabel": "LLM の推定:"
   },
   "triggerComposer": {
@@ -22214,6 +22288,7 @@
     "installProfileHint": "Kortix でこのコネクタに表示される名前。",
     "wayComposio": "Composio 経由で接続します。Composio はサインインを代行するサードパーティのパートナーです。{name} にワンクリックでサインインし、Composio がログインを保持します。",
     "wayMcpOneClick": "{name} 自身の MCP サーバーに接続します。{name} にサインインするだけです。",
+    "wayKortixGoogle": "Kortix は Google の API を通じて {name} に接続します。Google にサインインするだけです。",
     "wayMcpSetup": "{name} 自身の MCP サーバーに接続します。自分の OAuth アプリか API キーが必要で、インストール後に設定します。",
     "wayApi": "{name} の {kind} に直接接続します。インストール後に API キーかトークンでアカウントを追加します。",
     "installsWay": "{kind} でインストール",
@@ -22232,8 +22307,8 @@
     "toolsAfterInstall": "この {kind} はインストール後にツールを一覧します。",
     "typeFilterLabel": "コネクターの種類",
     "typeFilterAll": "すべての種類",
-    "moveComposioTitle": "{app} には独自の MCP サーバーがあります",
-    "moveComposioBody": "このコネクターは Composio 経由で動いています。{app} 自身の MCP サーバーに切り替えられます。一度サインインすると切り替わります。エージェント、トリガー、kortix.yaml は引き続き {slug} を使います。",
+    "moveComposioTitle": "{app} は Composio なしで接続できます",
+    "moveComposioBody": "このコネクターは Composio 経由で動いています。Kortix が直接接続できます。一度サインインすると切り替わります。エージェント、トリガー、kortix.yaml は引き続き {slug} を使います。",
     "moveComposioAction": "MCP に切り替え",
     "wayChannel": "Kortix に組み込み：{name} でエージェントにメッセージできます。第三者は不要です。そのページで一度設定します。",
     "waySetUp": "設定",
@@ -22368,11 +22443,13 @@
     "areaDescription": "アプリとチャネルをエージェントに接続し、できることを決めます。",
     "wayMoreNamed": "{name} のその他",
     "otherWaysLead": "その他の方法：",
-    "typeFilterKortix": "Kortix"
+    "typeFilterKortix": "Kortix",
+    "scopeAll": "すべて",
+    "scopeAdded": "追加済み"
   },
   "connectMcp": {
     "title": "MCP で Kortix に接続",
-    "description": "Claude、Claude Code、Cursor、Codex、または任意の MCP クライアントから Kortix を使えます。サインインは一度だけ。インストールは不要です。",
+    "description": "Claude、ChatGPT、Claude Code、Cursor、Codex、または任意の MCP クライアントから Kortix を使えます。サインインは一度だけ。インストールは不要です。",
     "docs": "ドキュメント",
     "done": "完了",
     "copy": "コピー",
@@ -22382,6 +22459,7 @@
     "copyUrl": "URL をコピー",
     "via": {
       "claude": "設定 → コネクタ",
+      "chatgpt": "開発者モード → カスタムコネクタ",
       "claude-code": "ターミナルコマンド 1 つ",
       "cursor": "ワンクリックでインストール",
       "codex": "ターミナルコマンド 2 つ",
@@ -22657,6 +22735,13 @@
     "onlyYouDescription": "あなただけ。すべてのワークスペースの、あなたのプライベートセッションで使えます。",
     "everyoneDescription": "ワークスペースの全員が使えます。自動化も含みます。",
     "promoLine": "Kortix がローカルファイルを扱い、コンピューターを操作できるようにします。",
+    "promo": {
+      "title": "仕事用のコンピューターを接続",
+      "titleThis": "このコンピューターを接続",
+      "description": "エージェントがローカルファイルを扱い、プログラムを実行し、画面上のアプリを操作します。何を許可するかはあなたが決めます。",
+      "cta": "接続",
+      "ctaOneClick": "ワンクリックで接続"
+    },
     "dismissPromo": "閉じる",
     "useCliInstead": "代わりに CLI を使う",
     "cliHint": "コマンドはコードを表示し、このデバイスを承認するページを開きます。その後はバックグラウンドで動作します。",
@@ -24682,6 +24767,86 @@
     "waitNoCost": "回答を待っている間はチェックは実行されません。",
     "chaseAt": "{time} にフォローアップ"
   },
+  "calendar": {
+    "title": "カレンダー",
+    "gateDescription": "人とエージェントの共有カレンダー：日付・参加者・コメント付きの項目を、スケジュール済みのトリガーとループと並べて表示します。",
+    "newItem": "新しい項目",
+    "today": "今日",
+    "previousWeek": "前の週",
+    "nextWeek": "次の週",
+    "previousMonth": "前の月",
+    "nextMonth": "次の月",
+    "week": "週",
+    "month": "月",
+    "view": "表示",
+    "triggers": "トリガー",
+    "filter": {
+      "everyone": "全員",
+      "me": "自分"
+    },
+    "people": "メンバー",
+    "agents": "エージェント",
+    "searchPeople": "メンバーとエージェントを検索",
+    "noDate": "日付なし",
+    "noDateHint": "日付のない項目はここに表示されます。",
+    "allDay": "終日",
+    "startTime": "開始時刻",
+    "endTime": "終了時刻",
+    "overdue": "期限切れ",
+    "status": {
+      "done": "完了"
+    },
+    "comments": "{count, plural, other {# 件のコメント}}",
+    "formerMember": "元メンバー",
+    "lastRun": "前回の実行",
+    "lastRunFailed": "前回の実行は失敗",
+    "loop": "ループ",
+    "trigger": "トリガー",
+    "addOn": "{day} に新しい項目",
+    "dayEntries": "{day}、{count, plural, other {# 件}}",
+    "showWeekOf": "{day} の週を表示",
+    "more": "ほか {count} 件",
+    "when": "日時",
+    "created": "作成",
+    "clearDate": "日付を削除",
+    "saveFailed": "変更は保存されませんでした。",
+    "close": "閉じる",
+    "goneTitle": "項目は削除されました",
+    "goneBody": "この項目はもう存在しません。",
+    "loadFailed": "カレンダーを読み込めませんでした。",
+    "itemLoadFailed": "この項目を読み込めませんでした。",
+    "tryAgain": "再試行",
+    "commentFailed": "コメントは追加されませんでした。",
+    "reopen": "再開",
+    "markDone": "完了にする",
+    "moreActions": "その他の操作",
+    "delete": "削除",
+    "deleteTitle": "この項目を削除しますか？",
+    "deleteBody": "「{title}」とそのコメントは全員に対して削除されます。",
+    "deleteFailed": "項目は削除されませんでした。",
+    "titleLabel": "タイトル",
+    "titlePlaceholder": "何をするか",
+    "openSession": "セッションを開く",
+    "notes": "メモ",
+    "notesPlaceholder": "詳細を追加。@ でメンションできます。",
+    "commentsTitle": "コメント",
+    "commentLabel": "コメント",
+    "commentPlaceholder": "コメントを書く。@ でメンションできます。",
+    "comment": "コメント",
+    "kind": "種類",
+    "target": "実行先",
+    "session": "セッション",
+    "schedule": "スケジュール",
+    "thisDay": "この日",
+    "nextRun": "次回の実行",
+    "failed": "失敗",
+    "succeeded": "成功",
+    "prompt": "プロンプト",
+    "openTriggers": "トリガーで開く",
+    "cancel": "キャンセル",
+    "create": "作成",
+    "runs": "{capped, select, yes {{count}+ 回実行} other {{count, plural, other {# 回実行}}}}"
+  },
   "agentEditor": {
     "manage": "管理",
     "overviewTitle": "概要",
@@ -24838,7 +25003,7 @@
       "newAgent": "New agent",
       "newAgentHelp": "My Kortix がエージェントを kortix.yaml に記述し、変更リクエストを作成します。",
       "name": "Name",
-      "namePlaceholder": "market-scan",
+      "namePlaceholder": "市場調査",
       "nameHelp": "Lowercase letters, digits and dashes. Saved as <slug></slug>.",
       "nameTaken": "この名前のエージェントはすでに存在します。",
       "howToStart": "How to start",
@@ -26437,7 +26602,11 @@
         "resume": "実行を再開できませんでした",
         "stop": "実行を停止できませんでした",
         "restart": "{label} を再起動できませんでした"
-      }
+      },
+      "hold": "新しいエージェントを保留",
+      "holdShort": "新しいエージェントを保留",
+      "holdHint": "新しいエージェントを保留: 再開するまで起動しません。作業中のエージェントは続行します (p)",
+      "holding": "新しいエージェントを保留中"
     },
     "board": {
       "layoutLabel": "レイアウト",
@@ -26540,7 +26709,10 @@
     "googleSheet": "Google スプレッドシート",
     "googleSlides": "Google スライド",
     "pullRequest": "PR #{number}",
-    "issue": "課題 #{number}"
+    "issue": "課題 #{number}",
+    "artifactDocument": "ドキュメント",
+    "artifactPage": "ページ",
+    "artifactUpdated": "更新日: {date}"
   },
   "subscriptionUsage": {
     "fiveHour": "5時間",
@@ -26737,6 +26909,9 @@
       "personalKeysEmpty": "個人キーはありません。kortix login で作成されます。スクリプト用のキーはワークスペースの設定 › API キーで作成します。",
       "securityDescription": "サインインのルール、誰が誰のセッションを開けるか、各 API キーのルール。",
       "rolesDescription": "組み込みロールとカスタムロール。メンバーから割り当てます。",
+      "builtInRoles": "組み込みロール",
+      "memberGroupsEnterprise": "グループは Enterprise の機能です。",
+      "openGroups": "グループを開く",
       "workspaceId": "ワークスペース ID",
       "workspaceIdDescription": "CLI、API、サポート用。",
       "leaveWorkspace": "ワークスペースから退出",
@@ -26750,7 +26925,7 @@
       "apiKeysDescription": "スクリプト、CI、連携用のキーです。キーはあなた、エージェント、またはボットとして動作します。すべてのキーに適用されるルールはセキュリティにあります。",
       "keys": {
         "title": "API キー",
-        "description": "スクリプト・CI・連携用のキーです。キーはあなた・エージェント・ボットとして動作し、「適用範囲」でどのワークスペースに届くかを決めます。",
+        "description": "スクリプト、CI、連携用のキー。キーはあなた、エージェント、またはボットとして動作します。すべてのワークスペースを選ばない限り、このワークスペースでのみ使えます。",
         "newKey": "新しいキー",
         "count": "{count, plural, other {# 個のキー}}",
         "emptyTitle": "API キーがありません",
@@ -27130,7 +27305,7 @@
     "progressLabel": "進捗",
     "ranFor": "実行時間 {time}",
     "recentJobs": "最近のジョブ",
-    "registryGroup": "Harbor レジストリ",
+    "registryGroup": "Harbor",
     "registryTasksHint": "Harbor レジストリのデータセットは、各ページにタスクを表示します",
     "registryUnavailable": "Harbor レジストリを読み込めませんでした（{reason}）。自分のスイートと組み込みデータセットを表示しています。",
     "retryN": "再試行 {n}",
@@ -27204,7 +27379,7 @@
       "all": "すべて",
       "suite": "自分のもの",
       "builtin": "組み込み",
-      "registry": "Harbor レジストリ"
+      "registry": "Harbor"
     },
     "taskTab": {
       "instruction": "指示",
@@ -27213,5 +27388,79 @@
       "results": "結果"
     },
     "colTaskCount": "タスク"
+  },
+  "desktopTabs": {
+    "tabs": "開いているタブ",
+    "newTab": "新しいタブ",
+    "newTabToRight": "右に新しいタブ",
+    "duplicate": "複製",
+    "pin": "タブを固定",
+    "unpin": "タブの固定を解除",
+    "closeTab": "タブを閉じる",
+    "closeOthers": "他のタブを閉じる",
+    "closeToRight": "右側のタブを閉じる",
+    "reopenClosed": "閉じたタブを再度開く",
+    "session": "セッション",
+    "artifact": "アーティファクト",
+    "page": "ページ",
+    "unavailable": "利用できません",
+    "newSession": "新しいセッション",
+    "sessions": "セッション",
+    "artifacts": "アーティファクト",
+    "customize": "カスタマイズ",
+    "goal": "ゴール",
+    "settings": "設定",
+    "pages": {
+      "apps": "アプリ",
+      "calendar": "カレンダー",
+      "chat": "チャット",
+      "drive": "ドライブ",
+      "files": "ファイル",
+      "goals": "ゴール",
+      "inbox": "受信トレイ",
+      "memory": "メモリ",
+      "members": "メンバー",
+      "review": "レビュー",
+      "setup": "セットアップを完了する"
+    },
+    "sections": {
+      "agents": "エージェント",
+      "connectors": "コネクタ",
+      "secrets": "シークレット",
+      "skills": "スキル",
+      "drives": "ドライブ",
+      "apps": "アプリ",
+      "triggers": "トリガー",
+      "models": "モデル",
+      "repo": "リポジトリ",
+      "review": "レビュー",
+      "reminders": "ループ",
+      "members": "メンバー",
+      "settings": "設定"
+    }
+  },
+  "workspaceSetup": {
+    "title": "セットアップを完了する",
+    "description": "{total} 件中 {done} 件完了。各行は設定が済むと完了になります。",
+    "descriptionIdle": "このワークスペースのエージェントに必要な設定です。",
+    "tryAgain": "再試行",
+    "loadFailed": "セットアップの手順を読み込めませんでした。",
+    "emptyTitle": "設定する項目はありません",
+    "emptyDescription": "このワークスペースではサインイン、シークレット、Slack の設定は不要です。",
+    "openWorkspace": "ワークスペースを開く",
+    "completeTitle": "セットアップが完了しました",
+    "completeDescription": "ターミナルでセットアップを開始した場合、そちらで自動的に続行されます。",
+    "slackName": "Slack",
+    "kindConnector": "コネクタ",
+    "kindSecret": "シークレット",
+    "kindSlack": "チャンネル",
+    "done": "完了",
+    "connect": "{name} を接続",
+    "reconnect": "{name} を再接続",
+    "setSecret": "{name} を設定",
+    "addSlack": "Kortix を Slack に追加",
+    "connectSlack": "Slack を接続",
+    "bannerTitle": "{left, plural, other {セットアップの手順があと # 件あります}}",
+    "bannerDismiss": "閉じる"
   }
 }

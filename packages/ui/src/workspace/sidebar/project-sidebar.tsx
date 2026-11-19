@@ -17,9 +17,7 @@ import {
 } from '../../primitives/sidebar';
 import { ComputerConnectModal } from '../../internal/tunnel/computer-connect';
 import { ConnectMcpModal } from '../../internal/layout/connect-mcp-modal';
-import { ProjectMcpNavItem } from './footer/project-mcp-nav';
-import { ProjectComputerNavItem } from './footer/project-computer-nav';
-import { ProjectDownloadAppNavItem } from './footer/project-download-app-nav';
+import { ProjectPromoCards } from './footer/project-promo-cards';
 import { ProjectManifestIssuesAlert } from './footer/project-manifest-issues-alert';
 import { ProjectSandboxAlert } from './footer/project-sandbox-alert';
 import { ProjectRepositoryDisconnectedAlert } from '../repository-disconnected';
@@ -37,7 +35,6 @@ import { useBillingAccountId } from '../../internal/stores/billing-account-conte
 import { useFeatureFlag } from '@kortix/sdk/react';
 import { AppsModal } from '../../internal/apps-and-extensions/apps-modal';
 import { useAppsModalStore } from '../../internal/stores/apps-modal-store';
-import { ProjectChromeNavItem } from './footer/project-chrome-nav';
 import { CHROME_UI_ENABLED } from '../../internal/chrome/use-chrome-offered';
 import {
   MagnifyingGlassIcon,
@@ -171,24 +168,18 @@ export function ProjectSidebar({
   // live inside "More": the bottom of the sidebar is More and the status alerts.
   const connectRows = (
     <>
-              {/* Connect MCP over Connect your computer: one block, 1px seam,
-                  inner corners rounded-sm. Either row can be absent (dismissed,
-                  or a paired computer), so the corners come from the siblings
-                  that render and an empty block collapses. A plain <li>, not
-                  SidebarMenuItem: its `group/menu-item` would make hovering one
-                  row light up the other row's badge and dismiss. */}
+              {/* One card for every promo: MCP, the computer, Chrome, the
+                  desktop app, the phone app. An empty list collapses. */}
               <li className="not-has-[li]:hidden">
-                <SidebarMenu className="gap-px [&>li:not(:first-child)>[data-sidebar=menu-button]]:rounded-t-sm [&>li:not(:last-child)>[data-sidebar=menu-button]]:rounded-b-sm">
-                  <ProjectMcpNavItem onOpenConnect={() => setConnectMcpOpen(true)} />
-                  <ProjectComputerNavItem
+                <ul className="pb-1">
+                  <ProjectPromoCards
                     projectId={projectId}
-                    onOpenConnect={() => setComputerConnectOpen(true)}
+                    onOpenMcp={() => setConnectMcpOpen(true)}
+                    onOpenComputer={() => setComputerConnectOpen(true)}
+                    onOpenChrome={chrome ? () => useAppsModalStore.getState().setOpen(true) : undefined}
+                    onOpenDownloadApp={onOpenDownloadApp}
                   />
-                  {chrome ? (
-                    <ProjectChromeNavItem onOpenConnect={() => useAppsModalStore.getState().setOpen(true)} />
-                  ) : null}
-                  {onOpenDownloadApp ? <ProjectDownloadAppNavItem onOpenDownload={onOpenDownloadApp} /> : null}
-                </SidebarMenu>
+                </ul>
               </li>
               {/* Last (Jay, 2026-09-03). It is the only paid call to action in
                   this group, and above the nav rows it put a sell between the

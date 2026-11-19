@@ -1,8 +1,8 @@
 ---
 title: Workspaces — one account, one project, one concept (the Slack model)
-status: Release 1 LIVE on prod (v0.15.3, 2026-11-10); Release 2 and 3 specified in design.md, not built; the split runs in dry_run until the sandbox-key fix is released
+status: Release 1 LIVE on prod (v0.15.3, 2026-11-10); the legacy split DONE on prod (2026-11-12), staging and dev (2026-11-16), 0 split_pending everywhere; Release 2a in progress (R2a-0, R2a-1 on prod; R2a-2 #12489 and R2a-3a #12487 on dev, next release; R2a-3b next); Release 3 not built
 owner: dimitrije (from marko, 2026-11-10)
-updated: 2026-11-10
+updated: 2026-11-16
 ---
 
 # Workspaces
@@ -134,6 +134,92 @@ Each stage is its own PR on branch `workspaces` or a sub-branch merged back.
    `projects(account_id) where status = 'active'`.
 10. **Later, separate initiative:** code repos as connected resources of a
     workspace, so a developer with 5 repos has 1 workspace, not 5.
+
+## Status (2026-11-16): staging and dev are split too
+
+R2a-2 (#12489) and R2a-3a (#12487, with `20261114171401000`) are live on `dev`, not yet on
+staging or prod. The next release carries their 29 migrations. A 55P03 on a hot table rolls
+one twin file back: find the lock holder, rerun the job, never raise `lock_timeout`.
+
+The `workspace_split` setting went to `apply` on staging and dev at 14:12 UTC (the user's
+go, after prod). Aggregates only:
+
+| | Staging | Dev |
+|---|---|---|
+| Moves | 416 `done` in 188 accounts, 15:33–17:04 UTC, 0 `failed` | 111 `done` (106, then the 5 below), 0 `failed` |
+| Held (`account_has_identity_provider`) | 0 | 11 runs in 3 accounts, see below |
+| After | 0 `split_pending`, 0 accounts with 2+ workspace rows, 0 with 2+ active projects; every `done` run has `repaired_at`, `billing`, `account_finished_at`; invariants equal the baseline taken before the switch | the same, except I4 +2 (below) |
+
+No operator command releases an IdP hold. On dev the 3 held accounts were two Kortix SSO test
+tenants and one test account:
+
+1. 6 projects with no session in 30 days were archived as `archiveProjectRow` does (status
+   `archived`, project tokens revoked). An archive skips three things a move does, so they
+   were done by hand: the flag (`projects_split_pending_sync` updates active rows only, so a
+   row archived while flagged keeps `split_pending`), the account's expand rows
+   (`workspace-split.ts fill --null`), and the account name (the `nameSourceAfterKeeper`
+   rule, I6).
+2. 5 projects used in the last 30 days moved. The two accounts' SSO provider and SCIM tokens
+   pointed at a synthetic account for 21 min (`account_id` and `workspace_id` saved and
+   restored), `workspace-split.ts plan <account>` planned the runs, and the worker moved
+   them. With no backlog the worker sleeps `IDLE_MS` (60 min) between ticks. Never do this
+   on prod: the split-off has no SSO enforcement and no SCIM deprovisioning.
+
+Dev I4 +2: two split-offs of the first-uuid account carry a grant of a user id that does not
+exist in auth. The split copies every grant with its project (I7); the source held it before.
+
+R2a-3b step 1's gate (no account holds 2+ workspace rows) holds on dev, staging and prod.
+Next: R2a-3b. Open before the Release 2 gate: I4, I6, I11 on prod.
+
+## Status (2026-11-14): the legacy split is done
+
+Prod, read-only, aggregates only. Prod runs v0.15.11.
+
+| Item | Prod now |
+|---|---|
+| Split mode | `apply` since 2026-11-12 13:01 UTC (D13: no owner email; the `split_notice` banner only). The worker picked it up at 13:52 UTC |
+| Runs | 635 `done`, 1 `skipped`, 0 `failed`, 0 `held`. Every `done` run has `repaired_at`, `billing` and `account_finished_at`. Last move 18:48 UTC |
+| `split_pending` | 0 projects. 0 accounts with 2 or more active projects (the accounts with more than one project row hold archived ones only) |
+| New accounts since the split | every one has its `kortix.workspaces` row |
+| Invariants over the 635 runs | I1, I2, I3, I5, I7, I8, I9, I10, I12: 0 |
+| Invariants, global | I4 9, I6 1, I11 1 (all from before the split, see below). I9/I12: the one account with no row. Its id is the first uuid (`00000000-…`), which the keyset of `20261114163000000` skips; `20261114171401000` reconciles it. I10: rows of erased accounts, which this branch stops counting |
+
+The split stalled once (2026-11-12, 16:43–18:45 UTC). `finishAccountIfLast` re-stamps a
+keeper account's expand rows with one `UPDATE` per table (`kortix.workspace_fill_account`).
+For a keeper with 397k and one with 5.57M `credit_ledger` rows that statement passed the
+API's 25 s `statement_timeout`. The throw in `finishDoneRuns` ends the tick before the apply
+loop, so no move ran until the fill finished. The operator filled both accounts in keyset
+batches of 20k rows (the split paused to `dry_run` 18:49–19:12 UTC for the second) and
+repaired the last 7 runs with `workspace-split.ts repair`. Open fix: `finishDoneRuns` handles
+each run on its own, and the account fill runs in batches that cannot hit the timeout. It
+matters again only for `reverse` or a re-split of a large account.
+
+R2a order now: R2a-2 (#12489) and R2a-3a (#12487) land on `dev`; then R2a-3b (branch
+`workspaces-r2a-gated`: step 1's unique index, the account-side twins, the store flip), which
+the split no longer blocks. Open before the Release 2 gate: I4, I6, I11.
+
+## Status (2026-11-11, night): the Release 2 gate re-measured
+
+Prod, read-only, 2026-11-11 22:30–23:00 UTC, aggregates only. Prod runs v0.15.7
+(`88dd823939`): the sandbox-key fix, D12, R2a-0 and R2a-1 are released, and the
+R2a-0 migration ran at 18:14 UTC. Step 1 of the order below is done.
+
+| Gate item | Prod now | Query |
+|---|---|---|
+| 0 `split_pending` | 1,036 projects in 401 accounts. `dry_run`; no `workspace_split` setting. 635 `planned` runs, 0 `held` (D12 live), last plan 21:18 UTC. 0 rows in `workspace_split_emails` | `projects WHERE status='active' AND split_pending`; `workspace_split_runs GROUP BY phase, mode` |
+| 0 NULL `workspace_id` where the account has a live workspace | 1 row (`audit_reconciliation_state`, the account below). Every other NULL row belongs to a `split_pending` account (e.g. `credit_ledger` 6,647,733) or a deleted account (`credit_ledger` 2,538,109; `billing_customers` 203,683; `credit_accounts` 202,029) | per expand table: `workspace_id IS NULL`, split by `accounts` row and `split_pending` |
+| Fill job | finished 2026-11-10 02:00:30 UTC: 987,280 rows, 2,187 batches, 19 min. Rate in the last 24 h: 0 (nothing left to fill) | `platform_settings` `workspace_id_fill_progress` |
+| 0 shadow mismatches for 7 days | 0 `[workspaces] shadow_mismatch` log lines since the R1 deploy (2026-11-10 01:40 UTC). The counter is per process and resets on deploy; the log line in Better Stack is the durable signal | Better Stack ClickHouse, source "Kortix API (prod)", `raw LIKE '%shadow_mismatch%'` |
+| Invariants I1–I12 exit 0 | not yet: I1 0, I4 9, I6 1, I9 1, I10 57, I11 1, I12 1; I2, I3, I5, I7, I8 0 (no `done` run yet) | the SQL of `split/invariants.ts`, read-only session |
+| 0 lint suppressions for `accounts`/`projects` imports | met | — |
+
+What the invariant failures are:
+
+- I10 57: rows of accounts the deletion sweep erased after the fill stamped them. A false positive, fixed on branch `workspaces-r2a`.
+- I9 1 and I12 1: one account (created 2026-04, no project row, no member) has no `kortix.workspaces` row. Its id is the first uuid; `20261114171401000` reconciles it (`20261114163000000` skips that id).
+- I4 9: project-scope grants held by users who are not members of the account (7 Manager grants from 2026-11-03, 2 "Folder: manage" from 2026-10-30 to 2026-11-11). Not a split artifact. Open: which write path grants a project role to a non-member.
+- I6 1: one 1:1 account whose name differs from its project's (the project was created 2026-11-10). Open.
+- I11 1: the known shared Stripe subscription id (design.md §3.3). It needs the owner-confirmed billing review before the gate can be met.
 
 ## Status (2026-11-10, evening): Release 2 and 3 handed to Dimitrije
 

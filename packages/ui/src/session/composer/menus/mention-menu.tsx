@@ -3,6 +3,7 @@
 import Loading from '../../../primitives/loading';
 import { getFileIcon } from '../../../files/project/components/file-icon';
 import { type Agent, type Session, useProjectSearch } from '@kortix/sdk/react';
+import { useDriveFolder, useProjectDrive } from '../../../files/drives/use-drives';
 import { ChatIcon, FolderIcon } from '@phosphor-icons/react';
 import { useTranslations } from '../../../i18n';
 import { cn } from '../../../lib/utils';
@@ -10,7 +11,7 @@ import { useEffect, useMemo } from 'react';
 
 import { useDebouncedValue } from '../hooks/use-debounced-value';
 import { useFileSearch } from '../hooks/use-file-search';
-import type { MentionSection, MenuRow } from './menu-items';
+import type { DriveFileHit, MentionSection, MenuRow } from './menu-items';
 import { buildMentionSections } from './menu-items';
 import { MenuCard, MenuRow as MenuRowButton, MenuSectionHeading } from './menu-shell';
 import { AgentMark } from '../../../internal/components/agent-mark';
@@ -223,10 +224,29 @@ export function MentionMenuHost({
   const t = useTranslations('sessionUi.composerMenus');
   // A space's menu lists no files.
   const { files, isLoading } = useFileSearch(query, !spaceMentions);
-  // The server answers only with files the viewer may read (`GET /v1/projects/:id/search`).
+  const driveOn = !!drive && !spaceMentions;
+  // Both reads answer only with what the viewer may read. Typed text searches
+  // the whole Drive (`GET /v1/projects/:id/search`, which needs a 1+ character
+  // `q`); a bare `@` lists the viewer's own folder, newest first, the way the
+  // Drive page opens (`GET /v1/drives/:id/files`). The listing also stands in
+  // until the first search answers.
   const driveQuery = useDebouncedValue(query, 150);
-  const driveSearch = useProjectSearch(drive?.projectId, { q: driveQuery, limit: 20 }, { enabled: !!drive && !spaceMentions });
-  const driveFiles = drive && !spaceMentions ? driveSearch.data?.hits : undefined;
+  const browsing = query.trim() === '';
+  const driveSearch = useProjectSearch(drive?.projectId, { q: driveQuery, limit: 20 }, { enabled: driveOn });
+  const workspaceDrive = useProjectDrive(drive?.projectId, driveOn);
+  const folder = useDriveFolder(
+    driveOn ? (workspaceDrive.data?.driveId ?? null) : null,
+    workspaceDrive.data?.personalFolder ?? '/',
+  );
+  const folderFiles = useMemo<DriveFileHit[] | undefined>(
+    () =>
+      folder.data?.entries
+        .filter((entry) => entry.type === 'file')
+        .sort((a, b) => b.mtime - a.mtime)
+        .map(({ path, name, size }): DriveFileHit => ({ path, name, kind: 'file', size })),
+    [folder.data],
+  );
+  const driveFiles = !driveOn ? undefined : browsing || !driveSearch.data ? folderFiles : driveSearch.data.hits;
   const sections = useMemo(
     () =>
       spaceMentions ? buildSpaceMentionSections(spaceMentions, query) : buildMentionSections({
@@ -242,8 +262,9 @@ export function MentionMenuHost({
       }),
     [agents, sessions, files, driveFiles, t, query, currentSessionId, now, tI18nComplete, spaceMentions],
   );
-  const driveLoading = !!drive && !spaceMentions && query.trim().length > 0 && driveSearch.isFetching && !driveSearch.data;
-  const driveFailed = !!drive && !spaceMentions && driveSearch.isError;
+  const driveLoading =
+    driveOn && (browsing ? workspaceDrive.isLoading || folder.isLoading : driveSearch.isFetching && !driveSearch.data);
+  const driveFailed = driveOn && (browsing ? workspaceDrive.isError || folder.isError : driveSearch.isError);
   const rows = useMemo(() => sections.flatMap((s) => s.items), [sections]);
 
   useEffect(() => {

@@ -309,7 +309,7 @@ function RevealKeyDialog({
   return (
     <Modal open onOpenChange={(open) => (!open && stored ? onClose() : undefined)}>
       <ModalContent variant="base" className="space-y-0 lg:max-w-[40rem]" data-gateway-reveal="">
-        <ModalHeader className="px-6 pt-5 pr-12 pb-4">
+        <ModalHeader className="mt-0 px-6 pt-5 pr-12 pb-4">
           <ModalTitle>{t('revealTitle')}</ModalTitle>
         </ModalHeader>
 

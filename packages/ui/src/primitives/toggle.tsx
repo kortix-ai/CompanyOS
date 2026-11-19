@@ -15,10 +15,12 @@ const toggleVariants = cva(
         secondary:
           'bg-foreground/[0.05] text-foreground/70 hover:bg-foreground/[0.08] hover:text-foreground',
       },
+      // `data-icon-only` (the iconOnly prop) makes it a square: size-*, never
+      // a height with side padding, which leaves a lone icon in a wide box.
       size: {
-        default: 'h-9 px-3 ',
-        sm: 'h-8 px-3',
-        lg: 'h-10 px-2.5 min-w-10',
+        default: 'h-9 px-3 data-icon-only:size-9 data-icon-only:px-0',
+        sm: 'h-8 px-3 data-icon-only:size-8 data-icon-only:px-0',
+        lg: 'h-10 px-2.5 min-w-10 data-icon-only:size-10 data-icon-only:min-w-0 data-icon-only:px-0',
       },
     },
     defaultVariants: {
@@ -35,16 +37,19 @@ type ToggleProps = Omit<React.ComponentPropsWithoutRef<'button'>, 'value'> &
     onPressedChange?: (pressed: boolean) => void;
     value?: string;
     asChild?: boolean;
+    /** A toggle that holds one icon: a square box. Give it an `aria-label`. */
+    iconOnly?: boolean;
   };
 
 const Toggle = React.forwardRef<HTMLButtonElement, ToggleProps>(
-  ({ className, variant, size, asChild, children, onPressedChange, ...props }, ref) => {
+  ({ className, variant, size, asChild, iconOnly = false, children, onPressedChange, ...props }, ref) => {
     const slot = asChildRender(asChild, children);
     const native = useNativeButton(asChild, children);
     return (
       <TogglePrimitive
         ref={composeRefs(ref, native.ref)}
         className={cn(toggleVariants({ variant, size, className }))}
+        data-icon-only={iconOnly || undefined}
         {...props}
         onPressedChange={(pressed) => onPressedChange?.(pressed)}
         nativeButton={native.nativeButton}

@@ -471,10 +471,9 @@ describe('the registry no longer carries palette settings destinations', () => {
  */
 describe('command palette — model list chrome', () => {
   const source = readFileSync(new URL('./command-palette.tsx', import.meta.url), 'utf8');
-  const modelsPage = source.slice(
-    source.indexOf("{page === 'models' && ("),
-    source.indexOf("{page === 'files' &&"),
-  );
+  const modelsStart = source.indexOf("{page === 'models' && (");
+  // From modelsStart: the footer's files hint (a palette prop) comes before the list.
+  const modelsPage = source.slice(modelsStart, source.indexOf("{page === 'files' &&", modelsStart));
 
   test('the models page block was located', () => {
     // Guards the two slice indices above — a rename here would otherwise leave

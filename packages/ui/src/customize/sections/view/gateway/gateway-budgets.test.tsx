@@ -8,6 +8,13 @@ Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, con
 
 import type { GatewayBudgetRow, GatewayBudgetsResponse } from '@kortix/sdk';
 
+/** The rendered text of a test node: Button wraps its label in a <span>, so a
+ *  label is not always a direct child. */
+const textOf = (node: unknown): string =>
+  typeof node === 'string'
+    ? node
+    : ((node as { children?: unknown[] }).children ?? []).map(textOf).join('');
+
 /**
  * The budgets panel reads every meter, percentage and alert from that budget's
  * own `spent_usd` (KRTX-1725). It used to divide month-to-date spend by the
@@ -237,7 +244,7 @@ describe('the budget dialog’s segmented controls', () => {
     if (!renderer) throw new Error('Renderer was not created');
     const setBudget = renderer.root
       .findAllByType('button')
-      .find((node) => node.children.includes('Set budget'));
+      .find((node) => textOf(node) === 'Set budget');
     expect(setBudget).toBeDefined();
     if (!setBudget) throw new Error('Missing button: Set budget');
     await act(async () => setBudget.props.onClick());

@@ -433,7 +433,8 @@ export function BrowserPanel({ tabId, projectId, projectSessionId, targetUrl }: 
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              size="icon"
+              size="md"
+              iconOnly
               disabled={!hasPreview}
               aria-label={tHardcodedUi.raw('i18nComplete.textbc79cdffbaa8')}
             >

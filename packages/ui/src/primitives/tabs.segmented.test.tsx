@@ -12,12 +12,14 @@ const triggerClasses = (out: string, label: string): string =>
     new RegExp(`<button[^>]*class="([^"]*)"[^>]*>${label}</button>`),
   )?.[1] ?? "";
 
-const TRACK = ["bg-muted", "rounded-md", "p-[2px]"];
+// sm and up (D43): the chip covers the trigger, one radius for track, chip and trigger.
+const TRACK = ["bg-muted", "rounded-(--control-md-radius)"];
+// xs keeps the 2px inset track with the concentric chip.
+const TRACK_XS = ["bg-muted", "rounded-md", "p-[2px]"];
 const CHIP = [
   "data-[state=active]:bg-popover",
-  "data-[state=active]:ring-1",
-  "data-[state=active]:ring-border",
-  "data-[state=active]:shadow-xs",
+  "data-[state=active]:inset-ring",
+  "data-[state=active]:inset-ring-border",
 ];
 
 describe("segmented tabs", () => {
@@ -31,7 +33,7 @@ describe("segmented tabs", () => {
     for (const cls of TRACK) expect(out).toContain(cls);
   });
 
-  test("triggers fill the track with the concentric chip radius", () => {
+  test("triggers fill the track with the track radius", () => {
     const out = render(
       <TabsList variant="segmented">
         <TabsTrigger value="managed">Kortix managed</TabsTrigger>
@@ -40,7 +42,7 @@ describe("segmented tabs", () => {
     );
     const cls = triggerClasses(out, "GitHub");
     expect(cls).toContain("h-full");
-    expect(cls).toContain("rounded-sm");
+    expect(cls).toContain("rounded-(--control-md-radius)");
     expect(cls).toContain("data-[state=inactive]:text-muted-foreground");
   });
 
@@ -127,7 +129,7 @@ describe("segmented tabs", () => {
         <TabsTrigger value="managed">Kortix managed</TabsTrigger>
       </TabsList>,
     );
-    for (const cls of TRACK) expect(out).toContain(cls);
+    for (const cls of TRACK_XS) expect(out).toContain(cls);
     const cls = triggerClasses(out, "Kortix managed");
     expect(cls).toContain("h-full");
     expect(cls).toContain("rounded-sm");

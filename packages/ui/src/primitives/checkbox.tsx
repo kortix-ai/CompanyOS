@@ -28,10 +28,15 @@ type CheckboxProps = Omit<
   variant?: CheckboxVariant;
 };
 
-// One size everywhere: an 18px box, 6px corners, a round-capped check.
+// One size everywhere (D43): a 14px box, 4px corners, a 1.5px rule, a
+// round-capped check. The ::after extends the hit area 8px on every side, so a
+// 14px box still takes a 30px tap. Press scales 0.96 like a button (D4k).
 const checkboxControlClassName = cn(
-  'peer flex size-[18px] shrink-0 items-center justify-center rounded-sm border-[length:calc(var(--border-width,1px)*1.5)] border-muted-foreground/60 bg-transparent text-background',
-  'transition-[border-color,background-color]',
+  'peer relative flex size-[14px] shrink-0 items-center justify-center rounded-(--control-xs-radius) border-[length:calc(var(--border-width,1px)*1.5)] border-muted-foreground/60 bg-transparent text-background',
+  "after:absolute after:-inset-2 after:content-['']",
+  'hover:not-disabled:data-[state=unchecked]:bg-foreground/5',
+  'enabled:active:scale-[0.96] motion-reduce:enabled:active:scale-100',
+  'transition-[border-color,background-color,scale] duration-moderate ease-out',
   'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
   'disabled:cursor-default disabled:opacity-50', // cursor-default: disabled keeps the default cursor (AGENTS.md → States)
   'aria-invalid:border-destructive',
@@ -45,7 +50,7 @@ const checkboxVariantClassName: Record<CheckboxVariant, string> = {
 
 function CheckMark({ indeterminate }: { indeterminate: boolean }) {
   return (
-    <svg viewBox="0 0 16 16" fill="none" aria-hidden className="size-3">
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden className="size-2.5">
       <path
         d={indeterminate ? 'M4 8h8' : 'M3.5 8.5l3 3 6-7'}
         stroke="currentColor"

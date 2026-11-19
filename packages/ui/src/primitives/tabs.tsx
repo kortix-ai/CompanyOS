@@ -16,12 +16,15 @@ import { SlidingTabIndicator } from './sliding-tab-indicator';
 
 const tabsTriggerPaddingVariants = cva('', {
   variants: {
+    // sm to 2xl are the control ladder (D43): --control-<size>-tab-padding.
     size: {
-      default: 'gap-2 px-4 py-2 has-[>svg]:px-3',
+      default: 'gap-1.5 px-(--control-md-tab-padding)',
       xs: 'gap-1.5 px-2.5 has-[>svg]:px-2',
-      sm: 'gap-1.5 px-3 has-[>svg]:px-2.5',
-      md: 'gap-2 px-5 has-[>svg]:px-4',
-      lg: 'gap-2 px-6 has-[>svg]:px-4',
+      sm: 'gap-1.5 px-(--control-sm-tab-padding)',
+      md: 'gap-1.5 px-(--control-md-tab-padding)',
+      lg: 'gap-1.5 px-(--control-lg-tab-padding)',
+      xl: 'gap-1.5 px-(--control-xl-tab-padding)',
+      '2xl': 'gap-2 px-(--control-2xl-tab-padding)',
     },
   },
   defaultVariants: {
@@ -32,11 +35,13 @@ const tabsTriggerPaddingVariants = cva('', {
 const tabsTriggerHeightVariants = cva('', {
   variants: {
     size: {
-      default: 'h-8',
+      default: 'h-(--control-md-height)',
       xs: 'h-7',
-      sm: 'h-8',
-      md: 'h-10',
-      lg: 'h-10',
+      sm: 'h-(--control-sm-height)',
+      md: 'h-(--control-md-height)',
+      lg: 'h-(--control-lg-height)',
+      xl: 'h-(--control-xl-height)',
+      '2xl': 'h-(--control-2xl-height)',
     },
   },
   defaultVariants: {
@@ -48,11 +53,13 @@ const tabsTriggerHeightVariants = cva('', {
 const tabsTriggerTextVariants = cva('font-medium', {
   variants: {
     size: {
-      default: 'text-sm',
+      default: 'text-xs',
       xs: 'text-xs rounded-sm',
       sm: 'text-xs',
-      md: 'text-sm',
-      lg: 'text-sm',
+      md: 'text-xs',
+      lg: 'text-xs',
+      xl: 'text-sm',
+      '2xl': 'text-sm',
     },
   },
   defaultVariants: {
@@ -60,8 +67,8 @@ const tabsTriggerTextVariants = cva('font-medium', {
   },
 });
 
-type TabsTriggerSize = 'xs' | 'sm' | 'default' | 'md';
-type TabsSize = TabsTriggerSize | 'lg';
+type TabsTriggerSize = 'xs' | 'sm' | 'default' | 'md' | 'lg' | 'xl' | '2xl';
+type TabsSize = TabsTriggerSize;
 /**
  * `default` is the filled pill; `outline` is a bordered active chip;
  * `segmented` is the raised surface chip of a segmented control.
@@ -69,12 +76,43 @@ type TabsSize = TabsTriggerSize | 'lg';
 type TabsTriggerVariant = 'default' | 'outline' | 'secondary' | 'segmented';
 
 const tabsListHeightClasses: Record<TabsSize, string> = {
-  default: 'h-9',
+  default: 'h-(--control-md-height)',
   xs: 'h-6',
-  sm: 'h-8',
-  md: 'h-10',
-  lg: 'h-10',
+  sm: 'h-(--control-sm-height)',
+  md: 'h-(--control-md-height)',
+  lg: 'h-(--control-lg-height)',
+  xl: 'h-(--control-xl-height)',
+  '2xl': 'h-(--control-2xl-height)',
 };
+
+/**
+ * Radius of the segmented track, its chip and each trigger: the control radius
+ * of the size (D44), the same corner a Button or Select of that size has. The
+ * chip covers the whole trigger, so the radii are equal, not concentric.
+ */
+const tabsRadiusClasses: Record<TabsSize, string> = {
+  default: 'rounded-(--control-md-radius)',
+  xs: 'rounded-sm',
+  sm: 'rounded-(--control-sm-radius)',
+  md: 'rounded-(--control-md-radius)',
+  lg: 'rounded-(--control-lg-radius)',
+  xl: 'rounded-(--control-xl-radius)',
+  '2xl': 'rounded-(--control-2xl-radius)',
+};
+
+/** Space between underline tabs: the bar is as wide as the label, so the gap is the only spacing. */
+const tabsUnderlineGapClasses: Record<TabsSize, string> = {
+  default: 'gap-(--control-md-tab-gap)',
+  xs: 'gap-(--control-xs-tab-gap)',
+  sm: 'gap-(--control-sm-tab-gap)',
+  md: 'gap-(--control-md-tab-gap)',
+  lg: 'gap-(--control-lg-tab-gap)',
+  xl: 'gap-(--control-xl-tab-gap)',
+  '2xl': 'gap-(--control-2xl-tab-gap)',
+};
+
+/** Tab switch: 200ms ease-out (motion.md, "Often" row: tab switch is duration-moderate). */
+const TAB_SLIDE = { duration: 0.2, ease: [0, 0, 0.2, 1] } as const;
 
 /** Stroke thickness of the active underline rule (`type="underline"` only). */
 type TabsUnderlineSize = 'xs' | 'sm' | 'md' | 'lg';
@@ -84,6 +122,14 @@ const tabsUnderlineBorderClasses: Record<TabsUnderlineSize, string> = {
   sm: '**:data-[slot=tabs-trigger]:after:h-[1.5px]',
   md: '**:data-[slot=tabs-trigger]:after:h-0.5',
   lg: '**:data-[slot=tabs-trigger]:after:h-[3px]',
+};
+
+/** Height of the sliding underline bar, by `underlineSize`. */
+const tabsUnderlineBarClasses: Record<TabsUnderlineSize, string> = {
+  xs: 'after:h-px',
+  sm: 'after:h-[1.5px]',
+  md: 'after:h-0.5',
+  lg: 'after:h-[3px]',
 };
 
 /** Shared underline-list chrome; indicator height comes from `underlineSize`. */
@@ -110,16 +156,15 @@ type TabsListType = 'default' | 'underline' | 'secondary' | 'segmented';
  * the other at 1x. A whole 2px leaves exactly 1px on every side.
  */
 const tabsSegmentedTrackClasses = 'bg-muted rounded-md p-[2px]';
-const tabsSegmentedChipClasses = 'bg-popover ring-border rounded-sm shadow-xs ring-1';
+// The chip covers the whole trigger, so its hairline is drawn INSIDE (inset-ring)
+// and it casts no shadow: an outer ring or shadow would spill past the track edge.
+const tabsSegmentedChipClasses = 'bg-popover inset-ring-border rounded-sm inset-ring';
 
 function resolveTabsTriggerSize(
   sizeProp: TabsTriggerSize | undefined,
   listSize: TabsSize,
 ): TabsSize {
-  if (sizeProp) return sizeProp;
-  if (listSize === 'xs') return 'xs';
-  if (listSize === 'lg') return 'md';
-  return listSize;
+  return sizeProp ?? listSize;
 }
 
 const TabsActiveValueContext = React.createContext<string>('');
@@ -211,7 +256,7 @@ interface TabsListProps extends React.ComponentProps<'div'> {
    */
   variant?: 'default' | 'secondary' | 'segmented';
   size?: TabsSize;
-  /** Active underline stroke. Only applies when `type="underline"`. Default `sm`. */
+  /** Active underline stroke. Only applies when `type="underline"`. Default `md`. */
   underlineSize?: TabsUnderlineSize;
   animate?: 'fluid' | 'none';
   /**
@@ -231,9 +276,9 @@ function TabsListRenderer({
   className,
   type: typeProp = 'default',
   variant,
-  size = 'default',
-  underlineSize = 'sm',
-  animate = 'none',
+  size = 'md',
+  underlineSize = 'md',
+  animate: animateProp,
   orientation,
   children,
   loop = true,
@@ -255,11 +300,18 @@ function TabsListRenderer({
         ? 'default'
         : 'segmented';
   const isSegmented = type === 'segmented';
-  const useSlidingIndicator = isSegmented && animate === 'fluid';
+  const isUnderline = !isVertical && type === 'underline';
+  // The segmented chip slides by default. The underline bar slides only when
+  // asked (animate="fluid"): the indicator measures one row on the x-axis, so a
+  // wrapping or scrolling underline list keeps the static per-trigger rule.
+  const animate = animateProp ?? (isUnderline ? 'none' : 'fluid');
+  const useSlidingIndicator = (isSegmented || isUnderline) && animate === 'fluid';
+  // xs keeps the inset track (2px padding, concentric chip). sm to 2xl follow
+  // the control ladder: the chip covers the whole trigger, no inset.
   const trackClassName = cn(
     'text-muted-foreground inline-flex w-fit items-center justify-center',
     tabsListHeightClasses[size],
-    tabsSegmentedTrackClasses,
+    size === 'xs' ? tabsSegmentedTrackClasses : cn('bg-muted', tabsRadiusClasses[size]),
     className,
   );
   const list = (
@@ -269,9 +321,10 @@ function TabsListRenderer({
         type === 'secondary' &&
           cn('inline-flex w-fit items-center gap-0.5', tabsListHeightClasses[size]),
         isSegmented && 'relative z-10 flex h-full w-full items-stretch justify-center gap-0.5',
-        !isVertical && type === 'underline' && tabsListUnderlineBaseClasses,
-        !isVertical && type === 'underline' && tabsUnderlineBorderClasses[underlineSize],
-        !isVertical && type === 'underline' && tabsListHeightClasses[size],
+        isUnderline && tabsListUnderlineBaseClasses,
+        isUnderline && !useSlidingIndicator && tabsUnderlineBorderClasses[underlineSize],
+        isUnderline && tabsListHeightClasses[size],
+        isUnderline && tabsUnderlineGapClasses[size],
         isVertical &&
           'flex h-auto w-full flex-col items-stretch gap-0.5 rounded-none bg-transparent p-0',
         className,
@@ -288,13 +341,32 @@ function TabsListRenderer({
   // SlidingTabIndicator) — in a column it would collapse to a
   // zero-width bar, so vertical lists render without it.
   const content =
-    isVertical || type === 'underline' || type === 'secondary' ? (
+    isUnderline && useSlidingIndicator ? (
+      // The bar slides under the active label. It sits on the list's bottom
+      // border (-bottom-px), so the two read as one rule.
+      <SlidingTabIndicator
+        activeId={activeValue}
+        // Only the width reaches the wrapper; the list keeps every other class.
+        className={cn('inline-flex w-fit max-w-full', /(^|\s)w-full(\s|$)/.test(className ?? '') && 'w-full')}
+        indicatorClassName={cn(
+          "after:bg-foreground after:absolute after:inset-x-0 after:-bottom-px after:content-['']",
+          tabsUnderlineBarClasses[underlineSize],
+        )}
+        transition={TAB_SLIDE}
+      >
+        {list}
+      </SlidingTabIndicator>
+    ) : isVertical || type === 'underline' || type === 'secondary' ? (
       list
     ) : useSlidingIndicator ? (
       <SlidingTabIndicator
         activeId={activeValue}
         className={trackClassName}
-        indicatorClassName={tabsSegmentedChipClasses}
+        indicatorClassName={cn(
+          tabsSegmentedChipClasses,
+          size === 'xs' ? 'rounded-sm' : tabsRadiusClasses[size],
+        )}
+        transition={size === 'xs' ? undefined : TAB_SLIDE}
       >
         {list}
       </SlidingTabIndicator>
@@ -363,11 +435,11 @@ function TabsTrigger({
     !isUnderlineList && !isOutline && !isSecondary && (isSegmentedList || variant === 'segmented');
   // Outline paints its own border; the sliding pill fill would fight it.
   const useSlidingIndicator =
-    !isUnderlineList &&
     !isSecondary &&
     !isOutline &&
-    (!isSegmented || isSegmentedList) &&
-    animate === 'fluid';
+    (isUnderlineList || !isSegmented || isSegmentedList) &&
+    animate === 'fluid' &&
+    listOrientation !== 'vertical';
   const isVertical = listOrientation === 'vertical';
 
   return (
@@ -383,11 +455,14 @@ function TabsTrigger({
         isUnderlineList || isSegmentedList ? 'h-full' : tabsTriggerHeightVariants({ size }),
         // Segmented: the chip sits inside the track's padding, so the trigger
         // fills the track and takes the chip's concentric radius.
-        isSegmented && 'rounded-sm',
+        isSegmented && (size === 'xs' ? 'rounded-sm' : tabsRadiusClasses[size]),
+        // Underline: the bar is as wide as the label, so the trigger has no side padding.
+        isUnderlineList && !isVertical && 'flex-none px-0',
+        isUnderlineList && useSlidingIndicator && 'after:hidden',
         // Without the sliding indicator the active trigger paints the chip itself.
         isSegmented &&
           !useSlidingIndicator &&
-          'data-[state=active]:bg-popover data-[state=active]:ring-border data-[state=active]:shadow-xs data-[state=active]:ring-1',
+          'data-[state=active]:bg-popover data-[state=active]:inset-ring-border data-[state=active]:inset-ring',
         isUnderlineList &&
           'data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:data-[state=inactive]:text-foreground rounded-none bg-transparent shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=inactive]:bg-transparent',
         // Default: a secondary-coloured pill. With animate="fluid" the sliding

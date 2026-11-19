@@ -25,9 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from './alert-dialog';
-import { buttonVariants } from './button';
 import { useUiStrings } from '../providers/ui-provider';
-import { cn } from '../lib/utils';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -66,7 +64,7 @@ export function ConfirmDialog({
   const confirmText = confirmLabel ?? strings.confirm;
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="sm:max-w-md" overlayClassName="bg-black/25 backdrop-blur-sm">
+      <AlertDialogContent className="sm:max-w-md">
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription asChild>
@@ -81,7 +79,8 @@ export function ConfirmDialog({
               onConfirm();
             }}
             disabled={isPending || confirmDisabled}
-            className={cn(buttonVariants({ variant: confirmVariant, size: 'sm' }), 'gap-1.5')}
+            // The action size comes from AlertDialogAction (DIALOG_ACTION_SIZE, lg).
+            variant={confirmVariant}
           >
             {confirmIcon}
             {isPending ? `${confirmText}…` : confirmText}

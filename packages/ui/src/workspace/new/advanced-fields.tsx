@@ -241,7 +241,7 @@ export function AdvancedFields({
                 if (option) onChange(withGitAccount(state, option));
               }}
             >
-              <SelectTrigger id="workspace-source" className="w-full" size="md">
+              <SelectTrigger id="workspace-source" className="w-full" size="lg">
                 <SelectValue placeholder={t('repository.selectGitAccount')} />
               </SelectTrigger>
               <SelectContent>
@@ -349,7 +349,6 @@ export function AdvancedFields({
               <Label htmlFor="workspace-branch">{t('repository.defaultBranch')}</Label>
               <Input
                 id="workspace-branch"
-                size="md"
                 value={state.defaultBranch}
                 onChange={(event) => onChange({ ...state, defaultBranch: event.target.value })}
                 placeholder="main"

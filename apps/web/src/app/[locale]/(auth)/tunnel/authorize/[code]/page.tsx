@@ -186,7 +186,6 @@ function DeviceAuthorize() {
             <Input
               id="connection-name"
               type="text"
-              size="md"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={info.machineHostname || tI18nComplete.raw('text686d4d5d8ecd')}

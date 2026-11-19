@@ -210,6 +210,18 @@ function webRootAndDark(): string {
   // var(--text-sm) readers (print.css, /design-system) need it declared.
   for (const [k, v] of Object.entries<any>(vs.typography.scale))
     lines.push(decl(`text-${k}`, v.size), decl(`text-${k}--line-height`, v.line_height));
+  // Dialog spacing (D45): whole pixels, read by dialog-recipe.ts.
+  for (const [k, v] of Object.entries<any>(vs.dialog))
+    if (typeof v === 'number') lines.push(decl(`dialog-${k.replace(/_/g, '-')}`, `${v}px`));
+  // The hairline baked into shadow-ring-* (D44); .dark flips it below.
+  lines.push(decl('shadow-ring-color', vs.elevation.ring.light));
+  // The control size ladder (D43): whole pixels, read by Button, Tabs and Select.
+  for (const [k, v] of Object.entries<any>(vs.controls.sizes)) {
+    for (const prop of ['height', 'padding', 'gap', 'icon', 'radius', 'icon_only_radius', 'tab_padding', 'tab_gap', 'select_ps', 'select_pe'])
+      lines.push(decl(`control-${k}-${prop.replace(/_/g, '-')}`, `${v[prop]}px`));
+    // The side that holds an icon sits closer to the edge by icon_offset.
+    lines.push(decl(`control-${k}-padding-icon`, `${v.padding - v.icon_offset}px`));
+  }
   const g = vs.effects['liquid-glass'];
   lines.push(decl('liquid-glass-bg', g.bg[0]));
   lines.push(decl('liquid-glass-bg-hover', g['bg-hover'][0]));
@@ -226,6 +238,7 @@ function webRootAndDark(): string {
     const dark = webValue(t, 'dark');
     if (dark !== light || isRef(t, 'dark')) lines.push(decl(t.name, dark, comment(t, 'dark')));
   }
+  lines.push(decl('shadow-ring-color', vs.elevation.ring.dark));
   lines.push(decl('liquid-glass-bg', g.bg[1]));
   lines.push(decl('liquid-glass-bg-hover', g['bg-hover'][1]));
   lines.push(decl('liquid-glass-shadow', g.shadow[1]));
@@ -251,6 +264,12 @@ function webTheme(): string {
   // The solid values live on :root in theme.css (glyph-tint.ts reads them at runtime); @theme only aliases them.
   L.push(`/* ${vs.color.glyph.solid_rule} */`);
   for (const k of Object.keys(vs.color.glyph.ring)) L.push(`--color-glyph-solid-${k}: var(--glyph-solid-${k});`);
+  L.push('/* Elevation (D44): stacked smooth shadows. shadow-ring-* adds the hairline as the last layer. */');
+  for (const [k, v] of Object.entries<any>(vs.elevation.steps)) {
+    // Read through a variable of the same name, so a host can flatten or deepen a step.
+    L.push(`--shadow-${k}: var(--shadow-${k}, ${v.value});`);
+    L.push(`--shadow-ring-${k}: var(--shadow-ring-${k}, ${v.value}, 0 0 0 1px var(--shadow-ring-color));`);
+  }
   L.push('/* Motion. Tailwind 4 reads duration utilities from --transition-duration-*. */');
   for (const [k, v] of Object.entries<any>(vs.motion.duration))
     L.push(`--transition-duration-${k}: var(--duration-${k}, ${v.ms}ms);`);

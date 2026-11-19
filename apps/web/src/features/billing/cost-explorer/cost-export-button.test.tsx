@@ -309,7 +309,7 @@ describe('CostExportButtonView', () => {
     // The button's accessible name is its visible text, with no `aria-label`
     // duplicating it — a redundant label is a no-op until the visible text
     // changes, at which point the two silently disagree.
-    expect(html).toContain('Export CSV</button>');
+    expect(html).toContain('Export CSV</span></button>');
     expect(html).not.toContain('aria-label');
     // The attribute, not the bare word — Button's base class carries
     // `disabled:pointer-events-none` on every render, disabled or not.

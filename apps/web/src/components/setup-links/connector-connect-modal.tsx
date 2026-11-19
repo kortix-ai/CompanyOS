@@ -248,7 +248,7 @@ function AddAccountDialogBody({
         />
       </div>
 
-      <ModalHeader className="gap-1 pt-0 pr-12">
+      <ModalHeader className="mt-0 gap-1 pr-12">
         <ModalTitle>
           {connected
             ? fill(copy.connectedTitle, { app })
@@ -394,7 +394,7 @@ function OneClickDialogBody({ token, onClose, onConnected, fallbackName }: Dialo
       </div>
 
       {/* `pr-12` keeps a long title clear of the close button on narrow sheets. */}
-      <ModalHeader className="gap-1 pt-0 pr-12">
+      <ModalHeader className="mt-0 gap-1 pr-12">
         <ModalTitle>{title}</ModalTitle>
         <ModalDescription className="text-pretty">{description}</ModalDescription>
       </ModalHeader>

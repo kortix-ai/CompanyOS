@@ -10,6 +10,79 @@ Ids: `D1` to `D8` and `D4a` to `D4k` come from the 2026-10-01 brand-kit build. `
 
 ---
 
+## 2026-11-12
+
+### D50 The lg control is 34px
+- **Date:** 2026-11-12
+- **Decision:** `controls.sizes.lg.height` is 34px (was 32). Every lg control grows with it (Input, Button, Select, Combobox, Tabs), so an lg field and an lg button still share one height. Input's default size stays `lg`.
+- **Why:** founder request, 2026-11-12: "increase the height of lg input to 34px", after the auth fields read small at 32.
+- **Where:** `visual/visual-system.json` → `--control-lg-height`.
+- **Supersedes:** lg at 32px (D43).
+
+### D49 One empty-state family, picked by situation
+- **Date:** 2026-11-12
+- **Decision:** `EmptyArt` draws one family of pictures in a 100 × 56 box (half the Paper source, founder: "too big, make it half"): toned `bg-muted` cards behind (a wide fan's far pair `bg-accent`) one lifted `bg-popover` card on the ring shadow, all at 4px corners, mirrored around the front card's centre. 14 kinds name situations (`fan`, `document`, `error`, `search`, `connect`, `folder`, `chat`, `locked`, `list`, `image`, `offline`, `key`, `agent`, `done`); `EmptyState` takes `art="<kind>"` or `icon` for the fan. 12px under the picture, title 14/20px medium, 4px, one 13px muted line, 16px, at most two actions: create = primary `Button`, recover = `Button variant="secondary"`. Only `error` (red) and `done` (green, solid check) carry a hue.
+- **Why:** founder request, 2026-11-12: 13 of 20 Paper variants (Kortix 2 › "Empty state — 20 card-stack variants") chosen as the product's empty states, with the "all done" check solid; agents must know which to use where. The old art was one 72 × 60 drawing with a glyph, and actions were outline sm buttons.
+- **Where:** `packages/ui/src/primitives/empty-art.tsx`, `empty-state.tsx`, `error-state.tsx`, the /design-system Empty State topic, `kortix-design-system/references/empty-states.md`.
+- **Supersedes:** D14's single `EmptyArt` drawing and its outline sm actions.
+- **Source:** the `design-system-v2` branch.
+
+### D48 A frame token: the recessed app frame
+- **Date:** 2026-11-12
+- **Decision:** `frame` (`bg-frame`) is the recessed app frame: `#f4f4f4` in light (the surface-1 grey), `#060606` in dark. The content is a `bg-popover` sheet lifted above it (white / `#141414`) with the one border; the sidebar paints the frame. A control that sits on the frame is lifted the same way: `Button` `outline` with `bg-popover`, never `secondary`. Rows on the frame use the translucent `bg-hover` / `bg-active`.
+- **Why:** founder request, 2026-11-12: the reference's sidebar and inset "look premium"; give /design-system the same contrast. The page painted the sidebar and the content with one color. No existing token is a recessed frame in both themes: `sidebar` is grey in light but lighter than the canvas in dark, and `dark:` color classes are not allowed. Measured (CIE L*): light frame 96.2 under a 100 sheet; dark frame 1.6 under a 6.3 sheet. `bg-pane` is too dark in dark (3.3) to read as lifted, so the sheet is `bg-popover`.
+- **Where:** `visual/visual-system.json` (`color.semantic.frame`), `packages/ui/src/styles/theme.css` (`--color-frame`), the /design-system frame (`_docs/shell.tsx`), `visual/color.md`.
+- **Scope:** /design-system only. The product shell stays one flat surface in the Pure themes; the `light` (dim) interface theme already carries a recessed sidebar through `--sidebar`. Not on mobile.
+- **Supersedes:** the /design-system frame on `bg-background` with a `bg-pane` sheet.
+- **Source:** the `design-system-v2` branch.
+
+### D47 Dark text reads as strongly as light text
+- **Date:** 2026-11-12
+- **Decision:** In the dark palettes a user gets by default (the generated `.dark` tokens and the `pure-dark` interface theme), the ink is `#f2f2f2` (`oklch(0.96 0 0)`), as text and as a fill (`--primary`), and grey text is `#b7b7b7` (`oklch(0.78 0 0)`). The light palettes do not change. Surfaces, borders, fills and accents do not change in either theme.
+- **Why:** founder request, 2026-11-12: study a reference design system's colors and decide what Kortix takes. Its dark greys are tuned to the same perceptual targets as its light greys; Kortix's were not. Measured (APCA): light grey text was Lc 79 on the canvas, dark grey text Lc 47, below the Lc 60 floor for labels; grey sat 58 Lc under the ink in Pure dark against 26 in Pure light. Pure white ink on a near-black canvas was 19.7:1, the harshest pair possible, and light-on-dark text blooms. After: dark grey is Lc 60 or more on every surface it renders on (measured on the rendered product and the /design-system page), the ink is Lc 99 (17.5:1), and grey sits 36 Lc under it.
+- **Not taken, on purpose:** the reference's values; its recessed app frame (Kortix already ships that as the `light` (dim) interface theme, and Pure is one flat surface by definition); a softer border (Kortix panels are white on white and hold their edge with the one border color); its danger red (a white label on it measures 3.87:1; Kortix's measures 4.57:1); alpha-only tokens and a third text level (new tokens for no missing job).
+- **Where:** `visual/visual-system.json` (dark `foreground` family, `primary`, `muted-foreground`), `scripts/generate-tokens.ts` outputs, `apps/web/src/app/globals.css` (`pure-dark`), `apps/mobile/lib/utils/theme.ts`, `packages/ui/dist/styles.css`, the token table in `apps/web/content/docs/developers.mdx`.
+- **Supersedes:** dark ink `#ffffff` and dark grey text `#999999` (`.dark`) / `#9e9e9e` (`pure-dark`). The `dark` interface theme is unchanged: it is the frozen palette prod shipped before interface themes.
+- **Revisit:** if dark screens read as flat or washed out in use, drop grey text toward `#aeaeae` (Lc 57 on the canvas) before touching the ink.
+- **Source:** the `design-system-v2` branch.
+
+### D46 One command palette
+- **Date:** 2026-11-12
+- **Decision:** Every ⌘K palette is `CommandPalette` from `@kortix/ui/command`: a CommandDialog 600px wide, pinned 17vh from the top, with no close button, a search glyph in the input (a sub-page may swap in a back button), the list in a faded scroll area capped at min(60vh, 380px), and `CommandPaletteHints` (↑↓ Navigate, ↵ Select, then extras) in the footer. Rows are a `size-4` icon, the label, then an optional `CommandShortcut`. Never compose CommandDialog by hand for a palette.
+- **Why:** founder request, 2026-11-12: the project-page palette is the final component; every palette must look and behave like it.
+- **Where:** `packages/ui/src/primitives/command.tsx`, `apps/web/src/features/workspace/command-palette.tsx`, the /design-system Command topic and search.
+- **Supersedes:** the hand-built CommandDialog in the /design-system search and the Command topic's "Dialog" example.
+- **Source:** the `design-system-v2` branch.
+
+### D45 One dialog look: padding, close, Cancel
+- **Date:** 2026-11-12
+- **Decision:** Dialog, Modal, AlertDialog and ConfirmDialog share one recipe (`packages/ui/src/primitives/dialog-recipe.ts`) and the `dialog` tokens: 16px top (12px until 2026-11-12), 16px sides and bottom, 16px between blocks, 4px from title to description, 12px corners; the surface is `bg-popover` with the `shadow-ring-lg` edge and no border. The title is `text-base font-medium`, the description `text-sm` muted. The close × is a ghost square the size of the footer buttons (md, 28px), 12px from the top and end edges, on every dialog including AlertDialog (`showCloseButton`, default true). Cancel is `secondary`; the action is a md Button.
+- **Why:** founder request, 2026-11-12: copy the reference design system's dialog padding; Cancel secondary and a ghost × "with same style and size" on dialog, modal and alert dialog alike.
+- **Where:** `visual/visual-system.json` (`dialog`), `scripts/generate-tokens.ts`, `packages/ui/src/primitives/dialog-recipe.ts`, `dialog.tsx`, `modal.tsx`, `alert-dialog.tsx`, `confirm-dialog.tsx`.
+- **Close ×:** one recipe for every panel (`DIALOG_CLOSE_LOOK` + `DIALOG_CLOSE_POSITION` in `dialog-recipe.ts`, guarded by `dialog-close.test.ts`): a ghost `Button` at sm (24px), icon only, muted until hover, square in the corner and on the title's line: 16px from the top and 16px from the end. The dialog top padding is 16px, equal to the side padding (`dialog.padding_top`), so the 24px button and the 24px title line share a centre; a floating Sheet's 12px viewport gap is its own token, `dialog.inset`. The ghost fill shows on hover only, because no panel opens with focus on the × (2026-11-12, founder: "ghost variant", "in line of the title", more space from the top and the end; supersedes the same day's header-centred, fill-less ×).
+- **No hand-made ×:** never pass `showCloseButton={false}` to draw a close of your own; header controls (Copy JSON, a menu) sit in the header row and the shared × stays. A × that must live inside a custom header row is `Button variant="ghost" size="sm" iconOnly` with muted text, the shared look. A `ModalBody` with no `ModalFooter` after it holds the bottom padding itself (2026-11-12: the session usage modal had both bugs).
+- **Action size:** Dialog, Modal, AlertDialog and ConfirmDialog actions are lg (34px), one step above the md default: `DIALOG_ACTION_SIZE` for the AlertDialog parts, and `DIALOG_FOOTER_ACTIONS` lifts any Button a caller puts in a Dialog or Modal footer. A Sheet's footer keeps md (2026-11-12, founder).
+- **Open focus:** a Dialog, AlertDialog, Sheet or Modal opens with focus on its first field (an `autoFocus` / `data-autofocus` element first), else on the panel itself, never on the close × or another button (`dialogInitialFocusTarget` in `packages/ui/src/lib/base-ui-compat.tsx`, tested in `dialog-initial-focus.test.ts`). Base UI's default focused the × in a panel with no field, and the × showed its focus chrome on open (2026-11-12).
+- **Modal:** Modal is the same card at every width: centered, 1rem from each edge on a phone, fade + zoom, no bottom sheet, and `variant="base"` is the same `bg-popover` surface (2026-11-12, founder: "make the overlay border and everything like dialog").
+- **Supersedes:** the per-component dialog paddings (p-5, px-5 pt-5), the `bg-sidebar` dialog surface, the `outline-ghost` AlertDialogCancel and the AlertDialog with no close button.
+- **Source:** the `design-system-v2` branch.
+
+### D44 One radius per size, one panel motion, smooth shadows with a ring edge
+- **Date:** 2026-11-12
+- **Decision:** (1) Radius: every control of a size has one corner, about a quarter of its height: xs 4px, sm 6px, md 8px, lg 8px, xl 10px, 2xl 12px (`controls.sizes[*].radius`); icon-only buttons, tab tracks and chips, select triggers and inputs all read it. Floating panels are `rounded-lg` (10px) with `rounded-sm` (6px) rows inside a 4px inset, so the corners are concentric. (2) Motion: every floating panel (menu, submenu, popover, combobox, hover card, tooltip) opens from its trigger, scale 0.95 to 1 and a fade, 200ms `ease-in-out`, reversed on close (`FLOATING_PANEL_MOTION`); the select from 0.97 (`SELECT_PANEL_MOTION`); a tooltip adds a 4px side nudge and goes instant inside an open group; dialogs and the command palette open the same way. (3) Shadows: `shadow-*` is the stacked smooth ladder from shadow-plugin; a floating surface takes `shadow-ring-*`, the shadow with a 1px hairline as its last layer (black 5% light, white 18% dark), and no border. (4) A described select row is a grid: the check in a 16px column on the left, the label (14px medium) over its description (13px, muted).
+- **Why:** founder request, 2026-11-12: the radii were "not consistent in sm md lg xl 2xl"; copy the reference's open and close timing and easing (measured from its computed styles: 200ms, `cubic-bezier(0.4, 0, 0.2, 1)`, scale 0.95, 0.97 for the select); use the cleaner shadow-plugin shadows; described select rows always look like the reference.
+- **Where:** `visual/visual-system.json` (`controls`, `elevation`), `scripts/generate-tokens.ts`, `scripts/audit.sh`, [motion.md](visual/motion.md) (Floating panels), [effects.md](visual/effects.md) (Elevation), `packages/ui/src/primitives/menu-recipe.ts`, `select.tsx`, `popover.tsx`, `tooltip.tsx`, `combobox.tsx`, `command.tsx`, `dialog.tsx`, `tabs.tsx`, `trigger-variants.ts`, `packages/ui/src/styles/theme.css`.
+- **Supersedes:** D4a (floating panels open with no animation), the D43 control radii (4, 6, 6, 8, 8 and the separate icon-only radius), E2 (no custom shadow ladder) and the effects.md rule "pair an overlay shadow with a hairline border".
+- **Source:** the `design-system-v2` branch.
+
+### D43 One control ladder; the design system becomes a site; the combobox animates
+- **Date:** 2026-11-12
+- **Decision:** (1) Button, Select, Combobox and Tabs take one size ladder, `controls` in `visual-system.json`, in whole pixels: sm 24px, md 28px, lg 32px, xl 40px, 2xl 48px (Tabs only), with padding, gap, icon, radius and the icon-side inset per size. md is the default for Button, Select and Tabs; Input joins the ladder with lg (32px) as its default, so a field barely moves (it was about 33px), and the form selects beside it move to lg. Button text is 13px at every size; Tabs and Select use 14px at xl and up. The values copy the reference design system the founder chose (measured from its computed styles). `generate-tokens.ts` emits them as `--control-<size>-*`. (2) Button gains `shape="pill"`, `iconOnly` and `pending` (the label hides, the width holds, a spinner shows). (3) Tabs: the segmented chip covers the whole trigger (no 2px inset) at sm and up, radius by size (4, 6, 8, 8, 8px); the chip slides by default and the underline bar slides with `animate="fluid"` (a wrapping or scrolling underline list keeps the static rule); both move in 200ms ease-out. (4) The checkbox is a 14px box with 4px corners and an 8px invisible hit ring. (5) A new Combobox primitive: a select with a search field whose panel scales from 0.95 and fades in over 200ms from its trigger. (6) `/design-system` becomes a sidebar site with one page per topic, each topic a set of live examples over the code that renders them; the old single page moves to `/design-system/reference`.
+- **Why:** founder request, 2026-11-12: copy the reference's button, select and tab sizes "exact", including padding and radius, with md as the default, and "make the motion guidelines better". Before this entry each control had its own scale (Button `sm` about 29px, Select `sm` about 29px, Tabs `default` about 33px), so mixed rows did not line up.
+- **Where:** `visual/visual-system.json` (`controls`), `scripts/generate-tokens.ts`, `packages/ui/src/primitives/button.tsx`, `tabs.tsx`, `trigger-variants.ts`, `checkbox.tsx`, `combobox.tsx`, `card-surface.tsx`, [layout.md](visual/layout.md) (the control ladder rule), [motion.md](visual/motion.md) (the combobox and tab-indicator rules), `apps/web/src/app/[locale]/(public)/design-system/`.
+- **Supersedes:** the per-component size scales of Button (`sm` h-8, `lg` h-10, `xl` h-12, `default` h-9), Select (`sm` h-8, `md` h-10, `lg` h-11), Input (`sm` h-9 default, `md` h-10, `lg` h-11, `xl` h-12) and Tabs; the 18px checkbox; the D4a sentence that the hover card is the only animated floating panel (the combobox joins it).
+- **Source:** the `design-system-v2` branch.
+
 ## 2026-11-09
 
 ### D42 The home hero has no trait line: title, then subhead

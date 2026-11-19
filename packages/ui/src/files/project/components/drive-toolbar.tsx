@@ -385,8 +385,10 @@ export function DriveViewMenu({
         <DropdownMenuTrigger asChild disabled={disabled}>
           <Button
             variant={variant}
-            // In the button group it matches New and Share: 32px, not 28px.
-            size={variant === 'secondary' ? 'icon-base' : 'icon-sm'}
+            // md icon-only (28px, the ladder's 8px corner) in both variants: the
+            // height of New beside it and of the panel's close button.
+            size="md"
+            iconOnly
             aria-label={tI18nComplete.raw('text1d55ff7c387c')}
             className={cn(
               'active:scale-[0.96]',
@@ -590,14 +592,15 @@ export function DriveNewMenu({
         {compact ? (
           <Button
             variant="secondary"
-            size="icon-base"
+            size="md"
+            iconOnly
             aria-label={tI18nComplete.raw('text18fdd549b2ed')}
             className="active:scale-[0.96]"
           >
             <PlusIcon className="size-4" />
           </Button>
         ) : (
-          <Button variant="secondary" size="sm" className="gap-1.5 active:scale-[0.96]">
+          <Button variant="secondary" size="md" className="active:scale-[0.96]">
             <PlusIcon className="size-3.5 shrink-0" />
             {tI18nComplete.raw('text18fdd549b2ed')}
           </Button>

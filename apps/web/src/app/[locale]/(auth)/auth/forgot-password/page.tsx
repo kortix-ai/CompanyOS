@@ -74,7 +74,6 @@ function ForgotPasswordContent() {
             aria-invalid={!!errorMessage || undefined}
             name="email"
             type="email"
-            size="md"
             placeholder={t('request.emailPlaceholder')}
             required
             autoComplete="email"

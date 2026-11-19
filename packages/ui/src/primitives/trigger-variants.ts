@@ -31,6 +31,10 @@ export const triggerVariants = cva(
     // own `flex` — an icon + label wrapper then stacked the icon ABOVE the
     // label and lost its gap. `truncate` changes overflow only, not display.
     '[&>span]:min-w-0 [&>span]:truncate [&>span]:text-left',
+    // A child icon takes the control ladder's icon size (set per size below);
+    // without it a Phosphor glyph renders at its own default, 32px. A trailing
+    // icon is the caret: muted, like the Select caret.
+    "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&>svg:last-child:not(:first-child)]:text-muted-foreground",
   ],
   {
     variants: {
@@ -46,15 +50,18 @@ export const triggerVariants = cva(
         // Select beside it should behave the same.
         transparent: 'bg-transparent hover:bg-foreground/5 motion-safe:active:scale-[0.98]',
       },
+      // The control ladder (D43): the trigger is the same height as a Button of
+      // the same size. The caret side is 2px tighter (select-pe < select-ps).
       size: {
-        sm: 'h-8 px-2.5 text-sm',
-        md: 'h-10 px-3.5 text-sm',
-        lg: 'h-11 px-4 text-base',
+        sm: "[&_svg:not([class*='size-'])]:size-(--control-sm-icon) h-(--control-sm-height) ps-(--control-sm-select-ps) pe-(--control-sm-select-pe) rounded-(--control-sm-radius) text-xs",
+        md: "[&_svg:not([class*='size-'])]:size-(--control-md-icon) h-(--control-md-height) ps-(--control-md-select-ps) pe-(--control-md-select-pe) rounded-(--control-md-radius) text-xs",
+        lg: "[&_svg:not([class*='size-'])]:size-(--control-lg-icon) h-(--control-lg-height) ps-(--control-lg-select-ps) pe-(--control-lg-select-pe) rounded-(--control-lg-radius) text-xs",
+        xl: "[&_svg:not([class*='size-'])]:size-(--control-xl-icon) h-(--control-xl-height) ps-(--control-xl-select-ps) pe-(--control-xl-select-pe) rounded-(--control-xl-radius) text-sm",
       },
     },
     defaultVariants: {
       variant: 'secondary',
-      size: 'sm',
+      size: 'md',
     },
   },
 );
@@ -63,9 +70,10 @@ export type TriggerVariantProps = VariantProps<typeof triggerVariants>;
 
 /** Caret sizing per trigger size — matches the text step of each size. */
 export const TRIGGER_ICON_SIZE = {
-  sm: 'size-4',
-  md: 'size-4',
-  lg: 'size-4.5',
+  sm: 'size-(--control-sm-icon)',
+  md: 'size-(--control-md-icon)',
+  lg: 'size-(--control-lg-icon)',
+  xl: 'size-(--control-xl-icon)',
 } as const;
 
 /** The caret classes: muted, shrink-proof, and flipped while the overlay is open. */

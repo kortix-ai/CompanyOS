@@ -118,7 +118,8 @@ plain text, no decoration. It looks finished in every state.
 - **Space.** Leave generous space between the header row and the controls
   below it. Content starts right under the controls.
 - **Empty and loading.** An empty view says what would be here and offers
-  one action. Loading shows gray placeholder rows in the same shape as the
+  one action. In a `@kortix/ui` app, use `EmptyState` with the `art` that
+  names the situation (`search`, `locked`, `offline`, `done`, `chat`, …). Loading shows gray placeholder rows in the same shape as the
   real rows. Never a blank page and never a full-page spinner.
 
 ## Dashboards, analytics and internal tools

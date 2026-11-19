@@ -37,6 +37,7 @@ import {
 import { deleteUserSessionStates, releaseProjectEventSubscriptions, settleLiveSessionsOfAccounts } from '../../projects/surface';
 import { deleteAccountExternalStores } from './account-erasure-stores';
 import { accountsView, deleteAccountRows, projectsView } from '../../workspaces/rows';
+import { isWorkspaceDeletion } from '../../workspaces/deletion-reason';
 
 const GRACE_PERIOD_DAYS = 14;
 const ACTIVE_DELETION_REQUEST_EXISTS = 'An active deletion request already exists for this account';
@@ -138,10 +139,11 @@ export async function requestAccountDeletion(
   };
 }
 
+/** Personal-deletion status; a workspace close must not replace Profile’s account controls. */
 export async function getAccountDeletionStatus(accountId: string) {
   const request = await getActiveDeletionRequest(accountId);
 
-  if (!request) {
+  if (!request || isWorkspaceDeletion(request.reason)) {
     return {
       has_pending_deletion: false,
       deletion_scheduled_for: null,
@@ -326,7 +328,7 @@ export async function deleteAccountImmediately(accountId: string, userId?: strin
     throw new BillingError('The deletion request changed while it was read. Reload and try again.', 409);
   }
   try {
-    await runAccountDeletion(accountId, userId ?? request?.userId, request?.id);
+    await runAccountDeletion(accountId, isWorkspaceDeletion(request?.reason) ? undefined : userId ?? request?.userId, request?.id);
   } catch (err) {
     if (request) await releaseDeletionRequest(request.id).catch(() => {});
     throw err;
@@ -360,9 +362,9 @@ export async function processScheduledDeletions(): Promise<{
     const request = await claimDeletionRequest(candidate.id);
     if (!request) continue;
     try {
-      // The request row carries the requester, so the scheduled path gets the
-      // same owner-wide sweep as the immediate one.
-      await runAccountDeletion(request.accountId, request.userId, request.id);
+      // Workspace closes share this queue, but never delete the person or
+      // reclaim their other workspaces, even when account_id = user_id.
+      await runAccountDeletion(request.accountId, isWorkspaceDeletion(request.reason) ? undefined : request.userId, request.id);
       await markDeletionCompleted(request.id);
       processed++;
     } catch (err) {

@@ -340,7 +340,7 @@ export function registerGroupGrantsRoutes(): void {
           ...errors(404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const groupId = c.req.param('groupId');
     const loaded = await loadProjectForUser(c, projectId, 'read');

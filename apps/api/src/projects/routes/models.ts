@@ -139,7 +139,7 @@ export function registerModelsRoutes(): void {
         ...errors(403, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const accountId = c.get('accountId') as string | undefined;
       const sandboxId = c.get('sandboxId') as string | undefined;
@@ -200,7 +200,7 @@ export function registerModelsRoutes(): void {
         ...errors(403, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -242,7 +242,7 @@ export function registerModelsRoutes(): void {
     summary: 'Read project provider and model access', ...auth,
     request: { params: z.object({ workspaceId: z.string() }) },
     responses: { 200: { description: 'OK', content: { 'application/json': { schema: z.any() } } }, ...errors(403, 404) },
-  }), async (c: any) => {
+  }), async (c) => {
     const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -374,7 +374,7 @@ export function registerModelsRoutes(): void {
         ...errors(403, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -417,7 +417,7 @@ export function registerModelsRoutes(): void {
         ...errors(403, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);

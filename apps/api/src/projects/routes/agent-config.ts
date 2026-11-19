@@ -199,7 +199,7 @@ export function registerAgentConfigRoutes(): void {
       request: { params: z.object({ workspaceId: z.string(), agentName: z.string() }) },
       responses: { 200: json(z.any(), 'The agent config block'), ...errors(400, 403, 404, 409) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const agentName = c.req.param('agentName');
       const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -297,7 +297,7 @@ export function registerAgentConfigRoutes(): void {
         ...errors(400, 403, 404, 409, 502),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -399,7 +399,7 @@ export function registerAgentConfigRoutes(): void {
         ...errors(400, 403, 404, 409, 502),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const agentName = c.req.param('agentName');
       const loaded = await loadProjectForUser(c, projectId, 'read');

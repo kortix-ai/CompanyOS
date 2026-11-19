@@ -62,7 +62,7 @@ export function registerSessionScopeRoutes(): void {
         ...errors(400, 404, 409),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       if (!isUuid(sessionId)) return c.json({ error: 'Invalid session id' }, 400);
@@ -160,7 +160,7 @@ export function registerSessionScopeRoutes(): void {
         ...errors(400, 403, 404, 409),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       if (!isUuid(sessionId)) return c.json({ error: 'Invalid session id' }, 400);
@@ -368,10 +368,10 @@ export function registerSessionScopeRoutes(): void {
           }),
           'Model changed',
         ),
-        ...errors(400, 403, 404, 409),
+        ...errors(400, 402, 403, 404, 409),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       if (!isUuid(sessionId)) return c.json({ error: 'Invalid session id' }, 400);

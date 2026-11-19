@@ -120,7 +120,7 @@ export function registerSessionConfigRoutes(): void {
       request: { params: z.object({ workspaceId: z.string(), sessionId: z.string() }) },
       responses: { 200: json(z.any(), 'Config freshness'), ...errors(400, 403, 404) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       // The mirror-work budget is spent across this whole request: the later
@@ -292,7 +292,7 @@ export function registerSessionConfigRoutes(): void {
       },
       responses: { 200: json(z.any(), 'Reload result'), ...errors(400, 403, 404, 409) },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       const binding = await resolveSessionBinding(c, projectId, sessionId, 'session');
@@ -377,7 +377,7 @@ export function registerSessionConfigRoutes(): void {
         ...errors(400, 403, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       const binding = await resolveSessionBinding(c, projectId, sessionId, 'session');

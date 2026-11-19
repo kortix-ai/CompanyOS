@@ -25,7 +25,7 @@ export function registerGatewayKeysRoutes(): void {
       request: { params: z.object({ workspaceId: z.string() }) },
       responses: { 200: json(z.any(), 'Gateway API keys'), ...errors(403, 404) },
     }),
-    async (c: any) => {
+    async (c) => {
       // Same escalation guard as project-credentials: a durable `kgw_` key minted
       // or revoked by an agent session outlives the session and carries no grant.
       if (isProjectSessionPrincipal(c)) throw buildDenialError(PROJECT_ACTIONS.PROJECT_GATEWAY_KEYS_MANAGE, 'agent_human_only_action');
@@ -75,7 +75,7 @@ export function registerGatewayKeysRoutes(): void {
       },
       responses: { 200: json(z.any(), 'Gateway API key created'), ...errors(400, 403, 404) },
     }),
-    async (c: any) => {
+    async (c) => {
       // A connected app's revocable `kortix_oat_` token must not mint a durable one.
       if (c.get('authType') === 'oauth') return c.json({ error: 'Connected apps cannot mint gateway keys.' }, 403);
       // Same escalation guard as project-credentials: a durable `kgw_` key minted
@@ -124,7 +124,7 @@ export function registerGatewayKeysRoutes(): void {
       },
       responses: { 200: json(z.any(), 'Gateway API key revoked'), ...errors(403, 404) },
     }),
-    async (c: any) => {
+    async (c) => {
       if (isProjectSessionPrincipal(c)) throw buildDenialError(PROJECT_ACTIONS.PROJECT_GATEWAY_KEYS_MANAGE, 'agent_human_only_action');
       const projectId = workspaceIdParam(c);
       const keyId = c.req.param('keyId');

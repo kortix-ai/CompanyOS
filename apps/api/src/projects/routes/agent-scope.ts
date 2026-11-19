@@ -100,7 +100,7 @@ export function registerAgentScopeRoutes(): void {
         ...errors(400, 403, 404, 409, 502),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const agentName = c.req.param('agentName');
       // Floor 'read' (membership); the real gate is project.agent.write below.
@@ -285,7 +285,7 @@ export function registerAgentScopeRoutes(): void {
         ...errors(400, 403, 404, 409, 502),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const identifierParam = c.req.param('identifier')?.trim();
       if (!identifierParam || !isValidIdentifier(identifierParam)) {
@@ -455,7 +455,7 @@ export function registerAgentScopeRoutes(): void {
         ...errors(404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);

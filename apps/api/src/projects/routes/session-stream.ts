@@ -144,7 +144,7 @@ export function registerSessionStreamRoutes(): void {
         ...errors(400, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       if (!isUuid(sessionId)) return c.json({ error: 'Invalid session id' }, 400);

@@ -258,7 +258,7 @@ export function registerProviderOauthRoutes(): void {
           ...errors(400, 401, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const provider = c.req.param('provider');
     const body = await readJsonObject(c);
@@ -371,7 +371,7 @@ export function registerProviderOauthRoutes(): void {
           ...errors(401, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -422,7 +422,7 @@ export function registerProviderOauthRoutes(): void {
           ...errors(401, 403, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const provider = c.req.param('provider');
     const loaded = await loadProjectForUser(c, projectId, 'read');

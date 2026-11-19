@@ -379,7 +379,7 @@ export function registerChangeRequestActionsRoutes(): void {
         ...errors(404, 409),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const crId = c.req.param('crId');
       const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -426,7 +426,7 @@ export function registerChangeRequestActionsRoutes(): void {
         ...errors(404, 409),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const crId = c.req.param('crId');
       const loaded = await loadProjectForUser(c, projectId, 'read');

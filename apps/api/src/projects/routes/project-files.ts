@@ -207,7 +207,7 @@ export function registerProjectFilesRoutes(): void {
           ...errors(400, 404, 503),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -294,7 +294,7 @@ export function registerProjectFilesRoutes(): void {
           ...errors(400, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -360,7 +360,7 @@ export function registerProjectFilesRoutes(): void {
           ...errors(400, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const query = normalizeString(c.req.query('q'));
     if (!query) return c.json({ error: 'q query param is required' }, 400);
@@ -429,10 +429,10 @@ export function registerProjectFilesRoutes(): void {
             }),
             'The file as text',
           ),
-          ...errors(400, 404),
+          ...errors(400, 404, 413),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const path = normalizeString(c.req.query('path'));
     if (!path) return c.json({ error: 'path query param is required' }, 400);
@@ -563,7 +563,7 @@ export function registerProjectFilesRoutes(): void {
           ...errors(400, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const path = normalizeString(c.req.query('path'));
     if (!path) return c.json({ error: 'path query param is required' }, 400);
@@ -633,7 +633,7 @@ export function registerProjectFilesRoutes(): void {
           ...errors(404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -738,7 +738,7 @@ export function registerProjectFilesRoutes(): void {
           ...errors(400, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const sha = c.req.param('sha');
     const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -774,10 +774,10 @@ export function registerProjectFilesRoutes(): void {
         },
       responses: {
           200: json(z.any(), 'OK'),
-          ...errors(400, 404),
+          ...errors(400, 404, 413),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const sha = c.req.param('sha');
     const path = normalizeString(c.req.query('path'));
@@ -820,7 +820,7 @@ export function registerProjectFilesRoutes(): void {
           ...errors(400, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const fromRef = normalizeString(c.req.query('from') ?? c.req.query('head'));
     const intoRef = normalizeString(c.req.query('into') ?? c.req.query('base'));

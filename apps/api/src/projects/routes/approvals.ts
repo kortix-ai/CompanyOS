@@ -77,7 +77,7 @@ export function registerApprovalsRoutes(): void {
         ...errors(400, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -158,7 +158,7 @@ export function registerApprovalsRoutes(): void {
         ...errors(400, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);

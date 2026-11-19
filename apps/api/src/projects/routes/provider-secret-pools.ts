@@ -103,7 +103,7 @@ export function registerProviderSecretPoolsRoutes(): void {
       personal_user_id: z.string().nullable(),
       personal_keys_reason: PersonalKeysReason.nullable(),
     }), 'Configured session pools'), ...errors(403, 404) },
-  }), async (c: any) => {
+  }), async (c) => {
     const { workspaceId: projectId, sessionId } = c.req.param();
     if (callerKortixSessionId(c) && callerKortixSessionId(c) !== sessionId) return c.json({ error: 'Not found' }, 404);
     const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -134,7 +134,7 @@ export function registerProviderSecretPoolsRoutes(): void {
     method: 'get', path: '/{workspaceId}/sessions/{sessionId}/provider-secret-pools/{providerId}',
     tags: ['sessions'], summary: 'Read the selected provider secret pool', ...auth,
     request: { params: Params }, responses: { 200: json(Pool, 'Session pool'), ...errors(403, 404) },
-  }), async (c: any) => {
+  }), async (c) => {
     const { workspaceId: projectId, sessionId, providerId } = c.req.param();
     if (callerKortixSessionId(c) && callerKortixSessionId(c) !== sessionId) return c.json({ error: 'Not found' }, 404);
     const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -152,7 +152,7 @@ export function registerProviderSecretPoolsRoutes(): void {
     tags: ['sessions'], summary: 'Replace one session provider secret pool', ...auth,
     request: { params: Params, body: { content: { 'application/json': { schema: Input } } } },
     responses: { 200: json(Pool, 'Session pool'), ...errors(400, 403, 404, 409) },
-  }), async (c: any) => {
+  }), async (c) => {
     const { workspaceId: projectId, sessionId, providerId } = c.req.param();
     if (callerKortixSessionId(c) && callerKortixSessionId(c) !== sessionId) return c.json({ error: 'Not found' }, 404);
     const loaded = await loadProjectForUser(c, projectId, 'session');

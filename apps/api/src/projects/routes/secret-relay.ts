@@ -77,7 +77,7 @@ export function registerSecretRelayRoutes(): void {
         ...errors(400, 403, 404, 409, 413, 502, 503, 504),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       // The kill switch answers FIRST, so flipping it also fails the probe — which
       // is what puts every newly-constructed shim back on /broker.
       if (!config.KORTIX_SECRET_RELAY_STREAM_ENABLED) {

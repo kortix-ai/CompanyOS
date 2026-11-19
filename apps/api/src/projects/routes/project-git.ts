@@ -41,7 +41,7 @@ export function registerProjectGitRoutes(): void {
           ...errors(404, 409, 503),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -140,7 +140,7 @@ export function registerProjectGitRoutes(): void {
         ...errors(404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -179,7 +179,7 @@ export function registerProjectGitRoutes(): void {
           ...errors(400, 404, 409, 502),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);

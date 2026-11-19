@@ -10,6 +10,7 @@ import { loadProjectAgents } from '../agents';
 import { assertMayRunAgent } from '../lib/agent-access';
 import { PROJECT_ACTIONS } from '../../iam';
 import { auth, errors, json, lenientBody } from '../../openapi';
+import { EVENT_BODY_KEYS, TRIGGER_MANIFEST_KEYS, TRIGGER_PATCH_SHAPE, TYPE_SPECIFIC_BODY_KEYS } from './trigger-patch-body';
 import { db } from '../../shared/db';
 import { assertProjectCapability, loadProjectForUser } from '../lib/access';
 import {
@@ -110,56 +111,6 @@ async function followTrigger(
   await upsertTriggerWatcher({ accountId: project.accountId, projectId, slug, userId }).catch((err) =>
     logger.warn('[trigger-watchers] follow failed', { projectId, slug, error: err instanceof Error ? err.message : String(err) }));
 }
-
-/** Body keys that change which event a trigger subscribes to. */
-const EVENT_BODY_KEYS = ['connector', 'event_account', 'event_source', 'event', 'event_config'];
-
-/** Merge-body keys owned by one trigger type, dropped when a PATCH changes the type. */
-const TYPE_SPECIFIC_BODY_KEYS = [
-  'cron', 'run_at', 'every', 'timezone', 'secret_env', 'run', 'mode', 'interval',
-  'expect_event_within', 'connector', 'event_account', 'event_source', 'event', 'event_config', 'app',
-] as const;
-
-// Body keys that change the trigger's *repo manifest* (committed to git). A PATCH
-// whose body touches none of these has nothing to commit, so we skip git entirely
-// and treat it as a no-op.
-const TRIGGER_MANIFEST_KEYS = [
-  'app',
-  'target',
-  'name',
-  'type',
-  'agent',
-  'model',
-  'enabled',
-  'prompt_template',
-  'promptTemplate',
-  'cron',
-  'every',
-  'schedule',
-  'run_at',
-  'runAt',
-  'timezone',
-  'secret_env',
-  'secretEnv',
-  'session_mode',
-  'sessionMode',
-  'session_id',
-  'sessionId',
-  'session_key',
-  'sessionKey',
-  'filter',
-  // A PATCH of only these must still write the manifest (KRTX-1721, KRTX-1743).
-  'max_runs_per_hour',
-  'max_runs_per_day',
-  'max_lateness',
-  'expect_event_within',
-  'overlap',
-  'connector',
-  'event_account',
-  'event_source',
-  'event',
-  'event_config',
-] as const;
 
 export function registerTriggersRoutes(): void {
   // GET /v1/projects/:projectId/triggers
@@ -594,35 +545,7 @@ export function registerTriggersRoutes(): void {
       ...auth,
       request: {
         params: z.object({ workspaceId: z.string(), slug: z.string() }),
-        body: { content: { 'application/json': { schema: lenientBody({
-            name: z.string().optional().openapi({ description: 'New name.' }),
-            prompt_template: z.string().optional().openapi({ description: 'New prompt.' }),
-            agent: z.string().optional().openapi({ description: 'Agent to run.' }),
-            model: z.string().optional().openapi({ description: 'Model as provider/model.' }),
-            enabled: z.boolean().optional().openapi({ description: 'Turn the trigger on or off.' }),
-            cron: z.string().optional().openapi({ description: 'Cron expression.' }),
-            run_at: z.string().optional().openapi({ description: 'ISO-8601 instant for a one-off trigger.' }),
-            every: z.string().nullish().openapi({ description: 'A fixed period such as 5m, 1h or 1d (at least 1m), instead of cron or run_at. Cron triggers only.' }),
-            timezone: z.string().optional().openapi({ description: 'IANA timezone.' }),
-            secret_env: z.string().optional().openapi({ description: 'Webhook signing secret name.' }),
-            connector: z.string().optional().openapi({ description: 'Connector slug of an event trigger.' }),
-            event_account: z.string().nullish().openapi({ description: 'Label of one shared account of the connector; null clears it to the connector default.' }),
-            event_source: z.string().nullish().openapi({ description: 'Event source adapter id of an event trigger; null clears it to the connector provider.' }),
-            event: z.string().optional().openapi({ description: 'The adapter event type id of an event trigger.' }),
-            event_config: z.record(z.string(), z.any()).optional().openapi({ description: 'Provider event config of an event trigger.' }),
-            app: z.string().optional().openapi({ description: 'App slug of an app trigger.' }),
-            target: z.object({ app: z.string(), path: z.string().optional(), method: z.enum(['POST', 'GET']).optional(), payload: z.record(z.string(), z.any()).optional() }).nullish().openapi({ description: 'Call an App instead of running an agent: each fire wakes the App and sends the payload to method path (default POST /). null clears it.' }),
-            session_mode: z.enum(['fresh', 'reuse', 'pinned', 'keyed']).optional().openapi({ description: 'Session reuse mode.' }),
-            session_id: z.string().optional().openapi({ description: 'Session to pin.' }),
-            session_key: z.string().optional().openapi({ description: 'Session key template.' }),
-            filter: z.record(z.string(), z.any()).optional().openapi({ description: 'Payload filter: path to a value (equals) or one operator (not, in, exists, prefix, not_prefix). null or {} clears it.' }),
-            expect_event_within: z.string().nullish().openapi({ description: 'App triggers only: the silence alert, such as 30m; null removes it.' }),
-            max_runs_per_hour: z.number().int().min(1).nullish().openapi({ description: 'Runs per 60 minutes; null resets it to the default, 60.' }),
-            max_runs_per_day: z.number().int().min(1).nullish().openapi({ description: 'Runs per UTC day; null removes the daily cap.' }),
-            overlap: z.enum(['skip', 'allow']).nullish().openapi({ description: 'skip or allow; null resets it to the default (skip for cron, allow otherwise).' }),
-            session_access: z.object({ mode: z.enum(['private', 'members', 'project']), memberIds: z.array(z.string()).optional(), groupIds: z.array(z.string()).optional() }).optional().optional().openapi({ description: 'Who can see the sessions this trigger creates.' }),
-            space_id: z.string().nullish().openapi({ description: 'Channel or DM its runs post to; null clears it (chat flag; ignored while it is off). It applies to later runs only; moving to a channel without session_access makes later threads project-visible.' }),
-          }) } } },
+        body: { content: { 'application/json': { schema: lenientBody(TRIGGER_PATCH_SHAPE) } } },
       },
       responses: {
         200: json(TriggerListSchema, 'Every trigger after the update'),

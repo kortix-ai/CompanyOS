@@ -124,7 +124,7 @@ export function registerReviewItemsRoutes(): void {
         ...errors(400, 403, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -189,7 +189,7 @@ export function registerReviewItemsRoutes(): void {
         ...errors(400, 403, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -240,7 +240,7 @@ export function registerReviewItemsRoutes(): void {
         ...errors(400, 403, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const body = await readJsonObject(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -332,7 +332,7 @@ export function registerReviewItemsRoutes(): void {
         ...errors(400, 403, 404, 409),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const reviewItemId = c.req.param('reviewItemId');
       const body = await readJsonObject(c);
@@ -401,7 +401,7 @@ export function registerReviewItemsRoutes(): void {
         ...errors(400, 403, 404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const projectId = workspaceIdParam(c);
       const body = await readJsonObject(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');

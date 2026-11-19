@@ -148,7 +148,7 @@ export function registerSecretsRoutes(): void {
           ...errors(404),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const started = performance.now();
     const stages: Record<string, number> = {};
@@ -633,7 +633,7 @@ export function registerSecretsRoutes(): void {
           ...errors(400, 403, 404, 409),
       },
     }),
-    async (c: any) => {
+    async (c) => {
     const projectId = workspaceIdParam(c);
     const identifier = c.req.param('name')?.trim();
     const loaded = await loadProjectForUser(c, projectId, 'read');

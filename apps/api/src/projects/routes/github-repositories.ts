@@ -56,7 +56,7 @@ export function registerGithubRepositoriesRoutes(): void {
         ...errors(403, 409, 502),
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const scope = await resolveProjectAccount(c);
       await assertAuthorized(await actorOf(c, scope.accountId), ACCOUNT_ACTIONS.PROJECT_CREATE);
 

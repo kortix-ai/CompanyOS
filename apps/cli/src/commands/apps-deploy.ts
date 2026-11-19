@@ -573,7 +573,9 @@ export async function waitForDeployment(
 /** Git ancestry is checked before staging: a refusal must upload nothing. */
 export async function deployProvenance(apps: AppsHandle, app: App, path: string | undefined, force: boolean) {
   if (!path) return force ? { source_force: true } : {};
-  const cwd = (await stat(path)).isDirectory() ? path : dirname(path);
+  // An archive can be built elsewhere: its parent checkout is not provenance.
+  if (!(await stat(path)).isDirectory()) return force ? { source_force: true } : {};
+  const cwd = path;
   const git = (...args: string[]) => spawnSync('git', ['-C', cwd, ...args], {
     encoding: 'utf8', timeout: 15_000, stdio: ['ignore', 'pipe', 'pipe'],
   });

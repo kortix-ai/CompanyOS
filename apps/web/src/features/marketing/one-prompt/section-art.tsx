@@ -25,7 +25,7 @@ type ToolSlug =
 /** A tool's official mark: the same tiles the connector screens use (`public/connector-icons/`). */
 function ToolIcon({ slug }: { slug: ToolSlug }) {
   // eslint-disable-next-line @next/next/no-img-element -- a 20px static SVG tile; next/image adds nothing here
-  return <img src={`/connector-icons/${slug}.svg`} alt="" width={20} height={20} className="size-5 rounded-sm" />;
+  return <img src={`/connector-icons/${slug}.svg`} alt="" width={20} height={20} loading="lazy" decoding="async" className="size-5 rounded-sm" />;
 }
 
 /** An agent's pixel mark in its tile, without the hover hint: art carries no tooltip. */

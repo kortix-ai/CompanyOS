@@ -73,10 +73,13 @@ person.
      every string of the translation catalog the page renders, plus the
      provider names. Each placeholder may stand only for a number:
      `{count} models` shows "14 models" and hides "Acme models". Text with no
-     letter never shows. Parts joined by ` · `, ` — ` or ` | ` are judged one
-     by one. Everything else hides, so a new screen with customer content is
-     hidden without a mark. Text that is not in the catalog (model names, a
-     provider name that comes from the API) stays hidden. A click event on a
+     letter never shows. Parts joined by ` · ` or ` — ` are judged one by one.
+     Everything else hides, so a new screen with customer content is hidden
+     without a mark. Text that is not in the catalog (model names, a provider
+     name that comes from the API) stays hidden. Message and document text
+     never shows, even where a word equals our text: `.kortix-markdown` and
+     `[data-replay-content]` (the user message bubble), `REPLAY_CONTENT_SELECTOR`.
+     Mark other text a person or an agent wrote with `data-replay-content`. A click event on a
      private page keeps the same interface text in `$el_text` and the
      element chain, and loses the rest (`scrubEvent`).
    - The recorder (`posthog-js/dist/posthog-recorder`, 66 KB gzip) downloads

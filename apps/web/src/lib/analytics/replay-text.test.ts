@@ -108,6 +108,12 @@ describe('UiTextIndex', () => {
     expect(ui.has('Zephyrine · 3 models')).toBe(false);
   });
 
+  test('a shell pipe or a table row is not split into parts', () => {
+    const ui = index();
+    const command = 'cat notes.md | Available';
+    expect(show(ui, command)).toBe(maskReplayText(command));
+  });
+
   test('provider names are interface text without a catalog', () => {
     const ui = new UiTextIndex();
     expect(show(ui, 'Anthropic')).toBe('Anthropic');

@@ -29,9 +29,10 @@ const MAX_VARIANTS = 32;
 /**
  * The separators our interface joins strings with ("API key · 14 models",
  * "In use · 3"). Each part is judged alone, so a customer name beside a label
- * hides and the label stays.
+ * hides and the label stays. Not `|`: a shell pipe or a table row in an
+ * agent's output would split into parts.
  */
-const SEGMENT_BREAK = /(\s+[·•|—–]\s+)/;
+const SEGMENT_BREAK = /(\s+[·•—–]\s+)/;
 
 /** Element kinds of a parsed ICU message (`TYPE` in @formatjs/icu-messageformat-parser). */
 const ICU = {

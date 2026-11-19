@@ -24,7 +24,8 @@
  *    recording hides every text and every attribute that can carry text,
  *    except our own interface text (`UiText`, `replay-text.ts`): a label,
  *    button or heading from the translation catalog stays readable, with
- *    numbers in its placeholders. Every input, link targets off our origin
+ *    numbers in its placeholders. Message and document text never shows
+ *    (`REPLAY_CONTENT_SELECTOR`). Every input, link targets off our origin
  *    and image sources are hidden; frames are blocked. Page URLs follow
  *    rule 3. A click event on those pages keeps the same interface text.
  */
@@ -400,6 +401,14 @@ export function replayMasksPage(pathname: string, signedIn: boolean): boolean {
   const path = withoutLocale(pathname);
   return path === '/auth' || path.startsWith('/auth/');
 }
+
+/**
+ * Message and document text: hidden in a masked recording even where a word
+ * equals our interface text. `.kortix-markdown` is every rendered message,
+ * document and file preview; `data-replay-content` marks other text a person
+ * or an agent wrote (the user message bubble).
+ */
+export const REPLAY_CONTENT_SELECTOR = '.kortix-markdown, [data-replay-content]';
 
 /** Frames, plugins and anything a component marks with `ph-no-capture` record as an empty box. */
 export const REPLAY_BLOCK_SELECTOR = 'iframe, object, embed';

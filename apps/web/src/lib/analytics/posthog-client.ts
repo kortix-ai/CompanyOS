@@ -46,6 +46,7 @@ import {
   posthogProjectForHost,
   readAnalyticsConsent,
   REPLAY_BLOCK_SELECTOR,
+  REPLAY_CONTENT_SELECTOR,
   replayAttribute,
   replayMasksPage,
   replayTier,
@@ -89,8 +90,12 @@ async function indexPageLocale(): Promise<void> {
   }
 }
 
-/** A text node of a masked recording: our interface text stays, everything else becomes `*`. */
-function revealReplayText(text: string): string {
+/**
+ * A text node of a masked recording: our interface text stays, everything
+ * else becomes `*`. Text inside a message or document always becomes `*`.
+ */
+function revealReplayText(text: string, element: HTMLElement | undefined): string {
+  if (element?.closest(REPLAY_CONTENT_SELECTOR)) return maskReplayText(text);
   // A locale switch while recording: index its catalog; its text shows once that finishes.
   if (!indexedLocales.has(pageLocale())) void indexPageLocale();
   return uiText.reveal(text, maskReplayText);
@@ -174,7 +179,7 @@ async function start(user: PostHogUser | null): Promise<PostHog | null> {
       maskAllInputs: true,
       // Every text node goes through maskTextFn, which decides per page.
       maskTextSelector: '*',
-      maskTextFn: (text) => (replayMasked() ? revealReplayText(text) : text),
+      maskTextFn: (text, element) => (replayMasked() ? revealReplayText(text, element) : text),
       maskAttributeFn: (name, value) =>
         replayAttribute(name, value, replayMasked(), origin, uiText),
       blockSelector: REPLAY_BLOCK_SELECTOR,

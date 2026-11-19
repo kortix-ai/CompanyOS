@@ -96,7 +96,9 @@ describe('closeBrowserOnAppOpen (iOS Smart App Banner OPEN)', () => {
       'https://kortix.com/auth/callback?mobile_callback=1&state=s',
       'https://kortix.com/share/abc',
       'kortix://invites/00000000-0000-4000-8000-000000000000',
+      'kortix://connectors',
       'kortix://connectors/done',
+      'kortix://providers',
       'kortix://web',
       'https://kortix.com/',
     ]) {

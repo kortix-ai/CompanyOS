@@ -13,7 +13,7 @@ person.
 
 | Part | File |
 |---|---|
-| Hosts that report, consent, URL scrubbing | `apps/web/src/lib/analytics/posthog-config.ts` (+ `.test.ts`) |
+| Hosts that report, consent, URL scrubbing, session replay rules | `apps/web/src/lib/analytics/posthog-config.ts` (+ `.test.ts`) |
 | The browser client (init, consent switch, masking) | `apps/web/src/lib/analytics/posthog-client.ts` |
 | Start, identify, per-page rules | `apps/web/src/components/analytics/posthog-host.tsx` |
 | Browser events (closed list) | `apps/web/src/lib/track.ts` |
@@ -54,8 +54,25 @@ person.
    the anonymous id lives in memory only (no cookie, no local storage). A grant
    switches to `localStorage+cookie`. A signed-in user without consent starts
    with their own user id (`bootstrap`), so no anonymous id is merged per page.
-7. **No session replay** (decision 2026-11-04). The recorder is not bundled,
-   and the project setting is off. Turning it on is a privacy-policy change.
+7. **Session replay with content hidden** (decision 2026-11-19; it replaced
+   "no replay" from 2026-11-04). The rules are rule 4 in `posthog-config.ts`:
+   - Who is recorded: everyone except a visitor who rejected analytics in the
+     banner. `REPLAY_RATES`: every session of a person in their first 14 days
+     after sign-up, 10 % of other signed-in sessions, 2 % of anonymous ones.
+     The free plan stops at 5,000 recordings a month; change the rates there.
+   - Where: kortix.com only (`REPLAY_HOSTS`). loopmaxxing.sh joins when its
+     CookieYes banner loads there; until then a visitor there cannot reject.
+   - What is hidden: for a signed-in person, and on private and `/auth` pages,
+     every text node becomes `*`, every input is masked, every attribute that
+     can carry text becomes `***` (`replayAttribute`), links to another origin
+     keep only the host, image sources lose everything off our origin, and
+     frames record as empty boxes. A component that must never appear even as
+     a shape takes the `ph-no-capture` class. Page URLs follow rule 5.
+   - The recorder (`posthog-js/dist/posthog-recorder`, 66 KB gzip) downloads
+     only for a recorded session.
+   - The privacy policy (`/legal`, cookies section) and the PostHog row in
+     `packages/shared/src/subprocessors.ts` describe this. Change them with
+     the rules.
 8. **A person's events only.** Route events go through `capturePersonEvent`
    (`projects/routes/product-events.ts`): an agent's session token, an API
    key, a service account or an OAuth app sends nothing. Server-side session
@@ -190,11 +207,13 @@ Every insight sets `filterTestAccounts`: `environment = production`, no
 `@kortix.ai` / `@kortix.com` person, not the internal cohort. Local, dev and
 staging events never reach the charts.
 
-## PostHog project settings (set 2026-11-04)
+## PostHog project settings (set 2026-11-04, replay 2026-11-19)
 
-- Session replay off. The recording domain (`https://kortix.com`), the 2 s
-  minimum, console and network capture off and the private-path blocklist
-  stay set, so turning it on later starts from safe settings.
+- Session replay on. Recording domain `https://kortix.com`, 2 s minimum,
+  console and network capture off, 30-day retention, no sample rate and no URL
+  blocklist: the web client decides which sessions record and what they hide
+  (rule 7). The project switch alone records nothing: the client starts
+  every recording itself.
 - Surveys on. Authorized URL `https://kortix.com` (toolbar, heatmaps).
 - IP anonymization on; GeoIP country and city still resolve.
 - Free plan hard limits: 1 M events a month. Past it PostHog drops events until
@@ -230,8 +249,16 @@ or a local capture sink that logs what the API sends.
    `$browser_type: bot`.
 2. In the browser console run `localStorage.setItem('ph_debug', 'true')` and
    reload: posthog-js logs every event with its properties before it sends it.
-3. API, local: set `POSTHOG_PROJECT_KEY` (your project, or any `phc_` value)
+3. Web, local, with a sink: also set `POSTHOG_INGEST_ORIGIN=http://127.0.0.1:<port>`
+   in `apps/web/.env.local`. The `/ingest` rewrite then sends there. The sink
+   answers `/array/<key>/config` and `/flags/` with
+   `{"sessionRecording": {"endpoint": "/s/"}, "supportedCompression": ["gzip-js"]}`
+   and logs every POST body (gzip; snapshot fields inside are gzip strings
+   too). To prove replay masking, sign in as a user whose email, name and
+   workspace name are unique strings, then search the logged `/s/` bodies for
+   them: the count must be 0.
+4. API, local: set `POSTHOG_PROJECT_KEY` (your project, or any `phc_` value)
    and `POSTHOG_HOST=http://localhost:<port>` (a sink that logs each `/batch/`
    body) in `apps/api/.env.local`, trigger the action, read the sink.
-4. Production: PostHog → Activity, filter `environment = production`. The
+5. Production: PostHog → Activity, filter `environment = production`. The
    dashboards apply the project's test-account filter by default.

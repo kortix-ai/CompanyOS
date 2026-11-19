@@ -281,6 +281,15 @@ function FooterContent({ prompt }: { prompt: string }) {
         One prompt.<br /><span className="text-muted-foreground">Your whole company, looped.</span>
       </h2>
       <CopyButton text={prompt} icon="shortcut" bindKey={false} />
+      {/* The page is also served on loopmaxxing.sh: the legal pages live on kortix.com. */}
+      <nav aria-label="Legal" className="text-muted-foreground flex gap-4 text-sm">
+        <a href="https://kortix.com/legal?tab=privacy" className="hover:text-foreground transition-colors">
+          Privacy
+        </a>
+        <a href="https://kortix.com/legal/terms" className="hover:text-foreground transition-colors">
+          Terms
+        </a>
+      </nav>
     </div>
   );
 }

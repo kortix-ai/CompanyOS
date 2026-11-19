@@ -1,17 +1,25 @@
 /**
  * What may leave the browser for PostHog: which hosts report, how the cookie
  * banner's answer is read, and how URLs and autocapture events are reduced on
- * pages that carry customer data or one-time tokens.
+ * pages that carry customer data or one-time tokens, and which sessions a
+ * recording keeps and what it hides.
  */
 import { describe, expect, test } from 'bun:test';
 
 import {
+  maskReplayText,
   POSTHOG_PROJECT_KEY,
   posthogProjectForHost,
   readAnalyticsConsent,
+  REPLAY_RATES,
+  replayAttribute,
+  replayMasksPage,
+  replayTier,
   routeTemplate,
   sanitizeUrl,
   scrubEvent,
+  sessionFraction,
+  shouldRecordSession,
 } from './posthog-config';
 
 const ORIGIN = 'https://kortix.com';
@@ -21,6 +29,7 @@ describe('posthogProjectForHost', () => {
     expect(posthogProjectForHost('kortix.com', undefined)).toEqual({
       key: POSTHOG_PROJECT_KEY,
       environment: 'production',
+      replay: true,
     });
     expect(posthogProjectForHost('www.kortix.com', undefined)?.environment).toBe('production');
     expect(posthogProjectForHost('loopmaxxing.sh', undefined)?.environment).toBe('production');
@@ -46,7 +55,14 @@ describe('posthogProjectForHost', () => {
     expect(posthogProjectForHost('localhost', 'phc_local')).toEqual({
       key: 'phc_local',
       environment: 'local',
+      replay: true,
     });
+  });
+
+  test('loopmaxxing.sh is not recorded: its cookie banner does not load there', () => {
+    expect(posthogProjectForHost('www.kortix.com', undefined)?.replay).toBe(true);
+    expect(posthogProjectForHost('loopmaxxing.sh', undefined)?.replay).toBe(false);
+    expect(posthogProjectForHost('www.loopmaxxing.sh', undefined)?.replay).toBe(false);
   });
 });
 
@@ -160,7 +176,10 @@ describe('scrubEvent', () => {
     const event = scrubEvent(
       {
         event: '$identify',
-        properties: { $current_url: 'https://kortix.com/workspaces/p1', $pathname: '/workspaces/p1' },
+        properties: {
+          $current_url: 'https://kortix.com/workspaces/p1',
+          $pathname: '/workspaces/p1',
+        },
         $set_once: {
           $initial_current_url: 'https://kortix.com/auth?email=a%40b.com&utm_source=meta',
           $initial_pathname: '/connect/tok_1',
@@ -189,5 +208,128 @@ describe('scrubEvent', () => {
       ORIGIN,
     );
     expect(event.properties.$el_text).toBe('Start free');
+  });
+});
+
+describe('session replay: which sessions are recorded', () => {
+  const NOW = Date.parse('2026-11-19T12:00:00Z');
+  // Time-ordered ids shaped like posthog-js session ids (UUIDv7).
+  const ids = Array.from({ length: 20_000 }, (_, i) => {
+    const time = (NOW + i * 997).toString(16).padStart(12, '0');
+    const rest = (i * 2654435761).toString(16).padStart(20, '0').slice(-20);
+    return `${time.slice(0, 8)}-${time.slice(8, 12)}-7${rest.slice(0, 3)}-8${rest.slice(3, 6)}-${rest.slice(8, 20)}`;
+  });
+  const share = (tier: keyof typeof REPLAY_RATES) =>
+    ids.filter((sessionId) =>
+      shouldRecordSession({ replay: true, consent: 'unknown', tier, sessionId }),
+    ).length / ids.length;
+
+  test('the tier follows the sign-up date', () => {
+    expect(replayTier(null, NOW)).toBe('anonymous');
+    expect(replayTier('2026-11-10T09:00:00Z', NOW)).toBe('new_user');
+    expect(replayTier('2026-11-05T11:00:00Z', NOW)).toBe('signed_in');
+    expect(replayTier('not a date', NOW)).toBe('signed_in');
+  });
+
+  test('each tier records about its share of sessions', () => {
+    expect(share('new_user')).toBe(1);
+    expect(share('signed_in')).toBeGreaterThan(0.09);
+    expect(share('signed_in')).toBeLessThan(0.11);
+    expect(share('anonymous')).toBeGreaterThan(0.015);
+    expect(share('anonymous')).toBeLessThan(0.025);
+  });
+
+  test('a session recorded while anonymous stays recorded after sign-in', () => {
+    for (const sessionId of ids) {
+      if (sessionFraction(sessionId) < REPLAY_RATES.anonymous) {
+        expect(sessionFraction(sessionId)).toBeLessThan(REPLAY_RATES.signed_in);
+      }
+    }
+  });
+
+  test('a rejection in the banner, or a host without replay, records nothing', () => {
+    for (const sessionId of ids.slice(0, 500)) {
+      expect(
+        shouldRecordSession({ replay: true, consent: 'denied', tier: 'new_user', sessionId }),
+      ).toBe(false);
+      expect(
+        shouldRecordSession({ replay: false, consent: 'granted', tier: 'new_user', sessionId }),
+      ).toBe(false);
+    }
+  });
+});
+
+describe('session replay: what a recording hides', () => {
+  test('a signed-in person is masked everywhere; an anonymous visitor on private and sign-in pages', () => {
+    expect(replayMasksPage('/pricing', true)).toBe(true);
+    expect(replayMasksPage('/pricing', false)).toBe(false);
+    expect(replayMasksPage('/', false)).toBe(false);
+    expect(replayMasksPage('/auth', false)).toBe(true);
+    expect(replayMasksPage('/de/auth/callback', false)).toBe(true);
+    expect(replayMasksPage('/share/8f2c1d', false)).toBe(true);
+    expect(replayMasksPage('/secret-intake/tok_123', false)).toBe(true);
+    expect(replayMasksPage('/inbox', false)).toBe(true);
+    expect(replayMasksPage('/authors', false)).toBe(false);
+  });
+
+  test('masked text keeps its shape and loses every character', () => {
+    expect(maskReplayText('Q3 launch plan for Acme Co')).toBe('** ****** **** *** **** **');
+    expect(maskReplayText('  ')).toBe('  ');
+  });
+
+  test('text-bearing attributes are hidden on a masked page', () => {
+    for (const name of [
+      'title',
+      'alt',
+      'aria-label',
+      'placeholder',
+      'id',
+      'name',
+      'data-name',
+      'content',
+    ]) {
+      expect(replayAttribute(name, 'Acme roadmap', true, ORIGIN)).toBe('***');
+    }
+  });
+
+  test('layout, state and styling attributes stay, so the replay renders', () => {
+    expect(replayAttribute('class', 'flex gap-2', true, ORIGIN)).toBe('flex gap-2');
+    expect(replayAttribute('data-state', 'open', true, ORIGIN)).toBe('open');
+    expect(replayAttribute('viewBox', '0 0 24 24', true, ORIGIN)).toBe('0 0 24 24');
+    expect(replayAttribute('rr_width', '120px', true, ORIGIN)).toBe('120px');
+    expect(replayAttribute('_cssText', '.a{color:red}', true, ORIGIN)).toBe('.a{color:red}');
+  });
+
+  test('style keeps its layout and loses every url()', () => {
+    expect(
+      replayAttribute(
+        'style',
+        'width: 40%; background-image: url("https://cdn.example.com/a.png")',
+        true,
+        ORIGIN,
+      ),
+    ).toBe('width: 40%; background-image: url()');
+  });
+
+  test('links keep our route template; other origins keep only the host', () => {
+    expect(
+      replayAttribute('href', '/workspaces/9f1e2d3c/sessions/4a5b6c7d?tab=files#x', true, ORIGIN),
+    ).toBe('https://kortix.com/workspaces/:id/sessions/:id');
+    expect(replayAttribute('src', '/_next/static/media/logo.svg', true, ORIGIN)).toBe(
+      'https://kortix.com/_next/static/media/logo.svg',
+    );
+    expect(replayAttribute('href', 'https://github.com/acme/roadmap', true, ORIGIN)).toBe(
+      'https://github.com/',
+    );
+    expect(replayAttribute('href', 'mailto:someone@example.com', true, ORIGIN)).toBe('');
+    expect(replayAttribute('src', 'data:image/png;base64,AAAA', true, ORIGIN)).toBe('');
+    expect(replayAttribute('srcset', '/a.png 1x, /b.png 2x', true, ORIGIN)).toBe('');
+    expect(replayAttribute('href', '#section-acme', true, ORIGIN)).toBe('#');
+  });
+
+  test('a public page keeps its attributes, except values', () => {
+    expect(replayAttribute('title', 'Pricing', false, ORIGIN)).toBe('Pricing');
+    expect(replayAttribute('href', '/pricing', false, ORIGIN)).toBe('/pricing');
+    expect(replayAttribute('value', 'tok_123', false, ORIGIN)).toBe('***');
   });
 });

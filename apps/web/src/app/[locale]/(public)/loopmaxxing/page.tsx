@@ -1,5 +1,7 @@
 import { FactoryHome } from '@/features/marketing/one-prompt/factory-home';
 import { loopViews } from '@/features/marketing/one-prompt/loops-content';
+import { loopmaxxingJsonLd } from '@/features/marketing/one-prompt/seo';
+import { safeJsonForHtml } from '@/lib/security/safe-json';
 import { requireLoopmaxxing } from '@/lib/loopmaxxing-gate';
 
 /**
@@ -14,5 +16,10 @@ export default async function Loopmaxxing() {
   await requireLoopmaxxing();
   // The launch leads with one template. The other factories are in the build; they join the page when their reference repositories are public.
   const loops = loopViews().filter((loop) => loop.id === 'software-factory');
-  return <FactoryHome loops={loops} />;
+  return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonForHtml(loopmaxxingJsonLd()) }} />
+      <FactoryHome loops={loops} />
+    </>
+  );
 }

@@ -18,8 +18,10 @@ the `product-analytics` skill (`.agents/skills/product-analytics/SKILL.md`).
 | Kortix · Setup | The setup prompt: runs started → template → onboard green → ready (per `setup_id`, and by coding agent), prompt copied → first real run, copies by template, minutes to ready, where onboard stops |
 
 Every insight sets `filterTestAccounts`. The project's test-account filter
-keeps `environment = production` and drops `@kortix.ai` / `@kortix.com`
-people and the internal cohort, so local, dev and staging traffic never shows.
+keeps `environment = production` and drops the cohort "Internal / Test users",
+so local, dev and staging traffic and Kortix staff never show. The API puts
+staff in that cohort (`$internal_or_test_user`); see the `product-analytics`
+skill, "Kortix staff are out of every chart".
 
 ## Files
 

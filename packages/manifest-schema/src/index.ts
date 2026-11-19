@@ -1480,6 +1480,9 @@ export function validateTriggers(rawNode: unknown, path: string, issues: Manifes
         severity: 'error',
       });
     }
+    if (entry.hard_run_caps !== undefined && typeof entry.hard_run_caps !== 'boolean') {
+      issues.push({ path: `${where}.hard_run_caps`, message: 'hard_run_caps must be a boolean.', severity: 'error' });
+    }
     // Run caps (KRTX-1721): any trigger type, a whole number of at least 1.
     for (const field of ['max_runs_per_hour', 'max_runs_per_day'] as const) {
       const cap = entry[field];

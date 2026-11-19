@@ -2089,3 +2089,16 @@ release contracts remain required.
 `SESS-63` Session asks (questions and permission asks never hold a session). `POST /turn-permission` (sandbox credential) stores the ask and answers `live_wait_ms`: 180000, or 0 for an unattended session (a trigger source, `unattended`, or a worker with a parent session), where the runtime parks it at once. A relay retry stores nothing new. `GET /projects/:id/asks` lists open questions, permission asks and connector approvals the caller may decide (a manager every session, a member the sessions they launched), each with `surface_session_id` (the root a person opens) and a one-line `title`. `POST /projects/:id/asks/:askId/answer` is refused to the session's own credential and to a member who did not launch it (403); a bad body is 400. A permission decision is 200 once and 409 after; an approval given while the call was parked is consumed by exactly one re-run of the same call (`args_hash`), whose relay answers `approved: true`. A parked question (`parkable: true`) stays listed until answered (200, then 409). An unknown ask id is 400; a connector approval is decided on `POST /approvals/:executionId` (400 `USE_APPROVALS_ROUTE`). The ledger rules (parked questions outlive the turn end, expiry, the consume race) are proven in `apps/api/src/__tests__/integration-session-asks.test.ts`.
 
 `SESS-64` Session create refuses when no model can run the session. A workspace on the Free plan (credits but no managed models) with no provider key, and no model named in the request, answers `POST /projects/:id/sessions` 409 `{code:"no_model_available", plan_upgrade:true, error:"No model: upgrade to the Credits plan or add your own provider key."}` and creates no session row and no sandbox: such a box could only die at boot ("pi harness has no model"). A provider key whose provider refused it at its last check (`verify_status = 'invalid'`) is no default: a Free-plan workspace whose only key is refused answers the same 409, and the same key checked `unknown` passes the model gate. A Credits-plan workspace with no model named → 201 on the platform default; where no managed model is served (the local profile) it answers 409 `{code:"no_model_available", plan_upgrade:false}`. The check runs after the agent, recursion and colleague-access gates and before sandbox placement, so the local profile's create flows that used to stop at 503 `KORTIX_URL_UNREACHABLE` now stop here.
+
+### TRG-44 — hard manual worker admission
+A disabled keyed schedule remains manually fireable. With `hard_run_caps: true`,
+all sources reserve an attempt atomically before dispatch, including manual fires.
+Invalid or missing keys start no session and consume no admission. Six concurrent
+manual requests with a five/hour policy admit exactly five; the refusal is persisted
+in run history. Reservations count failed attempts conservatively, so retries and
+process crashes cannot exceed the configured start ceiling. No implicit override.
+
+### TRG-45 — isolated keyed draft dispatch
+A session-bound dispatcher manually fires a disabled keyed schedule into its
+existing synthetic worker. Both fires reuse that session, can read it, and each
+writes exactly one visible run. The real CLI lists those same runs.

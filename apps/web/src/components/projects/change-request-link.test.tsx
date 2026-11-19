@@ -4,6 +4,8 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { notifyManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { configureKortix } from '@kortix/sdk';
+import { NextIntlClientProvider } from 'next-intl';
+import messages from '../../../translations/en.json';
 
 const win = new Window({ url: 'http://kortix.test/workspaces/w/change-requests/233?tag=a&tag=b&id=wrong#files' });
 Object.assign(globalThis, { window: win, document: win.document, navigator: win.navigator, IS_REACT_ACT_ENVIRONMENT: true });
@@ -33,7 +35,7 @@ async function mount(workspaceId: string, crRef: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   qc = client;
   await act(async () => {
-    root?.render(<QueryClientProvider client={client}><ChangeRequestLink workspaceId={workspaceId} crRef={crRef} /></QueryClientProvider>);
+    root?.render(<NextIntlClientProvider locale="en" messages={messages}><QueryClientProvider client={client}><ChangeRequestLink workspaceId={workspaceId} crRef={crRef} /></QueryClientProvider></NextIntlClientProvider>);
   });
   await act(async () => { await qc?.refetchQueries(); });
 }

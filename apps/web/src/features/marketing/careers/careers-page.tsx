@@ -87,7 +87,7 @@ export function CareersPage(): ReactNode {
         <Board hero={hero} openings={openings} apply={apply} onApply={openApply} />
       </section>
 
-      {/* The bar: seven cells, and the eighth is the way in. */}
+      {/* The bar: three cells, and the fourth is the way in. */}
       <Block id="what-we-look-for">
         <Heading title={bar.title} titleMuted={bar.titleMuted} sub={bar.lead} />
         <Band className="mt-12">

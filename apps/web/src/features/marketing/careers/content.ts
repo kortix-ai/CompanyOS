@@ -6,7 +6,7 @@
  * Plain English lives here, not in `apps/web/translations/*.json`, so the copy
  * can iterate before paying the 8-locale parity gate (`pnpm i18n:translations`).
  *
- * Voice rules: the `kortix-brand` skill. The bar is distilled from `CLAUDE.md`.
+ * Voice rules: the `kortix-brand` skill.
  *
  * ACCURACY GATE for this page specifically:
  *  - INVENT NOTHING about employment. No salary band, no equity, no benefits,
@@ -32,7 +32,7 @@
 export const hero = {
   title: 'Open positions.',
   lead: 'Belgrade, New York, San Francisco or remote.',
-  description: 'An extremely small, talent-dense team.',
+  description: 'A small team building the open-source CompanyOS.',
   roleLabel: 'Role',
   locationLabel: 'Location',
   ctaPrimary: 'Apply',
@@ -47,7 +47,7 @@ export const openings = [
     id: 'gtm',
     name: 'Founding GTM',
     full: 'Enterprise & Partners',
-    location: 'SF, NYC or US Remote',
+    location: 'SF, NYC or US remote',
   },
   {
     id: 'mts',
@@ -66,52 +66,32 @@ export const openings = [
 export const bar = {
   title: 'What we look for.',
   titleMuted: 'Ownership, agency and skill.',
-  lead: 'An extremely small, talent-dense team. Everyone can AGI-max now, so the one chokepoint left is judgement. Either you are performing or you are not.',
+  lead: 'Each person owns a part of the product end to end.',
   items: [
     {
-      id: 'prolonged',
-      title: 'Prolonged ownership',
-      body: 'You owned something for a long stretch. Whether it worked out matters less than the stretch.',
+      id: 'ownership',
+      title: 'Ownership',
+      body: 'You take a problem from the first report to a fix in production, and you stay with it after the release.',
     },
     {
-      id: 'room',
-      title: 'The room test',
-      body: 'I hand you something at a high level, walk out, come back, and find it done well. Ideally better than I would have done it.',
+      id: 'agency',
+      title: 'Agency',
+      body: 'You find the next step without a ticket. You ask for help when you need it.',
     },
     {
-      id: 'end-to-end',
-      title: 'End to end',
-      body: 'From "we have a problem" to "nobody has to think about this again". If someone still has to track it, you did not own it.',
-    },
-    {
-      id: 'not-done',
-      title: 'It is not done if',
-      body: 'it is not implemented, the implementation is ugly, it is not documented, nobody can discover it, or you cannot market it.',
-    },
-    {
-      id: 'problem-first',
-      title: 'Problem first',
-      body: '"Move from X to Y" is a solution you pre-committed to. Slow, flaky, breaks for this one customer — those are problems.',
-    },
-    {
-      id: 'prove',
-      title: 'Prove it',
-      body: 'Not "the tests pass". Prove it, then confirm it is live in production, which is not the same as merged.',
-    },
-    {
-      id: 'no-net',
-      title: 'No PMs, no QA',
-      body: 'Ask for help, ask questions, redo things. Never quietly assume someone else will catch the part you skipped.',
+      id: 'skill',
+      title: 'Skill',
+      body: 'Your past work shows it: products, companies, open-source projects or tools you built for yourself.',
     },
   ],
 } as const;
 
 export const apply = {
-  title: 'Tell me what you have worked on.',
-  titleMuted: 'I read every application.',
-  body: 'One open question, no form to game. Products, campaigns, companies, things you built for yourself — whatever you want me to know. It comes straight to me. I am Marko.',
+  title: 'Tell us what you have built.',
+  titleMuted: 'We read every application.',
+  body: 'One open question and a link to your work. No cover letter.',
   cta: 'Apply',
-  directLead: 'Or write to me directly:',
+  directLead: 'Or write to Marko directly:',
   links: [
     { id: 'email', label: 'marko@kortix.com', href: 'mailto:marko@kortix.com', external: false },
     { id: 'x', label: '@markokraemer', href: 'https://x.com/markokraemer', external: true },
@@ -124,35 +104,34 @@ export const apply = {
   ],
 } as const;
 
-/** Copy for `ApplyModal`. Short, and one open question carries the weight. */
+/** Copy for `ApplyModal`. */
 export const applyForm = {
   title: 'Apply to Kortix',
-  description: 'Short. One open question does the work.',
+  description: 'One open question and a link to your work.',
   areaLabel: 'Which opening',
   areaPlaceholder: 'Pick the closest one',
   areaOptions: [
     'Founding GTM — Enterprise & Partners',
     'MTS — Member of Technical Staff',
     'FDE — Forward Deployed Engineer',
-    'Not sure — read it and tell me',
+    'Not sure yet',
   ],
   nameLabel: 'Name',
   namePlaceholder: 'Your name',
   emailLabel: 'Email',
   emailPlaceholder: 'you@wherever.com',
   ownedLabel: 'What have you worked on?',
-  ownedPlaceholder:
-    'Products, campaigns, companies, things you built for yourself. Whatever you want to tell me.',
+  ownedPlaceholder: 'Products, companies, projects. Whatever you want us to know.',
   linkLabel: 'Link to a CV, portfolio, GitHub or profile',
   /* No attachment: the lead pipeline takes JSON only. Ask for a link. */
   linkPlaceholder: 'https://',
   submit: 'Send application',
   submitting: 'Sending',
   doneTitle: 'Application received.',
-  doneBody: 'It lands in the inbox I read every day. If it is a fit, you hear from me directly.',
+  doneBody: 'We read every application. If it is a fit, we reply by email.',
   doneCta: 'Done',
   errors: {
-    email: 'Enter an email address I can reply to.',
+    email: 'Enter an email address we can reply to.',
     owned: 'Tell me what you have worked on.',
     area: 'Pick the closest opening.',
   },

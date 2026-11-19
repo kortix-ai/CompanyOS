@@ -27490,6 +27490,8 @@
     "saved": "空间已保存",
     "createFailed": "无法创建空间",
     "saveFailed": "无法保存空间",
+    "iconSaveFailed": "无法更改图标",
+    "createdSpace": "创建了此空间",
     "nameTaken": "此工作区中已有其他空间使用该名称。",
     "limit": "一个工作区最多有 50 个空间。",
     "delete": "删除空间",

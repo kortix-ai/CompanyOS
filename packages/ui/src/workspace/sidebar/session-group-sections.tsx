@@ -60,6 +60,7 @@ import {
 } from '../../primitives/modal';
 import { errorToast, successToast } from '../../primitives/toast';
 import { moveGroupBy, moveGroupTo } from './session-group-order';
+import { SpaceIcon } from '../session-spaces/space-icon';
 import {
   SESSION_MENU_TRIGGER_CLASS,
   SESSION_ROW_HEIGHT_CLASS,
@@ -543,7 +544,13 @@ function SessionGroupSection({
               aria-label={`${open ? tGroups('hideSessions') : tGroups('showSessions')}: ${group.name}`}
               className="text-muted-foreground hover:text-sidebar-foreground hit-area-1.5 flex size-4 shrink-0 items-center justify-center rounded-sm"
             >
-              <StackIcon aria-hidden className="size-4 group-hover/section-header:hidden group-focus-within/section-header:hidden" />
+              {/* An 18px tile in the 15px slot: -mx-0.5 lets it overhang both sides
+                  equally, so the name keeps the sessions' text edge. */}
+              <SpaceIcon
+                space={group}
+                size="sm"
+                className="-mx-0.5 size-5 shrink-0 rounded-[calc(var(--radius)-3px)] group-hover/section-header:hidden group-focus-within/section-header:hidden"
+              />
               <CaretRightSolidIcon
                 aria-hidden
                 className="duration-normal hidden size-4 transition-transform ease-out group-hover/section-header:block group-focus-within/section-header:block group-data-[state=open]/section:rotate-90"

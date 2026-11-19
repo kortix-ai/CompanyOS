@@ -45,6 +45,7 @@ import {
   setSessionGroup,
   setSessionGroupSharing,
   sessionGroupActivity,
+  normalizeSessionGroupIcon,
   setSessionGroupTabs,
   type SessionGroupRow,
 } from '../lib/session-groups';
@@ -59,12 +60,17 @@ const sessionParams = projectParams.extend({ sessionId: z.string().min(1).max(12
 
 const GROUP_NOT_FOUND = { error: 'No such session group in this workspace.', code: 'group_not_found' } as const;
 const NAME_TAKEN = { error: 'Another group in this workspace already has that name.', code: 'group_name_taken' } as const;
+const INVALID_ICON = {
+  error: 'The icon must be one emoji, or a glyph from the icon picker in a preset colour or #rrggbb.',
+  code: 'invalid_icon',
+} as const;
 
 function serializeGroup(row: SessionGroupRow, memberIds: readonly string[], viewer: GroupViewer): SessionGroup {
   return {
     group_id: row.groupId,
     name: row.name,
     description: row.description,
+    icon: normalizeSessionGroupIcon(row.icon),
     visibility: row.visibility === 'project' ? 'project' : 'private',
     member_ids: [...memberIds],
     tabs: serializeTabs(row.tabs),
@@ -183,11 +189,15 @@ export function registerSessionGroupsRoutes(): void {
     async (c) => {
       const loaded = await loadGroupsProject(c, 'session');
       if (loaded instanceof Response) return loaded;
+      const body = c.req.valid('json');
+      const icon = body.icon === undefined ? undefined : normalizeSessionGroupIcon(body.icon);
+      if (icon === null) return c.json(INVALID_ICON, 400);
       const result = await createSessionGroup({
         accountId: loaded.row.accountId,
         projectId: loaded.row.projectId,
-        name: c.req.valid('json').name,
-        description: c.req.valid('json').description ?? null,
+        name: body.name,
+        description: body.description ?? null,
+        icon,
         createdBy: loaded.userId,
       });
       if (!result.ok) {
@@ -236,7 +246,7 @@ export function registerSessionGroupsRoutes(): void {
       method: 'patch',
       path: '/{workspaceId}/session-groups/{groupId}',
       tags: ['sessions'],
-      summary: 'Rename a session group or change its description',
+      summary: 'Rename a session group, or change its description or icon',
       ...auth,
       request: {
         params: groupParams,
@@ -249,7 +259,10 @@ export function registerSessionGroupsRoutes(): void {
       if (loaded instanceof Response) return loaded;
       const found = await loadGroup(c, loaded, 'see');
       if (found instanceof Response) return found;
-      const result = await updateSessionGroup(loaded.row.projectId, found.group.groupId, c.req.valid('json'));
+      const body = c.req.valid('json');
+      const icon = body.icon == null ? body.icon : normalizeSessionGroupIcon(body.icon);
+      if (body.icon != null && icon === null) return c.json(INVALID_ICON, 400);
+      const result = await updateSessionGroup(loaded.row.projectId, found.group.groupId, { ...body, icon });
       if (!result.ok) return result.code === 'group_not_found' ? c.json(GROUP_NOT_FOUND, 404) : c.json(NAME_TAKEN, 409);
       return c.json(serializeGroup(result.group, found.memberIds, found.viewer), 200);
     },

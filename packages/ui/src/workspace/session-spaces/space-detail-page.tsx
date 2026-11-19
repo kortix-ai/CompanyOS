@@ -42,15 +42,11 @@ import { EmptyArt } from '../../primitives/empty-art';
 import { EmptyState } from '../../primitives/empty-state';
 import { ErrorState } from '../../primitives/error-state';
 import Hint from '../../primitives/hint';
-import {
-  InputGroupSearch,
-  InputGroupSearchClear,
-  InputGroupSearchIcon,
-  InputGroupSearchInput,
-} from '../../primitives/input-group';
 import { Skeleton } from '../../primitives/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../primitives/tabs';
 import { errorToast, successToast } from '../../primitives/toast';
+import { ExpandableSearch } from '../../primitives/expandable-search';
+import { ProfileHoverCard, profileLabel } from '../../primitives/profile-hover-card';
 import { UserAvatar } from '../../primitives/user-avatar';
 import { UiLink as Link, useUiRouter, useUiSearchParams, useUiShallowNavigate, useUiPathname } from '../../providers/ui-provider';
 import { useDriveFolder, useProjectDrive } from '../../files/drives/use-drives';
@@ -63,6 +59,7 @@ import type { DraftScope } from '../../session/composer/draft/composer-draft';
 import type { AttachedFile } from '../../session/composer/session-chat-input';
 import { useProjectHomeSend } from '../layout/use-project-home-send';
 import { AddTabMenu, StoredTabBody, StoredTabTrigger, type SpaceTabsState } from '../spaces/space-tabs';
+import { SpaceIconButton } from './space-icon';
 import { SpaceFormModal } from './space-form-modal';
 import { SpaceAudienceMark, spaceAudience, useSpaceAudienceLabel, useWorkspacePeople } from './space-people';
 import { SpaceShareModal } from './space-share-modal';
@@ -178,32 +175,13 @@ function SpaceView({ projectId, space, renderFolder, renderFile }: { projectId: 
   return (
     <div className="bg-background flex min-h-0 flex-1 flex-col">
       <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
-        <header className="border-border shrink-0 border-b">
-          <div className="flex h-14 items-center gap-2 px-3">
+        {/* One row: the tabs, and Share on their line. The space's icon and name head the Home tab, over the composer. */}
+        <header className="border-border flex h-12 shrink-0 items-stretch gap-2 border-b px-3">
+          <div className="flex shrink-0 items-center">
             <SidebarToggle />
-            <span className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-md">
-              <StackIcon className="size-4" />
-            </span>
-            <SpaceTitleMenu projectId={projectId} space={space} onEdit={() => setEditing(true)} />
-            {space.description ? (
-              <>
-                <span aria-hidden className="bg-border hidden h-4 w-px shrink-0 md:block" />
-                <Hint label={space.description}>
-                  <button
-                    type="button"
-                    onClick={() => setEditing(true)}
-                    className="text-muted-foreground hover:text-foreground duration-fast hidden min-w-0 truncate px-1 text-left text-sm transition-colors md:block"
-                  >
-                    {space.description}
-                  </button>
-                </Hint>
-              </>
-            ) : null}
-            <div className="ml-auto flex shrink-0 items-center">
-              <AudienceShare projectId={projectId} space={space} onShare={canManage ? () => setSharing(true) : undefined} />
-            </div>
           </div>
-          <TabsList type="underline" size="sm" className="w-full justify-start gap-4 overflow-x-auto px-4">
+          {/* Full height, so the active tab's underline lands on the header's bottom border. */}
+          <TabsList type="underline" size="sm" className="h-full min-w-0 flex-1 justify-start gap-4 overflow-x-auto border-b-0 px-1">
             <TabsTrigger value={HOME_TAB} className="w-fit flex-none">
               {t('tabHome')}
             </TabsTrigger>
@@ -215,6 +193,9 @@ function SpaceView({ projectId, space, renderFolder, renderFile }: { projectId: 
             ))}
             <AddTabMenu projectId={projectId} ownFolder={ownFolder} ownFolderTab={false} state={state} onAdded={setTab} />
           </TabsList>
+          <div className="flex shrink-0 items-center">
+            <AudienceShare projectId={projectId} space={space} onShare={canManage ? () => setSharing(true) : undefined} />
+          </div>
         </header>
         <TabsContent value={HOME_TAB} className="min-h-0 flex-1 overflow-y-auto">
           <SpaceHome
@@ -362,9 +343,27 @@ function SpaceHome({
   onOpenFiles: () => void;
 }) {
   return (
-    <div className="mx-auto grid w-full max-w-5xl gap-10 px-4 pt-8 pb-20 md:px-8 lg:grid-cols-[minmax(0,1fr)_16rem]">
+    <div className="mx-auto grid w-full max-w-5xl gap-10 px-4 pt-12 pb-20 md:px-8 md:pt-16 lg:grid-cols-[minmax(0,1fr)_16rem]">
       <div className="min-w-0 space-y-8">
-        <SpaceComposer projectId={projectId} space={space} />
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <SpaceIconButton projectId={projectId} space={space} />
+              <SpaceTitleMenu projectId={projectId} space={space} onEdit={onEdit} />
+            </div>
+            {space.description ? (
+              // The About rail shows it on wide screens; this line is for every width.
+              <button
+                type="button"
+                onClick={onEdit}
+                className="text-muted-foreground hover:text-foreground duration-fast line-clamp-2 block text-left text-sm text-pretty transition-colors lg:hidden"
+              >
+                {space.description}
+              </button>
+            ) : null}
+          </div>
+          <SpaceComposer projectId={projectId} space={space} />
+        </div>
         <SpaceHistory projectId={projectId} space={space} />
       </div>
       <SpaceAbout projectId={projectId} space={space} onEdit={onEdit} onShare={onShare} onOpenFiles={onOpenFiles} />
@@ -401,9 +400,7 @@ function SpaceAbout({
       <AboutBlock title={t('people')} action={onShare ? <AboutAction onClick={onShare}>{t('share')}</AboutAction> : null}>
         <SpacePeopleList projectId={projectId} space={space} />
       </AboutBlock>
-      <AboutBlock title={t('tabFiles')} action={<AboutAction onClick={onOpenFiles}>{t('openFiles')}</AboutAction>}>
-        <SpaceRecentFiles projectId={projectId} space={space} onOpenFiles={onOpenFiles} />
-      </AboutBlock>
+      <SpaceRecentFiles projectId={projectId} space={space} onOpenFiles={onOpenFiles} />
     </aside>
   );
 }
@@ -453,50 +450,60 @@ function SpacePeopleList({ projectId, space }: { projectId: string; space: Proje
     );
   }
   return (
-    <ul className="space-y-2">
-      {known.slice(0, PEOPLE_MAX).map((id) => (
-        <li key={id} className="flex min-w-0 items-center gap-2">
-          <UserAvatar email={people.get(id)!.email} name={people.get(id)!.email} colorKey={id} size="xs" />
-          <span className="text-foreground min-w-0 truncate text-sm">{people.get(id)!.email}</span>
-        </li>
-      ))}
+    <ul className="space-y-0.5">
+      {known.slice(0, PEOPLE_MAX).map((id) => {
+        const person = people.get(id)!;
+        const profile = { userId: id, name: person.name, email: person.email, avatarUrl: person.avatarUrl };
+        return (
+          <li key={id}>
+            <ProfileHoverCard person={profile} detail={id === space.created_by ? t('createdSpace') : undefined}>
+              {/* Focusable, so the keyboard opens the card too. */}
+              <div
+                tabIndex={0}
+                className="hover:bg-hover focus-visible:ring-ring duration-fast -mx-1.5 flex min-w-0 cursor-default items-center gap-2 rounded-md px-1.5 py-1 transition-colors outline-none focus-visible:ring-2"
+              >
+                <UserAvatar email={person.email} name={person.name ?? person.email} avatarUrl={person.avatarUrl} colorKey={id} size="xs" />
+                <span className="text-foreground min-w-0 truncate text-sm">{profileLabel(profile)}</span>
+              </div>
+            </ProfileHoverCard>
+          </li>
+        );
+      })}
       {ids.length > PEOPLE_MAX ? <li className="text-muted-foreground text-xs tabular-nums">{t('morePeople', { count: ids.length - PEOPLE_MAX })}</li> : null}
     </ul>
   );
 }
 
-/** The newest files in the space's folder; each opens the Files tab. */
+/**
+ * The Files block: the newest files in the space's folder, each opening the
+ * Files tab. No block at all while it loads or when the folder has no files:
+ * the Files tab is one click away, and an empty block is noise.
+ */
 function SpaceRecentFiles({ projectId, space, onOpenFiles }: { projectId: string; space: ProjectSessionGroup; onOpenFiles: () => void }) {
   const t = useTranslations('sessionSpaces');
   const drive = useProjectDrive(projectId);
   const path = sessionGroupDriveFolder(space.group_id);
   const folder = useDriveFolder(path ? (drive.data?.driveId ?? null) : null, path ?? '/');
-  if (drive.isLoading || folder.isLoading) {
-    return (
-      <div className="space-y-2" aria-hidden>
-        <Skeleton className="h-3.5 w-40 py-0" />
-        <Skeleton className="h-3.5 w-32 py-0" />
-      </div>
-    );
-  }
   const files = (folder.data?.entries ?? []).filter((entry) => entry.type === 'file').sort((a, b) => b.mtime - a.mtime);
-  if (files.length === 0) return <p className="text-muted-foreground text-sm">{t('filesEmpty')}</p>;
+  if (files.length === 0) return null;
   return (
-    <ul className="space-y-0.5">
-      {files.slice(0, FILES_MAX).map((file) => (
-        <li key={file.path}>
-          <button
-            type="button"
-            onClick={onOpenFiles}
-            className="hover:bg-hover duration-fast -mx-1.5 flex w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors"
-          >
-            <FileTextIcon className="text-muted-foreground size-4 shrink-0" />
-            <span className="text-foreground min-w-0 flex-1 truncate text-sm">{file.name}</span>
-          </button>
-        </li>
-      ))}
-      {files.length > FILES_MAX ? <li className="text-muted-foreground px-0 pt-1 text-xs tabular-nums">{t('moreFiles', { count: files.length - FILES_MAX })}</li> : null}
-    </ul>
+    <AboutBlock title={t('tabFiles')} action={<AboutAction onClick={onOpenFiles}>{t('openFiles')}</AboutAction>}>
+      <ul className="space-y-0.5">
+        {files.slice(0, FILES_MAX).map((file) => (
+          <li key={file.path}>
+            <button
+              type="button"
+              onClick={onOpenFiles}
+              className="hover:bg-hover duration-fast -mx-1.5 flex w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors"
+            >
+              <FileTextIcon className="text-muted-foreground size-4 shrink-0" />
+              <span className="text-foreground min-w-0 flex-1 truncate text-sm">{file.name}</span>
+            </button>
+          </li>
+        ))}
+        {files.length > FILES_MAX ? <li className="text-muted-foreground px-0 pt-1 text-xs tabular-nums">{t('moreFiles', { count: files.length - FILES_MAX })}</li> : null}
+      </ul>
+    </AboutBlock>
   );
 }
 
@@ -551,27 +558,15 @@ function SpaceHistory({ projectId, space }: { projectId: string; space: ProjectS
   const rows = query.sessions.filter((session) => session.group_id === space.group_id);
   return (
     <section className="space-y-3" aria-label={t('sessionsHeading')}>
-      <div className="flex items-center gap-3">
+      {/* Every text edge in this section lines up with the heading; rows bleed their hover fill 2 units out (-mx-2 px-2). */}
+      <div className="flex h-8 items-center gap-3">
         <h2 className="text-foreground text-sm font-medium">{t('sessionsHeading')}</h2>
-        <div className="ml-auto w-full max-w-56">
-          <InputGroupSearch>
-            <InputGroupSearchIcon>
-              <MagnifyingGlassIcon />
-            </InputGroupSearchIcon>
-            <InputGroupSearchInput
-              type="text"
-              autoComplete="off"
-              placeholder={t('searchSessions')}
-              aria-label={t('searchSessions')}
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-            <InputGroupSearchClear onClick={() => setSearch('')} />
-          </InputGroupSearch>
+        <div className="ml-auto flex justify-end">
+          <ExpandableSearch value={search} onValueChange={setSearch} label={t('searchSessions')} size="sm" />
         </div>
       </div>
       {query.isLoading || query.isScanning ? (
-        <ul className="space-y-1" aria-hidden>
+        <ul className="-mx-2 space-y-1" aria-hidden>
           {SKELETON_WIDTHS.map((width) => (
             <li key={width} className="flex items-center gap-3 px-2 py-2.5">
               <Skeleton className="size-4 shrink-0 rounded-full py-0" />
@@ -602,8 +597,8 @@ function SpaceHistory({ projectId, space }: { projectId: string; space: ProjectS
           <div className="space-y-5">
             {byDay(rows).map((day) => (
               <section key={day.key} className="space-y-1">
-                <h3 className="text-muted-foreground px-2 text-xs font-medium">{t(day.key)}</h3>
-                <ul>
+                <h3 className="text-muted-foreground text-xs font-medium">{t(day.key)}</h3>
+                <ul className="-mx-2">
                   {day.sessions.map((session) => (
                     <li key={session.session_id}>
                       <SessionHistoryRow projectId={projectId} session={session} />
@@ -655,7 +650,7 @@ function SessionHistoryRow({ projectId, session }: { projectId: string; session:
       return '';
     }
   }, [session]);
-  const starter = session.initiator?.label ?? null;
+  const starter = session.owner_name?.trim() || session.initiator?.label || session.owner_email || null;
   return (
     <Link
       href={uiRoutes().session(projectId, session.session_id)}
@@ -667,11 +662,26 @@ function SessionHistoryRow({ projectId, session }: { projectId: string; session:
       </span>
       <span className="text-foreground min-w-0 flex-1 truncate text-sm">{getSessionDisplayTitle(session)}</span>
       {starter ? (
-        <Hint label={starter}>
+        <ProfileHoverCard
+          side="top"
+          align="end"
+          person={{
+            userId: session.created_by ?? session.session_id,
+            name: session.owner_name ?? session.initiator?.label ?? null,
+            email: session.owner_email ?? null,
+            avatarUrl: session.owner_avatar_url ?? null,
+          }}
+        >
           <span className="shrink-0">
-            <UserAvatar email={starter} name={starter} colorKey={session.created_by ?? session.session_id} size="xs" />
+            <UserAvatar
+              email={session.owner_email ?? starter}
+              name={starter}
+              avatarUrl={session.owner_avatar_url}
+              colorKey={session.created_by ?? session.session_id}
+              size="xs"
+            />
           </span>
-        </Hint>
+        </ProfileHoverCard>
       ) : null}
       <span className="text-muted-foreground w-24 shrink-0 text-right text-xs tabular-nums">{when}</span>
     </Link>

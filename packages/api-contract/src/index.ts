@@ -1683,12 +1683,25 @@ export const SESSION_GROUP_MEMBERS_MAX = 200;
 /** The most groups one project may have. */
 export const SESSION_GROUPS_MAX = 50;
 
+/**
+ * A space's icon: an emoji XOR a glyph from the project glyph catalogue
+ * (`@kortix/shared` `PROJECT_GLYPH_GROUPS`, a preset colour or `#rrggbb`).
+ * The API refuses anything else with 400 `invalid_icon`.
+ */
+export const SessionGroupIconSchema = z.union([
+  z.object({ emoji: z.string().min(1).max(64) }).strict(),
+  z.object({ glyph: z.object({ name: z.string().min(1).max(64), color: z.string().min(1).max(16) }).strict() }).strict(),
+]);
+export type SessionGroupIcon = z.infer<typeof SessionGroupIconSchema>;
+
 export const SessionGroupSchema = z
   .object({
     group_id: z.string(),
     name: z.string(),
     /** What the group is for; null when none was given. */
     description: z.string().nullable(),
+    /** The group's icon. Null on a group created before icons: clients draw `suggestSpaceIcon(name)`. */
+    icon: SessionGroupIconSchema.nullable(),
     /**
      * `private`: its creator and `member_ids` see it and every session in it.
      * `project`: everyone in the project does. New groups are `private`.
@@ -1720,17 +1733,31 @@ const SessionGroupNameSchema = z.string().trim().min(1).max(SESSION_GROUP_NAME_M
 /** Trimmed; empty or null clears it. */
 const SessionGroupDescriptionSchema = z.string().trim().max(SESSION_GROUP_DESCRIPTION_MAX).nullable();
 
-/** A new group goes last in the order. A name another group of the project has (any case) is refused. */
+/**
+ * A new group goes last in the order. A name another group of the project has (any case) is refused.
+ * Without `icon`, the group gets the icon `suggestSpaceIcon(name)` gives.
+ */
 export const SessionGroupCreateInputSchema = z
-  .object({ name: SessionGroupNameSchema, description: SessionGroupDescriptionSchema.optional() })
+  .object({
+    name: SessionGroupNameSchema,
+    description: SessionGroupDescriptionSchema.optional(),
+    icon: SessionGroupIconSchema.optional(),
+  })
   .strict();
 export type SessionGroupCreateInput = z.infer<typeof SessionGroupCreateInputSchema>;
 
-/** Rename a group, change its description, or both. */
+/** Rename a group, change its description, change its icon, or any of them. `icon: null` takes the icon off. */
 export const SessionGroupUpdateInputSchema = z
-  .object({ name: SessionGroupNameSchema.optional(), description: SessionGroupDescriptionSchema.optional() })
+  .object({
+    name: SessionGroupNameSchema.optional(),
+    description: SessionGroupDescriptionSchema.optional(),
+    icon: SessionGroupIconSchema.nullable().optional(),
+  })
   .strict()
-  .refine((input) => input.name !== undefined || input.description !== undefined, 'Give name, description, or both');
+  .refine(
+    (input) => input.name !== undefined || input.description !== undefined || input.icon !== undefined,
+    'Give name, description, icon, or any of them',
+  );
 export type SessionGroupUpdateInput = z.infer<typeof SessionGroupUpdateInputSchema>;
 
 /** The project's groups in their new order: every group id, each once. */

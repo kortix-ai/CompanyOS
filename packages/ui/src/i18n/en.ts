@@ -10659,6 +10659,8 @@ const catalog = {
     "saved": "Space saved",
     "createFailed": "Could not create the space",
     "saveFailed": "Could not save the space",
+    "iconSaveFailed": "Could not change the icon",
+    "createdSpace": "Created this space",
     "nameTaken": "Another space in this workspace has that name.",
     "limit": "A workspace has at most 50 spaces.",
     "delete": "Delete space",

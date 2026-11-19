@@ -1513,6 +1513,9 @@ export const projectSpaceVisibilityEnum = kortixSchema.enum('project_space_visib
  * before 2026-11-04 may hold `threads` or `memory`: the API drops those on
  * read.
  */
+/** A space's icon (`project_session_groups.icon`): an emoji XOR a catalogue glyph. */
+export type SessionGroupIconRecord = { emoji: string } | { glyph: { name: string; color: string } };
+
 export interface ProjectSpaceTabRecord {
   id: string;
   title: string;
@@ -1979,6 +1982,8 @@ export const projectSessionGroups = kortixSchema.table(
     visibility: text('visibility').default('private').notNull(),
     /** The tabs after Sessions, in order (at most 20): a channel's tab shape (`ProjectSpaceTabRecord`, kinds file|folder|artifact|app|link). */
     tabs: jsonb('tabs').$type<ProjectSpaceTabRecord[]>().default(sql`'[]'::jsonb`).notNull(),
+    /** `{ emoji }` or `{ glyph: { name, color } }` (the API checks it); null: clients draw the icon `suggestSpaceIcon` gives the name. */
+    icon: jsonb('icon').$type<SessionGroupIconRecord>(),
     position: integer('position').notNull(),
     createdBy: uuid('created_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

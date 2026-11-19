@@ -27490,6 +27490,8 @@
     "saved": "Espace enregistré",
     "createFailed": "Impossible de créer l'espace",
     "saveFailed": "Impossible d'enregistrer l'espace",
+    "iconSaveFailed": "Impossible de modifier l'icône",
+    "createdSpace": "A créé cet espace",
     "nameTaken": "Un autre espace de ce workspace porte déjà ce nom.",
     "limit": "Un workspace compte au plus 50 espaces.",
     "delete": "Supprimer l'espace",

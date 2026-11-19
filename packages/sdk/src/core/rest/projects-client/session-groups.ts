@@ -22,6 +22,11 @@ export interface ProjectSessionGroup {
   /** What the group is for, at most 2000 characters; null when none was given. Absent on older APIs. */
   description?: string | null;
   /**
+   * An emoji XOR a glyph from the project icon catalogue. Null (or absent, on
+   * older APIs): draw `suggestSpaceIcon(name)` from `@kortix/shared`.
+   */
+  icon?: { emoji: string } | { glyph: { name: string; color: string } } | null;
+  /**
    * `private` (the default): its creator and `member_ids` see it and every
    * session in it. `project`: everyone in the project does. Absent on older APIs.
    */
@@ -62,6 +67,8 @@ export interface CreateProjectSessionGroupInput {
   name: string;
   /** What the group is for, at most 2000 characters after trimming. */
   description?: string | null;
+  /** Absent: the API gives the icon the name suggests. A bad value rejects with 400 `invalid_icon`. */
+  icon?: { emoji: string } | { glyph: { name: string; color: string } };
 }
 
 /** The workspace name of {@link CreateProjectSessionGroupInput}: the same type. */
@@ -127,10 +134,12 @@ export interface UpdateWorkspaceSessionGroupInput {
   name?: string;
   /** At most 2000 characters after trimming; `null` or empty clears it. */
   description?: string | null;
+  /** The new icon; `null` takes it off. A bad value rejects with 400 `invalid_icon`. */
+  icon?: { emoji: string } | { glyph: { name: string; color: string } } | null;
 }
 
 /**
- * Rename a group, change its description, or both; only the fields given are
+ * Rename a group, change its description or its icon; only the fields given are
  * sent. A taken name rejects with 409 `group_name_taken`; an unknown group
  * with 404 `group_not_found`.
  */

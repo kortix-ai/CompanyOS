@@ -27490,6 +27490,8 @@
     "saved": "Espacio guardado",
     "createFailed": "No se pudo crear el espacio",
     "saveFailed": "No se pudo guardar el espacio",
+    "iconSaveFailed": "No se pudo cambiar el icono",
+    "createdSpace": "Creó este espacio",
     "nameTaken": "Otro espacio de este workspace ya tiene ese nombre.",
     "limit": "Un workspace tiene como máximo 50 espacios.",
     "delete": "Eliminar espacio",

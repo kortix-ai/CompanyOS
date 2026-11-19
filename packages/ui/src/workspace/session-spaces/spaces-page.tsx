@@ -23,6 +23,7 @@ import {
 import { Skeleton } from '../../primitives/skeleton';
 import { UiLink as Link, useUiRouter } from '../../providers/ui-provider';
 import { SpaceFormModal } from './space-form-modal';
+import { SpaceIcon } from './space-icon';
 import { SpaceAudienceMark, useSpaceAudienceLabel } from './space-people';
 
 const SKELETON_KEYS = ['a', 'b', 'c', 'd'];
@@ -149,9 +150,7 @@ function SpaceTile({ projectId, space }: { projectId: string; space: ProjectSess
       className="bg-popover hover:bg-hover duration-fast flex h-full min-h-36 flex-col gap-3 rounded-md border p-4 transition-colors"
     >
       <span className="flex items-center gap-3">
-        <span className="bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-md">
-          <StackIcon className="size-4" />
-        </span>
+        <SpaceIcon space={space} size="md" className="size-9" />
         <span className="min-w-0 flex-1">
           <span className="text-foreground block truncate text-sm font-medium">{space.name}</span>
           <span className="text-muted-foreground block truncate text-xs">{audience}</span>

@@ -19,6 +19,7 @@ import {
   CommandSeparator,
 } from '../../primitives/command';
 import { SpaceFormModal } from './space-form-modal';
+import { SpaceIcon } from './space-icon';
 
 /** Spaces on screen before the popover shows its search field (it stays mounted for the arrow keys). */
 const SEARCH_THRESHOLD = 8;
@@ -59,7 +60,7 @@ export function SpacePicker({
 
   const row = (space: ProjectSessionGroup) => (
     <CommandItem key={space.group_id} value={`space-${space.group_id}`} className="gap-2" onSelect={() => pick(space.group_id)}>
-      <StackIcon className="text-muted-foreground size-4 shrink-0" />
+      <SpaceIcon space={space} size="sm" className="size-5 rounded-[calc(var(--radius)-3px)]" />
       <span className="min-w-0 flex-1 truncate">{space.name}</span>
       {space.group_id === value ? <CheckIcon className="text-foreground size-4 shrink-0" /> : null}
     </CommandItem>
@@ -76,7 +77,7 @@ export function SpacePicker({
             aria-label={picked ? `${t('picker')}: ${picked.name}` : t('picker')}
             className={cn('rounded-lg hit-area-y-3', picked ? 'text-foreground' : 'text-muted-foreground')}
           >
-            <StackIcon className="size-4 shrink-0" />
+            {picked ? <SpaceIcon space={picked} size="sm" className="size-5 rounded-[calc(var(--radius)-3px)]" /> : <StackIcon className="size-4 shrink-0" />}
             <span className="max-w-[140px] truncate">{picked ? picked.name : t('picker')}</span>
             <CaretDownIcon className={cn('size-3 transition-transform duration-moderate ease-out', open && 'rotate-180')} />
           </Button>

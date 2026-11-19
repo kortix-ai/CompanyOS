@@ -1807,6 +1807,13 @@
       "when": 1795002117581,
       "tag": "20261118114157_session_groups_sharing_and_tabs",
       "breakpoints": true
+    },
+    {
+      "idx": 258,
+      "version": "7",
+      "when": 1795093875738,
+      "tag": "20261119131115_session_groups_icon",
+      "breakpoints": true
     }
   ]
 }

@@ -29,8 +29,16 @@ export function useSpaceAudienceLabel(space: ProjectSessionGroup): string {
   return t('sharedWith', { count: audience.ids.length - 1 });
 }
 
-/** The workspace's people by id, for avatars: their emails. A viewer who may not read the list gets an empty map. */
-export function useWorkspacePeople(projectId: string, enabled: boolean): Map<string, { email: string }> {
+/** One person of the workspace as the avatars draw them. */
+export interface WorkspacePerson {
+  email: string;
+  /** Their profile's display name; null when they set none. */
+  name: string | null;
+  avatarUrl: string | null;
+}
+
+/** The workspace's people by id, for avatars: email, name and picture. A viewer who may not read the list gets an empty map. */
+export function useWorkspacePeople(projectId: string, enabled: boolean): Map<string, WorkspacePerson> {
   const access = useQuery({
     queryKey: qk.project.access(projectId),
     queryFn: () => listProjectAccess(projectId),
@@ -38,8 +46,11 @@ export function useWorkspacePeople(projectId: string, enabled: boolean): Map<str
     retry: false,
     ...contract('inventory'),
   });
-  const people = new Map<string, { email: string }>();
-  for (const member of access.data?.members ?? []) if (member.email) people.set(member.user_id, { email: member.email });
+  const people = new Map<string, WorkspacePerson>();
+  for (const member of access.data?.members ?? []) {
+    if (!member.email) continue;
+    people.set(member.user_id, { email: member.email, name: member.name?.trim() || null, avatarUrl: member.avatar_url ?? null });
+  }
   return people;
 }
 
@@ -69,7 +80,7 @@ export function SpaceAudienceMark({ projectId, space, max = 4, className }: { pr
         const person = people.get(id)!;
         return (
           <span key={id} className={cn('ring-background rounded-sm ring-2', index > 0 && '-ml-1.5')}>
-            <UserAvatar email={person.email} name={person.email} colorKey={id} size="xs" />
+            <UserAvatar email={person.email} name={person.name ?? person.email} avatarUrl={person.avatarUrl} colorKey={id} size="xs" />
           </span>
         );
       })}

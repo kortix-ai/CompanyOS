@@ -467,6 +467,7 @@ describe('session group contracts', () => {
     group_id: '22222222-3333-4444-8555-666666666666',
     name: 'Store A',
     description: null,
+    icon: { glyph: { name: 'Storefront', color: 'blue' } },
     visibility: 'private' as const,
     member_ids: [],
     tabs: [],
@@ -503,6 +504,17 @@ describe('session group contracts', () => {
     expect(SessionGroupCreateInputSchema.safeParse({ name: 'A', description: 'x'.repeat(SESSION_GROUP_DESCRIPTION_MAX + 1) }).success).toBe(false);
     expect(SessionGroupUpdateInputSchema.parse({ description: null })).toEqual({ description: null });
     expect(SessionGroupUpdateInputSchema.safeParse({}).success).toBe(false);
+  });
+
+  test('an icon is an emoji or a glyph, never both; null clears it on update', () => {
+    expect(SessionGroupCreateInputSchema.parse({ name: 'A', icon: { emoji: '🚀' } }).icon).toEqual({ emoji: '🚀' });
+    expect(SessionGroupCreateInputSchema.parse({ name: 'A', icon: { glyph: { name: 'Rocket', color: 'red' } } }).icon).toEqual({
+      glyph: { name: 'Rocket', color: 'red' },
+    });
+    expect(SessionGroupCreateInputSchema.safeParse({ name: 'A', icon: { emoji: '🚀', glyph: { name: 'Rocket', color: 'red' } } }).success).toBe(false);
+    expect(SessionGroupCreateInputSchema.safeParse({ name: 'A', icon: null }).success).toBe(false);
+    expect(SessionGroupUpdateInputSchema.parse({ icon: null })).toEqual({ icon: null });
+    expect(SessionGroupSchema.parse({ ...GROUP, icon: null }).icon).toBeNull();
   });
 
   test('sharing: private (with or without people) or project; ids are uuids, each once; nothing else', () => {

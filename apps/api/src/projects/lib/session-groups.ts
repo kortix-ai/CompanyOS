@@ -19,13 +19,15 @@
  * (`parent_session_id`, or the older `metadata.spawned_by_session`) stays
  * with its parent.
  */
-import { SESSION_GROUPS_MAX, type SpaceTab } from '@kortix/api-contract';
+import { SESSION_GROUPS_MAX, type SessionGroupIcon, type SpaceTab } from '@kortix/api-contract';
 import { accountMembers, projectSessionGroupMembers, projectSessionGroups, projectSessions } from '@kortix/db';
+import { isProjectGlyphName, normalizeProjectGlyphColor, suggestSpaceIcon } from '@kortix/shared';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../../shared/db';
 import { errorSqlstate } from '../../shared/error-cause';
 import { uniqueViolationConstraint } from '../../shared/postgres-errors';
 import { forgetSessionListPollEtags } from './session-list-poll-memo';
+import { normalizeProjectIcon } from './project-icon';
 import { storedSpaceTabs } from './project-spaces';
 
 export type SessionGroupRow = typeof projectSessionGroups.$inferSelect;
@@ -46,6 +48,28 @@ function groupsOf(executor: Tx | typeof db, projectId: string) {
     .orderBy(asc(projectSessionGroups.position), asc(projectSessionGroups.createdAt), asc(projectSessionGroups.groupId));
 }
 
+/**
+ * A group icon the API may store and every client can draw: one emoji
+ * grapheme (`normalizeProjectIcon`, the project icon's rule), or a catalogue
+ * glyph in a preset colour or `#rrggbb`. Null for anything else, including a
+ * stored value a later catalogue no longer has.
+ */
+export function normalizeSessionGroupIcon(input: unknown): SessionGroupIcon | null {
+  if (!input || typeof input !== 'object') return null;
+  if ('emoji' in input) {
+    const emoji = normalizeProjectIcon((input as { emoji: unknown }).emoji);
+    return emoji ? { emoji } : null;
+  }
+  if ('glyph' in input) {
+    const glyph = (input as { glyph: unknown }).glyph;
+    if (!glyph || typeof glyph !== 'object') return null;
+    const { name, color } = glyph as { name?: unknown; color?: unknown };
+    const normalizedColor = normalizeProjectGlyphColor(color);
+    return isProjectGlyphName(name) && normalizedColor ? { glyph: { name, color: normalizedColor } } : null;
+  }
+  return null;
+}
+
 /** The project's groups, in order. */
 export function listSessionGroups(projectId: string): Promise<SessionGroupRow[]> {
   return groupsOf(db, projectId);
@@ -57,6 +81,8 @@ export async function createSessionGroup(input: {
   projectId: string;
   name: string;
   description?: string | null;
+  /** Already checked (`normalizeSessionGroupIcon`). Absent: the icon the name suggests. */
+  icon?: SessionGroupIcon;
   createdBy: string | null;
 }): Promise<{ ok: true; group: SessionGroupRow } | { ok: false; code: 'group_name_taken' | 'group_limit' }> {
   try {
@@ -71,6 +97,7 @@ export async function createSessionGroup(input: {
           projectId: input.projectId,
           name: input.name,
           description: input.description || null,
+          icon: input.icon ?? suggestSpaceIcon(input.name),
           position: existing.length,
           createdBy: input.createdBy,
         })
@@ -83,11 +110,16 @@ export async function createSessionGroup(input: {
   }
 }
 
-/** Rename a group of the project, change its description, or both. Its own name in another case is free. An empty description clears it. */
+/**
+ * Rename a group of the project, change its description or its icon. Its own
+ * name in another case is free. An empty description clears it; `icon: null`
+ * takes the icon off (clients then draw the suggested one). The icon is
+ * already checked (`normalizeSessionGroupIcon`).
+ */
 export async function updateSessionGroup(
   projectId: string,
   groupId: string,
-  input: { name?: string; description?: string | null },
+  input: { name?: string; description?: string | null; icon?: SessionGroupIcon | null },
 ): Promise<{ ok: true; group: SessionGroupRow } | { ok: false; code: 'group_name_taken' | 'group_not_found' }> {
   try {
     const [group] = await db
@@ -95,6 +127,7 @@ export async function updateSessionGroup(
       .set({
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.description !== undefined ? { description: input.description || null } : {}),
+        ...(input.icon !== undefined ? { icon: input.icon } : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(projectSessionGroups.projectId, projectId), eq(projectSessionGroups.groupId, groupId)))

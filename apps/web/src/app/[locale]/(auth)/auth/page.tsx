@@ -710,12 +710,14 @@ function AuthCardForm({
       if (!flaggedAt || Date.now() - flaggedAt > ENTRY_SUBMIT_TTL_MS || !stash) {
         window.sessionStorage.removeItem(ENTRY_SUBMIT_FLAG_KEY);
         window.sessionStorage.removeItem(ENTRY_EMAIL_STASH_KEY);
-        // Typing without a submit: put back what hydration wiped so the
-        // visitor's next Enter or click submits the address they typed. The
-        // DOM write lands before React's re-render from setEmail, so a
-        // submit in the same task cannot read the wiped field.
-        if (stash && step === 'entry' && emailRef.current && !emailRef.current.value) {
-          emailRef.current.value = stash;
+        // Typing without a submit: hand the typed address to React so the
+        // visitor's next Enter or click submits it. React state is set even
+        // when the field still shows the typing: the field is controlled, and
+        // after hydration React clears it to `email` (still '') once this
+        // effect has run. The DOM write covers a field that was already
+        // wiped, so a submit in the same task cannot read an empty field.
+        if (stash && step === 'entry' && emailRef.current) {
+          if (!emailRef.current.value) emailRef.current.value = stash;
           setEmail(stash);
         }
         return;

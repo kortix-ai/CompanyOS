@@ -60,14 +60,25 @@ const OLD_CLI_NOTE = [
   'tell the person which one to remove, in one line.',
 ].join('\n');
 
-/** Step 0 of the guide: install or update the CLI and, off production, point it at this deployment. */
+/** The CLI's built-in Kortix Cloud host (\`CLOUD_HOST_NAME\` in host-config): every config has it. */
+const CLOUD_HOST = 'cloud';
+
+/** Step 0 of the guide: install or update the CLI and point it at this deployment. */
 function installBlock(target: SetupTarget): string {
   if (isProd(target)) {
+    // The CLI keeps the host it used last: a person who once followed a test or
+    // self-hosted guide would otherwise set this repository up there.
     return [
       '```bash',
       `curl -fsSL ${target.origin}/install | bash   # installs the CLI, or updates an older one`,
       'kortix --version',
+      `kortix hosts use ${CLOUD_HOST}   # Kortix Cloud, ${target.apiBase}`,
+      `kortix hosts current   # must print ${CLOUD_HOST}`,
       '```',
+      '',
+      'The CLI keeps the host an earlier guide or command chose (a test or',
+      `self-hosted deployment). \`kortix hosts use ${CLOUD_HOST}\` points every later command at`,
+      'Kortix Cloud.',
       '',
       OLD_CLI_NOTE,
     ].join('\n');

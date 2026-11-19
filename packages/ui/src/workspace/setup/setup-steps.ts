@@ -60,3 +60,20 @@ export function setupSteps({
   if (slack.needed) steps.push({ kind: 'slack', id: 'slack', name: slackName, done: slack.installed });
   return [...steps.filter((step) => !step.done), ...steps.filter((step) => step.done)];
 }
+
+/**
+ * The open steps this viewer can finish: a secret needs secret write; a
+ * connector sign-in and Slack need connector write (the Slack install route
+ * checks `project.connector.write`). The home banner counts these.
+ */
+export function openStepsFor(steps: SetupStep[], can: { connect: boolean; setSecrets: boolean }): SetupStep[] {
+  return steps.filter((step) => !step.done && (step.kind === 'secret' ? can.setSecrets : can.connect));
+}
+
+/**
+ * A dismissed banner stays hidden until a step opens that was not open when
+ * the viewer dismissed it, for example a connector a later setup added.
+ */
+export function setupBannerDismissed(open: SetupStep[], dismissedIds: readonly string[] | null): boolean {
+  return dismissedIds !== null && open.every((step) => dismissedIds.includes(step.id));
+}

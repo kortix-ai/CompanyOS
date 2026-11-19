@@ -21,10 +21,19 @@
  *    recordings a month: every session of a person who signed up in the last
  *    14 days, a tenth of other signed-in sessions, a fiftieth of anonymous
  *    ones. For a signed-in person, and on every private or sign-in page, the
- *    recording hides all text, every input, every attribute that can carry
- *    text, link targets off our origin and image sources; frames are blocked.
- *    Page URLs follow rule 3.
+ *    recording hides every text and every attribute that can carry text,
+ *    except our own interface text (`UiText`, `replay-text.ts`): a label,
+ *    button or heading from the translation catalog stays readable, with
+ *    numbers in its placeholders. Message and document text never shows
+ *    (`REPLAY_CONTENT_SELECTOR`). Every input, link targets off our origin
+ *    and image sources are hidden; frames are blocked. Page URLs follow
+ *    rule 3. A click event on those pages keeps the same interface text.
  */
+
+/** Our own interface text (`UiTextIndex` in `replay-text.ts`). */
+export interface UiText {
+  has(text: string): boolean;
+}
 
 import { locales } from '@/i18n/catalog.mjs';
 import { analyticsLocation, isAnalyticsExcludedPath } from '@/lib/analytics/url-policy';
@@ -254,7 +263,15 @@ const PATH_KEY = /pathname$/;
 
 /** Element-chain attributes that can carry customer text on a private page. */
 const CHAIN_TEXT =
-  /(?:\btext|\bhref|attr__(?:href|title|aria-label|alt|placeholder|value|name|data-[\w-]*))="(?:[^"\\]|\\.)*"/g;
+  /(\btext|\bhref|attr__(?:href|title|aria-label|alt|placeholder|value|name|data-[\w-]*))="((?:[^"\\]|\\.)*)"/g;
+/** Chain attributes that may keep a value when it is our own interface text. */
+const CHAIN_UI_TEXT = new Set([
+  'text',
+  'attr__title',
+  'attr__aria-label',
+  'attr__alt',
+  'attr__placeholder',
+]);
 
 type Props = Record<string, unknown>;
 
@@ -282,10 +299,11 @@ export interface ScrubbableEvent {
 
 /**
  * The `before_send` hook. Rewrites every URL- and path-valued property, and on
- * private pages removes page titles and every piece of element text or link
- * target an autocapture event carries. Never drops an event.
+ * private pages removes page titles, link targets and every piece of element
+ * text an autocapture event carries, except our own interface text (`ui`).
+ * Never drops an event.
  */
-export function scrubEvent<T extends ScrubbableEvent>(event: T, origin: string): T {
+export function scrubEvent<T extends ScrubbableEvent>(event: T, origin: string, ui?: UiText): T {
   const pathname =
     typeof event.properties.$pathname === 'string'
       ? event.properties.$pathname
@@ -305,11 +323,16 @@ export function scrubEvent<T extends ScrubbableEvent>(event: T, origin: string):
   if (privatePage) {
     delete event.properties.title;
     delete event.properties.$title;
-    delete event.properties.$el_text;
     delete event.properties.$elements;
+    const text = event.properties.$el_text;
+    if (typeof text !== 'string' || !ui?.has(text)) delete event.properties.$el_text;
     const chain = event.properties.$elements_chain;
     if (typeof chain === 'string') {
-      event.properties.$elements_chain = chain.replace(CHAIN_TEXT, '');
+      event.properties.$elements_chain = chain.replace(
+        CHAIN_TEXT,
+        (whole, key: string, value: string) =>
+          CHAIN_UI_TEXT.has(key) && ui?.has(value.replace(/\\(.)/g, '$1')) ? whole : '',
+      );
     }
   }
   return event;
@@ -378,6 +401,14 @@ export function replayMasksPage(pathname: string, signedIn: boolean): boolean {
   const path = withoutLocale(pathname);
   return path === '/auth' || path.startsWith('/auth/');
 }
+
+/**
+ * Message and document text: hidden in a masked recording even where a word
+ * equals our interface text. `.kortix-markdown` is every rendered message,
+ * document and file preview; `data-replay-content` marks other text a person
+ * or an agent wrote (the user message bubble).
+ */
+export const REPLAY_CONTENT_SELECTOR = '.kortix-markdown, [data-replay-content]';
 
 /** Frames, plugins and anything a component marks with `ph-no-capture` record as an empty box. */
 export const REPLAY_BLOCK_SELECTOR = 'iframe, object, embed';
@@ -553,13 +584,15 @@ export function replayUrl(value: string, origin: string): string {
  * The value a recording stores for one attribute. rrweb's own attributes
  * (`rr_width`, `_cssText`, …) always pass: they hold layout and our CSS.
  * Unmasked pages hide only `value`, which rrweb records unmasked for hidden
- * inputs.
+ * inputs. On a masked page a text attribute (`title`, `aria-label`,
+ * `placeholder`, …) keeps a value that is our own interface text (`ui`).
  */
 export function replayAttribute(
   name: string,
   value: string,
   masked: boolean,
   origin: string,
+  ui?: UiText,
 ): string {
   const key = name.toLowerCase();
   if (!value || key.startsWith('rr_') || key.startsWith('_')) return value;
@@ -568,5 +601,5 @@ export function replayAttribute(
   if (key === 'style') return value.replace(/url\([^)]*\)/gi, 'url()');
   if (REPLAY_URL_ATTRIBUTES.has(key)) return replayUrl(value, origin);
   if (REPLAY_URL_LIST_ATTRIBUTES.has(key)) return '';
-  return REPLAY_MASK;
+  return ui?.has(value) ? value : REPLAY_MASK;
 }

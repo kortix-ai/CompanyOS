@@ -304,8 +304,9 @@ function PrivacyPolicy() {
           banner. It receives a random account identifier, never your name or email address, and
           never your prompts, messages, files or other project content. PostHog also records a share
           of visits as session replays: which pages you open, where you click and how far you scroll.
-          When you are signed in, and on sign-in pages, a replay hides all text, everything you type,
-          image sources and embedded content, so it shows the layout of a page but not what is on it.
+          When you are signed in, and on sign-in pages, a replay hides everything you type, image
+          sources, embedded content and all text except the labels of our own interface, such as
+          button and menu names. It shows how you use a page, not what you or your workspace wrote.
           We use replays to find the places where the product is hard to use, and PostHog deletes
           them after 30 days. If you reject analytics in the cookie banner, we do not record your
           visits. On our marketing website we also use Vercel Analytics and, through Google Tag

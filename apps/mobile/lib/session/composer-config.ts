@@ -11,6 +11,7 @@
 
 import { selectableProjectAgents, type ProjectConfigSummary } from '@kortix/sdk';
 import type { Agent } from '@/lib/session/runtime-data';
+import { agentDisplayName as sharedAgentDisplayName } from '@kortix/shared';
 
 export interface PickerOption {
   /** Unique row id: the gateway wire id (home) or `providerID/modelID` (thread). */
@@ -147,8 +148,8 @@ export function latestAssistantAgent(messages: ReadonlyArray<{ role: string; age
   return null;
 }
 
-export function agentDisplayName(name: string | undefined): string {
-  return name ? capitalise(name) : 'Agent';
+export function agentDisplayName(name: string | undefined, title?: string): string {
+  return name ? sharedAgentDisplayName(name, title) : 'Agent';
 }
 
 /**

@@ -152,8 +152,8 @@ describe('ModelPickerSheet', () => {
     const props = pickerProps(r);
     expect(props.title).toBe('Agent');
     expect(props.options).toEqual([
-      { key: 'agent-a', label: 'Agent-a' },
-      { key: 'agent-b', label: 'Agent-b' },
+      { key: 'agent-a', label: 'Agent a' },
+      { key: 'agent-b', label: 'Agent b' },
     ]);
     expect(props.activeKey).toBe('agent-a');
     const trailing = props.titleTrailing as { props?: { children?: unknown } };

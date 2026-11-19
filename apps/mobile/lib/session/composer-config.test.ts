@@ -224,10 +224,14 @@ describe('agents — the SDK resolver over the thread roster', () => {
     });
   });
 
-  test('display name capitalises the first letter; unknown agent says Agent', () => {
+  test('display names match web, including built-in agents and separated words', () => {
+    expect(agentDisplayName('mykortix')).toBe('My Kortix');
+    expect(agentDisplayName('meta')).toBe('My Kortix');
     expect(agentDisplayName('kortix')).toBe('Kortix');
-    expect(agentDisplayName('chief-of-staff')).toBe('Chief-of-staff');
+    expect(agentDisplayName('chief-of-staff')).toBe('Chief of staff');
     expect(agentDisplayName(undefined)).toBe('Agent');
+    expect(agentDisplayName('reviewer', 'PR reviewer')).toBe('PR reviewer');
+    expect(agentDisplayName('mykortix', 'mykortix')).toBe('My Kortix');
   });
 });
 

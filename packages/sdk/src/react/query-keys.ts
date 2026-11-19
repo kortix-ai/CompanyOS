@@ -438,6 +438,12 @@ export const qk = {
     },
 
     /**
+     * The workspace's sessions at work now (`working=only`), for a Running
+     * view. Two segments past `sessionsScope`, so it is never one session's key.
+     */
+    runningSessions: (id: string) => [...qk.project.sessionsScope(id), 'list-running', 'visible'] as const,
+
+    /**
      * One session's children (`parent=<sessionId>`), infinite. Its own slot
      * beside `sessionsPaged`; nests under `sessionsScope` for invalidation.
      */
@@ -707,6 +713,14 @@ export const qk = {
     evalTrial: (id: string, jobId: string, trialId: string) => [...qk.project.evalJob(id, jobId), 'trial', trialId] as const,
     /** `listWorkspaceEvalTasks` of a suite. */
     evalTasks: (id: string, suite: string) => [...qk.project.evals(id), 'tasks', suite] as const,
+    /** Every calendar key starts with it (flag `calendar`). */
+    calendar: (id: string) => [...qk.project.scope(id), 'calendar'] as const,
+    /** `listWorkspaceCalendarItems` of one window and filter (`key`: the query as a string). */
+    calendarItems: (id: string, key: string) => [...qk.project.calendar(id), 'items', key] as const,
+    /** `getWorkspaceCalendarItem` — one item and its comments. */
+    calendarItem: (id: string, itemId: string) => [...qk.project.calendar(id), 'item', itemId] as const,
+    /** `listWorkspaceCalendarPeople` — who can be assigned or mentioned. */
+    calendarPeople: (id: string) => [...qk.project.calendar(id), 'people'] as const,
     /** `listSessionReminders` — `GET /projects/:id/sessions/:sid/reminders`. */
     sessionReminders: (id: string, sessionId: string) =>
       [...qk.project.reminders(id), 'session', sessionId] as const,

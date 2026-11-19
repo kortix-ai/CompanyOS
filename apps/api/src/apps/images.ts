@@ -7,7 +7,8 @@
  *
  * Providers cap how many templates an org may hold: Platinum refuses builds
  * past its per-org template count (`org_template_quota_exceeded`, tiers
- * 10/50/500), and `snapshots/quota-gc.ts` reclaims Daytona only. A build that
+ * 10/50/500). `snapshots/quota-gc.ts` reclaims superseded images under org
+ * pressure, and an untracked App image only after its idle floor. A build that
  * hits the cap reclaims unused images once and retries once
  * (`buildWithImageQuotaGuard`); a second refusal fails the deployment with
  * `app_image_quota_exceeded` instead of three retries on a backoff.

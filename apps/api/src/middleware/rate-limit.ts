@@ -101,6 +101,7 @@ const projectWebhookRejectedRunLimiter = new TokenBucketRateLimiter('project_web
 const projectSecretWriteLimiter = new TokenBucketRateLimiter('project_secret_write');
 const llmGatewayLimiter = new TokenBucketRateLimiter('llm_gateway');
 const feedbackLimiter = new TokenBucketRateLimiter('feedback');
+const setupEventLimiter = new TokenBucketRateLimiter('setup_event');
 const deviceTokenReleaseLimiter = new TokenBucketRateLimiter('device_token_release');
 
 /**
@@ -328,6 +329,27 @@ export function createFeedbackRateLimitMiddleware() {
         resourceType: 'feedback',
         resourceId: userId ?? null,
         metadata: { limiter: 'feedback' },
+      },
+    };
+  });
+}
+
+/**
+ * Guards `POST /v1/cli/setup-events`, keyed on the caller's user id like
+ * feedback. A guided setup sends about ten events in an hour; 20 a minute stops
+ * a loop from spending the PostHog plan's monthly event limit.
+ */
+export function createSetupEventRateLimitMiddleware() {
+  return createAuditedRateLimitMiddleware(setupEventLimiter, (c) => {
+    const userId = c.get('userId') as string | undefined;
+    return {
+      key: userId ? `user:${userId}` : `ip:${requestClientKey(c)}`,
+      policy: { limit: 20, windowMs: 60_000 },
+      auditContext: {
+        action: RATE_LIMIT_EXCEEDED_ACTION,
+        resourceType: 'setup_event',
+        resourceId: userId ?? null,
+        metadata: { limiter: 'setup_event' },
       },
     };
   });

@@ -44,6 +44,7 @@ import { PROJECT_ACTIONS } from '../../iam';
 import { isProjectSessionPrincipal } from '../../iam/agent-scope';
 import { callerKortixSessionId } from '../../middleware/caller-session';
 import { auth, errors, json, lenientBody } from '../../openapi';
+import { readJsonObject } from '../../shared/http-body';
 import { workspaceIdParam } from '../../shared/route-params';
 import { isUuid } from '../../shared/validate';
 import type { AppEnv } from '../../types';
@@ -134,7 +135,7 @@ const textFile = (body: string | Uint8Array<ArrayBuffer>, cacheSeconds: number) 
   new Response(body, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': `private, max-age=${cacheSeconds}`, 'X-Content-Type-Options': 'nosniff' } });
 
 async function parseBody<T>(c: EvalContextC, schema: z.ZodType<T>): Promise<T | Response> {
-  const parsed = schema.safeParse(await c.req.json().catch(() => ({})));
+  const parsed = schema.safeParse(await readJsonObject(c));
   if (parsed.success) return parsed.data;
   return c.json(
     { error: 'eval_invalid' as const, message: 'The request body is invalid.', violations: parsed.error.issues.slice(0, 20).map((i) => `${i.path.join('.') || 'body'}: ${i.message}`) },

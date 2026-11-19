@@ -44,7 +44,9 @@ import {
 } from './oauth2-lifecycle';
 import { validateAuthorizationIssuer } from './oauth2-issuer';
 import { oauthCompletionRematerializeInput } from './oauth2-rematerialize';
-import { kortixClientApplication, mcpAppForUrl } from './mcp-apps';
+import { kortixClientApplication, kortixClientIdentity, mcpAppForUrl } from './mcp-apps';
+import { CONNECTED_AS_KEY, relabelToIdentity } from './connection-identity';
+import { safeEgressFetch } from '../shared/ssrf-guard';
 import { registerOAuth2Client } from './oauth2-registration';
 import {
   type ProtectedResourceProvider,
@@ -419,7 +421,7 @@ export async function startConnectionSignIn(input: {
     },
   );
   if (!mcpSignInCheck(discovery).one_click) return null;
-  const callbackUrl = nativeOAuth2CallbackUrl('http://localhost:8008/', config.KORTIX_URL);
+  const callbackUrl = nativeOAuth2CallbackUrl('http://localhost:8008/', config.KORTIX_OAUTH_CALLBACK_ORIGIN || config.KORTIX_URL);
   const metadata = discovery.metadata ?? {};
   await registerConnectionOAuth2Client({
     identity: input.identity,
@@ -544,6 +546,39 @@ async function notifyWaitingSession(
   }
 }
 
+/**
+ * Record which account a sign-in with Kortix's own OAuth client authorized
+ * (Google: its email) as `connected_as`, and let a generic label become it.
+ * Best effort: the sign-in already succeeded, a failed lookup only leaves the
+ * label as it was.
+ */
+async function recordSignedInIdentity(
+  connectionId: string,
+  application: Pick<OAuth2ApplicationInput, 'issuer' | 'client_id'>,
+  accessToken: string,
+): Promise<void> {
+  const identity = kortixClientIdentity(application);
+  if (!identity) return;
+  try {
+    const response = await safeEgressFetch(identity.url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
+      return;
+    }
+    const body = (await response.json()) as Record<string, unknown>;
+    const value = body[identity.field];
+    if (typeof value !== 'string' || !value.trim()) return;
+    const connectedAs = value.trim();
+    await db
+      .update(connectorConnections)
+      .set({ metadata: sql`${connectorConnections.metadata} || ${JSON.stringify({ [CONNECTED_AS_KEY]: connectedAs })}::jsonb`, updatedAt: new Date() })
+      .where(eq(connectorConnections.connectionId, connectionId));
+    await relabelToIdentity({ connectionId, identity: connectedAs });
+  } catch (error) {
+    logger.debug('[connector] signed-in identity lookup failed', { connectionId, err: (error as Error).message });
+  }
+}
+
 export async function completeAuthorizationCodeSession(input: {
   stateHash: string;
   code?: string;
@@ -639,6 +674,7 @@ export async function completeAuthorizationCodeSession(input: {
       // A revoke that landed after this sign-in started wins.
       startedAt: claimed.createdAt,
     });
+    await recordSignedInIdentity(loaded.connectionId, loaded.application, token.access_token);
     // The catalog was last fetched WITHOUT this credential, so the connector is
     // very likely sitting on a 401. Refetch before the user sees the result.
     await rematerializeAfterOAuthCompletion(loaded.connectionId);
@@ -880,7 +916,7 @@ export async function handleNativeOAuth2Callback(requestUrl: string) {
       config.FRONTEND_URL,
     );
   }
-  const callback = nativeOAuth2CallbackUrl(requestUrl, config.KORTIX_URL);
+  const callback = nativeOAuth2CallbackUrl(requestUrl, config.KORTIX_OAUTH_CALLBACK_ORIGIN || config.KORTIX_URL);
   const result = await completeAuthorizationCodeSession({
     stateHash: createHash('sha256').update(state).digest('hex'),
     code: url.searchParams.get('code') ?? undefined,

@@ -66,6 +66,7 @@ import {
   SlidersHorizontalIcon as SlidersHorizontal,
   TargetIcon as Target,
   ChartBarIcon as ChartBar,
+  CalendarBlankIcon as CalendarBlank,
   TerminalIcon as Terminal,
   TextAlignLeftIcon as TextAlignLeft,
   TrayIcon as Tray,
@@ -769,6 +770,20 @@ export const menuRegistry: MenuItemDef[] = [
     keywords: 'goals goal objectives outcomes',
   },
   {
+    // The workspace calendar (flag `calendar`): the sidebar Calendar row
+    // (`project-calendar-nav.tsx`), same icon, same route, same gate.
+    id: 'proj-calendar',
+    label: 'Calendar',
+    icon: CalendarBlank,
+    group: 'navigation',
+    showIn: ['commandPalette'],
+    kind: 'navigate',
+    href: '/workspaces/{projectId}/calendar',
+    requiresProject: true,
+    requiresFlag: 'calendar',
+    keywords: 'calendar schedule agenda week month due deadline items triggers',
+  },
+  {
     // The project's evals (flag `evals`): Customize → Evals.
     id: 'proj-evals',
     label: 'Evals',
@@ -843,7 +858,7 @@ export const menuRegistry: MenuItemDef[] = [
     showIn: ['commandPalette'],
     kind: 'navigate',
     // The workspace Review page (`reviewHref`).
-    href: '/workspaces/{projectId}/inbox?view=review',
+    href: '/workspaces/{projectId}/review',
     requiresProject: true,
     keywords: 'review center inbox approvals awaiting waiting needs you outputs queue',
   },
@@ -1192,13 +1207,13 @@ export const menuRegistry: MenuItemDef[] = [
   },
   {
     id: 'theme-light',
-    label: 'Light Theme',
+    label: 'Kortix Light Theme',
     icon: Sun,
     group: 'theme',
     showIn: ['commandPalette'],
     kind: 'theme',
     themeValue: 'light',
-    keywords: 'theme light mode bright day',
+    keywords: 'theme kortix light mode default bright day',
   },
   {
     id: 'theme-pure-light',
@@ -1212,13 +1227,13 @@ export const menuRegistry: MenuItemDef[] = [
   },
   {
     id: 'theme-dark',
-    label: 'Dark Theme',
+    label: 'Kortix Dark Theme',
     icon: Moon,
     group: 'theme',
     showIn: ['commandPalette'],
     kind: 'theme',
     themeValue: 'dark',
-    keywords: 'theme dark mode night',
+    keywords: 'theme kortix dark mode default night',
   },
   {
     id: 'theme-pure-dark',

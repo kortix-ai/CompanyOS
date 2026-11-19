@@ -34,8 +34,16 @@ export { sessionWhereTurn } from './lib/session-where';
 export { messageAddressesOnlyPeople, notifyMessageMentions } from './lib/space-posts';
 export { runSpaceWatcherTick } from './lib/space-watch/wake';
 export { runGoalReconcilerTick } from './goals/reconcile';
-export { runEvalRunnerTick } from './evals/runner';
 export { sessionSpaceAgents } from './lib/front-thread';
+
+// The eval runner's tick (consumed by worker/jobs/eval-runner). Loaded on the
+// first tick, not at import: the runner reaches provisioning and account
+// deletion, and a static re-export put that whole graph into every module that
+// loads this surface (the sandbox-proxy boot order, session-sandbox).
+export async function runEvalRunnerTick(now?: Date): Promise<number> {
+  const { runEvalRunnerTick: tick } = await import('./evals/runner');
+  return tick(now);
+}
 
 // A person's pins and archive (consumed by account erasure and offboarding).
 export { deleteMemberSessionStates, deleteUserSessionStates } from './lib/session-user-state';

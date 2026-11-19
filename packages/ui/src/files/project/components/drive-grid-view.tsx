@@ -21,6 +21,7 @@ import { Label } from '../../../primitives/label';
 import type { GitStatusType } from '../../tree/components/file-tree-item';
 import type { FileNode } from '../../../internal/files/types';
 import { cn } from '../../../lib/utils';
+import { ManifestIssueMark } from './manifest-issue-mark';
 import Loading from '../../../primitives/loading';
 import { Copy } from '../../../icons/copy';
 import {
@@ -480,6 +481,9 @@ const FileCard = memo(function FileCard({
           <FileThumbnail
             filePath={node.path}
             fileName={node.name}
+            // No preview until the server has the file: a read before the
+            // write lands is a 404 the card would keep (D-08).
+            deferPreview={uploading}
             onOpen={open}
             className={cn(
               'border-border h-[120px] rounded-lg border',
@@ -523,7 +527,7 @@ const FileCard = memo(function FileCard({
             </DropdownMenu>
           )}
 
-          <div className="flex min-w-0 items-center px-0.5">
+          <div className="flex min-w-0 items-center gap-1 px-0.5">
             {isRenaming ? (
               <input
                 ref={renameInputRef}
@@ -541,7 +545,10 @@ const FileCard = memo(function FileCard({
                 className="border-primary/50 w-full border-b bg-transparent py-0.5 text-sm outline-none"
               />
             ) : (
-              <span className="text-foreground truncate text-sm font-medium">{node.name}</span>
+              <>
+                <span className="text-foreground truncate text-sm font-medium">{node.name}</span>
+                <ManifestIssueMark path={node.path} name={node.name} />
+              </>
             )}
           </div>
         </div>
@@ -564,14 +571,8 @@ const FileCard = memo(function FileCard({
 
 // ─── Main Grid View ─────────────────────────────────────────────────────────
 
-/** Descriptions for elevated system directories */
-const ELEVATED_DIR_META: Record<string, { description: string }> = {
-  '.kortix': { description: 'Workspace config, tasks, context' },
-};
-
 export function DriveGridView(props: DriveListingProps) {
   const {
-    elevatedDirs,
     dirs,
     files,
     onNavigateToDir,
@@ -591,45 +592,6 @@ export function DriveGridView(props: DriveListingProps) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   return (
     <div className="space-y-7 p-5">
-      {elevatedDirs.length > 0 && (
-        <section className="space-y-2">
-          <SectionHeader
-            label={tI18nComplete.raw('text6725e7bbcd28')}
-            count={elevatedDirs.length}
-          />
-          <div
-            className="grid gap-x-4 gap-y-5"
-            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(168px, 1fr))" }}
-          >
-            {elevatedDirs.map((node) => {
-              const meta = ELEVATED_DIR_META[node.name];
-              const description = meta
-                ? tI18nComplete.raw(
-                    node.name === '.kortix' ? 'text85231c543c71' : 'text96ef9c0ac0c9',
-                  )
-                : undefined;
-              return (
-                <button
-                  type="button"
-                  key={node.path}
-                  onClick={() => onNavigateToDir(node)}
-                  title={description}
-                  className="group relative flex w-full min-w-0 cursor-pointer flex-col gap-2 text-left select-none"
-                >
-                  <DriveFolderThumbnail
-                    path={node.path}
-                    className="h-[120px]"
-                  />
-                  <span className="text-foreground truncate px-0.5 text-sm font-medium">
-                    {node.name}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
       {dirs.length > 0 && (
         <section className="space-y-2">
           <SectionHeader label={tI18nComplete.raw('textc4d6bb200f4c')} count={dirs.length} />

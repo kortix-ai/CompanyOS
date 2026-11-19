@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { GatewayResolutionError } from '@kortix/llm-gateway';
+import { WalletUnavailableError } from '../errors';
 
 // The internal routes the standalone gateway pod calls, through the real Hono
 // app and the real model catalog. Mocked: resolveCandidates, the servable
@@ -561,6 +562,36 @@ describe('POST /admit — authorize, route, resolve and billing in one call', ()
     expect('candidates' in json).toBe(false);
     authorizeAnswer = { ok: true };
     billingAnswer = async () => undefined;
+  });
+
+  // prod 2026-11-12: a stalled control plane answered funded accounts "subscription_required".
+  test('a wallet check with no answer is no verdict: /admit leaves billing to the gateway, /billing fails', async () => {
+    const billing = (accountId: string) => app().request(new Request('http://test/billing', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ accountId }),
+    }));
+    authorizeAnswer = { ok: true, principal };
+    try {
+      billingAnswer = async () => { throw new WalletUnavailableError(); };
+      resolveCandidatesMock.mockResolvedValueOnce([{ provider: 'kortix', billingMode: 'credits' }]);
+      const res = await admit({ token: 't', input });
+      expect(res.status).toBe(200);
+      const json = await res.json() as Record<string, unknown>;
+      expect(json.admission).toEqual({ ok: true, principal });
+      expect('billing' in json).toBe(false);
+      const unanswered = await billing('a');
+      expect(unanswered.status).toBeGreaterThanOrEqual(500);
+
+      // A refusal is still the verdict body the gateway turns into its 402.
+      billingAnswer = async () => { throw new actualBillingGate.BillingGateError('insufficient_credits', 0, 'Out of credits.', 'a'); };
+      const refused = await billing('a');
+      expect(refused.status).toBe(200);
+      expect(await refused.json()).toEqual({ active: false, reason: 'insufficient_credits', message: 'Out of credits.' });
+    } finally {
+      authorizeAnswer = { ok: true };
+      billingAnswer = async () => undefined;
+    }
   });
 });
 

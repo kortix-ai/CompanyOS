@@ -202,16 +202,17 @@ export async function runTokens(argv: string[]): Promise<number> {
       case 'list': {
         // The client already appends `?account_id=`; `mine` narrows to the
         // caller's own hand-minted keys (no session or connector tokens).
-        const { tokens } = await listRevocableTokens(ctx.client, mine);
+        const { tokens, base } = await listRevocableTokens(ctx.client, mine);
         // `?mine=true` keeps dead keys as history — the settings page renders
         // them muted — but a CLI list means "keys that still authenticate":
         // status='active' AND revoked_at null, the server's own live predicate
         // (listAccountTokens / validateAccountToken / isRevokedRow in
         // apps/api/src/repositories/account-tokens.ts; the two columns are not
         // tied by any DB constraint, so both halves are needed). `--all` brings
-        // the history back.
+        // the history back. The `/me/tokens` fallback is that same personal
+        // history, so it is filtered even without `--mine`.
         const visible =
-          mine && !all
+          (mine || base !== '/accounts/tokens') && !(mine && all)
             ? tokens.filter((t) => t.status === 'active' && !t.revoked_at)
             : tokens;
         const hidden = tokens.length - visible.length;

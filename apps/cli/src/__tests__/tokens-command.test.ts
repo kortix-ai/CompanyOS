@@ -70,7 +70,7 @@ const routes: Parameters<typeof startFakeApi>[0] = (req, url, body) => {
   if (workspaceClosed && p.startsWith('/v1/accounts/tokens')) {
     return Response.json({ error: 'Workspace closed', code: workspaceDenial }, { status: 403 });
   }
-  if (p === '/v1/me/tokens' && req.method === 'GET') return Response.json([laptop]);
+  if (p === '/v1/me/tokens' && req.method === 'GET') return Response.json([laptop, ci, ghost]);
   if (p === '/v1/me/tokens/tok_a' && req.method === 'DELETE') return Response.json({ ok: true });
   if (p === '/v1/me' && req.method === 'GET') {
     return Response.json({ user_id: 'user_1', email: 'user@example.test', token_context: { auth_type: 'pat', token_id: meTokenId } });
@@ -464,6 +464,20 @@ describe('kortix tokens', () => {
     expect(revoked.code).toBe(0);
     expect(revoked.stdout).toContain('Revoked');
     expect(api?.requests.find((r) => r.method === 'DELETE')?.path).toBe('/v1/me/tokens/tok_a');
+  });
+
+  test('a closed workspace lists only live personal keys unless --mine --all', async () => {
+    const config = boot();
+    workspaceClosed = true;
+    const ids = async (args: string[]) => {
+      const r = await runCommand(runner, ['ls', ...args, '--json'], { cwd: tmp, configFile: config });
+      expect(r.code).toBe(0);
+      return JSON.parse(r.stdout).map((row: { id: string }) => row.id);
+    };
+    expect(await ids([])).toEqual(['tok_a']);
+    expect(await ids(['--all'])).toEqual(['tok_a']);
+    expect(await ids(['--mine'])).toEqual(['tok_a']);
+    expect(await ids(['--mine', '--all'])).toEqual(['tok_a', 'tok_b', 'tok_c']);
   });
 
   test('an ordinary permission denial never falls back to the personal surface', async () => {

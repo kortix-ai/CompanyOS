@@ -63,11 +63,25 @@ person.
    - Where: kortix.com only (`REPLAY_HOSTS`). loopmaxxing.sh joins when its
      CookieYes banner loads there; until then a visitor there cannot reject.
    - What is hidden: for a signed-in person, and on private and `/auth` pages,
-     every text node becomes `*`, every input is masked, every attribute that
-     can carry text becomes `***` (`replayAttribute`), links to another origin
-     keep only the host, image sources lose everything off our origin, and
-     frames record as empty boxes. A component that must never appear even as
-     a shape takes the `ph-no-capture` class. Page URLs follow rule 5.
+     every text node becomes `*` and every attribute that can carry text
+     becomes `***` (`replayAttribute`), except our own interface text. Every
+     input is masked, links to another origin keep only the host, image
+     sources lose everything off our origin, and frames record as empty boxes.
+     A component that must never appear even as a shape takes the
+     `ph-no-capture` class. Page URLs follow rule 5.
+   - Interface text (`UiTextIndex`, `apps/web/src/lib/analytics/replay-text.ts`):
+     every string of the translation catalog the page renders, plus the
+     provider names. Each placeholder may stand only for a number:
+     `{count} models` shows "14 models" and hides "Acme models". Text with no
+     letter never shows. Parts joined by ` · ` or ` — ` are judged one by one.
+     Everything else hides, so a new screen with customer content is hidden
+     without a mark. Text that is not in the catalog (model names, a provider
+     name that comes from the API) stays hidden. Message and document text
+     never shows, even where a word equals our text: `.kortix-markdown` and
+     `[data-replay-content]` (the user message bubble), `REPLAY_CONTENT_SELECTOR`.
+     Mark other text a person or an agent wrote with `data-replay-content`. A click event on a
+     private page keeps the same interface text in `$el_text` and the
+     element chain, and loses the rest (`scrubEvent`).
    - The recorder (`posthog-js/dist/posthog-recorder`, 66 KB gzip) downloads
      only for a recorded session.
    - The privacy policy (`/legal`, cookies section) and the PostHog row in

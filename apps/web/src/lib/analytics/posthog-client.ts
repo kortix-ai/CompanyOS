@@ -24,12 +24,17 @@
  * Every session decides once, from its id: `syncReplay` runs at start, on a
  * new session id, on a consent change and on sign-in or sign-out. A
  * signed-in person's recording, and any recording of a private or sign-in
- * page, hides all text, inputs and text-bearing attributes (`replayMasked`).
- * Autocapture keeps element text on public pages and masks it on private
- * ones; the `before_send` scrubber removes what masking does not cover.
+ * page, hides every input and all text and text-bearing attributes
+ * (`replayMasked`) except our own interface text (`uiText`, built from the
+ * translation catalog the page renders, before init).
+ * Autocapture collects element text everywhere; on private pages the
+ * `before_send` scrubber keeps only interface text and removes the rest.
  */
 
 import { isDesktop } from '@kortix/ui/internal/lib/desktop';
+
+import { loadClientCatalog } from '@/i18n/client-catalog';
+import { defaultLocale, type Locale, locales } from '@/i18n/config';
 
 import {
   type AnalyticsConsent,
@@ -41,6 +46,7 @@ import {
   posthogProjectForHost,
   readAnalyticsConsent,
   REPLAY_BLOCK_SELECTOR,
+  REPLAY_CONTENT_SELECTOR,
   replayAttribute,
   replayMasksPage,
   replayTier,
@@ -48,6 +54,7 @@ import {
   scrubEvent,
   shouldRecordSession,
 } from './posthog-config';
+import { UiTextIndex } from './replay-text';
 
 type PostHog = (typeof import('posthog-js/dist/module.no-external'))['default'];
 
@@ -61,6 +68,38 @@ let project: PostHogProject | null = null;
 /** The signed-in person (`created_at` of the Supabase user), or null. */
 let replayUser: { signedUpAt: string } | null = null;
 let recorder: Promise<unknown> | null = null;
+/** Our interface text in every locale this page rendered. Empty until built: then nothing shows. */
+const uiText = new UiTextIndex();
+const indexedLocales = new Set<Locale>();
+
+/** The locale the page renders now (`I18nProvider` keeps `<html lang>` in sync). */
+function pageLocale(): Locale {
+  const lang = document.documentElement?.lang ?? '';
+  return (locales as readonly string[]).includes(lang) ? (lang as Locale) : defaultLocale;
+}
+
+/** Adds the page's catalog to `uiText` once per locale. The catalog is already loaded for rendering. */
+async function indexPageLocale(): Promise<void> {
+  const locale = pageLocale();
+  if (indexedLocales.has(locale)) return;
+  indexedLocales.add(locale);
+  try {
+    uiText.addCatalog(await loadClientCatalog(locale), locale);
+  } catch {
+    // No catalog: that locale's text stays hidden.
+  }
+}
+
+/**
+ * A text node of a masked recording: our interface text stays, everything
+ * else becomes `*`. Text inside a message or document always becomes `*`.
+ */
+function revealReplayText(text: string, element: HTMLElement | undefined): string {
+  if (element?.closest(REPLAY_CONTENT_SELECTOR)) return maskReplayText(text);
+  // A locale switch while recording: index its catalog; its text shows once that finishes.
+  if (!indexedLocales.has(pageLocale())) void indexPageLocale();
+  return uiText.reveal(text, maskReplayText);
+}
 
 /** The signed-in Supabase user the page starts with. */
 export interface PostHogUser {
@@ -102,6 +141,10 @@ async function start(user: PostHogUser | null): Promise<PostHog | null> {
     import('posthog-js/dist/module.no-external'),
     // Registers itself on window.__PosthogExtensions__ before init reads it.
     import('posthog-js/dist/surveys'),
+    // Before the first event and the first snapshot of a masked page, so interface text
+    // shows from the start. A public page indexes when the visitor signs in or opens a
+    // private page (`setReplayUser`, `syncPostHogPage`).
+    replayMasksPage(window.location.pathname, user !== null) ? indexPageLocale() : null,
   ]);
   consent = readAnalyticsConsent(document.cookie);
   const privatePage = isPrivatePath(window.location.pathname);
@@ -123,7 +166,8 @@ async function start(user: PostHogUser | null): Promise<PostHog | null> {
     capture_pageview: 'history_change',
     capture_pageleave: 'if_capture_pageview',
     autocapture: true,
-    mask_all_text: privatePage,
+    // Element text reaches `before_send`, which keeps only interface text on private pages.
+    mask_all_text: false,
     mask_all_element_attributes: privatePage,
     // Sentry owns errors; Vercel Speed Insights owns web vitals.
     capture_exceptions: false,
@@ -135,8 +179,9 @@ async function start(user: PostHogUser | null): Promise<PostHog | null> {
       maskAllInputs: true,
       // Every text node goes through maskTextFn, which decides per page.
       maskTextSelector: '*',
-      maskTextFn: (text) => (replayMasked() ? maskReplayText(text) : text),
-      maskAttributeFn: (name, value) => replayAttribute(name, value, replayMasked(), origin),
+      maskTextFn: (text, element) => (replayMasked() ? revealReplayText(text, element) : text),
+      maskAttributeFn: (name, value) =>
+        replayAttribute(name, value, replayMasked(), origin, uiText),
       blockSelector: REPLAY_BLOCK_SELECTOR,
       // Page URLs in the recording follow the same reduction as event URLs.
       maskCapturedNetworkRequestFn: (request) => ({
@@ -158,7 +203,7 @@ async function start(user: PostHogUser | null): Promise<PostHog | null> {
     // loop popped the acquisition survey over the create-first-workspace
     // landing of a zero-workspace account.
     disable_surveys_automatic_display: true,
-    before_send: (event) => (event ? scrubEvent(event, origin) : event),
+    before_send: (event) => (event ? scrubEvent(event, origin, uiText) : event),
     // Runs inside init, before the first event, so every event carries these.
     loaded: (client) =>
       client.register({
@@ -218,11 +263,16 @@ async function syncReplay(posthog: PostHog): Promise<void> {
  */
 export function setReplayUser(posthog: PostHog, user: PostHogUser | null): void {
   replayUser = user ? { signedUpAt: user.createdAt } : null;
+  if (user) void indexPageLocale();
   void syncReplay(posthog);
 }
 
-/** Apply the per-page rules after a navigation: text masking for autocapture. */
+/**
+ * Apply the per-page rules after a navigation: autocapture drops element
+ * attributes on private pages. Element text is judged in `scrubEvent`.
+ */
 export function syncPostHogPage(posthog: PostHog, pathname: string): void {
   const privatePage = isPrivatePath(pathname);
-  posthog.set_config({ mask_all_text: privatePage, mask_all_element_attributes: privatePage });
+  if (privatePage) void indexPageLocale();
+  posthog.set_config({ mask_all_element_attributes: privatePage });
 }

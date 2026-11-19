@@ -432,3 +432,17 @@ readiness. A funded Free account can pay for compute while it uses BYOK.
 The project/principal-scoped `/model-picker` catalog is the source of truth
 for executable models. A gateway trigger with no enabled model returns
 `402 no_usable_model`; credits alone never unlock managed inference.
+
+### Identity without a workspace
+
+An unscoped Supabase-authenticated person with no membership can read account-state
+without creating or choosing a workspace. The response contains `billing_state`,
+`has_active_subscription`, `subscription.status`, and `can_manage_billing: false`.
+It checks the legacy personal account key (`account_id = user_id`), its wallet
+subscription references, and every page of subscriptions of its mapped Stripe
+customers. Ended Stripe subscriptions (`canceled`, `incomplete_expired`) do not
+count. Unknown statuses fail closed as active. A database or provider error is
+an error response, never a no-subscription fallback. No database means the read
+cannot be authoritative. Named workspace requests retain membership authorization.
+This read performs no billing writes and never grants credits. Deployment does
+not unhold production dogfood: its prerequisite must be validated separately.

@@ -146,3 +146,31 @@ flow(
     });
   },
 );
+
+flow('BILL-WS-3', {
+  domain: 'billing', requires: ['database'],
+  routes: ['GET /v1/billing/account-state', 'GET /v1/billing/account-state/minimal'],
+}, async (ctx) => {
+  const person = await ctx.fixtures.user({ label: 'BILLWS3-EMPTY', noAccount: true });
+  for (const path of ['/v1/billing/account-state', '/v1/billing/account-state/minimal']) {
+    await ctx.step('a person without a workspace reads authoritative absence without creating a wallet', async () => {
+      const response = await ctx.client.as(person).get(path);
+      response.status(200).body().has('$.has_active_subscription', false).has('$.billing_state', 'no_account');
+    });
+  }
+  await ctx.step('nonrecurring purchased credits are not an active subscription', async () => {
+    await withDb(ctx, async (db) => {
+      await db.query(`INSERT INTO kortix.credit_accounts (account_id, tier, balance_precise) VALUES ($1, 'free', 20)`, [person.userId]);
+    });
+    try {
+      (await ctx.client.as(person).get('/v1/billing/account-state')).status(200).body()
+        .has('$.has_active_subscription', false).has('$.billing_state', 'no_subscription');
+      await withDb(ctx, async (db) => {
+        await db.query(`UPDATE kortix.credit_accounts SET stripe_subscription_id = 'sub_synthetic', stripe_subscription_status = 'active' WHERE account_id = $1`, [person.userId]);
+      });
+      (await ctx.client.as(person).get('/v1/billing/account-state')).status(200).body().has('$.has_active_subscription', true);
+    } finally {
+      await withDb(ctx, async (db) => { await db.query('DELETE FROM kortix.credit_accounts WHERE account_id = $1', [person.userId]); });
+    }
+  });
+});

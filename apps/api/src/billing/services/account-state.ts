@@ -11,6 +11,8 @@ import type {
   CommitmentInfo,
   ScheduledChange,
 } from '../../types';
+import { getStripe } from '../../shared/stripe';
+import { listStripeCustomerIdsByAccountId } from '../repositories/customers';
 import { getCreditAccount } from '../repositories/credit-accounts';
 import { getAutoTopupSettings } from './auto-topup';
 import { accountHoldsComp } from './account-write-owner';
@@ -423,4 +425,36 @@ function extractScheduledChange(
   }
 
   return null;
+}
+
+/** Read-only identity safety check. Legacy personal billing used account_id = user_id. */
+export async function buildWorkspacelessAccountState(userId: string) {
+  const [account, customers] = await Promise.all([
+    getCreditAccount(userId),
+    listStripeCustomerIdsByAccountId(userId),
+  ]);
+  // An unknown status is not evidence that recurring billing has ended.
+  let active = Boolean(
+    (account?.stripeSubscriptionId && !['canceled', 'incomplete_expired'].includes(account.stripeSubscriptionStatus ?? '')) ||
+    ((account?.revenuecatSubscriptionId || account?.revenuecatCustomerId) && !account.revenuecatCancelledAt),
+  );
+  for (const customer of customers) {
+    let after: string | undefined;
+    for (;;) {
+      const page = await getStripe().subscriptions.list({
+        customer, status: 'all', limit: 100, ...(after ? { starting_after: after } : {}),
+      });
+      active ||= page.data.some((sub) => !['canceled', 'incomplete_expired'].includes(sub.status));
+      if (!page.has_more) break;
+      const last = page.data.at(-1);
+      if (!last) throw new Error('Incomplete subscription listing');
+      after = last.id;
+    }
+  }
+  return {
+    billing_state: active ? 'active' : account ? 'no_subscription' : 'no_account',
+    has_active_subscription: active,
+    subscription: { status: active ? 'active' : 'no_subscription' },
+    can_manage_billing: false,
+  };
 }

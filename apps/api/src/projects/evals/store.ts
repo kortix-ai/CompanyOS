@@ -7,6 +7,7 @@ import { evalJobs, evalTrials, sessionSandboxes } from '@kortix/db';
 import type { EvalJobConfig, EvalJobStats, EvalJobStatus, EvalTrialStatus, EvalUsage } from '@kortix/api-contract';
 import { and, asc, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '../../shared/db';
+import { qualifiedColumn } from '../../shared/sql-qualified-column';
 import type { PlannedTrial } from './config';
 import { computeJobStats } from './scoring';
 
@@ -152,7 +153,7 @@ function jobFilters(projectId: string, filters: EvalJobFilters): SQL | undefined
  */
 export async function listJobs(projectId: string, opts: EvalJobFilters & { limit: number; after?: string }): Promise<EvalJobRow[]> {
   const keyset = opts.after
-    ? sql`(${evalJobs.createdAt}, ${evalJobs.jobId}) < (select c.created_at, c.job_id from kortix.eval_jobs c where c.job_id = ${opts.after})`
+    ? sql`(${qualifiedColumn(evalJobs.createdAt)}, ${qualifiedColumn(evalJobs.jobId)}) < (select c.created_at, c.job_id from kortix.eval_jobs c where c.job_id = ${opts.after})`
     : undefined;
   return db
     .select()
@@ -338,17 +339,22 @@ export async function countActiveTrials(projectId: string): Promise<number> {
 }
 
 /**
- * Ended trials whose sandbox still runs: a cancel that landed while the runner
- * was creating the session, or a stop that failed. A job that keeps its
+ * Ended trials whose sandbox (or separate verifier's sandbox) still runs: a
+ * cancel that landed while the runner was creating the session, a stop that
+ * failed, or an API that died mid-trial. A job that keeps its
  * sandboxes (`environment.delete: false`) keeps those of its graded trials; a
  * cancelled trial's sandbox stops in every job.
  */
 export async function endedTrialsWithLiveSandbox(limit: number): Promise<Array<{ job: EvalJobRow; sessionId: string }>> {
   const rows = await db
-    .select({ job: evalJobs, sessionId: evalTrials.sessionId })
+    .select({ job: evalJobs, sessionId: sessionSandboxes.sessionId })
     .from(evalTrials)
     .innerJoin(evalJobs, eq(evalJobs.jobId, evalTrials.jobId))
-    .innerJoin(sessionSandboxes, eq(sessionSandboxes.sessionId, evalTrials.sessionId))
+    // The trial's session, or the separate verifier's (its id is in the run state).
+    .innerJoin(
+      sessionSandboxes,
+      or(eq(sessionSandboxes.sessionId, evalTrials.sessionId), eq(sessionSandboxes.sessionId, sql`${evalTrials.runState}->>'verifier_session_id'`)),
+    )
     .where(
       and(
         inArray(evalTrials.status, ['completed', 'errored', 'cancelled']),

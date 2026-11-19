@@ -157,7 +157,8 @@ import {
   useVisibleAgents,
   useFeatureFlags,
 } from '@kortix/sdk/react';
-import { capitalizeWords, formatRelativeTime } from '@kortix/shared';
+import { agentDisplayName, capitalizeWords, formatRelativeTime } from '@kortix/shared';
+import { InlineCodeText } from '@kortix/ui/markdown';
 import {
   ArrowDownIcon as ArrowDown,
   ArrowUpIcon as ArrowUp,
@@ -1307,7 +1308,9 @@ export function CommandPalette() {
     const q = query.trim().toLowerCase();
     return agents.filter(
       (a) =>
-        (a.name || '').toLowerCase().includes(q) || (a.description || '').toLowerCase().includes(q),
+        (a.name || '').toLowerCase().includes(q) ||
+        (a.title || '').toLowerCase().includes(q) ||
+        (a.description || '').toLowerCase().includes(q),
     );
   }, [agents, query]);
 
@@ -2920,7 +2923,7 @@ export function CommandPalette() {
                         <CommandItem
                           key={agent.name}
                           value={sanitizeCmdkValue(
-                            `agent ${agent.name} ${agent.description || ''}`,
+                            `agent ${agent.name} ${agent.title || ''} ${agent.description || ''}`,
                           )}
                           onSelect={() => handleSelectAgent(agent.name)}
                         >
@@ -2928,11 +2931,11 @@ export function CommandPalette() {
                           <AgentMark slug={agent.name} size={21} />
                           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
                             <span className="truncate text-sm font-medium">
-                              {capitalizeWords(agent.name)}
+                              {agentDisplayName(agent.name, agent.title)}
                             </span>
                             {agent.description && (
                               <span className="text-muted-foreground/50 truncate text-xs">
-                                {agent.description}
+                                <InlineCodeText text={agent.description} />
                               </span>
                             )}
                           </div>

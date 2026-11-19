@@ -11,7 +11,7 @@ import {
   AlertDialogTitle,
 } from '../../../primitives/alert-dialog';
 import { Button } from '../../../primitives/button';
-import { ButtonGroup } from '../../../primitives/button-group';
+import { ActionBar, ActionBarDock } from '../../../primitives/action-bar';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -31,7 +31,6 @@ import { isSandboxNotReadyError } from '@kortix/sdk';
 import {
   ClipboardIcon as Clipboard,
   FolderPlusIcon as FolderPlus,
-  ClipboardTextIcon,
   MoonIcon,
   XIcon,
   UploadSimpleIcon,
@@ -57,6 +56,7 @@ import { useFileExplorerSource } from '../explorer-source';
 import { buildGitStatusMap } from '../hooks';
 import {
   forEachLimit,
+  inFlightPaths,
   MAX_UPLOAD_BYTES,
   partitionUploadBatch,
   resolveUploadTarget,
@@ -291,16 +291,9 @@ export function DriveExplorer({
   // Project-wide, so a batch keeps going (and its tray keeps reporting) after
   // this folder view unmounts. The tray itself is in the project shell.
   const uploads = useDriveUploads((s) => s.uploads);
-  // Cards and rows still on their way up show a spinner until the server has them.
-  const uploadingPaths = useMemo(
-    () =>
-      new Set(
-        uploads
-          .filter((u) => u.status === 'queued' || u.status === 'uploading')
-          .map((u) => (u.targetPath ? `${u.targetPath.replace(/\/+$/, '')}/${u.file.name}` : u.file.name)),
-      ),
-    [uploads],
-  );
+  // Cards and rows still on their way up (an upload, or a New file not yet
+  // created) show a spinner and defer their preview until the server has them.
+  const uploadingPaths = useMemo(() => inFlightPaths(uploads, pending), [uploads, pending]);
   const dragPageCounter = useRef(0);
 
   const [createKind, setCreateKind] = useState<DriveCreateKind | null>(null);
@@ -361,7 +354,7 @@ export function DriveExplorer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [searchEnabled, toggleSearch, closeSearch, isSearchOpen]);
 
-  const { elevatedDirs, dirs, fileItems } = useSortedListing(files, partial);
+  const { dirs, fileItems } = useSortedListing(files, partial);
 
   // ── Handlers ──────────────────────────────────────────────────
 
@@ -1024,7 +1017,7 @@ export function DriveExplorer({
   const [selectionStore] = useState(createSelectionStore);
   useEffect(() => selectionStore.clear(), [currentPath, selectionStore]);
   const selectMode = useSyncExternalStore(selectionStore.subscribe, selectionStore.mode, () => false);
-  const ordered = useMemo(() => [...elevatedDirs, ...dirs, ...fileItems], [elevatedDirs, dirs, fileItems]);
+  const ordered = useMemo(() => [...dirs, ...fileItems], [dirs, fileItems]);
   // Read by the stable callbacks below at the moment they run.
   const orderedRef = useRef(ordered);
   useEffect(() => {
@@ -1296,7 +1289,6 @@ export function DriveExplorer({
     !error &&
     Boolean(files) &&
     !listing.hasNextPage &&
-    elevatedDirs.length === 0 &&
     dirs.length === 0 &&
     fileItems.length === 0;
 
@@ -1483,7 +1475,6 @@ export function DriveExplorer({
                 <>
                   {viewMode === 'grid' ? (
                     <DriveGridView
-                      elevatedDirs={elevatedDirs}
                       dirs={dirs}
                       files={fileItems}
                       onNavigateToDir={handleNavigateToDir}
@@ -1508,7 +1499,6 @@ export function DriveExplorer({
                     />
                   ) : (
                     <DriveListView
-                      elevatedDirs={elevatedDirs}
                       dirs={dirs}
                       files={fileItems}
                       sortDisabled={partial}
@@ -1590,73 +1580,57 @@ export function DriveExplorer({
         </div>
       )}
 
-      {/* Clipboard bar: floats at the bottom centre of the listing, inside its
-          edges, like the Triggers page's selection bar (\`schedule-view.tsx\`). */}
+      {/* The select-mode bar and the clipboard bar share one ActionBarDock:
+          bottom centre of the listing, inside its edges. */}
       {selectMode ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center px-4">
-          <div className="pointer-events-auto w-full max-w-xl">
-            <DriveSelectionBar
-              store={selectionStore}
-              total={ordered.length}
-              zipping={zipping}
-              canWrite={canWrite}
-              onSelectAll={selectAll}
-              onClearSelection={() => selectionStore.set(new Set())}
-              onDownload={() => void bulkDownload(selectedNodes())}
-              onCopy={() => bulkClipboard(selectedNodes(), 'copy')}
-              onMove={() => bulkClipboard(selectedNodes(), 'cut')}
-              onDelete={() => bulkDelete(selectedNodes())}
-              onExit={exitSelect}
-            />
-          </div>
-        </div>
+        <ActionBarDock>
+          <DriveSelectionBar
+            store={selectionStore}
+            total={ordered.length}
+            zipping={zipping}
+            canWrite={canWrite}
+            onSelectAll={selectAll}
+            onClearSelection={() => selectionStore.set(new Set())}
+            onDownload={() => void bulkDownload(selectedNodes())}
+            onCopy={() => bulkClipboard(selectedNodes(), 'copy')}
+            onMove={() => bulkClipboard(selectedNodes(), 'cut')}
+            onDelete={() => bulkDelete(selectedNodes())}
+            onExit={exitSelect}
+          />
+        </ActionBarDock>
       ) : null}
 
       {canWrite && clipboard && !selectMode && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center px-4">
-          <div className="bg-popover text-popover-foreground border-border pointer-events-auto flex w-full max-w-xl items-center gap-3 rounded-lg border p-2 pl-3.5 shadow-md">
-            <Clipboard className="text-muted-foreground size-4 shrink-0" />
-            <span className="min-w-0 flex-1 truncate text-sm" aria-live="polite">
-              {clipboardItems.length > 1
+        <ActionBarDock>
+          <ActionBar
+            leading={<Clipboard />}
+            title={
+              clipboardItems.length > 1
                 ? tDrives(clipboard.operation === 'cut' ? 'clipboardMovingMany' : 'clipboardCopyingMany', {
                     count: clipboardItems.length,
                   })
                 : tDrives(clipboard.operation === 'cut' ? 'clipboardMoving' : 'clipboardCopying', {
                     name: clipboard.name,
-                  })}
-            </span>
-            <ButtonGroup className="shrink-0">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="gap-1.5 active:scale-[0.96]"
-                onClick={handlePaste}
-                disabled={pasting}
-              >
-                {pasting ? (
-                  <Loading className="size-3.5 shrink-0" />
-                ) : (
-                  <ClipboardTextIcon className="size-3.5 shrink-0" />
-                )}
-                {tHardcodedUi.raw('featuresFilesComponentsFileExplorerPage.line771JsxTextPasteHere')}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="gap-1.5 active:scale-[0.96]"
-                onClick={clearClipboard}
+                  })
+            }
+            actions={[
+              {
+                id: 'paste',
+                label: tHardcodedUi.raw('featuresFilesComponentsFileExplorerPage.line771JsxTextPasteHere'),
+                loading: pasting,
+                onSelect: handlePaste,
+              },
+              {
+                id: 'cancel',
+                label: tHardcodedUi.raw('i18nComplete.text19766ed6ccb2'),
                 // A paste already sent cannot be taken back; Cancel would only
                 // hide the bar while it finishes.
-                disabled={pasting}
-              >
-                <XIcon className="size-3.5 shrink-0" />
-                {tHardcodedUi.raw('i18nComplete.text19766ed6ccb2')}
-              </Button>
-            </ButtonGroup>
-          </div>
-        </div>
+                disabled: pasting,
+                onSelect: clearClipboard,
+              },
+            ]}
+          />
+        </ActionBarDock>
       )}
 
       <DriveCreateDialog

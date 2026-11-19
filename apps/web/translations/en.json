@@ -206,7 +206,8 @@
     },
     "agentAccess": "Agents: {agents}",
     "allAgents": "All agents",
-    "noAgents": "No agents"
+    "noAgents": "No agents",
+    "deliveredOnceSet": "Delivered once a value is set"
   },
   "useCases": {
     "headline": "The loops that run a company",
@@ -451,7 +452,7 @@
         },
         "preferences": {
           "label": "Language & shortcuts",
-          "description": "Language and keyboard shortcuts."
+          "description": "Language, motion and keyboard shortcuts."
         },
         "connected": {
           "label": "Connected accounts"
@@ -753,6 +754,7 @@
       "secretsCommand": "Secrets command",
       "ownClientTitle": "Use your own Git client",
       "ownClientDescription": "Clone with plain <code>git</code> instead of the Kortix command line.",
+      "ownClientHelp": "Clone from this address with any Git client. When git asks, enter any username and a Kortix API key as the password — the Kortix command line does this for you through its credential helper; plain <code>git</code> does not.",
       "cloneAddressDescription": "Clone from this address with any Git client. Kortix signs the request for you, so there is no access token to create, paste, or keep on your machine.",
       "cloneAddress": "Clone address",
       "peopleTitle": "People with access",
@@ -967,15 +969,16 @@
         "startup": "Startup"
       },
       "statuses": {
-        "ready": "ready",
-        "building": "building",
-        "failed": "failed"
+        "ready": "Ready",
+        "building": "Building",
+        "failed": "Failed"
       },
       "stale": {
         "superseded": "Didn’t finish, and a newer setup has replaced it",
         "recovered": "Didn’t finish, but the environment is ready now",
         "retrying": "Didn’t finish — a new attempt is running"
       },
+      "supersededGroup": "{count, plural, one {# older build replaced} other {# older builds replaced}}",
       "outcomes": {
         "ready": "Ready for new sessions",
         "building": "Being prepared now",
@@ -1077,6 +1080,7 @@
       "search": "Search features",
       "loadFailed": "Failed to load workspace",
       "retry": "Retry",
+      "reset": "Reset to default",
       "noMatches": "No matches for {query}.",
       "emptyTitle": "No experimental features",
       "emptyDescription": "This deployment exposes no per-workspace feature flags.",
@@ -1158,6 +1162,14 @@
         "evals": {
           "name": "Evals",
           "description": "Run your agents on a list of tasks and score the results. A task is an instruction, a sandbox and a test script that writes a score (the Harbor task format). Declare a set of tasks under `evals:` in kortix.yaml, run it against any agent and model, and compare runs to see whether a change made the agent better or worse."
+        },
+        "desktop_tabs": {
+          "name": "Desktop tabs",
+          "description": "The desktop app shows browser-style tabs in the title bar: each session, artifact and page opens in its own tab, and ⌘T, ⌘W and ⌘1–9 work like a browser. The web app is unchanged."
+        },
+        "calendar": {
+          "name": "Calendar",
+          "description": "A shared calendar for people and agents: dated items with the people on them and comments, beside the scheduled triggers and Loops. Mention someone with @ to notify them. Agents use `kortix calendar`."
         }
       },
       "channelsSwitch": {
@@ -1305,9 +1317,11 @@
     },
     "preferences": {
       "title": "Language & shortcuts",
-      "description": "Language and keyboard shortcuts.",
+      "description": "Language, motion and keyboard shortcuts.",
       "languageTitle": "Language",
       "languageDescription": "The language Kortix displays, everywhere in the app.",
+      "motionTitle": "Reduce motion",
+      "motionDescription": "Stop shimmer, pulses and transitions across the app. Spinners keep turning.",
       "keyboardTitle": "Keyboard shortcuts",
       "keyboardDescription": "The modifier key used for tab switching, and every shortcut in the app.",
       "modifierKey": "Modifier key",
@@ -1561,6 +1575,22 @@
     "referralShareTitle": "Refer Friends",
     "referralShareSubtitle": "Get 400 credits",
     "new": "New",
+    "mcpPromo": {
+      "title": "Use Kortix in ChatGPT and Claude",
+      "description": "Add Kortix to the AI chat you already use. Start agents, follow their work and use your connectors from there.",
+      "cta": "Connect"
+    },
+    "desktopPromo": {
+      "title": "Get the desktop app",
+      "description": "Hand Kortix a task from any app with Quick Entry, and connect this computer in one click.",
+      "cta": "Download"
+    },
+    "phonePromo": {
+      "title": "Kortix on your phone",
+      "description": "Every session in your pocket. A push tells you when one finishes or needs your answer.",
+      "cta": "Get the app"
+    },
+    "promos": "Ways to use Kortix",
     "upgrade": "Upgrade",
     "chats": "Chats",
     "library": "Files",
@@ -1647,6 +1677,7 @@
         "status": "Status",
         "subAgent": "Sub-agent",
         "spawned": "Spawned session",
+        "spawnedBy": "Spawned by {title}",
         "subAgentCount": "{count, plural, one {# sub-agent} other {# sub-agents}}",
         "spawnedCount": "{count, plural, one {# spawned session} other {# spawned sessions}}",
         "created": "Created",
@@ -1666,8 +1697,8 @@
         "needsInput": "Needs input",
         "starting": "Waking",
         "running": "Working",
-        "done": "Ready",
-        "stopped": "Asleep",
+        "done": "Done",
+        "stopped": "Stopped",
         "failed": "Failed",
         "legacy": "Legacy"
       }
@@ -1696,6 +1727,9 @@
       "title": "{file} has {errors, plural, one {# error} other {# errors}} and {warnings, plural, one {# warning} other {# warnings}}",
       "titleErrors": "{file} has {errors, plural, one {# error} other {# errors}}",
       "titleWarnings": "{file} has {warnings, plural, one {# warning} other {# warnings}}",
+      "count": "{errors, plural, one {# error} other {# errors}} and {warnings, plural, one {# warning} other {# warnings}}",
+      "countErrors": "{errors, plural, one {# error} other {# errors}}",
+      "countWarnings": "{warnings, plural, one {# warning} other {# warnings}}",
       "errorsOff": "Agents and triggers with an error are off until it is fixed.",
       "warningsOnly": "Everything still runs.",
       "error": "Error",
@@ -1841,6 +1875,7 @@
       "deleteFailed": "Could not delete the group",
       "moveUp": "Move up",
       "moveDown": "Move down",
+      "collapseOthers": "Collapse others",
       "reorderFailed": "Could not reorder the groups",
       "moveTo": "Move to group",
       "removeFromGroup": "Remove from group",
@@ -1875,7 +1910,16 @@
       "private": "Private",
       "noMessages": "No messages yet",
       "more": "More"
-    }
+    },
+    "calendar": "Calendar",
+    "running": "Running",
+    "runningCount": "{count, plural, one {# session running} other {# sessions running}}",
+    "runningTitle": "Running now",
+    "runningEmpty": "Nothing is running.",
+    "runningFailed": "Couldn't read what is running.",
+    "runningRetry": "Try again",
+    "runningIn": "in {title}",
+    "runningFirst": "Showing the first {count}."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -2182,6 +2226,11 @@
       "resume": "Resume",
       "agentIsWorking": "{agent} is working",
       "needsYouOn": "Needs you: {header}"
+    },
+    "panel": {
+      "outputNew": "New",
+      "outputUpdated": "Updated",
+      "resizePane": "Resize pane"
     }
   },
   "agents": {
@@ -2366,6 +2415,8 @@
     "chatInputMachine": "Machine",
     "chatInputMachineDescription": "The machine template this session starts on.",
     "sending": "Sending",
+    "notSentYet": "Not sent yet · sends when you’re back online",
+    "offlineReconnecting": "Offline — reconnecting…",
     "stop": "Stop",
     "startingSession": "Starting session…",
     "sessionStarted": "Session started",
@@ -2883,7 +2934,7 @@
       "featuresGrace": "SSO and SCIM stay on until {date}. Talk to sales to keep Enterprise.",
       "featuresOn": "On",
       "featuresOff": "Off",
-      "featuresOffDescription": "SSO, SCIM, advanced roles, audit logs and branding.",
+      "featuresOffDescription": "SSO, SCIM, advanced roles and audit logs.",
       "featuresDemo": "On as a demo. Talk to sales for a license.",
       "featuresLicensed": "Licensed",
       "featuresLicensedRenews": "Licensed · renews {date}",
@@ -2908,7 +2959,11 @@
       "action": "Add credits or pick a plan to run sessions here."
     },
     "costs": {
-      "billedElsewhere": "{amount} credits of this cost were billed to the workspace it moved from."
+      "billedElsewhere": "{amount} credits of this cost were billed to the workspace it moved from.",
+      "allWorkspaces": "All workspaces",
+      "usageDescriptionWorkspace": "Kortix charges for this workspace. Credits are one balance for all workspaces.",
+      "usageDescriptionAll": "Kortix charges and credit ledger across all workspaces.",
+      "planDescriptionAll": "Plan, credits and spend across all workspaces."
     }
   },
   "ssoRequired": {
@@ -3015,40 +3070,35 @@
       "sending": "Sending…",
       "oneMoment": "One moment…",
       "useDifferentEmail": "Use a different email",
-      "usePasswordInstead": "Use a password instead",
-      "emailLinkInstead": "Email me a link instead",
-      "forgotPassword": "Forgot your password?",
-      "automaticAccount": "New here? Continue creates your account automatically.",
+      "usePasswordInstead": "Use a password",
+      "emailLinkInstead": "Email me a code",
+      "forgotPassword": "Forgot password?",
+      "automaticAccount": "Sign in or create an account.",
       "sso": {
         "title": "Use single sign-on",
-        "description": "<address>{email}</address> can sign in through your organization's identity provider.",
+        "description": "Sign in as <address>{email}</address> with your organization.",
         "continue": "Continue with SSO",
         "enterWorkEmail": "Enter your work email above, then choose single sign-on.",
         "notConfigured": "Single sign-on isn't set up for “{domain}”. Ask your admin to configure it, or continue with email.",
         "lookingUp": "Looking up your identity provider…",
-        "use": "Use single sign-on (SSO)"
+        "use": "Use SSO"
       },
       "link": {
         "title": "Check your email",
-        "description": "We sent a link to <address>{email}</address>. Open it to continue.",
-        "confirmDescription": "We sent a confirmation email to <address>{email}</address>. Confirm your email to continue.",
-        "unknownDescription": "We emailed <address>{email}</address> — a sign-in link, or a confirmation link for a new account.",
-        "closedDescription": "If <address>{email}</address> has an account, its sign-in link is on its way.",
-        "notReceived": "Didn't receive the link?",
-        "confirmNotReceived": "Didn't receive the confirmation email?",
-        "resendIn": "Resend in {seconds}",
-        "resend": "Resend",
-        "checkSpam": "Not there? Check your spam or junk folder."
+        "description": "Enter the code sent to <address>{email}</address>.",
+        "confirmDescription": "Confirm the email we sent to <address>{email}</address> to continue.",
+        "unknownDescription": "Enter the code sent to <address>{email}</address>.",
+        "closedDescription": "If <address>{email}</address> has an account, a code is on its way.",
+        "resendIn": "Resend in {seconds}s",
+        "resend": "Resend code"
       },
       "credentials": {
         "signin": {
           "title": "Welcome back",
-          "description": "Enter your password to continue.",
           "passwordPlaceholder": "Your password"
         },
         "signup": {
           "title": "Create your account",
-          "description": "Choose a password to get started.",
           "passwordPlaceholder": "Create a password"
         },
         "unknown": {
@@ -3062,22 +3112,19 @@
         "networkFailed": "The request could not be sent. Please try again.",
         "signupsClosed": "Signups are currently closed. Contact your administrator or request access.",
         "ssoRequired": "Your organization requires single sign-on. Continue with SSO instead.",
-        "incorrectPassword": "Incorrect password. Try again, or reset it via “Forgot your password?”.",
-        "existingAccountWrongPassword": "You already have an account — enter your existing password to sign in.",
+        "incorrectPassword": "Incorrect password.",
+        "existingAccountWrongPassword": "This email already has an account. Enter its password.",
         "confirmAccount": "Check your email to confirm your account",
         "invalidCode": "Invalid or expired code"
       },
-      "legal": {
-        "signup": "By creating an account, you agree to the <termsOfService>Terms of Service</termsOfService> and <privacyPolicy>Privacy Policy</privacyPolicy>",
-        "default": "<termsOfService>Terms of Service</termsOfService> and <privacyPolicy>Privacy Policy</privacyPolicy>"
-      }
+      "or": "or"
     },
     "passwordReset": {
       "loading": "Loading",
       "resetting": "Resetting password",
       "request": {
         "title": "Reset your password",
-        "description": "Enter your email and we'll send you a password reset link.",
+        "description": "We'll email you a reset link.",
         "email": "Email",
         "emailPlaceholder": "Your email address",
         "sending": "Sending link…",
@@ -3085,8 +3132,7 @@
       },
       "sent": {
         "title": "Check your email",
-        "description": "We've sent you a password reset link.",
-        "address": "Reset link sent to <address>{email}</address>"
+        "address": "We sent a reset link to <address>{email}</address>."
       },
       "expired": {
         "title": "Link expired",
@@ -3096,12 +3142,11 @@
       "success": {
         "title": "Password updated",
         "description": "You can now sign in with your new password.",
-        "changed": "Your password has been changed.",
         "signIn": "Go to sign in"
       },
       "form": {
         "title": "Set a new password",
-        "description": "Choose a new password for your account.",
+        "description": "Choose a new password.",
         "newPassword": "New password",
         "newPasswordPlaceholder": "Your new password",
         "confirmPassword": "Confirm password",
@@ -3337,7 +3382,17 @@
       "jsonKeys": "{count, plural, one {JSON · # key} other {JSON · # keys}}",
       "jsonItems": "{count, plural, one {JSON · # item} other {JSON · # items}}",
       "failedSentence": "The workflow stopped before it finished.",
-      "runningCount": "{count} running"
+      "runningCount": "{count} running",
+      "spent": "Spent {credits} credits",
+      "spentHint": "What Kortix billed for this run so far: model calls and computer time of the run and its agents.",
+      "waitingForYou": "Waiting for you · not started",
+      "cancelled": "Cancelled — nothing ran",
+      "answeredInChat": "Answered in chat — nothing ran",
+      "stoppedByYou": "Stopped by you",
+      "attempt": "attempt {count}",
+      "quietFor": "Quiet for {minutes} min",
+      "quietCount": "{count} quiet",
+      "holdingWorking": "Holding · {count} still working"
     },
     "agent": {
       "backgroundWorking": "Working in the background",
@@ -3467,7 +3522,8 @@
       "automation_failed": "Failure alert",
       "automation_recovered": "Recovery alert",
       "capture_device_down": "Capture computer stopped",
-      "capture_device_recovered": "Capture computer recording again"
+      "capture_device_recovered": "Capture computer recording again",
+      "mention": "Mentions"
     },
     "kindDescription": {
       "turn_done": "A turn ends.",
@@ -3478,7 +3534,8 @@
       "automation_failed": "A trigger or a loop starts failing.",
       "automation_recovered": "A failing trigger or loop works again.",
       "capture_device_down": "A Kortix Capture computer is not recording. Sent to people who manage Capture.",
-      "capture_device_recovered": "A Kortix Capture computer that stopped records again."
+      "capture_device_recovered": "A Kortix Capture computer that stopped records again.",
+      "mention": "Someone else mentions you or adds you to an item on the calendar."
     },
     "inbox": {
       "title": "Inbox",
@@ -10463,6 +10520,7 @@
       "text38e64d6a8162": "Commits a SKILL.md to the workspace's default branch. No model or chat needed.",
       "text39cfc32bd12c": "Pasted text",
       "text23d0bb29fca0": "{count, plural, one {# word} other {# words}}",
+      "text3e310b75051c": "Run again",
       "text426699d5a8c0": "{count, plural, one {# character} other {# characters}}",
       "text40078a553439": "Uploaded attachment chunk",
       "text4c7f8000aabd": "Completed attachment upload",
@@ -10826,6 +10884,10 @@
       "text0b2e0f1bf47e": "Every call it made, and who let it",
       "text0b2ecc210632": "The one live channel. Ask the question in the thread where it came up; the answer, the chart and the query come back into the same thread.",
       "text0b348466332c": "Nothing changed yet",
+      "textf83916135509": "used",
+      "texta251c18205f1": "Cached",
+      "text64cd989efc14": "Free space",
+      "textcc6d004b577f": "This file has no changes against the base.",
       "text0b38e3daeb93": "All secrets",
       "text0b3dbab0c668": "- Ship the fix, write the postmortem",
       "text0b495c90447a": "The calendar, the inbox, the applicant system.",
@@ -10961,7 +11023,7 @@
       "text0f096c40454e": "Profile the dataset, plot the distributions, check for leakage and imbalance, and write the first honest paragraph about what is in the data. You start from a briefed position rather than from an empty cell.",
       "text0f16342ee1c1": "32%",
       "text0f308cfb7ef3": "0 auto",
-      "text0f4827ef74ea": "Open positions at Kortix — FDE, GTM and MTS. Belgrade, Serbia and San Francisco. We hire for prolonged ownership.",
+      "text0f4827ef74ea": "Open positions at Kortix — FDE, GTM and MTS. Belgrade, Serbia and the US. We hire for prolonged ownership.",
       "text0f600458e375": "SSO, members, groups and role-based access come built in, with per-resource permissions for people and agents, encrypted secrets and a full audit trail. Self-host so the entire platform runs inside your own environment.",
       "text0f64c7d16c28": "# check it compiles, ask for the missing secrets,",
       "text0f656790976e": "Open any agent platform — they are architecturally identical. The marginal differences are not defensible. The only thing that diverges is the learning loop.",
@@ -11695,6 +11757,7 @@
       "text2522f9d16f3b": "The CompanyOS",
       "text25330787f710": "+3",
       "text2534086de9fe": "Show panel",
+      "text40cd6293d193": "Hide panel",
       "text2534e74d5120": "What should the agent change?",
       "text253923d0f0c5": "Connections → Applications → +",
       "text253b18a02165": "Starting up",
@@ -12030,7 +12093,6 @@
       "text2f6a48c637a9": "Webhook removed",
       "text2f6c00ce1d58": "Groups pushed from OneLogin Rules are created in Kortix under their OneLogin names.",
       "text2f6e9daec8e9": "States",
-      "text2f72fafe0ce1": "instead of the Kortix command line.",
       "text2f77668a9dfb": "Message",
       "text2f77dafd3fcc": "connect a provider",
       "text2f80158a9d89": "research/",
@@ -14245,7 +14307,7 @@
       "text6ff3bff5952a": "needs permission for:",
       "text6ffb34d0baed": "git push origin HEAD",
       "text700e7474f9a9": "Referral link not available",
-      "text702391f5d071": "This creates a personal access token. Revoke it anytime in",
+      "text702391f5d071": "Revoke access anytime in",
       "text702ef921ed1d": "First name",
       "text7031306d3dd8": "This model's provider isn't connected for this workspace — requests routed here fail over immediately",
       "text7031edbcf9c4": "Failure",
@@ -14512,7 +14574,6 @@
       "text7743ce348d92": "draft",
       "text775ddc2119ab": "Copy the \"Identifier (Entity ID)\" and the \"Reply URL (Assertion Consumer Service URL)\" below and paste them into the \"Basic SAML Configuration\" panel — mark the Identifier as Default, and set \"Sign on URL\" to your Kortix sign-in page. Leave Relay State and Logout URL empty. Click \"Save\" and close the edit panel.",
       "text775f96fcc9db": "Token revoked",
-      "text7760401b25c7": "Clone with plain",
       "text7761b572aba8": "Browser notifications",
       "text77793c7508f1": "setup will be reset.",
       "text7779bc2ac4be": "skills/claims/SKILL.md",
@@ -16581,7 +16642,7 @@
       "textb2a8625a332e": "Three scheduled triggers on a time axis with a present-moment marker, and the next run called out.",
       "textb2ac0da7c543": "Whole team",
       "textb2c0cab20dc3": "JSON-RPC batches are not supported",
-      "textb2c293b68745": ".kortix/connectors/routes.toml",
+      "textb2c293b68745": "connectors/routes.toml",
       "textb2c5bc52374a": "Secret deleted",
       "textb2d544129223": "It is not done if",
       "textb2e30caf44ee": "Use hardcoded hex colors in components",
@@ -16735,7 +16796,6 @@
       "textb7297226fd1f": "Save name",
       "textb7396994492d": "Add custom SAML app → Attribute mapping",
       "textb73ce9104ddb": "Copy failed - select and copy manually",
-      "textb74106e21108": "does not.",
       "textb7416a669c6b": "Recalled",
       "textb74399647bf0": "Name it after the job it does, so an audit line reads as itself.",
       "textb743a712efa8": "A thread is a session. One, and only one.",
@@ -17092,7 +17152,7 @@
       "textc18ce3e6b5e0": "enterpriseAccordionSelfhostBody",
       "textc18dc13ca821": "Sessions can still start, but the agent will be missing these values.",
       "textc19b5dc4376a": "\"What has anyone said about export?\"",
-      "textc19c3fc65916": "in your terminal is waiting for you to approve this sign-in.",
+      "textc19c3fc65916": "is waiting for your approval.",
       "textc1a5d4982c10": "not slip past one.",
       "textc1abcf2a909a": "≈ {value0} credits",
       "textc1ada08ce138": "Audit trail",
@@ -18312,7 +18372,6 @@
       "texte3190ee3d8a8": "Unable to display workbook",
       "texte31ab643c44f": "member",
       "texte31c7af1f424": "Everyone connects their own account.",
-      "texte327e6c1348b": "Clone from this address with any Git client. When git asks, enter any username and a Kortix API key as the password — the Kortix command line does this for you through its credential helper, plain",
       "texte3311b311078": "Wants CSV as well as xlsx",
       "texte335ed040bfe": "A draft on a branch, reviewed as a diff.",
       "texte339fc8e7d89": "A chat answer cannot be checked or repeated. So the session commits its work: the query, the script, the chart, and a note on what it verified.",
@@ -18657,7 +18716,7 @@
       "textecbd276ebec2": "Try a search.",
       "textecc7ed048b32": "month end close",
       "texteccba86b787c": "A laptop, a VPS, or your own network.",
-      "textecccd43d1878": ".kortix/connectors/schema.graphql",
+      "textecccd43d1878": "connectors/schema.graphql",
       "texteccce15347a4": "You do not have access to preview this App.",
       "textecd3c555ab44": "Failed to save permissions",
       "textecdcf83028e7": "Review parameters",
@@ -20752,7 +20811,7 @@
       "text5f6ba69d66d1": "Skill removed",
       "textcb8d6b0c94c9": " and every file in it, edits included, and removes the skill from every agent that lists it. One commit on the default branch.",
       "cliDeviceTitle": "Authorize Kortix CLI",
-      "cliDeviceWarning": "Approve only a login you started. Check that this code matches the one your terminal shows.",
+      "cliDeviceWarning": "Approve only if this code matches your terminal.",
       "cliDeviceCode": "Login code",
       "cliDeviceApproved": "Login approved. Return to your terminal.",
       "cliDeviceAction": "Authorize CLI",
@@ -21323,7 +21382,7 @@
       "text05ee1d6181f3": "When a change request merges, {agent} runs your instruction.",
       "texte608495c45ce": "Merged into {branch}",
       "text80ca527b0d55": "Change request trigger created",
-      "authEmailAlreadySent": "We sent this email less than a minute ago. Check your inbox and your spam folder before you ask for another one.",
+      "authEmailAlreadySent": "Already sent. Check your inbox and spam folder.",
       "textfe0dab79db43": "Talk to Kortix in one chat: every message is a thread, and Kortix's newest reply shows under it.",
       "text2e914b62b832": "Markdown links",
       "text7bed093239f3": "Recognised resources show an app icon and compact label. Hover to inspect the original URL.",
@@ -21419,7 +21478,19 @@
       "text458ceb31019b": "Connector event triggers",
       "text27ca9df9dbaa": "Connector event triggers are off",
       "textfff553f218c7": "Evals",
-      "textd5b5d846044e": "evals eval benchmark score harbor terminal-bench tasks leaderboard"
+      "textd5b5d846044e": "evals eval benchmark score harbor terminal-bench tasks leaderboard",
+      "textdb6ee6610b15": "calendar schedule agenda week month due deadline items triggers",
+      "text9b041fd0dfb7": "Listed calendar items",
+      "text968ff709bd3d": "Created calendar item",
+      "textd115ffd5e3a4": "Listed calendar people",
+      "texta268bab502cf": "Viewed calendar item",
+      "text16d71c4d10a2": "Edited calendar item",
+      "text14580c9900ac": "Deleted calendar item",
+      "text96386c724e21": "Commented on calendar item",
+      "textf543a9f99ce7": "Action Bar",
+      "textca4067071fcf": "Selection",
+      "text4cea356a17a1": "Unsaved edits",
+      "text2358f7b37c07": "The floating bar for a temporary mode: a selection, unsaved edits, a pending paste. A title, a muted description, actions with key hints, and a close button."
     },
     "publicShareConfirm": {
       "title": "Create a public link?",
@@ -21836,11 +21907,14 @@
     "noCapUnlimited": "No cap · spend is unlimited",
     "tokensSub": "{in} in · {out} out",
     "unknownValue": "Unknown",
-    "estimateCoverageUnavailable": "Estimate coverage unavailable.",
     "estimatesSeparate": "Actual spend above is separate. Estimates are never added to charges.",
     "estimatedUsageValueLabel": "LLM estimated usage value (not a bill):",
-    "pricedRequests": "{count} priced requests",
-    "unpricedRequests": "{count} unpriced requests",
+    "pricedRequests": "{count, number} priced requests",
+    "unpricedRequests": "{count, number} unpriced requests",
+    "failedRequests": "{count, number} failed requests",
+    "estimateInfoLabel": "About this estimate",
+    "estimateDetail": "Successful model calls priced at public list rates. Failed requests and models without a known rate are not priced.",
+    "estimateRateVersion": "Rate table: {version}",
     "llmEstimateLabel": "LLM estimate:"
   },
   "triggerComposer": {
@@ -22214,6 +22288,7 @@
     "installProfileHint": "The name people see for this connector in Kortix.",
     "wayComposio": "Connects through Composio, a third-party partner that runs the sign-in for you: you sign in to {name} in one click, and Composio keeps the login.",
     "wayMcpOneClick": "Connects to {name}'s own MCP server. You only sign in to {name}.",
+    "wayKortixGoogle": "Kortix connects to {name} through Google's API. You only sign in to Google.",
     "wayMcpSetup": "Connects to {name}'s own MCP server. It needs your own OAuth app or an API key, set after install.",
     "wayApi": "Connects to {name}'s {kind} directly. Add an account with its API key or token after install.",
     "installsWay": "Installs via {kind}",
@@ -22232,8 +22307,8 @@
     "toolsAfterInstall": "This {kind} lists its tools after install.",
     "typeFilterLabel": "Connector type",
     "typeFilterAll": "All types",
-    "moveComposioTitle": "{app} has its own MCP server",
-    "moveComposioBody": "This connector runs through Composio. You can switch it to {app}'s own MCP server: sign in once and it switches. Agents, triggers and kortix.yaml keep using {slug}.",
+    "moveComposioTitle": "{app} can connect without Composio",
+    "moveComposioBody": "This connector runs through Composio. Kortix can connect it directly: sign in once and it switches. Agents, triggers and kortix.yaml keep using {slug}.",
     "moveComposioAction": "Switch to MCP",
     "wayChannel": "Built into Kortix: people message the agent in {name}, with no third party. Set it up once on its page.",
     "waySetUp": "Set up",
@@ -22368,11 +22443,13 @@
     "areaDescription": "Connect apps and channels to your agents, and decide what they may do.",
     "wayMoreNamed": "More for {name}",
     "otherWaysLead": "Other ways:",
-    "typeFilterKortix": "Kortix"
+    "typeFilterKortix": "Kortix",
+    "scopeAll": "All",
+    "scopeAdded": "Added"
   },
   "connectMcp": {
     "title": "Connect Kortix over MCP",
-    "description": "Use Kortix from Claude, Claude Code, Cursor, Codex, or any MCP client. You sign in once. Nothing to install.",
+    "description": "Use Kortix from Claude, ChatGPT, Claude Code, Cursor, Codex, or any MCP client. You sign in once. Nothing to install.",
     "docs": "Docs",
     "done": "Done",
     "copy": "Copy",
@@ -22382,6 +22459,7 @@
     "copyUrl": "Copy URL",
     "via": {
       "claude": "Settings → Connectors",
+      "chatgpt": "Developer mode → custom connector",
       "claude-code": "One terminal command",
       "cursor": "One-click install",
       "codex": "Two terminal commands",
@@ -22657,6 +22735,13 @@
     "onlyYouDescription": "Only you, in every workspace, in your private sessions.",
     "everyoneDescription": "Everyone in the workspace can use it, including automations.",
     "promoLine": "Let Kortix work with your local files and take control of your computer.",
+    "promo": {
+      "title": "Connect your work computer",
+      "titleThis": "Connect this computer",
+      "description": "Agents work with your local files, run programs and use the apps on your screen. You decide what they may do.",
+      "cta": "Connect",
+      "ctaOneClick": "Connect in one click"
+    },
     "dismissPromo": "Dismiss",
     "useCliInstead": "Use the CLI instead",
     "cliHint": "The command shows a code and opens a page where you approve this device. It then runs in the background.",
@@ -24682,6 +24767,86 @@
     "waitNoCost": "No checks run while it waits for an answer.",
     "chaseAt": "Follows up {time}"
   },
+  "calendar": {
+    "title": "Calendar",
+    "gateDescription": "A shared calendar for people and agents: dated items with the people on them and comments, beside your scheduled triggers and Loops.",
+    "newItem": "New item",
+    "today": "Today",
+    "previousWeek": "Previous week",
+    "nextWeek": "Next week",
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month",
+    "week": "Week",
+    "month": "Month",
+    "view": "View",
+    "triggers": "Triggers",
+    "filter": {
+      "everyone": "Everyone",
+      "me": "Mine"
+    },
+    "people": "People",
+    "agents": "Agents",
+    "searchPeople": "Search people and agents",
+    "noDate": "No date",
+    "noDateHint": "Items without a date wait here.",
+    "allDay": "All day",
+    "startTime": "Start time",
+    "endTime": "End time",
+    "overdue": "Overdue",
+    "status": {
+      "done": "Done"
+    },
+    "comments": "{count, plural, one {# comment} other {# comments}}",
+    "formerMember": "Former member",
+    "lastRun": "Last run",
+    "lastRunFailed": "Last run failed",
+    "loop": "Loop",
+    "trigger": "Trigger",
+    "addOn": "New item on {day}",
+    "dayEntries": "{day}, {count, plural, one {# entry} other {# entries}}",
+    "showWeekOf": "Show the week of {day}",
+    "more": "{count} more",
+    "when": "When",
+    "created": "Created",
+    "clearDate": "Remove date",
+    "saveFailed": "The change was not saved.",
+    "close": "Close",
+    "goneTitle": "Item deleted",
+    "goneBody": "This item no longer exists.",
+    "loadFailed": "The calendar did not load.",
+    "itemLoadFailed": "This item did not load.",
+    "tryAgain": "Try again",
+    "commentFailed": "The comment was not added.",
+    "reopen": "Reopen",
+    "markDone": "Mark done",
+    "moreActions": "More actions",
+    "delete": "Delete",
+    "deleteTitle": "Delete this item?",
+    "deleteBody": "“{title}” and its comments are deleted for everyone.",
+    "deleteFailed": "The item was not deleted.",
+    "titleLabel": "Title",
+    "titlePlaceholder": "What needs to happen",
+    "openSession": "Open session",
+    "notes": "Notes",
+    "notesPlaceholder": "Add details. Type @ to mention someone.",
+    "commentsTitle": "Comments",
+    "commentLabel": "Comment",
+    "commentPlaceholder": "Write a comment. Type @ to mention someone.",
+    "comment": "Comment",
+    "kind": "Kind",
+    "target": "Runs",
+    "session": "Session",
+    "schedule": "Schedule",
+    "thisDay": "This day",
+    "nextRun": "Next run",
+    "failed": "failed",
+    "succeeded": "succeeded",
+    "prompt": "Prompt",
+    "openTriggers": "Open in Triggers",
+    "cancel": "Cancel",
+    "create": "Create",
+    "runs": "{capped, select, yes {{count}+ runs} other {{count, plural, one {# run} other {# runs}}}}"
+  },
   "agentEditor": {
     "manage": "Manage",
     "overviewTitle": "Overview",
@@ -24839,7 +25004,7 @@
       "newAgent": "New agent",
       "newAgentHelp": "My Kortix writes the agent into kortix.yaml and opens a change request.",
       "name": "Name",
-      "namePlaceholder": "market-scan",
+      "namePlaceholder": "Market scan",
       "nameHelp": "Lowercase letters, digits and dashes. Saved as <slug></slug>.",
       "nameTaken": "An agent with this name already exists.",
       "howToStart": "How to start",
@@ -26437,7 +26602,11 @@
         "resume": "Could not resume the run",
         "stop": "Could not stop the run",
         "restart": "Could not restart {label}"
-      }
+      },
+      "hold": "Hold new agents",
+      "holdShort": "Hold new agents",
+      "holdHint": "Hold new agents: none starts until you resume; agents already working go on (p)",
+      "holding": "Holding new agents"
     },
     "board": {
       "layoutLabel": "Layout",
@@ -26540,7 +26709,10 @@
     "googleSheet": "Google Sheet",
     "googleSlides": "Google Slides",
     "pullRequest": "PR #{number}",
-    "issue": "Issue #{number}"
+    "issue": "Issue #{number}",
+    "artifactDocument": "Document",
+    "artifactPage": "Page",
+    "artifactUpdated": "Updated {date}"
   },
   "subscriptionUsage": {
     "fiveHour": "5-hour",
@@ -26737,6 +26909,9 @@
       "personalKeysEmpty": "No personal keys. kortix login makes one; keys for a script are made in a workspace's Settings › API keys.",
       "securityDescription": "Sign-in rules, who may open whose sessions, and the rules every API key follows.",
       "rolesDescription": "Built-in and custom roles. Assign them from Members.",
+      "builtInRoles": "Built-in roles",
+      "memberGroupsEnterprise": "Groups are part of Enterprise.",
+      "openGroups": "Open Groups",
       "workspaceId": "Workspace ID",
       "workspaceIdDescription": "For the CLI, the API, and support.",
       "leaveWorkspace": "Leave workspace",
@@ -26750,7 +26925,7 @@
       "apiKeysDescription": "Keys for scripts, CI and integrations. A key acts as you, an agent or a bot. The rules every key follows are in Security.",
       "keys": {
         "title": "API keys",
-        "description": "Keys for scripts, CI and integrations. A key acts as you, an agent or a bot; Works in sets which workspaces it reaches.",
+        "description": "Keys for scripts, CI and integrations. A key acts as you, an agent or a bot. It works in this workspace unless you pick all your workspaces.",
         "newKey": "New key",
         "count": "{count, plural, one {# key} other {# keys}}",
         "emptyTitle": "No API keys",
@@ -27130,7 +27305,7 @@
     "progressLabel": "Progress",
     "ranFor": "Ran for {time}",
     "recentJobs": "Recent jobs",
-    "registryGroup": "Harbor registry",
+    "registryGroup": "Harbor",
     "registryTasksHint": "Harbor registry datasets list their tasks on their own page",
     "registryUnavailable": "The Harbor registry could not be read ({reason}). Your suites and the built-in datasets are listed.",
     "retryN": "retry {n}",
@@ -27204,7 +27379,7 @@
       "all": "All",
       "suite": "Yours",
       "builtin": "Built-in",
-      "registry": "Harbor registry"
+      "registry": "Harbor"
     },
     "taskTab": {
       "instruction": "Instruction",
@@ -27213,5 +27388,79 @@
       "results": "Results"
     },
     "colTaskCount": "Tasks"
+  },
+  "desktopTabs": {
+    "tabs": "Open tabs",
+    "newTab": "New tab",
+    "newTabToRight": "New tab to the right",
+    "duplicate": "Duplicate",
+    "pin": "Pin tab",
+    "unpin": "Unpin tab",
+    "closeTab": "Close tab",
+    "closeOthers": "Close other tabs",
+    "closeToRight": "Close tabs to the right",
+    "reopenClosed": "Reopen closed tab",
+    "session": "Session",
+    "artifact": "Artifact",
+    "page": "Page",
+    "unavailable": "Unavailable",
+    "newSession": "New session",
+    "sessions": "Sessions",
+    "artifacts": "Artifacts",
+    "customize": "Customize",
+    "goal": "Goal",
+    "settings": "Settings",
+    "pages": {
+      "apps": "Apps",
+      "calendar": "Calendar",
+      "chat": "Chat",
+      "drive": "Drive",
+      "files": "Files",
+      "goals": "Goals",
+      "inbox": "Inbox",
+      "memory": "Memory",
+      "members": "Members",
+      "review": "Review",
+      "setup": "Finish setup"
+    },
+    "sections": {
+      "agents": "Agents",
+      "connectors": "Connectors",
+      "secrets": "Secrets",
+      "skills": "Skills",
+      "drives": "Drives",
+      "apps": "Apps",
+      "triggers": "Triggers",
+      "models": "Models",
+      "repo": "Repository",
+      "review": "Review",
+      "reminders": "Loops",
+      "members": "Members",
+      "settings": "Settings"
+    }
+  },
+  "workspaceSetup": {
+    "title": "Finish setup",
+    "description": "{done} of {total} done. A row turns done as soon as it is set up.",
+    "descriptionIdle": "What the agents of this workspace need from you.",
+    "tryAgain": "Try again",
+    "loadFailed": "Could not load the setup steps.",
+    "emptyTitle": "Nothing left to set up",
+    "emptyDescription": "This workspace needs no sign-in, secret or Slack from you.",
+    "openWorkspace": "Open workspace",
+    "completeTitle": "Setup is complete",
+    "completeDescription": "If you started the setup in a terminal, it continues there by itself.",
+    "slackName": "Slack",
+    "kindConnector": "Connector",
+    "kindSecret": "Secret",
+    "kindSlack": "Channel",
+    "done": "Done",
+    "connect": "Connect {name}",
+    "reconnect": "Reconnect {name}",
+    "setSecret": "Set {name}",
+    "addSlack": "Add Kortix to Slack",
+    "connectSlack": "Connect Slack",
+    "bannerTitle": "{left, plural, one {# setup step is left} other {# setup steps are left}}",
+    "bannerDismiss": "Dismiss"
   }
 }

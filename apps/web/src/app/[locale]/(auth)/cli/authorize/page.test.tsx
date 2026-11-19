@@ -85,7 +85,10 @@ const motionComponents = new Proxy(
       }),
   },
 );
+// The real module first: code under test reads exports this stub does not name (MotionGlobalConfig).
+const realMotion = await import('motion/react');
 mock.module('motion/react', () => ({
+  ...realMotion,
   AnimatePresence: ({ children }: { children: ReactNode }) => <>{children}</>,
   LazyMotion: ({ children }: { children: ReactNode }) => <>{children}</>,
   m: motionComponents,

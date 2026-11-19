@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1799,
-  "aliases": 697,
+  "count": 1814,
+  "aliases": 704,
   "routes": [
     {
       "method": "GET",
@@ -1598,6 +1598,10 @@
       "path": "/v1/cli/device/start"
     },
     {
+      "method": "POST",
+      "path": "/v1/cli/setup-events"
+    },
+    {
       "method": "GET",
       "path": "/v1/clients/mobile"
     },
@@ -2940,6 +2944,41 @@
       "method": "GET",
       "path": "/v1/projects/:workspaceId/branches",
       "aliasOf": "/v1/workspaces/:workspaceId/branches"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/calendar",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/calendar",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/projects/:workspaceId/calendar/:itemId",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar/:itemId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/calendar/:itemId",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar/:itemId"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/projects/:workspaceId/calendar/:itemId",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar/:itemId"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/calendar/:itemId/comments",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar/:itemId/comments"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/calendar/people",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar/people"
     },
     {
       "method": "GET",
@@ -5783,6 +5822,34 @@
     {
       "method": "POST",
       "path": "/v1/workspaces/:workspaceId/branding/assets/:kind"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/calendar"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/calendar"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/workspaces/:workspaceId/calendar/:itemId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/calendar/:itemId"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/workspaces/:workspaceId/calendar/:itemId"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/calendar/:itemId/comments"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/calendar/people"
     },
     {
       "method": "GET",

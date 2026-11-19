@@ -33,17 +33,20 @@ mock.module('@/lib/use-cases-source', () => ({
   },
 }));
 
-import DesktopPage from '@/app/[locale]/(public)/(marketing)/desktop/page';
-import Home from '@/app/[locale]/(public)/(marketing)/(home)/page';
-import CompliancePage from '@/app/[locale]/(public)/(marketing)/compliance/page';
-import EnterprisePage from '@/app/[locale]/(public)/(marketing)/enterprise/page';
-import FrameworkPage from '@/app/[locale]/(public)/(marketing)/framework/page';
-import MultiplayerPage from '@/app/[locale]/(public)/(marketing)/multiplayer/page';
-import SecurityPage from '@/app/[locale]/(public)/(marketing)/security/page';
-import SelfHostedPage from '@/app/[locale]/(public)/(marketing)/self-hosted/page';
-import SovereignPage from '@/app/[locale]/(public)/(marketing)/sovereign/page';
-import { TOPIC_PANELS as SelfHostedPanels } from '@/features/marketing/self-hosted/topic-panels';
-import { TOPIC_PANELS as SovereignPanels } from '@/features/marketing/sovereign/topic-panels';
+// Dynamic imports, after the mocks: a static import is hoisted above
+// `mock.module`, so the real MDX content source loaded first and, under
+// `--isolate`, died on a circular import (`useCases` before initialization).
+const { default: DesktopPage } = await import('@/app/[locale]/(public)/(marketing)/desktop/page');
+const { default: Home } = await import('@/app/[locale]/(public)/(marketing)/(home)/page');
+const { default: CompliancePage } = await import('@/app/[locale]/(public)/(marketing)/compliance/page');
+const { default: EnterprisePage } = await import('@/app/[locale]/(public)/(marketing)/enterprise/page');
+const { default: FrameworkPage } = await import('@/app/[locale]/(public)/(marketing)/framework/page');
+const { default: MultiplayerPage } = await import('@/app/[locale]/(public)/(marketing)/multiplayer/page');
+const { default: SecurityPage } = await import('@/app/[locale]/(public)/(marketing)/security/page');
+const { default: SelfHostedPage } = await import('@/app/[locale]/(public)/(marketing)/self-hosted/page');
+const { default: SovereignPage } = await import('@/app/[locale]/(public)/(marketing)/sovereign/page');
+const { TOPIC_PANELS: SelfHostedPanels } = await import('@/features/marketing/self-hosted/topic-panels');
+const { TOPIC_PANELS: SovereignPanels } = await import('@/features/marketing/sovereign/topic-panels');
 
 describe('shipped marketing route composition', () => {
   for (const [name, Page] of [['home', Home], ['security', SecurityPage]] as const) {
@@ -93,13 +96,13 @@ describe('shipped marketing route composition', () => {
 // sub, the CTA row, the band, the caption, and the walkthrough's ids and
 // aria wiring. Projections, not raw HTML: the shell's wrapper divs are
 // internals a dedupe may re-nest; everything a reader depends on is pinned.
+// The framework and sovereign heroes are characterized byte for byte in
+// `hero-solutions.test.tsx`; this projection does not repeat them.
 const SOLUTION_HERO_PAGES = [
   ['compliance', CompliancePage],
   ['enterprise', EnterprisePage],
-  ['framework', FrameworkPage],
   ['multiplayer', MultiplayerPage],
   ['self-hosted', SelfHostedPage],
-  ['sovereign', SovereignPage],
   ['desktop', DesktopPage],
 ] as const;
 

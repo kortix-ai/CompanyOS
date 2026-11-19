@@ -96,6 +96,7 @@ export const INBOX_NOTIFICATION_KINDS = [
   'automation_recovered',
   'capture_device_down',
   'capture_device_recovered',
+  'mention',
 ] as const;
 
 /** The kinds the API sends today: every entry of {@link INBOX_NOTIFICATION_KINDS}. */
@@ -105,7 +106,8 @@ type LiveInboxNotificationKind = (typeof INBOX_NOTIFICATION_KINDS)[number];
  * What a notification is about: a turn ended (`turn_done`, `turn_error`), the
  * agent asks (`question`, `permission`), a session was shared with you
  * (`shared`), an automation fails or works again, or a Capture computer stops
- * recording or records again (`capture_device_down`, `capture_device_recovered`).
+ * recording or records again (`capture_device_down`, `capture_device_recovered`),
+ * or someone else @mentioned you or added you to a calendar item (`mention`, flag `calendar`).
  * `message` is deprecated: a room message. Rooms were removed (2026-11); the API no longer serves these routes. Removed in the next major.
  */
 export type InboxNotificationKind = LiveInboxNotificationKind | 'message';
@@ -124,6 +126,8 @@ export interface InboxNotification {
   session_id: string | null;
   /** The automation, for the two automation kinds. */
   trigger_slug: string | null;
+  /** The calendar item of a `mention` row (flag `calendar`). */
+  calendar_item_id?: string | null;
   /** @deprecated The room of a `message` row. Rooms were removed (2026-11); the API no longer serves these routes. Removed in the next major. */
   room_id?: string | null;
   /** Who caused it: the person who shared or prompted. */
@@ -131,6 +135,12 @@ export interface InboxNotification {
   /** The web path that opens the subject; its `?notification=<id>` marks the row read. */
   url: string;
   read: boolean;
+  /**
+   * A `question` or `permission` whose ask is closed: answered, dismissed,
+   * decided or expired. False for every other kind. Absent from an older API:
+   * read it as false. "Needs you" leaves a resolved row out.
+   */
+  resolved?: boolean;
   created_at: string;
 }
 
@@ -195,6 +205,27 @@ export interface NotificationPreferences {
   hidden_kinds?: InboxNotificationKind[];
 }
 
+/** The feature flag each flagged kind exists behind: off in every project of the caller, the kind cannot reach them. */
+const NOTIFICATION_KIND_FLAGS: ReadonlyArray<readonly [InboxNotificationKind, string]> = [['mention', 'calendar']];
+
+/**
+ * The kinds a notification settings screen leaves out: the API's
+ * `hidden_kinds`, then each kind whose feature flag is off in every project
+ * the caller is in (`mention`: flag `calendar`). Pass the caller's projects
+ * across accounts (`useWorkspaces`), which the app has already loaded; while
+ * they are not loaded (`undefined`), a flagged kind stays hidden.
+ */
+export function hiddenNotificationKinds(
+  preferences: Pick<NotificationPreferences, 'hidden_kinds'> | undefined,
+  projects: ReadonlyArray<{ experimental?: Partial<Record<string, boolean>> | null }> | undefined,
+): InboxNotificationKind[] {
+  const hidden = new Set<InboxNotificationKind>(preferences?.hidden_kinds ?? []);
+  for (const [kind, flag] of NOTIFICATION_KIND_FLAGS) {
+    if (!(projects ?? []).some((project) => project.experimental?.[flag] === true)) hidden.add(kind);
+  }
+  return [...hidden];
+}
+
 /** A partial update: only the kinds and channels named change. */
 export interface NotificationPreferencesPatch {
   kinds: Partial<Record<InboxNotificationKind, Partial<{ push: boolean; email: boolean }>>>;
@@ -211,6 +242,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences['kinds'] 
   automation_recovered: { push: true, email: false },
   capture_device_down: { push: true, email: true },
   capture_device_recovered: { push: true, email: false },
+  mention: { push: true, email: true },
 };
 
 /** The caller's effective preferences (the defaults with their saved choices applied). */

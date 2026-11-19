@@ -9,6 +9,7 @@ import type { InputProps } from './input';
 import { InputGroupSearch, InputGroupSearchClear, InputGroupSearchIcon, InputGroupSearchInput } from './input-group';
 
 type ButtonSize = NonNullable<ComponentProps<typeof Button>['size']>;
+type ButtonVariant = NonNullable<ComponentProps<typeof Button>['variant']>;
 type InputSize = NonNullable<InputProps['size']>;
 
 /**
@@ -44,6 +45,7 @@ export function ExpandableSearch({
   placeholder,
   size = 'sm',
   buttonSize,
+  buttonVariant = 'ghost',
   inputSize,
   defaultOpen = false,
   className,
@@ -57,6 +59,8 @@ export function ExpandableSearch({
   placeholder?: string;
   size?: ExpandableSearchSize;
   buttonSize?: ButtonSize;
+  /** The closed icon button's look; `ghost` by default. */
+  buttonVariant?: ButtonVariant;
   inputSize?: InputSize;
   defaultOpen?: boolean;
   /** The open input's wrapper: set its width here (default `w-56`). */
@@ -78,7 +82,7 @@ export function ExpandableSearch({
       <Button
         ref={buttonRef}
         type="button"
-        variant="ghost"
+        variant={buttonVariant}
         size={buttonSize ?? preset.button}
         aria-label={label}
         title={label}

@@ -196,6 +196,7 @@
     "./error-boundary": "./src/primitives/error-boundary.tsx",
     "./error-state": "./src/primitives/error-state.tsx",
     "./expandable-search": "./src/primitives/expandable-search.tsx",
+    "./sort-menu": "./src/primitives/sort-menu.tsx",
     "./faded-scroll-area": "./src/primitives/faded-scroll-area.tsx",
     "./favicon-avatar": "./src/primitives/favicon-avatar.tsx",
     "./field": "./src/primitives/field.tsx",

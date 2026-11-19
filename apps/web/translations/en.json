@@ -1800,7 +1800,8 @@
         "project": "Whole workspace"
       },
       "ownerAccess": "{owner} · {access}",
-      "labels": "Labels"
+      "labels": "Labels",
+      "members": "Members"
     },
     "loadingMore": "Loading…",
     "loadMoreSessions": "Load more sessions",
@@ -24770,7 +24771,9 @@
     "checkFailed": "Check failed: {note}",
     "waitingOnPerson": "Waiting on {person}",
     "waitNoCost": "No checks run while it waits for an answer.",
-    "chaseAt": "Follows up {time}"
+    "chaseAt": "Follows up {time}",
+    "search": "Search goals",
+    "noMatch": "No goal matches"
   },
   "calendar": {
     "title": "Calendar",
@@ -27567,7 +27570,14 @@
     "spaceMember": "Member of this space",
     "workspaceOwner": "Workspace owner",
     "workspaceAdmin": "Workspace admin",
-    "addedOn": "Added to this space {date}"
+    "addedOn": "Added to this space {date}",
+    "sortBy": "Sort: {mode}",
+    "sortActivity": "Last activity",
+    "sortName": "Name",
+    "sortCreated": "Date created",
+    "yourSpaces": "Your spaces",
+    "sharedWithYou": "Shared with you",
+    "sharedShort": "Shared"
   },
   "sessionShare": {
     "addPlaceholder": "Add people or groups by name or email…",
@@ -27579,5 +27589,15 @@
     "remove": "Remove",
     "share": "Share",
     "notMember": "Share a session only with members of this workspace."
+  },
+  "listSort": {
+    "sortBy": "Sort: {mode}",
+    "lastActivity": "Last activity",
+    "name": "Name",
+    "created": "Date created"
+  },
+  "appsList": {
+    "search": "Search Apps",
+    "noMatch": "No App matches"
   }
 }

@@ -1800,7 +1800,8 @@
         "project": "Tutto il workspace"
       },
       "ownerAccess": "{owner} · {access}",
-      "labels": "Etichette"
+      "labels": "Etichette",
+      "members": "Membri"
     },
     "loadingMore": "Caricamento…",
     "loadMoreSessions": "Carica altre sessioni",
@@ -24770,7 +24771,9 @@
     "checkFailed": "Controllo non superato: {note}",
     "waitingOnPerson": "In attesa di {person}",
     "waitNoCost": "Nessun controllo viene eseguito mentre attende una risposta.",
-    "chaseAt": "Sollecita {time}"
+    "chaseAt": "Sollecita {time}",
+    "search": "Cerca obiettivi",
+    "noMatch": "Nessun obiettivo corrisponde"
   },
   "calendar": {
     "title": "Calendario",
@@ -27567,7 +27570,14 @@
     "spaceMember": "Membro di questo spazio",
     "workspaceOwner": "Proprietario del workspace",
     "workspaceAdmin": "Amministratore del workspace",
-    "addedOn": "Aggiunto a questo spazio il {date}"
+    "addedOn": "Aggiunto a questo spazio il {date}",
+    "sortBy": "Ordina: {mode}",
+    "sortActivity": "Ultima attività",
+    "sortName": "Nome",
+    "sortCreated": "Data di creazione",
+    "yourSpaces": "I tuoi spazi",
+    "sharedWithYou": "Condivisi con te",
+    "sharedShort": "Condiviso"
   },
   "sessionShare": {
     "addPlaceholder": "Aggiungi persone o gruppi per nome o email…",
@@ -27579,5 +27589,15 @@
     "remove": "Rimuovi",
     "share": "Condividi",
     "notMember": "Condividi una sessione solo con i membri di questo workspace."
+  },
+  "listSort": {
+    "sortBy": "Ordina: {mode}",
+    "lastActivity": "Ultima attività",
+    "name": "Nome",
+    "created": "Data di creazione"
+  },
+  "appsList": {
+    "search": "Cerca app",
+    "noMatch": "Nessuna app corrisponde"
   }
 }

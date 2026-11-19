@@ -393,6 +393,18 @@ export interface SessionChatInputProps {
    */
   underbarPlacement?: 'below' | 'inline';
   /**
+   * One row (attach, text, send) while the text fits one line, the full card
+   * once it wraps or anything is attached; back to one row when emptied. Off
+   * by default: only a narrow pane (a sub-agent beside the chat) opts in.
+   */
+  inline?: boolean;
+  /**
+   * Draw no agent picker. Only for a box with no agent choice: a message to an
+   * existing sub-agent goes to that agent, so a picker there would lie. Every
+   * composer that starts or continues a turn keeps it (see `ComposerUnderbar`).
+   */
+  hideAgentPicker?: boolean;
+  /**
    * The agent picker shows the agent's tile alone, its name in the tooltip
    * and the menu. A narrow inline toolbar (a channel's thread panel) gives
    * the model name the width instead.
@@ -2211,6 +2223,8 @@ function ComposerImpl(props: SessionChatInputProps) {
         // this stacking context sits above them; the dock's own `z-99` only
         // ranks inside this shell and cannot do that job.
         slashMenuPlacement === 'below' && 'z-50',
+        // `inline` sits in a host that already has its gutter (the sub-agent panel): no second one.
+        props.inline && 'px-0',
         parentClassName,
       )}
     >

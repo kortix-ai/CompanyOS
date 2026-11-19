@@ -1800,7 +1800,8 @@
         "project": "ワークスペース全体"
       },
       "ownerAccess": "{owner} · {access}",
-      "labels": "ラベル"
+      "labels": "ラベル",
+      "members": "メンバー"
     },
     "loadingMore": "読み込み中…",
     "loadMoreSessions": "セッションをさらに読み込む",
@@ -24770,7 +24771,9 @@
     "checkFailed": "検証に失敗しました: {note}",
     "waitingOnPerson": "{person} の回答待ち",
     "waitNoCost": "回答を待っている間はチェックは実行されません。",
-    "chaseAt": "{time} にフォローアップ"
+    "chaseAt": "{time} にフォローアップ",
+    "search": "ゴールを検索",
+    "noMatch": "一致するゴールはありません"
   },
   "calendar": {
     "title": "カレンダー",
@@ -27567,7 +27570,14 @@
     "spaceMember": "このスペースのメンバー",
     "workspaceOwner": "ワークスペースのオーナー",
     "workspaceAdmin": "ワークスペースの管理者",
-    "addedOn": "{date} にこのスペースに追加"
+    "addedOn": "{date} にこのスペースに追加",
+    "sortBy": "並べ替え: {mode}",
+    "sortActivity": "最近のアクティビティ",
+    "sortName": "名前",
+    "sortCreated": "作成日",
+    "yourSpaces": "自分のスペース",
+    "sharedWithYou": "共有されたスペース",
+    "sharedShort": "共有"
   },
   "sessionShare": {
     "addPlaceholder": "名前またはメールでユーザーやグループを追加…",
@@ -27579,5 +27589,15 @@
     "remove": "削除",
     "share": "共有",
     "notMember": "セッションはこのワークスペースのメンバーとだけ共有できます。"
+  },
+  "listSort": {
+    "sortBy": "並べ替え: {mode}",
+    "lastActivity": "最近のアクティビティ",
+    "name": "名前",
+    "created": "作成日"
+  },
+  "appsList": {
+    "search": "アプリを検索",
+    "noMatch": "一致するアプリはありません"
   }
 }

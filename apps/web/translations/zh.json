@@ -1800,7 +1800,8 @@
         "project": "整个工作区"
       },
       "ownerAccess": "{owner} · {access}",
-      "labels": "标签"
+      "labels": "标签",
+      "members": "成员"
     },
     "loadingMore": "加载中…",
     "loadMoreSessions": "加载更多会话",
@@ -24770,7 +24771,9 @@
     "checkFailed": "检查未通过：{note}",
     "waitingOnPerson": "等待 {person}",
     "waitNoCost": "等待回答期间不会运行检查。",
-    "chaseAt": "{time} 跟进"
+    "chaseAt": "{time} 跟进",
+    "search": "搜索目标",
+    "noMatch": "没有匹配的目标"
   },
   "calendar": {
     "title": "日历",
@@ -27567,7 +27570,14 @@
     "spaceMember": "此空间成员",
     "workspaceOwner": "工作区所有者",
     "workspaceAdmin": "工作区管理员",
-    "addedOn": "{date} 加入此空间"
+    "addedOn": "{date} 加入此空间",
+    "sortBy": "排序：{mode}",
+    "sortActivity": "最近活动",
+    "sortName": "名称",
+    "sortCreated": "创建日期",
+    "yourSpaces": "你的空间",
+    "sharedWithYou": "与你共享",
+    "sharedShort": "已共享"
   },
   "sessionShare": {
     "addPlaceholder": "按姓名或邮箱添加成员或群组…",
@@ -27579,5 +27589,15 @@
     "remove": "移除",
     "share": "共享",
     "notMember": "会话只能与此工作区的成员共享。"
+  },
+  "listSort": {
+    "sortBy": "排序：{mode}",
+    "lastActivity": "最近活动",
+    "name": "名称",
+    "created": "创建日期"
+  },
+  "appsList": {
+    "search": "搜索应用",
+    "noMatch": "没有匹配的应用"
   }
 }

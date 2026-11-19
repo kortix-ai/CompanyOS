@@ -18,7 +18,6 @@ import {
   useCreateProjectSessionGroup,
   useDeleteProjectSessionGroup,
   useProjectSessions,
-  useRenameProjectSessionGroup,
   useReorderProjectSessionGroups,
   useSetProjectSessionGroup,
 } from '@kortix/sdk/react';
@@ -48,16 +47,6 @@ import {
   DropdownMenuTrigger,
 } from '../../primitives/dropdown-menu';
 import Hint from '../../primitives/hint';
-import { Input } from '../../primitives/input';
-import Loading from '../../primitives/loading';
-import {
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  ModalTitle,
-} from '../../primitives/modal';
 import { errorToast, successToast } from '../../primitives/toast';
 import { moveGroupBy, moveGroupTo } from './session-group-order';
 import { SpaceIconBare } from '../session-spaces/space-icon';
@@ -194,104 +183,6 @@ export function useSessionGroupActions(projectId: string, groups: readonly Proje
       },
     };
   }, [file, reorder, groups, t, queryClient, projectId]);
-}
-
-/**
- * Rename a group (a new group is named in place, `NewSessionGroupRow`). A
- * taken name shows in the dialog; the dialog closes with a toast once the
- * list holds the change.
- */
-export function SessionGroupNameModal({
-  projectId,
-  group,
-  open,
-  onOpenChange,
-}: {
-  projectId: string;
-  group: ProjectSessionGroup | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const t = useTranslations('sidebar.sessionGroups');
-  const rename = useRenameProjectSessionGroup(projectId);
-  const [value, setValue] = useState('');
-  const [problem, setProblem] = useState<string | null>(null);
-  const [syncedFor, setSyncedFor] = useState<[boolean, string | null]>([open, group?.group_id ?? null]);
-  if (syncedFor[0] !== open || syncedFor[1] !== (group?.group_id ?? null)) {
-    setSyncedFor([open, group?.group_id ?? null]);
-    if (open) {
-      setValue(group?.name ?? '');
-      setProblem(null);
-    }
-  }
-
-  const pending = rename.isPending;
-  const name = value.trim();
-  const unchanged = group !== null && name === group.name;
-
-  const submit = async () => {
-    if (!group || !name || unchanged || pending) return;
-    setProblem(null);
-    try {
-      await rename.mutateAsync({ groupId: group.group_id, name });
-      successToast(t('renamed'));
-      onOpenChange(false);
-    } catch (error) {
-      const code = error instanceof ApiError ? error.code : undefined;
-      setProblem(code === 'group_name_taken' ? t('nameTaken') : t('renameFailed'));
-    }
-  };
-
-  return (
-    <Modal open={open} onOpenChange={(next) => !pending && onOpenChange(next)}>
-      <ModalContent className="lg:max-w-md">
-        <ModalHeader>
-          <ModalTitle>{t('rename')}</ModalTitle>
-        </ModalHeader>
-        <ModalBody className="space-y-2">
-          <Input
-            autoFocus
-            value={value}
-            maxLength={GROUP_NAME_MAX}
-            placeholder={t('namePlaceholder')}
-            aria-label={t('namePlaceholder')}
-            aria-invalid={problem ? true : undefined}
-            onChange={(event) => {
-              setValue(event.target.value);
-              setProblem(null);
-            }}
-            onKeyDown={(event) => {
-              if (event.nativeEvent.isComposing) return;
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                void submit();
-              }
-            }}
-          />
-          {problem ? (
-            <p className="text-destructive text-xs" role="alert">
-              {problem}
-            </p>
-          ) : null}
-        </ModalBody>
-        <ModalFooter className="sm:justify-between">
-          <Button
-            variant="outline-ghost"
-            size="sm"
-            className="w-full sm:w-auto"
-            onClick={() => onOpenChange(false)}
-            disabled={pending}
-          >
-            {t('cancel')}
-          </Button>
-          <Button size="sm" className="w-full sm:w-auto" onClick={() => void submit()} disabled={!name || unchanged || pending}>
-            {pending ? <Loading className="size-4 shrink-0" /> : null}
-            {t('save')}
-          </Button>
-        </ModalFooter>
-      </ModalContent>
-    </Modal>
-  );
 }
 
 /** `base`, or `base 2`, `base 3`…: the first name no group of the project has (names are unique per project). */
@@ -632,6 +523,7 @@ function SessionGroupMenu({
   const tGroups = useTranslations('sidebar.sessionGroups');
   const router = useUiRouter();
   const spaceHref = uiRoutes().sessionSpace?.(projectId, group.group_id) ?? null;
+  const pathname = useUiPathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const remove = useDeleteProjectSessionGroup(projectId);
@@ -727,6 +619,11 @@ function SessionGroupMenu({
             onSuccess: () => {
               setConfirmOpen(false);
               successToast(tGroups('deleted'));
+              // Deleting the space you are looking at leaves its page for the spaces list,
+              // not a "This space does not exist" screen.
+              if (spaceHref && pathname?.endsWith(spaceHref)) {
+                router.push(uiRoutes().sessionSpaces?.(projectId) ?? uiRoutes().project(projectId));
+              }
             },
             onError: () => errorToast(tGroups('deleteFailed')),
           })

@@ -2,44 +2,59 @@
 
 import type { ProjectSessionGroup } from '@kortix/sdk';
 import { useFeatureFlag, useWorkspaceSessionGroups } from '@kortix/sdk/react';
-import { MagnifyingGlassIcon, PlusIcon, StackIcon } from '@phosphor-icons/react';
+import {
+  CaretDownIcon,
+  DotsThreeIcon,
+  LockSimpleIcon,
+  MagnifyingGlassIcon,
+  PlusIcon,
+  StackIcon,
+  UsersIcon,
+  UsersThreeIcon,
+} from '@phosphor-icons/react';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
-import { CapabilityPageShell } from '../../customize/shared/capability-page-shell';
 import { FeatureGateScreen } from '../../customize/shared/feature-gate-screen';
 import { useTranslations } from '../../i18n';
+import { ProjectPageHeader } from '../../internal/layout/project-page-header';
 import { uiRoutes } from '../../lib/routes';
+import { cn } from '../../lib/utils';
 import { Button } from '../../primitives/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../primitives/collapsible';
 import { EmptyArt } from '../../primitives/empty-art';
 import { EmptyState } from '../../primitives/empty-state';
 import { ErrorState } from '../../primitives/error-state';
-import {
-  InputGroupSearch,
-  InputGroupSearchClear,
-  InputGroupSearchIcon,
-  InputGroupSearchInput,
-} from '../../primitives/input-group';
+import { ExpandableSearch } from '../../primitives/expandable-search';
 import { Skeleton } from '../../primitives/skeleton';
-import { UiLink as Link, useUiRouter } from '../../providers/ui-provider';
+import { SortMenu, useStoredSort } from '../../primitives/sort-menu';
+import { UiLink as Link, useUiRouter, useUiViewerId } from '../../providers/ui-provider';
+import { SpaceSettingsMenu } from './space-detail-page';
 import { SpaceFormModal } from './space-form-modal';
-import { SpaceIcon } from './space-icon';
-import { SpaceAudienceMark, useSpaceAudienceLabel } from './space-people';
+import { SpaceIconBare } from './space-icon';
+import { spaceAudience, spaceParticipants } from './space-people';
+import { SessionParticipantStack } from '../../session/participants/session-participants';
 
-const SKELETON_KEYS = ['a', 'b', 'c', 'd'];
+type SpaceSort = 'activity' | 'name' | 'created';
+const SORTS: SpaceSort[] = ['activity', 'name', 'created'];
+const SORT_STORAGE_KEY = 'kortix:spaces-sort';
+const SKELETON_KEYS = ['a', 'b', 'c', 'd', 'e'];
 
 /**
- * The workspace's Spaces (flag `session_groups`): every space the viewer sees
- * as a card, a search over their names and what they are for, and New space.
- * A space groups sessions; its page (`SpaceDetailPage`) starts sessions in it.
+ * The workspace's Spaces (flag `session_groups`) as one list: a header bar
+ * (sort, search, New space), then the spaces the viewer made and the spaces
+ * shared with them, each a collapsible group of one-line rows.
  */
 export function SpacesPage({ projectId }: { projectId: string }) {
   const t = useTranslations('sessionSpaces');
   const flag = useFeatureFlag(projectId, 'session_groups');
   const groups = useWorkspaceSessionGroups(flag.enabled ? projectId : null);
+  const viewerId = useUiViewerId();
   const router = useUiRouter();
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useStoredSort<SpaceSort>(SORT_STORAGE_KEY, SORTS, 'activity');
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<ProjectSessionGroup | null>(null);
 
   if (flag.isLoading) return null;
   if (!flag.enabled) {
@@ -48,127 +63,204 @@ export function SpacesPage({ projectId }: { projectId: string }) {
 
   const spaces = groups.data ?? [];
   const query = search.trim().toLowerCase();
-  const shown = query
-    ? spaces.filter(
-        (space) => space.name.toLowerCase().includes(query) || (space.description ?? '').toLowerCase().includes(query),
-      )
-    : spaces;
+  const shown = sortSpaces(
+    query
+      ? spaces.filter(
+          (space) => space.name.toLowerCase().includes(query) || (space.description ?? '').toLowerCase().includes(query),
+        )
+      : spaces,
+    sort,
+  );
+  // Without a known viewer every space counts as theirs: one group, no empty "Shared" header.
+  const mine = shown.filter((space) => !viewerId || space.created_by === viewerId);
+  const shared = shown.filter((space) => viewerId && space.created_by !== viewerId);
   const open = (space: ProjectSessionGroup) => {
     const href = uiRoutes().sessionSpace?.(projectId, space.group_id);
     if (href) router.push(href);
   };
+  const sortLabel = { activity: t('sortActivity'), name: t('sortName'), created: t('sortCreated') };
+
+  let body: ReactNode;
+  if (groups.isLoading) {
+    body = (
+      <ul aria-hidden className="space-y-1 px-3">
+        {SKELETON_KEYS.map((key) => (
+          <li key={key} className="flex h-11 items-center gap-3">
+            <Skeleton className="size-6 shrink-0 rounded-md py-0" />
+            <Skeleton className="h-3.5 w-40 py-0" />
+          </li>
+        ))}
+      </ul>
+    );
+  } else if (groups.isError) {
+    body = (
+      <ErrorState
+        size="sm"
+        title={t('loadFailed')}
+        action={
+          <Button variant="outline" size="sm" onClick={() => void groups.refetch()}>
+            {t('tryAgain')}
+          </Button>
+        }
+      />
+    );
+  } else if (spaces.length === 0) {
+    body = <EmptyState media={<EmptyArt icon={StackIcon} />} title={t('emptyTitle')} description={t('emptyDescription')} />;
+  } else if (shown.length === 0) {
+    body = (
+      <EmptyState media={<EmptyArt icon={MagnifyingGlassIcon} />} title={t('noResultsTitle')} description={t('noResultsDescription')} />
+    );
+  } else {
+    body = (
+      <div className="space-y-1">
+        {mine.length > 0 ? (
+          <SpaceGroup label={t('yourSpaces')} spaces={mine} projectId={projectId} onEdit={setEditing} />
+        ) : null}
+        {shared.length > 0 ? (
+          <SpaceGroup label={t('sharedWithYou')} spaces={shared} projectId={projectId} onEdit={setEditing} />
+        ) : null}
+      </div>
+    );
+  }
 
   return (
-    <CapabilityPageShell
-      title={t('title')}
-      description={t('description')}
-      search={
-        spaces.length > 0 ? (
-          <InputGroupSearch>
-            <InputGroupSearchIcon>
-              <MagnifyingGlassIcon />
-            </InputGroupSearchIcon>
-            <InputGroupSearchInput
-              type="text"
-              autoComplete="off"
-              placeholder={t('searchPlaceholder')}
-              aria-label={t('searchPlaceholder')}
+    // Capped at the screen height so the header bar stays put and only the list scrolls.
+    <div className="bg-background flex h-svh max-h-svh min-h-0 flex-1 flex-col overflow-clip">
+      <ProjectPageHeader title={t('title')}>
+        {spaces.length > 0 ? (
+          <>
+            <ExpandableSearch
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onValueChange={setSearch}
+              label={t('searchPlaceholder')}
+              size="sm"
+              buttonVariant="outline"
+              className="w-40 sm:w-56"
             />
-            <InputGroupSearchClear onClick={() => setSearch('')} />
-          </InputGroupSearch>
-        ) : undefined
-      }
-      action={
+            <SortMenu
+              value={sort}
+              onValueChange={setSort}
+              options={SORTS.map((mode) => ({ value: mode, label: sortLabel[mode] }))}
+              label={t('sortBy', { mode: sortLabel[sort] })}
+            />
+          </>
+        ) : null}
         <Button size="sm" className="gap-1.5" onClick={() => setCreating(true)}>
           <PlusIcon className="size-3.5 shrink-0" />
-          {t('newSpace')}
+          <span className="hidden sm:inline">{t('newSpace')}</span>
         </Button>
-      }
-    >
-      {groups.isLoading ? (
-        <ul className="grid gap-3 sm:grid-cols-2" aria-hidden>
-          {SKELETON_KEYS.map((key) => (
-            <li key={key} className="bg-popover flex h-36 flex-col gap-4 rounded-md border p-4">
-              <span className="flex items-center gap-3">
-                <Skeleton className="size-9 shrink-0 rounded-md py-0" />
-                <Skeleton className="h-3.5 w-32 py-0" />
-              </span>
-              <Skeleton className="h-3 w-full py-0" />
-              <Skeleton className="mt-auto h-3 w-24 py-0" />
-            </li>
-          ))}
-        </ul>
-      ) : groups.isError ? (
-        <ErrorState
-          size="sm"
-          title={t('loadFailed')}
-          action={
-            <Button variant="outline" size="sm" onClick={() => void groups.refetch()}>
-              {t('tryAgain')}
-            </Button>
-          }
-        />
-      ) : spaces.length === 0 ? (
-        <EmptyState media={<EmptyArt icon={StackIcon} />} title={t('emptyTitle')} description={t('emptyDescription')} />
-      ) : shown.length === 0 ? (
-        <EmptyState
-          media={<EmptyArt icon={MagnifyingGlassIcon} />}
-          title={t('noResultsTitle')}
-          description={t('noResultsDescription')}
-        />
-      ) : (
-        <ul className="grid gap-3 sm:grid-cols-2">
-          {shown.map((space) => (
-            <li key={space.group_id}>
-              <SpaceTile projectId={projectId} space={space} />
-            </li>
-          ))}
-        </ul>
-      )}
+      </ProjectPageHeader>
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2 sm:px-3">{body}</div>
       <SpaceFormModal projectId={projectId} space={null} open={creating} onOpenChange={setCreating} onSaved={open} />
-    </CapabilityPageShell>
+      <SpaceFormModal
+        projectId={projectId}
+        space={editing}
+        open={editing !== null}
+        onOpenChange={(next) => {
+          if (!next) setEditing(null);
+        }}
+      />
+    </div>
+  );
+}
+
+/** A filled header that folds its rows away, with how many it holds. */
+function SpaceGroup({
+  label,
+  spaces,
+  projectId,
+  onEdit,
+}: {
+  label: string;
+  spaces: ProjectSessionGroup[];
+  projectId: string;
+  onEdit: (space: ProjectSessionGroup) => void;
+}) {
+  return (
+    <Collapsible defaultOpen>
+      <CollapsibleTrigger className="group/trigger bg-muted/60 text-muted-foreground hover:text-foreground duration-fast flex h-9 w-full items-center gap-2 rounded-md px-3 text-sm transition-colors">
+        <span className="truncate">{label}</span>
+        <span className="text-muted-foreground tabular-nums">{spaces.length}</span>
+        <CaretDownIcon
+          aria-hidden
+          className="duration-fast ml-auto size-3.5 shrink-0 transition-transform ease-out group-data-[state=closed]/trigger:-rotate-90"
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <ul className="py-1">
+          {spaces.map((space) => (
+            <SpaceRow key={space.group_id} projectId={projectId} space={space} onEdit={() => onEdit(space)} />
+          ))}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
 /**
- * One space as a card: its glyph, name and who sees it; what it is for, in up
- * to two lines; then how many sessions it holds and when one last moved.
+ * One space on one line: its icon and name, then fixed columns on the right
+ * (who is in it, who can open it, when it last moved, its menu) so every row
+ * lines up. The menu shows on hover or focus, and always on touch.
  */
-function SpaceTile({ projectId, space }: { projectId: string; space: ProjectSessionGroup }) {
+function SpaceRow({ projectId, space, onEdit }: { projectId: string; space: ProjectSessionGroup; onEdit: () => void }) {
   const t = useTranslations('sessionSpaces');
   const href = uiRoutes().sessionSpace?.(projectId, space.group_id);
-  const audience = useSpaceAudienceLabel(space);
-  const count = space.session_count;
-  const active = space.last_activity_at ? relativeTime(space.last_activity_at) : null;
+  const audience = spaceAudience(space);
+  const when = relativeTime(space.last_activity_at ?? space.updated_at);
   if (!href) return null;
+  let access: { icon: ReactNode; label: string };
+  if (audience.kind === 'everyone') access = { icon: <UsersThreeIcon className="size-3.5" />, label: t('everyone') };
+  else if (audience.kind === 'private') access = { icon: <LockSimpleIcon className="size-3.5" />, label: t('private') };
+  else access = { icon: <UsersIcon className="size-3.5" />, label: t('sharedShort') };
   return (
-    <Link
-      href={href}
-      prefetch
-      className="bg-popover hover:bg-hover duration-fast flex h-full min-h-36 flex-col gap-3 rounded-md border p-4 transition-colors"
-    >
-      <span className="flex items-center gap-3">
-        <SpaceIcon space={space} size="md" className="size-9" />
-        <span className="min-w-0 flex-1">
-          <span className="text-foreground block truncate text-sm font-medium">{space.name}</span>
-          <span className="text-muted-foreground block truncate text-xs">{audience}</span>
+    <li className="group/row hover:bg-hover focus-within:bg-hover duration-fast flex items-center rounded-md pr-2 transition-colors">
+      <Link
+        href={href}
+        prefetch
+        className="focus-visible:ring-ring flex h-11 min-w-0 flex-1 items-center gap-3 rounded-md px-3 outline-none focus-visible:ring-2"
+      >
+        <SpaceIconBare space={space} className="size-5 text-base" />
+        <span className="text-foreground min-w-0 flex-1 truncate text-sm first-letter:uppercase">{space.name}</span>
+        {audience.kind === 'people' ? (
+          <span className="hidden sm:flex">
+            <SessionParticipantStack participants={spaceParticipants(space)} label={t('peopleCount', { count: space.people?.length ?? 0 })} />
+          </span>
+        ) : null}
+        <span className="text-muted-foreground hidden w-24 shrink-0 items-center gap-1.5 text-xs sm:flex">
+          {access.icon}
+          <span className="truncate">{access.label}</span>
         </span>
+        <span className="text-muted-foreground w-28 shrink-0 text-right text-xs whitespace-nowrap tabular-nums">{when}</span>
+      </Link>
+      <span className="ml-1 flex w-7 shrink-0 items-center justify-center">
+        {space.can_manage === true ? (
+          <SpaceSettingsMenu
+            projectId={projectId}
+            space={space}
+            onEdit={onEdit}
+            trigger={
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={t('options')}
+                className="text-muted-foreground hover:text-foreground duration-fast opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100 pointer-coarse:opacity-100 data-[state=open]:opacity-100"
+              >
+                <DotsThreeIcon weight="bold" className="size-4" />
+              </Button>
+            }
+          />
+        ) : null}
       </span>
-      <span className="text-muted-foreground line-clamp-2 text-sm text-pretty">
-        {space.description || t('noDescription')}
-      </span>
-      <span className="text-muted-foreground mt-auto flex items-center gap-3 text-xs tabular-nums">
-        <span className="min-w-0 truncate">
-          {count === undefined ? null : t('sessionCount', { count })}
-          {count !== undefined && active ? <span aria-hidden> · </span> : null}
-          {active ? t('activeAgo', { when: active }) : null}
-        </span>
-        <SpaceAudienceMark space={space} className="ml-auto" />
-      </span>
-    </Link>
+    </li>
   );
+}
+
+function sortSpaces(spaces: ProjectSessionGroup[], sort: SpaceSort): ProjectSessionGroup[] {
+  const sorted = [...spaces];
+  if (sort === 'name') return sorted.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  if (sort === 'created') return sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const moved = (space: ProjectSessionGroup) => space.last_activity_at ?? space.updated_at;
+  return sorted.sort((a, b) => moved(b).localeCompare(moved(a)));
 }
 
 /** "3h ago" from an ISO time; empty when it does not parse. */

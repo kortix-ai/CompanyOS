@@ -77,7 +77,6 @@ import {
   ShowMoreButton,
 } from '../../session/list/session-list-chrome';
 import {
-  SessionGroupNameModal,
   SessionGroupSections,
   SpacesHeading,
   NewSessionGroupRow,
@@ -127,6 +126,7 @@ import {
   type ProjectSession,
   type ProjectSessionGroup,
 } from '@kortix/sdk';
+import { SpaceFormModal } from '../session-spaces/space-form-modal';
 import {
   qk,
   useProjectSession,
@@ -142,6 +142,7 @@ import {
   ArrowsSplitIcon,
   CheckIcon,
   DotsThreeIcon,
+  FunnelSimpleIcon,
   FolderSimpleIcon,
   FolderSimpleMinusIcon,
   PlusIcon,
@@ -889,9 +890,10 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
       />
 
       {groupsEnabled && (
-        <SessionGroupNameModal
+        // Rename opens the space's own edit dialog: name, icon and what it is for, in one place.
+        <SpaceFormModal
           projectId={projectId}
-          group={groupToRename}
+          space={groupToRename}
           open={!!groupToRename}
           onOpenChange={(open) => {
             if (!open) setGroupToRename(null);
@@ -1016,7 +1018,7 @@ function SessionListHeader({
               aria-label={t('sessionViewOptions')}
               className={controlClass}
             >
-              <DotsThreeIcon className="size-4" />
+              <FunnelSimpleIcon className="size-4" />
             </Button>
           </DropdownMenuTrigger>
         </DropdownMenu>
@@ -1160,7 +1162,7 @@ function SessionSectionMenu({
             }
           }}
         >
-          <DotsThreeIcon className="size-4" />
+          <FunnelSimpleIcon className="size-4" />
         </Button>
       </DropdownMenuTrigger>
       <SessionFilterMenu

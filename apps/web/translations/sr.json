@@ -1800,7 +1800,8 @@
         "project": "Цео радни простор"
       },
       "ownerAccess": "{owner} · {access}",
-      "labels": "Oznake"
+      "labels": "Oznake",
+      "members": "Чланови"
     },
     "loadingMore": "Учитавање…",
     "loadMoreSessions": "Учитајте још сесија",
@@ -24770,7 +24771,9 @@
     "checkFailed": "Provera nije uspela: {note}",
     "waitingOnPerson": "Čeka na {person}",
     "waitNoCost": "Dok čeka odgovor, nijedna provera se ne pokreće.",
-    "chaseAt": "Proverava ponovo {time}"
+    "chaseAt": "Proverava ponovo {time}",
+    "search": "Pretraži ciljeve",
+    "noMatch": "Nijedan cilj se ne poklapa"
   },
   "calendar": {
     "title": "Kalendar",
@@ -27567,7 +27570,14 @@
     "spaceMember": "Члан овог простора",
     "workspaceOwner": "Власник радног простора",
     "workspaceAdmin": "Администратор радног простора",
-    "addedOn": "Додат у овај простор {date}"
+    "addedOn": "Додат у овај простор {date}",
+    "sortBy": "Sortiraj: {mode}",
+    "sortActivity": "Poslednja aktivnost",
+    "sortName": "Ime",
+    "sortCreated": "Datum kreiranja",
+    "yourSpaces": "Tvoji prostori",
+    "sharedWithYou": "Podeljeno sa tobom",
+    "sharedShort": "Podeljeno"
   },
   "sessionShare": {
     "addPlaceholder": "Додај особе или групе по имену или имејлу…",
@@ -27579,5 +27589,15 @@
     "remove": "Уклони",
     "share": "Подели",
     "notMember": "Сесију делите само са члановима овог радног простора."
+  },
+  "listSort": {
+    "sortBy": "Sortiraj: {mode}",
+    "lastActivity": "Poslednja aktivnost",
+    "name": "Ime",
+    "created": "Datum kreiranja"
+  },
+  "appsList": {
+    "search": "Pretraži aplikacije",
+    "noMatch": "Nijedna aplikacija se ne poklapa"
   }
 }

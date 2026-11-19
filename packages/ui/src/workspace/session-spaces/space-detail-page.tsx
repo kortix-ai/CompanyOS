@@ -11,6 +11,7 @@ import {
 import { MY_KORTIX_SANDBOX_SLUG, isMyKortixAgentName, sessionGroupDriveFolder } from '@kortix/shared';
 import {
   FileTextIcon,
+  FunnelSimpleIcon,
   GearSixIcon,
   ShareNetworkIcon,
   LockSimpleIcon,
@@ -47,6 +48,18 @@ import { Skeleton } from '../../primitives/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../primitives/tabs';
 import { errorToast, successToast } from '../../primitives/toast';
 import { ExpandableSearch } from '../../primitives/expandable-search';
+import {
+  selectAccessFilters,
+  selectLabelFilters,
+  selectOrderMode,
+  selectOwnerFilters,
+  selectSourceFilters,
+  selectStatusFilters,
+  useSessionFilterStore,
+} from '../../internal/stores/session-filter-store';
+import type { SessionOrderMode } from '../sidebar/session-grouping';
+import { SessionFilterMenu } from '../sidebar/session-filter-menu';
+import { filterProjectSessions } from '../sessions/project-sessions-helpers';
 import { ProfileHoverCard, profileLabel } from '../../primitives/profile-hover-card';
 import { UserAvatar } from '../../primitives/user-avatar';
 import { UiLink as Link, useUiRouter, useUiSearchParams, useUiShallowNavigate, useUiPathname } from '../../providers/ui-provider';
@@ -62,7 +75,7 @@ import { useProjectHomeSend } from '../layout/use-project-home-send';
 import { AddTabMenu, StoredTabBody, StoredTabTrigger, type SpaceTabsState } from '../spaces/space-tabs';
 import { SpaceIconButton } from './space-icon';
 import { SpaceFormModal } from './space-form-modal';
-import { useSpaceAudienceLabel } from './space-people';
+import { spaceParticipants, useSpaceAudienceLabel } from './space-people';
 import { SessionParticipantStack } from '../../session/participants/session-participants';
 import { SpaceShareModal } from './space-share-modal';
 
@@ -175,10 +188,13 @@ function SpaceView({ projectId, space, renderFolder, renderFile }: { projectId: 
   );
 
   return (
-    <div className="bg-background flex min-h-0 flex-1 flex-col">
-      <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
+    // Capped at the screen height: the app shell above sizes to its content (`min-h-svh`), so
+    // without the cap the whole document scrolled and took the header with it. `overflow-clip`,
+    // not `hidden`, so no focus() can scroll it either. Only the tab content scrolls.
+    <div className="bg-background flex h-svh max-h-svh min-h-0 flex-1 flex-col overflow-clip">
+      <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0 overflow-clip">
         {/* One row: the tabs, and Share on their line. The space's icon and name head the Home tab, over the composer. */}
-        <header className="border-border flex h-12 shrink-0 items-stretch gap-2 border-b px-3">
+        <header className="border-border bg-background sticky top-0 z-20 flex h-12 shrink-0 items-stretch gap-2 border-b px-3">
           <div className="flex shrink-0 items-center">
             <SidebarToggle />
           </div>
@@ -259,7 +275,18 @@ function useSessionSpaceTabs(projectId: string, space: ProjectSessionGroup): Spa
 }
 
 /** The name, with its menu: Edit details for everyone who sees the space, Delete for whoever may manage it. */
-function SpaceSettingsMenu({ projectId, space, onEdit }: { projectId: string; space: ProjectSessionGroup; onEdit: () => void }) {
+export function SpaceSettingsMenu({
+  projectId,
+  space,
+  onEdit,
+  trigger,
+}: {
+  projectId: string;
+  space: ProjectSessionGroup;
+  onEdit: () => void;
+  /** The button that opens the menu; the gear by default. */
+  trigger?: ReactNode;
+}) {
   const t = useTranslations('sessionSpaces');
   const router = useUiRouter();
   const remove = useDeleteWorkspaceSessionGroup(projectId);
@@ -269,9 +296,11 @@ function SpaceSettingsMenu({ projectId, space, onEdit }: { projectId: string; sp
       <DropdownMenu>
         <Hint label={t('options')}>
           <DropdownMenuTrigger asChild>
-            <Button variant="secondary" size="icon-base" className="shrink-0" aria-label={t('options')}>
-              <GearSixIcon className="size-4" />
-            </Button>
+            {trigger ?? (
+              <Button variant="secondary" size="icon-base" className="shrink-0" aria-label={t('options')}>
+                <GearSixIcon className="size-4" />
+              </Button>
+            )}
           </DropdownMenuTrigger>
         </Hint>
         <DropdownMenuContent align="end" className="w-48">
@@ -322,13 +351,8 @@ function SpaceSettingsMenu({ projectId, space, onEdit }: { projectId: string; sp
 function AudienceShare({ space, onShare }: { space: ProjectSessionGroup; onShare?: () => void }) {
   const t = useTranslations('sessionSpaces');
   const label = useSpaceAudienceLabel(space);
-  const people = space.people ?? [];
   // The session header's stack: overlapping faces, the full list on hover. It draws for two or more people.
-  const participants = {
-    participants: people.map((person) => ({ user_id: person.user_id, name: person.name, email: person.email, avatar_url: person.avatar_url, is_viewer: false })),
-    total: people.length,
-    multi_user: people.length > 1,
-  };
+  const participants = spaceParticipants(space);
   return (
     <div className="flex items-center gap-2">
       <SessionParticipantStack participants={participants} label={label} />
@@ -570,26 +594,59 @@ function SpaceComposer({ projectId, space }: { projectId: string; space: Project
 /** The space's top-level sessions, newest activity first, searchable; each row opens the session. */
 function SpaceHistory({ projectId, space }: { projectId: string; space: ProjectSessionGroup }) {
   const t = useTranslations('sessionSpaces');
+  const tFilter = useTranslations('sidebar.filter');
+  const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const [search, setSearch] = useState('');
   const q = useDebounce(search.trim(), 250);
+  // This list's own filter state (`space`): narrowing a space does not narrow the sidebar.
+  const orderMode = useSessionFilterStore(selectOrderMode(projectId, SPACE_SURFACE));
+  const statusFilters = useSessionFilterStore(selectStatusFilters(projectId, SPACE_SURFACE));
+  const sourceFilters = useSessionFilterStore(selectSourceFilters(projectId, SPACE_SURFACE));
+  const ownerFilters = useSessionFilterStore(selectOwnerFilters(projectId, SPACE_SURFACE));
+  const accessFilters = useSessionFilterStore(selectAccessFilters(projectId, SPACE_SURFACE));
+  const labelFilters = useSessionFilterStore(selectLabelFilters(projectId, SPACE_SURFACE));
   const query = useWorkspaceSessions(projectId, {
     group: space.group_id,
     parent: 'root',
     limit: PAGE_SIZE,
     ...(q ? { q } : {}),
+    ...(labelFilters.length > 0 ? { labels: labelFilters } : {}),
   });
-  const rows = query.sessions.filter((session) => session.group_id === space.group_id);
+  const inSpace = query.sessions.filter((session) => session.group_id === space.group_id);
+  const rows = orderSessions(
+    filterProjectSessions(inSpace, statusFilters, sourceFilters, tI18nComplete, { owners: ownerFilters, access: accessFilters }),
+    orderMode,
+  );
+  const filtering =
+    statusFilters.length + sourceFilters.length + ownerFilters.length + accessFilters.length + labelFilters.length > 0;
   // A space with no sessions shows just the composer: no heading, no search, no empty state.
   // A search with no match keeps the section, so the filter stays visible.
   const settled = !query.isLoading && !query.isScanning && !query.isError;
-  if (settled && rows.length === 0 && !search.trim() && !q) return null;
+  if (settled && inSpace.length === 0 && !search.trim() && !q && labelFilters.length === 0) return null;
   return (
     <section className="space-y-3" aria-label={t('sessionsHeading')}>
       {/* Every text edge in this section lines up with the heading; rows bleed their hover fill 2 units out (-mx-2 px-2). */}
-      <div className="flex h-8 items-center gap-3">
+      {/* Pinned to the top of the page's scroll while the list moves under it. */}
+      <div className="bg-background sticky top-0 z-10 flex h-10 items-center gap-3">
         <h2 className="text-foreground text-sm font-medium">{t('sessionsHeading')}</h2>
-        <div className="ml-auto flex justify-end">
+        <div className="ml-auto flex items-center justify-end gap-1">
           <ExpandableSearch value={search} onValueChange={setSearch} label={t('searchSessions')} size="sm" />
+          <DropdownMenu>
+            <Hint label={tFilter('filters')}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-base"
+                  aria-label={tFilter('filters')}
+                  className="text-muted-foreground hover:text-foreground relative shrink-0"
+                >
+                  <FunnelSimpleIcon className="size-4" />
+                  {filtering ? <span aria-hidden className="bg-foreground absolute top-1.5 right-1.5 size-1.5 rounded-full" /> : null}
+                </Button>
+              </DropdownMenuTrigger>
+            </Hint>
+            <SessionFilterMenu projectId={projectId} sessions={inSpace} surface={SPACE_SURFACE} side="bottom" align="end" />
+          </DropdownMenu>
         </div>
       </div>
       {query.isLoading || query.isScanning ? (
@@ -622,9 +679,9 @@ function SpaceHistory({ projectId, space }: { projectId: string; space: ProjectS
       ) : (
         <>
           <div className="space-y-5">
-            {byDay(rows).map((day) => (
-              <section key={day.key} className="space-y-1">
-                <h3 className="text-muted-foreground text-xs font-medium">{t(day.key)}</h3>
+            {(orderMode === 'activity' ? byDay(rows) : [{ key: null, sessions: rows }]).map((day) => (
+              <section key={day.key ?? 'all'} className="space-y-1">
+                {day.key ? <h3 className="text-muted-foreground text-xs font-medium">{t(day.key)}</h3> : null}
                 <ul className="-mx-2">
                   {day.sessions.map((session) => (
                     <li key={session.session_id}>
@@ -650,6 +707,15 @@ function SpaceHistory({ projectId, space }: { projectId: string; space: ProjectS
       )}
     </section>
   );
+}
+
+const SPACE_SURFACE = 'space' as const;
+
+/** The list in the order the filter menu picked: last activity (the server's order), newest first, or by title. */
+function orderSessions(sessions: ProjectSession[], mode: SessionOrderMode): ProjectSession[] {
+  if (mode === 'created') return [...sessions].sort((a, b) => Date.parse(b.created_at ?? '') - Date.parse(a.created_at ?? ''));
+  if (mode === 'name') return [...sessions].sort((a, b) => getSessionDisplayTitle(a).localeCompare(getSessionDisplayTitle(b)));
+  return sessions;
 }
 
 /** The day buckets of the history, newest first: Today, Yesterday, This week, Earlier. Empty buckets are left out. */
@@ -710,7 +776,7 @@ function SessionHistoryRow({ projectId, session }: { projectId: string; session:
           </span>
         </ProfileHoverCard>
       ) : null}
-      <span className="text-muted-foreground w-24 shrink-0 text-right text-xs tabular-nums">{when}</span>
+      <span className="text-muted-foreground shrink-0 text-right text-xs whitespace-nowrap tabular-nums">{when}</span>
     </Link>
   );
 }

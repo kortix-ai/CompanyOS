@@ -1294,7 +1294,8 @@ const catalog = {
         "project": "Whole workspace"
       },
       "ownerAccess": "{owner} · {access}",
-      "labels": "Labels"
+      "labels": "Labels",
+      "members": "Members"
     },
     "loadingMore": "Loading…",
     "loadMoreSessions": "Load more sessions",
@@ -10736,7 +10737,14 @@ const catalog = {
     "spaceMember": "Member of this space",
     "workspaceOwner": "Workspace owner",
     "workspaceAdmin": "Workspace admin",
-    "addedOn": "Added to this space {date}"
+    "addedOn": "Added to this space {date}",
+    "sortBy": "Sort: {mode}",
+    "sortActivity": "Last activity",
+    "sortName": "Name",
+    "sortCreated": "Date created",
+    "yourSpaces": "Your spaces",
+    "sharedWithYou": "Shared with you",
+    "sharedShort": "Shared"
   },
   "sessionShare": {
     "addPlaceholder": "Add people or groups by name or email…",

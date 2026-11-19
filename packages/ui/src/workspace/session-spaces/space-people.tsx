@@ -100,3 +100,19 @@ export function SpaceAudienceMark({ space, max = 4, className }: { space: Projec
     </span>
   );
 }
+
+/** A space's people in the shape of the session header's avatar stack (`SessionParticipantStack`), creator first. */
+export function spaceParticipants(space: ProjectSessionGroup) {
+  const people = space.people ?? [];
+  return {
+    participants: people.map((person) => ({
+      user_id: person.user_id,
+      name: person.name,
+      email: person.email,
+      avatar_url: person.avatar_url,
+      is_viewer: false,
+    })),
+    total: people.length,
+    multi_user: people.length > 1,
+  };
+}

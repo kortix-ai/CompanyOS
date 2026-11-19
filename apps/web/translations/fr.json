@@ -1800,7 +1800,8 @@
         "project": "Tout l’espace de travail"
       },
       "ownerAccess": "{owner} · {access}",
-      "labels": "Libellés"
+      "labels": "Libellés",
+      "members": "Membres"
     },
     "loadingMore": "Chargement…",
     "loadMoreSessions": "Charger plus de sessions",
@@ -24770,7 +24771,9 @@
     "checkFailed": "Vérification échouée : {note}",
     "waitingOnPerson": "En attente de {person}",
     "waitNoCost": "Aucune vérification ne tourne tant qu'il attend une réponse.",
-    "chaseAt": "Relance {time}"
+    "chaseAt": "Relance {time}",
+    "search": "Rechercher des objectifs",
+    "noMatch": "Aucun objectif ne correspond"
   },
   "calendar": {
     "title": "Calendrier",
@@ -27567,7 +27570,14 @@
     "spaceMember": "Membre de cet espace",
     "workspaceOwner": "Propriétaire de l'espace de travail",
     "workspaceAdmin": "Administrateur de l'espace de travail",
-    "addedOn": "Ajouté à cet espace le {date}"
+    "addedOn": "Ajouté à cet espace le {date}",
+    "sortBy": "Trier : {mode}",
+    "sortActivity": "Dernière activité",
+    "sortName": "Nom",
+    "sortCreated": "Date de création",
+    "yourSpaces": "Vos espaces",
+    "sharedWithYou": "Partagés avec vous",
+    "sharedShort": "Partagé"
   },
   "sessionShare": {
     "addPlaceholder": "Ajouter des personnes ou des groupes par nom ou e-mail…",
@@ -27579,5 +27589,15 @@
     "remove": "Retirer",
     "share": "Partager",
     "notMember": "Partagez une session uniquement avec les membres de cet espace de travail."
+  },
+  "listSort": {
+    "sortBy": "Trier : {mode}",
+    "lastActivity": "Dernière activité",
+    "name": "Nom",
+    "created": "Date de création"
+  },
+  "appsList": {
+    "search": "Rechercher des apps",
+    "noMatch": "Aucune app ne correspond"
   }
 }

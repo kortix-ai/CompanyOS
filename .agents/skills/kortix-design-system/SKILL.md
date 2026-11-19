@@ -259,6 +259,78 @@ Rules:
 - **Major blocks inside body:** `space-y-4` (search + list), `space-y-6` (tab panels), `space-y-8` (settings sections).
 - Mobile-first: test narrow width.
 
+### Page header: one row for every project page
+
+Every standalone project page (Spaces, Goals, a goal, Apps, Artifacts, an
+artifact, Files, Calendar, Inbox, Memory) opens with `ProjectPageHeader`
+(`@kortix/ui/workspace`). A page that must draw its own row uses
+`PROJECT_PAGE_HEADER_CLASS`. Never write header numbers by hand.
+
+1. **Geometry.** 44px tall (`h-12`), 11px gutters (`px-3`), a bottom border.
+   The sidebar toggle, then the title, then the actions at the trailing edge,
+   8px apart (`gap-2`).
+2. **Title.** The page's `<h1>`, `text-sm font-medium`, on the toggle's line.
+   A child page puts its parent first as a breadcrumb: `Goals › <goal>`.
+3. **Actions, in this order:** search, sort, view controls, then the primary
+   action. Sort is `SortMenu` (`@kortix/ui/sort-menu`). Search depends on the
+   page: a page with a filter row under the header (Goals' All / Assigned to
+   me, Artifacts' scope tabs) puts a plain `InputGroupSearch` (`sm:w-64`) at
+   the end of that row, never in the header. A page with no filter row
+   (Spaces, Apps) puts `ExpandableSearch` (`size="sm"`,
+   `buttonVariant="outline"`) in the header, before sort.
+4. **Sizes.** Every action is 29px tall: `size="sm"` for a labelled button,
+   `size="icon-base"` for an icon button. No `xs`, no `icon-sm` in a page
+   header. An icon is `size-4` in an icon button and `size-3.5` beside a
+   label.
+5. **Variants.** The page's primary action ("New space", "New goal",
+   "New doc") is the default variant, last, with `PlusIcon`. Item actions on
+   a child page ("Pause goal", "Share", ⋯) are `secondary`. Search, sort and
+   view controls are `outline`.
+6. **Spacing between actions.** The header's actions are separate buttons
+   8px apart, not one `ButtonGroup`. The only group in a header is a
+   segmented choice of one value (Apps' grid density): `ButtonGroup` of
+   `outline` `icon-base` buttons with `aria-pressed`; the chosen one adds
+   `bg-secondary text-foreground`, the others are `text-muted-foreground`.
+7. **Sort.** `SortMenu` offers the page's orders as radio rows (Last
+   activity, Name, Date created). `useStoredSort(key, orders, fallback)`
+   keeps the choice per page in this browser; the first render uses the
+   fallback, so server HTML matches. Grouped lists keep the order inside
+   each group.
+8. **What shows when.** Search and sort appear only once the page has items
+   to search. The primary action shows in every state, the empty state
+   included, unless the empty state itself is the starter (Goals).
+
+Reference: `packages/ui/src/workspace/session-spaces/spaces-page.tsx`,
+`apps/web/src/features/workspace/goals/goals-page.tsx`,
+`apps/web/src/features/apps/apps-view.tsx`.
+
+### List page rows: one line, fixed trailing columns
+
+A list page (Spaces) shows items as rows, not cards, when a row's facts fit
+on one line.
+
+1. **Groups.** A filled, collapsible header per group (`Collapsible`,
+   `bg-muted/60`, `h-9`, `rounded-md`, `text-sm text-muted-foreground`), the
+   group's name and its count, a `CaretDownIcon` that turns `-90deg` when
+   closed. A group with no rows is not drawn.
+2. **Row.** `h-11`, `rounded-md`, `hover:bg-hover`, the whole row one link.
+   Leading: the item's bare glyph (`size-5`, no tile), then the name
+   (`text-sm`, `truncate`).
+3. **Trailing columns.** Fixed widths, so every row lines up: people
+   (`SessionParticipantStack`, the session header's avatar stack, never
+   hand-drawn faces), access (`w-24`, a `size-3.5` icon and a word), time
+   (`w-28`, `text-right`, `tabular-nums`, `whitespace-nowrap`), then the ⋯
+   slot (`w-7`). A column that runs out of room truncates; it never pushes
+   into the next one.
+4. **Row menu.** The ⋯ button is a sibling of the link, never inside it.
+   `ghost`, `icon-xs`, hidden until the row is hovered or focused
+   (`opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100`),
+   always shown on touch (`pointer-coarse:opacity-100`) and while its menu is
+   open (`data-[state=open]:opacity-100`). Only a viewer who may manage the
+   item gets one; the slot stays to keep the columns aligned.
+5. **Small screens.** People and access hide below `sm`; name, time and ⋯
+   stay.
+
 ## Card & panel patterns (no SectionCard)
 
 A panel inside another panel, a form panel in a settings section and a floating panel are `bg-popover rounded-md border` surfaces. A bordered list that sits directly on a page is `bg-background` plus `border-border`: the color rule wins over this recipe ([`color.md`](../kortix-brand/references/visual/color.md), in-flow section, Q11). Two sanctioned ways to build a panel — never `SectionCard`:
@@ -540,7 +612,7 @@ Icons in buttons: `size-3.5 shrink-0` (dense) or `size-4` (header). Always `shri
 
 ### Button groups — the default for buttons in a row
 
-**Two or more buttons side by side that serve one surface are a `ButtonGroup`** (`@kortix/ui/button-group`). A toolbar cluster, a back/forward pair, a header's action set and a viewer's close cluster are all groups. Do not line buttons up with `flex gap-1` and hand-tuned `ml-*`: the group owns the spacing (`gap-px`) and joins the corners of neighbours, so a row of controls reads as one object instead of loose icons.
+**Two or more buttons side by side that serve one surface are a `ButtonGroup`** (`@kortix/ui/button-group`). A toolbar cluster, a back/forward pair and a viewer's close cluster are all groups. **Exception:** a project page header's actions are separate buttons 8px apart (see Page header, rule 6). Do not line buttons up with `flex gap-1` and hand-tuned `ml-*`: the group owns the spacing (`gap-px`) and joins the corners of neighbours, so a row of controls reads as one object instead of loose icons.
 
 | Rule                                                                                                                                                 | Why                                                                                                                                                           |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |

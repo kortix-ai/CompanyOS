@@ -1,3 +1,4 @@
+import { parseTriggerReaders, type TriggerReaders } from '@kortix/manifest-schema';
 import type { TriggerList } from '@kortix/api-contract';
 import { hiddenSpaceIds } from '../../shared/space-access';
 import { apps, connectorConnections, connectors, projectSpaces, projectTriggerRuntime } from '@kortix/db';
@@ -139,6 +140,7 @@ export async function loadTriggersForResponse(
 
   return {
     triggers: specs.map((spec) => ({
+      ...(spec.sessionReaders ?? spec.defaultSessionReaders ? { session_readers: spec.sessionReaders ?? spec.defaultSessionReaders } : {}),
       slug: spec.slug,
       path: spec.path,
       name: spec.name,
@@ -292,6 +294,7 @@ export function eventStatusFor(row: store.EventSubscriptionRow | undefined, flag
 }
 
 export interface TriggerDraft {
+  sessionReaders?: TriggerReaders;
   slug: string;
   name: string;
   type: GitTriggerType;
@@ -395,7 +398,9 @@ export function parseTriggerDraft(
   if ('error' in parsedFilter) return parsedFilter;
   const { filter } = parsedFilter;
 
-  const common = { slug, name, agent, model, enabled, promptTemplate, sessionMode, pinnedSessionId, sessionKey, filter, ...(runPayload ? { runPayload } : {}) };
+  const readers = body.session_readers === undefined || body.session_readers === null ? null : parseTriggerReaders(body.session_readers);
+  if (readers && 'error' in readers) return readers;
+  const common = { ...(readers && 'readers' in readers ? { sessionReaders: readers.readers } : {}), slug, name, agent, model, enabled, promptTemplate, sessionMode, pinnedSessionId, sessionKey, filter, ...(runPayload ? { runPayload } : {}) };
   const lateness = parseMaxLateness(body, type);
   if ('error' in lateness) return lateness;
   const silence = parseExpectEventWithin(body, type);
@@ -457,7 +462,7 @@ function parseDraftSession(body: Record<string, unknown>, type: GitTriggerType):
   return { sessionMode, pinnedSessionId, sessionKey };
 }
 
-type DraftCommon = Pick<TriggerDraft, 'slug' | 'name' | 'agent' | 'model' | 'enabled' | 'promptTemplate' | 'sessionMode' | 'pinnedSessionId' | 'sessionKey' | 'filter' | 'runPayload'>;
+type DraftCommon = Pick<TriggerDraft, 'slug' | 'name' | 'agent' | 'model' | 'enabled' | 'promptTemplate' | 'sessionMode' | 'pinnedSessionId' | 'sessionKey' | 'filter' | 'runPayload' | 'sessionReaders'>;
 
 function parseEventDraft(body: Record<string, unknown>, common: DraftCommon): TriggerDraft | { error: string } {
   const event = parseEventFields(body, 'event_config');
@@ -555,6 +560,7 @@ export function specToBody(spec: GitTriggerSpec): Record<string, unknown> {
   const noCronWiring = spec.type === 'event' || spec.type === 'app';
   return {
     slug: spec.slug,
+    session_readers: spec.sessionReaders ?? null,
     name: spec.name,
     type: spec.type,
     agent: spec.agent,
@@ -611,6 +617,7 @@ export function draftToSpec(
 ): GitTriggerSpec {
   return {
     slug: draft.slug,
+    ...(draft.sessionReaders ? { sessionReaders: draft.sessionReaders } : {}),
     // Use the ACTUAL manifest path (`kortix.yml`, a custom path).
     path: `${manifestPath}#triggers.${draft.slug}`,
     name: draft.name,

@@ -798,9 +798,9 @@
       "wallpaperDescription": "O fundo por trás do seu espaço de trabalho.",
       "defaultWallpaper": "Padrão",
       "themes": {
-        "light": "Claro",
+        "light": "Kortix Claro",
         "pureLight": "Claro puro",
-        "dark": "Escuro",
+        "dark": "Kortix Escuro",
         "pureDark": "Escuro puro",
         "system": "Sistema",
         "kortix": "Kortix",

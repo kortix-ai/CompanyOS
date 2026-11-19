@@ -66,7 +66,9 @@ export function useSettingsPageTitle(): string | null {
  * only its own max width inside it (`max-w-2xl` a form, `max-w-5xl` a library,
  * none a table).
  */
-export const SETTINGS_PAGE_COLUMN_CLASS = 'w-full px-4 pt-12 pb-20 sm:px-12';
+// `[&>*]:mx-auto`: each page caps its own width (`max-w-2xl` … `max-w-7xl`) on
+// the column's child, and that child sits centered in the pane.
+export const SETTINGS_PAGE_COLUMN_CLASS = 'w-full px-4 pt-12 pb-20 sm:px-12 [&>*]:mx-auto';
 
 /**
  * The one page-title rung of Workspace settings: the brand's section page

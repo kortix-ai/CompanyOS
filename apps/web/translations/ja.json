@@ -798,9 +798,9 @@
       "wallpaperDescription": "ワークスペースの背景です。",
       "defaultWallpaper": "デフォルト",
       "themes": {
-        "light": "ライト",
+        "light": "Kortix ライト",
         "pureLight": "ピュアライト",
-        "dark": "ダーク",
+        "dark": "Kortix ダーク",
         "pureDark": "ピュアダーク",
         "system": "システム",
         "kortix": "Kortix",

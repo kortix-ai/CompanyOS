@@ -12,7 +12,8 @@ import type { ReactNode } from 'react';
 import { useTranslations } from '../../../i18n';
 
 /**
- * The sidebar's one promo card. Every way to reach Kortix from somewhere else
+ * The workspace's one promo card: in the sidebar on a phone, floating in the
+ * window's bottom-right corner on desktop. Every way to reach Kortix from somewhere else
  * is a slide, in this order: the chat apps people already use (MCP), their
  * own computer, Chrome, the desktop app, the phone app. Each slide is
  * dismissed on its own and leaves once it is done (a paired computer, a
@@ -28,8 +29,11 @@ export function ProjectPromoCards({
   onOpenComputer,
   onOpenChrome,
   onOpenDownloadApp,
+  variant = 'inline',
 }: {
   projectId: string;
+  /** `floating` pins the card to the window's bottom-right corner (desktop). */
+  variant?: 'inline' | 'floating';
   onOpenMcp: () => void;
   onOpenComputer: () => void;
   /** Absent when Kortix in Chrome is off for this workspace. */
@@ -47,6 +51,7 @@ export function ProjectPromoCards({
   const render = (computer: PromoSlide | null, chrome: PromoSlide | null) => (
     <PromoSwitcher
       label={t('promos')}
+      variant={variant}
       slides={[mcp, computer, chrome, desktop, phone].filter(
         (slide): slide is PromoSlide => slide !== null,
       )}

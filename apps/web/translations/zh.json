@@ -798,9 +798,9 @@
       "wallpaperDescription": "工作区背后的背景。",
       "defaultWallpaper": "默认",
       "themes": {
-        "light": "浅色",
+        "light": "Kortix 浅色",
         "pureLight": "纯白",
-        "dark": "深色",
+        "dark": "Kortix 深色",
         "pureDark": "纯黑",
         "system": "跟随系统",
         "kortix": "Kortix",

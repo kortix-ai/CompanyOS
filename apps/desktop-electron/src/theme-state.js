@@ -22,7 +22,7 @@ const DARK_BACKGROUNDS = {
   'pure-dark': '#0A0A0A',
   ...terminalThemeBackgrounds.dark,
 };
-const DEFAULT_CHOICE = { light: 'pure-light', dark: 'pure-dark' };
+const DEFAULT_CHOICE = { light: 'light', dark: 'dark' };
 
 /** Ids stored by earlier builds that now live under a terminal-theme id. */
 const LEGACY_DARK_THEME_IDS = { jellybean: 'jellybeans-default' };

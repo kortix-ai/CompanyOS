@@ -2,6 +2,7 @@
 
 import { ArrowRightIcon, XIcon } from '@phosphor-icons/react';
 import { useId, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 import Loading from '../../../primitives/loading';
 import { BeamsStill } from '../../../primitives/paper-wallpaper-shaders';
@@ -36,12 +37,32 @@ export interface PromoSlide {
  * In flow, so a border and no shadow (effects.md); hover is color only. On a
  * window under 52rem tall the sentence folds away.
  */
-export function PromoSwitcher({ slides, label }: { slides: readonly PromoSlide[]; label: string }) {
+export function PromoSwitcher({
+  slides,
+  label,
+  variant = 'inline',
+}: {
+  slides: readonly PromoSlide[];
+  label: string;
+  /** `floating`: a card pinned to the window's bottom-right corner, over the page. */
+  variant?: 'inline' | 'floating';
+}) {
   const id = useId();
   const [activeId, setActiveId] = useState<string | null>(null);
   if (slides.length === 0) return null;
   // The chosen slide, or the first one when it was dismissed or none was chosen.
   const active = slides.find((slide) => slide.id === activeId) ?? slides[0];
+  if (variant === 'floating') {
+    return (
+      <FloatingPromo
+        id={id}
+        slides={slides}
+        active={active}
+        label={label}
+        onSelect={setActiveId}
+      />
+    );
+  }
 
   return (
     <li
@@ -142,6 +163,128 @@ export function PromoSwitcher({ slides, label }: { slides: readonly PromoSlide[]
         </div>
       ) : null}
     </li>
+  );
+}
+
+/**
+ * The promo card floating in the window's bottom-right corner, over the page:
+ * a lifted card (`bg-popover`, `smooth-shadow-ring-lg`, the shadow and its
+ * hairline in one) with the art inset in a rounded panel, the close button on
+ * the art, then the title, one sentence, the call to action and the dots.
+ * Floating, so shadow + hairline (effects.md). Portaled to `document.body` so
+ * no sidebar transform or overflow clips it.
+ */
+function FloatingPromo({
+  id,
+  slides,
+  active,
+  label,
+  onSelect,
+}: {
+  id: string;
+  slides: readonly PromoSlide[];
+  active: PromoSlide;
+  label: string;
+  onSelect: (slideId: string) => void;
+}) {
+  if (typeof document === 'undefined') return null;
+  return createPortal(
+    <div
+      role="region"
+      aria-roledescription="carousel"
+      aria-label={label}
+      className="bg-popover text-popover-foreground smooth-shadow-ring-lg fixed right-4 bottom-4 z-40 w-80 rounded-xl p-1.5"
+    >
+      <div className="grid">
+        {slides.map((slide) => {
+          const current = slide.id === active.id;
+          return (
+            <button
+              key={slide.id}
+              type="button"
+              disabled={slide.pending}
+              aria-busy={slide.pending || undefined}
+              aria-labelledby={`${id}-${slide.id}-title`}
+              aria-describedby={`${id}-${slide.id}-description`}
+              inert={!current}
+              onClick={slide.onClick}
+              className={cn(
+                'group/slide focus-visible:ring-ring col-start-1 row-start-1 flex w-full cursor-pointer flex-col rounded-lg text-left transition-opacity duration-moderate outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-60 motion-reduce:transition-none',
+                !current && 'pointer-events-none opacity-0',
+              )}
+            >
+              {/* Dark in both themes, like every art pane. */}
+              <span
+                aria-hidden="true"
+                className="dark bg-background relative isolate flex h-28 w-full shrink-0 items-center justify-center gap-5 overflow-hidden rounded-lg"
+              >
+                <BeamsStill />
+                <span className="bg-background/50 absolute inset-0" />
+                {slide.marks}
+              </span>
+              <span className="flex flex-col gap-3 px-2 pt-3 pb-1.5">
+                <span className="space-y-1">
+                  <span
+                    id={`${id}-${slide.id}-title`}
+                    className="text-foreground block text-sm leading-snug font-medium text-balance"
+                  >
+                    {slide.title}
+                  </span>
+                  <span
+                    id={`${id}-${slide.id}-description`}
+                    className="text-muted-foreground block text-sm leading-relaxed text-pretty"
+                  >
+                    {slide.description}
+                  </span>
+                </span>
+                {/* The whole card is the button; this reads as its action. */}
+                <span className="bg-secondary text-secondary-foreground group-hover/slide:bg-active inline-flex h-8 w-fit items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors duration-fast">
+                  {slide.pending ? <Loading className="size-3.5 shrink-0" /> : null}
+                  {slide.cta}
+                  {slide.pending ? null : <ArrowRightIcon className="size-3.5 shrink-0" />}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {/* On the art, so it takes the art's dark scope. */}
+      <button
+        type="button"
+        onClick={active.onDismiss}
+        aria-label={active.dismissLabel}
+        className="text-foreground hover:bg-active focus-visible:ring-ring dark absolute top-3 right-3 flex size-7 items-center justify-center rounded-md transition-colors duration-fast outline-none focus-visible:ring-2"
+      >
+        <XIcon className="size-4" />
+      </button>
+      {slides.length > 1 ? (
+        <div className="absolute right-3 bottom-4 flex items-center">
+          {slides.map((slide) => {
+            const current = slide.id === active.id;
+            return (
+              <button
+                key={slide.id}
+                type="button"
+                aria-label={slide.title}
+                aria-current={current || undefined}
+                onClick={() => onSelect(slide.id)}
+                className="group/dot focus-visible:ring-ring flex size-6 cursor-pointer items-center justify-center rounded-sm outline-none focus-visible:ring-2"
+              >
+                <span
+                  className={cn(
+                    'h-1.5 rounded-full transition-colors duration-fast',
+                    current
+                      ? 'bg-foreground w-4'
+                      : 'bg-muted-foreground/40 group-hover/dot:bg-muted-foreground w-1.5',
+                  )}
+                />
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>,
+    document.body,
   );
 }
 

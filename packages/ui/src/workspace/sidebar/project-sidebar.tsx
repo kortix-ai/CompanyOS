@@ -178,6 +178,7 @@ export function ProjectSidebar({
                     onOpenComputer={() => setComputerConnectOpen(true)}
                     onOpenChrome={chrome ? () => useAppsModalStore.getState().setOpen(true) : undefined}
                     onOpenDownloadApp={onOpenDownloadApp}
+                    variant={isMobile ? 'inline' : 'floating'}
                   />
                 </ul>
               </li>

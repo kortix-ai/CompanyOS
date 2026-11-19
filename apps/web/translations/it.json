@@ -798,9 +798,9 @@
       "wallpaperDescription": "Lo sfondo dietro l'workspace.",
       "defaultWallpaper": "Predefinito",
       "themes": {
-        "light": "Chiaro",
+        "light": "Kortix Chiaro",
         "pureLight": "Chiaro puro",
-        "dark": "Scuro",
+        "dark": "Kortix Scuro",
         "pureDark": "Scuro puro",
         "system": "Sistema",
         "kortix": "Kortix",

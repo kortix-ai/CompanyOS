@@ -798,9 +798,9 @@
       "wallpaperDescription": "Der Hintergrund Ihres Workspace.",
       "defaultWallpaper": "Standard",
       "themes": {
-        "light": "Hell",
+        "light": "Kortix Hell",
         "pureLight": "Reines Hell",
-        "dark": "Dunkel",
+        "dark": "Kortix Dunkel",
         "pureDark": "Reines Dunkel",
         "system": "System",
         "kortix": "Kortix",

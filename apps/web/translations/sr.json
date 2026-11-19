@@ -27459,6 +27459,8 @@
     "reconnect": "Ponovo poveži {name}",
     "setSecret": "Podesi {name}",
     "addSlack": "Dodaj Kortix u Slack",
-    "connectSlack": "Poveži Slack"
+    "connectSlack": "Poveži Slack",
+    "bannerTitle": "{left, plural, one {Ostao je # korak podešavanja} few {Ostala su # koraka podešavanja} other {Ostalo je # koraka podešavanja}}",
+    "bannerDismiss": "Odbaci"
   }
 }

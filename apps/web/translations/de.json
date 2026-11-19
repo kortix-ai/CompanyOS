@@ -27459,6 +27459,8 @@
     "reconnect": "{name} neu verbinden",
     "setSecret": "{name} setzen",
     "addSlack": "Kortix zu Slack hinzufügen",
-    "connectSlack": "Slack verbinden"
+    "connectSlack": "Slack verbinden",
+    "bannerTitle": "{left, plural, one {# Einrichtungsschritt ist offen} other {# Einrichtungsschritte sind offen}}",
+    "bannerDismiss": "Ausblenden"
   }
 }

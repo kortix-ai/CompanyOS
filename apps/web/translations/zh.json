@@ -27459,6 +27459,8 @@
     "reconnect": "重新连接 {name}",
     "setSecret": "设置 {name}",
     "addSlack": "将 Kortix 添加到 Slack",
-    "connectSlack": "连接 Slack"
+    "connectSlack": "连接 Slack",
+    "bannerTitle": "{left, plural, other {还有 # 个设置步骤未完成}}",
+    "bannerDismiss": "关闭"
   }
 }

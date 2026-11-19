@@ -27459,6 +27459,8 @@
     "reconnect": "Reconectar {name}",
     "setSecret": "Configurar {name}",
     "addSlack": "Añadir Kortix a Slack",
-    "connectSlack": "Conectar Slack"
+    "connectSlack": "Conectar Slack",
+    "bannerTitle": "{left, plural, one {Queda # paso de configuración} other {Quedan # pasos de configuración}}",
+    "bannerDismiss": "Descartar"
   }
 }

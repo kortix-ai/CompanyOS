@@ -27459,6 +27459,8 @@
     "reconnect": "{name} を再接続",
     "setSecret": "{name} を設定",
     "addSlack": "Kortix を Slack に追加",
-    "connectSlack": "Slack を接続"
+    "connectSlack": "Slack を接続",
+    "bannerTitle": "{left, plural, other {セットアップの手順があと # 件あります}}",
+    "bannerDismiss": "閉じる"
   }
 }

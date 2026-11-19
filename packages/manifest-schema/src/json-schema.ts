@@ -530,6 +530,13 @@ function triggerFilterSchema(): JsonSchemaFragment {
  * One trigger in the `on:` / `run:` shape (trigger-shape.ts): what fires it,
  * and what a fire runs. `type` is implied by `on`, so it may not appear.
  */
+function triggerReadersSchema(): JsonSchemaFragment {
+  return { type: 'object', additionalProperties: false, properties: {
+    humans: { type: 'string', enum: ['none', 'members'], description: 'Current human account members may read newly created trigger sessions. No mutation rights. Default: none.' },
+    agents: { type: 'array', items: { type: 'string', pattern: '^[a-z0-9][a-z0-9_-]{0,127}$' }, description: 'Explicit named monitoring agents. Read only; no implicit agent access. Default: [].' },
+  } };
+}
+
 function onRunTriggerSchema(): JsonSchemaFragment {
   const durationSchema: JsonSchemaFragment = { type: 'string', pattern: DURATION_RE.source };
   const appSlug: JsonSchemaFragment = { type: 'string', pattern: '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$' };
@@ -541,6 +548,7 @@ function onRunTriggerSchema(): JsonSchemaFragment {
     type: 'object',
     required: ['slug', 'on', 'run'],
     properties: {
+      session_readers: { ...triggerReadersSchema(), description: 'Additive read-only policy for new sessions; overrides trigger_session_readers in full.' },
       slug: { ...SLUG_SCHEMA, description: 'Unique. Lowercase letters, digits, `-` and `_`, at most 128 characters.' },
       name: { type: 'string', description: 'The label in the dashboard. Default: the slug.' },
       type: false,
@@ -639,6 +647,7 @@ function triggerSchema(): JsonSchemaFragment {
     type: 'object',
     required: ['slug', 'type'],
     properties: {
+      session_readers: { ...triggerReadersSchema(), description: 'Additive read-only policy for new sessions; overrides trigger_session_readers in full.' },
       slug: SLUG_SCHEMA,
       type: { type: 'string', enum: [...TRIGGER_TYPES], description: 'Required in the flat form: the trigger without `on` and `run`. `type` next to `on` is an error.' },
       name: { type: 'string' },
@@ -1181,6 +1190,7 @@ function appsV2Schema(): JsonSchemaFragment {
  *  top-level section keeps its v1 shape" except `agents`/`channels`). */
 function sharedSectionProperties(): JsonSchemaFragment {
   return {
+    trigger_session_readers: { ...triggerReadersSchema(), description: 'Shared additive reader default for newly created trigger sessions. Existing sharing and IAM are unchanged. No implicit backfill.' },
     project: projectSchema(),
     env: envSchema(),
     sandbox: sandboxSchema(),

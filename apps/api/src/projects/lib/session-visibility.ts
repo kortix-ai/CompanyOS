@@ -1,3 +1,5 @@
+import { mayReadTriggerSession, triggerReaderPrincipal } from '../trigger-reader-access';
+import type { TriggerReaderPrincipal } from '../trigger-reader-policy';
 import {
   agentSessionStanding,
   isSessionTargetVisibleToCaller,
@@ -325,6 +327,9 @@ export type SessionReadOptions = {
    * as one the caller may act on (prompt it, answer its permission requests).
    */
   spawnAncestorRead?: boolean;
+  /** Audited content read only. Never set on mutation or writable proxy paths. */
+  triggerReaderRead?: boolean;
+  readerPrincipal?: TriggerReaderPrincipal;
 };
 
 async function sessionReadAccess(
@@ -401,13 +406,15 @@ async function sessionReadAccess(
     spaceVisible &&
     (await isSpawnAncestor(loaded.row.projectId, boundCredentialSessionId, sessionId));
   if (ancestor) visible = true;
-  if (!visible) return null;
+  const reader = opts.triggerReaderRead === true && spaceVisible && isSessionTargetVisibleToCaller(ownership) &&
+    await mayReadTriggerSession(row, opts.readerPrincipal ?? await triggerReaderPrincipal(loaded.actor, loaded.row.projectId, boundCredentialSessionId));
+  if (!visible && !reader) return null;
   let isOwner = row.createdBy === loaded.userId;
   if (agentPrincipal) {
     // Spec §2: never the launcher's standing. Checked after the ordinary
     // rules so it can only narrow them.
     const standing = agentSessionStanding(boundCredentialSessionId, row, visible, ancestor);
-    if (!standing.visible) return null;
+    if (!standing.visible && !reader) return null;
     isOwner = standing.isOwner;
   }
   return { canManageProject, isOwner };
@@ -517,6 +524,7 @@ export async function loadVisibleSessionsForList(
   sessionIds: readonly string[],
   callerSessionId: string | null,
   boundCredentialSessionId: string | null,
+  opts: SessionReadOptions = {},
 ): Promise<Map<string, VisibleSessionAccess>> {
   const ids = [...new Set(sessionIds.filter(Boolean))];
   const out = new Map<string, VisibleSessionAccess>();
@@ -543,11 +551,14 @@ export async function loadVisibleSessionsForList(
   const subject = await subjectRead;
   const grants = await grantsRead;
   const hidden = await hiddenRead;
+  const readerPrincipal = opts.triggerReaderRead
+    ? await triggerReaderPrincipal(loaded.actor, loaded.row.projectId, boundCredentialSessionId)
+    : undefined;
   for (const sessionId of ids) {
     const row = byId.get(sessionId);
     if (!row) continue;
     const access = await sessionReadAccess(
-      loaded, row, sessionId, subject, grants.get(sessionId) ?? [], callerSessionId, boundCredentialSessionId, hidden,
+      loaded, row, sessionId, subject, grants.get(sessionId) ?? [], callerSessionId, boundCredentialSessionId, hidden, { ...opts, readerPrincipal },
     );
     if (!access) continue;
     out.set(sessionId, await finalizeVisibleAccess(loaded, row, subject, grants.get(sessionId) ?? [], access));

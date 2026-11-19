@@ -1,7 +1,9 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto';
 import { config } from '../../config';
+import { triggerReaderStanding, type TriggerReaderPrincipal } from '../trigger-reader-policy';
 import {
   agentSessionStanding,
+  isSessionTargetVisibleToCaller,
   isProjectSessionVisibleTo,
   type SecretGrant,
   type ShareSubject,
@@ -101,6 +103,8 @@ export function selectSessionRowsForViewer(input: {
    * must not get every member's private session there.
    */
   accountSessionOversight?: boolean;
+  readerPrincipal?: TriggerReaderPrincipal;
+  readerExcludedSpaceIds?: ReadonlySet<string>;
   /**
    * The caller is an agent session under the agent-principal model (spec §2).
    * It lists only its own session, its children, and project-visible sessions —
@@ -145,10 +149,14 @@ export function selectSessionRowsForViewer(input: {
         spaceVisible: spaceVisibleFor(input.hiddenSpaceIds, row.spaceId),
       },
     );
+    const reader = spaceVisibleFor(input.hiddenSpaceIds, row.spaceId) &&
+      (!row.spaceId || !input.readerExcludedSpaceIds?.has(row.spaceId)) &&
+      isSessionTargetVisibleToCaller({ origin: row.origin, sessionId: row.sessionId, callerSessionId: input.callerSessionId, boundCredentialSessionId: input.boundCredentialSessionId }) &&
+      triggerReaderStanding({ metadata: row.metadata, spaceKind: null, tombstoned: deletedAt !== null }, input.readerPrincipal ?? { kind: 'none' });
     const access = input.agentPrincipal
       ? spaceVisibleFor(input.hiddenSpaceIds, row.spaceId) &&
-        agentSessionStanding(input.boundCredentialSessionId, row, canAccess).visible
-      : canAccess;
+        (reader || agentSessionStanding(input.boundCredentialSessionId, row, canAccess).visible)
+      : reader || canAccess;
     return { row, canAccess: access, runtimeStatus, deletedAt, deletedBy };
   });
 

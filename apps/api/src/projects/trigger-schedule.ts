@@ -1,8 +1,11 @@
+import type { TriggerReaders } from '@kortix/manifest-schema';
 import { createHash } from 'node:crypto';
 import { CRON_MIN_INTERVAL_SECONDS, type TriggerFilter, cronIntervalError } from '@kortix/manifest-schema';
 import { Cron } from 'croner';
 
 export interface TriggerScheduleSpec {
+  sessionReaders?: TriggerReaders;
+  defaultSessionReaders?: TriggerReaders;
   slug: string;
   /** `monitor` never schedules — `nextTriggerScheduleSlot` returns null for it,
    *  so the cron sweep's `trigger_type = 'cron'` claim can never see one. */
@@ -73,6 +76,8 @@ export function triggerScheduleRevision(spec: TriggerScheduleSpec): string {
       )
     : null;
   const scheduleConfig = {
+    ...(spec.sessionReaders ? { sessionReaders: spec.sessionReaders } : {}),
+    ...(spec.defaultSessionReaders ? { defaultSessionReaders: spec.defaultSessionReaders } : {}),
     type: spec.type,
     enabled: spec.enabled,
     cron: spec.cron,

@@ -11,6 +11,7 @@ import { egressShimPort } from '@/services/egress-shim'
 import { logger } from '@/lib/log/logger'
 import { slowRequestLogger } from './slow-request'
 import { agentSwapRequiresUnattendedBox, registerAgentSwapBlocker } from '@/services/runtime-assets/runtime-assets'
+import { startSampling } from '@/lib/loop-lag'
 import { kortixEventBus, sessionLogEventBus } from '@/services/event-bus/kortix-event-bus'
 import { createEnvRpcRouter } from '@/routes/kortix/env-rpc'
 import { createChromeRouter } from '@/routes/kortix/chrome'
@@ -98,7 +99,7 @@ export function buildDaemonApp(
   cfg: Config,
   harness: HarnessService,
   bootTime: number,
-  bootState: SandboxBootState = { repoMaterializationError: null, timeline: [] },
+  bootState: SandboxBootState = { timeline: [] },
   projectEnv?: ProjectEnvStore,
   staticWebPort: number | null = null,
   ptyRegistry?: PtyRegistry,
@@ -219,13 +220,17 @@ export function startProxy(
   cfg: Config,
   harness: HarnessService,
   bootTime: number,
-  bootState: SandboxBootState = { repoMaterializationError: null, timeline: [] },
+  bootState: SandboxBootState = { timeline: [] },
   projectEnv?: ProjectEnvStore,
   staticWebPort: number | null = null,
 ): ProxyServer {
   // Mutable so restore-time reload() can hot-swap the handler in place; the
   // indirection below re-reads `app` per request, so reassigning it is enough.
   let currentCfg = cfg
+  // Loop-lag sampling for the Server-Timing stamp (KRTX-4459): start at server
+  // entry, not on the first turn-verb answer, so a stall in the boot window or
+  // a pre-first-request turn is counted too.
+  startSampling()
   // Kortix Drive off Platinum (KORTIX_DRIVE_SYNC=1): copy the session's drives in and keep them in sync.
   startDriveSyncFromEnv(cfg)
   // Constructed once, outside reload() — pty state must survive a config
@@ -262,9 +267,9 @@ export function startProxy(
     return true
   })
   // A swap must not exit this process while the runtime is COMING UP. The turn
-  // oracle cannot see a boot: it reads the root's newest assistant message, and
-  // a box whose runtime is still starting has no turn in flight by that test, so
-  // it answers `false` and the swap proceeds — turning a recoverable restart (an
+  // oracle (`PiRuntime.busy()`: the turn queue and the active turn) cannot see a
+  // boot: a box whose runtime is still starting has no turn in flight, so it
+  // answers `false` and the swap proceeds — turning a recoverable restart (an
   // in-place runtime restart, a boot fallback) into a dead box plus a
   // supervisor restart.
   // `getState()` is the harness's own answer to "am I serving", so it is the

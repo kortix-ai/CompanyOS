@@ -19,11 +19,13 @@ import { notificationsApp } from './notifications/routes';
 import { drivesApp } from './drives/routes';
 import { feedbackApp } from './feedback';
 import {
+  agentMarkApp,
   channelAppWebhookRoutes,
   channelWebhookRoutes,
   discordInbound,
   discordOauthApp,
   emailWebhookApp,
+  registerAgentMarkRoutes,
   registerDiscordOauthRoutes,
   registerEmailWebhookRoutes,
   registerSlackWebhookRoutes,
@@ -56,6 +58,17 @@ import { router } from './router';
 import { runtimeAssetsApp } from './runtime-assets';
 import { sandboxProxyApp } from './sandbox-proxy';
 import { registerScimRoutes, scimRouter } from './scim';
+import {
+  connectorWorkspacesApp,
+  meApp,
+  registerWorkspaceRootRoutes,
+  scimWorkspacesApp,
+  webhookWorkspacesApp,
+  workspaceAccountFamiliesApp,
+  workspaceProjectsApp,
+  workspacesRootApp,
+} from './workspaces';
+import { canonicalWorkspaceGate } from './middleware/workspace-account';
 import { setupApp } from './setup';
 import { skillsApp } from './skills';
 import { tunnelApp } from './tunnel';
@@ -104,9 +117,15 @@ import { createCaptureRouter } from './capture/device-routes';
 app.route('/v1/capture', createCaptureRouter());
 import { createCliDeviceRouter } from './cli/device-routes';
 app.route('/v1/cli/device', createCliDeviceRouter());
+import { createCliSetupEventsApp } from './cli/setup-events';
+app.route('/v1/cli/setup-events', createCliSetupEventsApp()); // POST: guided-setup milestones from the CLI, to product analytics
 
 // /v1/accounts/* — account & member management lives in ./accounts router.
+// Permanent legacy name: the workspace-scoped families are also served under
+// /v1/workspaces/:workspaceId/<family> (mounted with the project app below).
 app.route('/v1/accounts', accountsRouter);
+// /v1/me[/devices] — the caller's identity, canonical name of /v1/accounts/me.
+app.route('/v1', meApp(accountsRouter));
 // /v1/auth/* — auth-side server endpoints (logout for now). Audit
 // events for login/logout/failed-login live in the auth middleware
 // + this router so SOC2 reviews see the full auth lifecycle.
@@ -118,9 +137,14 @@ app.route('/v1/auth', authRouter);
 // Mounted outside /v1 so IdPs configure the documented protocol URL.
 registerScimRoutes();
 app.route('/scim/v2', scimRouter);
+// /scim/v2/workspaces/:workspaceId/* — the same SCIM surface keyed by either
+// workspace key. /scim/v2/accounts/:accountId stays: IdPs have it registered.
+app.route('/scim/v2', scimWorkspacesApp(scimRouter));
 
 // /v1/account-invites/* — accept/decline/describe pending team invitations.
 app.route('/v1/account-invites', accountInvitesRouter);
+// /v1/invites/* — canonical name of /v1/account-invites (a person answering an invite).
+app.route('/v1/invites', accountInvitesRouter);
 
 app.route('/v1/ops', opsApp);
 
@@ -176,7 +200,7 @@ app.route('/v1/drives', drivesApp); // personal, agent and company drives + thei
 // Kortix in Chrome: the user's own Chrome, driven from a session sandbox. The
 // control socket (/v1/chrome/ws) is upgraded in inbound-dispatch.ts. The sandbox
 // routes (attach, release) take only a session-scoped credential, checked in the
-// handler; enforceTokenProjectScope lets that credential through (auth-scope.ts).
+// handler; the workspace fence lets that credential through (middleware/workspace-binding.ts).
 import { chromeApp, chromeConnectionsApp, chromeMasterSwitch, registerChromeRoutes } from './chrome/routes';
 app.use('/v1/chrome/*', chromeMasterSwitch);
 app.use('/v1/chrome/*', supabaseAuth);
@@ -206,12 +230,27 @@ app.route('/v1/platform', platformApp); // /v1/platform, /v1/platform/sandbox/ve
 // (apps/token-issuer-routes.ts). Mounted BEFORE projectsApp, whose `/*`
 // supabaseAuth would otherwise 401 an anonymous verifier.
 import { tokenIssuerApp } from './apps/token-issuer-routes';
-app.route('/v1/projects', tokenIssuerApp); // /v1/projects/:projectId/{.well-known/openid-configuration,jwks.json}
 // App events: authenticated by the App's own token, so also before projectsApp.
 import { appEventsApp, registerAppEventRoutes } from './apps/event-routes';
 registerAppEventRoutes();
-app.route('/v1/projects', appEventsApp); // POST /v1/projects/:projectId/apps/:appId/events
 registerAllProjectRoutes();
+// ─── /v1/workspaces: the canonical workspace routes (workspaces/index.ts) ───
+// 1. The account-key families (/iam, /members, /audit, /tokens, …), with their
+//    own auth chain scoped to those paths. Before the project app: the merged
+//    GET /:workspaceId/audit is the workspace audit log, not the project slice.
+app.route('/v1/workspaces', workspaceAccountFamiliesApp(accountsRouter));
+// 2. The workspace resource: GET/POST /, GET/PATCH /:workspaceId (workspaces/routes.ts).
+registerWorkspaceRootRoutes();
+app.route('/v1/workspaces', workspacesRootApp);
+// 3. The project app, in the same order as its legacy mount.
+app.route('/v1/workspaces', tokenIssuerApp); // /v1/workspaces/:workspaceId/{.well-known/openid-configuration,jwks.json}
+app.route('/v1/workspaces', appEventsApp); // POST /v1/workspaces/:workspaceId/apps/:appId/events
+app.route('/v1/workspaces', workspaceProjectsApp(projectsApp)); // /v1/workspaces — every workspace route
+// ─── /v1/projects: permanent legacy name of /v1/workspaces ───
+// Kept forever: SDKs, CLIs, OIDC issuers (`iss` = <API>/v1/projects/<id>) and
+// bookmarks name it. Same apps, same handlers.
+app.route('/v1/projects', tokenIssuerApp); // /v1/projects/:workspaceId/{.well-known/openid-configuration,jwks.json}
+app.route('/v1/projects', appEventsApp); // POST /v1/projects/:workspaceId/apps/:appId/events
 app.route('/v1/projects', projectsApp); // /v1/projects — Git-backed Kortix projects
 registerSessionLookupRoutes();
 app.route('/v1/sessions', sessionsApp); // GET /v1/sessions/:sessionId — one session by id, in any project
@@ -257,11 +296,18 @@ app.route('/v1/runtime-assets', runtimeAssetsApp); // GET /manifest, /cli, /agen
 // (/projects/:id/connectors*) need user auth, so combinedAuth runs first.
 {
   app.use('/v1/connectors/projects/*', combinedAuth);
+  app.use('/v1/connectors/workspaces/*', combinedAuth);
+  // Canonical id rule: an account id or an unknown id → 404 workspace_not_found; an unreadable workspace → 403 workspace_access_denied.
+  app.use('/v1/connectors/workspaces/*', canonicalWorkspaceGate());
   app.use('/v1/connectors/connect-status', combinedAuth); // deployment capability flag (authed)
   app.route('/v1/connectors', connectorApp);
+  // /v1/connectors/workspaces/:workspaceId/* — canonical name of /v1/connectors/projects/:workspaceId/*.
+  app.route('/v1/connectors', connectorWorkspacesApp(connectorApp));
 }
 
 app.route('/v1/webhooks', projectWebhooksApp); // /v1/webhooks/:triggerId — signed project trigger fires
+// /v1/webhooks/workspaces/:workspaceId/:slug — canonical name of /v1/webhooks/projects/:workspaceId/:slug.
+app.route('/v1/webhooks', webhookWorkspacesApp(projectWebhooksApp));
 
 app.route('/v1/webhooks/slack/oauth', slackOauthApp); // /v1/webhooks/slack/oauth/callback — OAuth dance
 registerSlackWebhookRoutes();
@@ -271,6 +317,8 @@ registerTeamsWebhookRoutes();
 app.route('/v1/webhooks/teams', teamsWebhookApp); // /v1/webhooks/teams/messages — Bot Framework activities
 app.route('/v1/channels/slack/identity', slackIdentityApp); // /v1/channels/slack/identity/bind — authed /login bind
 app.route('/v1/channels/teams/identity', teamsIdentityApp); // /v1/channels/teams/identity/bind — authed login bind
+registerAgentMarkRoutes();
+app.route('/v1/agent-marks', agentMarkApp); // GET /v1/agent-marks/:slug.png — an agent's face, public (Slack icon_url)
 app.route('/v1/webhooks/telegram', channelWebhookRoutes(telegramInbound)); // /v1/webhooks/telegram/:projectId — Telegram updates
 registerDiscordOauthRoutes();
 app.route('/v1/webhooks/discord/oauth', discordOauthApp); // /v1/webhooks/discord/oauth/callback — Add to Discord

@@ -61,7 +61,7 @@ Perplexity's plans are $17 a month for Pro and $167 a month for Max, billed annu
 
 ## What owning the system looks like
 
-A Kortix project is a git repository. Open source. Read it, fork it, audit it. The manifest is short enough to read in a review:
+A Kortix workspace is backed by a git repository. Open source. Read it, fork it, audit it. The manifest is short enough to read in a review:
 
 ```yaml
 kortix_version: 2
@@ -71,10 +71,9 @@ agents:
     file: agents/kortix.md
     connectors: all
     skills: all
-    workspace: { project_repository: true }
 ```
 
-Two keys carry most of the meaning. `default_agent` names the agent a session boots when nothing else is specified. `file` points at the markdown file that holds its behavior. `connectors`, `skills` and `workspace` are grants: what the agent may reach, and whether a session gets a checkout on its own branch.
+Two keys carry most of the meaning. `default_agent` names the agent a session boots when nothing else is specified. `file` points at the markdown file that holds its behavior. `connectors` and `skills` are grants: what the agent may reach.
 
 A change to any of that arrives as a diff. Someone widens a connector grant, and the line shows up in the change request beside the reason for it. Behavior sits in `agents/kortix.md`, a markdown file a person can read without opening the product.
 

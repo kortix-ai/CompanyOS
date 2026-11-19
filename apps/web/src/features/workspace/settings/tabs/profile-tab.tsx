@@ -1,11 +1,12 @@
 'use client';
 
+import { useAccountsList } from '@kortix/ui/internal/hooks/account/use-accounts-list';
 import { localizedCopy } from './localized-copy';
 import { removeProfileAvatar } from './profile-avatar';
 
 /**
- * The Profile tab — profile picture, email, display name, the organizations
- * you belong to, and account deletion.
+ * The Profile tab — profile picture, email, display name, and account
+ * deletion.
  *
  * Two-factor authentication left for its own Security tab on 2026-09-02
  * (`security-tab.tsx`, with `FactorRow` and `totpQrSrc`): "who am I" and "how
@@ -28,7 +29,7 @@ import { removeProfileAvatar } from './profile-avatar';
  *   text on the right instead of swapping the row out for a paragraph.
  *
  * The factor list answers in four states and each one is visible: loading
- * (skeleton row), failed (red `InfoBanner` + Retry), empty (orange "No second
+ * (skeleton row), failed (red `Alert` + Retry), empty (orange "No second
  * factor enrolled" nudge), and populated (`FactorRow`s). A failed fetch never
  * borrows the empty-state copy — that copy asserts the account has no second
  * factor, which a failed fetch cannot know.
@@ -58,11 +59,13 @@ import { removeProfileAvatar } from './profile-avatar';
 import { useLocale, useTranslations } from '@/i18n/use-translations';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { getPersonDeletionPlan } from '@kortix/sdk';
+import { useWorkspaceDirectory } from '@kortix/ui/workspace/sidebar/use-workspace-directory';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@kortix/ui/avatar';
 import { Button } from '@kortix/ui/button';
 import { ConfirmDialog } from '@kortix/ui/confirm-dialog';
-import { InfoBanner } from '@kortix/ui/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription} from '@kortix/ui/alert';
 import { Input } from '@kortix/ui/input';
 import { KortixLoader } from '@kortix/ui/kortix-loader';
 import { Label } from '@kortix/ui/label';
@@ -88,12 +91,6 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@kortix/ui';
 import { SettingsTabHeader } from '@kortix/ui/customize/settings/settings-tab-header';
-import {
-  type AccountMembership,
-  type AccountMembershipsCopy,
-  AccountMembershipsSection,
-  useAccountMemberships,
-} from './account-memberships';
 import { isOfflineUploadError } from './avatar-upload-error';
 
 const PROFILE_QUERY_KEY = ['account', 'profile'] as const;
@@ -111,7 +108,7 @@ function getInitials(name: string): string {
 
 type DeletionType = 'grace-period' | 'immediate';
 
-export interface ProfileTabCopy {
+interface ProfileTabCopy {
   profilePicture: string;
   profilePictureDescription: string;
   remove: string;
@@ -122,9 +119,9 @@ export interface ProfileTabCopy {
   nameDescription: string;
   namePlaceholder: string;
   save: string;
-  organizations: AccountMembershipsCopy;
   dangerZone: string;
   deleteAccount: string;
+  plan: DeletionPlanCopy;
   deletionUnavailable: string;
   deletionStatusCheckFailed: string;
   scheduledForDeletionOn: string;
@@ -148,6 +145,7 @@ export interface ProfileTabCopy {
   gracePeriodDescription: string;
   immediateLabel: string;
   immediateDescription: string;
+  noWorkspaceImmediateOnly: string;
   typeDeleteToConfirm: string;
   keepAccount: string;
   processing: string;
@@ -166,17 +164,16 @@ export const DEFAULT_PROFILE_TAB_COPY: ProfileTabCopy = {
   nameDescription: 'Your display name across Kortix.',
   namePlaceholder: 'Your name',
   save: 'Save',
-  organizations: {
-    title: 'Organizations',
-    description: "Members, billing, roles, and audit live in each organization's own settings.",
-    fallbackAccountName: 'Account',
-    owner: 'Owner',
-    admin: 'Admin',
-    member: 'Member',
-    manage: 'Manage',
-  },
   dangerZone: 'Danger zone',
   deleteAccount: 'Delete account',
+  plan: {
+    deleted: 'Deleted with your account',
+    left: 'You leave',
+    blockersTitle: 'Hand these over first',
+    blockers: 'You are their only owner, and others work in them. Transfer ownership or delete the workspace.',
+    members: (count) => `${count} members`,
+    nothing: 'No workspace is deleted or left with your account.',
+  },
   deletionUnavailable:
     "Account deletion isn't available on this deployment. Contact support to close your account.",
   deletionStatusCheckFailed: "Couldn't confirm whether account deletion is available.",
@@ -207,6 +204,8 @@ export const DEFAULT_PROFILE_TAB_COPY: ProfileTabCopy = {
   gracePeriodDescription: 'Deletion happens on the scheduled date. Cancel any time before then.',
   immediateLabel: 'Delete immediately',
   immediateDescription: 'Your account and its data are deleted right away. This cannot be undone.',
+  noWorkspaceImmediateOnly:
+    'You belong to no workspace, so there is no grace period: your account is deleted right away.',
   typeDeleteToConfirm: 'Type "delete" to confirm',
   keepAccount: 'Keep account',
   processing: 'Processing…',
@@ -215,7 +214,7 @@ export const DEFAULT_PROFILE_TAB_COPY: ProfileTabCopy = {
     'This cancels the scheduled deletion. Your account and its data stay exactly as they are.',
 };
 
-export interface ProfileTabViewProps {
+interface ProfileTabViewProps {
   // Profile picture
   userName?: string;
   avatarUrl?: string;
@@ -237,12 +236,21 @@ export interface ProfileTabViewProps {
   // Email
   userEmail?: string;
 
-  // Organizations — every account this user is a member of. See
-  // `account-memberships.tsx` for why the list lives on this tab.
-  accounts?: readonly AccountMembership[];
-  accountsLoading?: boolean;
-
   // Delete account
+  /**
+   * The person belongs to no workspace (Workspaces D3). The dialog stays the
+   * same Delete-account dialog (KRTX-4849); only the grace period is disabled
+   * with its reason, because `POST /v1/account/request-deletion` answers 409
+   * `no_workspace` for them.
+   */
+  noWorkspace?: boolean;
+  /**
+   * What deleting the person does (`GET /v1/account/deletion-plan`): the
+   * workspaces deleted with them (sole owner, only member), the ones they
+   * leave, and the shared ones they must hand over first. `undefined` while
+   * it loads.
+   */
+  deletionPlan?: ProfileDeletionPlan;
   accountDeletionSupported?: boolean;
   hasPendingDeletion?: boolean;
   deletionScheduledForLabel?: string | null;
@@ -263,12 +271,66 @@ export interface ProfileTabViewProps {
   onCloseCancelDeletionDialog?: () => void;
   onConfirmCancelDeletion?: () => void;
   isCancelingDeletion?: boolean;
-  copy?: Partial<Omit<ProfileTabCopy, 'organizations'>> & {
-    organizations?: Partial<AccountMembershipsCopy>;
-  };
+  copy?: Partial<ProfileTabCopy>;
 }
 
-const NO_ACCOUNTS: readonly AccountMembership[] = [];
+/** What deleting the person does, with workspace names resolved for display. */
+interface ProfileDeletionPlan {
+  deleteNames: string[];
+  leaveNames: string[];
+  blockers: Array<{ name: string; memberCount: number }>;
+}
+
+interface DeletionPlanCopy {
+  deleted: string;
+  left: string;
+  blockersTitle: string;
+  blockers: string;
+  members: (count: number) => string;
+  nothing: string;
+}
+
+/** The plan, in three short lists: deleted, left, and the blockers that disable Delete. */
+function DeletionPlanSummary({ plan, copy }: { plan: ProfileDeletionPlan; copy: DeletionPlanCopy }) {
+  const empty = plan.deleteNames.length + plan.leaveNames.length + plan.blockers.length === 0;
+  return (
+    <div className="space-y-3" data-testid="deletion-plan">
+      {empty ? <p className="text-muted-foreground text-sm">{copy.nothing}</p> : null}
+      {plan.blockers.length > 0 ? (
+        <BannerAlert variant="destructive" ><BannerAlertTitle>{copy.blockersTitle}</BannerAlertTitle><BannerAlertDescription>
+          <p>{copy.blockers}</p>
+          <ul className="list-disc space-y-1 pl-5">
+            {plan.blockers.map((blocker) => (
+              <li key={blocker.name}>
+                {blocker.name} · {copy.members(blocker.memberCount)}
+              </li>
+            ))}
+          </ul>
+        </BannerAlertDescription></BannerAlert>
+      ) : null}
+      {plan.deleteNames.length > 0 ? (
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium">{copy.deleted}</p>
+          <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
+            {plan.deleteNames.map((name) => (
+              <li key={name}>{name}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {plan.leaveNames.length > 0 ? (
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium">{copy.left}</p>
+          <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
+            {plan.leaveNames.map((name) => (
+              <li key={name}>{name}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 /** Presentational only — no hooks, no data fetching, no store or Supabase
  *  read. Kept separate from `ProfileTab` so this renders under
@@ -293,8 +355,8 @@ export function ProfileTabView({
   isSavingName = false,
   onSaveName = () => {},
   userEmail = '',
-  accounts = NO_ACCOUNTS,
-  accountsLoading = false,
+  noWorkspace = false,
+  deletionPlan,
   accountDeletionSupported = true,
   hasPendingDeletion = false,
   deletionScheduledForLabel = null,
@@ -320,10 +382,6 @@ export function ProfileTabView({
   const copy: ProfileTabCopy = {
     ...DEFAULT_PROFILE_TAB_COPY,
     ...copyOverrides,
-    organizations: {
-      ...DEFAULT_PROFILE_TAB_COPY.organizations,
-      ...copyOverrides.organizations,
-    },
   };
   // The right-hand control of the Delete-account row, and the line under its
   // label. Four states, one row — an errored status check, an unavailable or
@@ -338,7 +396,9 @@ export function ProfileTabView({
   // failed fetch cannot know. It states the check failed and offers Retry.
   // The check comes first so no later branch can render a destructive
   // control off an unknown answer.
-  const deleteAccountDescription = isDeletionStatusError
+  const deleteAccountDescription = noWorkspace
+    ? copy.noWorkspaceImmediateOnly
+    : isDeletionStatusError
     ? copy.deletionStatusCheckFailed
     : !accountDeletionSupported
       ? copy.deletionUnavailable
@@ -437,15 +497,8 @@ export function ProfileTabView({
         </SettingsRow>
       </SettingsRowGroup>
 
-      {/* Organizations — directly under the identity group, because it
-          answers the same question those rows do ("who am I here") and because
-          Jay asked for it to be EASY to reach: no scrolling, no tab to find
-          first. `account-memberships.tsx` carries the full rationale. */}
-      <AccountMembershipsSection
-        accounts={accounts}
-        isLoading={accountsLoading}
-        copy={copy.organizations}
-      />
+      {/* No workspace list here: the rail lists every workspace with its
+          role, one click away, and closes this dialog on the way (finding 37). */}
 
       {/* Danger zone */}
       <section className="space-y-3">
@@ -492,7 +545,7 @@ export function ProfileTabView({
                   <ModalTitle>{copy.deleteDialogTitle}</ModalTitle>
                 </ModalHeader>
                 <ModalBody className="space-y-4">
-                  <InfoBanner tone="warning">
+                  <BannerAlert variant="warning" ><BannerAlertDescription>
                     {deletionType === 'immediate' ? (
                       copy.immediateWarning
                     ) : (
@@ -501,17 +554,21 @@ export function ProfileTabView({
                         {deletionPreviewDateLabel && <p>{deletionPreviewDateLabel}</p>}
                       </>
                     )}
-                  </InfoBanner>
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">{copy.whenDeleted}</p>
-                    <ul className="text-muted-foreground list-disc space-y-1.5 pl-5 text-sm">
-                      <li>{copy.agentsDeleted}</li>
-                      <li>{copy.threadsDeleted}</li>
-                      <li>{copy.credentialsDeleted}</li>
-                      <li>{copy.subscriptionCancelled}</li>
-                      <li>{copy.billingRecordsKept}</li>
-                    </ul>
-                  </div>
+                  </BannerAlertDescription></BannerAlert>
+                  {deletionPlan ? (
+                    <DeletionPlanSummary plan={deletionPlan} copy={copy.plan} />
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">{copy.whenDeleted}</p>
+                      <ul className="text-muted-foreground list-disc space-y-1.5 pl-5 text-sm">
+                        <li>{copy.agentsDeleted}</li>
+                        <li>{copy.threadsDeleted}</li>
+                        <li>{copy.credentialsDeleted}</li>
+                        <li>{copy.subscriptionCancelled}</li>
+                        <li>{copy.billingRecordsKept}</li>
+                      </ul>
+                    </div>
+                  )}
                   <div className="space-y-3">
                     <Label className="text-sm">{copy.chooseWhen}</Label>
                     <RadioGroup
@@ -522,7 +579,8 @@ export function ProfileTabView({
                         value="grace-period"
                         id="profile-grace-period"
                         label={copy.gracePeriodLabel}
-                        description={copy.gracePeriodDescription}
+                        description={noWorkspace ? copy.noWorkspaceImmediateOnly : copy.gracePeriodDescription}
+                        disabled={noWorkspace}
                         size="lg"
                         variant="outline"
                       />
@@ -568,7 +626,11 @@ export function ProfileTabView({
                   <Button
                     variant="destructive"
                     onClick={onConfirmDelete}
-                    disabled={isDeletingAccount || deleteConfirmText !== 'delete'}
+                    disabled={
+                      isDeletingAccount ||
+                      deleteConfirmText !== 'delete' ||
+                      (deletionPlan?.blockers.length ?? 0) > 0
+                    }
                     className="w-full sm:w-auto"
                   >
                     {isDeletingAccount ? copy.processing : copy.deleteAccount}
@@ -603,8 +665,8 @@ export function ProfileTab() {
   const locale = useLocale();
   const copy = useMemo(
     () =>
-      localizedCopy(DEFAULT_PROFILE_TAB_COPY, (key) =>
-        key === 'scheduledForDeletionOn' ? t.raw(key) : t(key),
+      localizedCopy(DEFAULT_PROFILE_TAB_COPY, (key, values) =>
+        key === 'scheduledForDeletionOn' ? t.raw(key) : t(key, values),
       ),
     [t],
   );
@@ -742,9 +804,36 @@ export function ProfileTab() {
   // --- Organizations ----------------------------------------------------
   // Same account-list entry `WorkspaceSwitcher` already primed on mount, so
   // this costs no extra request inside a project shell.
-  const { accounts, isLoading: accountsLoading } = useAccountMemberships();
+  // No account at all (Workspaces D3: nothing is created at sign-up). The
+  // grace period then answers 409 `no_workspace`, and `delete-immediately`
+  // deletes the person at once (flow DEL-6).
+  const accountList = useAccountsList();
+  const noWorkspace = accountList.isSuccess && (accountList.data ?? []).length === 0;
 
   // --- Delete account ---------------------------------------------------
+  // The plan names every workspace the delete touches, read when the dialog
+  // opens: deleted (sole owner, only member), left, and the blockers.
+  const [planWanted, setPlanWanted] = useState(false);
+  const planQuery = useQuery({
+    queryKey: ['person-deletion-plan'],
+    queryFn: getPersonDeletionPlan,
+    enabled: planWanted,
+    staleTime: 0,
+  });
+  const directory = useWorkspaceDirectory();
+  const deletionPlan = useMemo<ProfileDeletionPlan | undefined>(() => {
+    const plan = planQuery.data;
+    if (!plan) return undefined;
+    // The API names each workspace (`workspace_names`); the directory is the fallback.
+    const served = plan.workspace_names ?? {};
+    const nameOf = (id: string) =>
+      served[id] ?? directory.workspaces.find((row) => row.workspaceId === id)?.project.name ?? id;
+    return {
+      deleteNames: plan.delete_workspaces.map(nameOf),
+      leaveNames: plan.leave_workspaces.map(nameOf),
+      blockers: plan.blockers.map((blocker) => ({ name: blocker.name, memberCount: blocker.member_count })),
+    };
+  }, [planQuery.data, directory.workspaces]);
   const {
     data: deletionStatus,
     isError: isDeletionStatusError,
@@ -765,7 +854,7 @@ export function ProfileTab() {
   // the row already renders the unavailable shape while the check runs, and a
   // definitive `supported: false` answer renders the same shape, so neither
   // branch changes.
-  const accountDeletionSupported = deletionStatus?.supported === true;
+  const accountDeletionSupported = noWorkspace || deletionStatus?.supported === true;
   // "The freshest known outcome is a failure." A bare `isError` is not enough:
   // the moment a retry starts, query-core clears the error of a data-less query
   // (fetchState sets `status: 'pending'`), and the row would flash the
@@ -777,6 +866,7 @@ export function ProfileTab() {
   // query-core keeps the previous answer, and a user with a scheduled
   // deletion must keep that row (schedule + cancel) over a network blip.
   const isDeletionStatusFailed =
+    !noWorkspace &&
     !deletionStatus &&
     (isDeletionStatusError ||
       (deletionStatusFetchStatus !== 'idle' && deletionStatusFailedAt > deletionStatusAnsweredAt));
@@ -796,7 +886,9 @@ export function ProfileTab() {
     // Match the API's fourteen-day elapsed-time grace period.
     setDeletionPreviewDate(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString());
     setDeleteConfirmText('');
-    setDeletionType('grace-period');
+    setDeletionType(noWorkspace ? 'immediate' : 'grace-period');
+    setPlanWanted(true);
+    void planQuery.refetch();
     setShowDeleteDialog(true);
   };
 
@@ -853,10 +945,10 @@ export function ProfileTab() {
       isSavingName={saveNameMutation.isPending}
       onSaveName={() => saveNameMutation.mutate(nameDraft)}
       userEmail={profileQuery.data?.email ?? ''}
-      accounts={accounts}
-      accountsLoading={accountsLoading}
+      noWorkspace={noWorkspace}
+      deletionPlan={deletionPlan}
       accountDeletionSupported={accountDeletionSupported}
-      hasPendingDeletion={deletionStatus?.has_pending_deletion ?? false}
+      hasPendingDeletion={!noWorkspace && (deletionStatus?.has_pending_deletion ?? false)}
       deletionScheduledForLabel={formatDate(deletionStatus?.deletion_scheduled_for)}
       deletionPreviewDateLabel={formatDate(deletionPreviewDate)}
       isDeletionStatusError={isDeletionStatusFailed}

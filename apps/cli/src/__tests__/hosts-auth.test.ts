@@ -91,14 +91,25 @@ function mockApi(
     agent: string | null;
     connectors: string[] | 'all' | null;
     kortix_permissions?: string[] | 'all' | null;
-    kortix_cli: string[] | 'all' | null;
-    env: string[] | 'all' | null;
+    kortix_cli?: string[] | 'all' | null;
+    env?: string[] | 'all' | null;
   },
+  /** The `DELETE /v1/me/tokens/self` answer. `absent` = the 500 the old
+   *  catch-all returned, so logout tests that never mock revocation keep
+   *  exercising the failed-revocation path. */
+  tokenRevocation: 'ok' | 'fail' | 'absent' = 'absent',
 ) {
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = String(input);
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+    const url = input instanceof Request ? input.url : String(input);
     requests.push(url);
-    if (url.endsWith('/v1/accounts/me')) {
+    if (method === 'DELETE' && url.endsWith('/v1/me/tokens/self')) {
+      return new Response(JSON.stringify(tokenRevocation === 'ok' ? { ok: true } : { error: 'no' }), {
+        status: tokenRevocation === 'ok' ? 200 : 500,
+        headers: JSON_HEADERS,
+      });
+    }
+    if (url.endsWith('/v1/me')) {
       return new Response(
         JSON.stringify({
           user_id: 'user_1',
@@ -146,7 +157,7 @@ describe('kortix hosts login', () => {
     mockApi();
     const code = await runHosts(['login', '--token', 'kortix_pat_new', '--no-project']);
     expect(code).toBe(0);
-    expect(requests).toEqual(['https://api.test/v1/accounts/me']);
+    expect(requests).toEqual(['https://api.test/v1/me']);
     const host = getHost('test');
     expect(host?.token).toBe('kortix_pat_new');
     expect(host?.user_email).toBe('user@example.test');
@@ -172,7 +183,7 @@ describe('kortix hosts login', () => {
       '--no-project',
     ]);
     expect(code).toBe(0);
-    expect(requests).toEqual(['https://fresh.test/v1/accounts/me']);
+    expect(requests).toEqual(['https://fresh.test/v1/me']);
     const host = getHost('fresh');
     expect(host?.url).toBe('https://fresh.test');
     expect(host?.token).toBe('kortix_pat_new');
@@ -225,7 +236,19 @@ describe('kortix login — the account step of the funnel', () => {
     const code = await runHosts(['login', '--token', 'kortix_pat_new', '--no-project']);
     expect(code).toBe(0);
     expect(getHost('test')?.account_id).toBe('account_1');
-    expect(stripAnsi(stdout)).toContain('Active account: Personal');
+    // The account is the workspace's record, not a step the person reads.
+    expect(stripAnsi(stdout)).not.toContain('Active account');
+  });
+
+  test('zero accounts: the login holds and names create-or-join', async () => {
+    writeConfig('');
+    mockApi([]);
+    const code = await runHosts(['login', '--token', 'kortix_pat_new']);
+    expect(code).toBe(0);
+    expect(getHost('test')?.token).toBe('kortix_pat_new');
+    expect(stripAnsi(stdout)).toContain(
+      'No workspace yet. Create one with kortix workspaces create <name>, or accept an invite.',
+    );
   });
 
   test('multiple accounts without a TTY keep the first (never blocks CI)', async () => {
@@ -235,7 +258,7 @@ describe('kortix login — the account step of the funnel', () => {
     expect(code).toBe(0);
     expect(getHost('test')?.account_id).toBe('account_1');
     // Non-TTY hint points the user at the switch verb.
-    expect(stripAnsi(stdout)).toContain('kortix accounts use');
+    expect(stripAnsi(stdout)).toContain('kortix workspaces use');
   });
 
   test('--account <slug> picks the active account non-interactively', async () => {
@@ -251,7 +274,6 @@ describe('kortix login — the account step of the funnel', () => {
     ]);
     expect(code).toBe(0);
     expect(getHost('test')?.account_id).toBe('account_2');
-    expect(stripAnsi(stdout)).toContain('Active account: Kortix');
   });
 
   test('an unknown --account warns and falls back to the first account', async () => {
@@ -315,6 +337,26 @@ describe('kortix hosts logout', () => {
     expect(code).toBe(0);
     expect(getHost('test')?.token).toBe('');
   });
+
+  test('revokes the stored key on the API before clearing it (KRTX-4493)', async () => {
+    mockApi(ACCOUNTS, undefined, 'ok');
+    const code = await runLogout([]);
+    expect(code).toBe(0);
+    // The revoke call went to the credential itself (the CLI cannot map a
+    // secret PAT to a token_id; the API revokes the presented bearer).
+    expect(requests.some((r) => r.endsWith('/v1/me/tokens/self'))).toBe(true);
+    // The local token is cleared either way.
+    expect(getHost('test')?.token).toBe('');
+    expect(stripAnsi(stdout)).not.toContain('could not be revoked');
+  });
+
+  test('still clears locally when the revocation fails, and says so', async () => {
+    mockApi(ACCOUNTS, undefined, 'fail');
+    const code = await runLogout([]);
+    expect(code).toBe(0);
+    expect(getHost('test')?.token).toBe('');
+    expect(stripAnsi(stdout)).toContain('could not be revoked');
+  });
 });
 
 describe('kortix hosts whoami', () => {
@@ -322,7 +364,11 @@ describe('kortix hosts whoami', () => {
     mockApi();
     const code = await runHosts(['whoami']);
     expect(code).toBe(0);
-    expect(requests).toEqual(['https://api.test/v1/accounts/me']);
+    // One identity read. With no default workspace picked, whoami also lists
+    // each account's projects to tell "pick one" from "none yet".
+    expect(requests[0]).toBe('https://api.test/v1/me');
+    expect(requests.filter((r) => r.endsWith('/me'))).toHaveLength(1);
+    expect(requests.slice(1).every((r) => r.includes('/v1/workspaces'))).toBe(true);
     expect(stripAnsi(stdout)).toContain('user@example.test');
   });
 

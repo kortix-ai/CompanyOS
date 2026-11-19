@@ -12,7 +12,7 @@
  * surfaced via /kortix/health `boot_error`, a terminal /start answer, or the
  * connect loop's own timeout), the failure is a card with the composer's
  * surface, the detail, Restart, and a way back to project home, centred in the
- * page, with no composer (Jay, 2026-10-02: nothing can be sent). Web parity with the dashboard's "OpenCode runtime is not ready"
+ * page, with no composer (Jay, 2026-10-02: nothing can be sent). Web parity with the dashboard's "Session runtime is not ready"
  * screen (apps/web/.../sessions/[sessionId]/page.tsx InlineSessionError).
  *
  * With a SAVED COPY (`thread`: the copy this device kept, then the server's;
@@ -45,6 +45,7 @@ import {
   type SessionMessageAuthors,
   type SessionParticipants,
 } from '@kortix/sdk';
+import { useNow } from '@kortix/sdk/react';
 import { useColorScheme } from 'nativewind';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowCounterClockwiseIcon as RotateCcw } from '@/lib/icons';
@@ -308,16 +309,6 @@ function WakingStatus({ label }: { label: string }) {
   );
 }
 
-/** A 1 s tick for the image step's timer. */
-function useNow(): number {
-  const [now, setNow] = React.useState(() => Date.now());
-  React.useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1_000);
-    return () => clearInterval(id);
-  }, []);
-  return now;
-}
-
 /**
  * The sandbox image step: `WakingStatus`'s card, dot and inset, with a title,
  * the step's own line and the time since it began. The image name is left
@@ -475,7 +466,7 @@ function ConnectErrorState({
       ) : null}
       <View className="flex-row gap-2">
         <Button variant="secondary" onPress={onCancel} className="flex-1 rounded-full">
-          <Text>Back to project</Text>
+          <Text>Back to workspace</Text>
         </Button>
         {onRestart ? (
           <Button variant="default" onPress={onRestart} disabled={restarting} className="flex-1 rounded-full">

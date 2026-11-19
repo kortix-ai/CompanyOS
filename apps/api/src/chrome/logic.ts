@@ -3,6 +3,8 @@
  * Protocol: .agents/skills/kortix-chrome/references/protocol.md
  */
 
+import { CHROME_LAUNCHED } from '@kortix/shared/chrome-launch';
+
 /** A browser is online when its last ping is newer than this. */
 export const ONLINE_WINDOW_MS = 75_000;
 /**
@@ -136,9 +138,14 @@ export class ChromeError extends Error {
   }
 }
 
-/** The error body of every browser route. */
+/** The error body of every browser route. Before launch there is no page to
+ *  connect a browser on (CHROME_LAUNCHED), so the body names none. */
 export function chromeErrorBody(code: ChromeErrorCode, frontendUrl: string) {
-  return { error: ERRORS[code].error, code, connectUrl: `${frontendUrl.replace(/\/+$/, '')}/settings/chrome` };
+  return {
+    error: ERRORS[code].error,
+    code,
+    ...(CHROME_LAUNCHED ? { connectUrl: `${frontendUrl.replace(/\/+$/, '')}/settings/chrome` } : {}),
+  };
 }
 
 // ── Picking a browser ───────────────────────────────────────────────────────
@@ -173,7 +180,7 @@ export interface GrantRow {
   decision: string;
 }
 
-export type ConsentOutcome = 'granted' | 'ask';
+type ConsentOutcome = 'granted' | 'ask';
 
 /**
  * Decide whether an attach needs a prompt in Chrome.
@@ -201,7 +208,7 @@ export function decideConsent(input: {
   return allowed ? 'granted' : 'ask';
 }
 
-export type ConsentDecision = 'session' | 'project' | 'deny';
+type ConsentDecision = 'session' | 'project' | 'deny';
 
 export function isConsentDecision(v: unknown): v is ConsentDecision {
   return v === 'session' || v === 'project' || v === 'deny';

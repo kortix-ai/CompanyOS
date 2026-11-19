@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  appEventOf,
   bucketRuns,
   canReplay,
   inRunRange,
@@ -123,6 +124,16 @@ describe('bucketRuns', () => {
     expect(b!.cost).toBe(0.75);
   });
 
+  test('runs inside one minute still spread the axis: one minute per slice, ending at the newest run', () => {
+    const buckets = bucketRuns([run(0, 'fired'), run(0, 'failed')], 48);
+    expect(buckets[47]!.end).toBe(Date.parse(at(0)));
+    expect(buckets[47]!.total).toBe(2);
+    expect(buckets[47]!.end - buckets[0]!.start).toBe(48 * 60_000);
+    // The ticks read 0, 11, 23 and 35 slices in: four different clock minutes.
+    const minutes = [0, 11, 23, 35].map((i) => Math.floor(buckets[i]!.start / 60_000));
+    expect(new Set(minutes).size).toBe(4);
+  });
+
   test('no runs, no bars', () => {
     expect(bucketRuns([], 48)).toEqual([]);
   });
@@ -142,5 +153,20 @@ describe('isDefaultSource', () => {
     expect(isDefaultSource('event', 'event')).toBe(true);
     expect(isDefaultSource('cron', 'manual')).toBe(false);
     expect(isDefaultSource('webhook', 'reminder')).toBe(false);
+  });
+});
+
+describe('appEventOf: the App event a run fired on', () => {
+  test('an App event run names its event and App', () => {
+    expect(appEventOf({ event: { name: 'status.changed', id: 'chg-1', data: {} }, app: { slug: 'status-watch' } }))
+      .toEqual({ name: 'status.changed', id: 'chg-1', app: 'status-watch' });
+  });
+  test('an event without an id still names it', () => {
+    expect(appEventOf({ event: { name: 'tick' }, app: { slug: 'w' } })).toEqual({ name: 'tick', id: null, app: 'w' });
+  });
+  test('any other run, or a truncated payload, has none', () => {
+    expect(appEventOf({ trigger: { slug: 'digest' }, source: 'manual' })).toBeNull();
+    expect(appEventOf({ event: { type: 'github.pr' }, connector: { slug: 'gh' } })).toBeNull();
+    expect(appEventOf({ truncated: true, bytes: 90000 })).toBeNull();
   });
 });

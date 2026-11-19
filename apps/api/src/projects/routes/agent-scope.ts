@@ -42,6 +42,7 @@ import { propagateProjectSecretsToActiveSandboxes } from '../lib/sandbox-env-syn
 import { eagerlyProvisionAgentIdentities, type AgentIdentity } from '../../accounts/iam/custom-roles';
 import { listAgentServiceAccounts } from '../../repositories/service-accounts';
 import { rethrowDatabaseError } from '../../shared/database-errors';
+import { workspaceIdParam } from '../../shared/route-params';
 
 // `'all'` = every item the launcher can see; a list = an explicit allowlist;
 // `[]` = none. Mirrors the AgentSpec GrantSet.
@@ -86,12 +87,12 @@ export function registerAgentScopeRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'put',
-      path: '/{projectId}/agents/{agentName}/scope',
+      path: '/{workspaceId}/agents/{agentName}/scope',
       tags: ['projects'],
       summary: 'Set which secrets and connectors an agent may use',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), agentName: z.string() }),
+        params: z.object({ workspaceId: z.string(), agentName: z.string() }),
         body: { content: { 'application/json': { schema: AgentScopeBody } } },
       },
       responses: {
@@ -100,7 +101,7 @@ export function registerAgentScopeRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const agentName = c.req.param('agentName');
       // Floor 'read' (membership); the real gate is project.agent.write below.
       // Scoping an agent edits its `[[agents]]` manifest entry (binding its
@@ -271,12 +272,12 @@ export function registerAgentScopeRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/secrets/{identifier}/grant',
+      path: '/{workspaceId}/secrets/{identifier}/grant',
       tags: ['secrets'],
       summary: 'Grant a secret to an agent',
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), identifier: z.string() }),
+        params: z.object({ workspaceId: z.string(), identifier: z.string() }),
         body: { content: { 'application/json': { schema: GrantSecretToAgentInputSchema } } },
       },
       responses: {
@@ -285,7 +286,7 @@ export function registerAgentScopeRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const identifierParam = c.req.param('identifier')?.trim();
       if (!identifierParam || !isValidIdentifier(identifierParam)) {
         return c.json({ error: 'Invalid secret identifier', code: 'invalid_identifier' }, 400);
@@ -320,17 +321,8 @@ export function registerAgentScopeRoutes(): void {
         projectId,
         PROJECT_ACTIONS.PROJECT_SECRET_READ,
       );
-      // Belt over the central agent-grant fold, which is not enough here: that
-      // fold passes an agent session whose grant is NULL (an ungoverned project —
-      // `agentMayPerform(null)` is true), and an ungoverned project is exactly the
-      // case this route serves. A session that borrows a human's authority must
-      // never widen its own secret grant. A governed agent's permissions decide.
-      if (isBorrowedSessionPrincipal(c)) {
-        return c.json(
-          { error: 'Agent sessions cannot grant a secret to an agent', code: 'agent_session_forbidden' },
-          403,
-        );
-      }
+      // No third check: a session that acts for a person gets the person's
+      // answer (their role ∩ the agent's grant), exactly as above.
 
       // Scoped to the rows this caller can actually see (shared, plus their own
       // override) — the same slice `loadSecretViewsForUser` builds the secrets
@@ -441,11 +433,11 @@ export function registerAgentScopeRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/agent-identities',
+      path: '/{workspaceId}/agent-identities',
       tags: ['agents'],
       summary: "List this project's agent identities (service accounts)",
       ...auth,
-      request: { params: z.object({ projectId: z.string() }) },
+      request: { params: z.object({ workspaceId: z.string() }) },
       responses: {
         200: json(
           z.object({
@@ -464,7 +456,7 @@ export function registerAgentScopeRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
       const byKey = new Map<string, AgentIdentity>();

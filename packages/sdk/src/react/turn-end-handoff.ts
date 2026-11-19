@@ -9,11 +9,11 @@ import {
   type TurnEndWatchDeps,
   createTurnEndWatch,
 } from '../core/session/turn-end-watch';
-import { unwrapError } from '../core/turns/errors';
+import { sessionErrorSentence } from '../core/turns/errors';
 import { hasNotifySink, notifySessionError, notifyTaskComplete } from '../platform/ui';
 import { registerIdentityReset } from './identity-reset-registry';
-import { cachedSessionName, realRuntimeTitle } from './use-opencode-events/helpers';
-import { type Session, runtimeKeys } from './use-opencode-sessions';
+import { cachedSessionName, realRuntimeTitle } from './use-runtime-events/helpers';
+import { type Session, runtimeKeys } from './use-runtime-sessions';
 
 /**
  * The session page's half of the turn-end hand-off (`core/session/turn-end-watch.ts`).
@@ -33,9 +33,9 @@ function announce(...[handoff, outcome, watchedSinceMs]: Parameters<TurnEndWatch
   if (outcome.kind === 'completed') {
     notifyTaskComplete(handoff.sessionId, title, { watchedSinceMs, projectId: handoff.projectId });
   } else if (outcome.kind === 'failed') {
-    // The sentence the stream path shows for a failure (`unwrapError`), never
-    // the error class name.
-    notifySessionError(handoff.sessionId, unwrapError(outcome.error), title, {
+    // The same sentence the stream path shows (both paths compose it through
+    // `sessionErrorSentence`), never the error class name.
+    notifySessionError(handoff.sessionId, sessionErrorSentence(outcome.error), title, {
       projectId: handoff.projectId,
     });
   }
@@ -116,7 +116,7 @@ export interface TurnEndHandoffInput {
   enabled: boolean;
   projectId: string;
   sessionId: string;
-  /** The runtime (OpenCode) session id, for the title fallback. */
+  /** The runtime session id, for the title fallback. */
   runtimeSessionId?: string | null;
   /** `useSessionWorking(...).state === 'working'`. */
   working: boolean;

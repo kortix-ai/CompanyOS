@@ -13,6 +13,12 @@
  * (or a click on the screen) drops the shield, rings the screen and focuses
  * it; "Return control" puts the shield back.
  *
+ * voxl resizes the desktop to the viewer's window (--enable-resize). With more
+ * than one viewer, one viewer sizes it: the first to connect, then whoever
+ * acts on the desktop (apps/sandbox/voxl/size-owner.patch); the others watch
+ * it scaled. Before that patch two viewers of different sizes resized it back
+ * and forth, and every resize showed a black frame.
+ *
  * The frame unmounts while this browser tab is hidden. voxl paces every
  * viewer to the slowest one, and a background tab stops acking frames, so a
  * forgotten tab would slow the stream for everyone watching. It reconnects,
@@ -43,6 +49,7 @@ import { probePreviewPort, type PreviewPortProbe } from '@kortix/sdk';
 import { useHasSessionDesktop } from '@kortix/sdk/react';
 import { ArrowSquareOutIcon, MonitorIcon } from '@phosphor-icons/react';
 import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { SESSION_BAR_CLASS } from '../../internal/layout/panel-chrome';
 
 export const DESKTOP_URL = 'http://localhost:6901/';
 /** How often the panel asks again until the desktop answers. */
@@ -111,12 +118,31 @@ export function SessionDesktop({
   };
 
   return (
-    <div className="bg-background flex h-full min-h-0 min-w-0 flex-col">
-      <div className="flex shrink-0 items-center gap-1 px-2 py-1">
+    // `@container/desktop`: the control status text hides when the panel is
+    // narrow, so the header never wraps; the button alone still says it.
+    <div className="bg-background @container/desktop flex h-full min-h-0 min-w-0 flex-col">
+      <div className={cn(SESSION_BAR_CLASS, 'gap-1 px-2')}>
         <DetailSidebarToggle className="size-7" />
         <MonitorIcon className="text-muted-foreground ml-1 size-3.5 shrink-0" />
         <span className="truncate text-sm font-medium">{t('title')}</span>
         <div className="flex-1" />
+        {/* Who drives the desktop, in the header beside the window controls,
+            so the screen takes the panel's full height. */}
+        {live && (
+          <div className="flex shrink-0 items-center gap-2 pr-1">
+            <span className="text-muted-foreground hidden truncate text-xs @md/desktop:inline">
+              {control ? t('userControl') : t('agentControl')}
+            </span>
+            <Button
+              variant={control ? 'secondary' : 'default'}
+              size="xs"
+              aria-pressed={control}
+              onClick={control ? () => setControl(false) : takeOver}
+            >
+              {control ? t('returnControl') : t('takeOver')}
+            </Button>
+          </div>
+        )}
         <ButtonGroup className="shrink-0">
           <Button
             variant="secondary"
@@ -133,13 +159,17 @@ export function SessionDesktop({
         </ButtonGroup>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2 px-3 pb-3">
+      <div className="flex min-h-0 flex-1 flex-col">
+        {/* Flush, like every other docked layer: no inset, no radius, no ring
+            frame (`panel-chrome.ts`). While the user has control, an inset
+            ring marks the screen as live input — it draws inside the edge,
+            so the screen never shifts. */}
         <div
           data-slot="desktop-screen"
           data-control={control ? 'user' : 'agent'}
           className={cn(
-            'bg-muted relative min-h-0 flex-1 overflow-hidden rounded-xl ring-1 ring-border transition-shadow',
-            control && 'ring-2 ring-primary',
+            'bg-muted relative min-h-0 flex-1 overflow-hidden',
+            control && 'ring-primary ring-2 ring-inset',
           )}
         >
           {hasDesktop === false ? (
@@ -188,25 +218,6 @@ export function SessionDesktop({
                   onClick={takeOver}
                 />
               )}
-            </>
-          )}
-        </div>
-
-        <div className="flex h-9 shrink-0 items-center justify-center gap-3 text-sm">
-          {live && (
-            <>
-              <span className="text-muted-foreground">
-                {control ? t('userControl') : t('agentControl')}
-              </span>
-              <Button
-                variant={control ? 'secondary' : 'default'}
-                size="sm"
-                className="h-7 rounded-full px-3"
-                aria-pressed={control}
-                onClick={control ? () => setControl(false) : takeOver}
-              >
-                {control ? t('returnControl') : t('takeOver')}
-              </Button>
             </>
           )}
         </div>

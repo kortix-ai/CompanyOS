@@ -473,6 +473,30 @@ fn remote_retention_purges_old_chunks_and_never_frees_their_local_copy() {
 }
 
 #[test]
+fn a_chunk_whose_local_file_is_gone_leaves_the_queue_and_the_backlog() {
+    let (lib, conn) = Lib::new();
+    let start = now_ms() - 120_000;
+    let gone = seed_chunk(&conn, &lib.0, start, "gone");
+    let kept = seed_chunk(&conn, &lib.0, start + 60_000, "kept");
+    let path_of = |id: i64| -> PathBuf {
+        let rel: String = conn.query_row("SELECT path FROM video WHERE id = ?1", [id], |r| r.get(0)).unwrap();
+        lib.0.videos_dir().join(rel)
+    };
+    std::fs::remove_file(path_of(gone)).unwrap();
+
+    assert!(!retire_if_file_gone(&conn, "video", gone, &path_of(gone), ErrorClass::Transient), "only a local read error retires");
+    assert!(!retire_if_file_gone(&conn, "video", kept, &path_of(kept), ErrorClass::Local), "a file that exists keeps retrying");
+    assert!(retire_if_file_gone(&conn, "video", gone, &path_of(gone), ErrorClass::Local));
+
+    let status: i64 = conn.query_row("SELECT status FROM video WHERE id = ?1", [gone], |r| r.get(0)).unwrap();
+    assert_eq!(status, 2, "marked deleted, like retention does");
+    let mut s = Settings::default();
+    s.sync.enabled = true;
+    let st = compute_state(&conn, &lib.0, &s, true, "dev", &Runtime::default());
+    assert_eq!((st.pending, st.bytes_pending), (1, 1000), "the gone chunk no longer counts toward the backlog");
+}
+
+#[test]
 fn state_reports_queue_depth_bytes_age_and_error_class() {
     let (lib, conn) = Lib::new();
     let start = now_ms() - 120_000;
@@ -816,4 +840,58 @@ fn awake_since_restarts_after_a_sleep_gap_only() {
     rt.last_tick_ms = 1_000 + SLEEP_GAP_MS;
     note_wake(&mut rt, 1_000 + 2 * SLEEP_GAP_MS + 1);
     assert_eq!(rt.awake_since_ms, 1_000 + 2 * SLEEP_GAP_MS + 1, "a longer gap restarts it");
+}
+
+#[test]
+fn state_writer_writes_sync_json_only_on_change() {
+    let (lib, conn) = Lib::new();
+    let paths = &lib.0;
+    let mut s = Settings::default();
+    s.sync.enabled = true;
+    let rt = Runtime::default();
+    let mut w = StateWriter::default();
+    let t0 = now_ms();
+    let start = t0 - 600_000;
+    seed_chunk(&conn, paths, start, "a");
+    let tick = |w: &mut StateWriter, now: i64| w.tick(&conn, paths, &s, true, "dev", &rt, now);
+
+    assert!(tick(&mut w, t0), "the first tick writes");
+    assert_eq!(read_state(paths).unwrap().pending, 1);
+    assert!(!tick(&mut w, t0 + 5_000), "nothing changed: no write");
+
+    // A new chunk changes the queue key: the counts are read again at once.
+    seed_chunk(&conn, paths, start + 60_000, "b");
+    assert!(tick(&mut w, t0 + 10_000));
+    assert_eq!(read_state(paths).unwrap().pending, 2);
+
+    // A change the key does not see (another process marks a chunk deleted) shows
+    // when the counts are older than STATE_REFRESH_MS.
+    let other = store::open(paths).unwrap();
+    other
+        .execute(
+            "UPDATE video SET status = 2 WHERE path = ?1",
+            [format!("v{start}.mp4")],
+        )
+        .unwrap();
+    assert!(!tick(&mut w, t0 + 15_000));
+    assert_eq!(read_state(paths).unwrap().pending, 2);
+    assert!(tick(&mut w, t0 + 10_000 + STATE_REFRESH_MS));
+    let st = read_state(paths).unwrap();
+    assert_eq!(st.pending, 1);
+    // A queue with an oldest unsent chunk refreshes its age once per STATE_REFRESH_MS.
+    assert!(!tick(&mut w, t0 + 20_000 + STATE_REFRESH_MS));
+    assert!(tick(&mut w, t0 + 10_000 + 2 * STATE_REFRESH_MS));
+    assert!(read_state(paths).unwrap().oldest_unsent_ms.unwrap() > st.oldest_unsent_ms.unwrap());
+
+    // An empty queue: no write at all while nothing changes.
+    conn.execute("UPDATE video SET uploaded_at = 1, remote_key = 'k'", [])
+        .unwrap();
+    assert!(tick(&mut w, t0 + 30_000 + 2 * STATE_REFRESH_MS));
+    assert_eq!(read_state(paths).unwrap().pending, 0);
+    assert!(!tick(&mut w, t0 + 30_000 + 5 * STATE_REFRESH_MS));
+
+    // A deleted sync.json is written again.
+    std::fs::remove_file(state_path(paths)).unwrap();
+    assert!(tick(&mut w, t0 + 35_000 + 5 * STATE_REFRESH_MS));
+    assert!(read_state(paths).is_some());
 }

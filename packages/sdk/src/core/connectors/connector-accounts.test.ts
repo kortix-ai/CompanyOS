@@ -5,9 +5,10 @@ import {
   type ConnectionAudienceSelection,
   type NewConnectorAccountDraft,
   connectorAccountNeedsSignIn,
+  connectorAccountSignInStarted,
   connectorAccountVisibility,
   connectorConnectionRows,
-  emptyProjectConnectionSlot,
+  emptyWorkspaceConnectionSlot,
   listedConnectorAccounts,
   newConnectorAccountAudienceFor,
   newConnectorAccountGrantees,
@@ -242,15 +243,41 @@ const connector = (provider: string, requestAuthType: string) =>
 
 describe('emptyProjectConnectionSlot', () => {
   test('a managed app’s unsigned slot is the empty slot, though Composio holds its auth', () => {
-    expect(emptyProjectConnectionSlot(connector('composio', 'none'), [slot])).toBe(slot);
+    expect(emptyWorkspaceConnectionSlot(connector('composio', 'none'), [slot])).toBe(slot);
   });
 
   test('a direct connector that needs no credential has no empty slot: its account works', () => {
-    expect(emptyProjectConnectionSlot(connector('mcp', 'none'), [slot])).toBeNull();
+    expect(emptyWorkspaceConnectionSlot(connector('mcp', 'none'), [slot])).toBeNull();
   });
 
   test('a direct connector with an auth scheme has one', () => {
-    expect(emptyProjectConnectionSlot(connector('mcp', 'bearer'), [slot])).toBe(slot);
+    expect(emptyWorkspaceConnectionSlot(connector('mcp', 'bearer'), [slot])).toBe(slot);
+  });
+});
+
+describe('a shared slot whose sign-in started', () => {
+  // 2026-11-11: an agent ran `kortix connectors connect gmail --owner project`.
+  // The start wrote a Composio session onto the slot, the person never came
+  // back to Kortix, and the slot stayed unsigned. Hidden as "empty", it left
+  // Settings with no row to finish the sign-in from.
+  const started = {
+    ...slot,
+    metadata: { default_slot: 'project', provider: 'composio', session_id: 'trs_started', requesting_session_id: 's-1' },
+  } as unknown as Connection;
+
+  test('is an account, not the empty slot', () => {
+    expect(emptyWorkspaceConnectionSlot(connector('composio', 'none'), [started])).toBeNull();
+    expect(
+      listedConnectorAccounts([started], connector('composio', 'none')).map((row) => row.connection_id),
+    ).toEqual(['c-slot']);
+  });
+
+  test('connectorAccountSignInStarted reads the start a provider left on the row', () => {
+    expect(connectorAccountSignInStarted(started)).toBe(true);
+    expect(connectorAccountSignInStarted(slot)).toBe(false);
+    expect(connectorAccountSignInStarted({ metadata: { auth_request_id: 'ar_1' } })).toBe(true);
+    expect(connectorAccountSignInStarted({ metadata: { requesting_session_id: 's-2' } })).toBe(true);
+    expect(connectorAccountSignInStarted({})).toBe(false);
   });
 });
 

@@ -2,9 +2,10 @@
  * Real-Postgres contract: Slack and Teams route no message to a deleted project.
  *
  * Two starting points, as in telegram/telegram-archived.integration.test.ts:
- * - `tombstone`: only the status changed (`archiveProjectAndRevokeTokens`); the
+ * - `tombstone`: only the status changed (`archiveProjectRow`); the
  *   installs, channel bindings and threads stay. Every project deleted before
- *   the delete released its channels looks like this. The routers skip it.
+ *   the delete released its channels looks like this. The routers skip it:
+ *   a Slack workspace runs in its one live linked Kortix workspace.
  * - `deleted`: the project went through the real DELETE route, which releases
  *   the Slack and Teams installs, their secrets and the channel bindings, and
  *   keeps the email inbox.
@@ -14,7 +15,7 @@ import { accountMembers, accounts, chatChannelBindings, chatInstalls, chatThread
 import { and, eq, inArray, like, or } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { insertIntoView } from '../__tests__/helpers/compat-views';
-import { archiveProjectAndRevokeTokens } from '../projects/lib/project-deletion';
+import { archiveProjectRow } from '../workspaces/lifecycle';
 import { registerProjectSettingsRoutes } from '../projects/routes/project-settings';
 import { projectsApp } from '../projects/surface';
 import { db } from '../shared/db';
@@ -35,14 +36,14 @@ const TAG = crypto.randomUUID().slice(0, 8).toUpperCase();
 const ws = (name: string) => `${name}${TAG}`;
 
 const install = (platform: string, workspaceId: string, ...projectIds: string[]) =>
-  db.insert(chatInstalls).values(projectIds.map((projectId) => ({ platform, workspaceId, projectId })));
+  db.insert(chatInstalls).values(projectIds.map((projectId) => ({ platform, platformTeamId: workspaceId, projectId })));
 const bind = (platform: string, workspaceId: string, channelId: string, projectId: string) =>
-  db.insert(chatChannelBindings).values({ platform, workspaceId, channelId, projectId });
+  db.insert(chatChannelBindings).values({ platform, platformTeamId: workspaceId, channelId, projectId });
 async function boundTo(platform: string, workspaceId: string, channelId: string) {
   const [row] = await db
     .select({ projectId: chatChannelBindings.projectId })
     .from(chatChannelBindings)
-    .where(and(eq(chatChannelBindings.platform, platform), eq(chatChannelBindings.workspaceId, workspaceId), eq(chatChannelBindings.channelId, channelId)));
+    .where(and(eq(chatChannelBindings.platform, platform), eq(chatChannelBindings.platformTeamId, workspaceId), eq(chatChannelBindings.channelId, channelId)));
   return row ? row.projectId : 'unbound';
 }
 
@@ -64,6 +65,7 @@ beforeAll(async () => {
   await insertIntoView(db, accountMembers, { userId: OWNER, accountId: ACCOUNT, accountRole: 'owner', isSuperAdmin: false });
   await db.insert(projects).values(
     [TOMBSTONE, DELETED, LIVE, LIVE_2].map((projectId) => ({
+      splitPending: true,
       projectId,
       accountId: ACCOUNT,
       name: `channels-${projectId.slice(0, 8)}`,
@@ -81,7 +83,7 @@ beforeAll(async () => {
   await install('teams', ws('tenant-only-'), TOMBSTONE);
   await install('teams', ws('tenant-many-'), TOMBSTONE, LIVE);
   await bind('teams', ws('tenant-many-'), 'conv-bound', TOMBSTONE);
-  expect(await archiveProjectAndRevokeTokens(TOMBSTONE, ACCOUNT)).toBeTruthy();
+  expect(await archiveProjectRow(TOMBSTONE, ACCOUNT)).toBeTruthy();
 });
 
 afterAll(async () => {
@@ -96,30 +98,26 @@ afterAll(async () => {
 });
 
 describe('Slack on a deleted project (tombstone) — migrated PostgreSQL', () => {
-  test('a workspace whose only install is the deleted project resolves nothing and binds no channel', async () => {
-    expect(await resolveOauthProject(ws('TONLY'), 'CNEW')).toEqual({ kind: 'none' });
-    expect(await boundTo('slack', ws('TONLY'), 'CNEW')).toBe('unbound');
+  test('a Slack workspace whose only install is the deleted project runs nothing', async () => {
+    expect(await resolveOauthProject(ws('TONLY'))).toEqual({ kind: 'none' });
   });
 
-  test('a channel bound to the deleted project resolves afresh: the one live install takes it', async () => {
-    expect(await resolveOauthProject(ws('TONE'), 'CBOUND')).toEqual({ kind: 'project', projectId: LIVE });
-    expect(await boundTo('slack', ws('TONE'), 'CBOUND')).toBe(LIVE);
+  test('a Slack workspace with one live install runs there, also in a channel and a thread of the deleted project', async () => {
+    expect(await resolveOauthProject(ws('TONE'))).toEqual({ kind: 'project', projectId: LIVE });
   });
 
-  test('with several live installs the picker offers only them, also in a channel bound to the deleted project', async () => {
-    const picker = async (channelId: string) => {
-      const resolution = await resolveOauthProject(ws('TMANY'), channelId);
-      return resolution.kind === 'ambiguous' ? { ...resolution, projectIds: [...resolution.projectIds].sort() } : resolution;
-    };
-    const ambiguous = { kind: 'ambiguous' as const, projectIds: [LIVE, LIVE_2].sort() };
-    expect(await picker('CNEW')).toEqual(ambiguous);
-    expect(await picker('CBOUND')).toEqual(ambiguous);
-    // The binding is gone, so the picker claims the channel and the pick writes it.
-    expect(await boundTo('slack', ws('TMANY'), 'CBOUND')).toBe('unbound');
-  });
-
-  test("a reply in a thread of the deleted project's session resolves nothing", async () => {
-    expect(await resolveOauthProject(ws('TMANY'), 'CTHREAD', '1700000000.000100')).toEqual({ kind: 'none' });
+  test('with several live installs one keeps the Slack workspace and the others are detached', async () => {
+    const first = await resolveOauthProject(ws('TMANY'));
+    expect(first.kind).toBe('project');
+    const kept: string = first.kind === 'project' ? first.projectId : '';
+    expect([LIVE, LIVE_2] as string[]).toContain(kept);
+    const left = await db
+      .select({ projectId: chatInstalls.projectId })
+      .from(chatInstalls)
+      .where(and(eq(chatInstalls.platform, 'slack'), eq(chatInstalls.platformTeamId, ws('TMANY'))));
+    // The tombstone's row stays (only status changed); the other live install is gone.
+    expect(left.map((r) => r.projectId).sort()).toEqual([TOMBSTONE, kept].sort());
+    expect(await resolveOauthProject(ws('TMANY'))).toEqual(first);
   });
 });
 
@@ -162,7 +160,7 @@ describe('the project delete releases Slack, Teams and Telegram — migrated Pos
       bindings: 0,
       secrets: [],
     });
-    expect(await resolveOauthProject(ws('TDEL'), 'CDEL')).toEqual({ kind: 'none' });
+    expect(await resolveOauthProject(ws('TDEL'))).toEqual({ kind: 'none' });
     expect(await resolveConversationProjectDetailed(ws('tenant-del-'), 'conv-del')).toEqual({ kind: 'none' });
   });
 });

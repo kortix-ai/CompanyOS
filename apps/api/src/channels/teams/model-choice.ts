@@ -23,7 +23,6 @@ import {
 } from '../model-access';
 import { channelModelContext } from '../slack/model-gate';
 import { currentChannelSelection, setChannelModel } from '../slack/selection';
-import { projectFeatureFlagEnabled } from '../../feature-flags/for-project';
 import { conversationSession, teamsChannelCtx } from './binding';
 import { buildModelPickerCard, buildNoticeCard } from './cards';
 import { normalizeConversationPolicy } from './participants';
@@ -38,7 +37,7 @@ export { statusModel } from '../core/model-choice';
 
 const PERSONAL_SCOPE_NOTE = 'Includes your own API keys and ChatGPT subscriptions. When a provider has several keys, they rotate.';
 const SHARED_SCOPE_NOTE =
-  'Here, only keys shared with the whole project work: this chat is shared. Your own keys and ChatGPT subscription work in a personal chat with me.';
+  'Here, only keys shared with the whole Kortix workspace work: this chat is shared. Your own keys and ChatGPT subscription work in a personal chat with me.';
 
 /**
  * Who this conversation's model decisions are made for; null when no project
@@ -52,10 +51,8 @@ export async function teamsModelScope(activity: TeamsActivity, tenantId: string,
   if (!gate) return null;
   const sender = config.TEAMS_REQUIRE_USER_IDENTITY ? teamsUserId(activity) : null;
   const actor = sender ? await resolveChatActor(chatUser('teams', tenantId, sender), gate).catch(() => null) : null;
-  const pooledEnabled = await projectFeatureFlagEnabled(gate.projectId, 'pooled_provider_secrets').catch(() => false);
   return channelModelScope({
     ...gate,
-    pooledEnabled,
     linkedUserId: actor && 'userId' in actor ? actor.userId : null,
     oneToOne: isPersonalChat(activity),
   });
@@ -64,7 +61,7 @@ export async function teamsModelScope(activity: TeamsActivity, tenantId: string,
 export async function buildTeamsModelsCard(activity: TeamsActivity, tenantId: string, conversationId: string) {
   const ctx = teamsChannelCtx(tenantId, conversationId);
   const scope = await teamsModelScope(activity, tenantId, conversationId);
-  if (!scope) return buildNoticeCard('Connect a project to this conversation first — try /projects.', '📁');
+  if (!scope) return buildNoticeCard('Connect a Kortix workspace to this conversation first — try /projects.', '📁');
   const selection = await currentChannelSelection(ctx);
   const current = selection?.sessionModel ?? null;
   const { models, defaultModel } = await listChannelModels(scope);
@@ -92,12 +89,12 @@ export async function applyTeamsModelChoice(
   const ctx = teamsChannelCtx(tenantId, conversationId);
   const id = choice.trim();
   const scope = await teamsModelScope(activity, tenantId, conversationId);
-  if (!scope) return buildNoticeCard('Connect a project to this conversation first.');
+  if (!scope) return buildNoticeCard('Connect a Kortix workspace to this conversation first.');
   const auth = await authorizeChannelChange(
     chatUser('teams', tenantId, teamsUserId(activity) ?? ''),
     teamsSettingsChannel(activity, tenantId, conversationId),
   );
-  if (!auth.ok) return buildNoticeCard(teamsSettingsRefusal(auth.reason, 'Connect a project to this conversation first.'));
+  if (!auth.ok) return buildNoticeCard(teamsSettingsRefusal(auth.reason, 'Connect a Kortix workspace to this conversation first.'));
   const reset = !id || id.toLowerCase() === 'default';
 
   const selection = await currentChannelSelection(ctx);
@@ -127,8 +124,8 @@ export async function applyTeamsModelChoice(
     // project default may no longer be.
     return buildNoticeCard(
       live?.sessionModel
-        ? `Model reset to the project default for new sessions. This chat's session keeps ${labelForModelRef(live.sessionModel)}; send /new to start on the default.`
-        : 'Model reset to the project default.',
+        ? `Model reset to the workspace default for new sessions. This chat's session keeps ${labelForModelRef(live.sessionModel)}; send /new to start on the default.`
+        : 'Model reset to the workspace default.',
       '✅',
     );
   }
@@ -150,12 +147,12 @@ export async function applyTeamsModelChoice(
         // Stored anyway: the private session `/new` starts will use it.
         await setChannelModel(ctx, personal.model);
         return buildNoticeCard(
-          `Model set to ${label}. It runs on your own API key or ChatGPT subscription, and this chat's current session is shared with your project, so it cannot use it. Send /new to start a session that is private to you — it will.`,
+          `Model set to ${label}. It runs on your own API key or ChatGPT subscription, and this chat's current session is shared with your Kortix workspace, so it cannot use it. Send /new to start a session that is private to you — it will.`,
           '✅',
         );
       }
       if (personal.ok) {
-        return buildNoticeCard(`${label} runs on your own API key or ChatGPT subscription, which this shared chat cannot use. Pick it in a personal chat with me, or pick a model the project shares.`);
+        return buildNoticeCard(`${label} runs on your own API key or ChatGPT subscription, which this shared chat cannot use. Pick it in a personal chat with me, or pick a model the Kortix workspace shares.`);
       }
     }
     return buildNoticeCard(`${label} isn't available in this conversation. Pick one with /models, or connect that provider in Kortix.`);

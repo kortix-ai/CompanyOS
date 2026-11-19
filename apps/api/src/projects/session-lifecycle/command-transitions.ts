@@ -1,4 +1,5 @@
-import { sessionLifecycleCommands } from '@kortix/db';
+import type { SessionPromptAdmissionReason } from '@kortix/api-contract';
+import { projectSessions, sessionLifecycleCommands } from '@kortix/db';
 import { and, eq, sql } from 'drizzle-orm';
 import { releaseCreateClaims } from '../../channels/core/threads';
 import { deadLetterCause } from './dead-letter-cause';
@@ -38,7 +39,7 @@ import { heldSql, notHeldSql, notStopPausedSql, stopPausedOnDeliverySql } from '
  * Reading a display marker to make a correctness decision is how the id got
  * sent stale; the payload merge (`||`) is the durable half.
  */
-export type InboxAdmissionReason = 'older_prompt_pending' | 'turn_active';
+export type InboxAdmissionReason = Extract<SessionPromptAdmissionReason, 'older_prompt_pending' | 'turn_active'>;
 
 /** True when a lease write matched its row; logs the loss otherwise. */
 function appliedUnderLease(lease: CommandLease, write: string, rows: unknown[]): boolean {
@@ -154,7 +155,14 @@ export async function requeueForAdmission(
         || ${JSON.stringify({ admission_reason: reason, ...(resultPatch ?? {}) })}::jsonb
         || jsonb_build_object('admission_refusals',
              COALESCE((${sessionLifecycleCommands.result}->>'admission_refusals')::int, 0) + 1)`,
-      payload: sql`${sessionLifecycleCommands.payload} || '{"remintOnDelivery": true}'::jsonb`,
+      // Stamp the mark once. The payload holds the prompt body and its parts,
+      // so it is TOASTed: `payload || ...` wrote a new copy on every put-back,
+      // and rows put back about once a minute for days grew the table's TOAST
+      // to ~40x its heap (prod 2026-11-09: 25 GB). Handing back the stored
+      // value keeps its TOAST pointer.
+      payload: sql`CASE WHEN ${sessionLifecycleCommands.payload} @> '{"remintOnDelivery": true}'::jsonb
+        THEN ${sessionLifecycleCommands.payload}
+        ELSE ${sessionLifecycleCommands.payload} || '{"remintOnDelivery": true}'::jsonb END`,
       updatedAt: new Date(),
     })
     .where(ownedByLease(lease))
@@ -163,22 +171,25 @@ export async function requeueForAdmission(
 }
 
 /**
- * A `steer` row that cannot steer becomes a Queue List row for good (R10):
- * `payload.delivery = 'queue'` and the reason in `payload.steerFallback`. The
- * predicate on `delivery` writes it once. The claim is kept; the caller
- * admits or requeues the row as a queue row.
+ * Record why a row did not steer: `payload.steerFallback`, read by `GET
+ * .../prompts` as `steer_fallback`. `turn_ended` also records the turn that
+ * refused it (`steerRefusedTurn`): admission then holds the row for that
+ * turn's end instead of re-posting it into a turn that is ending, and steers
+ * it into any newer turn. The claim is kept; the caller requeues the row.
  */
 export async function recordSteerFallback(
   lease: CommandLease,
-  reason: 'unsupported' | 'not_prompter' | 'turn_ended',
+  reason: 'unsupported' | 'turn_ended',
+  refusedTurnMessageId?: string,
 ): Promise<void> {
+  const patch = { steerFallback: reason, ...(refusedTurnMessageId ? { steerRefusedTurn: refusedTurnMessageId } : {}) };
   await db
     .update(sessionLifecycleCommands)
     .set({
-      payload: sql`${sessionLifecycleCommands.payload} || ${JSON.stringify({ delivery: 'queue', steerFallback: reason })}::jsonb`,
+      payload: sql`${sessionLifecycleCommands.payload} || ${JSON.stringify(patch)}::jsonb`,
       updatedAt: new Date(),
     })
-    .where(and(ownedByLease(lease), sql`${sessionLifecycleCommands.payload}->>'delivery' = 'steer'`));
+    .where(ownedByLease(lease));
 }
 
 /**
@@ -268,10 +279,10 @@ export async function markCommandSucceeded(
 }
 
 /**
- * The row went to OpenCode. It is NOT finished.
+ * The row went to the runtime. It is NOT finished.
  *
  * `markCommandSucceeded` used to run here, and "succeeded" was a lie in the one
- * way that matters to the person watching: OpenCode PERSISTS a prompt and
+ * way that matters to the person watching: the runtime PERSISTS a prompt and
  * queues its execution behind the turn in flight, so between the POST and the
  * turn there is a real interval in which the message exists, belongs to the
  * transcript, and has not run. Closing the row there left the composer with
@@ -303,7 +314,7 @@ export async function markCommandSucceeded(
  * the POST started, and that is the abort's job, not this row's.
  *
  * A `noReply` delivery (the non-final row of a released Stop batch) closes
- * `delivered` here, at once: OpenCode persisted the message and started no turn,
+ * `delivered` here, at once: the runtime persisted the message and started no turn,
  * so no ledger turn will ever confirm it, and leaving it `forwarded` would sit
  * in `delivering` until the sweep force-closed it. The stop mark above still
  * wins over it.
@@ -387,6 +398,10 @@ export async function markCommandFailed(
     attempts: number;
     sessionId?: string | null;
     result?: Record<string, unknown>;
+    /** The row gave up because its runtime could not be reached. On a
+     *  `failed` session the prompts behind it give up with it
+     *  (`deadLetterPromptsOfFailedSession`). */
+    runtimeUnreachable?: boolean;
   },
 ): Promise<'queued' | 'dead_lettered' | 'lease_lost'> {
   const retry = opts.retryable && opts.attempts < 5;
@@ -497,6 +512,15 @@ export async function markCommandFailed(
     await releaseCreateClaims(payload.postCreate);
   }
 
+  // Before the wake below, so it finds no row of a session that gave up.
+  if (opts.runtimeUnreachable && row.commandType === 'continue_session' && row.sessionId) {
+    await deadLetterPromptsOfFailedSession(row.sessionId).catch((err) =>
+      logger.warn('[session-lifecycle] failed-session queue not closed after a dead-letter', {
+        sessionId: row.sessionId,
+        error: err instanceof Error ? err.message : String(err),
+      }));
+  }
+
   // A dead-lettered head opens no turn, so no turn end wakes the prompt behind
   // it. Make that row due now; the worker tick drains it within ~1 s.
   if (row.commandType === 'continue_session' && row.sessionId) {
@@ -504,6 +528,63 @@ export async function markCommandFailed(
       logger.warn('[session-lifecycle] wake after dead-letter failed', { sessionId: row.sessionId, error: err }));
   }
   return 'dead_lettered';
+}
+
+/** `last_error` of a prompt closed because its session's runtime is gone. */
+export const FAILED_SESSION_PROMPT_ERROR = "the session's machine could not be reached";
+
+/**
+ * A prompt gave up on the runtime of a FAILED session. Close every prompt
+ * still waiting in that session's queue, in one statement.
+ *
+ * `continueSession` answers `unreachable` for a failed session before it
+ * reaches any box, so each waiting prompt would reach the same verdict
+ * through its own three parks (`MAX_RUNTIME_UNREACHABLE_RETRIES`, ~10 min
+ * each), one at a time: 374 prompts on prod 2026-11-09, ~65 hours of claims,
+ * put-backs and audit rows for one failed session. Each closed row is a
+ * failed row with a retry button, as the head is.
+ *
+ * Only `queued` rows that are not held: a held row waits for its person,
+ * and a `running` row belongs to a drain that settles it under its lease.
+ * A session that is only stopped keeps its queue: its next prompt wakes the box.
+ */
+export async function deadLetterPromptsOfFailedSession(sessionId: string): Promise<number> {
+  const closed = await db
+    .update(sessionLifecycleCommands)
+    .set({
+      status: 'dead_lettered',
+      lastError: FAILED_SESSION_PROMPT_ERROR,
+      lockedBy: null,
+      lockedUntil: null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(sessionLifecycleCommands.sessionId, sessionId),
+        eq(sessionLifecycleCommands.commandType, 'continue_session'),
+        eq(sessionLifecycleCommands.status, 'queued'),
+        notHeldSql,
+        sql`EXISTS (SELECT 1 FROM ${projectSessions}
+                     WHERE ${projectSessions.sessionId} = ${sessionId}
+                       AND ${projectSessions.status} = 'failed')`,
+      ),
+    )
+    .returning({
+      projectId: sessionLifecycleCommands.projectId,
+      triggerSlug: sql<string | null>`${sessionLifecycleCommands.payload}->>'triggerSlug'`,
+    });
+  if (closed.length === 0) return 0;
+  logger.warn('[session-lifecycle] failed session — closed the prompts queued behind a dead-lettered head', {
+    session_id: sessionId,
+    prompts: closed.length,
+  });
+  // A trigger's runtime row shows the failure instead of "queued", once per slug.
+  const slugs = new Map(closed.filter((r) => r.triggerSlug).map((r) => [r.triggerSlug!, r.projectId]));
+  for (const [slug, projectId] of slugs) {
+    await markTriggerRuntimeDeliveryFailed({ projectId, slug, when: new Date(), error: FAILED_SESSION_PROMPT_ERROR })
+      .catch(() => {});
+  }
+  return closed.length;
 }
 
 /** `claimCreateSessionCommand` locks an inline create with this owner prefix. */

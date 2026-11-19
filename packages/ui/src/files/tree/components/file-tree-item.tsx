@@ -289,11 +289,7 @@ export function FileTreeItem({
         className={cn(
           'flex-1 truncate',
           gitStatus && gitStatusTextColor[gitStatus],
-          !gitStatus &&
-            node.name.startsWith('.') &&
-            node.name !== '.kortix' &&
-            node.name !== '.opencode' &&
-            'opacity-50',
+          !gitStatus && node.name.startsWith('.') && 'opacity-50',
         )}
       >
         {node.name}

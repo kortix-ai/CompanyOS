@@ -3,6 +3,7 @@
 import { Button } from '../../primitives/button';
 import { STATUS_TEXT } from '../../primitives/status';
 import { QuestionPrompt } from '../prompts/question-prompt';
+import { SessionConnectCard } from '../prompts/session-connect-card';
 import { GenericTool } from './generic-tool';
 import {
   BasicTool,
@@ -23,7 +24,7 @@ import { type InlinePermissionReply, replyToInlinePermission } from './inline-pe
 import { errorToast } from '../../primitives/toast';
 import { cn } from '../../lib/utils';
 import { partError, partMetadata, partStreamingInput } from './shared/infrastructure-parts';
-import { kortixCardTool, multiAgentTool, parseKortixToolResult } from './tools/kortix-tool-card';
+import { kortixCardTool, parseKortixToolResult } from './tools/kortix-tool-card';
 import { isWorkflowTool, parseWorkflowRun } from './tools/workflow-run';
 import {
   PERMISSION_LABELS,
@@ -32,7 +33,13 @@ import {
   getChildSessionId,
   shouldShowToolPart,
 } from '../../internal/session-types';
-import { sessionLogCallStatus, sessionLogOpenCall, toolKind, type ToolCallBlock } from '@kortix/sdk';
+import {
+  sessionLogCallStatus,
+  sessionLogOpenCall,
+  toolCallConnectorSignIns,
+  toolKind,
+  type ToolCallBlock,
+} from '@kortix/sdk';
 import { useTranslations } from '../../i18n';
 import { memo, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
@@ -161,6 +168,10 @@ function ToolPartRendererImpl({
   // tool that threw as far as the reader is concerned, so it must look
   // identical on the row too.
   const outcome = useMemo(() => partOutcome(call), [call]);
+  // The connector sign-ins this call started (`kortix connectors connect`, the
+  // `kortix_connectors` tool): their Connect card draws under the row. A call
+  // that failed (an error, a shell exit other than 0) started none.
+  const signIns = useMemo(() => toolCallConnectorSignIns(call), [call]);
 
   // The SDK's verdict on tools that never render (a todo read, context bookkeeping).
   if (!shouldShowToolPart(call)) return null;
@@ -282,6 +293,8 @@ function ToolPartRendererImpl({
                 <div className={cn('relative', fillsPanel && 'h-full')}>
                   {toolElement}
 
+                  {signIns.length > 0 && <SessionConnectCard calls={signIns} className="mt-1.5" />}
+
                   {permission && onPermissionReply && (
                     <div className="mt-1.5">
                       <PermissionPromptInline permission={permission} onReply={onPermissionReply} />
@@ -308,14 +321,18 @@ function ToolPartRendererImpl({
 }
 
 
-/** The tools whose rows are an agent's work: they open in place, never in the side panel. */
+/**
+ * The tools whose rows are an agent's work: they open in place, never in the side panel.
+ * That includes every My Kortix platform tool (`kortix_schedules`, `kortix_agents`, …):
+ * its card is one line and a few rows, and a failed call is the agent's own slip, which
+ * a full panel only turned into a wall of red.
+ */
 export function isAgentTool(name: string): boolean {
   return (
     toolKind(name) === 'task' ||
     isWorkflowTool(name) ||
-    multiAgentTool(name) !== undefined ||
-    name === 'agent_spawn' ||
-    name === 'kortix_agents'
+    kortixCardTool(name) !== undefined ||
+    name === 'agent_spawn'
   );
 }
 

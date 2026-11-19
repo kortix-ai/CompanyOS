@@ -22,7 +22,7 @@ globals.location = win.location;
 globals.history = win.history;
 globals.requestAnimationFrame = (cb: () => void) => setTimeout(cb, 0);
 globals.cancelAnimationFrame = (id: number) => clearTimeout(id);
-// The mobile sheet is a Radix dialog: its focus guards and dismissable layer
+// The mobile sheet is a dialog: its focus guards and dismiss layer
 // read DOM constructor globals at mount. Bun ships its own `Event` family, so
 // `key in globals` alone would leave happy-dom's document rejecting bun-realm
 // event objects. Mirror the happy-dom window OVER bun's DOM classes, except
@@ -78,15 +78,17 @@ mock.module('@kortix/sdk/react', () => ({
   useVisibleAgents: () => [{ name: 'kortix' }, { name: 'meta' }],
   useCreateProjectSpace: () => ({ mutate: () => undefined, isPending: false }),
   useUpdateProjectSpace: () => ({ mutate: () => undefined, isPending: false }),
+  // 3 unread, one of them a question (Needs you): the sidebar still shows no Inbox row.
+  useNotificationInbox: () => ({
+    data: { notifications: [{ id: 'n1', kind: 'question', read: false }], unread_count: 3 },
+    unreadCount: 3,
+  }),
 }));
 mock.module('@kortix/ui/internal/hooks/projects/new-session-guard', () => ({
   useIsCreatingProjectSession: () => false,
 }));
 mock.module('@kortix/ui/internal/stores/billing-account-context', () => ({
   useBillingAccountId: () => 'synthetic-account',
-}));
-mock.module('@kortix/ui/internal/notifications/notification-bell', () => ({
-  NotificationBell: () => React.createElement('div', { 'data-testid': 'notification-bell' }),
 }));
 mock.module('@kortix/ui/workspace/sidebar/project-session-list', () => ({
   ProjectSessionList: ({ secondary }: { secondary?: boolean }) =>
@@ -103,11 +105,8 @@ mock.module('@kortix/ui/internal/tunnel/computer-connect', () => ({
 mock.module('@kortix/ui/internal/layout/connect-mcp-modal', () => ({
   ConnectMcpModal: () => null,
 }));
-mock.module('@kortix/ui/workspace/sidebar/footer/project-mcp-nav', () => ({
-  ProjectMcpNavItem: () => null,
-}));
-mock.module('@kortix/ui/workspace/sidebar/footer/project-computer-nav', () => ({
-  ProjectComputerNavItem: () => null,
+mock.module('@kortix/ui/workspace/sidebar/footer/project-promo-cards', () => ({
+  ProjectPromoCards: () => null,
 }));
 mock.module('@kortix/ui/workspace/sidebar/footer/project-manifest-issues-alert', () => ({
   ProjectManifestIssuesAlert: () => null,
@@ -124,8 +123,11 @@ mock.module('@kortix/ui/workspace/sidebar/footer/project-upgrade-button', () => 
 mock.module('@kortix/ui/workspace/repository-disconnected', () => ({
   ProjectRepositoryDisconnectedAlert: () => null,
 }));
-mock.module('@kortix/ui/workspace/sidebar/project-nav-items', () => ({
-  ProjectNavItems: () => null,
+// A signed-in viewer: the nav rows render as for a real person.
+const realUiProvider = await import('@kortix/ui/providers/ui-provider');
+mock.module('@kortix/ui/providers/ui-provider', () => ({
+  ...realUiProvider,
+  useUiViewerId: () => 'synthetic-viewer',
 }));
 mock.module('@kortix/ui/internal/layout/open-command-palette', () => ({
   openCommandPalette: () => undefined,
@@ -142,11 +144,17 @@ let container: { innerHTML: string; remove(): void } | undefined;
 
 /** Opens the mobile sheet on mount: its content only exists while open. */
 function MobileOpenHarness({ projectId }: { projectId: string }) {
-  const { setOpenMobile } = useSidebar();
+  const { openMobile, setOpenMobile } = useSidebar();
   React.useEffect(() => {
     setOpenMobile(true);
   }, [setOpenMobile]);
-  return React.createElement(ProjectSidebar, { projectId });
+  return React.createElement(
+    React.Fragment,
+    null,
+    // Outside the sheet: whether the sheet is open.
+    React.createElement('span', { 'data-testid': 'sheet', 'data-open': openMobile ? 'true' : 'false' }),
+    React.createElement(ProjectSidebar, { projectId }),
+  );
 }
 
 async function mountSidebar(width: number) {
@@ -195,7 +203,7 @@ test('the desktop rail keeps the Ctrl/Cmd+J shortcut hint on the New-session row
 
 test('the mobile sheet renders no keyboard shortcut hint (KRTX-2005)', async () => {
   await mountSidebar(390);
-  // The mobile sheet is a Radix portal: its content mounts into document.body,
+  // The mobile sheet renders through a portal: its content mounts into document.body,
   // not into the test container the provider renders into.
   expect(document.body.innerHTML).toContain('newSession');
   expect(document.body.innerHTML).not.toContain('data-slot="kbd-group"');
@@ -218,14 +226,14 @@ test('with chat on, the sidebar is Spaces only (Cmd+J still opens the new-sessio
   expect(html).not.toContain('oneChat');
   expect(html).not.toContain('spaces.directMessages');
   // Review first, then the person's own space (their chat with My Kortix, at /chat), then the channels.
-  const review = html.indexOf('href="/projects/synthetic-project/review"');
-  const personal = html.indexOf('href="/projects/synthetic-project/chat"');
-  const general = html.indexOf('href="/projects/synthetic-project/c/general"');
+  const review = html.indexOf('href="/workspaces/synthetic-project/review"');
+  const personal = html.indexOf('href="/workspaces/synthetic-project/chat"');
+  const general = html.indexOf('href="/workspaces/synthetic-project/c/general"');
   expect(review).toBeGreaterThan(-1);
   expect(personal).toBeGreaterThan(review);
   expect(general).toBeGreaterThan(personal);
   // The My Kortix DM is that personal row, never a second row of its own.
-  expect(html).not.toContain('href="/projects/synthetic-project/dm/kortix"');
+  expect(html).not.toContain('href="/workspaces/synthetic-project/dm/kortix"');
   // Live channels only, then the add row.
   expect(html).not.toContain('/c/old');
   expect(html.indexOf('spaces.addChannel')).toBeGreaterThan(general);
@@ -245,9 +253,46 @@ test('with chat off, the sidebar keeps New session, the session list and Cmd+J',
   expect(html).toContain('data-testid="session-list" data-secondary="false"');
   expect(html).toContain('newSession');
   expect(html).not.toContain('spaces.channels');
-  expect(html).not.toContain('href="/projects/synthetic-project/chat"');
+  expect(html).not.toContain('href="/workspaces/synthetic-project/chat"');
   await act(async () => {
     win.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'j', metaKey: true }));
   });
   expect(newSessionCalls).toBe(1);
+});
+
+// Inbox (`/inbox`, the person's notifications) is not a sidebar nav row in any
+// variant (KRTX-4949): it opens from the workspace menu (`workspace-switcher.tsx`),
+// ⌘K and the notification toast. A Needs-you notification waits (the inbox mock
+// above), so a row would also carry its count badge.
+const INBOX = ['href="/inbox"', 'inbox.title'];
+
+function expectNoInbox(html: string) {
+  for (const needle of INBOX) expect(html).not.toContain(needle);
+}
+
+test('the desktop sidebar has no Inbox row (KRTX-4949)', async () => {
+  await mountSidebar(1280);
+  expect(document.body.innerHTML).toContain('newSession');
+  expectNoInbox(document.body.innerHTML);
+});
+
+test('the mobile sheet has no Inbox row (KRTX-4949)', async () => {
+  await mountSidebar(390);
+  expect(document.body.innerHTML).toContain('newSession');
+  expectNoInbox(document.body.innerHTML);
+});
+
+test('with chat on, neither the Spaces list nor the opened More group has an Inbox row (KRTX-4949)', async () => {
+  channelsOn = true;
+  await mountSidebar(1280);
+  expectNoInbox(document.body.innerHTML);
+  const more = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'more');
+  expect(more).toBeDefined();
+  await act(async () => {
+    more?.click();
+  });
+  const html = document.body.innerHTML;
+  // The Spaces list still renders (Review is its first row; the test above checks the order).
+  expect(html).toContain('href="/workspaces/synthetic-project/review"');
+  expectNoInbox(html);
 });

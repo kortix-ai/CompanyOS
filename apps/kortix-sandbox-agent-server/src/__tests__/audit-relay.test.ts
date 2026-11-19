@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { RUNTIME_AUDIT_SUMMARY_KEYS } from '@kortix/api-contract/runtime-relay';
 import {
   DEFAULT_BATCH_SIZE,
   DEFAULT_COALESCED_EVENT_TYPES,
@@ -832,6 +833,51 @@ describe('audit relay emission volume', () => {
   });
 });
 
+describe('the audit summary allowlist (KRTX-4621 characterization)', () => {
+  // Every key of the contract union at its own value: scalars on the plain
+  // keys, and recursively allowlisted object fixtures on the six structural
+  // wrapper keys, so the sanitizer's recursion runs on every level. The
+  // fixture must round-trip exactly — dropping any key or value fails the
+  // parity assert below.
+  function fullUnionSummary(): Record<string, unknown> {
+    const summary = Object.fromEntries(
+      [...RUNTIME_AUDIT_SUMMARY_KEYS].map((key) => [key, `v ${key}`]),
+    );
+    Object.assign(summary, {
+      session: { sessionID: 'ses_fixture', state: { status: 'ok' } },
+      message: { id: 'msg_fixture', role: 'agent', delivery: 'push' },
+      part: { partID: 'part_fixture', type: 'text', time: { start: 1, end: 2 } },
+      info: { providerID: 'prov_fixture', modelID: 'model_fixture', mode: 'default' },
+      error: { message: { id: 'err_fixture' } },
+      state: { status: 'completed', count: 2 },
+    });
+    return summary;
+  }
+
+  test('the sanitizer keeps every key the contract allowlist defines, custom included', () => {
+    const properties = fullUnionSummary();
+    const sanitized = sanitizeRuntimeEvent(
+      { type: 'tool.execute.after', properties },
+      new Date('2026-08-07T12:00:00Z'),
+    );
+    // Full union parity: every allowlisted key and value survives exactly.
+    expect(sanitized?.input_summary).toEqual(properties);
+  });
+
+  test('a spool event whose summary carries custom reloads', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'kortix-audit-spool-custom-'));
+    const spoolPath = join(directory, 'events.json');
+    try {
+      const first = createAuditRelay(async () => {}, { flushMs: 60_000, spoolPath });
+      first.enqueue({ type: 'tool.execute.after', properties: { sessionID: 'ses_1', custom: 'note' } });
+      await first.stop({ flush: false });
+      expect(() => createAuditRelay(async () => {}, { spoolPath })).not.toThrow();
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('the runtime audit relay every harness runs (E12)', () => {
   const KEYS = ['KORTIX_PROJECT_ID', 'KORTIX_SESSION_ID', 'KORTIX_TOKEN', 'KORTIX_API_URL'] as const;
   const saved = new Map<string, string | undefined>();
@@ -871,7 +917,7 @@ describe('the runtime audit relay every harness runs (E12)', () => {
     relay.enqueue({ type: 'tool.execute.after', properties: { sessionID: 'ses_pi', callID: 'call_1', tool: 'bash' } });
     await relay.flush();
     expect(posted).toHaveLength(1);
-    expect(posted[0]!.url).toBe('https://api.kortix.test/v1/projects/proj-1/sessions/sess-1/audit/events');
+    expect(posted[0]!.url).toBe('https://api.kortix.test/v1/workspaces/proj-1/sessions/sess-1/audit/events');
     expect(posted[0]!.auth).toBe('Bearer sandbox-token');
     expect(posted[0]!.body).toMatchObject({ source: 'runtime', harness: 'pi' });
     expect(posted[0]!.body.events[0]).toMatchObject({ runtime_session_id: 'ses_pi', tool_call_id: 'call_1' });

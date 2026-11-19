@@ -230,6 +230,13 @@ export const qk = {
      *  same key refetches a fresh answer. */
     quota: (accountId?: string) =>
       [...qk.projects.scope(), 'quota', accountId ?? 'default'] as const,
+
+    /** `listWorkspaces()` — every workspace of the user, one request. Keyed by
+     *  user like `accounts.list`, and under `scope()` so a create, a rename or
+     *  a delete (which invalidate that prefix) refetches it. The `'workspaces'`
+     *  segment is never an account id, so it collides with no `list(id)`. */
+    workspaces: (userId?: string | null) =>
+      [...qk.projects.scope(), 'workspaces', userId ?? 'anonymous'] as const,
   },
 
   /**
@@ -308,6 +315,13 @@ export const qk = {
      * `executorPolicies` below are kept apart for the identical reason.
      */
     summary: (id: string) => [...qk.project.scope(id), 'summary'] as const,
+    /**
+     * The workspace — `getWorkspace`, a `Workspace` (the project row plus the
+     * caller's role and the workspace settings). Its own entry, not
+     * `summary(id)`: the two responses have different shapes. Under the
+     * project scope, so `invalidateProject` reaches it.
+     */
+    workspace: (id: string) => [...qk.project.scope(id), 'workspace'] as const,
 
     detail: (id: string) => [...qk.project.scope(id), 'detail'] as const,
     /**
@@ -422,6 +436,12 @@ export const qk = {
       const normalized = normalizeSessionListFilters(filters);
       return normalized ? ([...key, normalized] as const) : key;
     },
+
+    /**
+     * The workspace's sessions at work now (`working=only`), for a Running
+     * view. Two segments past `sessionsScope`, so it is never one session's key.
+     */
+    runningSessions: (id: string) => [...qk.project.sessionsScope(id), 'list-running', 'visible'] as const,
 
     /**
      * One session's children (`parent=<sessionId>`), infinite. Its own slot
@@ -661,7 +681,7 @@ export const qk = {
      * purpose: the record is fixed at the thread's first turn, so no write refreshes it.
      */
     sessionMemoryUsage: (id: string, sessionId: string) => [...qk.project.scope(id), 'memory-usage', sessionId] as const,
-    /** Every artifact read of a project (flag `artifacts`): the prefix of the
+    /** Every artifact read of a project: the prefix of the
      *  keys below, so a publish refreshes the gallery and the open artifact. */
     artifacts: (id: string) => [...qk.project.scope(id), 'artifacts'] as const,
     /** `listArtifacts` — the gallery, per scope/type/search. */
@@ -670,19 +690,37 @@ export const qk = {
     artifact: (id: string, artifactId: string, version: string = 'current') => [...qk.project.artifacts(id), 'one', artifactId, version] as const,
     /** `listArtifactVersions`. */
     artifactVersions: (id: string, artifactId: string) => [...qk.project.artifacts(id), 'versions', artifactId] as const,
-    artifactComments: (id: string, artifactId: string, status?: string, version?: string) => [...qk.project.artifacts(id), 'comments', artifactId, ...(status ? [status] : []), ...(version ? [{ version }] : [])] as const,
-    artifactCommentContext: (id: string, artifactId: string, options: { version?: string; agent?: string } = {}) => [...qk.project.artifactComments(id, artifactId), 'context', JSON.stringify(options)] as const,
-    artifactActivity: (id: string, artifactId: string, options?: { limit?: number; cursor?: string }) => [...qk.project.artifacts(id), 'activity', artifactId, ...(options ? [JSON.stringify(options)] : [])] as const,
-    artifactActivityInfinite: (id: string, artifactId: string, limit: number) => [...qk.project.artifactActivity(id, artifactId), 'infinite', limit] as const,
     /** `readArtifactFile` of a doc's Markdown at one entry version. Immutable,
      *  so outside the `artifacts` prefix: a write never refetches it. */
     artifactText: (id: string, artifactId: string, entryVersion: string) => [...qk.project.scope(id), 'artifact-text', artifactId, entryVersion] as const,
     /** `listArtifactTypes`. */
     artifactTypes: (id: string) => [...qk.project.artifacts(id), 'types'] as const,
-    /** `listProjectGoals` — the goal folders in Files with their heartbeats. */
+    /** `listProjectGoals` — every goal record the caller may read. */
     goals: (id: string) => [...qk.project.scope(id), 'goals'] as const,
-    /** `getProjectGoalFiles` — one goal folder's log, notes and verification. */
+    /** `getProjectGoalFiles` — one goal folder's brief, log, notes and verification. */
     goalFiles: (id: string, folder: string) => [...qk.project.goals(id), 'files', folder] as const,
+    /** `getProjectGoal` — one goal record by `goal_id`. */
+    goal: (id: string, goalId: string) => [...qk.project.goals(id), 'goal', goalId] as const,
+    /** `listProjectGoalEvents` — one goal's audit trail. */
+    goalEvents: (id: string, goalId: string) => [...qk.project.goals(id), 'events', goalId] as const,
+    /** `listWorkspaceEvalSuites` — the `evals:` suites of kortix.yaml. Every eval key starts with it. */
+    evals: (id: string) => [...qk.project.scope(id), 'evals'] as const,
+    /** `listWorkspaceEvalJobs`, filtered by suite (`''`: every suite). */
+    evalJobs: (id: string, suite: string) => [...qk.project.evals(id), 'jobs', suite] as const,
+    /** `getWorkspaceEvalJob` and `listWorkspaceEvalTrials` of one job. */
+    evalJob: (id: string, jobId: string) => [...qk.project.evals(id), 'job', jobId] as const,
+    /** `getWorkspaceEvalTrial` — one trial with its instruction and files. */
+    evalTrial: (id: string, jobId: string, trialId: string) => [...qk.project.evalJob(id, jobId), 'trial', trialId] as const,
+    /** `listWorkspaceEvalTasks` of a suite. */
+    evalTasks: (id: string, suite: string) => [...qk.project.evals(id), 'tasks', suite] as const,
+    /** Every calendar key starts with it (flag `calendar`). */
+    calendar: (id: string) => [...qk.project.scope(id), 'calendar'] as const,
+    /** `listWorkspaceCalendarItems` of one window and filter (`key`: the query as a string). */
+    calendarItems: (id: string, key: string) => [...qk.project.calendar(id), 'items', key] as const,
+    /** `getWorkspaceCalendarItem` — one item and its comments. */
+    calendarItem: (id: string, itemId: string) => [...qk.project.calendar(id), 'item', itemId] as const,
+    /** `listWorkspaceCalendarPeople` — who can be assigned or mentioned. */
+    calendarPeople: (id: string) => [...qk.project.calendar(id), 'people'] as const,
     /** `listSessionReminders` — `GET /projects/:id/sessions/:sid/reminders`. */
     sessionReminders: (id: string, sessionId: string) =>
       [...qk.project.reminders(id), 'session', sessionId] as const,
@@ -759,5 +797,12 @@ export const qk = {
   },
 } as const;
 
+/** @deprecated Use `WorkspaceScopeKey`. Kept permanently. */
 export type ProjectScopeKey = ReturnType<typeof qk.project.scope>;
+
+/** The workspace name of {@link ProjectScopeKey}: the same type. */
+export type WorkspaceScopeKey = ProjectScopeKey;
+/**
+ * @deprecated The query key of `useProjects`; use `useWorkspaces`. Kept permanently.
+ */
 export type ProjectsListKey = ReturnType<typeof qk.projects.list>;

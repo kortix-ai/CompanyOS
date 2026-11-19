@@ -10,7 +10,7 @@
  * itself alive by saying "I'm still waiting" is exactly the self-renewal that
  * once left 187 boxes running, the oldest for 264 hours.
  *
- * What was wrong is what parking DESTROYED. opencode restarts cold, so its
+ * What was wrong is what parking DESTROYED. The runtime restarts cold, so its
  * in-memory pending question died with the box and the user came back to a
  * session that had silently forgotten what it asked. The turn was lost, not
  * paused.
@@ -38,6 +38,26 @@ export interface PendingQuestion {
   asked_at: string;
 }
 
+/** A stored row as the wire shape: snake_case fields, the jsonb questions coerced. */
+function toWireQuestion(row: {
+  id: string;
+  sessionId: string;
+  requestId: string;
+  runtimeSessionId: string | null;
+  questions: unknown;
+  askedAt: string;
+}): PendingQuestion {
+  return {
+    id: row.id,
+    session_id: row.sessionId,
+    request_id: row.requestId,
+    runtime_session_id: row.runtimeSessionId,
+    // `jsonb`; only /turn-question writes it, after coercing to RuntimeQuestion[].
+    questions: row.questions as RuntimeQuestion[],
+    asked_at: row.askedAt,
+  };
+}
+
 /**
  * Record a question the agent is blocked on.
  *
@@ -50,7 +70,7 @@ export async function recordPendingQuestion(input: {
   projectId: string;
   sessionId: string;
   requestId: string;
-  opencodeSessionId?: string | null;
+  runtimeSessionId?: string | null;
   questions: RuntimeQuestion[];
   /** The runtime parks it when nobody answers live; it stays open past the turn (session-asks.ts). */
   parkable?: boolean;
@@ -64,7 +84,7 @@ export async function recordPendingQuestion(input: {
       projectId: input.projectId,
       sessionId: input.sessionId,
       requestId: input.requestId,
-      runtimeSessionId: input.opencodeSessionId ?? null,
+      runtimeSessionId: input.runtimeSessionId ?? null,
       questions: input.questions as never,
       parkable: input.parkable === true,
       surfaceSessionId: input.surfaceSessionId ?? null,
@@ -74,7 +94,7 @@ export async function recordPendingQuestion(input: {
       target: [sessionPendingQuestions.sessionId, sessionPendingQuestions.requestId],
       set: {
         questions: input.questions as never,
-        runtimeSessionId: input.opencodeSessionId ?? null,
+        runtimeSessionId: input.runtimeSessionId ?? null,
         updatedAt: new Date().toISOString(),
       },
     })
@@ -82,7 +102,7 @@ export async function recordPendingQuestion(input: {
       id: sessionPendingQuestions.id,
       sessionId: sessionPendingQuestions.sessionId,
       requestId: sessionPendingQuestions.requestId,
-      opencodeSessionId: sessionPendingQuestions.runtimeSessionId,
+      runtimeSessionId: sessionPendingQuestions.runtimeSessionId,
       questions: sessionPendingQuestions.questions,
       askedAt: sessionPendingQuestions.askedAt,
       // PostgreSQL leaves xmax at 0 on a freshly inserted row version and sets
@@ -91,16 +111,7 @@ export async function recordPendingQuestion(input: {
       inserted: sql<boolean>`(xmax = 0)`,
     });
   if (!row) return null;
-  return {
-    id: row.id,
-    session_id: row.sessionId,
-    request_id: row.requestId,
-    runtime_session_id: row.opencodeSessionId,
-    // `jsonb`; only /turn-question writes it, after coercing to RuntimeQuestion[].
-    questions: row.questions as RuntimeQuestion[],
-    asked_at: row.askedAt,
-    inserted: row.inserted === true,
-  };
+  return { ...toWireQuestion(row), inserted: row.inserted === true };
 }
 
 /**
@@ -115,7 +126,7 @@ export async function getOpenQuestion(sessionId: string): Promise<PendingQuestio
       id: sessionPendingQuestions.id,
       sessionId: sessionPendingQuestions.sessionId,
       requestId: sessionPendingQuestions.requestId,
-      opencodeSessionId: sessionPendingQuestions.runtimeSessionId,
+      runtimeSessionId: sessionPendingQuestions.runtimeSessionId,
       questions: sessionPendingQuestions.questions,
       askedAt: sessionPendingQuestions.askedAt,
     })
@@ -129,15 +140,7 @@ export async function getOpenQuestion(sessionId: string): Promise<PendingQuestio
     .orderBy(desc(sessionPendingQuestions.askedAt))
     .limit(1);
   if (!row) return null;
-  return {
-    id: row.id,
-    session_id: row.sessionId,
-    request_id: row.requestId,
-    runtime_session_id: row.opencodeSessionId,
-    // `jsonb`; only /turn-question writes it, after coercing to RuntimeQuestion[].
-    questions: row.questions as RuntimeQuestion[],
-    asked_at: row.askedAt,
-  };
+  return toWireQuestion(row);
 }
 
 /** A stored question by its row id, in its project: a chat button names it. */
@@ -299,13 +302,13 @@ export async function clearOpenQuestions(
  * Render a stored question and its answer as the text of a follow-up turn.
  *
  * The answer CANNOT be delivered inline to the call that blocked. That call
- * lived in an opencode process which has since been parked and restarted cold —
+ * lived in a runtime process which has since been parked and restarted cold —
  * its request id no longer exists, and nothing is waiting on it. This is also
  * how the channel path has always worked: "the user's in-thread reply arrives
  * as a follow-up turn" (routes/turn-questions.ts).
  *
  * So the answer arrives as a new turn, and it has to carry its own context: the
- * fresh opencode has no memory of asking. Quoting the question is what makes
+ * fresh runtime has no pending call. Quoting the question is what makes
  * the reply legible instead of a bare "yes" with nothing to attach it to.
  *
  * Several questions are paired by position: each answer under its own

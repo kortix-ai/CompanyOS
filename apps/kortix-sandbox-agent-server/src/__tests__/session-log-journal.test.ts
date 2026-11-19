@@ -252,7 +252,7 @@ describe('session-log journal', () => {
 
     expect(api.received).toHaveLength(1)
     const [first] = api.received
-    expect(first!.path).toBe('/v1/projects/project-1/sessions/session-1/log/journal')
+    expect(first!.path).toBe('/v1/workspaces/project-1/sessions/session-1/log/journal')
     expect(first!.headers.get('authorization')).toBe('Bearer session-token')
     expect(first!.headers.get('content-encoding')).toBe('gzip')
     expect(first!.body.generation).toBe(7)
@@ -763,7 +763,7 @@ describe('session-log journal', () => {
     expect(last.session).toEqual({ title: 'A synthetic title' })
   })
 
-  test('pi and the OpenCode orphan path: a slow acknowledgement holds relayTurnEnd at most 3 s; the batch is retried afterwards', async () => {
+  test('a slow acknowledgement holds relayTurnEnd at most 3 s; the batch is retried afterwards', async () => {
     const api = fakeApi(async (body, n, request) => {
       if (n === 1) {
         await Promise.race([Bun.sleep(6_000), aborted(request)])

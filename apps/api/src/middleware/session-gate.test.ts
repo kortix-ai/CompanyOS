@@ -91,7 +91,8 @@ mock.module('./auth-audit', () => ({
 
 const { accountSessionGate } = await import('./session-gate');
 const { installHttpErrors } = await import('../http-errors');
-const { resetDeadCredentialLogForTests, isDeadCredential } = await import('../shared/dead-credential-log');
+const { isDeadCredential } = await import('../shared/dead-credential-log');
+const { resetLogWindowsForTests } = await import('../shared/log-window');
 
 const ACCOUNT = 'a5ddd8d5-c8f2-4c54-9b64-842b2ad31ceb';
 const EFFECTIVE_PATH = `/v1/accounts/${ACCOUNT}/iam/members/22222222-2222-4222-8222-222222222222/effective`;
@@ -138,7 +139,7 @@ beforeEach(() => {
   logged.length = 0;
   markRevokedCalls.length = 0;
   verdict = 'allow';
-  resetDeadCredentialLogForTests();
+  resetLogWindowsForTests();
 });
 
 describe('session-gate refusal shape (KRTX-2369)', () => {
@@ -162,7 +163,7 @@ describe('session-gate refusal shape (KRTX-2369)', () => {
     expect(isDeadCredential(captured.err as never)).toBe(true);
   });
 
-  test('a client that keeps polling a revoked session produces ONE warn line, not one per refusal', async () => {
+  test('a client that keeps polling a revoked session produces ONE throttled line, not one per refusal', async () => {
     verdict = 'revoked';
     const app = bareGateApp();
     const before = logged.length;
@@ -171,7 +172,10 @@ describe('session-gate refusal shape (KRTX-2369)', () => {
       expect(res.status).toBe(401);
       expect((await res.json()).code).toBe('session_token_revoked');
     }
-    expect(logged.slice(before).filter((entry) => entry.level === 'warn')).toHaveLength(1);
+    // Steady refusal churn ships at info below the burst band (KRTX-4454);
+    // the throttle, not the level, is the contract under test here.
+    expect(logged.slice(before).filter((entry) => entry.level === 'warn')).toHaveLength(0);
+    expect(logged.slice(before).filter((entry) => entry.level === 'info')).toHaveLength(1);
   });
 
   test('idle-timeout and lifetime refusals carry the typed body too, and still mark the session revoked', async () => {

@@ -158,6 +158,12 @@ const ignoredPathParts = [
   '/src/app/[locale]/presentations/film/',
   '/src/features/marketing/launch/',
   '/src/app/[locale]/(public)/(marketing)/launch/',
+  // Unannounced Loopmaxxing landing behind KORTIX_PUBLIC_LOOPMAXXING_ENABLED
+  // (#12644): the copy is still being cut for the launch. Remove these entries
+  // and move the copy into i18n keys when the flag turns on.
+  '/src/app/[locale]/(public)/loopmaxxing/',
+  '/src/features/marketing/one-prompt/',
+  '/src/features/marketing/kit/announcement-bar.tsx',
   // Legal texts are English only by design: one authoritative version, like
   // the Terms of Service PDF (#8315). Their page chrome still uses i18n keys.
   '/src/app/[locale]/(public)/(seo)/legal/',
@@ -195,6 +201,8 @@ const ignoredPathParts = [
   '/src/features/marketing/landing-sections/trust-band.tsx',
   '/src/features/marketing/landing-sections/use-case-teams.ts',
   '/src/features/marketing/landing-sections/works-with-strip.tsx',
+  // The /pricing compare table, moved out of pricing/page.tsx (#12072); it renders for `en` alone.
+  '/src/features/marketing/pricing/compare-table.tsx',
   '/src/features/marketing/security-page/approval-tabs.tsx',
   '/src/features/marketing/security-page/summary.ts',
   '/src/features/marketing/self-hosted/summary.ts',
@@ -206,6 +214,19 @@ const ignoredPathParts = [
   '/src/features/marketing/surfaces/stages.tsx',
   '/src/features/marketing/surfaces/surface-page.tsx',
   '/src/lib/seo/public-content.ts',
+  // The settings deep-search index is English by design: its labels must equal
+  // the English card text the landing scrolls to, like the command palette
+  // registry (see the file's header, #12077).
+  '/packages/ui/src/workspace/admin/settings-search.ts',
+  // English-only copy of the design-system guidance rebuild (#12031): demo
+  // fixtures and section titles of the /design-system catalog. Exact files, so
+  // the rest of the tree stays audited. Move the copy into design-system keys
+  // and delete each line when the sections are translated.
+  '/src/app/[locale]/(public)/(marketing)/design-system/page.tsx',
+  '/src/app/[locale]/(public)/(marketing)/design-system/states-section.tsx',
+  '/src/app/[locale]/(public)/(marketing)/design-system/interaction-section.tsx',
+  '/src/app/[locale]/(public)/(marketing)/design-system/card-section.tsx',
+  '/src/app/[locale]/(public)/(marketing)/design-system/token-map-section.tsx',
 ];
 
 const ignoredFilePattern = /\.(?:test|spec)\.[cm]?[jt]sx?$/;
@@ -286,6 +307,8 @@ const allowedLiteralValues = new Set([
   // the API sends when none is set (channel-email.ts), shown verbatim.
   're_…',
   'support',
+  // The managed inbox username example: `support` is reserved since #12504.
+  'orders',
   'support@example.com',
   'mail.example.com',
   '&lt;',
@@ -962,7 +985,7 @@ function scanFile(file) {
         /^shadow-/.test(node.text);
       const coveredLocalizedSourceCatalog =
         (file === path.join(srcDir, 'features/marketplace/marketplace-meta.tsx') &&
-          ['TYPE_META', 'TYPE_FILTERS', 'TYPE_SECTIONS'].includes(catalogRoot)) ||
+          ['TYPE_META', 'TYPE_FILTERS'].includes(catalogRoot)) ||
         (file === path.join(uiSrcDir, 'session/composer/menus/slash-actions.ts') &&
           catalogRoot === 'SLASH_ACTIONS') ||
         (file === path.join(uiSrcDir, 'session/actions/session-label.ts') &&
@@ -1087,7 +1110,10 @@ function scanFile(file) {
           ['dark', 'light'].includes(catalogRoot)) ||
         // Attribute value kinds ('string?', 'number?') of the doc editor's schema check: code, never shown.
         (file === path.join(uiSrcDir, 'markdown/doc-editor/doc-attrs.ts') &&
-          ['NODE_ATTRS', 'MARK_ATTRS'].includes(catalogRoot));
+          ['NODE_ATTRS', 'MARK_ATTRS'].includes(catalogRoot)) ||
+        // Section id ↔ old account-hub tab id maps (`help: 'help'`): route ids, never shown.
+        (file === path.join(uiSrcDir, 'customize/project-settings/project-admin-sections.ts') &&
+          ['ACCOUNT_TAB_FOR_SECTION', 'SECTION_FOR_ACCOUNT_TAB'].includes(catalogRoot));
       const coveredPresentationCatalog =
         (file === path.join(srcDir, 'app/[locale]/presentations/decks/security.tsx') &&
           catalogRoot === 'ANSWERS') ||
@@ -1096,6 +1122,10 @@ function scanFile(file) {
       const coveredLocalizedLeafCatalog =
         (file === path.join(srcDir, 'features/billing/billing-return.tsx') &&
           catalogRoot === 'RETURNS') ||
+        // Ledger badge labels, localized through
+        // localizeUiCatalog(TRANSACTION_BADGES, …, APP_REGISTRY_TRANSLATION_KEYS).
+        (file === path.join(srcDir, 'features/billing/transactions-table.tsx') &&
+          catalogRoot === 'TRANSACTION_BADGES') ||
         // Message keys of spaces.view.tabEdit, read through t(copy.title) and friends.
         (file === path.join(uiSrcDir, 'workspace/spaces/space-tabs.tsx') &&
           catalogRoot === 'TARGET_COPY') ||
@@ -1117,7 +1147,7 @@ function scanFile(file) {
         (file ===
           path.join(uiSrcDir, 'customize/sections/view/gateway/gateway-overview.tsx') &&
           catalogRoot === 'METRICS') ||
-        (file === path.join(srcDir, 'app/[locale]/admin/projects/page.tsx') &&
+        (file === path.join(srcDir, 'app/[locale]/admin/workspaces/page.tsx') &&
           catalogRoot === 'STATUS_OPTIONS') ||
         (file === path.join(srcDir, 'components/iam/api-keys-card.tsx') &&
           catalogRoot === 'STATUS_BADGE') ||

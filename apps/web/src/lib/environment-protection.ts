@@ -1,5 +1,7 @@
 export const ENVIRONMENT_PROTECTION_USERNAME = 'kortix';
 export const ENVIRONMENT_HEALTH_PATH = '/api/health';
+/** RFC 9116: the disclosure policy is public by definition, also on gated environments. */
+const SECURITY_TXT_PATH = '/.well-known/security.txt';
 export const ENVIRONMENT_ACCESS_COOKIE = '__Secure-kortix_test_access';
 
 /**
@@ -13,6 +15,15 @@ export const ENVIRONMENT_ACCESS_COOKIE = '__Secure-kortix_test_access';
  */
 const ENVIRONMENT_CALLBACK_PATHS = ['/auth/callback', '/auth/mobile/callback'];
 
+/**
+ * The setup guide, the loop guides and the CLI installer. A coding agent on a
+ * developer's computer fetches them with `curl` from the prompt copied on this
+ * deployment, so a gate 401 there stops the setup at its first step. They are
+ * the same text the public repository holds and reveal nothing of the gated
+ * app; every page stays gated.
+ */
+const ENVIRONMENT_SETUP_GUIDE_PATH = /^\/(?:setup\.md|factory\.md|install(?:\.sh)?|loops\/[^/]+\.md)$/;
+
 export interface EnvironmentProtectionInput {
   enabled: string | undefined;
   password: string | undefined;
@@ -23,7 +34,7 @@ export interface EnvironmentProtectionInput {
 }
 
 export type EnvironmentProtectionResult =
-  | { allowed: true; source: 'disabled' | 'health' | 'auth-callback' | 'cookie' | 'basic' }
+  | { allowed: true; source: 'disabled' | 'health' | 'security-txt' | 'auth-callback' | 'setup-guide' | 'cookie' | 'basic' }
   | { allowed: false; reason: 'credentials_required' | 'configuration_error' };
 
 function safeEqual(left: string, right: string): boolean {
@@ -63,8 +74,14 @@ export function authorizeEnvironment(
   if (input.pathname === ENVIRONMENT_HEALTH_PATH) {
     return { allowed: true, source: 'health' };
   }
+  if (input.pathname === SECURITY_TXT_PATH) {
+    return { allowed: true, source: 'security-txt' };
+  }
   if (ENVIRONMENT_CALLBACK_PATHS.includes(input.pathname)) {
     return { allowed: true, source: 'auth-callback' };
+  }
+  if (ENVIRONMENT_SETUP_GUIDE_PATH.test(input.pathname)) {
+    return { allowed: true, source: 'setup-guide' };
   }
   if (input.enabled !== 'true') {
     return { allowed: true, source: 'disabled' };

@@ -3,6 +3,11 @@ import type { UpstreamDescriptor } from '../domain';
 import { ClientAbortError, UpstreamHttpError, UpstreamMisconfiguredError } from '../errors';
 import type { AiSdkFetch } from '../transports/ai-sdk';
 import { resolveTransportKind } from '../transports/route-kind';
+import {
+  exposeGeminiThoughtSignaturesInResponse,
+  isGoogleOpenAiUpstream,
+  restoreGeminiThoughtSignatures,
+} from './gemini-thought-signatures';
 // The SHARED implementation. This module carried its own copy using
 // `value.replace(/\/+$/, '')`, which CodeQL flags as `js/polynomial-redos`
 // (high, alert #5907): on a long run of slashes that is not at the end, the
@@ -126,9 +131,10 @@ const DIRECT_STREAM_PEEK_MAX_CHARS = 64 * 1024;
  * Reads a streamed direct response up to its first `data:` frame, for at most
  * `commitAfterMs`. An error frame there served nothing, so it throws the
  * `UpstreamHttpError` a non-2xx answer throws: dispatch fails over, and the
- * client gets an HTTP error. OpenCode compacts on a 400
- * `context_length_exceeded` and retries a 429; an in-band error frame is an
- * UnknownError to it, and the turn ends. Any other first frame, a timeout, a
+ * client gets an HTTP error. pi compacts and retries on a 400
+ * `context_length_exceeded` and retries a 429 (kortixd `harness/pi/runtime.ts`,
+ * `harness/pi/transient-retry.ts`). OpenCode read an in-band error frame as an
+ * UnknownError and ended the turn. Any other first frame, a timeout, a
  * client abort, or EOF returns a response that replays the bytes read and
  * continues the body, as the AI SDK transport's `openStream` does for its own
  * streams. The relay then settles a stopped prefill as it always did.
@@ -214,8 +220,13 @@ export async function callUpstream(
   const transportKind = resolveTransportKind(body, descriptor);
   if (transportKind === 'openai-compat' || transportKind === 'custom') {
     const streaming = body.stream === true;
-    const response = await directOpenAiRequest(body, descriptor, opts);
-    return streaming ? openDirectStream(response, descriptor.provider, { signal: clientSignal }) : response;
+    // Gemini thought signatures travel in `extra_content`, which pi drops
+    // (see gemini-thought-signatures.ts).
+    const google = isGoogleOpenAiUpstream(descriptor);
+    const sent = google ? restoreGeminiThoughtSignatures(body, descriptor.resolvedModel) : body;
+    const response = await directOpenAiRequest(sent, descriptor, opts);
+    const opened = streaming ? await openDirectStream(response, descriptor.provider, { signal: clientSignal }) : response;
+    return google ? exposeGeminiThoughtSignaturesInResponse(opened, streaming) : opened;
   }
 
   const fetchImpl: AiSdkFetch | undefined = opts.fetchImpl

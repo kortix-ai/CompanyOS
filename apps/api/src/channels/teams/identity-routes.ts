@@ -1,11 +1,8 @@
 import { createRoute, z } from '@hono/zod-openapi';
-import { projects } from '@kortix/db';
-import { inArray } from 'drizzle-orm';
 import type { Context } from 'hono';
 import { config } from '../../config';
 import { combinedAuth } from '../../middleware/auth';
 import { auth, errors, json, makeOpenApiApp } from '../../openapi';
-import { db } from '../../shared/db';
 import { listProjectsForWorkspace, loadTeamsAppIdForProject, loadTeamsInstall } from '../install-store';
 import { consumePendingTeamsAuthMessage, peekPendingTeamsAuthSenderName } from './auth-resume';
 import { chatUser, completeChatLogin } from '../core/identity';
@@ -15,6 +12,7 @@ import { verifyTeamsLoginState } from './login';
 import { createOrJoinTeamsConversationSession } from './session';
 import { confirmTeamsConnected } from './identity';
 import { readJsonObject } from '../../shared/http-body';
+import { accountKeysOfWorkspaces } from '../../workspaces/rows';
 
 export const teamsIdentityApp = makeOpenApiApp();
 
@@ -91,7 +89,7 @@ teamsIdentityApp.openapi(
 
     const projectIds = await listProjectsForWorkspace('teams', payload.tenantId);
     if (projectIds.length === 0) {
-      return c.json({ error: 'This Teams tenant is not connected to any Kortix project.' }, 403);
+      return c.json({ error: 'This Teams tenant is not connected to any Kortix workspace.' }, 403);
     }
     const [install, chatUserName] = await Promise.all([
       loadTeamsInstall(projectIds[0]!).catch(() => null),
@@ -147,13 +145,9 @@ teamsIdentityApp.openapi(
 
     const projectIds = await listProjectsForWorkspace('teams', payload.tenantId);
     if (projectIds.length === 0) {
-      return c.json({ error: 'This Teams tenant is not connected to any Kortix project.' }, 403);
+      return c.json({ error: 'This Teams tenant is not connected to any Kortix workspace.' }, 403);
     }
-    const accountRows = await db
-      .select({ accountId: projects.accountId })
-      .from(projects)
-      .where(inArray(projects.projectId, projectIds));
-    const accountIds = Array.from(new Set(accountRows.map((r) => r.accountId)));
+    const accountIds = await accountKeysOfWorkspaces(projectIds);
 
     const outcome = await completeChatLogin({
       user: chatUser('teams', payload.tenantId, payload.teamsUserId),

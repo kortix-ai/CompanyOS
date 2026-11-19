@@ -11,7 +11,7 @@ import type {
   UpstreamDescriptor,
   UsageEvent,
 } from '../domain';
-import { GatewayResolutionError, type NoUpstreamReasonCode, UpstreamHttpError } from '../errors';
+import { ClientAbortError, GatewayResolutionError, type NoUpstreamReasonCode, UpstreamHttpError } from '../errors';
 import { type FetchImpl, callUpstream } from '../http';
 import {
   type ExtractedUsage,
@@ -34,7 +34,9 @@ import {
   upstreamHeadersTimeoutMs,
   withUpstreamHeadersTimeout,
 } from './dispatch';
-import { clampRetryAfterSeconds, gatewayErrorResponse, providerClientErrorBody } from './error-response';
+import { breakerKey, tripsBreaker, upstreamBreakers } from './circuit-breaker';
+import { clampRetryAfterSeconds, gatewayErrorResponse, providerClientErrorBody, providerFailureCode, requestTooLarge } from './error-response';
+import { parseUpstreamErrorBody } from '../http/parse-upstream-error';
 import { DEFAULT_IMAGE_WINDOW, type ImageWindowOptions, applyImageWindow } from './image-window';
 import { conversationError, requestFieldError } from './request-fields';
 import {
@@ -162,6 +164,34 @@ function hasImage(body: Record<string, unknown>): boolean {
 // verdict the gate can return: those mean "the caller may not run this", this
 // one means "we could not find out".
 const ADMISSION_UNAVAILABLE = 'admission_unavailable';
+
+/**
+ * The answer to a wallet admission that failed (`assertBillingActive` or the
+ * batched `admit` billing). A refusal carries its 402 code as `reason`. An
+ * error without one is no verdict: the check timed out or the control plane
+ * was unreachable. That is a retryable 503, never "no subscription" (prod
+ * 2026-11-12: a 25 s control-plane stall answered funded accounts
+ * `402 subscription_required "attempt 3 exceeded 5000ms"`, and their agents
+ * reported "Out of credits").
+ */
+export function billingRefusal(error: unknown): { status: 402 | 503; code: string; message: string; suggestion: string; retryAfter?: number } {
+  const reason = (error as { reason?: unknown })?.reason;
+  if (typeof reason === 'string') {
+    return {
+      status: 402,
+      code: reason,
+      message: error instanceof Error ? error.message : 'Billing inactive',
+      suggestion: 'Check your subscription or add credits, then retry.',
+    };
+  }
+  return {
+    status: 503,
+    code: ADMISSION_UNAVAILABLE,
+    message: 'Gateway admission control is unavailable',
+    suggestion: 'Retry the request.',
+    retryAfter: 5,
+  };
+}
 
 export async function authorize(hooks: GatewayHooks, token: string): Promise<AuthorizeResult> {
   if (hooks.authorize) return hooks.authorize(token);
@@ -298,6 +328,8 @@ export async function handleChatCompletions(
   // decide whether a stream-cut transparent retry may afford ANOTHER
   // `structuredClone` of the body — see `streamRedispatchBody` below.
   const approxRequestSize = req.rawBody?.length ?? 0;
+  // What the provider receives after the image window: what decides `request_too_large`.
+  let sentRequestBytes = approxRequestSize;
   try {
     body = req.parsedBody ?? (JSON.parse(req.rawBody) as Record<string, unknown>);
   } catch {
@@ -307,9 +339,10 @@ export async function handleChatCompletions(
   req.rawBody = '';
   if (body) {
     const window = applyImageWindow(body, imageWindow);
+    sentRequestBytes = Math.max(0, approxRequestSize - (window.bytes - window.keptBytes));
     if (window.dropped > 0) {
       logger.info(
-        `[gateway] image window ${id}: kept ${window.total - window.dropped} of ${window.total} inline images`,
+        `[gateway] image window ${id}: kept ${window.total - window.dropped} of ${window.total} inline images (${window.keptBytes} of ${window.bytes} bytes)`,
       );
     }
   }
@@ -627,25 +660,28 @@ export async function handleChatCompletions(
     const admitted = await admitCharge();
     if (!admitted.ok) {
       const { error } = admitted;
-      const reason = (error as { reason?: unknown })?.reason;
+      const refusal = billingRefusal(error);
+      const detail = error instanceof Error ? error.message : String(error);
+      if (refusal.status === 503) logger.error(`[gateway] ${id}: billing check unavailable — ${detail}`);
       emit({
         ...identity(principal),
         requestedModel,
         resolvedModel: shownModel(descriptor, routedModel),
         provider: shownProvider(descriptor),
-        status: 402,
+        status: refusal.status,
         ok: false,
-        errorCode: typeof reason === 'string' ? reason : 'subscription_required',
-        errorMessage: error instanceof Error ? error.message : 'Billing inactive',
+        errorCode: refusal.code,
+        errorMessage: error instanceof Error ? error.message : refusal.message,
       });
-      return gatewayErrorResponse(402, {
-        message: error instanceof Error ? error.message : 'Billing inactive',
-        code: typeof reason === 'string' ? reason : 'subscription_required',
+      return gatewayErrorResponse(refusal.status, {
+        message: refusal.message,
+        code: refusal.code,
         provider: shownProvider(descriptor),
         requestedModel,
         resolvedModel: shownModel(descriptor, routedModel),
         requestId: id,
-        suggestion: 'Check your subscription or add credits, then retry.',
+        suggestion: refusal.suggestion,
+        ...(refusal.retryAfter !== undefined ? { retryAfterSeconds: refusal.retryAfter } : {}),
       });
     }
     emit.mark('billed');
@@ -765,29 +801,96 @@ export async function handleChatCompletions(
       )
     : [];
   let streamRedispatchIndex = 0;
-  const redispatchStream = async (): Promise<ReadableStream<Uint8Array> | null> => {
-    if (!streamRedispatchBody) return null;
-    const candidate = streamRedispatchCandidates[streamRedispatchIndex] ?? served;
-    streamRedispatchIndex += 1;
-    const timeoutMs = upstreamHeadersTimeoutMs(streamRedispatchBody, candidate, true);
+  // One stream-cut retry attempt against `candidate`. It reports its outcome
+  // the way dispatch() does: to the candidate's circuit (success, failure or
+  // release), to the pool cooldown on a 429, and to `attemptFailures`. A
+  // non-2xx answer is a failed attempt (null), never the new SSE upstream.
+  const redispatchTo = async (
+    candidate: UpstreamDescriptor,
+    lastOption: boolean,
+  ): Promise<ReadableStream<Uint8Array> | null> => {
+    const key = breakerKey(candidate, routedModel);
+    const admitted = upstreamBreakers.allow(key);
+    // An open circuit skips a pool peer; the last option is tried anyway.
+    if (!admitted && !lastOption) return null;
+    const admittedAt = upstreamBreakers.now();
+    const failed = async (status: number | undefined, message: string, retryAfter?: string | null): Promise<null> => {
+      if (tripsBreaker(status)) {
+        upstreamBreakers.failure(key, {
+          provider: candidate.provider,
+          model: candidate.resolvedModel ?? routedModel,
+          reason: status === undefined ? 'network_error' : String(status),
+          publicListing: candidate.billingMode !== 'none',
+        });
+      } else if (admitted) upstreamBreakers.release(key);
+      attempts += 1;
+      candidatesTried = [...candidatesTried, `${candidate.provider}:stream-retry:${status ?? 'network_error'}`];
+      const shown = candidate.publicProvider ? publicUpstreamError(status ?? 0, message, routedModel, sentRequestBytes) : null;
+      attemptFailures.push({
+        attempt: attemptFailures.length + 1,
+        provider: shownProvider(candidate),
+        routeModel: routedModel,
+        resolvedModel: shownModel(candidate, routedModel),
+        stage: 'dispatch',
+        status,
+        code: shown ? shown.code : status ?? 'network_error',
+        message: shown ? shown.message : message,
+      });
+      logger.warn(`[gateway] ${id}: stream-cut redispatch to ${candidate.provider} failed (${status ?? 'network error'}): ${message.slice(0, 300)}`);
+      if (status === 429 && candidate.poolSecretId && hooks.notePoolRateLimit) {
+        try {
+          await hooks.notePoolRateLimit(principal, candidate.poolSecretId, clampRetryAfterSeconds(retryAfter) ?? 30);
+        } catch (error) {
+          logger.error('[gateway] provider key cooldown could not be recorded', {
+            secretId: candidate.poolSecretId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      return null;
+    };
+    const timeoutMs = upstreamHeadersTimeoutMs(streamRedispatchBody!, candidate, true);
+    let response: Response;
     try {
-      const response = await callUpstream(structuredClone(streamRedispatchBody), candidate, {
+      response = await callUpstream(structuredClone(streamRedispatchBody!), candidate, {
         fetchImpl: withUpstreamHeadersTimeout(fetchImpl ?? upstreamFetch, timeoutMs),
         signal: req.signal,
         requestId: id,
       });
-      if (!response.body) return null;
-      // Attribute whatever gets billed/logged from here on to the candidate
-      // that actually answered, exactly like dispatch()'s own retries do.
-      served = candidate;
-      attempts += 1;
-      candidatesTried = [...candidatesTried, `${candidate.provider}:stream-retry`];
-      return response.body;
     } catch (error) {
-      logger.warn(`[gateway] ${id}: stream-cut redispatch to ${candidate.provider} failed`, {
-        error: error instanceof Error ? error.message : String(error),
-      });
+      if (error instanceof ClientAbortError || req.signal?.aborted) {
+        if (admitted) upstreamBreakers.release(key);
+        return null;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      return failed(error instanceof UpstreamHttpError ? error.status : undefined, message);
+    }
+    if (!response.ok) {
+      const message = (await response.text().catch(() => '')).slice(0, 500);
+      return failed(response.status, message, response.headers.get('retry-after'));
+    }
+    if (!response.body) {
+      if (admitted) upstreamBreakers.release(key);
       return null;
+    }
+    upstreamBreakers.success(key, admittedAt);
+    // Attribute whatever gets billed/logged from here on to the candidate
+    // that actually answered, exactly like dispatch()'s own retries do.
+    served = candidate;
+    attempts += 1;
+    candidatesTried = [...candidatesTried, `${candidate.provider}:stream-retry`];
+    return response.body;
+  };
+  // Pool peers first, then the served descriptor again. A failed peer moves
+  // to the next one within the same retry; the served descriptor ends it.
+  const redispatchStream = async (): Promise<ReadableStream<Uint8Array> | null> => {
+    if (!streamRedispatchBody) return null;
+    for (;;) {
+      const lastOption = streamRedispatchIndex >= streamRedispatchCandidates.length;
+      const candidate = streamRedispatchCandidates[streamRedispatchIndex] ?? served;
+      streamRedispatchIndex += 1;
+      const body = await redispatchTo(candidate, lastOption);
+      if (body || lastOption || req.signal?.aborted) return body;
     }
   };
   if (!outcome.response) {
@@ -798,8 +901,16 @@ export async function handleChatCompletions(
         ? `${error.message} ${error.body}`
         : error instanceof Error ? error.message : String(error);
     const publicError = served.publicProvider
-      ? publicUpstreamError(error instanceof UpstreamHttpError ? error.status : 0, errorText, routedModel)
+      ? publicUpstreamError(error instanceof UpstreamHttpError ? error.status : 0, errorText, routedModel, sentRequestBytes)
       : null;
+    // An own provider's refusal is the customer's to read: the trace keeps its text, not "upstream HTTP 400".
+    const providerFailure =
+      !publicError && error instanceof UpstreamHttpError && error.status < 500 && error.status !== 429
+        ? (requestTooLarge(error.status, error.body, sentRequestBytes) ?? {
+            code: providerFailureCode(error.status) ?? 'upstream_error',
+            message: parseUpstreamErrorBody(error.body, error.message).message.slice(0, 500),
+          })
+        : null;
     if (publicError) {
       logger.warn(
         `[gateway] ${id}: ${served.provider} failed for ${served.resolvedModel ?? routedModel}: ${errorText.slice(0, 300)}`,
@@ -817,8 +928,8 @@ export async function handleChatCompletions(
       streaming,
       status: publicError?.status ?? (error instanceof UpstreamHttpError ? error.status : 502),
       ok: false,
-      errorCode: publicError?.code ?? 'upstream_error',
-      errorMessage: publicError?.message ?? (error instanceof Error ? error.message : String(error)),
+      errorCode: publicError?.code ?? providerFailure?.code ?? 'upstream_error',
+      errorMessage: publicError?.message ?? providerFailure?.message ?? (error instanceof Error ? error.message : String(error)),
       attempts,
       candidatesTried,
       attemptFailures,
@@ -836,7 +947,7 @@ export async function handleChatCompletions(
           error instanceof UpstreamHttpError ? clampRetryAfterSeconds(error.headers?.['retry-after']) : undefined,
       });
     }
-    if (error instanceof UpstreamHttpError) return rawProviderError(error);
+    if (error instanceof UpstreamHttpError) return rawProviderError(error, sentRequestBytes);
     // A headers timeout is "try again", not "this request is malformed".
     const timedOut = (error as { name?: unknown })?.name === 'TimeoutError' && !req.signal?.aborted;
     if (timedOut)
@@ -876,8 +987,8 @@ export async function handleChatCompletions(
     const classified = publicUpstreamError(Number.isFinite(code) ? code : 0, streamError.message ?? '', routedModel);
     return { message: classified.message, code: classified.code };
   };
-  // Set when a managed-model upstream answered non-2xx: the trace records the
-  // public error the client received.
+  // Set when an upstream answered non-2xx: the trace records the error the
+  // client received (the public one for a managed model).
   let publicFailure: { status: number; code: string; message: string } | null = null;
   const settle = async (
     reported: ExtractedUsage | null,
@@ -1011,7 +1122,7 @@ export async function handleChatCompletions(
     logger.warn(
       `[gateway] ${id}: ${served.provider} ${upstream.status} for ${served.resolvedModel ?? routedModel}: ${upstreamText.slice(0, 300)}`,
     );
-    const classified = publicUpstreamError(upstream.status, upstreamText, routedModel);
+    const classified = publicUpstreamError(upstream.status, upstreamText, routedModel, sentRequestBytes);
     publicFailure = classified;
     await settle(null);
     return gatewayErrorResponse(classified.status, {
@@ -1026,12 +1137,27 @@ export async function handleChatCompletions(
     });
   }
 
-  if (!upstream.ok && upstream.status < 500 && upstream.status !== 429) {
+  if (!upstream.ok) {
     const upstreamText = await upstream.text().catch(() => '');
+    // The trace records the refusal the client receives, with the provider's
+    // own text. A 429 or 5xx reaches the client unchanged, as before; it is
+    // read here so its trace row names the failure (it was blank before).
+    const clientError = upstream.status < 500 && upstream.status !== 429;
+    publicFailure = {
+      status: upstream.status,
+      ...((clientError ? requestTooLarge(upstream.status, upstreamText, sentRequestBytes) : null) ?? {
+        code: providerFailureCode(upstream.status) ??
+          (upstream.status === 429 ? 'upstream_rate_limited' : upstream.status >= 500 ? 'upstream_unavailable' : 'upstream_error'),
+        message: parseUpstreamErrorBody(upstreamText, `upstream HTTP ${upstream.status}`).message.slice(0, 500),
+      }),
+    };
     await settle(null);
     const headers = passthroughHeaders(upstream.headers);
-    headers.set('content-type', 'application/json');
-    return new Response(providerClientErrorBody(upstream.status, upstreamText), { status: upstream.status, headers });
+    if (clientError) headers.set('content-type', 'application/json');
+    return new Response(
+      clientError ? providerClientErrorBody(upstream.status, upstreamText, sentRequestBytes, served.provider) : upstreamText,
+      { status: upstream.status, headers },
+    );
   }
 
   // KRTX-3369: an answer names the model the client asked for and the model

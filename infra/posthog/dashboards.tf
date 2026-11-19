@@ -14,18 +14,25 @@
 locals {
   last_30d = { date_from = "-30d" }
   last_90d = { date_from = "-90d" }
-  tags     = ["kortix", "terraform"]
+  # A completed turn that worked. Failed turns (no model, plan refusal) also fire turn_completed.
+  turn_ok = {
+    kind       = "EventsNode"
+    event      = "turn_completed"
+    name       = "turn_completed"
+    properties = [{ key = "status", value = ["ok"], operator = "exact", type = "event" }]
+  }
+  tags = ["kortix", "terraform"]
 
   dashboards = {
     activation = {
       name        = "Kortix · Activation"
       description = "Do new users reach a completed agent turn, and how fast?"
-      intro       = "## Activation\nSignup → project → session → prompt → completed turn, inside 24h. Time to first prompt is the number to move."
+      intro       = "## Activation\nSelf-serve: signup → project → model provider (optional) → session → prompt → completed turn, inside 24h. Invited people join a workspace someone else made, so they have their own funnel. A completed turn means `status = ok`. Time to first prompt is the number to move."
       insights = [
         {
           key         = "funnel"
-          name        = "Activation funnel (24h)"
-          description = "user_signed_up → project_created → session_started → prompt_sent → turn_completed within 24h."
+          name        = "Activation funnel, self-serve (24h)"
+          description = "user_signed_up (invited ≠ true) → project_created → provider_configured (optional: the Free plan needs one, a paid plan does not) → session_created → prompt_sent → turn_completed (status ok), within 24h."
           query = {
             kind = "InsightVizNode"
             source = {
@@ -33,17 +40,65 @@ locals {
               filterTestAccounts = true
               dateRange          = local.last_30d
               series = [
-                { kind = "EventsNode", event = "user_signed_up", name = "user_signed_up" },
+                {
+                  kind  = "EventsNode"
+                  event = "user_signed_up"
+                  name  = "user_signed_up"
+                  # is_not keeps sign-ups from before the property existed.
+                  properties = [{ key = "invited", value = ["true"], operator = "is_not", type = "event" }]
+                },
                 { kind = "EventsNode", event = "project_created", name = "project_created" },
-                { kind = "EventsNode", event = "session_started", name = "session_started" },
+                { kind = "EventsNode", event = "provider_configured", name = "provider_configured", optionalInFunnel = true },
+                { kind = "EventsNode", event = "session_created", name = "session_created" },
                 { kind = "EventsNode", event = "prompt_sent", name = "prompt_sent" },
-                { kind = "EventsNode", event = "turn_completed", name = "turn_completed" },
+                local.turn_ok,
               ]
               funnelsFilter = {
                 funnelVizType            = "steps"
                 funnelWindowInterval     = 24
                 funnelWindowIntervalUnit = "hour"
               }
+            }
+          }
+        },
+        {
+          key         = "funnel_invited"
+          name        = "Activation funnel, invited (24h)"
+          description = "member_joined (a person joins a workspace someone else made: invite, auto-claim, direct add, project invite, access request) → session_created → prompt_sent → turn_completed (status ok), within 24h."
+          query = {
+            kind = "InsightVizNode"
+            source = {
+              kind               = "FunnelsQuery"
+              filterTestAccounts = true
+              dateRange          = local.last_30d
+              series = [
+                { kind = "EventsNode", event = "member_joined", name = "member_joined" },
+                { kind = "EventsNode", event = "session_created", name = "session_created" },
+                { kind = "EventsNode", event = "prompt_sent", name = "prompt_sent" },
+                local.turn_ok,
+              ]
+              funnelsFilter = {
+                funnelVizType            = "steps"
+                funnelWindowInterval     = 24
+                funnelWindowIntervalUnit = "hour"
+              }
+            }
+          }
+        },
+        {
+          key         = "signups_by_kind"
+          name        = "Signups per day, invited vs self-serve"
+          description = "user_signed_up broken down by invited (true = an invitation to the email was open at sign-up; empty = before the property existed)."
+          query = {
+            kind = "InsightVizNode"
+            source = {
+              kind               = "TrendsQuery"
+              filterTestAccounts = true
+              dateRange          = local.last_30d
+              interval           = "day"
+              series             = [{ kind = "EventsNode", event = "user_signed_up", name = "user_signed_up", math = "total" }]
+              breakdownFilter    = { breakdown = "invited", breakdown_type = "event" }
+              trendsFilter       = { display = "ActionsBar" }
             }
           }
         },
@@ -123,7 +178,7 @@ locals {
         {
           key         = "first_turn_rate"
           name        = "Signup → completed turn (7 days)"
-          description = "Share of signups that reach turn_completed within 7 days."
+          description = "Share of signups that reach a turn_completed with status ok within 7 days."
           query = {
             kind = "InsightVizNode"
             source = {
@@ -132,13 +187,199 @@ locals {
               dateRange          = local.last_90d
               series = [
                 { kind = "EventsNode", event = "user_signed_up", name = "user_signed_up" },
-                { kind = "EventsNode", event = "turn_completed", name = "turn_completed" },
+                local.turn_ok,
               ]
               funnelsFilter = {
                 funnelVizType            = "steps"
                 funnelWindowInterval     = 7
                 funnelWindowIntervalUnit = "day"
               }
+            }
+          }
+        },
+      ]
+    }
+
+    setup = {
+      name        = "Kortix · Setup"
+      description = "Does the setup prompt (/setup.md) end in working loops, how fast, and where does it stop?"
+      intro       = "## Setup prompt\nA person copies the prompt (`setup_prompt_copied`, Loopmaxxing), their coding agent follows /setup.md, and the CLI reports each step: `kortix plan` (setup_started), `templates add` (setup_template_added), each `kortix onboard` (setup_onboard_run) and the first green doctor (setup_ready). One setup run = one `setup_id`; `agent` is the coding agent that ran it. The first real run is the first `trigger_fired`."
+      insights = [
+        {
+          key         = "runs_funnel"
+          name        = "Setup runs: started → template → onboard green → ready (7 days)"
+          description = "Counted per setup run (setup_id), not per person. The template step is optional: a setup can write its own loops. Onboard green = setup_onboard_run with exit_code 0."
+          query = {
+            kind = "InsightVizNode"
+            source = {
+              kind               = "FunnelsQuery"
+              filterTestAccounts = true
+              dateRange          = local.last_30d
+              series = [
+                { kind = "EventsNode", event = "setup_started", name = "setup_started" },
+                { kind = "EventsNode", event = "setup_template_added", name = "setup_template_added", optionalInFunnel = true },
+                {
+                  kind        = "EventsNode"
+                  event       = "setup_onboard_run"
+                  name        = "setup_onboard_run"
+                  custom_name = "onboard green"
+                  properties  = [{ key = "exit_code", value = ["0"], operator = "exact", type = "event" }]
+                },
+                { kind = "EventsNode", event = "setup_ready", name = "setup_ready" },
+              ]
+              funnelsFilter = {
+                funnelVizType            = "steps"
+                funnelAggregateByHogQL   = "properties.setup_id"
+                funnelWindowInterval     = 7
+                funnelWindowIntervalUnit = "day"
+              }
+            }
+          }
+        },
+        {
+          key         = "runs_funnel_by_agent"
+          name        = "Setup runs by coding agent (7 days)"
+          description = "The same funnel, broken down by agent: claude_code, codex, cursor, gemini, opencode, copilot, kortix (a Kortix session), other, none (a person in a terminal)."
+          query = {
+            kind = "InsightVizNode"
+            source = {
+              kind               = "FunnelsQuery"
+              filterTestAccounts = true
+              dateRange          = local.last_30d
+              series = [
+                { kind = "EventsNode", event = "setup_started", name = "setup_started" },
+                {
+                  kind        = "EventsNode"
+                  event       = "setup_onboard_run"
+                  name        = "setup_onboard_run"
+                  custom_name = "onboard green"
+                  properties  = [{ key = "exit_code", value = ["0"], operator = "exact", type = "event" }]
+                },
+                { kind = "EventsNode", event = "setup_ready", name = "setup_ready" },
+              ]
+              breakdownFilter = { breakdown = "agent", breakdown_type = "event" }
+              funnelsFilter = {
+                funnelVizType            = "steps"
+                funnelAggregateByHogQL   = "properties.setup_id"
+                funnelWindowInterval     = 7
+                funnelWindowIntervalUnit = "day"
+              }
+            }
+          }
+        },
+        {
+          key         = "people_funnel"
+          name        = "Prompt copied → setup started → ready → first real run (7 days)"
+          description = "Per person. A copy counts for the person only when the browser that copied later signs in (PostHog merges the ids); copies without a sign-in show on the copies chart."
+          query = {
+            kind = "InsightVizNode"
+            source = {
+              kind               = "FunnelsQuery"
+              filterTestAccounts = true
+              dateRange          = local.last_30d
+              series = [
+                { kind = "EventsNode", event = "setup_prompt_copied", name = "setup_prompt_copied" },
+                { kind = "EventsNode", event = "setup_started", name = "setup_started" },
+                { kind = "EventsNode", event = "setup_ready", name = "setup_ready" },
+                { kind = "EventsNode", event = "trigger_fired", name = "trigger_fired" },
+              ]
+              funnelsFilter = {
+                funnelVizType            = "steps"
+                funnelWindowInterval     = 7
+                funnelWindowIntervalUnit = "day"
+              }
+            }
+          }
+        },
+        {
+          key         = "copies"
+          name        = "Prompt copies per day, by template"
+          description = "setup_prompt_copied per day. template = the template the prompt names, none = the general prompt."
+          query = {
+            kind = "InsightVizNode"
+            source = {
+              kind               = "TrendsQuery"
+              filterTestAccounts = true
+              dateRange          = local.last_30d
+              interval           = "day"
+              series             = [{ kind = "EventsNode", event = "setup_prompt_copied", name = "setup_prompt_copied", math = "total" }]
+              breakdownFilter    = { breakdown = "template", breakdown_type = "event" }
+              trendsFilter       = { display = "ActionsBar" }
+            }
+          }
+        },
+        {
+          key         = "started_by_agent"
+          name        = "Setups started per day, by coding agent"
+          description = "setup_started per day (one per setup run), broken down by agent."
+          query = {
+            kind = "InsightVizNode"
+            source = {
+              kind               = "TrendsQuery"
+              filterTestAccounts = true
+              dateRange          = local.last_30d
+              interval           = "day"
+              series             = [{ kind = "EventsNode", event = "setup_started", name = "setup_started", math = "total" }]
+              breakdownFilter    = { breakdown = "agent", breakdown_type = "event" }
+              trendsFilter       = { display = "ActionsBar" }
+            }
+          }
+        },
+        {
+          key         = "time_to_ready"
+          name        = "Minutes from start to ready, median / p90"
+          description = "setup_ready.minutes_since_start per week: kortix plan to the first green doctor."
+          query = {
+            kind = "InsightVizNode"
+            source = {
+              kind               = "TrendsQuery"
+              filterTestAccounts = true
+              dateRange          = local.last_90d
+              interval           = "week"
+              series = [
+                { kind = "EventsNode", event = "setup_ready", name = "setup_ready", math = "median", math_property = "minutes_since_start", custom_name = "median" },
+                { kind = "EventsNode", event = "setup_ready", name = "setup_ready", math = "p90", math_property = "minutes_since_start", custom_name = "p90" },
+              ]
+            }
+          }
+        },
+        {
+          key         = "onboard_exit"
+          name        = "Onboard runs by exit code"
+          description = "setup_onboard_run per day. 0 = done and green, 4 = the person still has steps on the setup page, 1 = a phase failed."
+          query = {
+            kind = "InsightVizNode"
+            source = {
+              kind               = "TrendsQuery"
+              filterTestAccounts = true
+              dateRange          = local.last_30d
+              interval           = "day"
+              series             = [{ kind = "EventsNode", event = "setup_onboard_run", name = "setup_onboard_run", math = "total" }]
+              breakdownFilter    = { breakdown = "exit_code", breakdown_type = "event" }
+              trendsFilter       = { display = "ActionsBar" }
+            }
+          }
+        },
+        {
+          key         = "onboard_stops"
+          name        = "Where onboard stops: phases that wait or fail"
+          description = "setup_onboard_run events whose phase_<name> is waiting_on_person or failed, one series per phase, last 30 days."
+          query = {
+            kind = "InsightVizNode"
+            source = {
+              kind               = "TrendsQuery"
+              filterTestAccounts = true
+              dateRange          = local.last_30d
+              interval           = "week"
+              series = [for phase in ["ship", "secrets", "webhooks", "slack", "connectors", "sandbox", "doctor"] : {
+                kind        = "EventsNode"
+                event       = "setup_onboard_run"
+                name        = "setup_onboard_run"
+                custom_name = phase
+                math        = "total"
+                properties  = [{ key = "phase_${phase}", value = ["waiting_on_person", "failed"], operator = "exact", type = "event" }]
+              }]
+              trendsFilter = { display = "ActionsBarValue" }
             }
           }
         },
@@ -401,13 +642,13 @@ locals {
 
     sessions = {
       name        = "Kortix · Sessions"
-      description = "Session starts, boot latency, how long sessions stay active, and turn outcomes."
-      intro       = "## Sessions\nboot_ms is measured at /start; active_ms is stamped when a session stops (user, idle reaper, restart). Turn outcomes come from turn_completed.status."
+      description = "Sandbox boots, boot latency, how long sessions stay active, and turn outcomes."
+      intro       = "## Sessions\nsession_started fires once per boot (first open, wake after sleep, restart), so it counts boots, not sessions; session_created counts sessions. boot_ms is measured at /start; active_ms is stamped when a session stops (user, idle reaper, restart). Turn outcomes come from turn_completed.status."
       insights = [
         {
           key         = "started_by_provider"
-          name        = "Sessions started by sandbox provider"
-          description = "session_started per day, broken down by provider."
+          name        = "Sandbox boots by provider"
+          description = "session_started per day, broken down by provider. One event per boot: first open, wake after sleep, restart."
           query = {
             kind = "InsightVizNode"
             source = {
@@ -460,7 +701,7 @@ locals {
         {
           key         = "turn_status"
           name        = "Turn outcomes"
-          description = "turn_completed by status (idle = success, error)."
+          description = "turn_completed by status (ok, error, aborted)."
           query = {
             kind = "InsightVizNode"
             source = {
@@ -502,7 +743,7 @@ locals {
         {
           key         = "turns_per_session"
           name        = "Turns per session (weekly)"
-          description = "turn_completed divided by session_started, per week."
+          description = "turn_completed divided by session_created, per week."
           query = {
             kind = "InsightVizNode"
             source = {
@@ -512,7 +753,7 @@ locals {
               interval           = "week"
               series = [
                 { kind = "EventsNode", event = "turn_completed", name = "turn_completed", math = "total" },
-                { kind = "EventsNode", event = "session_started", name = "session_started", math = "total" },
+                { kind = "EventsNode", event = "session_created", name = "session_created", math = "total" },
               ]
               trendsFilter = { display = "ActionsLineGraph", formula = "A/B" }
             }

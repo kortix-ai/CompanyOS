@@ -16,8 +16,11 @@ import { useAppDeployments, useProjectApps } from '@kortix/sdk/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { kortix } from '../../kortix.ts';
+import { copyToClipboard } from '../../lib/clipboard.ts';
 import { openUrl } from '../../lib/open-url.ts';
 import { glyph as GLYPH, theme } from '../../theme.ts';
+import type { ScreenProps } from '../../screens.tsx';
+import { useScreenAction } from '../../ui/index.ts';
 import { type AppDetail, type AppRow, type AppStatus, AppsView } from './apps-view.tsx';
 
 /**
@@ -45,24 +48,23 @@ export const FIRST_DEPLOY_COMMAND = 'kortix apps deploy .';
 /** How often the age column is recomputed. A minute is its smallest unit. */
 const CLOCK_TICK_MS = 30_000;
 
-export interface AppsScreenProps {
-  projectId: string | null;
-  /** The account the project belongs to. Carried for the caller's header. */
-  accountId: string | null;
-  focused: boolean;
-  width: number;
-  height: number;
-  onBack(): void;
-  onToast?(message: string, kind?: 'info' | 'error'): void;
+export type AppsScreenProps = Pick<
+  ScreenProps,
+  'projectId' | 'focused' | 'width' | 'height' | 'onBack' | 'onToast'
+> & {
   /**
-   * Copy to the system clipboard. `src/lib/clipboard.ts` holds the
-   * implementation; the host injects it so this screen stays free of process
-   * spawning. Without it `y` toasts the URL, which still leaves it selectable
-   * with the mouse.
+   * Copy to the system clipboard. Defaults to `copy`, which runs
+   * `src/lib/clipboard.ts`; a harness injects its own to see what `y` copied.
    */
   onCopy?(text: string): void | Promise<void>;
   /** Test seam for `o`. Defaults to `lib/open-url.ts`. */
   openUrlImpl?: (url: string) => Promise<unknown>;
+};
+
+/** `y` in a screen: copy, or throw so the screen shows "Copy failed". */
+async function copy(text: string): Promise<void> {
+  const result = await copyToClipboard(text);
+  if (!result.ok) throw new Error(result.error ?? 'no clipboard tool');
 }
 
 function errorText(error: unknown): string {
@@ -138,18 +140,18 @@ export function activeDeployment(
 
 export function AppsScreen({
   projectId,
-  accountId: _accountId,
   focused,
   width,
   height,
   onBack,
   onToast,
-  onCopy,
+  onCopy = copy,
   openUrlImpl = openUrl,
 }: AppsScreenProps) {
   const [detailAppId, setDetailAppId] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+
+  const { busy, run, refresh } = useScreenAction(onToast);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
@@ -214,30 +216,19 @@ export function AppsScreen({
         onToast?.(`${row.name} is not deployed yet.`, 'error');
         return;
       }
-      setBusy('opening…');
-      void (async () => {
-        try {
-          const target = await resolveOpenUrl(row);
-          await openUrlImpl(target);
-          onToast?.(`Opened ${row.url}`);
-        } catch (error) {
-          onToast?.(errorText(error), 'error');
-        } finally {
-          setBusy(null);
-        }
-      })();
+      run('opening…', async () => {
+        const target = await resolveOpenUrl(row);
+        await openUrlImpl(target);
+        return `Opened ${row.url}`;
+      });
     },
-    [onToast, openUrlImpl, resolveOpenUrl],
+    [run, openUrlImpl, resolveOpenUrl],
   );
 
   const copyRowUrl = useCallback(
     (row: AppRow) => {
       if (!row.url) {
         onToast?.(`${row.name} is not deployed yet.`, 'error');
-        return;
-      }
-      if (!onCopy) {
-        onToast?.(row.url);
         return;
       }
       void (async () => {
@@ -252,13 +243,9 @@ export function AppsScreen({
     [onCopy, onToast],
   );
 
-  const refresh = useCallback(() => {
-    setBusy('refreshing…');
-    void appsQuery
-      .refetch()
-      .catch((error: unknown) => onToast?.(errorText(error), 'error'))
-      .finally(() => setBusy(null));
-  }, [appsQuery.refetch, onToast]);
+  const onRefresh = useCallback(() => {
+    refresh('refreshing…', () => appsQuery.refetch());
+  }, [refresh, appsQuery.refetch]);
 
   const setState = useCallback(
     (row: AppRow, next: 'running' | 'stopped') => {
@@ -268,15 +255,14 @@ export function AppsScreen({
         onToast?.(`${row.name} has no deployment yet. Run \`${FIRST_DEPLOY_COMMAND}\`.`, 'error');
         return;
       }
-      setBusy(next === 'running' ? 'starting…' : 'suspending…');
-      const run = next === 'running' ? appsQuery.start : appsQuery.stop;
-      void run
-        .mutateAsync(row.id)
-        .then(() => onToast?.(`${row.name} ${next === 'running' ? 'is ready' : 'suspended'}.`))
-        .catch((error: unknown) => onToast?.(errorText(error), 'error'))
-        .finally(() => setBusy(null));
+      const mutate = next === 'running' ? appsQuery.start : appsQuery.stop;
+      run(
+        next === 'running' ? 'starting…' : 'suspending…',
+        () => mutate.mutateAsync(row.id),
+        `${row.name} ${next === 'running' ? 'is ready' : 'suspended'}.`,
+      );
     },
-    [appsQuery.start, appsQuery.stop, onToast],
+    [appsQuery.start, appsQuery.stop, run],
   );
 
   const setVisibility = useCallback(
@@ -286,31 +272,24 @@ export function AppsScreen({
         onToast?.(`${row.name} is already ${mode}.`);
         return;
       }
-      setBusy('updating access…');
-      void (async () => {
-        try {
-          // `updateAppAccess` replaces the whole policy. The three modes this
-          // screen offers carry no member/group list by definition, so the
-          // mode alone is the complete policy.
-          await kortix()
-            .project(projectId)
-            .apps.access.update(row.id, { mode: mode as 'private' | 'project' | 'public' });
-          await appsQuery.refetch();
-          onToast?.(`${row.name}: ${ACCESS_PHRASE[mode] ?? mode}.`);
-        } catch (error) {
-          onToast?.(errorText(error), 'error');
-        } finally {
-          setBusy(null);
-        }
-      })();
+      run('updating access…', async () => {
+        // `updateAppAccess` replaces the whole policy. The three modes this
+        // screen offers carry no member/group list by definition, so the
+        // mode alone is the complete policy.
+        await kortix()
+          .project(projectId)
+          .apps.access.update(row.id, { mode: mode as 'private' | 'project' | 'public' });
+        await appsQuery.refetch();
+        return `${row.name}: ${ACCESS_PHRASE[mode] ?? mode}.`;
+      });
     },
-    [projectId, appsQuery.refetch, onToast],
+    [projectId, appsQuery.refetch, run],
   );
 
   if (!projectId) {
     return (
       <box flexDirection="column" width={width}>
-        <text fg={theme.faint}>No project selected.</text>
+        <text fg={theme.faint}>No workspace open. Type /workspaces to pick one.</text>
       </box>
     );
   }
@@ -332,7 +311,7 @@ export function AppsScreen({
       onOpenDetails={setDetailAppId}
       onOpenUrl={openRowUrl}
       onCopyUrl={copyRowUrl}
-      onRefresh={refresh}
+      onRefresh={onRefresh}
       onSetState={setState}
       onSetVisibility={setVisibility}
       onBack={onBack}

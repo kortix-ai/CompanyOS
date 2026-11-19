@@ -827,13 +827,18 @@ function SpaceComposer({
   const [prefill, setPrefill] = useState<Parameters<typeof ComposerChatInput>[0]['prefill']>(null);
   useEffect(() => {
     if (!pendingPrefill) return;
-    consumePrefill(projectId);
+    // Apply what `consume` returns, never the render-time snapshot: the
+    // typing buffer may have dropped the entry since this render (another
+    // account signed in on the tab), and a dropped entry must not land.
+    const taken = consumePrefill(projectId);
+    if (!taken) return;
     setPrefill({
-      text: pendingPrefill.text,
+      text: taken.text,
       id: Date.now(),
-      submit: pendingPrefill.submit,
-      files: pendingPrefill.files,
-      options: pendingPrefill.options,
+      submit: taken.submit,
+      files: taken.files,
+      options: taken.options,
+      restoreDraft: taken.restoreDraft,
     });
   }, [pendingPrefill, projectId, consumePrefill]);
 
@@ -851,7 +856,7 @@ function SpaceComposer({
   // A channel's agents lead its picker; the first one the project still offers starts a new thread.
   const visible = useVisibleAgents({ projectId });
   const projectConfig = useProjectConfig(projectId);
-  const projectDefault = projectConfig?.default_agent ?? projectConfig?.open_code_default_agent ?? null;
+  const projectDefault = projectConfig?.default_agent ?? null;
   // A member with no agent grant still posts here with the channel's agents.
   const runnable = useMemo(() => channelRunnableAgents(space, projectDefault), [space, projectDefault]);
   const offered = useMemo(

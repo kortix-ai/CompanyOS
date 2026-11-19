@@ -60,6 +60,7 @@ import { currentInstanceId } from '../../projects/instance-scope';
 import { isOpencodePort } from '../../shared/opencode-ports';
 import { logger } from '../../lib/logger';
 import { platinumJson, platinumJsonResponse, type PlatinumHttpError } from '../../shared/platinum';
+import { isPlatinumNotRunningVerdict } from '../../shared/platinum-not-running';
 import { sandboxFrontendBaseUrl } from '../sandbox-frontend-url';
 import { serviceKeyForExternalId } from '../service-key';
 import type {
@@ -83,7 +84,7 @@ import {
   sandboxWorkloadType,
 } from './contract';
 import { providerAutoStopBackstopMinutes } from './contract';
-import { classifyPtyWebSocketPath } from './pty-ingress';
+import { isPtyWebSocketPath } from './pty-ingress';
 import { sandboxOwnershipMarker } from '../sandbox-ownership';
 import { RESIDENTIAL_PROXY_NOT_OFFERED_MESSAGE } from '../services/sandbox-provisioning-error';
 
@@ -1023,9 +1024,9 @@ export class PlatinumProvider implements SandboxProvider {
     const _exposeMs = Date.now() - _tExpose0;
 
     // Return as soon as the VM is running and the agent port is exposed — do NOT
-    // block on the in-guest runtime (repo clone + opencode). That readiness is
-    // polled by the frontend (useOpenCodeRuntimeReady + the react-query
-    // "opencode not ready" retry) EXACTLY as it is for Daytona, whose create()
+    // block on the in-guest runtime (repo clone + runtime start). That readiness
+    // is polled by the frontend (the SDK's `useRuntimeReady` gate) EXACTLY as it
+    // is for Daytona, whose create()
     // also returns a not-yet-usable box and defers readiness to the FE.
     //
     // Why this matters: the old code polled /kortix/health for runtimeReady up
@@ -1402,6 +1403,18 @@ export class PlatinumProvider implements SandboxProvider {
       return 'unknown'; // provisioning / starting / resuming / migrating — transitional
     } catch (err) {
       if (isProviderNotFound(err)) return 'removed';
+      // The control plane's own not-running verdict (a GET answered 409
+      // sandbox_not_running — the same verdict its expose/exec give a box
+      // they refuse to serve) IS the stopped state, not a transitional one:
+      // a box this verdict describes never reaches `running` without a
+      // /start. Reading it as `unknown` made every wake a silent no-op while
+      // open session views polled the dead box through the preview proxy
+      // (502 bursts for as long as the view stayed open). A box that is
+      // STARTING answers 200 with a state body instead, so this branch
+      // cannot misread a boot. Matched by the pinned class NAME, not an
+      // instanceof: the expose-not-running tests establish the name as the
+      // contract, and a name survives every test's module mock.
+      if (isPlatinumNotRunningVerdict(err)) return 'stopped';
       return 'unknown';
     }
   }
@@ -1549,7 +1562,7 @@ export class PlatinumProvider implements SandboxProvider {
 
   routeIngress(request: SandboxIngressRequest) {
     const ptyWebsocket =
-      request.transport === 'websocket' && classifyPtyWebSocketPath(request.path) !== null;
+      request.transport === 'websocket' && isPtyWebSocketPath(request.path);
     return {
       // Either half of the opencode pair rewrites to the agent bridge —
       // Platinum cannot expose opencode's port directly. After a verified
@@ -1593,7 +1606,17 @@ export class PlatinumProvider implements SandboxProvider {
     return { url: ingress.url, headers };
   }
 
-  async ensureRunning(externalId: string): Promise<void> {
+  async ensureRunning(externalId: string, wakeReason?: unknown): Promise<void> {
+    // The freshest verdict wins: the caller may have just watched the control
+    // plane refuse an expose/exec with sandbox_not_running AFTER this box's
+    // GET last answered `running` — the control plane can contradict itself,
+    // and the verdict is the authoritative half. Start without re-trusting
+    // the GET.
+    if (isPlatinumNotRunningVerdict(wakeReason)) {
+      logger.warn(`[PLATINUM] Sandbox ${externalId} is stopped (control-plane verdict), waking up...`);
+      await this.start(externalId);
+      return;
+    }
     const status = await this.getStatus(externalId);
     if (status === 'running') return;
     // Only a stopped sandbox can be started; poking a transitional one would

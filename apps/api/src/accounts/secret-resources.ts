@@ -1,6 +1,6 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { SecretValueStatusSchema } from '@kortix/api-contract';
-import { accountSecretGrants, accountSecretResources, projects, sessionProviderSecretPools } from '@kortix/db';
+import { accountSecretGrants, accountSecretResources, sessionProviderSecretPools } from '@kortix/db';
 import { and, eq, sql } from 'drizzle-orm';
 import type { Context } from 'hono';
 import type { AppEnv } from '../types';
@@ -8,15 +8,28 @@ import { auth, errors, json } from '../openapi';
 import { db } from '../shared/db';
 import { accountMemberRow } from '../iam/membership-read';
 import { clearAccountSecretCooldown, encryptAccountSecret, memberMayReadProject, probeAccountSecret, secretUsableInProject } from '../secrets/account-resource';
-import { resolveFeatureFlag } from '../feature-flags/registry';
 import { ACCOUNT_ACTIONS, actorOf, authorize, PROJECT_ACTIONS } from '../iam';
 import { resolveCatalogUpstream } from '../llm-gateway/models/provider-registry';
+import { type KeyVerification, verifyAndRecordAccountKey } from '../llm-gateway/provider-verify';
+import { customProviderSecretName, readCustomProviders } from '../llm-gateway/custom-providers';
+import { isAwsRegion } from '../llm-gateway/resolution/aws-region';
+import { seedProjectDefaultModelOnConnect } from '../llm-gateway/models/seed-default';
+import { BEDROCK_PROVIDER_ID, BEDROCK_REGION_NAME } from '../secrets/llm-credential-names';
 import { SUBSCRIPTION_PROVIDERS, SubscriptionAccountSchema, SubscriptionUsageSchema, refreshSubscriptionUsage, storedSubscriptionUsage, subscriptionAccount } from '../llm-gateway/subscription-usage';
 import { AccountIdParam, accountsRouter, getMembership } from './core/app';
 import { readJsonObject } from '../shared/http-body';
 import { projectInAccount } from '../secrets/project-account';
 import { listLegacySubscriptionConnections, refreshLegacySubscriptionUsage } from '../llm-gateway/legacy-subscription-usage';
+import { accountIdParam } from '../shared/route-params';
+import { PATH_WORKSPACE_ID_VAR, isCanonicalWorkspacePath } from '../middleware/workspace-account';
+import { projectsView } from '../workspaces/rows';
+import { workspaceFactsOf } from '../iam/workspace-facts';
 
+const KeyVerificationSchema = z.object({
+  status: z.enum(['verified', 'invalid', 'unknown']),
+  message: z.string(),
+  checked_at: z.string(),
+});
 const SecretIdParam = AccountIdParam.extend({ secretId: z.string().uuid() });
 const GrantParam = SecretIdParam.extend({ userId: z.string().uuid() });
 const View = z.object({
@@ -34,6 +47,9 @@ const View = z.object({
   granted_user_ids: z.array(z.string()), can_use: z.boolean(),
   /** Can the server decrypt the stored value? Never carries the value. */
   status: SecretValueStatusSchema,
+  /** The last check of a provider API key against its provider (on save, on
+   *  rotate, or on request); null for a login and for a key never checked. */
+  verification: KeyVerificationSchema.nullable(),
 });
 const Create = z.object({
   project_id: z.string().uuid().optional(),
@@ -54,14 +70,23 @@ async function loadSecret(accountId: string, secretId: string) {
 }
 /** The caller may manage a resource they created, or any resource with account.write. */
 async function mayManage(c: Context<AppEnv>, accountId: string, creatorId: string) {
-  const userId = c.get('userId') as string;
+  const userId = c.get('userId');
   if (creatorId === userId) return Boolean(await getMembership(userId, accountId));
   return mayWriteAccount(c, accountId);
 }
 async function mayWriteAccount(c: Context<AppEnv>, accountId: string) {
   return (await authorize(await actorOf(c, accountId), ACCOUNT_ACTIONS.ACCOUNT_WRITE)).allowed;
 }
-async function view(row: typeof accountSecretResources.$inferSelect, actorId: string, projectId?: string) {
+type ResourceRow = typeof accountSecretResources.$inferSelect;
+
+/** `row` with a check that just ran, as its stored columns now read. */
+function withVerification(row: ResourceRow, verification: KeyVerification | null): ResourceRow {
+  return verification
+    ? { ...row, verifyStatus: verification.status, verifyMessage: verification.message, verifiedAt: verification.checkedAt }
+    : row;
+}
+
+async function view(row: ResourceRow, actorId: string, projectId?: string) {
   const grants = await db.select({ userId: accountSecretGrants.userId }).from(accountSecretGrants)
     .where(and(eq(accountSecretGrants.accountId, row.accountId), eq(accountSecretGrants.secretId, row.secretId)));
   return {
@@ -75,6 +100,13 @@ async function view(row: typeof accountSecretResources.$inferSelect, actorId: st
     created_by: row.createdBy, created_at: row.createdAt.toISOString(), updated_at: row.updatedAt.toISOString(),
     granted_user_ids: grants.map((grant) => grant.userId),
     status: probeAccountSecret(row.accountId, row.valueEnc),
+    verification: row.verifyStatus && row.verifiedAt
+      ? {
+          status: row.verifyStatus as 'verified' | 'invalid' | 'unknown',
+          message: row.verifyMessage ?? '',
+          checked_at: row.verifiedAt.toISOString(),
+        }
+      : null,
     can_use: (projectId ?? row.projectId)
       ? secretUsableInProject(row, (projectId ?? row.projectId)!, grants.some((grant) => grant.userId === actorId)) &&
         await memberMayReadProject(row.accountId, (projectId ?? row.projectId)!, actorId)
@@ -82,18 +114,41 @@ async function view(row: typeof accountSecretResources.$inferSelect, actorId: st
   };
 }
 
+/**
+ * The project these routes scope to. On a canonical path
+ * (`/v1/workspaces/:workspaceId/…`) the workspace IS the project, so an
+ * omitted `project_id` means the path workspace. On a legacy path an omitted
+ * `project_id` keeps its old meaning (account-wide rows only).
+ */
+async function scopedProjectId(c: Context, queried: string | undefined): Promise<string | undefined> {
+  if (queried) return queried;
+  if (isCanonicalWorkspacePath(c.req.path)) {
+    const pathWorkspace = c.get(PATH_WORKSPACE_ID_VAR as never) as string | undefined;
+    return pathWorkspace || undefined;
+  }
+  // The legacy spelling (`/v1/accounts/:id/…`): a 1:1 account has one
+  // workspace, so it needs no project_id. A split_pending legacy account
+  // still must name one.
+  return (await workspaceFactsOf(accountIdParam(c))).soleProjectId ?? undefined;
+}
+
 export function registerSecretResourceRoutes() {
-  const SubscriptionQuery = z.object({ project_id: z.string().uuid() });
+  const SubscriptionQuery = z.object({
+    project_id: z.string().uuid().optional().openapi({
+      description: 'The workspace (project) to scope to. Defaults to the path workspace on `/v1/workspaces/…` and to the account\'s one workspace on `/v1/accounts/…`; required there only for a legacy account with several.',
+    }),
+  });
   accountsRouter.openapi(createRoute({
-    method: 'get', path: '/{accountId}/subscription-connections', tags: ['secrets'],
+    method: 'get', path: '/{workspaceId}/subscription-connections', tags: ['secrets'],
     summary: 'List subscription logins, including existing legacy connections', ...auth,
     request: { params: AccountIdParam, query: SubscriptionQuery },
-    responses: { 200: json(z.object({ subscriptions: z.array(View.extend({ storage: z.enum(['account_resource', 'project']) })) }), 'Connected subscriptions'), ...errors(403) },
+    responses: { 200: json(z.object({ subscriptions: z.array(View.extend({ storage: z.enum(['account_resource', 'project']) })) }), 'Connected subscriptions'), ...errors(400, 403) },
   }), async (c) => {
-    const { accountId } = c.req.valid('param');
-    const { project_id: projectId } = c.req.valid('query');
-    const userId = c.get('userId') as string;
-    if (!(await getMembership(userId, accountId)) || !(await projectInAccount(accountId, projectId)) || !(await memberMayReadProject(accountId, projectId, userId, { mfaAal: (c as Context).get('mfaAal') as string | undefined }))) return c.json({ error: 'Forbidden' }, 403);
+    const accountId = accountIdParam(c);
+    const projectId = await scopedProjectId(c, c.req.valid('query').project_id);
+    if (!projectId) return c.json({ error: 'project_id is required' }, 400);
+    const userId = c.get('userId');
+    if (!(await getMembership(userId, accountId)) || !(await projectInAccount(accountId, projectId)) || !(await memberMayReadProject(accountId, projectId, userId, { mfaAal: c.get('mfaAal') }))) return c.json({ error: 'Forbidden' }, 403);
     const rows = await db.select().from(accountSecretResources).where(and(
       eq(accountSecretResources.accountId, accountId),
       sql`(${accountSecretResources.projectId} is null or ${accountSecretResources.projectId} = ${projectId})`,
@@ -106,41 +161,46 @@ export function registerSecretResourceRoutes() {
   });
 
   accountsRouter.openapi(createRoute({
-    method: 'post', path: '/{accountId}/subscription-connections/{secretId}/usage', tags: ['secrets'],
+    method: 'post', path: '/{workspaceId}/subscription-connections/{secretId}/usage', tags: ['secrets'],
     summary: 'Read usage from an existing subscription without reconnecting', ...auth,
     request: { params: SecretIdParam, query: SubscriptionQuery.extend({ storage: z.enum(['account_resource', 'project']) }) },
-    responses: { 200: json(z.object({ usage: SubscriptionUsageSchema.nullable(), provider_account: SubscriptionAccountSchema.nullable() }), 'Subscription usage'), ...errors(403, 404) },
+    responses: { 200: json(z.object({ usage: SubscriptionUsageSchema.nullable(), provider_account: SubscriptionAccountSchema.nullable() }), 'Subscription usage'), ...errors(400, 403, 404) },
   }), async (c) => {
-    const { accountId, secretId } = c.req.valid('param');
-    const { project_id: projectId, storage } = c.req.valid('query');
-    const userId = c.get('userId') as string;
-    if (!(await getMembership(userId, accountId)) || !(await projectInAccount(accountId, projectId)) || !(await memberMayReadProject(accountId, projectId, userId, { mfaAal: (c as Context).get('mfaAal') as string | undefined }))) return c.json({ error: 'Forbidden' }, 403);
+    const { secretId } = c.req.valid('param');
+    const accountId = accountIdParam(c);
+    const { storage } = c.req.valid('query');
+    const projectId = await scopedProjectId(c, c.req.valid('query').project_id);
+    if (!projectId) return c.json({ error: 'project_id is required' }, 400);
+    const userId = c.get('userId');
+    if (!(await getMembership(userId, accountId)) || !(await projectInAccount(accountId, projectId)) || !(await memberMayReadProject(accountId, projectId, userId, { mfaAal: c.get('mfaAal') }))) return c.json({ error: 'Forbidden' }, 403);
     if (storage !== 'account_resource') {
       const result = await refreshLegacySubscriptionUsage({ accountId, projectId, userId, secretId, storage });
       return result ? c.json(result, 200) : c.json({ error: 'Not found' }, 404);
     }
     const row = await loadSecret(accountId, secretId);
     if (!row || !row.providerId || !SUBSCRIPTION_PROVIDERS.has(row.providerId)) return c.json({ error: 'Not found' }, 404);
-    if (!(await view(row, userId, projectId)).can_use) return c.json({ error: 'Forbidden' }, 403);
+    // Usage is management metadata, not permission to spend the login's credentials.
+    // Match secret-resources usage: account managers may refresh every listed login.
+    if (!(await mayWriteAccount(c, accountId)) && !(await view(row, userId, projectId)).can_use) return c.json({ error: 'Forbidden' }, 403);
     const usage = await refreshSubscriptionUsage(row);
     const current = await loadSecret(accountId, secretId);
     return c.json({ usage, provider_account: current ? subscriptionAccount(current) : null }, 200);
   });
 
   accountsRouter.openapi(createRoute({
-    method: 'get', path: '/{accountId}/secret-resources', tags: ['secrets'],
+    method: 'get', path: '/{workspaceId}/secret-resources', tags: ['secrets'],
     summary: 'List account secret resources granted to the caller', ...auth,
     request: { params: AccountIdParam },
     responses: { 200: json(z.object({ secrets: z.array(View) }), 'Granted secret resources'), ...errors(403) },
-  }), async (c: any) => {
-    const accountId = c.req.param('accountId');
-    const userId = c.get('userId') as string;
+  }), async (c) => {
+    const accountId = accountIdParam(c);
+    const userId = c.get('userId');
     const membership = await getMembership(userId, accountId);
     if (!membership) return c.json({ error: 'Forbidden' }, 403);
-    const projectId = c.req.query('project_id') as string | undefined;
+    const projectId = await scopedProjectId(c, c.req.query('project_id') as string | undefined);
     if (projectId && !(await projectInAccount(accountId, projectId))) return c.json({ error: 'Forbidden' }, 403);
     // This route authorizes the caller's own request here, so MFA counts.
-    if (projectId && !(await memberMayReadProject(accountId, projectId, userId, { mfaAal: (c as Context).get('mfaAal') as string | undefined }))) {
+    if (projectId && !(await memberMayReadProject(accountId, projectId, userId, { mfaAal: c.get('mfaAal') }))) {
       return c.json({ error: 'Forbidden' }, 403);
     }
     const manager = await mayWriteAccount(c, accountId);
@@ -151,46 +211,59 @@ export function registerSecretResourceRoutes() {
   });
 
   accountsRouter.openapi(createRoute({
-    method: 'post', path: '/{accountId}/secret-resources', tags: ['secrets'],
+    method: 'post', path: '/{workspaceId}/secret-resources', tags: ['secrets'],
     summary: 'Create an account secret resource', ...auth,
     request: { params: AccountIdParam, body: { content: { 'application/json': { schema: Create } } } },
     responses: { 201: json(View, 'Created secret metadata'), ...errors(400, 403) },
-  }), async (c: any) => {
-    const accountId = c.req.param('accountId');
-    const userId = c.get('userId') as string;
+  }), async (c) => {
+    const accountId = accountIdParam(c);
+    const userId = c.get('userId');
     if (!(await getMembership(userId, accountId))) return c.json({ error: 'Forbidden' }, 403);
     const parsed = Create.safeParse(await readJsonObject(c));
     if (!parsed.success) return c.json({ error: 'Invalid secret resource' }, 400);
     const body = parsed.data;
-    if (resolveCatalogUpstream(body.provider_id)?.envVar !== body.name) {
+    // A key's name is the one the gateway reads for its provider: the catalog
+    // key name, Bedrock's region next to its key, or a custom provider's key.
+    const nameMatches = resolveCatalogUpstream(body.provider_id)?.envVar === body.name ||
+      (body.provider_id === BEDROCK_PROVIDER_ID && body.name === BEDROCK_REGION_NAME) ||
+      (customProviderSecretName(body.provider_id) === body.name && body.project_id !== undefined);
+    if (!nameMatches) {
       return c.json({ error: 'Provider and environment name do not match' }, 400);
     }
+    if (body.name === BEDROCK_REGION_NAME && !isAwsRegion(body.value.trim())) {
+      return c.json({ error: 'AWS_REGION must be an AWS region name, such as us-east-1' }, 400);
+    }
     if (body.project_id) {
-      const [project] = await db.select({ accountId: projects.accountId, metadata: projects.metadata }).from(projects)
-        .where(eq(projects.projectId, body.project_id)).limit(1);
+      const [project] = await db.select({ accountId: projectsView.accountId, metadata: projectsView.metadata }).from(projectsView)
+        .where(eq(projectsView.projectId, body.project_id)).limit(1);
       // A key only for the caller skips the `authorize` below, so this is the
       // caller's whole project check, and their request's MFA level counts.
       if (
         !project ||
         project.accountId !== accountId ||
-        !(await memberMayReadProject(accountId, body.project_id, userId, { mfaAal: (c as Context).get('mfaAal') as string | undefined }))
+        !(await memberMayReadProject(accountId, body.project_id, userId, { mfaAal: c.get('mfaAal') }))
       ) {
-        return c.json({ error: 'Project unavailable' }, 403);
+        return c.json({ error: 'Workspace unavailable' }, 403);
       }
-      if (!resolveFeatureFlag(project.metadata, 'pooled_provider_secrets')) return c.json({ error: 'Pooled provider secrets are disabled' }, 403);
+      // Named accounts are the one store of provider keys: the flag no longer
+      // decides where a key is saved (secrets/llm-credential-move.ts).
+      if (customProviderSecretName(body.provider_id) === body.name &&
+        !readCustomProviders(project.metadata).some((provider) => provider.id === body.provider_id)) {
+        return c.json({ error: 'Provider and environment name do not match' }, 400);
+      }
       if (body.access_mode !== 'members' || (body.user_ids ?? []).some((id) => id !== userId)) {
         const verdict = await authorize(await actorOf(c, accountId), PROJECT_ACTIONS.PROJECT_SECRET_WRITE, { type: 'project', id: body.project_id });
-        if (!verdict.allowed) return c.json({ error: 'Project secret write access required' }, 403);
+        if (!verdict.allowed) return c.json({ error: 'Workspace secret write access required' }, 403);
       }
       if (body.access_mode === 'members') {
         for (const memberId of body.user_ids ?? []) {
           if (!(await getMembership(memberId, accountId)) || !(await memberMayReadProject(accountId, body.project_id, memberId))) {
-            return c.json({ error: 'Member has no project access' }, 400);
+            return c.json({ error: 'Member has no workspace access' }, 400);
           }
         }
       }
     } else if (body.access_mode || body.user_ids) {
-      return c.json({ error: 'Project required for access mode' }, 400);
+      return c.json({ error: 'Workspace required for access mode' }, 400);
     }
     const resource = await db.transaction(async (tx) => {
       const [row] = await tx.insert(accountSecretResources).values({
@@ -204,25 +277,35 @@ export function registerSecretResourceRoutes() {
       await tx.insert(accountSecretGrants).values(userIds.map((grantee) => ({ accountId, secretId: row!.secretId, userId: grantee, grantedBy: userId })));
       return row!;
     });
-    return c.json(await view(resource, userId), 201);
+    // The key is saved first; one cheap call to the provider then says whether
+    // it works. A failed check never undoes the save (`unknown`).
+    const verification = await verifyAndRecordAccountKey(resource, userId);
+    // A workspace with no usable default model gets one from a key that works.
+    if (resource.projectId) {
+      void seedProjectDefaultModelOnConnect({
+        projectId: resource.projectId, accountId, userId, secretName: resource.name,
+        ...(verification ? { keyCheck: verification.status } : {}),
+      });
+    }
+    return c.json(await view(withVerification(resource, verification), userId), 201);
   });
 
   accountsRouter.openapi(createRoute({
-    method: 'put', path: '/{accountId}/secret-resources/{secretId}/access', tags: ['secrets'],
+    method: 'put', path: '/{workspaceId}/secret-resources/{secretId}/access', tags: ['secrets'],
     summary: 'Set project or selected-member access for one resource', ...auth,
     request: { params: SecretIdParam, body: { content: { 'application/json': { schema: z.object({
       mode: z.enum(['project', 'members']), user_ids: z.array(z.string().uuid()).max(200),
     }).strict() } } } },
     responses: { 200: json(View, 'Updated access'), ...errors(400, 403, 404) },
-  }), async (c: any) => {
-    const accountId = c.req.param('accountId');
-    const actorId = c.get('userId') as string;
+  }), async (c) => {
+    const accountId = accountIdParam(c);
+    const actorId = c.get('userId');
     const row = await loadSecret(accountId, c.req.param('secretId'));
     if (!row) return c.json({ error: 'Not found' }, 404);
     if (!row.projectId || !(await mayManage(c, accountId, row.createdBy))) return c.json({ error: 'Forbidden' }, 403);
     // Narrowing a key to its creator skips the `authorize` below: the caller's
     // own request, with its MFA level, is checked here instead.
-    if (!(await memberMayReadProject(accountId, row.projectId, actorId, { mfaAal: (c as Context).get('mfaAal') as string | undefined }))) {
+    if (!(await memberMayReadProject(accountId, row.projectId, actorId, { mfaAal: c.get('mfaAal') }))) {
       return c.json({ error: 'Forbidden' }, 403);
     }
     const parsed = z.object({ mode: z.enum(['project', 'members']), user_ids: z.array(z.string().uuid()).max(200) }).strict().safeParse(await readJsonObject(c));
@@ -232,11 +315,11 @@ export function registerSecretResourceRoutes() {
     const userIds = [...new Set([...parsed.data.user_ids, ...(creatorStillEligible ? [row.createdBy] : [])])];
     if (parsed.data.mode === 'project' || userIds.some((id) => id !== row.createdBy)) {
       const verdict = await authorize(await actorOf(c, accountId), PROJECT_ACTIONS.PROJECT_SECRET_WRITE, { type: 'project', id: row.projectId });
-      if (!verdict.allowed) return c.json({ error: 'Project secret write access required' }, 403);
+      if (!verdict.allowed) return c.json({ error: 'Workspace secret write access required' }, 403);
     }
     for (const userId of userIds) {
       if (!(await getMembership(userId, accountId)) || !(await memberMayReadProject(accountId, row.projectId, userId))) {
-        return c.json({ error: 'Member has no project access' }, 400);
+        return c.json({ error: 'Member has no workspace access' }, 400);
       }
     }
     const updated = await db.transaction(async (tx) => {
@@ -250,13 +333,13 @@ export function registerSecretResourceRoutes() {
   });
 
   accountsRouter.openapi(createRoute({
-    method: 'put', path: '/{accountId}/secret-resources/{secretId}/value', tags: ['secrets'],
+    method: 'put', path: '/{workspaceId}/secret-resources/{secretId}/value', tags: ['secrets'],
     summary: 'Rotate one secret value', ...auth,
     request: { params: SecretIdParam, body: { content: { 'application/json': { schema: z.object({ value: z.string().min(1).max(65536) }) } } } },
     responses: { 200: json(View, 'Rotated secret metadata'), ...errors(400, 403, 404) },
-  }), async (c: any) => {
-    const accountId = c.req.param('accountId');
-    const userId = c.get('userId') as string;
+  }), async (c) => {
+    const accountId = accountIdParam(c);
+    const userId = c.get('userId');
     const row = await loadSecret(accountId, c.req.param('secretId'));
     if (!row) return c.json({ error: 'Not found' }, 404);
     if (!(await mayManage(c, accountId, row.createdBy))) return c.json({ error: 'Forbidden' }, 403);
@@ -268,21 +351,40 @@ export function registerSecretResourceRoutes() {
     }
     const parsed = z.object({ value: z.string().min(1).max(65536) }).safeParse(await readJsonObject(c));
     if (!parsed.success) return c.json({ error: 'Invalid value' }, 400);
-    const [updated] = await db.update(accountSecretResources).set({ valueEnc: encryptAccountSecret(accountId, parsed.data.value), cooldownUntil: null, needsReauthAt: null, updatedAt: new Date() })
+    const [updated] = await db.update(accountSecretResources).set({ valueEnc: encryptAccountSecret(accountId, parsed.data.value), cooldownUntil: null, needsReauthAt: null, verifyStatus: null, verifiedAt: null, verifyMessage: null, updatedAt: new Date() })
       .where(eq(accountSecretResources.secretId, row.secretId)).returning();
-    return c.json(await view(updated!, userId));
+    return c.json(await view(withVerification(updated!, await verifyAndRecordAccountKey(updated!, userId)), userId));
+  });
+
+  // "Check again" on a saved key: the same one call that runs on save.
+  accountsRouter.openapi(createRoute({
+    method: 'post', path: '/{workspaceId}/secret-resources/{secretId}/verify', tags: ['secrets'],
+    summary: 'Check one saved provider API key against its provider', ...auth,
+    request: { params: SecretIdParam },
+    responses: { 200: json(View, 'Secret metadata with the check result'), ...errors(400, 403, 404) },
+  }), async (c) => {
+    const { secretId } = c.req.valid('param');
+    const accountId = accountIdParam(c);
+    const userId = c.get('userId');
+    const row = await loadSecret(accountId, secretId);
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    if (!(await mayManage(c, accountId, row.createdBy))) return c.json({ error: 'Forbidden' }, 403);
+    const verification = await verifyAndRecordAccountKey(row, userId);
+    if (!verification) return c.json({ error: 'Only a provider API key in a workspace can be checked' }, 400);
+    return c.json(await view(withVerification(row, verification), userId));
   });
 
   // An owner's "retry now": a ChatGPT plan's usage can be reset before the reset
   // the provider named; the rest ends now instead of on the next 15-min re-try.
   accountsRouter.openapi(createRoute({
-    method: 'post', path: '/{accountId}/secret-resources/{secretId}/retry', tags: ['secrets'],
+    method: 'post', path: '/{workspaceId}/secret-resources/{secretId}/retry', tags: ['secrets'],
     summary: 'End the rate-limit rest of one stored account', ...auth,
     request: { params: SecretIdParam },
     responses: { 200: json(View, 'Secret metadata with no cooldown'), ...errors(403, 404) },
   }), async (c) => {
-    const { accountId, secretId } = c.req.valid('param');
-    const userId = c.get('userId') as string;
+    const { secretId } = c.req.valid('param');
+    const accountId = accountIdParam(c);
+    const userId = c.get('userId');
     const row = await loadSecret(accountId, secretId);
     if (!row) return c.json({ error: 'Not found' }, 404);
     if (!(await mayManage(c, accountId, row.createdBy))) return c.json({ error: 'Forbidden' }, 403);
@@ -293,19 +395,20 @@ export function registerSecretResourceRoutes() {
   // The account list shows each login's plan usage. Opening it asks the
   // provider again when the last read is over a minute old (no plan quota).
   accountsRouter.openapi(createRoute({
-    method: 'post', path: '/{accountId}/secret-resources/{secretId}/usage', tags: ['secrets'],
+    method: 'post', path: '/{workspaceId}/secret-resources/{secretId}/usage', tags: ['secrets'],
     summary: 'Refresh the plan usage of one subscription login (ChatGPT, Claude)', ...auth,
     request: { params: SecretIdParam, query: z.object({ project_id: z.string().uuid().optional() }) },
     responses: { 200: json(z.object({ usage: SubscriptionUsageSchema.nullable(), provider_account: SubscriptionAccountSchema.nullable() }), 'Current plan usage and who the login signs in as; null when the provider does not say'), ...errors(400, 403, 404) },
   }), async (c) => {
-    const { accountId, secretId } = c.req.valid('param');
-    const userId = c.get('userId') as string;
+    const { secretId } = c.req.valid('param');
+    const accountId = accountIdParam(c);
+    const userId = c.get('userId');
     if (!(await getMembership(userId, accountId))) return c.json({ error: 'Forbidden' }, 403);
     const row = await loadSecret(accountId, secretId);
     if (!row) return c.json({ error: 'Not found' }, 404);
     const { project_id: projectId } = c.req.valid('query');
     if (projectId && !(await projectInAccount(accountId, projectId))) return c.json({ error: 'Forbidden' }, 403);
-    if (projectId && !(await memberMayReadProject(accountId, projectId, userId, { mfaAal: (c as Context).get('mfaAal') as string | undefined }))) {
+    if (projectId && !(await memberMayReadProject(accountId, projectId, userId, { mfaAal: c.get('mfaAal') }))) {
       return c.json({ error: 'Forbidden' }, 403);
     }
     // The same rule as the list: a manager sees every login, a member the ones they may use.
@@ -318,13 +421,13 @@ export function registerSecretResourceRoutes() {
   });
 
   accountsRouter.openapi(createRoute({
-    method: 'delete', path: '/{accountId}/secret-resources/{secretId}', tags: ['secrets'],
+    method: 'delete', path: '/{workspaceId}/secret-resources/{secretId}', tags: ['secrets'],
     summary: 'Delete one secret resource and its grants', ...auth,
     request: { params: SecretIdParam },
     responses: { 200: json(z.object({ ok: z.boolean() }), 'Deleted'), ...errors(403, 404) },
-  }), async (c: any) => {
-    const accountId = c.req.param('accountId');
-    const userId = c.get('userId') as string;
+  }), async (c) => {
+    const accountId = accountIdParam(c);
+    const userId = c.get('userId');
     const row = await loadSecret(accountId, c.req.param('secretId'));
     if (!row) return c.json({ error: 'Not found' }, 404);
     if (!(await mayManage(c, accountId, row.createdBy))) return c.json({ error: 'Forbidden' }, 403);
@@ -338,13 +441,13 @@ export function registerSecretResourceRoutes() {
   });
 
   accountsRouter.openapi(createRoute({
-    method: 'put', path: '/{accountId}/secret-resources/{secretId}/grants/{userId}', tags: ['secrets'],
+    method: 'put', path: '/{workspaceId}/secret-resources/{secretId}/grants/{userId}', tags: ['secrets'],
     summary: 'Grant a member use of one secret', ...auth,
     request: { params: GrantParam },
-    responses: { 200: json(View, 'Updated secret grants'), ...errors(403, 404) },
-  }), async (c: any) => {
-    const accountId = c.req.param('accountId');
-    const actorId = c.get('userId') as string;
+    responses: { 200: json(View, 'Updated secret grants'), ...errors(400, 403, 404) },
+  }), async (c) => {
+    const accountId = accountIdParam(c);
+    const actorId = c.get('userId');
     const userId = c.req.param('userId');
     const row = await loadSecret(accountId, c.req.param('secretId'));
     if (!row) return c.json({ error: 'Not found' }, 404);
@@ -355,29 +458,29 @@ export function registerSecretResourceRoutes() {
     // who may read the project, and sharing beyond the creator needs
     // `project.secret.write`; the grantee must be able to read the project.
     if (row.projectId) {
-      if (!(await memberMayReadProject(accountId, row.projectId, actorId, { mfaAal: (c as Context).get('mfaAal') as string | undefined }))) {
+      if (!(await memberMayReadProject(accountId, row.projectId, actorId, { mfaAal: c.get('mfaAal') }))) {
         return c.json({ error: 'Forbidden' }, 403);
       }
       if (userId !== row.createdBy) {
         const verdict = await authorize(await actorOf(c, accountId), PROJECT_ACTIONS.PROJECT_SECRET_WRITE, { type: 'project', id: row.projectId });
-        if (!verdict.allowed) return c.json({ error: 'Project secret write access required' }, 403);
+        if (!verdict.allowed) return c.json({ error: 'Workspace secret write access required' }, 403);
       }
       if (!(await memberMayReadProject(accountId, row.projectId, userId))) {
-        return c.json({ error: 'Member has no project access' }, 400);
+        return c.json({ error: 'Member has no workspace access' }, 400);
       }
     }
     await db.insert(accountSecretGrants).values({ accountId, secretId: row.secretId, userId, grantedBy: actorId }).onConflictDoNothing();
-    return c.json(await view(row, actorId));
+    return c.json(await view(row, actorId), 200);
   });
 
   accountsRouter.openapi(createRoute({
-    method: 'delete', path: '/{accountId}/secret-resources/{secretId}/grants/{userId}', tags: ['secrets'],
+    method: 'delete', path: '/{workspaceId}/secret-resources/{secretId}/grants/{userId}', tags: ['secrets'],
     summary: 'Revoke a member secret grant', ...auth,
     request: { params: GrantParam },
-    responses: { 200: json(View, 'Updated secret grants'), ...errors(403, 404) },
-  }), async (c: any) => {
-    const accountId = c.req.param('accountId');
-    const actorId = c.get('userId') as string;
+    responses: { 200: json(View, 'Updated secret grants'), ...errors(400, 403, 404) },
+  }), async (c) => {
+    const accountId = accountIdParam(c);
+    const actorId = c.get('userId');
     const row = await loadSecret(accountId, c.req.param('secretId'));
     if (!row) return c.json({ error: 'Not found' }, 404);
     if (!(await mayManage(c, accountId, row.createdBy))) return c.json({ error: 'Forbidden' }, 403);
@@ -386,6 +489,6 @@ export function registerSecretResourceRoutes() {
       return c.json({ error: 'The connection owner keeps access' }, 400);
     }
     await db.delete(accountSecretGrants).where(and(eq(accountSecretGrants.secretId, row.secretId), eq(accountSecretGrants.userId, c.req.param('userId'))));
-    return c.json(await view(row, actorId));
+    return c.json(await view(row, actorId), 200);
   });
 }

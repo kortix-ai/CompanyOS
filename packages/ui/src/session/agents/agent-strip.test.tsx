@@ -18,7 +18,7 @@ const originals = ['window', 'document', 'IS_REACT_ACT_ENVIRONMENT'].map((key) =
 Object.defineProperty(globalThis, 'window', { value: windowObject, configurable: true });
 Object.defineProperty(globalThis, 'document', { value: windowObject.document, configurable: true });
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
-// Radix (the popover, its focus and dismiss layers) reads these by bare global name, and
+// Base UI (the popover, its focus and dismiss layers) reads these by bare global name, and
 // happy-dom dispatches only its own event classes (the floating-panel-motion.test.tsx setup).
 const radixGlobals = [
   'navigator',
@@ -60,27 +60,35 @@ afterAll(() => {
 // The workflow reads go through `useSessionWorkflows`: the runs per session id, and the controls it sends.
 let runsBySession: Record<string, unknown[]> = {};
 let controls: unknown[] = [];
+let workflowLive: Array<boolean | undefined> = [];
 const real = await import('@kortix/sdk/react');
 mock.module('@kortix/sdk/react', () => ({
   ...real,
-  useSessionWorkflows: (_projectId: string | undefined, sessionId: string | undefined) => ({
-    data: sessionId ? runsBySession[sessionId] : undefined,
-    control: {
-      mutate: (variables: unknown) => controls.push(variables),
-      isPending: false,
-      variables: undefined,
-    },
-  }),
+  useSessionWorkflows: (
+    _projectId: string | undefined,
+    sessionId: string | undefined,
+    options: { live?: boolean } = {},
+  ) => {
+    workflowLive.push(options.live);
+    return {
+      data: sessionId ? runsBySession[sessionId] : undefined,
+      control: {
+        mutate: (variables: unknown) => controls.push(variables),
+        isPending: false,
+        variables: undefined,
+      },
+    };
+  },
 }));
 
-// Imported after the globals above: Radix picks its layout effect when its module loads,
+// Imported after the globals above: Base UI picks its layout effect when its module loads,
 // and a module loaded before `document` exists never mounts a portal.
 const { TooltipProvider } = await import('../../primitives/tooltip');
 const { resolveEffectiveBusy } = await import('../status/session-chat-busy');
-const { AgentsLineView, AgentsPanel, stripRuns, runSessionIds } = await import('./agent-strip');
+const { AgentsLine, AgentsLineView, AgentsPanel, stripRuns, runSessionIds } = await import('./agent-strip');
 const { agentRowOf } = await import('./agent-model');
 const { TasksPanel, groupTasks } = await import('./tasks-panel');
-const { HeldMessageList, heldPreview } = await import('./held-messages');
+const { HeldMessageList } = await import('./held-messages');
 const { WorkflowRunControls, workflowFileName, isLargeRun } = await import('./workflow-run-controls');
 const { SessionPromptContext } = await import('./session-prompt');
 const { parseWorkflowRun } = await import('../tool/tools/workflow-run');
@@ -90,6 +98,7 @@ const roots: Root[] = [];
 beforeEach(() => {
   runsBySession = {};
   controls = [];
+  workflowLive = [];
 });
 afterEach(async () => {
   if (renderer) await act(async () => renderer?.unmount());
@@ -112,6 +121,16 @@ async function mountDom(node: ReactNode) {
     rows: () => [...body.querySelectorAll('[data-testid="agents-line-row"]')] as unknown as HTMLElement[],
     byLabel: (label: string) => body.querySelector(`[aria-label="${label}"]`) as unknown as HTMLButtonElement | null,
   };
+}
+
+/** Yield macrotasks until `done()` holds or 200 hops pass; returns whether it held. */
+async function until(done: () => boolean): Promise<boolean> {
+  for (let hop = 0; hop < 200 && !done(); hop++) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+  return done();
 }
 
 function wrap(node: ReactNode) {
@@ -263,7 +282,7 @@ describe('AgentsLineView — the line', () => {
     await act(async () => {
       focused.dispatchEvent(new windowObject.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     });
-    expect(dom.popover()).toBeNull();
+    expect(await until(() => dom.popover() === null)).toBe(true);
     expect(line.getAttribute('aria-expanded')).toBe('false');
   });
 
@@ -291,7 +310,8 @@ describe('AgentsLineView — the line', () => {
     );
     await act(async () => dom.byLabel('Open namer')!.click());
     expect(opened).toEqual(['namer']);
-    expect(dom.popover()).toBeNull();
+    // The popover closes on a later task; a loaded machine reaches it later.
+    expect(await until(() => dom.popover() === null)).toBe(true);
   });
 });
 
@@ -358,7 +378,7 @@ describe('AgentsPanel — the popover rows', () => {
     expect(tab.textContent).toContain('1');
     expect(body.querySelector('[aria-label="Team tasks"]')).toBeNull();
     await act(async () => {
-      // Radix tabs activate on mousedown.
+      // Tabs activate on mousedown.
       tab.dispatchEvent(new windowObject.MouseEvent('mousedown', { bubbles: true, button: 0 }));
     });
     expect(body.querySelector('[aria-label="Team tasks"]')).not.toBeNull();
@@ -375,8 +395,8 @@ describe('AgentsPanel — the popover rows', () => {
     // Read from the runner: 2 of its 5 agents are done, and it runs after this turn ended.
     expect(text).toContain('Running in the background · 2 of 5 done');
     expect(html).toContain('aria-label="Open run"');
-    // Its controls: pause and stop go to the runner.
-    expect(html).toContain('aria-label="Pause the run"');
+    // Its controls: hold and stop go to the runner.
+    expect(html).toContain('aria-label="Hold new agents"');
     expect(html).toContain('data-testid="agents-line-row"');
   });
 });
@@ -445,9 +465,7 @@ describe('held messages', () => {
     expect(denied).toEqual(['m3']);
   });
 
-  test('the card names the sender and previews the summary, else the first line', () => {
-    expect(heldPreview(message('m', 'held'))).toBe('The schema migration finished.');
-    expect(heldPreview(message('m', 'held', { summary: 'Migration done' }))).toBe('Migration done');
+  test('the card names the sender and asks for approval', () => {
     const approve = { mutate: noop, isPending: false } as never;
     const text = textOf(renderToStaticMarkup(wrap(<HeldMessageList messages={[message('m1', 'held')]} approve={approve} deny={approve} />)));
     expect(text).toContain('reviewer');
@@ -471,13 +489,13 @@ describe('WorkflowRunControls', () => {
     return (label: string) => renderer!.root.findByProps({ 'aria-label': label });
   }
 
-  test('pause, stop and save send their controls to the box that runs the run', async () => {
+  test('hold, stop and save send their controls to the box that runs the run', async () => {
     const sent: string[] = [];
     const button = await mount(
       <WorkflowRunControls projectId="proj_1" controlSessionId="ses_runner" ownerSessionId="ses_lead" run={live} />,
       (text) => void sent.push(text),
     );
-    await act(async () => button('Pause the run').props.onClick({ stopPropagation: noop }));
+    await act(async () => button('Hold new agents').props.onClick({ stopPropagation: noop }));
     await act(async () => button('Stop the run').props.onClick({ stopPropagation: noop }));
     expect(controls).toEqual([
       { runId: 'run-1', body: { action: 'pause' } },
@@ -485,7 +503,7 @@ describe('WorkflowRunControls', () => {
     ]);
     await act(async () => button('Save').props.onClick({ stopPropagation: noop }));
     expect(sent).toHaveLength(1);
-    expect(sent[0]).toContain('.kortix/workflows/weekly-competitor-review.js');
+    expect(sent[0]).toContain('workflows/weekly-competitor-review.js');
     expect(sent[0]).toContain('change request');
   });
 
@@ -500,12 +518,37 @@ describe('WorkflowRunControls', () => {
   test('a finished run has no pause or stop; a saved workflow has no save', () => {
     const done = { ...live, status: 'done' as const };
     const html = renderToStaticMarkup(wrap(<WorkflowRunControls projectId="proj_1" controlSessionId="ses_runner" ownerSessionId="ses_lead" run={done} />));
-    expect(html).not.toContain('Pause the run');
+    expect(html).not.toContain('Hold new agents');
     expect(html).not.toContain('Stop the run');
     expect(html).toContain('aria-label="Save"');
     expect(
       renderToStaticMarkup(wrap(<WorkflowRunControls projectId="proj_1" controlSessionId="ses_runner" ownerSessionId="ses_lead" run={{ ...done, name: 'weekly-review' }} />)),
     ).toBe('');
+  });
+
+  test('Hold says what it does, and shows only while the script can still start an agent; a held run keeps Resume', () => {
+    const markup = (doc: typeof live) =>
+      renderToStaticMarkup(wrap(<WorkflowRunControls projectId="proj_1" controlSessionId="ses_runner" ownerSessionId="ses_lead" run={doc} />));
+    // Every planned agent started (5 of 5, each with its session): nothing is left to hold, Stop stays.
+    const allStarted = {
+      ...live,
+      maxAgents: 5,
+      agents: live.agents.map((agent) => (agent.status === 'starting' ? { ...agent, status: 'running' as const, sessionId: agent.sessionId ?? `ses_${agent.id}` } : agent)),
+    };
+    // An agent still queued for a slot can be held.
+    expect(markup({ ...live, maxAgents: 5 })).toContain('aria-label="Hold new agents"');
+    expect(markup(allStarted)).not.toContain('Hold new agents');
+    expect(markup(allStarted)).toContain('aria-label="Stop the run"');
+    // A declared phase has not started: its agents can still be held.
+    expect(markup({ ...allStarted, phases: [{ title: 'Review', status: 'pending' }] })).toContain('aria-label="Hold new agents"');
+    expect(markup({ ...allStarted, paused: true })).toContain('aria-label="Resume the run"');
+  });
+
+  test('before the run exists (its approval is open) there is nothing to hold or stop', () => {
+    const asking = { ...live, agents: [], awaitingApproval: true as const };
+    const html = renderToStaticMarkup(wrap(<WorkflowRunControls projectId="proj_1" controlSessionId="ses_lead" ownerSessionId="ses_lead" run={asking} />));
+    expect(html).not.toContain('Hold new agents');
+    expect(html).not.toContain('Stop the run');
   });
 
   test('file names and the large-run threshold', () => {
@@ -543,5 +586,37 @@ describe('the agents line never holds the composer', () => {
     );
     expect(runs.map((r) => r.runId)).toEqual(['run-1', 'recent']);
     expect([...runSessionIds(runs)].sort()).toEqual(['ses_a1', 'ses_a2', 'ses_a3', 'ses_a4', 'ses_runner']);
+  });
+});
+
+describe('the agents line polls fast while the session or one of its agents works', () => {
+  test('an idle lead with a working child keeps its lists at the live cadence', async () => {
+    const { configureKortix } = await import('@kortix/sdk');
+    configureKortix({ backendUrl: 'http://test.local', getToken: async () => 'tok' });
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (url: unknown) => {
+      const target = String(url);
+      if (target.includes('parent=ses_lead')) {
+        return Response.json([
+          {
+            session_id: 'ses_child',
+            agent_handle: 'researcher',
+            agent_name: 'researcher',
+            status: 'running',
+            board_state: 'working',
+            created_at: '2026-10-30T11:00:00.000Z',
+            updated_at: new Date().toISOString(),
+          },
+        ]);
+      }
+      return Response.json([]);
+    }) as unknown as typeof fetch;
+    try {
+      await mountDom(<AgentsLine projectId="proj_1" sessionId="ses_lead" live={false} />);
+      expect(workflowLive[0]).toBe(false);
+      expect(await until(() => workflowLive.at(-1) === true)).toBe(true);
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });

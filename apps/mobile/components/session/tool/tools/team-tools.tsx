@@ -16,26 +16,25 @@
 import type { ReactNode } from 'react';
 import { View } from 'react-native';
 import { PressableSurface } from '@/components/kortix/pressable-surface';
-import { parseKortixToolResult, multiAgentTool, type MultiAgentTool } from '@kortix/sdk';
-import { peerHandleLabel } from '@kortix/shared';
-import { Text } from '@/components/ui/text';
-import { SessionStatusMark } from '@/components/session/SessionStatusMark';
-import { ChatCircleIcon, ListChecksIcon, StopCircleIcon, UsersThreeIcon } from '@/lib/icons';
 import {
-  AGENT_STATE_LABEL,
-  PEER_STATUS_LABEL,
-  agentStateGlyph,
   looksLikeTeamTaskInput,
+  multiAgentTool,
+  parseKortixToolResult,
   parsePeerSend,
   parseReachable,
   parseStoppedChild,
   parseTasks,
-  taskGlyph,
+  type MultiAgentTool,
   type PeerSendSummary,
   type ReachableAgentRow,
   type StoppedChild,
   type TeamTaskRow,
-} from '@/lib/session/multi-agent';
+} from '@kortix/sdk';
+import { peerHandleLabel } from '@kortix/shared';
+import { Text } from '@/components/ui/text';
+import { SessionStatusMark } from '@/components/session/SessionStatusMark';
+import { ChatCircleIcon, ListChecksIcon, StopCircleIcon, UsersThreeIcon } from '@/lib/icons';
+import { AGENT_STATE_LABEL, PEER_STATUS_LABEL, agentStateGlyph, taskGlyph } from '@/lib/session/multi-agent';
 import { webSpace } from '@/lib/session/user-message';
 import { AgentCard } from '../shared/agent-surface';
 import { MessageRow } from '../shared/message-row';
@@ -81,7 +80,7 @@ export function isTeamTaskCall(call: ToolProps['call']): boolean {
   return looksLikeTeamTaskInput(partInput(call));
 }
 
-export function MultiAgentToolCard({ call, forceOpen }: ToolProps) {
+function MultiAgentToolCard({ call, forceOpen }: ToolProps) {
   const tool = multiAgentTool(call.name);
   const status = partStatus(call);
   const settled = status === 'completed' || status === 'error';
@@ -149,7 +148,7 @@ function AgentRow({ agent }: { agent: ReachableAgentRow }) {
   const { enabled, openSession } = useToolNavigation();
   const body = (
     <>
-      {agent.state ? <SessionStatusMark status={agentStateGlyph(agent.state)} /> : <View style={{ width: 16 }} />}
+      {agent.state ? <SessionStatusMark status={agentStateGlyph(agent.state)} waitingOn="answer" /> : <View style={{ width: 16 }} />}
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: webSpace(2) }}>
           <Text numberOfLines={1} style={[TURN_TYPE.sm, { flexShrink: 1, fontFamily: FONT_MEDIUM, color: palette.foreground }]}>

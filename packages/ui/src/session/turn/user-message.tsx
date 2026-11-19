@@ -5,7 +5,8 @@ import { appendDriveRefs, keptDriveRefs } from '../../internal/lib/project-pream
 import { AttachmentPreview } from './attachment-preview';
 import { getFileCategory } from '../../files/viewer/preview-policy';
 import { uiRoutes } from '../../lib/routes';
-import { remindersHref } from '../../internal/lib/capability-tab-routes';
+import { triggerHref } from '../../internal/lib/capability-tab-routes';
+import { useTriggersPageOpen } from '../../internal/layout/project-settings-nav';
 import { MessageSenderAbove } from '../participants/session-participants';
 import { MessageAuthorLabel } from './message-author-label';
 import { MESSAGE_TEXT_CLASS, RowToolbar } from './message-row';
@@ -267,8 +268,8 @@ function PlatformPromptMessage({
 
 /**
  * A loop fire (`[REMINDER reminder.<id> …]`, the wire name). The pill says
- * Loop and whether it repeats; its card carries the id and a link to the
- * project's Loops page, filtered to this session.
+ * Loop and whether it repeats; its card carries the id and a Manage link to
+ * the loop's own row on the Triggers page (`?id=<reminder id>`).
  */
 /**
  * A voice call's turn the voice answered itself (voice-turn.ts): the caller's words as their own bubble under a Call
@@ -305,8 +306,9 @@ function VoiceTurnMessage({ info, actions }: { info: VoiceTurnInfo; actions?: Re
 function ReminderMessage({ info, actions }: { info: ReminderPromptInfo; actions?: React.ReactNode }) {
   const t = useTranslations('reminders');
   const ids = useSessionIds();
-  const loopsHref = ids.projectId ? remindersHref(ids.projectId) : null;
-  const manageHref = loopsHref && ids.sessionId ? `${loopsHref}?session=${ids.sessionId}` : null;
+  // The loop's own row on the Triggers page, shown only to a caller that page lets in.
+  const canOpenTriggers = useTriggersPageOpen(ids.projectId ?? undefined);
+  const manageHref = ids.projectId && canOpenTriggers ? triggerHref(ids.projectId, info.id) : null;
   return (
     <PlatformPromptMessage
       data-testid="reminder-turn"
@@ -1874,7 +1876,7 @@ export function UserMessage({
   const shallowNavigate = useUiShallowNavigate();
 
   const openSessionMention = (raw: string) => {
-    // `/projects/<id>/sessions/<id>`, not `/sessions/<id>`. The latter is not a
+    // `/workspaces/<id>/sessions/<id>`, not `/sessions/<id>`. The latter is not a
     // route — the tab stays mounted so the click looks fine, but the URL it
     // writes into history 404s on reload or Back. See `session-href.ts`.
     // Direct session ID (ses_...) — navigate without title lookup

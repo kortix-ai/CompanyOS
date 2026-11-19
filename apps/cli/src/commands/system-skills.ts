@@ -1,7 +1,7 @@
 /**
  * `kortix system-skills <subcommand>` — the Kortix SYSTEM skills, served live.
  *
- * This command makes an OpenCode session self-sufficient. The binary plus a
+ * This command makes an agent session self-sufficient. The binary plus a
  * token can retrieve the platform instructions with no repo checkout, baked
  * image, or local clone. `list` names every
  * system skill, `get` prints one in full, and both read `/v1/skills` on the host
@@ -345,7 +345,7 @@ async function skillsFile(argv: string[], flags: SkillsFlags, cmd: string): Prom
 }
 
 /** Walk up from cwd to a Kortix project root, else use cwd. Keys on the
- *  manifest (`kortix.yaml` / `kortix.yml`), not a bare `.kortix/` — otherwise
+ *  manifest (`kortix.yaml` / `kortix.yml`), not a `.kortix` folder — otherwise
  *  the CLI's own `~/.kortix` home dir matches. */
 function projectRoot(): string {
   let dir = process.cwd();

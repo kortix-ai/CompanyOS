@@ -18,7 +18,6 @@ import { resolveDesiredRelease } from '../../config-releases/desired';
 import { ownerMayUseAgent } from '../../config-releases/repoint';
 import { recordDaemonConfigReport } from '../../config-releases/quarantine';
 import { isReleaseStale, toSessionConfigRelease } from '../lib/session-config-release';
-import { LATEST_ETAG_BUDGET_MS } from '../lib/session-reload';
 import { repositoryAccessFromSessionMetadata } from '../lib/session-sandbox-metadata';
 import {
   combineConfigStaleness,
@@ -36,6 +35,7 @@ import { computeDesiredRuntime } from '../../runtime-convergence/desired';
 import { diffRuntime } from '../../runtime-convergence/diff';
 import { toRuntimeBlockWire, type RuntimeBlockWire } from '../../runtime-convergence/wire';
 import type { SandboxConfigState } from '../lib/session-reload';
+import { workspaceIdParam } from '../../shared/route-params';
 
 /**
  * The `runtime` block (spec §3, the runtime-convergence contract (PR #7785)): desired vs
@@ -53,19 +53,46 @@ async function runtimeBlockFor(releaseId: string | null, running: SandboxConfigS
 }
 
 /**
- * One mirror-work budget, spent across the stages of ONE GET /config request
- * that can block on the project mirror's network ops (`latest_etag`,
- * `desired_release`, `config_dir`). A mirror fetch has a 30s per-op timeout and
- * retries 3 times, so an unbounded stage outran the 25s request deadline and
- * turned every poll against a slow mirror into a 5xx (KRTX-818: `git;dur`
- * pinned at 24.4–25.0s on every deadline 503). Each stage races what is left
- * of the budget; on timeout it answers its own "could not tell" value instead
- * of a 503, and the fetch the caller abandoned keeps running so the next poll
- * finds the mirror warm.
+ * The mirror-work budget for ONE freshness poll, spent across the stages of a
+ * GET /config request that can block on the project mirror's network ops
+ * (`latest_etag`, `desired_release`, `config_dir`). A mirror fetch has a 30s
+ * per-op timeout and retries 3 times, so an unbounded stage outran the 25s
+ * request deadline and turned every poll against a slow mirror into a 5xx
+ * (KRTX-818: `git;dur` pinned at 24.4–25.0s on every deadline 503). Each
+ * stage races what is left of the budget; on timeout it answers its own
+ * "could not tell" value instead of a 503, and the fetch the caller abandoned
+ * keeps running so the next poll finds the mirror warm.
  */
 function budgetLeft(spendFrom: number): number {
-  return Math.max(1_000, LATEST_ETAG_BUDGET_MS - (Date.now() - spendFrom));
+  return Math.max(1_000, SANDBOX_CONFIG_MIRROR_BUDGET_MS - (Date.now() - spendFrom));
 }
+
+/**
+ * The poll-sized mirror budget behind `budgetLeft`. A GET /config only
+ * REPORTS freshness — a mirror that cannot answer inside the budget degrades
+ * to `stale: null` ("could not tell"), the state every client of this route
+ * already handles — so the poll chooses how long it holds its client, the
+ * same rule as the 3 s probe beside it. Sized to keep the whole read (probe,
+ * the two budget stages, the compute stages) under the ~9.5 s tail the
+ * route's acceptance tracks: the slow-mirror resolutions this replaces ran
+ * 10.8–20 s against the old 20 s reload budget, 5 reads ≥9.5 s in the fix's
+ * first 24 h alone (KRTX-629 follow-up). Reloads and convergences keep
+ * `LATEST_ETAG_BUDGET_MS` because they act on the answer.
+ */
+const SANDBOX_CONFIG_MIRROR_BUDGET_MS = 5_000;
+
+/**
+ * Cap on the box-health probe inside ONE GET /config read (the
+ * `sandbox_state` stage). A probe that does not answer is answered the same
+ * shape either way — `sandbox_reachable: false`, `stale: null` — so the wait
+ * only holds the poller. Its p95 is ~467 ms over 26 h of prod reads, so the
+ * 10 s default only ever fired for a box whose daemon stopped answering: an
+ * enterprise workspace polled it 18 times in two hours and set the route's
+ * p95 at ~10000 ms while its p50 stayed flat (KRTX-629). 3 s keeps the
+ * healthy box and still answers quickly; reloads and convergences keep the
+ * 10 s default because they act on the state.
+ */
+const SANDBOX_CONFIG_PROBE_TIMEOUT_MS = 3_000;
 
 /** Degrade one bounded stage to `null` on its budget timeout, loudly once. */
 async function boundedStage<T>(promise: Promise<T>, label: string, budgetMs: number): Promise<T | null> {
@@ -86,15 +113,15 @@ export function registerSessionConfigRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'get',
-      path: '/{projectId}/sessions/{sessionId}/config',
+      path: '/{workspaceId}/sessions/{sessionId}/config',
       tags: ['sessions'],
       summary: "Whether a session's agent config is the latest",
       ...auth,
-      request: { params: z.object({ projectId: z.string(), sessionId: z.string() }) },
+      request: { params: z.object({ workspaceId: z.string(), sessionId: z.string() }) },
       responses: { 200: json(z.any(), 'Config freshness'), ...errors(400, 403, 404) },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       // The mirror-work budget is spent across this whole request: the later
       // stages get only what the earlier ones left (see `budgetLeft`).
@@ -129,7 +156,9 @@ export function registerSessionConfigRoutes(): void {
         gitAuthToken: null,
       };
       const [running, latest] = await Promise.all([
-        timeConfigStage('sandbox_state', () => readSandboxConfigState({ sessionId })),
+        timeConfigStage('sandbox_state', () =>
+          readSandboxConfigState({ sessionId, timeoutMs: SANDBOX_CONFIG_PROBE_TIMEOUT_MS }),
+        ),
         timeConfigStage('latest_etag', () =>
           latestAgentConfigEtag(
             {
@@ -253,18 +282,18 @@ export function registerSessionConfigRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/sessions/{sessionId}/reload',
+      path: '/{workspaceId}/sessions/{sessionId}/reload',
       tags: ['sessions'],
       summary: "Reload a running session's agent config from git",
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), sessionId: z.string() }),
+        params: z.object({ workspaceId: z.string(), sessionId: z.string() }),
         body: { content: { 'application/json': { schema: AnyObject } }, required: false },
       },
       responses: { 200: json(z.any(), 'Reload result'), ...errors(400, 403, 404, 409) },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       const binding = await resolveSessionBinding(c, projectId, sessionId, 'session');
       if (binding.kind === 'error') return binding.response as never;
@@ -283,7 +312,7 @@ export function registerSessionConfigRoutes(): void {
       // permission to restart the runtime underneath someone else's work.
       if (!mayChangeSessionModel(visible)) {
         return c.json(
-          { error: 'Only the session owner or a project manager can reload this session' },
+          { error: 'Only the session owner or a workspace manager can reload this session' },
           403,
         );
       }
@@ -301,7 +330,7 @@ export function registerSessionConfigRoutes(): void {
         refreshRepo: body.refresh_repo !== false,
         force: body.force === true,
       });
-      // A reload restarts opencode, which ENDS the turn in flight. Refused by
+      // A reload restarts the runtime, which ENDS the turn in flight. Refused by
       // default rather than discarding someone's work without saying so.
       if (
         result.reason === 'session is mid-turn' ||
@@ -332,12 +361,12 @@ export function registerSessionConfigRoutes(): void {
   projectsApp.openapi(
     createRoute({
       method: 'post',
-      path: '/{projectId}/sessions/{sessionId}/reload-stream',
+      path: '/{workspaceId}/sessions/{sessionId}/reload-stream',
       tags: ['sessions'],
       summary: "Reload a running session's agent config with live progress",
       ...auth,
       request: {
-        params: z.object({ projectId: z.string(), sessionId: z.string() }),
+        params: z.object({ workspaceId: z.string(), sessionId: z.string() }),
         body: { content: { 'application/json': { schema: AnyObject } }, required: false },
       },
       responses: {
@@ -349,7 +378,7 @@ export function registerSessionConfigRoutes(): void {
       },
     }),
     async (c: any) => {
-      const projectId = c.req.param('projectId');
+      const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
       const binding = await resolveSessionBinding(c, projectId, sessionId, 'session');
       if (binding.kind === 'error') return binding.response as never;
@@ -366,7 +395,7 @@ export function registerSessionConfigRoutes(): void {
       if (!visible || sessionIsTombstoned(visible.row)) return c.json({ error: 'Not found' }, 404);
       if (!mayChangeSessionModel(visible)) {
         return c.json(
-          { error: 'Only the session owner or a project manager can reload this session' },
+          { error: 'Only the session owner or a workspace manager can reload this session' },
           403,
         );
       }

@@ -24,7 +24,7 @@ mock.module('@kortix/sdk', () => ({
     return { ok: true };
   },
 }));
-// The dialog chrome is Radix's: render its confirm action only.
+// The dialog chrome renders through a portal: render its confirm action only.
 mock.module('../../primitives/confirm-dialog', () => ({
   ConfirmDialog: ({ onConfirm }: { onConfirm: () => void }) => (
     <button type="button" onClick={onConfirm}>
@@ -86,7 +86,7 @@ async function confirmDelete(target: string, open: string, onDeleted?: () => voi
 }
 
 test('deleting the open session leaves its page for the project home', async () => {
-  expect(await confirmDelete('s-open', 's-open')).toEqual(['/projects/p-1']);
+  expect(await confirmDelete('s-open', 's-open')).toEqual(['/workspaces/p-1']);
 });
 
 test('deleting another session stays on the page', async () => {

@@ -1,12 +1,10 @@
-import { eq } from 'drizzle-orm';
-import { projects } from '@kortix/db';
-import { db } from '../../shared/db';
 import { PROJECT_ACTIONS } from '../../iam/actions';
 import { type ChatUser, resolveProjectChatActor } from './identity';
+import { accountKeyOfWorkspace } from '../../workspaces/rows';
 
 /** What a refused Stop tells the presser, in Slack and in Teams. */
 export const CHAT_TURN_STOP_REFUSED =
-  'Only the person who started this run, the session owner or a project manager can stop it.';
+  'Only the person who started this run, the session owner or a workspace manager can stop it.';
 
 /** `userId`: the presser's linked Kortix user, for the stop's attribution; null when unlinked. */
 export type ChatTurnStopVerdict = { allowed: true; userId: string | null } | { allowed: false };
@@ -47,18 +45,14 @@ export async function chatTurnStopVerdict(input: {
   const userId = 'userId' in actor ? actor.userId : null;
   if (input.sentIt) return userId || !input.requireIdentity ? { allowed: true, userId } : { allowed: false };
   if (!userId) return { allowed: false };
-  const [project] = await db
-    .select({ accountId: projects.accountId })
-    .from(projects)
-    .where(eq(projects.projectId, input.projectId))
-    .limit(1);
-  if (!project) return { allowed: false };
+  const projectAccountId = await accountKeyOfWorkspace(input.projectId);
+  if (!projectAccountId) return { allowed: false };
   // Lazily imported so the channel modules keep no static edge into the
   // session-lifecycle engine (the rule stop.ts follows for the abort).
   const { readRunningTurn, sessionLifecycleStandingFor, turnPrompterOf } = await import('../../projects/surface');
   const standing = await sessionLifecycleStandingFor({
     userId,
-    accountId: project.accountId,
+    accountId: projectAccountId,
     projectId: input.projectId,
     sessionId: input.sessionId,
   });

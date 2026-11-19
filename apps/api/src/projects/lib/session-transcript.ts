@@ -20,8 +20,8 @@ export interface SessionTranscriptDeps {
     sessionId: string,
     limit: number,
     before?: string | null,
-    /** A sub-agent's OpenCode session; null reads the root. */
-    opencodeSessionId?: string | null,
+    /** A sub-agent's runtime session; null reads the root. */
+    runtimeSessionId?: string | null,
   ) => Promise<MirrorSnapshot | null>;
 }
 
@@ -72,6 +72,35 @@ export async function buildSessionTranscriptDigest(
 }
 
 /**
+ * The last assistant answer of the turn the digest ends on: the newest
+ * assistant message after the last user message — the turn that just ended —
+ * plus the newest assistant message's turn error. No user message reads the
+ * whole window (the inline selections this replaces did the same).
+ *
+ * `text` is the newest non-blank assistant text, `''` when the window had
+ * none; `id` belongs to the message that carried it. `error` is the turn's
+ * error — the newest assistant message may differ from the one with text —
+ * and it never carries the reader's own failure.
+ */
+export function lastAssistantAnswer(transcript: SessionTranscriptDigest): {
+  id: string | null;
+  text: string;
+  error: { name?: string; message?: string } | null;
+} | null {
+  const messages = transcript.messages;
+  const lastUser = messages.map((m) => m.role).lastIndexOf('user');
+  const assistants = messages.slice(lastUser + 1).filter((m) => m.role === 'assistant');
+  const last = assistants.at(-1);
+  if (!last) return null;
+  const withText = [...assistants].reverse().find((m) => m.text.trim());
+  return {
+    id: withText?.id ?? null,
+    text: withText?.text.trim() ?? '',
+    error: last.error ?? null,
+  };
+}
+
+/**
  * The sync-store envelope. Always the stored copy (the session log): a client whose sandbox is up
  * reads the runtime directly, so re-proxying it here would only duplicate the
  * body this endpoint exists to avoid.
@@ -83,7 +112,7 @@ export async function buildSessionTranscriptSyncEnvelope(
     requireCurrentRoot?: boolean;
     /** A `next_cursor` from a previous window — read the window older than it. */
     before?: string | null;
-    /** A sub-agent's OpenCode session inside this session: its own saved
+    /** A sub-agent's runtime session inside this session: its own saved
      *  transcript. Omitted: the root conversation. */
     child?: string | null;
   },
@@ -143,10 +172,10 @@ async function readMirrorSafely(
   sessionId: string,
   limit: number,
   before?: string | null,
-  opencodeSessionId?: string | null,
+  runtimeSessionId?: string | null,
 ): Promise<MirrorSnapshot | null> {
   try {
-    return await readStoredTranscriptWindow({ sessionId, limit, before, opencodeSessionId });
+    return await readStoredTranscriptWindow({ sessionId, limit, before, runtimeSessionId });
   } catch (err) {
     // A cursor the caller supplied is the caller's error, not a mirror
     // failure, and swallowing it here would answer "nothing was captured" for

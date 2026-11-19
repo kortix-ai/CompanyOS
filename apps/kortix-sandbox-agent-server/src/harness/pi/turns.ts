@@ -16,10 +16,12 @@ const READ = answer(409, { code: MESSAGE_READ_CODE, error: 'a model call read th
 const OK = answer(200, { ok: true })
 const NOT_ROOT = answer(404, { error: 'not the session root' })
 
-/** The box's own session log, built from the runtime's store, and its queued prompts; null while the runtime is down. */
+/** The box's own session log, built from the runtime's store, and its queued prompts; null while the runtime is down.
+ * No per-message hashing: a log read never consumes the hash map, and on a long session
+ * digesting every entry's JSON costs more than the derivation it wraps (KRTX-4488). */
 function sessionLogOf(rt: PiRuntime) {
   const snapshot = rt.sessionLogSnapshot()
-  return snapshot ? { ...piSessionLog(snapshot), queued: piQueued(snapshot) } : null
+  return snapshot ? { ...piSessionLog(snapshot, { hashes: false }), queued: piQueued(snapshot) } : null
 }
 
 /**
@@ -223,7 +225,7 @@ export function createPiTurnService(runtime: () => PiRuntime | null): HarnessTur
       return rt ? answer(200, rt.pendingNow()) : NOT_STARTED
     },
 
-    async readLog({ threadId, afterSeq, beforeSeq, limit }) {
+    async readLog({ threadId, afterSeq, beforeSeq, limit, includeContext = false }) {
       const rt = runtime()
       if (!rt) return NOT_STARTED
       const exported = sessionLogOf(rt)
@@ -235,7 +237,10 @@ export function createPiTurnService(runtime: () => PiRuntime | null): HarnessTur
       // As apps/api stores the log (its seqs, its session fields), then the queued prompts at the queued seq.
       const view = sessionLogView()
       const queued = id === rt.rootId ? exported.queued : []
-      const ordered = [...thread.messages.map((m) => view.message(m)), ...queued].sort((a, b) => a.seq - b.seq)
+      // The system prompt (`kind: 'context'`, the agent's whole instructions) only for a reader that asks:
+      // no viewer renders it, and it was ~56 KB of a ~68 KB My Kortix page (finding 17).
+      const shown = includeContext ? thread.messages : thread.messages.filter((m) => m.kind !== 'context')
+      const ordered = [...shown.map((m) => view.message(m)), ...queued].sort((a, b) => a.seq - b.seq)
       let messages: SessionLogMessage[]
       let hasMore: boolean
       if (afterSeq !== null) {

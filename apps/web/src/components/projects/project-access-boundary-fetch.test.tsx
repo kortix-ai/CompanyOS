@@ -13,12 +13,13 @@ mock.module('@/lib/auth/use-signed-out-redirect', () => ({ useSignedOutRedirect:
 mock.module('@kortix/ui/internal/hooks/admin/use-admin-role', () => ({ useAdminRole: () => ({ data: null }) }));
 mock.module('@kortix/ui/internal/lib/onboarding/use-app-home', () => ({ useAppHome: () => '/' }));
 mock.module('next/navigation', () => ({
-  usePathname: () => '/projects/deleted-project',
+  usePathname: () => '/workspaces/deleted-project',
   useParams: () => ({ sessionId: 'synthetic-session' }),
   useRouter: () => ({ push: () => {} }),
   useSearchParams: () => new URLSearchParams(),
 }));
 mock.module('@/i18n/use-translations', () => ({
+  useLocale: () => 'en',
   useTranslations: () =>
     Object.assign((key: string) => key, { raw: (key: string) => key, rich: (key: string) => key }),
 }));
@@ -73,7 +74,7 @@ test(`a deleted project stays quiet across revisit (seeded=${seeded})`, async ()
   });
   await act(async () => tree?.unmount());
   await mount();
-  expect(urls).toEqual(['http://api.test/v1/projects/deleted-project']);
+  expect(urls).toEqual(['http://api.test/v1/workspaces/deleted-project']);
   expect(reports).toHaveLength(0);
 });
 
@@ -146,7 +147,51 @@ test('a forbidden project offers access request without speculative reads', asyn
   });
   expect(JSON.stringify(tree?.toJSON())).toContain('projectAccessBoundary.privateHeading');
   expect(JSON.stringify(tree?.toJSON())).not.toContain('PRIVATE PROJECT CONTENT');
-  expect(urls).toEqual(['http://api.test/v1/projects/private-project']);
+  expect(urls).toEqual(['http://api.test/v1/workspaces/private-project']);
+});
+
+test('a workspace in its restore window renders the restoring screen, not the project', async () => {
+  jest.useFakeTimers();
+  const urls: string[] = [];
+  configureKortix({
+    backendUrl: 'http://api.test/v1',
+    getToken: async () => 'synthetic-token',
+    fetch: async (url) => {
+      urls.push(String(url));
+      if (String(url).endsWith('/restoring-project')) {
+        // The record the API serves on GET /v1/workspaces/:id: the project row
+        // plus the served role, state and erase date (K2).
+        return Response.json({
+          project_id: 'restoring-project',
+          account_id: 'account-1',
+          name: 'Sunset Lab',
+          repo_url: '',
+          default_branch: 'main',
+          role: 'owner',
+          state: 'deleting',
+          deletion_scheduled_for: '2026-12-01T00:00:00.000Z',
+        });
+      }
+      return Response.json({ message: 'Not found' }, { status: 404 });
+    },
+  });
+  await act(async () => {
+    tree = create(
+      <QueryClientProvider client={client}>
+        <ProjectAccessBoundary projectId="restoring-project">
+          RESTORING PROJECT CONTENT
+        </ProjectAccessBoundary>
+      </QueryClientProvider>,
+    );
+  });
+  await act(async () => {
+    jest.advanceTimersByTime(100);
+  });
+  const json = JSON.stringify(tree?.toJSON());
+  expect(json).toContain('restore');
+  expect(json).not.toContain('RESTORING PROJECT CONTENT');
+  expect(json).not.toContain('projectAccessBoundary.');
+  expect(urls[0]).toBe('http://api.test/v1/workspaces/restoring-project');
 });
 
 test('a kept project renders at once while its access read is held, and shell reads start once it answers', async () => {
@@ -177,7 +222,7 @@ test('a kept project renders at once while its access read is held, and shell re
     jest.advanceTimersByTime(100);
   });
   expect(JSON.stringify(tree?.toJSON())).toContain('KEPT PROJECT');
-  expect(urls).toEqual(['http://api.test/v1/projects/kept-project']);
+  expect(urls).toEqual(['http://api.test/v1/workspaces/kept-project']);
   await act(async () => {
     answer();
   });

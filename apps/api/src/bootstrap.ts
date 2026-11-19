@@ -22,7 +22,6 @@ import { handBackClaims } from './projects/surface';
 // live in replica/. The scheduled jobs live in worker/jobs/ and run only on the
 // lease holder (bootServices below).
 import { startAccessControlCache, stopAccessControlCache } from './replica/access-control-cache';
-import { startArtifactLiveSweep, stopArtifactLiveSweep } from './replica/artifact-live';
 import { startEventLoopLagSampler, stopEventLoopLagSampler } from './replica/event-loop-lag';
 import { startJobWorker, stopJobWorker } from './replica/job-queue';
 import { loadManagedLineupAtBoot, startManagedLineupRefresh, stopManagedLineupRefresh } from './replica/managed-lineup';
@@ -132,6 +131,11 @@ let processKind: ProcessKind = 'api';
  * imports the app without starting it.
  */
 export async function prepareProcess(options: { entry: boolean }): Promise<void> {
+  // Bun does not reap orphans. As PID 1 it keeps every detached git process as
+  // a zombie, and aborts when no PID is left (prod worker, 2026-11-03..11).
+  if (options.entry && process.pid === 1) {
+    appLogger.warn('[startup] Running as PID 1 without an init: orphaned git processes are never reaped. Start the image with its ENTRYPOINT (tini), or set init: true.');
+  }
   // Pre-load the provider SDK error classes, so the synchronous classifiers
   // (`app.onError`, provider retries) have their strongest instanceof signal
   // from the first failure on. Fire-and-forget: each classifier's name /
@@ -171,8 +175,6 @@ async function startReplicaServices(kind: ProcessKind) {
   startAccessControlCache();
   if (config.KORTIX_WORKERS_ENABLED) startManagedLineupRefresh();
   if (serving) startTunnelService();
-  // Live presence on Artifacts: each serving process sweeps the rooms of the sockets it holds.
-  if (serving) startArtifactLiveSweep();
   // Warm the runtime-settings cache BEFORE serving traffic so the admin-panel
   // toggles (warm_snapshot / provider_fallback) are honored from
   // request #1. Without this a fresh pod serves the cold-cache defaults for the
@@ -390,7 +392,6 @@ async function runShutdown(signal: string): Promise<void> {
   stopManagedLineupRefresh();
   stopTmpReaper();
   stopTriggerEventPollWorker();
-  stopArtifactLiveSweep();
   await handBack;
   // A build claim this task holds would block peers until its lease lapses.
   await within(import('./snapshots/build-claim').then((m) => m.releaseAllSnapshotBuilds()), 5_000, 'snapshot claims');

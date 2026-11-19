@@ -8,6 +8,7 @@ import {
 } from '@kortix/sdk';
 
 import { openKortixWebSocket } from '../api/kortix-socket.ts';
+import { splitHelp } from '../command-argv.ts';
 import { kortixFromAuth, withKortixScope } from '../api/sdk.ts';
 import { emitJson, surfaceApiError, takeFlagBool, takeFlagValue, fail } from '../command-helpers.ts';
 import { C, help, pad, status } from '../style.ts';
@@ -53,11 +54,11 @@ Subcommands:
   kill <pty-id>    Kill one terminal. The ambient shell respawns on the next
                    attach; anything running inside it does not.
 
-  --new            Start a brand-new shell instead of reattaching.
-  --project <id>   Pin this project id (skips the cross-host scan).
-  --host <name>    Pin this Kortix host (skips the cross-host scan).
-  --json           Machine-readable output (\`ls\`/\`kill\`).
-  -h, --help       Show this help.
+  --new             Start a brand-new shell instead of reattaching.
+  --workspace <id>  Pin this workspace id (skips the cross-host scan).
+  --host <name>     Pin this Kortix host (skips the cross-host scan).
+  --json            Machine-readable output (\`ls\`/\`kill\`).
+  -h, --help        Show this help.
 
 Examples:
   kortix sessions shell <session-id>
@@ -66,16 +67,16 @@ Examples:
   kortix sessions shell <session-id> kill <pty-id>`;
 
 export async function runSessionsShell(argv: string[]): Promise<number> {
+  // A bare `sessions shell` reports the session it needs; only a help FLAG
+  // shows help.
+  const helped = argv.length > 0 ? splitHelp(argv, SHELL_HELP) : null;
+  if (helped !== null) return helped;
   const rest = [...argv];
-  if (rest.includes('-h') || rest.includes('--help')) {
-    process.stdout.write(`${SHELL_HELP}\n`);
-    return 0;
-  }
 
   let projectArg: string | undefined;
   let hostArg: string | undefined;
   try {
-    projectArg = takeFlagValue(rest, ['--project']);
+    projectArg = takeFlagValue(rest, ['--project', '--workspace']);
     hostArg = takeFlagValue(rest, ['--host']);
   } catch (err) {
     return fail((err as Error).message);

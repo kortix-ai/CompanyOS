@@ -16,6 +16,7 @@ import {
   takeFlagBool,
   takeFlagValue,
 } from '../command-helpers.ts';
+import { splitHelp } from '../command-argv.ts';
 import { mintWireMessageId } from '@kortix/sdk';
 import type { ApiClient } from '../api/client.ts';
 import type { ProjectSession } from '../api/types.ts';
@@ -53,14 +54,13 @@ export interface CreateSessionPromptResult {
 const QUEUE_HELP = help`Usage: kortix sessions queue <session-id> [<subcommand>] [options]
 
 The session's durable prompt inbox — messages the server still owes the agent.
-A queued prompt survives a closed terminal and is delivered when the session
-can take it. Put one there with \`kortix sessions chat <id> -p "…" --queue\`,
-or steer a running turn with \`--steer\`.
+A prompt here survives a closed terminal. A running turn reads it at its next
+step, after its current tool call; the turn does not stop. With no turn
+running, it starts one. Put one there with
+\`kortix sessions chat <id> -p "…" --queue\`.
 
-DELIVERY is how a prompt reaches a running turn: \`steer\` (read at the
-turn's next step), \`queue\` (waits for the turn to end) or \`interrupt\`
-(ends the turn after its running tool). A steer prompt that cannot steer runs
-as \`queue\` and shows why.
+DELIVERY is always \`steer\`. A prompt that cannot reach the running turn
+(an older runtime, or the turn ended first) starts the next turn and shows why.
 
 Subcommands:
   ls                   List everything still waiting (default). --json.
@@ -72,7 +72,7 @@ Subcommands:
   release              Release the hold.
 
 Options:
-  --project <id>       Operate on this project id (default: linked).
+  --workspace <id>     Operate on this workspace id (default: linked).
   --host <name>        Operate against a non-default Kortix host.
   --json               Machine-readable output.
   -h, --help           Show this help.
@@ -81,11 +81,11 @@ Needs project.session.start — the same permission as sending a message.
 `;
 
 /**
- * The OpenCode wire message id for one CLI prompt.
+ * The runtime wire message id for one CLI prompt.
  *
  * The id is the prompt's POSITION in the transcript, and only a process that
  * holds the transcript can place it. The CLI does not, so it mints with the
- * SDK's `mintWireMessageId` (OpenCode's own encoding: the LOW 48 bits of
+ * SDK's `mintWireMessageId` (the wire format's encoding: the LOW 48 bits of
  * `Date.now() * 0x1000`) and every enqueue asks the server to re-place it at
  * delivery (`remint_on_delivery`). The hand-rolled mint this replaces kept the
  * HIGH bits — ~40 days ahead of every real id — and every turn sent after a CLI
@@ -99,7 +99,7 @@ export function wireMessageId(): string {
  * Put ONE prompt in a session's inbox. Resolving means the prompt is DURABLE,
  * not that the agent has seen it. The overrides carry the session's persisted
  * agent + model exactly as the dashboard captures them at submit time — a
- * prompt delivered without them lets OpenCode fall back to a model Kortix
+ * prompt delivered without them lets the runtime fall back to a model Kortix
  * sandboxes do not provision.
  */
 export async function queueSessionPrompt(
@@ -107,7 +107,7 @@ export async function queueSessionPrompt(
   projectId: string,
   session: ProjectSession,
   text: string,
-  /** `steer`: the running turn reads it at its next step. Omitted: Queue List. */
+  /** Ignored by the API: every prompt steers a running turn or starts one. */
   delivery?: 'steer',
 ): Promise<CreateSessionPromptResult> {
   const defaults = sessionPromptDefaults(session);
@@ -117,8 +117,10 @@ export async function queueSessionPrompt(
     parts: [{ type: 'text', text }],
     client_sent_at_ms: Date.now(),
     remint_on_delivery: true,
-    // `placement: 'composer'` keeps an API built before steering on Queue List.
-    ...(delivery ? { delivery, placement: 'composer' } : {}),
+    // One mode: a running turn reads it at its next step. `placement:
+    // 'composer'` shows it above the composer until the turn reads it.
+    delivery: 'steer',
+    placement: 'composer',
   };
   if (defaults.agent || defaults.model) {
     body.overrides = {
@@ -127,23 +129,21 @@ export async function queueSessionPrompt(
     };
   }
   return client.post<CreateSessionPromptResult>(
-    `/projects/${projectId}/sessions/${session.session_id}/prompts`,
+    `/workspaces/${projectId}/sessions/${session.session_id}/prompts`,
     body,
   );
 }
 
 export async function runSessionsQueue(argv: string[]): Promise<number> {
+  const helped = splitHelp(argv, QUEUE_HELP);
+  if (helped !== null) return helped;
   const rest = [...argv];
-  if (rest.includes('-h') || rest.includes('--help')) {
-    process.stdout.write(QUEUE_HELP);
-    return 0;
-  }
 
   let projectArg: string | undefined;
   let hostArg: string | undefined;
   let json = false;
   try {
-    projectArg = takeFlagValue(rest, ['--project']);
+    projectArg = takeFlagValue(rest, ['--project', '--workspace']);
     hostArg = takeFlagValue(rest, ['--host']);
     json = takeFlagBool(rest, ['--json']);
   } catch (err) {
@@ -177,7 +177,7 @@ export async function runSessionsQueue(argv: string[]): Promise<number> {
   );
   if (!located) return 1;
   const { client, projectId, session } = located.located;
-  const base = `/projects/${projectId}/sessions/${session.session_id}/prompts`;
+  const base = `/workspaces/${projectId}/sessions/${session.session_id}/prompts`;
 
   try {
     switch (sub) {

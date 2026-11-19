@@ -7,12 +7,11 @@
 
 import { ScrollView, View } from 'react-native';
 import { peerHandleLabel } from '@kortix/shared';
-import type { PeerMessage } from '@kortix/sdk';
+import { heldMessages, type PeerMessage } from '@kortix/sdk';
 import { usePeerMessages } from '@kortix/sdk/react';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { useToast } from '@/components/kortix/toast-provider';
-import { heldMessages } from '@/lib/session/multi-agent';
 import { webSpace } from '@/lib/session/user-message';
 import { AgentCard } from '@/components/session/tool/shared/agent-surface';
 import { SessionStatusMark } from '@/components/session/SessionStatusMark';
@@ -46,7 +45,7 @@ export function HeldMessageCard({ message, pending, onApprove, onDeny }: HeldMes
           <Text numberOfLines={1} style={[TURN_TYPE.sm, { flex: 1, color: palette.mutedForeground }]}>
             {verb}
           </Text>
-          <SessionStatusMark status="needs-you" />
+          <SessionStatusMark status="needs-you" waitingOn="answer" />
         </View>
         {/* The whole message: a person approves only what they can read. */}
         {message.summary?.trim() ? <Text style={[TURN_TYPE.sm, { color: palette.mutedForeground }]}>{message.summary.trim()}</Text> : null}
@@ -71,10 +70,21 @@ export function HeldMessageCard({ message, pending, onApprove, onDeny }: HeldMes
   );
 }
 
-/** The session's held messages, one card each, oldest first. */
-export function HeldMessages({ projectId, sessionId }: { projectId: string | null | undefined; sessionId: string | null | undefined }) {
+/**
+ * The session's held messages, one card each, oldest first. They poll every
+ * 5 s while the session works (`live`), every 30 s while it is idle.
+ */
+export function HeldMessages({
+  projectId,
+  sessionId,
+  live = false,
+}: {
+  projectId: string | null | undefined;
+  sessionId: string | null | undefined;
+  live?: boolean;
+}) {
   const toast = useToast();
-  const { data, approve, deny } = usePeerMessages(projectId, sessionId, 'in');
+  const { data, approve, deny } = usePeerMessages(projectId, sessionId, 'in', { live });
   const held = heldMessages(data);
   if (held.length === 0) return null;
   const pendingFor = (id: string): 'approve' | 'deny' | null =>

@@ -54,11 +54,20 @@ describe('RunRow (C20 D6V-0 + D73-0)', () => {
   test('expanded: meta, Replay (outline), Open session as a link, the payload; no hover Replay', () => {
     const out = render({ initialOpen: true });
     expect(out).toContain('aria-expanded="true"');
-    expect(out).toContain('href="/projects/p1/sessions/ses_example"');
+    expect(out).toContain('href="/workspaces/p1/sessions/ses_example"');
     expect(out).toContain('Open session');
     expect(out).toContain('ses_example');
     expect(out).toContain('&quot;action&quot;: &quot;opened&quot;');
     expect(out).not.toContain('group-hover:opacity-100');
+  });
+
+  test('collapsed: a skipped run says why on its line, like a rejected one', () => {
+    const reason = 'throttled: 1 run in the last hour (max_runs_per_hour 1)';
+    const skipped = { ...failed, status: 'skipped', error: reason, session_id: null } as ProjectTriggerRun;
+    const out = render({ run: skipped });
+    expect(out).toContain('aria-expanded="false"');
+    expect(out).toContain('Skipped');
+    expect(out).toContain(reason);
   });
 
   test('a run that may not be replayed offers no Replay', () => {

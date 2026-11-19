@@ -143,10 +143,10 @@ function projectFixture(overrides: Record<string, unknown> = {}) {
       reminders: false,
       warm_sessions: false,
       secrets_egress: false,
-      pooled_provider_secrets: false,
+      pooled_provider_secrets: true,
       us_region: false,
       event_triggers: false,
-      notification_center: false,
+      notification_center: true,
       volumes: false,
       drives: false,
       session_log_restore: false,
@@ -164,6 +164,10 @@ function projectFixture(overrides: Record<string, unknown> = {}) {
       chat_input: false,
       chat_front: false,
       spaces_proactive: false,
+      program_agents: false,
+      evals: false,
+      desktop_tabs: false,
+      calendar: false,
     },
     experimental_features: [],
     default_sandbox_provider: null,
@@ -587,6 +591,27 @@ describe('pending session prompt contract', () => {
   });
 });
 
+describe('session create from an old CLI', () => {
+  // `kortix sessions new --model` in CLI v0.13.0–v0.14.19 sends the pin twice:
+  // `body.model = body.opencode_model = <id>`. #11848 removed `opencode_model`
+  // from this strict schema, so every such create answered 400
+  // `unrecognized_keys` from v0.15.0 on, although `model` was right beside it.
+  test('accepts the body a v0.14 CLI sends with --model', () => {
+    const parsed = SessionCreateInputSchema.parse({
+      initial_prompt: 'Reply with OK.',
+      title_source: 'Reply with OK.',
+      model: 'kortix/glm-5.3-flash',
+      opencode_model: 'kortix/glm-5.3-flash',
+    });
+    expect(parsed.model).toBe('kortix/glm-5.3-flash');
+    expect(parsed.opencode_model).toBe('kortix/glm-5.3-flash');
+  });
+
+  test('still refuses a key no client ever sent', () => {
+    expect(() => SessionCreateInputSchema.parse({ model: 'kortix/glm-5.3-flash', zz_probe: 1 })).toThrow();
+  });
+});
+
 describe('ProjectSessionSandboxSchema', () => {
   test('accepts every provider the platform can emit', () => {
     for (const provider of ['platinum', 'daytona']) {
@@ -862,16 +887,12 @@ describe('envelopes', () => {
       'marketplace',
       'reminders',
       'secrets_egress',
-      'pooled_provider_secrets',
       'us_region',
       'event_triggers',
-      'notification_center',
       'chat',
       'shared_drives',
       'goals',
       'workspace_volume',
-      'artifacts',
-      'artifact_comments',
       'email_channel',
       'session_groups',
       'chrome',
@@ -880,6 +901,10 @@ describe('envelopes', () => {
       'chat_input',
       'chat_front',
       'spaces_proactive',
+      'program_agents',
+      'evals',
+      'desktop_tabs',
+      'calendar',
     ]);
   });
 
@@ -1253,7 +1278,7 @@ describe('session scope contracts', () => {
       connector_bindings_inherit_unbound: true,
       applied_live: true,
       detail:
-        'Applied to the running sandbox now — the OpenCode process and new shells see the new scope.',
+        'Applied to the running sandbox now — the agent runtime and new shells see the new scope.',
     };
     expect(SessionScopeSchema.parse(value)).toEqual(value);
   });

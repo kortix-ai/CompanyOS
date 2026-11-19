@@ -141,7 +141,7 @@ export function providerMeta(row: Pick<ProviderRow, 'id' | 'method' | 'modelCoun
 
 /** The access line on an account row. `email` names another member's private account. */
 export function accessLine(summary: ConnectionAccessSummary, ownerEmail?: string): string {
-  if (summary.kind === 'project') return 'Everyone in this project';
+  if (summary.kind === 'project') return 'Everyone in this workspace';
   if (summary.kind === 'you') return 'Only you';
   if (summary.kind === 'owner') return ownerEmail ? `Only ${ownerEmail}` : '1 member';
   return plural(summary.count, 'member', 'members');
@@ -149,8 +149,8 @@ export function accessLine(summary: ConnectionAccessSummary, ownerEmail?: string
 
 /**
  * Which body a provider's sheet shows: the web's `ProviderSheet` branch order.
- * `pooled-*` lists named accounts with sharing (flag `pooled_provider_secrets`,
- * on by default); the others are the project-wide credential flows.
+ * `pooled-*` lists named accounts with sharing once the account is known; the
+ * others are the project-wide credential flows.
  */
 export type ProviderSheetKind =
   | 'included'
@@ -163,6 +163,7 @@ export type ProviderSheetKind =
 
 export function providerSheetKind(
   entry: Pick<LlmProviderEntry, 'id' | 'envVars' | 'apiHost' | 'managed'>,
+  /** The workspace's account is known, so named accounts can be listed. */
   pooled: boolean,
 ): ProviderSheetKind {
   if (providerConnectMethod(entry) === 'included') return 'included';

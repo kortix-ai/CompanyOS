@@ -38,11 +38,12 @@ export const PRICING_PLANS: PricingPlan[] = [
     note: 'Start with real sandbox credits.',
     icon: Sparkles,
     features: [
-      '500 credits / month, no card needed',
-      'Managed models: Kimi, DeepSeek, GLM. Zero data retention, US inference',
-      '1 project',
-      'Bring your own API key for any premium model',
-      'Connect your ChatGPT subscription',
+      '500 credits / month on your first workspace',
+      'No card needed',
+      // KRTX-4494: kept in sync with apps/web/src/features/billing/pricing-plans.ts —
+      // the free family never gets managed models.
+      'Models run on your own API key or ChatGPT subscription',
+      'Managed models are on the Credits plan only',
     ],
   },
   {
@@ -55,10 +56,11 @@ export const PRICING_PLANS: PricingPlan[] = [
     icon: Users,
     features: [
       'Everything in Free',
+      'Managed models: DeepSeek, GLM. Zero data retention',
       'Unlimited members, one shared credit pool',
       'Unused credits roll over one month',
       'Top up any time. Top-ups never expire',
-      'Up to 200 projects and higher model rate limits',
+      'Higher model rate limits',
       'Support via email',
     ],
   },

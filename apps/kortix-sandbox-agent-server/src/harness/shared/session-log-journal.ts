@@ -75,6 +75,10 @@
  * a higher rev and ends its live puts, unless it is a mid-turn streaming record (below). A live message the harness removes
  * before the collection (`message.removed`) gets the journal-form tombstone
  * if a put of it went out; a removed part (`message.part.removed`) a fresh put.
+ * A subscriber that joins the v2 stream while a message streams (a tab that came back to the
+ * session, a reconnect the ring could not replay) gets that message's put first, at a fresh rev,
+ * built from the same row (`liveSnapshot`, written by the events route after the replay): no page
+ * holds a reply pi has not finished, and the client drops a delta for a message it lacks (F-011).
  *
  * Mid-turn (pi only: `midTurnMs`, `JOURNAL_MID_TURN_MS` = 5 s). A `message.*` frame on the v1 bus
  * schedules one collection and send at most `midTurnMs` later, so a box that dies mid-turn loses at
@@ -137,13 +141,14 @@ import type { KortixMessageInfo, KortixPart } from '@kortix/api-contract/transcr
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { logger } from '@/lib/log/logger'
-import { kortixEventBus, sessionLogEventBus } from '@/services/event-bus/kortix-event-bus'
+import { kortixEventBus, provideSessionLogJoinSnapshot, sessionLogEventBus } from '@/services/event-bus/kortix-event-bus'
 import { sandboxRelayContext } from '@/lib/kortix-api/relay-context'
 import { noteControlPlaneResponse, sessionTokenPresumedDead } from '@/lib/kortix-api/session-token-health'
 import type { ExportedMessage, SessionLogChanges, SessionLogPort } from '../contract/session-log'
 import { mapLimit } from '@/lib/map-limit'
 import { computeRetryDelay, MAX_RETRY_MS_DEFAULT } from './audit-relay'
 import { carryHarness, saveSeqOffsets, type HarnessCarry } from './session-log-boot'
+import { kortixApiFetch } from '@/lib/kortix-api/workspace-routes'
 
 /** The assistant message a compaction streams its summary into (`summary: true`, its marker as parent). */
 function isCompactionSummary(info: unknown): boolean {
@@ -429,22 +434,46 @@ export class SessionLogJournal {
         row.due = false
         continue
       }
-      const thread = row.info.sessionID
-      try {
-        const known = this.port.live(thread, id)
-        if (!known) continue
-        row.due = false
-        const harness = this.port.capabilities.harness as FromV1Options['harness']
-        const { queued, ...at } = known
-        const live = liveMessageFromV1({ info: row.info, parts: [...row.parts.values()] }, at, harness)
-        // A queued seq is above every real one already: never shifted (it would pass MAX_SAFE_INTEGER).
-        const message = queued ? live : this.shifted(live)
-        row.sent = true
-        sessionLogEventBus().publish('log.message', { rev: nextRev(), message } satisfies SessionLogMessageEvent, thread)
-      } catch (err) {
-        logger.warn('[session-log] live put failed', { message_id: id, err: String(err) })
-      }
+      const message = this.liveRecord(id, row)
+      if (!message) continue
+      row.due = false
+      row.sent = true
+      sessionLogEventBus().publish('log.message', { rev: nextRev(), message } satisfies SessionLogMessageEvent, message.thread_id)
     }
+  }
+
+  /** The live record of `row` as its put carries it now (the deltas so far), or null while its seq is unknown. */
+  private liveRecord(id: string, row: LiveRow): SessionLogMessage | null {
+    if (!row.info) return null
+    try {
+      const known = this.port.live(row.info.sessionID, id)
+      if (!known) return null
+      const harness = this.port.capabilities.harness as FromV1Options['harness']
+      const { queued, ...at } = known
+      const live = liveMessageFromV1({ info: row.info, parts: [...row.parts.values()] }, at, harness)
+      // A queued seq is above every real one already: never shifted (it would pass MAX_SAFE_INTEGER).
+      return queued ? live : this.shifted(live)
+    } catch (err) {
+      logger.warn('[session-log] live put failed', { message_id: id, err: String(err) })
+      return null
+    }
+  }
+
+  /**
+   * A put of every message streaming now that already had one, at a fresh rev: what a subscriber
+   * that joins the v2 stream mid-message missed (F-011). pi stores a reply only at its
+   * `message_end`, so no page holds it, and the store drops a delta for a message it lacks.
+   * Built from the same rows the live puts are, so its text is exactly the deltas published so far.
+   */
+  liveSnapshot(): Array<{ rev: number; message: SessionLogMessage }> {
+    if (this.off || this.stopped) return []
+    const puts: Array<{ rev: number; message: SessionLogMessage }> = []
+    for (const [id, row] of this.live) {
+      if (!row.sent || !row.info || isCompactionSummary(row.info) || this.collected(id)) continue
+      const message = this.liveRecord(id, row)
+      if (message) puts.push({ rev: nextRev(), message })
+    }
+    return puts
   }
 
   private async collectOnce(): Promise<void> {
@@ -533,7 +562,7 @@ export class SessionLogJournal {
       return
     }
     if (sessionTokenPresumedDead()) return
-    const blobUrl = (sha256: string) => `${ctx.apiRoot}/projects/${encodeURIComponent(ctx.projectId)}/sessions/${encodeURIComponent(ctx.sessionId)}/log/blobs/${sha256}`
+    const blobUrl = (sha256: string) => `${ctx.apiRoot}/workspaces/${encodeURIComponent(ctx.projectId)}/sessions/${encodeURIComponent(ctx.sessionId)}/log/blobs/${sha256}`
     const headers = { Authorization: `Bearer ${ctx.token}` }
     let down = false
     const found = await mapLimit(pending, JOURNAL_BLOB_CONCURRENCY, async ([sha256]) => {
@@ -556,7 +585,7 @@ export class SessionLogJournal {
   private async lookupBlob(url: string, headers: Record<string, string>, sha256: string): Promise<'settled' | 'missing' | 'down'> {
     let found: Response
     try {
-      found = await fetch(url, { headers, signal: AbortSignal.timeout(JOURNAL_POST_TIMEOUT_MS) })
+      found = await kortixApiFetch(url, { headers, signal: AbortSignal.timeout(JOURNAL_POST_TIMEOUT_MS) })
     } catch (err) {
       logger.warn('[session-log] attachment lookup failed; it keeps blob: until a later collection', { err: (err as Error).message })
       return 'down'
@@ -576,7 +605,7 @@ export class SessionLogJournal {
     if (!bytes || bytes.byteLength > JOURNAL_MAX_BLOB_BYTES) return this.settleBlob(sha256, '')
     let put: Response
     try {
-      put = await fetch(url, { method: 'PUT', headers: { ...headers, 'Content-Type': mime }, body: bytes, signal: AbortSignal.timeout(JOURNAL_BLOB_TIMEOUT_MS) })
+      put = await kortixApiFetch(url, { method: 'PUT', headers: { ...headers, 'Content-Type': mime }, body: bytes, signal: AbortSignal.timeout(JOURNAL_BLOB_TIMEOUT_MS) })
     } catch (err) {
       logger.warn('[session-log] attachment upload failed', { err: (err as Error).message })
       return 'failed'
@@ -679,8 +708,8 @@ export class SessionLogJournal {
     let response: Response
     this.inflight = new AbortController()
     try {
-      response = await fetch(
-        `${ctx.apiRoot}/projects/${encodeURIComponent(ctx.projectId)}/sessions/${encodeURIComponent(ctx.sessionId)}/log/journal`,
+      response = await kortixApiFetch(
+        `${ctx.apiRoot}/workspaces/${encodeURIComponent(ctx.projectId)}/sessions/${encodeURIComponent(ctx.sessionId)}/log/journal`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip', Authorization: `Bearer ${ctx.token}` },
@@ -939,6 +968,9 @@ let active: SessionLogJournal | null = null
 export function sessionLogView(): SessionLogView {
   return active?.view() ?? UNJOURNALED
 }
+
+// The v2 events route asks the bus, never this module (routes depend on contracts only).
+provideSessionLogJoinSnapshot(() => active?.liveSnapshot() ?? [])
 
 /** Start this boot's journal. An adapter calls it once its native store is ready (after a restore, with its cursors). */
 export function startSessionLogJournal(port: SessionLogPort, options: SessionLogJournalOptions): SessionLogJournal | null {

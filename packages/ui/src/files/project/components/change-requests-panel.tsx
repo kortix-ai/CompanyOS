@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 
 import { Button } from '../../../primitives/button';
 import Hint from '../../../primitives/hint';
-import { Tabs, TabsListCompact, TabsTriggerCompact } from '../../../primitives/tabs';
+import { Tabs, TabsList, TabsTrigger } from '../../../primitives/tabs';
 import { cn } from '../../../lib/utils';
 import { formatRelative } from '@kortix/shared';
 import { CheckCircleIcon, GitDiffIcon, PlusIcon, XCircleIcon } from '@phosphor-icons/react';
@@ -64,7 +64,7 @@ function CrIcon({ status }: { status: ChangeRequestStatus }) {
   if (status === 'merged') {
     return <CheckCircleIcon weight="fill" className="text-kortix-purple size-4" />;
   }
-  if (status === 'closed') return <XCircleIcon className="text-muted-foreground/60 size-4" />;
+  if (status === 'closed') return <XCircleIcon className="text-muted-foreground size-4" />;
   return <GitDiffIcon className="text-kortix-green size-4" />;
 }
 
@@ -144,20 +144,20 @@ export function ChangeRequestsPanel({ open = false, onClose }: ChangeRequestsPan
             onValueChange={(v) => setStatus(v as ChangeRequestStatus | 'all')}
             className="gap-0"
           >
-            <TabsListCompact className="w-fit">
-              <TabsTriggerCompact value="open">
+            <TabsList size="xs" className="w-fit">
+              <TabsTrigger value="open">
                 {tI18nComplete.raw('texted077f3d8125')}
-              </TabsTriggerCompact>
-              <TabsTriggerCompact value="merged">
+              </TabsTrigger>
+              <TabsTrigger value="merged">
                 {tI18nComplete.raw('text0c79a9c22284')}
-              </TabsTriggerCompact>
-              <TabsTriggerCompact value="closed">
+              </TabsTrigger>
+              <TabsTrigger value="closed">
                 {tI18nComplete.raw('text9d74727714db')}
-              </TabsTriggerCompact>
-              <TabsTriggerCompact value="all">
+              </TabsTrigger>
+              <TabsTrigger value="all">
                 {tI18nComplete.raw('texta52ace420f21')}
-              </TabsTriggerCompact>
-            </TabsListCompact>
+              </TabsTrigger>
+            </TabsList>
           </Tabs>
         }
       >
@@ -211,7 +211,7 @@ export function ChangeRequestsPanel({ open = false, onClose }: ChangeRequestsPan
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-baseline gap-1.5">
-                        <span className="text-muted-foreground/70 shrink-0 text-xs tabular-nums">
+                        <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
                           #{cr.number}
                         </span>
                         <span
@@ -228,7 +228,7 @@ export function ChangeRequestsPanel({ open = false, onClose }: ChangeRequestsPan
                         title={fullTimestampFormat.format(tsFromCr(cr))}
                       >
                         <span className="truncate">{crTimeLabel(cr)}</span>
-                        <span className="text-muted-foreground/30" aria-hidden>
+                        <span className="text-muted-foreground" aria-hidden>
                           ·
                         </span>
                         <span className="truncate">

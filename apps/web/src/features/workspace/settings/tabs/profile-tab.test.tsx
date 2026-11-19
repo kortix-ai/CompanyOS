@@ -2,13 +2,16 @@ import { describe, expect, mock, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import messages from '../../../../../translations/en.json';
 import { renderToStaticMarkup } from 'react-dom/server';
+import * as realModal from '@kortix/ui/modal';
 
-// The app's Bun tests have no DOM and Radix's portal renders nothing under
+// The app's Bun tests have no DOM and the dialog portal renders nothing under
 // `renderToStaticMarkup`; the dialog-content tests below need that markup, so
 // the portal-based `Modal` is replaced by a flat stand-in — the same handling
 // as `legacy-subagent-chat.test.tsx`. The real modal behavior
-// is exercised by the browser journeys.
+// is exercised by the browser journeys. The real exports stay, so a new one
+// (ModalClose, …) never breaks the mock.
 const uiModalMock = () => ({
+  ...realModal,
   Modal: ({ open, children }: { open: boolean; children: ReactNode }) =>
     open ? <div>{children}</div> : null,
   ModalBody: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -65,48 +68,7 @@ describe('ProfileTabView', () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
   });
 
-  /**
-   * Jay, 2026-08-17: "in the user settings also have all the accounts you're a
-   * part of so you can easily go to the account settings as well from the user
-   * settings."
-   *
-   * Placement is the requirement, not just presence — "easily" means the list
-   * is reachable without scrolling past Security and Danger zone, and without
-   * finding a tab first. So it sits directly under the identity group and
-   * ABOVE Security. `account-memberships.test.tsx` covers the section itself;
-   * this pins where it lands on the pane.
-   */
-  describe('organizations', () => {
-    const withAccounts = () =>
-      renderToStaticMarkup(
-        <ProfileTabView
-          accounts={[{ account_id: 'acc_1', name: 'Acme', account_role: 'owner' }]}
-        />,
-      );
 
-    test('lists each account with a link to its settings', () => {
-      const out = withAccounts();
-      // `?accountId=acc_1` — the hub is a modal on the current page, not a
-      // route. Rendered with no router context, the href is the query-only
-      // relative form.
-      expect(out).toContain('href="?accountId=acc_1"');
-      expect(out).toContain('>Acme<');
-    });
-
-    test('sits under the identity rows and above Danger zone', () => {
-      expect(headings(withAccounts())).toEqual(['Profile', 'Organizations', 'Danger zone']);
-      expect(withAccounts().indexOf('>Email<')).toBeLessThan(
-        withAccounts().indexOf('Organizations'),
-      );
-    });
-
-    /** No account list, no section — the pane is unchanged for a reader whose
-     *  accounts query has not answered. This is why the heading assertion at
-     *  the top of this file still reads three headings. */
-    test('adds nothing to the pane when the list is unknown', () => {
-      expect(headings(html())).toEqual(['Profile', 'Danger zone']);
-    });
-  });
 
   test('consecutive rows share one bordered group', () => {
     // The whole point of the restyle: one border around the rows, hairlines
@@ -115,7 +77,8 @@ describe('ProfileTabView', () => {
   });
 
   test('the deletion entry point explains the cancellable default before confirmation', () => {
-    const out = renderToStaticMarkup(<ProfileTabView copy={messages.settings.profile} />);
+    // The raw catalog: its plural strings are not the view's formatter functions.
+    const out = renderToStaticMarkup(<ProfileTabView copy={messages.settings.profile as never} />);
     expect(out).toContain('Schedule account deletion. You can cancel before the scheduled date.');
     expect(out).not.toContain('This cannot be undone.');
   });
@@ -227,5 +190,35 @@ describe('ProfileTabView — no security section', () => {
     const out = html();
     expect(out).not.toContain('Two-factor authentication');
     expect(out).not.toContain('No second factor enrolled');
+  });
+});
+
+describe('ProfileTabView — a person with no workspace', () => {
+  // KRTX-4849: the same Delete-account dialog as everyone else, never a
+  // "Delete my login" variant; the grace period is disabled with its reason.
+  test('renders the Delete account dialog and says why there is no grace period', () => {
+    const out = renderToStaticMarkup(
+      <ProfileTabView noWorkspace showDeleteDialog deletionType="immediate" />,
+    );
+    expect(out).toContain('>Delete account</button>');
+    expect(out).toContain('Delete your account?');
+    expect(out).toContain('Grace period');
+    expect(out).toContain('Delete immediately');
+    expect(out).toContain('You belong to no workspace, so there is no grace period');
+    expect(out).toContain('There is no grace period and no way to undo it.');
+    expect(out).not.toMatch(/\blogin\b/i);
+  });
+
+  test('the empty deletion plan names no login', () => {
+    const out = renderToStaticMarkup(
+      <ProfileTabView
+        noWorkspace
+        showDeleteDialog
+        deletionType="immediate"
+        deletionPlan={{ deleteNames: [], leaveNames: [], blockers: [] }}
+      />,
+    );
+    expect(out).toContain('No workspace is deleted or left with your account.');
+    expect(out).not.toMatch(/\blogin\b/i);
   });
 });

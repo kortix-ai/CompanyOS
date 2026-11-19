@@ -22,7 +22,7 @@ import { useCallback, useMemo, useState } from 'react';
 
 import { relativeAge } from '../../lib/relative-time.ts';
 import { glyph as GLYPH, theme } from '../../theme.ts';
-import { List, type ListItem, Spinner } from '../../ui/index.ts';
+import { List, type ListItem, Spinner, useScreenAction } from '../../ui/index.ts';
 import type { CustomizeTabProps } from './customize-screen.tsx';
 import { DetailPane, Field, Paragraph } from './fields.tsx';
 import { matchesCustomizeBinding } from './keys.ts';
@@ -159,7 +159,7 @@ export function TriggersTabView({
         <Field label="Type" value={current.type} />
         <Field label="When" value={current.when} />
         <Field label="Agent" value={current.agent} />
-        <Field label="Model" value={current.model ?? 'project default'} />
+        <Field label="Model" value={current.model ?? 'workspace default'} />
         <Field label="Sessions" value={current.sessionMode} />
         <Field
           label="Last run"
@@ -190,7 +190,7 @@ export function TriggersTabView({
   return (
     <box flexDirection="column" width={width}>
       {paused ? (
-        <text fg={theme.busy}>Triggers are paused for this project — nothing runs on its own.</text>
+        <text fg={theme.busy}>Triggers are paused for this workspace. Nothing runs on its own.</text>
       ) : null}
       {parseErrors.map((entry) => (
         <text key={entry.slug} fg={theme.danger}>{`${entry.slug}: ${entry.error}`}</text>
@@ -226,19 +226,18 @@ export function TriggersTab({
   onInputActive,
 }: CustomizeTabProps) {
   const query = useProjectTriggers(projectId);
-  const [busy, setBusy] = useState<string | null>(null);
+  const { busy, run } = useScreenAction(onToast);
   const rows = useMemo(() => (query.data ? triggerRows(query.data.triggers) : []), [query.data]);
 
   const toggle = useCallback(
     (slug: string, enabled: boolean) => {
-      setBusy(enabled ? 'resuming…' : 'pausing…');
-      void query.update
-        .mutateAsync({ slug, input: { enabled } })
-        .then(() => onToast?.(`${slug} ${enabled ? 'resumed' : 'paused'}.`))
-        .catch((error: unknown) => onToast?.(errorText(error), 'error'))
-        .finally(() => setBusy(null));
+      run(
+        enabled ? 'resuming…' : 'pausing…',
+        () => query.update.mutateAsync({ slug, input: { enabled } }),
+        `${slug} ${enabled ? 'resumed' : 'paused'}.`,
+      );
     },
-    [query.update, onToast],
+    [run, query.update],
   );
 
   return (

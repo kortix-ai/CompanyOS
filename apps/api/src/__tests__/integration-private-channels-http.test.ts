@@ -328,10 +328,15 @@ describe('the channel and its tabs', () => {
 describe('threads of P', () => {
   const sessionRoutes = ['', '/participants', '/memory-usage', '/message-authors', '/sharing', '/public-shares', '/events'];
 
-  test('bob gets 404 on every session route of alice\'s P thread', async () => {
+  test('bob gets 404 on every session route of alice\'s P thread (405 where the path matches another method)', async () => {
     for (const route of sessionRoutes) {
       const res = await req('GET', `/sessions/${THREAD}${route}`, keys.bob);
-      expect({ route, status: res.status }).toEqual({ route, status: 404 });
+      // /sharing is registered as PUT (approvals.ts): KRTX-4704 answers a
+      // wrong method with 405 + Allow at the router, before any resource
+      // read — it reveals nothing about the thread. Every other route keeps
+      // 404: no such visible resource for bob.
+      const expected = route === '/sharing' ? 405 : 404;
+      expect({ route, status: res.status }).toEqual({ route, status: expected });
     }
   });
 
@@ -437,13 +442,13 @@ describe('threads of P', () => {
       projectId: PROJECT,
       sessionId: THREAD,
       actorType: 'agent',
-      action: 'opencode.tool.bash',
-      resourceType: 'opencode_event',
+      action: 'agent.tool.bash',
+      resourceType: 'agent_event',
       resourceId: crypto.randomUUID(),
       inputSummary: { command: `cat ${WORD}-secret.md` },
     } as any);
     await flushAuditEvents({ waitMs: 2_000 });
-    const ofP = (events: any[]) => events.filter((e) => e.session_id === THREAD && e.action === 'opencode.tool.bash');
+    const ofP = (events: any[]) => events.filter((e) => e.session_id === THREAD && e.action === 'agent.tool.bash');
     const project = await req('GET', '/audit?limit=200', keys.manager);
     expect(project.status).toBe(200);
     expect(ofP(project.body.events).length).toBe(1);

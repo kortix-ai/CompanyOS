@@ -19,7 +19,7 @@ import { TerminalWindowIcon as Terminal } from '@phosphor-icons/react';
 import { useTranslations } from '../../../i18n';
 import { useMemo } from 'react';
 
-/** @deprecated Renders an OpenCode-only tool or todo list in an OpenCode session (pi has none). OpenCode is sunset (2026-10-23): no new code; delete with OpenCode. */
+/** @deprecated Renders an OpenCode-only tool or todo list (pi has none). Only a transcript OpenCode wrote holds one; this keeps it readable. No new code. */
 export function PtySpawnTool({ call, defaultOpen, forceOpen, locked }: ToolProps) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const input = partInput(call);
@@ -75,7 +75,7 @@ export function PtySpawnTool({ call, defaultOpen, forceOpen, locked }: ToolProps
           <div className="space-y-2 px-2 py-1.5">
             {command && (
               <div className="font-mono text-xs leading-relaxed wrap-break-word whitespace-pre-wrap">
-                <span className="text-muted-foreground/50 select-none">$</span>{' '}
+                <span className="text-muted-foreground select-none">$</span>{' '}
                 <span className="text-foreground/80">{command}</span>
               </div>
             )}

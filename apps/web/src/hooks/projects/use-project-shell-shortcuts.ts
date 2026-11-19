@@ -2,6 +2,7 @@
 
 import { useCloseProjectTab } from '@/hooks/projects/use-close-project-tab';
 import { isDesktop } from '@kortix/ui/internal/lib/desktop';
+import { desktopTabsMounted } from '@/features/desktop-tabs/desktop-tabs-gate';
 import { CUSTOMIZE_TAB_ID, useProjectSessionTabsStore } from '@/stores/project-session-tabs-store';
 import { useUserPreferencesStore } from '@kortix/ui/internal/stores/user-preferences-store';
 import { usePathname, useRouter } from 'next/navigation';
@@ -13,8 +14,19 @@ import { useEffect } from 'react';
  */
 function hrefForTab(projectId: string, id: string) {
   return id === CUSTOMIZE_TAB_ID
-    ? `/projects/${projectId}/customize`
-    : `/projects/${projectId}/sessions/${id}`;
+    ? `/workspaces/${projectId}/customize`
+    : `/workspaces/${projectId}/sessions/${id}`;
+}
+
+/**
+ * The desktop window draws its own tab strip (features/desktop-tabs), which
+ * handles Mod+T, Mod+W, Mod+Shift+T, Mod+1…9 and tab cycling itself. These
+ * session-tab shortcuts are the web's, and step aside on the desktop shell.
+ */
+function desktopStripOwnsTabs(): boolean {
+  // Mounted also while it draws nothing (a fresh start). Off (the project's
+  // `desktop_tabs` flag, or a strip that failed), these shortcuts are back.
+  return desktopTabsMounted();
 }
 
 /**
@@ -84,8 +96,9 @@ export function useProjectShellShortcuts({
         return;
       }
       if (command !== 'close-tab') return;
-      const session = pathname?.match(/^\/projects\/[^/]+\/sessions\/([^/]+)/)?.[1];
-      const customize = pathname?.match(/^\/projects\/[^/]+\/customize/) ? CUSTOMIZE_TAB_ID : null;
+      if (desktopStripOwnsTabs()) return;
+      const session = pathname?.match(/^\/(?:workspaces|projects)\/[^/]+\/sessions\/([^/]+)/)?.[1];
+      const customize = pathname?.match(/^\/(?:workspaces|projects)\/[^/]+\/customize/) ? CUSTOMIZE_TAB_ID : null;
       const activeTabId = session ?? customize;
       if (activeTabId) closeProjectTab(activeTabId);
     };
@@ -95,13 +108,15 @@ export function useProjectShellShortcuts({
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // The desktop tab strip owns every tab shortcut while it is mounted.
+      if (desktopStripOwnsTabs()) return;
       const modHeld = tabSwitchModifier === 'meta' ? e.metaKey : e.ctrlKey;
       const modOther = tabSwitchModifier === 'meta' ? e.ctrlKey : e.metaKey;
 
       // Resolve the active tab from the URL (cheaper than threading params).
       // The active tab is either a session id, the Customize sentinel, or none.
-      const sessMatch = pathname?.match(/^\/projects\/([^/]+)\/sessions\/([^/]+)/);
-      const custMatch = pathname?.match(/^\/projects\/([^/]+)\/customize/);
+      const sessMatch = pathname?.match(/^\/(?:workspaces|projects)\/([^/]+)\/sessions\/([^/]+)/);
+      const custMatch = pathname?.match(/^\/(?:workspaces|projects)\/([^/]+)\/customize/);
       const urlProject = sessMatch?.[1] ?? custMatch?.[1] ?? null;
       const activeTabId = sessMatch?.[2] ?? (custMatch ? CUSTOMIZE_TAB_ID : null);
       const tabs = useProjectSessionTabsStore.getState().tabsByProject[projectId] ?? [];

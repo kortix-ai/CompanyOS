@@ -205,7 +205,7 @@ export function registerDeviceEnrollRoute(app: OpenAPIHono<AppEnv>) {
 // ─── Admin ───────────────────────────────────────────────────────────────────
 
 const tags = ['capture'];
-const params = z.object({ accountId: z.string().uuid() });
+const params = z.object({ workspaceId: z.string().uuid() });
 
 const TokenSchema = z.object({
   token_id: z.string(),
@@ -247,11 +247,10 @@ const EnrollmentSchema = z.object({
   last_seen_at: z.string(),
 });
 
-/** A person (not an agent) with `capture.manage` in the account, or the refusal. */
+/** A caller with `capture.manage` in the account (a person, or an agent session acting for one), or the refusal. */
 async function manager(c: Ctx) {
   const access = await captureAccessWithPowers(c);
   if (isResponse(access)) return access;
-  if (access.sessionId) return refuse(c, 403, 'capture_forbidden', 'An agent cannot manage the Capture rollout');
   if (!access.manages) return refuse(c, 403, 'capture_forbidden', 'Managing the Capture rollout needs the capture.manage permission');
   return access;
 }
@@ -260,7 +259,7 @@ export function registerCaptureEnrollmentRoutes() {
   accountsRouter.openapi(
     createRoute({
       method: 'get',
-      path: '/{accountId}/capture/enrollment-tokens',
+      path: '/{workspaceId}/capture/enrollment-tokens',
       tags,
       summary: 'The account’s Capture enrollment tokens, newest first (capture.manage)',
       ...auth,
@@ -277,7 +276,7 @@ export function registerCaptureEnrollmentRoutes() {
   accountsRouter.openapi(
     createRoute({
       method: 'post',
-      path: '/{accountId}/capture/enrollment-tokens',
+      path: '/{workspaceId}/capture/enrollment-tokens',
       tags,
       summary: 'Create a Capture enrollment token for an IT rollout (capture.manage); the token is in this answer only',
       ...auth,
@@ -336,7 +335,7 @@ export function registerCaptureEnrollmentRoutes() {
   accountsRouter.openapi(
     createRoute({
       method: 'delete',
-      path: '/{accountId}/capture/enrollment-tokens/{tokenId}',
+      path: '/{workspaceId}/capture/enrollment-tokens/{tokenId}',
       tags,
       summary: 'Revoke a Capture enrollment token (capture.manage); computers it enrolled keep recording',
       ...auth,
@@ -357,7 +356,7 @@ export function registerCaptureEnrollmentRoutes() {
   accountsRouter.openapi(
     createRoute({
       method: 'get',
-      path: '/{accountId}/capture/enrollments',
+      path: '/{workspaceId}/capture/enrollments',
       tags,
       summary: 'Computers that presented an enrollment token, last seen first (capture.manage)',
       ...auth,
@@ -374,7 +373,7 @@ export function registerCaptureEnrollmentRoutes() {
   accountsRouter.openapi(
     createRoute({
       method: 'post',
-      path: '/{accountId}/capture/enrollments/{enrollmentId}/approve',
+      path: '/{workspaceId}/capture/enrollments/{enrollmentId}/approve',
       tags,
       summary: 'Approve a waiting computer, optionally linked to a member (capture.manage); it enrolls at its next call, within a minute',
       ...auth,
@@ -408,7 +407,7 @@ export function registerCaptureEnrollmentRoutes() {
   accountsRouter.openapi(
     createRoute({
       method: 'post',
-      path: '/{accountId}/capture/enrollments/{enrollmentId}/deny',
+      path: '/{workspaceId}/capture/enrollments/{enrollmentId}/deny',
       tags,
       summary: 'Deny a computer (capture.manage); a device it enrolled is revoked at once',
       ...auth,

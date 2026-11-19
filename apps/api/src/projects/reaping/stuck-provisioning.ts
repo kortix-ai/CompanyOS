@@ -25,9 +25,13 @@ import { and, eq, isNotNull, lte, sql } from 'drizzle-orm';
 import { type SandboxProviderName, config } from '../../config';
 import { getProvider } from '../../platform/providers';
 import { db } from '../../shared/db';
-import { finalizeRecoveredRuntimeIfRunning, preserveEstablishedRuntime } from '../runtime-identity';
+import {
+  RUNTIME_RECOVERY_ATTEMPTS_KEY,
+  finalizeRecoveredRuntimeIfRunning,
+  preserveEstablishedRuntime,
+} from '../runtime-identity';
 import { runtimeWakeInProgress } from '../session-lifecycle/runtime-wake-fence';
-import { stripMetadataKeys } from '../session-lifecycle/sandbox-metadata-sql';
+
 import {
   DELETED_SESSION_CLEARED_KEYS,
   PROVIDER_REMOVAL_PENDING_KEY,
@@ -35,7 +39,11 @@ import {
 } from './archived-box-removal';
 import { applyStoppedState } from './sandbox-state-sync';
 import { recoverRemovedParkedRuntime } from './parked-runtime-verification';
-import { transitionSandbox, transitionSession } from '../session-lifecycle/status-transitions';
+import {
+  transitionSandbox,
+  transitionSession,
+  patchedSandboxMetadata,
+} from '../session-lifecycle/status-transitions';
 
 /** A row with no lease that has not changed for this long has no live owner. */
 export const STUCK_WITHOUT_LEASE_MS = 30 * 60_000;
@@ -195,7 +203,8 @@ export async function convergeStuckProvisioningRuntimes(now = new Date()): Promi
         }
         const activated = await transitionSandbox('activateProvisioning', row.sandboxId, {
           at: now,
-          metadata: { strip: LEASE_KEYS, merge: patch },
+          // The box runs: a failed-recovery count no longer applies.
+          metadata: { strip: [...LEASE_KEYS, RUNTIME_RECOVERY_ATTEMPTS_KEY], merge: patch },
           guard: sameLease(metadata),
         });
         if (!activated) continue;
@@ -209,7 +218,7 @@ export async function convergeStuckProvisioningRuntimes(now = new Date()): Promi
       const [claimed] = await db
         .update(sessionSandboxes)
         .set({
-          metadata: sql`(${stripMetadataKeys(LEASE_KEYS)}) || ${JSON.stringify({ provisioningConvergedAt: now.toISOString() })}::jsonb`,
+          metadata: patchedSandboxMetadata({ strip: LEASE_KEYS, merge: { provisioningConvergedAt: now.toISOString() } }),
           updatedAt: now,
         })
         .where(

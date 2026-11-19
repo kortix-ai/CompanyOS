@@ -1,13 +1,14 @@
-import { changeRequests, projectSessions, projects } from '@kortix/db';
+import { changeRequests, projectSessions } from '@kortix/db';
 import { and, asc, eq, inArray, lt, ne, or, sql } from 'drizzle-orm';
 import { logger } from '../lib/logger';
 import { tickRunningComputeCharges } from '../billing/services/compute-metering';
 import { cleanupExpiredConnectorAttachments } from '../connectors/attachments';
 import { db } from '../shared/db';
 import { recordAuditEvent } from '../shared/audit';
+import { escalateProviderAuthOutage } from '../shared/provider-auth';
 import { qualifiedColumn } from '../shared/sql-qualified-column';
 import { reconcileStaleBuilds } from '../snapshots/builder';
-import { reconcileSnapshotQuota } from '../snapshots/quota-gc';
+import { reconcilePlatinumTemplateQuota, reconcileSnapshotQuota } from '../snapshots/quota-gc';
 import { EMPTY_APP_IMAGE_RECLAIM_RESULT, reclaimAppDeploymentImages } from '../apps/images';
 import { sweepAppRetention } from '../apps/retention';
 import { sweepAppVolumes } from '../apps/volumes';
@@ -36,6 +37,7 @@ import {
   reconcileOrphanComputeSessions,
   reconcileStuckActiveSessions,
 } from './sandbox-reaper';
+import { projectsView } from '../workspaces/rows';
 
 const DEFAULT_BRANCH_RETENTION_DAYS = 90;
 const DEFAULT_MAINTENANCE_INTERVAL_MS = 5 * 60 * 1000;
@@ -171,13 +173,13 @@ export async function selectExpiredSessionBranches(now: Date) {
       baseRef: projectSessions.baseRef,
       metadata: projectSessions.metadata,
       accountId: projectSessions.accountId,
-      projectId: projects.projectId,
-      repoUrl: projects.repoUrl,
-      defaultBranch: projects.defaultBranch,
-      manifestPath: projects.manifestPath,
+      projectId: projectsView.projectId,
+      repoUrl: projectsView.repoUrl,
+      defaultBranch: projectsView.defaultBranch,
+      manifestPath: projectsView.manifestPath,
     })
     .from(projectSessions)
-    .innerJoin(projects, eq(projectSessions.projectId, projects.projectId))
+    .innerJoin(projectsView, eq(projectSessions.projectId, projectsView.projectId))
     .where(
       and(
         or(
@@ -191,7 +193,7 @@ export async function selectExpiredSessionBranches(now: Date) {
             sql`strpos(${projectSessions.branchName}, ${projectSessions.sessionId}) > 0`,
           ),
         ),
-        ne(projectSessions.branchName, projects.defaultBranch),
+        ne(projectSessions.branchName, projectsView.defaultBranch),
         // Exclude the NEVER-deletable classes at the query so they can't
         // occupy batch slots forever and starve deletable rows: a skipped row
         // never gets a db.update, so its updatedAt stays < cutoff and it
@@ -351,6 +353,23 @@ export async function runProjectMaintenance(): Promise<void> {
   }
 }
 
+function quotaGcFailed(provider: 'daytona' | 'platinum', err: unknown) {
+  escalateProviderAuthOutage(provider, 'snapshot quota GC', err);
+  console.warn(
+    `[project-maintenance] ${provider} snapshot quota GC failed:`,
+    err instanceof Error ? err.message : err,
+  );
+  return {
+    orgTotal: 0,
+    managedCount: 0,
+    eligible: 0,
+    deleted: 0,
+    deferred: 0,
+    budgetUnresolved: false,
+    dryRun: false,
+  };
+}
+
 /** Every maintenance sweep, SWEEP_CONCURRENCY at a time. A failing sweep logs and returns its empty result. */
 function runMaintenanceSweeps() {
   return runSweepsBounded([
@@ -436,26 +455,14 @@ function runMaintenanceSweeps() {
       return { checked: 0, closedReady: 0, closedFailed: 0 };
     }),
     // GC superseded template snapshots (content-addressed names orphaned by
-    // every identity drift) before the 100/org Daytona quota fills up.
+    // every identity drift) before a provider's org image cap fills up:
+    // Daytona 100 snapshots, Platinum `PLATINUM_TEMPLATE_QUOTA` templates.
     // Pressure-gated + bounded; no-op while the ORG total is small.
-    () => reconcileSnapshotQuota().catch((err) => {
-      console.warn(
-        '[project-maintenance] snapshot quota GC failed:',
-        err instanceof Error ? err.message : err,
-      );
-      return {
-        orgTotal: 0,
-        managedCount: 0,
-        eligible: 0,
-        deleted: 0,
-        deferred: 0,
-        budgetUnresolved: false,
-        dryRun: false,
-      };
-    }),
+    () => reconcileSnapshotQuota().catch((err) => quotaGcFailed('daytona', err)),
+    () => reconcilePlatinumTemplateQuota().catch((err) => quotaGcFailed('platinum', err)),
     // App deployment images (`kortix-app-<deploymentId>`): one per build,
-    // counted against Platinum's per-org template cap, never reclaimed by the
-    // Daytona-only quota GC above. Deletes only images whose deployment THIS
+    // counted against Platinum's per-org template cap. The quota GC above
+    // reaps an untracked one only after its idle floor. Deletes only images whose deployment THIS
     // database holds as unservable (App deleted, deployment failed/deleted),
     // after removing any runtime that still pins one. Bounded per pass.
     // Then retention: retire superseded deployments first (their images become
@@ -595,6 +602,7 @@ function logMaintenanceCycle(
     computeTick,
     staleBuilds,
     snapshotGc,
+    platinumTemplateGc,
     appImages,
     connectorAttachments,
     promptAttachments,
@@ -628,6 +636,7 @@ function logMaintenanceCycle(
       staleBuilds.closedReady ||
       staleBuilds.closedFailed ||
       snapshotGc.deleted ||
+      platinumTemplateGc.deleted ||
       appImages.released ||
       appImages.runtimesRemoved ||
       appImages.errors ||
@@ -724,6 +733,10 @@ function logMaintenanceCycle(
     `app_deployments_retired=${appImages.deploymentsRetired}`,
     `app_artifacts_reclaimed=${appImages.artifactsReclaimed}`,
     `app_site_blobs_reclaimed=${appImages.siteBlobsReclaimed}`,
+    // The Platinum org's template count against PLATINUM_TEMPLATE_QUOTA. At
+    // the cap every build in the org fails (2026-11-19).
+    `platinum_templates_org=${platinumTemplateGc.orgTotal}`,
+    `platinum_templates_deleted=${platinumTemplateGc.deleted}`,
     // The sweeps run SWEEP_CONCURRENCY at a time. A cycle that takes longer
     // than the interval makes the next tick skip, which halves every sweep's
     // rate: alert on this value approaching the interval.

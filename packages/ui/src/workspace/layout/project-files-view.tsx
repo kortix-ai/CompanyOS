@@ -2,12 +2,13 @@
 
 /**
  * Standalone project Files view — the Google-Drive-style browser over the
- * project repo. Rendered by the /projects/[id]/files page inside the regular
+ * project repo. Rendered by the /workspaces/[id]/files page inside the regular
  * ProjectShell (NOT the Customize overlay — Files is a top-level surface any
  * member can open, so it lives outside customization entirely).
  */
 
 import { ErrorState } from '../../primitives/error-state';
+import { ManifestAnnotationsProvider } from '../../files/project/manifest-annotations';
 import {
   FileExplorerPage,
   FileExplorerSourceProvider,
@@ -72,7 +73,10 @@ export function ProjectFilesView({ projectId }: { projectId: string }) {
     <ProjectFilesProvider value={{ projectId, ref, defaultBranch }}>
       <FileExplorerSourceProvider value={gitRefExplorerSource}>
         <FilesStoreProvider>
-          <FileExplorerPage />
+          {/* kortix.yaml's open issues on its card and in its viewer. */}
+          <ManifestAnnotationsProvider projectId={projectId} onDefaultBranch={!!ref && ref === defaultBranch}>
+            <FileExplorerPage />
+          </ManifestAnnotationsProvider>
         </FilesStoreProvider>
       </FileExplorerSourceProvider>
     </ProjectFilesProvider>

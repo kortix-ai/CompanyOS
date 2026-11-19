@@ -8,7 +8,7 @@ import {
 import { useTranslations } from '../../i18n';
 import { ConnectorLogo } from '../../internal/connector-logo/connector-logo';
 import type { ConnectorLogoSource } from '../../internal/connector-logo/connector-logo-source';
-import { STATUS_DOT, STATUS_WORD, connectorStatusTone } from './detail/connector-status';
+import { STATUS_DOT, STATUS_WORD, connectorTone } from './detail/connector-status';
 import { ConnectorStatusBadge as ToneBadge } from './detail/status-badge';
 import { cn } from '../../internal/lib/utils';
 
@@ -18,7 +18,7 @@ import { cn } from '../../internal/lib/utils';
  * connector surface.
  *
  * These two render once per card in the connectors grid, so they sit on the
- * hottest path of `/projects/[id]/connectors`. They used to live in
+ * hottest path of `/workspaces/[id]/connectors`. They used to live in
  * `customize/sections/connectors-view.tsx`, which is ~5,100 lines across 50
  * components and pulls `HighlightedCode` and `PoliciesPanel`. Importing
  * two small components from there put that entire graph in this route's client
@@ -56,7 +56,7 @@ export function ConnectorStatusBadge({
   connector: AdminConnector;
   accountCount?: number;
 }) {
-  const tone = connectorStatusTone(connector, accountCount);
+  const tone = connectorTone(connector, accountCount);
   return tone === 'connected' ? null : <ToneBadge tone={tone} />;
 }
 
@@ -64,8 +64,9 @@ export function ConnectorStatusBadge({
 /**
  * A project connector's logo with its state on it, the way a Slack or Teams
  * app tile shows one: a dot on the bottom-right corner (green Connected,
- * orange Needs account, red Error). The word is for screen readers; the dot
- * carries it on screen.
+ * orange Needs account, red Error). The dot is a second cue only: colour is
+ * never the only means (WCAG 1.4.1). Put {@link ConnectorStatusWord} in the
+ * tile's subtitle, which says the state in words.
  */
 export function ConnectorStatusLogo({
   connector,
@@ -77,14 +78,33 @@ export function ConnectorStatusLogo({
   accountCount?: number;
 }) {
   const t = useTranslations('connectorPages');
-  const tone = connectorStatusTone(connector, accountCount);
+  const tone = connectorTone(connector, accountCount);
   return (
     <span className="relative flex shrink-0">
       <ConnectorLogo source={source} size="lg" />
       <span aria-hidden className="bg-background absolute -right-1 -bottom-1 flex size-3 items-center justify-center rounded-full">
         <span className={cn('size-2 rounded-full', STATUS_DOT[tone])} />
       </span>
-      <span className="sr-only">{t(STATUS_WORD[tone])}</span>
+      {/* Connected says nothing on screen, so its word stays for screen readers. */}
+      {tone === 'connected' ? <span className="sr-only">{t(STATUS_WORD[tone])}</span> : null}
     </span>
+  );
+}
+
+/**
+ * The state as visible text after a tile's subtitle (" · Needs account").
+ * A healthy connector stays quiet and renders nothing.
+ */
+export function ConnectorStatusWord({ connector, accountCount }: { connector: AdminConnector; accountCount?: number }) {
+  const t = useTranslations('connectorPages');
+  const tone = connectorTone(connector, accountCount);
+  if (tone === 'connected') return null;
+  return (
+    <>
+      {' · '}
+      <span className="text-foreground" data-connector-tone={tone}>
+        {t(STATUS_WORD[tone])}
+      </span>
+    </>
   );
 }

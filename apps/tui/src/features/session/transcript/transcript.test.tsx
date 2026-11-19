@@ -425,7 +425,7 @@ describe('<Transcript/> boot readout', () => {
     const { captureCharFrame, flush, renderer } = await render(session);
     await flush();
     const frame = captureCharFrame();
-    expect(frame).toMatch(/Building the first image for this project \(0:4\d\)/);
+    expect(frame).toMatch(/Building the first image for this workspace \(0:4\d\)/);
     expect(frame).not.toContain('Reserving your computer');
     renderer.destroy();
   });
@@ -472,7 +472,7 @@ describe('<Transcript/> inbox prompts', () => {
     const frame = captureCharFrame();
     expect(frame).not.toContain('No messages yet');
     expect(frame).toContain('yo');
-    expect(frame).toContain('you · queued');
+    expect(frame).toContain('you · waiting');
     expect(frame).toContain('and then this');
   });
 });

@@ -17,19 +17,7 @@ import { isKe2eRetryableError } from '../core/client';
 import { waitFor } from '../core/poll';
 import { markSessionReadinessTimeoutRetryable } from '../core/session-runtime-retry';
 import type { CreatedProject, FlowContext } from '../core/types';
-
-async function createProjectPat(ctx: FlowContext, label: string) {
-  const project = await ctx.fixtures.project();
-  const response = await ctx.client.as(ctx.P.OWNER).post(
-    '/v1/projects/:projectId/cli-token',
-    { name: ctx.fixtures.name(label) },
-    { params: { projectId: project.id } },
-  );
-  response.status(201).body().exists('$.secret_key').exists('$.token_id');
-  const body = response.json<{ secret_key: string; token_id: string }>();
-  ctx.track('token', body.token_id);
-  return ctx.client.withBearer(body.secret_key, 'PAT_PROJ');
-}
+import { createProjectPat } from '../fixtures/database-project';
 
 const SHA256 = /^[0-9a-f]{64}$/;
 
@@ -42,7 +30,7 @@ flow(
       'GET /v1/runtime-assets/manifest',
       'GET /v1/runtime-assets/agent',
       'HEAD /v1/runtime-assets/agent',
-      'POST /v1/projects/:projectId/cli-token',
+      'POST /v1/workspaces/:projectId/cli-token',
     ],
   },
   async (ctx) => {
@@ -94,7 +82,8 @@ flow(
     });
 
     await ctx.step('the v2 component block describes the whole runtime, not just the CLI', async () => {
-      // A box converges its daemon and its opencode off this block. If the
+      // A box converges its daemon and CLI (and an old OpenCode box its
+      // OpenCode) off this block. If the
       // component list regresses to CLI-only, every sandbox silently stops
       // self-healing and nothing else in the system notices.
       const r = await ctx.client.as(ctx.P.OWNER).get('/v1/runtime-assets/manifest');
@@ -161,7 +150,7 @@ flow(
     routes: [
       'GET /v1/runtime-assets/managed-skills',
       'GET /v1/runtime-assets/manifest',
-      'POST /v1/projects/:projectId/cli-token',
+      'POST /v1/workspaces/:projectId/cli-token',
     ],
   },
   async (ctx) => {
@@ -232,7 +221,7 @@ flow(
       'GET /v1/runtime-assets/cli',
       'HEAD /v1/runtime-assets/cli',
       'GET /v1/runtime-assets/manifest',
-      'POST /v1/projects/:projectId/cli-token',
+      'POST /v1/workspaces/:projectId/cli-token',
     ],
   },
   async (ctx) => {
@@ -304,7 +293,7 @@ flow(
       'GET /v1/runtime-assets/entrypoint',
       'HEAD /v1/runtime-assets/entrypoint',
       'GET /v1/runtime-assets/manifest',
-      'POST /v1/projects/:projectId/cli-token',
+      'POST /v1/workspaces/:projectId/cli-token',
     ],
   },
   async (ctx) => {
@@ -398,7 +387,7 @@ flow(
 //
 // WHAT CANNOT BE STAGED HERE, said plainly rather than faked: the BEHIND half
 // needs the deploy's binaries to differ from the box's image, which no test can
-// arrange. The swap decision table, the pre-exec probe and the OpenCode rollback
+// arrange. The swap decision table, the pre-exec probe and the rollback latch
 // are proved in apps/kortix-sandbox-agent-server/src/__tests__/runtime-convergence.test.ts,
 // and the comparison and the memo in
 // apps/api/src/runtime-assets/__tests__/running-assets.test.ts.
@@ -464,7 +453,7 @@ async function bootBox(ctx: FlowContext, project: CreatedProject): Promise<Boote
       async () => {
         const r = await ctx.client
           .as(ctx.P.OWNER)
-          .post('/v1/projects/:projectId/sessions/:sessionId/start', {}, {
+          .post('/v1/workspaces/:projectId/sessions/:sessionId/start', {}, {
             params: { projectId: project.id, sessionId: session.id },
             query: { wait_ms: '8000' },
             timeoutMs: 25_000,
@@ -560,7 +549,7 @@ flow(
     // can run in every preview — which is the only place a real box exists.
     requires: ['database', 'sandbox'],
     timeoutMs: 900_000,
-    routes: ['GET /v1/runtime-assets/manifest', 'POST /v1/projects/:projectId/sessions/:sessionId/start'],
+    routes: ['GET /v1/runtime-assets/manifest', 'POST /v1/workspaces/:projectId/sessions/:sessionId/start'],
   },
   async (ctx) => {
     // `seed: true`: a database-only project's `repo_url` cannot be cloned by a
@@ -619,7 +608,7 @@ flow(
     // `funded`: every step below runs a real model turn. Operator-run.
     requires: ['database', 'funded', 'sandbox'],
     timeoutMs: 1_200_000,
-    routes: ['GET /v1/runtime-assets/manifest', 'POST /v1/projects/:projectId/sessions/:sessionId/start'],
+    routes: ['GET /v1/runtime-assets/manifest', 'POST /v1/workspaces/:projectId/sessions/:sessionId/start'],
   },
   async (ctx) => {
     // `seed: true`: same reason as RTA-5 — `bootBox` needs a real, clonable repo.
@@ -744,7 +733,7 @@ flow(
       'GET /v1/runtime-assets/chunk/:sha256',
       'GET /v1/runtime-assets/chunks/:component',
       'GET /v1/runtime-assets/manifest',
-      'POST /v1/projects/:projectId/cli-token',
+      'POST /v1/workspaces/:projectId/cli-token',
     ],
   },
   async (ctx) => {
@@ -815,7 +804,7 @@ flow(
     // reasoning that ~90 MB of each is the same embedded Bun runtime. That is
     // true of two binaries compiled by the SAME Bun and false of what we ship:
     // `apps/api/Dockerfile` builds the daemon on `SANDBOX_AGENT_BUN_VERSION`
-    // (1.3.11, a deliberate pin) and the CLI on `BUN_VERSION` (1.4.3), so they
+    // (1.3.11, a deliberate pin) and the CLI on `BUN_VERSION` (1.4.4), so they
     // embed different runtimes. Measured on a deployed preview: 0 of 111 chunks
     // shared, first MiB already different. Requiring overlap would have pinned a
     // build coincidence rather than a contract — and would go red on a green

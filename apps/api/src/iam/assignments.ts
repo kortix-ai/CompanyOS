@@ -17,19 +17,11 @@
  * bypass the store, the cache contract, or the audit trail.
  */
 import { and, eq, gt, inArray, isNull, ne, or, sql } from 'drizzle-orm';
-import {
-  accountGroups,
-  accountMembers,
-  accountMemberships,
-  iamRoleActions,
-  iamRoles,
-  projects,
-  roleAssignments,
-  serviceAccounts,
-} from '@kortix/db';
+import { accountGroups, accountMembers, accountMemberships, iamRoleActions, iamRoles, roleAssignments, serviceAccounts } from '@kortix/db';
 import { HTTPException } from 'hono/http-exception';
 import { db } from '../shared/db';
 import { recordAuditEvent } from '../shared/audit';
+import { IMPERSONATION_INVALID_CODE, isImpersonatingAccount } from '../shared/impersonation';
 import { assertAuthorized, type Obj } from './authorize';
 import { loadSystemRoles, loadPermissionCatalog, type ObjectType, type ScopeType } from './catalog';
 import {
@@ -39,6 +31,16 @@ import {
 } from './cache-invalidation';
 import { pendingPrincipalId, type Actor, type PrincipalRef } from './actor';
 import { notAnAudienceGrant } from './audience-grants';
+import { projectsView } from '../workspaces/rows';
+import {
+  accountScoped,
+  accountScopedNoJoin,
+  grantScopeIdOf,
+  grantScopeOf,
+  projectScoped,
+  projectScopedNoJoin,
+  storedAction,
+} from './workspace-scope';
 
 export type AssignmentSource = 'manual' | 'scim' | 'sso' | 'invite' | 'system';
 
@@ -152,6 +154,19 @@ export interface AssignmentFilter {
   liveOnly?: boolean;
 }
 
+/**
+ * A fetched row in its legacy scope shape: the workspace form (R2b) reads as
+ * its role's scope, and an account grant reports `scopeId: null`
+ * (`workspace-scope.ts`). Every read of this module returns this shape, so the
+ * guards, the audit events and the wire see one form.
+ */
+function asLegacyScope<
+  T extends { scopeType: string; scopeId: string | null; objectType: string | null; roleScopeType: string; roleAccountId: string | null },
+>({ roleScopeType, roleAccountId, ...r }: T) {
+  const scope = { scopeType: r.scopeType, scopeId: r.scopeId, objectType: r.objectType, roleScopeType };
+  return { ...r, scopeType: grantScopeOf(scope) ?? r.scopeType, scopeId: grantScopeIdOf(scope), roleIsSystem: roleAccountId === null };
+}
+
 /** Every assignment matching the filter, newest first. */
 export async function listAssignments(filter: AssignmentFilter): Promise<AssignmentRow[]> {
   const clauses = [eq(roleAssignments.accountId, filter.accountId)];
@@ -171,8 +186,9 @@ export async function listAssignments(filter: AssignmentFilter): Promise<Assignm
       )!,
     );
   }
-  if (filter.scopeType) clauses.push(eq(roleAssignments.scopeType, filter.scopeType));
-  if (filter.scopeId) clauses.push(eq(roleAssignments.scopeId, filter.scopeId));
+  // The workspace form (R2b) reads as its role's scope (`workspace-scope.ts`).
+  if (filter.scopeType) clauses.push(filter.scopeType === 'account' ? accountScoped() : projectScoped());
+  if (filter.scopeId) clauses.push(projectScoped(), eq(roleAssignments.scopeId, filter.scopeId));
   if (filter.roleId) clauses.push(eq(roleAssignments.roleId, filter.roleId));
   if (filter.objectType) clauses.push(eq(roleAssignments.objectType, filter.objectType));
   if (filter.objectId) clauses.push(eq(roleAssignments.objectId, filter.objectId));
@@ -186,6 +202,7 @@ export async function listAssignments(filter: AssignmentFilter): Promise<Assignm
       roleId: roleAssignments.roleId,
       roleKey: iamRoles.key,
       roleAccountId: iamRoles.accountId,
+      roleScopeType: iamRoles.scopeType,
       scopeType: roleAssignments.scopeType,
       scopeId: roleAssignments.scopeId,
       objectType: roleAssignments.objectType,
@@ -201,7 +218,7 @@ export async function listAssignments(filter: AssignmentFilter): Promise<Assignm
     .where(and(...clauses))
     .orderBy(sql`${roleAssignments.createdAt} desc`);
 
-  return rows.map(({ roleAccountId, ...r }) => ({ ...r, roleIsSystem: roleAccountId === null }));
+  return rows.map(asLegacyScope);
 }
 
 // ─── Writes ─────────────────────────────────────────────────────────────────
@@ -213,20 +230,36 @@ export async function listAssignments(filter: AssignmentFilter): Promise<Assignm
  * unique constraint at all, and `:bulk-import` happily creates duplicates).
  */
 export async function assignRole(writer: Writer, accountId: string, input: AssignRoleInput): Promise<AssignmentRow> {
+  // An operator acting as a customer never writes a grant: a role assignment
+  // outlives the one-hour act-as grant (finding 14). The route list in
+  // shared/impersonation.ts refuses the IAM subtree too; this is the floor any
+  // future route that reaches role_assignments stands on.
+  if (writer !== SYSTEM_ACTOR && isImpersonatingAccount(writer.userId, accountId)) {
+    throw new HTTPException(403, {
+      message: 'Impersonated requests cannot change role assignments',
+      res: new Response(
+        JSON.stringify({
+          error: 'Impersonated requests cannot change role assignments',
+          code: IMPERSONATION_INVALID_CODE,
+        }),
+        { status: 403, headers: { 'content-type': 'application/json' } },
+      ),
+    });
+  }
   const role = await resolveRole(accountId, input);
   const scopeType = input.scope.type;
   const scopeId = scopeType === 'project' ? (input.scope.id ?? null) : null;
 
   if (scopeType === 'project' && !scopeId) {
-    throw new HTTPException(400, { message: 'a project-scoped assignment must name a project' });
+    throw new HTTPException(400, { message: 'an assignment with scope type `project` must name its workspace in scope_id' });
   }
   if (scopeType === 'account' && input.scope.id) {
     throw new HTTPException(400, {
-      message: 'an account-scoped assignment covers every project and must not name one',
+      message: 'an assignment with scope type `account` covers the whole workspace and must not set scope_id',
     });
   }
   if (input.object && scopeType !== 'project') {
-    throw new HTTPException(400, { message: 'an object assignment must be project-scoped' });
+    throw new HTTPException(400, { message: 'an object assignment must have scope type `project`' });
   }
   if (role.scopeType !== scopeType && !input.object) {
     throw new HTTPException(400, {
@@ -300,6 +333,16 @@ export async function assignRole(writer: Writer, accountId: string, input: Assig
 
   if (input.exclusive && role.isSystem) {
     await retractSiblingSystemRoles(writer, accountId, row);
+  }
+
+  // An account-scope role makes a person a member of the workspace. Write the
+  // membership too, so the holder shows in Members and can be removed there:
+  // a role holder the member list cannot see is an invisible owner.
+  if (scopeType === 'account' && !input.object && input.principal.type === 'user') {
+    await db
+      .insert(accountMemberships)
+      .values({ userId: input.principal.id, accountId })
+      .onConflictDoNothing({ target: [accountMemberships.userId, accountMemberships.accountId] });
   }
 
   await bustCachesFor(input.principal, scopeId);
@@ -400,7 +443,7 @@ export async function updateAssignment(
   const scopeType = input.scope.type;
   const scopeId = scopeType === 'project' ? (input.scope.id ?? null) : null;
   if (scopeType === 'project' && !scopeId) {
-    throw new HTTPException(400, { message: 'a project-scoped assignment must name a project' });
+    throw new HTTPException(400, { message: 'an assignment with scope type `project` must name its workspace in scope_id' });
   }
   if (scopeId) await assertProjectInAccount(accountId, scopeId);
   assertAccountRoleHolder(writer, role, scopeType, {
@@ -738,7 +781,7 @@ async function assertObjectAssignable(
       limit 1`);
     const rows = (result as unknown as { rows?: Array<{ found: number }> }).rows ?? result;
     if ((rows as Array<{ found: number }>).length === 0) {
-      throw new HTTPException(404, { message: 'object_id is not a shared secret in this project' });
+      throw new HTTPException(404, { message: 'object_id is not a shared secret in this workspace' });
     }
     return;
   }
@@ -758,7 +801,7 @@ async function assertObjectAssignable(
   const rows = (result as unknown as { rows?: Array<{ found: number }> }).rows ?? result;
   if ((rows as Array<{ found: number }>).length === 0) {
     throw new HTTPException(404, {
-      message: 'object_id is not a shared connection in this project',
+      message: 'object_id is not a shared connection in this workspace',
     });
   }
 }
@@ -786,17 +829,10 @@ async function assertWriterMayAssign(
 ): Promise<void> {
   if (writer === SYSTEM_ACTOR) return;
   const projectObj: Obj = scopeId ? { type: 'project', id: scopeId } : { type: 'account' };
-  // Who may use a secret value or a connector account is a person's decision.
-  // An agent that may write either could otherwise widen one narrowed away
-  // from it, or name itself in the audience, and then use it.
-  if ((objectType === 'secret' || objectType === 'connection') && writer.credential.kind === 'agent_session') {
-    throw new HTTPException(403, {
-      message:
-        objectType === 'secret'
-          ? 'An agent cannot change who can use a secret. A person changes it in Customize → Secrets.'
-          : 'An agent cannot change who can use a connector account. A person changes it in Customize → Connectors.',
-    });
-  }
+  // Who may use a secret value or a connector account: the same permission
+  // for a person and for an agent session acting for one (the person's role ∩
+  // the agent's grant). An agent widens an audience only when its grant holds
+  // the permission a person gave it.
   if (objectType === 'secret') {
     await assertAuthorized(writer, 'project.secret.write', projectObj);
     return;
@@ -842,7 +878,7 @@ function assertAccountRoleHolder(
   if (!role.isSystem || scopeType !== 'account') return;
   if (principal.type === 'user' || principal.type === 'pending') return;
   throw new HTTPException(400, {
-    message: `an account role ("${role.key}") is held by a person, not a ${principal.type}; give the group a project role or a custom role instead`,
+    message: `an account role ("${role.key}") is held by a person, not a ${principal.type}; give the group a role with scope type "project" or a custom role instead`,
   });
 }
 
@@ -864,7 +900,7 @@ async function assertDelegable(role: ResolvedRole): Promise<void> {
     .from(iamRoleActions)
     .where(eq(iamRoleActions.roleId, role.roleId));
   const forbidden = rows
-    .map((r) => r.action)
+    .map((r) => storedAction(r.action))
     .filter((a) => catalog.byAction.get(a)?.delegable === false);
   if (forbidden.length > 0) {
     throw new HTTPException(403, {
@@ -885,11 +921,11 @@ async function assertDelegable(role: ResolvedRole): Promise<void> {
  */
 async function assertProjectInAccount(accountId: string, projectId: string): Promise<void> {
   const [row] = await db
-    .select({ projectId: projects.projectId })
-    .from(projects)
-    .where(and(eq(projects.projectId, projectId), eq(projects.accountId, accountId)))
+    .select({ projectId: projectsView.projectId })
+    .from(projectsView)
+    .where(and(eq(projectsView.projectId, projectId), eq(projectsView.accountId, accountId)))
     .limit(1);
-  if (!row) throw new HTTPException(404, { message: 'project not found in this account' });
+  if (!row) throw new HTTPException(404, { message: 'Workspace not found' });
 }
 
 function isAccountOwnerRow(row: Pick<AssignmentRow, 'roleIsSystem' | 'roleKey' | 'scopeType' | 'principalType'>): boolean {
@@ -915,7 +951,7 @@ async function clearSuperAdminAfterOwnerLoss(writer: Writer, accountId: string, 
         eq(roleAssignments.accountId, accountId),
         eq(roleAssignments.principalType, 'user'),
         eq(roleAssignments.principalId, userId),
-        eq(roleAssignments.scopeType, 'account'),
+        accountScoped(),
         isNull(iamRoles.accountId),
         eq(iamRoles.key, 'owner'),
         or(isNull(roleAssignments.expiresAt), gt(roleAssignments.expiresAt, sql`now()`)),
@@ -968,7 +1004,7 @@ async function assertNotLastOwner(accountId: string, row: AssignmentRow): Promis
     .where(
       and(
         eq(roleAssignments.accountId, accountId),
-        eq(roleAssignments.scopeType, 'account'),
+        accountScoped(),
         isNull(iamRoles.accountId),
         eq(iamRoles.key, 'owner'),
         ne(roleAssignments.assignmentId, row.assignmentId),
@@ -1001,7 +1037,7 @@ async function assertNotLastMembership(accountId: string, row: AssignmentRow): P
     .where(
       and(
         eq(roleAssignments.accountId, accountId),
-        eq(roleAssignments.scopeType, 'account'),
+        accountScoped(),
         eq(roleAssignments.principalType, 'user'),
         eq(roleAssignments.principalId, row.principalId),
         isNull(iamRoles.accountId),
@@ -1034,7 +1070,7 @@ export async function deleteAccountScopeAssignments(accountId: string, userId: s
         eq(roleAssignments.accountId, accountId),
         eq(roleAssignments.principalType, 'user'),
         eq(roleAssignments.principalId, userId),
-        eq(roleAssignments.scopeType, 'account'),
+        accountScopedNoJoin(),
       ),
     );
   invalidateIamCacheForUser(userId);
@@ -1053,7 +1089,7 @@ export async function deleteProjectScopeAssignments(accountId: string, userId: s
         eq(roleAssignments.accountId, accountId),
         eq(roleAssignments.principalType, 'user'),
         eq(roleAssignments.principalId, userId),
-        eq(roleAssignments.scopeType, 'project'),
+        projectScopedNoJoin(),
         notAnAudienceGrant(),
       ),
     );
@@ -1081,6 +1117,7 @@ export async function listAssignmentsByIds(assignmentIds: string[]): Promise<Ass
       roleId: roleAssignments.roleId,
       roleKey: iamRoles.key,
       roleAccountId: iamRoles.accountId,
+      roleScopeType: iamRoles.scopeType,
       scopeType: roleAssignments.scopeType,
       scopeId: roleAssignments.scopeId,
       objectType: roleAssignments.objectType,
@@ -1094,7 +1131,7 @@ export async function listAssignmentsByIds(assignmentIds: string[]): Promise<Ass
     .from(roleAssignments)
     .innerJoin(iamRoles, eq(iamRoles.roleId, roleAssignments.roleId))
     .where(inArray(roleAssignments.assignmentId, assignmentIds));
-  return rows.map(({ roleAccountId, ...r }) => ({ ...r, roleIsSystem: roleAccountId === null }));
+  return rows.map(asLegacyScope);
 }
 
 /**
@@ -1242,6 +1279,7 @@ export async function findExpiredAssignments(since: Date): Promise<AssignmentRow
       roleId: roleAssignments.roleId,
       roleKey: iamRoles.key,
       roleAccountId: iamRoles.accountId,
+      roleScopeType: iamRoles.scopeType,
       scopeType: roleAssignments.scopeType,
       scopeId: roleAssignments.scopeId,
       objectType: roleAssignments.objectType,
@@ -1261,7 +1299,7 @@ export async function findExpiredAssignments(since: Date): Promise<AssignmentRow
         sql`${roleAssignments.expiresAt} > ${since}`,
       ),
     );
-  return rows.map(({ roleAccountId, ...r }) => ({ ...r, roleIsSystem: roleAccountId === null }));
+  return rows.map(asLegacyScope);
 }
 
 /** Bulk principal lookup used by the read models (`GET /projects/:id/access`). */
@@ -1295,6 +1333,7 @@ export async function assignmentsForRoles(accountId: string, roleIds: string[]):
       roleId: roleAssignments.roleId,
       roleKey: iamRoles.key,
       roleAccountId: iamRoles.accountId,
+      roleScopeType: iamRoles.scopeType,
       scopeType: roleAssignments.scopeType,
       scopeId: roleAssignments.scopeId,
       objectType: roleAssignments.objectType,
@@ -1308,5 +1347,5 @@ export async function assignmentsForRoles(accountId: string, roleIds: string[]):
     .from(roleAssignments)
     .innerJoin(iamRoles, eq(iamRoles.roleId, roleAssignments.roleId))
     .where(and(eq(roleAssignments.accountId, accountId), inArray(roleAssignments.roleId, roleIds)));
-  return rows.map(({ roleAccountId, ...r }) => ({ ...r, roleIsSystem: roleAccountId === null }));
+  return rows.map(asLegacyScope);
 }

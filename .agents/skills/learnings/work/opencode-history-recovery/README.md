@@ -1,8 +1,8 @@
 ---
 title: Recover OpenCode-era conversations that never reached the session log
-status: dev rehearsal done 2026-11-05 (Platinum and Daytona); prod run waits for the release that ships the script (PR #11788)
+status: done and removed. Prod Platinum recovered (numbers under Status); Daytona written off; the script was deleted from the tree by the PR that set this status (restore it from git history: `git show 550757a87b:apps/api/src/scripts/recover-opencode-history.ts`)
 owner: platform
-updated: 2026-11-05
+updated: 2026-11-10
 ---
 
 # Recover OpenCode-era conversations that never reached the session log
@@ -40,8 +40,14 @@ Including sessions with only abandoned turns (many are a false-abandoned bug fix
 2. Boot the box at the provider, not through Kortix: the session row stays
    `stopped`, the box token stays refused (no turn, no model call, no billing), the
    sidebar does not move.
-3. Copy `opencode.db` + `-wal` (never `auth.json`) and the offloaded attachments to
-   a temp folder; delete it after the session.
+3. Measure `opencode.db` + `-wal` (never `auth.json`) in the box. Over the run's
+   cap (128 MiB by default): record `too_large` with the size and copy nothing.
+   Else split both files into 200 MiB parts in a temp folder (Platinum's file API
+   refuses a file over 256 MiB), download every part, and check that every byte
+   the box measured arrived: the store is never read without its `-wal`. Then
+   the offloaded attachments. `release` removes every `/tmp/kortix-recover.*` in
+   the box, also the one a failed download left; the local copy is deleted after
+   the session.
 4. Re-read the Kortix row; if still parked, stop and archive the box. A box a person
    woke meanwhile keeps running.
 5. Convert with the deleted kortixd exporter's mapping (`fromV1`), validate with
@@ -56,13 +62,29 @@ Outcomes: `written`, `converted` (dry run), `no_store`, `empty_store`, `box_gone
 `unsupported_store`, `invalid`, `skipped` (the session changed), `retry`, `failed`,
 `refused`, `too_large` (a store over 128 MiB or the row caps: set aside, not read).
 `empty_store` carries `store_messages=0`; a store with message rows of which none
-parse records `unsupported_store`.
+parse records `unsupported_store`. `too_large` records the store size (`bytes`)
+when the size was the reason; over the row caps its detail starts with
+`sessions=`.
 
 `retry` is mostly a box another writer stopped during the copy, for example
 Kortix's row-VM divergence sweep, which stops a running box whose row says
-`stopped`. The next run takes it again, up to 3 attempts.
+`stopped`. The next run takes it again, up to 3 attempts. A box that is not
+settled before the cycle starts (`box other`: still archiving after an earlier
+cycle, for example a dry run a minute before) spends no attempt and does not
+count for the stop rules. A part download retries a network error or a 5xx
+twice.
+
+`invalid` is a log that failed `SessionLogSchema`. On prod all 9 were a todo whose
+status OpenCode had stored as free text outside the session-log enum. The
+converter now leaves such a todo out (and drops an unknown priority), and the
+candidate filter takes those `invalid` rows (detail `todos.…`) again, up to 3
+attempts.
 
 ## Runbook
+
+The script is no longer in the tree. To run it again, restore the 9 files
+from `550757a87b` (`apps/api/src/scripts/recover-opencode-history.ts` and the
+folder beside it) on a branch, ship them in a release, then follow this runbook.
 
 Run it as a one-off ECS task of the environment (the worker task definition: its
 env, IAM and VPC), never on a laptop for prod: the files are customer data.
@@ -80,6 +102,23 @@ run '["bun","src/scripts/recover-opencode-history.ts","--env","'$ENV'","--limit"
 run '["bun","src/scripts/recover-opencode-history.ts","--env","'$ENV'","--apply"]'                 # all Platinum, in batches of 200
 run '["bun","src/scripts/recover-opencode-history.ts","--env","'$ENV'","--apply","--provider","daytona","--concurrency","2"]'
 ```
+
+Big stores, after the main runs: one session at a time, on a 2 vCPU / 16 GB task
+(the worker container sets no memory limit of its own, so a task override is
+enough; Fargate allows 16 GB only from 2 vCPU, and the dev worker has 1).
+Peak memory is about 2.4 × the store (dev: 636 MB for a 262 MB store).
+
+```bash
+runbig() { aws ecs run-task --profile kortix --region $REGION --cluster $CLUSTER --task-definition "$TD" \
+  --capacity-provider-strategy capacityProvider=FARGATE,weight=1 --network-configuration "$NET" \
+  --overrides "{\"cpu\":\"2048\",\"memory\":\"16384\",\"containerOverrides\":[{\"name\":\"worker\",\"command\":$1}]}" --query 'tasks[0].taskArn' --output text; }
+runbig '["bun","src/scripts/recover-opencode-history.ts","--env","'$ENV'","--apply","--max-store-mb","2048","--concurrency","1"]'
+runbig '["bun","src/scripts/recover-opencode-history.ts","--env","'$ENV'","--apply","--provider","daytona","--max-store-mb","2048","--concurrency","1"]'
+```
+
+`--max-store-mb` above 128 needs `--concurrency 1`. It takes the fresh candidates
+and every `too_large` set aside for its size under the new cap. The cap goes up
+to 8192: at about 2.4 × the store, 16 GB holds a store up to ~6 GB.
 
 The output goes to the worker log group (`/ecs/kortix-<env>…`, stream prefix
 `worker`): one `[recover]` line per session, a `done` line with the outcome counts.
@@ -119,5 +158,51 @@ are stamped and skipped.
 - Prod Daytona estimate at the dev rate: 6,069 sessions × 57 s / 2 ≈ 48 h at
   concurrency 2. Daytona's disk quota is shared by every environment, so raise the
   concurrency only while watching it.
-- Open: the prod run after the release; pi sessions with no log (146 Platinum
-  since 08-19, `ses_pi…` roots) need a pi reader and are not covered.
+- 2026-11-06, prod on v0.15.0 (first image with the script): `--plan` 6,424
+  Platinum candidates (525 by a user, 72 with no root). The candidate filter takes
+  sessions with only abandoned turns too, so the earlier 1,544 was low: at the dev
+  rate, ≈15 h for Platinum. Dry run of 5 (newest user sessions): 3 `converted`
+  (40, 54, 617 messages), 2 failed on stores of 685 MB and 399 MB: Platinum's
+  file API answers `404 file too large` over 256 MiB. The old reader also read a
+  404 on the `-wal` as "no WAL", so a big `-wal` would have been dropped without
+  an error, and a failed download left its temp copy in the box. Nothing was
+  written on prod.
+- 2026-11-06, the fix on dev (local run against dev data): the 2 dev `too_large`
+  stores (227 MB, 262 MB) `written` in 2 parts each (178 and 713 messages, peak
+  RSS 636 MB). A 200 MiB cap records `too_large` from the box's measure, without a
+  copy. Single-part copies read on a Platinum box (4.5 MB) and a Daytona box
+  (9.4 MB). After the cycles, 0 `/tmp/kortix-recover.*` folders in the boxes, and
+  every box parked.
+- 2026-11-06, the deployed dev image (`a11a454428`, worker td `:222`): a one-off
+  task at 2 vCPU / 16 GB with `--apply --max-store-mb 2048 --concurrency 1` and
+  a Daytona `--apply`, both exit 0 and 0 candidates. Dev totals: 868 `written`,
+  47 `empty_store`, 3 `no_store`, 2 `box_gone`, 1 `retry` (a box stuck in Daytona
+  `archiving`).
+- 2026-11-07/08, prod on v0.15.1 (worker td `:11`): plan 6,425 Platinum
+  candidates. Dry run of 5, then `--limit 5 --apply`: 2 `written` (40 and 54
+  messages, read back from `session_log_messages`), 2 `too_large`, 1 `no_store`,
+  boxes archived. Full pass, concurrency 3: 6,420 sessions in 663.9 min, exit 0,
+  peak RSS 279 MB, ~560 sessions/h. Big pass at 2 vCPU / 16 GB (85 sessions,
+  35.2 min): 73 `written`. A Platinum stop can take over 10 s on a box with a big
+  disk: `release` then fails, a `written` session stays `written`, any other
+  outcome becomes `retry`.
+- 2026-11-10, final retry pass (td `:13`): 2 more `written`. Prod Platinum total:
+  6,258 `written`, 148 `empty_store`, 1 `no_store`. Not recovered: 9 `invalid`
+  (todo status, fixed above), 1 `too_large` of 4,213 MB (over the old 4096 cap),
+  and 8 `retry` with 3 attempts spent: disk input/output errors or a crash in the
+  box (4), a box that cannot start on its host (1), an attachment over 50 MiB
+  (1), a box still settling (1), a provider timeout (1).
+- 2026-11-10, Daytona: written off. Daytona answers `401 Invalid credentials`
+  to the key in `.env.prod` and `.env.dev` (unchanged in git; it worked on dev
+  on 11-05). The prod plan counted 8,453 Daytona candidates; the owner decided
+  not to recover them.
+- 2026-11-10 23:51Z, rerun after v0.15.4 shipped the todo fix (td `:14`,
+  2 vCPU / 16 GB, `--apply --max-store-mb 8192 --concurrency 1`, 12 sessions in
+  2.3 min): the 9 `invalid` sessions `written` (11 to 238 messages each; every
+  count matches `session_log_messages`), 1 more `no_store`. The 4,213 MB store
+  failed with `No space left on device`: the copy splits the whole store into the
+  box's `/tmp` before the download, and that box's disk cannot hold it. The owner
+  wrote it off. Final prod Platinum total: 6,267 `written`, 148 `empty_store`,
+  2 `no_store`, 9 not recovered.
+- Not covered: pi sessions with no log (146 Platinum since 08-19, `ses_pi…`
+  roots) need a pi reader.

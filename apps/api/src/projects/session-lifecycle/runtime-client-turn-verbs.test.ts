@@ -1,7 +1,7 @@
 // Every runtime call of the session lifecycle goes to a Kortix route. Bun
 // mocks are process-global; run this file in isolation (`bun test --isolate`).
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
-import * as realOpencodeMapping from '../opencode-mapping';
+import * as realRuntimeMapping from '../runtime-session-mapping';
 
 const forwarded: Array<{ method: string; path: string; query: string; body: unknown; headers: Headers }> = [];
 let forwardStatus = 202;
@@ -32,9 +32,9 @@ mock.module('../../sandbox-proxy/forward', () => ({
   },
 }));
 
-mock.module('../opencode-mapping', () => ({
-  ...realOpencodeMapping,
-  sandboxOpencodeEndpoint: async () => ({ url: 'https://daemon.test', headers: {} }),
+mock.module('../runtime-session-mapping', () => ({
+  ...realRuntimeMapping,
+  sandboxRuntimeEndpoint: async () => ({ url: 'https://daemon.test', headers: {} }),
 }));
 
 const { SteerNotTaken, postPrompt, readRuntimeMessage, readSessionMessageTip, retractRuntimeMessage } = await import('./runtime-client');
@@ -73,7 +73,7 @@ beforeEach(() => {
   }) as typeof fetch;
 });
 
-const session = { endpoint: { url: 'https://daemon.test', headers: {} }, opencodeSessionId: 'ses_1', externalId: 'ext-1' };
+const session = { endpoint: { url: 'https://daemon.test', headers: {} }, runtimeSessionId: 'ses_1', externalId: 'ext-1' };
 const deliver = () =>
   postPrompt('ext-1', 'ses_1', 'hello', 'user-1', 'sess-1', 'idem-1', {
     parts: [{ type: 'text', text: 'hello' }],
@@ -152,7 +152,7 @@ describe('session runtime reads: the box log (runtime.log.v1)', () => {
 
   test('the tip read uses the box log page: reply_to is the parent, a streaming reply is open, a waiting prompt is on record', async () => {
     logBox();
-    pages['/kortix/runtime/log?limit=8'] = {
+    pages['/kortix/runtime/log?limit=8&include=context'] = {
       thread_id: 'ses_1',
       messages: [
         record('msg_a', 2),
@@ -167,13 +167,13 @@ describe('session runtime reads: the box log (runtime.log.v1)', () => {
       { id: 'msg_b', role: 'assistant', parentID: 'msg_a', created: Date.parse(at(3)), completed: null, partIds: ['msg_b-b0'] },
       { id: 'msg_q', role: 'user', parentID: null, created: Date.parse(at(4)), completed: Date.parse(at(4)), partIds: ['msg_q-b0'] },
     ]);
-    expect(fetched).toEqual(['GET /kortix/runtime/log?limit=8']);
+    expect(fetched).toEqual(['GET /kortix/runtime/log?limit=8&include=context']);
   });
 
   test('a full read pages backwards on before_seq until has_more is false', async () => {
     logBox();
-    pages['/kortix/runtime/log?limit=200'] = { thread_id: 'ses_1', messages: [record('msg_c', 5)], has_more: true };
-    pages['/kortix/runtime/log?limit=200&before_seq=5'] = {
+    pages['/kortix/runtime/log?limit=200&include=context'] = { thread_id: 'ses_1', messages: [record('msg_c', 5)], has_more: true };
+    pages['/kortix/runtime/log?limit=200&before_seq=5&include=context'] = {
       thread_id: 'ses_1',
       messages: [record('msg_a', 2), record('msg_b', 3, { role: 'assistant', reply_to: 'msg_a' })],
       has_more: false,
@@ -182,9 +182,20 @@ describe('session runtime reads: the box log (runtime.log.v1)', () => {
     expect(tip?.map((m) => m.id)).toEqual(['msg_a', 'msg_b', 'msg_c']);
   });
 
+  test('a full read the page cap cut short is unknown (null), not a partial transcript', async () => {
+    logBox();
+    for (let i = 0; i < 50; i++) {
+      const seq = 1000 - i;
+      pages[i === 0 ? '/kortix/runtime/log?limit=200&include=context' : `/kortix/runtime/log?limit=200&before_seq=${seq + 1}&include=context`] = {
+        thread_id: 'ses_1', messages: [record(`msg_${seq}`, seq)], has_more: true,
+      };
+    }
+    expect(await readSessionMessageTip(session)).toBeNull();
+  });
+
   test('an auto compaction reads as one, as the v1 compaction part did', async () => {
     logBox();
-    pages['/kortix/runtime/log?limit=8'] = {
+    pages['/kortix/runtime/log?limit=8&include=context'] = {
       thread_id: 'ses_1',
       messages: [record('msg_k', 4, { role: 'assistant', kind: 'compaction', blocks: [{ type: 'compaction', id: 'k0', summary: 's', first_kept_message_id: null, trigger: 'auto' }] })],
       has_more: false,

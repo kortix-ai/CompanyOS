@@ -15,7 +15,8 @@ import { assertSafeEgressUrl, UnsafeEgressError } from '../../shared/ssrf-guard'
 import { assertProjectCapability, loadProjectForUser } from '../lib/access';
 import { projectsApp } from '../lib/app';
 import { propagateProjectSecretsToActiveSandboxes } from '../lib/sandbox-env-sync';
-import { resolveProjectSecretsForConsumer } from '../secrets';
+import { firstGatewayKeyValue } from '../../llm-gateway/credentials/gateway-keys';
+import { moveLegacyProviderKeysNamed } from '../../secrets/llm-credential-move';
 
 const CustomLlmProviderSchema = z.object({
   id: z.string(),
@@ -40,7 +41,7 @@ const CustomLlmProviderSchema = z.object({
 }).openapi('CustomLlmProvider');
 type CustomLlmProviderView = z.infer<typeof CustomLlmProviderSchema>;
 
-const Params = z.object({ projectId: z.string(), providerId: z.string() });
+const Params = z.object({ workspaceId: z.string(), providerId: z.string() });
 
 function view(provider: CustomLlmProviderDefinition, secretNames: string[]): CustomLlmProviderView {
   const secretName = customProviderSecretName(provider.id);
@@ -49,18 +50,19 @@ function view(provider: CustomLlmProviderDefinition, secretNames: string[]): Cus
 
 /**
  * Models → Custom: a project's own OpenAI-compatible endpoints, served by the
- * LLM gateway (llm-gateway/custom-providers.ts). The key is the ordinary
- * project secret `CUSTOM_<ID>_API_KEY`, written and deleted through the
- * secrets routes.
+ * LLM gateway (llm-gateway/custom-providers.ts). The key is `CUSTOM_<ID>_API_KEY`,
+ * a named account of provider `<id>` (a write through the secrets routes lands
+ * there, `secrets/llm-credential-move.ts`), or a legacy project secret not
+ * moved yet.
  */
 export function registerCustomProvidersRoutes(): void {
   projectsApp.openapi(createRoute({
-    method: 'get', path: '/{projectId}/custom-providers', tags: ['projects'],
+    method: 'get', path: '/{workspaceId}/custom-providers', tags: ['projects'],
     summary: 'List the custom LLM providers of a project', ...auth,
     request: { params: Params.omit({ providerId: true }) },
     responses: { 200: json(z.object({ providers: z.array(CustomLlmProviderSchema) }), 'Custom providers'), ...errors(403, 404) },
   }), async (c) => {
-    const { projectId } = c.req.valid('param');
+    const { workspaceId: projectId } = c.req.valid('param');
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     const { providers, secretNames } = await listProjectCustomProviders(projectId);
@@ -75,12 +77,12 @@ export function registerCustomProvidersRoutes(): void {
   });
 
   projectsApp.openapi(createRoute({
-    method: 'put', path: '/{projectId}/custom-providers/{providerId}', tags: ['projects'],
+    method: 'put', path: '/{workspaceId}/custom-providers/{providerId}', tags: ['projects'],
     summary: 'Create or replace a custom LLM provider', ...auth,
     request: { params: Params, body: { content: { 'application/json': { schema: CustomLlmProviderInputSchema } } } },
     responses: { 200: json(CustomLlmProviderSchema, 'The saved provider'), ...errors(400, 403, 404) },
   }), async (c) => {
-    const { projectId, providerId } = c.req.valid('param');
+    const { workspaceId: projectId, providerId } = c.req.valid('param');
     const input = c.req.valid('json');
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
@@ -107,12 +109,15 @@ export function registerCustomProvidersRoutes(): void {
       }, 400);
     }
     // Save the key first: the endpoint's `GET /models` usually needs it.
-    const [key] = await resolveProjectSecretsForConsumer({
-      projectId, accountId: loaded.row.accountId, actorUserId: loaded.userId,
-      name: customProviderSecretName(providerId), consumer: 'llm_gateway',
+    const key = await firstGatewayKeyValue({
+      accountId: loaded.row.accountId, projectId, userId: loaded.userId, grantUserId: loaded.userId,
+      providerId, name: customProviderSecretName(providerId),
     });
-    const detected = await probeCustomModels(input.base_url, key?.value ?? null);
+    const detected = await probeCustomModels(input.base_url, key);
     const next = await writeProjectCustomProvider(projectId, providerId, input, detected);
+    // A key saved before its endpoint existed is a legacy secret (no provider
+    // to file it under yet): now that the provider exists it moves to the named store.
+    await moveLegacyProviderKeysNamed(projectId, customProviderSecretName(providerId));
     const { secretNames } = await listProjectCustomProviders(projectId);
     // Running sessions re-read the served model list.
     void propagateProjectSecretsToActiveSandboxes(projectId, { refreshModels: true });
@@ -120,12 +125,12 @@ export function registerCustomProvidersRoutes(): void {
   });
 
   projectsApp.openapi(createRoute({
-    method: 'delete', path: '/{projectId}/custom-providers/{providerId}', tags: ['projects'],
+    method: 'delete', path: '/{workspaceId}/custom-providers/{providerId}', tags: ['projects'],
     summary: 'Remove a custom LLM provider', ...auth,
     request: { params: Params },
     responses: { 204: { description: 'Removed' }, ...errors(403, 404) },
   }), async (c) => {
-    const { projectId, providerId } = c.req.valid('param');
+    const { workspaceId: projectId, providerId } = c.req.valid('param');
     const loaded = await loadProjectForUser(c, projectId, 'read');
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_MODEL_WRITE);

@@ -28,20 +28,17 @@ import { Checkbox } from '@kortix/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@kortix/ui/dropdown-menu';
 import { Hint } from '@kortix/ui/hint';
 import { PROJECT_LANDING_PATH } from '@kortix/ui/internal/lib/onboarding/landing-destination';
-import { readLastProjectId } from '@kortix/ui/internal/lib/onboarding/last-project-cookie';
-import { useComposerPrefillStore } from '@kortix/ui/internal/stores/composer-prefill-store';
 import { cn } from '@kortix/ui/lib/utils';
 import Loading from '@kortix/ui/loading';
 import { Popover, PopoverContent, PopoverTrigger } from '@kortix/ui/popover';
 import { Skeleton } from '@kortix/ui/skeleton';
-import { Tabs, TabsListCompact, TabsTriggerCompact } from '@kortix/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@kortix/ui/tabs';
 import { errorToast } from '@kortix/ui/toast';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -54,35 +51,12 @@ import { useTranslations } from '@/i18n/use-translations';
 import { isInExtensionPanel } from '@/lib/supabase/panel-cookies';
 
 import { usePanelChannel, type PanelContext, type PanelTab } from './panel-channel';
-import {
-  isReadPage,
-  pageAttachment,
-  screenshotAttachment,
-  sendTabs,
-  withActTab,
-  withQuote,
-  type PanelMode,
-} from './panel-prompt';
+import { sendTabs, type PanelMode } from './panel-prompt';
+import { usePanelProject } from './use-panel-project';
+import { usePanelSend } from './use-panel-send';
 
 /** How many of the project's sessions the new chat lists. */
 const RECENT_SESSIONS = 3;
-const projectKey = (userId: string) => `kortix.panel.project.${userId}`;
-
-function rememberedProject(userId: string): string | null {
-  try {
-    return window.localStorage.getItem(projectKey(userId));
-  } catch {
-    return null;
-  }
-}
-
-function rememberProject(userId: string, projectId: string) {
-  try {
-    window.localStorage.setItem(projectKey(userId), projectId);
-  } catch {
-    // A blocked store only loses the remembered project.
-  }
-}
 
 export function ChromePanelHome() {
   const t = useTranslations('chrome.panel');
@@ -90,14 +64,9 @@ export function ChromePanelHome() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
 
-  const { sections, listsLoading } = useProjectSelectorData();
-  const projects = useMemo(() => sections.flatMap((section) => section.projects), [sections]);
-  const [picked, setPicked] = useState<string | null>(null);
-  const projectId = useMemo(() => {
-    const known = (id: string | null) => (id && projects.some((p) => p.project_id === id) ? id : null);
-    const stored = userId ? known(rememberedProject(userId)) ?? known(readLastProjectId(userId)) : null;
-    return known(picked) ?? stored ?? projects[0]?.project_id ?? null;
-  }, [picked, projects, userId]);
+  const { openable: workspaces, listsLoading } = useProjectSelectorData();
+  const projects = useMemo(() => workspaces.map((row) => row.project), [workspaces]);
+  const { projectId, pickProject } = usePanelProject({ userId, projects });
   const project = projects.find((p) => p.project_id === projectId);
 
   const [text, setText] = useState('');
@@ -105,7 +74,6 @@ export function ChromePanelHome() {
   const [follow, setFollow] = useState(true);
   const [added, setAdded] = useState<PanelTab[]>([]);
   const [quote, setQuote] = useState<PanelContext | null>(null);
-  const [sending, setSending] = useState(false);
   /** Send also attaches a JPEG of the visible tab. */
   const [shot, setShot] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -137,51 +105,7 @@ export function ChromePanelHome() {
     else input.current?.focus();
   }, [router]);
 
-  const pickProject = (id: string) => {
-    setPicked(id);
-    if (userId) rememberProject(userId, id);
-  };
-
-  // A quick action reads the page whatever the switch says.
-  const send = async (override?: string, sendMode: PanelMode = mode) => {
-    const body = (override ?? text).trim();
-    if (!body || !projectId || sending) return;
-    setSending(true);
-    try {
-      let prompt = quote?.quote ? withQuote(body, quote.quote, quote.tab) : body;
-      const readable = tabs.filter((tab) => tab.readable);
-      let files: ReturnType<typeof pageAttachment>[] = [];
-      if (sendMode === 'act') {
-        const tab = readable[0] ?? quote?.tab;
-        if (tab?.readable) {
-          prompt = withActTab(prompt, tab);
-          channel.handAct(tab.id);
-        }
-      } else if (readable.length) {
-        const pages = await channel.readTabs(readable.map((tab) => tab.id));
-        const read = pages.filter(isReadPage);
-        if (!read.length) throw new Error(t('readFailed'));
-        const readAt = new Date();
-        files = read.map((page) => pageAttachment(page, readAt));
-      }
-      if (shot) {
-        // Chrome captures the window's visible tab: the one the first chip shows.
-        const dataUrl = await channel.capture();
-        if (!dataUrl) throw new Error(t('captureFailed'));
-        files = [...files, screenshotAttachment(dataUrl, channel.activeTab?.title ?? '', new Date())];
-      }
-      // Project home sends it as if the person pressed Enter there, then opens the session here.
-      // 'when-ready': a one-shot submit on landing is dropped when the composer is still loading.
-      useComposerPrefillStore
-        .getState()
-        .setPrefill(projectId, prompt, { submit: 'when-ready', ...(files.length ? { files } : {}) });
-      // nav-contract: prefetch-only — project home consumes the prefill and opens the new session
-      router.push(`/projects/${projectId}`);
-    } catch (error) {
-      errorToast(error instanceof Error && error.message ? error.message : t('readFailed'));
-      setSending(false);
-    }
-  };
+  const { send, sending } = usePanelSend({ text, projectId, quote, tabs, mode, shot, channel });
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
@@ -211,18 +135,11 @@ export function ChromePanelHome() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="max-h-80 w-64">
               <DropdownMenuRadioGroup value={projectId ?? ''} onValueChange={pickProject}>
-                {sections
-                  .filter((section) => section.projects.length)
-                  .map((section) => (
-                    <div key={section.accountId}>
-                      {sections.length > 1 ? <DropdownMenuLabel>{section.accountName}</DropdownMenuLabel> : null}
-                      {section.projects.map((p) => (
-                        <DropdownMenuRadioItem key={p.project_id} value={p.project_id}>
-                          <span className="truncate">{p.name}</span>
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </div>
-                  ))}
+                {projects.map((p) => (
+                  <DropdownMenuRadioItem key={p.project_id} value={p.project_id}>
+                    <span className="truncate">{p.name}</span>
+                  </DropdownMenuRadioItem>
+                ))}
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -234,7 +151,7 @@ export function ChromePanelHome() {
           <div className="space-y-2">
             <p className="text-muted-foreground text-sm text-pretty">{t('noProjects')}</p>
             <Button asChild variant="outline" size="sm">
-              <Link href="/projects/start">{t('createProject')}</Link>
+              <Link href="/workspaces/start">{t('createProject')}</Link>
             </Button>
           </div>
         ) : (
@@ -286,7 +203,7 @@ export function ChromePanelHome() {
                   {recent.map((session) => (
                     <li key={session.id}>
                       <Link
-                        href={`/projects/${projectId}/sessions/${session.id}`}
+                        href={`/workspaces/${projectId}/sessions/${session.id}`}
                         className="hover:bg-muted -mx-2 flex items-center rounded-md px-2 py-1.5 text-sm"
                       >
                         <span className="truncate">{session.title}</span>
@@ -393,10 +310,10 @@ export function ChromePanelHome() {
           />
           <div className="flex items-center gap-2">
             <Tabs value={mode} onValueChange={(value) => setMode(value as PanelMode)}>
-              <TabsListCompact aria-label={t('modeLabel')}>
-                <TabsTriggerCompact value="read">{t('read')}</TabsTriggerCompact>
-                <TabsTriggerCompact value="act">{t('act')}</TabsTriggerCompact>
-              </TabsListCompact>
+              <TabsList size="xs" aria-label={t('modeLabel')}>
+                <TabsTrigger value="read">{t('read')}</TabsTrigger>
+                <TabsTrigger value="act">{t('act')}</TabsTrigger>
+              </TabsList>
             </Tabs>
             <span className="flex-1" />
             <Hint label={t('send')} side="top">

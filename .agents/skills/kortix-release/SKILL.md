@@ -76,6 +76,18 @@ gh run list --repo kortix-ai/CompanyOS --workflow tests.yml --branch dev --event
 A red night means fix `dev` first. Then cost every new migration (Step 5)
 before you dispatch: Promote applies it to the staging database within minutes.
 
+Then run the release suite's fast tripwires on the `dev` SHA you promote:
+
+```bash
+git fetch origin dev && git switch --detach origin/dev   # in your own worktree
+pnpm install --frozen-lockfile && bash scripts/pre-promote-tripwires.sh
+```
+
+It takes about 2.5 min. It names each red check, and you fix each one on
+`dev` before the dispatch. v0.15.11 needed 3 release-suite runs (about 1 h
+each) for failures this script finds in minutes (the learnings ledger,
+2026-11-14).
+
 ### Step 3 — one dispatch: Promote to Production
 
 Write the title and notes (Step 7 shows how), then:
@@ -105,6 +117,15 @@ Promote then:
 `-f dry_run=true` prints every decision (SHA, conflict, PR, version) and
 changes nothing. `-f ref=staging` skips the dev leg: the hotfix path for a
 commit already on `staging`.
+
+**A failed promote resumes.** When the run fails after the staging merge
+(build, deploy or the `/health` proof), fix the cause and re-run the run (or
+dispatch again with the same `ref`). The plan step finds the merged
+`promote/dev-<sha10>` PR; while its merge is still the staging tip it skips the
+merge, skips the build when the three staging manifests already passed, and
+always repeats the 8-read `/health` proof. When staging moved on after that
+merge, use `-f ref=staging`. A re-promote cancels the gate run of the release
+PR's older head itself.
 
 ### Step 4 — the release suite is the gate; fix forward
 
@@ -164,11 +185,16 @@ Promote waits for the proof itself; to check by hand:
 
 ```bash
 curl -fsS https://staging-api.kortix.com/v1/health | jq '{environment,version,commit}'
-curl -fsS https://gateway-staging.kortix.com/health | jq '{version,commit}'
-curl -fsS https://staging.kortix.com/api/health | jq '{version,commit}'
+curl -fsS https://gateway-staging.kortix.com/health/live | jq '{version,commit}'
 ```
 
-All three must report the exact SHA you promoted. A staging runtime check that
+The gateway's `/health` answers only `{status}` to an anonymous caller
+(`apps/llm-gateway/src/health.test.ts`); `/health/live` carries the version.
+The staging web sits behind Vercel Authentication: an anonymous read of
+`staging.kortix.com/api/health` gets `302`. Promote reads it with the Vercel
+bypass from AWS Secrets Manager. All three must report the exact SHA you
+promoted. Deploy Staging runs list the `dev` SHA as their head: match the
+deployed SHA by `/health`, not by the run's `headSha`. A staging runtime check that
 points at `dev.kortix.com` / `dev-api.kortix.com` is a broken staging setup, not
 a passing gate.
 
@@ -251,13 +277,16 @@ every surface on the new version:
 
 ```bash
 curl -fsS https://api.kortix.com/v1/health | jq '{environment,version,commit}'
-curl -fsS https://gateway.kortix.com/health | jq '{version,commit}'
+curl -fsS https://gateway.kortix.com/health/live | jq '{version,commit}'
 curl -fsS https://kortix.com/api/health | jq '{version,commit}'
 npm view @kortix/sdk version
 npm view @kortix/agent-tunnel version
 npm view @kortix/llm-catalog version
 gh release view "vX.Y.Z" --repo kortix-ai/CompanyOS --json name,body,assets --jq '{name,assetCount:(.assets|length)}'   # 24 assets
 ```
+
+The API and the gateway report the promoted staging SHA: deploy-prod retags
+the staging images. The web reports the prod merge SHA. Both are correct.
 
 Then check Better Stack for an API error, 5xx, or frontend-exception spike in
 the minutes after the rollout.
@@ -273,7 +302,11 @@ Connect (runbook: `apps/mobile/BUILD_GUIDE.md`).
 
 `:stable` moves **only** on the user's explicit, per-release consent — never
 implied by "we released" or "prod is healthy." Run `promote-self-host-stable.yml`
-by hand when that consent is given.
+by hand when that consent is given. It refuses a version with no published GitHub
+Release `vX.Y.Z`: deploy-prod creates the Release only after prod served that
+version, so `:stable` never names a version whose prod roll failed. `:latest`
+and `:prod` move in deploy-prod's `promote-prod-channel` job, after
+`verify-live-version`; `:X.Y.Z` exists from the retag on, because ECS rolls it.
 
 ### Step 11 — rollback
 
@@ -295,7 +328,12 @@ written, evidence-backed justification, never silently.
 ## 4. Gotchas (hard-won)
 
 - **deploy-prod concurrency = `cancel-in-progress: false`.** A slow desktop build or a
-  zombie queued run blocks the next deploy — cancel it first.
+  zombie queued run blocks the next deploy — cancel it first. `rollback-prod.yml` uses
+  the same group, so a rollback waits for a running deploy, and a waiting run of
+  either one replaces the other's waiting run.
+- **Any deploy-prod run undoes a rollback.** It re-rolls every ECS service to
+  `prod:VERSION`. Do not dispatch it (for example with `rebuild_desktop`) while prod is
+  rolled back, unless you mean to roll forward.
 - **A release rebuilds the desktop app only when the desktop changed.** `desktop-plan`
   compares the desktop fingerprint with the latest release's `DESKTOP-FINGERPRINT`; when
   it is equal, `attach-desktop` copies that release's installers and `latest*.yml`, and
@@ -343,6 +381,7 @@ no `vX.Y.Z` Release.
 ## Checklist
 
 1. Last nightly `Tests` run on `dev` checked; red lanes fixed on `dev` first.
+   `bash scripts/pre-promote-tripwires.sh` green on the `dev` SHA you promote.
 2. Every new migration in the diff costed read-only against prod before the dispatch.
 3. `git log $PREV..origin/dev` read in full; title + notes written in
    kortix-voice, accurate to that log.

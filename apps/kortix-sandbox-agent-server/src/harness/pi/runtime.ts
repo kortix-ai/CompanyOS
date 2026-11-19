@@ -24,12 +24,14 @@ import type { AssistantMessage, ImageContent, ModelThinkingLevel } from '@earend
 import type { AgentSessionEvent, SessionEntry, SessionHeader, Skill } from '@earendil-works/pi-coding-agent'
 import { KORTIX_RUNTIME_SCHEMA, toolAllowed, type CompiledAgent, type CompiledAgentSet, type RuntimePending } from '@kortix/api-contract/runtime-relay'
 import { KORTIX_PLATFORM_TOOL_NAMES } from '@kortix/api-contract/kortix-tool-card'
+import type { ThreadActivity } from '@kortix/api-contract/wire-values'
 import type { KortixAssistantMessageInfo, KortixMessage, KortixMessageError, RuntimePermissionRequest, RuntimeQuestionRequest, RuntimeToolRef, TurnErrorCode } from '@kortix/api-contract/transcript'
 import type { HarnessState } from '../contract/lifecycle-contract'
 import { kortixEventBus, sessionLogEventBus } from '@/services/event-bus/kortix-event-bus'
 import { logger } from '@/lib/log/logger'
 import { resolveKortixRuntimeStateDirectory } from '@/lib/config/runtime-state-dir'
 import { SECRET_CAPABILITIES_INSTRUCTION_PATH } from '@/services/sandbox-env/secret-capabilities'
+import { WORKSPACE_SETUP_NOTE_PATH, parseWorkspaceSetup } from '../shared/workspace-setup'
 import { withheldManagedSkills } from '@/services/skills/managed-skills'
 import { loadTools } from '@/services/tools/host'
 import { compiledAgentConfigFromEnv } from '@/services/config-provider/compiled-agent-config'
@@ -43,22 +45,25 @@ import { FRONT_AGENTS_TTL_MS, FRONT_PROMPT, FRONT_TOOLS, FRONT_WORKER_NOTE, fetc
 import { WATCHER_PROMPT } from './watcher'
 import { frontSpaceAgentsFrom, frontSpaceRoster, frontSpaceRosterSection } from './front-space'
 import { cloudChildReport, cloudChildToolDetails, cloudSpawnSession, cloudStopChild, cloudSubagentApiFrom, routeSubagent, subagentContextFrom, type CloudSubagentApi, type SubagentContext } from './cloud-subagent'
-import type { ControlPlane } from './extensions/control-plane'
+import { callApi, sessionPath, type ControlPlane } from './extensions/control-plane'
 import { messaging, MESSAGING_TOOLS } from './extensions/messaging'
 import { TEAM_TASK_TOOLS, teamTasks } from './extensions/team-tasks'
 import { VOICE_CALL_FLAG, voice } from './extensions/voice'
+import { LOOPS_FLAG, followThrough } from './extensions/follow-through'
+import { GOAL_MODE_BOX_FLAG, goalMode, type ChatGoal } from './extensions/goal-mode'
 import { BUNDLED_WORKFLOWS } from './extensions/bundled-workflows'
 import { isWorkflowRunner, WORKFLOW_TOOL, WorkflowRuns, type WorkflowControlAnswer } from './extensions/workflow'
 import { contextRecord } from './extensions/context-record'
 import { listCheckout } from './extensions/workflow-store'
-import { promptOrigin, ULTRACODE_SYSTEM_LINE, ultracodeRequested, type PromptOrigin } from './prompt-origin'
+import { promptOrigin, TRIGGER_EVENT_TAG, ULTRACODE_SYSTEM_LINE, ultracodeRequested, type PromptOrigin } from './prompt-origin'
 import { enabledFeatureFlags } from '@/lib/config/feature-flags'
+import { PROGRAM_AGENTS_FLAG, PROGRAM_PROVIDER_ID, programStep, type ProgramRun } from './program'
 import type { WorkflowRunMetadata } from '@kortix/api-contract/kortix-tool-card'
 import type { WorkflowControlBody } from '@kortix/api-contract/multi-agent'
 import type { RuntimeCapability } from '@kortix/api-contract/runtime-relay'
 import { PARKED, PermissionBroker, QuestionBroker, compilePermissionPolicy, type AskRelayAnswer, resolvePolicyRule, skillGranted, type PermissionPolicy, type PermissionRule, type SessionPermissionRule } from './interactions'
 import type { CatalogModel, PiModels, SelectedModel } from './model'
-import { KORTIX_PROVIDER_ID, compactionSettings, nativeModelId, promptModelId, selectId } from './model'
+import { IMAGE_RESIZE, KORTIX_PROVIDER_ID, compactionSettings, nativeModelId, promptModelId, selectId } from './model'
 import { claudeSessions } from './claude/provider'
 import { CLAUDE_AGENT_PROVIDER_ID } from '@kortix/api-contract/claude-agent'
 import { TranscriptStore, type RuntimeFrame } from './transcript'
@@ -73,6 +78,7 @@ import { PI_HARNESS_VERSION } from './version'
 import { promptImages } from './images'
 import type { PiSessionSnapshot } from './session-log'
 import { flushSessionLogJournal, reliveSessionLogMessage } from '../shared/session-log-journal'
+import { workspaceIdFromEnv } from '@/lib/config/workspace-id'
 
 export type { CompiledAgent }
 
@@ -130,7 +136,7 @@ export class CommandNotEnabled extends Error {
 }
 
 export const DEFAULT_SYSTEM_PROMPT = [
-  'You are a coding agent working inside a Kortix sandbox. The project repository is checked out at the working directory.',
+  'You are a coding agent working inside a Kortix sandbox. The working directory starts empty: the project repository is not checked out. Run `kortix workspaces clone` to work on its files.',
   'Use the tools to read, search and change files and to run commands. Prefer small, verifiable steps. Report what you did and what remains.',
 ].join('\n')
 
@@ -145,7 +151,7 @@ export const ACT_BEFORE_YOU_ASK = [
   '- Verify outcomes yourself: after an action that should produce something (a sent or received message, a confirmation link, a changed page, a booking, a saved file), check that it happened before you call it done.',
   '- Hand a step to the person only after you checked that you cannot do it, or when it needs them: a password, a sign-in or 2FA code, a payment, a signature, an approval. Say in one line what you checked.',
   '- A promise to check later is a check you run yourself (a follow-up or a wake-up), not a reminder for the person.',
-  '- Do it in this conversation, never by sending the person to a screen. To connect an app, start the sign-in yourself (`kortix connectors connect <app> --owner project`, or the connectors tool) and give the person the sign-in link. To get a key or password you lack, mint a secret link (`kortix secrets request NAME`) and give them that link. Name a screen in the app only when no tool or command can do the step (for example billing), with the exact clicks.',
+  '- Do it in this conversation, never by sending the person to a screen. To connect an app, start the sign-in yourself (the connectors tool, or `kortix connectors connect <app>`). Start ONE sign-in per app. For a trigger, wake-up or automation, it is the shared sign-in of the workspace (connectors tool `for_trigger=true`, or `--owner workspace`): those run only on a shared account, so never start a private sign-in first. For their own use, it is their private sign-in. In the web chat, Kortix then shows the person a Connect card for that app: tell them in one line to click Connect on the card, and do not paste the raw sign-in link there. Paste the link only when the person reads you outside the web chat (Slack, email). When they finish, you get a message that the account is connected. To get a key or password you lack, mint a secret link (`kortix secrets request NAME`) and give them that link. Name a screen in the app only when no tool or command can do the step (for example billing), with the exact clicks.',
   '- Act only on links and messages that belong to the task the person gave you.',
 ].join('\n')
 
@@ -170,6 +176,41 @@ export const PARKED_PERMISSION_REASON =
   'This call needs a person\'s approval and did not run. The request waits in their Review inbox; nobody answered it yet. ' +
   'Continue with work that does not need this call. When they approve, you get a message: then run exactly the same call again and it runs. ' +
   'If nothing else is left, end your turn and say in one line what you wait for. Do not retry the call before that message.'
+
+/**
+ * Every agent's ids: its session, its project, the session that started it
+ * and its space (`KORTIX_SESSION_ID`, `KORTIX_PROJECT_ID`,
+ * `KORTIX_PARENT_SESSION_ID`, `KORTIX_SPACE_ID`). A subagent reads the
+ * conversation that started it with `kortix sessions log` instead of relying
+ * on its brief alone: the API lets a session read the sessions that spawned
+ * it (apps/api `session-visibility.ts` `isSpawnAncestor`). A subagent inside
+ * this session (`session: "same"`) has this session's main conversation as
+ * its parent. The ids never change during a session, so the section never
+ * breaks the prompt cache. Null on a box with no session id (a local box).
+ */
+export function sessionIdsSection(input: {
+  sessionId?: string
+  projectId?: string
+  parentSessionId?: string
+  spaceId?: string
+  /** A subagent that runs inside this session. */
+  inProcessChild?: boolean
+}): string | null {
+  const session = input.sessionId?.trim()
+  if (!session) return null
+  const parent = input.inProcessChild ? null : input.parentSessionId?.trim()
+  return [
+    '## Session ids',
+    `- session_id: ${session} (this session)`,
+    ...(input.projectId?.trim() ? [`- project_id: ${input.projectId.trim()}`] : []),
+    ...(input.inProcessChild ? [`- parent: the main conversation of this session (${session}), which started you`] : []),
+    ...(parent ? [`- parent_session_id: ${parent} (the session that started you)`] : []),
+    ...(input.spaceId?.trim() ? [`- space_id: ${input.spaceId.trim()}`] : []),
+    'Read a session\'s conversation with `kortix sessions log <session_id> -n 50` (`--json` for scripts; pipe it to rg or jq to search). It is always current.',
+    ...(input.inProcessChild || parent ? ['Read your parent\'s conversation when your task needs context your brief does not give.'] : []),
+    'Pass a session_id to a subagent or a command instead of copying a conversation into a prompt or a file.',
+  ].join('\n')
+}
 
 /** The system prompt's `Today's date` line, with the box's time zone. Without it an agent with no shell cannot resolve "yesterday". */
 export const todayLine = (now: number) => `Today's date: ${new Date(now).toDateString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone})`
@@ -275,13 +316,19 @@ export type TurnOutcome = 'completed' | 'error' | 'aborted'
  * My Kortix's platform tools are here: each card is the outcome of an action taken for the person.
  */
 const NATIVE_PART_TOOLS: readonly string[] = ['show', 'image_gen', ...KORTIX_PLATFORM_TOOL_NAMES, ...MESSAGING_TOOLS, ...TEAM_TASK_TOOLS, TASK_STOP_TOOL]
+/**
+ * Tools a codemode script may call that still get their own card: the native-part tools, and
+ * `agent`/`task`, whose card carries the child session link and its `task_id` (the web opens
+ * the child from it). Published from the session event like a direct call (`onSessionEvent`).
+ */
+const SCRIPT_CARD_TOOLS: readonly string[] = [...NATIVE_PART_TOOLS, 'agent', 'task']
 /** The multi-agent tools: their grant follows the `agent` tool's unless the agent's `tools` names them (`rootToolAllowed`). */
 const DELEGATION_TOOLS: readonly string[] = ['workflow', ...MESSAGING_TOOLS, ...TEAM_TASK_TOOLS, TASK_STOP_TOOL]
 /** The feature flag of agent teams (teammates and the shared task list). */
 export const AGENT_TEAMS_FLAG = 'agent_teams'
 /**
  * Built-in tools the model calls directly also with codemode `only`: presentation (NATIVE_PART_TOOLS)
- * and `question`, which a script may not call (`nestedCallGate`). `agent` is the subagents
+ * and `question`, whose answer lands on the model-issued call (`nestedCallGate`). `agent` is the subagents
  * extension's (`KortixHost.codemodeOnly`).
  */
 const CODEMODE_ONLY_DIRECT_TOOLS: readonly string[] = [...NATIVE_PART_TOOLS, 'question']
@@ -292,11 +339,33 @@ const PARALLEL_TOOLS: readonly string[] = ['image_gen']
  * these two messages). Exact strings: a pi bump that rewords them fails the pi-harness tests.
  */
 const PI_COMPACTION_REFUSALS = new Set(['Compaction failed: Nothing to compact (session too small)', 'Compaction failed: Already compacted'])
+/**
+ * How `AgentSession.prompt()` refuses while pi runs work of its own (pi 1.4.0 gives no code): a
+ * run an extension started, or a compaction. Both throw before any model call. A pi bump that
+ * rewords them fails the "pi runs an extension starts" pi-harness test.
+ */
+const PI_BUSY_REFUSALS = ['Agent is already processing', 'Cannot submit a prompt while compaction is in progress']
+/** Prompt attempts a turn makes when pi starts work of its own between its idle check and the prompt. */
+const PI_BUSY_PROMPT_ATTEMPTS = 3
+const piRefusedBusy = (err: unknown) => err instanceof Error && PI_BUSY_REFUSALS.some((text) => err.message.startsWith(text))
 
 export interface TurnEnd {
   messageId: string
   status: 'idle' | 'error'
   error?: { name: string; message?: string; statusCode?: number; code?: TurnErrorCode }
+  /** The text of the turn's last assistant message: a chat channel posts it when the agent sent no reply itself. */
+  finalText?: string
+}
+
+/** The text parts of an assistant message, joined; empty when it has none. */
+export function assistantFinalText(message: unknown): string {
+  const content = (message as { content?: unknown } | null)?.content
+  if (!Array.isArray(content)) return ''
+  return content
+    .filter((c): c is { type: 'text'; text: string } => (c as { type?: unknown })?.type === 'text' && typeof (c as { text?: unknown }).text === 'string')
+    .map((c) => c.text)
+    .join('\n\n')
+    .trim()
 }
 
 export interface PiRuntimeHooks {
@@ -313,6 +382,8 @@ export interface PiRuntimeHooks {
   onFrame?: (frame: RuntimeFrame) => void
   /** A turn read a steered message: it is on the wire and in the model's context. */
   onSteerRead?: (read: { rootId: string; messageId: string }) => void
+  /** A stopped turn dropped a steered message it never read: apps/api sends it again as the next turn. */
+  onSteerDropped?: (drop: { rootId: string; messageId: string }) => void
 }
 
 export interface PiRuntimeOptions {
@@ -331,7 +402,7 @@ interface ChildSession {
   agentName: string
   createdAt: number
   updatedAt: number
-  status: 'idle' | 'busy'
+  status: ThreadActivity
   transcript: TranscriptStore
   /** The child's pi conversation, kept so `task_id` resumes it. */
   agentMessages: AgentMessage[]
@@ -532,10 +603,15 @@ export class PiRuntime {
   private readonly steerReads = new Set<string>()
   /** The user message the next assistant message answers: the turn's, then the newest steered one read. */
   private turnParent: string | null = null
-  private abortAfterTool: { promptId: string; messageId: string } | null = null
-  private status: 'idle' | 'busy' = 'idle'
-  /** Turns admitted and not yet finished, the running one included. */
-  private pendingTurns = 0
+  /**
+   * The work admitted on the root and not finished: each queued or running turn and each
+   * `/summarize`, one token per item. The one source of "is a turn running" ({@link busy}):
+   * no wire frame writes it, so pi's `agent_end` idle frame inside a turn cannot clear it.
+   * A forced stop ({@link stop}) clears it; a late `delete` from the abandoned item is a no-op.
+   */
+  private readonly work = new Set<object>()
+  /** The start in flight ({@link start}). */
+  private starting: Promise<void> | null = null
   /** Prompts admitted behind the running work that have not started: a turn, or a `noReply` message before its queue slot. */
   private readonly waiting = new Map<string, { retracted?: boolean }>()
   /** `noReply` messages in pi's context that no model call has read, with their session entry. */
@@ -555,6 +631,8 @@ export class PiRuntime {
   private summarizeMarker: string | null = null
   /** Each Stop counts here; a `/summarize` queued before a Stop does not run. */
   private stops = 0
+  /** Each forced abandon ({@link abandonWork}) counts here; a turn that waited on pi across one does not run. */
+  private abandons = 0
   private resetProgressWatchdog: (() => void) | null = null
   /**
    * The Kortix message id of each pi message object (root and children): pi
@@ -700,8 +778,16 @@ export class PiRuntime {
     return (this.env.KORTIX_SESSION_ID ?? '').trim() || 'session-local'
   }
 
-  async start(): Promise<void> {
-    if (this.state === 'ok') return
+  /** Start the runtime. A second call while one runs joins it: one Agent, one PiSession. */
+  start(): Promise<void> {
+    if (this.state === 'ok') return Promise.resolve()
+    this.starting ??= this.startOnce().finally(() => {
+      this.starting = null
+    })
+    return this.starting
+  }
+
+  private async startOnce(): Promise<void> {
     this.state = 'starting'
     this.startError = null
     const startedAt = this.now()
@@ -747,7 +833,7 @@ export class PiRuntime {
         sessionID: this.rootId,
         mintMessageId: () => this.clock.mint(this.now()),
         parentMessageId: () => this.turnParent,
-        model: () => ({ providerID: this.selected!.providerID, modelID: this.selected!.modelID }),
+        model: () => (this.programRun(this.agentName) ? { providerID: PROGRAM_PROVIDER_ID, modelID: this.agentName } : { providerID: this.selected!.providerID, modelID: this.selected!.modelID }),
         agent: () => this.agentName,
         workspace: this.workspace,
         now: this.now,
@@ -778,8 +864,12 @@ export class PiRuntime {
         // `sessionId` names the thread, so a Claude subscription model keeps one Claude session per thread.
         streamFn: withMessageIdentity(
           withAgentSampling(
-            (model, context, options) => this.models!.models.streamSimple(model, context, { ...options, sessionId: this.rootId }),
-            () => this.sampling(this.compiledAgent(), this.selected!),
+            (model, context, options) => {
+              // A program agent (`run`): its command takes the model's place (program.ts).
+              const program = this.programRun(this.agentName)
+              return program ? programStep(program, context, options) : this.models!.models.streamSimple(model, context, { ...options, sessionId: this.rootId })
+            },
+            () => this.sampling(this.compiledAgent(), this.selected!, this.turnParent ?? undefined),
           ),
           { reserveMessageId: () => this.adapter!.reserveMessageId(), turnId: () => this.turnParent },
         ),
@@ -822,7 +912,7 @@ export class PiRuntime {
         prebuilt: project.prebuilt,
         baseTools: this.baseTools,
         // The nested-call gate is first: pi runs `tool_call` handlers in load order and stops at the first block.
-        extensions: [this.nestedCallGate(), this.presentationExtension(), this.turnExtension(), ...this.contextExtensions(), subagents(this.kortixHost()), workflow(this.kortixHost()), ...this.voiceExtensions(), ...this.multiAgentExtensions(), ...codemodeExtensions(this.codemodeMode, coding.createCodemodeExtension), ...local, ...project.extensions],
+        extensions: [this.nestedCallGate(), this.presentationExtension(), this.turnExtension(), ...this.contextExtensions(), subagents(this.kortixHost()), workflow(this.kortixHost()), ...this.voiceExtensions(), ...this.multiAgentExtensions(), ...this.goalModeExtensions(), ...this.followThroughExtensions(), ...codemodeExtensions(this.codemodeMode, coding.createCodemodeExtension), ...local, ...project.extensions],
         systemPrompt: () => this.systemPrompt(),
         skillAllowed: (name) => skillGranted(this.policy, name),
         // Every provider a turn may switch to: the gateway, and Claude subscription models.
@@ -850,6 +940,11 @@ export class PiRuntime {
         ms: this.now() - startedAt,
       })
     } catch (err) {
+      // A start that got as far as the session disposes it: the next start builds its own.
+      try {
+        this.pi?.session.dispose()
+      } catch {}
+      this.pi = null
       this.state = 'down'
       this.startError = err instanceof Error ? err.message : String(err)
       logger.error('[pi] runtime start failed', { err: this.startError })
@@ -860,7 +955,9 @@ export class PiRuntime {
   async stop(): Promise<void> {
     if (this.state === 'down') return
     await this.abort()
-    await this.queue.catch(() => {})
+    // A run an extension started is no turn `abort` stops; a turn queued behind it waits for it.
+    if (this.pi && !this.pi.session.isIdle) this.stopPi()
+    if (!(await settlesWithin(this.queue.catch(() => {}), this.cfg.piStopSettleMs))) this.abandonWork()
     const runner = this.runner.current
     if (runner?.hasHandlers('session_shutdown')) await runner.emit({ type: 'session_shutdown', reason: 'quit' }).catch(() => {})
     this.persist()
@@ -880,10 +977,19 @@ export class PiRuntime {
    * runs on the new settings, a running turn finishes on the old ones.
    */
   async reconfigure(): Promise<{ changed: boolean }> {
-    if (this.active) {
+    // Work admitted or running keeps its config: the next turn applies the new one (`runTurn`).
+    if (this.active || this.work.size > 0) {
       this.reconfigurePending = true
       return { changed: false }
     }
+    // On the serial queue: a prompt admitted during the awaits below runs after the whole new config.
+    const applied = this.queue.then(() => this.applyReconfigure())
+    this.queue = applied.catch(() => {})
+    return applied
+  }
+
+  /** The body of {@link reconfigure}. Runs only on the serial queue: from `reconfigure` or from `runTurn`. */
+  private async applyReconfigure(): Promise<{ changed: boolean }> {
     this.reconfigurePending = false
     if (!this.agent || !this.models) return { changed: false }
     const { createPiModels } = await import('./model')
@@ -949,14 +1055,23 @@ export class PiRuntime {
 
   // ── turns ────────────────────────────────────────────────────────────────
 
-  /** True while a turn runs. */
+  /**
+   * The one authority on "work is running on this session": a turn running or queued, a
+   * `/summarize`, or a same-session subagent. The daemon self-update, the memory guard, the
+   * reaper's turn probe and config convergence read it.
+   */
   busy(): boolean {
-    return this.status === 'busy'
+    return this.active !== null || this.work.size > 0 || [...this.children.values()].some((child) => child.agent !== null)
   }
 
-  /** No turn running and none admitted behind it: a config applied now reaches the next turn whole. */
+  /** Nothing running and nothing admitted behind it: a config applied now reaches the next turn whole. */
   idle(): boolean {
-    return this.status === 'idle' && this.pendingTurns === 0
+    return !this.busy()
+  }
+
+  /** The root thread's status for the wire reads: busy from a turn's admission to its end. */
+  private rootStatus(): ThreadActivity {
+    return this.active !== null || this.work.size > 0 ? 'busy' : 'idle'
   }
 
   activeTurnMessageId(): string | null {
@@ -1011,12 +1126,12 @@ export class PiRuntime {
     this.waiting.set(messageId, turn)
     // Queued now: the v2 stream gets it at its queued seq (session-log.ts).
     reliveSessionLogMessage(messageId)
-    this.pendingTurns += 1
+    this.work.add(turn)
     this.queue = this.queue
       .then(() => this.runTurn(turn))
       .catch(() => {})
       .finally(() => {
-        this.pendingTurns -= 1
+        this.work.delete(turn)
       })
     return { messageId, done: outcome }
   }
@@ -1041,7 +1156,7 @@ export class PiRuntime {
     if (!this.agent || this.state !== 'ok') throw new PromptRejected('pi runtime is not ready')
     const messageId = input.messageID
     if (this.knows(messageId) || this.loadingSteers.has(messageId)) return 'duplicate'
-    if (!this.active || this.active.stopRequested || this.abortAfterTool) return 'no_turn'
+    if (!this.active || this.active.stopRequested) return 'no_turn'
     const slot: { retracted?: boolean } = {}
     this.loadingSteers.set(messageId, slot)
     const steered = this.steerChain.then(async () => {
@@ -1050,7 +1165,7 @@ export class PiRuntime {
       // the caller it is handled; `no_turn` would make apps/api run it as a new prompt.
       if (slot.retracted || this.knows(messageId)) return 'duplicate' as const
       // The turn may have ended while the images loaded.
-      if (!this.agent || !this.active || this.active.stopRequested || this.abortAfterTool) return 'no_turn' as const
+      if (!this.agent || !this.active || this.active.stopRequested) return 'no_turn' as const
       this.clock.observe(messageId)
       const message: AgentMessage = {
         role: 'user',
@@ -1149,7 +1264,8 @@ export class PiRuntime {
     if (!this.pi || this.state !== 'ok') throw new PromptRejected('pi runtime is not ready')
     const session = this.pi.session
     const stops = this.stops
-    this.pendingTurns += 1
+    const token = {}
+    this.work.add(token)
     this.queue = this.queue
       .then(() => {
         // A Stop after the request drops it: no model call after a Stop.
@@ -1163,7 +1279,7 @@ export class PiRuntime {
       .catch((err) => logger.warn('[pi] compaction failed', { err: err instanceof Error ? err.message : String(err) }))
       .finally(() => {
         this.summarizing = false
-        this.pendingTurns -= 1
+        this.work.delete(token)
       })
   }
 
@@ -1174,7 +1290,7 @@ export class PiRuntime {
    * in a session.
    * A command shadows a skill of the same name. Then the workflows this
    * session can run by name (`source: 'workflow'`, listed as a template): the
-   * project checkout's saved `.kortix/workflows/<name>.js` and the bundled
+   * project checkout's saved `workflows/<name>.js` and the bundled
    * ones, as Claude Code lists saved and bundled workflows as `/name`.
    */
   commandList(): Array<{ name: string; description: string; source: 'command' | 'skill' | 'workflow'; template: string; hints: string[]; agents?: string[] }> {
@@ -1278,8 +1394,45 @@ export class PiRuntime {
     this.turnRetry?.abort()
     this.active.stopRequested = true
     this.stopPi()
-    await this.active.outcome
+    const turn = this.active
+    // Bounded: a tool that ignores the abort signal must not hold Stop, the memory guard or a shutdown.
+    if (!(await settlesWithin(turn.outcome, this.cfg.piStopSettleMs))) {
+      logger.warn('[pi] the stopped turn did not settle; Stop returns without it', { messageId: turn.messageId, ms: this.cfg.piStopSettleMs })
+    }
     return true
+  }
+
+  /** The running turn's fields, back to "no turn". */
+  private clearActiveTurn(): void {
+    this.resetProgressWatchdog = null
+    this.turnRetry = null
+    this.turnSystem = null
+    this.parkOpenAsks()
+    this.active = null
+    this.turnParent = null
+    this.runningTools = 0
+  }
+
+  /**
+   * A stop whose work did not settle in `piStopSettleMs` (a tool that ignores the abort signal):
+   * the runtime lets go of it. The running and queued turns end `aborted`, the queue starts empty,
+   * and a late end of the abandoned turn writes nothing ({@link runTurn}'s `finally`).
+   */
+  private abandonWork(): void {
+    logger.warn('[pi] work did not settle after Stop; the runtime abandons it', { messageId: this.active?.messageId ?? null, queued: this.work.size })
+    this.abandons += 1
+    const turn = this.active
+    if (turn) {
+      this.clearActiveTurn()
+      this.completedTurns.set(turn.messageId, 'idle')
+      this.dropUnreadSteers()
+      this.hooks.onTurnEnd?.({ rootId: this.rootId, messageId: turn.messageId, status: 'idle' })
+    }
+    for (const item of [turn, ...this.work]) (item as Turn | null)?.resolve?.('aborted')
+    for (const slot of this.waiting.values()) (slot as Partial<Turn>).resolve?.('aborted')
+    this.waiting.clear()
+    this.work.clear()
+    this.queue = Promise.resolve()
   }
 
   /**
@@ -1293,41 +1446,67 @@ export class PiRuntime {
   }
 
   /**
-   * Quick Queue: end the named turn once no tool is running. A tool in flight
-   * is never killed; the model's own streaming may be cut.
+   * Wait until pi runs nothing of its own. An extension can start a run that kortixd never
+   * admitted: `sendUserMessage`, or `sendMessage` with `triggerTurn`, after a turn settled. pi
+   * refuses a prompt while it runs ("Agent is already processing"; prod 2026-11-14: 299 of
+   * ~1,200 cron runs of one pinned trigger failed so), and refuses one during a compaction.
    */
-  armAbortAfterTool(input: { promptId: string; runtimeSessionId: string; messageId: string }): void {
-    if (input.runtimeSessionId !== this.rootId) return
-    this.abortAfterTool = { promptId: input.promptId, messageId: input.messageId }
-    this.checkAbortAfterTool()
+  private async piIdle(): Promise<void> {
+    const session = this.pi?.session
+    if (session && !session.isIdle) await session.waitForIdle()
   }
 
-  /** Without a prompt id, disarm whatever is pending. */
-  disarmAbortAfterTool(promptId?: string): void {
-    if (promptId && this.abortAfterTool?.promptId !== promptId) return
-    this.abortAfterTool = null
-  }
-
-  private checkAbortAfterTool(): void {
-    const armed = this.abortAfterTool
-    if (!armed) return
-    // Idle, or another turn is running: a late arm must not stop its successor.
-    if (this.active?.messageId !== armed.messageId) {
-      this.abortAfterTool = null
-      return
+  /**
+   * The turn's prompt. When pi started work of its own between {@link runTurn}'s idle wait and
+   * here, it refuses before any model call: wait for that work and send again, a bounded number
+   * of times. A turn stopped while it waited sends nothing.
+   */
+  private async promptWhenIdle(turn: Turn, text: string, options: Parameters<PiSession['session']['prompt']>[1]): Promise<void> {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await this.pi!.session.prompt(text, options)
+        return
+      } catch (err) {
+        if (attempt >= PI_BUSY_PROMPT_ATTEMPTS || !piRefusedBusy(err)) throw err
+        logger.warn('[pi] pi runs work of its own; the turn waits for it', { messageId: turn.messageId, attempt })
+        await this.piIdle()
+        if (turn.stopRequested || !this.pi) return
+      }
     }
-    if (this.runningTools > 0) return
-    this.abortAfterTool = null
-    void this.abort()
+  }
+
+  /**
+   * A stopped turn's end: every steered message it did not read is dropped and
+   * reported (`onSteerDropped`), before the turn's end is. The steer was
+   * accepted (202), so apps/api holds its row as forwarded; without the report
+   * nothing ever sends it. A steer the API's Stop settle withdrew first
+   * (`withdrawSteer`) is no longer listed.
+   */
+  private dropUnreadSteers(): void {
+    const dropped = this.steered
+    this.steered = []
+    this.agent?.clearSteeringQueue()
+    for (const entry of dropped) this.hooks.onSteerDropped?.({ rootId: this.rootId, messageId: entry.messageId })
   }
 
   private async runTurn(turn: Turn): Promise<void> {
+    // Still queued while pi runs work of its own: the reaper's probe reads the turn in flight,
+    // a retract or a Stop takes it back, and a steer finds no turn and is queued as a prompt
+    // instead of joining the extension's run.
+    const abandons = this.abandons
+    if (this.pi && !this.pi.session.isIdle) logger.info('[pi] the turn waits for a run pi started on its own', { messageId: turn.messageId })
+    await this.piIdle()
+    if (this.abandons !== abandons || !this.pi) {
+      turn.resolve('aborted')
+      return
+    }
     if (this.waiting.get(turn.messageId) === turn) this.waiting.delete(turn.messageId)
     if (turn.retracted) {
       turn.resolve('aborted')
       return
     }
-    if (this.reconfigurePending) await this.reconfigure()
+    // A config the runtime refuses keeps the old one; the turn still runs and settles.
+    if (this.reconfigurePending) await this.applyReconfigure().catch((err) => logger.warn('[pi] deferred reconfigure failed', { err: err instanceof Error ? err.message : String(err) }))
     const modelId = turn.input.model
       ? promptModelId(turn.input.model)
       : turn.input.agent ? nativeModelId(this.compiled?.agent?.[turn.agent]?.model) : null
@@ -1341,7 +1520,6 @@ export class PiRuntime {
     this.turnPromptMapped = false
     this.turnPromptRelived = false
     this.steerReads.clear()
-    this.status = 'busy'
     this.hooks.onTurnBegin?.({ rootId: this.rootId, messageId: turn.messageId })
     // A runner's turn starts failed until its workflow ends done (a spent runner's: with its run's outcome). On a
     // caller, a notice header only asks for an API read of that runner now; no prompt text decides a run's end.
@@ -1359,6 +1537,7 @@ export class PiRuntime {
     })
     this.turnRetry = retry
     let timedOut = false
+    let abandoned = false
     let watchdog: ReturnType<typeof setTimeout> | undefined
     const armWatchdog = () => {
       clearTimeout(watchdog)
@@ -1375,10 +1554,7 @@ export class PiRuntime {
       agent.state.model = this.selected!.model
       agent.state.thinkingLevel = this.thinkingLevel(turn.input.variant ?? this.compiledAgent()?.variant)
       this.turnSystem = turn.input.system ?? null
-      if (turn.input.threadFiles) {
-        // A turn with no message of the person (a worker's notice) keeps the folder and the newest message file.
-        this.threadFiles = { ...turn.input.threadFiles, ...(turn.input.threadFiles.message ? {} : this.threadFiles?.message ? { message: this.threadFiles.message } : {}) }
-      }
+      if (turn.input.threadFiles) this.threadFiles = turn.input.threadFiles
       // A worker's notice carries none: the space's list stays the one of the person's last message.
       if (turn.input.spaceAgents) this.spaceAgents = turn.input.spaceAgents
       if (this.subagentContext.front) await this.refreshFrontAgents()
@@ -1386,7 +1562,7 @@ export class PiRuntime {
       const images = await this.images(turn.input)
       // A transient model error continues the turn at the settle boundary (`turnExtension`).
       armWatchdog()
-      await this.pi!.session.prompt(turn.input.text || '(attachment)', { source: 'rpc', ...(images.length ? { images } : {}) })
+      await this.promptWhenIdle(turn, turn.input.text || '(attachment)', { source: 'rpc', ...(images.length ? { images } : {}) })
       for (const frame of this.adapter!.settleRetry()) this.publish(frame)
       if (timedOut) {
         outcome = 'error'
@@ -1397,13 +1573,15 @@ export class PiRuntime {
         this.publish({ type: 'session.idle', properties: { sessionID: this.rootId } })
       }
       // Only this turn's messages: an extension command answers without a model call.
-      const last = this.turnAssistant as { stopReason?: string; errorMessage?: string; provider?: string } | null
+      const last = this.turnAssistant as { stopReason?: string; errorMessage?: string; provider?: string; model?: string } | null
       if (!timedOut && (last?.stopReason === 'aborted' || retry.wasAborted)) outcome = 'aborted'
       else if (!timedOut && last && (last.stopReason === 'error' || last.stopReason === 'length')) {
         outcome = 'error'
-        const wire = assistantMessageError({ stopReason: last.stopReason as never, errorMessage: last.errorMessage, provider: last.provider })
-        const data = wire?.data as { message?: string; statusCode?: number } | undefined
-        error = wire ? { name: wire.name, message: data?.message, statusCode: data?.statusCode, code: wire.code } : undefined
+        const wire = assistantMessageError({ stopReason: last.stopReason as never, errorMessage: last.errorMessage, provider: last.provider, model: last.model })
+        const data = wire?.data as { message?: string; statusCode?: number; providerID?: string } | undefined
+        error = wire
+          ? { name: wire.name, message: data?.message, statusCode: data?.statusCode, code: wire.code, ...(data?.providerID ? { providerID: data.providerID } : {}) }
+          : undefined
       }
       if (outcome === 'completed' && turn.failure) {
         outcome = 'error'
@@ -1420,29 +1598,36 @@ export class PiRuntime {
       this.publish({ type: 'session.idle', properties: { sessionID: this.rootId } })
     } finally {
       clearTimeout(watchdog)
-      this.resetProgressWatchdog = null
-      this.turnRetry = null
-      this.turnSystem = null
-      this.parkOpenAsks()
-      this.active = null
-      this.turnParent = null
-      this.runningTools = 0
-      this.abortAfterTool = null
-      this.status = 'idle'
+      // A turn a forced stop abandoned ends late: the runtime's fields belong to what runs now.
+      abandoned = this.active !== turn
+      if (!abandoned) {
+        this.clearActiveTurn()
+        this.persist()
+      }
       this.completedTurns.set(turn.messageId, outcome === 'error' ? 'error' : 'idle')
-      this.persist()
       turn.resolve(outcome)
       // A Claude turn still waiting for tool results gets none from this turn: its idle timer starts.
-      claudeSessions()?.settle(this.rootId)
-      this.hooks.onTurnEnd?.({ rootId: this.rootId, messageId: turn.messageId, status: outcome === 'error' ? 'error' : 'idle', ...(error ? { error } : {}) })
+      if (!abandoned) claudeSessions()?.settle(this.rootId)
+      // `abandonWork` already reported the abandoned turn's end.
+      const finalText = outcome === 'completed' ? assistantFinalText(this.turnAssistant) : ''
+      if (!abandoned && turn.stopRequested) this.dropUnreadSteers()
+      if (!abandoned)
+        this.hooks.onTurnEnd?.({
+          rootId: this.rootId,
+          messageId: turn.messageId,
+          status: outcome === 'error' ? 'error' : 'idle',
+          ...(error ? { error } : {}),
+          ...(finalText ? { finalText } : {}),
+        })
     }
+    if (abandoned) return
     // Started while the live model list was down: fetch it again, so the next turn runs on real limits.
     if (this.models?.live === false) this.refreshModelsSoon()
-    // Steered messages the turn did not read. A stopped turn drops them (the
-    // API's Stop path owns them). Otherwise they start the next turn: the first
-    // is its prompt, the rest are read before its first model call. Same queue
-    // slot, so no prompt admitted meanwhile runs before them.
-    const [next, ...rest] = turn.stopRequested ? [] : this.steered
+    // Steered messages the turn did not read. A stopped turn dropped and
+    // reported them above (`dropUnreadSteers`). Otherwise they start the next
+    // turn: the first is its prompt, the rest are read before its first model
+    // call. Same queue slot, so no prompt admitted meanwhile runs before them.
+    const [next, ...rest] = this.steered
     this.steered = rest
     agent.clearSteeringQueue()
     if (!next) return
@@ -1480,7 +1665,7 @@ export class PiRuntime {
     if (
       (event.type === 'tool_execution_start' || event.type === 'tool_execution_update' || event.type === 'tool_execution_end') &&
       event.parentToolCallId &&
-      NATIVE_PART_TOOLS.includes(event.toolName)
+      SCRIPT_CARD_TOOLS.includes(event.toolName)
     ) {
       this.translateAndPublish(event)
       return
@@ -1585,7 +1770,7 @@ export class PiRuntime {
   /** The session row changed (`time.compacting`); `log.status` says the root compacts, then what it does after. */
   private publishSessionUpdated(): void {
     this.publish({ type: 'session.updated', properties: { sessionID: this.rootId, info: this.sessionObject() } })
-    sessionLogEventBus().publish('log.status', { thread_id: this.rootId, status: this.compaction ? 'compacting' : this.status }, this.rootId)
+    sessionLogEventBus().publish('log.status', { thread_id: this.rootId, status: this.compaction ? 'compacting' : this.rootStatus() }, this.rootId)
   }
 
   private onAgentEvent(event: AgentEvent): void {
@@ -1622,8 +1807,6 @@ export class PiRuntime {
     if (event.type === 'tool_execution_end') this.runningTools = Math.max(0, this.runningTools - 1)
     if (event.type === 'tool_execution_start' || event.type === 'tool_execution_end' || event.type === 'message_update') this.resetProgressWatchdog?.()
     this.translateAndPublish(event)
-    // After the frames: the finished tool part is on the transcript before the turn is cut.
-    if (event.type === 'tool_execution_end') this.checkAbortAfterTool()
   }
 
   /** The root agent's rule for a call: its tool access, then the permission policy. */
@@ -1666,10 +1849,15 @@ export class PiRuntime {
           if (!parent) return undefined
           // A subagent's script call already passed the child's own gate (stricter than rootRule); re-deciding here would double an `ask`.
           if (this.childNestedCalls.has(event.toolCallId)) return undefined
-          // A subagent thread links to its root `agent`/`task` call; a question needs the model-issued call it answers;
-          // a workflow holds the turn for hours and must not run inside a script's worker.
-          if (event.toolName === 'agent' || event.toolName === 'task' || event.toolName === 'question' || event.toolName === 'workflow') {
-            return { block: true, reason: `Call ${event.toolName} directly, not from a script.` }
+          // `agent`/`task` run from a script like a direct call: the policy below decides, and each gets its
+          // own card with the child's link (SCRIPT_CARD_TOOLS). Two stay direct calls, for a reason the model
+          // can act on: a question's answer lands on the model-issued call it answers, and a workflow holds
+          // the turn for hours, longer than a script's worker lives.
+          if (event.toolName === 'question') {
+            return { block: true, reason: 'Call question directly, not from a script: the person\'s answer arrives on that call.' }
+          }
+          if (event.toolName === 'workflow') {
+            return { block: true, reason: 'Call workflow directly, not from a script: a run can outlive the script that starts it.' }
           }
           return this.decide(this.rootRule(event.toolName, event.input), event.toolName, event.input, () => this.adapter?.toolRef(event.toolCallId) ?? this.adapter?.toolRef(parent))
         })
@@ -1747,12 +1935,22 @@ export class PiRuntime {
    */
   private compactionFor(floor: number) {
     const settings = compactionSettings(this.models!.catalog, floor)
-    return this.cfg.piContext === 'summary' ? settings : { ...settings, keepRecentTokens: 1 }
+    return this.recordContext() ? { ...settings, keepRecentTokens: 1 } : settings
   }
 
-  /** Retrieval instead of compaction (`extensions/context-record.ts`), unless the agent's `context` is `summary`. */
+  /** The Kortix session whose stored log a reset points at; null on a local daemon with no session. */
+  private loggedSession(): string | null {
+    return (this.env.KORTIX_SESSION_ID ?? '').trim() || null
+  }
+
+  /** Retrieval instead of compaction, on the session log: a Kortix session, unless the agent's `context` is `summary`. */
+  private recordContext(): boolean {
+    return this.cfg.piContext !== 'summary' && this.loggedSession() !== null
+  }
+
+  /** `extensions/context-record.ts` when `recordContext()`. */
   private contextExtensions(): InlineExtension[] {
-    return this.cfg.piContext === 'summary' ? [] : [contextRecord({ dir: join(this.cfg.piStateDir, 'records') })]
+    return this.recordContext() ? [contextRecord({ session: () => this.loggedSession() })] : []
   }
 
   private turnExtension(): InlineExtension {
@@ -1839,6 +2037,59 @@ export class PiRuntime {
     return [voice(session, this.agentName)]
   }
 
+  /**
+   * Goal mode (`extensions/goal-mode.ts`): a top-level chat that owns a goal
+   * keeps working it until the verifier passes it. The box lists `goal_mode`
+   * wherever a Drive can hold a goal (apps/api feature-flag-env.ts).
+   */
+  private goalModeExtensions(): InlineExtension[] {
+    const plane = this.controlPlane()
+    const flags = enabledFeatureFlags(this.env)
+    if (!plane || this.subagentContext.depth !== 0 || !(flags.has(GOAL_MODE_BOX_FLAG) || flags.has('goals'))) return []
+    return [
+      goalMode({
+        sessionId: plane.sessionId,
+        applies: () => promptOrigin(this.active?.input.text ?? '') !== 'peer',
+        turnText: () => this.active?.input.text ?? '',
+        listGoals: async () => {
+          const answer = await callApi(plane, 'GET', `/workspaces/${encodeURIComponent(plane.projectId)}/goals`)
+          const goals = (answer.body as { goals?: ChatGoal[] } | null)?.goals
+          return answer.status === 200 && Array.isArray(goals) ? goals : null
+        },
+        onNudge: (goal, nudges) => logger.info('[pi] goal-mode nudge', { rootId: this.rootId, goalId: goal.goal_id, nudges }),
+      }),
+    ]
+  }
+
+  /**
+   * Follow-through (`extensions/follow-through.ts`): a top-level session with
+   * Loops on never ends a turn with a wait it set no wake-up for. Not for a
+   * peer message or a trigger-started session: nobody waits on those turns.
+   */
+  private followThroughExtensions(): InlineExtension[] {
+    const plane = this.controlPlane()
+    if (!plane || this.subagentContext.depth !== 0 || !enabledFeatureFlags(this.env).has(LOOPS_FLAG)) return []
+    return [
+      followThrough({
+        applies: () => {
+          const text = this.active?.input.text ?? ''
+          return promptOrigin(text) !== 'peer' && !text.includes(TRIGGER_EVENT_TAG)
+        },
+        hasWakeUp: async () => {
+          try {
+            const answer = await callApi(plane, 'GET', sessionPath(plane.projectId, plane.sessionId, '/reminders'))
+            const rows = (answer.body as { reminders?: { state?: string }[] } | null)?.reminders
+            // An unreadable list counts as a wake-up: the guard never nudges on a guess.
+            return answer.status !== 200 || !Array.isArray(rows) || rows.some((row) => row.state === 'active')
+          } catch {
+            return true
+          }
+        },
+        onNudge: (wait) => logger.info('[pi] follow-through nudge', { rootId: this.rootId, kind: wait.kind, actions: wait.kind === 'acted' ? wait.actions : undefined }),
+      }),
+    ]
+  }
+
   /** The lead whose task list this session uses: itself at depth 0, its lead as a teammate; null without agent teams. */
   private teamListLead(): string | null {
     const plane = this.controlPlane()
@@ -1847,9 +2098,9 @@ export class PiRuntime {
     return this.subagentContext.depth === 0 ? plane.sessionId : null
   }
 
-  /** `session.context_record` unless the agent's `context` is `summary` (`extensions/context-record.ts`). */
+  /** `session.context_record` when `recordContext()` (`extensions/context-record.ts`). */
   contextCapabilities(): RuntimeCapability[] {
-    return this.cfg.piContext === 'summary' ? [] : ['session.context_record']
+    return this.recordContext() ? ['session.context_record'] : []
   }
 
   /** The session features pi serves on this box (`GET /kortix/health` `capabilities`), beyond the static list. */
@@ -1877,7 +2128,7 @@ export class PiRuntime {
 
   /** Where the running turn's prompt came from; a steered message never changes it. */
   private turnOrigin(): PromptOrigin {
-    return this.active ? promptOrigin(this.active.input.text) : 'human'
+    return this.active ? promptOrigin(this.active.input.text, { synthetic: this.active.input.synthetic }) : 'human'
   }
 
   /** The running turn's prompt is the session's first user message (`KortixHost.turnIsFirstPrompt`). */
@@ -2013,6 +2264,10 @@ export class PiRuntime {
       controlPlane: cloud !== null,
       background: input.background,
     })
+    // Access beyond this session's own is granted by the API to a new session: never dropped into an in-process child.
+    if (input.access && !(route.session === 'separate' && cloud)) {
+      throw new Error('An inline agent with its own connectors or secrets needs its own session, and this computer cannot start one. Do the work without that access, or name a project agent that has it.')
+    }
     if (route.session === 'separate' && cloud) {
       // The agent and its tools are read per call: a prompt may switch the agent (applyAgent).
       // The spread keeps the shared `live` counter.
@@ -2029,21 +2284,28 @@ export class PiRuntime {
   /**
    * What a cloud child inherits from the agent running now. `parentAgent` is
    * the RESOLVED agent (never the `default` sentinel, which the API could
-   * resolve to the platform coordinator), left out for the coordinator itself
-   * so the API picks the project default. `toolAllowlist` is every tool this
+   * resolve to the platform coordinator), the coordinator's own name
+   * included: a child that names no agent runs with this session's access,
+   * never with another agent's. `coordinator` marks My Kortix, whose own
+   * prompt never runs in a child (cloud-subagent.ts `buildCreateBody`). A
+   * router (front) sends neither, and the API picks. `toolAllowlist` is every tool this
    * agent may use (`rootToolAllowed`), sent for every child, named ones
    * included, so the child runs with intersection(its own tools, these).
    * Undefined = this agent is not narrowed at all.
    */
-  private cloudParent(): Pick<CloudSubagentApi, 'parentAgent' | 'toolAllowlist'> {
+  private cloudParent(): Pick<CloudSubagentApi, 'parentAgent' | 'toolAllowlist' | 'coordinator' | 'parentModel'> {
+    // The model the running turn uses: a child with no model of its own inherits it.
+    const running = this.agent?.state.model as { provider?: string; id?: string } | undefined
+    const parentModel = running?.provider && running.id ? `${running.provider}/${running.id}` : undefined
     // A front's worker gets every tool of its own agent, never narrowed to the front's.
-    if (this.subagentContext.front) return { parentAgent: undefined, toolAllowlist: undefined }
-    const coordinator = this.env.KORTIX_META_AGENT === '1'
+    if (this.subagentContext.front) return { parentAgent: undefined, toolAllowlist: undefined, ...(parentModel ? { parentModel } : {}) }
     const declared = Object.prototype.hasOwnProperty.call(this.compiled?.agent ?? {}, this.agentName)
     const narrowed = this.compiledAgent()?.tools !== undefined || this.subagentContext.tools !== undefined
     return {
-      parentAgent: !coordinator && declared ? this.agentName : undefined,
+      parentAgent: declared ? this.agentName : undefined,
+      ...(this.env.KORTIX_META_AGENT === '1' ? { coordinator: true } : {}),
       toolAllowlist: narrowed ? this.ownToolNames() : undefined,
+      ...(parentModel ? { parentModel } : {}),
     }
   }
 
@@ -2204,8 +2466,11 @@ export class PiRuntime {
     const agent = new core.Agent({
       streamFn: withMessageIdentity(
         withAgentSampling(
-          (m, context, options) => this.models!.models.streamSimple(m, context, { ...options, sessionId: child.id }),
-          () => this.sampling(this.compiled?.agent?.[input.agent], selected),
+          (m, context, options) => {
+            const program = this.programRun(input.agent, child.id)
+            return program ? programStep(program, context, options) : this.models!.models.streamSimple(m, context, { ...options, sessionId: child.id })
+          },
+          () => this.sampling(this.compiled?.agent?.[input.agent], selected, messageId),
         ),
         { reserveMessageId: () => adapter.reserveMessageId(), turnId: () => messageId, threadId: child.id },
       ),
@@ -2326,7 +2591,6 @@ export class PiRuntime {
       if (!opts.busOnly) child.transcript.apply(frame)
     } else {
       this.updatedAt = this.now()
-      if (status === 'busy' || status === 'idle') this.status = status
       if (!opts.busOnly) this.transcript.apply(frame)
     }
     if (opts.transcriptOnly) return
@@ -2398,7 +2662,8 @@ export class PiRuntime {
   /** The prompt's images (images.ts), when the selected model reads images. Otherwise its `<file>` tags carry the paths alone. */
   private async images(input: PromptInput): Promise<ImageContent[]> {
     if (!this.selected?.images || !this.coding) return []
-    return promptImages(input, this.cfg.workspace || '/workspace', this.coding.resizeImage)
+    const resize = this.coding.resizeImage
+    return promptImages(input, this.cfg.workspace || '/workspace', (bytes, mime) => resize(bytes, mime, IMAGE_RESIZE))
   }
 
   // ── configuration ────────────────────────────────────────────────────────
@@ -2415,6 +2680,22 @@ export class PiRuntime {
 
   private compiledAgent(): CompiledAgent | undefined {
     return this.compiled?.agent?.[this.agentName]
+  }
+
+  /** The run of `agent` when it is a program agent (`run`); null for a model agent. */
+  private programRun(agent: string, sessionId: string = this.sessionId): ProgramRun | null {
+    const command = this.compiled?.agent?.[agent]?.run?.trim()
+    if (!command) return null
+    const repo = parseWorkspaceSetup(this.env.KORTIX_WORKSPACE_SETUP)?.repos[0]?.path
+    return {
+      command,
+      agent,
+      sessionId,
+      enabled: enabledFeatureFlags(this.env).has(PROGRAM_AGENTS_FLAG),
+      cwd: repo && existsSync(repo) ? repo : this.workspace,
+      env: this.env,
+      ...(this.compiled?.agent?.[agent]?.timeout ? { timeoutMs: this.compiled.agent[agent]!.timeout! * 1000 } : {}),
+    }
   }
 
   /**
@@ -2457,12 +2738,15 @@ export class PiRuntime {
     this.rebuildSystemPrompt()
   }
 
-  /** An agent's `temperature`, `top_p` and `steps` for its requests on `model`. */
-  private sampling(agent: CompiledAgent | undefined, model: SelectedModel) {
+  /** An agent's `temperature`, `top_p`, `steps` and current run id for its requests on `model`.
+   *  `runId` is the prompt message id of the run in flight; the step counter resets when it
+   *  changes (a new turn or sub-agent invocation) and holds across compaction within a run. */
+  private sampling(agent: CompiledAgent | undefined, model: SelectedModel, runId: string | undefined) {
     return {
       temperature: agent?.temperature,
       top_p: agent?.top_p,
       steps: agent?.steps,
+      runId,
       acceptsTemperature: this.models?.catalog[model.modelID]?.temperature !== false,
     }
   }
@@ -2517,7 +2801,8 @@ export class PiRuntime {
     if (!child && this.subagentContext.watcher) return WATCHER_PROMPT
     // A router's own prompt leads; its agent's instructions, skills and capabilities follow, since it now works too.
     const front = !child && this.subagentContext.front
-    const parts = [front ? FRONT_PROMPT : child?.base || this.compiledAgent()?.prompt?.trim() || DEFAULT_SYSTEM_PROMPT]
+    // An inline agent's instructions (`kortix.agent.instructions`) replace its agent's own prompt.
+    const parts = [front ? FRONT_PROMPT : child?.base || this.subagentContext.instructions || this.compiledAgent()?.prompt?.trim() || DEFAULT_SYSTEM_PROMPT]
     // pi's own context-file format. pi's own loader stays off (`noContextFiles`): it reads `/workspace` and its ancestors, for the root only.
     if (this.instructions) parts.push(`<project_instructions path="${this.instructions.name}">\n${this.instructions.text}\n</project_instructions>`)
     // pi appends the working directory (and package skills) to the root's prompt.
@@ -2529,7 +2814,17 @@ export class PiRuntime {
     if (capabilities) parts.push(capabilities)
     const releaseNotice = this.releases?.notice()
     if (releaseNotice) parts.push(releaseNotice)
+    const workspaceSetup = this.readInstruction(WORKSPACE_SETUP_NOTE_PATH)
+    if (workspaceSetup) parts.push(workspaceSetup)
     if (this.cfg.workspaceVolume) parts.push(this.newComputer ? `${TEMPORARY_COMPUTER}\n${NEW_COMPUTER_NOTE}` : TEMPORARY_COMPUTER)
+    const ids = sessionIdsSection({
+      sessionId: this.env.KORTIX_SESSION_ID,
+      projectId: this.env.KORTIX_PROJECT_ID,
+      parentSessionId: this.env.KORTIX_PARENT_SESSION_ID,
+      spaceId: this.env.KORTIX_SPACE_ID,
+      inProcessChild: Boolean(child),
+    })
+    if (ids) parts.push(ids)
     parts.push(
       [
         '## Runtime capabilities',
@@ -2633,15 +2928,15 @@ export class PiRuntime {
     return (this.agent?.state.tools ?? []).map((tool) => tool.name)
   }
 
-  sessionStatus(): { type: 'idle' | 'busy' } {
-    return { type: this.status }
+  sessionStatus(): { type: ThreadActivity } {
+    return { type: this.rootStatus() }
   }
 
   /** What each thread does now and what waits on a person (`GET /kortix/runtime/pending`). */
   pendingNow(): RuntimePending {
     return {
       statuses: Object.fromEntries([
-        [this.rootId, this.compaction ? 'compacting' : this.status],
+        [this.rootId, this.compaction ? 'compacting' : this.rootStatus()],
         ...[...this.children.values()].map((child) => [child.id, child.status === 'busy' ? 'busy' : 'idle']),
       ]),
       permissions: this.permissions.records(),
@@ -2667,7 +2962,7 @@ export class PiRuntime {
     return {
       id: this.rootId,
       slug: this.rootId,
-      projectID: (this.env.KORTIX_PROJECT_ID ?? '').trim() || this.sessionId,
+      projectID: workspaceIdFromEnv(this.env) || this.sessionId,
       directory: this.workspace,
       title: this.title,
       version: PI_HARNESS_VERSION,
@@ -2691,8 +2986,10 @@ export class PiRuntime {
       color: agent?.color ?? null,
       variant: agent?.variant ?? null,
       source: 'config',
-      model:
-        name === this.agentName && selected
+      // A program agent's replies name provider `program` (program.ts): so does its listing, and pickers hide the model.
+      model: agent?.run?.trim()
+        ? { providerID: PROGRAM_PROVIDER_ID, modelID: name }
+        : name === this.agentName && selected
           ? { providerID: selected.providerID, modelID: selected.modelID }
           : agent?.model && nativeModelId(agent.model)
             ? agentModelRef(nativeModelId(agent.model)!)
@@ -2771,7 +3068,13 @@ export class PiRuntime {
     if (messageId === null) {
       return { inFlight: this.busy(), end: this.busy() ? null : this.latestEnd(), orphanedPrompt: false }
     }
-    if (this.active?.messageId === messageId || this.steered.some((entry) => entry.messageId === messageId)) return { inFlight: true, end: null, orphanedPrompt: false }
+    // A steer still loading its images and a prompt queued behind the running work are ours too.
+    if (
+      this.active?.messageId === messageId ||
+      this.steered.some((entry) => entry.messageId === messageId) ||
+      this.loadingSteers.has(messageId) ||
+      this.waiting.has(messageId)
+    ) return { inFlight: true, end: null, orphanedPrompt: false }
     const completed = this.completedTurns.get(messageId)
     if (completed) return { inFlight: false, end: completed === 'error' ? 'failed' : 'completed', orphanedPrompt: false }
     // Queued behind the running turn: on record, not yet answered, still ours.
@@ -2857,7 +3160,7 @@ export class PiRuntime {
           busy: child.agent !== null,
         }
       }),
-      busy: this.status === 'busy' || this.active !== null,
+      busy: this.rootStatus() === 'busy',
       reply: replying(this.agent, this.adapter),
       pending: { questions: this.questions.records(), permissions: this.permissions.records() },
       queued: this.queuedIds(entryMessageIds),
@@ -2967,5 +3270,19 @@ export class PiRuntime {
       logger.warn('[pi] transcript restore failed; starting empty', { err: (err as Error).message })
       return null
     }
+  }
+}
+
+/** True when `promise` settles within `ms`; false at the deadline. The timer never holds the process open. */
+async function settlesWithin(promise: Promise<unknown>, ms: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), ms)
+    timer.unref?.()
+  })
+  try {
+    return await Promise.race([promise.then(() => true, () => true), deadline])
+  } finally {
+    clearTimeout(timer)
   }
 }

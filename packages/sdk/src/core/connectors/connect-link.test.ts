@@ -6,8 +6,10 @@ import {
   CONNECT_LINK_POLL_INTERVAL_MS,
   CONNECT_LINK_TIMEOUT_MS,
   connectLinkUrl,
+  connectionSignInSteps,
+  type ConnectionSignInDeps,
   pollConnectLinkFinalize,
-  projectConnectionConnectSteps,
+  workspaceConnectionConnectSteps,
 } from './connect-link';
 
 /**
@@ -81,7 +83,7 @@ describe('projectConnectionConnectSteps — sole shared account (the connector d
     // unpinned project-owned row, which IS the connector's effective default.
     // Before the fix both shared "Connect" CTAs died here on the 409.
     const { calls, deps } = recordingDeps('409');
-    const steps = projectConnectionConnectSteps('project-1', 'notion-product', 'Support', deps);
+    const steps = workspaceConnectionConnectSteps('project-1', 'notion-product', 'Support', deps);
 
     const started = await steps.start();
 
@@ -101,7 +103,7 @@ describe('projectConnectionConnectSteps — sole shared account (the connector d
     // `me` and poll the caller's member account. Either way the account never
     // reports active and the flow burns its full 10-minute timeout.
     const { calls, deps } = recordingDeps('409');
-    const steps = projectConnectionConnectSteps('project-1', 'notion-product', 'Support', deps);
+    const steps = workspaceConnectionConnectSteps('project-1', 'notion-product', 'Support', deps);
 
     await steps.start();
     calls.length = 0;
@@ -117,7 +119,7 @@ describe('projectConnectionConnectSteps — sole shared account (the connector d
     // created — so the label survives rather than being replaced.
     const { calls, deps } = recordingDeps('409');
 
-    await projectConnectionConnectSteps('project-1', 'notion-product', '  Support  ', deps).start();
+    await workspaceConnectionConnectSteps('project-1', 'notion-product', '  Support  ', deps).start();
 
     expect(calls[0]).toBe('reconcile:project-1:project:Support');
   });
@@ -125,7 +127,7 @@ describe('projectConnectionConnectSteps — sole shared account (the connector d
   test('an omitted label falls back to the default name', async () => {
     const { calls, deps } = recordingDeps('409');
 
-    await projectConnectionConnectSteps('project-1', 'notion-product', '   ', deps).start();
+    await workspaceConnectionConnectSteps('project-1', 'notion-product', '   ', deps).start();
 
     expect(calls[0]).toBe(`reconcile:project-1:project:${DEFAULT_PROJECT_CONNECTION_LABEL}`);
   });
@@ -139,7 +141,7 @@ describe('projectConnectionConnectSteps — a second labelled shared account', (
     // `owner: 'project'` there reuses `ensureDefaultConnection` and would
     // re-authorize the DEFAULT account, leaving this new row unauthorized.
     const { calls, deps } = recordingDeps('ok', 'conn-2');
-    const steps = projectConnectionConnectSteps('project-1', 'notion-product', 'Sales', deps);
+    const steps = workspaceConnectionConnectSteps('project-1', 'notion-product', 'Sales', deps);
 
     const started = await steps.start();
     const finalized = await steps.finalize();
@@ -158,7 +160,7 @@ describe('projectConnectionConnectSteps — a second labelled shared account', (
 describe('projectConnectionConnectSteps — errors that are not the default-account 409', () => {
   test('a 403 propagates instead of silently retrying the other route', async () => {
     const { calls, deps } = recordingDeps(403);
-    const steps = projectConnectionConnectSteps('project-1', 'notion-product', 'Support', deps);
+    const steps = workspaceConnectionConnectSteps('project-1', 'notion-product', 'Support', deps);
 
     await expect(steps.start()).rejects.toThrow('forbidden');
     expect(calls).not.toContain('connect-connector:project-1:notion-product:project');
@@ -166,7 +168,7 @@ describe('projectConnectionConnectSteps — errors that are not the default-acco
 
   test('finalize before start names the missing connection rather than throwing on null', async () => {
     const { deps } = recordingDeps('ok');
-    const steps = projectConnectionConnectSteps('project-1', 'notion-product', 'Support', deps);
+    const steps = workspaceConnectionConnectSteps('project-1', 'notion-product', 'Support', deps);
 
     expect(() => steps.finalize()).toThrow('The project connection was not created.');
   });
@@ -178,7 +180,7 @@ describe('projectConnectionConnectSteps — an account shared with chosen people
     // before the OAuth link opens means the account never holds a credential
     // while it is open to the whole project.
     const { calls, deps } = recordingDeps('ok', 'conn-3');
-    const steps = projectConnectionConnectSteps('project-1', 'notion-product', 'Sales', deps, async (id) => {
+    const steps = workspaceConnectionConnectSteps('project-1', 'notion-product', 'Sales', deps, async (id) => {
       calls.push(`narrow:${id}`);
     });
 
@@ -193,7 +195,7 @@ describe('projectConnectionConnectSteps — an account shared with chosen people
 
   test('names the account it created, so a caller can finalize exactly that one', async () => {
     const { deps } = recordingDeps('ok', 'conn-5');
-    const steps = projectConnectionConnectSteps('project-1', 'notion-product', 'Sales', deps);
+    const steps = workspaceConnectionConnectSteps('project-1', 'notion-product', 'Sales', deps);
     expect(steps.connectionId()).toBeNull();
     await steps.start();
     expect(steps.connectionId()).toBe('conn-5');
@@ -201,7 +203,7 @@ describe('projectConnectionConnectSteps — an account shared with chosen people
 
   test('a failed narrowing stops the flow before any authorization link', async () => {
     const { calls, deps } = recordingDeps('ok', 'conn-4');
-    const steps = projectConnectionConnectSteps('project-1', 'notion-product', 'Sales', deps, async () => {
+    const steps = workspaceConnectionConnectSteps('project-1', 'notion-product', 'Sales', deps, async () => {
       throw new Error('grant refused');
     });
 
@@ -249,5 +251,120 @@ describe('pollConnectLinkFinalize', () => {
     expect(connectLinkUrl({ connectUrl: 'https://a', redirectUrl: 'https://b' })).toBe('https://a');
     expect(connectLinkUrl({ redirectUrl: 'https://b' })).toBe('https://b');
     expect(connectLinkUrl({})).toBeNull();
+  });
+});
+
+describe('connectionSignInSteps — finish the sign-in of one existing account', () => {
+  function signInDeps(options: {
+    /** What the connection-scoped routes do: 409 for an effective default. */
+    connectionRoute: 'ok' | '409';
+    /** The account is already active at the provider before any click. */
+    alreadyActive: boolean;
+  }): { calls: string[]; deps: ConnectionSignInDeps } {
+    const calls: string[] = [];
+    let active = options.alreadyActive;
+    const conflict = () => {
+      throw sharedDefaultConflict();
+    };
+    return {
+      calls,
+      deps: {
+        connectConnection: async (projectId, id) => {
+          calls.push(`connect-connection:${projectId}:${id}`);
+          if (options.connectionRoute === '409') conflict();
+          return { connectUrl: 'https://connect.example/connection' };
+        },
+        finalizeConnection: async (projectId, id) => {
+          calls.push(`finalize-connection:${projectId}:${id}`);
+          if (options.connectionRoute === '409') conflict();
+          return { connected: active };
+        },
+        connectConnector: async (projectId, slug, input) => {
+          calls.push(`connect-connector:${projectId}:${slug}:${input.owner}`);
+          return { connectUrl: 'https://connect.example/connector', connectionId: 'conn-slot' };
+        },
+        finalizeConnector: async (projectId, slug, input) => {
+          calls.push(`finalize-connector:${projectId}:${slug}:${input.owner}:${input.connectionId}`);
+          return { connected: active };
+        },
+      },
+    };
+  }
+
+  test('a sign-in that already finished at the provider is recorded, and no window opens', async () => {
+    // The person finished on the provider page from a raw link. The first
+    // finalize asks the provider and records the account (PR #12484 server side).
+    const { calls, deps } = signInDeps({ connectionRoute: 'ok', alreadyActive: true });
+    const steps = connectionSignInSteps(
+      'project-1',
+      'gmail',
+      { connection_id: 'conn-1', owner_type: 'member' },
+      deps,
+    );
+
+    const started = await steps.start();
+
+    expect(started.connected).toBe(true);
+    expect(started.connectUrl).toBeUndefined();
+    expect(calls).toEqual(['finalize-connection:project-1:conn-1']);
+  });
+
+  test('an unfinished sign-in starts a new link on the same account, and finalize polls it', async () => {
+    const { calls, deps } = signInDeps({ connectionRoute: 'ok', alreadyActive: false });
+    const steps = connectionSignInSteps(
+      'project-1',
+      'gmail',
+      { connection_id: 'conn-1', owner_type: 'member' },
+      deps,
+    );
+
+    const started = await steps.start();
+    await steps.finalize();
+
+    expect(started.connectUrl).toBe('https://connect.example/connection');
+    expect(calls).toEqual([
+      'finalize-connection:project-1:conn-1',
+      'connect-connection:project-1:conn-1',
+      'finalize-connection:project-1:conn-1',
+    ]);
+  });
+
+  test('the shared default account uses the connector route with its owner and id', async () => {
+    // The connection routes answer 409 for the effective default. The connector
+    // route must then name owner `project`, or it polls the caller's own account.
+    const { calls, deps } = signInDeps({ connectionRoute: '409', alreadyActive: false });
+    const steps = connectionSignInSteps(
+      'project-1',
+      'gmail',
+      { connection_id: 'conn-slot', owner_type: 'project' },
+      deps,
+    );
+
+    const started = await steps.start();
+    await steps.finalize();
+
+    expect(started.connectUrl).toBe('https://connect.example/connector');
+    expect(calls).toEqual([
+      'finalize-connection:project-1:conn-slot',
+      'finalize-connector:project-1:gmail:project:conn-slot',
+      'connect-connector:project-1:gmail:project',
+      'finalize-connector:project-1:gmail:project:conn-slot',
+    ]);
+  });
+
+  test('a private default account uses the connector route as `me`', async () => {
+    const { calls, deps } = signInDeps({ connectionRoute: '409', alreadyActive: true });
+    const steps = connectionSignInSteps(
+      'project-1',
+      'gmail',
+      { connection_id: 'conn-mine', owner_type: 'member' },
+      deps,
+    );
+
+    expect((await steps.start()).connected).toBe(true);
+    expect(calls).toEqual([
+      'finalize-connection:project-1:conn-mine',
+      'finalize-connector:project-1:gmail:me:conn-mine',
+    ]);
   });
 });

@@ -3,7 +3,7 @@ import { constants, createReadStream } from 'node:fs';
 import { type FileHandle, lstat, open, readdir, readlink } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
-export interface RuntimeArtifact {
+interface RuntimeArtifact {
   label: string;
   path: string;
   /**
@@ -13,7 +13,7 @@ export interface RuntimeArtifact {
   excludeNames?: readonly string[];
 }
 
-export interface RuntimeArtifactFingerprintInput {
+interface RuntimeArtifactFingerprintInput {
   sandboxVersion: string;
   artifacts: RuntimeArtifact[];
 }
@@ -59,7 +59,19 @@ export const CLI_CONNECTOR_RUNTIME_FILES = [
   'src/tui-select.ts',
   'src/api/types.ts',
   'src/project-link.ts',
+  // Workspaces: the no-workspace answer (`api/sdk.ts`, `command-helpers.ts`,
+  // `project-bind.ts`) and the `--workspace`/`--account` alias reader
+  // (`commands/connector-gateway.ts`).
+  'src/api/no-workspace.ts',
+  'src/command-argv.ts',
 ] as const;
+
+/**
+ * `packages/shared` sources the connector imports through `@kortix/shared/*`
+ * (`api/client.ts` reads the account families, `token-denial.ts` the
+ * workspace action names), relative to `packages/shared`.
+ */
+export const CLI_CONNECTOR_SHARED_FILES = ['src/workspace-routes.ts', 'src/workspace-actions.ts'] as const;
 
 const CLI_RUNTIME_EXCLUDES = ['node_modules', '.bin', 'dist', '.turbo', '.cache'] as const;
 
@@ -86,6 +98,14 @@ export function cliConnectorRuntimeArtifacts(
       label: 'kortix-host-config',
       path: resolve(cliRoot, '../../packages/shared/src/host-config'),
       excludeNames: CLI_RUNTIME_EXCLUDES,
+    },
+    ...CLI_CONNECTOR_SHARED_FILES.map((relativePath) => ({
+      label: `kortix-shared-${relativePath.replace(/^src\//, '')}`,
+      path: resolve(cliRoot, '../../packages/shared', relativePath),
+    })),
+    {
+      label: 'kortix-shared-utils-string',
+      path: resolve(cliRoot, '../../packages/shared/src/utils/string.ts'),
     },
     { label: 'kortix-shared-pkg', path: resolve(cliRoot, '../../packages/shared/package.json') },
   ];
@@ -118,7 +138,7 @@ export async function buildFileSha256(path: string): Promise<string> {
 /**
  * Deterministic content digest for a labeled artifact set.
  */
-export async function buildArtifactContentDigest(artifacts: RuntimeArtifact[]): Promise<string> {
+async function buildArtifactContentDigest(artifacts: RuntimeArtifact[]): Promise<string> {
   const hash = createHash('sha256');
   await hashArtifacts(hash, artifacts);
   return hash.digest('hex');

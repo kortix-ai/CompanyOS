@@ -53,6 +53,8 @@ beforeAll(() => {
     port: 0,
     async fetch(req) {
       const url = new URL(req.url);
+      // Only the CLI's API calls: a dev box's port probe (`GET /`) must not take captured[0].
+      if (!url.pathname.startsWith('/v1/')) return new Response(null, { status: 404 });
       captured.push({
         path: url.pathname,
         body: (await req.json().catch(() => ({}))) as Record<string, unknown>,
@@ -116,7 +118,7 @@ describe('a denied connector call carries its remedy', () => {
       PROJECT_ID,
     ]);
 
-    expect(captured[0]?.path).toBe(`/v1/connectors/projects/${PROJECT_ID}/call`);
+    expect(captured[0]?.path).toBe(`/v1/connectors/workspaces/${PROJECT_ID}/call`);
     expect(captured[0]?.body).toMatchObject({
       connector: 'crm',
       action: 'whoami',
@@ -199,10 +201,10 @@ describe('a denied connector call carries its remedy', () => {
     expect(result.payload.execution_id).toBe('exec-pending');
     expect(result.payload.approval_summary).toBe('one synthetic write');
     expect(result.payload.approval_instructions).toContain(
-      `kortix review act call:exec-pending approve --project ${PROJECT_ID}`,
+      `kortix review act call:exec-pending approve --workspace ${PROJECT_ID}`,
     );
     expect(result.payload.approval_instructions).toContain(
-      `kortix review act call:exec-pending reject --project ${PROJECT_ID}`,
+      `kortix review act call:exec-pending reject --workspace ${PROJECT_ID}`,
     );
     expect(result.stdout).not.toContain(approvalUrl);
     expect(result.stdout).not.toContain('synthetic-token');
@@ -228,7 +230,7 @@ describe('a denied connector call carries its remedy', () => {
     expect(result.code).toBe(0);
     const text = result.payload.approval_instructions as string;
     expect(text).toContain('Kortix runs this exact call once a human approves. Do not repeat the call.');
-    expect(text).toContain(`kortix review show call:exec-held --project ${PROJECT_ID}`);
+    expect(text).toContain(`kortix review show call:exec-held --workspace ${PROJECT_ID}`);
     expect(text).not.toContain('Approval alone does not run the call');
   });
 

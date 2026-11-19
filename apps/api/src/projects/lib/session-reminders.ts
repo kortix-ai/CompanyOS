@@ -12,7 +12,7 @@
  * (project_id, slug) key.
  */
 import { randomBytes } from 'node:crypto';
-import { projectTriggerRuntime, projects } from '@kortix/db';
+import { projectTriggerRuntime } from '@kortix/db';
 import { reminderPromptText as sharedReminderPromptText } from '@kortix/shared';
 import { formatDurationSeconds, parseDurationSeconds } from '@kortix/manifest-schema';
 import { Cron } from 'croner';
@@ -26,6 +26,7 @@ import {
   validateTriggerTimezone,
 } from '../trigger-schedule';
 import type { GitTriggerSpec } from '../triggers';
+import { projectsView } from '../../workspaces/rows';
 
 /** A recurring reminder fires at most once per 5 minutes. Each fire is a model turn. */
 export const REMINDER_MIN_INTERVAL_SECONDS = 300;
@@ -348,13 +349,19 @@ export async function insertSessionReminderWithinCaps(
   });
 }
 
-export async function insertSessionReminder(input: {
+export async function insertSessionReminder(input: Parameters<typeof insertRuntimeTriggerRow>[0], q: Db = db): Promise<RuntimeRow> {
+  return insertRuntimeTriggerRow({ ...input, sessionId: input.spec.pinnedSessionId }, q);
+}
+
+/** The one writer of a `project_trigger_runtime` row. `sessionId` is set for a session reminder only. */
+export async function insertRuntimeTriggerRow(input: {
   projectId: string;
   spec: GitTriggerSpec;
   createdBy: string;
   /** Null for a source that is not a schedule: nothing to claim. */
   firstFireAt: Date | null;
   now: Date;
+  sessionId?: string | null;
 }, q: Db = db): Promise<RuntimeRow> {
   const { spec } = input;
   const [row] = await q
@@ -362,7 +369,7 @@ export async function insertSessionReminder(input: {
     .values({
       projectId: input.projectId,
       slug: spec.slug,
-      sessionId: spec.pinnedSessionId,
+      sessionId: input.sessionId,
       ownerUserId: input.createdBy,
       // A loop is `cron`; a session-target trigger keeps its own source type.
       triggerType: spec.type,
@@ -423,7 +430,7 @@ export async function disableRemindersAuthoredBy(accountId: string, userId: stri
       and(
         inArray(
           projectTriggerRuntime.projectId,
-          db.select({ projectId: projects.projectId }).from(projects).where(eq(projects.accountId, accountId)),
+          db.select({ projectId: projectsView.projectId }).from(projectsView).where(eq(projectsView.accountId, accountId)),
         ),
         sql`${projectTriggerRuntime.scheduleSpec} -> 'reminder' ->> 'promptAuthorUserId' = ${userId}`,
         ...activeReminder,

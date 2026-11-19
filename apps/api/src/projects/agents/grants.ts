@@ -1,9 +1,10 @@
 import type { AgentGrant } from '@kortix/db';
 import { isMyKortixAgentName } from '@kortix/shared';
-import { canonicalizeGrantActions, canonicalizeGrantConnectors } from '../../iam/agent-scope';
+import { PROJECT_ACTIONS } from '../../iam/actions';
+import { agentMayPerform, canonicalizeGrantActions, canonicalizeGrantConnectors } from '../../iam/agent-scope';
 import type { GitBackedProject } from '../git';
 import { disabledMyKortixAgentGrant, myKortixAgentGrant } from '../lib/my-kortix-agent';
-import { OPENCODE_BUILTIN_AGENTS_V3 } from '@kortix/manifest-schema';
+import { RUNTIME_BUILTIN_AGENTS } from '@kortix/manifest-schema';
 import { manifestIssueSummary, parseManifestString } from '../manifest-io';
 import { extractAgents, loadProjectAgents } from './parse';
 import type { AgentSpec, LoadedAgents } from './types';
@@ -11,7 +12,7 @@ import type { AgentSpec, LoadedAgents } from './types';
 /**
  * The non-binding agent sentinel. `project_sessions.agent_name` defaults to this
  * literal and NO agent is ever named `default` — the runtime resolves it to
- * OpenCode's configured `default_agent` (a general-purpose agent). Kept in sync
+ * the configured `default_agent` (a general-purpose agent). Kept in sync
  * with the proxy's copy (sandbox-proxy/pre-prompt-env-sync.ts).
  */
 export const DEFAULT_AGENT_SENTINEL = 'default';
@@ -46,7 +47,7 @@ export async function resolveAgentGrant(
  * sandbox roster, 2026-09-15: build, compaction, explore, general, plan,
  * summary, title).
  */
-export const OPENCODE_BUILTIN_AGENT_NAMES: ReadonlySet<string> = new Set([
+export const RUNTIME_BUILTIN_AGENT_NAMES: ReadonlySet<string> = new Set([
   'build',
   'compaction',
   'explore',
@@ -82,14 +83,14 @@ export function isLaunchableAgentName(agentName: string, loaded: LoadedAgents): 
   if (name === DEFAULT_AGENT_SENTINEL) return true;
   // My Kortix is launchable only when kortix.yaml sets `builtin_agents.my_kortix: true`.
   if (isMyKortixAgentName(name)) return loaded.builtinAgents?.my_kortix === true;
-  // OpenCode ships these in every runtime and a governed project's picker can
+  // OpenCode shipped these in every runtime and a governed project's picker can
   // still send one. They are the runtime's own, not another project's, so they
   // keep running exactly as before: an undeclared built-in resolves to the
   // deny-all grant in `grantFromLoadedAgents`, never a widening. Only declared
   // agents run: the compiled config disables build/plan/general/explore unless
   // the manifest declares the name.
-  const compiledOff = (OPENCODE_BUILTIN_AGENTS_V3 as readonly string[]).includes(name);
-  if (OPENCODE_BUILTIN_AGENT_NAMES.has(name) && !compiledOff) return true;
+  const compiledOff = (RUNTIME_BUILTIN_AGENTS as readonly string[]).includes(name);
+  if (RUNTIME_BUILTIN_AGENT_NAMES.has(name) && !compiledOff) return true;
   if (loaded.specs.length === 0 && loaded.errors.length === 0) return true;
   return loaded.specs.some((s) => s.name === name && s.enabled);
 }
@@ -174,7 +175,13 @@ export function grantFromLoadedAgents(agentName: string, loaded: LoadedAgents): 
   // A project that does not run My Kortix (no `builtin_agents.my_kortix: true`)
   // strips an existing `mykortix` session of every project action on its next prompt.
   if (isMyKortixAgentName(agentName)) {
-    return loaded.builtinAgents?.my_kortix === true ? myKortixAgentGrant() : disabledMyKortixAgentGrant();
+    const platform = loaded.builtinAgents?.my_kortix === true ? myKortixAgentGrant() : disabledMyKortixAgentGrant();
+    // Repair mode (an unparseable manifest): My Kortix still runs so the file
+    // can be fixed, but the project cannot prove what any agent may use — so
+    // it receives no project secret, the same fail-closed rule every other
+    // agent answers on an error (secret-grant.ts). Permissions and connectors
+    // stay person-capped; fixing kortix.yaml needs a write, never a secret.
+    return loaded.manifestSyntaxError ? { ...platform, env: [] } : platform;
   }
 
   // No `agents` parsed and no errors → project hasn't adopted
@@ -225,6 +232,18 @@ export function grantFromLoadedAgents(agentName: string, loaded: LoadedAgents): 
   return { agent: agentName, permissions: [], connectors: [], env: [] };
 }
 
+/**
+ * Does the agent's own grant (the one its session token is minted with) allow
+ * repository reads? A session never checks out the repository at boot
+ * (2026-11-08); this decides whether its box may receive repository bytes at
+ * all: the full config release, every agent's compiled config, the project's
+ * template image, and the repository routes. Session create ANDs it with the
+ * launching person's `project.file.read`.
+ */
+export function agentGrantAllowsRepository(agentName: string, loaded: LoadedAgents): boolean {
+  return agentMayPerform(canonicalizeGrantActions(grantFromLoadedAgents(agentName, loaded)), PROJECT_ACTIONS.PROJECT_GITOPS_READ);
+}
+
 /** Resolve the selected agent's sandbox template without repository I/O. */
 export function sandboxFromLoadedAgents(agentName: string, loaded: LoadedAgents): string | null {
   const concreteName =
@@ -232,23 +251,6 @@ export function sandboxFromLoadedAgents(agentName: string, loaded: LoadedAgents)
       ? loaded.defaultAgent
       : agentName;
   return loaded.specs.find((spec) => spec.name === concreteName && spec.enabled)?.sandbox ?? null;
-}
-
-/** Resolve the selected agent's project file delivery mode without repository I/O.
- *  An agent block that fails to parse, or is off, gets no repository: a typo in
- *  `workspace` must not grant the checkout it tried to withhold. */
-export function repositoryAccessFromLoadedAgents(agentName: string, loaded: LoadedAgents): boolean {
-  const name = agentName === DEFAULT_AGENT_SENTINEL && loaded.defaultAgent ? loaded.defaultAgent : agentName;
-  if (loaded.errors.some((error) => error.name === name)) return false;
-  const spec = loaded.specs.find((candidate) => candidate.name === name);
-  if (spec && !spec.enabled) return false;
-  return spec?.repositoryAccess ?? true;
-}
-
-/** Legacy read remains unavailable until its owner explicitly chooses a boolean policy. */
-export function legacyReadWorkspaceFromLoadedAgents(agentName: string, loaded: LoadedAgents): boolean {
-  const name = agentName === DEFAULT_AGENT_SENTINEL && loaded.defaultAgent ? loaded.defaultAgent : agentName;
-  return loaded.specs.find((spec) => spec.name === name && spec.enabled)?.legacyReadWorkspace ?? false;
 }
 
 /**

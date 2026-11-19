@@ -14,7 +14,7 @@
  *  - **OpenAI and OpenCode Go** — two ways in. With nothing connected the sheet
  *    asks which: a subscription sign-in (device code) or an API key. With
  *    either connected it lists the connections and offers the other.
- *  - **Pooled keys** (`pooled_provider_secrets`) — the account-level key
+ *  - **Pooled keys** — the account-level key
  *    manager, as before.
  *
  * Saving is a button, not a blur. The old list saved a field when focus left
@@ -66,7 +66,9 @@ import { errorToast, successToast } from '../../primitives/toast';
 import {
   ProviderLogoStatus,
   connectedVia,
+  providerConnectionIds,
   providerMethod,
+  providerRowConnected,
   type ProviderStatus,
   supportsPooledProviderKey,
   useManagedProvider,
@@ -85,7 +87,8 @@ import {
   prettyFieldLabel,
   providerDisconnectPlan,
 } from '../sections/llm-provider/utils';
-import { AccountSecretResourcesPanel } from '../sections/view/account-secret-resources-panel';
+import { AccountSecretResourcesPanel, useCanShareProviderAccounts } from '../sections/view/account-secret-resources-panel';
+import { LegacyChatGptUsage, SubscriptionUsageSection } from '../sections/view/subscription-usage';
 import { useTranslations } from '../../i18n';
 import { LLM_PROVIDER_BY_ID, type LlmProviderEntry, type LlmProviderModel } from '../../internal/lib/llm-providers';
 import { cn } from '../../internal/lib/utils';
@@ -898,21 +901,24 @@ export function ProviderSheet({
   const access = useModelAccess(enabled ? projectId : null);
   const managed = useManagedProvider(enabled ? projectId : null);
   const pooled = usePooledProviderIds(projectId, enabled);
+  const canShare = useCanShareProviderAccounts(projectId);
   const { connectedProviders } = useConnectedProviders(projectId, enabled);
 
   const entry = providerId === 'kortix' ? managed : LLM_PROVIDER_BY_ID.get(providerId);
   if (!entry) return null;
 
   const method = providerMethod(entry);
-  const connectedIdSet = new Set(connectedProviders.map((provider) => provider.id));
-  const keyConnected = connectedProviders.some((provider) => provider.id === entry.id);
-  const subscriptionConnected = connectedProviders.some(
-    (provider) => provider.id === (entry.id === 'openai' ? 'codex' : entry.id),
+  // Project connections plus account-shared ones: a shared ChatGPT login
+  // (`codex`) connects OpenAI, and the header says how.
+  const connectedIdSet = providerConnectionIds(
+    connectedProviders.map((provider) => provider.id),
+    pooled.pooledProviderIds,
   );
+  const keyConnected = connectedProviders.some((provider) => provider.id === entry.id);
   const status: ProviderStatus =
     method === 'included'
       ? 'included'
-      : keyConnected || subscriptionConnected || pooled.pooledProviderIds.has(entry.id)
+      : providerRowConnected(entry.id, connectedIdSet)
         ? 'connected'
         : 'none';
 
@@ -940,7 +946,11 @@ export function ProviderSheet({
     </>
   );
 
-  const bodyProps: BodyProps = { projectId, entry, connected: keyConnected, canWrite, models };
+  // A key form writes the named store now (the API files it as a "Workspace
+  // key"), so a key saved there counts as this provider's saved key too.
+  const bodyProps: BodyProps = {
+    projectId, entry, connected: keyConnected || pooled.pooledProviderIds.has(entry.id), canWrite, models,
+  };
   let content: ReactNode;
   if (method === 'included') {
     content = (
@@ -949,12 +959,15 @@ export function ProviderSheet({
         {models}
       </SplitSheetBody>
     );
-  } else if (pooled.pooledSecretsEnabled && pooled.accountId && entry.id === 'openai') {
+  } else if (pooled.accountId && entry.id === 'openai') {
     content = (
       <SplitSheetBody className="space-y-7">
+        <SubscriptionUsageSection accountId={pooled.accountId} projectId={projectId} providerId="codex" />
         <div className="space-y-3">
           <p className="text-foreground text-sm font-medium">{tPooled('chatGptAccounts')}</p>
-          <p className="text-muted-foreground text-xs text-pretty">{tPooled('oauthPrivateDescription')}</p>
+          <p className="text-muted-foreground text-xs text-pretty">
+            {tPooled(canShare ? 'oauthPrivateDescription' : 'oauthOnlyYouDescription')}
+          </p>
           <AccountSecretResourcesPanel
             accountId={pooled.accountId}
             projectId={projectId}
@@ -964,18 +977,33 @@ export function ProviderSheet({
             canWrite
             oauth={{ projectId, onConnected: () => undefined }}
           />
-          <ChatGptSubscriptionConnect projectId={projectId} onConnected={() => undefined} legacyOnly />
+          <ChatGptSubscriptionConnect projectId={projectId} onConnected={() => undefined} legacyOnly usageSlot={<LegacyChatGptUsage accountId={pooled.accountId} projectId={projectId} />} />
+        </div>
+        {/* OpenAI API keys below the ChatGPT accounts, exactly as Anthropic lists its keys below Claude accounts. */}
+        <div className="space-y-3">
+          <p className="text-foreground text-sm font-medium">{tPooled('providerKeysFor', { provider: entry.label })}</p>
+          <AccountSecretResourcesPanel
+            accountId={pooled.accountId}
+            projectId={projectId}
+            providerId={entry.id}
+            providerName={entry.label}
+            envVar={entry.envVars[0]!}
+            canWrite
+          />
         </div>
         {models}
       </SplitSheetBody>
     );
-  } else if (pooled.pooledSecretsEnabled && pooled.accountId && entry.id === 'anthropic') {
+  } else if (pooled.accountId && entry.id === 'anthropic') {
     // Claude accounts, exactly as OpenAI lists ChatGPT accounts; Anthropic API keys below them.
     content = (
       <SplitSheetBody className="space-y-7">
+        <SubscriptionUsageSection accountId={pooled.accountId} projectId={projectId} providerId="claude-agent" />
         <div className="space-y-3">
           <p className="text-foreground text-sm font-medium">{tPooled('claudeAccounts')}</p>
-          <p className="text-muted-foreground text-xs text-pretty">{tPooled('claudeOauthPrivateDescription')}</p>
+          <p className="text-muted-foreground text-xs text-pretty">
+            {tPooled(canShare ? 'claudeOauthPrivateDescription' : 'claudeOauthOnlyYouDescription')}
+          </p>
           <AccountSecretResourcesPanel
             accountId={pooled.accountId}
             projectId={projectId}
@@ -1000,7 +1028,7 @@ export function ProviderSheet({
         {models}
       </SplitSheetBody>
     );
-  } else if (pooled.pooledSecretsEnabled && pooled.accountId && supportsPooledProviderKey(entry)) {
+  } else if (pooled.accountId && supportsPooledProviderKey(entry)) {
     content = (
       <SplitSheetBody className="space-y-7">
         <AccountSecretResourcesPanel

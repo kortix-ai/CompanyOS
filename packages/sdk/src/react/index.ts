@@ -15,22 +15,27 @@ export {
 // One connector action's output as a cached query, with typed connector errors.
 export { useConnectorQuery, type ConnectorQueryOptions } from './use-connector-query';
 
+// The host-neutral React clock: elapsed labels and relative times tick on one
+// interval instead of each surface hand-rolling its own.
+export { useNow } from './use-now';
+
 // The one call a host makes on every identity change (sign-out, a different
 // user signing in) to drop the SDK's per-user in-memory session state.
 export { resetIdentityState } from './reset-identity-state';
 
-// @kortix/sdk/react — the complete OpenCode React hook surface, relocated
-// verbatim from apps/web (every useOpenCode* hook, query-key factory, provider,
-// and type). This is the single source of truth the web UI binds to.
-export * from './opencode';
+// @kortix/sdk/react — the session runtime React hook surface (every runtime
+// hook, query-key factory, provider, and type). This is the single source of
+// truth the web UI binds to.
+export * from './runtime-hooks';
 export { useRuntimeSupports } from './use-runtime-supports';
 export { useHasSessionDesktop } from './use-has-session-desktop';
 // The session's one live connection (R5.3). `useSession` mounts it; a host that
 // runs its own copy of a poll (self-heal, sync) gates it on this.
-export { useSessionStreamConnected } from './use-session-stream';
+export { useSessionStreamConnected, useSessionStreamEnded } from './use-session-stream';
+export type { SessionStreamEnd, SessionStreamEndReason } from './use-session-stream';
 
 // `useSession`'s reply/error-classification surface — not (yet) re-exported by
-// `./opencode`'s explicit barrel list, so re-exported directly here.
+// `./runtime-hooks`'s explicit barrel list, so re-exported directly here.
 export {
   answerQuestion,
   answerPermission,
@@ -55,7 +60,7 @@ export {
 } from '../core/http/api/errors';
 
 // The framework-free SSE event-stream primitive that `useRuntimeEventStream`
-// (exported above via `./opencode`) wraps. Re-exported here too so a host
+// (exported above via `./runtime-hooks`) wraps. Re-exported here too so a host
 // already importing from `@kortix/sdk/react` can build its own binding
 // (e.g. a non-QueryClient consumer) without a second import from `@kortix/sdk`.
 export {
@@ -77,7 +82,7 @@ export * from './use-kortix-master';
 
 // The send / stash-replay / error-recovery core extracted from apps/web's
 // `session-chat.tsx` — see `use-session-send.ts` for the full contract. Not
-// (yet) re-exported by `./opencode`'s explicit barrel list, so re-exported
+// (yet) re-exported by `./runtime-hooks`'s explicit barrel list, so re-exported
 // directly here (same reasoning as the other direct re-exports above).
 export {
   useSessionSend,
@@ -134,28 +139,68 @@ export {
   type UseAccountsOptions,
   type UseProjectsOptions,
 } from './use-accounts';
-export { useProjectSecrets, projectSecretsKey } from './use-project-secrets';
-export { useAccountSecretResources, useSessionProviderSecretPools, useSubscriptionUsage, useSubscriptionConnections } from './use-provider-secrets';
+// The workspace names. Same queries and keys as useAccounts/useProjects.
 export {
-  useProjectTriggers,
-  projectTriggersKey,
-  useProjectTriggerEventTypes,
-  useProjectTriggerEventApps,
-  projectTriggerEventAppsKey,
-  projectTriggerEventTypesKey,
+  useWorkspaces,
+  useWorkspace,
+  workspacesState,
+  workspaceQueryOptions,
+  type UseWorkspacesOptions,
+  type UseWorkspacesResult,
+  type UseWorkspaceOptions,
+} from './use-workspaces';
+export { useWorkspaceSecrets, useProjectSecrets, workspaceSecretsKey, projectSecretsKey } from './use-project-secrets';
+export { useAccountSecretResources, useSessionProviderSecretPools, useSubscriptionUsage, useSubscriptionUsages, useSubscriptionConnections } from './use-provider-secrets';
+export {
+  useWorkspaceTriggers, useProjectTriggers,
+  workspaceTriggersKey, projectTriggersKey,
+  useWorkspaceTriggerEventTypes, useProjectTriggerEventTypes,
+  useWorkspaceTriggerEventApps, useProjectTriggerEventApps,
+  workspaceTriggerEventAppsKey, projectTriggerEventAppsKey,
+  workspaceTriggerEventTypesKey, projectTriggerEventTypesKey,
   useTriggerRuns,
-  useProjectTriggerRuns,
+  useWorkspaceTriggerRuns, useProjectTriggerRuns,
   triggerRunsKey,
-  projectTriggerRunsKey,
+  workspaceTriggerRunsKey, projectTriggerRunsKey,
   type TriggerRunsQueryOptions,
 } from './use-project-triggers';
-export { useProjectReminders, useSessionReminders } from './use-reminders';
+export { useWorkspaceReminders, useProjectReminders, useSessionReminders } from './use-reminders';
 export { useUnifiedTriggers } from './use-unified-triggers';
-export { useProjectGoalFiles, useProjectGoals, useSessionGoal } from './use-goals';
+export {
+  runWorkspaceGoalControl, runProjectGoalControl,
+  useWorkspaceGoal, useProjectGoal,
+  useWorkspaceGoalControl, useProjectGoalControl,
+  useWorkspaceGoalEvents, useProjectGoalEvents,
+  useWorkspaceGoalFiles, useProjectGoalFiles,
+  useWorkspaceGoals, useProjectGoals,
+  useSessionGoal,
+  type ProjectGoalControlInput, type WorkspaceGoalControlInput,
+} from './use-goals';
+export {
+  useWorkspaceEvalActions,
+  useWorkspaceEvalCompare,
+  useWorkspaceEvalDatasets,
+  useWorkspaceEvalJob,
+  useWorkspaceEvalJobs,
+  useWorkspaceEvalSuites,
+  useWorkspaceEvalTask,
+  useWorkspaceEvalTaskCatalog,
+  useWorkspaceEvalTaskFile,
+  useWorkspaceEvalTaskResults,
+  useWorkspaceEvalTasks,
+  type WorkspaceEvalTaskSource,
+  useWorkspaceEvalTrial,
+  useWorkspaceEvalTrialFile,
+} from './use-evals';
+export {
+  useWorkspaceCalendarActions,
+  useWorkspaceCalendarItem,
+  useWorkspaceCalendarItems,
+  useWorkspaceCalendarPeople,
+} from './use-calendar';
 export { useRoom, useRoomConversations, useRoomMessages, useRoomThread, useRooms, useSpaceRoom } from './use-rooms';
 export { usePeerMessages, useReachableAgents, useSessionWorkflows, useTeamTasks, useTeammates } from './use-multi-agent';
-export { useArtifactLive, type ArtifactLiveState, type UseArtifactLiveOptions } from './use-artifact-live';
-export { prefetchArtifact, useArtifact, useArtifactActivity, useArtifactCommentContext, useArtifactComments, useArtifactCommentScreenshot, useInfiniteArtifactActivity, useArtifactMutations, useArtifactText, useArtifactTypes, useArtifactVersions, useArtifacts } from './use-artifacts';
+export { prefetchArtifact, useArtifact, useArtifactMutations, useArtifactText, useArtifactTypes, useArtifactVersions, useArtifacts } from './use-artifacts';
 export {
   useApproveCaptureDevice,
   useApproveCaptureEnrollment,
@@ -184,10 +229,11 @@ export {
 export { useSessionMessageAuthors } from './use-session-message-authors';
 export { useSessionModelUsage } from './use-session-model-usage';
 export { useSessionUsage } from './use-session-usage';
+export { RUNNING_SESSIONS_LIMIT, useRunningSessions } from './use-running-sessions';
 export { useChangeRequests, changeRequestsKey } from './use-change-requests';
 export { useGatewayRoutingPolicy, gatewayRoutingPolicyKey } from './use-gateway-routing-policy';
 export {
-  useProjectApps,
+  useWorkspaceApps, useProjectApps,
   useAppDeployments,
   useAppDeployment,
   useAppMachines,
@@ -196,7 +242,7 @@ export {
   appMachinesKey,
   appVolumesKey,
   useAppAccess,
-  projectAppsKey,
+  workspaceAppsKey, projectAppsKey,
   appDeploymentsKey,
   appDeploymentKey,
   useAppEvents,
@@ -205,6 +251,7 @@ export {
 } from './use-project-apps';
 
 export * from './use-admin-accounts';
+export * from './use-admin-credit-codes';
 export * from './use-admin-role';
 export * from './use-admin-projects';
 export * from './use-admin-activity-analytics';
@@ -252,37 +299,37 @@ export * from './use-project-session';
 export * from './use-session-participants';
 export * from './use-project-sessions';
 export {
-  useAddProjectSpaceLink,
-  useAddProjectSpaceMembers,
+  useAddWorkspaceSpaceLink, useAddProjectSpaceLink,
+  useAddWorkspaceSpaceMembers, useAddProjectSpaceMembers,
   useChannelsOnboarding,
-  useJoinProjectSpace,
-  useLeaveProjectSpace,
-  useProjectSpaceMembers,
-  useRemoveProjectSpaceMember,
-  useCreateProjectSpace,
+  useJoinWorkspaceSpace, useJoinProjectSpace,
+  useLeaveWorkspaceSpace, useLeaveProjectSpace,
+  useWorkspaceSpaceMembers, useProjectSpaceMembers,
+  useRemoveWorkspaceSpaceMember, useRemoveProjectSpaceMember,
+  useCreateWorkspaceSpace, useCreateProjectSpace,
   useMarkChannelsOnboarding,
-  useOpenProjectDm,
-  usePinProjectSpaceLink,
-  useProjectSpaceApps,
-  useProjectSpaceGeneralNotice,
+  useOpenWorkspaceDm, useOpenProjectDm,
+  usePinWorkspaceSpaceLink, usePinProjectSpaceLink,
+  useWorkspaceSpaceApps, useProjectSpaceApps,
+  useWorkspaceSpaceGeneralNotice, useProjectSpaceGeneralNotice,
   usePrivateChannelsAvailable,
   usePrivateChannelsNotIn,
-  useProjectSpaceLinks,
-  useProjectSpaces,
-  useRemoveProjectSpaceLink,
-  useSetProjectSpaceTabs,
-  useUpdateProjectSpace,
-  useProjectSpaceProactive,
-  useSetProjectSpaceProactive,
+  useWorkspaceSpaceLinks, useProjectSpaceLinks,
+  useWorkspaceSpaces, useProjectSpaces,
+  useRemoveWorkspaceSpaceLink, useRemoveProjectSpaceLink,
+  useSetWorkspaceSpaceTabs, useSetProjectSpaceTabs,
+  useUpdateWorkspaceSpace, useUpdateProjectSpace,
+  useWorkspaceSpaceProactive, useProjectSpaceProactive,
+  useSetWorkspaceSpaceProactive, useSetProjectSpaceProactive,
 } from './use-project-spaces';
 // Session groups (`session_groups`): the project's shared folders of sessions.
 export {
-  useCreateProjectSessionGroup,
-  useDeleteProjectSessionGroup,
-  useProjectSessionGroups,
-  useRenameProjectSessionGroup,
-  useReorderProjectSessionGroups,
-  useSetProjectSessionGroup,
+  useCreateWorkspaceSessionGroup, useCreateProjectSessionGroup,
+  useDeleteWorkspaceSessionGroup, useDeleteProjectSessionGroup,
+  useWorkspaceSessionGroups, useProjectSessionGroups,
+  useRenameWorkspaceSessionGroup, useRenameProjectSessionGroup,
+  useReorderWorkspaceSessionGroups, useReorderProjectSessionGroups,
+  useSetWorkspaceSessionGroup, useSetProjectSessionGroup,
 } from './use-session-groups';
 export * from './use-sessions-needing-input';
 export * from './use-session-asks';
@@ -292,6 +339,7 @@ export * from './use-review-summary';
 export * from './use-notifications';
 export * from './use-session-list-state';
 export * from './session-cache-write';
+export * from './use-cached-workspace-sessions';
 export * from './invalidate-project';
 export * from './use-feature-flag';
 export * from './use-project-memory';

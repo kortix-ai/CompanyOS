@@ -22,7 +22,7 @@ import { useTranslations } from '../../i18n';
 import { Close } from '../../icons/close';
 import { AgentMark } from '../../internal/components/agent-mark';
 import { cn } from '../../lib/utils';
-import { uiRoutes } from '../../lib/routes';
+import { triggerHref } from '../../internal/lib/capability-tab-routes';
 import { Button } from '../../primitives/button';
 import {
   DropdownMenu,
@@ -220,7 +220,7 @@ function AgentsSection({ projectId, space, editable }: { projectId: string; spac
   const tDetails = useTranslations('spaces.details');
   const config = useProjectConfig(projectId);
   const update = useUpdateProjectSpace(projectId);
-  const projectDefault = config?.default_agent ?? config?.open_code_default_agent ?? null;
+  const projectDefault = config?.default_agent ?? null;
   const agents = space.kind === 'dm' ? (space.dm_agent_name ? [space.dm_agent_name] : []) : (space.agents ?? []);
   // No agent list: a new thread starts on the project's default agent.
   const shown = agents.length > 0 ? agents : projectDefault ? [projectDefault] : [];
@@ -431,7 +431,7 @@ function RoutinesSection({ projectId, space }: { projectId: string; space: Proje
           avatar={<LightningIcon className="text-muted-foreground size-4" />}
           name={triggerName(trigger)}
           tag={describeWhen(trigger)}
-          href={uiRoutes().customize(projectId, `triggers?id=${encodeURIComponent(trigger.slug)}`)}
+          href={triggerHref(projectId, trigger.slug)}
         />
       ))}
       {privateChannel && routines.length === 0 ? (

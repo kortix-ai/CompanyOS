@@ -130,7 +130,7 @@ function subscribeToBody(onChange: () => void) {
 /** Serialized so an unchanged DOM yields an identical snapshot. */
 function readOpenLayers(): string {
   const layers: InspectedLayer[] = [];
-  // Document order is open order: each Radix portal appends to `body`.
+  // Document order is open order: each overlay portal appends to `body`.
   const dialogs = document.querySelectorAll<HTMLElement>(
     '[role="dialog"][data-state="open"],[role="alertdialog"][data-state="open"],[role="dialog"][aria-modal="true"]',
   );
@@ -343,7 +343,7 @@ function NestedScenario() {
                 </ModalTrigger>
                 <DemoModalContent
                   title="Inner modal"
-                  description="Uncontrolled: Radix owns no state here, the stack still sees it."
+                  description="Uncontrolled: the dialog owns its own state, the stack still sees it."
                   treeDepth={3}
                   widthLevel={2}
                 />
@@ -379,7 +379,7 @@ function MixedScenario() {
 
       <Modal open={modal} onOpenChange={setModal}>
         <DemoModalContent
-          title="Project settings"
+          title="Workspace settings"
           description="The sheet and confirm below are not inside this modal's JSX."
           treeDepth={1}
           widthLevel={0}
@@ -411,7 +411,7 @@ function MixedScenario() {
       <ConfirmDialog
         open={confirm}
         onOpenChange={setConfirm}
-        title="Delete project?"
+        title="Delete workspace?"
         description="Demo only. Nothing is deleted."
         confirmLabel="Delete"
         confirmVariant="destructive"

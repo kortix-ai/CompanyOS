@@ -31,6 +31,7 @@ import type { MouseEvent } from '@opentui/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ditherBand, toBraille } from '../lib/dither.ts';
+import { clip } from '../lib/text.ts';
 import {
   type LifeGrid,
   type LifeSnapshot,
@@ -95,7 +96,7 @@ const SYMBOL_PIXEL_ROWS = PIXEL_KORTIX_ROWS.length;
  * SAME quadrant renderer Game of Life starts from, so generation 0 is this,
  * glyph for glyph. Solid cells, never a checker: `#` at full ink and `+` (a
  * curve cell) at half ink, the rule the web's agent mark applies at small
- * sizes (`packages/ui/src/internal/lib/pixel-mark.ts`). 2×: a cell is `██`
+ * sizes (`packages/shared/src/pixel-mark.ts`). 2×: a cell is `██`
  * (2 columns × 1 row, square). 1×: 1 column × half a row.
  */
 export function symbolRuns(scale: 1 | 2): ToneRun[][] {
@@ -204,10 +205,6 @@ function layoutFor(
     total: Math.max(height, 1),
     indent,
   };
-}
-
-function clip(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
 interface LifeRun {

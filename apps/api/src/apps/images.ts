@@ -7,7 +7,8 @@
  *
  * Providers cap how many templates an org may hold: Platinum refuses builds
  * past its per-org template count (`org_template_quota_exceeded`, tiers
- * 10/50/500), and `snapshots/quota-gc.ts` reclaims Daytona only. A build that
+ * 10/50/500). `snapshots/quota-gc.ts` reclaims superseded images under org
+ * pressure, and an untracked App image only after its idle floor. A build that
  * hits the cap reclaims unused images once and retries once
  * (`buildWithImageQuotaGuard`); a second refusal fails the deployment with
  * `app_image_quota_exceeded` instead of three retries on a backoff.
@@ -59,11 +60,13 @@ import { config, type SandboxProviderName } from '../config';
 import { logger } from '../lib/logger';
 import { getProvider, type SandboxProvider } from '../platform/providers';
 import { db } from '../shared/db';
+import { escalateProviderAuthOutage } from '../shared/provider-auth';
 import { mapWithConcurrency } from '../shared/map-with-concurrency';
 import { getSandboxProvider } from '../snapshots/providers';
 import { releaseVolumesOf } from './volumes';
 import { SnapshotInUseError } from '../snapshots/providers/errors';
 import { PLATINUM_BUILD_FAILED_RE } from '../snapshots/providers/platinum-templates';
+import { transitionAppRuntimes } from './runtime-status';
 import {
   APP_DEPLOYMENT_PREFIX,
   APP_IMAGE_PREFIX,
@@ -299,6 +302,10 @@ export async function releaseAppImage(
   const name = image.imageName;
   const fail = (error: unknown): 'pending' => {
     if (!(error instanceof SnapshotInUseError)) {
+      // The same invisible-outage family as every other `[apps] … maintenance
+      // retries it` warn: a dead provider key answers every release with a 401
+      // and this line paged nobody. The provider is the failing call's target.
+      escalateProviderAuthOutage(image.provider, 'app image release', error);
       logger.warn('[apps] shared image release failed; maintenance retries it', {
         imageName: name,
         provider: image.provider,
@@ -443,6 +450,7 @@ export async function releaseDeploymentImage(
     return 'released';
   } catch (error) {
     if (!(error instanceof SnapshotInUseError)) {
+      escalateProviderAuthOutage(deployment.hostingProvider, 'app image release', error);
       logger.warn('[apps] image release failed; maintenance retries it', {
         deploymentId: deployment.deploymentId,
         provider: deployment.hostingProvider,
@@ -509,6 +517,7 @@ export async function removeAppRuntime(
   } catch (error) {
     const status = await provider.getStatus(runtime.externalId).catch(() => 'unknown' as const);
     if (status === 'removed') return true;
+    escalateProviderAuthOutage(runtime.provider, 'app runtime removal', error);
     logger.warn('[apps] runtime removal failed; maintenance retries it', {
       runtimeId: runtime.runtimeId,
       provider: runtime.provider,
@@ -524,17 +533,14 @@ export async function markAppRuntimesDeleted(runtimeIds: string[], now = new Dat
   if (runtimeIds.length === 0) return;
   // The box is gone (its delete committed the mount): its single-writer lock goes with it.
   await releaseVolumesOf(runtimeIds);
-  await db.update(appRuntimes)
-    .set({
-      status: 'deleted',
-      stoppedAt: sql`coalesce(${appRuntimes.stoppedAt}, ${now.toISOString()}::timestamptz)`,
-      activityLeaseUntil: null,
-      idleDeadlineAt: null,
-      wakeLeaseOwner: null,
-      wakeLeaseUntil: null,
-      updatedAt: now,
-    })
-    .where(inArray(appRuntimes.runtimeId, runtimeIds));
+  await transitionAppRuntimes('delete', inArray(appRuntimes.runtimeId, runtimeIds), {
+    stoppedAt: sql`coalesce(${appRuntimes.stoppedAt}, ${now.toISOString()}::timestamptz)`,
+    activityLeaseUntil: null,
+    idleDeadlineAt: null,
+    wakeLeaseOwner: null,
+    wakeLeaseUntil: null,
+    updatedAt: now,
+  });
   for (const runtimeId of runtimeIds) {
     await pauseComputeSession(runtimeId, now).catch((error) => {
       logger.error('[apps] compute meter close failed for a deleted runtime', {
@@ -716,6 +722,10 @@ export async function reclaimAppDeploymentImages(
   }
 
   const providers = io.providers();
+  // Providers whose listing succeeded this pass. One API key serves listing
+  // and release, so a provider that could not list cannot release either —
+  // its shared images skip this pass instead of failing per image below.
+  const listedProviders: string[] = [];
   for (const { name, adapter } of providers) {
     let images: string[];
     try {
@@ -730,6 +740,7 @@ export async function reclaimAppDeploymentImages(
       });
       continue;
     }
+    listedProviders.push(name);
     result.providers += 1;
     result.listed += images.length;
 
@@ -767,7 +778,7 @@ export async function reclaimAppDeploymentImages(
 
   // Shared images: tracked in this database, so no provider listing is needed.
   try {
-    const unused = await io.loadUnusedImages(maxPerPass + 1, providers.map((provider) => provider.name));
+    const unused = await io.loadUnusedImages(maxPerPass + 1, listedProviders);
     result.reclaimable += unused.length;
     result.deferred += Math.max(0, unused.length - maxPerPass);
     for (const image of unused.slice(0, maxPerPass)) {

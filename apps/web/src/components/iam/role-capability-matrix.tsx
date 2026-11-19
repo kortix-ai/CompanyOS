@@ -51,10 +51,6 @@ import {
   type CellKind,
 } from './role-capability-model';
 
-// The model's public names stay importable from this renderer path — every
-// existing importer (tests, member panels) keeps working through the re-export.
-export * from './role-capability-model';
-
 // ─── Component ──────────────────────────────────────────────────────────────
 
 const MATRIX_NOTE =
@@ -81,7 +77,6 @@ export function RoleCapabilityMatrix({
   disabled = false,
 }: RoleCapabilityMatrixProps) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
-  const tCapabilities = useTranslations('roleCapabilities');
   const [search, setSearch] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const autoOpened = useRef(false);
@@ -98,7 +93,6 @@ export function RoleCapabilityMatrix({
     () => localizeUiCatalog(fold.areas, tI18nComplete, APP_REGISTRY_TRANSLATION_KEYS),
     [fold.areas, tI18nComplete],
   );
-  const hasComments = fold.areas.some((row) => row.comment.leaves.length > 0);
 
   // Open Advanced by itself the first time a role arrives with a partial cell
   // or an unmapped grant — otherwise those leaves would be invisible.
@@ -117,7 +111,6 @@ export function RoleCapabilityMatrix({
         row.area.label.toLowerCase().includes(query) ||
         row.area.hint?.toLowerCase().includes(query) ||
         row.view.leaves.some((leaf) => leaf.includes(query)) ||
-        row.comment.leaves.some((leaf) => leaf.includes(query)) ||
         row.edit.leaves.some((leaf) => leaf.includes(query)),
     );
   }, [localizedAreas, query]);
@@ -216,7 +209,6 @@ export function RoleCapabilityMatrix({
         <div className="text-muted-foreground flex items-center gap-3 px-4 py-2 text-xs">
           <span className="min-w-0 flex-1">{tI18nComplete.raw('text024dc204d7ba')}</span>
           <span className="w-10 shrink-0 text-center">{tI18nComplete.raw('textdcc839a4015c')}</span>
-          {hasComments ? <span className="w-20 shrink-0 text-center">{tCapabilities('comment')}</span> : null}
           <span className="w-10 shrink-0 text-center">{tI18nComplete.raw('text464c4ffd019e')}</span>
         </div>
 
@@ -248,16 +240,6 @@ export function RoleCapabilityMatrix({
                 disabled={disabled}
                 onToggle={(checked) => setCell(row.area.key, 'view', checked)}
               />
-              {hasComments ? (
-                <MatrixCell
-                  areaLabel={row.area.label}
-                  cell={row.comment}
-                  kind="comment"
-                  label={tCapabilities('commentArea', { area: row.area.label })}
-                  disabled={disabled}
-                  onToggle={(checked) => setCell(row.area.key, 'comment', checked)}
-                />
-              ) : null}
               <MatrixCell
                 areaLabel={row.area.label}
                 cell={row.edit}
@@ -279,7 +261,9 @@ export function RoleCapabilityMatrix({
           >
             <span className="text-sm font-medium">{tI18nComplete.raw('text9f088dbebd6c')}</span>
             <span className="text-muted-foreground text-xs">
-              {advancedOpen ? 'Hide' : tI18nComplete.raw('textee2682510c82')}
+              {advancedOpen
+                ? tI18nComplete.raw('textac20a57bfde0')
+                : tI18nComplete.raw('textee2682510c82')}
             </span>
           </Button>
         </DisclosureTrigger>
@@ -328,21 +312,20 @@ function MatrixCell({
   areaLabel,
   cell,
   kind,
-  label,
   disabled,
   onToggle,
 }: {
   areaLabel: string;
   cell: CellFold;
   kind: CellKind;
-  label?: string;
   disabled: boolean;
   onToggle: (checked: boolean) => void;
 }) {
+  const t = useTranslations('hardcodedUi.i18nComplete');
   if (cell.leaves.length === 0) {
     return (
       <span
-        className={cn('text-muted-foreground flex shrink-0 justify-center pt-0.5 text-sm', kind === 'comment' ? 'w-20' : 'w-10')}
+        className="text-muted-foreground flex w-10 shrink-0 justify-center pt-0.5 text-sm"
         aria-hidden
       >
         —
@@ -350,12 +333,12 @@ function MatrixCell({
     );
   }
   return (
-    <span className={cn('flex shrink-0 justify-center pt-0.5', kind === 'comment' ? 'w-20' : 'w-10')}>
+    <span className="flex w-10 shrink-0 justify-center pt-0.5">
       <Checkbox
         checked={cell.state === 'partial' ? 'indeterminate' : cell.state === 'on'}
         onCheckedChange={(c) => onToggle(c === true)}
         disabled={disabled}
-        aria-label={label ?? `${kind === 'view' ? 'View' : 'Edit'} ${areaLabel}`}
+        aria-label={`${kind === 'view' ? t.raw('textdcc839a4015c') : t.raw('text464c4ffd019e')} ${areaLabel}`}
       />
     </span>
   );

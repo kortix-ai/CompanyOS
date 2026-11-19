@@ -6,7 +6,7 @@ import type { ToolProps } from '../shared/types';
 import { TerminalWindowIcon as Terminal } from '@phosphor-icons/react';
 import { useTranslations } from '../../../i18n';
 
-/** @deprecated Renders an OpenCode-only tool or todo list in an OpenCode session (pi has none). OpenCode is sunset (2026-10-23): no new code; delete with OpenCode. */
+/** @deprecated Renders an OpenCode-only tool or todo list (pi has none). Only a transcript OpenCode wrote holds one; this keeps it readable. No new code. */
 export function PtyWriteTool({ call, defaultOpen, forceOpen, locked }: ToolProps) {
   const tHardcodedUi = useTranslations('hardcodedUi');
   const input = partInput(call);
@@ -28,7 +28,7 @@ export function PtyWriteTool({ call, defaultOpen, forceOpen, locked }: ToolProps
       {ptyInput && (
         <ToolResultCard bodyClassName="px-2 py-1.5">
           <pre className="text-foreground/80 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap">
-            <span className="text-muted-foreground/50 select-none">
+            <span className="text-muted-foreground select-none">
               {tHardcodedUi.raw('componentsSessionToolRenderers.line2685JsxTextText')}
             </span>
             {ptyInput}

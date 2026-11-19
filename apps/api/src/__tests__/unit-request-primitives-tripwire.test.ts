@@ -76,8 +76,7 @@ const XFF_ALLOW: Record<string, string> = {
 const UUID_LITERAL = /\[0-9a-f\]\{8\}-/i;
 const UUID_ALLOW: Record<string, string> = {
   'shared/validate.ts': 'the one implementation',
-  // TODO(follow-up): convert once each open change lands.
-  'connectors/db-deps-rows.ts': 'open PR #7236 edits this file',
+  // TODO(follow-up): convert once the open SSO identity work lands.
   'iam/sso-sync.ts': 'open SSO identity work edits this file',
 };
 
@@ -100,9 +99,7 @@ const BEARER_PARSE = /startsWith\(\s*['"`]Bearer ['"`]\s*\)/;
 const BEARER_ALLOW: Record<string, string> = {};
 
 const ESCAPE_HTML_DEF = /function\s+escapeHtml\b|\bescapeHtml\s*=\s*(?:\(|function)/;
-const ESCAPE_HTML_ALLOW: Record<string, string> = {
-  'shared/html.ts': 'the one implementation',
-};
+const ESCAPE_HTML_ALLOW: Record<string, string> = {};
 
 describe('request primitives have one implementation', () => {
   test('X-Forwarded-For is read only in shared/client-ip.ts', () => {

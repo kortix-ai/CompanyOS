@@ -19,14 +19,11 @@ const nativeAgents = [
 ];
 
 describe('project config agent discovery', () => {
-  test('no agents: keeps legacy OpenCode discovery', () => {
+  test('no agents: an empty declarative roster', () => {
     const result = resolveConfigAgents(nativeAgents, { specs: [], errors: [] });
 
-    expect(result.agent_discovery).toBe('opencode');
-    expect(result.agents).toEqual([
-      { ...nativeAgents[0], source: 'opencode', enabled: true },
-      { ...nativeAgents[1], source: 'opencode', enabled: true },
-    ]);
+    expect(result.agent_discovery).toBe('declarative');
+    expect(result.agents).toEqual([]);
   });
 
   test('agents: lists every registered agent, a disabled one with enabled: false', () => {
@@ -80,6 +77,7 @@ describe('project config agent discovery', () => {
         // resolver reads `native?.model ?? null`.
         model: null,
         space: null,
+        title: null,
         source: 'kortix.yaml',
         enabled: true,
         sandbox: null,
@@ -92,6 +90,7 @@ describe('project config agent discovery', () => {
         mode: 'subagent',
         model: null,
         space: null,
+        title: null,
         source: 'kortix.yaml',
         enabled: true,
         sandbox: null,
@@ -104,6 +103,7 @@ describe('project config agent discovery', () => {
         mode: null,
         model: null,
         space: null,
+        title: null,
         source: 'kortix.yaml',
         enabled: false,
         sandbox: null,

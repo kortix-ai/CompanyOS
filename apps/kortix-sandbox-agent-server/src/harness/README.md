@@ -159,15 +159,22 @@ and the body types of `@kortix/api-contract/runtime-relay`. An adapter decides
 WHEN a turn begins or ends and what its identity is; the shared module owns the
 route, the body, the credential, the retries and the dead-token breaker.
 
+Every route is the canonical workspace name (`/v1/workspaces/:id/…`). The
+fetch goes through `lib/kortix-api/workspace-routes.ts`: an API older than the
+rename answers the unknown-route 404, and the daemon sends the same request
+once more on the legacy name (`/v1/projects/:id/…`) and remembers that API
+base. A daemon released before the rename calls the legacy names, which the
+API serves permanently.
+
 | Module | Callback |
 | --- | --- |
-| `shared/turn-relay.ts` | `POST /projects/:id/turn-stream` (initial-turn claim, `turn_accepted`, `turn_abandoned`, `runtime_session` pin, `turn_begin`, `end`, `steer_read`, memory-guard end), `/turn-question`, `/turn-permission` |
+| `shared/turn-relay.ts` | `POST /workspaces/:id/turn-stream` (initial-turn claim, `turn_accepted`, `turn_abandoned`, `runtime_session` pin, `turn_begin`, `end`, `steer_read`, `steer_dropped`, memory-guard end), `/turn-question`, `/turn-permission` |
 | `shared/projection-relay.ts` | `POST /platform/runtime-projection`; the adapter registers its state reader |
-| `shared/audit-relay.ts` | `POST /projects/:id/sessions/:id/audit/events`: sanitize, batch, spool; batches carry `source: 'runtime'` and the harness id. pi feeds it every frame it publishes (`PiRuntimeHooks.onFrame`), so pi sessions have a tool audit trail |
+| `shared/audit-relay.ts` | `POST /workspaces/:id/sessions/:id/audit/events`: sanitize, batch, spool; batches carry `source: 'runtime'` and the harness id. pi feeds it every frame it publishes (`PiRuntimeHooks.onFrame`), so pi sessions have a tool audit trail |
 | `shared/boot-timeline-relay.ts` | `POST /platform/boot-timeline` |
-| `shared/session-log-journal.ts` | `POST /projects/:id/sessions/:id/log/journal`: the session log (`kortix.session/2`, `@kortix/api-contract/session-log`), and `GET`/`PUT …/log/blobs/:sha256`: the bytes of each attachment it names (P2.13), see below |
-| `shared/session-log-restore.ts` | `GET /projects/:id/sessions/:id/attachments/:id`: the full text of each text a restore answer (P6.1) stores by reference (`sessionLogFromRestore`, `apiTextReader`), see "Restore" below |
-| `shared/session-log-boot.ts` | `GET /projects/:id/sessions/:id/log/manifest` and `POST …/log/restore`: the boot reconcile (P6.4), see "When the boot restores" below |
+| `shared/session-log-journal.ts` | `POST /workspaces/:id/sessions/:id/log/journal`: the session log (`kortix.session/2`, `@kortix/api-contract/session-log`), and `GET`/`PUT …/log/blobs/:sha256`: the bytes of each attachment it names (P2.13), see below |
+| `shared/session-log-restore.ts` | `GET /workspaces/:id/sessions/:id/attachments/:id`: the full text of each text a restore answer (P6.1) stores by reference (`sessionLogFromRestore`, `apiTextReader`), see "Restore" below |
+| `shared/session-log-boot.ts` | `GET /workspaces/:id/sessions/:id/log/manifest` and `POST …/log/restore`: the boot reconcile (P6.4), see "When the boot restores" below |
 
 The API accepts only these names. Since 0.15.0 it no longer reads the pre-W3
 spellings (`opencode_session_id`, kind `opencode_session`): the runtime floor
@@ -272,7 +279,7 @@ boot restores" below):
 
 `reconcileSessionLog(port)` (`shared/session-log-boot.ts`) decides, restores, and
 returns what the journal starts with (`{ generation, cursors, session }`). pi
-runs it beside the workspace checkout (pi's dump needs no `/workspace`) and
+runs it at boot (pi's dump needs no `/workspace`) and
 awaits it before `lifecycle.start()`; the runtime adopts the root the dump names
 at start, so a service built before the restore runs under the log's root. No
 turn runs at that point.
@@ -470,7 +477,6 @@ Known limits of the pi restore:
 
 Known limits of the pi export:
 - A dump written before P2.5 has no header; pi makes a fresh one on load, so `created_at` is the restart time for a session that spans the upgrade.
-- The journal does not start on a box with `repoMaterializationError` (the boot returns before it): turns run through the proxy on such a box are not journaled.
 
 ### Bumping a harness (P6.5)
 
@@ -744,7 +750,10 @@ parked runs on the agent's re-run of the same call: apps/api matches its
 Every new message parks every open ask at once (`parkOpenAsks`: a prompt, a
 steer, synthetic or not), and so does `POST /kortix/runtime/asks/park`, which
 the prompt inbox calls when a queued row waits behind a turn that holds a live
-ask. Abort and the turn end park what is left. A workflow run approval is the
+ask. Abort and the turn end park what is left. A permission ask is registered
+before its relay answers, as a question is: a Stop or a steer during a slow
+relay parks it, and an ask parked there never reaches the wire
+(`permission.asked` is sent only once the relay leaves it open). A workflow run approval is the
 one ask that is not parkable: it resolves as dismissed and the run is not
 started.
 
@@ -855,7 +864,10 @@ end.
 - **Leftovers.** A turn that ends on its own with unread steered messages
   starts the next turn with them, in the same queue slot: the first is its
   prompt, the rest are read before its first model call. A stopped turn (Stop,
-  Quick Queue, the no-progress watchdog) drops them.
+  the no-progress watchdog, an abandoned stop) drops them and relays
+  `steer_dropped` once per id before its `end`; apps/api puts each prompt back
+  on its queue for the next turn. A steer the API's Stop settle withdrew first
+  is not reported.
 - **Gaps.** A steered message keeps the turn's model, agent and variant. It
   does not run extension `input` handlers, `/skill:` or prompt-template
   expansion (a prompt does). Unread steered messages live in memory: a daemon
@@ -904,7 +916,7 @@ resolves the same root and restores the transcript from
 `$KORTIX_RUNTIME_STATE_DIR/pi/<session>.json`. The root's title stays
 `New session`, also after a restore: the session title is Kortix's
 (`metadata.name`, generated from the first prompt), and the API drops the
-placeholder (`isPlaceholderOpencodeTitle`).
+placeholder title.
 
 Config it reads (all set by apps/api for every session, harness-neutral values):
 `KORTIX_MODEL` (the resolved session model), `KORTIX_COMPILED_AGENT_CONFIG`
@@ -912,7 +924,7 @@ Config it reads (all set by apps/api for every session, harness-neutral values):
 + `KORTIX_TOKEN`. The model catalog is the project's live list,
 `GET <KORTIX_LLM_BASE_URL>/models?scope=picker`; it only sizes models (window,
 output cap, images, reasoning). pi fetches it from the moment the runtime is
-built, beside the repo clone, so the first start rarely waits for it. An env
+built, so the first start rarely waits for it. An env
 push (`POST /kortix/env`) and a restart build from the list pi already has and
 refresh it in the background: a prompt never waits for the gateway. When the
 list does not answer after two tries, models run on default limits and pi
@@ -926,6 +938,44 @@ variant, and its `model` when the prompt names none. A prompt that picks none
 runs on the session's agent. A pick of a subagent, a disabled
 agent or an unknown name is logged and runs on the session's agent. pi
 packages and extensions stay the ones the session booted with.
+
+**Is a turn running.** `PiRuntime.busy()` is the one answer, and every
+consumer reads it: the daemon self-update (`configureRuntimeConvergence`
+`turnInFlight`), the memory guard, the reaper's turn probe
+(`/kortix/health?turn=1`) and config convergence (`idle()` is `!busy()`).
+It is true while a turn runs or is queued, while a `/summarize` runs, and
+while a same-session subagent runs. It derives from the turn queue
+(`PiRuntime.work`, one token per admitted item) and the active turn, never
+from the last `session.status` frame: pi's `agent_end` emits `idle` while a
+turn still compacts, and that frame does not clear it. A prompt still loading
+its images, or queued behind the running work, is in flight for the probe.
+`reconfigure()` runs on the same serial queue, so a prompt admitted during
+it runs on the whole new config.
+
+**A run an extension starts.** An extension can start a pi run that kortixd
+never admitted: `sendUserMessage`, or `sendMessage` with `triggerTurn`,
+after a turn settled (for example a heartbeat posted from an async
+`agent_settled` handler). pi refuses a prompt while that run or a compaction
+is going ("Agent is already processing"). The next turn waits for pi to be
+idle before it begins (`PiRuntime.piIdle`). It stays queued while it waits,
+so the reaper's probe reads it in flight, and a steer finds no turn to join
+and is queued as a prompt. When such a run starts between that wait and the
+prompt, pi refuses the prompt before any model call; the turn waits and
+sends it again, at most 3 times (`promptWhenIdle`). A runtime stop also
+stops that run. prod 2026-11-14: a pinned 5-minute cron trigger failed 299
+of ~1,200 runs this way. `busy()` does not count such a run yet.
+
+**Stop is bounded.** `abort()` waits up to `KORTIX_PI_STOP_SETTLE_MS`
+(10 s) for the turn to settle. A tool that ignores its abort signal no longer
+holds Stop, the memory guard or a restart: a runtime stop that times out
+abandons the work (the turns end `aborted`, the queue starts empty, a late
+end of the abandoned turn writes nothing). Daemon shutdown waits at most
+`SHUTDOWN_HARNESS_STOP_MS` (20 s) for the harness and then exits, so the
+supervisor restarts it.
+
+**A failed start at boot.** Boot tries the start 3 times (2 s, then 10 s
+apart, `startRuntimeAtBoot`). After the last failure readiness reports
+`runtime_start_failed` with the message, not `pi_not_ready`.
 
 ### kortix.yaml
 
@@ -947,14 +997,17 @@ session. Every rule below holds for the working tree and for a config release.
 - **Skills.** The managed `kortix-*` skills, then exactly the folders in
   `compiled.skills`, under the config root: the active release root, else
   `/workspace` (`resolvePiSkillDirectories`). The image default has no
-  project skill. pi scans no `skills/` folder. The agent's
+  project skill. A session without repository access gets a release that
+  holds the folders of the skills its agents are granted, beside the project
+  tool modules they may call (apps/api `toolsRelease`). pi scans no `skills/` folder. The agent's
   `permission.skill` allowlist still hides every skill it does not grant.
 - **Subagents.** A kortix.yaml set has no built-in `general` or `explore`. The `agent` tool offers
   only declared, enabled agents with `mode` `subagent` or `all` that the
   calling agent's `permission.task` rule does not deny. The rule's subject is
   `subagent_type`, so a call to a denied name is refused before it runs.
-  The tool also takes an inline ephemeral agent (no manifest entry); the
-  session's tool rules still gate every call its child makes.
+  The tool also takes an inline ephemeral agent (no manifest entry): its
+  instructions are its system prompt, it runs with this session's own access,
+  and the session's tool rules still gate every call its child makes.
 - **Commands.** `GET /command` lists every `compiled.commands` entry with its
   `agents`. `POST /session/:id/command` runs on the body's `agent`, else the
   session's agent. An agent outside `agents` gets `403 { error:
@@ -980,8 +1033,8 @@ session. Every rule below holds for the working tree and for a config release.
   column? }`) adds a section to the session notice (below): the error and
   warning counts, one line per issue (`kortix.yaml:<line>:<col> <severity>
   <path> <message>`), the rule that an agent or trigger with an error is off
-  until it is fixed, and the fix (edit `/workspace/kortix.yaml`, run `kortix
-  validate`, open a change request). No issues: no section
+  until it is fixed, and the fix (`kortix workspaces clone`, edit `kortix.yaml`
+  in the clone, run `kortix validate`, push, `kortix cr open`). No issues: no section
   (`services/config-provider/notice.ts` `manifestIssuesOf`).
 
 ### Config releases
@@ -996,15 +1049,16 @@ and project tools that governance registers, the `./` pi packages, and the
 root `AGENTS.md` (else `CLAUDE.md`). A descriptor's `config_dir` (an older
 API's) is ignored: the release manifest records `config_dir: null`.
 
-- **Boot.** `runPi` starts the config choice and the workspace checkout
-  together, and they never wait for each other. `lifecycle.start()` waits for
-  the config only: the desired release (downloaded from the S3 project
-  snapshot, else the API archive), then the last release this box proved
-  (`current.json`), then the image default (managed skills and the
-  provisioned governance). pi is ready before `/workspace` lands; the
-  readiness gate holds turns until it does. `/workspace` is read as config
-  only when the box has no Kortix API, or an API from before config releases
-  graduated answers `403 feature_disabled`: then pi waits for the checkout.
+- **Boot.** The box never checks out the project repository. `/workspace`
+  starts empty, and an agent that needs the files runs `kortix workspaces
+  clone`. `lifecycle.start()` waits for the config only: the desired release
+  (downloaded from the S3 project snapshot, else the API archive), then the
+  last release this box proved (`current.json`), then the image default
+  (managed skills and the provisioned governance). Readiness has no
+  repository gate. `/workspace` is read as config only when the box has no
+  Kortix API, or an API from before config releases graduated answers
+  `403 feature_disabled`. `sandbox.on_boot` reads `kortix.yaml` from the
+  running config release (`shared/on-boot.ts`) and runs in `/workspace`.
 - **Convergence** (`POST /kortix/config/converge`, the 60 s runtime-truth tick,
   one pass after ready). pi applies a release in place: the governance goes
   into the runtime's env, the skill directories and the `AGENTS.md` root
@@ -1036,8 +1090,9 @@ session create, `KORTIX_CONFIG_RELEASE`: read from the store, no API call) or
 `config-release-fetched` (the descriptor route answered),
 `config-release-<disk|snapshot|archive|git>`,
 `config-release-proven`, `pi-ready`, `initial-prompt-delivered`,
-`initial-turn-accepted`, `runtime-ready`. No workspace step is a boot mark;
-`/kortix/health` reports the checkout as `workspace_provider`.
+`initial-turn-accepted`, `runtime-ready`. The box clones no repository, so
+no boot mark names one. `/kortix/health` has no `repo_required`,
+`repo_ready` or `workspace_provider` field.
 
 A permission rule names a capability (`RUNTIME_PERMISSION_CAPABILITIES` in
 `@kortix/api-contract/transcript`: `read`, `edit`, `bash`, `webfetch`, …), not
@@ -1067,8 +1122,19 @@ reads each `$(…)`, backtick, `<(…)`, `>(…)` and `( … )` body as commands
 own, and the strictest answer wins (`deny`, then `ask`, then `allow`). So
 `bash: { '*': deny, 'kortix connectors call x get *': allow }` runs that call
 and refuses `kortix connectors call x get a; env`. A line whose quotes or
-brackets do not balance is decided as a call with no subject: a restriction
-asks.
+brackets do not balance is decided as a call with no subject: a restricted
+pattern asks when its first word is a word of the line, else `*` decides.
+
+**A heredoc body is data when nothing on its line can run it.** Every command
+on the heredoc's line must be in `NEVER_RUNS_STDIN`: a data reader (`cat`,
+`tee`, `jq`, `git commit -F -`, `gh … --body-file -`) or a command that ignores
+stdin (`cd`, `mkdir`, `echo`). So `cd /tmp; cat > body.md <<'EOF'` keeps its
+markdown out of the check. The body is read as commands when the line has any
+other program (`sh <<EOF`, `cat <<EOF | bash`, a function defined on the
+line), when the line ends in a pipe (bash continues the pipeline after the
+body), or when an unquoted body runs `$(…)` or a backtick. Prod 2026-11-17: an
+agent with `kortix` rules asked a person to approve a change-request body,
+because `cd /tmp;` was not in the list.
 
 **Precedence:** the most specific matching rule wins, whatever
 order the keys are written in (`@kortix/api-contract/permission-rules`). The
@@ -1263,21 +1329,38 @@ rules; a `deny` from either wins, so delegating never unlocks a denied call.
 **Separate sessions** (`session: "separate"`, the default; no project
 setting, the model picks per call). The
 call is a real child session (`harness/pi/cloud-subagent.ts`):
-`POST /v1/projects/:id/sessions` with the
+`POST /v1/workspaces/:id/sessions` with the
 box token, which links the child to this session and authorizes every later
-read of it. A named agent runs as itself; `general`, `explore` and an inline
-spec run as the parent's resolved agent (never the `default` sentinel; the
-platform coordinator sends none), with the spec's instructions in
-`initial_context`. Every child, named ones included, gets the parent agent's
+read of it. A named agent runs as itself. `general`, `explore`, a fork and
+an inline spec run as the parent's resolved agent (never the `default`
+sentinel), My Kortix included, so the child's grant, connectors, secrets,
+sandbox and originating channel are the parent's, never another agent's. Only
+a parent with no resolved agent (a router) sends no `agent_name`, and the API
+picks. An inline spec's instructions are the child's own system prompt: they
+ride in `runtime_context` `kortix.agent.instructions` (at most 4,096
+characters) and the child's runtime uses them as its base prompt in place of
+its agent's, exactly as the in-process path does. Under My Kortix every spec
+prompt (a built-in's, a fork's) rides there, because My Kortix's coordinator
+prompt never runs in a child; the API lets such a My Kortix child through
+its recursion stop (`apps/api/src/projects/lib/inline-colleague.ts`). Under My
+Kortix an inline spec may also carry `connectors` and `secrets`: they ride as the
+create's `colleague_access`, and the API answers 409
+`COLLEAGUE_ACCESS_APPROVAL_REQUIRED` until a person allows that list
+(`apps/api/src/projects/lib/colleague-access.ts`). The tool then returns
+`<task_awaiting_approval>` with no task id, and its details carry
+`awaitingApproval` and the `askId`. Any
+other spec prompt is a note beside the agent's own prompt in
+`initial_context`, which the child pastes into its first message. Every child, named ones included, gets the parent agent's
 effective tool list (the tools that pass `rootToolAllowed`), intersected with
 the spec's list, in `runtime_context` `kortix.subagent.tools`. The child's
 runtime narrows its tools to that list, so a child never has a tool its parent
 lacks, as on the in-process path. `variant` and the spec `permission` are not
-sent: the child applies its own agent's. The result text comes from
-`GET …/sessions/:child/transcript?detail=full`, read only from the messages
-after the last user message (the turn this call started): a failed last
-assistant message is an error, and an earlier turn's report is never
-returned. `task_id` sends a follow-up through `POST …/sessions/:child/prompts`
+sent: the child applies its own agent's. The result text comes from the
+child's stored session log, `GET …/sessions/:child/log?limit=20`, read only
+from the conversation messages after the last user message (the turn this
+call started; compaction and context records do not count): a failed last
+assistant message is an error, an earlier turn's report is never returned,
+and an answer over 16,000 characters is cut with a `[truncated: …]` marker. `task_id` sends a follow-up through `POST …/sessions/:child/prompts`
 to a child of this session only. An aborted call, and a wait past the 30 min
 ceiling, stop the child. Guardrails: at most
 `KORTIX_PI_CLOUD_SUBAGENTS_MAX` (4) children wait at once per parent, and a
@@ -1308,7 +1391,7 @@ provisioning or working.
 
 **Workflows.** The `workflow` tool (`pi/extensions/workflow.ts`) starts each
 `agent()` through the same spawn, with three more inputs: `stallMs` (a child
-whose transcript tail, `GET …/transcript?limit=3`, shows no change and no
+whose session-log tail, `GET …/log?limit=3`, shows no change and no
 running tool for that long is stopped; the result carries `stalled: true` and
 the tool starts a new session), `waitMs` (the run's 2 h deadline replaces the
 30 min ceiling), and `runtimeContext` (the runner's marks:
@@ -1349,13 +1432,13 @@ failed or was interrupted; `fresh: true` opts out) reuses every completed
 run id, and starts a NEW runner session. Its hand-off carries the finished
 agents' saved results: from this box's record of a run that ran here, or, for a
 background run, from the last runner's final run document (`details.records`
-of its last `workflow` call, read from its saved transcript,
-`GET …/transcript?shape=sync`). A runner whose transcript holds no such
+of its last `workflow` call, read from its stored session log,
+`GET …/log?limit=40`). A runner whose log holds no such
 document (its box died mid-run) leaves nothing to reuse, and the resume says
 so. The parent's record then names the new runner. A runner that still works
 refuses the resume. A structured agent whose
 answer never validates resolves to `{ schema_error, text }` (`strict: true`
-throws). Saved workflows are `.kortix/workflows/<name>.js`: the checkout's
+throws). Saved workflows are `workflows/<name>.js` at the repository root: the checkout's
 working tree, or the API's project files on a box without one.
 
 **Tool concurrency.** The root agent runs `toolExecution: 'parallel'`. Every
@@ -1414,27 +1497,24 @@ builtin extension `kortix-context-record`).** It answers pi's
 `session_before_compact` hook for every trigger (threshold, overflow,
 `/summarize`) with its own compaction, and pi makes no model call:
 
-- The record: every entry of the root thread, word for word, in
-  `<KORTIX_PI_STATE_DIR>/records/<pi session id>.log` (dir `0700`, file `0600`,
-  a `.gitignore` of `*`, outside `/workspace`). One JSON header line per entry
-  (`{"n":12,"kind":"result","time":"…","name":"bash","for":"call_3","exit":"ok"}`;
-  kinds `user`, `assistant`, `thinking`, `call`, `result`, `error`, `event`,
-  `model`, `reset`), then its text. An image is one line; pi's system prompt
-  entry is left out. Written at session start (a restored log included), at
-  every settled run, and inside the hook.
+- The source: the session log the API stores (`GET .../sessions/:id/log`),
+  journaled at every turn end and every 5 s during a turn. Nothing is copied
+  into a file. `kortix sessions log <KORTIX_SESSION_ID> --json` reads it, plus
+  the open turn live from this box.
 - The reset: no `firstKeptEntryId`, so pi keeps no earlier entry. Its text
-  gives the record's path and format, tells the model to read exact lines with
-  the `grep` and `read` tools (not the shell) when it needs them, repeats the person's latest message (up to 8,000
+  names the command that reads the log, tells the model to read exact lines
+  when it needs them, repeats the person's latest message (up to 8,000
   characters), and adds a mid-turn note when the reset lands inside a tool
-  chain or an overflow retry. `details` is `{ kind: 'record', path, entries }`.
+  chain or an overflow retry. `details` is `{ kind: 'record', session, entries }`
+  (`entries`: the branch's messages).
 - The wire: the marker part gains `mode: 'record'`, `tokens_before` and
   `entries` when the reset lands (re-published at `compaction_end`), and the
-  session-log block carries `mode` and `entries`. A failed record write
-  returns nothing from the hook, so pi's summary keeps the session going.
-- The agent's `context: summary` (kortix.yaml, sent as `KORTIX_PI_CONTEXT`)
-  leaves the extension out: pi's own summary compaction below then runs.
+  session-log block carries `mode` and `entries`.
+- The agent's `context: summary` (kortix.yaml, sent as `KORTIX_PI_CONTEXT`),
+  or a daemon with no `KORTIX_SESSION_ID`, leaves the extension out: pi's own
+  summary compaction below then runs.
 
-pi's own compaction (an agent with `context: summary`, or a failed record write) runs on demand (`POST /session/:id/summarize`),
+pi's own compaction (an agent with `context: summary`, or no Kortix session) runs on demand (`POST /session/:id/summarize`),
 when the context nears the model's window, and when a model request overflows
 it or a reply is cut by the length limit (pi then retries that request once;
 the failed attempt's error is withheld from the wire and lands on the message
@@ -1526,6 +1606,33 @@ session for its person. No tool waits on another session: each call is one
 API request (at most `CONTROL_PLANE_CALL_TIMEOUT_MS`, 10 s), and a person's
 message during the turn is steered in at the next step as always.
 
+### Session ids, and context by retrieval
+
+Every agent's system prompt carries a `## Session ids` section
+(`sessionIdsSection`, `pi/runtime.ts`): `session_id`, `project_id`,
+`parent_session_id` (the session that started it, `KORTIX_PARENT_SESSION_ID`)
+and `space_id`, plus the read command `kortix sessions log <session_id> -n 50`.
+A subagent inside the session (`session: "same"`) names the session's main
+conversation as its parent. The ids never change during a session, so the
+section keeps the prompt cache valid.
+
+A subagent does not get a copy of its parent's conversation. Its parent writes
+the task and the facts it depends on, and the subagent reads the rest from the
+parent's session log when it needs it. The API lets a session token read every
+session up its spawn chain (`metadata.spawned_by_session`, written only when a
+box creates its own child; `isSpawnAncestor`,
+`apps/api/src/projects/lib/session-visibility.ts`), as a reader, never an
+owner, and only on the read routes (`GET …/sessions/:id`, `GET …/sessions/:id/log`):
+a prompt, a permission answer or any other write to a parent stays `404`. The
+box's live log is open to the same readers: the sandbox proxy lets a session
+token `GET /p/<box>/8000/kortix/runtime/log[/messages/<id>]` of a session that
+spawned it (a read only; any other request to that box stays `403`). Before this
+the proxy gate kept it closed and the CLI fell back to the stored log, which the
+box journals every 5 s during a turn.
+A person-set `parent_session_id` grants no read. `fork: true` (a full
+copy) stays opt-in: a copy is a large input, and it does not reuse the
+parent's prompt cache, because the `agent` tool text differs by depth.
+
 | Tool | Where | What |
 | --- | --- | --- |
 | `send_message`, `list_agents` | a box with a control plane (`session.messaging`) | `POST …/sessions/:self/peer-messages`, `GET …/sessions/:self/reachable?scope=&project_id=`. `held`, `refused`, `dropped` and an ambiguous `to` (`409`) are results with a card, never errors. |
@@ -1555,8 +1662,10 @@ starts; running agents finish), `resume`, `restart_agent` (stop that child and
 start it again with the same prompt, counted as an attempt), `stop`. `404`
 for an unknown run; `409 run_in_runner` with `runner_session_id` for a
 background run (control it on the runner's box), `409 run_ended`, `409
-agent_not_running`. Saved workflows of the checkout and the bundled
-`deep-research` (`pi/extensions/bundled-workflows.ts`) are `/name` commands.
+agent_not_running`. Saved workflows of a checkout in `/workspace` and the bundled
+`deep-research` (`pi/extensions/bundled-workflows.ts`) are `/name` commands. The box
+never checks out the repository at boot, so without a clone in `/workspace` only the
+bundled ones are listed; a saved workflow still runs by name from the API's project files.
 
 - **Names.** `agent({ name })` writes metadata `agent_handle` on the child;
   `agent({ name, team: true })` from a depth-0 session with flag
@@ -1594,7 +1703,7 @@ process.
 | `services/tools/tool.ts` | The contract: a default export `{ description, parameters (JSON Schema), execute(args, context) }`, with `context` = `{ sessionId, agent, directory, env, signal }`. |
 | `services/tools/kortix/<name>.ts` | The Kortix tools, one self-contained module each: `web_search` (Tavily), `image_search` (Serper), `scrape_webpage` (Firecrawl), `show` (an entry whose `path` is an image file of at most 32 MiB gains `sha256`, hashed streamed and concurrently within 2 s; a read error or the deadline leaves it out), `image_gen` (any image model the project can use). Each follows the project tool contract and imports only `node:*`, so `kortix tools eject <name>` copies the file into a project unchanged (the CLI embeds the same bytes, `apps/cli/src/kortix-tools.generated.json`). The web tools read `KORTIX_API_URL` and `KORTIX_TOKEN` from `context.env` and call the API's billed router proxy (`/v1/router/{tavily,serper,firecrawl}`); a box with no control plane calls the upstream with the project's own key. `image_gen` takes 1–4 `prompts` and posts one request per prompt, all at once (`n: 1` each), to the LLM gateway (`KORTIX_LLM_BASE_URL` + `/images/{generations,edits}`, `KORTIX_TOKEN`); the platform picks the image model (`auto` or the one asked for) and resolves its credential. Each image is written under `<checkout>/output/images/<prompt slug>-<time>.{png,jpg,webp}` (the bytes decide the type; never overwriting). The output is `{ action, model, provider, images: [{ path, size, prompt, sha256 }], failed?: [{ prompt, error }] }` (`sha256`: hex digest of the saved bytes); when every prompt fails the call throws the first failure (`… [<code>]`). Code caps it at 10 images per turn and 50 per session, counted before the first await (a batch that would pass a cap is refused whole). The turn is `context.turnId` (pi: the turn's message id, `ToolContext.turnId` in `services/tools/tool.ts`), so direct, parallel, script, retried and subagent calls of one turn share the 10; a call that names no turn keys the turn cap on its abort signal; a reference image must be a real png/jpeg/webp inside the checkout. |
 | `services/tools/host.ts` | `loadTools(root, compiled)`: the Kortix tools `CompiledAgentSet.kortix_tools` lists (all five when it is absent: no kortix.yaml `tools` key, or a config compiled before the key existed), then the project's (`project_tools`), imported from `root` (the working tree or the config release). A project tool replaces a Kortix tool of its name; a module that does not load is logged and skipped. `runTool` bounds the output (over 50 KB or 2000 lines: the whole text to a temp file, the head to the model). `sessionEnv` is `context.env`: the process env with the live agent env file over it. |
-| `services/tools/platform/<name>.ts` | The My Kortix platform tools, loaded only when `kortix_tools` names them (the platform's My Kortix config does). `kortix_agents`, `kortix_sessions`, `kortix_schedules`, `kortix_connectors`, `kortix_people`, `kortix_access`, `kortix_usage` run the in-box `kortix` CLI (`platform.ts`). `kortix_schedules` keeps a long task alive: `follow_up` is a loop on this session (`kortix loop`), `wake_on` wakes this session on a merged change request, a webhook, a connector event or an App event (`kortix triggers add --on …`), `events` lists a connector's event types, `list` shows this session's follow-ups and wake-ons plus the project schedules, and `remove` routes `reminder.<hex>` to `kortix loops rm` and `trigger.<hex>` to `kortix triggers rm`. `kortix_memory` (`list`, `view`, `save`, `delete`) calls `/v1/projects/:id/memory/me/agent/mykortix[/pages/:name]` with `KORTIX_TOKEN`: one page per slug name in the session person's `/Users/<person>/Memory/mykortix`, refused in plain words when Files is off. `memory` was a Kortix tool until 2026-10-30; a project's ejected `tools/memory.ts` loads as a project tool. |
+| `services/tools/platform/<name>.ts` | The My Kortix platform tools, loaded only when `kortix_tools` names them (the platform's My Kortix config does). `kortix_agents`, `kortix_sessions`, `kortix_schedules`, `kortix_connectors`, `kortix_people`, `kortix_access`, `kortix_usage` run the in-box `kortix` CLI (`platform.ts`). `kortix_change_requests` `list` reads one page (`kortix cr ls --limit --cursor`; `limit` default 50, at most 100) and stops before its rows pass 36 KB of tool output, so `runTool` never cuts the JSON; `data.next_cursor` and `truncated` say more exist. `kortix_agents` `models` lists the models the session can run, plus `offered` (the enabled count `kortix models ls` reports), `not_runnable` (offered, provider not connected) and `default_runnable`. `kortix_schedules` keeps a long task alive: `follow_up` is a loop on this session (`kortix loop`), `wake_on` wakes this session on a merged change request, a webhook, a connector event or an App event (`kortix triggers add --on …`), `events` lists a connector's event types, `list` shows this session's follow-ups and wake-ons plus the project schedules, and `remove` routes `reminder.<hex>` to `kortix loops rm` and `trigger.<hex>` to `kortix triggers rm`. `kortix_memory` (`list`, `view`, `save`, `delete`) calls `/v1/workspaces/:id/memory/me/agent/mykortix[/pages/:name]` with `KORTIX_TOKEN`: one page per slug name in the session person's `/Users/<person>/Memory/mykortix`, refused in plain words when Files is off. `memory` was a Kortix tool until 2026-10-30; a project's ejected `tools/memory.ts` loads as a project tool. |
 
 pi loads them at `start()` and registers each as an `AgentTool`
 (`pi/tools.ts` `createWorkspaceTools`); subagents get them too. A release that
@@ -1607,21 +1716,16 @@ a tool name to visible, with `*` for every tool not named; `toolAllowed`
 and denies a call to a hidden one, for the root and for a subagent (both
 agents' maps must allow it).
 
-## The workspace and config providers are host services, not harness logic
+## The config provider is a host service, not harness logic
 
-`src/services/workspace-provider/` (the `git` / `prefer-s3` / `require-s3`
-project acquisition, #7221) and `src/services/config-provider/` (the config
-release a boot needs) stay outside `src/harness/`. Each depends only on
-`src/lib/` and knows nothing about any harness or about the other: both read
-the S3 project snapshot through `src/lib/project-snapshot/`, each into its
-own directory, in parallel. The config provider never reads `/workspace`
-(`obtainRelease`: disk, snapshot, archive, git; the archive first from the
-published release's signed store URL). The harness composes them.
-`pi/boot.ts` calls `provideWorkspace(cfg, { onSummary })` at the point where the
-cold boot acquires the workspace; pi does not wait for the checkout before its
-proof. `contract/boot-state.ts` carries the outcome:
-`workspaceProvider` (reported in `/kortix/health` as `workspace_provider`)
-and `deferredHistoryBackfill` (`backfillAfterHydration` for an S3 start).
+`src/services/config-provider/` (the config release a boot needs) stays
+outside `src/harness/`. It depends only on `src/lib/` and knows nothing about
+any harness. It reads the S3 project snapshot through
+`src/lib/project-snapshot/` into its own directory. It never reads
+`/workspace` (`obtainRelease`: disk, snapshot, archive, git; the archive
+first from the published release's signed store URL). The harness composes
+it. No workspace provider exists: the daemon never clones the project
+repository.
 
 ## Native features remain available
 

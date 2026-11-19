@@ -31,10 +31,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { kortix } from '../../kortix.ts';
 import { theme } from '../../theme.ts';
-import { layoutRow } from '../../ui/index.ts';
+import type { ScreenProps } from '../../screens.tsx';
+import { layoutRow, useScreenAction } from '../../ui/index.ts';
 import { ChangeList, type ChangeRow, toChangeRow } from './change-list.tsx';
 import { type DiffState, DiffView, type DiffViewMode, splitUnifiedPatch } from './diff-view.tsx';
 import { matchesReviewBinding } from './keys.ts';
+import { PICK_WORKSPACE_TEXT } from '../../lib/workspaces.ts';
 
 /** How often the age column is recomputed. A minute is its smallest unit. */
 const CLOCK_TICK_MS = 30_000;
@@ -57,16 +59,10 @@ export interface ReviewActions {
   refresh(): void;
 }
 
-export interface ReviewScreenProps {
-  projectId: string;
-  focused: boolean;
-  width: number;
-  height: number;
-  onBack(): void;
-  /** `o` on a change request that came from a session. */
-  onOpenSession?(sessionId: string): void;
-  onToast?(message: string, kind?: 'info' | 'error'): void;
-}
+export type ReviewScreenProps = Pick<
+  ScreenProps,
+  'projectId' | 'focused' | 'width' | 'height' | 'onBack' | 'onOpenSession' | 'onToast'
+>;
 
 function errorText(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
@@ -82,7 +78,14 @@ export function compareRows(a: ChangeRow, b: ChangeRow): number {
   return b.createdAtMs - a.createdAtMs;
 }
 
-export function ReviewScreen({
+export function ReviewScreen(props: ReviewScreenProps) {
+  if (!props.projectId) {
+    return <text fg={theme.faint}>{PICK_WORKSPACE_TEXT}</text>;
+  }
+  return <ReviewScreenBody {...props} projectId={props.projectId} />;
+}
+
+function ReviewScreenBody({
   projectId,
   focused,
   width,
@@ -90,7 +93,7 @@ export function ReviewScreen({
   onBack,
   onOpenSession,
   onToast,
-}: ReviewScreenProps) {
+}: ReviewScreenProps & { projectId: string }) {
   // 'all', not the hook's default 'open': the list prints a status column, and
   // a change request merged an hour ago is exactly what a reviewer looks for
   // right after acting on it.
@@ -169,9 +172,9 @@ export function ReviewView({
   const [fileIndex, setFileIndex] = useState(0);
   const [offset, setOffset] = useState(0);
   const [confirm, setConfirm] = useState<'merge' | 'close' | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
   const [tickedNow, setNow] = useState(() => Date.now());
   const now = fixedNow ?? tickedNow;
+  const { busy, run } = useScreenAction(onToast);
 
   useEffect(() => {
     if (fixedNow != null) return;
@@ -231,22 +234,23 @@ export function ReviewView({
   const runAction = useCallback(
     async (action: 'merge' | 'close') => {
       if (!current) return;
-      setBusy(`${action === 'merge' ? 'merging' : 'closing'} #${current.number}…`);
-      try {
-        if (action === 'merge') {
-          const sha = await actions.merge(current.crId);
-          onToast?.(`Merged #${current.number} as ${sha.slice(0, 7)}`);
-        } else {
-          await actions.close(current.crId);
-          onToast?.(`Closed #${current.number}`);
-        }
-      } catch (error) {
-        onToast?.(`${action === 'merge' ? 'Merge' : 'Close'} failed: ${errorText(error)}`, 'error');
-      } finally {
-        setBusy(null);
-      }
+      run(
+        `${action === 'merge' ? 'merging' : 'closing'} #${current.number}…`,
+        async () => {
+          try {
+            if (action === 'merge') {
+              const sha = await actions.merge(current.crId);
+              return `Merged #${current.number} as ${sha.slice(0, 7)}`;
+            }
+            await actions.close(current.crId);
+            return `Closed #${current.number}`;
+          } catch (error) {
+            throw new Error(`${action === 'merge' ? 'Merge' : 'Close'} failed: ${errorText(error)}`);
+          }
+        },
+      );
     },
-    [current, actions, onToast],
+    [current, actions, run],
   );
 
   const diffRows = Math.max(height - 4, 1);

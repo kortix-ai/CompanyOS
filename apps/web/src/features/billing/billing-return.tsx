@@ -1,6 +1,7 @@
 'use client';
 
 import { successToast } from '@kortix/ui/toast';
+import { CreditsAddedDialog, useCreditsAddedStore } from '@/features/billing/credits-added-dialog';
 import { useAuth } from '@/features/providers/auth-provider';
 import { invalidateAccountState } from '@kortix/ui/internal/billing/index';
 import { fireConfetti } from '@/lib/confetti';
@@ -8,6 +9,7 @@ import { latestProjectPath } from '@kortix/ui/internal/lib/onboarding/last-proje
 import { accountPanelUrl, hubTarget } from '@kortix/ui/internal/stores/account-panel-store';
 import { useBillingAccountId } from '@kortix/ui/internal/stores/billing-account-context';
 import { syncSubscription } from '@kortix/sdk';
+import { invalidateWorkspaceProviderQueries, qk } from '@kortix/sdk/react';
 import { type QueryClient, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef } from 'react';
@@ -21,12 +23,12 @@ import { useLocalizedUiCatalog } from '@kortix/ui/i18n';
  * user is a refreshed wallet and an acknowledgement.
  *
  * This used to be two near-identical 25-line effects inlined in the projects
- * LIST page — which is why every checkout return had to land on `/projects`,
+ * LIST page — which is why every checkout return had to land on `/workspaces`,
  * the one place in the product that is deliberately never a destination. The
  * handling is route-independent now (mounted once in the `(app)` layout), so a
  * return can land wherever the user actually belongs.
  */
-export type BillingReturn = {
+type BillingReturn = {
   /** Query param Stripe echoes back. */
   param: string;
   /** Value that marks success. Anything else is ignored. */
@@ -35,6 +37,9 @@ export type BillingReturn = {
   settle: (queryClient: QueryClient, accountId?: string) => void | Promise<void>;
   title: string;
   description: string;
+  /** `dialog`: a receipt with the new balance (the one-time top-up). Default:
+   *  confetti and a toast. */
+  ack?: 'toast' | 'dialog';
 };
 
 const RETURNS = [
@@ -65,13 +70,14 @@ const RETURNS = [
     settle: (queryClient, accountId) => invalidateAccountState(queryClient, true, true, accountId),
     title: 'Credits added',
     description: 'Your top-up landed — compute and the latest AI models are ready to go.',
+    ack: 'dialog',
   },
 ] as const satisfies readonly BillingReturn[];
 
 export const BILLING_RETURNS: readonly BillingReturn[] = RETURNS;
 
 /** The marker params this module owns — a closed set, not an open string. */
-export type BillingReturnParam = (typeof RETURNS)[number]['param'];
+type BillingReturnParam = (typeof RETURNS)[number]['param'];
 
 /** For callers that must carry a return across their own redirect. */
 export const BILLING_RETURN_PARAMS: readonly string[] = RETURNS.map((r) => r.param);
@@ -82,7 +88,7 @@ export const BILLING_RETURN_PARAMS: readonly string[] = RETURNS.map((r) => r.par
  * Producer and consumer live in one file on purpose. When the handling lived in
  * the projects page, "where does a checkout return land" was an implicit
  * consequence of where the effect happened to be mounted, and every producer
- * hardcoded `/projects` to match it. Now the destination is a decision, made
+ * hardcoded `/workspaces` to match it. Now the destination is a decision, made
  * once, here: reopen Billing for the account that owns the purchase.
  */
 export function useBillingReturnUrl(): (param: BillingReturnParam) => string {
@@ -100,6 +106,48 @@ export function useBillingReturnUrl(): (param: BillingReturnParam) => string {
     [user?.id, accountId],
   );
 }
+
+/**
+ * Re-read every model list the plan decides.
+ *
+ * `/model-picker` and `/model-defaults` are filtered by plan on the server: a
+ * Free account sees no Kortix model. The page that Stripe returns to fetches
+ * them on load, before `syncSubscription` moves the plan. Their 60 s cache then
+ * kept "No model" and a disabled Send on screen after the success toast (audit
+ * finding F-004). The plan covers every project of the account, so every cached
+ * project list goes, not one project's.
+ */
+export async function refreshModelAvailability(queryClient: QueryClient): Promise<void> {
+  const projectIds = new Set<string>();
+  for (const query of queryClient.getQueryCache().getAll()) {
+    const id = query.queryKey[2];
+    if (
+      typeof id === 'string' &&
+      JSON.stringify(query.queryKey) === JSON.stringify(qk.project.modelPicker(id))
+    ) {
+      projectIds.add(id);
+    }
+  }
+  // A read still in flight started before the plan moved. Invalidation would
+  // reuse it and keep its Free answer: drop it, so the read below is new.
+  await Promise.all([
+    ...[...projectIds].map((id) => queryClient.cancelQueries({ queryKey: qk.project.modelPicker(id) })),
+    queryClient.cancelQueries({ queryKey: ['model-defaults'] }),
+  ]);
+  // The list, its gateway-provider projection and the runtime provider list.
+  for (const id of projectIds) invalidateWorkspaceProviderQueries(queryClient, id);
+  await queryClient.invalidateQueries({ queryKey: ['model-defaults'], refetchType: 'all' });
+}
+
+/**
+ * The API caches each account's plan per process for `BILLING_CACHE_TTL_MS`
+ * (30 s, `apps/api/src/billing/services/billing-cache.ts`). A plan write
+ * clears it on every replica over LISTEN/NOTIFY (`kortix_billing_bust`). When
+ * that channel is down, a replica can serve the Free plan until its entry
+ * expires: one more pass after the TTL ends that case too. Keep this above
+ * `BILLING_CACHE_TTL_MS`.
+ */
+const API_BILLING_CACHE_TTL_MS = 31_000;
 
 function stripParam(param: string) {
   const url = new URL(window.location.href);
@@ -120,6 +168,18 @@ export function useBillingReturn(): void {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const handled = useRef<string | null>(null);
+  const showCreditsAdded = useCreditsAddedStore((store) => store.show);
+  // Only an unmount drops the acknowledgement. A per-run `cancelled` flag was
+  // set by every effect re-run (React's dev double-invoke, a translator that
+  // changed identity), and `handled` then stopped the re-run from trying
+  // again, so the receipt or toast never showed.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const match = billingReturns.find((r) => searchParams.get(r.param) === r.value);
@@ -127,28 +187,29 @@ export function useBillingReturn(): void {
     handled.current = match.param;
 
     const accountId = searchParams.get('accountId') || undefined;
-    let cancelled = false;
     void (async () => {
       try {
         await match.settle(queryClient, accountId);
-        if (cancelled) return;
-        fireConfetti();
-        successToast(match.title, { description: match.description });
+        if (!mounted.current) return;
+        if (match.ack === 'dialog') {
+          showCreditsAdded({ accountId, title: match.title, description: match.description });
+        } else {
+          fireConfetti();
+          successToast(match.title, { description: match.description });
+        }
       } catch {
         invalidateAccountState(queryClient, true, true, accountId);
       } finally {
+        void refreshModelAvailability(queryClient);
+        setTimeout(() => void refreshModelAvailability(queryClient), API_BILLING_CACHE_TTL_MS);
         stripParam(match.param);
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [billingReturns, searchParams, queryClient]);
+  }, [billingReturns, searchParams, queryClient, showCreditsAdded]);
 }
 
-/** Mount once, app-wide. Renders nothing. */
+/** Mount once, app-wide. Renders only the top-up receipt, when it is open. */
 export function BillingReturnWatcher() {
   useBillingReturn();
-  return null;
+  return <CreditsAddedDialog />;
 }

@@ -1,4 +1,4 @@
-import { projectSecrets, projects } from '@kortix/db';
+import { projectSecrets } from '@kortix/db';
 import { and, eq, inArray, isNull, or } from 'drizzle-orm';
 import type { SecretConsumer, SecretStrategy } from '../../secrets/strategy';
 import { recordAuditEvent } from '../../shared/audit';
@@ -8,6 +8,17 @@ import { filterSecretRowsByAudience, secretAudienceSubject } from '../lib/secret
 import { SecretUndecryptableError } from '../../secrets/undecryptable';
 import { decryptProjectSecret } from './envelope';
 import { secretAudienceRank } from './grant-policy';
+import { accountKeyOfWorkspace } from '../../workspaces/rows';
+import { legacySecretNotMoved } from '../../secrets/llm-credential-ledger';
+
+/**
+ * A legacy `llm_gateway` row that moved to the named store
+ * (`secrets/llm-credential-move.ts`) is never read again: its named account
+ * serves. Every other consumer reads as before.
+ */
+function notMovedFor(consumer: SecretConsumer) {
+  return consumer === 'llm_gateway' ? [legacySecretNotMoved(projectSecrets.secretId)] : [];
+}
 
 export interface ProjectSecretConsumerRead {
   projectId: string;
@@ -91,6 +102,7 @@ export async function getProjectSecretConsumerConfigurationStatus(input: {
         eq(projectSecrets.projectId, input.projectId),
         eq(projectSecrets.name, normalizedName),
         isNull(projectSecrets.ownerUserId),
+        ...notMovedFor(input.consumer),
       ),
     );
   if (rows.length === 0) return 'missing';
@@ -134,6 +146,7 @@ export async function listProjectSecretNamesForConsumer(input: {
               eq(projectSecrets.ownerUserId, input.principalUserId),
             )
           : isNull(projectSecrets.ownerUserId),
+        ...notMovedFor(input.consumer),
       ),
     );
 
@@ -199,14 +212,7 @@ async function loadProjectSecretConsumerRows(
   names: string[],
 ) {
   const accountId =
-    input.accountId ??
-    (
-      await db
-        .select({ accountId: projects.accountId })
-        .from(projects)
-        .where(eq(projects.projectId, input.projectId))
-        .limit(1)
-    )[0]?.accountId;
+    input.accountId ?? (await accountKeyOfWorkspace(input.projectId));
   if (!accountId) return null;
   const normalizedNames = names.map((name) => name.trim().toUpperCase());
   const rows = await db
@@ -233,6 +239,7 @@ async function loadProjectSecretConsumerRows(
               eq(projectSecrets.ownerUserId, input.principalUserId),
             )
           : isNull(projectSecrets.ownerUserId),
+        ...notMovedFor(input.consumer),
       ),
     );
 

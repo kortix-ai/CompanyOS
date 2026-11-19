@@ -23,7 +23,7 @@ import { Button } from '@kortix/ui/button';
 import { ConfirmDialog } from '@kortix/ui/confirm-dialog';
 import { SessionDotMatrix } from '@kortix/ui/dot-matrix/session-dot-matrix';
 import Hint from '@kortix/ui/hint';
-import { InfoBanner } from '@kortix/ui/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription, AlertActions as BannerAlertActions, AlertMedia as BannerAlertMedia } from '@kortix/ui/alert';
 import { inputSurfaceClasses, inputTransitionClasses } from '@kortix/ui/input';
 import Loading from '@kortix/ui/loading';
 import { Modal, ModalContent, ModalDescription, ModalTitle } from '@kortix/ui/modal';
@@ -46,7 +46,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { FactorInfo } from '@/lib/supabase/mfa';
 import { cn } from '@kortix/ui';
 import { SettingsTabHeader } from '@kortix/ui/customize/settings/settings-tab-header';
-import { type DeviceBrand, describeUserAgent } from './device-label';
+import { deviceLabel, type DeviceBrand, describeUserAgent } from './device-label';
 
 const BRAND_MARK: Record<DeviceBrand, (props: { className?: string }) => React.JSX.Element> = {
   chrome: Chrome,
@@ -126,7 +126,7 @@ export function formatSecret(secret: string): string {
  *  One real input sits over six drawn cells, so paste, autofill
  *  (`one-time-code`) and screen readers all see a single field. The
  *  container verifies as soon as the sixth digit lands. */
-export function EnrollDialog({
+function EnrollDialog({
   enrolling,
   code,
   onCodeChange,
@@ -244,7 +244,7 @@ export function EnrollDialog({
   );
 }
 
-export interface SecurityTabViewProps {
+interface SecurityTabViewProps {
   // Two-factor authentication
   factors?: FactorInfo[];
   factorsLoading?: boolean;
@@ -299,7 +299,7 @@ export interface DeviceRow {
   current?: boolean;
 }
 
-export interface SecurityTabCopy {
+interface SecurityTabCopy {
   twoFactorTitle: string;
   twoFactorDescription: string;
   authenticatorApp: string;
@@ -351,7 +351,7 @@ export const DEFAULT_SECURITY_TAB_COPY: SecurityTabCopy = {
     'Your two-factor settings are unchanged — this is only the list failing to load.',
   noFactorEnrolled: 'No second factor enrolled',
   noFactorDescription:
-    'If your organization requires MFA, you’ll be blocked from gated actions until you enroll an authenticator here.',
+    'If a workspace you belong to requires MFA, you’ll be blocked from gated actions until you enroll an authenticator here.',
   scanTitle: 'Scan with your phone',
   scanDescription: 'Open any authenticator app and scan this code.',
   qrAlt: 'TOTP enrollment QR code',
@@ -362,7 +362,7 @@ export const DEFAULT_SECURITY_TAB_COPY: SecurityTabCopy = {
   cancel: 'Cancel',
   removeFactorTitle: 'Remove this factor?',
   removeFactorDescription:
-    'If your organization requires MFA and this is your only verified factor, you will be locked out of gated actions until you enroll again.',
+    'If a workspace you belong to requires MFA and this is your only verified factor, you will be locked out of gated actions until you enroll again.',
   removeFactor: 'Remove factor',
   devices: 'Devices',
   currentDevice: 'This browser',
@@ -476,22 +476,15 @@ export function SecurityTabView({
             - it has factors → nothing here; the rows above ARE the answer.
             Loading outranks both: an in-flight list has no answer yet. */}
         {!factorsLoading && factorsError ? (
-          <InfoBanner
-            tone="destructive"
-            icon={Warning}
-            title={copy.factorsLoadFailed}
-            action={
-              <Button variant="outline" size="sm" onClick={onRetryFactors}>
-                {copy.retry}
-              </Button>
-            }
-          >
+          <BannerAlert variant="destructive" ><BannerAlertMedia><Warning /></BannerAlertMedia><BannerAlertTitle>{copy.factorsLoadFailed}</BannerAlertTitle><BannerAlertDescription>
             {copy.factorsUnchanged}
-          </InfoBanner>
+          </BannerAlertDescription><BannerAlertActions>{<Button variant="outline" size="sm" onClick={onRetryFactors}>
+                {copy.retry}
+              </Button>}</BannerAlertActions></BannerAlert>
         ) : !factorsLoading && factors.length === 0 && !enrolling ? (
-          <InfoBanner tone="warning" icon={ShieldWarning} title={copy.noFactorEnrolled}>
+          <BannerAlert variant="warning" ><BannerAlertMedia><ShieldWarning /></BannerAlertMedia><BannerAlertTitle>{copy.noFactorEnrolled}</BannerAlertTitle><BannerAlertDescription>
             {copy.noFactorDescription}
-          </InfoBanner>
+          </BannerAlertDescription></BannerAlert>
         ) : null}
 
         <EnrollDialog
@@ -714,8 +707,7 @@ export function SecurityTab() {
   );
   const devices: DeviceRow[] = (deviceQuery.data ?? []).map((device) => {
     const { browser, os, mobile, brand } = describeUserAgent(device.user_agent);
-    const label =
-      browser && os ? t('deviceName', { browser, os }) : (browser ?? os ?? t('unknownDevice'));
+    const label = deviceLabel({ browser, os }, t);
     const when = device.current
       ? t('deviceSignedInAt', { date: dateFormat.format(new Date(device.signed_in_at)) })
       : t('deviceLastActive', { date: dateTimeFormat.format(new Date(device.last_active_at)) });

@@ -46,6 +46,7 @@ import {
 } from '@kortix/ui/apps';
 import { APP_GRID_CONTAINER, APP_GRID_COLUMN_OPTIONS, AppGridColumnsControl, useAppGridColumns, type AppGridColumns } from './app-density';
 import { AppDetailModal } from './app-detail';
+import { useDesktopTabsEnabled } from '@/features/desktop-tabs/desktop-tabs-gate';
 import { BackgroundApps } from './app-background-list';
 export { DEPLOYMENT_COPY, deployNotice, appHost } from '@kortix/ui/apps';
 export { AppPreview, AppPreviewOverlay, PREVIEW_SPINNER_DELAY_MS, scheduleSlowPreview, PREVIEW_VIEWPORT_WIDTH, PREVIEW_VIEWPORT_HEIGHT, PREVIEW_TILE_ASPECT, previewScale } from '@kortix/ui/apps';
@@ -78,7 +79,7 @@ function AppsControls({
  * The Apps screen in two variants (the agent editor's resource-page contract,
  * `packages/ui/src/customize/shared/agent-resource-scope.tsx`):
  *
- *  - `global` (default): `/projects/<id>/apps`, every App in the project.
+ *  - `global` (default): `/workspaces/<id>/apps`, every App in the project.
  *  - `agent`: the same screen on one agent's page, inside the agent editor's
  *    pane. Every App carries a checkbox that grants it to the agent
  *    (`agents.<name>.apps`, by slug), driven by `grant`; the page's All ·
@@ -119,6 +120,8 @@ export function AppsView({
   // opens one on arrival: the links the CLI prints and the retired
   // `/backends/<id>` routes land here.
   const [openAppId, setOpenAppId] = useState<string | null>(() => searchParams.get('app'));
+  // An App opens in its tab only where there are tabs (desktop, flag on).
+  const inlineApp = useDesktopTabsEnabled(projectId);
   // A link to `?app=<id>` followed while this page is open (the sidebar Apps
   // card) does not remount it, so the initializer above never sees it. Only a
   // new id opens: the mirror below writes the same key back, and removing it
@@ -154,7 +157,12 @@ export function AppsView({
       // Private window or blocked storage: the choice lasts until reload.
     }
   };
-  const openApp = apps.data?.find((item) => item.app_id === openAppId) ?? null;
+  // `?app=` takes the id or the slug: a trigger run links to its App by slug.
+  const openApp = apps.data?.find((item) => item.app_id === openAppId)
+    ?? apps.data?.find((item) => item.slug === openAppId)
+    ?? null;
+  // `?event=<id>`: the App's log opens on that one event (a trigger run's link).
+  const focusEventId = searchParams.get('event');
   // Agent scope: the per-App grant control. The grant stores slugs
   // (`appGrantRows`). An App whose access mode admits agents without it is
   // still grantable, and its card says so.
@@ -183,7 +191,10 @@ export function AppsView({
     const url = new URL(window.location.href);
     if ((url.searchParams.get('app') ?? null) === urlAppId) return;
     if (urlAppId) url.searchParams.set('app', urlAppId);
-    else url.searchParams.delete('app');
+    else {
+      url.searchParams.delete('app');
+      url.searchParams.delete('event');
+    }
     window.history.replaceState(window.history.state, '', url);
   }, [urlAppId]);
 
@@ -268,6 +279,7 @@ export function AppsView({
           canWrite={canWrite}
           canDeploy={canDeploy}
           canAdmin={canAdmin}
+          focusEventId={focusEventId}
           open
           onOpenChange={(next) => {
             if (!next) setOpenAppId(null);
@@ -276,6 +288,28 @@ export function AppsView({
       ) : null}
     </>
   );
+
+  // Desktop: an open App takes the page, in its tab under the tab strip, with
+  // the sidebar beside it, instead of a sheet over the whole window. Close
+  // returns to the grid in the same tab.
+  if (openApp && inlineApp && !agentGrant) {
+    return (
+      <AppDetailModal
+        key={openApp.app_id}
+        projectId={projectId}
+        app={openApp}
+        canWrite={canWrite}
+        canDeploy={canDeploy}
+        canAdmin={canAdmin}
+        focusEventId={focusEventId}
+        open
+        inline
+        onOpenChange={(next) => {
+          if (!next) setOpenAppId(null);
+        }}
+      />
+    );
+  }
 
   if (agentGrant) {
     // Granted slugs with no App behind them (deleted, or renamed): listed

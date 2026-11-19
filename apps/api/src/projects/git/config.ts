@@ -122,17 +122,6 @@ export function resolveConfigAgents(
   /** The declared agent's prompt file, when it has one. */
   resolveFile: (spec: LoadedAgents['specs'][number]) => string | undefined = () => undefined,
 ): Pick<ProjectConfigSummary, 'agent_discovery' | 'agents'> {
-  if (loadedAgents.specs.length === 0 && loadedAgents.errors.length === 0) {
-    return {
-      agent_discovery: 'opencode',
-      agents: nativeAgents.map((agent) => ({
-        ...agent,
-        source: 'opencode' as const,
-        enabled: true,
-      })),
-    };
-  }
-
   const nativeByName = new Map(nativeAgents.map((agent) => [agent.name, agent]));
   const nativeByPath = new Map(nativeAgents.map((agent) => [agent.path, agent]));
   return {
@@ -148,10 +137,12 @@ export function resolveConfigAgents(
         return {
           name: spec.name,
           path: file ?? native?.path ?? spec.path,
+          title: native?.title ?? null,
           description: native?.description ?? null,
           mode: native?.mode ?? null,
           ...(native?.hidden === true ? { hidden: true } : {}),
           model: native?.model ?? null,
+          ...(native?.run ? { run: native.run } : {}),
           space: native?.space ?? null,
           source: 'kortix.yaml' as const,
           enabled: spec.enabled,
@@ -181,14 +172,12 @@ export function resolveConfigAgents(
 export function disconnectedProjectConfig(): ProjectConfigSummary {
   return {
     is_kortix_repo: false,
-    signals: { manifest: false, openCodeConfig: false, openCodeAgent: false },
+    signals: { manifest: false, declaredAgents: false },
     manifest_raw: null,
     manifest: {},
     manifest_health: manifestHealthWithout('repository_disconnected'),
     env: { required: [], optional: [] },
-    open_code_raw: null,
     default_agent: null,
-    open_code_default_agent: null,
     agent_discovery: 'declarative',
     agents: [],
     skills: [],
@@ -353,6 +342,33 @@ function withSyntaxErrorConsequence(health: ManifestHealth, lastGoodCommit: stri
   };
 }
 
+/**
+ * Every project skill's description, from its SKILL.md frontmatter at `ref`.
+ * A skill whose folder has no readable SKILL.md reads as null.
+ *
+ * One batched fetch for every SKILL.md first (`prefetchRepoFiles`): on a cold
+ * partial store each per-file read is its own fetch from the host, and
+ * fetches into one store run one at a time — a project with many skills paid
+ * one fetch per skill and 503'd the 25 s request deadline (KRTX-4739; the
+ * same cold-store 503 `loadProjectConfig` fixed on 2026-11-03).
+ */
+export async function readProjectSkillDescriptions(
+  project: GitBackedProject,
+  skills: unknown,
+  ref = project.defaultBranch,
+): Promise<Record<string, string | null>> {
+  const folders = skills && typeof skills === 'object' && !Array.isArray(skills) ? Object.entries(skills) : [];
+  await prefetchRepoFiles(project, folders.map(([, folder]) => `${String(folder)}/SKILL.md`), ref);
+  return Object.fromEntries(
+    await Promise.all(
+      folders.map(async ([name, folder]) => {
+        const text = await readRepoFile(project, `${String(folder)}/SKILL.md`, ref).catch(() => null);
+        return [name, text ? (parseFrontmatter(text).description ?? null) : null] as const;
+      }),
+    ),
+  );
+}
+
 /** The project config summary at the default branch, with the Kortix skills. */
 export async function loadProjectConfig(
   project: GitBackedProject,
@@ -425,10 +441,12 @@ export async function loadRepoConfigSummary(
     return {
       name: spec.name,
       path: text(block.prompt_file) ?? spec.path,
+      title: text(block.title)?.trim() ?? null,
       description: text(block.description),
       mode: text(block.mode),
       ...(block.hidden === true ? { hidden: true } : {}),
       model: text(block.model),
+      run: text(block.run),
       space: text(block.space),
     };
   });
@@ -455,16 +473,14 @@ export async function loadRepoConfigSummary(
 
   return {
     is_kortix_repo: Boolean(found),
-    signals: { manifest: Boolean(found), openCodeConfig: false, openCodeAgent: loadedAgents.specs.length > 0 },
+    signals: { manifest: Boolean(found), declaredAgents: loadedAgents.specs.length > 0 },
     // The root file's own text. `manifest`/`env`/agents come from the merged
     // document when the root declares `imports:`.
     manifest_raw: found?.rootContent ?? null,
     manifest,
     manifest_health: health,
     env: envRequirements(manifest),
-    open_code_raw: null,
     default_agent: loadedAgents.defaultAgent ?? null,
-    open_code_default_agent: loadedAgents.defaultAgent ?? null,
     agent_discovery: 'declarative',
     agents,
     skills: projectSkills,

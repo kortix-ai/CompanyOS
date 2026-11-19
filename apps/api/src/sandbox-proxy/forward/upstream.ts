@@ -9,8 +9,16 @@ import {
 } from '../../projects/sandbox-deadline';
 import { markSandboxUsed } from '../backend';
 import { jsonProxyError } from '../pre-prompt-env-sync';
+import { recordDaemonTiming } from './daemon-timing';
 import { appCookieHeader } from '../preview-session';
 import { STRIP_FORWARD_HEADERS, clientResponseHeaders } from '../preview-response';
+import {
+  injectPreviewBridge,
+  previewBridgeScript,
+  shouldInjectPreviewBridge,
+  varyOnFetchDest,
+} from '../preview-bridge';
+import { previewParentOrigins } from '../preview-hosts';
 import { EFFECTIVE_MESSAGE_ID_HEADER } from '../prompt-wire-id-repair';
 import { proxyAttemptTimeoutMs } from '../preview-retry-budget';
 import { releasePromptDelivery } from '../prompt-dedupe';
@@ -58,6 +66,12 @@ export function forwardsClientEncoding(port: number, remainingPath: string): boo
 // load is hundreds of requests and the extend is monotone, so collapsing them
 // loses nothing.
 const previewUseThrottle = createExtendThrottle(60_000);
+
+/** The connect timer's abort reason (see `sendUpstreamAttempt`). `retry.ts`
+ *  matches this exact message to tell the proxy's own connect timeout from any
+ *  other TimeoutError — a client abort reuses the DOMException name with a
+ *  different message. */
+export const PROXY_CONNECT_TIMEOUT_MESSAGE = 'proxy attempt connect timeout';
 
 /**
  * Build forwarding headers: copy the client's (minus stripped), force
@@ -170,7 +184,7 @@ export async function sendUpstreamAttempt(
   const connectTimer = setTimeout(
     () =>
       attemptController.abort(
-        new DOMException('proxy attempt connect timeout', 'TimeoutError'),
+        new DOMException(PROXY_CONNECT_TIMEOUT_MESSAGE, 'TimeoutError'),
       ),
     proxyAttemptTimeoutMs(budgetRemainingMs, {
       method,
@@ -181,7 +195,7 @@ export async function sendUpstreamAttempt(
   let upstream: Response;
   try {
     // Begin after every pre-prompt refusal point, but before the first byte
-    // can reach OpenCode. A fast session.idle can now delete this record;
+    // can reach the runtime. A fast session.idle can now delete this record;
     // the success path below promotes it with a token CAS and cannot revive
     // a turn that already ended.
     const turnLifecycleStart = await turn.begin();
@@ -241,14 +255,18 @@ export async function respondFromUpstream(
 ): Promise<Response> {
   const { sandboxId, method, remainingPath, origin, access, sandboxAuthored, upstreamPort, promptDelivery, promptDedupeKey, ptl, record, turnIdentity, turn, isSseEventStreamRequest } = req;
   void markSandboxUsed(sandboxId);
+  // The box stamps its own Server-Timing on `/kortix/runtime/*` turn-verb
+  // answers (routes/kortix/runtime.ts's `answer`); record it so a slow row's
+  // log line names box-side vs ingress-edge (KRTX-4459). One parse, no await.
+  recordDaemonTiming(upstream.headers);
   // A 2xx confirms acceptance. A 5xx on a non-replayable turn is ambiguous:
-  // OpenCode may hold the message even though the response was lost. Both
+  // the runtime may hold the message even though the response was lost. Both
   // cases must preserve the turn. A definitive 4xx abandons delivery.
   if (upstream.ok || (turnIdentity && upstream.status >= 500)) {
     await turn.accept();
   } else {
     await turn.abandon();
-    // A definitive 4xx never reached OpenCode's queue: free the claim so a
+    // A definitive 4xx never reached the runtime's queue: free the claim so a
     // same-key retry delivers instead of answering `duplicate` for 10 minutes.
     if (promptDedupeKey && upstream.status < 500) releasePromptDelivery(promptDedupeKey);
   }
@@ -392,11 +410,31 @@ export async function respondFromUpstream(
   // go to the client untouched. The API's compress middleware skips a body
   // that is already encoded (preview-encoding-passthrough.test.ts).
 
-  return new Response(upstream.body, {
+  varyOnFetchDest(upstream.status, respHeaders);
+  const passthrough = new Response(upstream.body, {
     status: upstream.status,
     statusText: upstream.statusText,
     headers: respHeaders,
   });
+  // A framed HTML page reports its address to the panel (preview-bridge.ts).
+  const parentOrigins = previewParentOrigins();
+  if (
+    upstream.body &&
+    shouldInjectPreviewBridge({
+      method,
+      status: upstream.status,
+      upstreamPort,
+      requestHeaders: req.incomingHeaders,
+      responseHeaders: respHeaders,
+      parentOrigins,
+    })
+  ) {
+    return await injectPreviewBridge(
+      passthrough,
+      previewBridgeScript({ prefix: req.originMode ? '' : req.redirectPrefix, origins: parentOrigins }),
+    );
+  }
+  return passthrough;
 }
 
 /**

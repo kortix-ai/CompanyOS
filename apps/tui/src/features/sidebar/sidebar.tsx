@@ -1,5 +1,5 @@
 /**
- * The sidebar: accounts, projects, the nav rows, and the session list.
+ * The sidebar: the workspace, the nav rows, and the session list.
  *
  * This file is the data half — every read is a `@kortix/sdk/react` hook or a
  * method on the one `kortix()` client, and every write is one of that client's
@@ -7,13 +7,16 @@
  * keys and knows nothing about the SDK.
  */
 
-import { useAccounts, useChangeRequests, useProjectSessions, useProjects } from '@kortix/sdk/react';
+import { useChangeRequests } from '@kortix/sdk/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { ResolvedHost } from '../../auth/hosts.ts';
 import { kortix } from '../../kortix.ts';
-import { filterSessionsByTitle, groupSessionsByDay } from '../../lib/session-groups.ts';
+import { filterSessionsByTitle, groupSessionsBySection } from '../../lib/session-groups.ts';
+import { NO_WORKSPACE_TEXT, useWorkspaces } from '../../lib/workspaces.ts';
 import { ColumnPicker } from './column-picker.tsx';
+import { useSidebarSessions } from './use-sidebar-sessions.ts';
+import { useScreenAction } from '../../ui/index.ts';
 import { type SidebarNavItem, type SidebarScreen, SidebarView } from './sidebar-view.tsx';
 
 export interface SidebarProps {
@@ -35,13 +38,13 @@ export interface SidebarProps {
   onNavigate(screen: SidebarScreen): void;
   /** The screen rows. Default: the four the sidebar always had. */
   nav?: readonly SidebarNavItem[];
+  /** A workspace row was picked: its `project_id` and the account that owns it. */
   onProjectChange(projectId: string, accountId: string): void;
-  onAccountChange(accountId: string): void;
   /**
    * The account this host actually resolved to, when the caller had none.
    *
-   * Distinct from `onAccountChange`, which is a person PICKING another account
-   * and therefore drops the open project and session. This one only fills a
+   * Distinct from `onProjectChange`, which is a person PICKING another
+   * workspace and therefore drops the open session. This one only fills a
    * blank: an env-token host (`KORTIX_API_KEY` with no `KORTIX_ACCOUNT_ID`)
    * boots with `accountId === null`, and without it every account-scoped screen
    * reads "No account on this host." while the sidebar header shows the account
@@ -51,9 +54,6 @@ export interface SidebarProps {
   onToast?(message: string, kind?: 'info' | 'error'): void;
 }
 
-/** Statuses that mean the row is still moving, so the list is worth polling. */
-const LIVE_STATUSES = new Set(['queued', 'branching', 'provisioning', 'running']);
-const LIVE_POLL_MS = 5000;
 /** How often the age column is recomputed. A minute is the smallest unit it
  *  prints, so anything faster only spends renders. */
 const CLOCK_TICK_MS = 30_000;
@@ -78,14 +78,13 @@ export function Sidebar({
   onNavigate,
   nav,
   onProjectChange,
-  onAccountChange,
   onAccountResolved,
   onToast,
 }: SidebarProps) {
-  const [picker, setPicker] = useState<'none' | 'account' | 'project'>('none');
+  const [picker, setPicker] = useState(false);
   const [filter, setFilter] = useState('');
-  const [busy, setBusy] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const { busy, run } = useScreenAction(onToast);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
@@ -94,163 +93,156 @@ export function Sidebar({
 
   const effectiveAccountId = accountId ?? (host.accountId || null);
 
-  const sessionsQuery = useProjectSessions(projectId ?? '', {
-    enabled: Boolean(projectId),
-    // Poll only while a row is still provisioning — the same bound `apps/web`
-    // uses. A settled project costs one request per mount.
-    refetchInterval: (sessions) =>
-      sessions.some((session) => LIVE_STATUSES.has(session.status)) ? LIVE_POLL_MS : false,
-  });
+  const { mine: sessionsQuery, shared: sharedQuery, automated: automatedQuery, refresh: refetchSessions } =
+    useSidebarSessions(projectId);
 
-  // The SDK owns both lists (`useAccounts` / `useProjects`, keyed by
-  // `qk.accounts.list` / `qk.projects.list`), so the sidebar, the switcher and
-  // every other reader share ONE cache entry and one in-flight request. A
-  // hand-rolled key of this app's own invention did not: `staleTime` is
-  // per-observer in React Query, so a copied fetcher silently becomes N
-  // requests. `userId` is omitted on purpose — a TUI process holds one token
-  // for its whole lifetime, so there is no second identity to bleed into.
-  const accountsQuery = useAccounts();
-  const projectsQuery = useProjects(effectiveAccountId ?? undefined);
+  // The SDK owns the lists (`useWorkspaces` reads `useAccounts` and the
+  // per-account project lists through `projectsQueryOptions`), so the sidebar, the
+  // switcher and every other reader share ONE cache entry and one in-flight
+  // request. `userId` is omitted on purpose: a TUI process holds one token for
+  // its whole lifetime, so there is no second identity to bleed into.
+  const workspaces = useWorkspaces();
 
   // `useChangeRequests` defaults to open change requests, which is exactly the
-  // count the Review row wants. One bounded GET per project, cached.
+  // count the Review row wants. One bounded GET per workspace, cached.
   const changeRequestsQuery = useChangeRequests(projectId);
   const reviewCount = changeRequestsQuery.data?.change_requests?.length ?? null;
 
-  const accounts = accountsQuery.data ?? [];
-  const projects = projectsQuery.data ?? [];
-
   // Fill a blank account id once the list answers. Only when there is none:
-  // a resolved account must never overwrite a picked one.
+  // a resolved account must never overwrite a picked one. The account of the
+  // open workspace wins; an account with no workspace is never a fallback.
+  const openRow = workspaces.rows.find((row) => row.id === projectId);
+  const resolvedAccount = effectiveAccountId || openRow?.accountId || workspaces.rows[0]?.accountId;
   useEffect(() => {
     if (accountId || !onAccountResolved) return;
-    const resolved = effectiveAccountId || accounts[0]?.account_id;
-    if (resolved) onAccountResolved(resolved);
-  }, [accountId, effectiveAccountId, accounts[0]?.account_id, onAccountResolved]);
+    if (resolvedAccount) onAccountResolved(resolvedAccount);
+  }, [accountId, resolvedAccount, onAccountResolved]);
 
-  // An account or project list that failed is an auth/host problem, not an
-  // empty workspace. Say so on the account row and in the error line instead
-  // of rendering "No account" over a picker with nothing in it.
-  const authError = accountsQuery.isError
-    ? `Accounts: ${errorText(accountsQuery.error)}`
-    : projectsQuery.isError
-      ? `Projects: ${errorText(projectsQuery.error)}`
-      : null;
-  const accountName =
-    accounts.find((account) => account.account_id === effectiveAccountId)?.name ??
-    (accountsQuery.isError
-      ? 'account list failed'
-      : accountsQuery.isLoading
-        ? 'loading…'
-        : (accounts[0]?.name ?? 'No account'));
-  const projectName =
-    projects.find((project) => project.project_id === projectId)?.name ??
-    (projectId ? projectId.slice(0, 8) : 'No project');
+  // A list that failed is an auth/host problem, not "no workspace". Say so on
+  // the workspace row and in the error line instead of rendering the
+  // no-workspace line over a picker with nothing in it.
+  const authError = workspaces.isError ? `Workspaces: ${errorText(workspaces.error)}` : null;
+  const noWorkspace = !workspaces.isLoading && !workspaces.isError && workspaces.rows.length === 0;
+  const workspaceName =
+    openRow?.name ??
+    (projectId
+      ? projectId.slice(0, 8)
+      : workspaces.isError
+        ? 'workspace list failed'
+        : workspaces.isLoading
+          ? 'loading…'
+          : noWorkspace
+            ? 'No workspace yet'
+            : 'Pick a workspace');
 
   const groups = useMemo(
-    () => groupSessionsByDay(filterSessionsByTitle(sessionsQuery.sessions, filter), { now }),
-    [sessionsQuery.sessions, filter, now],
+    () =>
+      groupSessionsBySection(
+        {
+          mine: filterSessionsByTitle(sessionsQuery.sessions, filter),
+          shared: filterSessionsByTitle(sharedQuery.sessions, filter),
+          automated: filterSessionsByTitle(automatedQuery.sessions, filter),
+        },
+        { now },
+      ),
+    [sessionsQuery.sessions, sharedQuery.sessions, automatedQuery.sessions, filter, now],
   );
 
+  // The end of the list reads the next page of the first section that has one,
+  // in the order they render: every session stays reachable.
   const reachEnd = useCallback(() => {
-    if (sessionsQuery.hasNextPage && !sessionsQuery.isFetchingNextPage) {
-      void sessionsQuery.fetchNextPage();
-    }
-  }, [sessionsQuery.hasNextPage, sessionsQuery.isFetchingNextPage, sessionsQuery.fetchNextPage]);
+    const next = [sessionsQuery, sharedQuery, automatedQuery].find((query) => query.hasNextPage);
+    if (next && !next.isFetchingNextPage) void next.fetchNextPage();
+  }, [sessionsQuery, sharedQuery, automatedQuery]);
 
   const createSession = useCallback(async () => {
     if (!projectId) {
-      onToast?.('No project selected.', 'error');
+      onToast?.(noWorkspace ? NO_WORKSPACE_TEXT : 'No workspace open. Pick one first.', 'error');
       return;
     }
-    setBusy('creating session…');
-    try {
-      // No title: session titles are server-owned (memory
-      // `session-titles-kortix-owned`), so the create body stays empty.
-      const session = await kortix().projects.createSession(projectId);
-      await sessionsQuery.refetch();
-      onNewSession(session.session_id);
-    } catch (error) {
-      onToast?.(`Create failed: ${errorText(error)}`, 'error');
-    } finally {
-      setBusy(null);
-    }
-  }, [projectId, onNewSession, onToast, sessionsQuery.refetch]);
+    run('creating session…', async () => {
+      try {
+        // No title: session titles are server-owned (memory
+        // `session-titles-kortix-owned`), so the create body stays empty.
+        const session = await kortix().projects.createSession(projectId);
+        await refetchSessions();
+        onNewSession(session.session_id);
+      } catch (error) {
+        throw new Error(`Create failed: ${errorText(error)}`);
+      }
+    });
+  }, [projectId, noWorkspace, onNewSession, run, refetchSessions]);
 
   const renameSession = useCallback(
-    async (sessionId: string, name: string) => {
+    (sessionId: string, name: string) => {
       if (!projectId) return;
-      setBusy('renaming…');
-      try {
-        await kortix().session(projectId, sessionId).update({ name });
-        await sessionsQuery.refetch();
-        onToast?.(`Renamed to ${name}`);
-      } catch (error) {
-        onToast?.(`Rename failed: ${errorText(error)}`, 'error');
-      } finally {
-        setBusy(null);
-      }
+      run('renaming…', async () => {
+        try {
+          await kortix().session(projectId, sessionId).update({ name });
+          await refetchSessions();
+          return `Renamed to ${name}`;
+        } catch (error) {
+          throw new Error(`Rename failed: ${errorText(error)}`);
+        }
+      });
     },
-    [projectId, onToast, sessionsQuery.refetch],
+    [projectId, run, refetchSessions],
   );
 
   const deleteSession = useCallback(
-    async (sessionId: string) => {
+    (sessionId: string) => {
       if (!projectId) return;
-      setBusy('deleting…');
-      try {
-        await kortix().session(projectId, sessionId).delete();
-        await sessionsQuery.refetch();
-        onToast?.('Session deleted.');
-      } catch (error) {
-        onToast?.(`Delete failed: ${errorText(error)}`, 'error');
-      } finally {
-        setBusy(null);
-      }
+      run('deleting…', async () => {
+        try {
+          await kortix().session(projectId, sessionId).delete();
+          await refetchSessions();
+          return 'Session deleted.';
+        } catch (error) {
+          throw new Error(`Delete failed: ${errorText(error)}`);
+        }
+      });
     },
-    [projectId, onToast, sessionsQuery.refetch],
+    [projectId, run, refetchSessions],
   );
 
-  const pickerItems = useMemo(() => {
-    if (picker === 'account')
-      return accounts.map((account) => ({ id: account.account_id, label: account.name }));
-    if (picker === 'project')
-      return projects.map((project) => ({
-        id: project.project_id,
-        label: project.name,
-        right: project.project_id === projectId ? 'active' : '',
-      }));
-    return [];
-  }, [picker, accounts, projects, projectId]);
+  const pickerItems = useMemo(
+    () =>
+      workspaces.rows.map((row) => ({
+        id: row.id,
+        label: row.name,
+        right: row.id === projectId ? 'active' : '',
+      })),
+    [workspaces.rows, projectId],
+  );
 
-  const listError = sessionsQuery.isError ? errorText(sessionsQuery.error) : authError;
-  const busyMessage = busy ?? (sessionsQuery.isFetchingNextPage ? 'loading more…' : null);
+  const failedQuery = [sessionsQuery, sharedQuery, automatedQuery].find((query) => query.isError);
+  const listError = failedQuery ? errorText(failedQuery.error) : authError;
+  const loadingMore = [sessionsQuery, sharedQuery, automatedQuery].some(
+    (query) => query.isFetchingNextPage,
+  );
+  const busyMessage = busy ?? (loadingMore ? 'loading more…' : null);
 
-  if (picker !== 'none') {
+  if (picker) {
     return (
       <ColumnPicker
-        title={picker === 'account' ? 'Switch account' : 'Switch project'}
+        title="Switch workspace"
         items={pickerItems}
         width={width}
         height={height}
+        emptyText={noWorkspace ? NO_WORKSPACE_TEXT : undefined}
         onPick={(item) => {
-          setPicker('none');
-          if (picker === 'account') {
-            onAccountChange(item.id);
-            return;
-          }
-          const project = projects.find((entry) => entry.project_id === item.id);
-          onProjectChange(item.id, project?.account_id ?? effectiveAccountId ?? '');
+          setPicker(false);
+          const row = workspaces.rows.find((entry) => entry.id === item.id);
+          onProjectChange(item.id, row?.accountId ?? effectiveAccountId ?? '');
         }}
-        onClose={() => setPicker('none')}
+        onClose={() => setPicker(false)}
       />
     );
   }
 
   return (
     <SidebarView
-      accountName={accountName}
-      projectName={projectName}
+      workspaceName={workspaceName}
       reviewCount={reviewCount}
       nav={nav}
       groups={groups}
@@ -263,11 +255,8 @@ export function Sidebar({
       errorMessage={listError}
       busyMessage={busyMessage}
       onOpenSession={onOpenSession}
-      onOpenAccountPicker={() =>
-        authError && accounts.length === 0 ? onToast?.(authError, 'error') : setPicker('account')
-      }
-      onOpenProjectPicker={() =>
-        authError && projects.length === 0 ? onToast?.(authError, 'error') : setPicker('project')
+      onOpenWorkspacePicker={() =>
+        authError && workspaces.rows.length === 0 ? onToast?.(authError, 'error') : setPicker(true)
       }
       onNewSession={() => (onStartDraft ? onStartDraft() : void createSession())}
       onNavigate={(screen: SidebarScreen) => onNavigate(screen)}

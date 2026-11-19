@@ -35,6 +35,27 @@ describe('authorizeEnvironment', () => {
     ).toEqual({ allowed: true, source: 'health' });
   });
 
+  test('always allows security.txt so the disclosure policy stays reachable (RFC 9116)', () => {
+    for (const password of ['test-password', undefined]) {
+      expect(
+        authorizeEnvironment({
+          enabled: 'true',
+          password,
+          authorization: null,
+          pathname: '/.well-known/security.txt',
+        }),
+      ).toEqual({ allowed: true, source: 'security-txt' });
+    }
+    expect(
+      authorizeEnvironment({
+        enabled: 'true',
+        password: 'test-password',
+        authorization: null,
+        pathname: '/.well-known/other.txt',
+      }),
+    ).toEqual({ allowed: false, reason: 'credentials_required' });
+  });
+
   test('fails closed when protection is enabled without a password', () => {
     expect(
       authorizeEnvironment({
@@ -70,8 +91,36 @@ describe('authorizeEnvironment', () => {
       '/auth/callback/extra',
       '/auth',
       '/auth/signup',
-      '/projects',
+      '/workspaces',
     ]) {
+      expect(
+        authorizeEnvironment({
+          enabled: 'true',
+          password: 'test-password',
+          authorization: null,
+          pathname,
+        }),
+      ).toEqual({ allowed: false, reason: 'credentials_required' });
+    }
+  });
+
+  test('always allows the setup guide, the loop guides and the installer', () => {
+    // The prompt copied on a gated deployment tells a coding agent to curl
+    // these: a 401 stops the setup at its first step.
+    for (const pathname of ['/setup.md', '/factory.md', '/install', '/install.sh', '/loops/software-factory.md']) {
+      expect(
+        authorizeEnvironment({
+          enabled: 'true',
+          password: 'test-password',
+          authorization: null,
+          pathname,
+        }),
+      ).toEqual({ allowed: true, source: 'setup-guide' });
+    }
+  });
+
+  test('exempts exactly the setup files, not pages beside them', () => {
+    for (const pathname of ['/setup', '/setup.md/x', '/installer', '/loops', '/loops/software-factory', '/loopmaxxing', '/docs/setup.md']) {
       expect(
         authorizeEnvironment({
           enabled: 'true',
@@ -106,7 +155,7 @@ describe('authorizeEnvironment', () => {
           enabled: 'true',
           password: 'test-password',
           authorization,
-          pathname: '/projects',
+          pathname: '/workspaces',
         }),
       ).toEqual({ allowed: false, reason: 'credentials_required' });
     }
@@ -118,7 +167,7 @@ describe('authorizeEnvironment', () => {
         enabled: 'true',
         password: 'test-password',
         authorization: basic(ENVIRONMENT_PROTECTION_USERNAME, 'test-password'),
-        pathname: '/projects',
+        pathname: '/workspaces',
       }),
     ).toEqual({ allowed: true, source: 'basic' });
   });
@@ -134,7 +183,7 @@ describe('authorizeEnvironment', () => {
         authorization: null,
         accessCookie: expectedAccessCookie,
         expectedAccessCookie,
-        pathname: '/projects',
+        pathname: '/workspaces',
       }),
     ).toEqual({ allowed: true, source: 'cookie' });
   });
@@ -147,7 +196,7 @@ describe('authorizeEnvironment', () => {
         authorization: null,
         accessCookie: await deriveEnvironmentAccessCookie('wrong-password'),
         expectedAccessCookie: await deriveEnvironmentAccessCookie('test-password'),
-        pathname: '/projects',
+        pathname: '/workspaces',
       }),
     ).toEqual({ allowed: false, reason: 'credentials_required' });
   });

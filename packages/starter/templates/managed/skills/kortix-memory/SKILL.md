@@ -1,37 +1,38 @@
 ---
 name: kortix-memory
-description: How to read, write, and curate project memory in `memory/` — the project brain. Load this skill whenever you (or a scheduled memory curator) need to add, update, or reorganize what this project knows about itself. Defines the rubric for what belongs in memory, the file structure, and the change-request flow for landing memory edits on `main`.
+description: How to read, write, and curate workspace memory in `memory/` — the workspace brain. Load this skill whenever you (or a scheduled memory curator) need to add, update, or reorganize what this workspace knows about itself. Defines the rubric for what belongs in memory, the file structure, and the change-request flow for landing memory edits on `main`.
 ---
 
 <skill name="kortix-memory">
 
 <overview>
-Every Kortix project has a **project brain** at `memory/` — a
-folder of curated markdown files describing what this project is,
+Every Kortix workspace has a **workspace brain** at `memory/` — a
+folder of curated markdown files describing what this workspace is,
 which connections it uses, the conventions the team works by, and
 the decisions worth not re-litigating.
 
 Read and edit the files under `memory/` with the file tools (`read`,
-`write`, `edit`, `bash`). A project that keeps its brain somewhere else
+`write`, `edit`, `bash`). A workspace that keeps its brain somewhere else
 (an older layout, `.kortix/memory/`) works the same way at that path.
 The `memory` tool that edited this folder is retired (2026-10-30): a
-project that ejected it into `tools/memory.ts` keeps its own copy.
+workspace that ejected it into `tools/memory.ts` keeps its own copy.
 
 `MEMORY.md` is the **index**. Memory is **not** auto-injected into the
-prompt — the **memory protocol** is: at the start of a task, `read`
-`memory/MEMORY.md` to recover prior context, then read the sub-files
-(`overview.md`, `connections.md`, etc.) the index points at when
-they're relevant. Record anything durable as you go — your context
-window may reset at any time, so what isn't written to `memory/` is lost.
-Memory edits land only from an agent with
-`workspace: { project_repository: true }`: without it the session has no
-checkout to commit or push.
+prompt — the **memory protocol** is: at the start of a task, read
+`memory/MEMORY.md` (`kortix files cat memory/MEMORY.md`, no clone needed)
+to recover prior context, then read the sub-files (`overview.md`,
+`connections.md`, etc.) the index points at when they're relevant.
+Record anything durable as you go — your context window may reset at any
+time, so what isn't written to `memory/` is lost. `/workspace` starts
+empty: to edit memory, run `kortix workspaces clone` (it clones the
+repository onto your session branch), edit `memory/` in the clone, commit,
+push, and open a change request (`kortix cr open`).
 
 Memory is **continuously CRUD'd**:
 
 - Agents curate memory as they work. They add a durable fact when they
   find it, update a stale file, and delete a wrong one.
-- A new project has no scheduled curator. A project may add one: an agent
+- A new workspace has no scheduled curator. A workspace may add one: an agent
   that a cron trigger runs, which surveys recent activity and curates the
   folder (see `<curator>` below).
 - Both consult this skill for the rubric.
@@ -44,20 +45,20 @@ never by pushing directly.
 <when-to-load>
 Load this skill when you:
 
-- Discover a project convention, connection detail, decision, or
+- Discover a workspace convention, connection detail, decision, or
   workaround that should outlast this session
-- Notice the project brain is out of date or contradicts current code
+- Notice the workspace brain is out of date or contradicts current code
 - Are a scheduled curator agent running its memory pass
 - Want to know if something is worth writing down (use the rubric below)
 - Need to add, rename, split, or delete a memory file
 - Want to know how memory edits reach `main`
 
-Skip this skill for one-off questions about *operating* code. Project
+Skip this skill for one-off questions about *operating* code. Workspace
 memory is about durable knowledge, not session state.
 </when-to-load>
 
 <file-layout>
-A new project has `memory/MEMORY.md` only. The usual sub-files:
+A new workspace has `memory/MEMORY.md` only. The usual sub-files:
 
 ```
 memory/
@@ -85,7 +86,7 @@ there's enough depth to warrant a click.
 
 ### What to remember (KEEP)
 
-- **The project's purpose** — what we're building, for whom, and the
+- **The workspace's purpose** — what we're building, for whom, and the
   one-sentence pitch.
 - **Architecture-level decisions** — why we use X over Y, which
   service owns what, the data flow.
@@ -97,14 +98,14 @@ there's enough depth to warrant a click.
   flaky dependencies, gotchas that bit us once.
 - **Ops runbooks** — how to deploy, how to roll back, how to debug the
   thing that breaks every quarter.
-- **Glossary** — domain terms specific to this project that an
+- **Glossary** — domain terms specific to this workspace that an
   outsider wouldn't know.
 - **People & ownership** *(optional)* — who owns which surface, how to
   reach them, what they care about.
 
 ### What NOT to remember (DROP)
 
-- One user's personal preferences — those are not project memory. They
+- One user's personal preferences — those are not workspace memory. They
   go in that user's own memory, `/drives/me/Memory` (the
   `kortix-user-memory` skill).
 - Facts derivable from the repo layout, file names, or `git log`.
@@ -132,12 +133,13 @@ there's enough depth to warrant a click.
 
 ### Editing memory
 
-Use the file tools on the repo-relative `memory/` folder (for example
-`memory/overview.md`). Writes go straight into the real `memory/`
-folder, so they show up in the working tree and land on `main` through
+Read memory without a clone: `kortix files cat memory/MEMORY.md` and
+`kortix files ls memory`. To change it, work in a clone of the repository
+(`kortix workspaces clone`, then `cd` into it; `/workspace` has none at boot)
+and use the file tools on its `memory/` folder. Edits land on `main` through
 the normal change-request flow (below).
 
-1. `read` `memory/MEMORY.md` (and `ls memory/`) to see what's there.
+1. Read `memory/MEMORY.md` (and list `memory/`) to see what's there.
 2. Identify the right file. Most additions fit `overview.md`,
    `connections.md`, `conventions.md`, or `decisions.md`. `write` a
    new file only when a topic deserves its own page.
@@ -169,14 +171,14 @@ The user reviews and merges. Don't merge your own CR.
 
 <curator>
 
-A new project has no scheduled memory curator. To add one, add an agent
+A new workspace has no scheduled memory curator. To add one, add an agent
 (for example `agents/memory-curator.md`) and a cron trigger in
 `kortix.yaml` that runs it. The `kortix-harness-refinement` skill
 describes the full reflection protocol; memory curation is one of its
 passes. On each run the curator:
 
 1. Loads this skill.
-2. Surveys recent project activity (git log since last run, recent
+2. Surveys recent workspace activity (git log since last run, recent
    merged CRs, session digests via `kortix sessions digest`).
 3. Decides what's worth keeping per the **rubric** above.
 4. CRUDs `memory/` accordingly.
@@ -184,7 +186,7 @@ passes. On each run the curator:
 6. Leaves memory untouched when nothing is worth changing.
 
 Kortix manages this skill: an edit to it is replaced on the next update.
-To change *what gets remembered*, write the project's own rules into the
+To change *what gets remembered*, write the workspace's own rules into the
 curator's prompt. A merged CR takes effect on the next run.
 
 </curator>
@@ -195,7 +197,7 @@ curator's prompt. A merged CR takes effect on the next run.
   every fact into `MEMORY.md` — keep it a clean table of contents and
   push depth into sub-files the agent reads only when relevant.
 - **Read your memory before you start.** Nothing is auto-injected;
-  if you skip `memory/MEMORY.md`, you work blind to what the project
+  if you skip `memory/MEMORY.md`, you work blind to what the workspace
   already knows. The agent rules say the same thing — this is the
   memory protocol.
 - **Memory files are markdown, not databases.** Avoid heavy

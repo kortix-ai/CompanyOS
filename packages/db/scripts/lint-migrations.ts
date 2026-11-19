@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { loadFileSet } from './load-file-set';
+import { isMigrationFile } from './migration-files';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -118,6 +119,16 @@ export interface LintResult {
   warnings: string[];
 }
 
+/** Shared by both lint paths: an unresolved merge-conflict marker fails the file. */
+function checkMergeConflictMarkers(filename: string, raw: string): string[] {
+  if (/^(<{7}|={7}|>{7})/m.test(raw)) {
+    return [
+      `${filename}: contains an unresolved merge-conflict marker (<<<<<<< / ======= / >>>>>>>).`,
+    ];
+  }
+  return [];
+}
+
 // Set-level invariant: every migration's 17-digit timestamp must be unique.
 // (Ordering within a checkout is the sorted filename order; "a new migration
 // must come AFTER every merged one" is enforced by the git-aware sequence gate
@@ -234,11 +245,7 @@ function lintConcurrentMigration(
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  if (/^(<{7}|={7}|>{7})/m.test(raw)) {
-    errors.push(
-      `${filename}: contains an unresolved merge-conflict marker (<<<<<<< / ======= / >>>>>>>).`,
-    );
-  }
+  errors.push(...checkMergeConflictMarkers(filename, raw));
   if (raw.trim().length === 0) {
     errors.push(`${filename}: empty file.`);
     return { errors, warnings };
@@ -332,11 +339,7 @@ export function lintMigration(filename: string, raw: string, options: LintOption
     );
   }
 
-  if (/^(<{7}|={7}|>{7})/m.test(raw)) {
-    errors.push(
-      `${filename}: contains an unresolved merge-conflict marker (<<<<<<< / ======= / >>>>>>>).`,
-    );
-  }
+  errors.push(...checkMergeConflictMarkers(filename, raw));
 
   if (stripComments(raw).length === 0) {
     errors.push(
@@ -460,7 +463,7 @@ export function mergedMigrationFiles(opts: { repoRoot?: string } = {}): string[]
     .toString()
     .split('\n')
     .map((path) => path.split('/').at(-1) ?? '')
-    .filter((f) => f.endsWith('.sql') || f.endsWith('.concurrent.ts'));
+    .filter(isMigrationFile);
 }
 
 function main(): void {
@@ -469,9 +472,7 @@ function main(): void {
   const grandfathered = loadFileSet(GRANDFATHER_FILE);
   const backfillGrandfathered = loadFileSet(BACKFILL_GRANDFATHER_FILE);
   const lockTimeoutGrandfathered = loadFileSet(CONCURRENT_LOCK_TIMEOUT_GRANDFATHER_FILE);
-  const files = readdirSync(DIR)
-    .filter((f) => f.endsWith('.sql') || f.endsWith('.concurrent.ts'))
-    .sort();
+  const files = readdirSync(DIR).filter(isMigrationFile).sort();
   if (files.length === 0) errors.push('No migration files found in packages/db/migrations/.');
 
   for (const f of files) {

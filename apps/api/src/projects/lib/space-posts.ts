@@ -18,7 +18,7 @@
 // own threads, `spaceAccessFor`), or a private space the person owns (a
 // `dm` row: their personal space, or their private space with an agent), from a private
 // session that works only for them (`threadWorksOnlyForPerson`).
-import { projectSessions, projectSpaceMembers, projects } from '@kortix/db';
+import { projectSessions, projectSpaceMembers } from '@kortix/db';
 import { isMyKortixAgentName, SPACE_POST_SUMMARY } from '@kortix/shared';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { Actor } from '../../iam/actor';
@@ -37,6 +37,8 @@ import { mentionTokens } from './mentions';
 import { loadProjectRosterIds } from './project-access-view';
 import { isWatcherOfSpace } from './space-watch/store';
 import { resolveUserIdentities } from './user-identity';
+import { projectsView } from '../../workspaces/rows';
+import { errorMessage } from '../../shared/error-message';
 
 /** Session metadata: the agent that wrote a top-level post (its name), when it was not the thread's agent. */
 export const CHAT_ROOT_AUTHOR_KEY = 'chat_root_author';
@@ -77,9 +79,9 @@ export async function notifyMessageMentions(input: {
   try {
     if (!input.text.includes('@')) return [];
     const [row] = await db
-      .select({ accountId: projects.accountId, spaceId: projectSessions.spaceId })
+      .select({ accountId: projectsView.accountId, spaceId: projectSessions.spaceId })
       .from(projectSessions)
-      .innerJoin(projects, eq(projects.projectId, projectSessions.projectId))
+      .innerJoin(projectsView, eq(projectsView.projectId, projectSessions.projectId))
       .where(and(eq(projectSessions.sessionId, input.sessionId), eq(projectSessions.projectId, input.projectId)))
       .limit(1);
     if (!row?.spaceId) return [];
@@ -102,7 +104,7 @@ export async function notifyMessageMentions(input: {
   } catch (error) {
     logger.warn('[space-posts] message mention notifications were not sent', {
       session_id: input.sessionId,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
     });
     return [];
   }
@@ -135,6 +137,29 @@ export function resolveMentions(text: string, people: readonly MentionCandidate[
     if (agent) out.push({ token, kind: 'agent', userId: null, label: agent });
   }
   return out;
+}
+
+/**
+ * True when every @mention of a member's message names another person (and
+ * there is at least one): the message is for them, not for the thread's
+ * agent. `@all`, `@here`, an agent, the author or an unknown name: false.
+ */
+export function addressesOnlyPeople(text: string, people: readonly MentionCandidate[], authorId: string): boolean {
+  const tokens = mentionTokens(text);
+  if (tokens.size === 0) return false;
+  const persons = resolveMentions(text, people, []).filter((m) => m.kind === 'person' && m.userId !== authorId);
+  return persons.length === tokens.size;
+}
+
+/** `addressesOnlyPeople` for a session's message: the project's people read only when the text has an @. Never throws. */
+export async function messageAddressesOnlyPeople(input: { accountId: string; projectId: string; authorId: string; text: string }): Promise<boolean> {
+  if (!input.text.includes('@')) return false;
+  try {
+    return addressesOnlyPeople(input.text, await projectMentionCandidates(input), input.authorId);
+  } catch (error) {
+    logger.warn('[space-posts] the message mentions were not read; the agent answers', { error: errorMessage(error) });
+    return false;
+  }
 }
 
 /** The project's people as mention candidates. */
@@ -186,7 +211,7 @@ export async function notifyMentions(input: {
   } catch (error) {
     logger.warn('[space-posts] mention notifications were not sent', {
       session_id: input.threadSessionId,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
     });
     return [];
   }
@@ -324,7 +349,7 @@ async function topLevelThreadIn(projectId: string, spaceId: string, sessionId: s
 /** The project's agent names, for `@agent` mentions; [] when the manifest cannot be read. */
 async function projectAgentNames(projectId: string): Promise<string[]> {
   try {
-    const [row] = await db.select().from(projects).where(eq(projects.projectId, projectId)).limit(1);
+    const [row] = await db.select().from(projectsView).where(eq(projectsView.projectId, projectId)).limit(1);
     if (!row) return [];
     return (await loadProjectAgents(row)).specs.map((spec) => spec.name);
   } catch {

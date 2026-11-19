@@ -132,27 +132,35 @@ function heredocBodiesEnd(line: string, from: number, heredocs: Heredoc[]): numb
 }
 
 /**
- * Commands that read stdin as data. Any other program can run its stdin
- * (`sh`, `$SHELL`, `./run.sh`, `sudo …`), so only these make a heredoc body
- * data. `sed`, `awk`, `psql` and `mysql` are left out: their stdin can run a
- * shell command.
+ * Commands that never run their stdin: they read it as data, or they ignore
+ * it. Any other program can run its stdin (`sh`, `$SHELL`, `./run.sh`,
+ * `sudo …`), so only these make a heredoc body data. `sed`, `awk`, `psql`
+ * and `mysql` are left out: their stdin can run a shell command. So are
+ * commands that can change what a later `cat` runs (`export PATH=…`,
+ * `source`, `alias`, `cp`, `ln`).
  */
-const STDIN_DATA_READERS = new Set([
+const NEVER_RUNS_STDIN = new Set([
+  // Read stdin as data.
   'cat', 'tee', 'grep', 'egrep', 'fgrep', 'rg', 'head', 'tail', 'wc', 'sort', 'uniq', 'tr', 'cut', 'jq', 'yq',
   'base64', 'gh', 'git', 'diff', 'cmp', 'comm', 'column', 'envsubst', 'read', 'mapfile', 'readarray', 'fmt', 'fold',
   'nl', 'paste', 'xxd', 'od', 'gzip', 'md5sum', 'sha256sum', 'curl',
+  // Ignore stdin. Agents write `cd /tmp; cat > body.md <<'EOF'`.
+  'cd', 'pushd', 'popd', 'mkdir', 'pwd', 'ls', 'echo', 'printf', 'true', 'false', ':',
 ])
 
 /**
  * Whether a heredoc's line may run the body: some command on it (the one
- * that declares the heredoc, or one it is piped to) is not a data reader.
- * Leading `NAME=value` assignments are skipped. Word based, so a quoted `|`
- * reads as a new command: it errs towards reading a body as commands.
+ * that declares the heredoc, or one it is piped to) may run its stdin, or
+ * the line ends in a pipe that bash continues after the body
+ * (`cat <<EOF |`, the body, then `sh`). Leading `NAME=value` assignments are
+ * skipped. Word based, so a quoted `|` reads as a new command: it errs
+ * towards reading a body as commands.
  */
 function readsStdinAsCode(text: string): boolean {
+  if (/(?<!\|)\|&?\s*$/.test(text)) return true
   return text.split(/[;&|()]+/).some((segment) => {
     const words = segment.trim().replace(RESERVED_PREFIX, '').split(/\s+/).filter((word) => word && !/^\w+=/.test(word))
-    return words.length > 0 && !STDIN_DATA_READERS.has(words[0]!)
+    return words.length > 0 && !NEVER_RUNS_STDIN.has(words[0]!)
   })
 }
 
@@ -166,7 +174,7 @@ const RESERVED_ALONE = new Set(['fi', 'done', 'esac', '}'])
  * read as commands of its own. A command keeps its substitutions' text.
  * A `#` comment is skipped. A heredoc body is data and is skipped, except an
  * unquoted one that runs `$(…)` or `` `…` `` (bash expands those) and one
- * whose line has a command that is not a data reader (`sh <<EOF`,
+ * whose line has a command that may run its stdin (`sh <<EOF`,
  * `cat <<EOF | bash`): those bodies are read as commands. `null` when the quotes or brackets do not balance.
  * ponytail: not a bash grammar — `case` arms read as unbalanced or as extra
  * commands, so they fail closed. Use tree-sitter-bash when a manifest needs
@@ -493,6 +501,8 @@ type PermissionEntry = {
   request: RuntimePermissionRequest
   resolve: (reply: PermissionReply | Parked) => void
   askedAt: string
+  /** `relaying`: registered, apps/api not answered yet, nothing on the wire. `asked`: published, waiting for a person. */
+  phase: 'relaying' | 'asked'
   timer?: ReturnType<typeof setTimeout>
 }
 
@@ -586,24 +596,32 @@ export class PermissionBroker {
       always: ['*'],
       ...(input.ref ? { tool: input.ref } : {}),
     }
+    // Registered BEFORE the relay, as QuestionBroker does: a Stop, a steer or a turn end
+    // during the relay (`parkAll`) parks this ask instead of missing it.
+    let entry!: PermissionEntry
+    const settled = new Promise<PermissionReply | Parked>((resolve) => {
+      entry = { request, resolve, askedAt: new Date().toISOString(), phase: 'relaying' }
+    })
+    this.pending.set(request.id, entry)
     const relayed = this.relay
       ? await this.relay(request, { tool: input.tool, argsHash: permissionArgsHash(input.tool, input.args) }).catch(() => null)
       : null
+    // Parked during the relay: the call does not run, the ask stays open in apps/api.
+    if (this.pending.get(request.id) !== entry) return settled
     if (relayed?.approved) {
       // The re-run of a call a person approved while it was parked.
+      this.take(request.id)
       if (relayed.grant) {
         this.granted.add(relayed.grant)
         this.onChange?.()
       }
       return 'once'
     }
-    return new Promise<PermissionReply | Parked>((resolve) => {
-      const entry: PermissionEntry = { request, resolve, askedAt: new Date().toISOString() }
-      this.pending.set(request.id, entry)
-      this.publish({ type: 'permission.asked', properties: { ...request } })
-      this.onChange?.()
-      entry.timer = liveWaitTimer(relayed?.liveWaitMs, () => void this.park(request.id))
-    })
+    entry.phase = 'asked'
+    this.publish({ type: 'permission.asked', properties: { ...request } })
+    this.onChange?.()
+    entry.timer = liveWaitTimer(relayed?.liveWaitMs, () => void this.park(request.id))
+    return settled
   }
 
   reply(id: string, reply: PermissionReply): boolean {
@@ -620,9 +638,10 @@ export class PermissionBroker {
   park(id: string): boolean {
     const entry = this.take(id)
     if (!entry) return false
-    this.publish({ type: 'permission.parked', properties: { sessionID: this.sessionID, requestID: id } })
+    // A relaying ask was never on the wire: nothing to withdraw there.
+    if (entry.phase === 'asked') this.publish({ type: 'permission.parked', properties: { sessionID: this.sessionID, requestID: id } })
     entry.resolve(PARKED)
-    this.onChange?.()
+    if (entry.phase === 'asked') this.onChange?.()
     return true
   }
 
@@ -640,13 +659,18 @@ export class PermissionBroker {
     return entry
   }
 
+  /** The asks a person can answer: a relaying one is not on the wire yet. */
+  private asked(): PermissionEntry[] {
+    return [...this.pending.values()].filter((entry) => entry.phase === 'asked')
+  }
+
   list(): RuntimePermissionRequest[] {
-    return [...this.pending.values()].map((entry) => entry.request)
+    return this.asked().map((entry) => entry.request)
   }
 
   /** The open requests, as the session log's `pending.permissions`. */
   records(): PendingRecord[] {
-    return [...this.pending.values()].map(({ request, askedAt }) => ({
+    return this.asked().map(({ request, askedAt }) => ({
       id: request.id,
       thread_id: request.sessionID,
       ...(request.tool?.callID ? { call_id: request.tool.callID } : {}),

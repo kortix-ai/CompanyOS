@@ -1,10 +1,11 @@
 'use client';
 
+import { useSaveShortcut } from '../../internal/hooks/use-save-shortcut';
 import { MY_KORTIX_AGENT_NAME } from '@kortix/shared';
 import { adminPath } from '../../lib/routes';
 
 /**
- * /projects/[id]/customize/agents/[name]: one agent, as a page with a rail.
+ * /workspaces/[id]/admin/agents/[name]: one agent, as a page with a rail, in the Workspace settings pane.
  *
  * Customize is agent-first. My Kortix is the one agent a person talks to; every
  * other agent is a work product with only the access its work needs. So the
@@ -80,7 +81,7 @@ import {
 import { EmptyState } from '../../primitives/empty-state';
 import { ErrorState } from '../../primitives/error-state';
 import Hint from '../../primitives/hint';
-import { InfoBanner } from '../../primitives/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription, AlertMedia as BannerAlertMedia } from '../../primitives/alert';
 import { errorToast, successToast } from '../../primitives/toast';
 import { UiLink as Link, useUiPathname, useUiRouter, useUiSearchParams } from '../../providers/ui-provider';
 import { configEntitySourcePath } from '../sections/component/config-entity-source-path';
@@ -123,7 +124,6 @@ import {
 } from './agent-page-chrome';
 import { AgentModelView } from './agent-model-view';
 import { AgentApprovalRules } from './agent-approval-rules';
-import { AgentPinButton } from './agent-pin-button';
 import { AgentShareControl } from './agent-share-control';
 import {
   ACCESS_VIEWS,
@@ -255,10 +255,10 @@ export function AgentPage({
   // read-only page with no word on why: say what failed, offer the retry.
   if (canWrite && configQuery.isError) {
     return (
-      <AgentStatePage title={agentDisplayName(agent.name)}>
+      <AgentStatePage title={agentDisplayName(agent.name, agent.title)}>
         <ErrorState
           size="sm"
-          title={t('configLoadError', { name: agentDisplayName(agent.name) })}
+          title={t('configLoadError', { name: agentDisplayName(agent.name, agent.title) })}
           description={<ErrorDetails error={configQuery.error} />}
           action={
             <Button variant="outline" size="sm" onClick={() => void configQuery.refetch()}>
@@ -357,7 +357,7 @@ function useAgentUseCounts(projectId: string, agentName: string, config: Project
     ...contract('inventory'),
   });
   // A trigger stored as `default` starts the project's default agent.
-  const fallback = config.default_agent ?? config.open_code_default_agent ?? null;
+  const fallback = config.default_agent ?? null;
   return {
     triggerCount: triggers.data
       ? triggers.data.triggers.filter(
@@ -407,7 +407,7 @@ function HeaderBadges({ agent, config, block }: { agent: Agent; config: ProjectC
   const tPage = useI18nTranslations('agentEditor.page');
   const enabled = block.enabled !== false;
   const mode = (block.behavior?.mode ?? agent.mode ?? 'primary').toLowerCase();
-  const isDefault = (config.default_agent ?? config.open_code_default_agent) === agent.name;
+  const isDefault = config.default_agent === agent.name;
   return (
     <>
       {isDefault ? (
@@ -453,27 +453,6 @@ function useShareDialog(openedByLink: boolean): ShareState {
 }
 
 /**
- * Mod+S saves the agent, only while the draft holds an edit. With nothing to
- * save the key keeps the browser's own behavior. A key pressed inside an open
- * dialog (an embedded screen's own editor, the secret form) belongs to that
- * dialog, never to the agent's draft.
- */
-function useSaveShortcut(dirty: boolean, onSave: () => void) {
-  useEffect(() => {
-    if (!dirty) return;
-    const handler = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey || event.key !== 's') return;
-      const target = event.target instanceof Element ? event.target : null;
-      if (target?.closest('[role="dialog"], [role="alertdialog"]')) return;
-      event.preventDefault();
-      onSave();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [dirty, onSave]);
-}
-
-/**
  * The rail's rows. Overview, Basics, People and Triggers are General; every
  * grant is Access; Model, Tools and Workspace are Runtime. Each row carries
  * the URL of its tab and view (`agent-tabs.ts`), so a row is a link a person
@@ -485,12 +464,17 @@ function useRailGroups(
   views: readonly AgentConfigSectionKey[],
   counts: { triggerCount?: number },
   onPeople?: () => void,
+  /** A program agent (`run`): its Model row is its Program. */
+  program = false,
 ): AgentRailGroup[] {
   const t = useI18nTranslations('agentEditor.tabs');
+  const tModel = useI18nTranslations('agentEditor.modelView');
   const tI18nComplete = useI18nTranslations('hardcodedUi.i18nComplete');
   const catalog = useLocalizedAgentConfigCatalog();
   const labelOf = (key: AgentConfigSectionKey) =>
-    key === 'subagents'
+    key === 'model' && program
+      ? tModel('programTitle')
+      : key === 'subagents'
       ? tI18nComplete.raw('agentsListSubagentsTitle')
       : (catalog.sections.find((s) => s.key === key)?.label ?? key);
   const viewRows = (keys: readonly AgentConfigSectionKey[]): AgentRailItem[] =>
@@ -574,7 +558,7 @@ function AgentActions({
   const configure = useConfigureThread(projectId);
   const makeDefault = useDefaultAgent(projectId);
   const [confirm, setConfirm] = useState<'edit' | 'delete' | null>(null);
-  const isDefault = (config.default_agent ?? config.open_code_default_agent) === agent.name;
+  const isDefault = config.default_agent === agent.name;
   const mode = agent.mode?.toLowerCase();
   const startBlocked =
     agent.enabled === false
@@ -608,7 +592,6 @@ function AgentActions({
 
   return (
     <>
-      <AgentPinButton projectId={projectId} agent={agent.name} />
       <AgentShareControl projectId={projectId} agentName={agent.name} open={share.open} onOpenChange={share.setOpen} />
       {/* A call starts its own session on this agent, so it is offered where Start session is. */}
       {startBlocked ? null : <AgentCallButton projectId={projectId} agentName={agent.name} />}
@@ -641,7 +624,7 @@ function AgentActions({
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" disabled={configure.pending} onSelect={() => setConfirm('delete')}>
               <TrashIcon className="size-4" />
-              {t('deleteAgent', { name: agentDisplayName(agent.name) })}
+              {t('deleteAgent', { name: agentDisplayName(agent.name, agent.title) })}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -652,7 +635,7 @@ function AgentActions({
       <ConfirmDialog
         open={confirm !== null}
         onOpenChange={(open) => (open ? undefined : setConfirm(null))}
-        title={confirm === 'delete' ? t('deleteTitle', { name: agentDisplayName(agent.name) }) : tI18nComplete.raw('text24ba36a8ec86')}
+        title={confirm === 'delete' ? t('deleteTitle', { name: agentDisplayName(agent.name, agent.title) }) : tI18nComplete.raw('text24ba36a8ec86')}
         description={
           confirm === 'delete'
             ? t('deleteBody')
@@ -751,6 +734,7 @@ function EditableAgentPage({
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const pathname = useUiPathname();
   const drivesOn = useFeatureFlag(projectId, 'drives').enabled;
+  const programAgentsOn = useFeatureFlag(projectId, 'program_agents').enabled;
   const views = useMemo<AgentConfigSectionKey[]>(
     () => AGENT_CONFIG_SECTIONS.map((s) => s.key).filter((k) => drivesOn || k !== 'drives'),
     [drivesOn],
@@ -772,8 +756,8 @@ function EditableAgentPage({
   );
   const policySetControl = useAgentPolicySetControls(projectId, editor, policySetOptions);
   const surface = { kind: 'agent', agentName: agent.name } as const;
-  const defaultAgent = config.default_agent ?? config.open_code_default_agent;
-  const name = agentDisplayName(agent.name);
+  const defaultAgent = config.default_agent;
+  const name = agentDisplayName(agent.name, agent.title);
   const sourcePath = editor.draft.file ?? configEntitySourcePath(agent.path);
 
   const { draft, set } = editor;
@@ -809,7 +793,13 @@ function EditableAgentPage({
   useSaveShortcut(editor.isDirty, saveNow);
 
   const canManageMembers = useCanManageMembers(projectId);
-  const railGroups = useRailGroups(pathname, views, facts, canManageMembers ? () => share.setOpen(true) : undefined);
+  const railGroups = useRailGroups(
+    pathname,
+    views,
+    facts,
+    canManageMembers ? () => share.setOpen(true) : undefined,
+    programAgentsOn && typeof editor.draft.run === 'string',
+  );
   const railItems = railGroups.flatMap((group) => group.items);
   const dirtyItems = useMemo(() => changedItems(editor.draft, editor.baseline), [editor.draft, editor.baseline]);
   const changed = new Intl.ListFormat(locale, { type: 'conjunction' }).format(
@@ -825,11 +815,7 @@ function EditableAgentPage({
       registryOptions={registryOptions}
       apps={null}
       drives={
-        <AgentDrivesSection
-          projectId={projectId}
-          agentName={agent.name}
-          repositoryAccess={draft.repository_access !== false}
-        />
+        <AgentDrivesSection projectId={projectId} agentName={agent.name} />
       }
       sectionStyle="tab"
     />
@@ -935,7 +921,7 @@ function EditableAgentPage({
         if (view === 'drives')
           return (
             <Embedded agentName={agent.name} column={RAIL_COLUMN}>
-              <AgentDrivesSection projectId={projectId} agentName={agent.name} repositoryAccess={draft.repository_access !== false} />
+              <AgentDrivesSection projectId={projectId} agentName={agent.name} />
             </Embedded>
           );
         // Model is this agent's model only. The project-wide gateway screens
@@ -943,7 +929,21 @@ function EditableAgentPage({
         if (view === 'model')
           return (
             <AgentTabBody>
-              <AgentModelView oc={editor.oc} setOc={editor.setOc} footer={<ProjectModelsLink projectId={projectId} />} />
+              <AgentModelView
+                oc={editor.oc}
+                setOc={editor.setOc}
+                footer={<ProjectModelsLink projectId={projectId} />}
+                program={
+                  programAgentsOn && typeof editor.draft.run === 'string'
+                    ? {
+                        command: editor.draft.run,
+                        onChange: (next) => editor.set('run', next),
+                        timeout: editor.draft.timeout,
+                        onTimeoutChange: (next) => editor.set('timeout', next),
+                      }
+                    : undefined
+                }
+              />
             </AgentTabBody>
           );
         return (
@@ -1061,13 +1061,13 @@ function ReadOnlyAgentPage({
   const spacesOn = useSpacesEnabled(projectId);
   const canManageMembers = useCanManageMembers(projectId);
   const railGroups = useRailGroups(pathname, READ_ONLY_VIEWS, facts, canManageMembers ? () => share.setOpen(true) : undefined);
-  const name = agentDisplayName(agent.name);
+  const name = agentDisplayName(agent.name, agent.title);
   // A reader has a page for Kortix permissions and Model only. Every other
   // Access row shows its grant by name on the Overview and links nowhere.
   const banner = (
-    <InfoBanner tone="neutral" icon={LockSimpleIcon} title={t('readOnlyTitle')}>
+    <BannerAlert variant="default" ><BannerAlertMedia><LockSimpleIcon /></BannerAlertMedia><BannerAlertTitle>{t('readOnlyTitle')}</BannerAlertTitle><BannerAlertDescription>
       {t.rich('readOnlyBody', { code: (chunks) => <span className="font-mono">{chunks}</span> })}
-    </InfoBanner>
+    </BannerAlertDescription></BannerAlert>
   );
 
   const body = (() => {
@@ -1133,7 +1133,7 @@ function ReadOnlyAgentPage({
             <TriggersPage
               projectId={projectId}
               surface={{ kind: 'agent', agentName: agent.name }}
-              defaultAgent={config.default_agent ?? config.open_code_default_agent}
+              defaultAgent={config.default_agent}
             />
           </Embedded>
         );

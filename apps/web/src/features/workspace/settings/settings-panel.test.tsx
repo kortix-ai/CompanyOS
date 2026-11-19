@@ -32,7 +32,7 @@ import type { RailItem } from '@kortix/ui/customize/settings/type';
  *
  * **The overlay is three tabs now.** Twenty-one rows left it: eight
  * account-scoped ones for `/accounts/[id]`, and thirteen project-scoped ones
- * for the Customize bar's Settings tab, `/projects/[id]/admin/general`. What remains
+ * for the Customize bar's Settings tab, `/workspaces/[id]/admin/general`. What remains
  * is Profile, Preferences and Connected accounts — the tabs that belong to the
  * signed-in PERSON. Every assertion below is derived from `railGroups()` or
  * `SETTINGS_TABS` rather than hard-coded counts, so the next arrival or
@@ -95,10 +95,10 @@ describe('SettingsPanelShell — desktop rail', () => {
     expect((html.match(/role="tab"/g) ?? []).length).toBe(allItems.length);
   });
 
-  test('renders one TabsList per rail group — Radix cannot mix a group Label into one shared list', () => {
+  test('renders one TabsList per rail group — a tab list cannot mix a group Label into one shared list', () => {
     const html = render();
     // One list per group, and no pinned extra: the Upgrades footer went to
-    // `/projects/[id]/admin/general` with the rest of project configuration.
+    // `/workspaces/[id]/admin/general` with the rest of project configuration.
     expect((html.match(/role="tablist"/g) ?? []).length).toBe(allGroups.length);
   });
 
@@ -134,13 +134,13 @@ describe('SettingsPanelShell — desktop rail', () => {
 
     // The Organizations block counts as a second group for the rule: with it
     // on screen, "Personal" has to be labelled or the two lists run together.
-    test('the organizations block brings the Personal heading back', () => {
+    test('the workspaces block brings the Personal heading back', () => {
       const html = render({
         groups: [allGroups[0]],
         organizations: [{ account_id: 'acc-1', name: 'Mirkos Org', account_role: 'owner' }],
       });
       expect(html).toContain(`>${allGroups[0].label}<`);
-      expect(html).toContain('>Organizations<');
+      expect(html).toContain('>Workspaces<');
       expect(html).toContain('Mirkos Org');
       // `?accountId=acc-1`, not `/accounts/acc-1`: the account hub has no
       // route — it is a modal addressed by a query param on whatever page it
@@ -267,12 +267,10 @@ test('mobile Settings headers sit in the native titlebar band on macOS', () => {
 });
 
 /**
- * Radix's `TabsContent` keeps a `<div role="tabpanel">` in the tree for
- * EVERY value, not just the active one — internally it always calls
- * `Presence` with a function-as-children (`{present} => ...`), and Presence
- * treats a function child as an automatic `forceMount`. Inactive panes are
- * marked `hidden` (and their own children are stripped, so they're empty),
- * active one is not. This is exactly what `@testing-library`'s
+ * `TabsContent` keeps a `<div role="tabpanel">` in the tree for EVERY value,
+ * not just the active one (`packages/ui/src/primitives/tabs.tsx`). Inactive
+ * panes are marked `hidden` (and their own children are stripped, so they're
+ * empty), the active one is not. This is exactly what `@testing-library`'s
  * `getAllByRole('tabpanel')` reports too — it excludes `hidden` elements by
  * default — so "one pane is mounted" means "one pane lacks `hidden`", not
  * "only one `role=tabpanel` div exists in the markup".
@@ -325,13 +323,12 @@ describe('SettingsPanelShell — pane wiring', () => {
  * throw, no matter how many query-backed views exist as its inactive siblings
  * in the very same rail.
  *
- * This does not depend on Radix's own `present && children` behaviour inside
- * `TabsContent` — `SettingsTabPane` in `settings-panel.tsx` gates
- * independently with its own `active` check, so the proof holds even if a
- * future Radix upgrade changes that internal.
+ * This does not depend on how `TabsContent` gates its children —
+ * `SettingsTabPane` in `settings-panel.tsx` gates independently with its own
+ * `active` check, so the proof holds even if that internal changes.
  *
  * The thirteen project-scoped cases that used to sit here moved with their
- * tabs to `/projects/[id]/admin/general`; the eight account-scoped ones moved to
+ * tabs to `/workspaces/[id]/admin/general`; the eight account-scoped ones moved to
  * `/accounts/[id]`. Neither set is asserted here any more, because neither
  * mounts here any more.
  */
@@ -348,8 +345,7 @@ describe('SettingsPanelShell — real tab content gating', () => {
    * `h2` `SettingsTabHeader` emits).
    *
    * Sessions (Notifications) left this list deliberately with KRTX-1742: it
-   * reads the `notification_center` flag (`useNotificationCenter`) and the
-   * person's server record (`useNotificationPreferences`), so it is
+   * reads the person's server record (`useNotificationPreferences`), so it is
    * query-backed like the rest.
    */
   const STORE_ONLY_TABS = ['appearance'] as const;
@@ -452,7 +448,7 @@ describe('SettingsPanelShell — mobile', () => {
   test('opens on the section list: every row, no pane header', () => {
     const html = render({ isMobile: true });
     expect((html.match(/role="tab"/g) ?? []).length).toBe(allItems.length);
-    // Radix keeps a tabpanel for every value, so the pane's absence is its
+    // `Tabs` keeps a tabpanel for every value, so the pane's absence is its
     // back pill's absence.
     expect(html).not.toContain('rounded-full');
   });
@@ -477,7 +473,7 @@ describe('SettingsPanelShell — mobile', () => {
  * rather than mocking it.
  *
  * The overlay is one of TWO hosts of that context now. The other is
- * `/projects/[id]/admin/general`, whose adapter (`buildProjectSettingsNav`) is
+ * `/workspaces/[id]/admin/general`, whose adapter (`buildProjectSettingsNav`) is
  * covered in `capabilities/project-settings/project-settings-page.test.ts`.
  */
 describe('buildSettingsPanelSettingsNav', () => {

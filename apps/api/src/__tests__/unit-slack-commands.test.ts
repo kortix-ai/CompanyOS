@@ -13,7 +13,19 @@ function makeChain(): any {
   return chain;
 }
 let deletes = 0;
+// One Slack workspace, one Kortix workspace (channels/slack/link.ts): this file's
+// rows describe the channel itself, so the link answers "no shared link here".
+mock.module('../channels/slack/link', () => ({
+  linkedSlackProject: async () => null,
+  recordSlackChannel: async () => {},
+  slackProjectLink: async () => ({ teamId: 'T1' }),
+  holdsSlackWorkspace: async () => true,
+  moveSlackLink: async () => [],
+  hasOwnSlackApp: async () => false,
+}));
+
 mock.module('../shared/db', () => ({
+  withDbTransaction: <T,>(action: () => Promise<T>): Promise<T> => action(),
   db: {
     select: () => makeChain(),
     update: () => makeChain(),
@@ -184,7 +196,7 @@ describe('help', () => {
     const resp = await handleSlashCommand('help', '', ctx);
     const txt = allText(resp);
     expect(txt).toContain('control panel');
-    for (const shortcut of ['model <id>', 'agent <name>', 'switch', 'policy', 'sessions']) {
+    for (const shortcut of ['model <id>', 'agent <name>', 'workspaces', 'policy', 'sessions']) {
       expect(txt).toContain(shortcut);
     }
   });
@@ -269,10 +281,10 @@ describe('/kortix agent <name>', () => {
     expect(resp.text).toContain('is not a declared agent');
     expect(resp.text).toContain('ghost');
   });
-  test('no binding → prompts to switch', async () => {
+  test('no Kortix workspace holds this Slack workspace → says how to connect one', async () => {
     setAgentResult = { ok: false, reason: 'no_binding' };
     const resp = await handleSlashCommand('agent', 'reviewer', ctx);
-    expect(resp.text).toContain('Bind a project first');
+    expect(resp.text).toContain('No Kortix workspace is connected to this Slack workspace');
   });
 });
 
@@ -294,7 +306,7 @@ describe('/kortix session (singular)', () => {
     const ids = actionIds(resp);
     expect(ids).toContain('session_open');
     const txt = allText(resp);
-    expect(txt).toContain('/projects/p1/sessions/sess-9');
+    expect(txt).toContain('/workspaces/p1/sessions/sess-9');
     expect(txt).toContain('running');
   });
   test('no sessions yet → empty state', async () => {
@@ -302,10 +314,10 @@ describe('/kortix session (singular)', () => {
     const resp = await handleSlashCommand('session', '', ctx);
     expect(allText(resp)).toContain('No sessions started in this channel');
   });
-  test('unbound channel → prompts to switch', async () => {
+  test('no Kortix workspace holds this Slack workspace → says how to connect one', async () => {
     selection = null;
     const resp = await handleSlashCommand('session', '', ctx);
-    expect(allText(resp)).toContain('No project bound');
+    expect(allText(resp)).toContain('No Kortix workspace is connected to this Slack workspace');
   });
 });
 
@@ -338,24 +350,22 @@ describe('channel settings need a linked project manager', () => {
   test('a caller without the capability cannot change the session policy', async () => {
     settingsActor = { reason: 'not_member' };
     const resp = await handleSlashCommand('policy', 'owner_only', ctx);
-    expect(resp.text).toContain('Only a project manager');
+    expect(resp.text).toContain('Only a workspace manager');
     expect(setPolicyCalls).toEqual([]);
   });
 
-  test('a caller without the capability cannot unbind the channel; nothing is deleted', async () => {
-    settingsActor = { reason: 'not_member' };
-    const resp = await handleSlashCommand('unbind', '', ctx);
-    expect(resp.text).toContain('Only a project manager');
+  test('switch, use and unbind change nothing: they say which Kortix workspace this Slack workspace runs in', async () => {
+    for (const sub of ['switch', 'use', 'unbind', 'workspaces']) {
+      expect(allText(await handleSlashCommand(sub, '', ctx))).toContain('No Kortix workspace is connected to this Slack workspace');
+    }
     expect(deletes).toBe(0);
   });
 
   test('a project manager changes each setting', async () => {
     expect((await handleSlashCommand('agent', 'reviewer', ctx)).text).toContain('reviewer');
     expect((await handleSlashCommand('policy', 'owner_only', ctx)).text).toContain('policy set to');
-    expect(allText(await handleSlashCommand('unbind', '', ctx))).toContain('Unbound');
     expect(setAgentCalls).toEqual(['reviewer']);
     expect(setPolicyCalls).toEqual(['owner_only']);
-    expect(deletes).toBe(1);
   });
 });
 

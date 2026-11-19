@@ -16,7 +16,7 @@
  * managed-GitHub backend; CR-9 additionally needs a real session, so it
  * is gated on `funded`):
  *   - SHIP-1  first ship, no origin → managed: POST /projects/provision, set
- *             origin, commit, token-header push, write .kortix/link.json.
+ *             origin, commit, token-header push, write git config kortix.workspace.
  *   - SHIP-2  first ship, existing origin → BYO: POST /projects {repo_url,name};
  *             origin never modified.
  *   - SHIP-3  first ship --origin <git-url> → BYO explicit; rewrites origin.
@@ -46,6 +46,11 @@ import { isKe2eRetryableError } from '../core/client';
 import { assert } from '../core/expect';
 import { waitFor } from '../core/poll';
 import { CliSandbox, throwIfCliInfraFailure, type CliResult } from '../fixtures/cli';
+
+/** The workspace a checkout is linked to: `git config kortix.workspace`, or '' when unlinked. */
+function linkedWorkspace(cwd: string): string {
+  return Bun.spawnSync(['git', '-C', cwd, 'config', '--local', '--get', 'kortix.workspace']).stdout.toString().trim();
+}
 
 function check(description: string, pass: boolean, expected: unknown, actual: unknown): void {
   assert({ kind: 'cli', description, expected, actual, pass });
@@ -77,8 +82,8 @@ flow('SHIP-DEFAULT', {
   domain: 'cli',
   timeoutMs: 300_000,
   requires: ['database'],
-  routes: ['POST /v1/accounts/tokens', 'GET /v1/accounts/me', 'GET /v1/projects/:projectId',
-    'POST /v1/connectors/projects/:projectId/connectors/sync'],
+  routes: ['POST /v1/accounts/tokens', 'GET /v1/me', 'GET /v1/workspaces/:projectId',
+    'POST /v1/connectors/workspaces/:projectId/connectors/sync'],
 }, async (ctx) => {
   const project = await ctx.fixtures.project({ managedGit: true });
   const pat = await ctx.fixtures.pat({ name: ctx.fixtures.name('ship-default') });
@@ -93,7 +98,7 @@ flow('SHIP-DEFAULT', {
     check('new local branch avoids overwriting seeded remote main', branch.exitCode === 0, 0, branch.exitCode);
     checkExit('login without linking', await sb.login(pat, { noProject: true, account: ctx.P.accountId }), 0);
     checkExit('save default project', await sb.run(['projects', 'use', project.id]), 0);
-    check('folder remains unlinked', !sb.exists('.kortix/link.json'), true, !sb.exists('.kortix/link.json'));
+    check('folder remains unlinked', linkedWorkspace(sb.cwd) === '', true, linkedWorkspace(sb.cwd));
     await ctx.step('unlinked ship uses saved default and pushes twice without creating a project', async () => {
       for (const content of ['first ship', 'second ship']) {
         sb.writeFile('DEFAULT-PROOF.md', content);
@@ -117,7 +122,7 @@ flow('SHIP-DEFAULT', {
 
 // ─────────────────────── SHIP-7 — dry-run (runnable now) ─────────────────────
 
-flow('SHIP-7', { domain: 'cli', routes: ['GET /v1/accounts/me'] }, async (ctx) => {
+flow('SHIP-7', { domain: 'cli', routes: ['GET /v1/me'] }, async (ctx) => {
   const pat = await ctx.fixtures.pat({
     name: ctx.fixtures.name('cli-ship7'),
   });
@@ -140,13 +145,8 @@ flow('SHIP-7', { domain: 'cli', routes: ['GET /v1/accounts/me'] }, async (ctx) =
           true,
           r.stdout.includes('provision'),
         );
-        // No side effects: no link.json written, no origin remote added.
-        check(
-          'no .kortix/link.json written',
-          !sb.exists('.kortix/link.json'),
-          true,
-          sb.exists('.kortix/link.json'),
-        );
+        // No side effects: no workspace link written, no origin remote added.
+        check('no git config kortix.workspace written', linkedWorkspace(sb.cwd) === '', true, linkedWorkspace(sb.cwd));
         const remote = Bun.spawnSync(['git', '-C', sb.cwd, 'remote']);
         check(
           'no git remote added',
@@ -187,8 +187,8 @@ flow('SHIP-8', { domain: 'cli', routes: [] }, async (ctx) => {
       const r = await sb.run(['ship']);
       check('exit 1', r.exitCode === 1, 1, r.exitCode);
       check(
-        'says not a Kortix project',
-        /not a kortix project/i.test(r.all),
+        'says not a Kortix workspace',
+        /not a kortix workspace/i.test(r.all),
         true,
         r.stderr.slice(0, 200),
       );
@@ -248,9 +248,9 @@ flow(
     // retryable, so it fails the gate outright rather than flaking.
     timeoutMs: 300_000,
     routes: [
-      'GET /v1/accounts/me',
+      'GET /v1/me',
       'POST /v1/projects/provision',
-      'POST /v1/projects/:projectId/git-token',
+      'POST /v1/workspaces/:projectId/git-token',
     ],
   },
   async (ctx) => {
@@ -265,24 +265,14 @@ flow(
       check('login exit 0', login.exitCode === 0, 0, login.exitCode);
 
       await ctx.step(
-        'ship -y (no origin) → managed provision, link.json + origin set',
+        'ship -y (no origin) → managed provision, git config kortix.workspace + origin set',
         async () => {
           const r = await sb.run(['ship', '-y'], { timeoutMs: 120_000 });
           checkExit('exit 0', r, 0);
-          check(
-            'wrote .kortix/link.json',
-            sb.exists('.kortix/link.json'),
-            true,
-            sb.exists('.kortix/link.json'),
-          );
-          const link = JSON.parse(sb.readFile('.kortix/link.json'));
-          check(
-            'link.json carries project_id',
-            typeof link.project_id === 'string' && link.project_id.length > 0,
-            true,
-            link.project_id,
-          );
-          if (link.project_id) ctx.track('project', link.project_id);
+          // Since #12812 the workspace link lives in the checkout's git config, not .kortix/link.json.
+          const projectId = linkedWorkspace(sb.cwd);
+          check('wrote git config kortix.workspace', projectId.length > 0, true, projectId);
+          if (projectId) ctx.track('project', projectId);
           const remote = Bun.spawnSync(['git', '-C', sb.cwd, 'remote', 'get-url', 'origin']);
           check(
             'origin remote set to managed repo',
@@ -304,7 +294,7 @@ flow(
   'SHIP-2',
   {
     domain: 'cli',
-    routes: ['GET /v1/accounts/me'],
+    routes: ['GET /v1/me'],
   },
   async (ctx) => {
     const pat = await ctx.fixtures.pat({
@@ -337,10 +327,10 @@ flow(
             r.stderr.slice(0, 300),
           );
           check(
-            'no link.json written on failure',
-            sb.exists('.kortix/link.json') === false,
+            'no workspace link written on failure',
+            linkedWorkspace(sb.cwd) === '',
             true,
-            sb.exists('.kortix/link.json'),
+            linkedWorkspace(sb.cwd),
           );
           const remote = Bun.spawnSync(['git', '-C', sb.cwd, 'remote', 'get-url', 'origin']);
           check(
@@ -363,7 +353,7 @@ flow(
   'SHIP-3',
   {
     domain: 'cli',
-    routes: ['GET /v1/accounts/me'],
+    routes: ['GET /v1/me'],
   },
   async (ctx) => {
     const pat = await ctx.fixtures.pat({
@@ -395,10 +385,10 @@ flow(
             r.stderr.slice(0, 300),
           );
           check(
-            'no link.json written on failure',
-            sb.exists('.kortix/link.json') === false,
+            'no workspace link written on failure',
+            linkedWorkspace(sb.cwd) === '',
             true,
-            sb.exists('.kortix/link.json'),
+            linkedWorkspace(sb.cwd),
           );
         },
       );
@@ -422,9 +412,9 @@ flow(
     // retryable, so it fails the gate outright rather than flaking.
     timeoutMs: 300_000,
     routes: [
-      'GET /v1/accounts/me',
+      'GET /v1/me',
       'POST /v1/projects/provision',
-      'POST /v1/projects/:projectId/git-token',
+      'POST /v1/workspaces/:projectId/git-token',
     ],
   },
   async (ctx) => {
@@ -457,16 +447,9 @@ flow(
             timeoutMs: 120_000,
           });
           checkExit('exit 0', r, 0);
-          check(
-            'link.json written (managed)',
-            sb.exists('.kortix/link.json'),
-            true,
-            sb.exists('.kortix/link.json'),
-          );
-          if (sb.exists('.kortix/link.json')) {
-            const link = JSON.parse(sb.readFile('.kortix/link.json'));
-            if (link.project_id) ctx.track('project', link.project_id);
-          }
+          const linked = linkedWorkspace(sb.cwd);
+          check('git config kortix.workspace written (managed)', linked.length > 0, true, linked);
+          if (linked) ctx.track('project', linked);
           const remote = Bun.spawnSync(['git', '-C', sb.cwd, 'remote', 'get-url', 'origin']);
           check(
             'origin rewritten to the managed repo (not the ignored url)',
@@ -484,7 +467,7 @@ flow(
 
 // ─────────────── SHIP-5 — account selection (--account mismatch) ─────────────
 
-flow('SHIP-5', { domain: 'cli', routes: ['GET /v1/accounts/me'] }, async (ctx) => {
+flow('SHIP-5', { domain: 'cli', routes: ['GET /v1/me'] }, async (ctx) => {
   const pat = await ctx.fixtures.pat({
     name: ctx.fixtures.name('cli-ship5'),
   });
@@ -511,10 +494,10 @@ flow('SHIP-5', { domain: 'cli', routes: ['GET /v1/accounts/me'] }, async (ctx) =
           r.all.slice(0, 1_000),
         );
         check(
-          'no project created (no link.json)',
-          !sb.exists('.kortix/link.json'),
+          'no project created (no workspace link)',
+          linkedWorkspace(sb.cwd) === '',
           true,
-          sb.exists('.kortix/link.json'),
+          linkedWorkspace(sb.cwd),
         );
       },
     );
@@ -537,10 +520,10 @@ flow(
     // retryable, so it fails the gate outright rather than flaking.
     timeoutMs: 600_000,
     routes: [
-      'GET /v1/accounts/me',
+      'GET /v1/me',
       'POST /v1/projects/provision',
-      'GET /v1/projects/:projectId',
-      'POST /v1/projects/:projectId/git-token',
+      'GET /v1/workspaces/:projectId',
+      'POST /v1/workspaces/:projectId/git-token',
     ],
   },
   async (ctx) => {
@@ -557,16 +540,9 @@ flow(
       // First ship (managed) to establish the link.
       const first = await sb.run(['ship', '-y'], { timeoutMs: 120_000 });
       checkExit('first ship exit 0', first, 0);
-      check(
-        'link.json written',
-        sb.exists('.kortix/link.json'),
-        true,
-        sb.exists('.kortix/link.json'),
-      );
-      if (sb.exists('.kortix/link.json')) {
-        const link = JSON.parse(sb.readFile('.kortix/link.json'));
-        if (link.project_id) ctx.track('project', link.project_id);
-      }
+      const linked = linkedWorkspace(sb.cwd);
+      check('git config kortix.workspace written', linked.length > 0, true, linked);
+      if (linked) ctx.track('project', linked);
 
       await ctx.step(
         'second ship (linked, managed) → GET /projects/:id + fresh git-token + push',
@@ -605,10 +581,10 @@ flow(
     // retryable, so it fails the gate outright rather than flaking.
     timeoutMs: 900_000,
     routes: [
-      'GET /v1/accounts/me',
+      'GET /v1/me',
       'POST /v1/projects/provision',
-      'GET /v1/projects/:projectId',
-      'POST /v1/projects/:projectId/git-token',
+      'GET /v1/workspaces/:projectId',
+      'POST /v1/workspaces/:projectId/git-token',
     ],
   },
   async (ctx) => {
@@ -625,10 +601,8 @@ flow(
       // Establish the link via a first managed ship (clean push of the scaffold).
       const first = await sb.run(['ship', '-y'], { timeoutMs: 120_000 });
       checkExit('first ship exit 0', first, 0);
-      if (sb.exists('.kortix/link.json')) {
-        const link = JSON.parse(sb.readFile('.kortix/link.json'));
-        if (link.project_id) ctx.track('project', link.project_id);
-      }
+      const linked = linkedWorkspace(sb.cwd);
+      if (linked) ctx.track('project', linked);
 
       await ctx.step('--no-commit with a dirty tree → error (exit 1)', async () => {
         sb.writeFile('DIRTY.md', `uncommitted ${Date.now()}\n`);
@@ -680,18 +654,18 @@ flow(
     serial: true,
     timeoutMs: 1_200_000,
     routes: [
-      'GET /v1/accounts/me',
+      'GET /v1/me',
       'POST /v1/projects/provision',
-      'POST /v1/projects/:projectId/sessions',
-      'POST /v1/projects/:projectId/sessions/:sessionId/start',
-      'POST /v1/projects/:projectId/sessions/:sessionId/commit-push',
-      'POST /v1/projects/:projectId/change-requests',
-      'GET /v1/projects/:projectId/change-requests',
-      'GET /v1/projects/:projectId/change-requests/:crId',
-      'GET /v1/projects/:projectId/change-requests/:crId/merge-preview',
-      'POST /v1/projects/:projectId/change-requests/:crId/merge',
-      'POST /v1/projects/:projectId/change-requests/:crId/close',
-      'POST /v1/projects/:projectId/change-requests/:crId/reopen',
+      'POST /v1/workspaces/:projectId/sessions',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/start',
+      'POST /v1/workspaces/:projectId/sessions/:sessionId/commit-push',
+      'POST /v1/workspaces/:projectId/change-requests',
+      'GET /v1/workspaces/:projectId/change-requests',
+      'GET /v1/workspaces/:projectId/change-requests/:crId',
+      'GET /v1/workspaces/:projectId/change-requests/:crId/merge-preview',
+      'POST /v1/workspaces/:projectId/change-requests/:crId/merge',
+      'POST /v1/workspaces/:projectId/change-requests/:crId/close',
+      'POST /v1/workspaces/:projectId/change-requests/:crId/reopen',
     ],
   },
   async (ctx) => {
@@ -712,7 +686,7 @@ flow(
     const started = await waitFor(
       async () => {
         const r = await ctx.client.as(ctx.P.OWNER).post(
-          '/v1/projects/:projectId/sessions/:sessionId/start',
+          '/v1/workspaces/:projectId/sessions/:sessionId/start',
           {},
           {
             params: { projectId: project.id, sessionId: session.id },
@@ -753,7 +727,7 @@ flow(
     const committed = await ctx.client
       .as(ctx.P.OWNER)
       .post(
-        '/v1/projects/:projectId/sessions/:sessionId/commit-push',
+        '/v1/workspaces/:projectId/sessions/:sessionId/commit-push',
         { message: 'Add change request fixture' },
         { params: { projectId: project.id, sessionId: session.id } },
       );

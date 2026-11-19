@@ -19,7 +19,7 @@ import { isWorkEmail } from '@/lib/personal-email';
 
 import { Button } from '@kortix/ui/button';
 import { Field, FieldGroup, FieldLabel } from '@kortix/ui/field';
-import { InfoBanner } from '@kortix/ui/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription, AlertMedia as BannerAlertMedia } from '@kortix/ui/alert';
 import { Input, inputInvalidClasses } from '@kortix/ui/input';
 import Loading from '@kortix/ui/loading';
 import {
@@ -94,7 +94,7 @@ const notch = (y: '0' | '100%') =>
 const TICKET_TOP = { mask: notch('100%') };
 const TICKET_BOTTOM = { mask: notch('0') };
 
-export interface DemoQualifierModalProps {
+interface DemoQualifierModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   calLink: string;
@@ -622,17 +622,13 @@ export function DemoQualifierModal({
           </ModalHeader>
 
           <div className="space-y-4 px-6 pt-6">
-            <InfoBanner
-              tone="success"
-              icon={Check}
-              title={tI18nHardcoded.raw(
+            <BannerAlert variant="success" ><BannerAlertMedia><Check /></BannerAlertMedia><BannerAlertTitle>{tI18nHardcoded.raw(
                 'autoFeaturesContactDemoQualifierModalJsxAttrTitleWeLle3d686d7',
-              )}
-            >
+              )}</BannerAlertTitle><BannerAlertDescription>
               {tI18nHardcoded.raw(
                 'autoFeaturesContactDemoQualifierModalJsxTextKortixIsBuilt9d7721e7',
               )}
-            </InfoBanner>
+            </BannerAlertDescription></BannerAlert>
             <p className="text-muted-foreground text-sm text-pretty">
               {tI18nHardcoded.raw('autoFeaturesContactDemoQualifierModalJsxTextSpinUpYour0b48cac5')}
             </p>

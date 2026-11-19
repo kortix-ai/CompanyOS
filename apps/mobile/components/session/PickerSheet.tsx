@@ -12,13 +12,16 @@
  * fixed height, so the sheet does not resize while the results filter.
  *
  * `tabs` pins a tab bar at the bottom (`FloatingTabCapsule` over a
- * `PinnedBar` fade — the project/account switcher's bar). The caller swaps
- * the title, options, and `children` for the active tab. A tabbed sheet
- * always opens at a fixed height, so switching tabs never resizes it.
+ * `PinnedBar` fade). The caller swaps the title, options, and `children` for
+ * the active tab. A tabbed sheet opens full screen, one detent (the workspace
+ * switcher's sheet): its box is the visible sheet, so the bar sits on the
+ * visible bottom edge and switching tabs never resizes it. At a partial
+ * detent the iOS native sheet laid the box out at full height and the bar
+ * sat below the screen (TestFlight, 2026-11-15: the Agent tab unreachable).
  */
 import * as React from 'react';
 import { View, useWindowDimensions } from 'react-native';
-import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { SheetScrollView } from '@/components/kortix/sheet-parts';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 
@@ -46,6 +49,7 @@ import { useSheetRowLimit } from '@/components/kortix/sheet-settled';
  * - a short list (no search): the content's own height (the dynamic snap point,
  *   at most 70% of the screen), then 100%.
  * - a long list (search field): 85%, so the keyboard has room, then 100%.
+ * - a tabbed sheet: 100% only, so its bottom tab bar is always on screen.
  */
 const SEARCH_SNAP_POINTS = ['85%', '100%'];
 const FULL_SCREEN_SNAP = ['100%'];
@@ -110,7 +114,7 @@ export const PickerSheet = React.forwardRef<SheetRef, PickerSheetProps>(
         ref={modalRef}
         title={title}
         titleTrailing={titleTrailing}
-        snapPoints={searchable || tabs ? SEARCH_SNAP_POINTS : FULL_SCREEN_SNAP}
+        snapPoints={searchable && !tabs ? SEARCH_SNAP_POINTS : FULL_SCREEN_SNAP}
         enableDynamicSizing={!searchable && !tabs}
         maxDynamicContentSize={Math.floor(height * 0.7)}
         topInset={insets.top}
@@ -122,7 +126,7 @@ export const PickerSheet = React.forwardRef<SheetRef, PickerSheetProps>(
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore">
         <View style={tabs ? { flex: 1 } : undefined}>
-        <BottomSheetScrollView
+        <SheetScrollView
           style={tabs ? { flex: 1 } : undefined}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -184,7 +188,7 @@ export const PickerSheet = React.forwardRef<SheetRef, PickerSheetProps>(
               <Text variant="muted">{emptyLabel}</Text>
             </View>
           ) : null}
-        </BottomSheetScrollView>
+        </SheetScrollView>
         {tabs ? (
           <PinnedBar controlHeight={FLOATING_BAR_HEIGHT} background={sheetBackground} className="justify-center px-4">
             <FloatingTabCapsule

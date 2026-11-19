@@ -8,7 +8,7 @@ import { MarkdownWithFrontmatter } from '../../markdown/markdown-frontmatter';
 import { Badge } from '../../primitives/badge';
 import { Button } from '../../primitives/button';
 import Hint from '../../primitives/hint';
-import { InfoBanner } from '../../primitives/info-banner';
+import { Alert as BannerAlert, AlertDescription as BannerAlertDescription, AlertMedia as BannerAlertMedia } from '../../primitives/alert';
 import Loading from '../../primitives/loading';
 import { ImageUnavailable } from '../renderers/image-frame';
 import { StatusDot } from '../../primitives/status';
@@ -30,7 +30,8 @@ import {
   FloppyDiskIcon as Save,
 } from '@phosphor-icons/react';
 import React, { lazy, Suspense, useCallback, useMemo, useState } from 'react';
-import { useReducedMotion, type Variant } from 'motion/react';
+import { type Variant } from 'motion/react';
+import { useReducedMotion } from '../../internal/hooks/use-reduced-motion';
 import { Disclosure, DisclosureContent } from '../../primitives/disclosure';
 // Direct module import, not the feature barrel: the barrel re-exports THIS file.
 import { HtmlPreview } from './html-preview';
@@ -82,7 +83,7 @@ const ZipRenderer = lazy(() =>
 function RendererFallback() {
   return (
     <div className="flex h-full items-center justify-center">
-      <Loading className="text-muted-foreground/40 h-4 w-4" />
+      <Loading className="text-muted-foreground h-4 w-4" />
     </div>
   );
 }
@@ -145,13 +146,13 @@ function FileNotFoundState({ filePath }: { filePath: string }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
       <div className="bg-muted/50 flex h-12 w-12 items-center justify-center rounded-sm">
-        <FileX className="text-muted-foreground/40 h-6 w-6" />
+        <FileX className="text-muted-foreground h-6 w-6" />
       </div>
       <p className="text-muted-foreground text-sm font-medium">
         {tHardcodedUi.raw('featuresFilesComponentsFileContentRenderer.line195JsxTextFileNotFound')}
       </p>
-      <p className="text-muted-foreground/50 max-w-sm font-mono text-xs break-all">{filePath}</p>
-      <p className="text-muted-foreground/40 max-w-xs text-xs">
+      <p className="text-muted-foreground max-w-sm font-mono text-xs break-all">{filePath}</p>
+      <p className="text-muted-foreground max-w-xs text-xs">
         {tHardcodedUi.raw(
           'featuresFilesComponentsFileContentRenderer.line201JsxTextThisFileDoesNotExistOrMayHave',
         )}
@@ -330,7 +331,7 @@ export function FileContentRenderer({
                   'autoFeaturesFileViewerFileContentRendererJsxTextCouldnT794ae800',
                 )}
               </p>
-              <p className="text-muted-foreground/50 max-w-sm font-mono text-xs break-all">
+              <p className="text-muted-foreground max-w-sm font-mono text-xs break-all">
                 {filePath}
               </p>
               <Button variant="outline" size="sm" onClick={handleDownload}>
@@ -343,7 +344,7 @@ export function FileContentRenderer({
           {/* Loading */}
           {showLoadingState && (
             <div className="flex h-full items-center justify-center">
-              <Loading className="text-muted-foreground/40 h-4 w-4" />
+              <Loading className="text-muted-foreground h-4 w-4" />
             </div>
           )}
 
@@ -353,14 +354,14 @@ export function FileContentRenderer({
               error, so no surface gets to render it as one. */}
           {contentError && !showLoadingState && isSandboxWaking && (
             <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-              <Loading className="text-muted-foreground/40 h-4 w-4" />
+              <Loading className="text-muted-foreground h-4 w-4" />
               <p className="text-muted-foreground text-sm font-medium">
                 {tI18nHardcoded.raw('i18nComplete.text5e3de76869f3')}
               </p>
-              <p className="text-muted-foreground/50 max-w-sm font-mono text-xs break-all">
+              <p className="text-muted-foreground max-w-sm font-mono text-xs break-all">
                 {filePath}
               </p>
-              <p className="text-muted-foreground/40 max-w-xs text-xs">
+              <p className="text-muted-foreground max-w-xs text-xs">
                 {tI18nHardcoded.raw('i18nComplete.textd4707c58c4a4')}
               </p>
             </div>
@@ -389,10 +390,10 @@ export function FileContentRenderer({
                     'featuresFilesComponentsFileContentRenderer.line692JsxTextFailedToLoadFile',
                   )}
                 </p>
-                <p className="text-muted-foreground/50 max-w-sm font-mono text-xs break-all">
+                <p className="text-muted-foreground max-w-sm font-mono text-xs break-all">
                   {filePath}
                 </p>
-                <p className="text-muted-foreground/60 max-w-sm text-xs">{contentError}</p>
+                <p className="text-muted-foreground max-w-sm text-xs">{contentError}</p>
               </div>
             ))}
 
@@ -471,13 +472,11 @@ export function FileContentRenderer({
           )}
 
           {/* XLSX / XLS preview */}
-          {!isLoading && !error && !isNotFound && fileCategory === 'xlsx' && (!bytesOnly || blobUrl) && (
+          {isContentReady && fileCategory === 'xlsx' && rawBlob && (
             <Suspense fallback={<RendererFallback />}>
               <XlsxRenderer
                 key={`xlsx-${filePath}-${contentRevision}-${reloadKey}`}
-                // A bytes-only source hands the workbook over as a blob URL;
-                // the renderer reads a sandbox path only for a session.
-                filePath={bytesOnly ? blobUrl! : filePath}
+                blob={rawBlob}
                 fileName={fileName}
                 className="h-full"
                 showDownload={false}
@@ -523,7 +522,7 @@ export function FileContentRenderer({
             <div className="flex h-full flex-col items-center justify-center gap-5 p-8">
               <div className="bg-muted/50 flex h-14 w-14 items-center justify-center rounded-sm">
                 <svg
-                  className="text-muted-foreground/40 h-6 w-6"
+                  className="text-muted-foreground h-6 w-6"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -534,7 +533,7 @@ export function FileContentRenderer({
                   <circle cx="18" cy="16" r="3" />
                 </svg>
               </div>
-              <p className="text-muted-foreground/60 text-sm">{fileName}</p>
+              <p className="text-muted-foreground text-sm">{fileName}</p>
               <audio controls src={blobUrl} className="w-full max-w-sm" />
             </div>
           )}
@@ -588,9 +587,9 @@ export function FileContentRenderer({
             !['pdf', 'docx', 'pptx', 'xlsx', 'sqlite', 'video', 'audio'].includes(fileCategory) && (
               <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
                 <div className="bg-muted/50 flex h-12 w-12 items-center justify-center rounded-sm">
-                  <FileWarning className="text-muted-foreground/30 h-6 w-6" />
+                  <FileWarning className="text-muted-foreground h-6 w-6" />
                 </div>
-                <p className="text-muted-foreground/50 text-sm">
+                <p className="text-muted-foreground text-sm">
                   {tHardcodedUi.raw(
                     'featuresFilesComponentsFileContentRenderer.line844JsxTextBinaryFile',
                   )}
@@ -622,15 +621,11 @@ export function FileContentRenderer({
               >
                 {/* Diff indicator */}
                 {fileContent.patch && fileContent.patch.hunks.length > 0 && (
-                  <InfoBanner
-                    tone="warning"
-                    icon={FileDiff}
-                    className="shrink-0 items-center gap-1.5 rounded-none border-x-0 border-t-0 px-3 py-1.5"
-                  >
+                  <BannerAlert variant="warning" className="shrink-0 items-center gap-1.5 rounded-none border-x-0 border-t-0 px-3 py-1.5"><BannerAlertMedia><FileDiff /></BannerAlertMedia><BannerAlertDescription>
                     {tHardcodedUi.raw(
                       'featuresFilesComponentsFileContentRenderer.line869JsxTextUncommittedChanges',
                     )}
-                  </InfoBanner>
+                  </BannerAlertDescription></BannerAlert>
                 )}
                 {isJsonTreeView && isJsonFile ? (
                   <div key={filePath} className="h-full w-full overflow-auto">

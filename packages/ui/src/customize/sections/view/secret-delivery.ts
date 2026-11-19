@@ -121,9 +121,24 @@ export function secretUsage(
  * would silently move the secret off the consumer its owning flow reads —
  * disconnecting a model provider, a connector, or a repository.
  */
-export function secretUsageIsAssigned(consumer?: SecretConsumer | null): boolean {
-  return consumer === 'llm_gateway' || consumer === 'connector' || consumer === 'git_proxy';
+export function secretUsageIsAssigned(
+  consumer?: SecretConsumer | null,
+  opts?: SecretUsageContext,
+): boolean {
+  // A connector-only row that no connector uses (a value typed into a
+  // connector-scoped setup link and never bound) has no owning flow to
+  // disconnect: its owner picks its delivery.
+  if (consumer === 'connector') return opts?.connectorBound ?? true;
+  return consumer === 'llm_gateway' || consumer === 'git_proxy';
 }
+
+/** What the row's surroundings say about its usage. */
+export type SecretUsageContext = {
+  /** A connector resolves this secret. Unknown (absent) reads as bound. */
+  connectorBound?: boolean;
+  /** The user picked an exposure in this edit. */
+  picked?: boolean;
+};
 
 /**
  * The `(strategy, consumer)` pair a save writes, given the picked exposure and
@@ -144,8 +159,14 @@ export function secretUsageIsAssigned(consumer?: SecretConsumer | null): boolean
 export function secretDeliveryTarget(
   exposure: SecretExposure,
   row?: { strategy: SecretDeliveryStrategy; consumer: SecretConsumer | null } | null,
+  opts?: SecretUsageContext,
 ): { strategy: SecretDeliveryStrategy; consumer: SecretConsumer | null } {
-  if (row && secretUsageIsAssigned(row.consumer)) {
+  if (row && secretUsageIsAssigned(row.consumer, opts)) {
+    return { strategy: row.strategy, consumer: row.consumer };
+  }
+  // An unbound connector row moves only when its owner picks an exposure: an
+  // unrelated save (a new value) keeps it where it is.
+  if (row?.consumer === 'connector' && !opts?.picked) {
     return { strategy: row.strategy, consumer: row.consumer };
   }
   if (exposure === 'enforced' && row?.strategy === 'broker' && row.consumer === 'http_broker') {
@@ -168,7 +189,7 @@ export function connectorBindingOptions(
       description = 'This connector manages authentication through its platform connection.';
     } else if (connector.credentialSource === 'stored') {
       disabled = true;
-      description = 'Disconnect the stored connector credential before using a project secret.';
+      description = 'Disconnect the stored connector credential before using a workspace secret.';
     } else if (connector.secretIdentifier && !selected) {
       disabled = true;
       description = `Already uses ${connector.secretIdentifier}. Unbind it there first.`;
@@ -221,7 +242,7 @@ const EXPOSURE_PRESENTATIONS: Record<SecretExposure, SecretDeliveryPresentation>
   environment: {
     // The only exposure where agent code can read the value, so the badge is a
     // warning and not a neutral label. `secrets-view.tsx` says the same thing
-    // in longhand right below it (`InfoBanner tone="warning"`); the two must
+    // in longhand right below it (`Alert tone="warning"`); the two must
     // agree.
     label: 'Environment variable',
     description: 'The real value is an environment variable agent code and commands can read.',
@@ -583,8 +604,6 @@ export function missingAgentGrantNotice(
 export type AgentGrantConfig = {
   agent_discovery?: string | null;
   default_agent?: string | null;
-  /** @deprecated Server alias for `default_agent`. */
-  open_code_default_agent?: string | null;
   agents?: readonly { name: string; scope?: { env?: string[] | 'all' } | null }[];
 };
 
@@ -621,9 +640,10 @@ function admitsIdentifier(list: readonly string[], identifier: string): boolean 
  *
  * `agent_discovery` is the server's own verdict on whether the manifest
  * declares any agent (apps/api/src/projects/git/config.ts `resolveConfigAgents`)
- * — `declarative` means it does, `opencode` means it declares none. Anything
- * else is a config we cannot read, and an unread config confirms rather than
- * guesses: a missed confirmation silently revokes working runtime secrets.
+ * — `declarative` means it does. Anything else (`null` in a response filtered
+ * by the caller's access) is a config we cannot read, and an unread config
+ * confirms rather than guesses: a missed confirmation silently revokes working
+ * runtime secrets.
  */
 export function agentGrantPlan(
   config: AgentGrantConfig | null | undefined,
@@ -641,7 +661,7 @@ export function agentGrantPlan(
     });
   }
 
-  const defaultAgent = (config?.default_agent ?? config?.open_code_default_agent ?? '').trim();
+  const defaultAgent = (config?.default_agent ?? '').trim();
   // A project can carry a default agent that no manifest entry declares — the
   // endpoint upserts the entry, so it is still a valid target.
   const candidates =

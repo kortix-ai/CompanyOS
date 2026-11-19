@@ -14,11 +14,13 @@ import type {
   SetStateAction,
 } from 'react';
 import { lazy, Suspense, useContext, useMemo, useRef } from 'react';
+import { useToastClearance } from '../../primitives/toast-clearance';
 
 import { SpaceMentionContext } from './menus/space-mentions';
 import type { DriveMentionSource } from './menus/mention-menu';
 import { useFeatureFlag } from '@kortix/sdk/react';
 
+import { ModelConnectionLayoutContext } from '../models/model-connection-layout';
 import { ImagesUnsupportedBar, ModelConnectionBar } from '../models/model-connection-gate';
 import { AnimatedComposerPlaceholder } from './animated-placeholder';
 import { AttachmentTiles } from './attachment-tiles';
@@ -37,6 +39,7 @@ import { ChatInputOverridesProvider } from './chat-input/chat-input-overrides';
 import type { ComposerEditorHandle } from './editor/composer-editor';
 import type { SlashAction } from './menus/slash-actions';
 import type { AttachedFile } from './types';
+import { resolveProgramAgent } from './agent-selector';
 import { useUiHostConfig } from '../../providers/ui-provider';
 
 /** What the attach picker offers when the host names no list. */
@@ -216,8 +219,12 @@ export function ComposerCard({
   agentPickerCompact = false,
   slashMenuPlacement = 'above',
   cardClassName,
+  call,
 }: ComposerCardProps) {
+  const connectionsAbove = useContext(ModelConnectionLayoutContext) === 'above';
   const cardRef = useRef<HTMLDivElement>(null);
+  // A composer docked at the window bottom keeps toasts above its Send/Stop button.
+  useToastClearance(cardRef, slashMenuPlacement === 'above');
   const { attachAccept, modelPickerEnabled } = useUiHostConfig();
   const inlineUnderbar = underbarPlacement === 'inline';
 
@@ -232,6 +239,8 @@ export function ComposerCard({
   // Inside a space the `@` menu is its people and agents (`menus/space-mentions.ts`).
   const spaceMentions = useContext(SpaceMentionContext);
   const chatInputOpen = agentMenuOpen || modelMenuOpen || reasoningMenuOpen;
+  // A program agent (`run` in kortix.yaml) has no model: its listing names provider `program`.
+  const programAgent = resolveProgramAgent(primaryAgents, selectedAgent);
   const chatInput = useMemo<ComposerUnderbarProps['chatInput']>(() => {
     if (!chatInputEnabled) return undefined;
     return {
@@ -285,6 +294,7 @@ export function ComposerCard({
 
   return (
     <ChatInputOverridesProvider enabled={chatInputEnabled}>
+    {connectionsAbove ? <ModelConnectionBar show={noModelsConnected} /> : null}
     <div
       ref={cardRef}
       onDragEnter={handleDragEnter}
@@ -458,6 +468,7 @@ export function ComposerCard({
             onChange={handleFileSelect}
           />
           <ComposerToolbar
+            noModel={programAgent}
             leading={
               inlineUnderbar ? (
                 <ComposerUnderbar
@@ -525,6 +536,7 @@ export function ComposerCard({
             disabled={disabled}
             modelUnavailable={modelUnavailable}
             agentUnavailable={agentUnavailable}
+            call={call}
             onSubmit={() => handleSubmit()}
           />
         </div>
@@ -533,14 +545,12 @@ export function ComposerCard({
 
     {/*
       Directly under the card, and BEFORE the underbar — the bar is a tray
-      that hangs off the card's bottom edge (see `ModelConnectionBar` for the
-      overlap), so it has to be the card's next sibling. Below the underbar it
-      was a third detached box under a second detached box.
+      that hangs off the card's bottom edge (see `ComposerTray` for the
+      overlap), so it has to be the card's next sibling.
 
       The card is `isolate z-10` and this is `z-0`, so the card paints over
       the overlap and only the tray's exposed strip shows.
     */}
-    <ModelConnectionBar show={noModelsConnected} />
     <ImagesUnsupportedBar modelName={noModelsConnected ? null : modelRejectingImages} />
 
     {/*
@@ -568,6 +578,13 @@ export function ComposerCard({
         chatInput={chatInput}
       />
     )}
+
+    {/*
+      The connect prompt is NOT a tray: it is the next step, so it sits a gap
+      below everything the composer owns (card and underbar) as a row of its
+      own. See `ModelConnectionBar`.
+    */}
+    {connectionsAbove ? null : <ModelConnectionBar show={noModelsConnected} />}
 
     {/*
       The `'below'` dock. Absolute, not in flow: `top-full` hangs it off the

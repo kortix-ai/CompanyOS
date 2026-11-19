@@ -1,4 +1,5 @@
 import { buildPreviewGuardInstall } from './preview-guard';
+import { PREVIEW_INSTANCE_ID, previewOrigin } from './preview-stack';
 
 export type SandboxPreviewProvider = 'auto' | 'platinum';
 
@@ -65,16 +66,12 @@ export function previewSuiteStatusPath(runId: string, runAttempt: string): strin
   return previewDeploymentStatusPath(runId, runAttempt).replace(/\.exit$/, '-suite.exit');
 }
 
-/**
- * `pnpm test -- --target-full` against a preview stack a deploy of THIS run
- * already proved healthy on `sha`. A separate script, launched after the
- * deploy returns, so the workflow publishes the preview origin ~40 min before
- * the suite finishes instead of after it.
- *
- * It holds the same `deploy.lock` as the bootstrap, so a redeploy cannot
- * replace the API while the suite runs, and it refuses to start when the local
- * edge no longer serves `sha` (a redeploy won the lock in between).
- */
+/** The input guards both remote preview scripts run first. */
+function assertPreviewScriptInput(input: { sha: string; prNumber: number }): void {
+  if (!/^[a-f0-9]{40}$/i.test(input.sha)) throw new Error(`invalid Git SHA: ${input.sha}`);
+  previewSandboxName(input.prNumber);
+}
+
 /**
  * The shared bash prelude of both remote preview scripts: fixed workspace and
  * log paths, the HOME/CI exports, the deploy.lock flock, and the finish trap
@@ -118,13 +115,22 @@ trap 'code=$?; finish "$code"' EXIT
 `;
 }
 
+/**
+ * `pnpm test -- --target-full` against a preview stack a deploy of THIS run
+ * already proved healthy on `sha`. A separate script, launched after the
+ * deploy returns, so the workflow publishes the preview origin ~40 min before
+ * the suite finishes instead of after it.
+ *
+ * It holds the same `deploy.lock` as the bootstrap, so a redeploy cannot
+ * replace the API while the suite runs, and it refuses to start when the local
+ * edge no longer serves `sha` (a redeploy won the lock in between).
+ */
 export function buildPreviewSuiteScript(input: {
   prNumber: number;
   sha: string;
   statusPath: string;
 }): string {
-  if (!/^[a-f0-9]{40}$/i.test(input.sha)) throw new Error(`invalid Git SHA: ${input.sha}`);
-  previewSandboxName(input.prNumber);
+  assertPreviewScriptInput(input);
   const state = '/workspace/kortix-preview';
   const instanceDir = `${state}/self-host/pr-${input.prNumber}`;
   return `${previewScriptPrelude(
@@ -188,13 +194,9 @@ export function buildPreviewBootstrapScript(input: {
     throw new Error(`invalid GitHub repository: ${input.repository}`);
   }
   if (!/^[a-z0-9_./-]+$/i.test(input.ref)) throw new Error(`invalid Git ref: ${input.ref}`);
-  if (!/^[a-f0-9]{40}$/i.test(input.sha)) throw new Error(`invalid Git SHA: ${input.sha}`);
-  previewSandboxName(input.prNumber);
-  const origin = new URL(input.origin);
-  if (origin.protocol !== 'https:' || origin.pathname !== '/') {
-    throw new Error('preview origin must be an HTTPS origin');
-  }
-  if (input.hostName !== undefined && !/^kortix-[a-z0-9-]+$/.test(input.hostName)) {
+  assertPreviewScriptInput(input);
+  const origin = previewOrigin(input.origin);
+  if (input.hostName !== undefined && !PREVIEW_INSTANCE_ID.test(input.hostName)) {
     throw new Error(`invalid preview host name: ${input.hostName}`);
   }
   const instance = `pr-${input.prNumber}`;
@@ -268,7 +270,7 @@ printf 'configure\n' > "$PHASE"
 bun apps/cli/src/index.ts self-host init --yes --local-images --no-restrict-account-creation --instance ${instance}
 PREVIEW_INSTANCE_DIR=${shellQuote(instanceDir)} \
 PREVIEW_STATE_DIR=${shellQuote(state)} \
-PREVIEW_ORIGIN=${shellQuote(origin.origin)} \
+PREVIEW_ORIGIN=${shellQuote(origin)} \
 PREVIEW_SHA=${shellQuote(input.sha)} \
 PREVIEW_SECRETS_FILE="$SECRETS" \
 ${input.hostName ? `PREVIEW_INSTANCE_ID=${shellQuote(input.hostName)} \

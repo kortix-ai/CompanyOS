@@ -7,8 +7,6 @@
  * (`running`): the held-call worker runs it and resumes the session once with
  * the result, so the surface starts no turn of its own.
  */
-import { projects } from '@kortix/db';
-import { eq } from 'drizzle-orm';
 import { PROJECT_ACTIONS } from '../../iam/actions';
 import { humanMayResolveApproval } from '../../projects/lib/approval-authority';
 import {
@@ -21,8 +19,8 @@ import {
 } from '../../projects/lib/connector-approval-decision';
 import { isApprovalExpired } from '../../connectors/approval-expiry';
 import { markApprovalCardDecided } from '../approval-card-relay';
-import { db } from '../../shared/db';
 import { type ChatUser, resolveChatActor } from './identity';
+import { accountKeyOfWorkspace } from '../../workspaces/rows';
 
 const APPROVAL_EXPIRED = 'This approval expired.';
 
@@ -48,18 +46,14 @@ export async function decideChatApproval(input: {
   }
   if (isApprovalExpired(row)) return { refusal: APPROVAL_EXPIRED };
   if (!isPendingApproval(row)) return { refusal: 'That call was already decided.' };
-  const [project] = await db
-    .select({ accountId: projects.accountId })
-    .from(projects)
-    .where(eq(projects.projectId, input.projectId))
-    .limit(1);
-  if (!project) return { refusal: 'That approval is no longer available.' };
+  const projectAccountId = await accountKeyOfWorkspace(input.projectId);
+  if (!projectAccountId) return { refusal: 'That approval is no longer available.' };
 
   // Read access, then the manager-or-launcher rule below: a read-and-run
   // member who started the session decides here exactly as in Kortix.
   const actor = await resolveChatActor(
     input.user,
-    { projectId: input.projectId, accountId: project.accountId },
+    { projectId: input.projectId, accountId: projectAccountId },
     PROJECT_ACTIONS.PROJECT_READ,
   );
   if ('reason' in actor) {
@@ -67,7 +61,7 @@ export async function decideChatApproval(input: {
       refusal:
         actor.reason === 'unlinked'
           ? 'Connect your Kortix account first (`/kortix login` in Slack, `/login` in Teams) to decide on approvals.'
-          : "You don't have access to decide on this project's approvals.",
+          : "You don't have access to decide on this Kortix workspace's approvals.",
     };
   }
   // Through the chat resolver, so the check carries the second factor the
@@ -75,7 +69,7 @@ export async function decideChatApproval(input: {
   // manager, leaving only the launcher able to decide.
   const manager = await resolveChatActor(
     input.user,
-    { projectId: input.projectId, accountId: project.accountId },
+    { projectId: input.projectId, accountId: projectAccountId },
     PROJECT_ACTIONS.PROJECT_MEMBERS_MANAGE,
   );
   const target = await approvalTargetSession(input.projectId, row);
@@ -86,12 +80,12 @@ export async function decideChatApproval(input: {
     callerUserId: actor.userId,
   });
   if (!verdict.allowed) {
-    return { refusal: 'Only a project manager or the person who started this session can decide.' };
+    return { refusal: 'Only a workspace manager or the person who started this session can decide.' };
   }
 
   const outcome = await decideConnectorApproval({
     projectId: input.projectId,
-    accountId: project.accountId,
+    accountId: projectAccountId,
     row,
     decision: input.decision,
     note: input.note,

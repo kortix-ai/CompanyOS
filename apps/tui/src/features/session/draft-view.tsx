@@ -20,6 +20,7 @@ import { theme } from '../../theme.ts';
 import { Panel, Splash, type SplashLine, Spinner } from '../../ui/index.ts';
 import { PICKER_RESERVE_ROWS } from './composer/composer.tsx';
 import { PromptInput, type PromptInputMetrics } from './composer/prompt-input.tsx';
+import { PICK_WORKSPACE_TEXT } from '../../lib/workspaces.ts';
 
 export interface DraftViewProps {
   width: number;
@@ -67,7 +68,7 @@ export function DraftView({
   const start = useCallback(
     (prompt: string) => {
       if (!context.hasProject) {
-        onToast('No project selected. Type /projects to pick one.', 'error');
+        onToast(PICK_WORKSPACE_TEXT, 'error');
         setRestore((current) => ({ text: prompt, seq: (current?.seq ?? 0) + 1 }));
         return;
       }
@@ -82,7 +83,7 @@ export function DraftView({
     [context.hasProject, onStart, onToast],
   );
 
-  const run = useCallback(
+  const runEntry = useCallback(
     (entry: MenuEntry, args: string) => {
       // No session: the only runtime commands a project has run inside one.
       if (entry.source === 'runtime') return;
@@ -172,7 +173,7 @@ export function DraftView({
             tagline={
               context.hasProject
                 ? 'Type a prompt to start. / for commands.'
-                : 'No project yet. /projects picks one.'
+                : 'No workspace open. /workspaces picks one.'
             }
             lines={splashLines}
           />
@@ -195,7 +196,7 @@ export function DraftView({
           context={context}
           busy={false}
           onSubmit={start}
-          onCommand={run}
+          onCommand={runEntry}
           onToast={onToast}
           onMetrics={reportMetrics}
           seed={seed}

@@ -8,10 +8,12 @@
 
 import { ApiError } from '../http/api/errors';
 import { authenticatedFetch } from '../http/auth';
+import { querySuffix } from '../http/url';
 import type { SessionLogPage } from '../session-log/source';
 import type { SessionLogMessage } from '../session-log/types';
 import { RuntimeNotReadyError } from '../runtime/runtime-not-ready-error';
 import { getActiveRuntimeUrl } from './server-store/active';
+import type { RuntimeThreadStatus } from '../wire-values';
 
 /** The health capability of a box that serves the session-log actions. */
 export const RUNTIME_ACTIONS_CAPABILITY = 'runtime.actions.v1';
@@ -19,8 +21,8 @@ export const RUNTIME_ACTIONS_CAPABILITY = 'runtime.actions.v1';
 /** The health capability of a box whose log reads answer whole pages, with the prompts waiting on it. */
 export const RUNTIME_LOG_CAPABILITY = 'runtime.log.v1';
 
-/** What a thread does now; a retry reads as `busy`. */
-export type RuntimeThreadStatus = 'idle' | 'busy' | 'compacting';
+/** What a thread does now; a retry reads as `busy` (`toRuntimeThreadStatus`). */
+export type { RuntimeThreadStatus } from '../wire-values';
 
 /** One request the runtime waits on: a permission request or a question. */
 export interface RuntimePendingRecord {
@@ -118,7 +120,7 @@ export async function readRuntimeLogPage(
   if (query.thread) params.set('thread', query.thread);
   if (query.limit !== undefined) params.set('limit', String(query.limit));
   try {
-    const response = await fetch(new Request(`${runtimeUrl.replace(/\/$/, '')}/kortix/runtime/log${params.size ? `?${params}` : ''}`, { method: 'GET' }));
+    const response = await fetch(new Request(`${runtimeUrl.replace(/\/$/, '')}/kortix/runtime/log${querySuffix(params)}`, { method: 'GET' }));
     if (!response.ok) return null;
     const page = (await response.json()) as Partial<SessionLogPage> | null;
     const whole = !!page && typeof page.session === 'object' && page.session !== null && Array.isArray(page.threads)

@@ -80,7 +80,7 @@ import { useTranslations } from '../../../i18n';
 import { PROJECT_ACTIONS } from '../../../internal/lib/project-actions';
 import { useProjectCan } from '../../../internal/lib/use-project-can';
 
-import { connectorRunsOver, connectorStatusTone } from './connector-status';
+import { connectorRunsOver, connectorTone } from './connector-status';
 import { ProviderInfo, providerName } from './provider-info';
 import { ConnectorStatusBadge } from './status-badge';
 
@@ -122,7 +122,7 @@ interface ResolvedApp {
 }
 
 /**
- * `/projects/<id>/admin/connectors/<app>` — one catalogue app: what it is,
+ * `/workspaces/<id>/admin/connectors/<app>` — one catalogue app: what it is,
  * the one Install button, the connectors this project already has for it, and
  * the other ways to connect it.
  *
@@ -303,7 +303,7 @@ function CatalogAppPage({ projectId, appSegment }: { projectId: string; appSegme
     // The way the user picked is the way installed.
     const mcpUrl = surface.kind === 'mcp' && surface.oneClick ? surface.url : null;
     const askName = () =>
-      ask({ target, way: { kind: surface.kind, oneClick: surface.oneClick }, connectors, app, asNewProfile });
+      ask({ target, way: { kind: surface.kind, oneClick: surface.oneClick, url: surface.url }, connectors, app, asNewProfile });
     if (!mcpUrl) {
       askName();
       return;
@@ -498,7 +498,7 @@ function CatalogAppPage({ projectId, appSegment }: { projectId: string; appSegme
           </h2>
           <ul className={ROW_GROUP}>
             {inProject.map((connector) => {
-              const tone = connectorStatusTone(
+              const tone = connectorTone(
                 connector,
                 connectionsQuery.data ? connectorAccounts(connectionsQuery.data.connections, connector).length : undefined,
               );
@@ -569,7 +569,7 @@ function CatalogAppPage({ projectId, appSegment }: { projectId: string; appSegme
                     ) : null}
                   </span>
                   <span className="text-muted-foreground block text-xs text-pretty">
-                    {wayDescription(t, { kind: surface.kind, oneClick: surface.oneClick }, resolved.name)}
+                    {wayDescription(t, { kind: surface.kind, oneClick: surface.oneClick, url: surface.url }, resolved.name)}
                   </span>
                 </span>
                 {surface.variantId && detail ? (

@@ -81,7 +81,7 @@ function PlanProgress({ done, total, running }: { done: number; total: number; r
  * single row.
  *
  * Pure, so both branches are testable without mounting anything.
- * @deprecated Renders an OpenCode-only tool or todo list in an OpenCode session (pi has none). OpenCode is sunset (2026-10-23): no new code; delete with OpenCode.
+ * @deprecated Renders an OpenCode-only tool or todo list (pi has none). Only a transcript OpenCode wrote holds one; this keeps it readable. No new code.
  */
 export function planPanelRows(
   todos: ReadonlyArray<TodoItem>,
@@ -93,7 +93,7 @@ export function planPanelRows(
   return listed.length > 0 ? listed : keyed;
 }
 
-/** @deprecated Renders an OpenCode-only tool or todo list in an OpenCode session (pi has none). OpenCode is sunset (2026-10-23): no new code; delete with OpenCode. */
+/** @deprecated Renders an OpenCode-only tool or todo list (pi has none). Only a transcript OpenCode wrote holds one; this keeps it readable. No new code. */
 export function PlanPanelCard({ sessionId }: { sessionId: string }) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const { data } = useRuntimeSessionTodo(sessionId);
@@ -139,9 +139,9 @@ export function PlanPanelCard({ sessionId }: { sessionId: string }) {
           </span>
         ) : undefined
       }
-      // `px-3.5` matches the header's own inset, so a step's glyph sits on the
+      // `px-4` matches the header's own inset, so a step's glyph sits on the
       // same left edge as the title above it.
-      contentClassName="border-border border-t px-3.5 py-3"
+      contentClassName="px-4 pb-3"
       defaultExpanded={true}
     >
       <PlanSteps rows={rows} />

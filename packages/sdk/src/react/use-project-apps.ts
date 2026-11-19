@@ -34,8 +34,11 @@ import {
 import { contract } from './query-contracts';
 import { qk } from './query-keys';
 
-export const projectAppsKey = (projectId: string | null | undefined) =>
+export const workspaceAppsKey = (projectId: string | null | undefined) =>
   qk.project.apps(projectId ?? '');
+
+/** @deprecated Use `workspaceAppsKey`. Kept permanently. */
+export const projectAppsKey = workspaceAppsKey;
 
 export const appDeploymentsKey = (
   projectId: string | null | undefined,
@@ -55,47 +58,50 @@ export const appEventsKey = (
 
 /** The project's App list, which also covers every channel's Apps (`qk.project.spaceApps`). */
 function invalidateProjectApps(queryClient: QueryClient, projectId: string | null | undefined) {
-  return queryClient.invalidateQueries({ queryKey: projectAppsKey(projectId) });
+  return queryClient.invalidateQueries({ queryKey: workspaceAppsKey(projectId) });
 }
 
 const SETTLED_DEPLOYMENT = new Set(['ready', 'failed', 'cancelled']);
 
 /** Project App inventory (only the Apps the caller may open; a project manager: every App) and lifecycle mutations. */
-export function useProjectApps(projectId: string | null | undefined) {
+export function useWorkspaceApps(projectId: string | null | undefined) {
   const queryClient = useQueryClient();
-  const queryKey = projectAppsKey(projectId);
+  const queryKey = workspaceAppsKey(projectId);
   const query = useQuery({
     queryKey,
     queryFn: () => listApps(projectId as string),
     enabled: !!projectId,
     ...contract('inventory'),
   });
+  // Every App mutation of this hook refreshes that list on success — the
+  // `useArtifactMutations` idiom: each useMutation spreads `opts`.
   const invalidate = () => invalidateProjectApps(queryClient, projectId);
+  const opts = { onSuccess: invalidate };
 
-  const create = useMutation({
-    mutationFn: (input: Parameters<typeof createApp>[1]) => createApp(projectId as string, input),
-    onSuccess: invalidate,
-  });
+  const create = useMutation({ mutationFn: (input: Parameters<typeof createApp>[1]) => createApp(projectId as string, input), ...opts });
   const update = useMutation({
-    mutationFn: (args: { appId: string; input: Parameters<typeof updateApp>[2] }) =>
-      updateApp(projectId as string, args.appId, args.input),
-    onSuccess: invalidate,
+    mutationFn: (args: { appId: string; input: Parameters<typeof updateApp>[2] }) => updateApp(projectId as string, args.appId, args.input),
+    ...opts,
   });
-  const start = useMutation({
-    mutationFn: (appId: string) => startApp(projectId as string, appId),
-    onSuccess: invalidate,
-  });
-  const stop = useMutation({
-    mutationFn: (appId: string) => stopApp(projectId as string, appId),
-    onSuccess: invalidate,
-  });
+  const start = useMutation({ mutationFn: (appId: string) => startApp(projectId as string, appId), ...opts });
+  const stop = useMutation({ mutationFn: (appId: string) => stopApp(projectId as string, appId), ...opts });
   const remove = useMutation({
     mutationFn: (appId: string) => deleteApp(projectId as string, appId),
-    onSuccess: invalidate,
+    onSuccess: (_deleted: unknown, appId: string) => {
+      // The deleted App's own queries (access, deployments, events) sit under
+      // the list key; refetched, each answers 404 while its detail closes.
+      const list = workspaceAppsKey(projectId);
+      void queryClient.invalidateQueries({ queryKey: list, predicate: (q) => q.queryKey[list.length] !== appId });
+      // A delete takes the triggers that name the App.
+      return queryClient.invalidateQueries({ queryKey: qk.project.triggers(projectId ?? '') });
+    },
   });
 
   return { ...query, create, update, start, stop, remove };
 }
+
+/** @deprecated Use `useWorkspaceApps`. Kept permanently. */
+export const useProjectApps = useWorkspaceApps;
 
 /**
  * The App's event log, newest first (`listAppEvents`): what it posted and what
@@ -105,11 +111,14 @@ export function useProjectApps(projectId: string | null | undefined) {
 export function useAppEvents(
   projectId: string | null | undefined,
   appId: string | null | undefined,
-  options: { enabled?: boolean; limit?: number } = {},
+  /** `id`: only the rows of that event (one per trigger it reached), as a trigger run links to it. */
+  options: { enabled?: boolean; limit?: number; id?: string | null } = {},
 ) {
+  const id = options.id || null;
   return useQuery({
-    queryKey: appEventsKey(projectId, appId),
-    queryFn: () => listAppEvents(projectId as string, appId as string, { limit: options.limit ?? 20 }),
+    // Under the log's key: a test event or an App mutation refreshes it too.
+    queryKey: id ? [...appEventsKey(projectId, appId), { id }] : appEventsKey(projectId, appId),
+    queryFn: () => listAppEvents(projectId as string, appId as string, { limit: options.limit ?? 20, ...(id ? { id } : {}) }),
     enabled: !!projectId && !!appId && options.enabled !== false,
     ...contract('inventory'),
     refetchInterval: 10_000,
@@ -126,11 +135,8 @@ export function useSendAppTestEvent(
 ) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: Parameters<typeof sendAppTestEvent>[2]) =>
-      sendAppTestEvent(projectId as string, appId as string, input),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: appEventsKey(projectId, appId) });
-    },
+    mutationFn: (input: Parameters<typeof sendAppTestEvent>[2]) => sendAppTestEvent(projectId as string, appId as string, input),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: appEventsKey(projectId, appId) }),
   });
 }
 
@@ -148,21 +154,17 @@ export function useAppDeployments(
     ...contract('inventory'),
     refetchInterval: 5_000,
   });
-  const invalidate = () => {
+  // The same `useArtifactMutations` idiom: each useMutation spreads `opts`.
+  const refresh = () => {
     void invalidateProjectApps(queryClient, projectId);
     void queryClient.invalidateQueries({ queryKey });
   };
-
+  const opts = { onSuccess: refresh };
   const deploy = useMutation({
-    mutationFn: (input: Parameters<typeof createAppDeployment>[2]) =>
-      createAppDeployment(projectId as string, appId as string, input),
-    onSuccess: invalidate,
+    mutationFn: (input: Parameters<typeof createAppDeployment>[2]) => createAppDeployment(projectId as string, appId as string, input),
+    ...opts,
   });
-  const rollback = useMutation({
-    mutationFn: (deploymentId: string) =>
-      rollbackApp(projectId as string, appId as string, deploymentId),
-    onSuccess: invalidate,
-  });
+  const rollback = useMutation({ mutationFn: (deploymentId: string) => rollbackApp(projectId as string, appId as string, deploymentId), ...opts });
 
   return { ...query, deploy, rollback };
 }
@@ -266,30 +268,18 @@ export function useAppMachines(projectId: string | null | undefined, appId: stri
     ...contract('inventory'),
     refetchInterval: 5_000,
   });
+  // Every machine mutation refreshes both keys — the `useArtifactMutations`
+  // idiom: each useMutation spreads `opts`.
   const invalidate = () => Promise.all([
     queryClient.invalidateQueries({ queryKey }),
     invalidateProjectApps(queryClient, projectId),
   ]);
-  const start = useMutation({
-    mutationFn: (machineId: string) => startAppMachine(projectId as string, appId as string, machineId),
-    onSuccess: invalidate,
-  });
-  const stop = useMutation({
-    mutationFn: (machineId: string) => stopAppMachine(projectId as string, appId as string, machineId),
-    onSuccess: invalidate,
-  });
-  const restart = useMutation({
-    mutationFn: (machineId: string) => restartAppMachine(projectId as string, appId as string, machineId),
-    onSuccess: invalidate,
-  });
-  const destroy = useMutation({
-    mutationFn: (machineId: string) => destroyAppMachine(projectId as string, appId as string, machineId),
-    onSuccess: invalidate,
-  });
-  const scale = useMutation({
-    mutationFn: (count: Record<string, number>) => scaleApp(projectId as string, appId as string, count),
-    onSuccess: invalidate,
-  });
+  const opts = { onSuccess: invalidate };
+  const start = useMutation({ mutationFn: (machineId: string) => startAppMachine(projectId as string, appId as string, machineId), ...opts });
+  const stop = useMutation({ mutationFn: (machineId: string) => stopAppMachine(projectId as string, appId as string, machineId), ...opts });
+  const restart = useMutation({ mutationFn: (machineId: string) => restartAppMachine(projectId as string, appId as string, machineId), ...opts });
+  const destroy = useMutation({ mutationFn: (machineId: string) => destroyAppMachine(projectId as string, appId as string, machineId), ...opts });
+  const scale = useMutation({ mutationFn: (count: Record<string, number>) => scaleApp(projectId as string, appId as string, count), ...opts });
   return { ...query, start, stop, restart, destroy, scale };
 }
 
@@ -303,30 +293,27 @@ export function useAppVolumes(projectId: string | null | undefined, appId: strin
     enabled: !!projectId && !!appId,
     ...contract('inventory'),
   });
+  // Every volume mutation refreshes that list — the `useArtifactMutations`
+  // idiom: each useMutation spreads `opts`.
   const invalidate = () => queryClient.invalidateQueries({ queryKey });
-  const snapshot = useMutation({
-    mutationFn: (volumeId: string) => createAppVolumeSnapshot(projectId as string, appId as string, volumeId),
-    onSuccess: invalidate,
-  });
+  const opts = { onSuccess: invalidate };
+  const snapshot = useMutation({ mutationFn: (volumeId: string) => createAppVolumeSnapshot(projectId as string, appId as string, volumeId), ...opts });
   const restore = useMutation({
-    mutationFn: (input: { volumeId: string; snapshotId: string }) =>
-      restoreAppVolume(projectId as string, appId as string, input.volumeId, input.snapshotId),
-    onSuccess: invalidate,
+    mutationFn: (input: { volumeId: string; snapshotId: string }) => restoreAppVolume(projectId as string, appId as string, input.volumeId, input.snapshotId),
+    ...opts,
   });
   const fork = useMutation({
     mutationFn: (input: { volumeId: string; name: string; snapshotId?: string }) =>
       forkAppVolume(projectId as string, appId as string, input.volumeId, { name: input.name, snapshot_id: input.snapshotId }),
-    onSuccess: invalidate,
+    ...opts,
   });
   const extend = useMutation({
-    mutationFn: (input: { volumeId: string; sizeGb: number }) =>
-      updateAppVolume(projectId as string, appId as string, input.volumeId, { size_gb: input.sizeGb }),
-    onSuccess: invalidate,
+    mutationFn: (input: { volumeId: string; sizeGb: number }) => updateAppVolume(projectId as string, appId as string, input.volumeId, { size_gb: input.sizeGb }),
+    ...opts,
   });
   const destroy = useMutation({
-    mutationFn: (input: { volumeId: string; name: string }) =>
-      destroyAppVolume(projectId as string, appId as string, input.volumeId, input.name),
-    onSuccess: invalidate,
+    mutationFn: (input: { volumeId: string; name: string }) => destroyAppVolume(projectId as string, appId as string, input.volumeId, input.name),
+    ...opts,
   });
   return { ...query, snapshot, restore, fork, extend, destroy };
 }

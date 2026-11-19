@@ -3,6 +3,8 @@
 
 export interface AccountMembership {
   account_id: string;
+  /** The account's one workspace (null: none, or several older projects). */
+  workspace_id?: string | null;
   slug: string;
   name: string;
   role: string;
@@ -14,6 +16,8 @@ export interface MeResponse {
   token_context?: {
     auth_type: string | null;
     project_id: string | null;
+    /** The workspace a bound credential is bound to (= `project_id`). */
+    workspace_id?: string | null;
     session_id: string | null;
     agent: string | null;
     connectors: string[] | 'all' | null;
@@ -42,6 +46,12 @@ export interface ProjectSummary {
   updated_at: string;
   /** Web dashboard URL for this project (server-provided; not the API host). */
   dashboard_url?: string;
+  /** `GET /v1/workspaces` (2026-11-06 and later): the workspace id (= project_id). */
+  workspace_id?: string;
+  /** `GET /v1/workspaces`: the caller's workspace role. */
+  role?: string | null;
+  /** `GET /v1/workspaces`: active, setup_required (pays, no project yet) or deleting. */
+  state?: 'active' | 'setup_required' | 'deleting';
 }
 
 // ── Custom LLM providers (`GET /projects/:id/custom-providers`) ───────────
@@ -317,6 +327,8 @@ export interface ProjectTrigger {
   name: string;
   type: 'cron' | 'webhook' | 'event' | 'app';
   agent: string;
+  /** Model for the trigger's runs (`provider/model` or a managed id); null = the workspace default. Absent on older APIs. */
+  model?: string | null;
   enabled: boolean;
   cron: string | null;
   /** One-off run instant (ISO); exclusive with cron. */
@@ -345,6 +357,8 @@ export interface ProjectTrigger {
   /** Set while the trigger paused itself after a sustained run-limit breach (KRTX-1721). */
   auto_paused_at?: string | null;
   auto_paused_reason?: string | null;
+  /** `billing` or `no_usable_model`: the pause ends by itself once the account can run it. */
+  auto_paused_code?: 'billing' | 'no_usable_model' | null;
   last_fired_at: string | null;
   /** `queued`, `fired`, or `failed` (the prompt was not delivered, or its run ended with an error). */
   last_status?: string | null;

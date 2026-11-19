@@ -1,9 +1,7 @@
 # Scheduling playbook
 
-Read this when you decide whether and how to schedule work, every time you
-start something whose result comes later, and before a long job. The decision tables are in
-`SKILL.md` → `<scheduling>`; trigger fields are in `kortix/kortix-yaml.md`
-→ triggers.
+Read this before you schedule work, after you start something whose result
+comes later, and before a long job. Trigger fields: `kortix/kortix-yaml.md`.
 
 ## Follow-through
 
@@ -16,7 +14,7 @@ wake-up is a promise nobody keeps: the session sleeps until someone types.
 
 1. **Pick the signal.** An event that wakes this session, when one exists:
    - a CR: `kortix triggers add "<text>" --on cr-merged --cr <id>`;
-   - a new email or message, when that app is connected and the project has
+   - a new email or message, when that app is connected and the workspace has
      the flag `event_triggers` on: `kortix triggers events --connector
      <slug>` lists the event types, then `kortix triggers add "<text>" --on
      event --connector <slug> --event <TYPE>`. It fires on every new item,
@@ -27,8 +25,7 @@ wake-up is a promise nobody keeps: the session sleeps until someone types.
      the URL to give it;
    - a page, a status, a price or an API that sends nothing ("tell me whenever
      it changes"): a watcher App that posts App events ("Watch 24/7" below),
-     then `--on app --app <slug>`. A loop wakes a model on every check; the
-     App wakes one only when something changed.
+     then `--on app --app <slug>`.
 2. **Add a fallback loop** whenever the event might not come: a reply may
    never arrive, a webhook may never be called. With no event, the loop is
    the signal.
@@ -56,7 +53,7 @@ wake-up is a promise nobody keeps: the session sleeps until someone types.
    for replies every 3 hours until 14 Nov, or until all 12 answer." From a
    Slack or Teams thread, put the channel and thread ids in the loop text.
 6. **On each fire:** check, act, record the outcome in the record file.
-   Report only what changed: a project agent ends silently on an empty
+   Report only what changed: a workspace agent ends silently on an empty
    check; My Kortix and a person's direct session say one short line. After
    3 empty checks in a row, replace the loop with a slower one
    (`kortix loops rm <id>`, then `kortix loop` with the same text and the next
@@ -69,11 +66,6 @@ wake-up is a promise nobody keeps: the session sleeps until someone types.
 teammate or a workflow (each reports back to you by itself), for a question
 to the person in this chat (ask it now, then end the turn), or for anything
 the person said not to track.
-
-**Loops off.** `kortix loop` answers `403 feature_disabled`: tell the person
-Loops are off and that a project admin turns them on (`kortix projects
-features enable reminders`). Meanwhile, a one-off `at` trigger starts a fresh
-session at the time; put the full context in its prompt.
 
 ### Worked example: quote requests to 12 printers
 
@@ -112,9 +104,7 @@ job the same way.
    a follow-up goes to the same name), a `workflow` for many parallel agents,
    a team only when they must share a task list. A hand-off, a teammate and
    a workflow report back by themselves: set no loop for them.
-3. **Set wake-ups.** For every wait on the outside world: an event that wakes
-   this session when one exists, plus a fallback loop with an end date
-   ("Follow-through" above).
+3. **Set wake-ups** for every wait on the outside world ("Follow-through").
 4. **Keep the state outside the context.** A woken turn reads it first:
    - the loop text: what is pending, the next step, the stop rule;
    - `out/status.md` in `/workspace` (kept for the life of the session; in
@@ -134,7 +124,7 @@ job the same way.
    On every wake: read the state, advance it, update `out/status.md`, then
    re-arm or remove the wake-ups.
 5. **Set Kortix up when the work repeats.** A check that outlives this job
-   becomes a project trigger (`kortix triggers add <slug> --cron … --apply`,
+   becomes a workspace trigger (`kortix triggers add <slug> --cron … --apply`,
    or a webhook) or a watcher App ("Watch 24/7"). A recurring role becomes its
    own agent or skill, landed through a CR. Ask the person once first for
    anything that runs unattended for weeks, spends credits on every run, or
@@ -166,13 +156,11 @@ order from the best one." In the first turn:
 5. The reply ends: "Searching for printers and requesting 12 quotes. I'll
    check every working morning until 14 Nov and bring you the comparison."
 
-When the person picks a printer, `printer-outreach` places the order; this
-session replaces its loop with a daily delivery check until the tracking
-says delivered. The person says the team orders stickers every quarter:
-propose a quarterly trigger for a fresh quote round, and create it only
-after they agree. At delivery: remove both loops, `task_stop`
-`printer-outreach`, mark `out/status.md` done, and report the order, the
-printer and the delivery date in three lines.
+When the person picks a printer, `printer-outreach` orders; this session's
+loop becomes a daily delivery check. The team orders every quarter: propose a
+quarterly trigger, and create it only after they agree. At delivery: remove
+both loops, `task_stop` `printer-outreach`, mark `out/status.md` done, and
+report the order, the printer and the delivery date in three lines.
 
 ## Where a trigger lives
 
@@ -183,7 +171,7 @@ across every file: a duplicate fails the whole manifest.
 
 A **trigger** is a source (what fires it) plus a target (what a fire
 does). A `kortix.yaml` trigger is `on:` plus `run:`. A fire starts a session
-and prompts its agent as a teammate would, or calls one of the project's Apps
+and prompts its agent as a teammate would, or calls one of the workspace's Apps
 (`run: { app, path }`: no session, no model). A **loop** is a trigger that
 wakes the session that created it: a runtime trigger, stored in the database.
 `kortix triggers ls` lists both.
@@ -263,22 +251,19 @@ day-of-week`. A 5-field expression works too (seconds = 0). Day-of-week
 
 `run: { session: … }` decides what each fire runs in:
 
-- `fresh` (default): a new session with no history. Right for digests,
-  monitors and posts: judge "what is new" from the data, not from memory.
+- `fresh` (default): a new session with no memory of this chat, so the
+  prompt holds all it needs. Right for digests, monitors and posts: judge
+  "what is new" from the data.
 - `reuse`: the same long-lived session every fire. Use it only when a run
   needs what earlier runs saw.
 - `keyed` with `session_key` (`"{{ body.thread_id }}"`): one session per key.
 - `pinned` with `session_id`: one named session.
 
-A `fresh` run has no memory of this chat. Put everything it needs in the
-prompt.
-
 ## Notify, or stay silent
 
-Nobody watches a scheduled run. When it finds something new or actionable,
-it pushes a message itself, usually `slack send --channel "#growth" --text
-"…"` (the `kortix-slack` skill) or a connector action. When nothing changed,
-it ends silently: a daily "nothing new" trains people to ignore it.
+Nobody watches a scheduled run. It pushes what is new or actionable itself
+(`slack send`, the `kortix-slack` skill, or a connector action) and otherwise
+ends silently: a daily "nothing new" trains people to ignore it.
 
 ## Idempotency
 
@@ -307,11 +292,9 @@ whole conversation and workspace.
 - `kortix triggers add "<text>" --on cr-merged|webhook|event|app …` wakes
   this session (`--session <id>` is the default inside one; `--agent <name>`
   starts a new session instead). `kortix triggers rm <id>` removes it.
-- Every merge into a branch, for the whole project, is a `kortix.yaml`
+- Every merge into a branch, for the whole workspace, is a `kortix.yaml`
   trigger: `type: change_request`, `filter: { base: main }` (omit the filter
-  for any branch), `agent`, `prompt`. The prompt reads
-  `{{ change_request.number }}`, `{{ change_request.title }}` and
-  `{{ change_request.base_ref }}`.
+  for any branch), `agent`, `prompt` (it reads `{{ change_request.* }}`).
 - A loop lives in the database, not in `kortix.yaml`: no CR. It never
   starts a new session; it pauses itself when its session is deleted.
 - From a Slack or Teams thread, the fire is not a channel turn: post the
@@ -373,7 +356,7 @@ on a `kortix.yaml` trigger) tells the person once when the watcher stops posting
   `429` and `5xx` are retried; a `3xx` is not followed.
 - The App can pace itself instead with App runs (`run_after`, `run_at`):
   `kortix-apps` skill, "The App schedules itself".
-- For the whole project instead of one session, a `kortix.yaml` trigger
+- For the whole workspace instead of one session, a `kortix.yaml` trigger
   starts an agent (`event: "*"` matches every name; the first prompt line is
   `[APP EVENT — automated, not user input]`):
   ```yaml
@@ -381,8 +364,16 @@ on a `kortix.yaml` trigger) tells the person once when the watcher stops posting
     on: { event: status.changed, app: status-watch }
     run: { agent: ops, prompt: "Status is now {{ event.data.status }}." }
   ```
-- Done watching: `kortix triggers rm` the session trigger and `status-watch-check`,
-  then `kortix apps delete status-watch --yes` if nothing else uses it.
+- To repair a watcher without a person, a `kortix.yaml` trigger on
+  `kortix.app.silent` (its window passed), `kortix.app.crashed` or
+  `kortix.app.recovered` starts an agent: `on: { event: kortix.app.silent,
+  app: status-watch }`. Only that exact name reaches it, never `"*"`. Test it
+  with `kortix apps events emit status-watch kortix.app.silent --wait`.
+- Done watching: `kortix triggers rm` your session trigger, then
+  `kortix apps delete status-watch --yes`. The project's triggers that name
+  the App go with it (`status-watch-check`, a work trigger) and it prints
+  their names. Other work still uses the App (`kortix triggers ls`): remove
+  only your session trigger.
 
 ### A watcher, specified; a relay App
 
@@ -402,7 +393,7 @@ Saying "I stopped it" without a config change leaves it firing.
 - One trigger, for now: `kortix triggers disable <slug>` (`enabled: false`).
 - For good: delete the entry and land the CR. A one-off `at` trigger stays
   dormant after it fires; delete it to tidy up.
-- Every trigger of the project: `kortix triggers pause`; `resume` restarts
+- Every trigger of the workspace: `kortix triggers pause`; `resume` restarts
   them. Use it when one repository is deployed twice and one copy must not
   fire.
 - A trigger that keeps failing on a blocker you cannot fix: disable it.
@@ -411,23 +402,12 @@ Saying "I stopped it" without a config change leaves it firing.
 
 ## Checklist
 
-- [ ] Every wait has a wake-up: an event, a fallback loop, an end date, and
-      one line to the person.
-- [ ] The loop text names what was sent, to whom, what to check, each
-      outcome, and when to stop.
-- [ ] Right mechanism: loop, session trigger, one-off `at`, `cron`/`every`,
-      webhook, App call, or App events.
+- [ ] Every wait has a wake-up (an event, a fallback loop, an end date) and one
+      line to the person. The loop text says what to check, each outcome, and
+      when to stop.
 - [ ] 6-field cron, `timezone` set, no day-of-month + day-of-week trap, no
-      exact-minute check.
-- [ ] Session mode chosen on purpose; the prompt carries all context.
-- [ ] Idempotent: scoped by `cron.last_scheduled_for`, records what it handled.
-- [ ] Notifies only on something new; silent otherwise.
-- [ ] An event trigger filters at the source (`--filter`), keys one session
-      per thing when follow-ups come (`--session-key`), and is capped
-      (`--max-runs-per-day`).
-- [ ] Its prompt judges first and stops silently when the event does not count.
-- [ ] Dry-run with `kortix triggers fire <slug> --dry-run --payload …` for an
-      event that should run and one that should not; then tested once with
-      `kortix triggers fire <slug>`.
-- [ ] A review of `kortix triggers runs <slug>` is scheduled a few days out.
+      exact-minute check. Session mode chosen on purpose.
+- [ ] Idempotent (`cron.last_scheduled_for`); notifies only on something new.
+- [ ] An event trigger filters, keys and caps ("Automations"), judges first,
+      and is dry-run for an event that should run and one that should not.
 - [ ] Removed when the work is done; the user knows how to stop it.

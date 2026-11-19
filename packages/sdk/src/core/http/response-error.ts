@@ -142,6 +142,8 @@ function isExpectedResponse(status: number, data: any, message: string): boolean
     isRequestDeadlineResponse(status, data, message) ||
     isGitMirrorUnavailableResponse(status, data, message) ||
     isConnectorsProviderUnavailableResponse(status, data) ||
+    // Cost queries own the retry; a busy permit is not a global error toast.
+    (status === 429 && data?.code === 'cost_read_busy') ||
     // Flag gates are expected disabled states; callers still receive the ApiError.
     (status === 403 && data?.code === FEATURE_DISABLED_CODE) ||
     (status === 501 && data?.code === FEATURE_NOT_SUPPORTED_CODE) ||

@@ -107,6 +107,62 @@ interface ConnectorAccountRow {
   connected_as?: string | null;
   /** When the upstream rejected the stored credential (401). Absent: not rejected. */
   credential_rejected_at?: string | null;
+  /** `sign_in_not_finished`: listed so it gets finished; a call cannot run as
+   *  it yet. Absent on older servers, which list connected accounts only. */
+  status?: 'connected' | 'sign_in_not_finished';
+}
+
+/**
+ * The human table of `kortix connectors accounts <slug>`: the accounts the
+ * person sees in Settings → Connectors, the ones a call can run as first.
+ */
+export function connectorAccountsLines(slug: string, accounts: readonly ConnectorAccountRow[]): string[] {
+  const unfinished = (account: ConnectorAccountRow) => account.status === 'sign_in_not_finished';
+  const callable = accounts.filter((account) => !unfinished(account));
+  const labelWidth = Math.max(5, ...accounts.map((account) => account.label.length));
+  const asWidth = connectedAsWidth(accounts);
+  const lines = [
+    '',
+    `  ${C.dim}${pad('LABEL', labelWidth)}  ${pad('CONNECTED AS', asWidth)}  OWNER    DEFAULT  CONNECTION ID${C.reset}`,
+  ];
+  for (const account of accounts) {
+    lines.push(
+      `  ${pad(account.label, labelWidth)}  ${pad(account.connected_as ?? '—', asWidth)}  ` +
+        `${pad(accountOwnerLabel(account.owner_type), 8)} ` +
+        `${pad(account.is_default ? 'yes' : 'no', 8)} ${account.connection_id}` +
+        `${account.is_default ? `  ${C.dim}(pinned default)${C.reset}` : ''}` +
+        `${account.credential_rejected_at ? `  ${C.red}(credential rejected — replace it)${C.reset}` : ''}` +
+        `${unfinished(account) ? `  ${C.yellow}(sign-in not finished)${C.reset}` : ''}`,
+    );
+  }
+  lines.push('');
+  // A ready-to-copy example per account a call can run as, plus the two
+  // selector words — this is what makes "which account do I pass?" a non-question.
+  for (const account of callable) {
+    lines.push(`  ${C.dim}kortix connectors call ${slug} <action> --account "${account.label}"${C.reset}`);
+  }
+  if (callable.length > 0) {
+    lines.push(
+      `  ${C.dim}kortix connectors call ${slug} <action> --account me${C.reset}       ${C.faded}# your default private account${C.reset}`,
+      `  ${C.dim}kortix connectors call ${slug} <action> --account workspace${C.reset}  ${C.faded}# the workspace's shared account${C.reset}`,
+      '',
+    );
+  }
+  if (callable.length < accounts.length) {
+    lines.push(
+      `  ${C.dim}Finish a sign-in in Settings → Connectors, or run ${C.reset}${C.cyan}kortix connectors connect ${slug}${C.reset}${C.dim} for a sign-in link. Do not add a second account.${C.reset}`,
+      '',
+    );
+  }
+  lines.push(`  ${C.dim}${accounts.length} account${accounts.length === 1 ? '' : 's'}${C.reset}`);
+  if (!callable.some((account) => account.is_default) && callable.length > 1) {
+    lines.push(
+      `  ${C.dim}No default pinned — unnamed calls will be refused with ${C.reset}account_required${C.dim}; ` +
+        `pass --account or pin one: ${C.reset}${C.cyan}kortix connectors accounts ${slug} --default <label>${C.reset}`,
+    );
+  }
+  lines.push('');
+  return lines;
 }
 
 /** One condition on a policy rule: a dot path into the call's arguments, the
@@ -1217,44 +1273,7 @@ export async function runConnectors(argv: string[]): Promise<number> {
           );
           return 0;
         }
-        const labelWidth = Math.max(5, ...accounts.map((account) => account.label.length));
-        const asWidth = connectedAsWidth(accounts);
-        process.stdout.write('\n');
-        process.stdout.write(
-          `  ${C.dim}${pad('LABEL', labelWidth)}  ${pad('CONNECTED AS', asWidth)}  OWNER    DEFAULT  CONNECTION ID${C.reset}\n`,
-        );
-        for (const account of accounts) {
-          process.stdout.write(
-            `  ${pad(account.label, labelWidth)}  ${pad(account.connected_as ?? '—', asWidth)}  ` +
-              `${pad(accountOwnerLabel(account.owner_type), 8)} ` +
-              `${pad(account.is_default ? 'yes' : 'no', 8)} ${account.connection_id}` +
-              `${account.is_default ? `  ${C.dim}(pinned default)${C.reset}` : ''}` +
-              `${account.credential_rejected_at ? `  ${C.red}(credential rejected — replace it)${C.reset}` : ''}\n`,
-          );
-        }
-        process.stdout.write('\n');
-        // A ready-to-copy example per account, plus the two selector words —
-        // this is what makes "which account do I pass?" a non-question.
-        for (const account of accounts) {
-          process.stdout.write(
-            `  ${C.dim}kortix connectors call ${slug} <action> --account "${account.label}"${C.reset}\n`,
-          );
-        }
-        process.stdout.write(
-          `  ${C.dim}kortix connectors call ${slug} <action> --account me${C.reset}       ${C.faded}# your default private account${C.reset}\n` +
-            `  ${C.dim}kortix connectors call ${slug} <action> --account workspace${C.reset}  ${C.faded}# the workspace's shared account${C.reset}\n\n`,
-        );
-        const hasPinned = accounts.some((a) => a.is_default);
-        process.stdout.write(
-          `  ${C.dim}${accounts.length} account${accounts.length === 1 ? '' : 's'}${C.reset}\n`,
-        );
-        if (!hasPinned && accounts.length > 1) {
-          process.stdout.write(
-            `  ${C.dim}No default pinned — unnamed calls will be refused with ${C.reset}account_required${C.dim}; ` +
-              `pass --account or pin one: ${C.reset}${C.cyan}kortix connectors accounts ${slug} --default <label>${C.reset}\n`,
-          );
-        }
-        process.stdout.write('\n');
+        process.stdout.write(`${connectorAccountsLines(slug, accounts).join('\n')}\n`);
         return 0;
       }
       case 'rename':
@@ -2427,7 +2446,7 @@ function parseMetadata(value: string | undefined): Record<string, unknown> | und
 }
 
 /** Column width for CONNECTED AS: the longest identity, or the header. */
-function connectedAsWidth(rows: Array<{ connected_as?: string | null }>): number {
+function connectedAsWidth(rows: ReadonlyArray<{ connected_as?: string | null }>): number {
   return Math.max(12, ...rows.map((row) => (row.connected_as ?? '—').length));
 }
 

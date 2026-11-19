@@ -6,7 +6,7 @@ import type { Messages } from '@/i18n/messages';
  * these strings to its own `NextIntlClientProvider`: the whole namespace is
  * ~1.2 MB and would ride along in every 404 response.
  */
-export const NOT_FOUND_MESSAGE_KEYS = [
+const NOT_FOUND_MESSAGE_KEYS = [
   'autoAppNotFoundJsxText404PageNotFoundf7ea8161',
   'autoAppNotFoundJsxTextThePageYouAreLookingccf1ecc5',
   'autoAppNotFoundJsxTextGoBackToHome7b70f24a',

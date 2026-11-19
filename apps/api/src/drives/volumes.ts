@@ -254,9 +254,18 @@ async function call(volume: DriveVolume | null, path: string, init: RequestInit 
   let res: Response;
   try {
     res = await platinumFetch(path, init, origin);
-    // Reads are safe to replay while storage recovers; writes may have committed.
+    // Reads are safe to replay while storage recovers. A write replays only on
+    // Platinum's own `unavailable` contract: the control plane refused a call
+    // it never ran and says to send it again ("database connection reset,
+    // retry" — the prod write that surfaced as one typed 503 during the
+    // 2026-11-10 outage). Any other write 503 may have committed; it never
+    // replays (KRTX-3607, 2026-10-28).
     for (const delay of [2_000, 3_000]) {
-      if (method !== 'GET' || res.status !== 503 || init.signal?.aborted) break;
+      if (res.status !== 503 || init.signal?.aborted) break;
+      if (method !== 'GET') {
+        const head = await res.clone().json().catch(() => ({}) as { code?: string });
+        if (head.code !== 'unavailable') break;
+      }
       await res.body?.cancel();
       await Bun.sleep(delay);
       init.signal?.throwIfAborted();

@@ -22,6 +22,7 @@ let projectCapabilityInput: {
   action: string;
 } | null = null;
 let projectCapabilityDenied = false;
+let summaryGate: Promise<void> | null = null;
 
 interface TestContext {
   set(key: string, value: unknown): void;
@@ -100,6 +101,7 @@ mock.module('../../projects/lib/access', () => ({
 mock.module('../../shared/cost-rollups', () => ({
   getCostSummary: async (input: Record<string, unknown>) => {
     summaryInput = input;
+    await summaryGate;
     return summary;
   },
   listCostByProject: async () => ({
@@ -126,6 +128,7 @@ mock.module('../../shared/session-costs', () => ({
 }));
 
 const { usageApp } = await import('./usage');
+const { COST_READ_MAX_WAITING } = await import('../../shared/cost-read-guard');
 
 function createTestApp() {
   const app = new Hono();
@@ -147,6 +150,28 @@ beforeEach(() => {
   projectAccessInput = null;
   projectCapabilityInput = null;
   projectCapabilityDenied = false;
+  summaryGate = null;
+});
+
+describe('GET /v1/usage/cost-summary read guard', () => {
+  test('answers 429 once one read runs and the queue is full, then recovers', async () => {
+    let release!: () => void;
+    summaryGate = new Promise<void>((resolve) => (release = resolve));
+    const app = createTestApp();
+    const running = Array.from({ length: 1 + COST_READ_MAX_WAITING }, () =>
+      app.request(`/v1/usage/cost-summary?account_id=${ACCOUNT_ID}`),
+    );
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const refused = await app.request(`/v1/usage/cost-summary?account_id=${ACCOUNT_ID}`);
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toEqual({ error: 'Too many cost reads are queued on this server. Retry shortly.' });
+
+    release();
+    for (const response of await Promise.all(running)) expect(response.status).toBe(200);
+    expect((await app.request(`/v1/usage/cost-summary?account_id=${ACCOUNT_ID}`)).status).toBe(200);
+  });
 });
 
 describe('GET /v1/usage/cost-summary', () => {
@@ -247,14 +272,32 @@ describe('GET /v1/usage/cost-summary', () => {
     expect(summaryInput).toBeNull();
   });
 
-  test('project token needs the usage leaf and cannot expand to account or another project', async () => {
+  test('project token reads its own workspace slice by default, never the account or another workspace', async () => {
     tokenProjectId = PROJECT_ID;
     const app = createTestApp();
-    const own = await app.request(`/v1/usage/cost-summary?project_id=${PROJECT_ID}`);
-    expect(own.status).toBe(200);
-    expect(projectCapabilityInput?.action).toBe('project.usage.read');
-    expect(summaryInput?.projectId).toBe(PROJECT_ID);
-    for (const query of ['', `?project_id=${ACCOUNT_ID}`, `?project_id=${PROJECT_ID}&account_id=${ACCOUNT_ID}`, `?project_id=${PROJECT_ID}&session_id=${SESSION_ID}`]) {
+    // Own workspace: named, omitted, or with the account_id the CLI attaches
+    // (the token's own workspace id or its own account) — always W's slice.
+    for (const query of [
+      `?project_id=${PROJECT_ID}`,
+      '',
+      `?account_id=${PROJECT_ID}`,
+      `?project_id=${PROJECT_ID}&account_id=${ACCOUNT_ID}`,
+    ]) {
+      summaryInput = null;
+      projectCapabilityInput = null;
+      const own = await app.request(`/v1/usage/cost-summary${query}`);
+      expect(own.status).toBe(200);
+      // Read through a cast: the loop's reset narrows the lets to `null`.
+      expect(projectCapabilityInput as unknown).toEqual({ userId: USER_ID, accountId: ACCOUNT_ID, projectId: PROJECT_ID, action: 'project.usage.read' });
+      expect((summaryInput as Record<string, unknown> | null)?.accountId).toBe(ACCOUNT_ID);
+      expect((summaryInput as Record<string, unknown> | null)?.projectId).toBe(PROJECT_ID);
+    }
+    // Another workspace, another account, or an arbitrary session: refused.
+    for (const query of [
+      `?project_id=${SECONDARY_ACCOUNT_ID}`,
+      `?account_id=${SECONDARY_ACCOUNT_ID}`,
+      `?project_id=${PROJECT_ID}&session_id=${SESSION_ID}`,
+    ]) {
       summaryInput = null;
       expect((await app.request(`/v1/usage/cost-summary${query}`)).status).toBe(403);
       expect(summaryInput).toBeNull();

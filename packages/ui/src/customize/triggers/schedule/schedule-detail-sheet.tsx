@@ -16,6 +16,7 @@
  * as one read-only list.
  */
 
+import { resolveProgramAgent } from '../../../session/composer/agent-selector';
 import { Alert, AlertDescription, AlertTitle } from '../../../primitives/alert';
 import { Button } from '../../../primitives/button';
 import { ButtonGroup } from '../../../primitives/button-group';
@@ -410,11 +411,12 @@ function SheetPanel({
                     {controls.canDelete ? (
                       <DropdownMenuItem variant="destructive" onClick={onDelete}>
                         <TrashIcon />
+                        {/* Named by type: a schedule, a webhook, any other kind a trigger. */}
                         {trigger.type === 'cron'
                           ? t.raw('textd8d0bd5c5106')
-                          : event
-                            ? t.raw('textf2f698118cc1')
-                            : t.raw('text60f85e57e4a7')}
+                          : trigger.type === 'webhook'
+                            ? t.raw('text60f85e57e4a7')
+                            : t.raw('text8043e69a8dd6')}
                       </DropdownMenuItem>
                     ) : null}
                   </DropdownMenuContent>
@@ -451,10 +453,26 @@ function SheetPanel({
       <SheetBody className="flex-none items-stretch gap-0 space-y-6 !overflow-visible px-4 pt-5 pb-0">
         {trigger.auto_paused_at ? (
           <Alert variant="warning">
-            <AlertTitle>{tAutoPause('title')}</AlertTitle>
+            {/* A pause the account state caused ends by itself: say so, and what ends it. */}
+            <AlertTitle>
+              {tAutoPause(trigger.auto_paused_code === 'billing' ? 'billingTitle' : trigger.auto_paused_code === 'no_usable_model' ? 'modelTitle' : 'title')}
+            </AlertTitle>
             <AlertDescription>
-              <p>{tAutoPause('description')}</p>
-              {trigger.auto_paused_reason ? <p className="font-mono text-xs">{trigger.auto_paused_reason}</p> : null}
+              <p>
+                {tAutoPause(
+                  trigger.auto_paused_code === 'billing'
+                    ? 'billingDescription'
+                    : trigger.auto_paused_code === 'no_usable_model'
+                      ? 'modelDescription'
+                      : 'description',
+                )}
+              </p>
+              {/* A coded pause (billing, no model) says it all in the sentence above.
+                  Any other pause names its cause in that sentence's "reason below":
+                  the stored reason, as a sentence, never a code line. */}
+              {!trigger.auto_paused_code && trigger.auto_paused_reason ? (
+                <p>{readableAutoPauseReason(trigger.auto_paused_reason)}</p>
+              ) : null}
             </AlertDescription>
           </Alert>
         ) : null}
@@ -596,7 +614,7 @@ function SheetForm({
   }, [serverKey, server, dirty]);
 
   const name = draft.nameOverride ?? '';
-  const problems = validate(draft, { name, configFields, app, edit: true }, t);
+  const problems = validate(draft, { name, configFields, app, edit: true, programAgent: resolveProgramAgent(agents, draft.agent) }, t);
   const shown = showProblems ? problems : [];
   const blockError = (block: ComposerBlock) =>
     shown.find((p) => p.block === block && !p.field)?.message;
@@ -706,6 +724,7 @@ function SheetForm({
           <section data-sheet-block data-block="then" className="space-y-3">
             <Label>{t.raw('text0597f441dcca')}</Label>
             <ThenFields
+              projectId={projectId}
               agents={agents}
               draft={draft}
               patch={patch}
@@ -816,7 +835,9 @@ function Details({ trigger }: { trigger: ProjectTrigger }) {
                   <span className="tabular-nums">
                     {trigger.last_fired_at
                       ? lastRunFormatter.format(new Date(trigger.last_fired_at))
-                      : describeLastRun(null)}
+                      : trigger.last_status === 'failed' && trigger.last_attempt_at
+                        ? `${t.raw('text031a8f0f659d')} · ${lastRunFormatter.format(new Date(trigger.last_attempt_at))}`
+                        : describeLastRun(null)}
                   </span>
                 ),
               },
@@ -826,4 +847,10 @@ function Details({ trigger }: { trigger: ProjectTrigger }) {
       </DisclosureContent>
     </Disclosure>
   );
+}
+
+/** `auto-paused: ran at …` → `Ran at …`: the stored reason without its code prefix. */
+function readableAutoPauseReason(reason: string): string {
+  const text = reason.replace(/^auto-paused:\s*/i, '').trim();
+  return text ? text[0]!.toUpperCase() + text.slice(1) : reason;
 }

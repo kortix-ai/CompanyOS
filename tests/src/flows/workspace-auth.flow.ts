@@ -116,14 +116,14 @@ flow(
       })).status(400);
     });
 
-    await ctx.step('a member of a split_pending legacy account still needs a project grant: canonical 404 workspace_not_found, legacy 403', async () => {
+    await ctx.step('a member of a split_pending legacy account still needs a project grant: canonical 403 workspace_access_denied, legacy 403', async () => {
       const legacy = await ctx.fixtures.team();
       const a = await legacy.project();
       await legacy.project();
       const person = await ctx.fixtures.user({ label: 'WSA1-LEGACY' });
       (await ctx.client.as(ctx.P.OWNER).post(`/v1/accounts/${legacy.id}/members`, { email: person.email })).status(201);
-      (await ctx.client.as(person).get(`/v1/workspaces/${a.id}`)).status(404).body().has('$.code', 'workspace_not_found');
-      (await ctx.client.as(person).get(`/v1/workspaces/${a.id}/sessions`)).status(404).body().has('$.code', 'workspace_not_found');
+      (await ctx.client.as(person).get(`/v1/workspaces/${a.id}`)).status(403).body().has('$.code', 'workspace_access_denied');
+      (await ctx.client.as(person).get(`/v1/workspaces/${a.id}/sessions`)).status(403).body().has('$.code', 'workspace_access_denied');
       (await ctx.client.as(person).get(`/v1/projects/${a.id}`)).status(403);
       (await ctx.client.as(person).get(`/v1/projects/${a.id}/sessions`)).status(403);
     });

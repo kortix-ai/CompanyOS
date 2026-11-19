@@ -7,8 +7,7 @@
  * `ON DELETE cascade` — and every RI check on `project_id` — scans the whole
  * table. Both foreign keys come from the committed migrations on every
  * environment, fresh or deployed. Reads the live catalog
- * (`pg_constraint` / `pg_index`), never source text; mirrors
- * `basejump-account-user-fk-index.integration.test.ts`.
+ * (`pg_constraint` / `pg_index`), never source text.
  */
 import { describe, expect, test } from 'bun:test';
 import pg from 'pg';
@@ -20,6 +19,8 @@ const suite = databaseUrl ? describe : describe.skip;
 const EXPECTED_FKS: Record<string, { columns: string[] }> = {
   account_secret_resources_account_id_accounts_account_id_fk: { columns: ['account_id'] },
   account_secret_resources_project_id_projects_project_id_fk: { columns: ['project_id'] },
+  // Workspaces R2a-3a twin of the project key (20261114163015000_workspaces_twin_fk_batch_1).
+  account_secret_resources_project_id_workspaces_fk: { columns: ['project_id'] },
 };
 
 suite('kortix.account_secret_resources foreign keys are covered by indexes', () => {

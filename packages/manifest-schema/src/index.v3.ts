@@ -39,6 +39,8 @@ import {
   SPACE_SLUG_RE,
   SPACE_TAB_TYPES,
   TOOL_NAME_RE,
+  parseDurationSeconds,
+  AGENT_TITLE_MAX_LENGTH,
 } from './constants';
 
 export { SPACE_HEADER_ITEMS, SPACE_TAB_TYPES };
@@ -58,6 +60,7 @@ import {
   validateProject,
   validateSandbox,
   validateTriggers,
+  type TriggerAgentContext,
 } from './index';
 import {
   type GrantSetV2,
@@ -74,6 +77,7 @@ import {
   validateTriggerAgentRefsV2,
 } from './index.v2';
 import { safeAgentFile, safeRepoPath, safeToolFile } from './layout';
+import { validateEvals } from './evals';
 import { BUILTIN_AGENT_KEYS, BUILTIN_AGENTS, LEGACY_MY_KORTIX_AGENT_NAME, type BuiltinAgentKey } from '@kortix/shared/my-kortix-agent';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -129,6 +133,12 @@ export function grantedNamesV3(value: unknown, universe: readonly string[]): str
 
 /** One `agents.<name>` entry. Behavior and grants in one block. */
 export interface AgentBlockV3 {
+  /**
+   * The agent's name as people read it ("GitHub PR reviewer"). The map key stays the
+   * agent's id: sessions, triggers and @-mentions use the key. Absent: the key in
+   * sentence case (`agentDisplayName`).
+   */
+  title?: string;
   description?: string;
   mode?: 'primary' | 'subagent' | 'all';
   model?: string;
@@ -141,6 +151,14 @@ export interface AgentBlockV3 {
   hidden?: boolean;
   prompt?: string;
   prompt_file?: string;
+  /**
+   * A program agent: the shell command each turn runs, in place of a model. The turn's prompt
+   * arrives on stdin and in `$KORTIX_EVENT_PATH`; stdout is the reply; a non-zero exit fails the
+   * turn. Excludes `model`, `prompt` and `prompt_file`.
+   */
+  run?: string;
+  /** A program agent's run limit, a duration (`"30m"`, `"2h"`). Default `30m`, at most `6h`. */
+  timeout?: string;
   /** Tool policy. Omitted: `allow`. `skill` and `task` belong to `skills` / `subagents`. */
   permission?: PermissionConfigV2;
   /** Default `true`. */
@@ -217,6 +235,49 @@ export function workspaceStepCwdProblem(cwd: unknown): string | null {
   if (value.startsWith('/')) return workspaceRepoPathProblem(value);
   if (value.split('/').some((part) => part === '..')) return 'must not contain `..`.';
   return null;
+}
+
+/** The trigger checks' view of the agents: who has `run`, and `default_agent`. */
+function triggerAgentContextV3(parsed: Record<string, unknown>): TriggerAgentContext {
+  const agents = isTable(parsed.agents) ? parsed.agents : {};
+  const programAgents = new Set(Object.entries(agents).flatMap(([name, block]) => (isTable(block) && typeof block.run === 'string' && block.run.trim() ? [name] : [])));
+  const defaultAgent = typeof parsed.default_agent === 'string' && parsed.default_agent.trim() ? parsed.default_agent.trim() : undefined;
+  return { programAgents, ...(defaultAgent ? { defaultAgent } : {}) };
+}
+
+/** A program agent's run limit: default and ceiling, in seconds. */
+export const AGENT_RUN_TIMEOUT_DEFAULT_SECONDS = 30 * 60;
+export const AGENT_RUN_TIMEOUT_MAX_SECONDS = 6 * 60 * 60;
+
+/** The longest `run` command: a command line, not a script. */
+export const AGENT_RUN_MAX_LENGTH = 4096;
+/** Keys a program agent refuses: it has no model and no system prompt. */
+const PROGRAM_AGENT_REFUSED_KEYS = ['model', 'prompt', 'prompt_file'] as const;
+/** Keys that only tune a model or its tools: a program agent ignores them. */
+const PROGRAM_AGENT_IGNORED_KEYS = ['variant', 'temperature', 'top_p', 'steps', 'options', 'codemode', 'context', 'skills', 'extensions', 'subagents', 'commands'] as const;
+
+/** `run`: a non-empty command line, and no model, prompt or model-only key beside it. */
+function validateProgramAgentV3(entry: Record<string, unknown>, where: string, issues: ManifestIssue[]): void {
+  const run = entry.run;
+  if (entry.timeout !== undefined) {
+    const seconds = typeof entry.timeout === 'string' ? parseDurationSeconds(entry.timeout) : null;
+    if (run === undefined) {
+      issues.push({ path: `${where}.timeout`, message: 'applies only to a program agent (`run`).', severity: 'error' });
+    } else if (seconds === null || seconds < 1 || seconds > AGENT_RUN_TIMEOUT_MAX_SECONDS) {
+      issues.push({ path: `${where}.timeout`, message: 'must be a duration from "1s" to "6h", such as "30m". Default: "30m".', severity: 'error' });
+    }
+  }
+  if (run === undefined) return;
+  if (typeof run !== 'string' || !run.trim() || run.length > AGENT_RUN_MAX_LENGTH) {
+    issues.push({ path: `${where}.run`, message: `must be a shell command of 1 to ${AGENT_RUN_MAX_LENGTH} characters.`, severity: 'error' });
+    return;
+  }
+  for (const key of PROGRAM_AGENT_REFUSED_KEYS) {
+    if (entry[key] !== undefined) issues.push({ path: `${where}.${key}`, message: 'a program agent (`run`) has no model and no prompt. Remove this key or `run`.', severity: 'error' });
+  }
+  for (const key of PROGRAM_AGENT_IGNORED_KEYS) {
+    if (entry[key] !== undefined) issues.push({ path: `${where}.${key}`, message: 'has no effect on a program agent (`run`).', severity: 'warning' });
+  }
 }
 
 function validateAgentWorkspaceV3(entry: Record<string, unknown>, where: string, issues: ManifestIssue[]): void {
@@ -351,6 +412,8 @@ export interface ManifestV3 {
   approvals?: { ttl?: string };
   /** Spaces (channels): slug → label, description, header and tabs. */
   spaces?: Record<string, SpaceV3>;
+  /** Eval suites: name → a Harbor-style job config, or `config: <path>` to one (`./evals.ts`). */
+  evals?: Record<string, Record<string, unknown>>;
   /** Built-in agents the platform injects, keyed by built-in (`my_kortix`). `true` adds it to the project; absent or `false` = off. */
   builtin_agents?: Partial<Record<BuiltinAgentKey, boolean>>;
   agents: Record<string, AgentBlockV3>;
@@ -377,6 +440,7 @@ const TOP_LEVEL_KEYS_V3 = [
   'policies',
   'approvals',
   'spaces',
+  'evals',
   'builtin_agents',
   'agents',
 ] as const;
@@ -407,9 +471,12 @@ const BEHAVIOR_KEYS_V3 = [
 
 /** Every key an `agents.<name>` block may hold. The agent page maps each to a row. */
 export const AGENT_BLOCK_KEYS_V3 = [
+  'title',
   ...BEHAVIOR_KEYS_V3,
   'prompt',
   'prompt_file',
+  'run',
+  'timeout',
   'enabled',
   'codemode',
   'context',
@@ -430,6 +497,8 @@ export const AGENT_BLOCK_KEYS_V3 = [
   'network_egress',
 ] as const;
 const AGENT_KEYS_V3 = new Set<string>(AGENT_BLOCK_KEYS_V3);
+
+export { AGENT_TITLE_MAX_LENGTH } from './constants';
 
 /** Agent keys of earlier versions, with what replaces each in v3. */
 const RETIRED_AGENT_KEYS_V3: Record<string, string> = {
@@ -475,7 +544,7 @@ export function validateManifestBody(parsed: Record<string, unknown>, issues: Ma
   validateEnv(parsed.env, 'env', issues);
   validateSandbox(parsed.sandbox, 'sandbox', issues);
   validateRuntimeV2(parsed.runtime, 'runtime', issues);
-  validateTriggers(parsed.triggers, 'triggers', issues);
+  validateTriggers(parsed.triggers, 'triggers', issues, triggerAgentContextV3(parsed));
   validateConnectors(parsed.connectors, 'connectors', issues);
   validateAppsV2(parsed.apps, 'apps', issues);
   validateSpacesV3(parsed.spaces, 'spaces', issues);
@@ -494,6 +563,7 @@ export function validateManifestBody(parsed: Record<string, unknown>, issues: Ma
   validateDefaultAgentV3(parsed.default_agent, 'default_agent', agents, myKortixDeclaredOn(parsed.builtin_agents), issues);
   validateTriggerAgentRefsV2(parsed.triggers, 'triggers', [...agents.keys()], issues);
   validateAgentPolicySetRefs(parsed.agents, parsed.connectors, 'agents', issues);
+  validateEvals(parsed.evals, 'evals', issues, [...agents.keys()]);
 }
 
 /**
@@ -806,6 +876,9 @@ function validateAgentBlockV3(
     }
   }
 
+  if (entry.title !== undefined && (typeof entry.title !== 'string' || !entry.title.trim() || entry.title.trim().length > AGENT_TITLE_MAX_LENGTH)) {
+    issues.push({ path: `${where}.title`, message: `must be a non-empty string of at most ${AGENT_TITLE_MAX_LENGTH} characters.`, severity: 'error' });
+  }
   if (entry.prompt !== undefined && (typeof entry.prompt !== 'string' || !entry.prompt.trim())) {
     issues.push({ path: `${where}.prompt`, message: 'must be a non-empty string.', severity: 'error' });
   }
@@ -816,6 +889,7 @@ function validateAgentBlockV3(
       issues.push({ path: `${where}.prompt_file`, message: 'must be a repository path to a .md file.', severity: 'error' });
     }
   }
+  validateProgramAgentV3(entry, where, issues);
   if (entry.enabled !== undefined && typeof entry.enabled !== 'boolean') {
     issues.push({ path: `${where}.enabled`, message: 'must be a boolean.', severity: 'error' });
   }
@@ -835,7 +909,8 @@ function validateAgentBlockV3(
   validateNetworkEgressV3(entry.network_egress, `${where}.network_egress`, issues);
 
   // Grants of registered things.
-  validateToolGrantV3(entry.tools, `${where}.tools`, registry.tools, issues);
+  // A program agent (`run`) calls no tools, so an unset `tools` is not worth a warning.
+  if (entry.run === undefined || entry.tools !== undefined) validateToolGrantV3(entry.tools, `${where}.tools`, registry.tools, issues);
   validateNamedGrantV3(entry.skills, `${where}.skills`, 'skills', registry.skills, issues, true);
   validateNamedGrantV3(entry.commands, `${where}.commands`, 'commands', registry.commands, issues);
   validateNamedGrantV3(entry.extensions, `${where}.extensions`, 'extensions', registry.extensions, issues, true);

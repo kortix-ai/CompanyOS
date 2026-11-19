@@ -72,7 +72,7 @@ export function SessionDetailPanel() {
           </div>
         </DetailLayer>
 
-        {/* vaul unmounts `DrawerContent` on close, so the shell reconnects on
+        {/* The drawer unmounts `DrawerContent` on close, so the shell reconnects on
             every open — the tradeoff mobile has always accepted; there is no
             room for a persistent absolutely positioned layer inside a bottom
             sheet. */}
@@ -116,7 +116,7 @@ export function SessionDetailPanel() {
         // content has not landed yet can sit in between. Name the state;
         // never draw a blank panel.
         !detail && !terminalOpen ? (
-          <div className="text-muted-foreground/70 flex h-full items-center justify-center p-8 text-center text-sm">
+          <div className="text-muted-foreground flex h-full items-center justify-center p-8 text-center text-sm">
             {tI18nComplete.raw('text49abaf804ab3')}
           </div>
         ) : null}

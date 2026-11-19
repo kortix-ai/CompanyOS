@@ -56,6 +56,22 @@ describe('buildSessionRuntimeEnv — server-claimed initial turn', () => {
 
 });
 
+describe('buildSessionRuntimeEnv — release identity', () => {
+  test('the box gets the release the API serves and its commit, so the CLI reports that release', () => {
+    const env = buildSessionRuntimeEnv({ ...BASE_INPUT, release: { version: '0.15.6', commit: 'a1b2c3d4e5f6' } });
+
+    expect(env.KORTIX_RELEASE_VERSION).toBe('0.15.6');
+    expect(env.KORTIX_RELEASE_COMMIT).toBe('a1b2c3d4e5f6');
+  });
+
+  test('an API without a build commit sends neither', () => {
+    const env = buildSessionRuntimeEnv({ ...BASE_INPUT, release: { version: 'dev', commit: '' } });
+
+    expect('KORTIX_RELEASE_VERSION' in env).toBe(false);
+    expect('KORTIX_RELEASE_COMMIT' in env).toBe(false);
+  });
+});
+
 describe('buildSessionRuntimeEnv — workspace id', () => {
   test('the box gets KORTIX_PROJECT_ID only, so a script that sets KORTIX_PROJECT_ID=<other> still wins', () => {
     // The CLI reads KORTIX_WORKSPACE_ID before KORTIX_PROJECT_ID. An injected

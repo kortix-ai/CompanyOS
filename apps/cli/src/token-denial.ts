@@ -30,6 +30,8 @@ interface RecordedDenial {
    *  an older server; the hint then falls back to the manifest remedy. */
   code?: string;
   action?: string;
+  /** The fence's `check` (credential_fence_refused only). */
+  check?: string;
   /** The credential the refused request carried (host + token, memory only).
    *  The footer resolves the identity FROM it. The active host's identity is a
    *  DIFFERENT credential — inside a sandbox it is the injected session token
@@ -43,6 +45,8 @@ interface RecordedDenial {
 export interface DenialDetail {
   code?: string;
   action?: string;
+  /** The fence's `check` on a credential_fence_refused body. */
+  check?: string;
 }
 
 let denial: RecordedDenial | null = null;
@@ -78,6 +82,7 @@ export function recordPermissionDenial(
     status,
     ...(typeof detail?.code === 'string' ? { code: detail.code } : {}),
     ...(typeof detail?.action === 'string' ? { action: detail.action } : {}),
+    ...(typeof detail?.check === 'string' ? { check: detail.check } : {}),
     ...(credential ? { credential } : {}),
   };
 }
@@ -103,9 +108,11 @@ export function denialDetailFromBody(body: unknown): DenialDetail {
       : typeof record.action === 'string'
         ? toWorkspaceAction(record.action)
         : undefined;
+  const check = typeof record.check === 'string' ? record.check : undefined;
   return {
     ...(code ? { code } : {}),
     ...(action ? { action } : {}),
+    ...(check ? { check } : {}),
   };
 }
 
@@ -122,14 +129,63 @@ export function grantHolds(granted: string[] | 'all' | null | undefined, action:
   return granted.some((entry) => entry === '*' || toLegacyAction(entry) === legacy);
 }
 
-/** The remedy line for a fence refusal: the credential, never the grant. */
+/** The remedy line for a fence refusal: the credential, never the grant.
+ *  With the binding workspace's NAME the line names it and the working path:
+ *  a personal key acts as the person in every workspace of theirs, so the
+ *  customer can fix it themselves instead of asking a person for access. */
 const FENCE_FIX_LINE =
   'this credential is bound to one workspace and this route is outside it; no grant changes that. ' +
   'Run it in that workspace, or ask a person with access to do it';
 
+/** Terminal-safe rendering of a NAME A TENANT CAN SET (a workspace rename
+ *  carries no character validation): drop well-formed escape sequences and
+ *  replace remaining control characters (C0/C1) and bidi overrides with '?',
+ *  so nothing in the name can recolor output or move the cursor. */
+export function terminalSafe(s: string): string {
+  return s
+    .replace(/\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))/g, '')
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '?');
+}
+
+function fenceFixLine(workspaceName: string | null | undefined): string {
+  if (!workspaceName) return FENCE_FIX_LINE;
+  return (
+    `this credential is bound to workspace "${terminalSafe(workspaceName)}" and this route is outside it; no grant changes that. ` +
+    'Mint a personal key instead — it acts as you in every workspace of yours ' +
+    '(Settings → API keys, Works in: All my workspaces — or run kortix login)'
+  );
+}
+
+/** The server's code when a workspace-bound token asks for account-wide data
+ *  its own workspace still shares with the other workspaces of its legacy
+ *  account (split_pending). */
+export const TOKEN_ACCOUNT_SHARED = 'token_account_shared';
+/** The fence check for the same constraint on an account-family route. */
+const SHARED_ACCOUNT_CHECK = 'account-wider-than-workspace';
+
+/** The remedy for a shared-account refusal: a personal key, never a flag. */
+export const SHARED_ACCOUNT_FIX_LINE =
+  'this workspace still shares its legacy account with other workspaces, so account-wide data ' +
+  '(members, roles, groups, keys, audit log, credit ledger) needs a personal key: run `kortix login` ' +
+  'on your own machine, or use the web app; no grant, --workspace or new token changes that. ' +
+  'This workspace\'s own audit events and spend work with this token: `kortix audit workspace <workspace id>`, `kortix billing costs`';
+
+/** The fix line for a fence refusal or a shared-account denial; null for any other code.
+ *  A PERSON's fence line names the binding workspace when the identity knows it
+ *  (the footer passes it); an agent session has no minting path, so its line stays generic. */
+function credentialFixLine(pending: RecordedDenial, workspaceName?: string | null): string | null {
+  if (pending.code === TOKEN_ACCOUNT_SHARED) return SHARED_ACCOUNT_FIX_LINE;
+  if (pending.code === CREDENTIAL_FENCE_REFUSED) {
+    if (pending.check === SHARED_ACCOUNT_CHECK) return SHARED_ACCOUNT_FIX_LINE;
+    return workspaceName === undefined ? FENCE_FIX_LINE : fenceFixLine(workspaceName);
+  }
+  return null;
+}
+
 function agentFixLine(agent: string, pending: RecordedDenial, granted?: string[] | 'all' | null): string {
   const actionText = pending.action ? `${C.cyan}${pending.action}${C.reset}` : 'the action';
-  if (pending.code === CREDENTIAL_FENCE_REFUSED) return FENCE_FIX_LINE;
+  const credentialLine = credentialFixLine(pending);
+  if (credentialLine) return credentialLine;
   if ((pending.code === undefined || pending.code === 'agent_scope_insufficient') && grantHolds(granted, pending.action)) {
     // The grant already holds it: kortix.yaml is not the cause.
     return (
@@ -261,7 +317,8 @@ export async function printPermissionDenialIdentity(): Promise<void> {
     lines.push(`  ${C.dim}fix       ${C.reset}${agentFixLine(identity.agent, pending, identity.permissions)}`);
   } else {
     if (identity.userEmail) lines.push(`  ${C.dim}user      ${C.reset}${identity.userEmail}`);
-    if (pending.code === CREDENTIAL_FENCE_REFUSED) lines.push(`  ${C.dim}fix       ${C.reset}${FENCE_FIX_LINE}`);
+    const credentialLine = credentialFixLine(pending, identity.workspaceName);
+    if (credentialLine) lines.push(`  ${C.dim}fix       ${C.reset}${credentialLine}`);
   }
   process.stderr.write(`${lines.join('\n')}\n`);
 }

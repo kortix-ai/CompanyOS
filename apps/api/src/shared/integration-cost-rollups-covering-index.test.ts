@@ -92,8 +92,8 @@ beforeAll(async () => {
   }
   // Clean baseline: the freshly inserted pages are not all-visible until a
   // vacuum runs (the exact degradation KRTX-4638 shipped to prod), so vacuum
-  // once here and every test below starts from the healthy state.
-  await db.execute(sql`vacuum (analyze) kortix.gateway_request_logs`);
+  // until the map is clean and every test below starts from the healthy state.
+  await vacuumUntilClean();
 });
 
 afterAll(async () => {
@@ -118,6 +118,23 @@ const heapFetches = (plan: string): number => {
   if (!match) throw new Error(`no Index Only Scan node in plan:\n${plan}`);
   return Number(match[1]);
 };
+
+/**
+ * VACUUM (ANALYZE) until the grouped scan is index-only with zero heap
+ * fetches, and return the last plan. Under the core-db lane's six-suite
+ * parallel load a vacuum pass can skip a page it cannot lock immediately
+ * (the skip clears the page's all-visible bit; the next pass processes it),
+ * so one pass is not a promise. Vacuum is idempotent and the table is small.
+ */
+async function vacuumUntilClean(): Promise<string> {
+  let plan = '';
+  for (let attempt = 0; attempt < 10; attempt++) {
+    await db.execute(sql`vacuum (analyze) kortix.gateway_request_logs`);
+    plan = await explainAnalyzed(costLlmGroupedQuery({ accountId }, window));
+    if (heapFetches(plan) === 0) return plan;
+  }
+  return plan;
+}
 
 test('the account-led LLM cost scans are index-only on idx_gateway_logs_account_time_covering', async () => {
   for (const [name, query] of [
@@ -146,6 +163,6 @@ test('a mass update degrades the index-only scan to heap fetches until vacuum (K
   // The remediation: VACUUM (ANALYZE) restores the visibility map and the
   // index-only scan stops touching the heap. This is the runbook action
   // KRTX-4638's handoff names for prod.
-  await db.execute(sql`vacuum (analyze) kortix.gateway_request_logs`);
-  expect(heapFetches(await explainAnalyzed(costLlmGroupedQuery({ accountId }, window)))).toBe(0);
+  const plan = await vacuumUntilClean();
+  expect(heapFetches(plan), `the vacuum restores the visibility map, last plan:\n${plan}`).toBe(0);
 });

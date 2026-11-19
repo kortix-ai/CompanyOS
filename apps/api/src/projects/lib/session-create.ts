@@ -1,5 +1,6 @@
 import { copySessionLog, withForkAttachmentCleanup } from '../session-log-fork';
 import { platformDefaultModelId } from '../../llm-gateway/models/served-managed-models';
+import { servableProjectCatalog } from '../../llm-gateway/models/servable-catalog';
 import { randomUUID } from 'node:crypto';
 import { SESSION_INITIAL_CONTEXT_MAX_CHARS, SessionCreateInputSchema } from '@kortix/api-contract';
 import { projectSessionConnectorBindings, projectSessionGrants, projectSessionRuntimeContexts, projectSessions, sessionLifecycleCommands, sessionProviderSecretPools } from '@kortix/db';
@@ -11,8 +12,7 @@ import { accountMayUseManagedModels } from '../../billing/services/entitlements'
 import { type SandboxProviderName, config } from '../../config';
 
 
-import { agentMayUseConnector, agentMayUseEnv } from '../../iam/agent-scope';
-import { usableProviderKeys } from '../../secrets/provider-key-selection';
+import { agentMayUseConnector } from '../../iam/agent-scope';
 import { decideSessionOnBehalfOf } from './on-behalf-of';
 import {
   loadSessionGrants,
@@ -104,9 +104,8 @@ import {
 
 import { buildSessionSandboxEnvVars } from './session-sandbox-env-build';
 import { sandboxCallbackUnreachableReason, sandboxCallbackDeadTunnelReason } from './session-callback-probe';
-import { actorForUser, type Actor } from '../../iam/actor';
-import { PROJECT_ACTIONS } from '../../iam/actions';
-import { authorize } from '../../iam/authorize';
+import type { Actor } from '../../iam/actor';
+import { launcherMayReadRepository } from './launcher-repository-access';
 import { loadVisibleSession, sessionIsTombstoned } from './session-visibility';
 import { HUMAN_SESSION_SURFACES } from './session-surface';
 import { isWorkflowRunnerContext, sessionIsWorkflowRunner } from './workflow-runner';
@@ -673,13 +672,19 @@ async function resolveSessionAgent(params: {
   // workflow runner. Nothing is picked for it from `default_agent` or the order
   // of the agents: an unnamed child is refused with the agents to name. A
   // router's worker is the exception: the router picks by space (above).
+  // Both refusals list the project agents and the exact field to set, so a
+  // caller (the CLI's `--agent`, an SDK host) can retry without guessing.
+  const startableAgents = () =>
+    loadedAgents.specs
+      .filter((spec) => spec.enabled && !spec.subagent && !isMyKortixAgentName(spec.name))
+      .map((spec) => spec.name);
   if (callerIsMeta && !requestedAgent && !callerIsFront && !isWorkflowRunnerContext(body.runtime_context)) {
-    const agents = loadedAgents.specs.filter((spec) => spec.enabled && !spec.subagent).map((spec) => spec.name);
+    const agents = startableAgents();
     return {
       error: {
         status: 400,
         body: {
-          error: `A session My Kortix starts names its agent: ${agents.join(', ') || 'none is declared'}. To start a colleague, give the agent tool inline instructions, and list the connectors and secrets it needs.`,
+          error: `A session My Kortix starts names its agent. ${nameAnAgentHint(agents)} To start a colleague, give the agent tool inline instructions, and list the connectors and secrets it needs.`,
           code: 'AGENT_REQUIRED',
           agents,
         },
@@ -689,13 +694,14 @@ async function resolveSessionAgent(params: {
   // An inline colleague (inline-colleague.ts) has My Kortix's own access, the list a person allowed it, and its own prompt.
   const myKortixColleague = platformMetaAgent && callerIsMeta && isInlineColleagueContext(body.runtime_context);
   if (platformMetaAgent && callerIsMeta && !myKortixWorkflowRunner && !frontWorker && !myKortixColleague) {
+    const agents = startableAgents();
     return {
       error: {
         status: 400,
         body: {
-          error:
-            'My Kortix cannot start another My Kortix session. Pick a project agent.',
+          error: `My Kortix cannot start another My Kortix session. ${nameAnAgentHint(agents)} To start a colleague, give the agent tool inline instructions.`,
           code: 'META_AGENT_RECURSION',
+          agents,
         },
       },
     };
@@ -708,12 +714,17 @@ async function resolveSessionAgent(params: {
   const repositoryAccess =
     agentGrantAllowsRepository(agentName, loadedAgents) &&
     (input.requestingPrincipalType === 'service_account' ||
-      (await authorize(actorForUser(input.userId, project.accountId), PROJECT_ACTIONS.PROJECT_FILE_READ, {
-        type: 'project',
-        id: projectId,
-      })).allowed);
+      (await launcherMayReadRepository(input.userId, project.accountId, projectId)));
 
   return { loadedAgents, projectDefaultAgent, agentName, platformMetaAgent, repositoryAccess, myKortixColleague };
+}
+
+/** The fix for an unnamed or My Kortix child: the field, the CLI flag and the agents to name. */
+function nameAnAgentHint(agents: string[]): string {
+  if (agents.length === 0) {
+    return 'No project agent is declared: add one under `agents:` in kortix.yaml, then set `agent_name` (CLI: `--agent <name>`).';
+  }
+  return `Set \`agent_name\` (CLI: \`--agent <name>\`) to one of: ${agents.join(', ')}.`;
 }
 
 /**
@@ -816,6 +827,36 @@ function parentTurnModel(runtimeContext: unknown): string | null {
  * Resolve and validate the session model, and the provider key selection a
  * pooled-key model needs. Runs before the billing hold.
  */
+/** The session-create refusal when no model can run the session. */
+export function noModelAvailableBody(freeModelsOnly: boolean): { error: string; code: 'no_model_available'; plan_upgrade: boolean } {
+  return {
+    error: freeModelsOnly
+      ? 'No model: upgrade to the Credits plan or add your own provider key.'
+      : 'No model: add a provider key or turn on Kortix Managed Models in Models.',
+    code: 'no_model_available',
+    // The Free plan has no managed models; upgrading is one of the two fixes.
+    plan_upgrade: freeModelsOnly,
+  };
+}
+
+/** True when the project's servable catalog (what the box registers at boot) is empty, refused keys not counted. */
+async function projectHasNoServableModel(input: {
+  projectId: string;
+  accountId: string;
+  userId: string;
+  personalUserId: string | null | undefined;
+}): Promise<boolean> {
+  const catalog = await servableProjectCatalog({
+    projectId: input.projectId,
+    accountId: input.accountId,
+    principalUserId: input.userId,
+    ...(input.personalUserId !== undefined ? { personalUserId: input.personalUserId } : {}),
+    // pi would select a model of a refused key and die on the provider's 401.
+    withoutRefusedKeys: true,
+  });
+  return Object.keys(catalog.models ?? {}).length === 0;
+}
+
 async function resolveSessionModel(params: {
   input: CreateProjectSessionInput;
   accountId: string;
@@ -834,13 +875,29 @@ async function resolveSessionModel(params: {
   const { input, accountId, projectId, agentName, loadedAgents, visibility, origin } = params;
   const { project, userId, body } = input;
   const freeModelsOnly = !(await accountMayUseManagedModels(accountId));
-  const pooledProviderSecrets = resolveFeatureFlag(project.metadata, 'pooled_provider_secrets');
-  if (body.provider_secret_pools !== undefined && !pooledProviderSecrets) {
-    return { error: { status: 403, body: { error: 'Provider secret pools are unavailable' } } };
-  }
-  // The key selection this session starts with: the caller's, or the one
-  // chosen below for a model that runs only on pooled keys.
-  let providerSecretPools = body.provider_secret_pools as Record<string, string[]> | undefined;
+  // The key selection this session starts with: the caller's, else none, and
+  // the gateway uses every key the session may use when it runs.
+  const providerSecretPools = body.provider_secret_pools as Record<string, string[]> | undefined;
+  // Whose personal keys the gateway will use for this session (spec 2026-09-22
+  // §2.3): a private session's person, nobody for a shared or unattended one.
+  // Every model check below uses it, so a model reached only through one
+  // person's keys is not accepted for a session that cannot use them. A child
+  // session's person is its parent's, unknown here: undefined keeps the
+  // creator's scope.
+  const personalUserId = input.callerSessionId
+    ? undefined
+    : visibility === 'private'
+      ? decideSessionOnBehalfOf({
+          userId,
+          origin,
+          // The metadata the session will carry: the request's, then the caller's.
+          metadata: { ...normalizeJsonObject(body.metadata), ...normalizeJsonObject(input.metadata) },
+          isAccountMember: true,
+          slackRequiresUserIdentity: config.SLACK_REQUIRE_USER_IDENTITY !== false,
+          teamsRequiresUserIdentity: config.TEAMS_REQUIRE_USER_IDENTITY !== false,
+        })
+      : null;
+  const scope = personalUserId === undefined ? {} : { personalUserId };
 
   // Model: normalize + fail-fast at create. Validate against the same
   // servability resolver the gateway uses and store the runtime ref form
@@ -876,54 +933,18 @@ async function resolveSessionModel(params: {
       const missing = await missingClaudeSubscription({ accountId, projectId, userId, model: claudeAgent.ref });
       if (missing) return { error: { status: 409, body: claudeSubscriptionRequiredBody(missing) } };
     }
-    let servable = await isModelServableForAccount({
+    // A caller that names only the model (the CLI, the SDK, a chat channel)
+    // selects no keys: the gateway serves the model with every key the
+    // session may use, the Models panel's keys included.
+    const servable = await isModelServableForAccount({
       userId,
       accountId,
       projectId,
       freeModelsOnly,
       model: requestedModel,
       providerSecretPools,
+      ...scope,
     });
-    // A model reached only through pooled keys needs a key selection, and a
-    // caller that names only the model (the CLI, the SDK, a chat channel)
-    // names none: it was refused here. Select every key the caller may use
-    // for its provider, so they rotate — the same keys the web offers.
-    // Personal keys only in a session private to them that acts on their
-    // behalf (spec 2026-09-22 §2.3); a child session's human is its
-    // parent's, unknown here, so it gets shared keys only.
-    if (!servable && providerSecretPools === undefined && pooledProviderSecrets) {
-      const personal =
-        visibility === 'private' && !input.callerSessionId
-          ? decideSessionOnBehalfOf({
-              userId,
-              origin,
-              // The metadata the session will carry: the request's, then the caller's.
-              metadata: { ...normalizeJsonObject(body.metadata), ...normalizeJsonObject(input.metadata) },
-              isAccountMember: true,
-              slackRequiresUserIdentity: config.SLACK_REQUIRE_USER_IDENTITY !== false,
-              teamsRequiresUserIdentity: config.TEAMS_REQUIRE_USER_IDENTITY !== false,
-            })
-          : null;
-      const selection = await usableProviderKeys({
-        accountId,
-        projectId,
-        userId,
-        grantUserId: personal,
-        model: requestedModel,
-      }).catch(() => null);
-      if (selection && agentMayUseEnv(grantFromLoadedAgents(agentName, loadedAgents), selection.envVar)) {
-        const selected = { [selection.providerId]: selection.secretIds };
-        servable = await isModelServableForAccount({
-          userId,
-          accountId,
-          projectId,
-          freeModelsOnly,
-          model: requestedModel,
-          providerSecretPools: selected,
-        });
-        if (servable) providerSecretPools = selected;
-      }
-    }
     if (!servable) {
       return {
         error: {
@@ -947,6 +968,7 @@ async function resolveSessionModel(params: {
         explicit: null,
         freeModelsOnly,
         providerSecretPools,
+        ...scope,
       });
       // A child session (another session called create) whose agent pins no
       // model runs on the model its parent's turn runs, not the project
@@ -956,7 +978,7 @@ async function resolveSessionModel(params: {
       const parentModel = input.callerSessionId && resolved.source !== 'agent' ? parentTurnModel(body.runtime_context) : null;
       if (
         parentModel &&
-        (await isModelServableForAccount({ userId, accountId, projectId, freeModelsOnly, model: parentModel, providerSecretPools }))
+        (await isModelServableForAccount({ userId, accountId, projectId, freeModelsOnly, model: parentModel, providerSecretPools, ...scope }))
       ) {
         sessionModel = toSessionModelRef(parentModel);
         sessionModelSource = 'explicit';
@@ -972,9 +994,15 @@ async function resolveSessionModel(params: {
         // No default: the box would boot with no model, and pi does not start
         // without one. The web names the person's pick only on the first prompt.
         const picked = firstPromptModelRef(body.pending_prompt);
-        if (picked && (await isModelServableForAccount({ userId, accountId, projectId, freeModelsOnly, model: picked, providerSecretPools }))) {
+        if (picked && (await isModelServableForAccount({ userId, accountId, projectId, freeModelsOnly, model: picked, providerSecretPools, ...scope }))) {
           sessionModel = toSessionModelRef(picked);
           sessionModelSource = 'explicit';
+        } else if (await projectHasNoServableModel({ projectId, accountId, userId, personalUserId: scope.personalUserId })) {
+          // No KORTIX_MODEL and an empty catalog is exactly the box that never
+          // boots ("pi harness has no model", harness/pi/model.ts). Refuse
+          // before a sandbox, a billing hold or a row exists. A non-empty
+          // catalog is fine: pi selects its first model.
+          return { error: { status: 409, body: noModelAvailableBody(freeModelsOnly) } };
         }
       }
     } catch (error) {

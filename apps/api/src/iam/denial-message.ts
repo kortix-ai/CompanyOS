@@ -6,7 +6,7 @@
 
 import { HTTPException } from 'hono/http-exception';
 import { toWorkspaceAction } from '@kortix/shared/workspace-actions';
-import { markAccountMfaDenial, markAgentGrantDenial } from '../shared/dead-credential-log';
+import { markAccountMfaDenial, markAgentGrantDenial, markPersonRoleDenial } from '../shared/dead-credential-log';
 
 const MFA_DENIAL_MESSAGE =
   'This workspace requires multi-factor authentication. Verify your second factor and retry.';
@@ -80,6 +80,10 @@ export function denialReasonMessage(rawAction: string, reason?: string): string 
       return `This key's scope does not include "${action}". Mint a key with that permission, or use a full key.`;
     case 'token_out_of_scope':
       return 'This key is bound to one workspace and cannot be used for this request.';
+    case 'token_account_shared':
+      // The token's own workspace, but its legacy account still holds other
+      // workspaces: the account rows are theirs too. No grant or flag lifts it.
+      return `"${action}" reads or changes account-wide data that this workspace still shares with other workspaces of the same legacy account, so a workspace key or session token cannot use it. Use a personal key: run \`kortix login\` on your own machine, or open the web app.`;
     case 'workspace_closed':
       return 'This workspace is being deleted. Only its owners can open it, to restore it.';
     case 'resource_scope_insufficient':
@@ -101,6 +105,24 @@ export function denialReasonMessage(rawAction: string, reason?: string): string 
  */
 /** Denials where the person's role (not an agent grant) lacks the action. */
 const ROLE_REASONS: ReadonlySet<string> = new Set(['project_role_insufficient', 'account_role_insufficient']);
+
+/**
+ * The person role/membership refusal family: every reason whose constraint is
+ * the caller's STANDING role or membership in the workspace — a human edits a
+ * role or sends an invite before the answer changes. Their warn lines share
+ * the log throttle — see shared/dead-credential-log.ts (KRTX-4801). The same
+ * boundary as the agent family: `sso_required` stays outside (one redirect
+ * fixes it), and so do the remaining generic fallbacks (`super_admin`,
+ * `impersonation*`, `workspace_closed`), no log pattern of a caller looping
+ * on them.
+ */
+const PERSON_ROLE_DENIAL_REASONS = new Set([
+  'role',
+  'project_role_insufficient',
+  'account_role_insufficient',
+  'no_project_membership',
+  'not_a_member',
+]);
 
 export function buildDenialError(
   action: string,
@@ -148,9 +170,11 @@ export function buildDenialError(
     }),
   });
   // A stable agent-principal denial is the one 4xx a caller can receive
-  // forever, so its LINE joins the log throttle (KRTX-4635). The response is
-  // untouched — the body keeps carrying code, action and the remedy.
+  // forever, so its LINE joins the log throttle (KRTX-4635) — and so does the
+  // person's role/membership denial (KRTX-4801). The response is untouched —
+  // the body keeps carrying code, action and the remedy.
   if (reason && AGENT_GRANT_DENIAL_REASONS.has(reason)) markAgentGrantDenial(err);
+  if (reason && PERSON_ROLE_DENIAL_REASONS.has(reason)) markPersonRoleDenial(err);
   return err;
 }
 

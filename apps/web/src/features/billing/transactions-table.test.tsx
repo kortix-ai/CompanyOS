@@ -4,13 +4,21 @@
 // what the customer sees. These tests pin the shared piece and the fact that
 // both callers actually use it.
 import { describe, expect, test } from 'bun:test';
-import { NextIntlClientProvider } from 'next-intl';
+import { NextIntlClientProvider, createTranslator } from 'next-intl';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { localizeUiCatalog } from '@kortix/ui/i18n';
+import { APP_REGISTRY_TRANSLATION_KEYS } from '@kortix/ui/i18n/ui-catalog/app-registry-translation-keys.generated';
 import { TooltipProvider } from '@kortix/ui/tooltip';
 import { CreditActivityFeed, formatEntryTime } from './credit-activity-feed';
-import { creditTransactionBadge, type CreditTransactionRow } from './transactions-table';
+import {
+  TRANSACTION_BADGES,
+  creditTransactionBadge,
+  type CreditTransactionRow,
+} from './transactions-table';
+import en from '../../../translations/en.json';
+import zh from '../../../translations/zh.json';
 
 const dir = import.meta.dir;
 const creditTransactionsSource = readFileSync(join(dir, 'credit-transactions.tsx'), 'utf8');
@@ -34,6 +42,32 @@ describe('creditTransactionBadge', () => {
       label: 'some_new_type',
       variant: 'outline',
     });
+  });
+
+  test('every ledger badge label carries a catalog key every locale can resolve', () => {
+    // `localizeUiCatalog` translates a label only when the generated key map
+    // names it and the locale catalog holds that key; a label without a key
+    // renders in English for every non-English locale (the v0.15.4 gate
+    // failure: five ledger labels had no catalog entries).
+    const english = en.hardcodedUi.i18nComplete as Record<string, string>;
+    const labels = new Set(Object.values(TRANSACTION_BADGES).map((badge) => badge.label));
+    for (const label of labels) {
+      const key = APP_REGISTRY_TRANSLATION_KEYS[label];
+      expect(key, label).toMatch(/^text[0-9a-f]{12}$/);
+      expect(english[key], `en:${label}`).toBe(label);
+    }
+
+    // The key sets are pinned in parity across locales by
+    // src/i18n/i18n-complete.test.tsx; spot-check the real runtime path: the
+    // zh catalog translates a label that used to fall through to English.
+    const tZh = createTranslator({
+      locale: 'zh',
+      messages: zh,
+      namespace: 'hardcodedUi.i18nComplete',
+    });
+    expect(
+      localizeUiCatalog(TRANSACTION_BADGES, tZh, APP_REGISTRY_TRANSLATION_KEYS).topup_bonus.label,
+    ).toBe('充值奖励');
   });
 });
 

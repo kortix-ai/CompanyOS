@@ -1,6 +1,9 @@
 import { HTTPException } from 'hono/http-exception';
-import { DEAD_CREDENTIAL_BURST_SUPPRESSED } from '../../shared/dead-credential-log';
-import { logWindowDecision } from '../../shared/log-window';
+import {
+  DEAD_CREDENTIAL_BURST_SUPPRESSED,
+  PREVIEW_SANDBOX_DENIED_MESSAGE,
+} from '../../shared/dead-credential-log';
+import { logWindowDecision, logWindowWarnDecision } from '../../shared/log-window';
 import { PROJECT_ACTIONS, authorize } from '../../iam';
 import { actorForUser } from '../../iam/actor';
 import { logger } from '../../lib/logger';
@@ -64,7 +67,10 @@ export function reportSessionAccessRefusal(payload: Record<string, unknown>, now
   const { log, suppressed } = logWindowDecision(message, now);
   if (!log) return;
   const fields = { ...payload, suppressed };
-  if (suppressed >= DEAD_CREDENTIAL_BURST_SUPPRESSED) logger.warn(message, fields);
+  // The escalation shares the hourly warn cap of the other burst-band sites
+  // (logWindowWarnDecision): a grind hour cannot ship every window's line at
+  // warn and re-trip the infra-sweep's 10/h new-warn-pattern bar (KRTX-4674).
+  if (suppressed >= DEAD_CREDENTIAL_BURST_SUPPRESSED && logWindowWarnDecision(message, now)) logger.warn(message, fields);
   else logger.info(message, fields);
 }
 
@@ -100,7 +106,7 @@ export async function assertPreviewSandboxAccess(
     }))
   ) {
     throw new HTTPException(403, {
-      message: `Not authorized to access this sandbox, userId: ${userId}, sandboxId: ${sandboxId}`,
+      message: `${PREVIEW_SANDBOX_DENIED_MESSAGE}, userId: ${userId}, sandboxId: ${sandboxId}`,
     });
   }
 }

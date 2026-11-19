@@ -48,7 +48,6 @@ export function fakeHarness(over: Partial<HarnessService> = {}): HarnessService 
     control: {
       bind: () => ({
         applyEnvironment: unused('control.applyEnvironment'), refresh: unused('control.refresh'), abort: unused('control.abort'),
-        armAbortAfterTool: unused('control.armAbortAfterTool'), disarmAbortAfterTool: unused('control.disarmAbortAfterTool'),
       }),
     },
     diagnostics: {

@@ -36,6 +36,15 @@ export { runSpaceWatcherTick } from './lib/space-watch/wake';
 export { runGoalReconcilerTick } from './goals/reconcile';
 export { sessionSpaceAgents } from './lib/front-thread';
 
+// The eval runner's tick (consumed by worker/jobs/eval-runner). Loaded on the
+// first tick, not at import: the runner reaches provisioning and account
+// deletion, and a static re-export put that whole graph into every module that
+// loads this surface (the sandbox-proxy boot order, session-sandbox).
+export async function runEvalRunnerTick(now?: Date): Promise<number> {
+  const { runEvalRunnerTick: tick } = await import('./evals/runner');
+  return tick(now);
+}
+
 // A person's pins and archive (consumed by account erasure and offboarding).
 export { deleteMemberSessionStates, deleteUserSessionStates } from './lib/session-user-state';
 
@@ -153,6 +162,10 @@ export const reconcileEventSubscriptionsFromCatalog: typeof import('./trigger-ev
   async (...args) => (await eventSubscriptions()).reconcileEventSubscriptionsFromCatalog(...args);
 export const releaseProjectEventSubscriptions: typeof import('./trigger-events/subscriptions').releaseProjectEventSubscriptions =
   async (...args) => (await eventSubscriptions()).releaseProjectEventSubscriptions(...args);
+// The save-time model check of triggers (consumed by connector sync, which
+// reconciles kortix.yaml triggers). Lazy for the same cycle as above.
+export const gateTriggerSetup: typeof import('./lib/trigger-setup-pause').gateTriggerSetup =
+  async (...args) => (await import('./lib/trigger-setup-pause')).gateTriggerSetup(...args);
 // Kortix-polled app events (consumed by replica/trigger-event-poll.ts). Loading the
 // module registers the delivery queue's job handler. Lazy for the same cycle as above.
 export const runDueEventPolls = async (onSlotFree?: () => void): Promise<number> =>

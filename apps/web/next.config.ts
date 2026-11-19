@@ -8,13 +8,13 @@ import createNextIntlPlugin from 'next-intl/plugin';
 import path from 'path';
 import { buildBlumeDocs, getBlumeDocsOutputPaths } from './scripts/blume-docs.mjs';
 import { BLOG_ORIGIN } from './src/config/blog-origin';
+import { resolveTurbopackFileSystemCacheForBuild } from './src/config/turbopack-build-cache';
 import { locales } from './src/i18n/catalog.mjs';
 import { workspaceRedirects } from './src/lib/workspace-redirects';
 import { SHIPPED_ICON_WEIGHTS } from '@kortix/ui/lib/icon-config';
 import {
   embedContentSecurityPolicy,
   enforcedContentSecurityPolicy,
-  reportOnlyContentSecurityPolicy,
 } from './src/lib/security/content-security-policy';
 import { refreshContentTimestamps } from './scripts/build-content-timestamps.mjs';
 import { copyEmojibaseData, getEmojibaseDataOutputPaths } from './scripts/emojibase-data.mjs';
@@ -326,11 +326,13 @@ const nextConfig = (): NextConfig => ({
 
   // --- Next.js 16.3 posture ------------------------------------------------
   // Recording WHY each 16.3 knob is set or left alone, so nobody "adds the
-  // missing config" later or wonders whether we missed the release. The only
-  // knobs we set are turbopackMemoryEviction and turbopackFileSystemCacheForDev
+  // missing config" later or wonders whether we missed the release. The knobs
+  // we set are turbopackMemoryEviction and turbopackFileSystemCacheForDev
   // (both below) — and both only as escape hatches that default to upstream's
   // value when their env var is unset. 16.4 adds turbopackGc (below), which we
-  // turn on: upstream defaults it off.
+  // turn on: upstream defaults it off. turbopackFileSystemCacheForBuild (also
+  // below) defaults to upstream's on, except on machines that cannot hold its
+  // memory: it OOM-killed the build on an 11 GB sandbox (KRTX-4741).
   //
   // Already default-ON in 16.3 — restating them here would be dead config that
   // silently diverges the day upstream changes a default:
@@ -421,6 +423,12 @@ const nextConfig = (): NextConfig => ({
 
   // Performance optimizations
   experimental: {
+    // Next 16.4 stops `next dev` under a coding agent (it reads the agent's
+    // environment) to print an upgrade notice, and lets it start only on a
+    // retry within 5 minutes. `pnpm dev` and `pnpm worktree start` take longer
+    // than that to reach the web server, so every agent session's stack died
+    // at the notice. Next.js upgrades arrive through Dependabot and PRs.
+    agentUpgrade: false,
     // Next 16 gives a dynamic page segment a client-cache TTL of 0, so every
     // navigation to a route under `workspaces/[id]/layout.tsx` (which awaits
     // cookies(), making the whole subtree dynamic) discards the segment and
@@ -464,6 +472,12 @@ const nextConfig = (): NextConfig => ({
     // aborts the dev server and takes the whole browser shard with it — the
     // full rationale is on resolveTurbopackFileSystemCacheForDev above.
     turbopackFileSystemCacheForDev: resolveTurbopackFileSystemCacheForDev(),
+    // One-shot sandbox builds (11 GB RAM, no swap) cannot hold the persistent
+    // build cache in memory: it pushed the build to 9.5 GB RSS and the kernel
+    // OOM killer SIGKILLed it (exit 137, KRTX-4741). Small machines default the
+    // build cache off; 16 GB CI runners keep it (and its warm 36.3 s -> 1.9 s
+    // compile). KORTIX_TURBOPACK_BUILD_CACHE=on|off overrides.
+    turbopackFileSystemCacheForBuild: resolveTurbopackFileSystemCacheForBuild(),
     // Without GC (the default, and the only mode before 16.4) the persistent
     // cache keeps every task it ever computed. Each `git merge origin/dev`
     // adds a new set, so a busy worktree's .next/dev/cache/turbopack reached
@@ -477,7 +491,6 @@ const nextConfig = (): NextConfig => ({
       'recharts',
       'date-fns',
       '@tanstack/react-query',
-      'cmdk',
       'next-intl',
     ],
   },
@@ -1074,7 +1087,9 @@ const nextConfig = (): NextConfig => ({
       },
       {
         source: '/ingest/:path*',
-        destination: 'https://eu.i.posthog.com/:path*',
+        // POSTHOG_INGEST_ORIGIN points a local run at a capture sink
+        // (product-analytics skill, "Verify an event"). Production leaves it unset.
+        destination: `${process.env.POSTHOG_INGEST_ORIGIN || 'https://eu.i.posthog.com'}/:path*`,
       },
       // /docs is a Blume static build in public/docs/. Astro writes clean URLs as
       // directories, and Next's static handler does not resolve a directory index,
@@ -1121,16 +1136,11 @@ const nextConfig = (): NextConfig => ({
       {
         source: '/:path*',
         headers: [
-          // Enforced: framing, plugins and <base>. The script allowlist is
-          // report-only until its reports are clean; see
-          // src/lib/security/content-security-policy.ts.
+          // Enforced: framing, plugins, <base> and the script allowlist, with
+          // a report-uri; see src/lib/security/content-security-policy.ts.
           {
             key: 'Content-Security-Policy',
             value: enforcedContentSecurityPolicy(),
-          },
-          {
-            key: 'Content-Security-Policy-Report-Only',
-            value: reportOnlyContentSecurityPolicy(),
           },
           // No X-Frame-Options: it cannot allowlist the Kortix extension's side panel.
           // CSP frame-ancestors above is the framing gate.

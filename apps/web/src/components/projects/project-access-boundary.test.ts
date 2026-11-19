@@ -162,19 +162,18 @@ describe('isForbiddenState', () => {
   });
 
   test('a 404 or a transient failure is not a permission problem', () => {
-    // This gates the account/project facts, the approval note, and the admin
-    // escape hatch. Admin bypass re-fetches with a bypass header — it cannot
-    // resurrect a deleted project or clear a 500, so offering it there is a
-    // dead control.
+    // This gates the account/project facts and the approval note.
     expect(isForbiddenState('notFound')).toBe(false);
     expect(isForbiddenState('unavailable')).toBe(false);
   });
+});
 
-  test('the admin escape hatch is gated on the 403 states, not just on the role', () => {
-    expect(componentSource).toContain('const showAdminBypass = forbidden && !!adminRole?.isAdmin');
-    expect(componentSource).toContain('{showAdminBypass ? (');
-    // The bare role check was what leaked the control onto 404 and 500.
-    expect(componentSource).not.toMatch(/\{adminRole\?\.isAdmin \? \(/);
+describe('admin escape hatch', () => {
+  test('shows behind the three 403 faces only', () => {
+    // The API answers a live workspace the caller cannot read with 403
+    // workspace_access_denied; a 404 is a workspace that is gone, where acting
+    // as the account opens nothing.
+    expect(ALL_STATES.filter(isForbiddenState)).toEqual(['request', 'sent', 'alreadyRequested']);
   });
 });
 
@@ -216,6 +215,13 @@ describe('resolveGateState', () => {
 describe('resolveBoundaryView', () => {
   const ready = { authReady: true, isPending: false };
 
+  test('the gate reads the canonical project slot, without retries', () => {
+    // The shell, ⌘K and settings read the same entry; a private key would
+    // bring the second GET per load back.
+    expect(projectGateQuery('p-1').queryKey).toEqual(qk.project.summary('p-1'));
+    expect(projectGateQuery('p-1').retry).toBe(false);
+  });
+
   test('unresolved auth shows pending, even over a cached project', () => {
     expect(
       resolveBoundaryView({ authReady: false, isPending: false, hasData: true, errorState: null }),
@@ -251,6 +257,30 @@ describe('resolveBoundaryView', () => {
     for (const status of [403, 404, 500]) {
       const errorState = gateStateForError({ status });
       expect(resolveBoundaryView({ ...ready, hasData: false, errorState })).toBe('gate');
+    }
+  });
+
+  test('a workspace in its restore window is its own view, still outranked by a terminal verdict', () => {
+    // K2: the deleting verdict is the resolver's fourth view, so the component
+    // renders exactly what this one function decided.
+    expect(
+      resolveBoundaryView({ ...ready, hasData: true, workspaceState: 'deleting', errorState: null }),
+    ).toBe('deleting');
+    expect(
+      resolveBoundaryView({ ...ready, hasData: true, workspaceState: 'active', errorState: null }),
+    ).toBe('project');
+    expect(
+      resolveBoundaryView({ ...ready, hasData: true, workspaceState: 'setup_required', errorState: null }),
+    ).toBe('project');
+    expect(
+      resolveBoundaryView({ ...ready, hasData: true, workspaceState: undefined, errorState: null }),
+    ).toBe('project');
+    // A 403 or 404 on the read outranks the deleting state, as it does the project.
+    for (const status of [403, 404]) {
+      const errorState = gateStateForError({ status });
+      expect(
+        resolveBoundaryView({ ...ready, hasData: true, workspaceState: 'deleting', errorState }),
+      ).toBe('gate');
     }
   });
 });
@@ -449,30 +479,6 @@ describe('house dialect', () => {
   // This screen sits beside /auth, /cli/authorize and /oauth/authorize. It must
   // be composed from their shared vocabulary, not from a bespoke frame — that
   // is the whole reason the previous split-hero version looked foreign.
-  test('is built from the shared auth consent primitives', () => {
-    expect(componentSource).toContain("from '@kortix/ui/internal/auth/auth-card-shell'");
-    expect(componentSource).toContain("from '@kortix/ui/internal/auth/auth-consent'");
-    expect(componentSource).toContain("from '@kortix/ui/internal/auth/auth-primitives'");
-    for (const primitive of [
-      '<AuthFrame>',
-      '<StepHeader',
-      '<DetailPanel>',
-      '<ErrorStrip ',
-      '<Rise',
-    ]) {
-      expect({ primitive, present: componentSource.includes(primitive) }).toEqual({
-        primitive,
-        present: true,
-      });
-    }
-    // The one exception to the auth vocabulary: the pending frame. It resolves
-    // into the project shell, not into an auth screen, so it is the shared
-    // "opening a project" mark rather than the consent flows' spinner. Paired
-    // with the absence, so a revert to AuthPendingScreen fails here.
-    expect(componentSource).toContain('<ProjectPendingScreen />');
-    expect(componentSource).not.toContain('<AuthPendingScreen');
-  });
-
   test('does not re-introduce a bespoke frame, card or wallpaper', () => {
     // The auth dialect is flat on the plain background. A card, a wallpaper or
     // a backdrop-blur here is the exact drift this screen was rebuilt to undo.

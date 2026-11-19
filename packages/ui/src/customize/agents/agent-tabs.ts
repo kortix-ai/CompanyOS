@@ -126,6 +126,7 @@ export function sectionLocationHref(pathname: string, section: AgentConfigSectio
 const OVERVIEW_ROW = 'overview';
 
 export const YAML_KEY_ROW = {
+  title: OVERVIEW_ROW,
   description: OVERVIEW_ROW,
   prompt: OVERVIEW_ROW,
   prompt_file: 'overview',
@@ -140,6 +141,8 @@ export const YAML_KEY_ROW = {
   top_p: 'model',
   steps: 'model',
   options: 'model',
+  run: 'model',
+  timeout: 'model',
   tools: 'tools',
   codemode: 'tools',
   context: 'tools',

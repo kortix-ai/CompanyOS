@@ -134,7 +134,7 @@ export function CopyAllButton({
 // Raw message accordion item
 // ============================================================================
 
-/** Stringifies only while its accordion item is open — Radix unmounts closed content. */
+/** Stringifies only while its accordion item is open — the accordion unmounts closed content. */
 function RawMessageJson({ value }: { value: unknown }) {
   const json = useMemo(() => JSON.stringify(value, null, 2), [value]);
   return (
@@ -173,7 +173,7 @@ const RawMessage = memo(function RawMessage({
             </Badge>
             <span className="text-muted-foreground">{row.id}</span>
           </div>
-          <div className="text-muted-foreground/60 shrink-0 text-xs tabular-nums">
+          <div className="text-muted-foreground shrink-0 text-xs tabular-nums">
             {formatTime(row.created)}
           </div>
         </div>

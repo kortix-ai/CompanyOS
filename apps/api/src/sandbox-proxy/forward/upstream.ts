@@ -12,6 +12,13 @@ import { jsonProxyError } from '../pre-prompt-env-sync';
 import { recordDaemonTiming } from './daemon-timing';
 import { appCookieHeader } from '../preview-session';
 import { STRIP_FORWARD_HEADERS, clientResponseHeaders } from '../preview-response';
+import {
+  injectPreviewBridge,
+  previewBridgeScript,
+  shouldInjectPreviewBridge,
+  varyOnFetchDest,
+} from '../preview-bridge';
+import { previewParentOrigins } from '../preview-hosts';
 import { EFFECTIVE_MESSAGE_ID_HEADER } from '../prompt-wire-id-repair';
 import { proxyAttemptTimeoutMs } from '../preview-retry-budget';
 import { releasePromptDelivery } from '../prompt-dedupe';
@@ -59,6 +66,12 @@ export function forwardsClientEncoding(port: number, remainingPath: string): boo
 // load is hundreds of requests and the extend is monotone, so collapsing them
 // loses nothing.
 const previewUseThrottle = createExtendThrottle(60_000);
+
+/** The connect timer's abort reason (see `sendUpstreamAttempt`). `retry.ts`
+ *  matches this exact message to tell the proxy's own connect timeout from any
+ *  other TimeoutError — a client abort reuses the DOMException name with a
+ *  different message. */
+export const PROXY_CONNECT_TIMEOUT_MESSAGE = 'proxy attempt connect timeout';
 
 /**
  * Build forwarding headers: copy the client's (minus stripped), force
@@ -171,7 +184,7 @@ export async function sendUpstreamAttempt(
   const connectTimer = setTimeout(
     () =>
       attemptController.abort(
-        new DOMException('proxy attempt connect timeout', 'TimeoutError'),
+        new DOMException(PROXY_CONNECT_TIMEOUT_MESSAGE, 'TimeoutError'),
       ),
     proxyAttemptTimeoutMs(budgetRemainingMs, {
       method,
@@ -397,11 +410,31 @@ export async function respondFromUpstream(
   // go to the client untouched. The API's compress middleware skips a body
   // that is already encoded (preview-encoding-passthrough.test.ts).
 
-  return new Response(upstream.body, {
+  varyOnFetchDest(upstream.status, respHeaders);
+  const passthrough = new Response(upstream.body, {
     status: upstream.status,
     statusText: upstream.statusText,
     headers: respHeaders,
   });
+  // A framed HTML page reports its address to the panel (preview-bridge.ts).
+  const parentOrigins = previewParentOrigins();
+  if (
+    upstream.body &&
+    shouldInjectPreviewBridge({
+      method,
+      status: upstream.status,
+      upstreamPort,
+      requestHeaders: req.incomingHeaders,
+      responseHeaders: respHeaders,
+      parentOrigins,
+    })
+  ) {
+    return await injectPreviewBridge(
+      passthrough,
+      previewBridgeScript({ prefix: req.originMode ? '' : req.redirectPrefix, origins: parentOrigins }),
+    );
+  }
+  return passthrough;
 }
 
 /**

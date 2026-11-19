@@ -32,7 +32,7 @@ import {
   REVIEW_CONTROL_ACTIONS,
   reviewVerdictAllowed,
 } from '@kortix/sdk';
-import { clearStartStash, contract, qk, reviewItemsOf } from '@kortix/sdk/react';
+import { clearStartStash, contract, qk, reviewItemsOf, useSessionAsks } from '@kortix/sdk/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUiRouter, useUiSearchParams } from '../../../providers/ui-provider';
 import { useEffect, useMemo, useState } from 'react';
@@ -52,7 +52,7 @@ import {
   isApprovalExpiredError,
   itemDeepLink,
 } from '../../../workspace/review/review-actions';
-import { AskDeck } from '../../../session/prompts/ask-deck';
+import { AskDeck, DECK_KINDS, deckOrder } from '../../../session/prompts/ask-deck';
 import { ReviewCenter } from '../../../workspace/review/review-center';
 import { REVIEW_VERDICT_ANNOUNCED } from '../../../workspace/review/review-reducer';
 
@@ -77,6 +77,17 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
   // role still sees the inbox, with no verdict control. The inbox stays live
   // for every viewer: an unresolved probe offers no verdict.
   const cans = useProjectCans(projectId, REVIEW_CONTROL_ACTIONS);
+  // The deck claims the inbox's empty pane only while an agent asks something
+  // (or the asks still load). With none, its own "Nothing waits on you" would
+  // sit beside rows that do wait, so the pane shows "Select an item" instead.
+  // Same query as the deck's own: a cache hit, not a second request.
+  const asks = useSessionAsks(projectId, { enabled: Boolean(projectId) });
+  const [selectedAskId, setSelectedAskId] = useState<string | null>(null);
+  const [currentAskId, setCurrentAskId] = useState<string | null>(null);
+  const [hiddenAskIds, setHiddenAskIds] = useState<ReadonlySet<string>>(() => new Set());
+  const deckAsks = deckOrder((asks.data?.asks ?? []).filter((ask) => DECK_KINDS.has(ask.kind)), [], hiddenAskIds);
+  const deckShows =
+    asks.isLoading || asks.isError || (asks.data?.asks ?? []).some((ask) => DECK_KINDS.has(ask.kind));
   const qc = useQueryClient();
   const router = useUiRouter();
   const closeCustomize = useSettingsPanelStore((s) => s.close);
@@ -344,7 +355,28 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
 
   return (
     <ReviewCenter
-      needsYouDeck={projectId ? <AskDeck projectId={projectId} onOpenSession={openSession} /> : null}
+      sessionAsks={deckAsks}
+      selectedAskId={currentAskId}
+      onSelectAsk={setSelectedAskId}
+      needsYouDeck={
+        projectId && deckShows
+          ? ({ paused }) => (
+              // `empty={null}`: in the 5 s Undo window after the last card,
+              // the deck draws nothing (the inbox shows its own empty state)
+              // rather than "Nothing waits on you" beside rows that do.
+              <AskDeck
+                projectId={projectId}
+                onOpenSession={openSession}
+                empty={null}
+                paused={paused}
+                onCurrentAskChange={setCurrentAskId}
+                onHiddenAskIdsChange={setHiddenAskIds}
+                selectedAskId={selectedAskId}
+                onClearSelection={() => setSelectedAskId(null)}
+              />
+            )
+          : undefined
+      }
       initialItems={items}
       segment={segment}
       onSegmentChange={setSegment}

@@ -158,6 +158,12 @@ export interface ProvisionContext {
    * project_id = workspace_id, so the workspace keeps its id (design.md §3.2 C1).
    */
   projectId?: string;
+  /**
+   * A workspace an eval trial runs in (`projects/evals/trial-workspace.ts`):
+   * no template prebuild (the trial's sessions boot the agent's own sandbox)
+   * and no `project_created` product event (nobody created a project).
+   */
+  evalTrial?: boolean;
 }
 
 /**
@@ -354,7 +360,7 @@ export async function runProvision(ctx: ProvisionContext, emit: ProvisionEmit): 
   if ('result' in seeding) return seeding.result;
   const { seeded } = seeding;
 
-  if (seeded) {
+  if (seeded && !ctx.evalTrial) {
     kickProjectTemplatePrebuilds(
       {
         projectId: row.projectId,
@@ -373,7 +379,7 @@ export async function runProvision(ctx: ProvisionContext, emit: ProvisionEmit): 
   // account takes the project's.
   if (ctx.newWorkspace) await renameAccountOfSoleProject(row, row.name);
 
-  captureProductEvent({
+  if (!ctx.evalTrial) captureProductEvent({
     userId: scope.userId,
     accountId: scope.accountId,
     event: 'project_created',

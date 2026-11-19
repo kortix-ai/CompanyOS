@@ -53,8 +53,10 @@ import {
   isParkedRuntimeDownReason,
   type SessionControlFrameType,
 } from '../core/wire-values';
+import { sessionWorkState, type ProjectSession } from '../core/rest/projects-client/sessions';
 import { invalidateWorkspaceProviderQueries } from './provider-refresh';
 import { qk } from './query-keys';
+import { updateCachedWorkspaceSessions } from './session-cache-write';
 import type { SessionTurnObservation } from './use-session-working';
 
 /** `sessionStreamConnected` as a hook. Re-renders when that answer moves. */
@@ -117,6 +119,11 @@ const CONTROL_FRAME_APPLIERS: Record<SessionControlFrameType, ControlFrameApplie
       atMs: frame.receivedAtMs ?? nowMs,
     };
     queryClient.setQueryData(key, observation);
+    // The same verdict is `ProjectSession.working`, which the session list
+    // reads for its status (`sessionListStatus`). Those caches refresh on a
+    // 60 s poll, so without this the row said "Working" well after the turn
+    // ended (F-025).
+    if (payload.working) patchCachedSessionWorking(queryClient, projectId, sessionId, payload.working, payload.last_ended);
   },
   'kortix.control.session': (queryClient, projectId, sessionId, frame, memory) => {
     const payload = frame.payload as SessionPayload;
@@ -162,7 +169,14 @@ const CONTROL_FRAME_APPLIERS: Record<SessionControlFrameType, ControlFrameApplie
       if (payload?.sandbox_status === 'stopped' && payload?.stop_reason === 'manual') {
         noteSessionStopped(sessionId);
       }
-      void queryClient.invalidateQueries({ queryKey: sessionStartKey(projectId, sessionId) });
+      // A box on its way up leaves the in-flight `/start` long-poll running:
+      // it answers when the box is ready. Cancelling it on every row change
+      // sent a new `/start` per frame (4 in 1.6 s for a new session). A stop
+      // must be seen now, so it still yields the in-flight read.
+      void queryClient.invalidateQueries(
+        { queryKey: sessionStartKey(projectId, sessionId) },
+        { cancelRefetch: payload?.sandbox_status === 'stopped' },
+      );
     }
     memory.runtimeKey = runtimeKey;
   },
@@ -215,6 +229,61 @@ export function applySessionControlFrame(
   // An unknown type comes from a newer API: ignored, as before.
   if (!isKnownControlFrameType(frame.type)) return;
   CONTROL_FRAME_APPLIERS[frame.type](queryClient, projectId, sessionId, frame, memory, nowMs);
+}
+
+function sameWorking(a: ProjectSession['working'], b: SessionWorkingVerdict): boolean {
+  return (
+    !!a &&
+    a.state === b.state &&
+    a.since === b.since &&
+    a.turn_token === b.turn_token &&
+    a.pending_delivery === b.pending_delivery
+  );
+}
+
+/**
+ * The board state that goes with a new working verdict, as the server derives
+ * it (`apps/api/src/projects/lib/session-board.ts`) from what the frame says.
+ * A row that waits for its person keeps `needs_input`; a settled row keeps its
+ * state; a row that worked and stopped working reads how its turn ended, or
+ * `idle` when the frame does not say. The next read of the row has the rest.
+ */
+function boardStateFor(
+  row: ProjectSession,
+  working: SessionWorkingVerdict,
+  lastEnded: SessionTurnObservation['last_ended'],
+): ProjectSession['board_state'] {
+  const board = row.board_state;
+  if (!board || board === 'needs_input') return board;
+  if (working.state === 'working') return 'working';
+  if (board !== 'working') return board;
+  if (lastEnded?.end_reason === 'completed') return 'completed';
+  if (lastEnded?.end_reason === 'failed' || lastEnded?.end_reason === 'runtime_gone') return 'failed';
+  return 'idle';
+}
+
+/** Put the server's working verdict on every cached row of this session, with the board state that goes with it. No request. */
+function patchCachedSessionWorking(
+  queryClient: QueryClient,
+  projectId: string,
+  sessionId: string,
+  working: SessionWorkingVerdict,
+  lastEnded?: SessionTurnObservation['last_ended'],
+): void {
+  updateCachedWorkspaceSessions(queryClient, projectId, (rows) => {
+    let changed = false;
+    const next = rows.map((row) => {
+      if (row.session_id !== sessionId) return row;
+      const board = boardStateFor(row, working, lastEnded);
+      if (sameWorking(row.working, working) && board === row.board_state) return row;
+      changed = true;
+      const patched: ProjectSession = { ...row, working: { ...working }, board_state: board };
+      if (board === undefined) delete patched.board_state;
+      if (row.work_state) patched.work_state = sessionWorkState({ board_state: board, working, status: row.status });
+      return patched;
+    });
+    return changed ? next : rows;
+  });
 }
 
 function readTitle(row: Record<string, unknown>): string | null {

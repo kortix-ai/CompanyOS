@@ -41,6 +41,9 @@ const LocalhostLinkInterceptor = dynamic(
     import('@/components/localhost-link-interceptor').then((mod) => mod.LocalhostLinkInterceptor),
   { ssr: false },
 );
+const PwaClient = dynamic(() => import('@/components/pwa/pwa-client').then((mod) => mod.PwaClient), {
+  ssr: false,
+});
 const DesktopUrlPrompt = dynamic(
   () => import('@/components/desktop/desktop-url-prompt').then((mod) => mod.DesktopUrlPrompt),
   { ssr: false },
@@ -82,6 +85,8 @@ export function RootClientHosts({ vercel }: { vercel: boolean }) {
       <RouteChangeTracker />
       <AuthEventTracker />
       <LocalhostLinkInterceptor />
+      {/* The desktop shell neither registers the worker nor installs the app. */}
+      {desktop ? null : <PwaClient />}
     </>
   );
 }

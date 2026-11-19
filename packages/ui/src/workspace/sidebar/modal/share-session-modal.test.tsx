@@ -24,7 +24,7 @@ mock.module('../../../primitives/label', () => ({
   Label: ({ children }: { children?: ReactNode }) => children,
 }));
 // The Modal shells render their children unconditionally: this test judges the
-// dialog's own composition (picker in, embed out), not the Radix portals.
+// dialog's own composition (picker in, embed out), not the portals.
 const shell =
   (testid: string) =>
   function ModalShell({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) {

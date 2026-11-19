@@ -19,7 +19,7 @@ export interface CostSummaryTilesProps {
   extraTiles: CostSummaryTile[];
 }
 
-export interface PeriodDelta {
+interface PeriodDelta {
   label: string;
   /** Never map to colour — a cost delta has no good/bad direction. Spending
    *  less is not inherently "good", so green-up/red-down would editorialise a

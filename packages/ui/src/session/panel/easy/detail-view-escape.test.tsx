@@ -14,6 +14,7 @@ for (const key of [
   "Node",
   "KeyboardEvent",
   "PointerEvent",
+  "MouseEvent",
   "MutationObserver",
   "CustomEvent",
   "NodeFilter",
@@ -164,11 +165,15 @@ test("Escape closes the floating comment menu, then Comments, then the embedded 
   const trigger = [...document.querySelectorAll("button")].find(
     (button) => button.textContent === "Comment actions",
   )!;
-  await act(async () =>
+  // A real press: the menu opens on `mousedown`, which follows `pointerdown`.
+  await act(async () => {
     trigger.dispatchEvent(
       new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
-    ),
-  );
+    );
+    trigger.dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, button: 0 }),
+    );
+  });
   const menu = document.querySelector('[role="menu"]');
   expect(menu).not.toBeNull();
   await escape(menu!);
@@ -237,4 +242,27 @@ test("an ancestor dialog does not block the detail from handling its own Escape"
   cleanups.push(() => ancestor.remove());
   await escape();
   expect(onBack).toHaveBeenCalledTimes(1);
+});
+
+/**
+ * D-07: Escape in full screen left two levels at once — it exited full screen
+ * AND closed the detail. The first press must only leave full screen and keep
+ * the same view docked; the second press closes it.
+ */
+test("Escape in full screen exits full screen first, then closes the detail", async () => {
+  const { useKortixComputerStore } = await import(
+    "../../../internal/stores/kortix-computer-store"
+  );
+  useKortixComputerStore.getState().setIsExpanded(true);
+  cleanups.push(() => useKortixComputerStore.getState().setIsExpanded(false));
+  const { onBack } = mountDetail();
+
+  const first = await escape();
+  expect(useKortixComputerStore.getState().isExpanded).toBe(false);
+  expect(onBack).not.toHaveBeenCalled();
+  expect(first.defaultPrevented).toBe(true);
+
+  const second = await escape();
+  expect(onBack).toHaveBeenCalledTimes(1);
+  expect(second.defaultPrevented).toBe(true);
 });

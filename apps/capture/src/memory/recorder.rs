@@ -151,7 +151,9 @@ impl SettingsWatch {
         if self.mtime.is_none() || self.mtime.map(|m| m.0) != Some(settings_mtime) {
             match std::fs::read(self.paths.settings()) {
                 Ok(bytes) => match serde_json::from_slice::<Settings>(&bytes) {
-                    Ok(settings) => {
+                    Ok(mut settings) => {
+                        // The running recorder obeys the managed capture knobs too.
+                        settings.self_manage();
                         self.raw = settings;
                         self.loaded_valid_file = true;
                     }
@@ -175,6 +177,7 @@ impl SettingsWatch {
             self.current = self.raw.clone();
             self.current.apply_policy(&self.paths);
             self.current.apply_host(&self.paths);
+            self.current.bound_org_pause(&self.paths, now_ms());
             self.mtime = Some((settings_mtime, policy_mtime));
         }
         &self.current
@@ -518,7 +521,7 @@ fn capture_loop(paths: &MemoryPaths, stop: &AtomicBool) -> Result<()> {
     while !stop.load(Ordering::SeqCst) {
         let tick = Instant::now();
         let s = settings.refresh().clone();
-        let interval = Duration::from_millis(s.interval_ms.max(500));
+        let interval = capture_interval(&s, person_active());
         // The model is shared with the audio transcript writer (one copy per
         // process); it is locked only while a private frame is prepared.
         if s.privacy.redact_pii && s.privacy.use_local_model {
@@ -776,6 +779,26 @@ const PERMISSION_RECHECK: Duration = Duration::from_secs(30);
 /// The engine skipped the capture because Screen Recording is not granted.
 fn is_permission_skip(resp: &Value) -> bool {
     resp.get("skipped").and_then(Value::as_str) == Some("permission_missing")
+}
+
+/// While the person works, a capture every this long (2 frames a second). An
+/// unchanged display costs almost nothing (the engine skips it), so the rate
+/// costs work only when the screen changes; `paced` stretches it on a slow computer.
+const CAPTURE_EVERY_ACTIVE: Duration = Duration::from_millis(500);
+/// Without input, a capture every this long.
+const CAPTURE_EVERY_IDLE: Duration = Duration::from_millis(2000);
+
+/// The capture rate. Kortix Capture sets it; no setting or policy does.
+/// `KORTIX_CAPTURE_TUNING` keeps `interval_ms` for development scripts.
+fn capture_interval(s: &Settings, active: bool) -> Duration {
+    if std::env::var_os(super::settings::TUNING_ENV).is_some() {
+        return Duration::from_millis(s.interval_ms.max(100));
+    }
+    if active {
+        CAPTURE_EVERY_ACTIVE
+    } else {
+        CAPTURE_EVERY_IDLE
+    }
 }
 
 /// The time from one capture's start to the next: `interval`, or twice what the
@@ -3004,6 +3027,27 @@ mod tests {
         run_once_tasks(&conn, &paths).unwrap();
         assert!(!Settings::load(&paths).pause_on_inactivity);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_running_recorder_ignores_capture_knobs_in_settings_json() {
+        let paths = MemoryPaths::at(
+            std::env::temp_dir().join(format!("kmem-watch-{}", uuid::Uuid::new_v4().simple())),
+        );
+        paths.ensure().unwrap();
+        std::fs::write(paths.settings(), r#"{"interval_ms": 500000, "ocr_level": "off"}"#).unwrap();
+        let mut watch = SettingsWatch::new(&paths);
+        let s = watch.refresh();
+        assert_eq!((s.interval_ms, s.ocr_level.as_str()), (2000, "accurate"));
+        let _ = std::fs::remove_dir_all(&paths.root);
+    }
+
+    #[test]
+    fn the_capture_rate_follows_the_person_and_no_setting() {
+        let mut s = Settings::default();
+        s.interval_ms = 500_000;
+        assert_eq!(capture_interval(&s, true), CAPTURE_EVERY_ACTIVE);
+        assert_eq!(capture_interval(&s, false), CAPTURE_EVERY_IDLE);
     }
 
     #[test]

@@ -58,13 +58,13 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '../../primitives/tabs';
 import { EmptyState } from '../../primitives/empty-state';
 import {
-  connectorConnectionQueryKeys,
   connectorSetupStatus,
 } from '../sections/connector-connection-form';
+import { connectorConnectionQueryKeys } from '../../internal/hooks/connectors/invalidate-connections';
 
 import { PROJECT_ACTIONS } from '../../internal/lib/project-actions';
 import { useProjectCan } from '../../internal/lib/use-project-can';
-import { ConnectorConnectedMark, ConnectorStatusBadge, ConnectorStatusLogo } from './connector-identity';
+import { ConnectorConnectedMark, ConnectorStatusBadge, ConnectorStatusLogo, ConnectorStatusWord } from './connector-identity';
 import { CatalogCard } from '../shared/catalog/catalog-card';
 import { DENSE_GRID_CLASSNAME, DENSE_GRID_CONTAINER_CLASSNAME } from '../shared/catalog/catalog-grid-tokens';
 import { ConnectorLogo } from '../../internal/connector-logo/connector-logo';
@@ -211,13 +211,17 @@ function ChannelsFallback() {
  */
 const SCOPES: readonly ConnectorScope[] = ['all', 'connected', 'channels'];
 
-const SCOPE_LABEL: Record<ConnectorScope, string> = {
-  all: 'All',
-  connected: 'Connected',
+/** The `connectorPages` key of each scope's tab label. */
+const SCOPE_LABEL = {
+  all: 'scopeAll',
+  // "Added", not "Connected": the tab lists every connector added to this
+  // workspace, whatever its state. A connector that still needs an account
+  // is added, not connected; its tile says so in words.
+  connected: 'scopeAdded',
   // The tab holds everything Kortix built (Slack, Teams, Email, Telegram and
   // the computer). People call those channels; the catalog type stays "Kortix".
-  channels: 'Channels',
-};
+  channels: 'scopeChannels',
+} as const satisfies Record<ConnectorScope, string>;
 
 /**
  * The heading follows the scope. "Give agents access to outside tools and
@@ -511,7 +515,12 @@ export function ConnectorsPage({
                 href={connectorHref(projectId, connector.slug)}
                 leading={<ConnectorStatusLogo connector={connector} source={installedConnectorLogoSource(connector)} />}
                 title={connectorDisplayName(connector)}
-                subtitle={<span className="text-muted-foreground truncate text-xs">{describeConnector(connector)}</span>}
+                subtitle={
+                  <span className="text-muted-foreground truncate text-xs">
+                    {describeConnector(connector)}
+                    <ConnectorStatusWord connector={connector} />
+                  </span>
+                }
                 trailing={toggle}
                 trailingInteractive={toggle !== undefined}
                 className={cn(agentScoped && row?.checked === false && 'opacity-60 hover:opacity-100')}
@@ -596,7 +605,7 @@ export function ConnectorsPage({
         <TabsList>
           {visibleScopes.map((value) => (
             <TabsTrigger key={value} value={value}>
-              {SCOPE_LABEL[value]}
+              {tPages(SCOPE_LABEL[value])}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -815,8 +824,7 @@ export function ConnectorsPage({
           own, so unlike the `AddAppPanel` this replaced it gets a real visible
           `ModalHeader` rather than a `VisuallyHidden` title — the dialog needs
           an accessible name and the user needs to know what the form is for.
-          That is why `@radix-ui/react-visually-hidden` is no longer imported
-          on this page. */}
+          That is why no visually hidden title is needed on this page. */}
           <Modal open={panel === 'custom'} onOpenChange={(open) => !open && setPanel(null)}>
             <ModalContent className="lg:max-w-3xl">
               <ModalHeader>

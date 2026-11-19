@@ -44,6 +44,7 @@ import {
   useReminderControls,
   useReminderView,
 } from './reminder-parts';
+import { prefersReducedMotion } from '../../internal/hooks/use-reduced-motion';
 
 /** More live reminders than this open in the side panel, not the popover. */
 export const REMINDERS_POPOVER_MAX = 30;
@@ -68,7 +69,7 @@ export function ReminderMark({
     : { reflection: 'text-kortix-purple', disc: 'bg-kortix-purple' };
   return (
     <span className="relative size-4 shrink-0">
-      <AlarmIcon className={cn('size-4', count === 0 && 'text-muted-foreground')} />
+      <AlarmIcon className="size-4" />
       {count > 0 ? (
         <>
           <AlarmIcon
@@ -142,7 +143,7 @@ function useGlidingCard() {
     if (!panel) return;
     clearTimers();
     const panelRect = panel.getBoundingClientRect();
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const reduce = prefersReducedMotion();
     const place = (glide: boolean) =>
       setActive({
         id,

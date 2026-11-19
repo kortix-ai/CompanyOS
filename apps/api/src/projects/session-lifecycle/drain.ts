@@ -269,7 +269,7 @@ async function drainSessionLifecycleQueueTick(
         // A sibling behind the head waits the minute: every exit of the head
         // wakes the next row (`promoteNextInboxRow`). The short clock stays
         // for a row that may go before the head finishes: a promoted row, and
-        // a steer (an older Queue List row does not block it). Prod
+        // a steer. Prod
         // 2026-11-09: a tail released at 300 ms made 9 of every 10 claims of
         // a parked session's queue a claim and a put-back for nothing.
         for (const sibling of batch.slice(1)) {

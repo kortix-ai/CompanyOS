@@ -19,11 +19,13 @@ import { notificationsApp } from './notifications/routes';
 import { drivesApp } from './drives/routes';
 import { feedbackApp } from './feedback';
 import {
+  agentMarkApp,
   channelAppWebhookRoutes,
   channelWebhookRoutes,
   discordInbound,
   discordOauthApp,
   emailWebhookApp,
+  registerAgentMarkRoutes,
   registerDiscordOauthRoutes,
   registerEmailWebhookRoutes,
   registerSlackWebhookRoutes,
@@ -115,6 +117,8 @@ import { createCaptureRouter } from './capture/device-routes';
 app.route('/v1/capture', createCaptureRouter());
 import { createCliDeviceRouter } from './cli/device-routes';
 app.route('/v1/cli/device', createCliDeviceRouter());
+import { createCliSetupEventsApp } from './cli/setup-events';
+app.route('/v1/cli/setup-events', createCliSetupEventsApp()); // POST: guided-setup milestones from the CLI, to product analytics
 
 // /v1/accounts/* — account & member management lives in ./accounts router.
 // Permanent legacy name: the workspace-scoped families are also served under
@@ -293,7 +297,7 @@ app.route('/v1/runtime-assets', runtimeAssetsApp); // GET /manifest, /cli, /agen
 {
   app.use('/v1/connectors/projects/*', combinedAuth);
   app.use('/v1/connectors/workspaces/*', combinedAuth);
-  // Canonical id rule: an account id, an unknown id or an unreadable workspace → 404 workspace_not_found.
+  // Canonical id rule: an account id or an unknown id → 404 workspace_not_found; an unreadable workspace → 403 workspace_access_denied.
   app.use('/v1/connectors/workspaces/*', canonicalWorkspaceGate());
   app.use('/v1/connectors/connect-status', combinedAuth); // deployment capability flag (authed)
   app.route('/v1/connectors', connectorApp);
@@ -313,6 +317,8 @@ registerTeamsWebhookRoutes();
 app.route('/v1/webhooks/teams', teamsWebhookApp); // /v1/webhooks/teams/messages — Bot Framework activities
 app.route('/v1/channels/slack/identity', slackIdentityApp); // /v1/channels/slack/identity/bind — authed /login bind
 app.route('/v1/channels/teams/identity', teamsIdentityApp); // /v1/channels/teams/identity/bind — authed login bind
+registerAgentMarkRoutes();
+app.route('/v1/agent-marks', agentMarkApp); // GET /v1/agent-marks/:slug.png — an agent's face, public (Slack icon_url)
 app.route('/v1/webhooks/telegram', channelWebhookRoutes(telegramInbound)); // /v1/webhooks/telegram/:projectId — Telegram updates
 registerDiscordOauthRoutes();
 app.route('/v1/webhooks/discord/oauth', discordOauthApp); // /v1/webhooks/discord/oauth/callback — Add to Discord

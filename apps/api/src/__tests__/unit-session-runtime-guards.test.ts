@@ -685,6 +685,13 @@ mock.module('../llm-gateway/resolution/default-model', () => ({
   isModelServableForAccount: async () => true,
 }));
 
+// A Free-tier fixture has no default model; a non-empty catalog lets pi pick one.
+const realServableCatalog = await import('../llm-gateway/models/servable-catalog');
+mock.module('../llm-gateway/models/servable-catalog', () => ({
+  ...realServableCatalog,
+  servableProjectCatalog: async () => ({ models: { 'stub/model': {} } }),
+}));
+
 mock.module('../shared/supabase', () => ({
   getSupabase: () => ({
     auth: {
@@ -1421,7 +1428,10 @@ describe('project session runtime guards', () => {
     manifestYaml = MY_KORTIX_DEFAULT_MANIFEST;
     const response = await spawnAsMyKortix({});
     expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({ code: 'AGENT_REQUIRED', agents: ['compliance-officer', 'kortix'] });
+    const body = await response.json();
+    expect(body).toMatchObject({ code: 'AGENT_REQUIRED', agents: ['compliance-officer', 'kortix'] });
+    // The message names the exact fix: the field, the CLI flag and the agents.
+    expect(body.error).toContain('`agent_name` (CLI: `--agent <name>`) to one of: compliance-officer, kortix.');
     expect(sandboxProvisionCalls).toBe(0);
   });
 
@@ -1442,7 +1452,10 @@ describe('project session runtime guards', () => {
     manifestYaml = MY_KORTIX_DEFAULT_MANIFEST;
     const response = await spawnAsMyKortix({ agent_name: 'mykortix' });
     expect(response.status).toBe(400);
-    expect((await response.json()).code).toBe('META_AGENT_RECURSION');
+    const body = await response.json();
+    expect(body).toMatchObject({ code: 'META_AGENT_RECURSION', agents: ['compliance-officer', 'kortix'] });
+    expect(body.error).toContain('`--agent <name>`) to one of: compliance-officer, kortix.');
+    expect(sandboxProvisionCalls).toBe(0);
   });
 
   test('a session-bound spawn inherits the SPAWNING session sharing, not the private default', async () => {

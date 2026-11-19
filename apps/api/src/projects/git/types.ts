@@ -42,6 +42,8 @@ export interface ProjectConfigSummary {
   agents: Array<{
     name: string;
     path: string;
+    /** `agents.<name>.title`: the name people read. null: derive it from `name`. */
+    title?: string | null;
     description: string | null;
     mode: string | null;
     /** Internal automation remains registered but is not offered by agent pickers. */
@@ -49,6 +51,8 @@ export interface ProjectConfigSummary {
     /** The agent's `model:` frontmatter (`provider/model`), null when it
      *  follows the project default. */
     model?: string | null;
+    /** A program agent's command (`agents.<name>.run`); null for a model agent. */
+    run?: string | null;
     source: 'kortix.yaml';
     /** True for a platform-owned agent the API injects (My Kortix), not one
      *  declared in `kortix.yaml`. Hosts render it read-only. Its `path` is

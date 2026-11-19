@@ -64,8 +64,9 @@ No hook or merge gate requires a test run on a PR into `dev`. The attestation sy
 removed on 2026-10-16: delete any `tests/attestations/` or `tests/test-attestation.json` file
 that an older branch or a merge brings back.
 
-Done when the commands you will list under "Verification" passed, with output
-captured.
+Done when the relevant checks passed, with output captured. Keep compact fenced commands
+and actual runner summaries under "Quick verification" when evidence gates require them
+(collapsed blocks are allowed). Link verbose logs; state failed, blocked or skipped checks.
 
 ### 4. Record the demo video on the local stack
 
@@ -137,7 +138,11 @@ gh pr create --base dev \
 
 - Write the title and `body.md` with the **create-pr** skill. It owns the PR text: English
   only, written for a reviewer who decides "merge or iterate" without the diff, in the
-  section order of `.github/pull_request_template.md`. The
+  two sections of `.github/pull_request_template.md`: `## Demo video`, then
+  `## Quick verification` with a high-level `Outcome:` bullet first, then a few actionable
+  checks. Link detailed commands/output,
+  design detail, RCAs and risk/rollback notes in PR comments or evidence. Testing, safety
+  and reviewer/merge gates are unchanged. The
   line `![Demo](./output/pr/demo.mp4)` holds the video; `--attach` uploads it and rewrites
   the path in one step, so skip step 6.
 - Put `body.md` and the recordings in the gitignored `output/pr/` directory. Keep them out
@@ -207,7 +212,7 @@ gh pr view <pr> --json body --jq .body | grep -cE '\]\(\./output/'              
 | Event | Workflows | Blocks? |
 | --- | --- | --- |
 | PR into `dev` | none. Adding `test` runs the `Tests` lanes once (~20 min); adding `preview` deploys once (~7 min), with no tests. A push re-runs neither. | no |
-| Push to `dev` (the merge) | no `Tests` lane. `secret-scan`, `secrets-guard`, path-gated `DB Migrations`, `i18n-catalogs`, `deploy-api-router-dev`, `Terraform Apply Global`. | no |
+| Push to `dev` (the merge) | no `Tests` lane. `secret-scan`, `secrets-guard`, path-gated `DB Migrations`, `i18n-catalogs`, `deploy-api-router-dev`, `Terraform Apply Global`; requested mobile-input-gated `Mobile TestFlight` build (production API, TestFlight only). | no |
 | Dispatch / schedule on `dev` | `Deploy Dev` and `Desktop`: dispatch only. `Tests`: nightly (a red night comments on the commit). `drata`: daily. `CI`, `CodeQL`: weekly. | no |
 | PR into `staging` | none: Promote to Production opens and merges it | no |
 | PR into `prod` (release PR) | the release suite, once: `tests-release.yml` (contract lanes, deployed API smoke, browser journeys against staging) plus `CI`, `CodeQL`, `secret-scan`, `secrets-guard`, path-gated `DB Migrations`, `Terraform CI`, `Security Scan`, `i18n-catalogs`, `drata`. `full suite + quality gates` requires every one green and is the only required check in the repo. | **yes, the only gate** |

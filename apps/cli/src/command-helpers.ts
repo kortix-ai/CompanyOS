@@ -1,4 +1,4 @@
-import { FEATURE_DISABLED_CODE } from '@kortix/sdk';
+import { FEATURE_DISABLED_CODE, WORKSPACE_DELETING_CODE } from '@kortix/sdk';
 
 import { loadAuth, loadAuthForHost, loadEnvAuth, type Auth } from './api/auth.ts';
 import {
@@ -11,7 +11,7 @@ import {
   markerActive,
 } from './api/config.ts';
 import { ApiError, clientFromAuth, type ApiClient } from './api/client.ts';
-import { loadLink, resolveProjectId, resolveProjectRef } from './project-link.ts';
+import { LINK_LOCATION, loadLink, resolveProjectId, resolveProjectRef } from './project-link.ts';
 import { ensureDefaultProjectBinding } from './project-bind.ts';
 import { NO_WORKSPACE_CODE, NO_WORKSPACE_LINE } from './api/no-workspace.ts';
 import { denialDetailFromBody, machineErrors, recordPermissionDenial, withIssues, writeMachineError } from './token-denial.ts';
@@ -25,7 +25,7 @@ interface ProjectContextOpts {
   hostArg?: string;
   /**
    * Enforce ONE principal (KRTX-1486, the change-request commands): a
-   * project resolved from .kortix/link.json travels with its own host's
+   * project resolved from the checkout's link travels with its own host's
    * stored credential — never the sandbox's ambient session token, which is
    * bound to the sandbox's own project. Without stored credentials for that
    * host the command stops with an explicit login pointer instead of a
@@ -122,7 +122,7 @@ export function resolveProjectAuth(opts: { hostArg?: string; envPin?: boolean } 
  *
  * Host resolution order:
  *   1. --host flag (per-invocation override)
- *   2. .kortix/link.json's `host` field (per-directory binding — its stored
+ *   2. the checkout link's `host` (git config `kortix.host` — its stored
  *      credentials are what make a NON-session project reachable from inside
  *      a sandbox, where the injected token is scoped to the session's project)
  *   3. KORTIX_TOKEN (platform-injected sandbox auth — the fallback when the
@@ -132,7 +132,7 @@ export function resolveProjectAuth(opts: { hostArg?: string; envPin?: boolean } 
  *
  * Project id resolution order (resolveProjectRef):
  *   1. --project flag
- *   2. .kortix/link.json in cwd (the most specific binding — it outranks the
+ *   2. the checkout's link (the most specific binding — it outranks the
  *      session env so a linked clone reaches its own project; the host notice
  *      already displays it as "linked", so behavior must match)
  *   3. KORTIX_PROJECT_ID env (platform-injected inside a sandbox)
@@ -165,7 +165,7 @@ export async function resolveProjectContext(
   let auth: Auth | null = resolvedAuth;
   if (!auth?.token) {
     if (hostName) {
-      const source = opts.hostArg ? '(--host)' : '(from .kortix/link.json)';
+      const source = opts.hostArg ? '(--host)' : `(from ${LINK_LOCATION})`;
       process.stderr.write(
         `${status.err(`Host "${hostName}" ${source} is not logged in.`)} Run ` +
           `${C.cyan}kortix login --host ${hostName}${C.reset}.\n`,
@@ -211,7 +211,7 @@ export async function resolveProjectContext(
     defaultProject = ref?.source === 'default';
     // ONE PRINCIPAL (KRTX-1486): the ambient sandbox session token is bound
     // to the sandbox's own project. A project the CLI config resolved
-    // (.kortix/link.json) must never pair with it — writes 403 cross-project
+    // (the checkout's link) must never pair with it — writes 403 cross-project
     // and reads return the wrong project's rows. The link project travels
     // with its own host's stored credential; without stored credentials for
     // that host, stop with an explicit login pointer instead of a doomed
@@ -228,7 +228,7 @@ export async function resolveProjectContext(
           : 'a host with no stored credentials';
         process.stderr.write(
           `${status.err(
-            `This directory is linked to a workspace on ${hostLabel} (.kortix/link.json), but only the ambient sandbox session token is available here. It cannot act on that workspace.`,
+            `This directory is linked to a workspace on ${hostLabel} (${LINK_LOCATION}), but only the ambient sandbox session token is available here. It cannot act on that workspace.`,
           )} Run ${C.cyan}kortix login --host ${configHostName ?? '<host>'}${C.reset} first.\n`,
         );
         return null;
@@ -286,7 +286,7 @@ export function resolveProjectTokenContext(): AccountContext | null {
  *      `--account` (`accountArg`)
  *   2. `KORTIX_WORKSPACE_ID`, then `KORTIX_PROJECT_ID` (platform-injected in a
  *      session box; a script's own value wins over the link and the default)
- *   3. `.kortix/link.json` in cwd
+ *   3. the checkout's link (git config `kortix.workspace`)
  *   4. the default workspace (`kortix workspaces use`)
  *   5. the older active account, then the account of the stored credential
  *
@@ -433,7 +433,11 @@ export async function locateSessionAnywhere(
         };
       }
     }
-    const probed = await probeSession(ctx.client, ctx.projectId, sessionId);
+    // A short id that matched nothing is not a session id: the API answers it
+    // with `400 Invalid session id`, so it is never sent as one.
+    const probed = SESSION_UUID_RE.test(sessionId)
+      ? await probeSession(ctx.client, ctx.projectId, sessionId)
+      : false;
     if (probed !== false && !(probed instanceof ApiError)) {
       return {
         located: { client: ctx.client, auth: ctx.auth, projectId: ctx.projectId, session: probed },
@@ -557,6 +561,18 @@ function printHostRetryHints(retryCommand: (hostName: string) => string): void {
 export const SESSION_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * The session ids a multi-id command was given. A session id never holds
+ * whitespace or a comma, so one argument with several ids (an unsplit zsh
+ * variable, a pasted list) is several ids. Flags are not ids.
+ */
+export function sessionIdArgs(args: readonly string[]): string[] {
+  return args
+    .filter((arg) => !arg.startsWith('-'))
+    .flatMap((arg) => arg.split(/[\s,]+/))
+    .filter(Boolean);
+}
+
 /** Expand a short session-id prefix against the project's session list,
  *  returning the matched row (the list already carries it — no re-fetch).
  *  The list leaves out the caller's archived sessions, so a prefix with no
@@ -567,7 +583,13 @@ export async function expandSessionIdPrefix(
   projectId: string,
   reference: string,
 ): Promise<ProjectSession | 'ambiguous' | null> {
-  for (const view of ['', '?archived=only']) {
+  // One list page holds only the newest 50 sessions, so an older session's
+  // short id was never found and fell through to a direct read with the
+  // prefix, which the API refuses (`400 Invalid session id`). `q` matches an
+  // id prefix server-side across every page; the startsWith below drops the
+  // rows `q` matched on another field.
+  const q = `q=${encodeURIComponent(reference)}&limit=200`;
+  for (const view of [`?${q}`, `?archived=only&${q}`]) {
     try {
       const sessions = await client.get<ProjectSession[]>(`/workspaces/${projectId}/sessions${view}`);
       const matches = sessions.filter((s) => s.session_id.startsWith(reference));
@@ -640,7 +662,13 @@ async function scanHostForSession(hostName: string, sessionId: string): Promise<
     } catch {
       continue;
     }
-    const hit = await probeConcurrently(projects, (p) => probeSession(client, p.project_id, sessionId));
+    // A short id is expanded per workspace, never sent as an id.
+    const isFullId = SESSION_UUID_RE.test(sessionId);
+    const hit = await probeConcurrently(projects, async (p) => {
+      if (isFullId) return probeSession(client, p.project_id, sessionId);
+      const expanded = await expandSessionIdPrefix(client, p.project_id, sessionId);
+      return expanded && expanded !== 'ambiguous' ? expanded : false;
+    });
     if (hit) {
       return {
         client,
@@ -746,6 +774,14 @@ function repositoryDisconnectedCode(err: unknown): boolean {
 
 export { NO_WORKSPACE_LINE };
 
+/** How to point the default at a live workspace once it named a deleted one (KRTX-4924). */
+export const PICK_DEFAULT_LINE = 'Pick another: kortix workspaces use <id> (kortix workspaces ls lists them).';
+
+/** True for the API's 409 `workspace_deleting`: the workspace is closed, inside its restore window. */
+export function isWorkspaceDeletingError(err: unknown): boolean {
+  return hasApiErrorCode(err, WORKSPACE_DELETING_CODE);
+}
+
 /** True for the API's 409 `no_workspace`. */
 export function isNoWorkspaceError(err: unknown): boolean {
   return hasApiErrorCode(err, NO_WORKSPACE_CODE);
@@ -799,6 +835,10 @@ export function surfaceApiError(err: unknown): number {
       );
     } else if (err.status === 404) {
       process.stderr.write(`${status.err(err.message || 'Not found.')}\n`);
+    } else if (isWorkspaceDeletingError(err)) {
+      // The workspace is closed and inside its restore window: a default or
+      // link that still names it fails every command until it points elsewhere.
+      process.stderr.write(`${status.err(err.message)}\n  ${PICK_DEFAULT_LINE}\n`);
     } else {
       process.stderr.write(`${status.err(`HTTP ${err.status}: ${err.message}`)}\n`);
       // A remediation-bearing body (the webhook-secret 409s, e.g.) names the
@@ -889,7 +929,8 @@ export function takeFlagValue(argv: string[], requested: string[]): string | und
     for (const n of names) {
       if (a === n) {
         const v = argv[i + 1];
-        if (!v || v.startsWith('-')) throw new Error(`${n} requires a value`);
+        // A lone `-` is a value: stdin, by Unix convention (`--github-token -`).
+        if (!v || (v.startsWith('-') && v !== '-')) throw new Error(`${n} requires a value`);
         argv.splice(i, 2);
         return v;
       }

@@ -26,7 +26,7 @@ const host = (tag: string) =>
   function Collaborator({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) {
     return React.createElement(tag, props, children);
   };
-// The Modal primitive is a Radix portal: render its body inline instead.
+// The Modal primitive renders through a portal: render its body inline instead.
 mock.module('../../../primitives/modal', () =>
   Object.fromEntries(
     ['Modal', 'ModalBody', 'ModalContent', 'ModalDescription', 'ModalFooter', 'ModalHeader', 'ModalTitle'].map((name) => [
@@ -35,7 +35,7 @@ mock.module('../../../primitives/modal', () =>
     ]),
   ),
 );
-// The audience picker is a Radix radio group (DOM-only effects); what it renders
+// The audience picker is a radio group (DOM-only effects); what it renders
 // is not what these assertions read.
 mock.module('../../sections/add-account-fields', () => ({ AudienceFields: host('div') }));
 // The pending-Connect test owns when the connector create resolves; the dialog's

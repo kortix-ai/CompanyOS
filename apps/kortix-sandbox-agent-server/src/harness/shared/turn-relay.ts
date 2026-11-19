@@ -204,22 +204,37 @@ export function turnEndAfterBegin(waitMs = 5_000) {
 
 /**
  * The running turn read a steered message at a step boundary (`steer_read`).
- * apps/api closes that message's inbox row as delivered. 3 attempts; a
- * non-ok answer other than 5xx is definitive. Skipped while the session
- * credential is presumed dead (KRTX-446).
+ * apps/api closes that message's inbox row as delivered.
  */
-export async function relaySteerRead(runtimeSessionId: string, messageId: string): Promise<void> {
+export function relaySteerRead(runtimeSessionId: string, messageId: string): Promise<void> {
+  return relaySteer('steer_read', runtimeSessionId, messageId)
+}
+
+/**
+ * A stopped turn dropped a steered message it never read (`steer_dropped`).
+ * apps/api puts that message's inbox row back on the queue for the next turn.
+ */
+export function relaySteerDropped(runtimeSessionId: string, messageId: string): Promise<void> {
+  return relaySteer('steer_dropped', runtimeSessionId, messageId)
+}
+
+/**
+ * 3 attempts; a non-ok answer other than 5xx is definitive (a 503 on
+ * `steer_dropped` is a row whose delivery has not come back yet). Skipped
+ * while the session credential is presumed dead (KRTX-446).
+ */
+async function relaySteer(kind: 'steer_read' | 'steer_dropped', runtimeSessionId: string, messageId: string): Promise<void> {
   if (!sandboxRelayContext() || sessionTokenPresumedDead()) return
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const response = await postTurnStream({ kind: 'steer_read', runtime_session_id: runtimeSessionId, turn_message_id: messageId })
+      const response = await postTurnStream({ kind, runtime_session_id: runtimeSessionId, turn_message_id: messageId })
       if (!response || response.ok) return
       const text = await response.text().catch(() => '')
       noteControlPlaneResponse(response.status, text)
-      logger.warn('[turn-relay] steer-read relay non-ok', { status: response.status, attempt, body: text.slice(0, 200) })
+      logger.warn('[turn-relay] steer relay non-ok', { kind, status: response.status, attempt, body: text.slice(0, 200) })
       if (response.status < 500) return
     } catch (err) {
-      logger.warn('[turn-relay] steer-read relay fetch failed', { err: (err as Error).message, attempt })
+      logger.warn('[turn-relay] steer relay fetch failed', { kind, err: (err as Error).message, attempt })
     }
     if (attempt < 3) await Bun.sleep(1_000 * attempt)
   }
@@ -240,6 +255,8 @@ export interface TurnEndFrame {
     /** Set by an adapter that knows better than `turnErrorCode` (pi's context overflow). */
     code?: TurnErrorCode
   }
+  /** The turn's last assistant text. apps/api posts it into a chat thread the agent did not answer. */
+  finalText?: string
 }
 
 /**
@@ -264,6 +281,9 @@ export function turnErrorCode(error: { name?: string; statusCode?: number }): Tu
   return 'unknown'
 }
 
+/** apps/api posts at most ~11k characters into a thread; the rest stays in the session. */
+const FINAL_TEXT_MAX = 16_000
+
 function turnEndBody(frame: TurnEndFrame): TurnStreamFrame {
   const { error } = frame
   return {
@@ -271,6 +291,7 @@ function turnEndBody(frame: TurnEndFrame): TurnStreamFrame {
     status: frame.status,
     runtime_session_id: frame.runtimeSessionId,
     turn_message_id: frame.messageId ?? undefined,
+    ...(frame.finalText ? { text: frame.finalText.slice(0, FINAL_TEXT_MAX) } : {}),
     ...(error
       ? {
           error_name: error.name,
@@ -460,11 +481,16 @@ export async function relayQuestion(
   const channel = sessionChannel()
   if (!channel) return relayed
   // Name the channel the agent is in: a Teams agent has no `slack send`.
+  // Slack: the thread's starter reaches the agent with a plain reply (apps/api
+  // `isStarterReplyInOwnThread`); Teams: only a mention does.
+  const reach =
+    channel === 'Slack'
+      ? 'In a channel, the person who started the thread reaches you with a plain reply and anyone else @mentions you'
+      : 'In a channel, the reply reaches you only when it @mentions you'
   const sentinel =
     `(Posted to the ${channel} conversation. In ${channel}, questions are async — the user ` +
-    'replies in the thread, which reaches you as a NEW turn with full context. In a channel, ' +
-    'the reply reaches you only when it @mentions you; a DM reply needs no mention. Do NOT ' +
-    'wait for an answer here; finish this turn now.)'
+    `replies in the thread, which reaches you as a NEW turn with full context. ${reach}; ` +
+    'a DM reply needs no mention. Do NOT wait for an answer here; finish this turn now.)'
   return { ...relayed, answers: request.questions.map(() => [sentinel]) }
 }
 

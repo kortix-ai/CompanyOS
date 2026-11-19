@@ -54,8 +54,9 @@ import {
   type ScopeType,
 } from './catalog';
 import { registerPrincipalScopedMemo, registerProjectScopedMemo } from './cache-invalidation';
-import { clearWorkspaceFacts, workspaceFactsOf } from './workspace-facts';
+import { clearWorkspaceFacts, tokenWorkspaceSharesAccount, workspaceFactsOf } from './workspace-facts';
 import { buildDenialError } from './denial-message';
+import { grantScopeOf, objectGrantScoped, storedAction } from './workspace-scope';
 import type { WorkspaceRole } from './roles';
 import {
   actingPrincipal,
@@ -64,7 +65,7 @@ import {
   type Actor,
   type PrincipalRef,
 } from './actor';
-import { accountsView, projectsView } from '../workspaces/rows';
+import { accountsView, accountKeyOfWorkspace } from '../workspaces/rows';
 
 // ─── Public surface ─────────────────────────────────────────────────────────
 
@@ -115,6 +116,12 @@ export type Reason =
   | 'impersonation'
   | 'impersonation_scope'
   | 'token_out_of_scope'
+  /** A workspace-bound token asked for an account-scope action of its OWN
+   *  workspace's account, and that legacy account still holds other
+   *  workspaces (split_pending). The account rows (members, roles, groups,
+   *  keys, the audit log, the wallet) are shared with those workspaces, so no
+   *  workspace key reaches them; a person's own key does. */
+  | 'token_account_shared'
   | 'not_a_member'
   | 'super_admin'
   | 'account_mfa_required'
@@ -297,7 +304,15 @@ async function authorizeDecision(actor: Actor, action: string, obj: EvalObj): Pr
   // 4. A token bound to one workspace is refused on every other workspace. An
   // account-scope action is in scope when it names the token's own workspace:
   // the account is the workspace's, and the workspace is not split_pending.
-  if (!tokenScopeAllows(binding, tokenId, rec.kind, scope, obj, facts.soleProjectId)) return deny('token_out_of_scope');
+  if (!tokenScopeAllows(binding, tokenId, rec.kind, scope, obj, facts.soleProjectId)) {
+    // Name the constraint the caller can act on. Read only on this denial path.
+    const shared =
+      scope === 'account' &&
+      facts.splitPending &&
+      !!binding?.projectId &&
+      (await tokenWorkspaceSharesAccount(binding.projectId, actor.accountId));
+    return deny(shared ? 'token_account_shared' : 'token_out_of_scope');
+  }
 
   // 4a. SSO only. Above the super-admin bypass: the account creator holds
   // `is_super_admin`, and enforcement exists to close exactly that person's
@@ -837,6 +852,7 @@ async function resolvePrincipalUncached(
         .select({
           scopeType: roleAssignments.scopeType,
           scopeId: roleAssignments.scopeId,
+          roleScopeType: iamRoles.scopeType,
           action: iamRoleActions.action,
         })
         .from(roleAssignments)
@@ -865,7 +881,9 @@ async function resolvePrincipalUncached(
     // nothing on its own — it must never be read as a project role, or a member
     // handed one agent would silently acquire the tier the role implies.
     if (row.objectType !== null) continue;
-    if (row.roleScopeType === 'account' && row.scopeType === 'account') {
+    // The workspace form (R2b) reads as its role's scope (`workspace-scope.ts`).
+    const scope = grantScopeOf(row);
+    if (row.roleScopeType === 'account' && scope === 'account') {
       const role = systemRoles.byId.get(row.roleId);
       if (role && accountRoleRank(role.key) > accountRoleRank(accountRoleKey)) {
         accountRoleKey = role.key;
@@ -873,7 +891,7 @@ async function resolvePrincipalUncached(
       }
       continue;
     }
-    if (row.roleScopeType === 'project' && row.scopeType === 'project' && row.scopeId) {
+    if (row.roleScopeType === 'project' && scope === 'project' && row.scopeId) {
       if (row.roleKey === 'agent-user') continue;
       const list = projectSystemRoleIds.get(row.scopeId);
       if (list) list.push(row.roleId);
@@ -881,11 +899,16 @@ async function resolvePrincipalUncached(
     }
   }
 
-  const customActions: CustomAction[] = customRows.map((r) => ({
-    scopeType: r.scopeType,
-    scopeId: r.scopeId,
-    action: r.action,
-  }));
+  // Normalized to the legacy scope and action name, so a workspace-form row
+  // (R2b) compares like the legacy row it replaces.
+  const customActions: CustomAction[] = customRows.map((r) => {
+    const scopeType = grantScopeOf({ scopeType: r.scopeType, roleScopeType: r.roleScopeType }) ?? r.scopeType;
+    return {
+      scopeType,
+      scopeId: scopeType === 'account' ? null : r.scopeId,
+      action: storedAction(r.action),
+    };
+  });
 
   if (accountRoleKey !== null) {
     return {
@@ -1092,7 +1115,7 @@ const loadObjectGrants = ttlMemo({
       .from(roleAssignments)
       .where(
         and(
-          eq(roleAssignments.scopeType, 'project'),
+          objectGrantScoped(),
           eq(roleAssignments.scopeId, projectId),
           // Only rows written in the project's own account count.
           projectAccountMatches(projectId),
@@ -1129,12 +1152,7 @@ const workspaceAccountMemo = ttlMemo({
   keyFn: (workspaceId: string) => `${workspaceId}|account`,
   loader: async (workspaceId: string): Promise<string | null> => {
     if (!isUuid(workspaceId)) return null;
-    const [row] = await db
-      .select({ accountId: projectsView.accountId })
-      .from(projectsView)
-      .where(eq(projectsView.projectId, workspaceId))
-      .limit(1);
-    return row?.accountId ?? null;
+    return accountKeyOfWorkspace(workspaceId);
   },
   shouldCache: (accountId) => accountId !== null,
 });

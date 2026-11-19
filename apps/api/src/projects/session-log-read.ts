@@ -42,7 +42,7 @@ import {
 } from '@kortix/api-contract/session-log';
 import { KORTIX_TRANSCRIPT_SCHEMA } from '@kortix/api-contract/transcript';
 import { projectSessions, sessionLogMessages, sessionLogs, sessionLogThreads } from '@kortix/db';
-import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, max, sql, type SQL } from 'drizzle-orm';
 import { config } from '../config';
 import { db } from '../shared/db';
 import { qualifiedColumn } from '../shared/sql-qualified-column';
@@ -151,19 +151,25 @@ export function readSessionLogPage(input: PageInput): Promise<SessionLogPage | '
     // payload: 40 MB ran ~330 ms on loopback; prod `db;dur` was ~96 % of a 1–5 s read —
     // KRTX-4508). Probe the window's seq and sizes first (TOAST pointers, no payload), keep
     // the newest run under `SESSION_LOG_PAGE_MAX_BYTES`, then read only those records in full.
+    // A pointer read (`limit: 0` — the snapshot route's `?transcript=0`, documented "session,
+    // generation, threads, no messages") reads NO payload at all: it used to read the newest
+    // record whole and slice it away, which paid a heavy session's multi-MB detoast on every
+    // session open (KRTX-4733: prod slow rows 1.1–4.8 s, `db;dur` 90–98 % of wall).
     let budgetCut = false;
+    let windowRows: SizedWindowRow[] = [];
     const rows =
       threadId === null
         ? []
         : await (async () => {
             const scope = threadScope(input, threadId);
-            const window = await tx
+            windowRows = await tx
               .select({ seq: sessionLogMessages.seq, bytes: sql<number>`pg_column_size(${sessionLogMessages.record})::int` })
               .from(sessionLogMessages)
               .where(scope)
               .orderBy(desc(sessionLogMessages.seq))
               .limit(input.limit + 1);
-            const kept = keptUnderBudget(window, config.SESSION_LOG_PAGE_MAX_BYTES);
+            if (input.limit === 0) return [];
+            const kept = keptUnderBudget(windowRows, config.SESSION_LOG_PAGE_MAX_BYTES);
             budgetCut = kept.dropped;
             let payloadScope = scope;
             if (kept.dropped) {
@@ -185,7 +191,10 @@ export function readSessionLogPage(input: PageInput): Promise<SessionLogPage | '
         .slice(0, input.limit)
         .reverse()
         .map((r) => withKeptToolInputs(log.record as J, threadRecord, r.record as SessionLogMessage)),
-      has_more: budgetCut || rows.length > input.limit,
+      // The probe's row count is the truth for every limit: with `limit: 0` the page serves
+      // no messages, so "older messages exist" is just "the window holds a row" (the payload
+      // `rows` are empty and the budget never cut a one-row window).
+      has_more: budgetCut || windowRows.length > input.limit,
     };
   }, READ_ONLY);
 }
@@ -304,7 +313,9 @@ export async function readStoredTranscriptWindow(input: WindowInput): Promise<Mi
         total: sql<number>`(count(*) + count(*) FILTER (WHERE CASE WHEN ${sessionLogMessages.kind} = 'compaction'
           THEN coalesce(jsonb_typeof(jsonb_path_query_first(${sessionLogMessages.record}, '$.blocks[*] ? (@.type == "compaction")') -> 'summary') <> 'null', false)
           ELSE false END))::int`,
-        writtenMs: sql<number | null>`(extract(epoch from max(${sessionLogMessages.updatedAt})) * 1000)::float8`,
+        // The column's own mapping (a Date, cut to the ms like `log.updatedAt`): an epoch float8
+        // needs 16 digits and came back rounded up to the next ms.
+        writtenAt: max(sessionLogMessages.updatedAt),
       })
       .from(sessionLogMessages)
       .where(scope);
@@ -341,7 +352,7 @@ export async function readStoredTranscriptWindow(input: WindowInput): Promise<Mi
   return {
     runtime_session_id: target,
     root_runtime_session_id: rootId,
-    captured_at: new Date(Math.max(new Date(log.updatedAt).getTime(), Math.floor(totals.writtenMs ?? 0))).toISOString(),
+    captured_at: new Date(Math.max(new Date(log.updatedAt).getTime(), totals.writtenAt?.getTime() ?? 0)).toISOString(),
     total: totals.total,
     head_complete: true,
     next_cursor: rows.length > input.limit ? idOf(kept.at(-1)!) : null,

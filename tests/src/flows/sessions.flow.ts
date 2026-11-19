@@ -925,8 +925,8 @@ flow(
       (await anon.post(sharesRoute, { transcript: true }, { params })).status(401);
     });
 
-    await ctx.step('NONMEMBER: {transcript:true} → 404 workspace_not_found, no share is written', async () => {
-      (await ctx.client.as(ctx.P.NONMEMBER).post(sharesRoute, { transcript: true }, { params })).status(404).body().has('$.code', 'workspace_not_found');
+    await ctx.step('NONMEMBER: {transcript:true} → 403 workspace_access_denied, no share is written', async () => {
+      (await ctx.client.as(ctx.P.NONMEMBER).post(sharesRoute, { transcript: true }, { params })).status(403).body().has('$.code', 'workspace_access_denied');
       const list = await owner.get(sharesRoute, { params });
       list.status(200);
       if (list.json<{ shares: unknown[] }>().shares.length !== 0) throw new Error('a refused mint wrote a share');
@@ -1433,11 +1433,11 @@ flow(
       (await ctx.client.as(ctx.P.ANON).get(byId, { params: { sessionId: sharedId } })).status(401);
     });
 
-    await ctx.step('a caller outside the account gets 404 by id, as for an unknown id; the workspace route answers 404 workspace_not_found', async () => {
+    await ctx.step('a caller outside the account gets 404 by id, as for an unknown id; the workspace route answers 403 workspace_access_denied', async () => {
       const outsider = ctx.client.as(ctx.P.NONMEMBER);
       (await outsider.get(byId, { params: { sessionId: sharedId } })).status(404);
       (await outsider.get(byId, { params: { sessionId: crypto.randomUUID() } })).status(404);
-      (await outsider.get(inProject, { params: { projectId: project.id, sessionId: sharedId } })).status(404).body().has('$.code', 'workspace_not_found');
+      (await outsider.get(inProject, { params: { projectId: project.id, sessionId: sharedId } })).status(403).body().has('$.code', 'workspace_access_denied');
     });
 
     await ctx.step('a deleted session is gone by id → 404', async () => {
@@ -1450,7 +1450,8 @@ flow(
 /**
  * SESS-54 — a person pins a session to the top of their list or archives it
  * out of the list (KRTX-2418). Per person: a pin or an archive changes only the
- * caller's own list, and neither moves the session's `updated_at`. Local
+ * caller's own list, and neither moves the session's `updated_at`. The pinned
+ * view lists in pin order, so opening a session does not reorder it. Local
  * profile: database sessions.
  */
 flow(
@@ -1582,17 +1583,32 @@ flow(
       expectIds((await list()).rows, [s4, s3, s2, s1], 'the restored list');
     });
 
+    await ctx.step('pinned=only lists in pin order, newest pin first; a write to an older pin (an open bumps updated_at) does not reorder it; the cursor pages the same order', async () => {
+      (await pin(s1, true)).status(200);
+      (await pin(s3, true)).status(200);
+      expectIds((await list({ pinned: 'only' })).rows, [s3, s1], 'pinned=only');
+      // The rename bumps s1's updated_at past s3's, as opening it does.
+      (await owner.patch('/v1/workspaces/:projectId/sessions/:sessionId', { name: 'Opened again' }, { params: params(s1) })).status(200);
+      expectIds((await list({ pinned: 'only' })).rows, [s3, s1], 'pinned=only after s1 was written');
+      const first = await list({ pinned: 'only', limit: '1' });
+      expectIds(first.rows, [s3], 'pinned=only page 1');
+      if (!first.cursor) throw new Error('pinned=only page 1 has no cursor');
+      expectIds((await list({ pinned: 'only', limit: '1', cursor: first.cursor })).rows, [s1], 'pinned=only page 2');
+      (await pin(s3, false)).status(200);
+      (await pin(s1, false)).status(200);
+    });
+
     await ctx.step('pinned=only with archived=only → 400; a body without the flag → 400', async () => {
       (await owner.get('/v1/workspaces/:projectId/sessions', { params: { projectId: project.id }, query: { pinned: 'only', archived: 'only' } })).status(400);
       (await owner.put('/v1/workspaces/:projectId/sessions/:sessionId/pin', {}, { params: params(s1) })).status(400);
       (await owner.put('/v1/workspaces/:projectId/sessions/:sessionId/archive', { archived: 'yes' }, { params: params(s1) })).status(400);
     });
 
-    await ctx.step('a session the caller cannot see → 404; ANON → 401; outside the account → 404 workspace_not_found', async () => {
+    await ctx.step('a session the caller cannot see → 404; ANON → 401; outside the account → 403 workspace_access_denied', async () => {
       (await pin(privateId, true, ctx.client.as(member))).status(404);
       (await pin(crypto.randomUUID(), true)).status(404);
       (await pin(s1, true, ctx.client.as(ctx.P.ANON))).status(401);
-      (await archive(s1, true, ctx.client.as(ctx.P.NONMEMBER))).status(404).body().has('$.code', 'workspace_not_found');
+      (await archive(s1, true, ctx.client.as(ctx.P.NONMEMBER))).status(403).body().has('$.code', 'workspace_access_denied');
     });
 
     await ctx.step('a deleted session cannot be pinned or archived → 404', async () => {
@@ -2576,6 +2592,10 @@ flow(
       expectIds(await rows(owner, { parent: 'root', started_by: 'others' }), [memberChat], 'others');
     });
 
+    await ctx.step('started_by=humans lists every person-started chat: mine and shared, never a machine run (KRTX-4705)', async () => {
+      expectIds(await rows(owner, { parent: 'root', started_by: 'humans' }), [memberChat, myChat], 'humans');
+    });
+
     await ctx.step('q searches server-side: a title match is `self`, a worker match returns its coordinator as `child`', async () => {
       const own = await rows(owner, { parent: 'root', q: 'APARTMENT rent' });
       expectIds(own, [myChat], 'q self');
@@ -2969,9 +2989,9 @@ flow(
         if (view.total !== 1 || view.multi_user) throw new Error(`unshared: ${JSON.stringify(view)}`);
       });
 
-      await ctx.step('unknown session → 404; NONMEMBER → 404 workspace_not_found; ANON → 401', async () => {
+      await ctx.step('unknown session → 404; NONMEMBER → 403 workspace_access_denied; ANON → 401', async () => {
         (await owner.get(path, { params: { projectId: project.id, sessionId: crypto.randomUUID() } })).status(404);
-        (await ctx.client.as(ctx.P.NONMEMBER).get(path, { params })).status(404).body().has('$.code', 'workspace_not_found');
+        (await ctx.client.as(ctx.P.NONMEMBER).get(path, { params })).status(403).body().has('$.code', 'workspace_access_denied');
         (await ctx.client.as(ctx.P.ANON).get(path, { params })).status(401);
       });
     } finally {
@@ -3509,8 +3529,7 @@ flow(
         const without = (await owner.put(shareRoute, { include_prompt: false }, { params: turn })).status(200);
         const b = without.json<{ share: { token: string; include_prompt: boolean } }>().share;
         if (b.token !== token || b.include_prompt !== false) throw new Error(`bad share ${JSON.stringify(b)}`);
-        const res = (await anon.get(publicRoute, { params: { token } })).status(200).body().has('$.response.prompt', null);
-        void res;
+        (await anon.get(publicRoute, { params: { token } })).status(200).body().has('$.response.prompt', null);
       });
 
       await ctx.step('the response token opens no sandbox proxy and is not in the preview/file share list', async () => {

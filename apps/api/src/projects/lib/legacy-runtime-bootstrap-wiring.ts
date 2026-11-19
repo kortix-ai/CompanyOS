@@ -49,7 +49,7 @@ export interface LegacyBootstrapRow {
 }
 
 /** Kill switch + scope, read per call so a `kubectl set env` takes effect without a rebuild. */
-export function legacyRuntimeBootstrapEnabled(): boolean {
+function legacyRuntimeBootstrapEnabled(): boolean {
   const raw = (process.env.LEGACY_RUNTIME_BOOTSTRAP ?? 'on').trim().toLowerCase();
   return !['0', 'false', 'off', 'no'].includes(raw);
 }
@@ -389,7 +389,18 @@ export function scheduleLegacyRuntimeBootstrap(
 ): boolean {
   if (!legacyRuntimeBootstrapEnabled()) return false;
   if (!row.externalId) return false;
-  if (inFlight.has(row.sandboxId) || inFlight.size >= MAX_IN_FLIGHT) return false;
+  if (inFlight.has(row.sandboxId) || inFlight.size >= MAX_IN_FLIGHT) {
+    // A refused repair is exactly the "requested a relaunch, nothing happened"
+    // case; say why or the box is unexplainable from logs (KRTX-4754). The
+    // callers' own request gates (a 4-minute dead-daemon budget, the edge
+    // refusal's metadata window) bound this line's rate.
+    logger.info(
+      `[legacy-bootstrap] repair refused for ${row.sandboxId}: ${
+        inFlight.has(row.sandboxId) ? 'a repair is already in flight' : `${MAX_IN_FLIGHT} repairs in flight on this replica`
+      }`,
+    );
+    return false;
+  }
   inFlight.add(row.sandboxId);
   void runner(row, reason)
     .catch((err) =>
@@ -452,9 +463,9 @@ export async function repairDeadDaemonOnEdgeRefusal(
   return true;
 }
 
-export type OpenRuntimeGuaranteeAction = 'proceed' | 'defer_turn_running' | 'repairing' | 'exhausted' | 'blocked';
+type OpenRuntimeGuaranteeAction = 'proceed' | 'defer_turn_running' | 'repairing' | 'exhausted' | 'blocked';
 
-export interface OpenRuntimeGuaranteeOutcome {
+interface OpenRuntimeGuaranteeOutcome {
   action: OpenRuntimeGuaranteeAction;
   /** Null only when the guarantee is disabled or the health probe itself failed (fail-open — see `guaranteeCurrentRuntimeOnOpen`). */
   classification: RuntimeClassification | null;

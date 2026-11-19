@@ -73,9 +73,9 @@ export interface CapturePolicy {
     paused: boolean;
     paused_until_ms: number | null;
     /**
-     * One screen frame every this many milliseconds, 500–10000, on every device
-     * (`CAPTURE_FRAME_INTERVALS_MS` lists the choices). Null or absent: the
-     * device default, `CAPTURE_DEVICE_DEFAULTS.intervalMs`.
+     * @deprecated Ignored by Kortix Capture 0.15.5 and later: the app sets its own
+     * frame rate (2 frames a second while someone works, one every 2 s otherwise).
+     * Kept so stored policies still parse.
      */
     interval_ms?: number | null;
     /** The frame height in pixels, at most. Null or absent: `CAPTURE_DEVICE_DEFAULTS.maxHeight`. */
@@ -295,7 +295,7 @@ export interface CaptureDeviceResources {
   window_ms: number;
   samples: number;
   cpu_percent_avg: number;
-  /** The busiest minute of the window. */
+  /** The busiest minute of that span. */
   cpu_percent_peak: number;
   /** Working set (Windows) or resident size (macOS, Linux) of all processes at the last sample. */
   memory_bytes: number;

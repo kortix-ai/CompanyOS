@@ -3,7 +3,9 @@ import { loadAuth, loadAuthForHost } from '../api/auth.ts';
 import { ApiError } from '../api/client.ts';
 import { hasEnvTokenHost } from '../api/config.ts';
 import { kortixFromAuth, withKortixScope } from '../api/sdk.ts';
+import { agentChoiceFromError, agentChoiceHintFor } from './session-agent-choice.ts';
 import { sendAndWaitForReply } from './sessions-chat.ts';
+import { runLoopsDoctor } from './doctor-loops.ts';
 import type { MeResponse, ProjectSummary } from '../api/types.ts';
 import { takeFlags } from '../command-argv.ts';
 import { resolveProjectContext, shortId, takeFlagBool, takeFlagValue } from '../command-helpers.ts';
@@ -20,7 +22,12 @@ they start orchestrating real work.
 By default, doctor attempts to delete only its diagnostic session.
 With --keep-session, it leaves that session in place.
 
+With --loops it checks this repository's kortix.yaml instead: secrets,
+triggers, sandbox images, GitHub webhooks, connectors, Slack, model. --fix
+repairs what it can. See \`kortix doctor --loops --help\`.
+
 Options:
+  --loops              Check what kortix.yaml declares (--fix, --repo, --json).
   --no-session         Stop after auth + workspace checks. Don't create
                        a sandbox. Fast and cheap.
   --keep-session       Don't delete the test session at the end.
@@ -36,6 +43,7 @@ Exit codes:
 `;
 
 export async function runDoctor(argv: string[]): Promise<number> {
+  if (argv.includes('--loops')) return runLoopsDoctor(argv.filter((arg) => arg !== '--loops'));
   const flags = takeFlags(argv, HELP, (rest) => ({
     noSession: takeFlagBool(rest, ['--no-session']),
     keepSession: takeFlagBool(rest, ['--keep-session']),
@@ -111,13 +119,31 @@ export async function runDoctor(argv: string[]): Promise<number> {
   const t0 = Date.now();
   process.stdout.write(`  ${C.dim}creating session…${C.reset}\n`);
   let session: ProjectSession;
-  try {
-    session = await withKortixScope(auth, () =>
-      kortixFromAuth(auth).project(ctx.projectId).sessions.create({ model }),
+  const create = (agentName?: string) =>
+    withKortixScope(auth, () =>
+      kortixFromAuth(auth)
+        .project(ctx.projectId)
+        .sessions.create(agentName ? { model, agent_name: agentName } : { model }),
     );
+  try {
+    session = await create();
   } catch (err) {
-    process.stdout.write(`${status.err(`session create failed: ${describe(err)}`)}\n`);
-    return 1;
+    // From a My Kortix session the create must name a project agent
+    // (session-agent-choice.ts): retry once with the first one the API lists.
+    const agentName = doctorRetryAgent(err);
+    if (!agentName) {
+      process.stdout.write(`${status.err(`session create failed: ${describe(err)}`)}\n`);
+      const hint = agentChoiceHintFor(err);
+      if (hint) process.stdout.write(`  ${hint}\n`);
+      return 1;
+    }
+    process.stdout.write(`  ${C.dim}My Kortix names the agent it starts; using ${agentName}${C.reset}\n`);
+    try {
+      session = await create(agentName);
+    } catch (retryErr) {
+      process.stdout.write(`${status.err(`session create failed (agent ${agentName}): ${describe(retryErr)}`)}\n`);
+      return 1;
+    }
   }
   const sessionId = session.session_id;
   const handle = kortixFromAuth(auth).session(ctx.projectId, sessionId);
@@ -190,6 +216,12 @@ export async function runDoctor(argv: string[]): Promise<number> {
   }
   process.stdout.write(`${status.ok('all checks passed')}\n\n`);
   return 0;
+}
+
+/** The agent doctor retries its session create with: the first project agent
+ *  an `AGENT_REQUIRED` / `META_AGENT_RECURSION` refusal lists, else null. */
+export function doctorRetryAgent(err: unknown): string | null {
+  return agentChoiceFromError(err)?.agents[0] ?? null;
 }
 
 /** `--timeout <seconds>`; absent or empty keeps the 180 s default. */

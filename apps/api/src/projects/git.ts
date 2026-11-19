@@ -42,6 +42,7 @@ export {
 } from './git/mirror';
 
 export {
+  listRepoDirectory,
   listRepoFiles,
   searchRepoFileNames,
   grepRepoFiles,
@@ -88,4 +89,4 @@ export {
   resolveBranchAheadState,
 } from './git/merge';
 
-export { loadProjectConfig } from './git/config';
+export { loadProjectConfig, readProjectSkillDescriptions } from './git/config';

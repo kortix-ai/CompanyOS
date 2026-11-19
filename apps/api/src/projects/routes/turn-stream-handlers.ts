@@ -37,6 +37,7 @@ import {
 } from '../sandbox-turn-lifecycle';
 import { drainSessionLifecycleQueue } from '../session-lifecycle';
 import { confirmInboxPromptConsumed, steerTargetAtTurnEnd } from '../session-lifecycle/consumption';
+import { requeueDroppedSteer } from '../session-lifecycle/redelivery';
 import { reconcileForwardedTurnsAtEnd } from '../session-lifecycle/forwarded-strand-reconcile';
 import { promoteNextInboxRow } from '../session-lifecycle/store';
 import { generateSessionTitleFromFirstPrompt } from '../session-title-generate';
@@ -494,7 +495,10 @@ async function publishTurnEnd(
       activeTurnCount: turnCompletion.activeTurnCount,
     });
   }
-  const ok = relayEnd ? await relayTurnEnd(sessionId, status, errorInfo) : false;
+  // The turn's last assistant text (kortixd sends it on `end`): the reply a
+  // chat thread gets when the agent ran no `slack send` of its own.
+  const finalText = status === 'idle' && typeof body.text === 'string' ? body.text : undefined;
+  const ok = relayEnd ? await relayTurnEnd(sessionId, status, errorInfo, finalText) : false;
   // A Telegram chat has no live turn that shows the error. Tell it when no Slack
   // or Teams turn carried the end. The gate is the push's own (turnEndPushType):
   // an end that closed a root turn in THIS call with a non-abort error, so once
@@ -654,6 +658,29 @@ export async function readSteer(
   const messageId = body.turn_message_id?.trim();
   if (!messageId) return c.json({ error: 'turn_message_id is required' }, 400);
   const outcome = await confirmInboxPromptConsumed(sessionId, messageId);
+  return c.json({ ok: outcome !== 'no_prompt', outcome });
+}
+
+// A stopped turn DROPPED a steered message it never read (pi): its inbox row
+// goes back on the queue and starts the next turn (`requeueDroppedSteer`). A
+// row still mid-delivery answers 503, so the daemon retries once the POST has
+// come back. Sandbox credential only, like `steer_read`.
+export async function dropSteer(
+  c: RelayResponder,
+  body: TurnStreamBody,
+  sessionId: string,
+  authenticatedSandboxId: string | null,
+): Promise<Response | null> {
+  if (!authenticatedSandboxId) {
+    return requireSandboxCredential(c, authenticatedSandboxId, 'steer_dropped');
+  }
+  const messageId = body.turn_message_id?.trim();
+  if (!messageId) return c.json({ error: 'turn_message_id is required' }, 400);
+  const outcome = await requeueDroppedSteer(sessionId, messageId);
+  if (outcome === 'pending_delivery') return c.json({ ok: false, outcome }, 503);
+  if (outcome === 'requeued' || outcome === 'exhausted') {
+    logger.info('[turn-stream] a stopped turn dropped a steered prompt', { session_id: sessionId, message_id: messageId, outcome });
+  }
   return c.json({ ok: outcome !== 'no_prompt', outcome });
 }
 

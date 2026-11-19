@@ -22,7 +22,7 @@ globals.location = win.location;
 globals.history = win.history;
 globals.requestAnimationFrame = (cb: () => void) => setTimeout(cb, 0);
 globals.cancelAnimationFrame = (id: number) => clearTimeout(id);
-// The mobile sheet is a Radix dialog: its focus guards and dismissable layer
+// The mobile sheet is a dialog: its focus guards and dismiss layer
 // read DOM constructor globals at mount. Bun ships its own `Event` family, so
 // `key in globals` alone would leave happy-dom's document rejecting bun-realm
 // event objects. Mirror the happy-dom window OVER bun's DOM classes, except
@@ -105,11 +105,8 @@ mock.module('@kortix/ui/internal/tunnel/computer-connect', () => ({
 mock.module('@kortix/ui/internal/layout/connect-mcp-modal', () => ({
   ConnectMcpModal: () => null,
 }));
-mock.module('@kortix/ui/workspace/sidebar/footer/project-mcp-nav', () => ({
-  ProjectMcpNavItem: () => null,
-}));
-mock.module('@kortix/ui/workspace/sidebar/footer/project-computer-nav', () => ({
-  ProjectComputerNavItem: () => null,
+mock.module('@kortix/ui/workspace/sidebar/footer/project-promo-cards', () => ({
+  ProjectPromoCards: () => null,
 }));
 mock.module('@kortix/ui/workspace/sidebar/footer/project-manifest-issues-alert', () => ({
   ProjectManifestIssuesAlert: () => null,
@@ -126,8 +123,11 @@ mock.module('@kortix/ui/workspace/sidebar/footer/project-upgrade-button', () => 
 mock.module('@kortix/ui/workspace/repository-disconnected', () => ({
   ProjectRepositoryDisconnectedAlert: () => null,
 }));
-mock.module('@kortix/ui/workspace/sidebar/project-nav-items', () => ({
-  ProjectNavItems: () => null,
+// A signed-in viewer: the nav rows render as for a real person.
+const realUiProvider = await import('@kortix/ui/providers/ui-provider');
+mock.module('@kortix/ui/providers/ui-provider', () => ({
+  ...realUiProvider,
+  useUiViewerId: () => 'synthetic-viewer',
 }));
 mock.module('@kortix/ui/internal/layout/open-command-palette', () => ({
   openCommandPalette: () => undefined,
@@ -203,7 +203,7 @@ test('the desktop rail keeps the Ctrl/Cmd+J shortcut hint on the New-session row
 
 test('the mobile sheet renders no keyboard shortcut hint (KRTX-2005)', async () => {
   await mountSidebar(390);
-  // The mobile sheet is a Radix portal: its content mounts into document.body,
+  // The mobile sheet renders through a portal: its content mounts into document.body,
   // not into the test container the provider renders into.
   expect(document.body.innerHTML).toContain('newSession');
   expect(document.body.innerHTML).not.toContain('data-slot="kbd-group"');
@@ -226,7 +226,7 @@ test('with chat on, the sidebar is Spaces only (Cmd+J still opens the new-sessio
   expect(html).not.toContain('oneChat');
   expect(html).not.toContain('spaces.directMessages');
   // Review first, then the person's own space (their chat with My Kortix, at /chat), then the channels.
-  const review = html.indexOf('href="/workspaces/synthetic-project/inbox?view=review"');
+  const review = html.indexOf('href="/workspaces/synthetic-project/review"');
   const personal = html.indexOf('href="/workspaces/synthetic-project/chat"');
   const general = html.indexOf('href="/workspaces/synthetic-project/c/general"');
   expect(review).toBeGreaterThan(-1);
@@ -260,17 +260,39 @@ test('with chat off, the sidebar keeps New session, the session list and Cmd+J',
   expect(newSessionCalls).toBe(1);
 });
 
-const INBOX_HREF = 'href="/workspaces/synthetic-project/inbox"';
+// Inbox (`/inbox`, the person's notifications) is not a sidebar nav row in any
+// variant (KRTX-4949): it opens from the workspace menu (`workspace-switcher.tsx`),
+// ⌘K and the notification toast. A Needs-you notification waits (the inbox mock
+// above), so a row would also carry its count badge.
+const INBOX = ['href="/inbox"', 'inbox.title'];
 
-// The Inbox is a row in the workspace menu (`workspace-switcher.tsx`), not a
-// sidebar nav row, with Spaces off or on.
-test('the sidebar has no Inbox row (KRTX-1742)', async () => {
+function expectNoInbox(html: string) {
+  for (const needle of INBOX) expect(html).not.toContain(needle);
+}
+
+test('the desktop sidebar has no Inbox row (KRTX-4949)', async () => {
   await mountSidebar(1280);
-  expect(container!.innerHTML).not.toContain(INBOX_HREF);
+  expect(document.body.innerHTML).toContain('newSession');
+  expectNoInbox(document.body.innerHTML);
 });
 
-test('with chat on, the sidebar has no Inbox row either', async () => {
+test('the mobile sheet has no Inbox row (KRTX-4949)', async () => {
+  await mountSidebar(390);
+  expect(document.body.innerHTML).toContain('newSession');
+  expectNoInbox(document.body.innerHTML);
+});
+
+test('with chat on, neither the Spaces list nor the opened More group has an Inbox row (KRTX-4949)', async () => {
   channelsOn = true;
   await mountSidebar(1280);
-  expect(container!.innerHTML).not.toContain(INBOX_HREF);
+  expectNoInbox(document.body.innerHTML);
+  const more = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'more');
+  expect(more).toBeDefined();
+  await act(async () => {
+    more?.click();
+  });
+  const html = document.body.innerHTML;
+  // The Spaces list still renders (Review is its first row; the test above checks the order).
+  expect(html).toContain('href="/workspaces/synthetic-project/review"');
+  expectNoInbox(html);
 });

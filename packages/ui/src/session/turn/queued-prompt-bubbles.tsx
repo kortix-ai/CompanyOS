@@ -1,6 +1,9 @@
 'use client';
 
+import { newSessionHref } from '../../lib/routes';
+import { UiLink } from '../../providers/ui-provider';
 import { Button } from '../../primitives/button';
+import { ButtonGroup } from '../../primitives/button-group';
 import { InlineMeta } from '../../primitives/inline-meta';
 import { useTranslations } from '../../i18n';
 
@@ -12,7 +15,8 @@ export const QUEUED_BUBBLE_OPACITY_CLASS =
  *  before a step opened under it — it runs with the next send. */
 export type QueuedPromptState = 'queued' | 'interrupted';
 
-export type QueuedPromptStatusState = QueuedPromptState | 'failed' | 'sending' | 'held';
+/** `unsent`: sent while offline; the POST waits for the network (finding 07). */
+export type QueuedPromptStatusState = QueuedPromptState | 'failed' | 'sending' | 'held' | 'unsent';
 
 /** Ring tone for a queued bubble. `pending` covers waiting and sending, so a
  *  delivery retry that flips a row between them never changes the ring. */
@@ -27,12 +31,12 @@ export function queuedBubbleTone(
 }
 
 /** Show delivery progress on the message itself, not only on the send button. */
-export function QueuedPromptProgress({ state }: { state: 'queued' | 'sending' | 'interrupted' }) {
+export function QueuedPromptProgress({ state }: { state: 'queued' | 'sending' | 'interrupted' | 'unsent' }) {
   const t = useTranslations('threads');
   return (
     <InlineMeta>
       <span role="status" data-queued-status={state} className="text-muted-foreground text-xs">
-        {state === 'sending' ? t('sending') : t('queued')}
+        {state === 'unsent' ? t('notSentYet') : state === 'sending' ? t('sending') : t('queued')}
       </span>
     </InlineMeta>
   );
@@ -71,5 +75,29 @@ export function QueuedPromptFailure({
         )}
       </span>
     </InlineMeta>
+  );
+}
+
+/** A failed callback path requires a new computer, not a retry on the old one. */
+export function QueuedPromptRecovery({ projectId, onRemove }: {
+  projectId?: string;
+  onRemove?: () => void;
+}) {
+  const sidebar = useTranslations('sidebar');
+  const turn = useTranslations('sessionUi.turn');
+  const common = useTranslations('common');
+  const newSession = projectId ? (
+    <Button variant="ghost" size="xs" asChild>
+      <UiLink href={newSessionHref(projectId)}>{sidebar('newSession')}</UiLink>
+    </Button>
+  ) : null;
+  const remove = onRemove ? (
+    <Button type="button" variant="ghost" size="xs" onClick={onRemove}>{common('remove')}</Button>
+  ) : null;
+  return (
+    <div data-queued-status="failed" className="flex flex-col items-end gap-1">
+      <span role="status" className="text-kortix-red text-xs">{turn('computerDisconnected')}</span>
+      {newSession && remove ? <ButtonGroup>{newSession}{remove}</ButtonGroup> : newSession ?? remove}
+    </div>
   );
 }

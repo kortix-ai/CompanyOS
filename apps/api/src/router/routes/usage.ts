@@ -13,6 +13,7 @@ import { auth, errors, json, makeOpenApiApp } from '../../openapi';
 import { assertProjectCapability, loadProjectForUser } from '../../projects/lib/access';
 import { CSV_ROW_CAP, toCsv } from '../../shared/cost-csv';
 import { getCostSummary, listCostByProject } from '../../shared/cost-rollups';
+import { withCostReadGuard } from '../../shared/cost-read-guard';
 import {
   type CostSort,
   type CostWindow,
@@ -49,23 +50,59 @@ usageApp.use('*', combinedAuth);
 // every project's spend on multi-user accounts. See reject-sandbox-tokens.ts.
 usageApp.use('*', rejectSandboxTokens);
 
-async function resolveSessionCostAccountId(
+/**
+ * The workspace a workspace-bound token reads usage for: its own, always.
+ *
+ *   no project_id            -> the token's own workspace (W's slice)
+ *   project_id = W           -> W
+ *   project_id = another one -> 403
+ *   account_id               -> must name the token's own workspace or its
+ *                               account (the CLI sends the workspace id as
+ *                               `account_id` on every account-scoped call);
+ *                               the read stays W's slice either way
+ *
+ * Exported for unit tests. Pure: the capability check runs after it.
+ */
+export function boundUsageProjectId(
+  tokenProjectId: string,
+  tokenAccountId: string | undefined,
+  requestedProjectId: string | undefined,
+  requestedAccountId: string | undefined,
+): { ok: true; projectId: string } | { ok: false; message: string } {
+  const own = tokenProjectId.toLowerCase();
+  if (requestedProjectId && requestedProjectId.toLowerCase() !== own) {
+    return { ok: false, message: 'A workspace-bound token reads only its own workspace usage; omit project_id or pass its own workspace id' };
+  }
+  if (requestedAccountId) {
+    const named = requestedAccountId.toLowerCase();
+    if (named !== own && named !== tokenAccountId?.toLowerCase()) {
+      return { ok: false, message: 'A workspace-bound token reads only its own workspace usage; omit account_id' };
+    }
+  }
+  return { ok: true, projectId: tokenProjectId };
+}
+
+/**
+ * The account and project a project-scoped usage read runs on. A
+ * workspace-bound token always reads its own workspace (`boundUsageProjectId`),
+ * authorized by `project.usage.read` on it. Any other caller names a project
+ * with `project_id` (checked with `project.gateway.spend.read`), or gets the
+ * account-wide read (`billing.read`).
+ */
+async function resolveSessionCostScope(
   c: Context<AppEnv>,
   projectId?: string,
-): Promise<string> {
+): Promise<{ accountId: string; projectId: string | undefined }> {
   const tokenAccountId = c.get('accountId');
   const tokenProjectId = c.get('tokenProjectId');
   if (tokenProjectId) {
     if (!tokenAccountId) throw new HTTPException(403, { message: 'Workspace token has no workspace binding' });
-    if (!projectId || projectId !== tokenProjectId || c.req.query('account_id')) {
-      throw new HTTPException(403, {
-        message: 'A workspace-bound token requires its own project_id and no account_id; grant project.usage.read in kortix_permissions',
-      });
-    }
+    const bound = boundUsageProjectId(tokenProjectId, tokenAccountId, projectId, c.req.query('account_id'));
+    if (!bound.ok) throw new HTTPException(403, { message: bound.message });
     await assertProjectCapability(
-      c, c.get('userId'), tokenAccountId, projectId, PROJECT_ACTIONS.PROJECT_USAGE_READ,
+      c, c.get('userId'), tokenAccountId, bound.projectId, PROJECT_ACTIONS.PROJECT_USAGE_READ,
     );
-    return tokenAccountId;
+    return { accountId: tokenAccountId, projectId: bound.projectId };
   }
   if (projectId) {
     const loaded = await loadProjectForUser(c, projectId, 'read');
@@ -83,16 +120,16 @@ async function resolveSessionCostAccountId(
       projectId,
       PROJECT_ACTIONS.PROJECT_GATEWAY_SPEND_READ,
     );
-    return loaded.row.accountId;
+    return { accountId: loaded.row.accountId, projectId };
   }
-  return resolveAccountWideUsageAccountId(c);
+  return { accountId: await resolveAccountWideUsageAccountId(c), projectId: undefined };
 }
 
 /**
  * Account-wide usage, cost and request-log reads. Every credential class
  * (JWT, PAT, OAuth, service account) needs `billing.read`: an account-bound
  * token or `?account_id=` alone is not authority. Project-scoped reads use the
- * project leaves instead (resolveSessionCostAccountId).
+ * project leaves instead (resolveSessionCostScope).
  */
 export async function resolveAccountWideUsageAccountId(c: Context<AppEnv>): Promise<string> {
   if (c.get('tokenProjectId')) {
@@ -512,7 +549,7 @@ usageApp.openapi(
           'text/csv': { schema: z.string() },
         },
       },
-      ...errors(400, 401, 403),
+      ...errors(400, 401, 403, 429),
     },
   }),
   async (c) => {
@@ -542,23 +579,24 @@ usageApp.openapi(
       throw new HTTPException(400, { message: 'owner_id must be a UUID' });
     }
 
-    const projectId = c.req.query('project_id') || undefined;
-    const accountId = await resolveSessionCostAccountId(c, projectId);
+    const { accountId, projectId } = await resolveSessionCostScope(c, c.req.query('project_id') || undefined);
     const ownerId = await sessionCostOwner(c, accountId, requestedOwnerId);
 
     if (c.req.query('format') === 'csv') {
       // Same filtered query as the JSON branch (accountId, projectId, ownerId,
       // window, sort) — only limit/offset differ, because a CSV export wants
       // up to CSV_ROW_CAP rows in one shot, not one paginated page of it.
-      const page = await listSessionCosts({
-        accountId,
-        projectId,
-        ownerId,
-        window: parsed.window,
-        sort: parsed.sort,
-        limit: CSV_ROW_CAP,
-        offset: 0,
-      });
+      const page = await withCostReadGuard(() =>
+        listSessionCosts({
+          accountId,
+          projectId,
+          ownerId,
+          window: parsed.window,
+          sort: parsed.sort,
+          limit: CSV_ROW_CAP,
+          offset: 0,
+        }),
+      );
       const body = toCsv(
         [
           'session_id',
@@ -595,7 +633,9 @@ usageApp.openapi(
       });
     }
 
-    return c.json(await listSessionCosts({ accountId, projectId, ownerId, ...parsed }));
+    return c.json(
+      await withCostReadGuard(() => listSessionCosts({ accountId, projectId, ownerId, ...parsed })),
+    );
   },
 );
 
@@ -618,8 +658,7 @@ usageApp.openapi(
     },
   }),
   async (c) => {
-    const projectId = c.req.query('project_id') || undefined;
-    const accountId = await resolveSessionCostAccountId(c, projectId);
+    const { accountId, projectId } = await resolveSessionCostScope(c, c.req.query('project_id') || undefined);
     const detail = await getSessionCostRecord({
       accountId,
       projectId,
@@ -672,7 +711,7 @@ usageApp.openapi(
           'text/csv': { schema: z.string() },
         },
       },
-      ...errors(400, 401, 403),
+      ...errors(400, 401, 403, 429),
     },
   }),
   async (c) => {
@@ -693,10 +732,7 @@ usageApp.openapi(
       // before input validation, not after.
       // A project token names its own project; any other caller may name one
       // with `project_id`, checked exactly as /session-costs checks it.
-      projectId = c.get('tokenProjectId') || c.req.query('project_id') || undefined;
-      accountId = projectId
-        ? await resolveSessionCostAccountId(c, c.req.query('project_id'))
-        : await resolveAccountWideUsageAccountId(c);
+      ({ accountId, projectId } = await resolveSessionCostScope(c, c.req.query('project_id') || undefined));
       window = parseCostWindow({ from: c.req.query('from'), to: c.req.query('to') });
       sort = parseCostSort(c.req.query('sort'), PROJECT_COST_SORTS, 'total_desc');
       ({ limit, offset } = parseCostPagination({
@@ -725,15 +761,17 @@ usageApp.openapi(
       // Same filtered query as the JSON branch (accountId, window, sort) —
       // only limit/offset differ, because a CSV export wants up to
       // CSV_ROW_CAP rows in one shot, not one paginated page of it.
-      const page = await listCostByProject({
-        accountId,
-        projectId,
-        visibleProjectIds,
-        window,
-        sort,
-        limit: CSV_ROW_CAP,
-        offset: 0,
-      });
+      const page = await withCostReadGuard(() =>
+        listCostByProject({
+          accountId,
+          projectId,
+          visibleProjectIds,
+          window,
+          sort,
+          limit: CSV_ROW_CAP,
+          offset: 0,
+        }),
+      );
       const body = toCsv(
         [
           'project_id',
@@ -761,7 +799,11 @@ usageApp.openapi(
       });
     }
 
-    return c.json(await listCostByProject({ accountId, projectId, visibleProjectIds, window, sort, limit, offset }));
+    return c.json(
+      await withCostReadGuard(() =>
+        listCostByProject({ accountId, projectId, visibleProjectIds, window, sort, limit, offset }),
+      ),
+    );
   },
 );
 
@@ -792,24 +834,21 @@ usageApp.openapi(
         })
         .openapi('CostSummaryQuery'),
     },
-    responses: { 200: json(CostSummarySchema, 'Cost summary'), ...errors(400, 401, 403) },
+    responses: { 200: json(CostSummarySchema, 'Cost summary'), ...errors(400, 401, 403, 429) },
   }),
   async (c) => {
     try {
-      const projectId = c.req.query('project_id') || undefined;
-      const accountId = await resolveSessionCostAccountId(c, projectId);
+      const { accountId, projectId } = await resolveSessionCostScope(c, c.req.query('project_id') || undefined);
       if (c.get('tokenProjectId') && c.req.query('session_id')) {
         throw new HTTPException(403, {
           message: 'A workspace-bound token cannot query an arbitrary session',
         });
       }
+      const window = parseCostWindow({ from: c.req.query('from'), to: c.req.query('to') });
       return c.json(
-        await getCostSummary({
-          accountId,
-          projectId,
-          sessionId: c.req.query('session_id') || undefined,
-          window: parseCostWindow({ from: c.req.query('from'), to: c.req.query('to') }),
-        }),
+        await withCostReadGuard(() =>
+          getCostSummary({ accountId, projectId, sessionId: c.req.query('session_id') || undefined, window }),
+        ),
       );
     } catch (error) {
       if (error instanceof InvalidCostQueryError) {

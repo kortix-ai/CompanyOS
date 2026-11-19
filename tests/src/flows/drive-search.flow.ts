@@ -196,9 +196,9 @@ flow(
         (await search(owner, { q: word, limit: 'ten' })).status(400).body().has('$.code', 'invalid_input');
       });
 
-      await ctx.step('a person outside the workspace → 404 workspace_not_found', async () => {
+      await ctx.step('a person outside the workspace → 403 workspace_access_denied', async () => {
         // Membership is access (design.md C3): an account member is in the 1:1 workspace.
-        (await search(ctx.client.as(ctx.P.NONMEMBER), { q: word })).status(404).body().has('$.code', 'workspace_not_found');
+        (await search(ctx.client.as(ctx.P.NONMEMBER), { q: word })).status(403).body().has('$.code', 'workspace_access_denied');
       });
     } finally {
       if (tokenId) await db.query('DELETE FROM kortix.account_tokens WHERE token_id = $1', [tokenId]).catch(() => {});

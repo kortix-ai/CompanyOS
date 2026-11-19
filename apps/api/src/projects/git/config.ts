@@ -137,10 +137,12 @@ export function resolveConfigAgents(
         return {
           name: spec.name,
           path: file ?? native?.path ?? spec.path,
+          title: native?.title ?? null,
           description: native?.description ?? null,
           mode: native?.mode ?? null,
           ...(native?.hidden === true ? { hidden: true } : {}),
           model: native?.model ?? null,
+          ...(native?.run ? { run: native.run } : {}),
           space: native?.space ?? null,
           source: 'kortix.yaml' as const,
           enabled: spec.enabled,
@@ -340,6 +342,33 @@ function withSyntaxErrorConsequence(health: ManifestHealth, lastGoodCommit: stri
   };
 }
 
+/**
+ * Every project skill's description, from its SKILL.md frontmatter at `ref`.
+ * A skill whose folder has no readable SKILL.md reads as null.
+ *
+ * One batched fetch for every SKILL.md first (`prefetchRepoFiles`): on a cold
+ * partial store each per-file read is its own fetch from the host, and
+ * fetches into one store run one at a time — a project with many skills paid
+ * one fetch per skill and 503'd the 25 s request deadline (KRTX-4739; the
+ * same cold-store 503 `loadProjectConfig` fixed on 2026-11-03).
+ */
+export async function readProjectSkillDescriptions(
+  project: GitBackedProject,
+  skills: unknown,
+  ref = project.defaultBranch,
+): Promise<Record<string, string | null>> {
+  const folders = skills && typeof skills === 'object' && !Array.isArray(skills) ? Object.entries(skills) : [];
+  await prefetchRepoFiles(project, folders.map(([, folder]) => `${String(folder)}/SKILL.md`), ref);
+  return Object.fromEntries(
+    await Promise.all(
+      folders.map(async ([name, folder]) => {
+        const text = await readRepoFile(project, `${String(folder)}/SKILL.md`, ref).catch(() => null);
+        return [name, text ? (parseFrontmatter(text).description ?? null) : null] as const;
+      }),
+    ),
+  );
+}
+
 /** The project config summary at the default branch, with the Kortix skills. */
 export async function loadProjectConfig(
   project: GitBackedProject,
@@ -412,10 +441,12 @@ export async function loadRepoConfigSummary(
     return {
       name: spec.name,
       path: text(block.prompt_file) ?? spec.path,
+      title: text(block.title)?.trim() ?? null,
       description: text(block.description),
       mode: text(block.mode),
       ...(block.hidden === true ? { hidden: true } : {}),
       model: text(block.model),
+      run: text(block.run),
       space: text(block.space),
     };
   });

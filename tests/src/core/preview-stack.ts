@@ -352,6 +352,13 @@ function buildPreviewRuntimeEnvironment(
     // The preview edge drops request bodies above ~124 KiB, and browser Storage
     // uploads cross the same origin. Attachments use bounded API chunks here.
     PROMPT_ATTACHMENT_UPLOAD_MODE: 'chunked',
+    // The browser and API suites reach this origin from one sandbox address,
+    // and the API's per-address edge budget (300/min, 30/min for auth routes)
+    // answered 429 to 11 of 41 API flows and 5 browser journeys in
+    // deploy-preview run 43495059821. Same reason as the GOTRUE_RATE_LIMIT_*
+    // values in the compose file above.
+    KORTIX_PUBLIC_EDGE_REQS_PER_MIN: '100000',
+    KORTIX_PUBLIC_AUTH_EDGE_REQS_PER_MIN: '10000',
     KORTIX_URL: origin,
     FRONTEND_URL: origin,
     SITE_URL: origin,

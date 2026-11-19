@@ -104,11 +104,22 @@ describe('the marker key', () => {
   });
 });
 
-describe('returning to a tab after its storage marker disappears', () => {
+describe('returning to a tab whose storage marker drifted', () => {
   test('the same document user retains its live state', () => {
     expect(shouldResetClientState({
       inDocumentUserId: USER_A,
       persistedUserId: null,
+      nextUserId: USER_A,
+    })).toBe(false);
+  });
+
+  test('the same document user retains its live state when another document rewrote the marker', () => {
+    // The Kortix side panel frames this origin with its own partitioned session
+    // cookie but shares this origin's localStorage, so it can publish another
+    // account into the marker while this tab stays signed in.
+    expect(shouldResetClientState({
+      inDocumentUserId: USER_A,
+      persistedUserId: USER_B,
       nextUserId: USER_A,
     })).toBe(false);
   });

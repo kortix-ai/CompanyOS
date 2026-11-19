@@ -1804,8 +1804,8 @@ function TurnToolBlocks(
   // a row) settles with its "Worked for" row open, so nothing they were
   // reading disappears under them.
   const split = useMemo(
-    () => (fold && !working ? splitSessionLogTurnWork(segments.filter(segmentRendersSomething), { working, foldStartedWork }) : null),
-    [fold, segments, working, foldStartedWork],
+    () => (fold && (!working || !!runLabel) ? splitSessionLogTurnWork(segments.filter(segmentRendersSomething), { working: working && !runLabel, foldStartedWork }) : null),
+    [fold, segments, working, foldStartedWork, runLabel],
   );
   // A settled turn whose prompt is another agent's notice folds the notice
   // row into this work fold with the work it led to (KRTX-4732): the parent's
@@ -1816,7 +1816,7 @@ function TurnToolBlocks(
   // answer instead — the gate below keeps the block mounted for it.
   // The run's other turns fold here too (KRTX-4732); while the turn still works, the run's
   // row already stands, closed, over the reports that came before.
-  const noticeFold = (!!workNotice || !!runContent) && fold && !working;
+  const noticeFold = (!!workNotice || !!runContent) && fold && (!working || !!runLabel);
   // A turn whose only work started agents has no steps, but its agent rows are what the
   // person tracks: they draw (and fold once every agent reported, `foldStartedWork`).
   const startedWork = useMemo(
@@ -2793,14 +2793,14 @@ function SessionTurnImpl(props: SessionTurnProps) {
   const inRun = !!props.agentRun || !!props.runMember;
   const turnSegments = useMemo(() => (inRun ? withoutRelayCalls(segments) : segments), [inRun, segments]);
   const { runTurns, agentRun } = props;
-  // The run's other turns, drawn by the anchor, each as a run member: its work in the fold,
-  // its answer under the run row. Each member is a memoized row: a render of the anchor costs a
-  // shallow prop compare per member.
-  const runMembers = (part: 'work' | 'answer') =>
+  // The run's other turns stay inside the anchor's activity fold, including interim replies.
+  // Only the anchor's final answer stays at the top level. Memoized members only
+  // need a shallow prop comparison when their anchor streams.
+  const runContent =
     agentRun && runTurns?.length
-      ? runTurns.map((member) => (
+      ? runTurns.flatMap((member) => (['work', 'answer'] as const).map((part) => (
           <SessionTurn
-            key={member.id}
+            key={`${member.id}:${part}`}
             {...props}
             turn={member}
             runMember={part}
@@ -2815,10 +2815,8 @@ function SessionTurnImpl(props: SessionTurnProps) {
             isLast={false}
             ownsPlan={false}
           />
-        ))
+        )))
       : null;
-  const runContent = runMembers('work');
-  const runAnswers = runMembers('answer');
   // A compaction turn's message-state — `inFlight` (the marker still
   // streams its summary) is the half of "is this compaction running" the
   // working projection cannot see, because it deliberately knows nothing
@@ -3067,7 +3065,6 @@ function SessionTurnImpl(props: SessionTurnProps) {
           runLabel={agentRun ? sessionLogAgentRunLabel(agentRun) : undefined}
           foldStartedWork={props.foldStartedWork}
         />
-        {runAnswers}
         <TurnAssistantBlock {...props} model={model} answered={answered} userContent={userContent} tHardcodedUi={tHardcodedUi} />
       </GenuiTelemetryContext.Provider>
       <TurnFooter {...props} model={model} errors={errors} answered={answered} status={status} retry={retry} meta={meta} tHardcodedUi={tHardcodedUi} connectProviderOpen={connectProviderOpen} onConnectProviderOpenChange={setConnectProviderOpen} />

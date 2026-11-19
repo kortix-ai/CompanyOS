@@ -31,7 +31,7 @@ function normalizeTheme(theme) {
   return THEMES.has(theme) ? theme : 'light';
 }
 
-/** Unknown or missing palettes fall back to Pure light / Pure dark. */
+/** Unknown or missing palettes fall back to Kortix light / Kortix dark (`light` / `dark`). */
 function normalizeChoice(choice) {
   const source = choice && typeof choice === 'object' ? choice : {};
   const dark =

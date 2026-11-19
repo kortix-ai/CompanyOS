@@ -1,7 +1,7 @@
 'use client';
 
 import { ArrowRightIcon, XIcon } from '@phosphor-icons/react';
-import { useId, useState, type ReactNode } from 'react';
+import { useId, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 import Loading from '../../../primitives/loading';
@@ -41,11 +41,17 @@ export function PromoSwitcher({
   slides,
   label,
   variant = 'inline',
+  besideComposer = false,
 }: {
   slides: readonly PromoSlide[];
   label: string;
   /** `floating`: a card pinned to the window's bottom-right corner, over the page. */
   variant?: 'inline' | 'floating';
+  /**
+   * Floating only: the page has a bottom composer. The 320px card clears a
+   * centered composer only from a 1700px window, so below that it hides.
+   */
+  besideComposer?: boolean;
 }) {
   const id = useId();
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -59,6 +65,7 @@ export function PromoSwitcher({
         slides={slides}
         active={active}
         label={label}
+        besideComposer={besideComposer}
         onSelect={setActiveId}
       />
     );
@@ -174,26 +181,40 @@ export function PromoSwitcher({
  * Floating, so shadow + hairline (effects.md). Portaled to `document.body` so
  * no sidebar transform or overflow clips it.
  */
+const subscribeNoop = () => () => {};
+
 function FloatingPromo({
   id,
   slides,
   active,
   label,
+  besideComposer,
   onSelect,
 }: {
   id: string;
   slides: readonly PromoSlide[];
   active: PromoSlide;
   label: string;
+  besideComposer: boolean;
   onSelect: (slideId: string) => void;
 }) {
-  if (typeof document === 'undefined') return null;
+  // `false` on the server and while hydrating, `true` after: the portal mounts
+  // only once the page is hydrated, so both passes render the same nothing.
+  const hydrated = useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false,
+  );
+  if (!hydrated) return null;
   return createPortal(
     <div
       role="region"
       aria-roledescription="carousel"
       aria-label={label}
-      className="bg-popover text-popover-foreground smooth-shadow-ring-lg fixed right-4 bottom-4 z-40 w-80 rounded-xl p-1.5"
+      className={cn(
+        'bg-popover text-popover-foreground smooth-shadow-ring-lg fixed right-4 bottom-4 z-40 w-80 rounded-xl p-1.5',
+        besideComposer && 'hidden min-[1700px]:block',
+      )}
     >
       <div className="grid">
         {slides.map((slide) => {
@@ -209,7 +230,7 @@ function FloatingPromo({
               inert={!current}
               onClick={slide.onClick}
               className={cn(
-                'group/slide focus-visible:ring-ring col-start-1 row-start-1 flex w-full cursor-pointer flex-col rounded-lg text-left transition-opacity duration-moderate outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-60 motion-reduce:transition-none',
+                'focus-visible:ring-ring col-start-1 row-start-1 flex w-full cursor-pointer flex-col rounded-lg text-left transition-opacity duration-moderate outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-60 motion-reduce:transition-none',
                 !current && 'pointer-events-none opacity-0',
               )}
             >
@@ -222,7 +243,7 @@ function FloatingPromo({
                 <span className="bg-background/50 absolute inset-0" />
                 {slide.marks}
               </span>
-              <span className="flex flex-col gap-3 px-2 pt-3 pb-1.5">
+              <span className="flex flex-col px-2 pt-3">
                 <span className="space-y-1">
                   <span
                     id={`${id}-${slide.id}-title`}
@@ -236,12 +257,6 @@ function FloatingPromo({
                   >
                     {slide.description}
                   </span>
-                </span>
-                {/* The whole card is the button; this reads as its action. */}
-                <span className="bg-secondary text-secondary-foreground group-hover/slide:bg-active inline-flex h-8 w-fit items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors duration-fast">
-                  {slide.pending ? <Loading className="size-3.5 shrink-0" /> : null}
-                  {slide.cta}
-                  {slide.pending ? null : <ArrowRightIcon className="size-3.5 shrink-0" />}
                 </span>
               </span>
             </button>
@@ -257,32 +272,46 @@ function FloatingPromo({
       >
         <XIcon className="size-4" />
       </button>
-      {slides.length > 1 ? (
-        <div className="absolute right-3 bottom-4 flex items-center">
-          {slides.map((slide) => {
-            const current = slide.id === active.id;
-            return (
-              <button
-                key={slide.id}
-                type="button"
-                aria-label={slide.title}
-                aria-current={current || undefined}
-                onClick={() => onSelect(slide.id)}
-                className="group/dot focus-visible:ring-ring flex size-6 cursor-pointer items-center justify-center rounded-sm outline-none focus-visible:ring-2"
-              >
-                <span
-                  className={cn(
-                    'h-1.5 rounded-full transition-colors duration-fast',
-                    current
-                      ? 'bg-foreground w-4'
-                      : 'bg-muted-foreground/40 group-hover/dot:bg-muted-foreground w-1.5',
-                  )}
-                />
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+      {/* In flow: the action and the dots share one row and wrap rather than
+          overlap when a translated label runs long. */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-2 pt-3 pb-1.5">
+        <button
+          type="button"
+          disabled={active.pending}
+          onClick={active.onClick}
+          className="bg-secondary text-secondary-foreground hover:bg-active focus-visible:ring-ring inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors duration-fast outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-60"
+        >
+          {active.pending ? <Loading className="size-3.5 shrink-0" /> : null}
+          {active.cta}
+          {active.pending ? null : <ArrowRightIcon className="size-3.5 shrink-0" />}
+        </button>
+        {slides.length > 1 ? (
+          <div className="flex items-center">
+            {slides.map((slide) => {
+              const current = slide.id === active.id;
+              return (
+                <button
+                  key={slide.id}
+                  type="button"
+                  aria-label={slide.title}
+                  aria-current={current || undefined}
+                  onClick={() => onSelect(slide.id)}
+                  className="group/dot focus-visible:ring-ring flex size-6 cursor-pointer items-center justify-center rounded-sm outline-none focus-visible:ring-2"
+                >
+                  <span
+                    className={cn(
+                      'h-1.5 rounded-full transition-colors duration-fast',
+                      current
+                        ? 'bg-foreground w-4'
+                        : 'bg-muted-foreground/40 group-hover/dot:bg-muted-foreground w-1.5',
+                    )}
+                  />
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
     </div>,
     document.body,
   );

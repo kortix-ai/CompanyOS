@@ -33,6 +33,7 @@ import { appDisplayIssues, appReleaseConfigIssues, resolveAppReleaseConfig } fro
 import { appReleaseInputFromBlock } from './app-config';
 import { parseChangeRequestFilter, parseTriggerFilter } from './trigger-filter';
 import { validateManifestBody } from './index.v3';
+export { normalizeEvalConfig, readEvalSuites, validateEvals, type EvalConfigIssue, type EvalSuiteDeclaration } from './evals';
 import { validateAgentPolicySetRefs, validateConnectorPolicySets } from './policy-sets';
 import {
   CHANNEL_PLATFORMS,
@@ -283,6 +284,7 @@ export {
 
 export {
   AGENT_BLOCK_KEYS_V3,
+  AGENT_TITLE_MAX_LENGTH,
   AGENT_RUN_TIMEOUT_DEFAULT_SECONDS,
   AGENT_RUN_TIMEOUT_MAX_SECONDS,
   type AgentBlockV3,

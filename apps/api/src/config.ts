@@ -596,6 +596,12 @@ const envSchema = z.object({
   // client per vendor whose MCP server has no dynamic client registration
   // (connectors/mcp-apps.ts). An app whose client is absent is not listed.
   KORTIX_OAUTH_CLIENTS: optStr,
+  // The origin of the OAuth redirect URI Kortix registers with providers
+  // (`<origin>/v1/connectors/oauth2/callback`). Empty: KORTIX_URL. Local runs
+  // set it to http://localhost:<api port>: their KORTIX_URL is a quick tunnel
+  // whose name changes on every start, and a provider such as Google accepts
+  // only the redirect URIs registered on its OAuth client.
+  KORTIX_OAUTH_CALLBACK_ORIGIN: optStr,
 
   // ── Channels — Microsoft Teams adapter (optional) ────────────────────────
   // One Kortix-owned multi-tenant Azure AD bot app. The same app id/password
@@ -873,6 +879,9 @@ const envSchema = z.object({
   PLATINUM_API_KEY: optStr,
   PLATINUM_API_URL: optStr,
   PLATINUM_TEMPLATE: optStr,
+  // The org's template cap (Platinum tiers 10/50/500; the API exposes no read
+  // of it). The snapshot quota GC reclaims from 80% of this value.
+  PLATINUM_TEMPLATE_QUOTA: optInt(500),
   // Per-webhook HMAC-SHA-256 secret from Platinum's `POST /v1/webhooks` (shown
   // once at registration). Optional — same backstop story as Daytona's.
   PLATINUM_WEBHOOK_SECRET: optStr,
@@ -1615,6 +1624,7 @@ export const config = {
   DISCORD_CDN_URL: env.DISCORD_CDN_URL,
   DISCORD_GATEWAY_URL: env.DISCORD_GATEWAY_URL,
   KORTIX_OAUTH_CLIENTS: env.KORTIX_OAUTH_CLIENTS,
+  KORTIX_OAUTH_CALLBACK_ORIGIN: env.KORTIX_OAUTH_CALLBACK_ORIGIN,
 
   // ─── Channels (Microsoft Teams) ───────────────────────────────────────────
   MICROSOFT_APP_ID: env.MICROSOFT_APP_ID,
@@ -1721,6 +1731,7 @@ export const config = {
   PLATINUM_API_URL:
     env.PLATINUM_TARGET === 'local' ? env.PLATINUM_API_URL_LOCAL : env.PLATINUM_API_URL,
   PLATINUM_TEMPLATE: env.PLATINUM_TEMPLATE,
+  PLATINUM_TEMPLATE_QUOTA: env.PLATINUM_TEMPLATE_QUOTA,
   PLATINUM_WEBHOOK_SECRET: env.PLATINUM_WEBHOOK_SECRET,
   // ─── Sandbox Provisioning (Platform) ──────────────────────────────────────
   KORTIX_URL: env.KORTIX_URL,

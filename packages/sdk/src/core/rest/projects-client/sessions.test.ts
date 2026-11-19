@@ -1805,6 +1805,27 @@ test('listProjectSessionsPage forwards parent, startedBy and q as parent, starte
   expect(new URL(last().url).searchParams.get('started_by')).toBe('humans');
 });
 
+// `react-native-url-polyfill` (Supabase's React Native setup; the Kortix mobile
+// app loads it) installs a URLSearchParams with no `size`. A `size` check sent
+// every mobile list request with no query: no filter, no search, no cursor.
+test('listProjectSessionsPage keeps its query under a URLSearchParams without size', async () => {
+  nextResponse = { status: 200, body: [] };
+  const native = globalThis.URLSearchParams;
+  class NoSize extends native {}
+  Object.defineProperty(NoSize.prototype, 'size', { get: () => undefined });
+  globalThis.URLSearchParams = NoSize;
+  try {
+    await listWorkspaceSessionsPage('P1', { parent: 'root', startedBy: 'humans', q: 'biomarkers', cursor: 'C1' });
+  } finally {
+    globalThis.URLSearchParams = native;
+  }
+  const url = new URL(last().url);
+  expect(url.searchParams.get('parent')).toBe('root');
+  expect(url.searchParams.get('started_by')).toBe('humans');
+  expect(url.searchParams.get('q')).toBe('biomarkers');
+  expect(url.searchParams.get('cursor')).toBe('C1');
+});
+
 test('listProjectSessions sends a child parent id and trims q', async () => {
   nextResponse = { status: 200, body: [] };
   await listWorkspaceSessions('P1', { parent: 'S9', q: '  hi  ' });
@@ -2062,4 +2083,33 @@ test('fork create retains saved history instead of mounting the empty fresh shel
   await createWorkspaceSession('synthetic-project', { fork_from_session_id: 'synthetic-source' });
   expect(calls[0]?.body).toEqual({ fork_from_session_id: 'synthetic-source' });
   expect(isSessionFresh('synthetic-fork')).toBe(false);
+});
+
+describe('sessionWorkState (audit finding 13)', () => {
+  // `status` is the row lifecycle and `runtime_status` the computer: a child
+  // that answered keeps `status: running` until its idle computer stops.
+  const row = (fields: Record<string, unknown>) => ({ status: 'running', ...fields }) as never;
+
+  test('the server field wins', async () => {
+    const { sessionWorkState } = await import('./sessions');
+    expect(sessionWorkState(row({ work_state: 'completed', board_state: 'working' }))).toBe('completed');
+  });
+
+  test('an older API: derived from board_state, working and needs_input are running', async () => {
+    const { sessionWorkState } = await import('./sessions');
+    expect(sessionWorkState(row({ board_state: 'completed' }))).toBe('completed');
+    expect(sessionWorkState(row({ board_state: 'working' }))).toBe('running');
+    expect(sessionWorkState(row({ board_state: 'needs_input' }))).toBe('running');
+    expect(sessionWorkState(row({ board_state: 'stopped' }))).toBe('stopped');
+    expect(sessionWorkState(row({ board_state: 'failed' }))).toBe('failed');
+    expect(sessionWorkState(row({ board_state: 'idle' }))).toBe('idle');
+  });
+
+  test('an API before the board: derived from working, never from a running status', async () => {
+    const { sessionWorkState } = await import('./sessions');
+    expect(sessionWorkState(row({ working: { state: 'working', since: null, turn_token: null, pending_delivery: false } }))).toBe('running');
+    expect(sessionWorkState(row({ working: { state: 'idle', since: null, turn_token: null, pending_delivery: false } }))).toBe('idle');
+    expect(sessionWorkState(row({}))).toBe('idle');
+    expect(sessionWorkState(row({ status: 'failed' }))).toBe('failed');
+  });
 });

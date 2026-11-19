@@ -230,7 +230,7 @@ export function createPiTurnService(runtime: () => PiRuntime | null): HarnessTur
       return rt ? answer(200, rt.pendingNow()) : NOT_STARTED
     },
 
-    async readLog({ threadId, afterSeq, beforeSeq, limit }) {
+    async readLog({ threadId, afterSeq, beforeSeq, limit, includeContext = false }) {
       const rt = runtime()
       if (!rt) return NOT_STARTED
       const id = threadId ?? rt.rootId
@@ -243,7 +243,8 @@ export function createPiTurnService(runtime: () => PiRuntime | null): HarnessTur
         // As apps/api stores the log (its seqs, its session fields), then the queued prompts at the queued seq.
         const view = sessionLogView()
         const queued = id === rt.rootId ? exported.queued : []
-        const ordered = [...thread.messages.map((m) => view.message(m)), ...queued].sort((a, b) => a.seq - b.seq)
+        const shown = includeContext ? thread.messages : thread.messages.filter((m) => m.kind !== 'context')
+        const ordered = [...shown.map((m) => view.message(m)), ...queued].sort((a, b) => a.seq - b.seq)
         // A tail cannot prove the page when it is not longer than `limit` (`has_more` unknown) or a child's spawning call is before it.
         if (tail !== undefined && (ordered.length <= limit || threads.some((t) => t.parent_thread_id !== null && t.spawned_by === null))) return UNPROVEN
         let messages: SessionLogMessage[]

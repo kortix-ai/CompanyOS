@@ -151,7 +151,7 @@ export function AgentsPage({ projectId }: { projectId: string }) {
           (a, b) =>
             Number(agentInMode(b, 'primary')) - Number(agentInMode(a, 'primary')) ||
             Number(b.name === defaultAgent) - Number(a.name === defaultAgent) ||
-            agentDisplayName(a.name).localeCompare(agentDisplayName(b.name)),
+            agentDisplayName(a.name, a.title).localeCompare(agentDisplayName(b.name, b.title)),
         ),
     [filtered, defaultAgent],
   );
@@ -173,7 +173,7 @@ export function AgentsPage({ projectId }: { projectId: string }) {
       slug={agent.name}
       href={agentHref(projectId, agent.name)}
       onIntent={() => prefetchAgentConfig(queryClient, projectId, agent.name)}
-      title={agentDisplayName(agent.name)}
+      title={agentDisplayName(agent.name, agent.title)}
       description={agent.description}
       badges={<AgentCardBadges agent={agent} />}
       coverLabel={cover}
@@ -401,7 +401,7 @@ function DefaultAgentSelector({
             <SelectItem key={agent.name} value={agent.name}>
               <span className="flex min-w-0 items-center gap-2">
                 <AgentMark slug={agent.name} />
-                <span className="truncate">{agentDisplayName(agent.name)}</span>
+                <span className="truncate">{agentDisplayName(agent.name, agent.title)}</span>
               </span>
             </SelectItem>
           ))}

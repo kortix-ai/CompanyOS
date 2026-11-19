@@ -40,6 +40,7 @@ import {
   SPACE_TAB_TYPES,
   TOOL_NAME_RE,
   parseDurationSeconds,
+  AGENT_TITLE_MAX_LENGTH,
 } from './constants';
 
 export { SPACE_HEADER_ITEMS, SPACE_TAB_TYPES };
@@ -76,6 +77,7 @@ import {
   validateTriggerAgentRefsV2,
 } from './index.v2';
 import { safeAgentFile, safeRepoPath, safeToolFile } from './layout';
+import { validateEvals } from './evals';
 import { BUILTIN_AGENT_KEYS, BUILTIN_AGENTS, LEGACY_MY_KORTIX_AGENT_NAME, type BuiltinAgentKey } from '@kortix/shared/my-kortix-agent';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -131,6 +133,12 @@ export function grantedNamesV3(value: unknown, universe: readonly string[]): str
 
 /** One `agents.<name>` entry. Behavior and grants in one block. */
 export interface AgentBlockV3 {
+  /**
+   * The agent's name as people read it ("GitHub PR reviewer"). The map key stays the
+   * agent's id: sessions, triggers and @-mentions use the key. Absent: the key in
+   * sentence case (`agentDisplayName`).
+   */
+  title?: string;
   description?: string;
   mode?: 'primary' | 'subagent' | 'all';
   model?: string;
@@ -404,6 +412,8 @@ export interface ManifestV3 {
   approvals?: { ttl?: string };
   /** Spaces (channels): slug → label, description, header and tabs. */
   spaces?: Record<string, SpaceV3>;
+  /** Eval suites: name → a Harbor-style job config, or `config: <path>` to one (`./evals.ts`). */
+  evals?: Record<string, Record<string, unknown>>;
   /** Built-in agents the platform injects, keyed by built-in (`my_kortix`). `true` adds it to the project; absent or `false` = off. */
   builtin_agents?: Partial<Record<BuiltinAgentKey, boolean>>;
   agents: Record<string, AgentBlockV3>;
@@ -430,6 +440,7 @@ const TOP_LEVEL_KEYS_V3 = [
   'policies',
   'approvals',
   'spaces',
+  'evals',
   'builtin_agents',
   'agents',
 ] as const;
@@ -460,6 +471,7 @@ const BEHAVIOR_KEYS_V3 = [
 
 /** Every key an `agents.<name>` block may hold. The agent page maps each to a row. */
 export const AGENT_BLOCK_KEYS_V3 = [
+  'title',
   ...BEHAVIOR_KEYS_V3,
   'prompt',
   'prompt_file',
@@ -485,6 +497,8 @@ export const AGENT_BLOCK_KEYS_V3 = [
   'network_egress',
 ] as const;
 const AGENT_KEYS_V3 = new Set<string>(AGENT_BLOCK_KEYS_V3);
+
+export { AGENT_TITLE_MAX_LENGTH } from './constants';
 
 /** Agent keys of earlier versions, with what replaces each in v3. */
 const RETIRED_AGENT_KEYS_V3: Record<string, string> = {
@@ -549,6 +563,7 @@ export function validateManifestBody(parsed: Record<string, unknown>, issues: Ma
   validateDefaultAgentV3(parsed.default_agent, 'default_agent', agents, myKortixDeclaredOn(parsed.builtin_agents), issues);
   validateTriggerAgentRefsV2(parsed.triggers, 'triggers', [...agents.keys()], issues);
   validateAgentPolicySetRefs(parsed.agents, parsed.connectors, 'agents', issues);
+  validateEvals(parsed.evals, 'evals', issues, [...agents.keys()]);
 }
 
 /**
@@ -861,6 +876,9 @@ function validateAgentBlockV3(
     }
   }
 
+  if (entry.title !== undefined && (typeof entry.title !== 'string' || !entry.title.trim() || entry.title.trim().length > AGENT_TITLE_MAX_LENGTH)) {
+    issues.push({ path: `${where}.title`, message: `must be a non-empty string of at most ${AGENT_TITLE_MAX_LENGTH} characters.`, severity: 'error' });
+  }
   if (entry.prompt !== undefined && (typeof entry.prompt !== 'string' || !entry.prompt.trim())) {
     issues.push({ path: `${where}.prompt`, message: 'must be a non-empty string.', severity: 'error' });
   }

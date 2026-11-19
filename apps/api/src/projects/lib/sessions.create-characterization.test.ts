@@ -15,7 +15,7 @@ mock.module('../../billing/services/billing-gate', () => ({ checkBillingAdmissio
 mock.module('../../billing/services/entitlements', () => ({ accountMayUseManagedModels: async () => mayUseManagedModels }));
 mock.module('../../shared/audit', () => ({ recordAuditEvent: async () => {} }));
 mock.module('../agents', () => ({
-  loadProjectAgents: async () => ({ defaultAgent: 'default', builtinAgents: { my_kortix: false } }),
+  loadProjectAgents: async () => ({ specs: [], errors: [], defaultAgent: 'default', builtinAgents: { my_kortix: false } }),
   agentGrantAllowsRepository: () => agentAllowsRepository,
   sandboxFromLoadedAgents: () => null,
 }));

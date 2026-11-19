@@ -502,12 +502,14 @@ export const KORTIX_SKILL_NAMES = [
   'kortix-cli',
   'kortix-apps',
   'kortix-artifacts',
+  'kortix-calendar',
   'kortix-channel-memory',
   'kortix-chrome',
   'kortix-computer',
   'kortix-connectors',
   'kortix-design',
   'kortix-drives',
+  'kortix-evals',
   'kortix-genui',
   'kortix-goals',
   'kortix-harness-refinement',
@@ -534,3 +536,6 @@ export const EXTENSION_HARNESSES = ['opencode', 'pi'] as const;
  * @deprecated OpenCode only: OpenCode is deleted (2026-10-30). See apps/kortix-sandbox-agent-server/src/harness/README.md "OpenCode is deleted".
  */
 export const RUNTIME_BUILTIN_AGENTS = ['build', 'plan', 'general', 'explore'] as const;
+
+/** The longest `agents.<name>.title`. */
+export const AGENT_TITLE_MAX_LENGTH = 80;

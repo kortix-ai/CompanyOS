@@ -50,6 +50,7 @@ import type { SessionStartedByFilter } from './session-initiator';
 import { hiddenSpaceIds } from '../../shared/space-access';
 import { resolveSessionOwnerIdentities, viewerManagerStanding } from './access';
 import { SESSION_DELETE_ROWS_DAYS } from '../session-log-purge';
+import { RUNNING_SANDBOX_STATUSES } from '../session-turn-ledger';
 import {
   SESSION_PAGE_DEFAULT_LIMIT,
   SESSION_PAGE_MAX_LIMIT,
@@ -63,6 +64,7 @@ import {
 } from './session-inventory';
 import {
   loadSessionUserStates,
+  pinnedAtSql,
   sessionUserStateSql,
   type SessionListView,
   type SessionUserState,
@@ -111,6 +113,9 @@ export interface SessionListFilter {
   /** Recently deleted (KRTX-2853): only the deleted sessions this viewer may
    *  restore, still inside their restore window. Archived ones included. */
   deleted?: boolean;
+  /** `working=only`: only sessions whose box holds a live turn now. The route
+   *  then keeps the rows whose derived `working.state` is `working`. */
+  working?: boolean;
 }
 
 type SessionTable = typeof projectSessions;
@@ -187,6 +192,23 @@ function startedByPersonSql(userId: string): SQL {
 
 const childSessions = alias(projectSessions, 'child_sessions');
 
+/**
+ * The session's box holds a live turn: the lifecycle authority
+ * (`session_sandboxes.metadata.activeTurns`, non-empty) on a running box, the
+ * same facts `readSessionTurnStates` reads. A superset of `working`: a turn the
+ * runtime already reported ended still sits here for ~2 s, so the route drops
+ * the rows whose derived `working.state` is not `working`. Only running boxes
+ * are read, so the subquery is small whatever the workspace's history.
+ */
+function liveTurnSql(t: SessionTable): SQL {
+  return sql`${t.sessionId} in (
+    select ${sessionSandboxes.sessionId} from ${sessionSandboxes}
+     where ${inArray(sessionSandboxes.status, [...RUNNING_SANDBOX_STATUSES] as Array<typeof sessionSandboxes.$inferSelect.status>)}
+       and jsonb_typeof(${sessionSandboxes.metadata} -> 'activeTurns') = 'object'
+       and ${sessionSandboxes.metadata} -> 'activeTurns' <> '{}'::jsonb
+  )`;
+}
+
 function sessionListFilterSql(filter: SessionListFilter, viewerId: string): SQL | undefined {
   const t = projectSessions;
   const conditions: (SQL | undefined)[] = [];
@@ -200,6 +222,7 @@ function sessionListFilterSql(filter: SessionListFilter, viewerId: string): SQL 
   if (filter.agent) conditions.push(eq(t.agentName, filter.agent));
   if (filter.updatedAfter) conditions.push(gte(t.updatedAt, filter.updatedAfter));
   if (filter.teamLead) conditions.push(sql`${t.metadata}->>'team_lead' = ${filter.teamLead}`);
+  if (filter.working) conditions.push(liveTurnSql(t));
   if (filter.labels?.length) {
     const has = (table: SessionTable) => sql`${table.labels} @> ${JSON.stringify(filter.labels)}::jsonb`;
     conditions.push(
@@ -390,7 +413,7 @@ function sessionCursorScope(input: SessionInventoryInput, filter: SessionListFil
     // A cursor is a scan position inside ONE filtered list.
     filter:
       filter.parent || filter.startedBy || filter.q || filter.labels?.length || filter.view || filter.deleted || filter.spaceId ||
-      filter.group || filter.createdBy || filter.agent || filter.updatedAfter || filter.teamLead
+      filter.group || filter.createdBy || filter.agent || filter.updatedAfter || filter.teamLead || filter.working
         ? JSON.stringify([
             filter.parent ?? null,
             filter.startedBy ?? null,
@@ -404,6 +427,7 @@ function sessionCursorScope(input: SessionInventoryInput, filter: SessionListFil
             ...(filter.agent ? [{ agent: filter.agent }] : []),
             ...(filter.updatedAfter ? [{ updatedAfter: filter.updatedAfter.toISOString() }] : []),
             ...(filter.teamLead ? [{ teamLead: filter.teamLead }] : []),
+            ...(filter.working ? [{ working: true }] : []),
           ])
         : undefined,
   };
@@ -506,7 +530,7 @@ async function appendMissingAncestors(input: {
   // A pinned, archived, deleted, space or group view promises only those rows.
   const appendAncestors =
     !filter.parent && !filter.labels?.length && !filter.view && !filter.deleted && !filter.spaceId &&
-    !filter.group && !filter.createdBy && !filter.agent && !filter.updatedAfter && !filter.teamLead;
+    !filter.group && !filter.createdBy && !filter.agent && !filter.updatedAfter && !filter.teamLead && !filter.working;
   for (let depth = 0; appendAncestors && depth < MAX_ANCESTOR_DEPTH; depth += 1) {
     const missing = [
       ...new Set(
@@ -595,10 +619,19 @@ export async function loadProjectSessionInventory(input: {
   // A cursor is sealed to (project, viewer): it carries the scan position, which
   // can name a row this viewer may not see. See `encodeSessionCursor`.
   const cursorScope = sessionCursorScope(input, filter);
-  const sortAt = input.orderByActivity
-    ? sql<Date>`date_trunc('milliseconds', coalesce((${projectSessions.metadata}->>'last_activity_at')::timestamptz, ${projectSessions.updatedAt}))`
-    : sql<Date>`${projectSessions.updatedAt}`;
+  // The pinned view lists in pin order, newest pin first. Opening a session
+  // writes `updated_at`, so an `updated_at` order moved pins on every open.
+  const pinOrderPerson = filter.view === 'pinned' && !filter.deleted ? (filter.personId ?? null) : null;
+  const sortAt = pinOrderPerson
+    ? pinnedAtSql(pinOrderPerson)
+    : input.orderByActivity
+      ? sql<Date>`date_trunc('milliseconds', coalesce((${projectSessions.metadata}->>'last_activity_at')::timestamptz, ${projectSessions.updatedAt}))`
+      : sql<Date>`${projectSessions.updatedAt}`;
   const rowSortAt = (row: ProjectSessionRow): Date => {
+    if (pinOrderPerson) {
+      const iso = (row as { sortAtIso?: string }).sortAtIso;
+      return iso ? new Date(iso) : row.updatedAt;
+    }
     if (!input.orderByActivity) return row.updatedAt;
     const raw = row.metadata?.last_activity_at;
     if (typeof raw !== 'string') return row.updatedAt;
@@ -608,9 +641,10 @@ export async function loadProjectSessionInventory(input: {
 
   // `updated_at` at microsecond precision for the cursor of the default order. The
   // activity order already sorts on a millisecond-truncated key.
-  const SORT_AT_ISO = sql<string>`to_char(${projectSessions.updatedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+  // The pinned view's cursor carries `pinned_at` the same way.
+  const SORT_AT_ISO = sql<string>`to_char(${pinOrderPerson ? sortAt : projectSessions.updatedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
   const rowSortIso = (row: ProjectSessionRow): string | undefined =>
-    input.orderByActivity ? undefined : (row as { sortAtIso?: string }).sortAtIso;
+    input.orderByActivity && !pinOrderPerson ? undefined : (row as { sortAtIso?: string }).sortAtIso;
 
   const limit = Math.min(
     Math.max(Math.trunc(input.limit ?? SESSION_PAGE_DEFAULT_LIMIT), 1),

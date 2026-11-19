@@ -1,6 +1,6 @@
 ---
 name: kortix-system
-description: "How Kortix works and how to change a Kortix workspace from a session: land work through a change request, drive Kortix with the in-sandbox `kortix` CLI, keep files where they last, store or request credentials, schedule work, know the computer a session runs on (its own microVM, its desktop, what lasts) and make an installed package last for every session (a sandbox template), know what the session runtime (pi) can and cannot do, and edit or fix `kortix.yaml`. Load when the user asks what Kortix can do or how it works; asks to create or change an agent, skill, tool, command, extension, permission, model, trigger or loop; asks to save, persist, schedule or ship work; asks what machine you run on, to install software for good, or to put something on \"my desktop\"; you just sent, submitted or started something whose result comes later (a reply, an order, a deploy, a change request, a person's answer); or your system prompt lists `kortix.yaml` issues."
+description: "How Kortix works and how to change a Kortix workspace from a session: land work through a change request, drive Kortix with the in-sandbox `kortix` CLI, keep files where they last, store or request credentials, schedule work, know the computer a session runs on (its own microVM, its desktop, what lasts) and make an installed package last for every session (a sandbox template), know what the session runtime (pi) can and cannot do, and edit or fix `kortix.yaml`. Load when the user asks what Kortix can do or how it works; asks to create or change an agent, skill, tool, command, extension, permission, model, trigger or loop; asks whether an agent got better or worse, or to benchmark, eval or compare agents or models; asks to save, persist, schedule or ship work; asks what machine you run on, to install software for good, or to put something on \"my desktop\"; you just sent, submitted or started something whose result comes later (a reply, an order, a deploy, a change request, a person's answer); or your system prompt lists `kortix.yaml` issues."
 ---
 <skill name="kortix-system">
 <live-skills>
@@ -111,6 +111,7 @@ state. Use `git` and the file tools for files and commits.
 | Agents and models | `kortix agents ls\|default\|config\|scope`, `kortix models ls\|default <model-id>` |
 | Tools, feature flags | `kortix tools ls\|eject <name>`, `kortix workspaces features [enable <flag>]` |
 | The manifest | `kortix validate [--scopes]`, `kortix schema` |
+| Score an agent on tasks (flag `evals`, `<evals>`) | `kortix evals datasets\|tasks\|run\|jobs\|show\|compare\|rerun\|judge` |
 | Kortix itself is broken, confusing or missing something | `kortix feedback "<what happened, what you expected>" --kind bug\|friction\|idea`: it reaches the Kortix team with this session's id. File it when it happens, once per problem, then continue with a workaround |
 </cli>
 
@@ -183,6 +184,17 @@ watch), set up this session's wake-up before you end the turn. Nobody asks.
 - Nobody watches a scheduled run: push what matters, stay silent otherwise.
 - Say "scheduled run" or "loop" to people, not "cron job".
 </scheduling>
+
+<evals>
+## Measure an agent before you change it
+A change to an agent's prompt, skills, tools or model is a guess until a score
+says otherwise. With the `evals` flag on, load the `kortix-evals` skill first:
+score a baseline, make one change, score again (`kortix evals compare`). Keep
+the change only when more tasks pass and none gets worse; say the score in the
+CR. Two models or prompts compare the same way. People see jobs in Customize →
+Evals. Flag off: say Evals exists behind it and offer to turn it on; do not
+build a scoring system of your own.
+</evals>
 
 <runtime>
 ## The session runtime: pi

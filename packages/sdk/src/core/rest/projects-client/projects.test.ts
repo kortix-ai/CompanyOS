@@ -1046,6 +1046,9 @@ test('FEATURE_FLAG_KEYS lists every flag key exactly once', () => {
     'chat_front',
     'spaces_proactive',
     'program_agents',
+    'evals',
+    'desktop_tabs',
+    'calendar',
   ];
   expect([...FEATURE_FLAG_KEYS].sort()).toEqual(expected.sort());
   expect(new Set(FEATURE_FLAG_KEYS).size).toBe(FEATURE_FLAG_KEYS.length);

@@ -447,7 +447,7 @@ flow(
         (await read({ all: true }, ctx.client.as(ctx.P.ANON))).status(401);
       });
 
-      await ctx.step('GET preferences → the documented defaults for all nine kinds (email opt-in except a failing automation and a down capture computer), and email_available', async () => {
+      await ctx.step('GET preferences → the documented defaults for all ten kinds (email opt-in except a failing automation, a down capture computer and a mention), and email_available', async () => {
         const r = await asReader.get('/v1/notifications/preferences');
         r.status(200);
         const prefs = r.json<{ kinds: Record<string, { push: boolean; email: boolean }>; email_available: unknown }>();
@@ -461,6 +461,8 @@ flow(
           automation_recovered: { push: true, email: false },
           capture_device_down: { push: true, email: true },
           capture_device_recovered: { push: true, email: false },
+          // A calendar mention or assignment names one person: mailed in the digest.
+          mention: { push: true, email: true },
           // A retired kind is never served: `message` (a Room post) left with Rooms (#11712),
           // `artifact_comment` with Artifact comments (2026-11-06).
         };

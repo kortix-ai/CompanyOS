@@ -45,7 +45,9 @@ export type IdentityMarkers = {
  *
  * Cost of erring this way: a first-ever sign-in in a clean browser runs one
  * reset over empty caches, and a browser that blocks storage runs one per cold
- * load. Both are wasted work, never wrong state. The opposite error hands one
+ * load. A returning document that already knows this user needs no reset when
+ * storage is absent: it has no foreign persisted state to adopt. Both cold-load
+ * resets are wasted work, never wrong state. The opposite error hands one
  * account another account's cached workspaces.
  *
  * The persisted marker does NOT survive a reset, on `SIGNED_OUT` or anywhere
@@ -66,5 +68,8 @@ export function shouldResetClientState({
   nextUserId,
 }: IdentityMarkers): boolean {
   if (inDocumentUserId !== null && inDocumentUserId !== nextUserId) return true;
+  // Storage can be cleared or blocked while this document stays signed in.
+  // A repeated SIGNED_IN on tab return must not wipe its known user's UI.
+  if (persistedUserId === null && inDocumentUserId === nextUserId) return false;
   return persistedUserId !== nextUserId;
 }

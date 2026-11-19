@@ -376,6 +376,7 @@ export function triggerSpecToFlatEntry(spec: GitTriggerSpec): Record<string, unk
   };
   // Only emit model when set so manifests on the "Default" path stay byte-stable.
   if (spec.model) entry.model = spec.model;
+  if (spec.capacityFallbackModels) entry.capacity_fallback_models = spec.capacityFallbackModels;
   entry.enabled = spec.enabled;
   // Only when set, like model: an uncapped manifest stays byte-stable.
   if (spec.maxRunsPerHour) entry.max_runs_per_hour = spec.maxRunsPerHour;
@@ -478,6 +479,7 @@ export function triggerSpecToOnRunEntry(spec: GitTriggerSpec): Record<string, un
         ...(spec.sessionMode === 'pinned' && spec.pinnedSessionId ? { session_id: spec.pinnedSessionId } : {}),
         ...(keyedByKey ? { session_key: spec.sessionKey } : {}),
         ...(spec.model ? { model: spec.model } : {}),
+        ...(spec.capacityFallbackModels ? { capacity_fallback_models: spec.capacityFallbackModels } : {}),
       };
   return {
     slug: spec.slug,
@@ -591,6 +593,8 @@ function parseTriggerEntry(
         ? row.agent_name.trim()
         : 'default';
   const model = typeof row.model === 'string' && row.model.trim() ? row.model.trim() : null;
+  const capacityFallbackModels = row.capacity_fallback_models;
+  if (capacityFallbackModels !== undefined && (!['claude-agent/opus', 'claude-agent/sonnet'].includes(model ?? '') || !Array.isArray(capacityFallbackModels) || capacityFallbackModels.length === 0 || capacityFallbackModels.length > 2 || capacityFallbackModels.some(value => typeof value !== 'string') || !['claude-agent/sonnet,codex/gpt-6.1-sol', 'codex/gpt-6.1-sol'].includes(capacityFallbackModels.join(',')))) return err(slug, 'capacity_fallback_models requires explicit Claude model and Sonnet/Sol or Sol chain');
   const enabled = coerceBool(row.enabled, true);
 
   const sessionModeRaw =
@@ -666,6 +670,7 @@ function parseTriggerEntry(
     name,
     agent,
     model,
+    ...(capacityFallbackModels ? { capacityFallbackModels: capacityFallbackModels as string[] } : {}),
     enabled,
     promptTemplate: prompt,
     ...(runPayload ? { runPayload } : {}),

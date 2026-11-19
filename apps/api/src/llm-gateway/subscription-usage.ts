@@ -322,3 +322,10 @@ export async function refreshSubscriptionUsage(
   inflight.set(row.secretId, pending);
   return pending;
 }
+
+/** A routing decision needs a successful provider read, never the UI's cached
+ * fallback after authentication/network failure. Does not alter the UI refresh contract. */
+export async function readSubscriptionCapacity(row: UsageRow, fetchImpl: FetchImpl = (input, init) => fetch(input, init)): Promise<SubscriptionUsage | null> {
+  const usage = await providerUsage(row, fetchImpl);
+  return usage?.windows.length ? usage : null;
+}

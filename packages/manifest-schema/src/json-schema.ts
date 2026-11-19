@@ -612,6 +612,7 @@ function onRunTriggerSchema(): JsonSchemaFragment {
             description:
               '`fresh`: a new session for each fire. `reuse`: the last session this trigger created, or a new one when none can continue. `pinned`: the session `run.session_id`. `keyed`: one session for each value of `run.session_key`.',
           },
+          capacity_fallback_models: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 2 },
           session_key: {
             ...NON_BLANK_STRING,
             description: 'With `keyed`: a template over the payload, such as `"{{ body.chat_id }}"`. A key that renders empty runs `fresh`.',
@@ -648,6 +649,7 @@ function triggerSchema(): JsonSchemaFragment {
       agent_name: { type: 'string' },
       enabled: enabledValueSchema(),
       session_mode: { ...normalizedEnumSchema(['fresh', 'reuse', 'pinned', 'keyed']), description: 'Flat form of `run.session`.' },
+      capacity_fallback_models: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 2 },
       session_key: { type: 'string', description: 'Flat form of `run.session_key`.' },
       sessionKey: { type: 'string' },
       filter: triggerFilterSchema(),

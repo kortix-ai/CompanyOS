@@ -1379,7 +1379,7 @@ function validateTriggerTarget(entry: Record<string, unknown>, where: string, ty
 }
 
 const ON_KEYS = ['cron', 'timezone', 'every', 'at', 'webhook', 'event', 'connector', 'account', 'source', 'config', 'app'];
-const RUN_KEYS = ['agent', 'prompt', 'session', 'session_key', 'session_id', 'model', 'app', 'path', 'method', 'payload'];
+const RUN_KEYS = ['agent', 'prompt', 'session', 'session_key', 'session_id', 'model', 'capacity_fallback_models', 'app', 'path', 'method', 'payload'];
 
 /** The raw `on:` / `run:` objects carry only known keys, and a trigger carries both or neither (trigger-shape.ts). */
 function validateOnRunShape(entry: Record<string, unknown>, where: string, issues: ManifestIssue[]): void {
@@ -1613,6 +1613,10 @@ export function validateTriggers(rawNode: unknown, path: string, issues: Manifes
       validateAppTrigger(entry, where, issues);
     }
     validateTriggerTarget(entry, where, type, issues);
+    if (entry.capacity_fallback_models !== undefined) {
+      const chain = entry.capacity_fallback_models;
+      if (typeof entry.model !== 'string' || !['claude-agent/opus', 'claude-agent/sonnet'].includes(entry.model) || !Array.isArray(chain) || !['claude-agent/sonnet,codex/gpt-6.1-sol', 'codex/gpt-6.1-sol'].includes(chain.join(','))) issues.push({path: `${where}.capacity_fallback_models`, message: 'requires explicit Claude model and Sonnet/Sol or Sol chain', severity: 'error'});
+    }
     if (entry.every !== undefined) {
       if (type !== 'cron') issues.push({ path: `${where}.every`, message: `is only valid on a cron trigger (type is "${type}").`, severity: 'error' });
       else validateMonitorDuration(entry.every, `${where}.every`, 60, issues);

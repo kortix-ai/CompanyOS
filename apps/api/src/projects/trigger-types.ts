@@ -43,6 +43,8 @@ export interface GitTriggerSpec {
    * run. Catalog-availability is validated at the route layer, not here.
    */
   model: string | null;
+  /** Explicit exhaustion-only fallback chain; never a generic retry policy. */
+  capacityFallbackModels?: string[];
   /** When false, the scheduler / webhook receiver skip this entry. */
   enabled: boolean;
   /**

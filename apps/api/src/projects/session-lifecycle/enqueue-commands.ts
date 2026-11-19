@@ -39,6 +39,7 @@ export interface EnqueueContinueSessionCommandInput {
   text: string;
   executionId?: string | null;
   triggerSlug?: string | null;
+  capacityRouting?: { intendedModel: string; model: string; reason: string };
   availableAt?: Date;
   /** Dedupe key — a repeat enqueue (double-resolve race) is a no-op. */
   idempotencyKey?: string | null;
@@ -102,7 +103,7 @@ export function buildContinueSessionCommandValues(input: EnqueueContinueSessionC
     sessionId: input.sessionId,
     idempotencyKey: input.idempotencyKey ?? null,
     payload: payload as unknown as Record<string, unknown>,
-    result: input.held ? { held: true } : {},
+    result: { ...(input.held ? { held: true } : {}), ...(input.capacityRouting ? { trigger_capacity_routing: input.capacityRouting } : {}) },
     availableAt: input.availableAt ?? now,
     updatedAt: now,
   };

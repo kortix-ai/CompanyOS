@@ -1269,6 +1269,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 | `run.session_key` | string | — | With `keyed`: a template over the payload, such as `"{{ body.chat_id }}"`. A key that renders empty runs `fresh`. |
 | `run.session_id` | string | — | The session to run in. Required with `pinned`. |
 | `run.model` | string | the agent's model | `provider/model`. |
+| `run.capacity_fallback_models` | string[] | — | Optional exhaustion-only policy for an explicit `claude-agent/opus` or `claude-agent/sonnet` model: `["claude-agent/sonnet", "codex/gpt-6.1-sol"]` or `["codex/gpt-6.1-sol"]`. A fire checks fresh project-shared Claude usage, never personal accounts. Only a positively exhausted pool selects an available fallback. Unknown, stale or refused credentials hold the fire. The configured model stays unchanged and is re-evaluated on every fresh or reused fire, restoring Claude after reset. This is not a network/auth-error retry chain. |
 | `run.app` | string | — | The fire calls this App instead of an agent. |
 | `run.path` | string | — | With `run.app`: the request path. Starts with `/`. |
 | `run.method` | `POST`, `GET` | — | With `run.app`: the request method. |

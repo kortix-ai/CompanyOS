@@ -298,6 +298,7 @@ export interface TriggerDraft {
   agent: string;
   /** Wire-form model (`provider/model`) or null for "Default" (resolve at fire time). */
   model: string | null;
+  capacityFallbackModels?: string[];
   enabled: boolean;
   promptTemplate: string;
   cron: string | null;
@@ -385,6 +386,8 @@ export function parseTriggerDraft(
   const agent = normalizeString(body.agent ?? body.agent_name) ?? 'default';
   // null/empty model = "Default" — leave it to the resolution chain at fire time.
   const model = normalizeString(body.model) ?? null;
+  const capacityFallbackModels = body.capacity_fallback_models;
+  if (capacityFallbackModels !== undefined && (!['claude-agent/opus', 'claude-agent/sonnet'].includes(model ?? '') || !Array.isArray(capacityFallbackModels) || !['claude-agent/sonnet,codex/gpt-6.1-sol', 'codex/gpt-6.1-sol'].includes(capacityFallbackModels.join(',')))) return { error: 'capacity_fallback_models requires explicit Claude model and Sonnet/Sol or Sol chain' };
   const enabled = normalizeBoolean(body.enabled) ?? true;
 
   const session = parseDraftSession(body, type);
@@ -395,7 +398,7 @@ export function parseTriggerDraft(
   if ('error' in parsedFilter) return parsedFilter;
   const { filter } = parsedFilter;
 
-  const common = { slug, name, agent, model, enabled, promptTemplate, sessionMode, pinnedSessionId, sessionKey, filter, ...(runPayload ? { runPayload } : {}) };
+  const common = { slug, name, agent, model, ...(capacityFallbackModels ? { capacityFallbackModels: capacityFallbackModels as string[] } : {}), enabled, promptTemplate, sessionMode, pinnedSessionId, sessionKey, filter, ...(runPayload ? { runPayload } : {}) };
   const lateness = parseMaxLateness(body, type);
   if ('error' in lateness) return lateness;
   const silence = parseExpectEventWithin(body, type);
@@ -457,7 +460,7 @@ function parseDraftSession(body: Record<string, unknown>, type: GitTriggerType):
   return { sessionMode, pinnedSessionId, sessionKey };
 }
 
-type DraftCommon = Pick<TriggerDraft, 'slug' | 'name' | 'agent' | 'model' | 'enabled' | 'promptTemplate' | 'sessionMode' | 'pinnedSessionId' | 'sessionKey' | 'filter' | 'runPayload'>;
+type DraftCommon = Pick<TriggerDraft, 'slug' | 'name' | 'agent' | 'model' | 'capacityFallbackModels' | 'enabled' | 'promptTemplate' | 'sessionMode' | 'pinnedSessionId' | 'sessionKey' | 'filter' | 'runPayload'>;
 
 function parseEventDraft(body: Record<string, unknown>, common: DraftCommon): TriggerDraft | { error: string } {
   const event = parseEventFields(body, 'event_config');
@@ -559,6 +562,7 @@ export function specToBody(spec: GitTriggerSpec): Record<string, unknown> {
     type: spec.type,
     agent: spec.agent,
     model: spec.model,
+    ...(spec.capacityFallbackModels ? { capacity_fallback_models: spec.capacityFallbackModels } : {}),
     enabled: spec.enabled,
     prompt_template: spec.promptTemplate,
     cron: spec.cron,
@@ -617,6 +621,7 @@ export function draftToSpec(
     type: draft.type,
     agent: draft.agent,
     model: draft.model,
+    ...(draft.capacityFallbackModels ? { capacityFallbackModels: draft.capacityFallbackModels } : {}),
     enabled: draft.enabled,
     promptTemplate: draft.promptTemplate,
     ...(draft.runPayload ? { runPayload: draft.runPayload } : {}),

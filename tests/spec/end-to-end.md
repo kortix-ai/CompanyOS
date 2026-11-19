@@ -2101,5 +2101,6 @@ release contracts remain required.
 A signed-in person without a workspace reads both account-state variants. The
 response reports no account and no active subscription, without a wallet write.
 A legacy personal wallet with nonrecurring credits reports no subscription.
-An active legacy subscription remains active. Database and provider errors must
+An active legacy subscription, and a store subscription cancelled but not yet
+expired, remain active. Database and provider errors must
 not be converted to successful absence. No production billing is changed.

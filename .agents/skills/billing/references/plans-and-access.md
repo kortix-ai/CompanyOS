@@ -441,7 +441,8 @@ without creating or choosing a workspace. The response contains `billing_state`,
 It checks the legacy personal account key (`account_id = user_id`), its wallet
 subscription references, and every page of subscriptions of its mapped Stripe
 customers. Ended Stripe subscriptions (`canceled`, `incomplete_expired`) do not
-count. Unknown statuses fail closed as active. A database or provider error is
+count. Unknown statuses fail closed as active. A cancelled store (RevenueCat)
+subscription stays active until its recorded expiry has passed. A database or provider error is
 an error response, never a no-subscription fallback. No database means the read
 cannot be authoritative. Named workspace requests retain membership authorization.
 This read performs no billing writes and never grants credits. Deployment does

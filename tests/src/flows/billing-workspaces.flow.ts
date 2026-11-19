@@ -169,6 +169,10 @@ flow('BILL-WS-3', {
         await db.query(`UPDATE kortix.credit_accounts SET stripe_subscription_id = 'sub_synthetic', stripe_subscription_status = 'active' WHERE account_id = $1`, [person.userId]);
       });
       (await ctx.client.as(person).get('/v1/billing/account-state')).status(200).body().has('$.has_active_subscription', true);
+      await withDb(ctx, async (db) => {
+        await db.query(`UPDATE kortix.credit_accounts SET stripe_subscription_id = NULL, revenuecat_subscription_id = 'store_synthetic', revenuecat_cancelled_at = now(), revenuecat_cancel_at_period_end = now() + interval '20 days' WHERE account_id = $1`, [person.userId]);
+      });
+      (await ctx.client.as(person).get('/v1/billing/account-state')).status(200).body().has('$.has_active_subscription', true);
     } finally {
       await withDb(ctx, async (db) => { await db.query('DELETE FROM kortix.credit_accounts WHERE account_id = $1', [person.userId]); });
     }

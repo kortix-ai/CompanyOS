@@ -433,10 +433,13 @@ export async function buildWorkspacelessAccountState(userId: string) {
     getCreditAccount(userId),
     listStripeCustomerIdsByAccountId(userId),
   ]);
-  // An unknown status is not evidence that recurring billing has ended.
+  // An unknown status is not evidence that recurring billing has ended. A store
+  // cancellation keeps the entitlement until its expiry, so only a past expiry ends it.
+  const storeEnded = Boolean(account?.revenuecatCancelledAt && account.revenuecatCancelAtPeriodEnd &&
+    new Date(account.revenuecatCancelAtPeriodEnd).getTime() <= Date.now());
   let active = Boolean(
     (account?.stripeSubscriptionId && !['canceled', 'incomplete_expired'].includes(account.stripeSubscriptionStatus ?? '')) ||
-    ((account?.revenuecatSubscriptionId || account?.revenuecatCustomerId) && !account.revenuecatCancelledAt),
+    ((account?.revenuecatSubscriptionId || account?.revenuecatCustomerId) && !storeEnded),
   );
   for (const customer of customers) {
     let after: string | undefined;

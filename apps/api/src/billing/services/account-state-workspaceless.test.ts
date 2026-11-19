@@ -53,3 +53,15 @@ test('a store subscription remains visible without a workspace', async () => {
   row = { revenuecatSubscriptionId: 'store_synthetic' };
   expect((await buildWorkspacelessAccountState('synthetic')).has_active_subscription).toBe(true);
 });
+test('a pending store cancellation stays active until it expires', async () => {
+  row = { revenuecatSubscriptionId: 'store_synthetic', revenuecatCancelledAt: '2026-01-01T00:00:00Z', revenuecatCancelAtPeriodEnd: '2099-01-01T00:00:00Z' };
+  expect((await buildWorkspacelessAccountState('synthetic')).has_active_subscription).toBe(true);
+});
+test('a store cancellation with no known expiry stays fail-closed', async () => {
+  row = { revenuecatSubscriptionId: 'store_synthetic', revenuecatCancelledAt: '2026-01-01T00:00:00Z' };
+  expect((await buildWorkspacelessAccountState('synthetic')).has_active_subscription).toBe(true);
+});
+test('an expired store cancellation is no longer a subscription', async () => {
+  row = { revenuecatSubscriptionId: 'store_synthetic', revenuecatCancelledAt: '2026-01-01T00:00:00Z', revenuecatCancelAtPeriodEnd: '2026-02-01T00:00:00Z' };
+  expect((await buildWorkspacelessAccountState('synthetic')).has_active_subscription).toBe(false);
+});

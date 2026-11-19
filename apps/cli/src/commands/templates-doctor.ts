@@ -18,8 +18,14 @@ export { doctorExitCode };
 /** Trigger slugs the template's import file (`<id>.yaml`) declares, read from the repository. */
 export function templateTriggerSlugs(root: string, template: TemplateInfo): string[] {
   const file = join(root, template.import_path);
-  if (!existsSync(file) || !statSync(file).isFile()) return [];
-  const doc = parseManifestText(readFileSync(file, 'utf8')) as { triggers?: Array<{ slug?: string }> };
+  // Read directly: a missing file or a directory throws, with no window between a check and the read.
+  let text: string;
+  try {
+    text = readFileSync(file, 'utf8');
+  } catch {
+    return [];
+  }
+  const doc = parseManifestText(text) as { triggers?: Array<{ slug?: string }> };
   return (doc.triggers ?? []).flatMap((trigger) => (trigger.slug ? [trigger.slug] : []));
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { PROD_TARGET, loopPrompt, setupGuide, setupHostName, setupPromptFor, setupTarget, templatePrompt } from './setup-guide';
+import { PROD_TARGET, loopPrompt, sandboxHourlyUsd, setupGuide, setupHostName, setupPromptFor, setupTarget, templatePrompt } from './setup-guide';
 
 // A prompt copied on a deployment must name that deployment's guide, and the
 // guide must point the CLI at that deployment's API (founder call 2026-11-10).
@@ -73,6 +73,48 @@ describe('templates in the setup guide', () => {
     expect(guide).toContain('<web>/workspaces/<id>/setup');
     expect(guide).toContain('Never print those links in the terminal.');
     expect(guide).not.toContain('give the person\nall of them in one message');
+  });
+
+  test('the guide offers Slack and declares it with the slug Kortix writes when Slack connects', () => {
+    const guide = setupGuide();
+    expect(guide).toContain('5. Slack, unless the plan shows it connected. Recommend yes');
+    // apps/api/src/connectors/channel-manifest.ts writes this entry on connect: the same slug makes that a no-op.
+    expect(guide).toContain('  - slug: kortix_slack\n    name: Slack\n    provider: channel\n    platform: slack');
+    expect(guide).toContain('--channels\` takes the Slack channels the reply named');
+  });
+
+  test('the guide lets the person keep Kortix in their repository, reuses its skills, and proves the dev environment', () => {
+    const guide = setupGuide();
+    // Where Kortix lives: this repository for one repository or a monorepo, a new one for several.
+    expect(guide).toContain('a) this repository (recommended for one repository or a monorepo)');
+    expect(guide).toContain('b) a new repository Kortix hosts (recommended for a product over');
+    expect(guide).toContain('skills: { <name>: .claude/skills/<name> }');
+    expect(guide).toContain('agents.<name>.prompt_file: .claude/agents/<name>.md');
+    // Every app found, not only the ones a loop calls.
+    expect(guide).toContain('whether a loop calls it or not');
+    expect(guide).toContain('"Anything missing?"');
+    // The dev environment runs for real on the workspace image, judged from the tool output.
+    expect(guide).toContain('kortix sessions new --agent <agent> --json --prompt');
+    expect(guide).toContain('kortix sessions wait-for <session_id> --timeout 1800 --json');
+    expect(guide).toContain('kortix sessions log <session_id> --json --limit 200');
+    expect(guide).toContain('never from the agent\'s summary');
+    // The person makes every sign-in on the setup page; the agent never clicks or signs in for them.
+    expect(guide).toContain('Never sign in, connect or click for the person');
+    expect(guide).not.toContain('providers login claude');
+    expect(guide).not.toContain('--connect <slug');
+    expect(guide).not.toContain('rule 10), makes');
+  });
+
+  test('the guide sizes the sandbox from the stack, quotes its cost, and resizes from measured peaks', () => {
+    const guide = setupGuide();
+    expect(guide).toContain('8. **What it needs to run.**');
+    expect(guide).toContain('(cpu 1–32, memory 1–128, disk 1–500)');
+    expect(sandboxHourlyUsd(4, 8)).toBe(0.22);
+    expect(guide).toContain('about $0.22 an hour while a session runs');
+    expect(guide).toContain('sample used memory and used disk every 2');
+    expect(guide).toContain('peak memory above 80 % of the size: one step up');
+    expect(guide).toContain('kortix sandboxes update <slug> --cpu <n> --memory <gb> --disk');
+    expect(guide).toContain('Never go under 2 vCPU, 4 GB and 20 GB');
   });
 
   test('the guide uses none of the words its plain-words rule bans, outside that rule', () => {

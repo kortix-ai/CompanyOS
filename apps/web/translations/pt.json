@@ -2226,6 +2226,11 @@
       "resume": "Retomar",
       "agentIsWorking": "{agent} está trabalhando",
       "needsYouOn": "Precisa de você: {header}"
+    },
+    "panel": {
+      "outputNew": "Novo",
+      "outputUpdated": "Atualizado",
+      "resizePane": "Redimensionar painel"
     }
   },
   "agents": {
@@ -10973,7 +10978,7 @@
       "text0f096c40454e": "Perfila o dataset, plota as distribuições, verifica vazamento e desequilíbrio e escreve o primeiro parágrafo honesto sobre os dados. Você começa com contexto, não com uma célula vazia.",
       "text0f16342ee1c1": "32%",
       "text0f308cfb7ef3": "0 automático",
-      "text0f4827ef74ea": "Vagas abertas na Kortix — FDE, GTM e MTS. Belgrado, Sérvia e São Francisco. Contratamos para responsabilidade prolongada.",
+      "text0f4827ef74ea": "Vagas abertas na Kortix — FDE, GTM e MTS. Belgrado, Sérvia e EUA. Contratamos para responsabilidade prolongada.",
       "text0f600458e375": "SSO, membros, grupos e acesso baseado em funções já vêm integrados, com permissões por recurso para pessoas e agentes, segredos criptografados e uma trilha de auditoria completa. Hospede por conta própria para executar toda a plataforma dentro do seu ambiente.",
       "text0f64c7d16c28": "# verifique se compila, peça os secrets ausentes,",
       "text0f656790976e": "Abra qualquer plataforma de agentes — todas são arquitetonicamente idênticas. As diferenças marginais não são defensáveis. A única coisa que diverge é o loop de aprendizado.",
@@ -16592,7 +16597,7 @@
       "textb2a8625a332e": "Três gatilhos agendados em um eixo temporal com um marcador do momento presente e a próxima execução destacada.",
       "textb2ac0da7c543": "Toda a equipe",
       "textb2c0cab20dc3": "Lotes JSON-RPC não são compatíveis",
-      "textb2c293b68745": ".kortix/connectors/routes.toml",
+      "textb2c293b68745": "connectors/routes.toml",
       "textb2c5bc52374a": "Segredo excluído",
       "textb2d544129223": "Não está concluído se",
       "textb2e30caf44ee": "Use cores hexadecimais codificadas diretamente nos componentes",
@@ -18666,7 +18671,7 @@
       "textecbd276ebec2": "Tente uma busca.",
       "textecc7ed048b32": "fechamento do mês",
       "texteccba86b787c": "Um laptop, uma VPS ou sua própria rede.",
-      "textecccd43d1878": ".kortix/connectors/schema.graphql",
+      "textecccd43d1878": "connectors/schema.graphql",
       "texteccce15347a4": "Você não tem acesso para visualizar este App.",
       "textecd3c555ab44": "Falha ao salvar as permissões",
       "textecdcf83028e7": "Revisar parâmetros",
@@ -22283,6 +22288,7 @@
     "installProfileHint": "O nome que as pessoas veem para este conector no Kortix.",
     "wayComposio": "Conecta pelo Composio, um parceiro terceiro que faz o login por você: você entra no {name} com um clique e o Composio mantém o login.",
     "wayMcpOneClick": "Conecta ao servidor MCP do próprio {name}. Você só entra no {name}.",
+    "wayKortixGoogle": "O Kortix se conecta ao {name} pela API do Google. Você só entra no Google.",
     "wayMcpSetup": "Conecta ao servidor MCP do próprio {name}. Precisa do seu próprio app OAuth ou de uma chave de API, definidos após a instalação.",
     "wayApi": "Conecta diretamente à {kind} do {name}. Após a instalação, adicione uma conta com a chave de API ou o token.",
     "installsWay": "Instala via {kind}",
@@ -22301,8 +22307,8 @@
     "toolsAfterInstall": "Esta {kind} lista as ferramentas após a instalação.",
     "typeFilterLabel": "Tipo de conector",
     "typeFilterAll": "Todos os tipos",
-    "moveComposioTitle": "{app} tem um servidor MCP próprio",
-    "moveComposioBody": "Este conector passa pelo Composio. Você pode mudá-lo para o servidor MCP do próprio {app}: entre uma vez e ele muda. Agentes, gatilhos e kortix.yaml continuam usando {slug}.",
+    "moveComposioTitle": "{app} pode se conectar sem o Composio",
+    "moveComposioBody": "Este conector passa pelo Composio. O Kortix pode conectá-lo diretamente: entre uma vez e ele muda. Agentes, gatilhos e kortix.yaml continuam usando {slug}.",
     "moveComposioAction": "Mudar para MCP",
     "wayChannel": "Integrado ao Kortix: as pessoas falam com o agente no {name}, sem terceiros. Configure uma vez na página dele.",
     "waySetUp": "Configurar",
@@ -27413,7 +27419,9 @@
       "goals": "Objetivos",
       "inbox": "Caixa de entrada",
       "memory": "Memória",
-      "members": "Membros"
+      "members": "Membros",
+      "review": "Revisão",
+      "setup": "Concluir a configuração"
     },
     "sections": {
       "agents": "Agentes",
@@ -27451,6 +27459,8 @@
     "reconnect": "Reconectar {name}",
     "setSecret": "Definir {name}",
     "addSlack": "Adicionar o Kortix ao Slack",
-    "connectSlack": "Conectar Slack"
+    "connectSlack": "Conectar Slack",
+    "bannerTitle": "{left, plural, one {Falta # etapa de configuração} other {Faltam # etapas de configuração}}",
+    "bannerDismiss": "Dispensar"
   }
 }

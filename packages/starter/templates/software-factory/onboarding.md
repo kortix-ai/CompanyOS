@@ -3,7 +3,7 @@
 Run the guide below as written. This template adds its steps at the points
 named here, in this order: **analysis → identity → store → sources → first
 proof**. The factory is one agent, `factory`, with one contract skill,
-`software-factory`. Its files are `software-factory.yaml`, `factory.json`, `agents/factory.md`
+`software-factory`. Its files are `software-factory.yaml`, `factory.json`, `agents/engineer.md`
 and `skills/software-factory/`: read `skills/software-factory/SKILL.md` once before you start (sections 0, 0.1
 and 1 at least), so you know the identity, the store, the sources and the
 merge policy you set up.
@@ -18,6 +18,11 @@ its recommended answer. Never ask it where it appears.
    the checkout. Read only; never `cat` an env file.
 2. **Ask** which ticket store is the source of truth (analysis section 2).
    Recommend the one the team uses; none: GitHub Issues on the code repository.
+   With Linear, Jira or Asana, **Ask** in the same question which member the
+   factory signs in as (`store.agent_identity`): it treats every ticket
+   assigned to that member as handed to it. Recommend a member of its own (one
+   seat, for example a `+kortix` alias of the person's email); the person's
+   own account hands the factory every ticket assigned to them.
 3. **Ask** which sources to turn on. Show only the sources whose evidence you
    found (analysis section 3), one line each: the evidence, what it needs.
    For example: `@sentry/nextjs` in `package.json` → `errors` (Sentry, poll),
@@ -39,14 +44,15 @@ Read the code repository's `AGENTS.md`, `CLAUDE.md` and `CONTRIBUTING.md`. A rul
 that conflicts with the factory contract (for example "push to main") is shown to
 the person with the factory's rule beside it. **Ask** which one wins; the factory's
 contract wins without an answer. Write the decision into the `dev-environment`
-skill. The config lives in the workspace repository, apart from the code, so the
-code repository's skills (`.agents/skills`, `.claude/skills`) cannot be registered
-from it: the worker reads them from its clone, and the `dev-environment` skill
+skill. The code repository's own skills (`.agents/skills`, `.claude/skills`):
+when Kortix lives in that repository (guide step 3), `kortix.yaml` registers them
+where they are and `agents.engineer.skills` lists them. When Kortix lives in a new
+repository, the worker reads them from its clone, and the `dev-environment` skill
 names where they are.
 
 ### B. In guide step 4: grant the dev environment
 
-Add `dev-environment` to `agents.factory.skills` in
+Add `dev-environment` to `agents.engineer.skills` in
 `software-factory.yaml`, once `kortix.yaml` registers it. The
 workers verify every change with its commands.
 
@@ -102,7 +108,7 @@ a generic GitHub token secret. `<owner>/<repo>` is the code repository.
 5. **Identity check**, run by the factory with the token itself:
 
    ```sh
-   sid=$(kortix sessions new --agent factory --label factory-identity --prompt "[factory] role=identity mode=setup" --json | jq -r .session_id)
+   sid=$(kortix sessions new --agent engineer --label factory-identity --prompt "[factory] role=identity mode=setup" --json | jq -r .session_id)
    kortix sessions wait-for "$sid"
    kortix sessions log "$sid"     # the line that starts with factory-identity:
    ```

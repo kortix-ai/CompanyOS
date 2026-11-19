@@ -2226,6 +2226,11 @@
       "resume": "再開",
       "agentIsWorking": "{agent} が作業中",
       "needsYouOn": "あなたの対応が必要: {header}"
+    },
+    "panel": {
+      "outputNew": "新規",
+      "outputUpdated": "更新済み",
+      "resizePane": "ペインのサイズを変更"
     }
   },
   "agents": {
@@ -10973,7 +10978,7 @@
       "text0f096c40454e": "データセットをプロファイリングし、分布を可視化し、リーケージと不均衡を確認し、データの内容について最初の率直な段落を書きます。空のセルからではなく、概要を把握した状態から始められます。",
       "text0f16342ee1c1": "32%",
       "text0f308cfb7ef3": "0 自動",
-      "text0f4827ef74ea": "Kortixの募集中ポジション：FDE、GTM、MTS。セルビアのベオグラードとサンフランシスコ。長期的なオーナーシップを担える人材を採用しています。",
+      "text0f4827ef74ea": "Kortixの募集中ポジション：FDE、GTM、MTS。セルビアのベオグラードと米国。長期的なオーナーシップを担える人材を採用しています。",
       "text0f600458e375": "SSO、メンバー、グループ、ロールベースアクセスを標準搭載。人とエージェントごとのリソース権限、暗号化されたシークレット、完全な監査証跡にも対応します。セルフホストすれば、プラットフォーム全体を自社環境内で運用できます。",
       "text0f64c7d16c28": "# コンパイルを確認し、不足しているシークレットを尋ね、",
       "text0f656790976e": "どのエージェントプラットフォームを開いても、アーキテクチャは同じです。わずかな違いは守れる優位性になりません。差がつくのは学習ループだけです。",
@@ -16592,7 +16597,7 @@
       "textb2a8625a332e": "時間軸上に3つのスケジュール済みトリガーがあり、現在時点のマーカーと次回実行が表示されています。",
       "textb2ac0da7c543": "チーム全体",
       "textb2c0cab20dc3": "JSON-RPCバッチはサポートされていません",
-      "textb2c293b68745": ".kortix/connectors/routes.toml",
+      "textb2c293b68745": "connectors/routes.toml",
       "textb2c5bc52374a": "シークレットが削除されました",
       "textb2d544129223": "次の状態では完了とは言えません",
       "textb2e30caf44ee": "コンポーネント内で16進カラーをハードコードしない",
@@ -18666,7 +18671,7 @@
       "textecbd276ebec2": "検索してみてください。",
       "textecc7ed048b32": "月末締め処理",
       "texteccba86b787c": "ノートPC、VPS、またはあなた自身のネットワーク。",
-      "textecccd43d1878": ".kortix/connectors/schema.graphql",
+      "textecccd43d1878": "connectors/schema.graphql",
       "texteccce15347a4": "このAppをプレビューするアクセス権がありません。",
       "textecd3c555ab44": "権限の保存に失敗しました",
       "textecdcf83028e7": "パラメーターを確認",
@@ -22283,6 +22288,7 @@
     "installProfileHint": "Kortix でこのコネクタに表示される名前。",
     "wayComposio": "Composio 経由で接続します。Composio はサインインを代行するサードパーティのパートナーです。{name} にワンクリックでサインインし、Composio がログインを保持します。",
     "wayMcpOneClick": "{name} 自身の MCP サーバーに接続します。{name} にサインインするだけです。",
+    "wayKortixGoogle": "Kortix は Google の API を通じて {name} に接続します。Google にサインインするだけです。",
     "wayMcpSetup": "{name} 自身の MCP サーバーに接続します。自分の OAuth アプリか API キーが必要で、インストール後に設定します。",
     "wayApi": "{name} の {kind} に直接接続します。インストール後に API キーかトークンでアカウントを追加します。",
     "installsWay": "{kind} でインストール",
@@ -22301,8 +22307,8 @@
     "toolsAfterInstall": "この {kind} はインストール後にツールを一覧します。",
     "typeFilterLabel": "コネクターの種類",
     "typeFilterAll": "すべての種類",
-    "moveComposioTitle": "{app} には独自の MCP サーバーがあります",
-    "moveComposioBody": "このコネクターは Composio 経由で動いています。{app} 自身の MCP サーバーに切り替えられます。一度サインインすると切り替わります。エージェント、トリガー、kortix.yaml は引き続き {slug} を使います。",
+    "moveComposioTitle": "{app} は Composio なしで接続できます",
+    "moveComposioBody": "このコネクターは Composio 経由で動いています。Kortix が直接接続できます。一度サインインすると切り替わります。エージェント、トリガー、kortix.yaml は引き続き {slug} を使います。",
     "moveComposioAction": "MCP に切り替え",
     "wayChannel": "Kortix に組み込み：{name} でエージェントにメッセージできます。第三者は不要です。そのページで一度設定します。",
     "waySetUp": "設定",
@@ -27413,7 +27419,9 @@
       "goals": "ゴール",
       "inbox": "受信トレイ",
       "memory": "メモリ",
-      "members": "メンバー"
+      "members": "メンバー",
+      "review": "レビュー",
+      "setup": "セットアップを完了する"
     },
     "sections": {
       "agents": "エージェント",
@@ -27451,6 +27459,8 @@
     "reconnect": "{name} を再接続",
     "setSecret": "{name} を設定",
     "addSlack": "Kortix を Slack に追加",
-    "connectSlack": "Slack を接続"
+    "connectSlack": "Slack を接続",
+    "bannerTitle": "{left, plural, other {セットアップの手順があと # 件あります}}",
+    "bannerDismiss": "閉じる"
   }
 }

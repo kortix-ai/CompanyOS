@@ -1,4 +1,4 @@
-import { useTranslations } from '../../i18n';
+import { useTranslations } from '../i18n';
 /**
  * The inline-code chip, and the one piece of markdown that draws something
  * other than text.
@@ -17,7 +17,7 @@ import { useTranslations } from '../../i18n';
  * pure JSX.
  */
 
-import { cn } from '../../lib/utils';
+import { cn } from '../lib/utils';
 import type React from 'react';
 
 // ─── Inline code ─────────────────────────────────────────────────────────────

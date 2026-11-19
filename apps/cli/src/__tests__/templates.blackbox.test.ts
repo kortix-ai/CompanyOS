@@ -52,7 +52,7 @@ test('add into a repository with kortix.yaml: files written, import appended, co
   expect(manifest).toContain('# keep');
   expect(manifest).toMatch(/imports:\n\s+- software-factory\.yaml/);
   expect(existsSync(join(repo, '.kortix'))).toBe(false);
-  const prompt = readFileSync(join(repo, 'agents/factory.md'), 'utf8');
+  const prompt = readFileSync(join(repo, 'agents/engineer.md'), 'utf8');
   expect(prompt).toContain('acme/shop');
   expect(prompt).not.toContain('{{');
 

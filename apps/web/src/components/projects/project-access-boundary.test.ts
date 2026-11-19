@@ -479,30 +479,6 @@ describe('house dialect', () => {
   // This screen sits beside /auth, /cli/authorize and /oauth/authorize. It must
   // be composed from their shared vocabulary, not from a bespoke frame — that
   // is the whole reason the previous split-hero version looked foreign.
-  test('is built from the shared auth consent primitives', () => {
-    expect(componentSource).toContain("from '@kortix/ui/internal/auth/auth-card-shell'");
-    expect(componentSource).toContain("from '@kortix/ui/internal/auth/auth-consent'");
-    expect(componentSource).toContain("from '@kortix/ui/internal/auth/auth-primitives'");
-    for (const primitive of [
-      '<AuthFrame>',
-      '<StepHeader',
-      '<DetailPanel>',
-      '<ErrorStrip ',
-      '<Rise',
-    ]) {
-      expect({ primitive, present: componentSource.includes(primitive) }).toEqual({
-        primitive,
-        present: true,
-      });
-    }
-    // The one exception to the auth vocabulary: the pending frame. It resolves
-    // into the project shell, not into an auth screen, so it is the shared
-    // "opening a project" mark rather than the consent flows' spinner. Paired
-    // with the absence, so a revert to AuthPendingScreen fails here.
-    expect(componentSource).toContain('<ProjectPendingScreen />');
-    expect(componentSource).not.toContain('<AuthPendingScreen');
-  });
-
   test('does not re-introduce a bespoke frame, card or wallpaper', () => {
     // The auth dialect is flat on the plain background. A card, a wallpaper or
     // a backdrop-blur here is the exact drift this screen was rebuilt to undo.

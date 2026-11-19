@@ -34,6 +34,7 @@ Module entries and `@kortix/ui/theme` need 0.14.4+. Inside `kortix-ai/CompanyOS`
 | Expand and collapse               | `Disclosure`, `DisclosureTrigger`, `DisclosureContent`                                                         | `disclosure`                          |
 | Form field; search field          | `Field`, `FieldLabel`, `FieldGroup`, `FieldDescription` with `Input`, `Textarea`, `Select`; `InputGroupSearch` | `field`, `input-group`                |
 | Panel; buttons side by side       | `Card` and its slots, or `bg-popover rounded-md border px-4 py-5`; `ButtonGroup`                               | `card`, `button-group`                |
+| A selection, unsaved edits or a pending paste needs actions | `ActionBar` in an `ActionBarDock` at the bottom of the column; actions take `kbd`, `tone`, `emphasis` | `action-bar` |
 | Tabs and filters                  | `Tabs`, `TabsList size="xs"`, `TabsTrigger`                                                                          | `tabs`                                |
 | Menu, picker, palette             | `DropdownMenu`, `Popover`, `Command`                                                                           | `dropdown-menu`, `popover`, `command` |
 | Table and empty list              | `Table`; `Empty` with one muted line                                                                           | `table`, `empty`                      |
@@ -93,8 +94,7 @@ Theme with `@kortix/ui/theme`, never by forking a component: `themeToCss(theme)`
 | `@kortix/ui/session` (blocks)                              | `UserMessage`, `ThrottledMarkdown`, `UnifiedMarkdown`, `UnifiedMarkdownProps`, `ToolPartRenderer`, `SessionChatInput`, `SessionChatInputProps`, `AgentSelector`, `ModelSelector`, `ModelSelectorProps`, `SessionPermissionPrompt`, `QuestionPrompt`, `QuestionPromptHandle`, `TurnErrorDisplay`, `SessionBusyIndicator`, `SessionStartingLoader`                                                                                                                                                                                                                                                                                     |
 | `@kortix/ui/session` (tool rows, pickers)                  | `ToolRegistry`, `ToolProps`, `ToolComponent`, `BasicTool`, `BasicToolProps`, `GenericTool`; for a form outside a session: `ModelSelector`, `AgentSelector`                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
-Every other primitive is one subpath per file: `@kortix/ui/<file name>` (`@kortix/ui/dot-matrix/<name>` for the dot matrices).
-Also: `lib/telemetry` (`UiTelemetryRegister`: declaration-merge `event`), `error-boundary` (`ErrorBoundary`, `ErrorBoundaryFallback`).
+Every other primitive is one subpath per file: `@kortix/ui/<file name>` (`@kortix/ui/dot-matrix/<name>` for the dot matrices). Also: `lib/telemetry` (`UiTelemetryRegister`: declaration-merge `event`), `error-boundary` (`ErrorBoundary`, `ErrorBoundaryFallback`).
 
 ## 8. Modules
 

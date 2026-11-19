@@ -2226,6 +2226,11 @@
       "resume": "Fortsetzen",
       "agentIsWorking": "{agent} arbeitet",
       "needsYouOn": "Braucht dich: {header}"
+    },
+    "panel": {
+      "outputNew": "Neu",
+      "outputUpdated": "Aktualisiert",
+      "resizePane": "Bereichsgröße ändern"
     }
   },
   "agents": {
@@ -10973,7 +10978,7 @@
       "text0f096c40454e": "Profilieren Sie den Datensatz, visualisieren Sie die Verteilungen, prüfen Sie auf Leakage und Ungleichgewicht und schreiben Sie den ersten ehrlichen Absatz darüber, was in den Daten steckt. Sie starten mit einer fundierten Ausgangslage statt mit einer leeren Zelle.",
       "text0f16342ee1c1": "32%",
       "text0f308cfb7ef3": "0 automatisch",
-      "text0f4827ef74ea": "Offene Stellen bei Kortix — FDE, GTM und MTS. Belgrad, Serbien und San Francisco. Wir suchen Menschen für langfristige Verantwortung.",
+      "text0f4827ef74ea": "Offene Stellen bei Kortix — FDE, GTM und MTS. Belgrad, Serbien und die USA. Wir suchen Menschen für langfristige Verantwortung.",
       "text0f600458e375": "SSO, Mitglieder, Gruppen und rollenbasierte Zugriffssteuerung sind integriert — mit Berechtigungen pro Ressource für Menschen und Agenten, verschlüsselten Geheimnissen und einem vollständigen Audit-Trail. Hoste die Plattform selbst, damit sie vollständig in deiner eigenen Umgebung läuft.",
       "text0f64c7d16c28": "# prüfen, ob es kompiliert, nach fehlenden Secrets fragen,",
       "text0f656790976e": "Öffne eine beliebige Agent-Plattform — architektonisch sind sie identisch. Die marginalen Unterschiede sind nicht verteidigungsfähig. Nur die Lernschleife weicht voneinander ab.",
@@ -16592,7 +16597,7 @@
       "textb2a8625a332e": "Drei geplante Trigger auf einer Zeitachse mit einer Markierung für den aktuellen Moment; der nächste Lauf wird hervorgehoben.",
       "textb2ac0da7c543": "Gesamtes Team",
       "textb2c0cab20dc3": "JSON-RPC-Batches werden nicht unterstützt",
-      "textb2c293b68745": ".kortix/connectors/routes.toml",
+      "textb2c293b68745": "connectors/routes.toml",
       "textb2c5bc52374a": "Geheimnis gelöscht",
       "textb2d544129223": "Es ist nicht erledigt, wenn",
       "textb2e30caf44ee": "Verwende keine fest codierten Hex-Farben in Komponenten",
@@ -18666,7 +18671,7 @@
       "textecbd276ebec2": "Versuche eine Suche.",
       "textecc7ed048b32": "Monatsabschluss",
       "texteccba86b787c": "Ein Laptop, ein VPS oder Ihr eigenes Netzwerk.",
-      "textecccd43d1878": ".kortix/connectors/schema.graphql",
+      "textecccd43d1878": "connectors/schema.graphql",
       "texteccce15347a4": "Du hast keinen Zugriff auf die Vorschau dieser App.",
       "textecd3c555ab44": "Berechtigungen konnten nicht gespeichert werden",
       "textecdcf83028e7": "Parameter prüfen",
@@ -22283,6 +22288,7 @@
     "installProfileHint": "Der Name, unter dem dieser Connector in Kortix erscheint.",
     "wayComposio": "Verbindet über Composio, einen Drittanbieter-Partner, der die Anmeldung für dich übernimmt: Du meldest dich mit einem Klick bei {name} an, Composio hält die Anmeldung.",
     "wayMcpOneClick": "Verbindet mit dem eigenen MCP-Server von {name}. Du meldest dich nur bei {name} an.",
+    "wayKortixGoogle": "Kortix verbindet sich über die Google-API mit {name}. Du meldest dich nur bei Google an.",
     "wayMcpSetup": "Verbindet mit dem eigenen MCP-Server von {name}. Er braucht eine eigene OAuth-App oder einen API-Schlüssel, nach der Installation festgelegt.",
     "wayApi": "Verbindet direkt mit der {kind} von {name}. Füge nach der Installation ein Konto mit API-Schlüssel oder Token hinzu.",
     "installsWay": "Installiert über {kind}",
@@ -22301,8 +22307,8 @@
     "toolsAfterInstall": "Diese {kind} listet ihre Tools nach der Installation.",
     "typeFilterLabel": "Connector-Typ",
     "typeFilterAll": "Alle Typen",
-    "moveComposioTitle": "{app} hat einen eigenen MCP-Server",
-    "moveComposioBody": "Dieser Connector läuft über Composio. Du kannst ihn auf den eigenen MCP-Server von {app} umstellen: einmal anmelden, dann wechselt er. Agenten, Trigger und kortix.yaml nutzen weiter {slug}.",
+    "moveComposioTitle": "{app} geht auch ohne Composio",
+    "moveComposioBody": "Dieser Connector läuft über Composio. Kortix kann ihn direkt verbinden: einmal anmelden, dann wechselt er. Agenten, Trigger und kortix.yaml nutzen weiter {slug}.",
     "moveComposioAction": "Auf MCP umstellen",
     "wayChannel": "In Kortix eingebaut: Leute schreiben dem Agenten in {name}, ohne Drittanbieter. Einmal auf seiner Seite einrichten.",
     "waySetUp": "Einrichten",
@@ -27413,7 +27419,9 @@
       "goals": "Ziele",
       "inbox": "Posteingang",
       "memory": "Gedächtnis",
-      "members": "Mitglieder"
+      "members": "Mitglieder",
+      "review": "Review",
+      "setup": "Einrichtung abschließen"
     },
     "sections": {
       "agents": "Agenten",
@@ -27451,6 +27459,8 @@
     "reconnect": "{name} neu verbinden",
     "setSecret": "{name} setzen",
     "addSlack": "Kortix zu Slack hinzufügen",
-    "connectSlack": "Slack verbinden"
+    "connectSlack": "Slack verbinden",
+    "bannerTitle": "{left, plural, one {# Einrichtungsschritt ist offen} other {# Einrichtungsschritte sind offen}}",
+    "bannerDismiss": "Ausblenden"
   }
 }

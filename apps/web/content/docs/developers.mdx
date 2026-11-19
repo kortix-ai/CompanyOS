@@ -135,17 +135,20 @@ Ask all your questions in one message. Never print a secret value.
 
 Your agent reads the guide at [kortix.com/setup.md](https://kortix.com/setup.md) and does each step with you:
 
-1. Installs the `kortix` CLI and signs you in (one click in your browser).
-2. Reads the repository, your other repositories and the software you use, and matches them to the [templates](#templates). It asks nothing yet.
-3. Asks every question in one message of at most 8 questions, each with its recommended answer. It starts with what the agents will do in your repository, then asks: the template (the one that fits, and at most one more), its sources to start with, where work lands, the software to connect, the models, and the workspace name. The config always lives in the workspace's own repository, which Kortix hosts, so the code repository gets no Kortix file. The agents reach the code on GitHub. You reply once: `go`, or `go` with changes.
-4. Keeps the agents you already have: each `.claude/agents/<name>.md` becomes an agent whose `prompt_file` is that file, and each folder with a `SKILL.md` becomes a skill.
-5. Writes the dev environment in the workspace repository: a `Dockerfile` at its root (a sandbox template) and the `dev-environment` skill in `skills/dev-environment/` (the install, start and test commands every agent loads).
-6. Uploads only the `.env` names its message listed, never a value it read (`kortix env push --names`, `--only`).
-7. Connects the plan your agents run on: your Claude or ChatGPT subscription, shared with the workspace so triggered sessions use it, or an API key.
-8. Runs `kortix validate`, commits the workspace repository, and runs `kortix onboard --repo <owner/repo>`, which creates the workspace and names the code repository on GitHub.
-9. Stores each template secret: it generates a random webhook secret, and opens the [setup page](#plan-one-go-onboard) in your browser, where you connect each app and paste your GitHub token. No value passes through the agent.
+1. Installs the `kortix` CLI and signs you in (one click in your browser; a new person signs up on the same page).
+2. Reads the repository, your other repositories and the software you use, and matches them to the [templates](#templates). It notes whether your product is one repository (a monorepo counts as one) or several, and the skills and agents you already have. It asks nothing yet.
+3. Asks every question in one message of at most 8 questions, each with its recommended answer. It starts with what the agents will do in your repository, then asks: the template (the one that fits, and at most one more), its sources to start with, where work lands, the software to connect (every app it found, and "Anything missing?"), Slack, the models, and where Kortix lives: in this repository (recommended for one repository or a monorepo), or in a new repository Kortix hosts (recommended for several). You reply once: `go`, or `go` with changes.
+4. Reuses what you have. In your repository, each skill folder stays where it is and is registered in `kortix.yaml` (`skills: { <name>: .claude/skills/<name> }`), and each `.claude/agents/<name>.md` becomes an agent's `prompt_file`. In a new repository, it copies your skills there.
+5. Writes the dev environment: a `Dockerfile` at the root (a sandbox template) and the `dev-environment` skill in `skills/dev-environment/` (the install, start and test commands every agent loads).
+6. Uploads the `.env` names classed `local` that your app reads, never a value it read itself (`kortix env push --names`, `--only`). A `remote` or `prod` name is never uploaded.
+7. Leaves the plan your agents run on to you, on the setup page: your Claude or ChatGPT subscription, shared with the workspace so triggered sessions use it, or an API key.
+8. Runs `kortix validate`, commits the Kortix files (on your default branch, or as a pull request you merge), and runs `kortix onboard`. In your repository, the workspace runs on that GitHub repository through the Kortix GitHub App.
+9. Stores each template secret: it generates a random webhook secret, and opens the [setup page](#plan-one-go-onboard) in your browser, where you connect each app, add Kortix to Slack and paste your GitHub token. No value passes through the agent. With Slack added, your team gives the agents work by mentioning @Kortix in a channel or in a direct message.
 10. Creates the GitHub webhooks with your own `gh`.
-11. Runs one real task and shows you what it made: the pull request, ticket or draft, with its link.
+11. Proves the dev environment: it starts a Kortix session on the workspace image, which installs your app, starts it, runs the tests and opens it with agent-browser while it measures peak memory and disk. It reads the real command output, fixes the `Dockerfile`, the skill or a missing secret, and resizes the sandbox from the measured peaks (`kortix sandboxes update`), until the check passes. The final report names the size and its cost per hour: a running sandbox costs $0.0324 per vCPU-hour plus $0.0108 per GB-hour of memory, and a stopped one only its disk.
+12. Runs one real task and shows you what it made: the pull request, ticket or draft, with its link.
+
+While it runs, the CLI reports each step to Kortix: `kortix plan` starts a setup, then `templates add`, each `onboard` and the first green `doctor --loops`. Each report carries the step's outcome, counts and durations, and the name of the coding agent; never a repository, secret, channel or connector name. Set `DO_NOT_TRACK=1` or `KORTIX_TELEMETRY=0` to turn it off.
 
 #### Plan, one go, onboard
 
@@ -161,7 +164,7 @@ kortix doctor --loops --fix --json         # one green/red list; --fix repairs w
 
 - `kortix plan` classifies each key of every `.env*` file as `local`, `remote` (a URL on another host, or a staging file) or `prod` (a production file, a `PROD`/`LIVE` name, a live-mode key). It reads each value in its own process and prints none. It also proposes the dev environment (runtimes, services, commands) and lists the public reference repositories an agent can adapt.
 - `kortix onboard --yes` runs, in order: `validate`, `ship`, `secrets` (pushes the approved names, generates every unset webhook secret, one intake link for the rest), `webhooks` (a GitHub webhook and label for each webhook trigger that filters on `headers.github_event`, through your `gh`), `slack` (connect link, then the bot joins `--channels`; a private channel needs `/invite`), `connectors` (a sign-in link per declared connector), `sandbox` (builds each image and waits), then the doctor. Each phase skips what is done: run it again after you finish a `user_actions` item. Exit `0`: done and green. `4`: something waits on you. `1`: a phase failed.
-- **The setup page.** Every step only you can do (a model, a connector sign-in, a required secret such as the GitHub token, Slack) is one row on `/workspaces/<workspace_id>/setup`. `kortix onboard` opens it in your browser before the image build and prints `setup_url`; `--no-open` only prints it. `--wait` keeps the run going until the page shows every row done, then finishes the phases that waited (`--wait-timeout`, default 1800 seconds). Anyone who manages the workspace can open the page later to see what is left.
+- **The setup page.** Every step only you can do (a model, a connector sign-in, a required secret such as the GitHub token, Slack) is one row on `/workspaces/<workspace_id>/setup`. `kortix onboard` opens it in your browser before the image build and prints `setup_url`; `--no-open` only prints it. `--wait` keeps the run going until the page shows every row done, then finishes the phases that waited (`--wait-timeout`, default 1800 seconds). Anyone who manages the workspace can open the page later to see what is left. While a row is open, the workspace home shows a banner with the number of steps left and a **Finish setup** link back to the page. It shows only to people who can connect apps or set secrets. Dismiss hides it in that browser until a new step opens.
 - `kortix channels join eng bugs` joins the Slack bot to public channels on its own.
 
 A workspace that already reads a repository with no `kortix.yaml` shows **Copy setup prompt** on its home page: the same prompt, with the repository and the branch to push to. Until the push, the workspace home shows only this step, because no agent can run. It checks the branch every 15 seconds and whenever you return to the tab.
@@ -4449,14 +4452,14 @@ Set these with `kortix self-host env set`. Each row says what the variable turns
 | `TUNNEL_ENABLED` | Default `true`. `false` turns off [computers](/docs/guide#computers): `/v1/tunnel/*` answers `503` `tunnel_disabled`. |
 | `PLATINUM_API_KEY` | Required. Sessions, App machines and volumes, and Drive (`/drives`). |
 
-OAuth callbacks, such as `<KORTIX_URL>/v1/connectors/oauth2/callback` and the Slack and Teams redirects, use `KORTIX_URL`. Domain mode and a named tunnel keep it stable. A quick tunnel changes it at every restart and breaks every callback you registered.
+OAuth callbacks, such as `<KORTIX_URL>/v1/connectors/oauth2/callback` and the Slack and Teams redirects, use `KORTIX_URL`. Domain mode and a named tunnel keep it stable. A quick tunnel changes it at every restart and breaks every callback you registered. `KORTIX_OAUTH_CALLBACK_ORIGIN` replaces `KORTIX_URL` in the connector callback only: set it to a stable origin the browser reaches, such as `http://localhost:8008` on one machine, and register `<origin>/v1/connectors/oauth2/callback`.
 
 #### Kortix OAuth clients
 
 Some MCP servers in the catalog do not let Kortix register itself. Kortix signs in to them with an OAuth client that you create at the vendor once per instance.
 
 1. At the vendor, create an OAuth app with the redirect URI `<KORTIX_URL>/v1/connectors/oauth2/callback`.
-   - Google: a **Web application** client. Select **Use this client for an AI-powered agent**. Enable the Gmail, Calendar, Drive, Docs and Sheets APIs and their MCP services. Add the scopes from Google's [MCP server guide](https://developers.google.com/workspace/guides/configure-mcp-servers). The Workspace MCP servers are a Google developer preview.
+   - Google: a **Web application** client. Select **Use this client for an AI-powered agent**. Enable the Gmail, Google Calendar, Google Drive, Google Docs, Google Sheets and People APIs. In **Data Access**, add `openid`, `userinfo.email`, `gmail.modify`, `gmail.settings.basic`, `contacts.readonly`, `contacts.other.readonly`, `calendar`, `drive`, `documents` and `spreadsheets` (each under `https://www.googleapis.com/auth/` except `openid`). Kortix serves Gmail, Calendar, Drive, Docs and Sheets itself on Google's REST APIs, with the tool names of Composio's toolkits; see [Google apps](#google-apps).
    - GitHub: an OAuth app (not a GitHub App).
    - X: in the X Developer Console, set up **User authentication** with OAuth 2.0, the app type **Web App, Automated App or Bot** (a confidential client) and the permission **Read and write**. Kortix requests `tweet.read tweet.write users.read offline.access`.
 2. Store the clients as one JSON value:
@@ -4466,6 +4469,18 @@ Some MCP servers in the catalog do not let Kortix register itself. Kortix signs 
    ```
 
 3. Restart the API. The apps of each configured vendor appear in the catalog.
+
+#### Google apps
+
+With a `google` entry in `KORTIX_OAUTH_CLIENTS`, the catalog lists Gmail, Google Calendar, Google Drive, Google Docs and Google Sheets as Kortix apps, and the Composio toolkits for them (`gmail`, `googlecalendar`, `googledrive`, `googledocs`, `googlesheets`) leave the catalog.
+
+- The tools keep the names and arguments of the Composio toolkits (`gmail.fetch_emails`, `gmail.send_email`, `google_calendar.events_list`, `google_drive.find_file`, …), so agents, skills and tool rules written for Composio keep working. A tool answers the object the Composio tool returned as its `data`.
+- Kortix runs the tools inside the API process. The access token reaches only `*.googleapis.com`. A connector's URL is `https://google.mcp.kortix.com/<service>`: an identity, not a network address.
+- Kortix asks for `gmail.modify`, not full mailbox access: `delete_message`, `delete_thread` and `batch_delete_messages` move mail to Trash, where Gmail deletes it after 30 days.
+- A downloaded file (`gmail.get_attachment`, `google_drive.download_file`) comes back as `file.content_base64`, up to 25 MB. Save a large answer with `kortix connectors call … --out result.json`. A file to send or upload goes in `attachments[]` as `content` (base64, or `--attach <file>`) or `url` (public https).
+- An existing Composio connector moves with `kortix connectors move <slug>`, or **Move to Kortix** on its page: the owner signs in to Google once, and the connector keeps its slug, its tool rules and its Gmail, Calendar and Drive event triggers. Google sign-ins cannot move between OAuth apps, so each account signs in again.
+
+Google review: `gmail.modify`, `gmail.settings.basic` and `drive` are restricted scopes. A Google project that is **In production** with these scopes needs Google's verification and a yearly third-party security assessment (CASA). Until then, people see an "unverified app" screen, and at most 100 Google accounts can ever sign in. In **Testing**, Google ends every sign-in after 7 days. A project with the **Internal** user type (Google Workspace only) needs neither, for accounts of that Workspace.
 
 #### Composio toolkits that need your own OAuth app
 

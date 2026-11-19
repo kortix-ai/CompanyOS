@@ -1620,6 +1620,11 @@ const catalog = {
       "resume": "Resume",
       "agentIsWorking": "{agent} is working",
       "needsYouOn": "Needs you: {header}"
+    },
+    "panel": {
+      "outputNew": "New",
+      "outputUpdated": "Updated",
+      "resizePane": "Resize pane"
     }
   },
   "agents": {
@@ -4880,7 +4885,7 @@ const catalog = {
       "textb27e54100c96": "Instructions and scripts this agent can load into a session.",
       "textb27fb38ba323": "Slack",
       "textb2ac0da7c543": "Whole team",
-      "textb2c293b68745": ".kortix/connectors/routes.toml",
+      "textb2c293b68745": "connectors/routes.toml",
       "textb301cac49225": "Ask agent to sync",
       "textb3278e5f53cc": "Copy file contents",
       "textb32e10370ffe": "Granted {value0} to {value1}",
@@ -5618,7 +5623,7 @@ const catalog = {
       "textecb89227d17e": "This workspace starts every session with this model — pick a different default before turning it off.",
       "textecbc89cd37a0": "Started",
       "textecbd276ebec2": "Try a search.",
-      "textecccd43d1878": ".kortix/connectors/schema.graphql",
+      "textecccd43d1878": "connectors/schema.graphql",
       "texteccce15347a4": "You do not have access to preview this App.",
       "textecdcf83028e7": "Review parameters",
       "textece53d1bdd76": "Plan credits",
@@ -7018,6 +7023,7 @@ const catalog = {
     "installProfileHint": "The name people see for this connector in Kortix.",
     "wayComposio": "Connects through Composio, a third-party partner that runs the sign-in for you: you sign in to {name} in one click, and Composio keeps the login.",
     "wayMcpOneClick": "Connects to {name}'s own MCP server. You only sign in to {name}.",
+    "wayKortixGoogle": "Kortix connects to {name} through Google's API. You only sign in to Google.",
     "wayMcpSetup": "Connects to {name}'s own MCP server. It needs your own OAuth app or an API key, set after install.",
     "wayApi": "Connects to {name}'s {kind} directly. Add an account with its API key or token after install.",
     "installsWay": "Installs via {kind}",
@@ -7036,8 +7042,8 @@ const catalog = {
     "toolsAfterInstall": "This {kind} lists its tools after install.",
     "typeFilterLabel": "Connector type",
     "typeFilterAll": "All types",
-    "moveComposioTitle": "{app} has its own MCP server",
-    "moveComposioBody": "This connector runs through Composio. You can switch it to {app}'s own MCP server: sign in once and it switches. Agents, triggers and kortix.yaml keep using {slug}.",
+    "moveComposioTitle": "{app} can connect without Composio",
+    "moveComposioBody": "This connector runs through Composio. Kortix can connect it directly: sign in once and it switches. Agents, triggers and kortix.yaml keep using {slug}.",
     "moveComposioAction": "Switch to MCP",
     "wayChannel": "Built into Kortix: people message the agent in {name}, with no third party. Set it up once on its page.",
     "waySetUp": "Set up",
@@ -10622,7 +10628,9 @@ const catalog = {
     "reconnect": "Reconnect {name}",
     "setSecret": "Set {name}",
     "addSlack": "Add Kortix to Slack",
-    "connectSlack": "Connect Slack"
+    "connectSlack": "Connect Slack",
+    "bannerTitle": "{left, plural, one {# setup step is left} other {# setup steps are left}}",
+    "bannerDismiss": "Dismiss"
   }
 };
 

@@ -2226,6 +2226,11 @@
       "resume": "Resume",
       "agentIsWorking": "{agent} is working",
       "needsYouOn": "Needs you: {header}"
+    },
+    "panel": {
+      "outputNew": "New",
+      "outputUpdated": "Updated",
+      "resizePane": "Resize pane"
     }
   },
   "agents": {
@@ -11018,7 +11023,7 @@
       "text0f096c40454e": "Profile the dataset, plot the distributions, check for leakage and imbalance, and write the first honest paragraph about what is in the data. You start from a briefed position rather than from an empty cell.",
       "text0f16342ee1c1": "32%",
       "text0f308cfb7ef3": "0 auto",
-      "text0f4827ef74ea": "Open positions at Kortix — FDE, GTM and MTS. Belgrade, Serbia and San Francisco. We hire for prolonged ownership.",
+      "text0f4827ef74ea": "Open positions at Kortix — FDE, GTM and MTS. Belgrade, Serbia and the US. We hire for prolonged ownership.",
       "text0f600458e375": "SSO, members, groups and role-based access come built in, with per-resource permissions for people and agents, encrypted secrets and a full audit trail. Self-host so the entire platform runs inside your own environment.",
       "text0f64c7d16c28": "# check it compiles, ask for the missing secrets,",
       "text0f656790976e": "Open any agent platform — they are architecturally identical. The marginal differences are not defensible. The only thing that diverges is the learning loop.",
@@ -16637,7 +16642,7 @@
       "textb2a8625a332e": "Three scheduled triggers on a time axis with a present-moment marker, and the next run called out.",
       "textb2ac0da7c543": "Whole team",
       "textb2c0cab20dc3": "JSON-RPC batches are not supported",
-      "textb2c293b68745": ".kortix/connectors/routes.toml",
+      "textb2c293b68745": "connectors/routes.toml",
       "textb2c5bc52374a": "Secret deleted",
       "textb2d544129223": "It is not done if",
       "textb2e30caf44ee": "Use hardcoded hex colors in components",
@@ -18711,7 +18716,7 @@
       "textecbd276ebec2": "Try a search.",
       "textecc7ed048b32": "month end close",
       "texteccba86b787c": "A laptop, a VPS, or your own network.",
-      "textecccd43d1878": ".kortix/connectors/schema.graphql",
+      "textecccd43d1878": "connectors/schema.graphql",
       "texteccce15347a4": "You do not have access to preview this App.",
       "textecd3c555ab44": "Failed to save permissions",
       "textecdcf83028e7": "Review parameters",
@@ -22283,6 +22288,7 @@
     "installProfileHint": "The name people see for this connector in Kortix.",
     "wayComposio": "Connects through Composio, a third-party partner that runs the sign-in for you: you sign in to {name} in one click, and Composio keeps the login.",
     "wayMcpOneClick": "Connects to {name}'s own MCP server. You only sign in to {name}.",
+    "wayKortixGoogle": "Kortix connects to {name} through Google's API. You only sign in to Google.",
     "wayMcpSetup": "Connects to {name}'s own MCP server. It needs your own OAuth app or an API key, set after install.",
     "wayApi": "Connects to {name}'s {kind} directly. Add an account with its API key or token after install.",
     "installsWay": "Installs via {kind}",
@@ -22301,8 +22307,8 @@
     "toolsAfterInstall": "This {kind} lists its tools after install.",
     "typeFilterLabel": "Connector type",
     "typeFilterAll": "All types",
-    "moveComposioTitle": "{app} has its own MCP server",
-    "moveComposioBody": "This connector runs through Composio. You can switch it to {app}'s own MCP server: sign in once and it switches. Agents, triggers and kortix.yaml keep using {slug}.",
+    "moveComposioTitle": "{app} can connect without Composio",
+    "moveComposioBody": "This connector runs through Composio. Kortix can connect it directly: sign in once and it switches. Agents, triggers and kortix.yaml keep using {slug}.",
     "moveComposioAction": "Switch to MCP",
     "wayChannel": "Built into Kortix: people message the agent in {name}, with no third party. Set it up once on its page.",
     "waySetUp": "Set up",
@@ -27413,7 +27419,9 @@
       "goals": "Goals",
       "inbox": "Inbox",
       "memory": "Memory",
-      "members": "Members"
+      "members": "Members",
+      "review": "Review",
+      "setup": "Finish setup"
     },
     "sections": {
       "agents": "Agents",
@@ -27451,6 +27459,8 @@
     "reconnect": "Reconnect {name}",
     "setSecret": "Set {name}",
     "addSlack": "Add Kortix to Slack",
-    "connectSlack": "Connect Slack"
+    "connectSlack": "Connect Slack",
+    "bannerTitle": "{left, plural, one {# setup step is left} other {# setup steps are left}}",
+    "bannerDismiss": "Dismiss"
   }
 }

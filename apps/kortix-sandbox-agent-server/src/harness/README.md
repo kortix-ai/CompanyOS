@@ -1438,7 +1438,7 @@ document (its box died mid-run) leaves nothing to reuse, and the resume says
 so. The parent's record then names the new runner. A runner that still works
 refuses the resume. A structured agent whose
 answer never validates resolves to `{ schema_error, text }` (`strict: true`
-throws). Saved workflows are `.kortix/workflows/<name>.js`: the checkout's
+throws). Saved workflows are `workflows/<name>.js` at the repository root: the checkout's
 working tree, or the API's project files on a box without one.
 
 **Tool concurrency.** The root agent runs `toolExecution: 'parallel'`. Every

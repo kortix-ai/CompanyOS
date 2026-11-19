@@ -28,6 +28,7 @@ import { PostHog } from 'posthog-node';
 import { config } from '../config';
 import { logger } from '../lib/logger';
 import { db, hasDatabase } from './db';
+import { isUuid } from './validate';
 
 /**
  * The event contract. Names and properties follow the dashboards in
@@ -158,7 +159,6 @@ export function isStaffEmail(email: string | null | undefined): boolean {
   return at > 0 && STAFF_EMAIL_DOMAINS.has(email.slice(at + 1).trim().toLowerCase());
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CHECKED_PEOPLE_MAX = 50_000;
 // replica-local: the user ids this process already checked; each process checks a person once.
 const checkedPeople = new Set<string>();
@@ -176,7 +176,7 @@ async function isStaffUser(userId: string): Promise<boolean> {
  * read is retried with the person's next event.
  */
 function flagStaffOnce(posthog: PostHog, userId: string): void {
-  if (!hasDatabase || !UUID.test(userId) || checkedPeople.has(userId)) return;
+  if (!hasDatabase || !isUuid(userId) || checkedPeople.has(userId)) return;
   if (checkedPeople.size >= CHECKED_PEOPLE_MAX) checkedPeople.clear();
   checkedPeople.add(userId);
   isStaffUser(userId).then(

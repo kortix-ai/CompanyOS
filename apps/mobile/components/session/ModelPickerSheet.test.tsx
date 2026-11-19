@@ -172,6 +172,26 @@ describe('ModelPickerSheet', () => {
     expect(onCreate).toHaveBeenCalled();
   });
 
+  test('the Agent tab names the project roster by its configured titles (KRTX-4980)', async () => {
+    const { threadAgents } = await import('@/lib/session/composer-config');
+    const config = {
+      default_agent: 'mykortix',
+      agents: [
+        { name: 'mykortix', title: 'mykortix', mode: 'primary', source: 'config' },
+        { name: 'github-pr-reviewer', title: 'GitHub PR Reviewer', mode: 'primary', source: 'config' },
+        { name: 'chief-of-staff', mode: 'primary', source: 'config' },
+      ],
+    } as unknown as Parameters<typeof threadAgents>[0];
+    const r = await render({ ...baseProps, agent: { ...baseProps.agent, agents: threadAgents(config), activeName: 'mykortix' } });
+    r.ref.current?.open();
+    await act(async () => (pickerProps(r).tabs as { onSelect: (i: number) => void }).onSelect(0));
+    expect(pickerProps(r).options).toEqual([
+      { key: 'mykortix', label: 'My Kortix' },
+      { key: 'github-pr-reviewer', label: 'GitHub PR Reviewer' },
+      { key: 'chief-of-staff', label: 'Chief of staff' },
+    ]);
+  });
+
   test('open() resets to the Model tab after the Agent tab was shown', async () => {
     const r = await render(baseProps);
     r.ref.current?.open();

@@ -128,6 +128,7 @@ export function homeAgentPick(i: {
 export function threadAgents(config: ProjectConfigSummary): Agent[] {
   return selectableProjectAgents(config).map((a) => ({
     name: a.name,
+    ...(a.title ? { title: a.title } : {}),
     description: a.description ?? undefined,
     mode: a.mode === 'primary' ? 'primary' : 'all',
     options: {},

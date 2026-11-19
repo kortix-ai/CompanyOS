@@ -515,7 +515,7 @@ export function useSlides(): SlideDef[] {
                   </div>
                 </Panel>
                 {i < arr.length - 1 ? (
-                  <ArrowRight className="text-muted-foreground/50 size-5 shrink-0" />
+                  <ArrowRight className="text-muted-foreground size-5 shrink-0" />
                 ) : null}
               </div>
             ))}
@@ -619,7 +619,7 @@ export function useSlides(): SlideDef[] {
                 </Panel>
               ))}
             </div>
-            <Lead className="text-muted-foreground/80">
+            <Lead className="text-muted-foreground">
               {tI18nHardcoded.raw('autoAppPresentationSlidesPlatformJsxTextThisIsTheOnly74f58f8b')}
             </Lead>
           </div>
@@ -797,11 +797,11 @@ export function useSlides(): SlideDef[] {
                   </span>
                 ))}
               </div>
-              <ArrowRight className="text-muted-foreground/50 size-5 rotate-90" />
+              <ArrowRight className="text-muted-foreground size-5 rotate-90" />
               <div className="bg-foreground text-background rounded-sm px-7 py-4 font-mono text-lg font-medium">
                 {tI18nHardcoded.raw('autoAppPresentationSlidesPlatformJsxText1KORTIXTOKEN7cd8465b')}
               </div>
-              <ArrowRight className="text-muted-foreground/50 size-5 rotate-90" />
+              <ArrowRight className="text-muted-foreground size-5 rotate-90" />
               <Pill>
                 {tI18nHardcoded.raw(
                   'autoAppPresentationSlidesPlatformJsxTextSandboxScopedAudited1023f72c',
@@ -1546,7 +1546,7 @@ export function useSlides(): SlideDef[] {
               )}
             />
           </div>
-          <Lead className="text-muted-foreground/80 mt-8">
+          <Lead className="text-muted-foreground mt-8">
             {tI18nHardcoded.raw('autoAppPresentationSlidesPlatformJsxTextTheLabsArePaid7834c27f')}
           </Lead>
         </Slide>

@@ -27,7 +27,7 @@ import { PostHog } from 'posthog-node';
 
 import { config } from '../config';
 import { logger } from '../lib/logger';
-import { db, hasDatabase } from './db';
+import { db } from './db';
 import { isUuid } from './validate';
 
 /**
@@ -176,7 +176,9 @@ async function isStaffUser(userId: string): Promise<boolean> {
  * read is retried with the person's next event.
  */
 function flagStaffOnce(posthog: PostHog, userId: string): void {
-  if (!hasDatabase || !isUuid(userId) || checkedPeople.has(userId)) return;
+  // config.DATABASE_URL is what db.ts exports as hasDatabase. Reading config keeps this
+  // module loadable under the many unit tests that mock ./db with `db` alone.
+  if (!config.DATABASE_URL || !isUuid(userId) || checkedPeople.has(userId)) return;
   if (checkedPeople.size >= CHECKED_PEOPLE_MAX) checkedPeople.clear();
   checkedPeople.add(userId);
   isStaffUser(userId).then(

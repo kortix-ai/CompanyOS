@@ -8,11 +8,13 @@ import { assertAuthorized, listAccessible } from '../../iam/authorize';
 import { visibleDirectory } from '../../iam/directory-visibility';
 import { actorOf } from '../../middleware/actor';
 import { combinedAuth } from '../../middleware/auth';
+import { createUsageRollupRateLimitMiddleware } from '../../middleware/rate-limit';
 import { rejectSandboxTokens } from '../../middleware/reject-sandbox-tokens';
 import { auth, errors, json, makeOpenApiApp } from '../../openapi';
 import { assertProjectCapability, loadProjectForUser } from '../../projects/lib/access';
 import { CSV_ROW_CAP, toCsv } from '../../shared/cost-csv';
 import { getCostSummary, listCostByProject } from '../../shared/cost-rollups';
+import { withCostReadGuard } from '../../shared/cost-read-guard';
 import {
   type CostSort,
   type CostWindow,
@@ -48,6 +50,13 @@ usageApp.use('*', combinedAuth);
 // reason to read account-wide usage/cost rollups — without this they'd see
 // every project's spend on multi-user accounts. See reject-sandbox-tokens.ts.
 usageApp.use('*', rejectSandboxTokens);
+// The heavy account-wide rollups hold a DB pool connection for the whole query:
+// one flooding caller must not drain the pool for every other route (KRTX-4895).
+// `/session-costs/{sessionId}` is a cheap single-record read and stays unguarded.
+const usageRollupGuard = createUsageRollupRateLimitMiddleware();
+for (const path of ['/', '/session-costs', '/cost-by-project', '/cost-summary']) {
+  usageApp.use(path, usageRollupGuard);
+}
 
 /**
  * The workspace a workspace-bound token reads usage for: its own, always.
@@ -548,7 +557,7 @@ usageApp.openapi(
           'text/csv': { schema: z.string() },
         },
       },
-      ...errors(400, 401, 403),
+      ...errors(400, 401, 403, 429),
     },
   }),
   async (c) => {
@@ -585,15 +594,17 @@ usageApp.openapi(
       // Same filtered query as the JSON branch (accountId, projectId, ownerId,
       // window, sort) — only limit/offset differ, because a CSV export wants
       // up to CSV_ROW_CAP rows in one shot, not one paginated page of it.
-      const page = await listSessionCosts({
-        accountId,
-        projectId,
-        ownerId,
-        window: parsed.window,
-        sort: parsed.sort,
-        limit: CSV_ROW_CAP,
-        offset: 0,
-      });
+      const page = await withCostReadGuard(() =>
+        listSessionCosts({
+          accountId,
+          projectId,
+          ownerId,
+          window: parsed.window,
+          sort: parsed.sort,
+          limit: CSV_ROW_CAP,
+          offset: 0,
+        }),
+      );
       const body = toCsv(
         [
           'session_id',
@@ -630,7 +641,9 @@ usageApp.openapi(
       });
     }
 
-    return c.json(await listSessionCosts({ accountId, projectId, ownerId, ...parsed }));
+    return c.json(
+      await withCostReadGuard(() => listSessionCosts({ accountId, projectId, ownerId, ...parsed })),
+    );
   },
 );
 
@@ -706,7 +719,7 @@ usageApp.openapi(
           'text/csv': { schema: z.string() },
         },
       },
-      ...errors(400, 401, 403),
+      ...errors(400, 401, 403, 429),
     },
   }),
   async (c) => {
@@ -756,15 +769,17 @@ usageApp.openapi(
       // Same filtered query as the JSON branch (accountId, window, sort) —
       // only limit/offset differ, because a CSV export wants up to
       // CSV_ROW_CAP rows in one shot, not one paginated page of it.
-      const page = await listCostByProject({
-        accountId,
-        projectId,
-        visibleProjectIds,
-        window,
-        sort,
-        limit: CSV_ROW_CAP,
-        offset: 0,
-      });
+      const page = await withCostReadGuard(() =>
+        listCostByProject({
+          accountId,
+          projectId,
+          visibleProjectIds,
+          window,
+          sort,
+          limit: CSV_ROW_CAP,
+          offset: 0,
+        }),
+      );
       const body = toCsv(
         [
           'project_id',
@@ -792,7 +807,11 @@ usageApp.openapi(
       });
     }
 
-    return c.json(await listCostByProject({ accountId, projectId, visibleProjectIds, window, sort, limit, offset }));
+    return c.json(
+      await withCostReadGuard(() =>
+        listCostByProject({ accountId, projectId, visibleProjectIds, window, sort, limit, offset }),
+      ),
+    );
   },
 );
 
@@ -823,7 +842,7 @@ usageApp.openapi(
         })
         .openapi('CostSummaryQuery'),
     },
-    responses: { 200: json(CostSummarySchema, 'Cost summary'), ...errors(400, 401, 403) },
+    responses: { 200: json(CostSummarySchema, 'Cost summary'), ...errors(400, 401, 403, 429) },
   }),
   async (c) => {
     try {
@@ -833,13 +852,11 @@ usageApp.openapi(
           message: 'A workspace-bound token cannot query an arbitrary session',
         });
       }
+      const window = parseCostWindow({ from: c.req.query('from'), to: c.req.query('to') });
       return c.json(
-        await getCostSummary({
-          accountId,
-          projectId,
-          sessionId: c.req.query('session_id') || undefined,
-          window: parseCostWindow({ from: c.req.query('from'), to: c.req.query('to') }),
-        }),
+        await withCostReadGuard(() =>
+          getCostSummary({ accountId, projectId, sessionId: c.req.query('session_id') || undefined, window }),
+        ),
       );
     } catch (error) {
       if (error instanceof InvalidCostQueryError) {

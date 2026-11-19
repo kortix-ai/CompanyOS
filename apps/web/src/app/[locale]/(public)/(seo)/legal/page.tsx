@@ -12,7 +12,7 @@ import { Fragment, Suspense, useState, type ReactNode } from 'react';
 
 import { TERMS_LAST_UPDATED, TERMS_OF_SERVICE } from './terms-of-service';
 
-const LEGAL_LAST_UPDATED = 'November 18, 2026';
+const LEGAL_LAST_UPDATED = 'November 19, 2026';
 
 type LegalTab = 'imprint' | 'terms' | 'privacy';
 
@@ -302,8 +302,13 @@ function PrivacyPolicy() {
           Services: which pages and features are used, and which campaign brought a visitor to us.
           PostHog stores an identifier in your browser only after you accept analytics in the cookie
           banner. It receives a random account identifier, never your name or email address, and
-          never your prompts, messages, files or other project content, and it does not record your
-          screen. On our marketing website we also use Vercel Analytics and, through Google Tag
+          never your prompts, messages, files or other project content. PostHog also records a share
+          of visits as session replays: which pages you open, where you click and how far you scroll.
+          When you are signed in, and on sign-in pages, a replay hides all text, everything you type,
+          image sources and embedded content, so it shows the layout of a page but not what is on it.
+          We use replays to find the places where the product is hard to use, and PostHog deletes
+          them after 30 days. If you reject analytics in the cookie banner, we do not record your
+          visits. On our marketing website we also use Vercel Analytics and, through Google Tag
           Manager, advertising and measurement tags. A cookie banner asks for your consent before we
           set non-essential cookies where the law requires consent, and you can change your choice
           there at any time. We do not load advertising tags on signed-in pages of the Services.

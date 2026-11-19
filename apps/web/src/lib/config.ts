@@ -45,8 +45,9 @@ export const isLoopmaxxingEnabled = (): boolean => {
 /**
  * Whether Loopmaxxing is announced: the marketing site shows the announcement
  * bar that links to it. A reachable page stays unannounced until
- * KORTIX_PUBLIC_LOOPMAXXING_ANNOUNCED=true (dev sets it; `next dev` turns it
- * on locally). Prod leaves it unset until the launch.
+ * KORTIX_PUBLIC_LOOPMAXXING_ANNOUNCED=true (dev, staging and prod set it
+ * since the launch, 2026-11-19; `next dev` turns it on locally). On Vercel
+ * the value is a project variable, not this repo's .env.prod.
  */
 export const isLoopmaxxingAnnounced = (): boolean => {
   return getEnv().LOOPMAXXING_ENABLED && getEnv().LOOPMAXXING_ANNOUNCED;

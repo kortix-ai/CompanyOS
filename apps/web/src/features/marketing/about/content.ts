@@ -133,7 +133,7 @@ export const future = {
    is the hiring call instead of the old thesis line. */
 export const closing = {
   title: 'Help us build it.',
-  titleMuted: 'We are hiring in Belgrade and San Francisco.',
+  titleMuted: 'We are hiring in Belgrade and the US.',
   ctaPrimary: 'See open positions',
   ctaPrimaryHref: '/careers',
   ctaSecondary: 'Read the code',

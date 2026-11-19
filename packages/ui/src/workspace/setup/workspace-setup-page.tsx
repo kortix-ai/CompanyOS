@@ -1,14 +1,14 @@
 'use client';
 
 import { CheckCircleIcon, KeyIcon } from '@phosphor-icons/react';
-import { getSlackInstallation, getSlackMode, listConnectors, listProjectSecrets, type AdminConnector } from '@kortix/sdk';
-import { contract, FRESHNESS, qk, useProjectAccountId } from '@kortix/sdk/react';
+import { getSlackMode, type AdminConnector } from '@kortix/sdk';
+import { useProjectAccountId } from '@kortix/sdk/react';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { connectorHref } from '../../customize/connectors/connector-routes';
 import { SetCredentialModal } from '../../customize/sections/connectors-view';
-import { buildRows, ProjectSecretDialog } from '../../customize/sections/view/secrets-view';
+import { ProjectSecretDialog } from '../../customize/sections/view/secrets-view';
 import { CapabilityPageShell } from '../../customize/shared/capability-page-shell';
 import { useTranslations } from '../../i18n';
 import { ConnectorLogo } from '../../internal/connector-logo/connector-logo';
@@ -24,7 +24,8 @@ import { EmptyArt } from '../../primitives/empty-art';
 import { ErrorState } from '../../primitives/error-state';
 import { Skeleton } from '../../primitives/skeleton';
 import { UiLink as Link, useUiSearchParams } from '../../providers/ui-provider';
-import { setupSteps, slackNeeded, type SetupStep } from './setup-steps';
+import type { SetupStep } from './setup-steps';
+import { useSetupSteps } from './use-setup-steps';
 
 /** While a step is open, read it again this often: the person may finish it in another tab. */
 const OPEN_STEP_POLL_MS = 5_000;
@@ -44,51 +45,18 @@ export function WorkspaceSetupPage({ projectId }: { projectId: string }) {
     useProjectCan(projectId, PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE, { accountId }).allowed === true;
   const canSetSecrets = useProjectCan(projectId, PROJECT_ACTIONS.PROJECT_SECRET_WRITE).allowed === true;
 
-  const connectorsQuery = useQuery({
-    queryKey: qk.project.connectors(projectId),
-    queryFn: () => listConnectors(projectId, { includeSchemas: false }),
-    ...contract(FRESHNESS.connectors),
+  const { steps, usesSlack, loading, failed, refresh } = useSetupSteps(projectId, {
+    slackRequested: params.get('slack') === '1',
+    pollMs: OPEN_STEP_POLL_MS,
   });
-  const secretsQuery = useQuery({
-    queryKey: qk.project.secrets(projectId),
-    queryFn: () => listProjectSecrets(projectId),
-    ...contract('config'),
-    refetchOnWindowFocus: true,
-    refetchInterval: OPEN_STEP_POLL_MS,
-  });
-  const connectors = connectorsQuery.data?.connectors ?? [];
-  const usesSlack = slackNeeded(connectors, params.get('slack') === '1');
-  // The same cache entries as the Channels page (`useSlackInstall`, `useSlackMode`).
-  const slackInstallQuery = useQuery({
-    queryKey: ['channels', 'slack-install', projectId],
-    queryFn: () => getSlackInstallation(projectId),
-    enabled: usesSlack,
-    refetchOnWindowFocus: true,
-    refetchInterval: (query) => (query.state.data ? false : OPEN_STEP_POLL_MS),
-  });
+  // The same cache entry as the Channels page (`useSlackMode`).
   const slackModeQuery = useQuery({
     queryKey: ['channels', 'slack-mode', projectId],
     queryFn: () => getSlackMode(projectId),
     enabled: usesSlack,
     staleTime: 60_000,
   });
-
-  const loading = connectorsQuery.isLoading || secretsQuery.isLoading || (usesSlack && slackInstallQuery.isLoading);
-  const failed = connectorsQuery.isError || secretsQuery.isError;
-  const steps = loading || failed
-    ? []
-    : setupSteps({
-        connectors,
-        secrets: buildRows(secretsQuery.data),
-        slack: { needed: usesSlack, installed: Boolean(slackInstallQuery.data) },
-        slackName: t('slackName'),
-      });
   const done = steps.filter((step) => step.done).length;
-  const refresh = () => {
-    void connectorsQuery.refetch();
-    void secretsQuery.refetch();
-    if (usesSlack) void slackInstallQuery.refetch();
-  };
   const workspaceLink = (
     <Button asChild variant="outline" size="sm">
       <Link href={`/workspaces/${projectId}`}>{t('openWorkspace')}</Link>

@@ -10628,7 +10628,9 @@ const catalog = {
     "reconnect": "Reconnect {name}",
     "setSecret": "Set {name}",
     "addSlack": "Add Kortix to Slack",
-    "connectSlack": "Connect Slack"
+    "connectSlack": "Connect Slack",
+    "bannerTitle": "{left, plural, one {# setup step is left} other {# setup steps are left}}",
+    "bannerDismiss": "Dismiss"
   }
 };
 

@@ -5,7 +5,7 @@ import { languageAlternates, localePath, metaDescription, requestLocale } from '
 import { getTranslations } from '@/i18n/get-translations';
 
 const DESCRIPTION =
-  'Open positions at Kortix — FDE, GTM and MTS. Belgrade, Serbia and San Francisco. We hire for prolonged ownership.';
+  'Open positions at Kortix — FDE, GTM and MTS. Belgrade, Serbia and the US. We hire for prolonged ownership.';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('hardcodedUi.i18nComplete');
@@ -16,7 +16,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title,
     description,
     keywords:
-      'Kortix careers, Kortix jobs, AI startup jobs, open AGI platform, agent engineering, San Francisco AI jobs, Belgrade AI jobs, startup hiring',
+      'Kortix careers, Kortix jobs, AI startup jobs, open AGI platform, agent engineering, New York AI jobs, San Francisco AI jobs, Belgrade AI jobs, startup hiring',
     openGraph: {
       title: socialTitle,
       description,

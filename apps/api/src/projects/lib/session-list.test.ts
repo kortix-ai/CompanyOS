@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { accountGroupMembers, accounts, projectSessions, projectSpaces } from '@kortix/db';
 import * as realDb from '../../shared/db';
+import { projectsView } from '../../workspaces/rows';
 
 // The sessions list is polled, and every statement is a full round trip. These
 // tests pin WHEN the first row chunk starts: beside the reads that depend only
@@ -28,7 +29,7 @@ function query(table: unknown) {
     }
     // The project's private channels (`hiddenSpaceIds`): none. It starts with
     // the caller reads and holds nothing back.
-    if (table === projectSpaces) return [];
+    if (table === projectSpaces || table === projectsView) return [];
     if (table === accounts) {
       started.push('oversight-policy');
       await oversightGate;

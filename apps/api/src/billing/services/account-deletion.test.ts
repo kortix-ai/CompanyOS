@@ -300,7 +300,8 @@ mock.module('../repositories/account-deletion', () => ({
   releaseDeletionRequest: async () => undefined,
 }));
 
-const { deleteAccountImmediately, getAccountDeletionStatus, reclaimableAccountIds, processScheduledDeletions } = await import('./account-deletion');
+const { deleteAccountImmediately, getAccountDeletionStatus, reclaimableAccountIds, processScheduledDeletions, runAccountDeletion } =
+  await import('./account-deletion');
 
 /**
  * The bound parameters of a drizzle WHERE condition, in order, rendered by the
@@ -689,6 +690,14 @@ describe('closing a legacy personal workspace keeps the person', () => {
       await deleteAccountImmediately(ME);
       expect(deletedUsers).toEqual([]);
       expect(completedRequests).toEqual(['req-workspace']);
+    });
+
+    // The retention backstop (retention-erasure.ts) calls the routine directly.
+    test(`${reason}: the shared routine keeps the login for every caller`, async () => {
+      ownedAccountRows = [{ accountId: ME }, { accountId: 'acct-other' }];
+      await runAccountDeletion(ME, ME, { id: 'req-workspace', reason });
+      expect(deletedUsers).toEqual([]);
+      expect(whereParams(sandboxWhereArg)).not.toContain('acct-other');
     });
   }
 });

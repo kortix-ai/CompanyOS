@@ -361,7 +361,7 @@ Names: `ActionPanel`, `AdvancedPanel`, `DiffDialog`, `EasyPanel`, `openSessionQu
 
 ## `@kortix/ui/workspace`
 
-Source: `src/workspace/index.ts`. Composed workspace screens: session workspace, workspace sidebar, sessions list, workspace home, permission and route helpers.
+Source: `src/workspace/index.ts`. `PROJECT_PAGE_HEADER_CLASS` is the shared workspace page-header class. Composed workspace screens: session workspace, workspace sidebar, sessions list, workspace home, permission and route helpers.
 
 Mount: `SessionWorkspace` takes `session` (the `useSession` result): the thread plus the resizable side panel. `children` replaces the thread. `SessionLayout` is the same layout with explicit ids (`sessionId` = runtime id, `projectId`, `projectSessionId`, `bootStage`, `transient`) and the thread as `children`. Workspace screens take `projectId`; `ProjectSessionList` mounts inside a `SidebarProvider`. `ProjectHome` sends by itself (`useProjectHomeSend`: create the session with the prompt, open it); `beforeSend` gates it, `onSend` replaces it.
 

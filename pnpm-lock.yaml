@@ -281,9 +281,6 @@ importers:
       '@kortix/manifest-schema':
         specifier: workspace:*
         version: link:../../packages/manifest-schema
-      '@kortix/registry':
-        specifier: workspace:*
-        version: link:../../packages/registry
       '@kortix/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
@@ -434,9 +431,6 @@ importers:
       '@kortix/manifest-schema':
         specifier: workspace:*
         version: link:../../packages/manifest-schema
-      '@kortix/registry':
-        specifier: workspace:*
-        version: link:../../packages/registry
       '@kortix/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
@@ -1824,22 +1818,6 @@ importers:
       '@types/picomatch':
         specifier: ^4.0.2
         version: 4.0.3
-
-  packages/registry:
-    dependencies:
-      '@kortix/manifest-schema':
-        specifier: workspace:*
-        version: link:../manifest-schema
-    devDependencies:
-      '@types/bun':
-        specifier: ^1.1.0
-        version: 1.4.2
-      '@typescript/native-preview':
-        specifier: 7.0.0-dev.20260707.2
-        version: 7.0.0-dev.20260707.2
-      typescript:
-        specifier: ^5.0.0
-        version: 5.9.3
 
   packages/sdk:
     dependencies:

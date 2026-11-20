@@ -42,7 +42,6 @@ const FOOTER_SECTIONS: FooterSection[] = [
       // is content/docs/cli.mdx, routed at /docs/cli.
       { label: 'Guide', href: '/docs/guide' },
       { label: 'CLI', href: '/docs/cli' },
-      { label: 'Marketplace', href: '/marketplace' },
     ],
   },
   {

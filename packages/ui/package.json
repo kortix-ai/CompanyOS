@@ -119,7 +119,6 @@
     "./customize/shared/capability-page-shell": "./src/customize/shared/capability-page-shell.tsx",
     "./customize/shared/capability-skeleton": "./src/customize/shared/capability-skeleton.tsx",
     "./customize/shared/customize-tab-bar": "./src/customize/shared/customize-tab-bar.tsx",
-    "./customize/shared/entity/entity-files": "./src/customize/shared/entity/entity-files.ts",
     "./customize/shared/feature-gate-screen": "./src/customize/shared/feature-gate-screen.tsx",
     "./customize/shared/use-customize-prefetch": "./src/customize/shared/use-customize-prefetch.ts",
     "./customize/shared/with-search": "./src/customize/shared/with-search.ts",
@@ -319,7 +318,6 @@
     "./internal/lib/navigation/router-bridge": "./src/internal/lib/navigation/router-bridge.ts",
     "./internal/lib/onboarding/landing-destination": "./src/internal/lib/onboarding/landing-destination.ts",
     "./internal/lib/onboarding/last-project-cookie": "./src/internal/lib/onboarding/last-project-cookie.ts",
-    "./internal/lib/onboarding/provision-errors": "./src/internal/lib/onboarding/provision-errors.ts",
     "./internal/lib/onboarding/use-app-home": "./src/internal/lib/onboarding/use-app-home.ts",
     "./internal/lib/project-preamble": "./src/internal/lib/project-preamble.ts",
     "./internal/lib/promo-art": "./src/internal/lib/promo-art.ts",
@@ -544,9 +542,7 @@
     "./workspace/layout/sidebar-cookie": "./src/workspace/layout/sidebar-cookie.ts",
     "./workspace/new/account-param": "./src/workspace/new/account-param.ts",
     "./workspace/new/advanced-fields": "./src/workspace/new/advanced-fields.tsx",
-    "./workspace/new/clone-param": "./src/workspace/new/clone-param.ts",
     "./workspace/new/new-workspace-form": "./src/workspace/new/new-workspace-form.ts",
-    "./workspace/new/provision-new-workspace": "./src/workspace/new/provision-new-workspace.ts",
     "./workspace/new/source-param": "./src/workspace/new/source-param.ts",
     "./workspace/new/use-create-workspace": "./src/workspace/new/use-create-workspace.ts",
     "./workspace/new/use-project-quota": "./src/workspace/new/use-project-quota.ts",
@@ -968,10 +964,6 @@
       "./customize/shared/customize-tab-bar": {
         "types": "./dist/customize/shared/customize-tab-bar.d.ts",
         "import": "./dist/customize/shared/customize-tab-bar.js"
-      },
-      "./customize/shared/entity/entity-files": {
-        "types": "./dist/customize/shared/entity/entity-files.d.ts",
-        "import": "./dist/customize/shared/entity/entity-files.js"
       },
       "./customize/shared/feature-gate-screen": {
         "types": "./dist/customize/shared/feature-gate-screen.d.ts",
@@ -1762,10 +1754,6 @@
       "./internal/lib/onboarding/last-project-cookie": {
         "types": "./dist/internal/lib/onboarding/last-project-cookie.d.ts",
         "import": "./dist/internal/lib/onboarding/last-project-cookie.js"
-      },
-      "./internal/lib/onboarding/provision-errors": {
-        "types": "./dist/internal/lib/onboarding/provision-errors.d.ts",
-        "import": "./dist/internal/lib/onboarding/provision-errors.js"
       },
       "./internal/lib/onboarding/use-app-home": {
         "types": "./dist/internal/lib/onboarding/use-app-home.d.ts",
@@ -2645,17 +2633,9 @@
         "types": "./dist/workspace/new/advanced-fields.d.ts",
         "import": "./dist/workspace/new/advanced-fields.js"
       },
-      "./workspace/new/clone-param": {
-        "types": "./dist/workspace/new/clone-param.d.ts",
-        "import": "./dist/workspace/new/clone-param.js"
-      },
       "./workspace/new/new-workspace-form": {
         "types": "./dist/workspace/new/new-workspace-form.d.ts",
         "import": "./dist/workspace/new/new-workspace-form.js"
-      },
-      "./workspace/new/provision-new-workspace": {
-        "types": "./dist/workspace/new/provision-new-workspace.d.ts",
-        "import": "./dist/workspace/new/provision-new-workspace.js"
       },
       "./workspace/new/source-param": {
         "types": "./dist/workspace/new/source-param.d.ts",

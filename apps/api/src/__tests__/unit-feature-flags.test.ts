@@ -221,9 +221,18 @@ describe('resolveFeatureFlag — explicit override wins', () => {
     );
   });
 
-  test('marketplace defaults ON platform-wide and is turned off only explicitly', () => {
-    expect(resolveFeatureFlag({}, 'marketplace')).toBe(true);
-    expect(resolveFeatureFlag({ experimental: { marketplace: false } }, 'marketplace')).toBe(false);
+  test('shared_drives defaults ON platform-wide and is turned off only explicitly', () => {
+    expect(resolveFeatureFlag({}, 'shared_drives')).toBe(true);
+    expect(resolveFeatureFlag({ experimental: { shared_drives: false } }, 'shared_drives')).toBe(false);
+  });
+
+  test('marketplace withdrawn: the marketplace was removed and a stored override is inert', () => {
+    // 13 prod workspaces stored a value (11 true, 2 false) before 2026-11-20.
+    // It must not resurface as a key, a catalog row, or a gate.
+    expect(isFeatureFlagKey('marketplace')).toBe(false);
+    const metadata = { experimental: { marketplace: false } };
+    expect(Object.keys(resolveFeatureFlags(metadata))).not.toContain('marketplace');
+    expect(buildFeatureFlagCatalog(metadata).map((flag) => flag.key)).not.toContain('marketplace');
   });
 
   test('teams graduated: every project can connect Teams and a stored override is inert', () => {
@@ -260,8 +269,8 @@ describe('resolveFeatureFlag — explicit override wins', () => {
 
   test('non-boolean stored values are treated as "no override"', () => {
     for (const garbage of ['true', 1, 0, null, [], {}, 'yes']) {
-      expect(resolveFeatureFlag({ experimental: { marketplace: garbage } }, 'marketplace')).toBe(
-        resolveFeatureFlag({}, 'marketplace'),
+      expect(resolveFeatureFlag({ experimental: { shared_drives: garbage } }, 'shared_drives')).toBe(
+        resolveFeatureFlag({}, 'shared_drives'),
       );
     }
   });
@@ -269,7 +278,7 @@ describe('resolveFeatureFlag — explicit override wins', () => {
   test('a malformed experimental subtree never throws', () => {
     for (const metadata of [null, undefined, {}, { experimental: null }, { experimental: 'x' }, []]) {
       expect(typeof resolveFeatureFlag(metadata, 'reminders')).toBe('boolean');
-      expect(typeof resolveFeatureFlag(metadata, 'marketplace')).toBe('boolean');
+      expect(typeof resolveFeatureFlag(metadata, 'shared_drives')).toBe('boolean');
     }
   });
 });

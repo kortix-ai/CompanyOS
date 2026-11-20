@@ -54,7 +54,6 @@ const MARKETING_ROUTES = [
   '/download',
   '/enterprise',
   '/legal',
-  '/marketplace',
   '/pricing',
   '/security',
   '/self-hosted',
@@ -91,7 +90,7 @@ function isExactMarketingPath(pathname: string): boolean {
 // Pure marketing/promo routes that a self-host with the landing page disabled
 // (KORTIX_PUBLIC_DISABLE_LANDING_PAGE) should NOT serve — they bounce to the
 // app. Functional public routes (/auth, /docs, /legal,
-// /marketplace, /share, /download, /maintenance, …) stay reachable; only the
+// /share, /download, /maintenance, …) stay reachable; only the
 // marketing site itself is deactivated.
 const SELF_HOST_MARKETING_ONLY = [
   '/about',
@@ -178,7 +177,6 @@ const PUBLIC_ROUTES = [
   '/legal',
   '/api/auth',
   '/share', // Shared content should be public
-  '/marketplace', // Public read-only marketplace directory; installs still require auth
   '/secret-intake', // Agent-minted secret setup links — token-gated, MUST be openable with no login (e.g. from a Slack link)
   '/connect', // Agent-minted Pipedream Quick Connect links — token-gated, MUST be openable with no login (distinct from authed /connectors)
   '/master-login', // Master password admin login
@@ -284,7 +282,6 @@ const DESKTOP_ALLOWED_ROUTES = [
   '/capture',
   '/github',
   '/cli',
-  '/marketplace',
   '/maintenance',
   '/countryerror',
   '/debug',
@@ -701,7 +698,7 @@ export async function middleware(request: NextRequest) {
   // marketing surface is deactivated: the homepage and every marketing route
   // bounce straight to the app — authenticated users to /workspaces, everyone
   // else to /auth. Functional public routes (/docs, /legal,
-  // /marketplace, /share, …) are unaffected. Read via process.env directly —
+  // /share, …) are unaffected. Read via process.env directly —
   // NEXT_PUBLIC_ vars are inlined at build time, so in Docker containers they'd
   // carry the image's placeholder value; the runtime container env
   // (KORTIX_PUBLIC_/NEXT_PUBLIC_ set at `docker run`) is what must win here,

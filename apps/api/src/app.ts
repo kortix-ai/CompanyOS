@@ -47,7 +47,6 @@ import { edgeApp } from './edge/tls-check';
 // `app` before it settles.
 import { gitProxyApp } from './git-proxy';
 import { mountLlmGateway } from './llm-gateway/wire';
-import { marketplaceApp } from './marketplace';
 import { createMcpApp } from './mcp';
 import { oauthApp } from './oauth';
 import { opsApp } from './ops';
@@ -260,7 +259,6 @@ app.route('/v1/sessions', sessionsApp); // GET /v1/sessions/:sessionId — one s
 // falls back to app.fetch), so the mount binds it here instead of importing
 // the app back — that would cycle app.ts and inbound-dispatch.ts.
 app.route('/v1/mcp', createMcpApp((req) => dispatchInProcess(req, app)));
-app.route('/v1/marketplace', marketplaceApp); // /v1/marketplace — browse the registry catalog
 
 // /v1/skills — the kortix-managed system skills (how Kortix itself works), served
 // straight out of @kortix/starter so the text always matches this deploy. This is

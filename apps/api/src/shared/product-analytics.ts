@@ -44,7 +44,7 @@ export type ProductEvent =
   | 'user_signed_up'
   /** A CLI or device login completed. `method`. */
   | 'user_logged_in'
-  /** A project was created. `origin`: blank | template | marketplace | github_import. */
+  /** A project was created. `origin`: blank | template | github_import (`marketplace` until 2026-11-20). */
   | 'project_created'
   /** A person created a session (not a trigger, channel or agent). `source`. */
   | 'session_created'

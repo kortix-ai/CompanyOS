@@ -1286,8 +1286,8 @@ export function CommandPalette() {
   }, [allPaletteItems, hasQuery, debouncedQuery]);
 
   // No `flags` argument any more: Marketplace, Review and Voice were the only
-  // flag-gated rail rows and all three moved to `/workspaces/<id>/config`, whose
-  // own sub-nav composes them. Nothing left in the rail varies by flag.
+  // flag-gated rail rows and all three left the rail. Nothing left in the rail
+  // varies by flag.
   const chromeOffered = useChromeOffered(open);
   const allSettingsGroups = useMemo(
     () => settingsPaletteGroups({ hasProject: !!projectId, chromeOffered }, (key) => tSettingsRail(key as never)),

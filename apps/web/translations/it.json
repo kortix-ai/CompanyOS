@@ -25523,7 +25523,8 @@
     "open": "Aperta",
     "jump": "Vai alla risposta per #{number}",
     "unavailable": "Questa risposta non è disponibile nella cronologia caricata.",
-    "loadError": "Impossibile caricare la risposta. Riprova."
+    "loadError": "Impossibile caricare la risposta. Riprova.",
+    "openError": "Impossibile aprire la richiesta di modifica"
   },
   "agentCapabilities": {
     "skillsTitle": "Skill",
@@ -27481,7 +27482,7 @@
     "newSpace": "Nuovo spazio",
     "searchPlaceholder": "Cerca spazi",
     "emptyTitle": "Ancora nessuno spazio",
-    "emptyDescription": "Uno spazio raggruppa le sessioni di un progetto, cliente o argomento.",
+    "emptyDescription": "Uno spazio raggruppa le sessioni di un’area di lavoro, cliente o argomento.",
     "noResultsTitle": "Nessuno spazio corrisponde",
     "noResultsDescription": "Prova un altro nome.",
     "loadFailed": "Impossibile caricare gli spazi",

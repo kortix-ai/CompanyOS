@@ -29,7 +29,7 @@ describe('suggestSpaceIcon', () => {
     ['Hiring', 'Users'],
     ['Research', 'MagnifyingGlass'],
     ['ProductRoadmap', 'Cube'],
-  ])('%s -> %s', (name, glyph) => {
+  ] as const)('%s -> %s', (name, glyph) => {
     expect(suggestSpaceIcon(name).glyph.name).toBe(glyph);
   });
 

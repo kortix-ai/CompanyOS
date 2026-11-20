@@ -12,7 +12,7 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { platformConfig } from '../core/http/config';
 import { setWorkspaceSessionModel } from '../core/rest/projects-client/sessions';
-import { modelKeyToWire } from './use-model-store';
+import { modelKeyToWire, type ModelKey } from './use-model-store';
 import { qk } from './query-keys';
 import { useKortixRouteWorkspaceId } from './route-project';
 
@@ -45,14 +45,15 @@ export function useSessionModelSelection(
 
   const persist = useMutation({
     scope: { id: `session-model:${projectId}:${options.projectSessionId}` },
-    mutationFn: async (model: NonNullable<Parameters<RuntimeLocal['model']['set']>[0]>) => {
-      if (!projectId || !options.projectSessionId) return;
-      const result = await setWorkspaceSessionModel(projectId, options.projectSessionId, modelKeyToWire(model));
+    // The pick carries its own session and setter: a save that finishes after the
+    // thread navigated applies to the session it was picked in, never the new one.
+    mutationFn: async (pick: { projectId: string; projectSessionId: string; model: ModelKey; apply: RuntimeLocal['model']['set'] }) => {
+      const result = await setWorkspaceSessionModel(pick.projectId, pick.projectSessionId, modelKeyToWire(pick.model));
       if (result.push_failed) throw new Error(result.detail ?? 'The running session did not accept the model');
     },
-    onSuccess: (_result, model) => {
-      base.model.set(model, { recent: true });
-      void queryClient.invalidateQueries({ queryKey: qk.project.sessionsScope(projectId ?? '') });
+    onSuccess: (_result, pick) => {
+      pick.apply(pick.model, { recent: true });
+      void queryClient.invalidateQueries({ queryKey: qk.project.sessionsScope(pick.projectId) });
     },
     onError: (error) => {
       platformConfig().onToast?.('error', error.message);
@@ -65,7 +66,7 @@ export function useSessionModelSelection(
       ...base.model,
       set: (model, pickOptions) => {
         if (model && projectId && options.projectSessionId && pickOptions?.recent && !pickOptions.autoSeed) {
-          persist.mutate(model);
+          persist.mutate({ projectId, projectSessionId: options.projectSessionId, model, apply: base.model.set });
         } else {
           base.model.set(model, pickOptions);
         }

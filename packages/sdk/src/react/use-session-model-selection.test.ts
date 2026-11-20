@@ -24,8 +24,10 @@ let rejectWrite = false;
 const errors: string[] = [];
 // The thread keys runtime-local state by the runtime id; the API persists by the durable session id.
 let projectSessionId: string | undefined = 'synthetic-project-session';
+let runtimeSessionId = 'ses_synthetic_runtime';
+let heldWrite: Promise<void> | undefined;
 function Probe() {
-  selection = useSessionModelSelection({ sessionId: 'ses_synthetic_runtime', projectSessionId, providers: {
+  selection = useSessionModelSelection({ sessionId: runtimeSessionId, projectSessionId, providers: {
     all: [{ id: 'kortix', name: 'Kortix', source: 'custom', env: [], options: {}, models: { 'model-a': model('model-a'), 'model-b': model('model-b') } }],
     connected: ['kortix'], default: { kortix: 'model-a' },
   } });
@@ -40,6 +42,8 @@ afterEach(() => {
   errors.length = 0;
   rejectWrite = false;
   projectSessionId = 'synthetic-project-session';
+  runtimeSessionId = 'ses_synthetic_runtime';
+  heldWrite = undefined;
   runIdentityResets();
 });
 
@@ -49,6 +53,7 @@ function mockApi() {
     const request = new Request(input, init);
     if (request.method === 'PUT') {
       writes.push({ path: new URL(request.url).pathname, body: await request.json() });
+      await heldWrite;
       return rejectWrite
         ? Response.json({ error: 'Model selection refused' }, { status: 403 })
         : Response.json({ model: 'kortix/model-b', applied_live: true });
@@ -56,12 +61,18 @@ function mockApi() {
     return Response.json({ accountDefault: null, projectDefault: null, platformDefault: 'kortix/model-a', agentDefaults: {}, freeTier: false });
   }, { preconnect: originalFetch.preconnect });
 }
+function tree(client: QueryClient) {
+  return createElement(QueryClientProvider, { client }, createElement(KortixWorkspaceProvider, { projectId: 'synthetic-project' }, createElement(Probe)));
+}
 async function mount() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  await act(async () => {
-    root = create(createElement(QueryClientProvider, { client }, createElement(KortixWorkspaceProvider, { projectId: 'synthetic-project' }, createElement(Probe))));
-  });
+  await act(async () => { root = create(tree(client)); });
   return client;
+}
+async function navigate(client: QueryClient, runtimeId: string, durableId: string) {
+  runtimeSessionId = runtimeId;
+  projectSessionId = durableId;
+  await act(async () => { root?.update(tree(client)); });
 }
 
 test('an intentional composer pick writes the durable session model API as the CLI does; automatic seeds do not', async () => {
@@ -85,6 +96,23 @@ test('a thread with no durable session id (a sub-agent) keeps the pick local and
   const client = await mount();
   await act(async () => { selection?.model.set({ providerID: 'kortix', modelID: 'model-b' }, { recent: true }); });
   expect(writes).toEqual([]);
+  expect(selection?.model.sendKey).toEqual({ providerID: 'kortix', modelID: 'model-b' });
+  client.clear();
+});
+
+test('a save that finishes after navigating to another session applies to the session it was picked in', async () => {
+  mockApi();
+  let releaseWrite = () => {};
+  heldWrite = new Promise((resolve) => { releaseWrite = resolve; });
+  const client = await mount();
+  await act(async () => { selection?.model.set({ providerID: 'kortix', modelID: 'model-b' }, { recent: true }); });
+  expect(writes).toEqual([{ path: '/v1/workspaces/synthetic-project/sessions/synthetic-project-session/model', body: { model: 'model-b' } }]);
+  await navigate(client, 'ses_synthetic_other_runtime', 'synthetic-other-project-session');
+  await act(async () => { selection?.model.set({ providerID: 'kortix', modelID: 'model-a' }); });
+  await act(async () => { releaseWrite(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+  expect(client.getMutationCache().getAll().map((mutation) => mutation.state.status)).toEqual(['success']);
+  expect(selection?.model.sendKey).toEqual({ providerID: 'kortix', modelID: 'model-a' });
+  await navigate(client, 'ses_synthetic_runtime', 'synthetic-project-session');
   expect(selection?.model.sendKey).toEqual({ providerID: 'kortix', modelID: 'model-b' });
   client.clear();
 });

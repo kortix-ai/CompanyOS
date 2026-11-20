@@ -500,6 +500,22 @@ describe('tabRoute', () => {
     expect(group('settings/x')).toBe('customize:general');
   });
 
+  test('a shared change-request link belongs to the Review tab it redirects to', () => {
+    const group = (rest: string) => pathGroup(`/workspaces/${P}/${rest}`, P);
+    expect(tabRoute(`/workspaces/${P}/change-requests/12`, P)).toEqual({ kind: 'page', page: 'review' });
+    expect(group('change-requests/12?tab=files')).toBe(group('review?id=cr:c1'));
+  });
+
+  test('one Space (session group) is its own tab, apart from a kortix.yaml space', () => {
+    const group = (rest: string) => pathGroup(`/workspaces/${P}/${rest}`, P);
+    expect(tabRoute(`/workspaces/${P}/space/g%201`, P)).toEqual({
+      kind: 'sessionSpace',
+      groupId: 'g 1',
+    });
+    expect(group('space/g1')).not.toBe(group('space/g2'));
+    expect(group('space/g1')).not.toBe(group('spaces/g1'));
+  });
+
   test('a page below a settings section belongs to that section', () => {
     const group = (rest: string) => pathGroup(`/workspaces/${P}/${rest}`, P);
     expect(group('admin/agents/kortix')).toBe(group('admin/agents'));

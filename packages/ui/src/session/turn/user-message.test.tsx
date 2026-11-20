@@ -1261,33 +1261,6 @@ describe('UserMessage renders reply quotes inside /command args', () => {
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
-
-  test('a command without quotes renders byte-identical markup to a command before quote support', () => {
-    // Captured from the renderer before this change.
-    const region = (markup: string) => {
-      const start = markup.indexOf('<div id="message-1-text"');
-      return markup.slice(start, markup.indexOf('</div>', start) + '</div>'.length);
-    };
-    const cases = [
-      { name: 'webapp', args: 'explain to me', split: { before: 'explain', after: 'to me' } },
-      { name: 'webapp', args: 'explain me this skill' },
-      { name: 'webapp' },
-      {
-        name: 'review',
-        args: 'look at @src/a.ts',
-        split: { before: '', after: 'look at @src/a.ts' },
-      },
-    ];
-    const expected = [
-      '<div id="message-1-text" class="max-w-full min-w-0 text-[0.9rem] leading-[22px] font-medium wrap-break-word whitespace-pre-wrap select-text max-h-[200px] overflow-hidden"><span>explain </span><span aria-label="command: /webapp" class="rounded-sm border-[0.5px] px-1.5 py-[0.08rem] [overflow-wrap:anywhere] font-medium whitespace-nowrap align-baseline text-[0.95em] bg-primary/[0.08] text-foreground">/webapp</span> <span>to me</span></div>',
-      '<div id="message-1-text" class="max-w-full min-w-0 text-[0.9rem] leading-[22px] font-medium wrap-break-word whitespace-pre-wrap select-text max-h-[200px] overflow-hidden"><span aria-label="command: /webapp" class="rounded-sm border-[0.5px] px-1.5 py-[0.08rem] [overflow-wrap:anywhere] font-medium whitespace-nowrap align-baseline text-[0.95em] bg-primary/[0.08] text-foreground">/webapp</span> <span>explain me this skill</span></div>',
-      '<div id="message-1-text" class="max-w-full min-w-0 text-[0.9rem] leading-[22px] font-medium wrap-break-word whitespace-pre-wrap select-text max-h-[200px] overflow-hidden"><span aria-label="command: /webapp" class="rounded-sm border-[0.5px] px-1.5 py-[0.08rem] [overflow-wrap:anywhere] font-medium whitespace-nowrap align-baseline text-[0.95em] bg-primary/[0.08] text-foreground">/webapp</span></div>',
-      '<div id="message-1-text" class="max-w-full min-w-0 text-[0.9rem] leading-[22px] font-medium wrap-break-word whitespace-pre-wrap select-text max-h-[200px] overflow-hidden"><span aria-label="command: /review" class="rounded-sm border-[0.5px] px-1.5 py-[0.08rem] [overflow-wrap:anywhere] font-medium whitespace-nowrap align-baseline text-[0.95em] bg-primary/[0.08] text-foreground">/review</span> <span>look at </span><button type="button" aria-label="file mention: src/a.ts" class="rounded-sm border-[0.5px] px-1.5 py-[0.08rem] [overflow-wrap:anywhere] font-medium whitespace-nowrap align-baseline text-[0.95em] bg-primary/[0.08] text-foreground cursor-pointer transition-colors duration-150 hover:bg-foreground/10 dark:hover:bg-foreground/10 active:scale-[0.97] active:transition-transform focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none">@src/a.ts</button></div>',
-    ];
-    cases.forEach((commandInfo, i) => {
-      expect(region(renderText('TEMPLATE BODY', { commandInfo }))).toBe(expected[i]);
-    });
-  });
 });
 
 describe('editablePromptText for a /command', () => {

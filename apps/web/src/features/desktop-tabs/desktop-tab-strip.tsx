@@ -9,8 +9,10 @@ import {
 import {
   useArtifact,
   useCachedWorkspaceSessions,
+  useFeatureFlag,
   useProjectApps,
   useProjectSession,
+  useWorkspaceSessionGroups,
 } from '@kortix/sdk/react';
 import { cn } from '@kortix/ui';
 import { Button } from '@kortix/ui/button';
@@ -41,6 +43,7 @@ import {
 } from '@kortix/ui/session/actions/session-label';
 import { SessionStatusMark } from '@kortix/ui/session/list/session-status-mark';
 import { useSidebar } from '@kortix/ui/sidebar';
+import { SpaceIconBare } from '@kortix/ui/workspace/session-spaces/space-icon';
 import { SessionBriefContent } from '@kortix/ui/workspace/sidebar/session-brief-hover-card';
 import {
   AppWindowIcon,
@@ -76,6 +79,7 @@ import {
   RepeatIcon,
   ShieldCheckIcon,
   SquaresFourIcon,
+  StackIcon,
   TargetIcon,
   TimerIcon,
   TrayIcon,
@@ -860,7 +864,7 @@ function Keys({ keys }: { keys: string[] }) {
 
 /* ─── Icon + title ────────────────────────────────────────────────────────── */
 
-function TabLabel({
+export function TabLabel({
   route,
   projectId,
   pinned,
@@ -904,6 +908,11 @@ function TabLabelBody({
   }
   if (route?.kind === 'app') {
     return <AppLabel projectId={projectId} appId={route.appId} pinned={pinned} t={t} />;
+  }
+  if (route?.kind === 'sessionSpace') {
+    return (
+      <SessionSpaceLabel projectId={projectId} groupId={route.groupId} pinned={pinned} t={t} />
+    );
   }
   if (route?.kind === 'agent') {
     return (
@@ -1017,6 +1026,43 @@ function AppLabel({
       pinned={pinned}
       title={app?.name ?? t('pages.apps')}
       icon={<AppWindowIcon className="size-3.5 shrink-0" />}
+    />
+  );
+}
+
+/** One Space: its name and icon, as the sidebar shows it (the same cached list). */
+function SessionSpaceLabel({
+  projectId,
+  groupId,
+  pinned,
+  t,
+}: {
+  projectId: string;
+  groupId: string;
+  pinned: boolean;
+  t: Translate;
+}) {
+  const tSpaces = useTranslations('sessionSpaces');
+  const flag = useFeatureFlag(projectId, 'session_groups');
+  const groups = useWorkspaceSessionGroups(projectId, { enabled: flag.enabled });
+  const space = groups.data?.find((group) => group.group_id === groupId);
+  if (space) {
+    return (
+      <Label
+        pinned={pinned}
+        title={space.name}
+        icon={<SpaceIconBare space={space} className="size-3.5" />}
+      />
+    );
+  }
+  // Loaded, and the space is not there: deleted, or no longer shared with you.
+  const gone = groups.isSuccess;
+  return (
+    <Label
+      pinned={pinned}
+      title={gone ? t('unavailable') : tSpaces('title')}
+      pending={gone}
+      icon={<StackIcon className="size-3.5 shrink-0" />}
     />
   );
 }

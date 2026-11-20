@@ -26,7 +26,8 @@
  * signed-in person's recording, and any recording of a private or sign-in
  * page, hides every input and all text and text-bearing attributes
  * (`replayMasked`) except our own interface text (`uiText`, built from the
- * translation catalog the page renders, before init).
+ * translation catalog the page renders, the session screen's labels
+ * (`replay-labels.ts`) and the locale's relative times, before init).
  * Autocapture collects element text everywhere; on private pages the
  * `before_send` scrubber keeps only interface text and removes the rest.
  */
@@ -54,6 +55,7 @@ import {
   scrubEvent,
   shouldRecordSession,
 } from './posthog-config';
+import { SESSION_LABELS } from './replay-labels';
 import { UiTextIndex } from './replay-text';
 
 type PostHog = (typeof import('posthog-js/dist/module.no-external'))['default'];
@@ -78,11 +80,17 @@ function pageLocale(): Locale {
   return (locales as readonly string[]).includes(lang) ? (lang as Locale) : defaultLocale;
 }
 
-/** Adds the page's catalog to `uiText` once per locale. The catalog is already loaded for rendering. */
+/**
+ * Adds the page's catalog and relative times to `uiText` once per locale, and
+ * the session screen's English labels once. The catalog is already loaded for
+ * rendering.
+ */
 async function indexPageLocale(): Promise<void> {
   const locale = pageLocale();
   if (indexedLocales.has(locale)) return;
+  if (indexedLocales.size === 0) uiText.addCatalog(SESSION_LABELS, 'en');
   indexedLocales.add(locale);
+  uiText.addRelativeTimes(locale);
   try {
     uiText.addCatalog(await loadClientCatalog(locale), locale);
   } catch {

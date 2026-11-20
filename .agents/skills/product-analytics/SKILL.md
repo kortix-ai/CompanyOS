@@ -70,13 +70,19 @@ person.
      A component that must never appear even as a shape takes the
      `ph-no-capture` class. Page URLs follow rule 5.
    - Interface text (`UiTextIndex`, `apps/web/src/lib/analytics/replay-text.ts`):
-     every string of the translation catalog the page renders, plus the
-     provider names. Each placeholder may stand only for a number:
-     `{count} models` shows "14 models" and hides "Acme models". Text with no
-     letter never shows. Parts joined by ` · ` or ` — ` are judged one by one.
-     Everything else hides, so a new screen with customer content is hidden
-     without a mark. Text that is not in the catalog (model names, a provider
-     name that comes from the API) stays hidden. Message and document text
+     every string of the translation catalog the page renders, the provider
+     names, the locale's relative times ("6 minutes ago") and the session
+     screen's English labels that code builds outside the catalog
+     (`replay-labels.ts`: step summaries, thought rows, tool verbs). Each
+     placeholder may stand only for a number: `{count} models` shows
+     "14 models" and hides "Acme models". Text with no letter never shows.
+     Parts joined by ` · ` or ` — ` are judged one by one; clauses joined by
+     `, ` show only when every clause is ours. Everything else hides, so a new
+     screen with customer content is hidden without a mark. A row that names
+     a file or a command renders the verb in its own text node, so the verb
+     shows and the object hides. Text that is not ours (model names and
+     provider names that come from the API) stays hidden. When a replay of the
+     session screen hides a label of ours, add it to `replay-labels.ts`. Message and document text
      never shows, even where a word equals our text: `.kortix-markdown` and
      `[data-replay-content]` (the user message bubble), `REPLAY_CONTENT_SELECTOR`.
      Mark other text a person or an agent wrote with `data-replay-content`. A click event on a

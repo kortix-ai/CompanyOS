@@ -5,7 +5,7 @@
   "marketing:developers": "2026-11-11T11:32:50.000Z",
   "marketing:enterprise": "2026-11-11T11:32:50.000Z",
   "marketing:pricing": "2026-11-11T12:02:49.000Z",
-  "marketing:legal": "2026-11-19T18:19:19.000Z",
+  "marketing:legal": "2026-11-20T14:27:26.000Z",
   "marketing:security": "2026-11-11T11:32:50.000Z",
   "marketing:self-hosted": "2026-11-11T11:32:50.000Z",
   "marketing:services": "2026-11-03T02:33:22.000Z",
@@ -23,11 +23,11 @@
   "marketing:mobile": "2026-11-11T11:32:50.000Z",
   "marketing:slack": "2026-11-11T11:32:50.000Z",
   "marketing:teams": "2026-11-11T11:32:50.000Z",
-  "docs:audit-actions": "2026-11-18T17:21:45.000Z",
+  "docs:audit-actions": "2026-11-20T15:04:15.000Z",
   "docs:capture": "2026-11-11T00:19:40.000Z",
   "docs:capture/rollout": "2026-11-10T19:37:22.000Z",
   "docs:connect/chrome": "2026-11-07T05:36:02.000Z",
-  "docs:developers": "2026-11-20T08:48:13.000Z",
-  "docs:guide": "2026-11-20T04:32:50.000Z",
+  "docs:developers": "2026-11-20T15:04:15.000Z",
+  "docs:guide": "2026-11-20T15:04:15.000Z",
   "docs:index": "2026-11-07T05:36:02.000Z"
 }

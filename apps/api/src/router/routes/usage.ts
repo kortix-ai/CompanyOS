@@ -8,6 +8,7 @@ import { assertAuthorized, listAccessible } from '../../iam/authorize';
 import { visibleDirectory } from '../../iam/directory-visibility';
 import { actorOf } from '../../middleware/actor';
 import { combinedAuth } from '../../middleware/auth';
+import { createUsageRollupRateLimitMiddleware } from '../../middleware/rate-limit';
 import { rejectSandboxTokens } from '../../middleware/reject-sandbox-tokens';
 import { auth, errors, json, makeOpenApiApp } from '../../openapi';
 import { assertProjectCapability, loadProjectForUser } from '../../projects/lib/access';
@@ -49,6 +50,13 @@ usageApp.use('*', combinedAuth);
 // reason to read account-wide usage/cost rollups — without this they'd see
 // every project's spend on multi-user accounts. See reject-sandbox-tokens.ts.
 usageApp.use('*', rejectSandboxTokens);
+// The heavy account-wide rollups hold a DB pool connection for the whole query:
+// one flooding caller must not drain the pool for every other route (KRTX-4895).
+// `/session-costs/{sessionId}` is a cheap single-record read and stays unguarded.
+const usageRollupGuard = createUsageRollupRateLimitMiddleware();
+for (const path of ['/', '/session-costs', '/cost-by-project', '/cost-summary']) {
+  usageApp.use(path, usageRollupGuard);
+}
 
 /**
  * The workspace a workspace-bound token reads usage for: its own, always.

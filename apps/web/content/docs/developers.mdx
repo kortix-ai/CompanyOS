@@ -1115,6 +1115,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 | --- | --- | --- | --- |
 | `imports` | list | — | YAML files or folders whose collections merge into this file. See [imports](#imports). |
 | `default_agent` | string | — | The agent a session or trigger runs when it names none, and the agent My Kortix starts when it names none. A declared agent that is enabled and whose `mode` is `primary` or `all`, or `mykortix` when `builtin_agents.my_kortix` is true. Omitted: My Kortix when it is on. |
+| `trigger_session_readers` | map | — | Shared additive reader default for newly created trigger sessions. Existing sharing and IAM are unchanged. No implicit backfill. |
 | `project` | map | — | `name`: the project's name. A push that changes it renames the project, and a rename in Kortix commits it here. `description`: text for people who read the repository. |
 | `env` | map | — | The secret names the project expects. Values live in Secrets, never in this file. See [env keys](#env-keys). |
 | `sandbox` | map | the platform image | Sandbox templates and the project's default template. See [sandbox keys](#sandbox-keys). |
@@ -1244,6 +1245,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
+| `session_readers` | map | — | Additive read-only policy for new sessions; overrides trigger_session_readers in full. |
 | `slug` | string | required | Unique. Lowercase letters, digits, `-` and `_`, at most 128 characters. |
 | `name` | string | the slug | The label in the dashboard. |
 | `enabled` | boolean | `true` | `false`: the trigger does not fire. |
@@ -6525,6 +6527,28 @@ await p.secrets.setGitCredential({ token: process.env.GIT_TOKEN! });
 ```
 
 ### Run triggers
+
+A workspace can declare an additive read-only default for newly created trigger sessions:
+
+```yaml
+trigger_session_readers:
+  humans: members
+  agents: []
+triggers:
+  - slug: daily-report
+    session_readers: { humans: none, agents: [] }
+    on: { cron: "0 0 9 * * *" }
+    run: { prompt: "Write the daily report." }
+```
+
+`session_readers` replaces the shared default in full. Omit it to inherit; an explicit empty map grants nobody. `humans: members` checks current workspace membership on each request. Removing a member removes this reader standing. `agents` lists exact agent names, never wildcards; no agent, including My Kortix, receives an implicit grant. Declaring an agent does not grant it workspace/API permissions: those gates still apply independently.
+
+Reconcile stores the normalized policy for later session creation. It does not reshare existing sessions, reused sessions or pinned targets. No bulk backfill is implicit or exposed by this feature; a later authorized migration must select and audit its targets explicitly. A session retains the reader policy stamped at creation. A later explicit session-sharing choice clears that stamp, including a choice of private. DMs never receive additive readers; private-channel membership and deleted-session gates still apply.
+
+Reader standing permits session inventory, session details, saved log/transcript and authorized trigger-run history reads only. It does not permit prompts, start/restart/stop/delete, configuration or scope changes, sharing, approval answers or runtime proxy access. Existing independent owner/manager privileges remain unchanged.
+
+In trigger history, `status: fired` means delivery, not a successful agent turn. Inspect `run_status`, `run_error` and `ended_at` for terminal execution. Hidden runs are not counted as successes: an empty page with `next_cursor` can still have older authorized records.
+
 
 A trigger starts a session, or calls an App, on a schedule, a webhook or an App event. `p.triggers.create(input)` returns the whole trigger list (`{ triggers, errors, triggers_paused }`).
 

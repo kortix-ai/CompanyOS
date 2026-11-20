@@ -88,6 +88,8 @@ export interface GitTriggerSpec {
    * when unset: the platform default (60) applies.
    */
   maxRunsPerHour?: number;
+  /** Include manual fires in atomically reserved run caps. */
+  hardRunCaps?: boolean;
   /** Any trigger type (`max_runs_per_day`): runs started in a UTC day. Omitted when unset: no daily cap. */
   maxRunsPerDay?: number;
   /**

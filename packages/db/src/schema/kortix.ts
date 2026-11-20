@@ -2899,6 +2899,18 @@ export const projectMonitorBoxes = kortixSchema.table(
   ],
 );
 
+/** Durable reservations serialize hard run caps across every firing replica. */
+export const projectTriggerAdmissions = kortixSchema.table(
+  'project_trigger_admissions',
+  {
+    admissionId: uuid('admission_id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id').notNull().references(() => projects.projectId, { onDelete: 'cascade' }),
+    slug: varchar('slug', { length: 128 }).notNull(),
+    admittedAt: timestamp('admitted_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('idx_trigger_admissions_cap').on(table.projectId, table.slug, table.admittedAt)],
+).enableRLS();
+
 /**
  * Durable execution queue for materialized cron slots.
  *

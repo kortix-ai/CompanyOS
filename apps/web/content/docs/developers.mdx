@@ -1250,6 +1250,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 | `name` | string | the slug | The label in the dashboard. |
 | `enabled` | boolean | `true` | `false`: the trigger does not fire. |
 | `filter` | map | — | Payload path → a value (equals), or one operator: `not`, `in`, `exists`, `prefix`, `not_prefix`. A fire runs only when every path matches. |
+| `hard_run_caps` | boolean | `false` | Reserve each attempt atomically before dispatch, including manual fires. Failed attempts count. No implicit manual override. |
 | `max_runs_per_hour` | integer, 1 or more | `60` | Runs the trigger starts in any 60 minutes. |
 | `max_runs_per_day` | integer, 1 or more | — | Runs the trigger starts in a UTC day. |
 | `max_lateness` | string | — | Schedules only, `60s` or more. A missed fire later than this does not run. |

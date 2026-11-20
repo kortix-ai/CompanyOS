@@ -183,6 +183,7 @@ export function ComposerChatInput({
     providers,
     config,
     sessionId,
+    projectSessionId: sessionId,
     boundAgentName,
     defaultAgentName: startAgent,
     // A new workspace chat remembers the person's pick and starts the next one

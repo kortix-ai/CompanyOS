@@ -147,7 +147,7 @@ export function listGeneralKnowledgeWorkerSkills(): string[] {
  * ordering — both the API and CLI rely on that.
  */
 export function getStarterFiles(vars: StarterVars): StarterFile[] {
-  const resolvedVars: Required<StarterVars> = {
+  const resolvedVars = {
     projectName: vars.projectName,
     repoFullName: vars.repoFullName ?? 'your-org/your-repo',
     template: normalizeStarterTemplateId(vars.template),
@@ -166,7 +166,7 @@ export function getStarterFiles(vars: StarterVars): StarterFile[] {
   const byPath = new Map<string, StarterFile>();
   for (const root of roots) {
     for (const raw of rawFilesForRoot(root.name, root.dir)) {
-      byPath.set(raw.path, { path: raw.path, content: interpolate(raw.content, resolvedVars) });
+      byPath.set(raw.path, { path: raw.path, content: interpolateVars(raw.content, resolvedVars) });
     }
   }
 
@@ -308,10 +308,6 @@ export function interpolateVars(input: string, vars: Record<string, string>): st
     if (name in vars) return vars[name]!;
     return match; // leave unknown placeholders intact
   });
-}
-
-function interpolate(input: string, vars: Required<StarterVars>): string {
-  return interpolateVars(input, vars as unknown as Record<string, string>);
 }
 
 function walk(root: string): string[] {

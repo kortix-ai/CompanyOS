@@ -87,7 +87,7 @@ triggers:
     name: "Sales: a new email in the sales inbox"
     enabled: false
     on:
-      event: GMAIL_NEW_GMAIL_MESSAGE
+      event: gmail.message.received
       connector: gmail
     max_runs_per_hour: 20
     max_runs_per_day: 200

@@ -416,6 +416,8 @@ await apps.access.update(app.app_id, {
 const browserSession = await apps.access.session(app.app_id);
 ```
 
+Deployment inputs accept optional `source_commit`, `source_ref`, and `source_force` provenance. Deployment reads return these fields. `kortix apps deploy` records the checkout HEAD and branch, warns for dirty files, and refuses before upload when HEAD does not contain the live commit. Merge the live commit first, or use `--force` (recorded on the deployment). Legacy releases, non-git sources, and commits still unknown after fetching skip this CLI check. This is a client-side ancestry check, not server-side serialization of concurrent deploys.
+
 Access modes are `private`, `project`, `restricted`, `public`, and `password`. An access session exchanges a five-minute URL for an eight-hour, host-only cookie. A stopped or idle App resumes on the same public request. Transient machine requests receive `202 app_starting` and `Retry-After: 3`.
 
 Branch on `app.capabilities` (`machines`, `scale`, `exec`, `volumes`, `snapshots`, `static`, …). A call for a capability the App lacks answers `409 app_capability_unsupported`. A backend (database, Convex) is an ordinary server App with a volume; there is no backend type.

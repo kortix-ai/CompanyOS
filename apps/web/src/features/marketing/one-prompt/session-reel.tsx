@@ -1,13 +1,12 @@
 'use client';
 
-import { Button } from '@kortix/ui/button';
+import { FULL_COLOR_LOGOS } from '@/features/marketing/landing-sections/works-with-logos';
 import { ChainOfThought } from '@kortix/ui/chain-of-thought';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@kortix/ui/dropdown-menu';
 import { Disclosure, DisclosureContent, DisclosureTrigger } from '@kortix/ui/disclosure';
 import { Claude } from '@kortix/ui/internal/icons/claude';
 import { TextShimmer } from '@kortix/ui/text-shimmer';
 import { cn } from '@kortix/ui';
-import { ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, CaretDownIcon, CaretRightIcon, PaperclipIcon } from '@phosphor-icons/react';
+import { ArrowLeftIcon, ArrowRightIcon, CaretRightIcon, ClockIcon, LightningIcon, TerminalWindowIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 
 import { sessionPool } from './agent-sessions';
@@ -241,7 +240,7 @@ function ReelArrow({ label, onClick, children }: { label: string; onClick: () =>
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="text-muted-foreground hover:text-foreground hover:bg-accent inline-flex size-9 items-center justify-center rounded-md transition-colors"
+      className="text-muted-foreground hover:text-foreground hover:bg-accent hit-area-1 inline-flex size-9 items-center justify-center rounded-md transition-colors"
     >
       {children}
     </button>
@@ -291,8 +290,8 @@ function WorkFold({ run, working }: { run: HeroRun; working: boolean }) {
   );
 }
 
-/** Where one run's panel stands: the session it plays, its beat, and what the reader sent it. */
-type Play = { run: HeroRun; beat: number; round: number; sent: Array<{ message: string; to: string }>; working: boolean };
+/** Where one run's panel stands: the session it plays and its beat. */
+type Play = { run: HeroRun; beat: number; round: number; working: boolean };
 
 /**
  * One run's clock. It plays the run's sessions beat by beat and, when one
@@ -303,14 +302,15 @@ function useRunPlay(first: HeroRun, live: boolean, delay: number, still: boolean
   const pool = useMemo(() => sessionPool(first), [first]);
   const [index, setIndex] = useState(0);
   const [round, setRound] = useState(0);
-  const [beat, setBeat] = useState(0);
+  // The first session renders finished, so nothing builds up on load; the next ones play beat by beat.
+  const [beat, setBeat] = useState(LAST_BEAT);
   const [held, setHeld] = useState(false);
-  const [sent, setSent] = useState<Play['sent']>([]);
-  const playing = live && !still && !held && sent.length === 0;
+  const playing = live && !still && !held;
 
   useEffect(() => {
     if (!playing) return;
-    const wait = round === 0 && beat === 0 ? delay + BEATS_MS[0]! : BEATS_MS[Math.min(beat, LAST_BEAT - 1)]!;
+    const hold = BEATS_MS[Math.min(beat, LAST_BEAT - 1)]!;
+    const wait = round === 0 && beat === LAST_BEAT ? delay + hold : hold;
     const id = setTimeout(() => {
       if (beat < LAST_BEAT) {
         setBeat(beat + 1);
@@ -327,13 +327,11 @@ function useRunPlay(first: HeroRun, live: boolean, delay: number, still: boolean
     run: pool[index] ?? first,
     beat: still ? LAST_BEAT : beat,
     round,
-    sent,
     working: playing && beat === 2,
   };
   return {
     play,
     hold: setHeld,
-    send: (message: string, to: string) => setSent((list) => [...list, { message, to }]),
   };
 }
 
@@ -346,7 +344,7 @@ function RunPanels({ run, index, count, pos, live, still, instant }: { run: Hero
   const slots = [0, 1, 2].map((copy) => copy * count + index);
   const drawn = (slot: number) => slot >= pos - DRAW_BEFORE && slot <= pos + DRAW_AFTER;
   // The clock runs only while one of the run's copies is drawn.
-  const { play, hold, send } = useRunPlay(run, live && slots.some(drawn), index * STAGGER_MS, still);
+  const { play, hold } = useRunPlay(run, live && slots.some(drawn), index * STAGGER_MS, still);
   // The window is narrower than one copy of the list, so at most one copy is drawn. It is one
   // element whose `order` moves: the jump back to the middle copy never remounts it.
   const shown = slots.find(drawn);
@@ -357,19 +355,42 @@ function RunPanels({ run, index, count, pos, live, still, instant }: { run: Hero
         .map((slot) => (
           <div key={slot} aria-hidden style={{ width: PANEL, order: slot }} className="shrink-0" />
         ))}
-      {shown === undefined ? null : <SessionPanel key="panel" order={shown} run={play.run} play={play} instant={instant} onHold={hold} onSend={send} />}
+      {shown === undefined ? null : <SessionPanel key="panel" order={shown} run={play.run} play={play} instant={instant} onHold={hold} />}
     </>
   );
 }
 
-/** One session window: its header, the conversation and a reply box. */
+/**
+ * The mark of what started a run: the integration's logo as a flat glyph in
+ * the theme ink (the site's logo set), a clock for a schedule, a terminal for
+ * the setup prompt, a bolt for any other event.
+ */
+function TriggerMark({ via, terminal }: { via?: string; terminal: boolean }) {
+  const glyph = 'text-muted-foreground size-4 shrink-0';
+  if (terminal) return <TerminalWindowIcon aria-hidden className={glyph} />;
+  if (via === 'schedule') return <ClockIcon aria-hidden className={glyph} />;
+  if (!via) return <LightningIcon aria-hidden className={glyph} />;
+  // The brand's own colors where a color file exists; a one-color mark (GitHub) stays white.
+  if (FULL_COLOR_LOGOS.has(via)) {
+    // eslint-disable-next-line @next/next/no-img-element -- a 16px static SVG; next/image adds nothing here
+    return <img src={`/media/landing/logos/color/${via}.svg`} alt="" width={16} height={16} className="size-4 shrink-0" />;
+  }
+  return (
+    <span
+      aria-hidden
+      className="bg-foreground size-4 shrink-0"
+      style={{ maskImage: `url(/media/landing/logos/${via}.svg)`, maskSize: 'contain', maskRepeat: 'no-repeat', maskPosition: 'center' }}
+    />
+  );
+}
+
+/** One session window: what started it, the agent and the conversation. */
 function SessionPanel({
   order,
   run,
   play,
   instant,
   onHold,
-  onSend,
 }: {
   /** The panel's slot in the tripled list. */
   order: number;
@@ -378,15 +399,9 @@ function SessionPanel({
   play: Play;
   instant: boolean;
   onHold: (held: boolean) => void;
-  onSend: (message: string, to: string) => void;
 }) {
-  const { beat, round, sent, working } = play;
-  const agent = run.host.kind === 'claude-code' ? 'kortix' : run.host.slug;
-  const end = useRef<HTMLDivElement>(null);
+  const { beat, round, working } = play;
   const shownBeat = beat;
-  useEffect(() => {
-    if (sent.length) end.current?.scrollIntoView({ block: 'nearest' });
-  }, [sent.length]);
   return (
     <article
       style={{ width: PANEL, order }}
@@ -397,34 +412,32 @@ function SessionPanel({
         if (!event.currentTarget.contains(event.relatedTarget)) onHold(false);
       }}
       className={cn(
-        'bg-card border-border flex h-[520px] shrink-0 flex-col overflow-hidden rounded-xl border',
+        'bg-card border-border flex h-108 shrink-0 flex-col overflow-hidden rounded-xl border',
       )}
     >
-      <header className="flex h-16 shrink-0 items-center justify-between gap-3 px-4">
-        <div className="flex min-w-0 items-center gap-2.5">
+      {/* What started the run, first: most runs are started by an integration, not by a person typing. */}
+      <div className="border-border flex h-11 shrink-0 items-center gap-2.5 border-b px-4">
+        <TriggerMark via={run.via} terminal={run.host.kind === 'claude-code'} />
+        <span className="text-foreground min-w-0 truncate text-sm font-medium">{run.source}</span>
+        {/* Who picked it up, at the row's end. */}
+        <span className="ml-auto flex shrink-0 items-center gap-2">
           {run.host.kind === 'claude-code' ? (
-            <span className="border-border inline-flex size-7 shrink-0 items-center justify-center rounded-md border">
-              <Claude className="size-4" />
+            <span className="border-border inline-flex size-5 shrink-0 items-center justify-center rounded-sm border">
+              <Claude className="size-3" />
             </span>
           ) : (
-            <AgentTile slug={run.host.slug} size={21} />
+            <AgentTile slug={run.host.slug} />
           )}
-          <span className="text-foreground truncate text-sm font-medium">{run.host.kind === 'claude-code' ? 'Claude Code' : run.host.name}</span>
-        </div>
-        <span className="border-border text-muted-foreground shrink-0 truncate rounded-md border px-2 py-0.5 text-xs">
-          {run.source}
+          <span className="text-muted-foreground text-sm">{run.host.kind === 'claude-code' ? 'Claude Code' : run.host.name}</span>
         </span>
-      </header>
+      </div>
 
-      {/* The conversation scrolls on its own only once the reader opened a fold or sent a message: those
-          can be longer than the window. Until then it is no scroll container, so a page scroll over the reel
-          never stops on it. No `overscroll-contain`: a trackpad gesture latches onto any contained scroller,
-          even one with nothing to scroll, and the page stays still. */}
+      {/* The conversation never scrolls under the reader's wheel or finger: a page scroll over the reel
+          always moves the page. What does not fit is clipped. */}
       <div
         key={`${run.id}-${round}`}
         className={cn(
-          'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-4 pt-2 pb-2 [scrollbar-width:none] has-[[data-state=open]]:overflow-y-auto',
-          sent.length > 0 && 'overflow-y-auto',
+          'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-4 pt-4 pb-8',
           round > 0 && 'animate-in fade-in duration-slow',
         )}
       >
@@ -475,93 +488,9 @@ function SessionPanel({
           </Beat>
         ) : null}
 
-        {sent.map((item, index) => (
-          <div key={index} className="flex flex-col gap-3">
-            <p className="bg-muted text-foreground ml-8 self-end rounded-lg px-3 py-2.5 text-sm whitespace-pre-wrap">{item.message}</p>
-            <p className="text-muted-foreground text-sm text-pretty">
-              In your workspace, <span className="text-foreground">{item.to}</span> runs this on your repo. Copy the prompt above to set it up.
-            </p>
-          </div>
-        ))}
-        <div ref={end} />
       </div>
 
-      <div className="shrink-0 p-2.5">
-        <LiveComposer defaultAgent={agent} busy={working} onSend={onSend} />
-      </div>
     </article>
   );
 }
 
-/** The agents the picker offers: the factory and the teams a description can loop. */
-const PICKER_AGENTS = ['factory', 'marketing', 'sales', 'support', 'recruiting'];
-
-/**
- * The Kortix chat input, live: type into it, Enter sends (Shift+Enter is a new
- * line), the agent picker opens a menu, and send stays a secondary button.
- */
-function LiveComposer({ defaultAgent, busy, onSend }: { defaultAgent: string; busy: boolean; onSend: (message: string, agent: string) => void }) {
-  const [text, setText] = useState('');
-  const [agent, setAgent] = useState(defaultAgent);
-  const agents = PICKER_AGENTS.includes(agent) ? PICKER_AGENTS : [agent, ...PICKER_AGENTS];
-  const send = () => {
-    const message = text.trim();
-    if (!message) return;
-    onSend(message, agent);
-    setText('');
-  };
-  return (
-    <div className="border-border bg-card focus-within:border-foreground/20 flex flex-col gap-2 rounded-xl border p-2 transition-colors">
-      <textarea
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-            event.preventDefault();
-            send();
-          }
-        }}
-        rows={2}
-        aria-label={`Message ${agent}`}
-        placeholder="Reply…"
-        className="text-foreground placeholder:text-muted-foreground w-full resize-none bg-transparent px-1.5 pt-1 text-sm outline-none"
-      />
-      <div className="flex items-center gap-1">
-        <Button type="button" variant="ghost" size="icon-sm" aria-label="Attach a file" className="text-muted-foreground">
-          <PaperclipIcon className="size-4" />
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button type="button" variant="ghost" size="xs" className="text-foreground gap-1.5 px-1.5 text-xs">
-              <AgentTile slug={agent} />
-              {agent}
-              <CaretDownIcon className="text-muted-foreground size-3" />
-            </Button>
-          </DropdownMenuTrigger>
-          {/* The menu renders in a portal, outside the page's dark wrapper: it is dark too. */}
-          <DropdownMenuContent align="start" className="dark min-w-40">
-            <DropdownMenuRadioGroup value={agent} onValueChange={setAgent}>
-              {agents.map((slug) => (
-                <DropdownMenuRadioItem key={slug} value={slug} className="gap-2">
-                  <AgentTile slug={slug} />
-                  {slug}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <Button
-          type="button"
-          variant="secondary"
-          size="icon-sm"
-          aria-label={busy ? 'Working' : 'Send'}
-          disabled={!busy && !text.trim()}
-          onClick={send}
-          className="ml-auto rounded-full"
-        >
-          {busy ? <span className="size-2 rounded-xs bg-current" /> : <ArrowUpIcon className="size-3.5" />}
-        </Button>
-      </div>
-    </div>
-  );
-}

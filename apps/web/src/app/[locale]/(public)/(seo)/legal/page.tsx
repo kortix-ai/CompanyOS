@@ -12,7 +12,7 @@ import { Fragment, Suspense, useState, type ReactNode } from 'react';
 
 import { TERMS_LAST_UPDATED, TERMS_OF_SERVICE } from './terms-of-service';
 
-const LEGAL_LAST_UPDATED = 'November 18, 2026';
+const LEGAL_LAST_UPDATED = 'November 20, 2026';
 
 type LegalTab = 'imprint' | 'terms' | 'privacy';
 
@@ -192,8 +192,9 @@ const PRIVACY_TITLES = {
   'information-gathering': 'Information we collect',
   'information-use': 'How we use it and our legal bases',
   cookies: 'Cookies and analytics',
-  'chrome-extension': 'Kortix in Chrome',
   'information-sharing': 'Who we share it with',
+  'google-user-data': 'Google user data',
+  'chrome-extension': 'Kortix in Chrome',
   'international-transfers': 'International transfers',
   retention: 'How long we keep it',
   'information-protection': 'How we protect it',
@@ -302,12 +303,173 @@ function PrivacyPolicy() {
           Services: which pages and features are used, and which campaign brought a visitor to us.
           PostHog stores an identifier in your browser only after you accept analytics in the cookie
           banner. It receives a random account identifier, never your name or email address, and
-          never your prompts, messages, files or other project content, and it does not record your
-          screen. On our marketing website we also use Vercel Analytics and, through Google Tag
+          never your prompts, messages, files or other project content. PostHog also records a share
+          of visits as session replays: which pages you open, where you click and how far you scroll.
+          When you are signed in, and on sign-in pages, a replay hides everything you type, image
+          sources, embedded content and all text except the labels of our own interface, such as
+          button and menu names. It shows how you use a page, not what you or your workspace wrote.
+          We use replays to find the places where the product is hard to use, and PostHog deletes
+          them after 30 days. If you reject analytics in the cookie banner, we do not record your
+          visits. On our marketing website we also use Vercel Analytics and, through Google Tag
           Manager, advertising and measurement tags. A cookie banner asks for your consent before we
           set non-essential cookies where the law requires consent, and you can change your choice
           there at any time. We do not load advertising tags on signed-in pages of the Services.
         </P>
+      </Section>
+
+      <Section id="information-sharing" title={PRIVACY_TITLES['information-sharing']}>
+        <Bullets>
+          <li>
+            Service providers that process data for us, listed on our{' '}
+            <Link href="/legal/subprocessors" className={LINK}>
+              subprocessors page
+            </Link>
+            .
+          </li>
+          <li>Third-party services you connect or instruct an agent to use, on your behalf.</li>
+          <li>Our affiliates, which support and operate the Services.</li>
+          <li>Authorities, when the law requires it or to protect people and the Services.</li>
+          <li>
+            A buyer or successor, if Kortix is part of a merger, acquisition, or reorganization.
+          </li>
+        </Bullets>
+        <P>We do not sell personal information.</P>
+      </Section>
+
+      <Section id="google-user-data" title={PRIVACY_TITLES['google-user-data']}>
+        <P>
+          When you connect Gmail, Google Calendar, Google Drive, Google Docs, or Google Sheets, you
+          sign in to Google and grant Kortix access to some of your Google data (&quot;Google user
+          data&quot;). This section states how Kortix accesses, uses, stores, shares, and deletes
+          it. The rest of this policy also applies.
+        </P>
+        <P>
+          When you sign in to Kortix with Google, Kortix receives only your name, email address, and
+          profile picture. We use them for your Kortix account, as described in the rest of this
+          policy. Signing in gives Kortix no access to your Gmail, Calendar, Drive, Docs, or Sheets.
+          Connecting one of them is a separate step with its own Google consent screen.
+        </P>
+        <P>
+          Kortix&apos;s use and transfer to any other app of information received from Google APIs
+          will adhere to the{' '}
+          <a
+            href="https://developers.google.com/terms/api-services-user-data-policy"
+            className={LINK}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Google API Services User Data Policy
+          </a>
+          , including the Limited Use requirements.
+        </P>
+        <Clause lead="What we access">
+          <Bullets>
+            <li>
+              Gmail: messages, threads, drafts, labels, attachments, filters, and send-as addresses
+              with their signatures, and your Google contacts, so that an agent can read, search,
+              write, send, label, and organize email for you.
+            </li>
+            <li>
+              Google Calendar: calendars and events, so that an agent can list, create, change, and
+              delete events and find free time.
+            </li>
+            <li>
+              Google Drive: files, folders, comments, and sharing settings, so that an agent can
+              search, read, upload, export, move, share, and organize files.
+            </li>
+            <li>
+              Google Docs and Google Sheets: documents and spreadsheets, so that an agent can read,
+              create, and edit them.
+            </li>
+            <li>
+              Your Google account email address and name, to show which account a connection uses.
+            </li>
+          </Bullets>
+        </Clause>
+        <Clause lead="How we use it">
+          <Bullets>
+            <li>
+              Only to provide the features you use. An agent reads or changes your Google data when
+              you ask it to, or when an automation you set up runs (for example, a trigger that
+              checks Gmail for new messages that match your filter).
+            </li>
+            <li>
+              We do not use Google user data for advertising, we do not sell it, and we do not use it
+              to determine credit-worthiness or for lending.
+            </li>
+            <li>
+              We never use Google user data to develop, improve, or train generalized or
+              non-personalized AI or machine-learning models.
+            </li>
+          </Bullets>
+        </Clause>
+        <Clause lead="How we store and protect it">
+          <Bullets>
+            <li>
+              Your Google access and refresh tokens are encrypted at rest. Only Kortix servers use
+              them, and only to call Google APIs. Agent sandboxes never receive them.
+            </li>
+            <li>
+              Google data that an agent reads becomes part of that session&apos;s conversation and
+              of any files the agent writes in your project. We store it like other customer
+              content, as described in &quot;How long we keep it&quot; and &quot;How we protect
+              it&quot;.
+            </li>
+          </Bullets>
+        </Clause>
+        <Clause lead="Who we share it with">
+          <Bullets>
+            <li>
+              The AI model provider of the model that runs a session receives the Google data that
+              the agent reads in that session, to generate the agent&apos;s reply. Kortix-managed
+              models run at the providers on our{' '}
+              <Link href="/legal/subprocessors" className={LINK}>
+                subprocessors page
+              </Link>
+              . A model that you connect with your own API key or account runs at that provider,
+              under your agreement with it.
+            </li>
+            <li>Third-party services that you instruct an agent to send it to.</li>
+            <li>
+              Otherwise only to comply with the law, to protect people and the Services, or as part
+              of a merger, acquisition, or sale of assets, with notice to you.
+            </li>
+          </Bullets>
+        </Clause>
+        <Clause lead="Who can read it">
+          <P>
+            Kortix staff do not read your Google user data, except with your explicit consent for
+            specific data (for example, when you ask support to look at a session), when it is
+            necessary for security purposes such as investigating abuse, to comply with the law, or
+            when the data is aggregated and anonymized for internal operations.
+          </P>
+        </Clause>
+        <Clause lead="How to remove access and delete it">
+          <Bullets>
+            <li>
+              Disconnect the connector in Kortix. We revoke the token at Google and delete it from
+              our systems at once. You can also remove Kortix&apos;s access at{' '}
+              <a
+                href="https://myaccount.google.com/connections"
+                className={LINK}
+                target="_blank"
+                rel="noreferrer"
+              >
+                myaccount.google.com/connections
+              </a>
+              .
+            </li>
+            <li>
+              Delete a session to delete the Google data that its agent read. You can restore a
+              deleted session for 30 days. Then we delete its content, and it leaves our backups
+              within about 35 more days. Files that an agent wrote stay in your project until you
+              delete them.
+            </li>
+            <li>
+              To ask us to delete your Google user data, email <MailLink address={PRIVACY_EMAIL} />.
+            </li>
+          </Bullets>
+        </Clause>
       </Section>
 
       <Section id="chrome-extension" title={PRIVACY_TITLES['chrome-extension']}>
@@ -334,10 +496,11 @@ function PrivacyPolicy() {
             </li>
             <li>
               When a session uses the browser: the content of the pages the session reaches,
-              including their addresses, titles, text and screenshots, and the actions the session
-              takes there. You choose whether a session reaches all your tabs or only the tabs it
-              opens, and whether it must ask first. Each tab a session uses is in a tab group named
-              after the session, and you can stop the session at any time.
+              including their addresses, titles, text, screenshots and network requests, and the
+              actions the session takes there. When you allow all tabs, a session can also list the
+              address and title of each open tab. You choose whether a session reaches all your tabs
+              or only the tabs it opens, and whether it must ask first. Each tab a session uses is in
+              a tab group named after the session, and you can stop the session at any time.
             </li>
             <li>
               When you send a message from its side panel: the text of the page you attach, and a
@@ -359,25 +522,6 @@ function PrivacyPolicy() {
           session, such as the AI model provider you choose, and as described under Who we share it
           with.
         </P>
-      </Section>
-
-      <Section id="information-sharing" title={PRIVACY_TITLES['information-sharing']}>
-        <Bullets>
-          <li>
-            Service providers that process data for us, listed on our{' '}
-            <Link href="/legal/subprocessors" className={LINK}>
-              subprocessors page
-            </Link>
-            .
-          </li>
-          <li>Third-party services you connect or instruct an agent to use, on your behalf.</li>
-          <li>Our affiliates, which support and operate the Services.</li>
-          <li>Authorities, when the law requires it or to protect people and the Services.</li>
-          <li>
-            A buyer or successor, if Kortix is part of a merger, acquisition, or reorganization.
-          </li>
-        </Bullets>
-        <P>We do not sell personal information.</P>
       </Section>
 
       <Section id="international-transfers" title={PRIVACY_TITLES['international-transfers']}>

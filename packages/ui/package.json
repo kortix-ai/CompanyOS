@@ -195,6 +195,7 @@
     "./entity-avatar": "./src/primitives/entity-avatar.tsx",
     "./error-boundary": "./src/primitives/error-boundary.tsx",
     "./error-state": "./src/primitives/error-state.tsx",
+    "./expandable-search": "./src/primitives/expandable-search.tsx",
     "./faded-scroll-area": "./src/primitives/faded-scroll-area.tsx",
     "./favicon-avatar": "./src/primitives/favicon-avatar.tsx",
     "./field": "./src/primitives/field.tsx",
@@ -280,6 +281,7 @@
     "./internal/hooks/use-slash-focus": "./src/internal/hooks/use-slash-focus.ts",
     "./internal/icons/claude": "./src/internal/icons/claude.tsx",
     "./internal/icons/codex": "./src/internal/icons/codex.tsx",
+    "./internal/icons/cursor": "./src/internal/icons/cursor.tsx",
     "./internal/icons/discord": "./src/internal/icons/discord.tsx",
     "./internal/icons/download": "./src/internal/icons/download.tsx",
     "./internal/icons/edge": "./src/internal/icons/edge.tsx",
@@ -422,6 +424,7 @@
     "./portal": "./src/primitives/portal.tsx",
     "./preview-image": "./src/primitives/preview-image.tsx",
     "./print.css": "./src/styles/print.css",
+    "./profile-hover-card": "./src/primitives/profile-hover-card.tsx",
     "./progress": "./src/primitives/progress.tsx",
     "./progress-ring": "./src/primitives/progress-ring.tsx",
     "./project-icon-picker": "./src/primitives/project-icon-picker.tsx",
@@ -447,11 +450,9 @@
     "./session/composer/session-chat-input": "./src/session/composer/session-chat-input.tsx",
     "./session/list/session-status-mark": "./src/session/list/session-status-mark.tsx",
     "./session/models/ask-owner-for-credits-button": "./src/session/models/ask-owner-for-credits-button.tsx",
-    "./session/models/connect-model-step": "./src/session/models/connect-model-step.tsx",
     "./session/models/model-grouping": "./src/session/models/model-grouping.ts",
     "./session/models/model-search-empty": "./src/session/models/model-search-empty.tsx",
     "./session/models/model-selector": "./src/session/models/model-selector.tsx",
-    "./session/models/use-workspace-model-gate": "./src/session/models/use-workspace-model-gate.ts",
     "./session/panel/audit/audit-credential-label": "./src/session/panel/audit/audit-credential-label.ts",
     "./session/panel/easy/detail-view": "./src/session/panel/easy/detail-view.tsx",
     "./session/participants/session-participants": "./src/session/participants/session-participants.tsx",
@@ -499,6 +500,7 @@
     "./slider-native": "./src/primitives/slider-native.tsx",
     "./sliding-tab-indicator": "./src/primitives/sliding-tab-indicator.tsx",
     "./slot": "./src/primitives/slot.tsx",
+    "./sort-menu": "./src/primitives/sort-menu.tsx",
     "./split-sheet": "./src/primitives/split-sheet.tsx",
     "./spotlight-card": "./src/primitives/spotlight-card.tsx",
     "./status": "./src/primitives/status.tsx",
@@ -559,6 +561,9 @@
     "./workspace/review/mock-data": "./src/workspace/review/mock-data.ts",
     "./workspace/review/review-center": "./src/workspace/review/review-center.tsx",
     "./workspace/review/types": "./src/workspace/review/types.ts",
+    "./workspace/session-spaces/space-detail-page": "./src/workspace/session-spaces/space-detail-page.tsx",
+    "./workspace/session-spaces/space-icon": "./src/workspace/session-spaces/space-icon.tsx",
+    "./workspace/session-spaces/spaces-page": "./src/workspace/session-spaces/spaces-page.tsx",
     "./workspace/settings/use-leave-workspace": "./src/workspace/settings/use-leave-workspace.tsx",
     "./workspace/setup/workspace-setup-page": "./src/workspace/setup/workspace-setup-page.tsx",
     "./workspace/sidebar/footer/project-apps-nav": "./src/workspace/sidebar/footer/project-apps-nav.tsx",
@@ -569,7 +574,6 @@
     "./workspace/sidebar/footer/project-upgrade-button": "./src/workspace/sidebar/footer/project-upgrade-button.tsx",
     "./workspace/sidebar/footer/sandbox-health": "./src/workspace/sidebar/footer/sandbox-health.ts",
     "./workspace/sidebar/modal/share-session-modal": "./src/workspace/sidebar/modal/share-session-modal.tsx",
-    "./workspace/sidebar/project-nav-items": "./src/workspace/sidebar/project-nav-items.tsx",
     "./workspace/sidebar/project-session-list": "./src/workspace/sidebar/project-session-list.tsx",
     "./workspace/sidebar/project-sidebar": "./src/workspace/sidebar/project-sidebar.tsx",
     "./workspace/sidebar/session-brief-hover-card": "./src/workspace/sidebar/session-brief-hover-card.tsx",
@@ -1266,6 +1270,10 @@
         "types": "./dist/primitives/error-state.d.ts",
         "import": "./dist/primitives/error-state.js"
       },
+      "./expandable-search": {
+        "types": "./dist/primitives/expandable-search.d.ts",
+        "import": "./dist/primitives/expandable-search.js"
+      },
       "./faded-scroll-area": {
         "types": "./dist/primitives/faded-scroll-area.d.ts",
         "import": "./dist/primitives/faded-scroll-area.js"
@@ -1602,6 +1610,10 @@
       "./internal/icons/codex": {
         "types": "./dist/internal/icons/codex.d.ts",
         "import": "./dist/internal/icons/codex.js"
+      },
+      "./internal/icons/cursor": {
+        "types": "./dist/internal/icons/cursor.d.ts",
+        "import": "./dist/internal/icons/cursor.js"
       },
       "./internal/icons/discord": {
         "types": "./dist/internal/icons/discord.d.ts",
@@ -2165,6 +2177,10 @@
         "import": "./dist/primitives/preview-image.js"
       },
       "./print.css": "./dist/styles/print.css",
+      "./profile-hover-card": {
+        "types": "./dist/primitives/profile-hover-card.d.ts",
+        "import": "./dist/primitives/profile-hover-card.js"
+      },
       "./progress": {
         "types": "./dist/primitives/progress.d.ts",
         "import": "./dist/primitives/progress.js"
@@ -2265,10 +2281,6 @@
         "types": "./dist/session/models/ask-owner-for-credits-button.d.ts",
         "import": "./dist/session/models/ask-owner-for-credits-button.js"
       },
-      "./session/models/connect-model-step": {
-        "types": "./dist/session/models/connect-model-step.d.ts",
-        "import": "./dist/session/models/connect-model-step.js"
-      },
       "./session/models/model-grouping": {
         "types": "./dist/session/models/model-grouping.d.ts",
         "import": "./dist/session/models/model-grouping.js"
@@ -2280,10 +2292,6 @@
       "./session/models/model-selector": {
         "types": "./dist/session/models/model-selector.d.ts",
         "import": "./dist/session/models/model-selector.js"
-      },
-      "./session/models/use-workspace-model-gate": {
-        "types": "./dist/session/models/use-workspace-model-gate.d.ts",
-        "import": "./dist/session/models/use-workspace-model-gate.js"
       },
       "./session/panel/audit/audit-credential-label": {
         "types": "./dist/session/panel/audit/audit-credential-label.d.ts",
@@ -2472,6 +2480,10 @@
       "./slot": {
         "types": "./dist/primitives/slot.d.ts",
         "import": "./dist/primitives/slot.js"
+      },
+      "./sort-menu": {
+        "types": "./dist/primitives/sort-menu.d.ts",
+        "import": "./dist/primitives/sort-menu.js"
       },
       "./split-sheet": {
         "types": "./dist/primitives/split-sheet.d.ts",
@@ -2701,6 +2713,18 @@
         "types": "./dist/workspace/review/types.d.ts",
         "import": "./dist/workspace/review/types.js"
       },
+      "./workspace/session-spaces/space-detail-page": {
+        "types": "./dist/workspace/session-spaces/space-detail-page.d.ts",
+        "import": "./dist/workspace/session-spaces/space-detail-page.js"
+      },
+      "./workspace/session-spaces/space-icon": {
+        "types": "./dist/workspace/session-spaces/space-icon.d.ts",
+        "import": "./dist/workspace/session-spaces/space-icon.js"
+      },
+      "./workspace/session-spaces/spaces-page": {
+        "types": "./dist/workspace/session-spaces/spaces-page.d.ts",
+        "import": "./dist/workspace/session-spaces/spaces-page.js"
+      },
       "./workspace/settings/use-leave-workspace": {
         "types": "./dist/workspace/settings/use-leave-workspace.d.ts",
         "import": "./dist/workspace/settings/use-leave-workspace.js"
@@ -2740,10 +2764,6 @@
       "./workspace/sidebar/modal/share-session-modal": {
         "types": "./dist/workspace/sidebar/modal/share-session-modal.d.ts",
         "import": "./dist/workspace/sidebar/modal/share-session-modal.js"
-      },
-      "./workspace/sidebar/project-nav-items": {
-        "types": "./dist/workspace/sidebar/project-nav-items.d.ts",
-        "import": "./dist/workspace/sidebar/project-nav-items.js"
       },
       "./workspace/sidebar/project-session-list": {
         "types": "./dist/workspace/sidebar/project-session-list.d.ts",

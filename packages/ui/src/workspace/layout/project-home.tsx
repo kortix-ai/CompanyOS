@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ACCOUNT_PANEL_PARAM, hubTarget } from '../../internal/stores/account-panel-store';
 import { SplitNoticeBanner } from '../settings/split-notice-banner';
+import { SetupBanner } from '../setup/setup-banner';
 import { useTranslations } from '../../i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -46,6 +47,7 @@ import { SandboxPicker } from '../home/sandbox-picker';
 import { ProjectHomeWallpaper, ProjectHomeWelcomeBody } from '../home/welcome-body';
 import { useProjectHomeCall } from './use-project-home-call';
 import { useProjectHomeSend } from './use-project-home-send';
+import { SpacePicker } from '../session-spaces/space-picker';
 
 // This path is this view's public surface — the instant session shell and the
 // IAM tests already import from here, so the moved pieces keep their address.
@@ -128,7 +130,11 @@ function ProjectHomeView({
   beforeSend,
   onboarding: onboardingEnabled = false,
 }: ProjectHomeProps) {
-  const defaultSend = useProjectHomeSend(projectId, { beforeSend });
+  const searchParams = useUiSearchParams();
+  // The space a new session is filed in (flag `session_groups`). A space's
+  // page links here with `?space=<group_id>` to start with it picked.
+  const [selectedSpace, setSelectedSpace] = useState<string | null>(() => searchParams?.get('space') || null);
+  const defaultSend = useProjectHomeSend(projectId, { beforeSend, groupId: selectedSpace });
   const { HomeAnnouncement } = useUiComponents();
   const send = onSend ?? defaultSend.send;
   const creating = onSend ? !!busy : defaultSend.sending;
@@ -137,7 +143,6 @@ function ProjectHomeView({
   // The first chat never ends, but it opens only when asked for
   // (`firstChatHref`: the sidebar row or the onboarding exit). Plain project
   // home, which "New session" opens, stays the normal home.
-  const searchParams = useUiSearchParams();
   const firstChatPending = useFirstChatPending(projectId);
   const firstChatRequested = isFirstChatRequested(searchParams);
   const router = useUiRouter();
@@ -457,6 +462,12 @@ function ProjectHomeView({
       onAgentSelectionChange={setSelectedAgent}
       sandboxSlot={sandboxSlot}
       call={call}
+      // A host's own `onSend` decides where a session goes; the first chat is the onboarding.
+      toolbarSlot={
+        onSend || firstChat ? undefined : (
+          <SpacePicker projectId={projectId} value={selectedSpace} onChange={setSelectedSpace} />
+        )
+      }
     />
   );
 
@@ -482,9 +493,12 @@ function ProjectHomeView({
           state either: that page has one job. */}
       {firstChatPending || !onboarded || noAgent || !HomeAnnouncement ? null : <HomeAnnouncement />}
 
-      {/* What changed when a legacy account's workspaces became their own (C9). */}
-      <div className="relative z-10 mx-auto w-full max-w-2xl px-4 pt-14 empty:hidden">
+      {/* What changed when a legacy account's workspaces became their own
+          (C9), and the way back to the setup page while a step is open. */}
+      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col gap-2 px-4 pt-14 empty:hidden">
         <SplitNoticeBanner workspaceId={projectId} />
+        {/* Keyed: a dismissal belongs to one workspace, and switching reuses this view. */}
+        <SetupBanner key={projectId} projectId={projectId} />
       </div>
 
       {/* No bubble or "Thinking" row is painted here on send. The page stays

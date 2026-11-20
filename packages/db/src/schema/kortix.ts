@@ -1513,6 +1513,9 @@ export const projectSpaceVisibilityEnum = kortixSchema.enum('project_space_visib
  * before 2026-11-04 may hold `threads` or `memory`: the API drops those on
  * read.
  */
+/** A space's icon (`project_session_groups.icon`): an emoji XOR a catalogue glyph. */
+export type SessionGroupIconRecord = { emoji: string } | { glyph: { name: string; color: string } };
+
 export interface ProjectSpaceTabRecord {
   id: string;
   title: string;
@@ -1952,10 +1955,14 @@ export const projectSessionInitiatorEnum = kortixSchema.enum('project_session_in
 ]);
 
 /**
- * A session group: a named folder of a project's sessions in the sidebar,
- * behind the `session_groups` flag. Every project member sees the same groups
- * in the same order (`position`, 0-based). A session is in at most one group
- * (`project_sessions.group_id`); deleting a group leaves its sessions in none.
+ * A session group (product word "Space"): a named folder of a project's
+ * sessions, behind the `session_groups` flag. `private` (the default): only
+ * its creator and its members (`project_session_group_members`) see it, and
+ * they see every session in it whatever the session's own sharing. `project`:
+ * everyone in the project does. Account session oversight shows every group
+ * to owners and admins. The groups share one order (`position`, 0-based). A
+ * session is in at most one group (`project_sessions.group_id`); deleting a
+ * group leaves its sessions in none, back to their own sharing.
  */
 export const projectSessionGroups = kortixSchema.table(
   'project_session_groups',
@@ -1969,6 +1976,14 @@ export const projectSessionGroups = kortixSchema.table(
       .references(() => projects.projectId, { onDelete: 'cascade' }),
     /** Trimmed, 1–80 characters; unique in the project in any case. */
     name: text('name').notNull(),
+    /** What the space is for, at most 2000 characters (the API checks it). Every session of the space reads it at turn start. */
+    description: text('description'),
+    /** `private` | `project` (check below). */
+    visibility: text('visibility').default('private').notNull(),
+    /** The tabs after Sessions, in order (at most 20): a channel's tab shape (`ProjectSpaceTabRecord`, kinds file|folder|artifact|app|link). */
+    tabs: jsonb('tabs').$type<ProjectSpaceTabRecord[]>().default(sql`'[]'::jsonb`).notNull(),
+    /** `{ emoji }` or `{ glyph: { name, color } }` (the API checks it); null: clients draw the icon `suggestSpaceIcon` gives the name. */
+    icon: jsonb('icon').$type<SessionGroupIconRecord>(),
     position: integer('position').notNull(),
     createdBy: uuid('created_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -1977,8 +1992,26 @@ export const projectSessionGroups = kortixSchema.table(
   (table) => [
     check('project_session_groups_name_check', sql`char_length(${table.name}) between 1 and 80`),
     check('project_session_groups_position_check', sql`${table.position} >= 0`),
+    check('project_session_groups_visibility_check', sql`${table.visibility} in ('private', 'project')`),
     uniqueIndex('uniq_project_session_groups_name').on(table.projectId, sql`lower(${table.name})`),
     index('idx_project_session_groups_project').on(table.projectId, table.position),
+  ],
+);
+
+/** The people a private session group (Space) is shared with; its creator is not listed. */
+export const projectSessionGroupMembers = kortixSchema.table(
+  'project_session_group_members',
+  {
+    groupId: uuid('group_id')
+      .notNull()
+      .references(() => projectSessionGroups.groupId, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull(),
+    addedBy: uuid('added_by'),
+    addedAt: timestamp('added_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.groupId, table.userId] }),
+    index('idx_project_session_group_members_user').on(table.userId),
   ],
 );
 
@@ -2865,6 +2898,23 @@ export const projectMonitorBoxes = kortixSchema.table(
       .where(sql`${table.status} IN ('provisioning', 'starting', 'running', 'stopping')`),
   ],
 );
+
+/**
+ * Durable reservations serialize hard run caps across every firing replica.
+ * The R2a workspace twin is SQL-managed, like the other project FKs:
+ * project_trigger_admissions_project_id_workspaces_fk is NO ACTION,
+ * DEFERRABLE INITIALLY DEFERRED (not expressible in Drizzle), and NOT VALID.
+ */
+export const projectTriggerAdmissions = kortixSchema.table(
+  'project_trigger_admissions',
+  {
+    admissionId: uuid('admission_id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id').notNull().references(() => projects.projectId, { onDelete: 'cascade' }),
+    slug: varchar('slug', { length: 128 }).notNull(),
+    admittedAt: timestamp('admitted_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('idx_trigger_admissions_cap').on(table.projectId, table.slug, table.admittedAt)],
+).enableRLS();
 
 /**
  * Durable execution queue for materialized cron slots.
@@ -6166,6 +6216,9 @@ export const appDeployments = kortixSchema.table(
     readyAt: timestamp('ready_at', { withTimezone: true }),
     failedAt: timestamp('failed_at', { withTimezone: true }),
     createdBy: uuid('created_by').notNull(),
+    sourceCommit: text('source_commit'),
+    sourceRef: text('source_ref'),
+    sourceForce: boolean('source_force').default(false).notNull(),
     sourceSessionId: text('source_session_id').references(() => projectSessions.sessionId, {
       onDelete: 'set null',
     }),

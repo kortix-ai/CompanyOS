@@ -626,10 +626,10 @@ Choose **Approve** or **Deny**, with an optional note to the agent. **Approve** 
 
 Connectors also work the other way round: your AI tool can start Kortix sessions, read their results and call your connectors through Kortix, with your permissions. See [Other AI tools (MCP)](/docs/guide#other-ai-tools-mcp).
 
-## Triggers
-
 {/* The section was "Automations" until 2026-10-28; published links name #automations. */}
 <a id="automations" />
+
+## Triggers
 
 <video src="/media/guide/automations.mp4" aria-label="Triggers in Kortix: creating a daily scheduled trigger" controls muted playsInline preload="metadata" style={{ width: '100%', borderRadius: '8px', border: '1px solid var(--border)' }} />
 
@@ -842,9 +842,9 @@ Select **Filesystem**, **Shell**, **Computer Use**, or a mix. On macOS, select *
 
 The computer stays connected after you quit the app.
 
-#### Access is set on the computer
-
 <a id="access-is-set-on-the-machine" />
+
+#### Access is set on the computer
 
 The computer itself decides whether an agent may use it, whatever the workspace allows. Its **Access** setting has three modes:
 
@@ -1003,15 +1003,15 @@ One owner session works on the goal at a time, and nothing runs between turns. T
 
 When the owner session's context is full, it writes a handover to `log.md` and a fresh session continues. If the owner session fails, a successor session takes the goal over.
 
-#### Questions to you
-
 <a id="ask" />
+
+#### Questions to you
 
 When only you can unblock the goal, it asks you and waits in **Waiting on you**. While it waits, the heartbeat is off: waiting costs no turns. It wakes when you answer on the goal's page, or at a follow-up time it set. Your answer reaches the agent under your name, once, even if you send it again after an error.
 
-#### The independent check
-
 <a id="check" />
+
+#### The independent check
 
 The agent never judges its own work. When every criterion has its proof, Kortix starts a separate verifier session that did none of the work. The verifier checks each criterion and gives one result per criterion: pass, fail or inconclusive. Kortix accepts the verdict only from that session and only when it covers every current criterion. A pass on every criterion makes the goal done. Anything else sends it back to work, with the findings in `log.md`.
 
@@ -1063,9 +1063,9 @@ Channels connect a workspace to Slack, Microsoft Teams, Telegram and Discord. Pe
 
 ### Slack and Microsoft Teams
 
-#### How it works
-
 <a id="one-thread-one-session" />
+
+#### How it works
 
 - **In Slack, one thread is one session.** The first message in a thread starts the session, and later messages in the thread continue it.
 - **In a Slack channel, a mention starts the agent.** In the agent's thread, the person who started it keeps talking with plain replies. Anyone else mentions the bot to reach it; their other replies stay between people, and the agent reads them the next time it runs.
@@ -1076,9 +1076,9 @@ Channels connect a workspace to Slack, Microsoft Teams, Telegram and Discord. Pe
 - **The agent moves through public channels on its own.** It joins a public channel when it needs to read one. A private channel needs a person to invite the bot.
 - **In Teams, each channel post is its own session.** A personal or group chat keeps one session until someone sends `/new`.
 
-#### Each person links their account
-
 <a id="each-person-is-their-own-account" />
+
+#### Each person links their account
 
 A Slack or Teams message carries no Kortix login, so each person links their Kortix account once: `/kortix login` in Slack, `/login` in Teams. Only you see the link. It works once and expires after 10 minutes.
 
@@ -1101,10 +1101,10 @@ Each channel has a join policy. It decides who may join a session that started t
 | Approval | The session owner approves or denies each new person |
 | Owner only | Only the person who started the session |
 
-#### Approvals and questions in the thread
-
 <a id="approvals-in-the-thread" />
 <a id="questions-in-the-thread" />
+
+#### Approvals and questions in the thread
 
 When an agent asks for a decision, the card shows a title, a summary, a risk note and buttons such as **Approve** and **Deny**. Every card also has **View in Kortix**. When the agent wants to use a connector action that needs approval, the card shows what it will do. A workspace manager, or the person who started the session, selects **Approve** or **Deny**.
 
@@ -1293,9 +1293,9 @@ On the first call, your browser opens the Kortix consent screen. Approve it only
 
 To disconnect a tool, open **Settings** → **Personal access keys** → **Connected apps** and select **Revoke access**. Its access stops at once.
 
-## People and access
-
 <a id="teams" />
+
+## People and access
 
 A workspace holds your company's people, agents, sessions and files. You decide who belongs, which agents each person may run, and who sees each session.
 
@@ -1368,9 +1368,9 @@ Everyone with access can read the session and continue it. Only the owner can ch
 
 You can also create a **Public link**. It shows the session, read-only, to anyone with the link, without signing in. You can revoke it at any time.
 
-### How agents' work reaches the workspace repository
-
 <a id="how-agents-work-reaches-the-company-repository" />
+
+### How agents' work reaches the workspace repository
 
 Your agents, skills and settings live in the workspace's shared repository. Kortix keeps it safe from unreviewed changes:
 
@@ -1388,9 +1388,9 @@ Each session runs in its own isolated sandbox. Secrets and connector logins are 
 
 ### How it works
 
-#### Each session has its own sandbox
-
 <a id="each-session-has-its-own-machine" />
+
+#### Each session has its own sandbox
 
 Every session starts its own isolated cloud computer, called a sandbox. The agent works there on its own branch of the workspace's repository. By default, a session can push only to its own branch, and its work reaches the shared repository only when a person merges its change request. See [How agents' work reaches the workspace repository](#how-agents-work-reaches-the-project-repository).
 
@@ -1400,9 +1400,9 @@ An agent without **Workspace repository access** gets no copy of the repository.
 
 A session runs with the agent's permissions, not with the permissions of the person who started it. You decide what each agent may do, and an agent can never give itself a permission it does not hold.
 
-#### Secrets: you choose who uses them, and how
-
 <a id="secrets-you-choose-who-uses-them" />
+
+#### Secrets: you choose who uses them, and how
 
 A secret is a password, an API key or a token that a session needs. Kortix encrypts every value, and no page, command or API shows a stored value again.
 
@@ -1428,9 +1428,9 @@ To check egress-enforced delivery, run two probes in a session. First, print the
 A secret delivered as an environment variable is a real value inside the session. For a web API key, use egress-enforced delivery unless code needs the real value.
 </Callout>
 
-#### Connector logins stay with Kortix
-
 <a id="connector-credentials-stay-with-kortix" />
+
+#### Connector logins stay with Kortix
 
 When you connect an app such as Gmail or Linear, Kortix stores the login, and it never enters the sandbox. For each call, Kortix picks the account, applies your rules, makes the call and records it. Your rules decide what each agent may do in each app: **Allow**, **Ask** for a person's approval, or **Block**. Approvals wait on the **Review** page. Kortix also refuses connector requests to private or internal network addresses.
 

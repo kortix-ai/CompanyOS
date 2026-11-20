@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1813,
-  "aliases": 704,
+  "count": 1818,
+  "aliases": 706,
   "routes": [
     {
       "method": "GET",
@@ -1596,6 +1596,10 @@
     {
       "method": "POST",
       "path": "/v1/cli/device/start"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/cli/setup-events"
     },
     {
       "method": "GET",
@@ -4260,6 +4264,16 @@
       "method": "PATCH",
       "path": "/v1/projects/:workspaceId/session-groups/:groupId",
       "aliasOf": "/v1/workspaces/:workspaceId/session-groups/:groupId"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/projects/:workspaceId/session-groups/:groupId/sharing",
+      "aliasOf": "/v1/workspaces/:workspaceId/session-groups/:groupId/sharing"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/projects/:workspaceId/session-groups/:groupId/tabs",
+      "aliasOf": "/v1/workspaces/:workspaceId/session-groups/:groupId/tabs"
     },
     {
       "method": "PUT",
@@ -7322,6 +7336,14 @@
     {
       "method": "PATCH",
       "path": "/v1/workspaces/:workspaceId/session-groups/:groupId"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/workspaces/:workspaceId/session-groups/:groupId/sharing"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/workspaces/:workspaceId/session-groups/:groupId/tabs"
     },
     {
       "method": "PUT",

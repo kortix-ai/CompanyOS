@@ -21,6 +21,8 @@
  */
 
 import { Cron } from 'croner';
+import { parseTriggerReaders } from './trigger-readers';
+export { parseTriggerReaders, type TriggerReaders } from './trigger-readers';
 import { normalizeTriggerList } from './trigger-shape';
 import { Document, isMap, LineCounter, parseDocument } from 'yaml';
 import { type AppliedFix, applyDeprecations, DEPRECATIONS } from './deprecations';
@@ -1479,6 +1481,13 @@ export function validateTriggers(rawNode: unknown, path: string, issues: Manifes
         message: 'prompt is required and may not be empty.',
         severity: 'error',
       });
+    }
+    if (entry.hard_run_caps !== undefined && typeof entry.hard_run_caps !== 'boolean') {
+      issues.push({ path: `${where}.hard_run_caps`, message: 'hard_run_caps must be a boolean.', severity: 'error' });
+    }
+    if (entry.session_readers !== undefined) {
+      const parsed = parseTriggerReaders(entry.session_readers);
+      if ('error' in parsed) issues.push({ path: `${where}.session_readers`, message: parsed.error, severity: 'error' });
     }
     // Run caps (KRTX-1721): any trigger type, a whole number of at least 1.
     for (const field of ['max_runs_per_hour', 'max_runs_per_day'] as const) {

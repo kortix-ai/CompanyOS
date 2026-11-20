@@ -113,8 +113,8 @@ export const THEME = {
     sidebarAccentForeground: 'hsl(0 0% 12.2%)', // --sidebar-accent-foreground
     sidebarBorder: 'hsl(0 0% 88.6%)', // --sidebar-border
     sidebarRing: 'hsl(204 100% 50%)', // --sidebar-ring
-    success: 'hsl(135 70.5% 33.8%)', // --success
-    warning: 'hsl(37.1 78.7% 45.9%)', // --warning
+    success: 'hsl(138.6 95.3% 22.8%)', // --success
+    warning: 'hsl(38.2 92% 36.8%)', // --warning
     radius: '0.625rem', // --radius
   },
   dark: {
@@ -158,24 +158,32 @@ export const THEME = {
     radius: '0.625rem', // --radius
   },
   /**
-   * Brand accents. These do NOT invert — global.css declares each one
-   * byte-identical in `:root` and `.dark:root` — so they live in one flat,
-   * theme-invariant group instead of being duplicated into `light`/`dark`.
-   * Read as `THEME.accent.green`, never `THEME.light.accent` /
-   * `THEME.dark.accent` (those keys are the unrelated semantic `--accent`
-   * token above, which DOES invert).
+   * Brand accents, per theme (J-7): light takes the contrast-safe values,
+   * dark keeps the brighter ones. Read as `THEME.accent[tone].green` with
+   * `useTone()`, never `THEME.light.accent` / `THEME.dark.accent` (those keys
+   * are the unrelated semantic `--accent` token above).
    */
   accent: {
-    blue: 'hsl(210 93% 56.9%)', // --kortix-blue
-    yellow: 'hsl(48 100% 40%)', // --kortix-yellow
-    orange: 'hsl(37.1 78.7% 45.9%)', // --kortix-orange
-    green: 'hsl(135 70.5% 33.8%)', // --kortix-green
-    purple: 'hsl(270 51.3% 67.1%)', // --kortix-purple
-    red: 'hsl(360 85.3% 62%)', // --kortix-red
+    light: {
+      blue: 'hsl(208.9 82.5% 50.1%)', // --kortix-blue
+      yellow: 'hsl(47.7 97.5% 31.6%)', // --kortix-yellow
+      orange: 'hsl(38.2 92% 36.8%)', // --kortix-orange
+      green: 'hsl(138.6 95.3% 22.8%)', // --kortix-green
+      purple: 'hsl(270.3 42% 60.5%)', // --kortix-purple
+      red: 'hsl(354.1 81.7% 42%)', // --kortix-red
+    },
+    dark: {
+      blue: 'hsl(210 93% 56.9%)', // --kortix-blue
+      yellow: 'hsl(48 100% 40%)', // --kortix-yellow
+      orange: 'hsl(37.1 78.7% 45.9%)', // --kortix-orange
+      green: 'hsl(135 70.5% 33.8%)', // --kortix-green
+      purple: 'hsl(270 51.3% 67.1%)', // --kortix-purple
+      red: 'hsl(360 85.3% 62%)', // --kortix-red
+    },
   },
   /**
-   * The data-viz ramp, `--chart-1..5` (index 0 is `--chart-1`). Theme-invariant
-   * like `accent`: global.css declares each step identical in both scopes.
+   * The data-viz ramp, `--chart-1..5` (index 0 is `--chart-1`). Theme-invariant:
+   * global.css declares each step identical in both scopes.
    * Charts only; `components/genui/components/charts.tsx` picks the order.
    */
   chart: [

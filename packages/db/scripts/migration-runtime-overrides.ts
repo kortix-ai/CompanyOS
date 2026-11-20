@@ -58,6 +58,20 @@ DELETE FROM kortix.role_permissions rp
 ALTER TABLE kortix.role_permissions
   VALIDATE CONSTRAINT role_permissions_action_permissions_fk;`;
 
+// A reader of account_members / project_members / project_group_grants takes
+// AccessShare on the view first, then on role_assignments. This migration took
+// ACCESS EXCLUSIVE on role_assignments first and on each view later (CREATE OR
+// REPLACE VIEW), so a concurrent reader deadlocked with it (40P01, reproduced
+// on PG 16 before the v0.16.0 promote). Locking the three views first takes
+// the locks in the readers' order: a reader then waits instead of deadlocking.
+const ROLE_ASSIGNMENTS_SCOPE_MIGRATION = '20261114162256000_role_assignments_workspace_scope.sql';
+const ROLE_ASSIGNMENTS_SCOPE_SHA256 = 'e75f30ff3f2219fec80cff7f3e16b13cf00e40d3b17a5e8f179dfdbb93ae9523';
+const ROLE_ASSIGNMENTS_SCOPE_INSERTION_POINT =
+  'ALTER TABLE kortix.role_assignments DROP CONSTRAINT IF EXISTS role_assignments_scope_type_check;';
+const ROLE_ASSIGNMENTS_SCOPE_RUNTIME_LOCK = `-- Runtime correction: take the views before their base table, in the order a reader does.
+LOCK TABLE kortix.account_members, kortix.project_members, kortix.project_group_grants IN ACCESS EXCLUSIVE MODE;
+`;
+
 // Two intermediate covering indexes of the gateway_logs index chain INCLUDE
 // the `metadata` jsonb column. Prod rows carry metadata up to ~25 KB, past the
 // 2,704-byte btree tuple limit, so both builds fail there (deploy-prod
@@ -97,6 +111,7 @@ interface RuntimeOverrideOptions {
   expectedSha256?: string;
   removeLocalDockerExpectedSha256?: string;
   rbacCutoverViewsExpectedSha256?: string;
+  roleAssignmentsScopeExpectedSha256?: string;
   supersededIndexExpectedSha256?: Record<string, string>;
 }
 
@@ -122,6 +137,25 @@ export function materializeMigrationRuntimeDirectory(
   const hasAuditOverride = existsSync(auditPath);
   const hasRemoveLocalDockerOverride = existsSync(removeLocalDockerPath);
   const hasRbacCutoverViewsOverride = existsSync(rbacCutoverViewsPath);
+  const roleAssignmentsScopePath = join(sourceDirectory, ROLE_ASSIGNMENTS_SCOPE_MIGRATION);
+  const roleAssignmentsScopeSource = existsSync(roleAssignmentsScopePath)
+    ? readFileSync(roleAssignmentsScopePath, 'utf8')
+    : null;
+  if (roleAssignmentsScopeSource) {
+    const expectedSha256 = options.roleAssignmentsScopeExpectedSha256 ?? ROLE_ASSIGNMENTS_SCOPE_SHA256;
+    const actualSha256 = sha256Hex(roleAssignmentsScopeSource);
+    if (actualSha256 !== expectedSha256) {
+      throw new Error(
+        `${ROLE_ASSIGNMENTS_SCOPE_MIGRATION} checksum mismatch: expected ${expectedSha256}, received ${actualSha256}`,
+      );
+    }
+    const occurrenceCount = roleAssignmentsScopeSource.split(ROLE_ASSIGNMENTS_SCOPE_INSERTION_POINT).length - 1;
+    if (occurrenceCount !== 1) {
+      throw new Error(
+        `${ROLE_ASSIGNMENTS_SCOPE_MIGRATION} expected exactly one first role_assignments ALTER; found ${occurrenceCount}`,
+      );
+    }
+  }
   const supersededIndexSources = SUPERSEDED_GATEWAY_INDEX_MIGRATIONS.flatMap((migration) => {
     const path = join(sourceDirectory, migration.file);
     if (!existsSync(path)) return [];
@@ -139,6 +173,7 @@ export function materializeMigrationRuntimeDirectory(
     !hasAuditOverride &&
     !hasRemoveLocalDockerOverride &&
     !hasRbacCutoverViewsOverride &&
+    !roleAssignmentsScopeSource &&
     supersededIndexSources.length === 0
   ) {
     return { path: sourceDirectory, appliedOverrides: [], cleanup: () => {} };
@@ -234,6 +269,18 @@ export function materializeMigrationRuntimeDirectory(
       );
       appliedOverrides.push(
         `${RBAC_CUTOVER_VIEWS_MIGRATION}: retire project.cr.*/trigger.* role_permissions rows before the catalog-FK VALIDATE (${RBAC_CUTOVER_VIEWS_SHA256})`,
+      );
+    }
+    if (roleAssignmentsScopeSource) {
+      writeFileSync(
+        join(runtimeDirectory, ROLE_ASSIGNMENTS_SCOPE_MIGRATION),
+        roleAssignmentsScopeSource.replace(
+          ROLE_ASSIGNMENTS_SCOPE_INSERTION_POINT,
+          ROLE_ASSIGNMENTS_SCOPE_RUNTIME_LOCK + ROLE_ASSIGNMENTS_SCOPE_INSERTION_POINT,
+        ),
+      );
+      appliedOverrides.push(
+        `${ROLE_ASSIGNMENTS_SCOPE_MIGRATION}: lock the member views before role_assignments (${ROLE_ASSIGNMENTS_SCOPE_SHA256})`,
       );
     }
     for (const migration of supersededIndexSources) {

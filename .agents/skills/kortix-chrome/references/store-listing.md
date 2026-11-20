@@ -5,7 +5,9 @@ The text of every field in the Chrome Web Store dashboard for the Kortix extensi
 `src/manifest.json` gains or loses a permission, change its justification here in the same
 commit, and update the dashboard before the next upload.
 
-Each claim traces to code: the permission rows name the call that needs the permission.
+The dashboard holds this text since 2026-10-13 (Marko); 2026-11-18 added `contextMenus`, the
+side panel parts of `scripting` and the host permission, User activity, and the privacy URL fix.
+The Code column names where each permission is used.
 
 ## Package
 
@@ -19,38 +21,34 @@ the last upload.
 |---|---|
 | Name | `Kortix` (from the manifest) |
 | Summary | `Let Kortix agents use this browser, with you watching.` (from the manifest) |
-| Category | Productivity → Tools |
+| Category | Workflow & Planning |
 | Language | English |
 | Store icon | `apps/chrome-extension/icons/128.png` |
-| Screenshots | 1280 × 800, see [Graphic assets](#graphic-assets) |
-| Small promo tile | 440 × 280, see [Graphic assets](#graphic-assets) |
+| Screenshots | 5 × 1280 × 800, uploaded 2026-10-13 |
+| Small promo tile | 440 × 280 "Kortix for Chrome", uploaded 2026-10-13 |
+| Marquee promo tile | 1400 × 560, uploaded 2026-10-13 |
 | Official URL | none |
 | Homepage URL | `https://kortix.com` |
-| Support URL | `https://kortix.com/support` (the store fetches it before it allows a submit) |
+| Support URL | `https://kortix.com/support` (redirects to `/contact`; the store fetches it before it allows a submit) |
 
 ### Description
 
 ```text
-Kortix in Chrome connects your own browser to Kortix. After you sign in once, your Kortix sessions can open pages, read them, click and type in them, with the logins you already have. You watch every step and can stop it at any time.
+Kortix connects this browser to your Kortix workspace. Ask any Kortix session to use your browser, and the agent works in it with the sites you are already signed in to: your inbox, your dashboards, your company tools.
 
-What you see while an agent works
-• Every tab a session uses goes into a tab group named after the session.
-• A bar on the page shows that Kortix is working, with Take over and Stop.
-• Alt+Shift+K stops every agent in this browser.
+While an agent works, you see:
+• its tabs, with a glow around the page and the agent's cursor
+• a bar on the page with Take over and Stop
+• Kortix in Chrome's side panel, next to the page
 
-You decide what agents can reach
-• Access: a session uses the browser without asking, asks you first, or never.
-• Tabs: a session reaches all your tabs, or only the tabs it opens.
-• chrome:// pages, the Chrome Web Store and other extensions are never reachable.
+You decide what it can do:
+• Access: without asking, ask first, or off
+• Tabs: all your tabs, or only the tabs it opens
+• Stop ends a session's access at once
 
-The side panel
-Click the toolbar icon, or press Alt+K, to open Kortix next to the page. Ask about the page you are on, pick a project, and send. Right-click a page or a selection and choose "Ask Kortix".
+How it works: you sign in to Kortix once. Sessions run in Kortix's cloud and reach this browser through the extension. Nothing runs until a session asks, and only sessions you started can ask.
 
-Requirements
-A Kortix account at kortix.com. Chrome 125 or later, or Edge, Brave and Arc.
-
-Privacy
-The extension reads a page only when a session or you ask it to. It contains no analytics or advertising code. Kortix handles the page content a session reads as your session's content. Details: https://kortix.com/legal?tab=privacy#chrome-extension
+Requires a Kortix account (kortix.com).
 ```
 
 ## Privacy tab
@@ -58,22 +56,22 @@ The extension reads a page only when a session or you ask it to. It contains no 
 ### Single purpose
 
 ```text
-Kortix in Chrome lets a person's own Kortix sessions use their Chrome browser: open tabs, read pages and act on them in a tab group named after the session, while the person watches and can stop it. The side panel lets the person send the current page to a Kortix session.
+Let the user's Kortix agent sessions operate this browser (open, read and act on web pages) on the user's request, with visible state on the page and a Stop control.
 ```
 
 ### Permission justifications
 
-| Permission | Justification |
-|---|---|
-| `debugger` | `A Kortix session controls the tabs in its own tab group through the Chrome DevTools Protocol: it navigates, reads the page, takes screenshots, clicks and types. chrome.debugger attaches to those tabs only while the session is connected, and Chrome shows its "is debugging this browser" bar.` |
-| `tabs` | `Creates the tabs a session asks for, lists the tabs a session may reach (all tabs or only the session's own, as the person chooses), activates a tab before a screenshot, and closes tabs the session opened.` |
-| `tabGroups` | `Puts every tab a session uses into a tab group named after the session, so the person sees which tabs an agent controls: the group gets the session's title and a blue color.` |
-| `scripting` | `Injects the on-page bar that shows "Kortix is working" with Take over and Stop into the tabs a session controls, and reads the text of the current page when the person sends it from the side panel.` |
-| `storage` | `Keeps the sign-in tokens for the person's Kortix account, the server address and the person's settings (browser name, access mode, tab scope) on the device.` |
-| `alarms` | `Wakes the service worker every 30 seconds to keep the connection to Kortix open, so a session can reach the browser while it is online.` |
-| `sidePanel` | `The toolbar icon and Alt+K open the Kortix side panel next to the page, where the person asks about the page and follows the session.` |
-| `contextMenus` | `Adds "Ask Kortix about this page" and "Ask Kortix about this selection" to the right-click menu. They open the side panel with that page or selection.` |
-| Host permission `<all_urls>` | `The person decides which sites a session works on, at the time of the task, and with "All tabs" a session may reach any http, https or file tab. The side panel reads and screenshots the current tab only when the person sends it. A fixed list of sites cannot cover this.` |
+| Permission | Justification | Code |
+|---|---|---|
+| `debugger` | `Kortix agents open, read and click pages through the Chrome DevTools Protocol, only in the tabs a session the user started may use. Chrome shows its debugging notice while it is attached, and the user can stop it at any time.` | `background/shim.ts` |
+| `tabs` | `List the user's open tabs when the user allows it, open and close the tabs a session uses, and follow their URL and title so the agent and the user see the same state.` | `background/shim.ts`, `hub.ts` |
+| `tabGroups` | `Keep the tabs a session uses together in a named 'Kortix · <session>' tab group, so the user sees which tabs an agent works in.` | `background/attachment.ts` |
+| `scripting` | `Draw the on-page glow, the agent cursor and the Take over / Stop bar in the tabs a session uses. When the user sends the current page from the side panel, read that page's text so the session can answer about it.` | `hub.ts` (`overlay.js`), `pages/sidepanel.ts` (`readPage`) |
+| `storage` | `Keep the user's Kortix sign-in, the chosen Kortix server and the user's settings (access mode, tab scope) in the browser.` | `background/state.ts` |
+| `alarms` | `Reconnect to Kortix after the network or the Kortix server restarts, so the browser stays available to the user's sessions.` | `background/index.ts` (`keepalive`, 30 s) |
+| `sidePanel` | `Show Kortix in Chrome's side panel next to the page, so the user follows and steers the session while it works.` | `background/index.ts` |
+| `contextMenus` | `Add "Ask Kortix about this page" and "Ask Kortix about this selection" to the right-click menu. Each opens the Kortix side panel with that page, or with the selected text as a quote, so the user can ask a session about it.` | `background/index.ts` |
+| Host permission `<all_urls>` | `The agent works on the sites the user asks it to use, which can be any site, and the visible overlay (glow, cursor, Stop bar) must appear on any page a session uses. When the user sends the current tab from the side panel, the extension reads its text and, if the user asks, takes a screenshot of it; that tab can be any site.` | `pages/sidepanel.ts` (`captureVisibleTab`) |
 
 ### Remote code
 
@@ -87,15 +85,15 @@ Select:
 
 - **Authentication information**: the OAuth tokens for the person's Kortix account.
 - **Web history**: with "All tabs", a session sees the address and title of open tabs.
-- **User activity**: a session can observe the page's network events and input while it controls a tab.
+- **User activity**: while a session controls a tab, it can watch the page's network requests through the debugger.
 - **Website content**: page text, screenshots and page data a session reads, and the page the person sends from the side panel.
 
 Leave the others unselected. Tick all three certifications: no sale, no use unrelated to the
 single purpose, no use for creditworthiness or lending.
 
-Privacy policy URL: `https://kortix.com/legal?tab=privacy`. Its section "Kortix in Chrome"
-(`#chrome-extension`) states what the extension keeps, what it sends and the Limited Use
-statement. Change that section and this table together.
+Privacy policy URL: `https://kortix.com/legal?tab=privacy` (`/legal/privacy` is a 404). Its
+section "Kortix in Chrome" (`#chrome-extension`) states what the extension keeps, what it sends
+and the Limited Use statement. Change that section and this table together.
 
 ## Distribution tab
 
@@ -124,8 +122,6 @@ on. The credentials go into this tab only, never into git, Slack or a PR.
 | Asset | Size | Content |
 |---|---|---|
 | Store icon | 128 × 128 PNG | `icons/128.png` |
-| Screenshot 1 | 1280 × 800 | A page in a session's tab group with the "Kortix is working" bar |
-| Screenshot 2 | 1280 × 800 | The welcome page: "Let Kortix use this browser" |
-| Screenshot 3 | 1280 × 800 | The side panel next to a page |
-| Screenshot 4 | 1280 × 800 | The settings page: access and tabs |
-| Small promo tile | 440 × 280 PNG | Kortix symbol and "Kortix in Chrome" |
+| Screenshots | 1280 × 800 | 5 in the dashboard (2026-10-13): "Your agents, in your browser", "Kortix next to the page", "You choose what it can do", "Stop any time", "Connect in one click" |
+| Small promo tile | 440 × 280 | "Kortix for Chrome" with the working bar |
+| Marquee promo tile | 1400 × 560 | "Your agents, in your browser." |

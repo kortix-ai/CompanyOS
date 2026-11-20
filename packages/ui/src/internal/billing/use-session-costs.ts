@@ -114,6 +114,9 @@ export function buildSessionCostDetailQuery(
     // for the exact session the user is looking at).
     enabled: Boolean(input.sessionId) && Boolean(input.accountId),
     staleTime: SESSION_COST_STALE_TIME_MS,
+    // The detail route shares the per-caller cost-read bound: a 429 is "try again shortly".
+    retry: retryCostReadBusy,
+    retryDelay: costReadBusyRetryDelay,
   };
 }
 

@@ -69,6 +69,7 @@ mock.module('../../shared/session-costs', () => ({
     return { sessions: [], total: 0, limit: 50, offset: 0, next_offset: null };
   },
   getSessionCostRecord: async () => null,
+  findSessionCostOwner: async () => null,
   billedComputeSecondsExpression: 0,
 }));
 mock.module('../../shared/cost-rollups', () => ({
@@ -165,11 +166,15 @@ describe('usage cost rollups under the per-caller guard', () => {
     await after.text();
   });
 
-  test('the cheap single-session cost record is not guarded', async () => {
-    for (let i = 0; i < 6; i += 1) {
-      const res = await get('/session-costs/some-session');
-      expect(res.status).not.toBe(429);
+  test('the single-session cost record is guarded, with one bucket for every session id', async () => {
+    const user = '00000000-0000-4000-a000-0000000000f5';
+    const statuses: number[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      const res = await get(`/session-costs/session-${i}`, user);
+      statuses.push(res.status);
       await res.text();
     }
+    expect(statuses.slice(0, 3).every((s) => s !== 429)).toBe(true);
+    expect(statuses[3]).toBe(429);
   });
 });

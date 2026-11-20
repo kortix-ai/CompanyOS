@@ -843,6 +843,23 @@ async function loadLedgerEntries(
   return sortLedgerEntriesNewestFirst([...llmEntries, ...computeEntries]);
 }
 
+/**
+ * The owner of one session of this account: `{ ownerId }`, or null when the
+ * account has no such session. One indexed row; the cost routes compare it
+ * with `sessionCostOwner` before they read a session's spend.
+ */
+export async function findSessionCostOwner(input: {
+  accountId: string;
+  sessionId: string;
+}): Promise<{ ownerId: string | null } | null> {
+  const [row] = await db
+    .select({ ownerId: projectSessions.createdBy })
+    .from(projectSessions)
+    .where(and(eq(projectSessions.accountId, input.accountId), eq(projectSessions.sessionId, input.sessionId)))
+    .limit(1);
+  return row ?? null;
+}
+
 export async function getSessionCostRecord(input: {
   accountId: string;
   projectId?: string;

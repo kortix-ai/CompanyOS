@@ -381,9 +381,10 @@ export async function resolveRequestedSessionSpace(input: CreateProjectSessionIn
 /**
  * `session_groups` on: the space (session group) a person's own top-level
  * create names (`group_id`), checked; a fork with none named keeps its
- * source's. A session another session starts is never filed: it reads its
- * parent's space (`sessionGroupOf`). Flag off, or `null`: no space. An id that
- * is not a group of this project: 404 `group_not_found`.
+ * source's space only when the caller sees that space. A session another
+ * session starts is never filed: it reads its parent's space
+ * (`sessionGroupOf`). Flag off, or `null`: no space. An id that is not a group
+ * of this project, or one the caller does not see: 404 `group_not_found`.
  */
 export async function resolveRequestedSessionGroup(input: CreateProjectSessionInput): Promise<SessionCreateStep<{ groupId: string | null }>> {
   const { project, body } = input;
@@ -397,15 +398,24 @@ export async function resolveRequestedSessionGroup(input: CreateProjectSessionIn
       .from(projectSessions)
       .where(and(eq(projectSessions.projectId, project.projectId), eq(projectSessions.sessionId, body.fork_from_session_id)))
       .limit(1);
-    return { groupId: source?.groupId ?? null };
+    // A space shares its Files folder read-write with every session in it. A
+    // fork of a session someone shared with you, from a space that is not
+    // shared with you, lands outside that space.
+    return { groupId: source?.groupId ? await visibleGroupId(input, source.groupId) : null };
   }
-  const group = typeof body.group_id === 'string' && isUuid(body.group_id) ? await findSessionGroup(project.projectId, body.group_id) : null;
+  const groupId = typeof body.group_id === 'string' && isUuid(body.group_id) ? await visibleGroupId(input, body.group_id) : null;
   // A private group says nothing to someone it is not shared with: the same 404.
-  const visible = group && input.userId
-    ? canSeeGroup(group, (await groupMemberIds([group.groupId])).get(group.groupId) ?? [], await groupViewerFor(input.userId, project.accountId))
-    : false;
-  if (!group || !visible) return { error: { status: 404, body: { error: 'No such space in this workspace.', code: 'group_not_found' } } };
-  return { groupId: group.groupId };
+  if (!groupId) return { error: { status: 404, body: { error: 'No such space in this workspace.', code: 'group_not_found' } } };
+  return { groupId };
+}
+
+/** The group's id when it is a group of this project that the caller sees; else null. */
+async function visibleGroupId(input: CreateProjectSessionInput, groupId: string): Promise<string | null> {
+  const { project } = input;
+  const group = await findSessionGroup(project.projectId, groupId);
+  if (!group || !input.userId) return null;
+  const members = (await groupMemberIds([group.groupId])).get(group.groupId) ?? [];
+  return canSeeGroup(group, members, await groupViewerFor(input.userId, project.accountId)) ? group.groupId : null;
 }
 
 /** The session's sharing: explicit, or inherited from the spawning session. */

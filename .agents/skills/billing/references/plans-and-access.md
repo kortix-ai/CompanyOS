@@ -439,8 +439,12 @@ An unscoped Supabase-authenticated person with no membership can read account-st
 without creating or choosing a workspace. The response contains `billing_state`,
 `has_active_subscription`, `subscription.status`, and `can_manage_billing: false`.
 It checks the legacy personal account key (`account_id = user_id`), its wallet
-subscription references, and every page of subscriptions of its mapped Stripe
-customers. Ended Stripe subscriptions (`canceled`, `incomplete_expired`) do not
+subscription references, every page of subscriptions of its mapped Stripe
+customers, and every page of a Stripe search for subscriptions whose
+`metadata.account_id` names the person (an unmapped legacy purchase). A
+subscription the wallet already proves is reported without a provider read;
+absence always needs Stripe, so a deployment without a Stripe key answers from
+the database alone. Ended Stripe subscriptions (`canceled`, `incomplete_expired`) do not
 count. Unknown statuses fail closed as active. A cancelled store (RevenueCat)
 subscription stays active until its recorded expiry has passed. A database or provider error is
 an error response, never a no-subscription fallback. No database means the read

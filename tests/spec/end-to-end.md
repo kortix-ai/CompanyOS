@@ -2098,11 +2098,18 @@ release contracts remain required.
 
 ### BILL-WS-3 — workspace-less billing safety
 
-A signed-in person without a workspace reads both account-state variants. The
-response reports no account and no active subscription, without a wallet write.
-A legacy personal wallet with nonrecurring credits reports no subscription.
-An active legacy subscription, and a store subscription cancelled but not yet
-expired, remain active. Database and provider errors must
-not be converted to successful absence. A workspace keyed by the person's id
-that they do not serve is refused with 409 `no_workspace`, never read. No
-production billing is changed.
+A signed-in person without a workspace reads both account-state variants. An
+active legacy subscription in the personal wallet, and a store subscription
+cancelled but not yet expired, remain active, without a provider read. A
+workspace keyed by the person's id that they do not serve is refused with 409
+`no_workspace`, never read. No production billing is changed.
+
+### BILL-WS-4 — workspace-less billing absence (Stripe)
+
+Absence needs Stripe: the read lists the subscriptions of every mapped customer
+and searches subscriptions whose metadata names the person's id (an unmapped
+legacy purchase). With no wallet both variants report `no_account` and no
+active subscription, without a wallet write; a wallet with nonrecurring credits
+reports `no_subscription`. A database or provider error is an error response,
+never absence: the local profile's Stripe key is a placeholder, so there the
+read answers 500 and this flow needs the `stripe` capability.

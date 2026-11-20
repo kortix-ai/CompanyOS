@@ -6,6 +6,7 @@ import {
   TRIGGER_MAX_EXPECT_EVENT_WITHIN_SECONDS,
   formatDurationSeconds,
   normalizeTriggerList,
+  parseTriggerReaders,
   parseChangeRequestFilter,
   parseDurationSeconds,
   parseTriggerFilter,
@@ -267,6 +268,8 @@ export function extractTriggers(manifest: ParsedManifest): LoadedTriggers {
     };
   }
 
+  const sharedReaders = manifest.raw.trigger_session_readers === undefined ? null : parseTriggerReaders(manifest.raw.trigger_session_readers);
+  if (sharedReaders && 'error' in sharedReaders) return { specs: [], errors: [{ slug: '(top-level)', path: filename, error: sharedReaders.error }] };
   const specs: GitTriggerSpec[] = [];
   const errors: GitTriggerParseError[] = [];
   const seenSlugs = new Set<string>();
@@ -291,7 +294,7 @@ export function extractTriggers(manifest: ParsedManifest): LoadedTriggers {
       return;
     }
     seenSlugs.add(result.spec.slug);
-    specs.push(result.spec);
+    specs.push({ ...result.spec, ...(sharedReaders && 'readers' in sharedReaders ? { defaultSessionReaders: sharedReaders.readers } : {}) });
   });
 
   specs.sort((a, b) => a.slug.localeCompare(b.slug));
@@ -374,6 +377,7 @@ export function triggerSpecToFlatEntry(spec: GitTriggerSpec): Record<string, unk
     type: spec.type,
     agent: spec.agent,
   };
+  if (spec.sessionReaders) entry.session_readers = spec.sessionReaders;
   // Only emit model when set so manifests on the "Default" path stay byte-stable.
   if (spec.model) entry.model = spec.model;
   entry.enabled = spec.enabled;
@@ -481,6 +485,7 @@ export function triggerSpecToOnRunEntry(spec: GitTriggerSpec): Record<string, un
       };
   return {
     slug: spec.slug,
+    ...(spec.sessionReaders ? { session_readers: spec.sessionReaders } : {}),
     ...(spec.name !== spec.slug ? { name: spec.name } : {}),
     on,
     run,
@@ -545,6 +550,8 @@ function parseTriggerEntry(
   if ('error' in lateness) return err(slug, lateness.error);
   const silence = parseExpectEventWithin(row, type);
   if ('error' in silence) return err(slug, silence.error);
+  const readers = row.session_readers === undefined ? null : parseTriggerReaders(row.session_readers);
+  if (readers && 'error' in readers) return err(slug, readers.error);
   const caps = parseRunCaps(row);
   if ('error' in caps) return err(slug, caps.error);
   const overlap = parseOverlap(row);
@@ -668,6 +675,7 @@ function parseTriggerEntry(
     model,
     enabled,
     promptTemplate: prompt,
+    ...(readers && 'readers' in readers ? { sessionReaders: readers.readers } : {}),
     ...(runPayload ? { runPayload } : {}),
     ...parsedTarget,
     sessionMode,

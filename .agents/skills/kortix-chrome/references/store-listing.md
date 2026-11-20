@@ -106,15 +106,27 @@ and the Limited Use statement. Change that section and this table together.
 The reviewer signs in at kortix.com with a reviewer account whose project has the `chrome` flag
 on. The credentials go into this tab only, never into git, Slack or a PR.
 
+The reviewer account is a password user on prod with the Credits tier (Kortix models need it) and
+non-expiring credits. Create it with the Supabase admin API (`email_confirm: true`, no password),
+sign in once with an admin magic link to create the workspace (`POST /v1/projects/provision` with
+`new_workspace: true`), then use the admin API: `POST /v1/admin/api/accounts/:id/tier`
+(`credits`), `POST /v1/admin/api/accounts/:id/credits`, and
+`PUT /v1/admin/api/projects/:id/features` (`chrome`). A person sets the password. After a test
+run, delete the test connection (`DELETE /v1/chrome/connections/:id`) so the reviewer sees only
+their own browser.
+
 ```text
+Email: <reviewer email>
+Password: <reviewer password>
+
 1. Install the extension. The welcome tab opens. Select "Connect to Kortix".
-2. Sign in at kortix.com with the account above (email and password), then select Allow.
-3. Back on the welcome tab, keep the defaults and select Done.
-4. Open https://kortix.com, open the project "Chrome review", and start a new session.
-5. Send: "Use my Chrome to open https://example.com and tell me the page title."
-6. A tab group named after the session opens with example.com. The bar at the bottom right shows "Kortix is working" with Take over and Stop. The session answers with the title.
-7. Select Stop on the page, or press Alt+Shift+K. The session loses access to the browser.
-8. Side panel: click the toolbar icon, type a question about the current page, and send it.
+2. At kortix.com, enter the email, select "Use a password", enter the password and select Continue. Then select Allow.
+3. Back on the welcome tab, keep the defaults and select Finish.
+4. Open https://kortix.com. The workspace "Chrome review" opens.
+5. In the message box, send: "Use my Chrome to open https://example.com and tell me the page title."
+6. A tab group named after the session opens with example.com, and the bar at the bottom right shows "Kortix is working". The session answers with the title, "Example Domain".
+7. To stop a session while it works, select Stop on the page, or press Alt+Shift+K. The session loses access to the browser.
+8. Side panel: click the toolbar icon or press Alt+K, type a question about the current page, and send it.
 ```
 
 ## Graphic assets

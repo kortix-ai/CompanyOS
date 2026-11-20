@@ -636,6 +636,8 @@ function ComposerImpl(props: SessionChatInputProps) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const tModelGate = useTranslations('sessionUi.modelGate');
   const tComposerAttachments = useTranslations('hardcodedUi.composerAttachments');
+  /** For the submit latch, created once at the first submit: the toast speaks the current locale. */
+  const tComposerAttachmentsRef = useLatestRef(tComposerAttachments);
   const tHardcodedUi = useTranslations('hardcodedUi');
   const tThreads = useTranslations('threads');
 
@@ -1830,11 +1832,6 @@ function ComposerImpl(props: SessionChatInputProps) {
       const filesNow = stash ? stash.files : attachedFilesRef.current;
       const quotesNow = stash ? stash.quotes : quotesRef.current;
       const pastesNow = stash ? stash.pastes : pastesRef.current;
-      // A Drive file still downloading would leave without its bytes (a message) or be thrown away (a command).
-      if (!stash && pendingDrivePathsRef.current.size > 0) {
-        errorToast(tComposerAttachments('driveFilePending'));
-        return;
-      }
       // Every quote leads the message, or the command args, as its own
       // `<reply_context>` line. A question's custom answer below reads
       // `draft.text`, so it never carries them.
@@ -2079,7 +2076,6 @@ function ComposerImpl(props: SessionChatInputProps) {
       onQuestionAction,
       onSend,
       promptAttachments,
-      tComposerAttachments,
     ],
   );
 
@@ -2176,6 +2172,13 @@ function ComposerImpl(props: SessionChatInputProps) {
           attachmentSubmission,
           placement: submitPlacementRef.current,
         };
+      },
+      // A Drive file still downloading would leave without its bytes (a message), be thrown away (a
+      // command), or lose its chip to a mid-send stash. Every submit waits for it, the stash included.
+      () => {
+        if (pendingDrivePathsRef.current.size === 0) return false;
+        errorToast(tComposerAttachmentsRef.current('driveFilePending'));
+        return true;
       },
     );
     return submitLatchRef.current();

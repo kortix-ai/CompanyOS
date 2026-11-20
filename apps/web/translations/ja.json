@@ -27482,7 +27482,7 @@
     "newSpace": "新しいスペース",
     "searchPlaceholder": "スペースを検索",
     "emptyTitle": "スペースはまだありません",
-    "emptyDescription": "スペースは 1 つのプロジェクト、顧客、テーマのセッションをまとめます。",
+    "emptyDescription": "スペースは 1 つのワークスペース、顧客、テーマのセッションをまとめます。",
     "noResultsTitle": "一致するスペースはありません",
     "noResultsDescription": "別の名前で試してください。",
     "loadFailed": "スペースを読み込めませんでした",

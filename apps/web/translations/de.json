@@ -27482,7 +27482,7 @@
     "newSpace": "Neuer Space",
     "searchPlaceholder": "Spaces durchsuchen",
     "emptyTitle": "Noch keine Spaces",
-    "emptyDescription": "Ein Space fasst die Sitzungen eines Projekts, Kunden oder Themas zusammen.",
+    "emptyDescription": "Ein Space fasst die Sitzungen eines Arbeitsbereichs, Kunden oder Themas zusammen.",
     "noResultsTitle": "Kein Space passt",
     "noResultsDescription": "Versuche einen anderen Namen.",
     "loadFailed": "Die Spaces konnten nicht geladen werden",

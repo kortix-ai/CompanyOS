@@ -27482,7 +27482,7 @@
     "newSpace": "Novo espaço",
     "searchPlaceholder": "Buscar espaços",
     "emptyTitle": "Nenhum espaço ainda",
-    "emptyDescription": "Um espaço agrupa as sessões de um projeto, cliente ou tema.",
+    "emptyDescription": "Um espaço agrupa as sessões de um espaço de trabalho, cliente ou tema.",
     "noResultsTitle": "Nenhum espaço corresponde",
     "noResultsDescription": "Tente outro nome.",
     "loadFailed": "Não foi possível carregar os espaços",

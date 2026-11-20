@@ -473,8 +473,6 @@ async function stripeNamesLiveSubscription(userId: string, customers: string[]):
       if (!after) throw new Error('Incomplete subscription listing');
     }
   }
-  // A deployment with no Stripe key holds no Stripe subscription to find.
-  if (!config.STRIPE_SECRET_KEY) return false;
   // A subscription can name the identity before (or without) a customer mapping
   // (legacy-stripe-sync.ts).
   for (let page: string | undefined; ;) {

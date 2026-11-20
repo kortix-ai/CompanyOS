@@ -2113,5 +2113,6 @@ and searches subscriptions whose metadata names the person's id (an unmapped
 legacy purchase). With no wallet both variants report `no_account` and no
 active subscription, without a wallet write; a wallet with nonrecurring credits
 reports `no_subscription`. A database or provider error is an error response,
-never absence: the local profile's Stripe key is a placeholder, so there the
+never absence, and so is a missing Stripe key: the local profile's Stripe key
+is a placeholder, so there the
 read answers 500 and this flow needs the `stripe` capability.

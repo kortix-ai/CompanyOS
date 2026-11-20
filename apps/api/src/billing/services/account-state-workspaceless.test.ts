@@ -12,10 +12,12 @@ let keyedWorkspace = false;
 const realAccounts = await import('../repositories/credit-accounts');
 const realCustomers = await import('../repositories/customers');
 const realResolve = await import('../../shared/resolve-account');
+const { getStripe: realGetStripe } = await import('../../shared/stripe');
 mock.module('../../shared/resolve-account', () => ({ ...realResolve, accountExists: async () => keyedWorkspace }));
 mock.module('../repositories/credit-accounts', () => ({ ...realAccounts, getCreditAccount: async () => { if (failure) throw new Error('read failed'); return row; } }));
 mock.module('../repositories/customers', () => ({ ...realCustomers, listStripeCustomerIdsByAccountId: async () => customers }));
-mock.module('../../shared/stripe', () => ({ getStripe: () => ({ subscriptions: { list: async () => { const page = pages[reads++]; if (!page) throw new Error('provider failed'); return page; },
+// With no key the real client refuses, so the missing-key case runs the real path.
+mock.module('../../shared/stripe', () => ({ getStripe: () => (!config.STRIPE_SECRET_KEY ? realGetStripe() : { subscriptions: { list: async () => { const page = pages[reads++]; if (!page) throw new Error('provider failed'); return page; },
   search: async (params: { query: string; limit?: number; page?: string }) => { searches.push(params); const page = named[searches.length - 1]; if (!page) throw new Error('search failed'); return page; } } }) }));
 const { config } = await import('../../config');
 const { buildWorkspacelessAccountState } = await import('./account-state');
@@ -99,10 +101,14 @@ test('an identity that is not a uuid is refused before any lookup', async () => 
   await expect(buildWorkspacelessAccountState("x' OR status:'active")).rejects.toThrow();
   expect(searches).toEqual([]);
 });
-test('a deployment without Stripe has no Stripe subscription to search for', async () => {
+test('a deployment without a Stripe key cannot report absence', async () => {
   config.STRIPE_SECRET_KEY = '';
-  expect(await buildWorkspacelessAccountState(ID)).toMatchObject({ billing_state: 'no_account', has_active_subscription: false });
+  await expect(buildWorkspacelessAccountState(ID)).rejects.toThrow('Missing STRIPE_SECRET_KEY');
   expect(searches).toEqual([]);
+});
+test('a subscription the wallet proves stays active without a Stripe key', async () => {
+  config.STRIPE_SECRET_KEY = ''; row = { stripeSubscriptionId: 'sub_synthetic', stripeSubscriptionStatus: 'active' };
+  expect((await buildWorkspacelessAccountState(ID)).has_active_subscription).toBe(true);
 });
 test('a subscription the wallet proves is reported without a provider read', async () => {
   row = { stripeSubscriptionId: 'sub_synthetic', stripeSubscriptionStatus: 'active' }; customers = ['cus_synthetic']; pages = []; named = [];

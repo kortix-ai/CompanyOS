@@ -37,6 +37,10 @@ function providerLabel(provider: SandboxProviderName): string {
   return provider.toUpperCase();
 }
 
+/** Not one of the statuses statusColor and statusLabel name: still provisioning. */
+const isProvisioningStatus = (status: string) =>
+  !['running', 'ready', 'active', 'stopped', 'archived', 'error', 'failed'].includes(status);
+
 function statusColor(status: string, isDark: boolean): string {
   switch (status) {
     case 'running': case 'ready': case 'active': return THEME.accent.green;
@@ -82,7 +86,7 @@ export default function InstancesScreen() {
 
   // Auto-poll when any instance is provisioning
   const hasProvisioning = React.useMemo(
-    () => instances?.some((i) => !['running', 'ready', 'active', 'stopped', 'archived', 'error', 'failed'].includes(i.status)),
+    () => instances?.some((i) => isProvisioningStatus(i.status)),
     [instances],
   );
   React.useEffect(() => {
@@ -167,7 +171,7 @@ export default function InstancesScreen() {
                 {instances?.map((instance, idx) => {
                   const isActive = instance.external_id === sandboxId;
                   const isLast = idx === (instances?.length ?? 0) - 1;
-                  const isProvisioning = !['running', 'ready', 'active', 'stopped', 'archived', 'error', 'failed'].includes(instance.status);
+                  const isProvisioning = isProvisioningStatus(instance.status);
                   // Prefer live /kortix/health version for the active instance;
                   // fall back to the DB cache (instance.version) for others.
                   const effectiveVersion = (isActive ? liveActiveVersion : null) || instance.version || null;
@@ -177,7 +181,7 @@ export default function InstancesScreen() {
                         <View className="flex-row items-center">
                           <View
                             className="h-2.5 w-2.5 rounded-full mr-3"
-                            style={{ backgroundColor: isProvisioning ? THEME.accent.orange : statusColor(instance.status, isDark) }}
+                            style={{ backgroundColor: statusColor(instance.status, isDark) }}
                           />
                           <View className="flex-1">
                             <Text className="font-roobert-medium text-[15px] text-foreground" numberOfLines={1}>

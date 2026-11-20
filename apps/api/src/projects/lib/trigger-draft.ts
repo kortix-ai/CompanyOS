@@ -196,6 +196,7 @@ export async function loadTriggersForResponse(
       // A change_request trigger's branch reads back as `filter.base`, as kortix.yaml writes it.
       filter: spec.type === 'change_request' && spec.changeRequest?.base ? { ...spec.filter, base: spec.changeRequest.base } : spec.filter,
       // Run caps (KRTX-1721); null = unset (the hourly default, 60, applies).
+      hard_run_caps: spec.hardRunCaps ?? false,
       max_runs_per_hour: spec.maxRunsPerHour ?? null,
       max_runs_per_day: spec.maxRunsPerDay ?? null,
       // Overlap (KRTX-1721); null = unset (`skip` for cron, `allow` otherwise).
@@ -311,7 +312,8 @@ export interface TriggerDraft {
   maxLatenessSeconds?: number;
   /** For type=app only — the silence alert (`expect_event_within`), in whole seconds. */
   expectEventWithinSeconds?: number;
-  /** Any type — the run caps (`max_runs_per_hour`, `max_runs_per_day`, KRTX-1721). Omitted when unset. */
+  /** Include manual fires in atomically reserved run caps. */
+  hardRunCaps?: boolean;
   maxRunsPerHour?: number;
   maxRunsPerDay?: number;
   /** `overlap` (KRTX-1721), every session mode. Omitted when unset: the type's default applies. */
@@ -581,6 +583,7 @@ export function specToBody(spec: GitTriggerSpec): Record<string, unknown> {
     max_lateness: spec.maxLatenessSeconds ? formatDurationSeconds(spec.maxLatenessSeconds) : null,
     expect_event_within: spec.expectEventWithinSeconds ? formatDurationSeconds(spec.expectEventWithinSeconds) : null,
     // Kept on PATCH, like max_lateness: an edit of any other field keeps the caps.
+    hard_run_caps: spec.hardRunCaps ?? false,
     max_runs_per_hour: spec.maxRunsPerHour ?? null,
     max_runs_per_day: spec.maxRunsPerDay ?? null,
     // An agent run's static input (`run.payload`); kept on PATCH.
@@ -633,6 +636,7 @@ export function draftToSpec(
     secretEnv: draft.secretEnv,
     ...(draft.maxLatenessSeconds ? { maxLatenessSeconds: draft.maxLatenessSeconds } : {}),
     ...(draft.expectEventWithinSeconds ? { expectEventWithinSeconds: draft.expectEventWithinSeconds } : {}),
+    ...(draft.hardRunCaps ? { hardRunCaps: true } : {}),
     ...(draft.maxRunsPerHour ? { maxRunsPerHour: draft.maxRunsPerHour } : {}),
     ...(draft.maxRunsPerDay ? { maxRunsPerDay: draft.maxRunsPerDay } : {}),
     ...(draft.overlap ? { overlap: draft.overlap } : {}),

@@ -451,11 +451,9 @@
     "./session/composer/session-chat-input": "./src/session/composer/session-chat-input.tsx",
     "./session/list/session-status-mark": "./src/session/list/session-status-mark.tsx",
     "./session/models/ask-owner-for-credits-button": "./src/session/models/ask-owner-for-credits-button.tsx",
-    "./session/models/connect-model-step": "./src/session/models/connect-model-step.tsx",
     "./session/models/model-grouping": "./src/session/models/model-grouping.ts",
     "./session/models/model-search-empty": "./src/session/models/model-search-empty.tsx",
     "./session/models/model-selector": "./src/session/models/model-selector.tsx",
-    "./session/models/use-workspace-model-gate": "./src/session/models/use-workspace-model-gate.ts",
     "./session/panel/audit/audit-credential-label": "./src/session/panel/audit/audit-credential-label.ts",
     "./session/panel/easy/detail-view": "./src/session/panel/easy/detail-view.tsx",
     "./session/participants/session-participants": "./src/session/participants/session-participants.tsx",
@@ -575,7 +573,6 @@
     "./workspace/sidebar/footer/project-upgrade-button": "./src/workspace/sidebar/footer/project-upgrade-button.tsx",
     "./workspace/sidebar/footer/sandbox-health": "./src/workspace/sidebar/footer/sandbox-health.ts",
     "./workspace/sidebar/modal/share-session-modal": "./src/workspace/sidebar/modal/share-session-modal.tsx",
-    "./workspace/sidebar/project-nav-items": "./src/workspace/sidebar/project-nav-items.tsx",
     "./workspace/sidebar/project-session-list": "./src/workspace/sidebar/project-session-list.tsx",
     "./workspace/sidebar/project-sidebar": "./src/workspace/sidebar/project-sidebar.tsx",
     "./workspace/sidebar/session-brief-hover-card": "./src/workspace/sidebar/session-brief-hover-card.tsx",
@@ -2283,10 +2280,6 @@
         "types": "./dist/session/models/ask-owner-for-credits-button.d.ts",
         "import": "./dist/session/models/ask-owner-for-credits-button.js"
       },
-      "./session/models/connect-model-step": {
-        "types": "./dist/session/models/connect-model-step.d.ts",
-        "import": "./dist/session/models/connect-model-step.js"
-      },
       "./session/models/model-grouping": {
         "types": "./dist/session/models/model-grouping.d.ts",
         "import": "./dist/session/models/model-grouping.js"
@@ -2298,10 +2291,6 @@
       "./session/models/model-selector": {
         "types": "./dist/session/models/model-selector.d.ts",
         "import": "./dist/session/models/model-selector.js"
-      },
-      "./session/models/use-workspace-model-gate": {
-        "types": "./dist/session/models/use-workspace-model-gate.d.ts",
-        "import": "./dist/session/models/use-workspace-model-gate.js"
       },
       "./session/panel/audit/audit-credential-label": {
         "types": "./dist/session/panel/audit/audit-credential-label.d.ts",
@@ -2766,10 +2755,6 @@
       "./workspace/sidebar/modal/share-session-modal": {
         "types": "./dist/workspace/sidebar/modal/share-session-modal.d.ts",
         "import": "./dist/workspace/sidebar/modal/share-session-modal.js"
-      },
-      "./workspace/sidebar/project-nav-items": {
-        "types": "./dist/workspace/sidebar/project-nav-items.d.ts",
-        "import": "./dist/workspace/sidebar/project-nav-items.js"
       },
       "./workspace/sidebar/project-session-list": {
         "types": "./dist/workspace/sidebar/project-session-list.d.ts",

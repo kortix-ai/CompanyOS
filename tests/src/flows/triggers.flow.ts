@@ -10,7 +10,7 @@ import { TriggerListSchema } from '@kortix/api-contract';
 import { flow } from '../core/flow';
 import { waitFor } from '../core/poll';
 import { CliSandbox, throwIfCliInfraFailure } from '../fixtures/cli';
-import { createDatabaseSession } from '../fixtures/database-project';
+import { bindDatabaseSessionCredential, createDatabaseSession } from '../fixtures/database-project';
 import { enableEnterpriseDemo } from '../fixtures/enterprise-access';
 import { signedWebhookHeaders, webhookSignature, withDb } from '../fixtures/chat';
 
@@ -3428,6 +3428,95 @@ flow(
     }
   },
 );
+
+// Hard caps reserve attempts before dispatch, including manual fires of disabled schedules.
+flow('TRG-46', {
+  domain: 'triggers', requires: ['database'],
+  routes: ['POST /v1/workspaces/:projectId/triggers', 'POST /v1/workspaces/:projectId/triggers/:slug/fire', 'GET /v1/workspaces/:projectId/triggers/:slug/runs'],
+}, async (ctx) => {
+  if (ctx.env.target !== 'local') return;
+  const p = await ctx.fixtures.project({ managedGit: true });
+  const owner = ctx.client.as(ctx.P.OWNER);
+  const params = { projectId: p.id, slug: 'hard-worker' };
+  await ctx.step('save a disabled keyed worker with hard limits and preserve them on read-back', async () => {
+    const response = await owner.post('/v1/workspaces/:projectId/triggers', {
+      name: 'Hard worker', type: 'cron', cron: '0 0 9 * * *', enabled: false,
+      prompt_template: 'Draft', session_key: '{{ body.thread_id }}',
+      filter: { 'body.thread_id': { prefix: 'th_' } },
+      hard_run_caps: true, max_runs_per_hour: 5, max_runs_per_day: 20,
+    }, { params });
+    response.status(201);
+    if (!response.text().includes('"hard_run_caps":true')) throw new Error('hard cap policy lost on read-back');
+  });
+  await ctx.step('invalid and missing keys start nothing and do not consume admission', async () => {
+    for (const payload of [{ body: { thread_id: 'x' } }, {}]) {
+      (await owner.post('/v1/workspaces/:projectId/triggers/:slug/fire', { payload }, { params })).status(429);
+    }
+    await withDb(ctx, async (db) => {
+      const result = await db.query('select count(*)::int as n from kortix.project_trigger_admissions where project_id = $1', [p.id]);
+      if (result.rows[0]?.n !== 0) throw new Error('invalid payload consumed admission');
+    });
+  });
+  await ctx.step('concurrent manual fires admit five; the sixth is refused with persisted history', async () => {
+    const results = await Promise.all(Array.from({ length: 6 }, () => owner.post('/v1/workspaces/:projectId/triggers/:slug/fire', {
+      payload: { body: { thread_id: 'th_synthetic' } },
+    }, { params })));
+    // The deterministic local account has no model. Admitted attempts fail 402,
+    // but still spend a reservation: retries cannot evade a hard attempt budget.
+    if (results.filter((r) => r.statusCode === 402).length !== 5 || results.filter((r) => r.statusCode === 429).length !== 1) {
+      throw new Error(`unexpected dispatch statuses: ${results.map((r) => r.statusCode).join(',')}`);
+    }
+    const history = await owner.get('/v1/workspaces/:projectId/triggers/:slug/runs', { params });
+    history.status(200);
+    if (!history.text().includes('hard max_runs_per_hour 5')) throw new Error('hard-cap refusal missing from history');
+  });
+});
+
+flow('TRG-47', {
+  domain: 'triggers', requires: ['database'],
+  routes: ['POST /v1/workspaces/:projectId/triggers', 'POST /v1/workspaces/:projectId/cli-token', 'POST /v1/workspaces/:projectId/triggers/:slug/fire', 'GET /v1/workspaces/:projectId/sessions/:sessionId', 'GET /v1/workspaces/:projectId/triggers/:slug/runs'],
+}, async (ctx) => {
+  if (ctx.env.target !== 'local') return;
+  const p = await ctx.fixtures.project({ managedGit: true });
+  const owner = ctx.client.as(ctx.P.OWNER);
+  const params = { projectId: p.id, slug: 'draft-worker' };
+  let secret = '';
+  let worker = '';
+  await ctx.step('seed a dispatcher and its private keyed draft worker with a session-bound credential', async () => {
+    (await owner.post('/v1/workspaces/:projectId/triggers', {
+      name: 'Draft worker', type: 'cron', cron: '0 0 9 * * *', enabled: false,
+      prompt_template: 'Draft only', session_key: '{{ body.thread_id }}',
+    }, { params })).status(201);
+    const dispatcher = await createDatabaseSession(ctx.env, { projectId: p.id, accountId: p.accountId!, userId: ctx.P.OWNER.userId!, visibility: 'private' });
+    worker = await createDatabaseSession(ctx.env, {
+      projectId: p.id, accountId: p.accountId!, userId: ctx.P.OWNER.userId!, visibility: 'private', parentSessionId: dispatcher,
+      metadata: { trigger_kind: 'git', trigger_slug: 'draft-worker', trigger_session_key: 'th_synthetic' },
+    });
+    await withDb(ctx, (db) => db.query("update kortix.project_sessions set status = 'stopped' where project_id = $1", [p.id]));
+    const minted = await owner.post('/v1/workspaces/:projectId/cli-token', { name: ctx.fixtures.name('dispatcher') }, { params });
+    minted.status(201);
+    const token = minted.json<{ token_id: string; secret_key: string }>();
+    secret = token.secret_key;
+    await bindDatabaseSessionCredential(ctx.env, { tokenId: token.token_id, commandId: crypto.randomUUID(), sessionId: dispatcher, accountId: p.accountId!, projectId: p.id });
+  });
+  await ctx.step('the bound dispatcher fires the disabled schedule twice, reads its worker, and sees exactly one persisted row per fire', async () => {
+    const box = ctx.client.as({ label: 'synthetic-dispatcher', auth: { mode: 'bearer', token: secret } });
+    for (let n = 1; n <= 2; n += 1) {
+      const result = await box.post('/v1/workspaces/:projectId/triggers/:slug/fire', { payload: { body: { thread_id: 'th_synthetic' } } }, { params });
+      result.status(202).body().has('$.session_id', worker);
+      (await box.get('/v1/workspaces/:projectId/sessions/:sessionId', { params: { ...params, sessionId: worker } })).status(200);
+      const history = await box.get('/v1/workspaces/:projectId/triggers/:slug/runs', { params });
+      history.status(200);
+      const runs = history.json<{ runs: Array<{ session_id: string }> }>().runs;
+      if (runs.length !== n || runs.some((run) => run.session_id !== worker)) throw new Error('dispatcher run history lost or duplicated');
+    }
+    const cli = new CliSandbox('keyed-draft');
+    try {
+      const result = await cli.run(['triggers', 'runs', 'draft-worker', '--json'], { env: { KORTIX_TOKEN: secret, KORTIX_PROJECT_ID: p.id } });
+      if (result.exitCode !== 0 || !result.stdout.includes(worker)) throw new Error(`CLI run history failed: ${result.all}`);
+    } finally { cli.dispose(); }
+  });
+});
 
 flow('TRG-44', {
   domain: 'triggers',

@@ -35,7 +35,8 @@ export interface TriggerScheduleSpec {
   maxLatenessSeconds?: number;
   /** type=app only — see GitTriggerSpec.expectEventWithinSeconds. */
   expectEventWithinSeconds?: number;
-  /** Any type — see GitTriggerSpec.maxRunsPerHour / maxRunsPerDay. */
+  /** Include manual fires in atomically reserved run caps. */
+  hardRunCaps?: boolean;
   maxRunsPerHour?: number;
   maxRunsPerDay?: number;
   /** See GitTriggerSpec.overlap. */
@@ -106,6 +107,7 @@ export function triggerScheduleRevision(spec: TriggerScheduleSpec): string {
     ...(spec.expectEventWithinSeconds ? { expectEventWithinSeconds: spec.expectEventWithinSeconds } : {}),
     // Run caps (KRTX-1721): the same rule. Cron, event and monitor fires read
     // them from the stored spec.
+    ...(spec.hardRunCaps ? { hardRunCaps: true } : {}),
     ...(spec.maxRunsPerHour ? { maxRunsPerHour: spec.maxRunsPerHour } : {}),
     ...(spec.overlap ? { overlap: spec.overlap } : {}),
     ...(spec.maxRunsPerDay ? { maxRunsPerDay: spec.maxRunsPerDay } : {}),

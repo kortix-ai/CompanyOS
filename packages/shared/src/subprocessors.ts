@@ -186,7 +186,7 @@ export const SUBPROCESSORS_CORE: readonly Subprocessor[] = [
   },
   {
     name: "PostHog, Inc.",
-    purpose: "Product analytics and session replay; replays of signed-in use hide all text and input",
+    purpose: "Product analytics and session replay; replays of signed-in use hide input and all text except our interface labels",
     location: "European Union",
   },
   {

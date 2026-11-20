@@ -20,7 +20,7 @@ import { EyeIcon as Eye, EyeSlashIcon as EyeOff } from '@phosphor-icons/react';
 import { m, useReducedMotion } from 'motion/react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { type FormEvent, Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { EmailLinkStep } from './email-link-step';
 import { resolveAuthMode } from './actions';
 import {
@@ -67,14 +67,16 @@ import {
   passwordFailureCopy,
 } from '@/lib/auth/unified-auth-flow';
 import { authRedirectUrl } from '@kortix/ui/internal/lib/desktop';
+// Static, not lazy: the server renders the button, and a lazy chunk that is
+// still loading when the page hydrates makes React delete that button and
+// render it again once the chunk arrives (a blink of up to ~360 ms).
+import GoogleSignIn from '@/features/auth/google-signin';
 import { getEnv } from '@/lib/env-config';
 import { emailDomain, isWorkEmail } from '@/lib/personal-email';
 import {
   createClient as createBrowserSupabaseClient,
   fetchSamlEnabled,
 } from '@/lib/supabase/client';
-
-const GoogleSignIn = lazy(() => import('@/features/auth/google-signin'));
 
 type Step = 'entry' | 'sso' | 'credentials' | 'link';
 
@@ -710,12 +712,14 @@ function AuthCardForm({
       if (!flaggedAt || Date.now() - flaggedAt > ENTRY_SUBMIT_TTL_MS || !stash) {
         window.sessionStorage.removeItem(ENTRY_SUBMIT_FLAG_KEY);
         window.sessionStorage.removeItem(ENTRY_EMAIL_STASH_KEY);
-        // Typing without a submit: put back what hydration wiped so the
-        // visitor's next Enter or click submits the address they typed. The
-        // DOM write lands before React's re-render from setEmail, so a
-        // submit in the same task cannot read the wiped field.
-        if (stash && step === 'entry' && emailRef.current && !emailRef.current.value) {
-          emailRef.current.value = stash;
+        // Typing without a submit: hand the typed address to React so the
+        // visitor's next Enter or click submits it. React state is set even
+        // when the field still shows the typing: the field is controlled, and
+        // after hydration React clears it to `email` (still '') once this
+        // effect has run. The DOM write covers a field that was already
+        // wiped, so a submit in the same task cannot read an empty field.
+        if (stash && step === 'entry' && emailRef.current) {
+          if (!emailRef.current.value) emailRef.current.value = stash;
           setEmail(stash);
         }
         return;
@@ -1111,12 +1115,10 @@ function AuthCardForm({
 
         {googleEnabled && (
           <>
-            <Suspense fallback={null}>
-              <GoogleSignIn
-                returnUrl={returnUrl}
-                mobileCallbackState={mobileCallbackState ?? undefined}
-              />
-            </Suspense>
+            <GoogleSignIn
+              returnUrl={returnUrl}
+              mobileCallbackState={mobileCallbackState ?? undefined}
+            />
             <OrDivider label={t('or')} />
           </>
         )}

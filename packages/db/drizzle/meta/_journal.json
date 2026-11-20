@@ -1793,6 +1793,27 @@
       "when": 1794851145393,
       "tag": "20261116174545_eval_trial_workspaces",
       "breakpoints": true
+    },
+    {
+      "idx": 256,
+      "version": "7",
+      "when": 1794929899430,
+      "tag": "20261117153819_session_groups_description",
+      "breakpoints": true
+    },
+    {
+      "idx": 257,
+      "version": "7",
+      "when": 1795002117581,
+      "tag": "20261118114157_session_groups_sharing_and_tabs",
+      "breakpoints": true
+    },
+    {
+      "idx": 258,
+      "version": "7",
+      "when": 1795093875738,
+      "tag": "20261119131115_session_groups_icon",
+      "breakpoints": true
     }
   ]
 }

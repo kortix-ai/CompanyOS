@@ -111,7 +111,7 @@ patchedDependencies:
     hash: h2muxfr6aq4tgswzcpaxi476gy
     path: patches/@electron__asar@3.4.1.patch
   blume@1.5.3:
-    hash: e2lihfsjc4kvtdhxezjuaintza
+    hash: it2pabpg2lgtvij6y2zaubcyqq
     path: patches/blume@1.5.3.patch
   next@16.4.2:
     hash: dbxh2pp57mgbhmbbexdoga4pp4
@@ -125,6 +125,9 @@ patchedDependencies:
   shaders@2.5.135:
     hash: w62sovffz6xvbvqx66sjk5qgeq
     path: patches/shaders@2.5.135.patch
+  streamdown@1.6.11:
+    hash: goowiaitvc37c2zrflcevm544i
+    path: patches/streamdown@1.6.11.patch
   undici@8.12.2:
     hash: mu6tw5d72jgydn6wat3dblh4w4
     path: patches/undici@8.12.2.patch
@@ -278,9 +281,6 @@ importers:
       '@kortix/manifest-schema':
         specifier: workspace:*
         version: link:../../packages/manifest-schema
-      '@kortix/registry':
-        specifier: workspace:*
-        version: link:../../packages/registry
       '@kortix/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
@@ -431,9 +431,6 @@ importers:
       '@kortix/manifest-schema':
         specifier: workspace:*
         version: link:../../packages/manifest-schema
-      '@kortix/registry':
-        specifier: workspace:*
-        version: link:../../packages/registry
       '@kortix/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
@@ -1216,7 +1213,7 @@ importers:
         version: 35.3.1(react-dom@19.3.0)(react@19.3.0)
       blume:
         specifier: 1.5.3
-        version: 1.5.3(patch_hash=e2lihfsjc4kvtdhxezjuaintza)(@types/node@20.19.43)(@types/react-dom@19.2.3)(@types/react@19.2.18)(csstype@3.2.3)(next@16.4.2)(preact@10.29.8)(prettier@3.9.7)(svelte@5.57.2)(vite@8.3.4)(vue@3.5.44)(yaml@2.9.1)
+        version: 1.5.3(patch_hash=it2pabpg2lgtvij6y2zaubcyqq)(@types/node@20.19.43)(@types/react-dom@19.2.3)(@types/react@19.2.18)(csstype@3.2.3)(next@16.4.2)(preact@10.29.8)(prettier@3.9.7)(svelte@5.57.2)(vite@8.3.4)(vue@3.5.44)(yaml@2.9.1)
       cannon-es:
         specifier: ^0.20.0
         version: 0.20.0
@@ -1366,7 +1363,7 @@ importers:
         version: 1.14.2
       streamdown:
         specifier: ^1.6.11
-        version: 1.6.11(micromark@4.0.3)(react@19.3.0)
+        version: 1.6.11(patch_hash=goowiaitvc37c2zrflcevm544i)(micromark@4.0.3)(react@19.3.0)
       tailwind-merge:
         specifier: ^3.6.0
         version: 3.7.0
@@ -1822,22 +1819,6 @@ importers:
         specifier: ^4.0.2
         version: 4.0.3
 
-  packages/registry:
-    dependencies:
-      '@kortix/manifest-schema':
-        specifier: workspace:*
-        version: link:../manifest-schema
-    devDependencies:
-      '@types/bun':
-        specifier: ^1.1.0
-        version: 1.4.2
-      '@typescript/native-preview':
-        specifier: 7.0.0-dev.20260707.2
-        version: 7.0.0-dev.20260707.2
-      typescript:
-        specifier: ^5.0.0
-        version: 5.9.3
-
   packages/sdk:
     dependencies:
       '@kortix/llm-catalog':
@@ -2189,7 +2170,7 @@ importers:
         version: 1.14.2
       streamdown:
         specifier: ^1.6.11
-        version: 1.6.11(micromark@4.0.3)(react@19.3.0)
+        version: 1.6.11(patch_hash=goowiaitvc37c2zrflcevm544i)(micromark@4.0.3)(react@19.3.0)
       tailwind-merge:
         specifier: ^3.6.0
         version: 3.7.0
@@ -17646,7 +17627,7 @@ packages:
     resolution: {integrity: sha512-XpNj6GDQzdfW+r2Wnn7xiSAd7TM3jzkxGXBGTtWKuSXv1xUV+azxAm8jdWZN06QTQk+2N2XB9jRDkvbmQmcRtg==}
     dev: true
 
-  /blume@1.5.3(patch_hash=e2lihfsjc4kvtdhxezjuaintza)(@types/node@20.19.43)(@types/react-dom@19.2.3)(@types/react@19.2.18)(csstype@3.2.3)(next@16.4.2)(preact@10.29.8)(prettier@3.9.7)(svelte@5.57.2)(vite@8.3.4)(vue@3.5.44)(yaml@2.9.1):
+  /blume@1.5.3(patch_hash=it2pabpg2lgtvij6y2zaubcyqq)(@types/node@20.19.43)(@types/react-dom@19.2.3)(@types/react@19.2.18)(csstype@3.2.3)(next@16.4.2)(preact@10.29.8)(prettier@3.9.7)(svelte@5.57.2)(vite@8.3.4)(vue@3.5.44)(yaml@2.9.1):
     resolution: {integrity: sha512-8oaUwDtMcEWdCxnUmnPnw6SJol93EAavUq7ihFcr6ur2mCPcdkMjMzphM5Y3qIAexwy2J/bsQKRzAWKqHqIUSw==}
     engines: {node: '>=22.12.0'}
     hasBin: true
@@ -29605,7 +29586,7 @@ packages:
     resolution: {integrity: sha512-uyQK/mx5QjHun80FLJTfaWE7JtwfRMKBLkMne6udYOmvH0CawotVa7TfgYHzAnpphn4+TweIx1QKMnRIbipmUg==}
     engines: {node: '>= 0.10.0'}
 
-  /streamdown@1.6.11(micromark@4.0.3)(react@19.3.0):
+  /streamdown@1.6.11(patch_hash=goowiaitvc37c2zrflcevm544i)(micromark@4.0.3)(react@19.3.0):
     resolution: {integrity: sha512-Y38fwRx5kCKTluwM+Gf27jbbi9q6Qy+WC9YrC1YbCpMkktT3PsRBJHMWiqYeF8y/JzLpB1IzDoeaB6qkQEDnAA==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
@@ -29640,6 +29621,7 @@ packages:
       - micromark-util-types
       - supports-color
     dev: false
+    patched: true
 
   /streamsearch@1.1.0:
     resolution: {integrity: sha512-Mcc5wHehp9aXz1ax6bZUyY5afg9u2rv5cqQI3mRrYkGC8rW2hM02jWuwjtL++LS5qinSyhj2QfLyNsuc+VsExg==}

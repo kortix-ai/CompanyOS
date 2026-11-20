@@ -19,18 +19,16 @@ const OLD_FOLDER = /(^|\/)(\.kortix|\.opencode|harnesses)(\/|$)|(^|\/)opencode\.
 const AGENT_FACING = [
   'packages/shared/src/setup-guide.ts',
   'apps/api/src/projects/lib/my-kortix-prompt.ts',
-  'apps/web/src/features/marketplace/marketplace-setup-prompt.ts',
   'apps/web/src/features/marketing/one-prompt/factory-content.ts',
   'packages/ui/src/session/agents/workflow-run-controls.tsx',
 ];
 const FORBIDS_IT = /Never write a\s+\\`\.kortix\/\\` folder/g;
 
 // Repositories made before 2026-09 keep their memory in `.kortix/memory/`, and
-// the memory tool still reads it there. These two lines describe that older
-// layout to the agent; they leave with the old-layout readers.
+// the memory tool still reads it there. This line describes that older
+// layout to the agent; it leaves with the old-layout readers.
 const OLDER_LAYOUT_NOTES = new Set([
   'packages/starter/templates/managed/skills/kortix-memory/SKILL.md',
-  'packages/starter/templates/marketplace/skills/coding/SKILL.md',
 ]);
 
 function templateFiles(): string[] {

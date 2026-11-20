@@ -58,7 +58,6 @@ export type OkResponse = z.infer<typeof OkResponseSchema>;
  * Code-level names are the FeatureFlag* family.
  */
 export const FeatureFlagMapSchema = z.object({
-  marketplace: z.boolean(),
   reminders: z.boolean(),
   secrets_egress: z.boolean(),
   us_region: z.boolean(),
@@ -2200,6 +2199,7 @@ export const TriggerSchema = z.object({
    * Runs the trigger may start in any 60 minutes. Null when unset: the default,
    * 60, applies. A fire past it is a skipped run with reason `throttled: …`.
    */
+  hard_run_caps: z.boolean().optional(),
   max_runs_per_hour: z.number().int().nullable().optional(),
   /** Runs the trigger may start in a UTC day. Null when unset: no daily cap. */
   max_runs_per_day: z.number().int().nullable().optional(),

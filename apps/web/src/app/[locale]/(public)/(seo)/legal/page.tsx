@@ -12,7 +12,7 @@ import { Fragment, Suspense, useState, type ReactNode } from 'react';
 
 import { TERMS_LAST_UPDATED, TERMS_OF_SERVICE } from './terms-of-service';
 
-const LEGAL_LAST_UPDATED = 'November 19, 2026';
+const LEGAL_LAST_UPDATED = 'November 20, 2026';
 
 type LegalTab = 'imprint' | 'terms' | 'privacy';
 
@@ -194,6 +194,7 @@ const PRIVACY_TITLES = {
   cookies: 'Cookies and analytics',
   'information-sharing': 'Who we share it with',
   'google-user-data': 'Google user data',
+  'chrome-extension': 'Kortix in Chrome',
   'international-transfers': 'International transfers',
   retention: 'How long we keep it',
   'information-protection': 'How we protect it',
@@ -469,6 +470,58 @@ function PrivacyPolicy() {
             </li>
           </Bullets>
         </Clause>
+      </Section>
+
+      <Section id="chrome-extension" title={PRIVACY_TITLES['chrome-extension']}>
+        <P>
+          Kortix in Chrome is our extension for Chrome and other Chromium browsers. It connects your
+          browser to your Kortix account, so that your sessions can open pages, read them, and act
+          on them as you, while you watch. It uses data only to provide this feature.
+        </P>
+        <Clause lead="What it keeps in your browser">
+          <Bullets>
+            <li>
+              The sign-in tokens for your Kortix account, the server address, and the settings you
+              choose: the browser name, the access mode, and which tabs a session can reach.
+            </li>
+          </Bullets>
+          <P>Signing out or removing the extension deletes them.</P>
+        </Clause>
+        <Clause lead="What it sends to Kortix">
+          <Bullets>
+            <li>
+              When you connect it: the browser name, browser brand, operating system, and extension
+              version, so that you can recognize the browser in Kortix. While it is connected:
+              whether the browser is online.
+            </li>
+            <li>
+              When a session uses the browser: the content of the pages the session reaches,
+              including their addresses, titles, text, screenshots and network requests, and the
+              actions the session takes there. When you allow all tabs, a session can also list the
+              address and title of each open tab. You choose whether a session reaches all your tabs
+              or only the tabs it opens, and whether it must ask first. Each tab a session uses is in
+              a tab group named after the session, and you can stop the session at any time.
+            </li>
+            <li>
+              When you send a message from its side panel: the text of the page you attach, and a
+              screenshot of the visible tab if you choose to add one.
+            </li>
+          </Bullets>
+        </Clause>
+        <P>
+          We handle this data as customer content: we use it to run the session you started, keep it
+          with that session, and delete it as described under How long we keep it. The extension does
+          not read a page unless a session or you ask it to, and it contains no analytics or
+          advertising code.
+        </P>
+        <P>
+          The use of information received from Kortix in Chrome adheres to the Chrome Web Store User
+          Data Policy, including the Limited Use requirements. We do not sell this data, use it for
+          advertising, use it to determine creditworthiness or for lending, or use it to train
+          general-purpose AI models. We share it only with the service providers that run your
+          session, such as the AI model provider you choose, and as described under Who we share it
+          with.
+        </P>
       </Section>
 
       <Section id="international-transfers" title={PRIVACY_TITLES['international-transfers']}>

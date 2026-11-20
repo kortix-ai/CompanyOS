@@ -92,6 +92,33 @@ const SUPERSEDED_GATEWAY_INDEX_MIGRATIONS = [
   },
 ] as const;
 
+// #12938 and #12944 both add the same trigger-admissions workspace twin.
+// 20261120083000000 adds it first, so this file failed with 42710 ("already
+// exists") on dev (deploy-dev 44749898469) and on every fresh database. The
+// runtime copy adds the constraint only where it is missing.
+const TRIGGER_ADMISSIONS_TWIN_MIGRATION = '20261120094700000_trigger_admissions_workspace_twin.sql';
+const TRIGGER_ADMISSIONS_TWIN_SHA256 = '19a4b0b419e4b55d0702d8e47bac9950f90c7344a5e723637aa265582522597a';
+const TRIGGER_ADMISSIONS_TWIN_STATEMENT = `ALTER TABLE kortix.project_trigger_admissions
+  ADD CONSTRAINT project_trigger_admissions_project_id_workspaces_fk
+  FOREIGN KEY (project_id) REFERENCES kortix.workspaces (workspace_id)
+  DEFERRABLE INITIALLY DEFERRED NOT VALID;`;
+const TRIGGER_ADMISSIONS_TWIN_RUNTIME = `-- Runtime correction: 20261120083000000_trigger_admissions_workspace_twin.sql
+-- adds this constraint first. Add it only where it is missing.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+      FROM pg_constraint
+     WHERE conrelid = 'kortix.project_trigger_admissions'::regclass
+       AND conname = 'project_trigger_admissions_project_id_workspaces_fk'
+  ) THEN
+    ALTER TABLE kortix.project_trigger_admissions
+      ADD CONSTRAINT project_trigger_admissions_project_id_workspaces_fk
+      FOREIGN KEY (project_id) REFERENCES kortix.workspaces (workspace_id)
+      DEFERRABLE INITIALLY DEFERRED NOT VALID;
+  END IF;
+END $$;`;
+
 /** The one `pgm.sql(...)` block that builds `index`, and the no-op that replaces it. */
 function supersededIndexBuild(source: string, index: string): string | null {
   const start = source.indexOf(`  pgm.sql(\`\n    create index concurrently if not exists ${index}\n`);
@@ -113,6 +140,7 @@ interface RuntimeOverrideOptions {
   rbacCutoverViewsExpectedSha256?: string;
   roleAssignmentsScopeExpectedSha256?: string;
   supersededIndexExpectedSha256?: Record<string, string>;
+  triggerAdmissionsTwinExpectedSha256?: string;
 }
 
 interface MigrationRuntimeDirectory {
@@ -156,6 +184,25 @@ export function materializeMigrationRuntimeDirectory(
       );
     }
   }
+  const triggerAdmissionsTwinPath = join(sourceDirectory, TRIGGER_ADMISSIONS_TWIN_MIGRATION);
+  const triggerAdmissionsTwinSource = existsSync(triggerAdmissionsTwinPath)
+    ? readFileSync(triggerAdmissionsTwinPath, 'utf8')
+    : null;
+  if (triggerAdmissionsTwinSource) {
+    const expectedSha256 = options.triggerAdmissionsTwinExpectedSha256 ?? TRIGGER_ADMISSIONS_TWIN_SHA256;
+    const actualSha256 = sha256Hex(triggerAdmissionsTwinSource);
+    if (actualSha256 !== expectedSha256) {
+      throw new Error(
+        `${TRIGGER_ADMISSIONS_TWIN_MIGRATION} checksum mismatch: expected ${expectedSha256}, received ${actualSha256}`,
+      );
+    }
+    const occurrenceCount = triggerAdmissionsTwinSource.split(TRIGGER_ADMISSIONS_TWIN_STATEMENT).length - 1;
+    if (occurrenceCount !== 1) {
+      throw new Error(
+        `${TRIGGER_ADMISSIONS_TWIN_MIGRATION} expected exactly one ADD CONSTRAINT statement; found ${occurrenceCount}`,
+      );
+    }
+  }
   const supersededIndexSources = SUPERSEDED_GATEWAY_INDEX_MIGRATIONS.flatMap((migration) => {
     const path = join(sourceDirectory, migration.file);
     if (!existsSync(path)) return [];
@@ -174,6 +221,7 @@ export function materializeMigrationRuntimeDirectory(
     !hasRemoveLocalDockerOverride &&
     !hasRbacCutoverViewsOverride &&
     !roleAssignmentsScopeSource &&
+    !triggerAdmissionsTwinSource &&
     supersededIndexSources.length === 0
   ) {
     return { path: sourceDirectory, appliedOverrides: [], cleanup: () => {} };
@@ -281,6 +329,16 @@ export function materializeMigrationRuntimeDirectory(
       );
       appliedOverrides.push(
         `${ROLE_ASSIGNMENTS_SCOPE_MIGRATION}: lock the member views before role_assignments (${ROLE_ASSIGNMENTS_SCOPE_SHA256})`,
+      );
+    }
+    if (triggerAdmissionsTwinSource) {
+      writeFileSync(
+        join(runtimeDirectory, TRIGGER_ADMISSIONS_TWIN_MIGRATION),
+        // A replacer function: a replacement string would turn the block's `$$` into `$`.
+        triggerAdmissionsTwinSource.replace(TRIGGER_ADMISSIONS_TWIN_STATEMENT, () => TRIGGER_ADMISSIONS_TWIN_RUNTIME),
+      );
+      appliedOverrides.push(
+        `${TRIGGER_ADMISSIONS_TWIN_MIGRATION}: add the twin FK only where 20261120083000000 did not (${TRIGGER_ADMISSIONS_TWIN_SHA256})`,
       );
     }
     for (const migration of supersededIndexSources) {

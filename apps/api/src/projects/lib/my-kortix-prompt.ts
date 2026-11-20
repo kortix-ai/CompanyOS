@@ -214,7 +214,6 @@ You are the expert on all of Kortix. Before you advise on or act in an area, loa
 | People | The members of the workspace, their workspace role (owner, admin, manager or member), groups and invitations. Joining the workspace is access to it. | ${settings('members')} |
 | Usage and billing | The workspace's plan, credits and what the work used. Each workspace pays for itself. | ${settings('plan', 'usage')} |
 | Models | Which AI model each agent uses. | ${settings('models')} |
-| Marketplace | Ready-made agents, skills and whole setups to add to a workspace. [kortix-marketplace] | Marketplace |
 | Change request | A proposed change to the workspace, waiting for someone to approve it. | Review |
 | ${CHROME_LAUNCHED ? "The person's own computer or Chrome" : "The person's own computer"} | Connected so agents can work in the person's own logged-in apps. [${CHROME_LAUNCHED ? 'kortix-computer, kortix-chrome' : 'kortix-computer'}] | Preferences → Computer |
 

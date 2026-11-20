@@ -332,8 +332,8 @@ export const DEPRECATED_KORTIX_PERMISSION_ALIASES: Readonly<Record<string, reado
  */
 export const RETIRED_KORTIX_PERMISSIONS: readonly string[] = ['project.room.read', 'project.room.write', 'project.artifact.comment', 'workspace.artifact.comment'];
 
-/** Kortix skills retired with their feature. An agent that still grants one validates with a warning. `kortix-rooms`: Rooms, removed 2026-11. */
-export const RETIRED_KORTIX_SKILL_NAMES: readonly string[] = ['kortix-rooms'];
+/** Kortix skills retired with their feature. An agent that still grants one validates with a warning. `kortix-rooms`: Rooms, removed 2026-11. `kortix-marketplace`: the marketplace, removed 2026-11-20. */
+export const RETIRED_KORTIX_SKILL_NAMES: readonly string[] = ['kortix-rooms', 'kortix-marketplace'];
 
 export const LEGACY_TOLERATED_KORTIX_PERMISSIONS: readonly string[] = [
   'project.session.exec',
@@ -513,7 +513,6 @@ export const KORTIX_SKILL_NAMES = [
   'kortix-genui',
   'kortix-goals',
   'kortix-harness-refinement',
-  'kortix-marketplace',
   'kortix-memory',
   'kortix-onboarding',
   'kortix-program-agents',

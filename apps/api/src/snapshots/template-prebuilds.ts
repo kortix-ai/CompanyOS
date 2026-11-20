@@ -275,7 +275,9 @@ async function toView(
     includeProviderCoverage?: boolean;
   },
 ): Promise<SandboxTemplateView> {
-  const identity = await computeTemplateIdentity(project, t);
+  // Listings already opt into bounded stale mirror reads. Do not override
+  // that policy with the build path's forced tip proof for a Dockerfile.
+  const identity = await computeTemplateIdentity(project, t, { freshness: false });
   let state: string = t.providerState ?? 'missing';
   let providerCoverage: SandboxTemplateProviderCoverage[] | undefined;
   if (opts.includeProviderCoverage) {

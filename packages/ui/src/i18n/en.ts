@@ -106,6 +106,7 @@ const catalog = {
     "savedVerified": "Key saved and verified",
     "savedInvalid": "Key saved, but {provider} refused it: {message}",
     "checkError": "The key could not be checked",
+    "keyRejected": "Your {provider} key was rejected. Update it in Models.",
     "openProviderInModels": "Open {provider} in Models",
     "member": "member",
     "members": "members",
@@ -243,7 +244,6 @@ const catalog = {
       "registering": "Registering workspace",
       "seeding": "Seeding starter files"
     },
-    "templateSeed": "This workspace will be seeded from the template you picked.",
     "account": {
       "label": "Account",
       "createIn": "Create in {account}",
@@ -793,10 +793,6 @@ const catalog = {
       "permission": "You need the workspace's settings permission to change a feature flag.",
       "updateFailed": "Failed to update {key}",
       "flags": {
-        "marketplace": {
-          "name": "Marketplace",
-          "description": "Browse and install skills from community and vendor registries. Sources, updates, and team scopes are still changing."
-        },
         "secrets_egress": {
           "name": "Network-Enforced Secrets",
           "description": "Control which tools and destinations can receive workspace secrets."
@@ -1433,7 +1429,7 @@ const catalog = {
       "copyFailed": "Could not copy the prompt."
     },
     "missing": {
-      "title": "Couldn't start session",
+      "title": "Session not found",
       "message": "This session is no longer available, or you do not have access to it."
     },
     "legacy": {
@@ -1584,7 +1580,9 @@ const catalog = {
       "commandsAndActions": "Commands and actions",
       "toUse": "to use",
       "use": "Use",
-      "noOneMatches": "No one matches"
+      "noOneMatches": "No one matches",
+      "drive": "Drive",
+      "driveSearchFailed": "Could not search Drive."
     },
     "history": {
       "restoreTitle": "Some earlier content could not be restored",
@@ -2773,7 +2771,9 @@ const catalog = {
       "budgetExceeded": "Too many unsent uploads. Unused uploads expire within 24 hours.",
       "tooLarge": "This file is larger than 50 MiB.",
       "expired": "This upload expired. Remove it and attach the file again.",
-      "checkConnection": "Check your connection, then retry."
+      "checkConnection": "Check your connection, then retry.",
+      "driveFileUnavailable": "{name} could not be attached from Drive. It may have moved, or you can no longer open it.",
+      "driveFilePending": "Wait for the Drive file to finish attaching, then send."
     },
     "i18nComplete": {
       "noModelAddProviderKey": "Add provider key",
@@ -3836,7 +3836,6 @@ const catalog = {
       "text5a41803b2dd1": "Deny all",
       "text5a517d8378f5": "Could not create key",
       "text5a5735e88fae": "— default",
-      "text5a7b24722fae": "Clone a full, working Kortix workspace in one click, or add skills from every source into your own.",
       "text5a9622af8882": "errorBody",
       "text5aa40906d187": "No secrets yet",
       "text5aaf2a8498fd": "Add an image or document",
@@ -4265,7 +4264,6 @@ const catalog = {
       "text7ecec93ed268": "Kortix home",
       "text7ed62f13532a": "Session event",
       "text7ed6733a3900": "Delete {value0} {value1}?",
-      "text7eebc3924618": "Marketplace — Clone a ready-made Kortix workspace",
       "text7eeffb726e71": "Features you can switch on before they are generally available.",
       "text7f619d9e30a8": "Workspace secrets handed to this agent's sessions as environment variables.",
       "text7f619ff13aa8": "Loading providers",
@@ -5122,7 +5120,6 @@ const catalog = {
       "textc58e371231b7": "DynamoDB",
       "textc5a9e0731890": "These are the redacted values the connector will receive.",
       "textc5bb9fda9711": "Every agent in this workspace today ({value0}). Agents added later need a new grant — agents are closed until someone is granted them.",
-      "textc608981d8d68": "Marketplace",
       "textc6092ea6beec": "Sample request copied",
       "textc614ae8886f0": "Path to folder",
       "textc616e8ff6ba3": "Session · {value0}",
@@ -8780,6 +8777,7 @@ const catalog = {
   },
   "sessionChangeRequests": {
     "title": "Change requests",
+    "openError": "Could not open change request",
     "open": "Open",
     "jump": "Jump to response for #{number}",
     "unavailable": "This response is not available in the loaded history.",
@@ -10644,7 +10642,7 @@ const catalog = {
     "newSpace": "New space",
     "searchPlaceholder": "Search spaces",
     "emptyTitle": "No spaces yet",
-    "emptyDescription": "A space groups the sessions of one project, client or topic.",
+    "emptyDescription": "A space groups the sessions of one workspace, client or topic.",
     "noResultsTitle": "No space matches",
     "noResultsDescription": "Try another name.",
     "loadFailed": "Could not load the spaces",

@@ -160,7 +160,10 @@ function isExpectedResponse(status: number, data: any, message: string): boolean
         // No workspace yet: the host shows "Create a workspace or join one".
         data?.code === NO_WORKSPACE_CODE)) ||
     (status === 503 &&
-      (data?.code === ANALYTICS_UNAVAILABLE_CODE || data?.code === ACCOUNTS_LIST_UNAVAILABLE_CODE))
+      (data?.code === ANALYTICS_UNAVAILABLE_CODE ||
+        data?.code === ACCOUNTS_LIST_UNAVAILABLE_CODE ||
+        // A sign-in provider (OpenAI, OpenCode) is down: the sign-in dialog shows it.
+        data?.code === 'provider_auth_unavailable'))
   );
 }
 

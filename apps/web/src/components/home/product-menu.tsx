@@ -100,7 +100,6 @@ export const MEGA_MENUS: MegaMenu[] = [
         title: 'Get Kortix',
         links: [
           { label: 'Download', href: '/download' },
-          { label: 'Marketplace', href: '/marketplace' },
         ],
       },
       {

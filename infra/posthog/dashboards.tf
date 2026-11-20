@@ -12,6 +12,7 @@
 # Layout: one markdown intro tile on top, then insights two per row.
 
 locals {
+  last_7d  = { date_from = "-7d" }
   last_30d = { date_from = "-30d" }
   last_90d = { date_from = "-90d" }
   # A completed turn that worked. Failed turns (no model, plan refusal) also fire turn_completed.
@@ -203,8 +204,40 @@ locals {
     setup = {
       name        = "Kortix · Setup"
       description = "Does the setup prompt (/setup.md) end in working loops, how fast, and where does it stop?"
-      intro       = "## Setup prompt\nA person copies the prompt (`setup_prompt_copied`, Loopmaxxing), their coding agent follows /setup.md, and the CLI reports each step: `kortix plan` (setup_started), `templates add` (setup_template_added), each `kortix onboard` (setup_onboard_run) and the first green doctor (setup_ready). One setup run = one `setup_id`; `agent` is the coding agent that ran it. The first real run is the first `trigger_fired`."
+      intro       = "## Setup prompt\nA person copies the prompt (`setup_prompt_copied`, Loopmaxxing), their coding agent follows /setup.md, and the CLI reports each step: `kortix plan` (setup_started), `templates add` (setup_template_added), each `kortix onboard` (setup_onboard_run) and the first green doctor (setup_ready). One setup run = one `setup_id`; `agent` is the coding agent that ran it. The first real run is the first `trigger_fired`. Copies and setups are two separate numbers: a copy on loopmaxxing.sh is an anonymous visitor, and the setup reports as the signed-in person, so PostHog cannot join them."
       insights = [
+        {
+          key         = "copies_7d"
+          name        = "Prompt copies (7 days)"
+          description = "setup_prompt_copied in the last 7 days, against the 7 days before. Anonymous visitors on loopmaxxing.sh: compare with setups started, never join them."
+          query = {
+            kind = "InsightVizNode"
+            source = {
+              kind               = "TrendsQuery"
+              filterTestAccounts = true
+              dateRange          = local.last_7d
+              series             = [{ kind = "EventsNode", event = "setup_prompt_copied", name = "setup_prompt_copied", math = "total" }]
+              compareFilter      = { compare = true }
+              trendsFilter       = { display = "BoldNumber" }
+            }
+          }
+        },
+        {
+          key         = "started_7d"
+          name        = "Setups started (7 days)"
+          description = "setup_started in the last 7 days (one per setup run), against the 7 days before. From a coding agent on a computer or from the Kortix agent in a session."
+          query = {
+            kind = "InsightVizNode"
+            source = {
+              kind               = "TrendsQuery"
+              filterTestAccounts = true
+              dateRange          = local.last_7d
+              series             = [{ kind = "EventsNode", event = "setup_started", name = "setup_started", math = "total" }]
+              compareFilter      = { compare = true }
+              trendsFilter       = { display = "BoldNumber" }
+            }
+          }
+        },
         {
           key         = "runs_funnel"
           name        = "Setup runs: started → template → onboard green → ready (7 days)"
@@ -239,7 +272,7 @@ locals {
         {
           key         = "runs_funnel_by_agent"
           name        = "Setup runs by coding agent (7 days)"
-          description = "The same funnel, broken down by agent: claude_code, codex, cursor, gemini, opencode, copilot, kortix (a Kortix session), other, none (a person in a terminal)."
+          description = "The same funnel, broken down by agent: claude_code, codex, cursor, gemini, opencode, copilot, kortix (the Kortix agent in a session a person started), other, none (a person in a terminal)."
           query = {
             kind = "InsightVizNode"
             source = {
@@ -269,8 +302,8 @@ locals {
         },
         {
           key         = "people_funnel"
-          name        = "Prompt copied → setup started → ready → first real run (7 days)"
-          description = "Per person. A copy counts for the person only when the browser that copied later signs in (PostHog merges the ids); copies without a sign-in show on the copies chart."
+          name        = "Setup started → ready → first real run, per person (7 days)"
+          description = "Per person: the person whose CLI started the setup (for the Kortix agent, the person who started the session). The first real run is the account's first trigger_fired."
           query = {
             kind = "InsightVizNode"
             source = {
@@ -278,7 +311,6 @@ locals {
               filterTestAccounts = true
               dateRange          = local.last_30d
               series = [
-                { kind = "EventsNode", event = "setup_prompt_copied", name = "setup_prompt_copied" },
                 { kind = "EventsNode", event = "setup_started", name = "setup_started" },
                 { kind = "EventsNode", event = "setup_ready", name = "setup_ready" },
                 { kind = "EventsNode", event = "trigger_fired", name = "trigger_fired" },

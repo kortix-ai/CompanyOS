@@ -404,6 +404,7 @@ export function registerTriggersRoutes(): void {
             session_id: z.string().optional().openapi({ description: 'Session to pin when session_mode is pinned.' }),
             session_key: z.string().optional().openapi({ description: 'Template deriving one session per key when session_mode is keyed.' }),
             filter: z.record(z.string(), z.any()).optional().openapi({ description: 'Payload path to a value (equals) or one operator: {"not":[…]}, {"in":[…]}, {"exists":true|false}, {"prefix":[…]}, {"not_prefix":[…]}. A delivery fires only if every path matches.' }),
+            hard_run_caps: z.boolean().optional().openapi({ description: 'Atomically cap every fire, including manual fires. No implicit override.' }),
             max_runs_per_hour: z.number().int().min(1).nullish().openapi({ description: 'Runs the trigger may start in any 60 minutes. Omit for the default, 60. A fire past it is a skipped run.' }),
             max_runs_per_day: z.number().int().min(1).nullish().openapi({ description: 'Runs the trigger may start in a UTC day. Omit for no daily cap.' }),
             overlap: z.enum(['skip', 'allow']).nullish().openapi({ description: 'skip holds a fire while the previous run is still active; in reuse, pinned and keyed mode, while its previous prompt still waits in the session queue. Omit for the default: skip for cron, allow for the other types.' }),
@@ -619,6 +620,7 @@ export function registerTriggersRoutes(): void {
             session_key: z.string().optional().openapi({ description: 'Session key template.' }),
             filter: z.record(z.string(), z.any()).optional().openapi({ description: 'Payload filter: path to a value (equals) or one operator (not, in, exists, prefix, not_prefix). null or {} clears it.' }),
             expect_event_within: z.string().nullish().openapi({ description: 'App triggers only: the silence alert, such as 30m; null removes it.' }),
+            hard_run_caps: z.boolean().optional().openapi({ description: 'Atomically cap every fire, including manual fires. No implicit override.' }),
             max_runs_per_hour: z.number().int().min(1).nullish().openapi({ description: 'Runs per 60 minutes; null resets it to the default, 60.' }),
             max_runs_per_day: z.number().int().min(1).nullish().openapi({ description: 'Runs per UTC day; null removes the daily cap.' }),
             overlap: z.enum(['skip', 'allow']).nullish().openapi({ description: 'skip or allow; null resets it to the default (skip for cron, allow otherwise).' }),
@@ -870,7 +872,7 @@ export function registerTriggersRoutes(): void {
         202: json(TriggerFireResultSchema, 'Queued or fired'),
         // 402: the account has no usable model — the fire gates instead of
         // minting a session that would fail on its first turn.
-        ...errors(400, 402, 403, 404, 500),
+        ...errors(400, 402, 403, 404, 429, 500),
       },
     }),
     async (c) => {
@@ -980,7 +982,7 @@ export function registerTriggersRoutes(): void {
       },
       responses: {
         202: json(TriggerFireResultSchema, 'Queued or fired'),
-        ...errors(402, 403, 404, 409, 422, 500),
+        ...errors(402, 403, 404, 409, 422, 429, 500),
       },
     }),
     async (c) => {
@@ -1038,7 +1040,7 @@ async function authorizeTriggerFire(c: Context<AppEnv>, projectId: string, slug:
   // manager all fire (all hold the leaf); a custom role without it is denied.
   const loaded = await loadProjectForUser(c, projectId, 'read');
   if (!loaded) return c.json({ error: 'Not found' }, 404);
-  await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_TRIGGER_FIRE);
+  await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_TRIGGER_FIRE, { type: 'trigger', id: slug });
 
   const gitProject = await withProjectGitAuth(loaded.row);
   const spec = await findProjectTriggerBySlug(gitProject, slug);
@@ -1123,8 +1125,10 @@ async function fireAndAnswer(
     source,
     idempotencyKey: input.idempotencyKey ?? null,
     request: requestAuditContext(c),
-    // A person fired it: the run caps do not hold it (KRTX-1721).
+    // Explicit fire bypasses soft caps; hard_run_caps still reserves atomically.
     deliberate: true,
+    // Replays render stored input, not input supplied by this dispatcher.
+    callerSessionId: input.replayOf ? null : callerKortixSessionId(c),
   }).catch(async (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     await recordTriggerRun({ ...run, status: 'failed', error: message });
@@ -1132,6 +1136,9 @@ async function fireAndAnswer(
   });
   const runId = await recordTriggerRun({ ...run, ...triggerRunFromFire(result) });
 
+  if (result.status === 'skipped') {
+    return c.json({ error: result.reason ?? 'Trigger fire skipped', run_id: runId }, 429);
+  }
   if (result.status === 'queued') {
     // Not run yet: its delivery ends an alert streak, not this handoff (KRTX-1742).
     await markGitTriggerFired(projectId, slug, now, 'fired', { endsAlert: false });

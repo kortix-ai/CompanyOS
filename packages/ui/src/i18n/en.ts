@@ -8784,6 +8784,7 @@ const catalog = {
   },
   "sessionChangeRequests": {
     "title": "Change requests",
+    "openError": "Could not open change request",
     "open": "Open",
     "jump": "Jump to response for #{number}",
     "unavailable": "This response is not available in the loaded history.",

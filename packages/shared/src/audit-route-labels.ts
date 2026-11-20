@@ -1003,6 +1003,8 @@ export const AUDIT_ROUTE_LABELS: Readonly<Record<string, AuditRouteLabel | strin
   'PUT /v1/projects/:workspaceId/session-groups/:groupId/tabs': { action: 'project.session_group.tabs.update', title: 'Updated session group tabs' },
   'PUT /v1/projects/:workspaceId/session-groups/order': { action: 'project.session_group.reorder', title: 'Reordered session groups' },
   'PATCH /v1/projects/:workspaceId/session-groups/:groupId': { action: 'project.session_group.update', title: 'Renamed session group' },
+  'PUT /v1/projects/:workspaceId/session-groups/:groupId/sharing': { action: 'project.session_group.sharing.update', title: 'Updated session group sharing' },
+  'PUT /v1/projects/:workspaceId/session-groups/:groupId/tabs': { action: 'project.session_group.tabs.update', title: 'Changed session group tabs' },
   'DELETE /v1/projects/:workspaceId/session-groups/:groupId': { action: 'project.session_group.delete', title: 'Deleted session group' },
   'POST /v1/projects/:workspaceId/sessions/warm': { action: 'session.warm.create', title: 'Warmed session sandbox' },
   'POST /v1/projects/:workspaceId/sessions/warm/claim': { action: 'session.warm.claim', title: 'Claimed warm session sandbox' },

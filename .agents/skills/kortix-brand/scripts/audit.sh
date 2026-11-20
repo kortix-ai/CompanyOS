@@ -216,9 +216,11 @@ scan "Weight off the 400/500/600 ladder" \
   'the ladder is font-normal, font-medium, font-semibold'
 
 # Mono-uppercase is the Badge chip (D4e) and, on marketing and decks, the eyebrow.
+# `first-letter:uppercase` is not a label style: it sentence-cases a name a
+# person typed in lower case (a space in the sidebar), so it is skipped.
 scan "Uppercase label in app chrome" \
   '\buppercase\b' \
-  'sentence case, text-xs text-muted-foreground. The Badge chip is the one sanctioned uppercase label' app "$BADGE_RE"
+  'sentence case, text-xs text-muted-foreground. The Badge chip is the one sanctioned uppercase label' app "($BADGE_RE|first-letter:uppercase)"
 
 # ── Loading and icons ───────────────────────────────────────────────────────
 

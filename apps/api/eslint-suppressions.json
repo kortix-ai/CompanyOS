@@ -214,11 +214,6 @@
       "count": 1
     }
   },
-  "src/billing/routes/account-state.ts": {
-    "no-console": {
-      "count": 2
-    }
-  },
   "src/billing/routes/payments.ts": {
     "no-restricted-syntax": {
       "count": 2

@@ -2110,3 +2110,22 @@ existing synthetic worker. Both fires reuse that session, can read it, and each
 writes exactly one visible run. The real CLI lists those same runs.
 
 `TRG-44` A current non-owner workspace member reads and lists a private trigger session with `trigger_session_readers.humans: members`, but cannot start or prompt it (404). Reader standing applies only to audited reads. Existing owner/manager rights stay independent. DB integration covers named monitors, membership removal, protected spaces and truthful `fired` delivery versus failed terminal turn.
+
+### BILL-WS-3 — workspace-less billing safety
+
+A signed-in person without a workspace reads both account-state variants. An
+active legacy subscription in the personal wallet, and a store subscription
+cancelled but not yet expired, remain active, without a provider read. A
+workspace keyed by the person's id that they do not serve is refused with 409
+`no_workspace`, never read. No production billing is changed.
+
+### BILL-WS-4 — workspace-less billing absence (Stripe)
+
+Absence needs Stripe: the read lists the subscriptions of every mapped customer
+and searches subscriptions whose metadata names the person's id (an unmapped
+legacy purchase). With no wallet both variants report `no_account` and no
+active subscription, without a wallet write; a wallet with nonrecurring credits
+reports `no_subscription`. A database or provider error is an error response,
+never absence, and so is a missing Stripe key: the local profile's Stripe key
+is a placeholder, so there the
+read answers 500 and this flow needs the `stripe` capability.

@@ -1127,7 +1127,8 @@ async function fireAndAnswer(
     request: requestAuditContext(c),
     // Explicit fire bypasses soft caps; hard_run_caps still reserves atomically.
     deliberate: true,
-    callerSessionId: callerKortixSessionId(c),
+    // Replays render stored input, not input supplied by this dispatcher.
+    callerSessionId: input.replayOf ? null : callerKortixSessionId(c),
   }).catch(async (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     await recordTriggerRun({ ...run, status: 'failed', error: message });

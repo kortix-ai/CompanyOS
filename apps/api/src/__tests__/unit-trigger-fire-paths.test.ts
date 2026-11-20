@@ -27,6 +27,7 @@ import {
   projectSecrets,
   projectSessions,
   projectTriggerRuntime,
+  projectTriggerExecutions,
   projects,
   sessionLifecycleCommands,
 } from '@kortix/db';
@@ -500,6 +501,7 @@ const triggerDbMock: any = {
             if (fields && Object.keys(fields).includes('provisioningCount')) {
               return [{ provisioningCount: provisioningSessionCount }];
             }
+            if (table === projectTriggerExecutions) return triggerExecutionRows.slice(0, 1);
             if (table === projects) return [projectRow];
             if (table === accountMembers) {
               return [{ accountId: ACCOUNT_ID, accountRole: 'owner', userId: USER_ID }];
@@ -1066,6 +1068,20 @@ describe('git-backed triggers — runtime fire paths', () => {
       expect(response.status).toBe(429);
     }
     expect(sandboxProvisionCalls).toBe(0);
+  });
+
+  test('replaying a stored run does not grant the replayer dispatcher ancestry', async () => {
+    dispatcherSessionId = 'synthetic-replayer';
+    testAuthType = 'pat';
+    seedManifest(cronEntry({ slug: 'worker', name: 'Worker', cron: '* * * * * *', prompt: 'Draft' }));
+    const executionId = randomUUID();
+    triggerExecutionRows.push({ executionId, projectId: PROJECT_ID, slug: 'worker', status: 'succeeded', payload: { body: { text: 'synthetic stored input' } }, payloadVerified: true, source: 'manual' });
+    const response = await createApp().request(`/v1/projects/${PROJECT_ID}/triggers/worker/runs/${executionId}/replay`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    });
+    expect(response.status).toBe(202);
+    expect(sessionRows).toHaveLength(1);
+    expect(sessionRows[0]?.metadata?.spawned_by_session).toBeUndefined();
   });
 
   test('disabled keyed manual fire retains authenticated dispatcher ancestry and reuses its session', async () => {

@@ -58,6 +58,13 @@ export interface KortixClientAuth {
   authorizationParams?: Record<string, string>;
   /** The provider's userinfo endpoint and the field that names the account (`connected_as`). */
   identity?: { url: string; field: string };
+  /**
+   * The provider keeps ONE grant per account for this client: revoking any of
+   * its tokens revokes every token of the account (Google). Disconnect then
+   * revokes upstream only for the account's last live connection
+   * (`revokeConnectionOAuth2`).
+   */
+  oneGrantPerAccount?: boolean;
 }
 
 export interface McpApp {
@@ -88,6 +95,7 @@ const GOOGLE = {
   // Google issues a refresh token only for offline access, on a fresh consent.
   authorizationParams: { access_type: 'offline', prompt: 'consent' },
   identity: { url: 'https://openidconnect.googleapis.com/v1/userinfo', field: 'email' },
+  oneGrantPerAccount: true,
 } as const;
 
 /**
@@ -258,6 +266,14 @@ export function withCurrentKortixClientSecret<T extends Pick<OAuth2ApplicationIn
   const auth = kortixClientAuthFor(application, clients);
   const secret = auth ? clients.get(auth.client)?.client_secret : undefined;
   return secret && secret !== application.client_secret ? { ...application, client_secret: secret } : application;
+}
+
+/** Whether a stored application signed in through a Kortix client whose provider keeps one grant per account (Google). */
+export function kortixClientHasOneGrantPerAccount(
+  application: Pick<OAuth2ApplicationInput, 'issuer' | 'client_id'>,
+  clients = kortixOAuthClients(),
+): boolean {
+  return kortixClientAuthFor(application, clients)?.oneGrantPerAccount === true;
 }
 
 /** The userinfo endpoint that names the account a Kortix-client sign-in authorized, or null. */

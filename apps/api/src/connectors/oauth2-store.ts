@@ -11,7 +11,7 @@ import {
   connectionOAuthApplications,
   connectionOAuthSessions,
 } from '@kortix/db';
-import { and, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, eq, gt, isNull, ne, sql } from 'drizzle-orm';
 import { HTTPException } from 'hono/http-exception';
 import { connectionRowIsReachable } from '../projects/lib/connection-access';
 import { decryptNamedProjectSecret, decryptProjectSecret, encryptProjectSecret } from '../projects/secrets';
@@ -44,8 +44,8 @@ import {
 } from './oauth2-lifecycle';
 import { validateAuthorizationIssuer } from './oauth2-issuer';
 import { oauthCompletionRematerializeInput } from './oauth2-rematerialize';
-import { kortixClientApplication, kortixClientIdentity, mcpAppForUrl } from './mcp-apps';
-import { CONNECTED_AS_KEY, relabelToIdentity } from './connection-identity';
+import { kortixClientApplication, kortixClientHasOneGrantPerAccount, kortixClientIdentity, mcpAppForUrl } from './mcp-apps';
+import { CONNECTED_AS_KEY, connectedAsOf, relabelToIdentity } from './connection-identity';
 import { safeEgressFetch } from '../shared/ssrf-guard';
 import { registerOAuth2Client } from './oauth2-registration';
 import {
@@ -868,7 +868,54 @@ export async function oauth2ConnectionStatus(connectionId: string) {
   };
 }
 
-export async function revokeConnectionOAuth2(connectionId: string): Promise<void> {
+/**
+ * Whether another live connection holds the same upstream grant: it signed in
+ * through the same Kortix client (issuer and client id) as the same account
+ * (`connected_as`). Google keeps one grant per account for a client, so
+ * revoking any token of it ends every connection of that account, in every
+ * workspace (2026-11-20: disconnecting Drive broke Calendar with a 401).
+ */
+async function anotherConnectionHoldsGrant(connectionId: string, application: OAuth2ApplicationInput): Promise<boolean> {
+  if (!kortixClientHasOneGrantPerAccount(application)) return false;
+  const [own] = await db
+    .select({ metadata: connectorConnections.metadata })
+    .from(connectorConnections)
+    .where(eq(connectorConnections.connectionId, connectionId))
+    .limit(1);
+  const account = connectedAsOf(own?.metadata);
+  // An unnamed account cannot be matched: revoke, as before.
+  if (!account) return false;
+  const others = await db
+    .select({ projectId: connectionOAuthApplications.projectId, configEnc: connectionOAuthApplications.configEnc })
+    .from(connectorConnections)
+    .innerJoin(connectionOAuthApplications, eq(connectionOAuthApplications.connectionId, connectorConnections.connectionId))
+    .innerJoin(connectionCredentials, eq(connectionCredentials.connectionId, connectorConnections.connectionId))
+    .where(
+      and(
+        ne(connectorConnections.connectionId, connectionId),
+        eq(connectorConnections.status, 'active'),
+        sql`lower(${connectorConnections.metadata} ->> ${CONNECTED_AS_KEY}) = lower(${account})`,
+      ),
+    );
+  return others.some((row) => {
+    const value = decryptOrNull(row.projectId, row.configEnc);
+    if (value === null) return false;
+    try {
+      const other = JSON.parse(value) as Pick<OAuth2ApplicationInput, 'issuer' | 'client_id'>;
+      return other.issuer === application.issuer && other.client_id === application.client_id;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
+ * Disconnect: revoke the token upstream, delete the local credential, mark the
+ * connection revoked. A Kortix Google connection skips the upstream revoke
+ * while another live connection holds the same grant
+ * (`anotherConnectionHoldsGrant`); the account's last connection revokes it.
+ */
+export async function revokeConnectionOAuth2(connectionId: string, runtime: OAuth2LifecycleRuntime = {}): Promise<void> {
   // An application or a token this server cannot decrypt cannot be revoked
   // upstream. The local credential is still deleted: a revoke must not fail on
   // the state it clears.
@@ -886,18 +933,24 @@ export async function revokeConnectionOAuth2(connectionId: string): Promise<void
   if (credential) {
     const value = app ? decryptOrNull(app.projectId, credential.valueEnc) : null;
     const stored = value === null ? null : parseDelegatedCredential(value);
-    if (app && stored && app.application.revocation_url) {
+    const sharedGrant =
+      app && stored && app.application.revocation_url
+        ? await anotherConnectionHoldsGrant(connectionId, app.application).catch(() => false)
+        : false;
+    if (app && stored && app.application.revocation_url && !sharedGrant) {
       if (stored.token.refresh_token) {
         await revokeOAuth2Token(
           app.application,
           stored.token.refresh_token,
           'refresh_token',
+          runtime,
         ).catch(() => undefined);
       }
       await revokeOAuth2Token(
         app.application,
         stored.token.access_token,
         'access_token',
+        runtime,
       ).catch(() => undefined);
     }
     await db

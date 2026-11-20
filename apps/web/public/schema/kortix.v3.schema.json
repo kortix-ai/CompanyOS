@@ -612,6 +612,10 @@
                 "type": "string",
                 "pattern": "^([1-9][0-9]*)(s|m|h|d)$"
               },
+              "hard_run_caps": {
+                "type": "boolean",
+                "description": "Atomically cap every fire, including manual fires. No implicit manual override."
+              },
               "max_runs_per_hour": {
                 "type": "integer",
                 "minimum": 1
@@ -1186,6 +1190,10 @@
                   ]
                 },
                 "description": "Payload path → a value (equals), or one operator: `not`, `in`, `exists`, `prefix`, `not_prefix`. A fire runs only when every path matches."
+              },
+              "hard_run_caps": {
+                "type": "boolean",
+                "description": "Atomically cap every fire, including manual fires. No implicit manual override."
               },
               "max_runs_per_hour": {
                 "type": "integer",

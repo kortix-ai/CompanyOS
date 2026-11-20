@@ -125,6 +125,9 @@ patchedDependencies:
   shaders@2.5.135:
     hash: w62sovffz6xvbvqx66sjk5qgeq
     path: patches/shaders@2.5.135.patch
+  streamdown@1.6.11:
+    hash: goowiaitvc37c2zrflcevm544i
+    path: patches/streamdown@1.6.11.patch
   undici@8.12.2:
     hash: mu6tw5d72jgydn6wat3dblh4w4
     path: patches/undici@8.12.2.patch
@@ -1366,7 +1369,7 @@ importers:
         version: 1.14.2
       streamdown:
         specifier: ^1.6.11
-        version: 1.6.11(micromark@4.0.3)(react@19.3.0)
+        version: 1.6.11(patch_hash=goowiaitvc37c2zrflcevm544i)(micromark@4.0.3)(react@19.3.0)
       tailwind-merge:
         specifier: ^3.6.0
         version: 3.7.0
@@ -2189,7 +2192,7 @@ importers:
         version: 1.14.2
       streamdown:
         specifier: ^1.6.11
-        version: 1.6.11(micromark@4.0.3)(react@19.3.0)
+        version: 1.6.11(patch_hash=goowiaitvc37c2zrflcevm544i)(micromark@4.0.3)(react@19.3.0)
       tailwind-merge:
         specifier: ^3.6.0
         version: 3.7.0
@@ -29605,7 +29608,7 @@ packages:
     resolution: {integrity: sha512-uyQK/mx5QjHun80FLJTfaWE7JtwfRMKBLkMne6udYOmvH0CawotVa7TfgYHzAnpphn4+TweIx1QKMnRIbipmUg==}
     engines: {node: '>= 0.10.0'}
 
-  /streamdown@1.6.11(micromark@4.0.3)(react@19.3.0):
+  /streamdown@1.6.11(patch_hash=goowiaitvc37c2zrflcevm544i)(micromark@4.0.3)(react@19.3.0):
     resolution: {integrity: sha512-Y38fwRx5kCKTluwM+Gf27jbbi9q6Qy+WC9YrC1YbCpMkktT3PsRBJHMWiqYeF8y/JzLpB1IzDoeaB6qkQEDnAA==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
@@ -29640,6 +29643,7 @@ packages:
       - micromark-util-types
       - supports-color
     dev: false
+    patched: true
 
   /streamsearch@1.1.0:
     resolution: {integrity: sha512-Mcc5wHehp9aXz1ax6bZUyY5afg9u2rv5cqQI3mRrYkGC8rW2hM02jWuwjtL++LS5qinSyhj2QfLyNsuc+VsExg==}

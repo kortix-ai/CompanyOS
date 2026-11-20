@@ -25523,7 +25523,8 @@
     "open": "Aberta",
     "jump": "Ir para a resposta de #{number}",
     "unavailable": "Esta resposta não está disponível no histórico carregado.",
-    "loadError": "Não foi possível carregar a resposta. Tente novamente."
+    "loadError": "Não foi possível carregar a resposta. Tente novamente.",
+    "openError": "Não foi possível abrir a solicitação de alteração"
   },
   "agentCapabilities": {
     "skillsTitle": "Skills",

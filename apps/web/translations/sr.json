@@ -25523,7 +25523,8 @@
     "open": "Otvoren",
     "jump": "Idi na odgovor za #{number}",
     "unavailable": "Ovaj odgovor nije dostupan u učitanoj istoriji.",
-    "loadError": "Odgovor nije moguće učitati. Pokušajte ponovo."
+    "loadError": "Odgovor nije moguće učitati. Pokušajte ponovo.",
+    "openError": "Није могуће отворити захтев за измену"
   },
   "agentCapabilities": {
     "skillsTitle": "Veštine",

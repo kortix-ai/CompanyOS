@@ -25523,7 +25523,8 @@
     "open": "Aperta",
     "jump": "Vai alla risposta per #{number}",
     "unavailable": "Questa risposta non è disponibile nella cronologia caricata.",
-    "loadError": "Impossibile caricare la risposta. Riprova."
+    "loadError": "Impossibile caricare la risposta. Riprova.",
+    "openError": "Impossibile aprire la richiesta di modifica"
   },
   "agentCapabilities": {
     "skillsTitle": "Skill",

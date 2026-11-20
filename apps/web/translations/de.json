@@ -25523,7 +25523,8 @@
     "open": "Offen",
     "jump": "Zur Antwort für #{number} springen",
     "unavailable": "Diese Antwort ist im geladenen Verlauf nicht verfügbar.",
-    "loadError": "Die Antwort konnte nicht geladen werden. Versuche es erneut."
+    "loadError": "Die Antwort konnte nicht geladen werden. Versuche es erneut.",
+    "openError": "Änderungsanfrage konnte nicht geöffnet werden"
   },
   "agentCapabilities": {
     "skillsTitle": "Skills",

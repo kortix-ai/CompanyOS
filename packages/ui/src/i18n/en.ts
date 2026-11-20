@@ -106,6 +106,7 @@ const catalog = {
     "savedVerified": "Key saved and verified",
     "savedInvalid": "Key saved, but {provider} refused it: {message}",
     "checkError": "The key could not be checked",
+    "keyRejected": "Your {provider} key was rejected. Update it in Models.",
     "openProviderInModels": "Open {provider} in Models",
     "member": "member",
     "members": "members",
@@ -8784,6 +8785,7 @@ const catalog = {
   },
   "sessionChangeRequests": {
     "title": "Change requests",
+    "openError": "Could not open change request",
     "open": "Open",
     "jump": "Jump to response for #{number}",
     "unavailable": "This response is not available in the loaded history.",

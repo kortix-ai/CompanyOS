@@ -113,6 +113,7 @@
     "savedVerified": "密钥已保存并验证",
     "savedInvalid": "密钥已保存，但 {provider} 拒绝了它：{message}",
     "checkError": "无法检查该密钥",
+    "keyRejected": "你的 {provider} 密钥被拒绝。请在模型中更新它。",
     "openProviderInModels": "在模型中打开 {provider}",
     "member": "成员",
     "members": "位成员",

@@ -113,6 +113,7 @@
     "savedVerified": "Chiave salvata e verificata",
     "savedInvalid": "Chiave salvata, ma {provider} l’ha rifiutata: {message}",
     "checkError": "Impossibile verificare la chiave",
+    "keyRejected": "La tua chiave {provider} è stata rifiutata. Aggiornala in Modelli.",
     "openProviderInModels": "Apri {provider} in Modelli",
     "member": "membro",
     "members": "membri",

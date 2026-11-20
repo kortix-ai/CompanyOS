@@ -113,6 +113,7 @@
     "savedVerified": "Clé enregistrée et vérifiée",
     "savedInvalid": "Clé enregistrée, mais {provider} l’a refusée : {message}",
     "checkError": "La clé n’a pas pu être vérifiée",
+    "keyRejected": "Votre clé {provider} a été refusée. Mettez-la à jour dans Modèles.",
     "openProviderInModels": "Ouvrir {provider} dans Modèles",
     "member": "membre",
     "members": "membres",

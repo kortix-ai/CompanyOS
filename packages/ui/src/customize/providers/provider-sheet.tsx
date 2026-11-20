@@ -546,7 +546,7 @@ export function useProviderKey(projectId: string, entry: LlmProviderEntry | unde
       return { target, refused: refused ? tKeys('savedInvalid', { provider: target.label, message: refused.message }) : null };
     },
     onSuccess: ({ target, refused }) => {
-      // A refused key is saved but runs no turn: the field stays open with the provider's words.
+      // A refused key is saved, but every turn on it fails: the field stays open with the provider's words.
       if (refused) {
         errorToast(refused);
         setError(refused);

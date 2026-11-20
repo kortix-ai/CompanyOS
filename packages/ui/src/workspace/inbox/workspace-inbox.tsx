@@ -5,7 +5,7 @@ import { useTranslations } from '../../i18n';
 import { ProjectPageHeader } from '../../internal/layout/project-page-header';
 
 /**
- * /workspaces/[id]/inbox — this workspace's Review queue (KRTX-4799):
+ * /workspaces/[id]/review — this workspace's Review queue (KRTX-4799):
  * approvals, questions and change requests to act on. `?id=` opens one item.
  * The person's notifications are not here: they span every workspace, so a
  * workspace page cannot scope them — they live on the person-level Inbox page

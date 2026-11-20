@@ -18,12 +18,20 @@ import { spawnSync } from 'node:child_process';
 // expo-router -> query-string 7.1.3, to parse the app's own URLs on the device.
 // The only fix, 0.5.1, is ESM-only, and query-string 7 loads it with require().
 // Remove the exception when expo-router leaves query-string 7.
+// Exception: GHSA-mfr8-8qww-v76h and GHSA-vc7v-qv4w-wrv8 (next 16.2.0-16.4.4,
+// fixed in 16.4.5). Both leak cached data across root-param values, and only
+// through `'use cache'` functions. No file in the repo has a `'use cache'`
+// directive, and apps/web keeps cacheComponents off (next.config.ts, "Deliberately
+// NOT enabled"). The upgrade also needs patches/next@16.4.2.patch rebased onto
+// 16.4.5. Remove both ids when apps/web moves to next >= 16.4.5.
 const IGNORE = new Set([
   'GHSA-q84f-53jg-9ppm',
   'GHSA-r4xp-prcw-77qf',
   'GHSA-965c-763c-88jm',
   'GHSA-44jh-23m7-hpcf',
   'GHSA-qr28-fpjm-wq7f',
+  'GHSA-mfr8-8qww-v76h',
+  'GHSA-vc7v-qv4w-wrv8',
 ]);
 const RANK = { info: 0, low: 1, moderate: 2, high: 3, critical: 4 };
 

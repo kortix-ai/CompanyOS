@@ -48,6 +48,7 @@
     "./well-known": "./src/well-known.ts",
     "./workspace-actions": "./src/workspace-actions.ts",
     "./workspace-routes": "./src/workspace-routes.ts",
+    "./change-request-links": "./src/change-request-links.ts",
     "./workspace-settings": "./src/workspace-settings.ts",
     "./session/attachment-tile": "./src/session/attachment-tile.ts",
     "./session/tool-row-text": "./src/session/tool-row-text.ts",

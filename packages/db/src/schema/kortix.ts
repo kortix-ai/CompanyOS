@@ -1513,6 +1513,9 @@ export const projectSpaceVisibilityEnum = kortixSchema.enum('project_space_visib
  * before 2026-11-04 may hold `threads` or `memory`: the API drops those on
  * read.
  */
+/** A space's icon (`project_session_groups.icon`): an emoji XOR a catalogue glyph. */
+export type SessionGroupIconRecord = { emoji: string } | { glyph: { name: string; color: string } };
+
 export interface ProjectSpaceTabRecord {
   id: string;
   title: string;
@@ -1952,10 +1955,14 @@ export const projectSessionInitiatorEnum = kortixSchema.enum('project_session_in
 ]);
 
 /**
- * A session group: a named folder of a project's sessions in the sidebar,
- * behind the `session_groups` flag. Every project member sees the same groups
- * in the same order (`position`, 0-based). A session is in at most one group
- * (`project_sessions.group_id`); deleting a group leaves its sessions in none.
+ * A session group (product word "Space"): a named folder of a project's
+ * sessions, behind the `session_groups` flag. `private` (the default): only
+ * its creator and its members (`project_session_group_members`) see it, and
+ * they see every session in it whatever the session's own sharing. `project`:
+ * everyone in the project does. Account session oversight shows every group
+ * to owners and admins. The groups share one order (`position`, 0-based). A
+ * session is in at most one group (`project_sessions.group_id`); deleting a
+ * group leaves its sessions in none, back to their own sharing.
  */
 export const projectSessionGroups = kortixSchema.table(
   'project_session_groups',
@@ -1969,6 +1976,14 @@ export const projectSessionGroups = kortixSchema.table(
       .references(() => projects.projectId, { onDelete: 'cascade' }),
     /** Trimmed, 1–80 characters; unique in the project in any case. */
     name: text('name').notNull(),
+    /** What the space is for, at most 2000 characters (the API checks it). Every session of the space reads it at turn start. */
+    description: text('description'),
+    /** `private` | `project` (check below). */
+    visibility: text('visibility').default('private').notNull(),
+    /** The tabs after Sessions, in order (at most 20): a channel's tab shape (`ProjectSpaceTabRecord`, kinds file|folder|artifact|app|link). */
+    tabs: jsonb('tabs').$type<ProjectSpaceTabRecord[]>().default(sql`'[]'::jsonb`).notNull(),
+    /** `{ emoji }` or `{ glyph: { name, color } }` (the API checks it); null: clients draw the icon `suggestSpaceIcon` gives the name. */
+    icon: jsonb('icon').$type<SessionGroupIconRecord>(),
     position: integer('position').notNull(),
     createdBy: uuid('created_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -1977,8 +1992,26 @@ export const projectSessionGroups = kortixSchema.table(
   (table) => [
     check('project_session_groups_name_check', sql`char_length(${table.name}) between 1 and 80`),
     check('project_session_groups_position_check', sql`${table.position} >= 0`),
+    check('project_session_groups_visibility_check', sql`${table.visibility} in ('private', 'project')`),
     uniqueIndex('uniq_project_session_groups_name').on(table.projectId, sql`lower(${table.name})`),
     index('idx_project_session_groups_project').on(table.projectId, table.position),
+  ],
+);
+
+/** The people a private session group (Space) is shared with; its creator is not listed. */
+export const projectSessionGroupMembers = kortixSchema.table(
+  'project_session_group_members',
+  {
+    groupId: uuid('group_id')
+      .notNull()
+      .references(() => projectSessionGroups.groupId, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull(),
+    addedBy: uuid('added_by'),
+    addedAt: timestamp('added_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.groupId, table.userId] }),
+    index('idx_project_session_group_members_user').on(table.userId),
   ],
 );
 
@@ -3888,11 +3921,17 @@ export const sandboxTemplates = kortixSchema.table(
     /** 'daytona' (others to follow). */
     provider: text('provider').default('daytona').notNull(),
 
-    // ─── Image definition (exactly one of image / dockerfilePath) ──────────
+    // ─── Image definition (at most one of image / dockerfilePath / dockerfileInline) ──
     /** Public Docker image reference (e.g. python:3.12-slim). */
     image: text('image'),
     /** Repo-relative path to a Dockerfile. Mutually exclusive with `image`. */
     dockerfilePath: text('dockerfile_path'),
+    /**
+     * A Dockerfile's text, for an image defined outside the project repository
+     * (an eval task from a Harbor dataset). Built without a build context, as a
+     * repository Dockerfile is. Mutually exclusive with the two above.
+     */
+    dockerfileInline: text('dockerfile_inline'),
     /** Optional entrypoint override. */
     entrypoint: text('entrypoint'),
 
@@ -9592,6 +9631,8 @@ export const notifications = kortixSchema.table('notifications', {
   roomThreadSeq: bigint('room_thread_seq', { mode: 'number' }),
   artifactId: uuid('artifact_id'),
   artifactThreadId: uuid('artifact_thread_id'),
+  // A `mention` row's calendar item (flag `calendar`). No FK: the read filter hides a row whose item is gone.
+  calendarItemId: uuid('calendar_item_id'),
   kind: text('kind').notNull(),
   title: text('title').notNull(),
   body: text('body').default('').notNull(),
@@ -9618,7 +9659,7 @@ export const notifications = kortixSchema.table('notifications', {
   index('idx_notifications_artifact').on(table.artifactId).where(sql`${table.artifactId} IS NOT NULL`),
   index('idx_notifications_artifact_thread').on(table.artifactThreadId).where(sql`${table.artifactThreadId} IS NOT NULL`),
   index('idx_notifications_created').on(table.createdAt),
-  check('notifications_kind', sql`${table.kind} IN ('turn_done', 'turn_error', 'question', 'permission', 'shared', 'automation_failed', 'automation_recovered', 'capture_device_down', 'capture_device_recovered', 'message', 'artifact_comment')`), // 'message': retired with Rooms; old rows age out
+  check('notifications_kind', sql`${table.kind} IN ('turn_done', 'turn_error', 'question', 'permission', 'shared', 'automation_failed', 'automation_recovered', 'capture_device_down', 'capture_device_recovered', 'mention', 'message', 'artifact_comment')`), // 'message': retired with Rooms; old rows age out
 ]);
 
 /** One record per user: partial overrides of the default notification preferences. */
@@ -10497,8 +10538,110 @@ export const evalTrials = kortixSchema.table('eval_trials', {
   index('idx_eval_trials_job').on(table.jobId, table.taskName, table.agent, table.attempt),
   uniqueIndex('uniq_eval_trials_job_name').on(table.jobId, table.trialName),
   index('idx_eval_trials_session').on(table.sessionId).where(sql`${table.sessionId} is not null`),
+  index('idx_eval_trials_project_created').on(table.projectId, table.createdAt),
   check(
     'eval_trials_status_check',
     sql`${table.status} in ('queued', 'starting', 'agent_running', 'verifying', 'completed', 'errored', 'cancelled')`,
   ),
+]).enableRLS();
+
+/**
+ * A workspace made for one eval trial (`[metadata.kortix] workspace = "fresh"`,
+ * apps/api/src/projects/evals/trial-workspace.ts). The row is written before
+ * the account exists and outlives it: the workspace switcher hides its account,
+ * the runner's sweep deletes the workspace once the trial ended, and the money
+ * moved for it (budget out of the payer, refund back) stays on record.
+ * No foreign keys: the trial account, its project and the job are deleted
+ * while this row stays.
+ */
+export const evalTrialWorkspaces = kortixSchema.table('eval_trial_workspaces', {
+  trialAccountId: uuid('trial_account_id').primaryKey(),
+  trialProjectId: uuid('trial_project_id').notNull(),
+  trialId: uuid('trial_id').notNull(),
+  jobId: uuid('job_id').notNull(),
+  /** The job's workspace: it pays for the trial and keeps its results. */
+  payerAccountId: uuid('payer_account_id').notNull(),
+  jobProjectId: uuid('job_project_id').notNull(),
+  /** The person the trial acts as: the owner of the trial workspace. */
+  ownerUserId: uuid('owner_user_id').notNull(),
+  budgetUsd: numeric('budget_usd', { precision: 12, scale: 4 }).default('0').notNull(),
+  fundedAt: timestamp('funded_at', { withTimezone: true }),
+  /** What went back to the payer (negative: the trial spent past its budget, and the payer paid the rest). */
+  refundUsd: numeric('refund_usd', { precision: 12, scale: 4 }),
+  settledAt: timestamp('settled_at', { withTimezone: true }),
+  /** The sweep deletes the workspace after this: late compute and model charges land first. */
+  cleanupAfter: timestamp('cleanup_after', { withTimezone: true }),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  lastError: text('last_error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('uniq_eval_trial_workspaces_trial').on(table.trialId),
+  index('idx_eval_trial_workspaces_live').on(table.cleanupAfter).where(sql`${table.deletedAt} is null`),
+]).enableRLS();
+
+// ─── Calendar (flag `calendar`) ─────────────────────────────────────────────
+// A workspace's shared calendar: dated items, the people on them and comments.
+// Scheduled triggers and Loops are not stored here; the clients compute their
+// fires from the trigger list. Every member who can open the workspace reads
+// and writes every item (projects/calendar/).
+
+export const calendarItems = kortixSchema.table('calendar_items', {
+  itemId: uuid('item_id').default(sql`kortix.uuid_v7()`).primaryKey(),
+  projectId: uuid('project_id')
+    .notNull()
+    .references(() => projects.projectId, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  notes: text('notes').default('').notNull(),
+  /** Null: the item has no date ("No date"). With `all_day`, UTC midnight of the date. */
+  startsAt: timestamp('starts_at', { withTimezone: true }),
+  allDay: boolean('all_day').default(false).notNull(),
+  status: text('status').$type<'open' | 'done'>().default('open').notNull(),
+  /** The end of a timed item; null for an all-day item, an item with no date, or a point in time. */
+  endsAt: timestamp('ends_at', { withTimezone: true }),
+  /** Who created it: a person, or an agent session (agent name plus session id). */
+  createdByUserId: uuid('created_by_user_id'),
+  createdByAgent: text('created_by_agent'),
+  /** No FK: a deleted session keeps its items; a reply then wakes nothing. */
+  createdBySessionId: text('created_by_session_id'),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_calendar_items_project_starts').on(table.projectId, table.startsAt),
+  check('calendar_items_status_check', sql`${table.status} in ('open', 'done')`),
+  check('calendar_items_ends_after_starts', sql`${table.endsAt} IS NULL OR (${table.startsAt} IS NOT NULL AND ${table.endsAt} > ${table.startsAt})`),
+]).enableRLS();
+
+/** The people on an item: persons and agents alike, each at most once. */
+export const calendarItemPeople = kortixSchema.table('calendar_item_people', {
+  itemId: uuid('item_id')
+    .notNull()
+    .references(() => calendarItems.itemId, { onDelete: 'cascade' }),
+  projectId: uuid('project_id').notNull(),
+  /** A person; null for an agent. */
+  userId: uuid('user_id'),
+  /** An agent by its kortix.yaml name; null for a person. */
+  agent: text('agent'),
+  addedAt: timestamp('added_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('uniq_calendar_item_people_user').on(table.itemId, table.userId).where(sql`${table.userId} IS NOT NULL`),
+  uniqueIndex('uniq_calendar_item_people_agent').on(table.itemId, table.agent).where(sql`${table.agent} IS NOT NULL`),
+  index('idx_calendar_item_people_project_user').on(table.projectId, table.userId),
+  index('idx_calendar_item_people_project_agent').on(table.projectId, table.agent),
+  check('calendar_item_people_one_kind', sql`(${table.userId} IS NULL) <> (${table.agent} IS NULL)`),
+]).enableRLS();
+
+export const calendarComments = kortixSchema.table('calendar_comments', {
+  commentId: uuid('comment_id').default(sql`kortix.uuid_v7()`).primaryKey(),
+  itemId: uuid('item_id')
+    .notNull()
+    .references(() => calendarItems.itemId, { onDelete: 'cascade' }),
+  projectId: uuid('project_id').notNull(),
+  body: text('body').notNull(),
+  authorUserId: uuid('author_user_id'),
+  authorAgent: text('author_agent'),
+  authorSessionId: text('author_session_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_calendar_comments_item').on(table.itemId, table.commentId),
 ]).enableRLS();

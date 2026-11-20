@@ -140,6 +140,10 @@ export type FeatureFlagKey =
   | 'program_agents'
   /** Evals: run agents on Harbor-format tasks and score them (`evals:` in kortix.yaml, `kortix evals`). Experimental, off by default. */
   | 'evals'
+  /** Desktop tabs: the desktop app shows browser-style tabs in the title bar for this project's pages. Client-only, off by default. */
+  | 'desktop_tabs'
+  /** Calendar: a shared calendar of dated items with the people on them and comments, plus the project's scheduled triggers (`kortix calendar`). Experimental, off by default. */
+  | 'calendar'
   /** @deprecated Withdrawn — agents messaging people left the product. The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'human_messaging';
 
@@ -203,6 +207,8 @@ export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'spaces_proactive',
   'program_agents',
   'evals',
+  'desktop_tabs',
+  'calendar',
 ] as const;
 
 /**
@@ -224,6 +230,12 @@ export interface FeatureFlagView {
   enabled: boolean;
   /** True when this project set an explicit choice (vs inheriting the default). */
   overridden: boolean;
+  /**
+   * What the flag resolves to without this project's choice: the state
+   * `updateFeatureFlag(projectId, key, null)` returns it to. Absent on servers
+   * older than this field.
+   */
+  default_enabled?: boolean;
   /**
    * True for an internal-only flag (`workspace_volume`). The
    * catalog lists one only while it is on, so agents and people can see it.
@@ -348,6 +360,10 @@ export interface ProjectConfigSummary {
   agents: Array<{
     name: string;
     path: string;
+    /** `kortix.yaml` `agents.<name>.title`: the agent's name as people read it
+     *  ("GitHub PR reviewer"). `name` stays its id. Absent from an older API;
+     *  null when the manifest sets none. Pass it to `agentDisplayName`. */
+    title?: string | null;
     description: string | null;
     mode: string | null;
     /** Internal automation remains registered but is not offered by agent pickers. */

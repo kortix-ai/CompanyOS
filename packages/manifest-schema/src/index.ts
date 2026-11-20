@@ -21,6 +21,8 @@
  */
 
 import { Cron } from 'croner';
+import { parseTriggerReaders } from './trigger-readers';
+export { parseTriggerReaders, type TriggerReaders } from './trigger-readers';
 import { normalizeTriggerList } from './trigger-shape';
 import { Document, isMap, LineCounter, parseDocument } from 'yaml';
 import { type AppliedFix, applyDeprecations, DEPRECATIONS } from './deprecations';
@@ -284,6 +286,7 @@ export {
 
 export {
   AGENT_BLOCK_KEYS_V3,
+  AGENT_TITLE_MAX_LENGTH,
   AGENT_RUN_TIMEOUT_DEFAULT_SECONDS,
   AGENT_RUN_TIMEOUT_MAX_SECONDS,
   type AgentBlockV3,
@@ -1478,6 +1481,10 @@ export function validateTriggers(rawNode: unknown, path: string, issues: Manifes
         message: 'prompt is required and may not be empty.',
         severity: 'error',
       });
+    }
+    if (entry.session_readers !== undefined) {
+      const parsed = parseTriggerReaders(entry.session_readers);
+      if ('error' in parsed) issues.push({ path: `${where}.session_readers`, message: parsed.error, severity: 'error' });
     }
     // Run caps (KRTX-1721): any trigger type, a whole number of at least 1.
     for (const field of ['max_runs_per_hour', 'max_runs_per_day'] as const) {

@@ -84,6 +84,7 @@ import {
   REGISTRY_NAME_MAX,
   REGISTRY_NAME_RE,
   V2_RUNTIME_VALUES,
+  AGENT_TITLE_MAX_LENGTH,
 } from './constants';
 import {
   CONNECTOR_HEADER_NAME_MAX_LENGTH,
@@ -529,6 +530,13 @@ function triggerFilterSchema(): JsonSchemaFragment {
  * One trigger in the `on:` / `run:` shape (trigger-shape.ts): what fires it,
  * and what a fire runs. `type` is implied by `on`, so it may not appear.
  */
+function triggerReadersSchema(): JsonSchemaFragment {
+  return { type: 'object', additionalProperties: false, properties: {
+    humans: { type: 'string', enum: ['none', 'members'], description: 'Current human account members may read newly created trigger sessions. No mutation rights. Default: none.' },
+    agents: { type: 'array', items: { type: 'string', pattern: '^[a-z0-9][a-z0-9_-]{0,127}$' }, description: 'Explicit named monitoring agents. Read only; no implicit agent access. Default: [].' },
+  } };
+}
+
 function onRunTriggerSchema(): JsonSchemaFragment {
   const durationSchema: JsonSchemaFragment = { type: 'string', pattern: DURATION_RE.source };
   const appSlug: JsonSchemaFragment = { type: 'string', pattern: '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$' };
@@ -540,6 +548,7 @@ function onRunTriggerSchema(): JsonSchemaFragment {
     type: 'object',
     required: ['slug', 'on', 'run'],
     properties: {
+      session_readers: { ...triggerReadersSchema(), description: 'Additive read-only policy for new sessions; overrides trigger_session_readers in full.' },
       slug: { ...SLUG_SCHEMA, description: 'Unique. Lowercase letters, digits, `-` and `_`, at most 128 characters.' },
       name: { type: 'string', description: 'The label in the dashboard. Default: the slug.' },
       type: false,
@@ -638,6 +647,7 @@ function triggerSchema(): JsonSchemaFragment {
     type: 'object',
     required: ['slug', 'type'],
     properties: {
+      session_readers: { ...triggerReadersSchema(), description: 'Additive read-only policy for new sessions; overrides trigger_session_readers in full.' },
       slug: SLUG_SCHEMA,
       type: { type: 'string', enum: [...TRIGGER_TYPES], description: 'Required in the flat form: the trigger without `on` and `run`. `type` next to `on` is an error.' },
       name: { type: 'string' },
@@ -1180,6 +1190,7 @@ function appsV2Schema(): JsonSchemaFragment {
  *  top-level section keeps its v1 shape" except `agents`/`channels`). */
 function sharedSectionProperties(): JsonSchemaFragment {
   return {
+    trigger_session_readers: { ...triggerReadersSchema(), description: 'Shared additive reader default for newly created trigger sessions. Existing sharing and IAM are unchanged. No implicit backfill.' },
     project: projectSchema(),
     env: envSchema(),
     sandbox: sandboxSchema(),
@@ -1254,6 +1265,12 @@ function agentBlockV3Schema(): JsonSchemaFragment {
   return {
     type: 'object',
     properties: {
+      title: {
+        type: 'string',
+        pattern: '\\S',
+        maxLength: AGENT_TITLE_MAX_LENGTH,
+        description: 'The agent\'s name as people read it, e.g. "GitHub PR reviewer". The key under `agents` stays its id: sessions, triggers and @-mentions use the key. Default: the key in sentence case.',
+      },
       ...behavior,
       permission: {
         ...permission,
@@ -1640,10 +1657,15 @@ function evalSourcesSchema(description: string): JsonSchemaFragment {
               type: 'object',
               properties: {
                 path: { type: 'string', description: 'A repository path: one task folder (it holds `task.toml`) or a folder of task folders.' },
-                name: { type: 'string', description: 'A dataset of the Harbor registry, such as `terminal-bench`.' },
+                name: {
+                  type: 'string',
+                  description:
+                    'A Harbor Hub package `org/name` (under `tasks` a task, under `datasets` a dataset), optionally `@ref`; or a dataset of the legacy Harbor registry, such as `terminal-bench`.',
+                },
                 git_url: { type: 'string', description: 'A public git repository (https). `path` is inside it.' },
                 git_commit_id: { type: 'string', description: 'The commit, branch or tag of `git_url`. Default: its default branch.' },
-                version: { type: ['string', 'number'], description: 'The dataset version, such as `2.0`.' },
+                version: { type: ['string', 'number'], description: 'The legacy registry dataset version, such as `2.0`, or a Harbor Hub ref.' },
+                ref: { type: 'string', description: 'A Harbor Hub ref: a tag (`latest`), a revision (`3`) or `sha256:<digest>`. Default: `latest`.' },
                 task_names: { type: 'array', items: { type: 'string' }, description: 'Glob patterns of task names to keep.' },
                 exclude_task_names: { type: 'array', items: { type: 'string' }, description: 'Glob patterns of task names to leave out.' },
                 n_tasks: { type: 'integer', minimum: 1, description: 'Keep at most this many tasks, in name order.' },
@@ -1667,7 +1689,7 @@ function evalsSchema(): JsonSchemaFragment {
       properties: {
         config: { type: 'string', description: 'A repository path to a Harbor job config (`.yaml`, `.yml` or `.json`). The other keys of the suite override its fields.' },
         tasks: evalSourcesSchema('The tasks to run: a repository path, or a list of them.'),
-        datasets: evalSourcesSchema('Folders of tasks, or datasets of the Harbor registry (`{ name: terminal-bench, version: "2.0" }`).'),
+        datasets: evalSourcesSchema('Folders of tasks, Harbor Hub datasets (`{ name: terminal-bench/terminal-bench-2-1 }`), or datasets of the legacy Harbor registry (`{ name: terminal-bench, version: "2.0" }`).'),
         agents: {
           description: 'The agents to score. Default: `oracle`, which runs each task\'s `solution/solve.sh` and proves the task is solvable.',
           type: 'array',

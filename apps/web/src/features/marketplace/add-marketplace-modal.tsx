@@ -205,7 +205,7 @@ export function AddMarketplaceModal({
 
           <div className="flex items-center gap-3">
             <Separator className="flex-1" />
-            <span className="text-muted-foreground/70 text-xs font-medium tracking-wide uppercase">
+            <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
               {tI18nComplete.raw('text6462590b2306')}
             </span>
             <Separator className="flex-1" />
@@ -233,7 +233,7 @@ export function AddMarketplaceModal({
                 ))}
               </div>
             ) : featured.length === 0 ? (
-              <p className="text-muted-foreground/70 py-6 text-center text-sm">
+              <p className="text-muted-foreground py-6 text-center text-sm">
                 {search
                   ? tI18nComplete('text598efd3e081f', { value0: search })
                   : tI18nComplete.raw('text3b0f1d282304')}

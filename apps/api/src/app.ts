@@ -117,6 +117,8 @@ import { createCaptureRouter } from './capture/device-routes';
 app.route('/v1/capture', createCaptureRouter());
 import { createCliDeviceRouter } from './cli/device-routes';
 app.route('/v1/cli/device', createCliDeviceRouter());
+import { createCliSetupEventsApp } from './cli/setup-events';
+app.route('/v1/cli/setup-events', createCliSetupEventsApp()); // POST: guided-setup milestones from the CLI, to product analytics
 
 // /v1/accounts/* — account & member management lives in ./accounts router.
 // Permanent legacy name: the workspace-scoped families are also served under

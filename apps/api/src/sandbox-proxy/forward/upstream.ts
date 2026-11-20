@@ -1,3 +1,4 @@
+import { sessionSharedThroughSpace } from '../../projects/surface';
 import { timeUpstream } from '../../middleware/upstream-timing';
 import { recordTurnStageMarks } from '../../lib/server-timing';
 import { getTraceHeaders } from '../../lib/request-context';
@@ -12,6 +13,13 @@ import { jsonProxyError } from '../pre-prompt-env-sync';
 import { recordDaemonTiming } from './daemon-timing';
 import { appCookieHeader } from '../preview-session';
 import { STRIP_FORWARD_HEADERS, clientResponseHeaders } from '../preview-response';
+import {
+  injectPreviewBridge,
+  previewBridgeScript,
+  shouldInjectPreviewBridge,
+  varyOnFetchDest,
+} from '../preview-bridge';
+import { previewParentOrigins } from '../preview-hosts';
 import { EFFECTIVE_MESSAGE_ID_HEADER } from '../prompt-wire-id-repair';
 import { proxyAttemptTimeoutMs } from '../preview-retry-budget';
 import { releasePromptDelivery } from '../prompt-dedupe';
@@ -381,6 +389,7 @@ export async function respondFromUpstream(
                 userId: access.userId,
                 callerSessionId: access.callerSessionId ?? null,
                 boundCredentialSessionId: access.boundCredentialSessionId,
+                sharedThroughSpace: () => sessionSharedThroughSpace(record.projectId, access.userId, record.sessionId),
               }),
             ),
           )
@@ -403,11 +412,31 @@ export async function respondFromUpstream(
   // go to the client untouched. The API's compress middleware skips a body
   // that is already encoded (preview-encoding-passthrough.test.ts).
 
-  return new Response(upstream.body, {
+  varyOnFetchDest(upstream.status, respHeaders);
+  const passthrough = new Response(upstream.body, {
     status: upstream.status,
     statusText: upstream.statusText,
     headers: respHeaders,
   });
+  // A framed HTML page reports its address to the panel (preview-bridge.ts).
+  const parentOrigins = previewParentOrigins();
+  if (
+    upstream.body &&
+    shouldInjectPreviewBridge({
+      method,
+      status: upstream.status,
+      upstreamPort,
+      requestHeaders: req.incomingHeaders,
+      responseHeaders: respHeaders,
+      parentOrigins,
+    })
+  ) {
+    return await injectPreviewBridge(
+      passthrough,
+      previewBridgeScript({ prefix: req.originMode ? '' : req.redirectPrefix, origins: parentOrigins }),
+    );
+  }
+  return passthrough;
 }
 
 /**

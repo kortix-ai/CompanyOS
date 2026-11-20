@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1799,
-  "aliases": 697,
+  "count": 1818,
+  "aliases": 706,
   "routes": [
     {
       "method": "GET",
@@ -1598,6 +1598,10 @@
       "path": "/v1/cli/device/start"
     },
     {
+      "method": "POST",
+      "path": "/v1/cli/setup-events"
+    },
+    {
       "method": "GET",
       "path": "/v1/clients/mobile"
     },
@@ -2943,6 +2947,41 @@
     },
     {
       "method": "GET",
+      "path": "/v1/projects/:workspaceId/calendar",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/calendar",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/projects/:workspaceId/calendar/:itemId",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar/:itemId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/calendar/:itemId",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar/:itemId"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/projects/:workspaceId/calendar/:itemId",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar/:itemId"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/calendar/:itemId/comments",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar/:itemId/comments"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/calendar/people",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar/people"
+    },
+    {
+      "method": "GET",
       "path": "/v1/projects/:workspaceId/capabilities",
       "aliasOf": "/v1/workspaces/:workspaceId/capabilities"
     },
@@ -4225,6 +4264,16 @@
       "method": "PATCH",
       "path": "/v1/projects/:workspaceId/session-groups/:groupId",
       "aliasOf": "/v1/workspaces/:workspaceId/session-groups/:groupId"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/projects/:workspaceId/session-groups/:groupId/sharing",
+      "aliasOf": "/v1/workspaces/:workspaceId/session-groups/:groupId/sharing"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/projects/:workspaceId/session-groups/:groupId/tabs",
+      "aliasOf": "/v1/workspaces/:workspaceId/session-groups/:groupId/tabs"
     },
     {
       "method": "PUT",
@@ -5786,6 +5835,34 @@
     },
     {
       "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/calendar"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/calendar"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/workspaces/:workspaceId/calendar/:itemId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/calendar/:itemId"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/workspaces/:workspaceId/calendar/:itemId"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/calendar/:itemId/comments"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/calendar/people"
+    },
+    {
+      "method": "GET",
       "path": "/v1/workspaces/:workspaceId/capabilities"
     },
     {
@@ -7259,6 +7336,14 @@
     {
       "method": "PATCH",
       "path": "/v1/workspaces/:workspaceId/session-groups/:groupId"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/workspaces/:workspaceId/session-groups/:groupId/sharing"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/workspaces/:workspaceId/session-groups/:groupId/tabs"
     },
     {
       "method": "PUT",

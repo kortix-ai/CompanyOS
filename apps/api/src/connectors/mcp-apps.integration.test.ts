@@ -56,7 +56,7 @@ afterAll(async () => {
 });
 
 test('registering a catalogue app without dynamic registration saves Kortix’s client and the catalogue’s endpoints', async () => {
-  const gmail = await connection('gmail', 'https://gmailmcp.googleapis.com/mcp/v1');
+  const gmail = await connection('gmail', 'https://google.mcp.kortix.com/gmail');
   await registerConnectionOAuth2Client({
     identity: gmail,
     // Everything a caller could send is ignored: the catalogue is the trust anchor.
@@ -81,7 +81,7 @@ test('registering a catalogue app without dynamic registration saves Kortix’s 
   expect(url.searchParams.get('redirect_uri')).toBe(CALLBACK);
   expect(url.searchParams.get('access_type')).toBe('offline');
   expect(url.searchParams.get('prompt')).toBe('consent');
-  expect(url.searchParams.get('scope')).toContain('https://www.googleapis.com/auth/gmail.readonly');
+  expect(url.searchParams.get('scope')).toContain('https://www.googleapis.com/auth/gmail.modify');
   expect(url.searchParams.get('code_challenge_method')).toBe('S256');
   expect(started.authorizationUrl).not.toContain('kortix-google-secret');
 });

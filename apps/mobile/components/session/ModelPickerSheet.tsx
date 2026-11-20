@@ -2,7 +2,7 @@
  * ModelPickerSheet — the agent and model sheet behind the composer's model
  * pill, on the project home and in a thread.
  *
- * One sheet, two tabs, the project/account switcher's UX (Jay, 2026-09-23):
+ * One sheet, two tabs (Jay, 2026-09-23), full screen so the tab bar shows:
  * an Agent · Model tab bar pinned at the bottom (`PickerSheet tabs`). It
  * opens on Model. Picking an agent applies it and moves to Model, the way
  * picking an account moves to Projects. The header's agent pill is gone.
@@ -109,7 +109,7 @@ export const ModelPickerSheet = React.memo(React.forwardRef<SheetRef, ModelPicke
     const [tab, setTab] = React.useState(MODEL_TAB);
 
     const agentOptions = React.useMemo<PickerOption[]>(
-      () => (agent?.agents ?? []).filter(isSelectableAgent).map((a) => ({ key: a.name, label: agentDisplayName(a.name) })),
+      () => (agent?.agents ?? []).filter(isSelectableAgent).map((a) => ({ key: a.name, label: agentDisplayName(a.name, a.title) })),
       [agent?.agents],
     );
     const hasAgentTab = !!agent && (agentOptions.length >= 2 || !!agent.onCreate);

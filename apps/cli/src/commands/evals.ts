@@ -31,7 +31,7 @@ import {
 } from '@kortix/sdk';
 import type { WorkspaceEvalJob, WorkspaceEvalJobConfig, WorkspaceEvalJobFilters, WorkspaceEvalJobStatus, WorkspaceEvalTrial } from '@kortix/sdk';
 import type { Auth } from '../api/auth.ts';
-import { withCliErrors } from '../api/client.ts';
+import { ApiError, createApiClient, withCliErrors } from '../api/client.ts';
 import { splitHelp } from '../command-argv.ts';
 import { emitJson, fail, resolveProjectContext, surfaceApiError, takeFlagBool, takeFlagValue, takeFlagValues } from '../command-helpers.ts';
 import { C, help, pad } from '../style.ts';
@@ -52,8 +52,9 @@ Subcommands:
   tasks <suite> | --path <dir> | --dataset <name>[@<version>]
                         The tasks a suite selects, parsed. Lists what Kortix
                         cannot run, and why.
-  datasets              Datasets a job can name: built-in (kortix/my-kortix)
-                        and the Harbor registry (terminal-bench, …).
+  datasets              Datasets a job can name: built-in (kortix/my-kortix),
+                        Harbor Hub (terminal-bench/terminal-bench-2-1, …) and
+                        the legacy Harbor registry (terminal-bench@2.0, …).
   run <suite> [--agent <name>[@<provider/model>]]... [--attempts <n>]
         [--concurrency <n>] [--task <glob>]... [--ref <branch|sha>] [--wait]
                         Start a job. Flags override the suite's fields.
@@ -64,14 +65,16 @@ Subcommands:
                         without a suite.
   run --dataset <name>[@<version>] --agent <name> ...
                         Start a job on a dataset by name: a built-in one
-                        (kortix/my-kortix) or one of the Harbor registry
-                        (terminal-bench@2.0).
+                        (kortix/my-kortix), a Harbor Hub dataset at a tag,
+                        revision or digest (terminal-bench/terminal-bench-2-1@6)
+                        or a legacy Harbor registry one (terminal-bench@2.0).
   jobs [<suite>] [--status <s>] [--dataset <name>] [--agent <name>]
         [--model <id>] [-q <text>]
                         Jobs, newest first, with their scores. Filters narrow
                         the list; the count of every match is printed.
   show <job_id>         One job: score per agent and model, then every trial.
-  watch <job_id>        Print trial progress until the job ends.
+  watch <job_id>        Print trial progress until the job ends. Exits 1 when
+                        the job was cancelled or a trial errored.
   trial <job_id> <trial_id> [--file <path>]
                         One trial: reward, error, timings, the instruction and
                         its files. --file prints one file (verifier/test-stdout.txt).
@@ -174,9 +177,14 @@ function initTask(dir: string | undefined, json: boolean): number {
   const written: string[] = [];
   for (const [path, content] of Object.entries(INIT_FILES)) {
     const target = join(root, path);
-    if (existsSync(target)) continue;
     mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, content, { mode: path.endsWith('.sh') ? 0o755 : 0o644 });
+    // 'wx' creates the file or fails when it exists: no window between a check and the write.
+    try {
+      writeFileSync(target, content, { mode: path.endsWith('.sh') ? 0o755 : 0o644, flag: 'wx' });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue;
+      throw error;
+    }
     written.push(target);
   }
   const tasksDir = dir ?? 'evals/tasks';
@@ -539,11 +547,11 @@ async function judge(argv: string[], json: boolean): Promise<number> {
   if (!criteria.size) return fail('Pass at least one --criterion <name>="<what earns 1.0>".');
   const creds = sessionCredentials();
   if (!creds) return fail(`No session credentials: set KORTIX_TOKEN and KORTIX_API_URL, or run inside a Kortix sandbox (${JUDGE_ENV_FILE}).`);
-  const gateway = `${new URL(creds.apiUrl).origin}/v1/llm/v1`;
-  const headers = { Authorization: `Bearer ${creds.token}`, 'content-type': 'application/json' };
+  // The LLM gateway is a Kortix API route (/v1/llm/v1/*): it goes through the SDK client.
+  const gateway = (timeoutMs: number) => createApiClient({ apiBase: creds.apiUrl, token: creds.token, signal: AbortSignal.timeout(timeoutMs) });
   if (!model) {
     // The first model the gateway serves this session.
-    const listed = (await fetch(`${gateway}/models`, { headers, signal: AbortSignal.timeout(30_000) }).then((r) => r.json()).catch(() => null)) as { data?: Array<{ id: string }> } | null;
+    const listed = await gateway(30_000).get<{ data?: Array<{ id: string }> }>('/llm/v1/models').catch(() => null);
     model = listed?.data?.[0]?.id ?? '';
     if (!model) return fail('No model: pass --model <id> or set KORTIX_EVAL_JUDGE_MODEL.');
   }
@@ -570,18 +578,14 @@ async function judge(argv: string[], json: boolean): Promise<number> {
   ].join('\n');
   let reply = '';
   for (let attempt = 1; attempt <= 3; attempt += 1) {
-    const res = await fetch(`${gateway}/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ model, temperature: 0, max_tokens: 4_000, messages: [{ role: 'user', content: prompt }] }),
-      signal: AbortSignal.timeout(180_000),
-    }).catch((err) => err as Error);
-    if (res instanceof Error || !res.ok) {
-      if (attempt === 3) return fail(`The judge model did not answer: ${res instanceof Error ? res.message : `HTTP ${res.status} ${(await res.text()).slice(0, 300)}`}`);
+    const body = await gateway(180_000)
+      .post<{ choices?: Array<{ message?: { content?: string | null } }> }>('/llm/v1/chat/completions', { model, temperature: 0, max_tokens: 4_000, messages: [{ role: 'user', content: prompt }] })
+      .catch((err) => err as Error);
+    if (body instanceof Error) {
+      if (attempt === 3) return fail(`The judge model did not answer: ${body instanceof ApiError && body.status ? `HTTP ${body.status} ` : ''}${body.message.slice(0, 300)}`);
       await Bun.sleep(2_000 * attempt);
       continue;
     }
-    const body = (await res.json()) as { choices?: Array<{ message?: { content?: string | null } }> };
     reply = body.choices?.[0]?.message?.content ?? '';
     if (parseJudgeReply(reply, names)) break;
   }
@@ -589,12 +593,11 @@ async function judge(argv: string[], json: boolean): Promise<number> {
   if (!result) return fail(`The judge's reply is not one score per criterion: ${reply.slice(0, 300)}`);
   // Merge: a test.sh may have written code-checked rewards first.
   let merged: Record<string, number> = {};
-  if (existsSync(out)) {
-    try {
-      merged = JSON.parse(readFileSync(out, 'utf8')) as Record<string, number>;
-    } catch {
-      merged = {};
-    }
+  try {
+    merged = JSON.parse(readFileSync(out, 'utf8')) as Record<string, number>;
+  } catch {
+    // No reward file yet, or an unreadable one: start empty.
+    merged = {};
   }
   merged = { ...merged, ...result.scores };
   mkdirSync(dirname(out), { recursive: true });

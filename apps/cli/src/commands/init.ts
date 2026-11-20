@@ -269,7 +269,7 @@ async function initNewProject(flags: InitFlags): Promise<number> {
   // ── Detect existing Kortix files ─────────────────────────────────────
   let overwrite = flags.overwrite;
   if (
-    ['kortix.yaml', 'kortix.yml', '.kortix'].some((path) => existsSync(resolve(cwd, path))) &&
+    ['kortix.yaml', 'kortix.yml'].some((path) => existsSync(resolve(cwd, path))) &&
     !overwrite &&
     !flags.yes
   ) {

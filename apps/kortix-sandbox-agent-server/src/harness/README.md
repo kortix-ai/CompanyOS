@@ -168,7 +168,7 @@ API serves permanently.
 
 | Module | Callback |
 | --- | --- |
-| `shared/turn-relay.ts` | `POST /workspaces/:id/turn-stream` (initial-turn claim, `turn_accepted`, `turn_abandoned`, `runtime_session` pin, `turn_begin`, `end`, `steer_read`, memory-guard end), `/turn-question`, `/turn-permission` |
+| `shared/turn-relay.ts` | `POST /workspaces/:id/turn-stream` (initial-turn claim, `turn_accepted`, `turn_abandoned`, `runtime_session` pin, `turn_begin`, `end`, `steer_read`, `steer_dropped`, memory-guard end), `/turn-question`, `/turn-permission` |
 | `shared/projection-relay.ts` | `POST /platform/runtime-projection`; the adapter registers its state reader |
 | `shared/audit-relay.ts` | `POST /workspaces/:id/sessions/:id/audit/events`: sanitize, batch, spool; batches carry `source: 'runtime'` and the harness id. pi feeds it every frame it publishes (`PiRuntimeHooks.onFrame`), so pi sessions have a tool audit trail |
 | `shared/boot-timeline-relay.ts` | `POST /platform/boot-timeline` |
@@ -864,7 +864,10 @@ end.
 - **Leftovers.** A turn that ends on its own with unread steered messages
   starts the next turn with them, in the same queue slot: the first is its
   prompt, the rest are read before its first model call. A stopped turn (Stop,
-  Quick Queue, the no-progress watchdog) drops them.
+  the no-progress watchdog, an abandoned stop) drops them and relays
+  `steer_dropped` once per id before its `end`; apps/api puts each prompt back
+  on its queue for the next turn. A steer the API's Stop settle withdrew first
+  is not reported.
 - **Gaps.** A steered message keeps the turn's model, agent and variant. It
   does not run extension `input` handlers, `/skill:` or prompt-template
   expansion (a prompt does). Unread steered messages live in memory: a daemon
@@ -948,6 +951,19 @@ turn still compacts, and that frame does not clear it. A prompt still loading
 its images, or queued behind the running work, is in flight for the probe.
 `reconfigure()` runs on the same serial queue, so a prompt admitted during
 it runs on the whole new config.
+
+**A run an extension starts.** An extension can start a pi run that kortixd
+never admitted: `sendUserMessage`, or `sendMessage` with `triggerTurn`,
+after a turn settled (for example a heartbeat posted from an async
+`agent_settled` handler). pi refuses a prompt while that run or a compaction
+is going ("Agent is already processing"). The next turn waits for pi to be
+idle before it begins (`PiRuntime.piIdle`). It stays queued while it waits,
+so the reaper's probe reads it in flight, and a steer finds no turn to join
+and is queued as a prompt. When such a run starts between that wait and the
+prompt, pi refuses the prompt before any model call; the turn waits and
+sends it again, at most 3 times (`promptWhenIdle`). A runtime stop also
+stops that run. prod 2026-11-14: a pinned 5-minute cron trigger failed 299
+of ~1,200 runs this way. `busy()` does not count such a run yet.
 
 **Stop is bounded.** `abort()` waits up to `KORTIX_PI_STOP_SETTLE_MS`
 (10 s) for the turn to settle. A tool that ignores its abort signal no longer
@@ -1106,8 +1122,19 @@ reads each `$(…)`, backtick, `<(…)`, `>(…)` and `( … )` body as commands
 own, and the strictest answer wins (`deny`, then `ask`, then `allow`). So
 `bash: { '*': deny, 'kortix connectors call x get *': allow }` runs that call
 and refuses `kortix connectors call x get a; env`. A line whose quotes or
-brackets do not balance is decided as a call with no subject: a restriction
-asks.
+brackets do not balance is decided as a call with no subject: a restricted
+pattern asks when its first word is a word of the line, else `*` decides.
+
+**A heredoc body is data when nothing on its line can run it.** Every command
+on the heredoc's line must be in `NEVER_RUNS_STDIN`: a data reader (`cat`,
+`tee`, `jq`, `git commit -F -`, `gh … --body-file -`) or a command that ignores
+stdin (`cd`, `mkdir`, `echo`). So `cd /tmp; cat > body.md <<'EOF'` keeps its
+markdown out of the check. The body is read as commands when the line has any
+other program (`sh <<EOF`, `cat <<EOF | bash`, a function defined on the
+line), when the line ends in a pipe (bash continues the pipeline after the
+body), or when an unquoted body runs `$(…)` or a backtick. Prod 2026-11-17: an
+agent with `kortix` rules asked a person to approve a change-request body,
+because `cd /tmp;` was not in the list.
 
 **Precedence:** the most specific matching rule wins, whatever
 order the keys are written in (`@kortix/api-contract/permission-rules`). The
@@ -1411,7 +1438,7 @@ document (its box died mid-run) leaves nothing to reuse, and the resume says
 so. The parent's record then names the new runner. A runner that still works
 refuses the resume. A structured agent whose
 answer never validates resolves to `{ schema_error, text }` (`strict: true`
-throws). Saved workflows are `.kortix/workflows/<name>.js`: the checkout's
+throws). Saved workflows are `workflows/<name>.js` at the repository root: the checkout's
 working tree, or the API's project files on a box without one.
 
 **Tool concurrency.** The root agent runs `toolExecution: 'parallel'`. Every

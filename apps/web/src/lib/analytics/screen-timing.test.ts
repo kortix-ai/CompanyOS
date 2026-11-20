@@ -135,6 +135,21 @@ describe('screen_ready', () => {
     expect(events).toEqual([]);
   });
 
+  test('a marketing or auth page sends nothing, and the app screen after it counts as a route', () => {
+    const { time, events, timer } = setup();
+    timer.navigate('/auth', 1);
+    timer.queries(false, 0);
+    time.advance(QUIET_MS);
+    time.advance(2_000);
+    timer.navigate(HOME, 1);
+    time.advance(400);
+    timer.queries(false, 0);
+    time.advance(QUIET_MS);
+    expect(events).toEqual([
+      { screen: '/workspaces/:id', duration_ms: 400, navigation: 'route', fetches: 1 },
+    ]);
+  });
+
   test('a mark on a screen that is not marked is ignored', () => {
     const { time, events, timer } = setup();
     timer.navigate(HOME, 1);

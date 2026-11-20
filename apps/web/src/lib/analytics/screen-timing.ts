@@ -1,7 +1,9 @@
 /**
  * `screen_ready`: how long a screen takes to show its data. PostHog adds the
  * country, so the same chart shows whether people far from our London API
- * wait longer. One event per navigation, sent through `track`.
+ * wait longer. One event per navigation, sent through `track`. App screens
+ * only (`isPrivatePath`): Vercel Speed Insights measures marketing and auth
+ * pages.
  *
  * A screen is ready when React Query has had no request in flight for
  * `QUIET_MS`, after at least one request: the chain of API reads behind the
@@ -17,7 +19,7 @@
  * an event: background tabs run timers late.
  */
 
-import { routeTemplate } from './posthog-config';
+import { isPrivatePath, routeTemplate } from './posthog-config';
 
 export const QUIET_MS = 500;
 export const MAX_MS = 60_000;
@@ -84,6 +86,11 @@ export function createScreenTimer(clock: ScreenClock, emit: (event: ScreenReady)
       if (pathname === lastPath) return;
       lastPath = pathname;
       stopQuiet();
+      if (!isPrivatePath(pathname)) {
+        current = null;
+        loadOpen = false;
+        return;
+      }
       const navigation = loadOpen ? 'load' : 'route';
       current = {
         screen: routeTemplate(pathname),
@@ -141,5 +148,9 @@ export function screenTimer(
 /** A marked screen (`MARKED_SCREENS`) calls this when its data is on screen. */
 export function markScreenReady(): void {
   if (typeof window === 'undefined' || !shared) return;
+  if (document.visibilityState === 'hidden') {
+    shared.abandon();
+    return;
+  }
   shared.mark(window.location.pathname, readInFlight());
 }

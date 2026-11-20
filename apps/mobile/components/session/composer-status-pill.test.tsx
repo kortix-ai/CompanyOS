@@ -207,17 +207,16 @@ describe('SandboxHealthPill chrome', () => {
     expect(pillText(pills[0])).toBe('Health');
   });
 
-  test('a waking computer draws the same card in yellow with no actions', async () => {
-    wording = { label: 'Waking computer', tone: 'progress' };
-    const root = await render(<SandboxHealthPill onHealth={() => {}} />);
+  for (const label of ['Waking computer', 'Connecting']) {
+    test(`${label} is silent during normal startup`, async () => {
+      wording = { label, tone: 'progress' };
+      const root = await render(<SandboxHealthPill onHealth={() => {}} />);
 
-    expect(byClassName(root, WRAPPER)).toHaveLength(1);
-    expect(byClassName(root, CARD)).toHaveLength(1);
-    const dots = instances(root, (node) => node.props.style?.width === 8 && node.props.style?.borderRadius === 4);
-    expect(dots).toHaveLength(2);
-    for (const dot of dots) expect(dot.props.style.backgroundColor).toBe(ACCENT_YELLOW);
-    expect(actionPills(root)).toHaveLength(0);
-  });
+      expect(byClassName(root, WRAPPER)).toHaveLength(0);
+      expect(actionPills(root)).toHaveLength(0);
+      expect(loopCounts.started).toBe(0);
+    });
+  }
 
   test('a reachable computer hides the pill and mounts its slot instead', async () => {
     wording = { label: "Can't reach computer", tone: 'danger' };

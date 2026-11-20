@@ -525,7 +525,8 @@ flow('SEC-POOL-5', {
   await ctx.step('a member starts a ChatGPT account only they can use, however it is spelled', async () => {
     for (const sharing of [{ mode: 'private', ownerId: member.userId }, { mode: 'members', memberIds: [member.userId] }]) {
       const started = await asMember.post(startPath, { resource_label: 'ChatGPT · Member', sharing }, { params: startParams });
-      started.status([200, 502]);
+      // 502: OpenAI refused the device-code request; 503: OpenAI is down.
+      started.status([200, 502, 503]);
       if (started.statusCode === 200) started.body().exists('$.flow_id').exists('$.user_code');
     }
   });
@@ -567,7 +568,7 @@ flow('SEC-POOL-5', {
 
   await ctx.step('the member reconnects only their own account, in place', async () => {
     const reconnect = await asMember.post(startPath, { resource_id: mine }, { params: startParams });
-    reconnect.status([200, 502]);
+    reconnect.status([200, 502, 503]);
     (await asMember.post(startPath, { resource_id: ownersPrivate }, { params: startParams })).status(403)
       .body().has('$.error', 'Only the person who connected this ChatGPT account can reconnect it');
     (await asMember.post(startPath, { resource_id: mine, resource_label: 'Renamed' }, { params: startParams })).status(400);

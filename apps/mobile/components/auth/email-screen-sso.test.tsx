@@ -270,8 +270,11 @@ describe('the SSO-required form', () => {
 
 /** The message line under the form, else null. */
 const message = () => {
-  const node = tree!.root.findAll(
-    (n) => n.type === 'text' && n.props.variant === 'muted' && String(n.props.className).includes('mt-3')
+  const node = tree?.root.findAll(
+    (n) =>
+      n.type === 'text' &&
+      n.props.variant === 'muted' &&
+      String(n.props.className).includes('mt-3'),
   )[0];
   return node ? textOf(node) : null;
 };
@@ -312,7 +315,7 @@ describe('every email door: validate, one loading pass, fresh messages', () => {
     await press('Forgot password?');
     expect(message()).toBe('Enter your email address first.');
 
-    act(() => tree!.unmount());
+    act(() => tree?.unmount());
     params = { method: 'sso' };
     render();
     type('Email address', 'not-an-email');
@@ -324,7 +327,9 @@ describe('every email door: validate, one loading pass, fresh messages', () => {
   });
 
   test('a rejected password maps to its friendly message and the button comes back', async () => {
-    answers = { signIn: async () => ({ success: false, error: { message: 'Invalid login credentials' } }) };
+    answers = {
+      signIn: async () => ({ success: false, error: { message: 'Invalid login credentials' } }),
+    };
     render();
     type('Email address', ` ${OPEN.toUpperCase()} `);
     type('Password', 'synthetic-password');
@@ -346,7 +351,11 @@ describe('every email door: validate, one loading pass, fresh messages', () => {
     type('Email address', OPEN);
     type('Password', 'synthetic-password');
     await press('Sign in');
-    expect({ message: message(), signingIn: hasButton('Signing in…'), signIn: hasButton('Sign in') }).toEqual({
+    expect({
+      message: message(),
+      signingIn: hasButton('Signing in…'),
+      signIn: hasButton('Sign in'),
+    }).toEqual({
       message: 'network down',
       signingIn: false,
       signIn: true,
@@ -355,7 +364,12 @@ describe('every email door: validate, one loading pass, fresh messages', () => {
 
   test('the button reads its loading label while the attempt runs', async () => {
     let finish: (value: unknown) => void = () => {};
-    answers = { signIn: () => new Promise((resolve) => (finish = resolve)) };
+    answers = {
+      signIn: () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    };
     render();
     type('Email address', OPEN);
     type('Password', 'synthetic-password');
@@ -372,7 +386,12 @@ describe('every email door: validate, one loading pass, fresh messages', () => {
   });
 
   test('an email code that cannot be sent explains why; a sent one opens the code step', async () => {
-    answers = { signInWithMagicLink: async () => ({ success: false, error: { message: 'Signups not allowed for otp' } }) };
+    answers = {
+      signInWithMagicLink: async () => ({
+        success: false,
+        error: { message: 'Signups not allowed for otp' },
+      }),
+    };
     render();
     await press('Use email code');
     type('Email address', OPEN);
@@ -381,13 +400,20 @@ describe('every email door: validate, one loading pass, fresh messages', () => {
 
     answers = {};
     await press('Continue');
-    expect({ step: hasField('Verification code'), message: message() }).toEqual({ step: true, message: null });
+    expect({ step: hasField('Verification code'), message: message() }).toEqual({
+      step: true,
+      message: null,
+    });
 
     // Resend from the code step: a new code, with its notice.
     await press('Resend code');
     expect({ message: message(), goTrue }).toEqual({
       message: 'New code sent.',
-      goTrue: [`signInWithMagicLink ${OPEN}`, `signInWithMagicLink ${OPEN}`, `signInWithMagicLink ${OPEN}`],
+      goTrue: [
+        `signInWithMagicLink ${OPEN}`,
+        `signInWithMagicLink ${OPEN}`,
+        `signInWithMagicLink ${OPEN}`,
+      ],
     });
   });
 
@@ -411,14 +437,18 @@ describe('every email door: validate, one loading pass, fresh messages', () => {
     await press('Forgot password?');
     expect(message()).toBe('Check your email for a link to reset your password.');
 
-    answers = { resetPassword: async () => ({ success: false, error: { message: 'rate limited' } }) };
+    answers = {
+      resetPassword: async () => ({ success: false, error: { message: 'rate limited' } }),
+    };
     await press('Forgot password?');
     expect(message()).toBe('rate limited');
   });
 
   test('SSO maps a missing provider to its domain and stays silent on a cancel', async () => {
     params = { method: 'sso' };
-    answers = { signInWithSSO: async () => ({ success: false, error: { message: 'No SSO provider found' } }) };
+    answers = {
+      signInWithSSO: async () => ({ success: false, error: { message: 'No SSO provider found' } }),
+    };
     render();
     type('Email address', OPEN);
     await press('Continue with SSO');
@@ -427,7 +457,9 @@ describe('every email door: validate, one loading pass, fresh messages', () => {
       checked: [],
     });
 
-    answers = { signInWithSSO: async () => ({ success: false, error: { message: 'User cancelled' } }) };
+    answers = {
+      signInWithSSO: async () => ({ success: false, error: { message: 'User cancelled' } }),
+    };
     await press('Continue with SSO');
     expect(message()).toBeNull();
   });

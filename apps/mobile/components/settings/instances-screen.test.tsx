@@ -8,7 +8,7 @@
  */
 import { afterEach, beforeAll, describe, expect, mock, test } from 'bun:test';
 import React from 'react';
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import { type ReactTestInstance, type ReactTestRenderer, act, create } from 'react-test-renderer';
 
 import type { SandboxInfo } from '@/lib/platform/client';
 
@@ -38,8 +38,13 @@ mock.module('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
 mock.module('nativewind', () => ({ useColorScheme: () => ({ colorScheme }) }));
-mock.module('@/lib/haptics', () => ({ haptics: { medium: none, tap: none, success: none, warning: none } }));
-mock.module('@/components/kortix/sheet-parts', () => ({ SheetRawTextInput: none, SheetView: host('sheet-view') }));
+mock.module('@/lib/haptics', () => ({
+  haptics: { medium: none, tap: none, success: none, warning: none },
+}));
+mock.module('@/components/kortix/sheet-parts', () => ({
+  SheetRawTextInput: none,
+  SheetView: host('sheet-view'),
+}));
 mock.module('@/lib/icons', () => ({
   CheckIcon: none,
   GlobeIcon: none,
@@ -64,10 +69,15 @@ mock.module('@/stores/instance-progress', () => ({
 mock.module('@/lib/theme-colors', () => ({
   useThemeColors: () => ({ primary: 'primary', primaryForeground: 'primary-foreground' }),
 }));
-mock.module('@/hooks/useSandboxUpdate', () => ({ useGlobalSandboxUpdate: () => ({ currentVersion: null }) }));
+mock.module('@/hooks/useSandboxUpdate', () => ({
+  useGlobalSandboxUpdate: () => ({ currentVersion: null }),
+}));
 mock.module('@/components/kortix/sheet', () => ({
   SheetBackdrop: none,
-  KortixBottomSheetModal: React.forwardRef<unknown, HostProps>(function Sheet({ children }, _ref) {
+  KortixBottomSheetModal: React.forwardRef<unknown, { children?: React.ReactNode }>(function Sheet(
+    { children },
+    _ref,
+  ) {
     return React.createElement('sheet', null, children);
   }),
 }));
@@ -120,14 +130,18 @@ const textOf = (node: ReactTestInstance | string): string =>
 
 /** Each instance row as it renders: dot colour, status label, pressable or not. */
 const rows = () =>
-  tree!.root
-    .findAll((n) => n.type === 'pressable' && typeof n.props.disabled === 'boolean')
-    .map((row) => ({
-      dot: row.find((n) => n.type === 'view' && String(n.props.className).includes('h-2.5 w-2.5')).props.style
-        .backgroundColor,
-      label: textOf(row.find((n) => n.type === 'text' && String(n.props.className).startsWith('mt-0.5'))),
-      disabled: row.props.disabled,
-    }));
+  (
+    tree?.root.findAll(
+      (n) => String(n.type) === 'pressable' && typeof n.props.disabled === 'boolean',
+    ) ?? []
+  ).map((row) => ({
+    dot: row.find((n) => n.type === 'view' && String(n.props.className).includes('h-2.5 w-2.5'))
+      .props.style.backgroundColor,
+    label: textOf(
+      row.find((n) => n.type === 'text' && String(n.props.className).startsWith('mt-0.5')),
+    ),
+    disabled: row.props.disabled,
+  }));
 
 describe('the status set behind each instance row', () => {
   test('every settled status has its colour and label; the row can be selected', () => {

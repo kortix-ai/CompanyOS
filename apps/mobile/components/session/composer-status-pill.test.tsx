@@ -16,7 +16,8 @@ import { readFileSync } from 'node:fs';
 // bunfig.toml → preload note), so this file must not mock a module another
 // test file reads unmocked — `@/lib/utils/theme` especially: theme.test.ts
 // pins the real THEME against global.css. The expected accent colors are
-// therefore read from theme.ts's source instead of importing or mocking it.
+// therefore read from theme.ts's source instead of importing or mocking it:
+// the first `--kortix-<name>` line is THEME.accent.light, the tone mocked below.
 const themeSource = readFileSync(import.meta.dir + '/../../lib/utils/theme.ts', 'utf8');
 const accent = (name: 'orange' | 'yellow') => {
   const value = themeSource.match(new RegExp(`${name}: '([^']+)', // --kortix-${name}`))?.[1];
@@ -113,6 +114,7 @@ mock.module('@/hooks/useSandboxReachability', () => ({
 }));
 mock.module('@/lib/network/use-online-status', () => ({ useOnlineStatus: () => online }));
 mock.module('@/lib/haptics', () => ({ haptics: { tap: () => taps++ } }));
+mock.module('@/lib/utils/tone', () => ({ useTone: () => 'light' }));
 
 let SandboxHealthPill: typeof import('./SandboxHealthPill').SandboxHealthPill;
 let LiveUpdatesPausedPill: typeof import('./LiveUpdatesPausedPill').LiveUpdatesPausedPill;

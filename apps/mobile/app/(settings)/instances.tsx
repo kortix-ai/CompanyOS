@@ -43,12 +43,12 @@ const isProvisioningStatus = (status: string) =>
 
 function statusColor(status: string, isDark: boolean): string {
   switch (status) {
-    case 'running': case 'ready': case 'active': return THEME.accent.green;
+    case 'running': case 'ready': case 'active': return THEME.accent[isDark ? 'dark' : 'light'].green;
     case 'stopped': case 'archived':
       return isDark ? THEME.dark.mutedForeground : THEME.light.mutedForeground;
     case 'error': case 'failed':
       return isDark ? THEME.dark.destructive : THEME.light.destructive;
-    default: return THEME.accent.orange;
+    default: return THEME.accent[isDark ? 'dark' : 'light'].orange;
   }
 }
 
@@ -68,6 +68,7 @@ export default function InstancesScreen() {
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const accent = THEME.accent[isDark ? 'dark' : 'light'];
   const { sandboxId, switchSandbox } = useSandboxContext();
 
   const { data: instances, isLoading, refetch, isRefetching } = useInstances();
@@ -140,7 +141,7 @@ export default function InstancesScreen() {
                   <>
                     <View className="py-3.5">
                       <View className="flex-row items-center mb-2">
-                        <View className="h-2.5 w-2.5 rounded-full mr-3" style={{ backgroundColor: THEME.accent.orange }} />
+                        <View className="h-2.5 w-2.5 rounded-full mr-3" style={{ backgroundColor: accent.orange }} />
                         <View className="flex-1">
                           <Text className="font-roobert-medium text-[15px] text-foreground">Sandbox</Text>
                           <Text className="mt-0.5 font-roobert text-[13px] text-muted-foreground">
@@ -206,7 +207,7 @@ export default function InstancesScreen() {
                           >
                             <View
                               className="h-full rounded-full"
-                              style={{ width: '30%', backgroundColor: THEME.accent.orange }}
+                              style={{ width: '30%', backgroundColor: accent.orange }}
                             />
                           </View>
                         )}

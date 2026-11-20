@@ -63,6 +63,7 @@ import { SessionDotMatrix } from '@/components/session/dot-matrix/session-dot-ma
 import { ToolFilePreviewHost, useToolFilePreviewStore } from '@/components/session/tool/shared/navigation';
 import { turnTopGap } from '@/lib/session/auto-scroll';
 import { THEME } from '@/lib/utils/theme';
+import { useTone } from '@/lib/utils/tone';
 import type { AttachedFile } from '@/lib/session/attachments';
 import { isPreviewableImage } from '@/lib/session/attachment-tile';
 import { splitPastedContent } from '@kortix/shared';
@@ -291,12 +292,13 @@ export function ImageStatus({ step }: { step: SessionImageStep }) {
   const { t } = useTranslation();
   const now = useNow();
   const line = t(`sessionImage.states.${step.state}`);
+  const yellow = THEME.accent[useTone()].yellow;
   return (
     <View className="px-4 pb-2" accessibilityLiveRegion="polite" testID="session-image-status">
       <View className={COMPOSER_CARD_CLASS}>
         <View className="flex-row items-start gap-2.5 px-2 py-1">
           <View className="h-5 justify-center">
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: THEME.accent.yellow }} />
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: yellow }} />
           </View>
           <View className="flex-1" accessible accessibilityLabel={`${t('sessionImage.title')}. ${line}`}>
             <View className="flex-row items-baseline justify-between gap-3">

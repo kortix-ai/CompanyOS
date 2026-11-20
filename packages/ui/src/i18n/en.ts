@@ -106,6 +106,7 @@ const catalog = {
     "savedVerified": "Key saved and verified",
     "savedInvalid": "Key saved, but {provider} refused it: {message}",
     "checkError": "The key could not be checked",
+    "keyRejected": "Your {provider} key was rejected. Update it in Models.",
     "openProviderInModels": "Open {provider} in Models",
     "member": "member",
     "members": "members",
@@ -1433,7 +1434,7 @@ const catalog = {
       "copyFailed": "Could not copy the prompt."
     },
     "missing": {
-      "title": "Couldn't start session",
+      "title": "Session not found",
       "message": "This session is no longer available, or you do not have access to it."
     },
     "legacy": {

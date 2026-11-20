@@ -113,6 +113,7 @@
     "savedVerified": "Schlüssel gespeichert und geprüft",
     "savedInvalid": "Schlüssel gespeichert, aber {provider} hat ihn abgelehnt: {message}",
     "checkError": "Der Schlüssel konnte nicht geprüft werden",
+    "keyRejected": "Dein {provider}-Schlüssel wurde abgelehnt. Aktualisiere ihn in Modelle.",
     "openProviderInModels": "{provider} in Modelle öffnen",
     "member": "Mitglied",
     "members": "Mitglieder",
@@ -2032,7 +2033,7 @@
       "copyFailed": "Die Eingabe konnte nicht kopiert werden."
     },
     "missing": {
-      "title": "Sitzung konnte nicht gestartet werden",
+      "title": "Sitzung nicht gefunden",
       "message": "Diese Sitzung ist nicht mehr verfügbar oder du hast keinen Zugriff darauf."
     },
     "legacy": {

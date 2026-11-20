@@ -292,3 +292,14 @@ describe('catalog shape', () => {
     expect(bad).toEqual([]);
   });
 });
+
+describe('space mutation audit labels', () => {
+  for (const root of ['projects', 'workspaces']) {
+    test(`${root} sharing and tabs have readable labels`, () => {
+      expect(auditLabelForRoute('PUT', `/v1/${root}/:workspaceId/session-groups/:groupId/sharing`))
+        .toEqual({ action: 'project.session_group.sharing.update', title: 'Updated session group sharing' });
+      expect(auditLabelForRoute('PUT', `/v1/${root}/:workspaceId/session-groups/:groupId/tabs`))
+        .toEqual({ action: 'project.session_group.tabs.update', title: 'Updated session group tabs' });
+    });
+  }
+});

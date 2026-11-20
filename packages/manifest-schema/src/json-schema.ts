@@ -558,6 +558,7 @@ function onRunTriggerSchema(): JsonSchemaFragment {
         description:
           'Payload path → a value (equals), or one operator: `not`, `in`, `exists`, `prefix`, `not_prefix`. A fire runs only when every path matches.',
       },
+      hard_run_caps: { type: 'boolean', description: 'Atomically cap every fire, including manual fires. No implicit manual override.' },
       max_runs_per_hour: { type: 'integer', minimum: 1, default: 60, description: 'Runs the trigger starts in any 60 minutes.' },
       max_runs_per_day: { type: 'integer', minimum: 1, description: 'Runs the trigger starts in a UTC day.' },
       max_lateness: { ...durationSchema, description: 'Schedules only, `60s` or more. A missed fire later than this does not run.' },
@@ -678,6 +679,7 @@ function triggerSchema(): JsonSchemaFragment {
       expect_event_within: durationSchema,
       // Any trigger type: runs started in any 60 minutes (60 when unset) and
       // in a UTC day (KRTX-1721).
+      hard_run_caps: { type: 'boolean', description: 'Atomically cap every fire, including manual fires. No implicit manual override.' },
       max_runs_per_hour: { type: 'integer', minimum: 1 },
       max_runs_per_day: { type: 'integer', minimum: 1 },
       // skip holds a fire while the previous run is active, or its prompt still waits (KRTX-1721).

@@ -77,6 +77,49 @@ index 03f3926ddc15546f0473a1a08557255dd4b2ea31..936c9ce2e12e1d7fda5a45493351dcfe
      scira: (q) => `https://scira.ai/?q=${q}`,
      t3: (q) => `https://t3.chat/new?q=${q}`,
      v0: (q) => `https://v0.app?q=${q}`,
+diff --git a/src/components/layout/toc-element.ts b/src/components/layout/toc-element.ts
+index c9ebead3feb55757f05c4c5ce7991c65979f0327..1babaefb035a530be87ed2c7ccbe8f442b82f36c 100644
+--- a/src/components/layout/toc-element.ts
++++ b/src/components/layout/toc-element.ts
+@@ -15,7 +15,7 @@
+  */
+ 
+ interface TocEntry {
+-  heading: HTMLElement;
++  heading: Element;
+   link: HTMLAnchorElement;
+ }
+ 
+@@ -34,9 +34,13 @@ class BlumeToc extends HTMLElement {
+       'a[href^="#"]'
+     )) {
+       const id = decodeURIComponent(link.hash.slice(1));
+-      const heading = id
+-        ? document.querySelector<HTMLElement>(`#${CSS.escape(id)}`)
+-        : null;
++      let heading = id ? document.querySelector(`#${CSS.escape(id)}`) : null;
++      // A legacy alias (`<a id="automations"></a>` right before the heading)
++      // starts the section: a link to it lands the alias, not the heading, at
++      // the trigger line.
++      while (heading?.previousElementSibling?.matches("a[id]:empty")) {
++        heading = heading.previousElementSibling;
++      }
+       if (heading) {
+         this.#entries.push({ heading, link });
+       }
+@@ -99,9 +103,11 @@ class BlumeToc extends HTMLElement {
+ 
+     // Headings are in document order, so the last one whose top has reached the
+     // trigger line is the section currently being read; default to the first.
++    // A hash scroll lands its heading at the scroll padding plus a sub-pixel
++    // remainder (72.27px in Chrome), so "reached" allows up to 1px past it.
+     let active = this.#entries[0]?.link ?? null;
+     for (const { heading, link } of this.#entries) {
+-      if (heading.getBoundingClientRect().top <= TRIGGER_OFFSET) {
++      if (heading.getBoundingClientRect().top < TRIGGER_OFFSET + 1) {
+         active = link;
+       }
+     }
 diff --git a/src/core/open-in-chat.ts b/src/core/open-in-chat.ts
 index f82351f0e90208d87398b7c5983622f5cc69c503..8e886f73d6728dbae709070cc733ec3a72b2d369 100644
 --- a/src/core/open-in-chat.ts

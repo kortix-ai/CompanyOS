@@ -50,6 +50,17 @@ function badTitle(title: string): boolean {
 }
 
 describe('route lookup', () => {
+  test('Space sharing and tab updates have distinct audit actions on both workspace paths', () => {
+    for (const prefix of ['projects', 'workspaces']) {
+      for (const [suffix, action, title] of [
+        ['sharing', 'project.session_group.sharing.update', 'Updated session group sharing'],
+        ['tabs', 'project.session_group.tabs.update', 'Updated session group tabs'],
+      ]) {
+        expect(auditLabelForRoute('PUT', `/v1/${prefix}/:workspaceId/session-groups/:groupId/${suffix}`)).toEqual({ action, title });
+        expect(auditLabelForAction(action)?.title).toBe(title);
+      }
+    }
+  });
   test('a row written before the 2026-11-05 param rename (`:projectId`, `:accountId`) keeps its label', () => {
     expect(auditLabelForRoute('GET', '/v1/projects/:projectId/search')).toEqual(
       auditLabelForRoute('GET', '/v1/projects/:workspaceId/search'),

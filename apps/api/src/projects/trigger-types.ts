@@ -1,4 +1,4 @@
-import type { ResolvedManifest, TriggerFilter } from '@kortix/manifest-schema';
+import type { TriggerReaders, ResolvedManifest, TriggerFilter } from '@kortix/manifest-schema';
 
 /**
  * The source of a trigger (a kortix.yaml trigger or a loop). `change_request` fires
@@ -24,6 +24,10 @@ export interface GitTriggerEventFields {
 }
 
 export interface GitTriggerSpec {
+  /** Explicit per-trigger override. Absent: inherit the shared default. */
+  sessionReaders?: TriggerReaders;
+  /** Resolved shared default; never serialized as an explicit override. */
+  defaultSessionReaders?: TriggerReaders;
   /** URL-safe slug — unique per project. */
   slug: string;
   /**

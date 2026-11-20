@@ -1164,6 +1164,8 @@ export function UserMessageBubble({
           <div
             ref={textRef}
             id={textId}
+            // What the person wrote: a session replay hides it even where it matches our labels.
+            data-replay-content=""
             className={cn(
               'max-w-full min-w-0',
               !quoted && BUBBLE_TEXT,

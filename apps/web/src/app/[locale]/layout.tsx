@@ -395,15 +395,11 @@ export default async function RootLayout({
                     desktop shell unless its shell navigates already. */}
                     <DesktopBackButton />
                     <ReactQueryProvider>
-                      {/* `--toast-offset-bottom` / `--toast-offset-right` are set by a
-                      composer docked at the window bottom (`@kortix/ui`
-                      toast-clearance.ts): a toast sits above its Send/Stop
-                      button, right-aligned with it. */}
+                      {/* `--toast-offset-bottom` is set by a composer docked at the
+                      window bottom (`@kortix/ui` toast-clearance.ts): a corner
+                      toast sits above its Send/Stop button. */}
                       <Toaster
-                        offset={{
-                          bottom: 'var(--toast-offset-bottom, 24px)',
-                          right: 'var(--toast-offset-right, 24px)',
-                        }}
+                        offset={{ bottom: 'var(--toast-offset-bottom, 24px)' }}
                         mobileOffset={{ bottom: 'var(--toast-offset-bottom, 16px)' }}
                       />
                       {/* Global "Request a demo" qualifier modal — mounted once here

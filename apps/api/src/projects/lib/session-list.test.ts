@@ -29,9 +29,7 @@ function query(table: unknown) {
     }
     // The project's private channels (`hiddenSpaceIds`): none. It starts with
     // the caller reads and holds nothing back.
-    if (table === projectSpaces) return [];
-    // No workspace row: session_groups is off for this ordering fixture.
-    if (table === projectsView) return [];
+    if (table === projectSpaces || table === projectsView) return [];
     if (table === accounts) {
       started.push('oversight-policy');
       await oversightGate;

@@ -18,6 +18,7 @@ import { projectSessionGroupMembers, projectSessionGroups } from '@kortix/db';
 import { sessionGroupDriveFolder } from '@kortix/shared';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from './db';
+import { qualifiedColumn } from './sql-qualified-column';
 
 export interface GroupViewer {
   userId: string;
@@ -80,10 +81,10 @@ export async function sharedGroupIdsFor(projectId: string, userId: string): Prom
     .where(
       and(
         eq(projectSessionGroups.projectId, projectId),
-        sql`(${projectSessionGroups.visibility} = 'project'
-          or ${projectSessionGroups.createdBy} = ${userId}::uuid
+        sql`(${qualifiedColumn(projectSessionGroups.visibility)} = 'project'
+          or ${qualifiedColumn(projectSessionGroups.createdBy)} = ${userId}::uuid
           or exists (select 1 from ${projectSessionGroupMembers} m
-                      where m.group_id = ${projectSessionGroups.groupId} and m.user_id = ${userId}::uuid))`,
+                      where m.group_id = ${qualifiedColumn(projectSessionGroups.groupId)} and m.user_id = ${userId}::uuid))`,
       ),
     );
   return new Set(rows.map((row) => row.groupId));

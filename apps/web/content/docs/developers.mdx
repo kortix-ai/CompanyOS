@@ -2890,9 +2890,9 @@ Point a coding agent at `https://kortix.com/llms.txt` for the concepts and at
 [Kortix MCP server](/docs/guide#other-ai-tools-mcp) reads the route reference itself through
 `search_api` and `describe_api`.
 
-### Call the LLM gateway from your own app
-
 <a id="use-the-gateway-from-your-own-tools" />
+
+### Call the LLM gateway from your own app
 
 The LLM gateway serves your workspace's models to your own code, with the same providers, routing, fallback models and budgets that sessions use. Your app calls it with a gateway key, through an OpenAI- or Anthropic-compatible endpoint.
 
@@ -4542,8 +4542,9 @@ A manual `update` uses the same rollout as the daily run. When another update ho
 
 `init` or `update` without `--tag` moves the instance back to its channel. To change auto-update, the time or the timezone, run `kortix self-host configure`, then `kortix self-host start`.
 
-#### Upgrading an instance that predates the session log
 <a id="sessions-saved-by-an-older-version" />
+
+#### Upgrading an instance that predates the session log
 
 An instance that ran a version before the session log holds some session history in an older v1 store. Version `0.14.9` converts that store by itself, in a background pass on the leader API container. The pass logs this line when it finishes:
 
@@ -4559,8 +4560,9 @@ Later versions do not convert the v1 store. Their `kortix-migrate` step refuses 
 
 A new install updates without these steps.
 
-#### Upgrading: provider keys move to Models → Providers
 <a id="legacy-credential-backfill" />
+
+#### Upgrading: provider keys move to Models → Providers
 
 Older versions kept LLM provider keys (API keys, ChatGPT and OpenCode logins, the Bedrock region, custom provider keys) as project secrets. They now live in **Models → Providers**. From version `0.15.9`, the leader API container moves the old keys there by itself: once a few seconds after it starts, then once a day. It moves each key once, deletes nothing and never logs a value. When a pass ends, `kortix self-host logs kortix-api` shows a line that contains:
 

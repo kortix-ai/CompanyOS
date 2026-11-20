@@ -240,3 +240,16 @@ describe('superseded gateway_logs covering indexes', () => {
     );
   });
 });
+
+describe('duplicate trigger-admissions twin runtime correction', () => {
+  const file = '20261120094700000_trigger_admissions_workspace_twin.sql';
+
+  test('fails closed when the committed file drifts from the approved checksum', () => {
+    const root = mkdtempSync(join(tmpdir(), 'kortix-migration-runtime-'));
+    roots.push(root);
+    const dir = join(root, 'migrations');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, file), "set lock_timeout = '2s';\n");
+    expect(() => materializeMigrationRuntimeDirectory(dir)).toThrow(`${file} checksum mismatch`);
+  });
+});

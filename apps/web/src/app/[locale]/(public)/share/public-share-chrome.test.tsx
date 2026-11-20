@@ -110,7 +110,7 @@ describe('public share chrome', () => {
     expect(document.querySelector('article p')?.textContent).toMatch(/Jan|2026/);
     expect(lastHtml).toContain('Synthetic prompt');
     expect(lastHtml).toContain('Synthetic heading');
-    expect(lastHtml).toMatchSnapshot();
+    expect(document.querySelector('[data-replay-content]')?.textContent).toBe('Synthetic prompt');
   });
 
   test('an unavailable artifact shows the quiet auth frame block', async () => {

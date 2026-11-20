@@ -2096,36 +2096,12 @@ release contracts remain required.
 
 `SESS-64` Session create refuses when no model can run the session. A workspace on the Free plan (credits but no managed models) with no provider key, and no model named in the request, answers `POST /projects/:id/sessions` 409 `{code:"no_model_available", plan_upgrade:true, error:"No model: upgrade to the Credits plan or add your own provider key."}` and creates no session row and no sandbox: such a box could only die at boot ("pi harness has no model"). A provider key whose provider refused it at its last check (`verify_status = 'invalid'`) is no default: a Free-plan workspace whose only key is refused answers the same 409, and the same key checked `unknown` passes the model gate. A Credits-plan workspace with no model named → 201 on the platform default; where no managed model is served (the local profile) it answers 409 `{code:"no_model_available", plan_upgrade:false}`. The check runs after the agent, recursion and colleague-access gates and before sandbox placement, so the local profile's create flows that used to stop at 503 `KORTIX_URL_UNREACHABLE` now stop here.
 
-### TRG-46 — hard manual worker admission
-A disabled keyed schedule remains manually fireable. With `hard_run_caps: true`,
-all sources reserve an attempt atomically before dispatch, including manual fires.
-Invalid or missing keys start no session and consume no admission. Six concurrent
-manual requests with a five/hour policy admit exactly five; the refusal is persisted
-in run history. Reservations count failed attempts conservatively, so retries and
-process crashes cannot exceed the configured start ceiling. No implicit override.
+`TRG-46` Hard manual worker admission. A disabled keyed schedule remains manually fireable. With `hard_run_caps: true`, all sources reserve an attempt atomically before dispatch, including manual fires. Invalid or missing keys start no session and consume no admission. Six concurrent manual requests with a five/hour policy admit exactly five; the refusal is persisted in run history. Reservations count failed attempts conservatively, so retries and process crashes cannot exceed the configured start ceiling. No implicit override.
 
-### TRG-47 — isolated keyed draft dispatch
-A session-bound dispatcher manually fires a disabled keyed schedule into its
-existing synthetic worker. Both fires reuse that session, can read it, and each
-writes exactly one visible run. The real CLI lists those same runs.
+`TRG-47` Isolated keyed draft dispatch. A session-bound dispatcher manually fires a disabled keyed schedule into its existing synthetic worker. Both fires reuse that session, can read it, and each writes exactly one visible run. The real CLI lists those same runs.
 
 `TRG-44` A current non-owner workspace member reads and lists a private trigger session with `trigger_session_readers.humans: members`, but cannot start or prompt it (404). Reader standing applies only to audited reads. Existing owner/manager rights stay independent. DB integration covers named monitors, membership removal, protected spaces and truthful `fired` delivery versus failed terminal turn.
 
-### BILL-WS-3 — workspace-less billing safety
+`BILL-WS-3` Workspace-less billing safety. A signed-in person without a workspace reads both account-state variants. An active legacy subscription in the personal wallet, and a store subscription cancelled but not yet expired, remain active, without a provider read. A workspace keyed by the person's id that they do not serve is refused with 409 `no_workspace`, never read. No production billing is changed.
 
-A signed-in person without a workspace reads both account-state variants. An
-active legacy subscription in the personal wallet, and a store subscription
-cancelled but not yet expired, remain active, without a provider read. A
-workspace keyed by the person's id that they do not serve is refused with 409
-`no_workspace`, never read. No production billing is changed.
-
-### BILL-WS-4 — workspace-less billing absence (Stripe)
-
-Absence needs Stripe: the read lists the subscriptions of every mapped customer
-and searches subscriptions whose metadata names the person's id (an unmapped
-legacy purchase). With no wallet both variants report `no_account` and no
-active subscription, without a wallet write; a wallet with nonrecurring credits
-reports `no_subscription`. A database or provider error is an error response,
-never absence, and so is a missing Stripe key: the local profile's Stripe key
-is a placeholder, so there the
-read answers 500 and this flow needs the `stripe` capability.
+`BILL-WS-4` Workspace-less billing absence (Stripe). Absence needs Stripe: the read lists the subscriptions of every mapped customer and searches subscriptions whose metadata names the person's id (an unmapped legacy purchase). With no wallet both variants report `no_account` and no active subscription, without a wallet write; a wallet with nonrecurring credits reports `no_subscription`. A database or provider error is an error response, never absence, and so is a missing Stripe key: the local profile's Stripe key is a placeholder, so there the read answers 500 and this flow needs the `stripe` capability.

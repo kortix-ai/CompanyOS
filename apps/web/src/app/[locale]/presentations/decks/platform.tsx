@@ -35,7 +35,6 @@ import {
   HardDrivesIcon as Server,
   ShieldIcon as Shield,
   SparkleIcon as Sparkles,
-  StorefrontIcon as Store,
   UsersIcon as Users,
   WebhooksLogoIcon as Webhook,
 } from '@phosphor-icons/react';
@@ -1507,7 +1506,7 @@ export function useSlides(): SlideDef[] {
               'autoAppPresentationSlidesPlatformJsxAttrLeadWeBuildOur3a652ae7',
             )}
           />
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <IconFeature
               icon={Code2}
               title={tI18nHardcoded.raw(
@@ -1529,13 +1528,6 @@ export function useSlides(): SlideDef[] {
               title={tI18nHardcoded.raw('i18nComplete.textf5828f35ad93')}
               body={tI18nHardcoded.raw(
                 'autoAppPresentationSlidesPlatformJsxAttrBodyRunItAnywhere9c8c4cd2',
-              )}
-            />
-            <IconFeature
-              icon={Store}
-              title={tI18nHardcoded.raw('i18nComplete.textc608981d8d68')}
-              body={tI18nHardcoded.raw(
-                'autoAppPresentationSlidesPlatformJsxAttrBodyAgentsSkillsWholedd8eefbc',
               )}
             />
             <IconFeature

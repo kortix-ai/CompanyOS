@@ -5087,7 +5087,7 @@ export function SessionChat({
                     )}
 
                     {/* Persisted failures can precede any transcript message (for
-                        example, a marketplace install rejected at admission). */}
+                        example, a session rejected at admission). */}
                     {[
                       ...(turnOutcome.recent_failures ?? []),
                       ...(turnOutcome.last_ended?.end_reason === 'failed' &&

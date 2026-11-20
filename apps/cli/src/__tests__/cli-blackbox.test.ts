@@ -95,7 +95,8 @@ async function runCli(args: string[], cwd = tmp, extraEnv: Record<string, string
   };
 }
 
-function startMarketplaceServer() {
+/** Records every request and answers 404: a command that must not reach the API shows up here. */
+function startRecordingServer() {
   server = Bun.serve({
     port: 0,
     fetch: async (req) => {
@@ -105,25 +106,6 @@ function startMarketplaceServer() {
         path: `${url.pathname}${url.search}`,
         authorization: req.headers.get('authorization'),
       });
-      if (url.pathname === '/v1/marketplace/items') {
-        return Response.json({
-          items: [{
-            id: 'kortix-starter:pdf',
-            registry: 'kortix-starter',
-            name: 'pdf',
-            type: 'registry:skill',
-            title: 'PDF',
-            description: 'Read and write PDFs.',
-            categories: ['general-knowledge-worker'],
-            capabilities: { secrets: [], connectors: [], tools: [], network: [] },
-            dependencies: [],
-            fileCount: 1,
-            external: false,
-            marketplaceId: 'kortix',
-            marketplaceLabel: 'Kortix',
-          }],
-        });
-      }
       return Response.json({ error: 'not found' }, { status: 404 });
     },
   });
@@ -131,7 +113,7 @@ function startMarketplaceServer() {
 }
 
 // `GET /v1/skills` — the kortix-managed system floor. Nothing else is served, so
-// any fallback to the marketplace catalog shows up as a 404 rather than passing.
+// any fallback to another catalog shows up as a 404 rather than passing.
 function startSystemSkillsServer() {
   const body = '---\nname: kortix-system\n---\n\n<skill name="kortix-system">how Kortix works</skill>\n';
   server = Bun.serve({
@@ -326,24 +308,6 @@ function projectSummary(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
-function catalogItem(name: string) {
-  return {
-    id: `kortix-starter:${name}`,
-    registry: 'kortix-starter',
-    name,
-    type: 'registry:skill',
-    title: name === 'agent-browser' ? 'Agent Browser' : name,
-    description: `${name} marketplace item`,
-    categories: ['kortix-runtime'],
-    capabilities: { secrets: [], connectors: [], tools: [name], network: [] },
-    dependencies: [],
-    fileCount: 1,
-    external: false,
-    marketplaceId: 'kortix',
-    marketplaceLabel: 'Kortix',
-  };
-}
-
 function startCliE2eServer() {
   let archived = false;
 
@@ -392,23 +356,6 @@ function startCliE2eServer() {
         archived = true;
         return Response.json({ ok: true, archived: true, repo_deleted: true });
       }
-      if (url.pathname === '/v1/marketplace/items' && req.method === 'GET') {
-        const query = url.searchParams.get('query') ?? '';
-        const items = ['agent-browser']
-          .filter((name) => !query || name.includes(query) || query === `kortix-starter:${name}`)
-          .map(catalogItem);
-        return Response.json({ items });
-      }
-      const itemDetail = url.pathname.match(/^\/v1\/marketplace\/items\/(.+)$/);
-      if (itemDetail && req.method === 'GET') {
-        const raw = decodeURIComponent(itemDetail[1]!);
-        const name = raw.includes(':') ? raw.split(':').pop()! : raw;
-        if (name !== 'agent-browser') {
-          return Response.json({ error: 'Not found' }, { status: 404 });
-        }
-        return Response.json(catalogItem(name));
-      }
-
       return Response.json({ error: 'not found' }, { status: 404 });
     },
   });
@@ -430,37 +377,26 @@ describe('kortix CLI black-box behavior', () => {
     process.env = { ...ORIGINAL_ENV };
   });
 
-  test('marketplace search runs as a process and returns API catalog JSON', async () => {
-    const apiBase = startMarketplaceServer();
-    const configFile = writeConfig(apiBase);
+  test.each(['marketplace', 'registry'])(
+    '`%s` is an unknown command (the marketplace was removed) and calls no API',
+    async (command) => {
+      const apiBase = startRecordingServer();
+      const configFile = writeConfig(apiBase);
 
-    const result = await runCli(
-      ['marketplace', 'search', 'pdf', '--source', 'kortix', '--json'],
-      tmp,
-      { KORTIX_CONFIG_FILE: configFile },
-    );
+      const result = await runCli([command, 'search', 'pdf', '--json'], tmp, { KORTIX_CONFIG_FILE: configFile });
 
-    expect(result.code).toBe(0);
-    expect(JSON.parse(result.stdout).items[0]).toMatchObject({
-      id: 'kortix-starter:pdf',
-      name: 'pdf',
-      marketplaceLabel: 'Kortix',
-    });
-    // Machine mode (--json) keeps stderr silent: no human host notice, so a
-    // piped or merged capture parses (see whoami-json.blackbox.test.ts).
-    expect(result.stderr).toBe('');
-    expect(requests).toEqual([{
-      method: 'GET',
-      path: '/v1/marketplace/items?query=pdf&source=kortix',
-      authorization: 'Bearer tok_blackbox',
-    }]);
-  }, 15_000);
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain(`unknown command \`${command}\``);
+      expect(requests).toEqual([]);
+    },
+    15_000,
+  );
 
-  test('top-level help exposes marketplace but hides add and registry commands', async () => {
+  test('top-level help hides the removed marketplace, add and registry commands', async () => {
     const result = await runCli(['--help']);
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain('marketplace');
+    expect(result.stdout).not.toContain('marketplace');
     expect(result.stdout).not.toContain('add <item>');
     expect(result.stdout).not.toContain('registry <subcommand>');
   });
@@ -491,8 +427,7 @@ describe('kortix CLI black-box behavior', () => {
     expect(read.code).toBe(0);
     expect(read.stdout).toContain('how Kortix works');
 
-    // Served live from the host, never from the marketplace catalog and never
-    // from a local clone.
+    // Served live from the host, never from a local clone.
     expect(requests.map((r) => r.path)).toEqual(['/v1/skills', '/v1/skills/kortix-system']);
     expect(requests.every((r) => r.authorization === 'Bearer tok_blackbox')).toBe(true);
   }, 20_000);
@@ -513,9 +448,6 @@ describe('kortix CLI black-box behavior', () => {
 
     expect(result.stdout).toContain('system-skills');
     expect(result.stdout).not.toContain('skills <subcommand>');
-    // Optional/marketplace skills keep their own home rather than being folded
-    // back into the system-skills list.
-    expect(result.stdout).toContain('marketplace');
   });
 
 
@@ -842,7 +774,7 @@ describe('kortix CLI black-box behavior', () => {
   });
 
   test('add is not a top-level command', async () => {
-    const apiBase = startMarketplaceServer();
+    const apiBase = startRecordingServer();
     const configFile = writeConfig(apiBase);
 
     const result = await runCli(
@@ -913,7 +845,7 @@ describe('kortix CLI black-box behavior', () => {
     expect(existsSync(join(root, 'skills', 'pdf', 'SKILL.md'))).toBe(true);
   });
 
-  test('E2E: CLI project setup plus marketplace discovery, then unlink/relink/archive', async () => {
+  test('E2E: CLI project setup, then unlink/relink/archive', async () => {
     const apiBase = startCliE2eServer();
     const configFile = writeConfig(apiBase);
 
@@ -944,21 +876,6 @@ describe('kortix CLI black-box behavior', () => {
     expect(info.code).toBe(0);
     expect(JSON.parse(info.stdout)).toMatchObject({ project_id: 'proj_e2e', default_branch: 'main' });
 
-    const search = await runCli(['marketplace', 'search', 'agent-browser', '--source', 'kortix', '--json'], root, { KORTIX_CONFIG_FILE: configFile });
-    expect(search.code).toBe(0);
-    expect(JSON.parse(search.stdout).items).toEqual([
-      expect.objectContaining({
-        id: 'kortix-starter:agent-browser',
-        name: 'agent-browser',
-        type: 'registry:skill',
-        capabilities: expect.objectContaining({ tools: ['agent-browser'] }),
-      }),
-    ]);
-
-    const show = await runCli(['marketplace', 'show', 'agent-browser', '--json'], root, { KORTIX_CONFIG_FILE: configFile });
-    expect(show.code).toBe(0);
-    expect(JSON.parse(show.stdout)).toMatchObject({ id: 'kortix-starter:agent-browser', name: 'agent-browser', type: 'registry:skill' });
-
     const unlink = await runCli(['projects', 'unlink'], root, { KORTIX_CONFIG_FILE: configFile });
     expect(unlink.code).toBe(0);
     expect(gitLink(root)).toEqual({});
@@ -983,8 +900,6 @@ describe('kortix CLI black-box behavior', () => {
       ['GET', '/v1/workspaces/proj_e2e', null],
       ['GET', '/v1/workspaces/proj_e2e', null],
       ['GET', '/v1/workspaces/proj_e2e/git/connection', null],
-      ['GET', '/v1/marketplace/items?query=agent-browser&source=kortix', null],
-      ['GET', '/v1/marketplace/items/agent-browser', null],
       ['GET', '/v1/workspaces/proj_e2e', null],
       ['GET', '/v1/workspaces/proj_e2e', null],
       ['DELETE', '/v1/workspaces/proj_e2e', null],
@@ -996,7 +911,7 @@ describe('kortix CLI black-box behavior', () => {
     const apiBase = startCliE2eServer();
     const configFile = writeConfig(apiBase);
 
-    const noAuth = await runCli(['marketplace', 'search', 'pty', '--json'], tmp, { KORTIX_CONFIG_FILE: join(tmp, 'missing-config.json') });
+    const noAuth = await runCli(['system-skills', '--json'], tmp, { KORTIX_CONFIG_FILE: join(tmp, 'missing-config.json') });
     expect(noAuth.code).toBe(1);
     expect(noAuth.stderr).toContain('Not logged in');
 
@@ -1009,18 +924,12 @@ describe('kortix CLI black-box behavior', () => {
     expect(missingProject.code).toBe(1);
     expect(missingProject.stderr).toContain('Not found');
 
-    const unknownShow = await runCli(['marketplace', 'show', 'does-not-exist'], root, { KORTIX_CONFIG_FILE: configFile });
-    expect(unknownShow.code).toBe(1);
-    expect(unknownShow.stderr).toContain('No marketplace item matches');
-
     const add = await runCli(['add', 'pty', '--project', 'proj_e2e'], root, { KORTIX_CONFIG_FILE: configFile });
     expect(add.code).toBe(2);
     expect(add.stderr).toContain('unknown command `add`');
 
     expect(requests.map((r) => [r.method, r.path, r.body ?? null])).toEqual([
       ['GET', '/v1/workspaces/missing', null],
-      ['GET', '/v1/marketplace/items/does-not-exist', null],
-      ['GET', '/v1/marketplace/items?query=does-not-exist', null],
     ]);
   }, 30_000);
 });

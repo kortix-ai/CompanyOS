@@ -2259,7 +2259,6 @@ Every command prints its subcommands and flags with `kortix <command> --help`, o
 | `channels <subcommand>` | Slack and Microsoft Teams connections, and the agent each channel runs. | [Channels](/docs/guide#channels) |
 | `sandboxes <subcommand>` | Sandbox templates, their builds and their health. | [Computers](/docs/guide#computers) |
 | `apps <subcommand>` | Deploy and manage Apps: sites and servers with stable Kortix URLs. | [Apps reference](/docs/developers#apps-reference) |
-| `marketplace <subcommand>` | Search, show, install and uninstall marketplace skills. | [Skills](/docs/guide#skills) |
 
 **Files, changes and triggers**
 
@@ -6307,8 +6306,7 @@ Renaming the workspace renames both rows: `PATCH /v1/workspaces/:id` with a new 
 | `idempotency_key` | Send the same key on every attempt at one create. A retry then returns the workspace of the first attempt. The key is scoped to the account. It identifies the attempt, not the payload: a reused key with a different `name` returns the first workspace. |
 | `account_id` | The account that owns the workspace. Omitted, and the caller has no workspace or its default account already holds its project: a NEW workspace is created (`201`, its own `account_id`). Named, and that account already holds its project: `409` `workspace_has_project` with `workspace_id` in the body (`isWorkspaceHasProjectError`). Prefer `createWorkspace`. |
 | `starter_template` | `general-knowledge-worker` or `minimal`. |
-| `source_item_id` | Clone a `registry:project` marketplace item instead of the starter. It wins over `starter_template`. |
-| `marketplace_items` | Marketplace item ids to install. |
+| `source_item_id` · `marketplace_items` | **Deprecated.** The marketplace was removed (2026-11-20). `source_item_id` answers `400`; `marketplace_items` is ignored. |
 | `default_branch` | The branch of the new repository. Omit it for the server default. |
 | `icon` · `icon_glyph` | An emoji string, or a `WorkspaceGlyph` object. `icon_glyph` wins when both are set. An invalid value is dropped and never fails the create. |
 
@@ -8504,7 +8502,7 @@ Stable entry points follow semver. A deep path into `dist/` has no semver.
 | `billing` | Plan, credit balance, transactions, usage, per-session usage, subscription. | `/billing/…` |
 | `sandboxShares` | Public share links for one sandbox port. | `/p/share` |
 | `connectStatus()` | Whether the managed OAuth connect provider is configured on this instance. | `/connectors/connect-status` |
-| `marketplace` | The public marketplace catalog and its sources. | `/marketplace/…` |
+| `marketplace` | **Deprecated.** The marketplace was removed (2026-11-20). Every call rejects with `410 ENDPOINT_RETIRED`. Removed in the next major release of the SDK. | `/marketplace/…` |
 | `capture` | Kortix Capture for one account, the device sign-in approval, and the caller's own reads. | `/accounts/{accountId}/capture/…`, `/capture/…` |
 | `notifications` | The caller's notification inbox and preferences, Web Push, and the push tokens of native devices. | `/notifications/…` |
 | `mobileClientPolicy()` | `{ minimum_version, store_url_ios, store_url_android }`. A `null` field means the operator set no value. Needs no token. | `/clients/mobile` |
@@ -8528,7 +8526,7 @@ The same calls exist as functions: `listWorkspaces`, `getWorkspace`, `updateWork
 | --- | --- |
 | `list()` · `listForAccount(accountId)` | Workspaces the caller can open · workspaces in one account. |
 | `get(projectId)` · `detail(projectId)` | The summary · the full detail with config. |
-| `provision(input)` | A new workspace on a new Kortix-managed repository. Input: `{ name, account_id?, seed_starter?, starter_template?: 'general-knowledge-worker' \| 'minimal', marketplace_items?, source_item_id?, default_branch?, icon?, icon_glyph?, idempotency_key? }`. |
+| `provision(input)` | A new workspace on a new Kortix-managed repository. Input: `{ name, account_id?, seed_starter?, starter_template?: 'general-knowledge-worker' \| 'minimal', default_branch?, icon?, icon_glyph?, idempotency_key? }`. |
 | `create(input)` · `createRepo(input)` | A workspace on an existing `repo_url` · a workspace on a new GitHub repository. |
 | `update(projectId, input)` · `archive(projectId)` | Change settings · archive. |
 | `llmCatalog(projectId)` · `modelPicker(projectId)` | The full model catalog · the compact list for a model picker. |
@@ -8554,13 +8552,10 @@ The same calls exist as functions: `listWorkspaces`, `getWorkspace`, `updateWork
 | `gitBackend.get()` | `{ configured, kind: 'app' \| 'pat' \| null, owner }`. Any signed-in user can read it. |
 | `gitBackend.repositories({ search?, limit? })` | Repositories under that owner. Self-host operators only; other callers get `403`. |
 
-#### `kortix.marketplace` and `kortix.sandboxShares`
+#### `kortix.sandboxShares`
 
 | Method | What it does |
 | --- | --- |
-| `marketplace.items(options?)` · `.item(id)` · `.itemFile(id, path)` | Browse the catalog · one item · one file of an item. |
-| `marketplace.marketplaces()` · `.featured()` | All marketplaces · featured marketplaces. |
-| `marketplace.sources.list()` · `.add(input)` · `.remove(id)` | Marketplace sources. |
 | `sandboxShares.list(sandboxId)` · `.create({ sandboxId, port, ttl?, label? })` · `.revoke(sandboxId, token)` | Public share links for one sandbox port. |
 
 ### Accounts, IAM, billing and notifications

@@ -74,8 +74,8 @@ export const CLI_ALLOWED = [
   'whoami', 'doctor', 'validate', 'schema', 'accounts', 'members', 'groups', 'tokens', 'keys', 'billing',
   'workspaces', 'workspace', 'projects', 'project',
   'sessions', 'session', 'chat', 'files', 'cr', 'review', 'triggers', 'automations', 'tasks', 'loops', 'loop', 'reminders', 'remind', 'connectors',
-  'secrets', 'providers', 'env', 'gateway', 'apps', 'channels', 'sandboxes', 'marketplace', 'system-skills',
-  'skills', 'registry', 'agents', 'models', 'access', 'roles', 'permissions', 'perms', 'audit', 'grants', 'feedback', 'drive', 'search', 'artifacts', 'spaces', 'calendar', 'evals', 'help', 'version',
+  'secrets', 'providers', 'env', 'gateway', 'apps', 'channels', 'sandboxes', 'system-skills',
+  'skills', 'agents', 'models', 'access', 'roles', 'permissions', 'perms', 'audit', 'grants', 'feedback', 'drive', 'search', 'artifacts', 'spaces', 'calendar', 'evals', 'help', 'version',
 ];
 
 export function denial(args: string[]): Denial | null {
@@ -252,7 +252,7 @@ export const KORTIX_TOOL = {
   name: 'kortix',
   title: 'Run the kortix CLI',
   description:
-    'Run the real `kortix` CLI as you: everything the CLI does (secrets, triggers, cr, review, loops, agents, models, gateway, providers, channels, sandboxes, apps, marketplace, files, access, roles, permissions, audit, grants, members, groups, tokens, billing, workspaces, sessions, system-skills, …). `args` is the argv after `kortix`, e.g. ["secrets","ls","--json"]. Discover with ["--help"] and ["<group>","--help"]; prefer `--json` for output you parse. `project_id` sets the project the command runs in; `session_id` sets the session where a command takes one. Returns {exit_code, stdout (or json: the parsed value when the output is JSON, e.g. with --json), stderr}; a non-zero exit code is `isError`. First-class tools exist for sessions, sandbox files and connectors: prefer start_session, run_command, read_file and call_connector to this one. Refused before it runs: `--host`, hosts, login, logout, init, ship, update, uninstall, self-host, tui, connect, chat without --prompt, token, env pull|push, apps deploy (a local directory: use run_command in a session sandbox), apps token, apps exec. Commands time out after about 45 seconds.',
+    'Run the real `kortix` CLI as you: everything the CLI does (secrets, triggers, cr, review, loops, agents, models, gateway, providers, channels, sandboxes, apps, files, access, roles, permissions, audit, grants, members, groups, tokens, billing, workspaces, sessions, system-skills, …). `args` is the argv after `kortix`, e.g. ["secrets","ls","--json"]. Discover with ["--help"] and ["<group>","--help"]; prefer `--json` for output you parse. `project_id` sets the project the command runs in; `session_id` sets the session where a command takes one. Returns {exit_code, stdout (or json: the parsed value when the output is JSON, e.g. with --json), stderr}; a non-zero exit code is `isError`. First-class tools exist for sessions, sandbox files and connectors: prefer start_session, run_command, read_file and call_connector to this one. Refused before it runs: `--host`, hosts, login, logout, init, ship, update, uninstall, self-host, tui, connect, chat without --prompt, token, env pull|push, apps deploy (a local directory: use run_command in a session sandbox), apps token, apps exec. Commands time out after about 45 seconds.',
   inputSchema: {
     type: 'object',
     properties: {

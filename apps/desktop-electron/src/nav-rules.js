@@ -46,7 +46,6 @@ const APP_PATH_PREFIXES = [
   '/capture',
   '/github',
   '/cli',
-  '/marketplace',
   '/maintenance',
   '/countryerror',
   '/debug',

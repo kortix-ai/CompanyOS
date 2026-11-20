@@ -113,7 +113,7 @@ person.
 | panel events (`panel_opened`, …) | web (`@kortix/ui`) | session panel and conversation UI | `source`, `kind`, `count` |
 | `user_signed_up` | API | a new person's first `GET /v1/accounts` with no workspace (`accounts/core/signup-event.ts`) | `method` (email, google, github, apple), `invited` (an invitation to the email was open at sign-up); sets the person property `signup_kind` (`invited`, `self_serve`) once |
 | `user_logged_in` | API | a CLI device login or a headless sign-in (not a token refresh) | `method` |
-| `project_created` | API | a project is provisioned or linked | `origin` (blank, template, marketplace, github_import), `provider` |
+| `project_created` | API | a project is provisioned or linked | `origin` (blank, template, github_import; `marketplace` until 2026-11-20), `provider` |
 | `session_created` | API | a person creates a session (not triggers, channels, agents) | `session_id`, `source`, `with_prompt` |
 | `session_started` | API | the session's runtime answers for the first time in one boot: first open, every wake after sleep, every restart. It counts boots, not sessions | `provider`, `boot_ms` |
 | `session_restarted` | API | a person restarts a session | `provider` |

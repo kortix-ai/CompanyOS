@@ -137,8 +137,6 @@ export const REMAINING_UI_TRANSLATION_KEYS: Readonly<Record<string, string>> = {
   'Choose which agent answers': 'texta33bc2792173',
   'Choose which model runs this turn': 'text0e22e022480d',
   'Claude Code': 'text246ef8c1130d',
-  'Clone a full, working Kortix workspace in one click, or add skills from every source into your own.':
-    'text5a7b24722fae',
   Closed: 'textc21ead0614e7',
   'Cloud runtime': 'texta5a909060ba4',
   Cmd: 'text1695b48bccfe',
@@ -325,8 +323,6 @@ export const REMAINING_UI_TRANSLATION_KEYS: Readonly<Record<string, string>> = {
   macOS: 'textaed6b7aa2a05',
   Manager: 'text8b2085f74dfa',
   Markdown: 'text0e52f6b9d025',
-  Marketplace: 'textc608981d8d68',
-  'Marketplace — Clone a ready-made Kortix workspace': 'text7eebc3924618',
   Member: 'text7c968fb71f50',
   "Members, billing, roles, and audit live in each workspace's own settings.":
     'textfde028796e58',

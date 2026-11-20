@@ -637,7 +637,7 @@ function ComposerImpl(props: SessionChatInputProps) {
   const tModelGate = useTranslations('sessionUi.modelGate');
   const tComposerAttachments = useTranslations('hardcodedUi.composerAttachments');
   /** For the submit latch, created once at the first submit: the toast speaks the current locale. */
-  const tComposerAttachmentsRef = useLatestRef(tComposerAttachments);
+  const driveFilePendingMessageRef = useLatestRef(tComposerAttachments('driveFilePending'));
   const tHardcodedUi = useTranslations('hardcodedUi');
   const tThreads = useTranslations('threads');
 
@@ -2163,7 +2163,7 @@ function ComposerImpl(props: SessionChatInputProps) {
       // command), or lose its chip to a mid-send stash. Every submit waits for it, the stash included.
       () => {
         if (pendingDrivePathsRef.current.size === 0) return false;
-        errorToast(tComposerAttachmentsRef.current('driveFilePending'));
+        errorToast(driveFilePendingMessageRef.current);
         return true;
       },
     );

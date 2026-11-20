@@ -25523,7 +25523,8 @@
     "open": "Aberta",
     "jump": "Ir para a resposta de #{number}",
     "unavailable": "Esta resposta não está disponível no histórico carregado.",
-    "loadError": "Não foi possível carregar a resposta. Tente novamente."
+    "loadError": "Não foi possível carregar a resposta. Tente novamente.",
+    "openError": "Não foi possível abrir a solicitação de alteração"
   },
   "agentCapabilities": {
     "skillsTitle": "Skills",
@@ -27481,7 +27482,7 @@
     "newSpace": "Novo espaço",
     "searchPlaceholder": "Buscar espaços",
     "emptyTitle": "Nenhum espaço ainda",
-    "emptyDescription": "Um espaço agrupa as sessões de um projeto, cliente ou tema.",
+    "emptyDescription": "Um espaço agrupa as sessões de um espaço de trabalho, cliente ou tema.",
     "noResultsTitle": "Nenhum espaço corresponde",
     "noResultsDescription": "Tente outro nome.",
     "loadFailed": "Não foi possível carregar os espaços",

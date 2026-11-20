@@ -24,7 +24,7 @@ mock.module('@/components/session/turn/user-message', () => ({ MessageBody: Pass
 mock.module('@/components/session/SessionTurn', () => ({ SessionTurn: Empty }));
 mock.module('@/components/session/dot-matrix/session-dot-matrix', () => ({ SessionDotMatrix: Empty }));
 mock.module('@/components/session/tool/shared/navigation', () => ({ ToolFilePreviewHost: Empty, useToolFilePreviewStore: { getState: () => ({ openPreview() {} }) } }));
-mock.module('@/lib/utils/theme', () => ({ THEME: { light: { background: 'white', primaryForeground: 'white' }, dark: { background: 'black' }, accent: { yellow: 'yellow' } } }));
+mock.module('@/lib/utils/theme', () => ({ THEME: { light: { background: 'white', primaryForeground: 'white' }, dark: { background: 'black' }, accent: { light: { yellow: 'yellow' }, dark: { yellow: 'yellow' } } } }));
 mock.module('@/lib/projects/hooks', () => ({ useSessionParticipants: () => ({}), useSessionMessageAuthors: () => ({}) }));
 
 const { SessionConnecting } = await import('./SessionConnecting');

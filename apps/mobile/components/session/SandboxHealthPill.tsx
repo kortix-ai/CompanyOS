@@ -8,6 +8,7 @@ import { Animated, Easing } from 'react-native';
 import { WarningCircleIcon as CircleAlert } from '@/lib/icons';
 import { useSandboxContext } from '@/contexts/SandboxContext';
 import { THEME } from '@/lib/utils/theme';
+import { useTone } from '@/lib/utils/tone';
 import { sessionConnectionLabel } from '@kortix/sdk';
 import {
   useElapsedSince,
@@ -29,7 +30,7 @@ export function SandboxHealthPill({ onHealth, whenReachable }: SandboxHealthPill
   const elapsed = useElapsedSince(downSince);
   const wording = sessionConnectionLabel(connection);
   const faulted = wording?.tone === 'danger';
-  const dotColor = THEME.accent.orange;
+  const dotColor = THEME.accent[useTone()].orange;
 
   const show = checked && !reachable && faulted;
 

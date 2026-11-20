@@ -147,9 +147,9 @@ describe('the status set behind each instance row', () => {
   test('every settled status has its colour and label; the row can be selected', () => {
     render(['running', 'ready', 'active', 'stopped', 'archived', 'error', 'failed']);
     expect(rows()).toEqual([
-      { dot: THEME.accent.green, label: 'Connected · DAYTONA', disabled: false },
-      { dot: THEME.accent.green, label: 'Connected · DAYTONA', disabled: false },
-      { dot: THEME.accent.green, label: 'Connected · DAYTONA', disabled: false },
+      { dot: THEME.accent.light.green, label: 'Connected · DAYTONA', disabled: false },
+      { dot: THEME.accent.light.green, label: 'Connected · DAYTONA', disabled: false },
+      { dot: THEME.accent.light.green, label: 'Connected · DAYTONA', disabled: false },
       { dot: THEME.light.mutedForeground, label: 'Stopped · DAYTONA', disabled: false },
       { dot: THEME.light.mutedForeground, label: 'Archived · DAYTONA', disabled: false },
       { dot: THEME.light.destructive, label: 'Error · DAYTONA', disabled: false },
@@ -158,11 +158,11 @@ describe('the status set behind each instance row', () => {
     expect(polls).toEqual([]);
   });
 
-  test('the dark theme takes the dark muted and destructive colours', () => {
+  test('the dark theme takes the dark accent, muted and destructive colours', () => {
     colorScheme = 'dark';
     render(['running', 'stopped', 'failed']);
     expect(rows().map((row) => row.dot)).toEqual([
-      THEME.accent.green,
+      THEME.accent.dark.green,
       THEME.dark.mutedForeground,
       THEME.dark.destructive,
     ]);
@@ -171,9 +171,9 @@ describe('the status set behind each instance row', () => {
   test('any other status is provisioning: orange, disabled, and the list polls every 5 s', () => {
     render(['running', 'creating', '']);
     expect(rows()).toEqual([
-      { dot: THEME.accent.green, label: 'Connected · DAYTONA', disabled: false },
-      { dot: THEME.accent.orange, label: 'Provisioning... · DAYTONA', disabled: true },
-      { dot: THEME.accent.orange, label: 'Provisioning... · DAYTONA', disabled: true },
+      { dot: THEME.accent.light.green, label: 'Connected · DAYTONA', disabled: false },
+      { dot: THEME.accent.light.orange, label: 'Provisioning... · DAYTONA', disabled: true },
+      { dot: THEME.accent.light.orange, label: 'Provisioning... · DAYTONA', disabled: true },
     ]);
     expect(polls).toEqual([5000]);
   });

@@ -68,7 +68,7 @@ Values live in `visual-system.json` (keys `color.*`). This file says which token
 
 ## Accents and status
 
-The `kortix-*` accents are the only source of hue in product UI. Each accent has a light and a dark value at the same hue (J-7); `kortix-base` follows `--ring` in both. Mobile stays theme-invariant for now. See `color.accents.*`.
+The `kortix-*` accents are the only source of hue in product UI. Each accent has a light and a dark value at the same hue (J-7); `kortix-base` follows `--ring` in both. Mobile follows both values (`global.css` and `THEME.accent[tone]`). See `color.accents.*`.
 
 | Token | Meaning. Use it for nothing else |
 | --- | --- |

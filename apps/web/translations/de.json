@@ -113,6 +113,7 @@
     "savedVerified": "Schlüssel gespeichert und geprüft",
     "savedInvalid": "Schlüssel gespeichert, aber {provider} hat ihn abgelehnt: {message}",
     "checkError": "Der Schlüssel konnte nicht geprüft werden",
+    "keyRejected": "Dein {provider}-Schlüssel wurde abgelehnt. Aktualisiere ihn in Modelle.",
     "openProviderInModels": "{provider} in Modelle öffnen",
     "member": "Mitglied",
     "members": "Mitglieder",
@@ -2032,7 +2033,7 @@
       "copyFailed": "Die Eingabe konnte nicht kopiert werden."
     },
     "missing": {
-      "title": "Sitzung konnte nicht gestartet werden",
+      "title": "Sitzung nicht gefunden",
       "message": "Diese Sitzung ist nicht mehr verfügbar oder du hast keinen Zugriff darauf."
     },
     "legacy": {
@@ -2190,7 +2191,9 @@
       "commandsAndActions": "Befehle und Aktionen",
       "toUse": "zur Verwendung",
       "use": "Verwenden",
-      "noOneMatches": "Niemand passt"
+      "noOneMatches": "Niemand passt",
+      "drive": "Drive",
+      "driveSearchFailed": "Drive konnte nicht durchsucht werden."
     },
     "history": {
       "restoreTitle": "Einige frühere Inhalte konnten nicht wiederhergestellt werden",
@@ -10467,7 +10470,9 @@
       "budgetExceeded": "Zu viele nicht gesendete Uploads. Nicht verwendete Uploads laufen innerhalb von 24 Stunden ab.",
       "tooLarge": "Diese Datei ist größer als 50 MiB.",
       "expired": "Dieser Upload ist abgelaufen. Entfernen Sie ihn und hängen Sie die Datei erneut an.",
-      "checkConnection": "Prüfen Sie Ihre Verbindung und versuchen Sie es erneut."
+      "checkConnection": "Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+      "driveFileUnavailable": "{name} konnte nicht aus Drive angehängt werden. Die Datei wurde eventuell verschoben, oder du kannst sie nicht mehr öffnen.",
+      "driveFilePending": "Warte, bis die Drive-Datei angehängt ist, und sende dann."
     },
     "i18nComplete": {
       "noModelAddProviderKey": "Anbieter-Schlüssel hinzufügen",
@@ -25519,7 +25524,8 @@
     "open": "Offen",
     "jump": "Zur Antwort für #{number} springen",
     "unavailable": "Diese Antwort ist im geladenen Verlauf nicht verfügbar.",
-    "loadError": "Die Antwort konnte nicht geladen werden. Versuche es erneut."
+    "loadError": "Die Antwort konnte nicht geladen werden. Versuche es erneut.",
+    "openError": "Änderungsanfrage konnte nicht geöffnet werden"
   },
   "agentCapabilities": {
     "skillsTitle": "Skills",
@@ -27477,7 +27483,7 @@
     "newSpace": "Neuer Space",
     "searchPlaceholder": "Spaces durchsuchen",
     "emptyTitle": "Noch keine Spaces",
-    "emptyDescription": "Ein Space fasst die Sitzungen eines Projekts, Kunden oder Themas zusammen.",
+    "emptyDescription": "Ein Space fasst die Sitzungen eines Arbeitsbereichs, Kunden oder Themas zusammen.",
     "noResultsTitle": "Kein Space passt",
     "noResultsDescription": "Versuche einen anderen Namen.",
     "loadFailed": "Die Spaces konnten nicht geladen werden",

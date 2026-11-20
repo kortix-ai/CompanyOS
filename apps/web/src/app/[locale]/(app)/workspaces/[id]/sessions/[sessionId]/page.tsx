@@ -178,6 +178,8 @@ export default function ProjectSessionPage() {
       key={`${projectId}/${sessionId}`}
       projectId={projectId}
       sessionId={sessionId}
+      // The bare frame: the skeleton's header mounts its own session readers.
+      pending={<HeaderlessSessionSurface>{null}</HeaderlessSessionSurface>}
       fallback={
         <InlineSessionError
           title={tSessionPage('missing.title')}

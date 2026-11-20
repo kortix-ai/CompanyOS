@@ -113,6 +113,7 @@
     "savedVerified": "Ključ je sačuvan i proveren",
     "savedInvalid": "Ključ je sačuvan, ali ga je {provider} odbio: {message}",
     "checkError": "Ključ nije mogao da se proveri",
+    "keyRejected": "Tvoj {provider} ključ je odbijen. Ažuriraj ga u Modelima.",
     "openProviderInModels": "Otvori {provider} u Modelima",
     "member": "члан",
     "members": "чланова",
@@ -2032,7 +2033,7 @@
       "copyFailed": "Није могуће копирати упит."
     },
     "missing": {
-      "title": "Сесија није покренута",
+      "title": "Сесија није пронађена",
       "message": "Ова сесија више није доступна или немате приступ њој."
     },
     "legacy": {
@@ -2190,7 +2191,9 @@
       "commandsAndActions": "Команде и радње",
       "toUse": "за коришћење",
       "use": "Користи",
-      "noOneMatches": "Нико се не поклапа"
+      "noOneMatches": "Нико се не поклапа",
+      "drive": "Drive",
+      "driveSearchFailed": "Претрага Drive-а није успела."
     },
     "history": {
       "restoreTitle": "Део ранијег садржаја није могао да се врати",
@@ -10467,7 +10470,9 @@
       "budgetExceeded": "Превише непослатих отпремања. Неискоришћена отпремања истичу у року од 24 сата.",
       "tooLarge": "Ова датотека је већа од 50 MiB.",
       "expired": "Ово отпремање је истекло. Уклоните га и поново приложите датотеку.",
-      "checkConnection": "Проверите везу, па покушајте поново."
+      "checkConnection": "Проверите везу, па покушајте поново.",
+      "driveFileUnavailable": "{name} није могуће приложити из Drive-а. Можда је премештен или више немате приступ.",
+      "driveFilePending": "Сачекајте да се датотека из Drive-а приложи, па пошаљите."
     },
     "i18nComplete": {
       "noModelAddProviderKey": "Dodaj ključ provajdera",
@@ -25519,7 +25524,8 @@
     "open": "Otvoren",
     "jump": "Idi na odgovor za #{number}",
     "unavailable": "Ovaj odgovor nije dostupan u učitanoj istoriji.",
-    "loadError": "Odgovor nije moguće učitati. Pokušajte ponovo."
+    "loadError": "Odgovor nije moguće učitati. Pokušajte ponovo.",
+    "openError": "Није могуће отворити захтев за измену"
   },
   "agentCapabilities": {
     "skillsTitle": "Veštine",
@@ -27477,7 +27483,7 @@
     "newSpace": "Нови простор",
     "searchPlaceholder": "Претражи просторе",
     "emptyTitle": "Још нема простора",
-    "emptyDescription": "Простор групише сесије једног пројекта, клијента или теме.",
+    "emptyDescription": "Простор групише сесије једног радног простора, клијента или теме.",
     "noResultsTitle": "Ниједан простор се не поклапа",
     "noResultsDescription": "Пробај други назив.",
     "loadFailed": "Просторе није могуће учитати",

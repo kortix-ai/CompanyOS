@@ -113,6 +113,7 @@
     "savedVerified": "キーを保存して確認しました",
     "savedInvalid": "キーを保存しましたが、{provider} が拒否しました: {message}",
     "checkError": "キーを確認できませんでした",
+    "keyRejected": "{provider} のキーが拒否されました。モデルで更新してください。",
     "openProviderInModels": "モデルで {provider} を開く",
     "member": "メンバー",
     "members": "人のメンバー",
@@ -2032,7 +2033,7 @@
       "copyFailed": "プロンプトをコピーできませんでした。"
     },
     "missing": {
-      "title": "セッションを開始できませんでした",
+      "title": "セッションが見つかりません",
       "message": "このセッションは利用できなくなったか、アクセス権がありません。"
     },
     "legacy": {
@@ -2190,7 +2191,9 @@
       "commandsAndActions": "コマンドとアクション",
       "toUse": "使用するには",
       "use": "使用",
-      "noOneMatches": "一致する人はいません"
+      "noOneMatches": "一致する人はいません",
+      "drive": "ドライブ",
+      "driveSearchFailed": "ドライブを検索できませんでした。"
     },
     "history": {
       "restoreTitle": "以前の内容の一部を復元できませんでした",
@@ -10467,7 +10470,9 @@
       "budgetExceeded": "未送信のアップロードが多すぎます。未使用のアップロードは24時間以内に期限切れになります。",
       "tooLarge": "このファイルは50 MiBを超えています。",
       "expired": "このアップロードは期限切れです。削除して、ファイルをもう一度添付してください。",
-      "checkConnection": "接続を確認してから、再試行してください。"
+      "checkConnection": "接続を確認してから、再試行してください。",
+      "driveFileUnavailable": "{name} をドライブから添付できませんでした。移動されたか、開く権限がなくなった可能性があります。",
+      "driveFilePending": "ドライブのファイルの添付が終わるまで待ってから送信してください。"
     },
     "i18nComplete": {
       "noModelAddProviderKey": "プロバイダーキーを追加",
@@ -25519,7 +25524,8 @@
     "open": "未適用",
     "jump": "#{number} の応答に移動",
     "unavailable": "この応答は読み込まれた履歴にはありません。",
-    "loadError": "応答を読み込めませんでした。もう一度お試しください。"
+    "loadError": "応答を読み込めませんでした。もう一度お試しください。",
+    "openError": "変更リクエストを開けませんでした"
   },
   "agentCapabilities": {
     "skillsTitle": "スキル",
@@ -27477,7 +27483,7 @@
     "newSpace": "新しいスペース",
     "searchPlaceholder": "スペースを検索",
     "emptyTitle": "スペースはまだありません",
-    "emptyDescription": "スペースは 1 つのプロジェクト、顧客、テーマのセッションをまとめます。",
+    "emptyDescription": "スペースは 1 つのワークスペース、顧客、テーマのセッションをまとめます。",
     "noResultsTitle": "一致するスペースはありません",
     "noResultsDescription": "別の名前で試してください。",
     "loadFailed": "スペースを読み込めませんでした",
@@ -27585,7 +27591,7 @@
     "owner": "オーナー",
     "member": "メンバー",
     "group": "グループ",
-    "groupMembers": "{count} 人のメンバー",
+    "groupMembers": "{count, plural, other {# 人のメンバー}}",
     "remove": "削除",
     "share": "共有",
     "notMember": "セッションはこのワークスペースのメンバーとだけ共有できます。"

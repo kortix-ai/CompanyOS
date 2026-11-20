@@ -106,6 +106,7 @@ const catalog = {
     "savedVerified": "Key saved and verified",
     "savedInvalid": "Key saved, but {provider} refused it: {message}",
     "checkError": "The key could not be checked",
+    "keyRejected": "Your {provider} key was rejected. Update it in Models.",
     "openProviderInModels": "Open {provider} in Models",
     "member": "member",
     "members": "members",
@@ -1433,7 +1434,7 @@ const catalog = {
       "copyFailed": "Could not copy the prompt."
     },
     "missing": {
-      "title": "Couldn't start session",
+      "title": "Session not found",
       "message": "This session is no longer available, or you do not have access to it."
     },
     "legacy": {
@@ -1584,7 +1585,9 @@ const catalog = {
       "commandsAndActions": "Commands and actions",
       "toUse": "to use",
       "use": "Use",
-      "noOneMatches": "No one matches"
+      "noOneMatches": "No one matches",
+      "drive": "Drive",
+      "driveSearchFailed": "Could not search Drive."
     },
     "history": {
       "restoreTitle": "Some earlier content could not be restored",
@@ -2773,7 +2776,9 @@ const catalog = {
       "budgetExceeded": "Too many unsent uploads. Unused uploads expire within 24 hours.",
       "tooLarge": "This file is larger than 50 MiB.",
       "expired": "This upload expired. Remove it and attach the file again.",
-      "checkConnection": "Check your connection, then retry."
+      "checkConnection": "Check your connection, then retry.",
+      "driveFileUnavailable": "{name} could not be attached from Drive. It may have moved, or you can no longer open it.",
+      "driveFilePending": "Wait for the Drive file to finish attaching, then send."
     },
     "i18nComplete": {
       "noModelAddProviderKey": "Add provider key",
@@ -8780,6 +8785,7 @@ const catalog = {
   },
   "sessionChangeRequests": {
     "title": "Change requests",
+    "openError": "Could not open change request",
     "open": "Open",
     "jump": "Jump to response for #{number}",
     "unavailable": "This response is not available in the loaded history.",
@@ -10644,7 +10650,7 @@ const catalog = {
     "newSpace": "New space",
     "searchPlaceholder": "Search spaces",
     "emptyTitle": "No spaces yet",
-    "emptyDescription": "A space groups the sessions of one project, client or topic.",
+    "emptyDescription": "A space groups the sessions of one workspace, client or topic.",
     "noResultsTitle": "No space matches",
     "noResultsDescription": "Try another name.",
     "loadFailed": "Could not load the spaces",

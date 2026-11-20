@@ -1,6 +1,6 @@
 {
   "id": "4de94323-a36a-4218-9d27-f0e3d5438c13",
-  "prevId": "8233d136-1b73-4c66-8447-985347a6d3b9",
+  "prevId": "1eddec93-0714-4fe4-b4dd-f65300ebbc51",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -25822,6 +25822,88 @@
         }
       },
       "isRLSEnabled": false
+    },
+    "kortix.project_trigger_admissions": {
+      "name": "project_trigger_admissions",
+      "schema": "kortix",
+      "columns": {
+        "admission_id": {
+          "name": "admission_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "varchar(128)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "admitted_at": {
+          "name": "admitted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_trigger_admissions_cap": {
+          "name": "idx_trigger_admissions_cap",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "admitted_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "project_trigger_admissions_project_id_projects_project_id_fk": {
+          "name": "project_trigger_admissions_project_id_projects_project_id_fk",
+          "tableFrom": "project_trigger_admissions",
+          "tableTo": "projects",
+          "schemaTo": "kortix",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "project_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
     },
     "kortix.project_trigger_event_polls": {
       "name": "project_trigger_event_polls",

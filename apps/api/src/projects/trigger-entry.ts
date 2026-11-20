@@ -179,8 +179,8 @@ export function parseExpectEventWithin(
  */
 export function parseRunCaps(
   row: Record<string, unknown>,
-): { maxRunsPerHour?: number; maxRunsPerDay?: number } | { error: string } {
-  const caps: { maxRunsPerHour?: number; maxRunsPerDay?: number } = {};
+): { maxRunsPerHour?: number; maxRunsPerDay?: number; hardRunCaps?: boolean } | { error: string } {
+  const caps: { maxRunsPerHour?: number; maxRunsPerDay?: number; hardRunCaps?: boolean } = {};
   for (const [field, key] of [['max_runs_per_hour', 'maxRunsPerHour'], ['max_runs_per_day', 'maxRunsPerDay']] as const) {
     const raw = row[field];
     if (raw === undefined || raw === null) continue;
@@ -188,6 +188,10 @@ export function parseRunCaps(
       return { error: `${field} must be a whole number of at least 1` };
     }
     caps[key] = raw;
+  }
+  if (row.hard_run_caps !== undefined) {
+    if (typeof row.hard_run_caps !== 'boolean') return { error: 'hard_run_caps must be a boolean' };
+    caps.hardRunCaps = row.hard_run_caps;
   }
   return caps;
 }
@@ -382,6 +386,7 @@ export function triggerSpecToFlatEntry(spec: GitTriggerSpec): Record<string, unk
   if (spec.model) entry.model = spec.model;
   entry.enabled = spec.enabled;
   // Only when set, like model: an uncapped manifest stays byte-stable.
+  if (spec.hardRunCaps) entry.hard_run_caps = true;
   if (spec.maxRunsPerHour) entry.max_runs_per_hour = spec.maxRunsPerHour;
   if (spec.maxRunsPerDay) entry.max_runs_per_day = spec.maxRunsPerDay;
   if (spec.overlap) entry.overlap = spec.overlap;
@@ -491,6 +496,7 @@ export function triggerSpecToOnRunEntry(spec: GitTriggerSpec): Record<string, un
     run,
     ...(spec.enabled ? {} : { enabled: false }),
     ...(Object.keys(filter).length > 0 ? { filter } : {}),
+    ...(spec.hardRunCaps ? { hard_run_caps: true } : {}),
     ...(spec.maxRunsPerHour ? { max_runs_per_hour: spec.maxRunsPerHour } : {}),
     ...(spec.maxRunsPerDay ? { max_runs_per_day: spec.maxRunsPerDay } : {}),
     ...(spec.overlap ? { overlap: spec.overlap } : {}),

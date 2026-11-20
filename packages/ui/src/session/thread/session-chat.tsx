@@ -963,6 +963,7 @@ export function SessionChat({
     providers,
     config,
     sessionId,
+    projectSessionId,
     boundAgentName,
     defaultAgentName: projectConfig?.default_agent,
     projectSession: projectSessionRow,

@@ -17,13 +17,13 @@
  *
  * With a SAVED COPY (`thread`: the copy this device kept, then the server's;
  * `hooks/useSavedCopy.ts`) the view is the thread itself: its turns,
- * read-only, and a status card above the composer saying what the computer
- * is doing. The loader is gone — the conversation is the content. A failure takes
+ * read-only, without routine infrastructure notices above the composer.
+ * The loader is gone — the conversation is the content. A failure takes
  * the composer's slot here too, so the thread stays readable, the rule the web
  * follows: a readable conversation is never replaced by a card.
  *
  * A conversation the saved copy proves EMPTY (`empty`) has nothing to wait
- * for: no loader, the status card and the composer.
+ * for: no loader, only the composer.
  *
  * The composer is disabled until the thread replaces this view: no typing,
  * no keyboard (Jay, 2026-10-02). A waking composer that took text had no agent
@@ -96,7 +96,6 @@ export function SessionConnecting({
   restarting,
   showLoader = true,
   thread,
-  statusLabel,
   sessionId,
   empty = false,
   projectId,
@@ -121,8 +120,6 @@ export function SessionConnecting({
   showLoader?: boolean;
   /** The session's saved copy, shown as the thread while the computer wakes. */
   thread?: SessionLogThread;
-  /** What the computer is doing, for the status card above the composer (`sessionConnectionLabel`). */
-  statusLabel?: string | null;
   /** The runtime session the saved copy belongs to; tool rows read it. */
   sessionId?: string;
   /** The saved copy proves the conversation empty: nothing to wait for. */
@@ -154,7 +151,6 @@ export function SessionConnecting({
       <SavedThread
         turns={turns}
         sessionId={sessionId}
-        statusLabel={statusLabel ?? null}
         imageStep={imageStep}
         error={error}
         onCancel={onCancel}
@@ -170,7 +166,7 @@ export function SessionConnecting({
     return (
       <View style={{ flex: 1 }} className="bg-background">
         <FloatingComposerArea>
-          {imageStep ? <ImageStatus step={imageStep} /> : statusLabel ? <WakingStatus label={statusLabel} /> : null}
+          {imageStep ? <ImageStatus step={imageStep} /> : null}
           <View className="px-4 pb-3 pt-1">
             <WakingComposer />
           </View>
@@ -287,30 +283,7 @@ function WakingComposer() {
 }
 
 /**
- * What the computer is doing: a card above the composer with the composer
- * card's own surface (`COMPOSER_CARD_CLASS`), so the two read as a pair. The
- * dot sits on the first line of text, the words on the composer's text inset.
- */
-function WakingStatus({ label }: { label: string }) {
-  return (
-    <View className="px-4 pb-2" accessibilityLiveRegion="polite">
-      <View className={COMPOSER_CARD_CLASS}>
-        <View className="flex-row items-start gap-2.5 px-2 py-1">
-          {/* One text line tall (leading-5), so the dot centres on the first line. */}
-          <View className="h-5 justify-center">
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: THEME.accent.yellow }} />
-          </View>
-          <Text variant="muted" className="flex-1 leading-5" numberOfLines={2}>
-            {label}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-/**
- * The sandbox image step: `WakingStatus`'s card, dot and inset, with a title,
+ * The sandbox image step: the composer card, dot and inset, with a title,
  * the step's own line and the time since it began. The image name is left
  * out: a provider snapshot name tells a phone user nothing.
  */
@@ -352,7 +325,6 @@ export function ImageStatus({ step }: { step: SessionImageStep }) {
 function SavedThread({
   turns,
   sessionId,
-  statusLabel,
   imageStep,
   error,
   onCancel,
@@ -366,7 +338,6 @@ function SavedThread({
   participants?: SessionParticipants;
   messageAuthors?: SessionMessageAuthors;
   sessionId?: string;
-  statusLabel: string | null;
   error?: SessionConnectError | null;
   onCancel: () => void;
   onRestart?: () => void;
@@ -412,7 +383,7 @@ function SavedThread({
           </View>
         ) : (
           <>
-            {imageStep ? <ImageStatus step={imageStep} /> : statusLabel ? <WakingStatus label={statusLabel} /> : null}
+            {imageStep ? <ImageStatus step={imageStep} /> : null}
             <View className="px-4 pb-3 pt-1">
               <WakingComposer />
             </View>

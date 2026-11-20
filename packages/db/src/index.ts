@@ -83,6 +83,7 @@ export {
   projectTriggerEventPolls,
   projectTriggerSessionAccessGrants,
   projectTriggerExecutions,
+  projectTriggerAdmissions,
   projectMonitorEvents,
   projectMonitorBoxes,
   sessionLifecycleCommands,

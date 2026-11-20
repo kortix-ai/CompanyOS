@@ -15,7 +15,7 @@ the `product-analytics` skill (`.agents/skills/product-analytics/SKILL.md`).
 | Kortix · Setup & adoption | Connectors, secrets, triggers, apps, feature flags, billing gates and the checkout funnel |
 | Kortix · Acquisition | Visitors, referrers, UTM source and campaign, landing pages and bounce, first-touch source of signups, visitor → signup |
 | Kortix · Conversion | Goals per day (Signed up, Activated, Subscribed, Topped up), visitor → paid funnel, signup → paid rate, checkout by tier, billing gate → top-up, time to paid |
-| Kortix · Setup | The setup prompt: runs started → template → onboard green → ready (per `setup_id`, and by coding agent), prompt copied → first real run, copies by template, minutes to ready, where onboard stops |
+| Kortix · Setup | The setup prompt: prompt copies and setups started (two numbers, never joined), runs started → template → onboard green → ready (per `setup_id`, and by coding agent), setup started → first real run per person, copies by template, minutes to ready, where onboard stops |
 
 Every insight sets `filterTestAccounts`. The project's test-account filter
 keeps `environment = production` and drops the cohort "Internal / Test users",

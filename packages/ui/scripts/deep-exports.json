@@ -328,6 +328,7 @@
     "./workspace/review/review-center",
     "./workspace/review/types",
     "./workspace/session-spaces/space-detail-page",
+    "./workspace/session-spaces/space-icon",
     "./workspace/session-spaces/spaces-page",
     "./workspace/settings/use-leave-workspace",
     "./workspace/setup/workspace-setup-page",

@@ -19,6 +19,8 @@ export type TabRoute =
   | { kind: 'channel'; slug: string }
   | { kind: 'dm'; agent: string }
   | { kind: 'space'; slug: string }
+  /** One Space (a session group): `/space/<groupId>`. */
+  | { kind: 'sessionSpace'; groupId: string }
   | { kind: 'settings' }
   /** The Apps page with one App open (`?app=`). */
   | { kind: 'app'; appId: string }
@@ -110,6 +112,8 @@ export function tabRoute(path: string, projectId: string): TabRoute | null {
       return b ? { kind: 'dm', agent: decode(b) } : { kind: 'page', page: 'chat' };
     case 'spaces':
       return b ? { kind: 'space', slug: decode(b) } : { kind: 'home' };
+    case 'space':
+      return b ? { kind: 'sessionSpace', groupId: decode(b) } : { kind: 'home' };
     case 'settings':
       return { kind: 'settings' };
     // Old addresses that redirect into Customize. They resolve to the section
@@ -119,6 +123,9 @@ export function tabRoute(path: string, projectId: string): TabRoute | null {
       return { kind: 'admin', section: 'reminders' };
     case 'channels':
       return { kind: 'admin', section: 'connectors' };
+    // A shared change-request link redirects into Review.
+    case 'change-requests':
+      return { kind: 'page', page: 'review' };
     case 'apps': {
       const appId = new URLSearchParams(path.split('?')[1]?.split('#')[0] ?? '').get('app');
       return appId ? { kind: 'app', appId } : { kind: 'page', page: 'apps' };
@@ -163,6 +170,8 @@ export function tabGroup(route: TabRoute): string {
       return 'chat';
     case 'space':
       return `space:${route.slug}`;
+    case 'sessionSpace':
+      return `session-space:${route.groupId}`;
     case 'sessions':
       return 'sessions';
     // The Apps tab shows the grid or one open App; both are that one tab.

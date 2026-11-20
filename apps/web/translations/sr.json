@@ -25523,7 +25523,8 @@
     "open": "Otvoren",
     "jump": "Idi na odgovor za #{number}",
     "unavailable": "Ovaj odgovor nije dostupan u učitanoj istoriji.",
-    "loadError": "Odgovor nije moguće učitati. Pokušajte ponovo."
+    "loadError": "Odgovor nije moguće učitati. Pokušajte ponovo.",
+    "openError": "Није могуће отворити захтев за измену"
   },
   "agentCapabilities": {
     "skillsTitle": "Veštine",
@@ -27481,7 +27482,7 @@
     "newSpace": "Нови простор",
     "searchPlaceholder": "Претражи просторе",
     "emptyTitle": "Још нема простора",
-    "emptyDescription": "Простор групише сесије једног пројекта, клијента или теме.",
+    "emptyDescription": "Простор групише сесије једног радног простора, клијента или теме.",
     "noResultsTitle": "Ниједан простор се не поклапа",
     "noResultsDescription": "Пробај други назив.",
     "loadFailed": "Просторе није могуће учитати",

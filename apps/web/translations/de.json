@@ -25523,7 +25523,8 @@
     "open": "Offen",
     "jump": "Zur Antwort für #{number} springen",
     "unavailable": "Diese Antwort ist im geladenen Verlauf nicht verfügbar.",
-    "loadError": "Die Antwort konnte nicht geladen werden. Versuche es erneut."
+    "loadError": "Die Antwort konnte nicht geladen werden. Versuche es erneut.",
+    "openError": "Änderungsanfrage konnte nicht geöffnet werden"
   },
   "agentCapabilities": {
     "skillsTitle": "Skills",
@@ -27481,7 +27482,7 @@
     "newSpace": "Neuer Space",
     "searchPlaceholder": "Spaces durchsuchen",
     "emptyTitle": "Noch keine Spaces",
-    "emptyDescription": "Ein Space fasst die Sitzungen eines Projekts, Kunden oder Themas zusammen.",
+    "emptyDescription": "Ein Space fasst die Sitzungen eines Arbeitsbereichs, Kunden oder Themas zusammen.",
     "noResultsTitle": "Kein Space passt",
     "noResultsDescription": "Versuche einen anderen Namen.",
     "loadFailed": "Die Spaces konnten nicht geladen werden",

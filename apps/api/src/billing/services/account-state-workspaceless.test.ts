@@ -5,13 +5,16 @@ let customers: string[] = [];
 let failure = false;
 let pages = [{ data: [{ id: 'sub_synthetic', status: 'active' }], has_more: false }];
 let reads = 0;
+let keyedWorkspace = false;
 const realAccounts = await import('../repositories/credit-accounts');
 const realCustomers = await import('../repositories/customers');
+const realResolve = await import('../../shared/resolve-account');
+mock.module('../../shared/resolve-account', () => ({ ...realResolve, accountExists: async () => keyedWorkspace }));
 mock.module('../repositories/credit-accounts', () => ({ ...realAccounts, getCreditAccount: async () => { if (failure) throw new Error('read failed'); return row; } }));
 mock.module('../repositories/customers', () => ({ ...realCustomers, listStripeCustomerIdsByAccountId: async () => customers }));
 mock.module('../../shared/stripe', () => ({ getStripe: () => ({ subscriptions: { list: async () => { const page = pages[reads++]; if (!page) throw new Error('provider failed'); return page; } } }) }));
 const { buildWorkspacelessAccountState } = await import('./account-state');
-beforeEach(() => { row = null; customers = []; failure = false; reads = 0; pages = [{ data: [{ id: 'sub_synthetic', status: 'active' }], has_more: false }]; });
+beforeEach(() => { keyedWorkspace = false; row = null; customers = []; failure = false; reads = 0; pages = [{ data: [{ id: 'sub_synthetic', status: 'active' }], has_more: false }]; });
 test('an empty identity has no subscription and creates no wallet', async () => {
   expect(await buildWorkspacelessAccountState('synthetic')).toMatchObject({ billing_state: 'no_account', has_active_subscription: false });
   expect(reads).toBe(0);
@@ -64,4 +67,8 @@ test('a store cancellation with no known expiry stays fail-closed', async () => 
 test('an expired store cancellation is no longer a subscription', async () => {
   row = { revenuecatSubscriptionId: 'store_synthetic', revenuecatCancelledAt: '2026-01-01T00:00:00Z', revenuecatCancelAtPeriodEnd: '2026-02-01T00:00:00Z' };
   expect((await buildWorkspacelessAccountState('synthetic')).has_active_subscription).toBe(false);
+});
+test('a workspace the person left that is keyed by their id is refused, not read', async () => {
+  keyedWorkspace = true; row = { stripeSubscriptionId: 'sub_synthetic', stripeSubscriptionStatus: 'active' };
+  await expect(buildWorkspacelessAccountState('synthetic')).rejects.toMatchObject({ status: 409, code: 'no_workspace' });
 });

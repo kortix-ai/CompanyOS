@@ -2103,4 +2103,6 @@ response reports no account and no active subscription, without a wallet write.
 A legacy personal wallet with nonrecurring credits reports no subscription.
 An active legacy subscription, and a store subscription cancelled but not yet
 expired, remain active. Database and provider errors must
-not be converted to successful absence. No production billing is changed.
+not be converted to successful absence. A workspace keyed by the person's id
+that they do not serve is refused with 409 `no_workspace`, never read. No
+production billing is changed.

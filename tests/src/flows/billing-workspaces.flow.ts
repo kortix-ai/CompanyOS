@@ -177,4 +177,12 @@ flow('BILL-WS-3', {
       await withDb(ctx, async (db) => { await db.query('DELETE FROM kortix.credit_accounts WHERE account_id = $1', [person.userId]); });
     }
   });
+  await ctx.step('a workspace keyed by the person id that they do not serve is refused, not read', async () => {
+    await withDb(ctx, async (db) => { await db.query(`INSERT INTO kortix.accounts (account_id, name) VALUES ($1, 'BILLWS3 left workspace')`, [person.userId]); });
+    try {
+      (await ctx.client.as(person).get('/v1/billing/account-state')).status(409).body().has('$.code', 'no_workspace');
+    } finally {
+      await withDb(ctx, async (db) => { await db.query('DELETE FROM kortix.accounts WHERE account_id = $1', [person.userId]); });
+    }
+  });
 });

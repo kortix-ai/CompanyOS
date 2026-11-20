@@ -444,6 +444,8 @@ customers. Ended Stripe subscriptions (`canceled`, `incomplete_expired`) do not
 count. Unknown statuses fail closed as active. A cancelled store (RevenueCat)
 subscription stays active until its recorded expiry has passed. A database or provider error is
 an error response, never a no-subscription fallback. No database means the read
-cannot be authoritative. Named workspace requests retain membership authorization.
+cannot be authoritative. When the personal key names an existing workspace the
+person does not serve, the read refuses with 409 `no_workspace` and reads nothing.
+Named workspace requests retain membership authorization.
 This read performs no billing writes and never grants credits. Deployment does
 not unhold production dogfood: its prerequisite must be validated separately.

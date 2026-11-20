@@ -12,6 +12,8 @@ import type {
   ScheduledChange,
 } from '../../types';
 import { getStripe } from '../../shared/stripe';
+import { noWorkspaceError } from '../../shared/no-workspace';
+import { accountExists } from '../../shared/resolve-account';
 import { listStripeCustomerIdsByAccountId } from '../repositories/customers';
 import { getCreditAccount } from '../repositories/credit-accounts';
 import { getAutoTopupSettings } from './auto-topup';
@@ -429,6 +431,9 @@ function extractScheduledChange(
 
 /** Read-only identity safety check. Legacy personal billing used account_id = user_id. */
 export async function buildWorkspacelessAccountState(userId: string) {
+  // A workspace still keyed by this id belongs to its members; a person without
+  // a membership never reads it (shared/resolve-account.ts).
+  if (await accountExists(userId)) throw noWorkspaceError();
   const [account, customers] = await Promise.all([
     getCreditAccount(userId),
     listStripeCustomerIdsByAccountId(userId),

@@ -130,7 +130,7 @@ recertification.
   it.
 - 2026-11-20: found while recording: disconnecting Drive revoked the
   account's whole grant and Calendar failed with `credential_rejected` (401).
-  Fixed in branch `google-grant-revoke` (disconnect revokes only the
+  Fixed in #12957 (disconnect revokes only the
   account's last connection).
 - 2026-11-19: v0.16.0 live in prod. The privacy section is live on
   kortix.com. Staging's Secrets Manager blob has the Google client

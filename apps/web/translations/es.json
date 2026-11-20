@@ -2032,7 +2032,7 @@
       "copyFailed": "No se pudo copiar el mensaje."
     },
     "missing": {
-      "title": "No se pudo iniciar la sesión",
+      "title": "Sesión no encontrada",
       "message": "Esta sesión ya no está disponible o no tienes acceso a ella."
     },
     "legacy": {

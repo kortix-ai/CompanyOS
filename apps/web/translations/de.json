@@ -2032,7 +2032,7 @@
       "copyFailed": "Die Eingabe konnte nicht kopiert werden."
     },
     "missing": {
-      "title": "Sitzung konnte nicht gestartet werden",
+      "title": "Sitzung nicht gefunden",
       "message": "Diese Sitzung ist nicht mehr verfügbar oder du hast keinen Zugriff darauf."
     },
     "legacy": {

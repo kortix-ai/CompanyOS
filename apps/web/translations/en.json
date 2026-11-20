@@ -2032,7 +2032,7 @@
       "copyFailed": "Could not copy the prompt."
     },
     "missing": {
-      "title": "Couldn't start session",
+      "title": "Session not found",
       "message": "This session is no longer available, or you do not have access to it."
     },
     "legacy": {

@@ -2032,7 +2032,7 @@
       "copyFailed": "Impossible de copier le prompt."
     },
     "missing": {
-      "title": "Impossible de démarrer la session",
+      "title": "Session introuvable",
       "message": "Cette session n’est plus disponible ou vous n’y avez pas accès."
     },
     "legacy": {

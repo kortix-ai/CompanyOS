@@ -2032,7 +2032,7 @@
       "copyFailed": "Não foi possível copiar o prompt."
     },
     "missing": {
-      "title": "Não foi possível iniciar a sessão",
+      "title": "Sessão não encontrada",
       "message": "Esta sessão não está mais disponível ou você não tem acesso a ela."
     },
     "legacy": {

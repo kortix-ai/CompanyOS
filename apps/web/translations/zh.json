@@ -2032,7 +2032,7 @@
       "copyFailed": "无法复制提示词。"
     },
     "missing": {
-      "title": "无法启动会话",
+      "title": "未找到会话",
       "message": "此会话已不可用，或你无权访问。"
     },
     "legacy": {

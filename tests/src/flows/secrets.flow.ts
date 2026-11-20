@@ -891,6 +891,12 @@ flow('SEC-POOL-8', {
         name: 'ANTHROPIC_API_KEY', value: 'sk-ant-api03-kortix-e2e-not-a-key-1', strategy: 'broker', consumer: 'llm_gateway',
       }, { params });
       saved.status(200).body().has('$.stored_in', 'provider_account').has('$.provider_id', 'anthropic');
+      // The write answers with the provider's check of the key: Anthropic refuses
+      // it (`invalid`), or the check has no answer offline (`unknown`).
+      const verification = saved.json<{ verification: { status: string; message: string; checked_at: string } | null }>().verification;
+      if (!verification || !['invalid', 'unknown'].includes(verification.status) || !verification.message || !verification.checked_at) {
+        throw new Error(`the saved key carries no check: ${saved.text().slice(0, 300)}`);
+      }
       const keys = await workspaceKeys();
       if (keys.length !== 1 || keys[0]!.access_mode !== 'project' || keys[0]!.provider_id !== 'anthropic') {
         throw new Error(`expected one workspace key, got ${JSON.stringify(keys)}`);

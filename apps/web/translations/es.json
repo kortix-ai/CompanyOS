@@ -113,6 +113,7 @@
     "savedVerified": "Clave guardada y verificada",
     "savedInvalid": "Clave guardada, pero {provider} la rechazó: {message}",
     "checkError": "No se pudo comprobar la clave",
+    "keyRejected": "Tu clave de {provider} fue rechazada. Actualízala en Modelos.",
     "openProviderInModels": "Abrir {provider} en Modelos",
     "member": "miembro",
     "members": "miembros",

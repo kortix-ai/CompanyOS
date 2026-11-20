@@ -113,6 +113,7 @@
     "savedVerified": "キーを保存して確認しました",
     "savedInvalid": "キーを保存しましたが、{provider} が拒否しました: {message}",
     "checkError": "キーを確認できませんでした",
+    "keyRejected": "{provider} のキーが拒否されました。モデルで更新してください。",
     "openProviderInModels": "モデルで {provider} を開く",
     "member": "メンバー",
     "members": "人のメンバー",

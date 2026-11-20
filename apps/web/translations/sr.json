@@ -113,6 +113,7 @@
     "savedVerified": "Ključ je sačuvan i proveren",
     "savedInvalid": "Ključ je sačuvan, ali ga je {provider} odbio: {message}",
     "checkError": "Ključ nije mogao da se proveri",
+    "keyRejected": "Tvoj {provider} ključ je odbijen. Ažuriraj ga u Modelima.",
     "openProviderInModels": "Otvori {provider} u Modelima",
     "member": "члан",
     "members": "чланова",

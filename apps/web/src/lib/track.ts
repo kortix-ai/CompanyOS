@@ -44,9 +44,20 @@ export const JOURNEY_EVENTS = [
   'setup_prompt_copied',
 ] as const;
 
+/** How fast the app shows its data, by country (PostHog adds it). See lib/analytics/screen-timing.ts. */
+export const PERFORMANCE_EVENTS = [
+  /**
+   * A screen shows its data. `screen`: route template. `duration_ms`. `navigation`: `load`
+   * (from the browser's navigation start) or `route` (from the in-app route change).
+   * `fetches`: React Query fetches it took.
+   */
+  'screen_ready',
+] as const;
+
 export type PanelEvent = (typeof PANEL_EVENTS)[number];
 export type JourneyEvent = (typeof JOURNEY_EVENTS)[number];
-export type AnalyticsEvent = PanelEvent | JourneyEvent;
+export type PerformanceEvent = (typeof PERFORMANCE_EVENTS)[number];
+export type AnalyticsEvent = PanelEvent | JourneyEvent | PerformanceEvent;
 
 export function track(
   event: AnalyticsEvent,

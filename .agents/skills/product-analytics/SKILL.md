@@ -32,8 +32,8 @@ person.
    secret name, or anything a customer typed. `identify` sends the user id
    only (decision 2026-11-04: data minimization). The CLAUDE.md PII rule
    applies to PostHog too.
-2. **Every event name is in a closed list.** Web: `PANEL_EVENTS` or
-   `JOURNEY_EVENTS` in `track.ts`. API: the `ProductEvent` union. Never call
+2. **Every event name is in a closed list.** Web: `PANEL_EVENTS`,
+   `JOURNEY_EVENTS` or `PERFORMANCE_EVENTS` in `track.ts`. API: the `ProductEvent` union. Never call
    `posthog.capture` directly.
 3. **A business fact is an API event.** Sign-up, project, session, message,
    checkout and payment events fire on the server after the database write. The
@@ -109,6 +109,7 @@ person.
 | `$pageview`, `$pageleave`, `$autocapture` | web | navigation, clicks | scrubbed URL, `environment`, `platform` (`web`/`desktop`), `app_version` |
 | `cta_signup_clicked` | web | a sign-up button on a marketing page | `location` |
 | `auth_completed` | web | the browser lands after sign-up or sign-in | `kind` (`signup`/`login`), `method` |
+| `screen_ready` | web | an app screen (signed-in and token pages; Speed Insights covers the rest) shows its data, once per navigation (`lib/analytics/screen-timing.ts`): the React Query reads behind it settled (no request for 0.5 s), or, on the session screen, the saved conversation is visible. A new session, a fully cached screen, a hidden tab and anything over 60 s send nothing | `screen` (route template, `/workspaces/:id`), `duration_ms`, `navigation` (`load`: from the browser's navigation start; `route`: from the in-app route change), `fetches` (React Query fetches it took) |
 | `setup_prompt_copied` | web | a Loopmaxxing copy button (or its C key) put the setup prompt on the clipboard | `template` (the one the prompt names, else `none`), `method` (`button`/`key`), `location` |
 | panel events (`panel_opened`, …) | web (`@kortix/ui`) | session panel and conversation UI | `source`, `kind`, `count` |
 | `user_signed_up` | API | a new person's first `GET /v1/accounts` with no workspace (`accounts/core/signup-event.ts`) | `method` (email, google, github, apple), `invited` (an invitation to the email was open at sign-up); sets the person property `signup_kind` (`invited`, `self_serve`) once |
@@ -225,6 +226,7 @@ README). They follow the design of the closed PR #7144.
 | Providers, key checks, prompts by model | Kortix · Providers & models |
 | Boot time, active time, turn outcomes | Kortix · Sessions |
 | Connectors, secrets, triggers, apps, flags, billing gates | Kortix · Setup & adoption |
+| How long screens take to show their data, by continent, country and screen (`screen_ready`) | Kortix · Speed |
 | Visitors, referrers, UTM, landing pages, first-touch signups, survey answers | Kortix · Acquisition |
 | Goals, visitor → paid, signup → paid, time to paid | Kortix · Conversion |
 | Does the setup prompt end in working loops, which coding agent ran it, where onboard stops | Kortix · Setup |

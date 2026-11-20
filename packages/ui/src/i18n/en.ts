@@ -10649,7 +10649,7 @@ const catalog = {
     "newSpace": "New space",
     "searchPlaceholder": "Search spaces",
     "emptyTitle": "No spaces yet",
-    "emptyDescription": "A space groups the sessions of one project, client or topic.",
+    "emptyDescription": "A space groups the sessions of one workspace, client or topic.",
     "noResultsTitle": "No space matches",
     "noResultsDescription": "Try another name.",
     "loadFailed": "Could not load the spaces",

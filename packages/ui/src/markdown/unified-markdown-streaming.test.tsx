@@ -23,7 +23,7 @@ globals.document = win.document;
 
 function streamingRoot() {
   const host = document.createElement('div');
-  const root = createRoot(host as unknown as HTMLElement);
+  const root = createRoot(host);
   const paint = (content: string, isStreaming = true) =>
     flushSync(() =>
       root.render(

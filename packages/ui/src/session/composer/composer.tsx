@@ -42,7 +42,7 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { extractClipboardFiles } from './clipboard-files';
-import { driveChipsIn, driveUploadName, drivePathsIn, withoutDriveChips } from './drive-mentions';
+import { createDriveChipSync, type DriveChipSync, driveUploadName, drivePathsIn, withoutDriveChips } from './drive-mentions';
 import type { DriveMentionSource } from './menus/mention-menu';
 import { mergeFailedSubmissionFiles } from './composer-draft-recovery';
 import { resolveComposerResetOnSend, type ComposerSendReset } from './composer-reset';
@@ -1080,13 +1080,6 @@ function ComposerImpl(props: SessionChatInputProps) {
   const queryClient = useQueryClient();
   /** Drive paths still downloading: a second pick of one attaches nothing, and Send waits. */
   const pendingDrivePathsRef = useRef(new Set<string>());
-  /** The Drive paths the document named after its last change: a path that leaves it is a deleted chip. */
-  const docDrivePathsRef = useRef(new Set<string>());
-  /**
-   * The Drive paths picked from the menu in this composer: the only chips worth fetching a file for
-   * again. A chip that arrives any other way (pasted rich text) is never a request to read a file.
-   */
-  const pickedDrivePathsRef = useRef(new Set<string>());
   // Declared before the question-lock effect below, so it holds the new value when that effect empties the editor.
   const lockForQuestionRef = useLatestRef(lockForQuestion);
   const pickDriveFile = useCallback(
@@ -1135,33 +1128,26 @@ function ComposerImpl(props: SessionChatInputProps) {
     },
     [appendAttachedFiles, disabled, lockForQuestionRef, projectId, queryClient, tComposerAttachments, viewerId],
   );
+  const pickDriveFileRef = useLatestRef(pickDriveFile);
+  const removeAttachedFileRef = useLatestRef(removeAttachedFile);
+  const driveChipSyncRef = useRef<DriveChipSync | null>(null);
+  // Lazy-created at the first use (never during render, which the compiler's ref rules forbid).
+  const driveChipSync = useCallback(
+    () =>
+      (driveChipSyncRef.current ??= createDriveChipSync({
+        tray: () => attachedFilesRef.current,
+        remove: (index) => removeAttachedFileRef.current(index),
+        refetch: (file) => void pickDriveFileRef.current(file),
+        paused: () => lockForQuestionRef.current,
+      })),
+    [lockForQuestionRef, pickDriveFileRef, removeAttachedFileRef],
+  );
   const handleDocChangeWithDrive = useCallback(
     (doc: JSONContent, isEmpty: boolean) => {
       handleEditorDocChange(doc, isEmpty);
-      const named = driveChipsIn(doc);
-      const previous = docDrivePathsRef.current;
-      docDrivePathsRef.current = new Set(named.keys());
-      // A recalled prompt replaces the draft for a moment; the tray keeps its files, as it does every attachment.
-      if (applyingHistoryRef.current) return;
-      const removed = [...previous].filter((path) => !named.has(path));
-      const added = [...named].filter(([path]) => !previous.has(path) && pickedDrivePathsRef.current.has(path));
-      if (removed.length === 0 && added.length === 0) return;
-      // Run after the change settles. A send or a command empties the editor and hands its tray off in
-      // the same handler, and a restore (draft, failed send, prefill) sets the document and then its
-      // files: by the microtask the tray is what the change left. A question lock keeps the tray.
-      queueMicrotask(() => {
-        if (lockForQuestionRef.current) return;
-        const held = (path: string) => attachedFilesRef.current.findIndex((file) => file.kind !== 'remote' && file.drivePath === path);
-        // The person deleted the last chip of a path: its file leaves the tray.
-        for (const path of removed) {
-          const index = held(path);
-          if (index !== -1) removeAttachedFile(index);
-        }
-        // A picked chip came back without its file (an undo, a redo): fetch it again.
-        for (const [path, name] of added) if (held(path) === -1) void pickDriveFile({ path, name });
-      });
+      driveChipSync().onDoc(doc, applyingHistoryRef.current);
     },
-    [handleEditorDocChange, lockForQuestionRef, pickDriveFile, removeAttachedFile],
+    [driveChipSync, handleEditorDocChange],
   );
   const driveMentions = useMemo<DriveMentionSource | null>(
     // A host that keeps files in its own store (`takeFiles`) gets no Drive rows.
@@ -1170,12 +1156,12 @@ function ComposerImpl(props: SessionChatInputProps) {
         ? {
             projectId,
             onPick: (file) => {
-              pickedDrivePathsRef.current.add(file.path);
+              driveChipSync().trust(file.path);
               void pickDriveFile(file);
             },
           }
         : null,
-    [projectId, drivesOn, takeFiles, pickDriveFile],
+    [projectId, drivesOn, takeFiles, driveChipSync, pickDriveFile],
   );
 
   const retryAttachedFile = useCallback(

@@ -61,3 +61,57 @@ export function driveUploadsOf(files: readonly AttachedFile[] | undefined): Driv
       : [],
   );
 }
+
+/** Keeps the tray's Drive files in step with the document's Drive chips (`createDriveChipSync`). */
+export type DriveChipSync = {
+  /** A path picked from the menu: a chip of it that comes back without its file fetches the file again. */
+  trust: (path: string) => void;
+  /** Every document change. `recalling`: a recalled prompt replaces the draft for a moment and the tray keeps its files. */
+  onDoc: (doc: JSONContent, recalling: boolean) => void;
+};
+
+export function createDriveChipSync(deps: {
+  tray: () => readonly AttachedFile[];
+  remove: (index: number) => void;
+  refetch: (file: { path: string; name: string }) => void;
+  /** A question lock keeps the tray. */
+  paused: () => boolean;
+}): DriveChipSync {
+  const { tray, remove, refetch, paused } = deps;
+  /** The Drive paths the document named after its last change: a path that leaves it is a deleted chip. */
+  let named = new Set<string>();
+  /**
+   * The only chips worth fetching a file for again: picked from the menu here, or one whose Drive file the
+   * tray held (a restored draft or failed send). A chip that arrives any other way (pasted rich text) is
+   * never a request to read a file.
+   */
+  const trusted = new Set<string>();
+  const held = (path: string) => tray().findIndex((file) => file.kind !== 'remote' && file.drivePath === path);
+  return {
+    trust: (path) => void trusted.add(path),
+    onDoc(doc, recalling) {
+      const chips = driveChipsIn(doc);
+      const previous = named;
+      named = new Set(chips.keys());
+      if (recalling) return;
+      const removed = [...previous].filter((path) => !chips.has(path));
+      const added = [...chips].filter(([path]) => !previous.has(path));
+      if (removed.length === 0 && added.length === 0) return;
+      // Run after the change settles. A send or a command empties the editor and hands its tray off in
+      // the same handler, and a restore (draft, failed send, prefill) sets the document and then its
+      // files: by then the tray is what the change left.
+      queueMicrotask(() => {
+        if (paused()) return;
+        // The person deleted the last chip of a path: its file leaves the tray, and an undo may fetch it back.
+        for (const path of removed) {
+          const index = held(path);
+          if (index === -1) continue;
+          trusted.add(path);
+          remove(index);
+        }
+        // A trusted chip came back without its file (an undo, a redo): fetch it again.
+        for (const [path, name] of added) if (trusted.has(path) && held(path) === -1) refetch({ path, name });
+      });
+    },
+  };
+}

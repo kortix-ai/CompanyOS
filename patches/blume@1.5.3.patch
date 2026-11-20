@@ -1,5 +1,5 @@
 diff --git a/dist/cli/index.js b/dist/cli/index.js
-index 86b5ac91369bd68964575d1cb60014408df27166..fe93e05b7ed2c45971131d7aa3d41c98585d6d32 100755
+index 86b5ac91369bd68964575d1cb60014408df27166..fb2577bd801ad59badea0a5c2cbdb678d0522a7b 100755
 --- a/dist/cli/index.js
 +++ b/dist/cli/index.js
 @@ -3958,7 +3958,7 @@ ${userConfigSetup}export default defineConfig({
@@ -21,6 +21,108 @@ index 86b5ac91369bd68964575d1cb60014408df27166..fe93e05b7ed2c45971131d7aa3d41c98
  ];
  
  // src/core/standard-schema.ts
+@@ -16135,14 +16136,40 @@ var collectText = (node, out) => {
+     }
+   }
+ };
++var parseMarkdown = (markdown) => fromMarkdown4(markdown, {
++  extensions: [gfm2()],
++  mdastExtensions: [gfmFromMarkdown2()]
++});
++var joinText = (out) => out.join("").replaceAll(WHITESPACE4, " ").trim();
+ var toPlainText = (markdown) => {
+-  const tree = fromMarkdown4(markdown, {
+-    extensions: [gfm2()],
+-    mdastExtensions: [gfmFromMarkdown2()]
+-  });
+   const out = [];
+-  collectText(tree, out);
+-  return out.join("").replaceAll(WHITESPACE4, " ").trim();
++  collectText(parseMarkdown(markdown), out);
++  return joinText(out);
++};
++var toPlainSections = (markdown) => {
++  const slugger = new GithubSlugger;
++  const intro = [];
++  const sections = [];
++  for (const node of parseMarkdown(markdown).children) {
++    if (node.type === "heading") {
++      const words = [];
++      collectText(node, words);
++      const heading = joinText(words);
++      const id = slugger.slug(heading);
++      if (node.depth === 2 || node.depth === 3) {
++        sections.push({ heading, id, out: [] });
++        continue;
++      }
++    }
++    collectText(node, sections.at(-1)?.out ?? intro);
++  }
++  return {
++    intro: joinText(intro),
++    sections: sections.map(({ out, ...section }) => ({
++      ...section,
++      text: joinText(out)
++    }))
++  };
+ };
+ var buildCrumbIndex = (sidebar) => {
+   const index = new Map;
+@@ -16194,12 +16221,13 @@ var buildSearchDocuments = async (project, options) => {
+     const page = pageById.get(route.id);
+     return page ? contentIndexable(page, project.config) : false;
+   });
+-  return await Promise.all(indexable.map(async (route) => {
++  const documents = await Promise.all(indexable.map(async (route) => {
+     const page = pageById.get(route.id);
+     const raw = page ? await readEntryText(project, page) : "";
+     const source = raw ? frontmatter_default(raw).content : "";
+     const visible = applyAudienceVisibility(source, options?.audience ?? "web");
+-    const body = options?.content === "markdown" ? visible.trim() : toPlainText(visible);
++    const split = options?.sections && options.content !== "markdown" ? toPlainSections(visible) : undefined;
++    const body = options?.content === "markdown" ? visible.trim() : split?.intro ?? toPlainText(visible);
+     const tags = page?.meta?.search?.tags;
+     const crumb = crumbs.get(route.path);
+     const facets = page ? pageFacets(page, project.config) : undefined;
+@@ -16218,8 +16246,19 @@ var buildSearchDocuments = async (project, options) => {
+     if (facets) {
+       document.facets = facets;
+     }
+-    return document;
++    return [
++      document,
++      ...(split?.sections ?? []).map((section) => ({
++        ...document,
++        breadcrumb: [...document.breadcrumb, route.title],
++        content: section.text,
++        description: "",
++        route: `${route.path}#${section.id}`,
++        title: section.heading
++      }))
++    ];
+   }));
++  return documents.flat();
+ };
+ var toSearchRecords = (documents) => documents.map((doc) => ({
+   _id: doc.route,
+@@ -19356,7 +19395,7 @@ var generateRuntime = async (project) => {
+     write(searchClientPath, searchClientTemplate(config))
+   ]);
+   if (servesStaticIndex(config.search.provider)) {
+-    const documents = await buildSearchDocuments(project);
++    const documents = await buildSearchDocuments(project, { sections: true });
+     await write(join28(srcDir, "generated", "search.json"), `${JSON.stringify(documents)}
+ `);
+     await write(join28(srcDir, "pages", "blume-search.json.ts"), searchEndpointTemplate());
+@@ -20560,7 +20599,7 @@ var eject = async (root) => {
+     path: join33(genDir, "search-client.ts")
+   });
+   if (servesStaticIndex(config2.search.provider)) {
+-    const documents = await buildSearchDocuments(project);
++    const documents = await buildSearchDocuments(project, { sections: true });
+     files.push({
+       content: `${JSON.stringify(documents)}
+ `,
 diff --git a/dist/types/core/open-in-chat.d.ts b/dist/types/core/open-in-chat.d.ts
 index 5c8740e19ce9103799fbc49456231f70bc5b022d..9b6b5172421e8948392ccb15ee514f3773339101 100644
 --- a/dist/types/core/open-in-chat.d.ts
@@ -32,6 +134,19 @@ index 5c8740e19ce9103799fbc49456231f70bc5b022d..9b6b5172421e8948392ccb15ee514f37
 -export declare const openInChatProviders: readonly ["v0", "chatgpt", "claude", "t3", "scira", "cursor"];
 +export declare const openInChatProviders: readonly ["v0", "chatgpt", "claude", "t3", "scira", "cursor", "kortix"];
  export type OpenInChatProvider = (typeof openInChatProviders)[number];
+diff --git a/src/astro/generate.ts b/src/astro/generate.ts
+index 185a200f32e484e96ed023ac0c398c6497ba5965..0eb8491f31ff12f406eac6e5e90d47a2612e2f71 100644
+--- a/src/astro/generate.ts
++++ b/src/astro/generate.ts
+@@ -1974,7 +1974,7 @@ export const generateRuntime = async (
+ 
+   // Client-loaded providers (orama, flexsearch) ship a static index + endpoint.
+   if (servesStaticIndex(config.search.provider)) {
+-    const documents = await buildSearchDocuments(project);
++    const documents = await buildSearchDocuments(project, { sections: true });
+     await write(
+       join(srcDir, "generated", "search.json"),
+       `${JSON.stringify(documents)}\n`
 diff --git a/src/components/layout/PageActions.astro b/src/components/layout/PageActions.astro
 index 03f3926ddc15546f0473a1a08557255dd4b2ea31..936c9ce2e12e1d7fda5a45493351dcfe5e5e1da6 100644
 --- a/src/components/layout/PageActions.astro
@@ -132,3 +247,157 @@ index f82351f0e90208d87398b7c5983622f5cc69c503..8e886f73d6728dbae709070cc733ec3a
  ] as const;
  
  export type OpenInChatProvider = (typeof openInChatProviders)[number];
+diff --git a/src/registry/eject.ts b/src/registry/eject.ts
+index 893aff2d9fa6fb72cf0dd0c695f1bb474eb926c0..bb6dcc4c41e78017b8ddf9295a689c55a30c2505 100644
+--- a/src/registry/eject.ts
++++ b/src/registry/eject.ts
+@@ -537,7 +537,7 @@ export const eject = async (
+   });
+ 
+   if (servesStaticIndex(config.search.provider)) {
+-    const documents = await buildSearchDocuments(project);
++    const documents = await buildSearchDocuments(project, { sections: true });
+     files.push(
+       {
+         content: `${JSON.stringify(documents)}\n`,
+diff --git a/src/search/documents.ts b/src/search/documents.ts
+index 98876f3a6012a95fc7a4f416eb17d4950097bcca..7dcb4aa195c5ae0ad87068af05e1b5aa0defd75b 100644
+--- a/src/search/documents.ts
++++ b/src/search/documents.ts
+@@ -1,3 +1,4 @@
++import GithubSlugger from "github-slugger";
+ import type { Nodes } from "mdast";
+ import { fromMarkdown } from "mdast-util-from-markdown";
+ import { gfmFromMarkdown } from "mdast-util-gfm";
+@@ -125,6 +126,15 @@ const collectText = (node: Nodes, out: string[]): void => {
+   }
+ };
+ 
++const parseMarkdown = (markdown: string) =>
++  fromMarkdown(markdown, {
++    extensions: [gfm()],
++    mdastExtensions: [gfmFromMarkdown()],
++  });
++
++const joinText = (out: string[]): string =>
++  out.join("").replaceAll(WHITESPACE, " ").trim();
++
+ /**
+  * Reduce Markdown/MDX to plain, searchable text: parse (GFM included) and walk
+  * the tree instead of regex-stripping the source, so reference-style links,
+@@ -133,13 +143,41 @@ const collectText = (node: Nodes, out: string[]): void => {
+  * record, so anything lost here is a permanent search-quality loss.
+  */
+ const toPlainText = (markdown: string): string => {
+-  const tree = fromMarkdown(markdown, {
+-    extensions: [gfm()],
+-    mdastExtensions: [gfmFromMarkdown()],
+-  });
+   const out: string[] = [];
+-  collectText(tree, out);
+-  return out.join("").replaceAll(WHITESPACE, " ").trim();
++  collectText(parseMarkdown(markdown), out);
++  return joinText(out);
++};
++
++/**
++ * Split Markdown into the plain text before the first h2/h3 and one section per
++ * h2/h3; deeper headings stay in their section's text. `id` comes from one
++ * github-slugger advanced over every heading in document order, the algorithm
++ * heading-anchors.ts uses for the rendered heading `id`, so `#id` lands on it.
++ */
++const toPlainSections = (markdown: string) => {
++  const slugger = new GithubSlugger();
++  const intro: string[] = [];
++  const sections: { heading: string; id: string; out: string[] }[] = [];
++  for (const node of parseMarkdown(markdown).children) {
++    if (node.type === "heading") {
++      const words: string[] = [];
++      collectText(node, words);
++      const heading = joinText(words);
++      const id = slugger.slug(heading);
++      if (node.depth === 2 || node.depth === 3) {
++        sections.push({ heading, id, out: [] });
++        continue;
++      }
++    }
++    collectText(node, sections.at(-1)?.out ?? intro);
++  }
++  return {
++    intro: joinText(intro),
++    sections: sections.map(({ out, ...section }) => ({
++      ...section,
++      text: joinText(out),
++    })),
++  };
+ };
+ 
+ interface Crumbs {
+@@ -202,6 +240,10 @@ const buildCrumbIndex = (sidebar: NavNode[]): Map<string, Crumbs> => {
+  * headings — for Ask AI grounding, where fenced examples are often the answer
+  * and stripping them makes the model unable to cite content the docs do contain.
+  *
++ * `sections` (plain content only) also emits one document per h2/h3 section,
++ * routed to `<page>#<heading id>`, so a result opens at the matching section;
++ * the page's own document then holds only the text before its first h2/h3.
++ *
+  * `audience` resolves `<Visibility>` blocks before extraction: `"web"`
+  * (default) keeps web-only content and drops agents-only blocks — the site
+  * search and hosted syncs must not surface content the page hides — while
+@@ -213,6 +255,7 @@ export const buildSearchDocuments = async (
+     includeWhenDisabled?: boolean;
+     content?: "markdown" | "plain";
+     audience?: VisibilityAudience;
++    sections?: boolean;
+   }
+ ): Promise<SearchDocument[]> => {
+   const pageById = new Map(project.graph.pages.map((page) => [page.id, page]));
+@@ -247,8 +290,8 @@ export const buildSearchDocuments = async (
+     return page ? contentIndexable(page, project.config) : false;
+   });
+ 
+-  return await Promise.all(
+-    indexable.map(async (route) => {
++  const documents = await Promise.all(
++    indexable.map(async (route): Promise<SearchDocument[]> => {
+       const page = pageById.get(route.id);
+       const raw = page ? await readEntryText(project, page) : "";
+       const source = raw ? matter(raw).content : "";
+@@ -256,8 +299,14 @@ export const buildSearchDocuments = async (
+         source,
+         options?.audience ?? "web"
+       );
++      const split =
++        options?.sections && options.content !== "markdown"
++          ? toPlainSections(visible)
++          : undefined;
+       const body =
+-        options?.content === "markdown" ? visible.trim() : toPlainText(visible);
++        options?.content === "markdown"
++          ? visible.trim()
++          : (split?.intro ?? toPlainText(visible));
+       const tags = page?.meta?.search?.tags;
+       const crumb = crumbs.get(route.path);
+       const facets = page ? pageFacets(page, project.config) : undefined;
+@@ -276,9 +325,20 @@ export const buildSearchDocuments = async (
+       if (facets) {
+         document.facets = facets;
+       }
+-      return document;
++      return [
++        document,
++        ...(split?.sections ?? []).map((section) => ({
++          ...document,
++          breadcrumb: [...document.breadcrumb, route.title],
++          content: section.text,
++          description: "",
++          route: `${route.path}#${section.id}`,
++          title: section.heading,
++        })),
++      ];
+     })
+   );
++  return documents.flat();
+ };
+ 
+ /**

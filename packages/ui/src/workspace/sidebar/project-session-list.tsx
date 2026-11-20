@@ -77,8 +77,8 @@ import {
   ShowMoreButton,
 } from '../../session/list/session-list-chrome';
 import {
-  SessionGroupNameModal,
   SessionGroupSections,
+  SpacesHeading,
   NewSessionGroupRow,
   keepFocusForNewGroup,
   markNewGroupFocus,
@@ -126,6 +126,7 @@ import {
   type ProjectSession,
   type ProjectSessionGroup,
 } from '@kortix/sdk';
+import { SpaceFormModal } from '../session-spaces/space-form-modal';
 import {
   qk,
   useProjectSession,
@@ -141,6 +142,7 @@ import {
   ArrowsSplitIcon,
   CheckIcon,
   DotsThreeIcon,
+  FunnelSimpleIcon,
   FolderSimpleIcon,
   FolderSimpleMinusIcon,
   PlusIcon,
@@ -789,20 +791,12 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
         secondary ? (listOpen ? 'flex-1' : 'shrink-0') : 'h-full',
       )}
     >
-      {/* Pinned, then the groups, sit above Sessions, outside it: they stay in
+      {/* The spaces, then Pinned, sit above Sessions, outside it: they stay in
           view while the list is closed. Capped at half the column so they
           never push Sessions out of view; past that they scroll. */}
-      {listsReady && (pinnedQuery.sessions.length > 0 || pinnedQuery.hasNextPage || groups.length > 0 || groupCreate) && (
+      {listsReady && (pinnedQuery.sessions.length > 0 || pinnedQuery.hasNextPage || groupsEnabled || groups.length > 0 || groupCreate) && (
         <div className="max-h-[50%] min-h-0 shrink-0 space-y-px overflow-y-auto">
-          <StarterSection
-            title={tPinArchive('section')}
-            query={pinnedQuery}
-            sessions={visiblePinned}
-            open={!collapsedSectionIds.has(PINNED_SECTION_ID)}
-            onToggle={() => toggleSectionCollapsed(projectId, PINNED_SECTION_ID)}
-            renderNode={(session) => renderSessionNode(session, false)}
-            caretOnHover
-          />
+          {groupsEnabled && <SpacesHeading projectId={projectId} onNew={() => setGroupCreate({ fileSessionId: null })} />}
           {groups.length > 0 && (
             <SessionGroupSections
               projectId={projectId}
@@ -815,14 +809,14 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
               actions={groupActions}
               onRename={setGroupToRename}
               onNewGroup={() => setGroupCreate({ fileSessionId: null })}
-              onCollapseOthers={(groupId) =>
+              onCollapseOthers={(groupId) => {
+                // A space's id in the set means open: keep every other section's state, and only this space open.
+                const spaceIds = new Set(groups.map((group) => sessionGroupSectionId(group.group_id)));
                 collapseAllSections(projectId, [
-                  ...Array.from(collapsedSectionIds).filter((id) => id !== sessionGroupSectionId(groupId)),
-                  ...groups
-                    .filter((group) => group.group_id !== groupId)
-                    .map((group) => sessionGroupSectionId(group.group_id)),
-                ])
-              }
+                  ...Array.from(collapsedSectionIds).filter((id) => !spaceIds.has(id)),
+                  sessionGroupSectionId(groupId),
+                ]);
+              }}
             />
           )}
           {groupsEnabled && groupCreate && (
@@ -838,6 +832,15 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
               }}
             />
           )}
+          <StarterSection
+            title={tPinArchive('section')}
+            query={pinnedQuery}
+            sessions={visiblePinned}
+            open={!collapsedSectionIds.has(PINNED_SECTION_ID)}
+            onToggle={() => toggleSectionCollapsed(projectId, PINNED_SECTION_ID)}
+            renderNode={(session) => renderSessionNode(session, false)}
+            caretOnHover
+          />
         </div>
       )}
       {/* The header collapses the sessions in no group: the time or status
@@ -887,9 +890,10 @@ export function ProjectSessionList({ projectId, secondary = false }: ProjectSess
       />
 
       {groupsEnabled && (
-        <SessionGroupNameModal
+        // Rename opens the space's own edit dialog: name, icon and what it is for, in one place.
+        <SpaceFormModal
           projectId={projectId}
-          group={groupToRename}
+          space={groupToRename}
           open={!!groupToRename}
           onOpenChange={(open) => {
             if (!open) setGroupToRename(null);
@@ -1014,7 +1018,7 @@ function SessionListHeader({
               aria-label={t('sessionViewOptions')}
               className={controlClass}
             >
-              <DotsThreeIcon className="size-4" />
+              <FunnelSimpleIcon className="size-4" />
             </Button>
           </DropdownMenuTrigger>
         </DropdownMenu>
@@ -1158,7 +1162,7 @@ function SessionSectionMenu({
             }
           }}
         >
-          <DotsThreeIcon className="size-4" />
+          <FunnelSimpleIcon className="size-4" />
         </Button>
       </DropdownMenuTrigger>
       <SessionFilterMenu
@@ -1253,7 +1257,8 @@ function StarterSection({
     <Disclosure
       open={open}
       onOpenChange={onToggle}
-      className="group/section space-y-1"
+      // The rows' own 1px rhythm under the header, the same as Spaces and Sessions.
+      className="group/section space-y-px"
       transition={{ duration: 0.15, ease: 'easeOut' }}
     >
       <DisclosureTrigger>

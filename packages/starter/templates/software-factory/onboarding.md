@@ -18,6 +18,11 @@ its recommended answer. Never ask it where it appears.
    the checkout. Read only; never `cat` an env file.
 2. **Ask** which ticket store is the source of truth (analysis section 2).
    Recommend the one the team uses; none: GitHub Issues on the code repository.
+   With Linear, Jira or Asana, **Ask** in the same question which member the
+   factory signs in as (`store.agent_identity`): it treats every ticket
+   assigned to that member as handed to it. Recommend a member of its own (one
+   seat, for example a `+kortix` alias of the person's email); the person's
+   own account hands the factory every ticket assigned to them.
 3. **Ask** which sources to turn on. Show only the sources whose evidence you
    found (analysis section 3), one line each: the evidence, what it needs.
    For example: `@sentry/nextjs` in `package.json` → `errors` (Sentry, poll),

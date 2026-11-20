@@ -3,7 +3,6 @@
 import { ProjectAppsNavItem } from './footer/project-apps-nav';
 import { ProjectCalendarNavItem } from './footer/project-calendar-nav';
 import { ProjectGoalsNavItem } from './footer/project-goals-nav';
-import { ProjectInboxNavItem } from './footer/project-inbox-nav';
 import { ProjectArtifactsNavItem } from './footer/project-artifacts-nav';
 import { ProjectFilesNavItem } from './footer/project-files-nav';
 import {
@@ -28,15 +27,13 @@ import { adminPath } from '../../lib/routes';
  * offer it. Spaces are the channel sidebar under the `chat` flag
  * (project-spaces-nav.tsx).
  */
-// `inbox` is first: it is the one row that says something waits on you.
-const NAV_ROWS = ['inbox', 'customize', 'files', 'apps', 'calendar', 'goals', 'artifacts'] as const;
+const NAV_ROWS = ['customize', 'files', 'apps', 'calendar', 'goals', 'artifacts'] as const;
 type NavRowId = (typeof NAV_ROWS)[number];
 
-/** `inbox={false}`: the host shows the Inbox row elsewhere (Spaces on: beside Review, `project-spaces-nav`). */
-export function ProjectNavItems({ projectId, inbox = true }: { projectId: string; inbox?: boolean }) {
+export function ProjectNavItems({ projectId }: { projectId: string }) {
   return (
     <>
-      {NAV_ROWS.filter((id) => inbox || id !== 'inbox').map((id) => (
+      {NAV_ROWS.map((id) => (
         <NavItem key={id} id={id} projectId={projectId} />
       ))}
     </>
@@ -109,8 +106,6 @@ function CustomizeNavEntry({ projectId }: { projectId: string }) {
 
 function NavItem({ id, projectId }: { id: NavRowId; projectId: string }) {
   switch (id) {
-    case 'inbox':
-      return <ProjectInboxNavItem />;
     case 'customize':
       return <CustomizeNavEntry projectId={projectId} />;
     case 'apps':

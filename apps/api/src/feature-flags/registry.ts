@@ -370,9 +370,9 @@ const FLAGS: readonly FeatureFlagDef[] = [
   // serializer keeps sending `true` for older clients.
   {
     key: 'chat',
-    name: 'Spaces',
+    name: 'Channels',
     description:
-      "Spaces with Kortix, the way Slack works: every message is a thread, Kortix's newest reply shows under it, Kortix can start threads, and you share spaces with people. Replaces the session list in the sidebar.",
+      "Channels with Kortix, the way Slack works: every message is a thread, Kortix's newest reply shows under it, Kortix can start threads, and you share channels with people. Replaces the session list in the sidebar.",
     stability: 'experimental',
     wip: true,
     available: () => true,
@@ -442,9 +442,10 @@ const FLAGS: readonly FeatureFlagDef[] = [
   },
   {
     key: 'session_groups',
-    name: 'Session groups',
+    // Product word "Spaces" since 2026-11-17; the key keeps its name (stored on projects).
+    name: 'Spaces',
     description:
-      "Group the sidebar's sessions into named folders that everyone in the workspace shares, for example one per store or client. Move a session into a group from its menu or by dragging it; reorder and collapse the groups.",
+      'Group sessions into spaces, each with its own files and tabs. A new space is private to you; share it with people or with the whole workspace. Start a session in a space from its page or from the Space picker under the composer. Every session in a space knows what the space is for and mounts its Files folder.',
     stability: 'experimental',
     wip: true,
     available: () => true,
@@ -454,7 +455,9 @@ const FLAGS: readonly FeatureFlagDef[] = [
       'ROUTES: every /projects/:id/session-groups route and PUT /projects/:id/sessions/:sid/group answer 403 ' +
       '`feature_disabled` while off (projects/routes/session-groups.ts). The session list ignores `group` while off, ' +
       "so the sidebar lists every session again. Turning it off deletes nothing: the groups and each session's " +
-      '`group_id` stay and come back when it is turned on. WEB: no group sections, no New group and no Move to group.',
+      '`group_id` stay and come back when it is turned on. WEB: no space sections, no Spaces page or picker, no New space and no Move to space. ' +
+      'SESSIONS: session create ignores `group_id` while off. On, every session of a space (a child: its parent\'s) gets the "## This space" ' +
+      'turn text (projects/lib/session-where.ts: name, description, mounted folder) and mounts /Spaces/<group_id> read-write at /drives/space (drives/service.ts sessionGroupFolder). SHARING: a group is private to its creator by default; sharing it (people or the whole project) shares every session in it and its folder (shared/session-group-access.ts).',
   },
   {
     key: 'chrome',

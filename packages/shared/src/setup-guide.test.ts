@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import { PROD_TARGET, loopPrompt, sandboxHourlyUsd, setupGuide, setupHostName, setupPromptFor, setupTarget, templatePrompt } from './setup-guide';
+import { CLOUD_HOST_NAME } from './host-config/config';
 
 // A prompt copied on a deployment must name that deployment's guide, and the
 // guide must point the CLI at that deployment's API (founder call 2026-11-10).
@@ -38,7 +39,10 @@ describe('setup target', () => {
     // An installed CLI can be older than the guide: the installer runs every time, never behind `command -v`.
     expect(guide).not.toContain('command -v kortix ||');
     expect(setupGuide()).not.toContain('command -v kortix ||');
-    expect(setupGuide()).not.toContain('kortix hosts use');
+    // Production selects the built-in cloud host: the CLI keeps the host an earlier guide chose.
+    expect(setupGuide()).toContain(`kortix hosts use ${CLOUD_HOST_NAME}`);
+    expect(setupGuide()).toContain(`kortix hosts current   # must print ${CLOUD_HOST_NAME}`);
+    expect(setupGuide()).not.toContain('kortix hosts add');
     // The MCP server the guide registers is this deployment's own.
     expect(guide).toContain('claude mcp add --transport http kortix https://dev-api.kortix.com/v1/mcp');
     expect(setupGuide()).toContain('codex mcp add kortix --url https://api.kortix.com/v1/mcp');
@@ -98,8 +102,11 @@ describe('templates in the setup guide', () => {
     expect(guide).toContain('kortix sessions wait-for <session_id> --timeout 1800 --json');
     expect(guide).toContain('kortix sessions log <session_id> --json --limit 200');
     expect(guide).toContain('never from the agent\'s summary');
-    // A browser-capable agent makes the clicks; never a password or a code.
-    expect(guide).toContain('Never type a password, a one-time code, a card number');
+    // The person makes every sign-in on the setup page; the agent never clicks or signs in for them.
+    expect(guide).toContain('Never sign in, connect or click for the person');
+    expect(guide).not.toContain('providers login claude');
+    expect(guide).not.toContain('--connect <slug');
+    expect(guide).not.toContain('rule 10), makes');
   });
 
   test('the guide sizes the sandbox from the stack, quotes its cost, and resizes from measured peaks', () => {

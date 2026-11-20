@@ -517,8 +517,10 @@ describe('pi workflow tool', () => {
     ])
     expect(part.output).toContain(JSON.stringify([null, 'answer: fine', null], null, 2))
     expect(part.output).toContain('agents: 3 (2 stopped, 1 done)')
-    expect(part.output).toContain('- a1 "agent-2" stopped by the person — do not rerun unless asked (session child-1)')
-    expect(part.output).toContain('- a3 "agent-3" stopped (session child-3)')
+    // The three agents start in parallel, so which child session each one gets depends on arrival
+    // order: assert the line's meaning and that it names a child session, not the session number.
+    expect(part.output).toMatch(/- a1 "agent-2" stopped by the person — do not rerun unless asked \(session child-\d\)/)
+    expect(part.output).toMatch(/- a3 "agent-3" stopped \(session child-\d\)/)
   })
 
   test('structured output: JSON in a fence parses, a corrective follow-up fixes a bad answer, 5 bad answers return { schema_error, text } and the run goes on, strict: true throws, a contradictory schema starts no agent', async () => {

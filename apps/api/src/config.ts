@@ -879,6 +879,9 @@ const envSchema = z.object({
   PLATINUM_API_KEY: optStr,
   PLATINUM_API_URL: optStr,
   PLATINUM_TEMPLATE: optStr,
+  // The org's template cap (Platinum tiers 10/50/500; the API exposes no read
+  // of it). The snapshot quota GC reclaims from 80% of this value.
+  PLATINUM_TEMPLATE_QUOTA: optInt(500),
   // Per-webhook HMAC-SHA-256 secret from Platinum's `POST /v1/webhooks` (shown
   // once at registration). Optional — same backstop story as Daytona's.
   PLATINUM_WEBHOOK_SECRET: optStr,
@@ -1016,6 +1019,10 @@ const envSchema = z.object({
   // Per-session ceiling on stored-log reads (GET /v1/workspaces/:id/sessions/:id/log);
   // why and how it sits: the sessionLogReadLimiter in middleware/rate-limit.ts (KRTX-4696).
   KORTIX_SESSION_LOG_READS_PER_MIN: optInt(300),
+  // Per-caller ceiling, per route, on the account-wide cost rollups
+  // (/v1/usage/session-costs, /cost-by-project, /cost-summary); why:
+  // createUsageRollupRateLimitMiddleware in middleware/rate-limit.ts (KRTX-4895).
+  KORTIX_USAGE_ROLLUPS_PER_MIN: optInt(60),
   // Proxies in front of the API that APPEND to X-Forwarded-For. The client is
   // the entry this many places from the right; everything to its left was
   // written by the client. Cloud: Cloudflare + ALB = 2. Self-host Caddy
@@ -1728,6 +1735,7 @@ export const config = {
   PLATINUM_API_URL:
     env.PLATINUM_TARGET === 'local' ? env.PLATINUM_API_URL_LOCAL : env.PLATINUM_API_URL,
   PLATINUM_TEMPLATE: env.PLATINUM_TEMPLATE,
+  PLATINUM_TEMPLATE_QUOTA: env.PLATINUM_TEMPLATE_QUOTA,
   PLATINUM_WEBHOOK_SECRET: env.PLATINUM_WEBHOOK_SECRET,
   // ─── Sandbox Provisioning (Platform) ──────────────────────────────────────
   KORTIX_URL: env.KORTIX_URL,
@@ -1815,6 +1823,7 @@ export const config = {
   KORTIX_LLM_GATEWAY_REQS_PER_MIN: env.KORTIX_LLM_GATEWAY_REQS_PER_MIN,
   KORTIX_PROXY_REQS_PER_MIN: env.KORTIX_PROXY_REQS_PER_MIN,
   KORTIX_SESSION_LOG_READS_PER_MIN: env.KORTIX_SESSION_LOG_READS_PER_MIN,
+  KORTIX_USAGE_ROLLUPS_PER_MIN: env.KORTIX_USAGE_ROLLUPS_PER_MIN,
   KORTIX_TRUSTED_PROXY_HOPS: env.KORTIX_TRUSTED_PROXY_HOPS,
   KORTIX_UNKNOWN_TOKEN_ATTEMPTS_PER_MIN: env.KORTIX_UNKNOWN_TOKEN_ATTEMPTS_PER_MIN,
   KORTIX_TRIGGER_MAX_PROVISIONING_SESSIONS_PER_PROJECT:

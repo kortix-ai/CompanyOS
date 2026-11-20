@@ -60,14 +60,25 @@ const OLD_CLI_NOTE = [
   'tell the person which one to remove, in one line.',
 ].join('\n');
 
-/** Step 0 of the guide: install or update the CLI and, off production, point it at this deployment. */
+/** The CLI's built-in Kortix Cloud host (\`CLOUD_HOST_NAME\` in host-config): every config has it. */
+const CLOUD_HOST = 'cloud';
+
+/** Step 0 of the guide: install or update the CLI and point it at this deployment. */
 function installBlock(target: SetupTarget): string {
   if (isProd(target)) {
+    // The CLI keeps the host it used last: a person who once followed a test or
+    // self-hosted guide would otherwise set this repository up there.
     return [
       '```bash',
       `curl -fsSL ${target.origin}/install | bash   # installs the CLI, or updates an older one`,
       'kortix --version',
+      `kortix hosts use ${CLOUD_HOST}   # Kortix Cloud, ${target.apiBase}`,
+      `kortix hosts current   # must print ${CLOUD_HOST}`,
       '```',
+      '',
+      'The CLI keeps the host an earlier guide or command chose (a test or',
+      `self-hosted deployment). \`kortix hosts use ${CLOUD_HOST}\` points every later command at`,
+      'Kortix Cloud.',
       '',
       OLD_CLI_NOTE,
     ].join('\n');
@@ -242,15 +253,10 @@ parse.
 9. **Keep the reply.** Do what the person chose. When a choice cannot work as
    chosen, only the person decides the change: say why in one line, give your
    fix and wait for the answer. Never swap a choice without saying so.
-10. **Make the clicks when you can.** When you can drive the person's browser
-    (a browser tool or MCP server that uses their own browser profile), offer
-    it in the step 3 message. With their yes, make their clicks yourself:
-    Authorize for \`kortix login\` (a new person signs up there with the Google
-    or GitHub sign-in they already have), each row of the setup page (a
-    connector's sign-in and consent, Add to Slack, a model plan) and the
-    GitHub App install. Never type a password, a one-time code, a card number
-    or a secret value: when a page asks for one, that step is the person's.
-    Say so in one line, wait, and go on.
+10. **The setup page is the person's.** Every sign-in (the model plan, a
+    connector, Slack, the GitHub App) and every pasted token happen there, in
+    the page \`onboard\` opens. Never sign in, connect or click for the person,
+    in the terminal or in a browser.
 
 ## 0. Install
 
@@ -296,6 +302,11 @@ message of step 3.
    the shape: one repository (a monorepo is one: several apps, one
    repository), or one product over several repositories (a web app, an API,
    services, each in its own). The shape decides where Kortix lives (step 3).
+   Check the person's rights on each code repository:
+   \`gh api repos/<owner>/<repo> --jq .permissions\`. \`onboard\` creates the
+   GitHub webhooks with their \`gh\`, which needs \`admin\`. Without it, say so on
+   the \`Found:\` line and name who can: an owner of the repository runs
+   \`kortix doctor --loops --fix\` once, or the triggers poll instead.
 3. **The software.** Start from the plan's \`integrations\` (each has a
    category and its evidence), \`unrecognized_services\` and \`mcp_servers\`.
    Add what you find yourself: SDK imports, webhook handlers, secret names in
@@ -419,9 +430,7 @@ The questions:
   names to upload (every \`local\` name the app reads; never a \`remote\` or
   \`prod\` one), the sandbox size with its cost ("4 vCPU, 8 GB, 30 GB disk:
   about $${sandboxHourlyUsd(4, 8).toFixed(2)} an hour while a session runs"), the Kortix
-  rule in \`AGENTS.md\` (default: add it) and, when
-  you can drive their browser, "I make the sign-in clicks in your browser"
-  (rule 10).
+  rule in \`AGENTS.md\` (default: add it).
 - **A gap is a question only when a chosen source needs it.** An
   \`unrecognized_services\` prefix or an empty category becomes one question
   with likely answers ("Tickets: a) GitHub Issues (recommended) b) Linear
@@ -544,27 +553,23 @@ repository, the step 3 answer decides how they land:
   open a pull request instead.
 - **A pull request:** \`git switch -c kortix/setup\`, commit, push,
   \`gh pr create\`. When the person has merged it, switch to the default
-  branch, pull, and go on.
+  branch, pull, and go on. Never point the workspace at \`kortix/setup\` to
+  start before the merge: many repositories delete a merged branch
+  (\`delete_branch_on_merge\`), and the workspace would then read a branch
+  that no longer exists.
 
 ## 5. Connect the models
 
 The setup page (step 6) asks for a model first when the workspace has none:
-the person picks their Claude or ChatGPT plan, or adds a key, in the browser.
-Use these commands only when the person wants it done in the terminal:
-
-- **Claude Pro or Max:** \`kortix providers login claude --start --share workspace --json\`;
-  give the person the \`authorize_url\`; they paste the code back;
-  \`kortix providers login claude --flow <flow_id> --code <code> --share workspace\`.
-- **ChatGPT Plus or Pro:** \`kortix providers login openai\` in the background;
-  give the person the link and the code it prints.
-- **An API key:** \`kortix providers set <provider>\`; the person types the key.
+the person picks their Claude or ChatGPT plan, or adds a key, there (rule
+10). Connect no model from the terminal.
 
 ## 6. Do it
 
 \`\`\`bash
 kortix onboard --yes --json --wait \\
   [--env-file <file> --only <A,B>]... \\
-  [--channels <a,b>] [--connect <slug,...>] \\
+  [--channels <a,b>] \\
   --repo <owner/repo> [--name "<workspace name>"]
 \`\`\`
 
@@ -602,6 +607,12 @@ row is done." Never print those links in the terminal. \`--wait\` keeps the run
 going until the page shows every row done, then finishes the phases that
 waited.
 
+Run the command as written. Never add \`--no-open\` and never drop \`--wait\`:
+the page is where the person makes every click (rule 10). Wait for
+\`onboard\` to exit before you end your turn: ending the turn can stop a
+command that runs in the background, and a question to the person never waits
+on a running \`onboard\`.
+
 A repository webhook that already sends the same event to another Kortix
 workspace is left in place and reported in the \`webhooks\` detail. Tell the
 person: two workspaces would act on the same event. They pick one; delete the
@@ -616,8 +627,7 @@ App. The first run asks for the App's install on this repository: a
 
 Exit 0 is done and green. Exit 4: steps are left. A \`user_action\` the page
 does not show (\`/invite\` the bot to a private Slack channel, install the
-GitHub App) goes to the person once, in one message, or is your click with
-their yes (rule 10). \`--wait\` timed out
+GitHub App) goes to the person once, in one message. \`--wait\` timed out
 (\`next\` says what the page still lists): tell the person in one line, then
 run the same command again. Exit 1: read the failed phase's \`detail\`, fix
 it, run again.

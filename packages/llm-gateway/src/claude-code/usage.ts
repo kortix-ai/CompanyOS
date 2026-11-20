@@ -17,6 +17,8 @@ export function observeClaudeUsage(response: Response, record: (usage: ClaudeUsa
   let read = 0;
   let write = 0;
   let seen = false;
+  let seenInput = false;
+  let seenOutput = false;
   let complete = false;
   let valid = true;
   let model: string | null = null;
@@ -37,13 +39,21 @@ export function observeClaudeUsage(response: Response, record: (usage: ClaudeUsa
       const usage = 'usage' in message ? message.usage : null;
       if (usage && typeof usage === 'object') {
         seen = true;
-        input = Math.max(input, count('input_tokens' in usage ? usage.input_tokens : null));
-        output = Math.max(output, count('output_tokens' in usage ? usage.output_tokens : null));
+        if ('input_tokens' in usage) {
+          seenInput = true;
+          if (usage.input_tokens == null) valid = false;
+          input = Math.max(input, count(usage.input_tokens));
+        }
+        if ('output_tokens' in usage) {
+          seenOutput = true;
+          if (usage.output_tokens == null) valid = false;
+          output = Math.max(output, count(usage.output_tokens));
+        }
         read = Math.max(read, count('cache_read_input_tokens' in usage ? usage.cache_read_input_tokens : null));
         write = Math.max(write, count('cache_creation_input_tokens' in usage ? usage.cache_creation_input_tokens : null));
       }
       if (('type' in event && event.type === 'message_stop') || !streaming) complete = true;
-    } catch { /* Non-JSON and oversized frames carry no usable usage. */ }
+    } catch { valid = false; }
   };
   const push = (text: string) => {
     carry += text;
@@ -56,13 +66,13 @@ export function observeClaudeUsage(response: Response, record: (usage: ClaudeUsa
       }
     }
     // Never retain generated content or an unbounded unterminated frame.
-    if (carry.length > 1024 * 1024) { carry = ''; oversizedJson = true; }
+    if (carry.length > 1024 * 1024) { carry = ''; oversizedJson = true; valid = false; }
   };
   const finish = () => {
     push(decoder.decode());
     if (streaming) { if (carry.startsWith('data:')) consume(carry.slice(5).trim()); }
     else if (!oversizedJson) consume(carry);
-    if (seen) record({ model, promptTokens: input + read + write, completionTokens: output, cachedTokens: read, cacheWriteTokens: write, complete: complete && valid });
+    if (seen) record({ model, promptTokens: input + read + write, completionTokens: output, cachedTokens: read, cacheWriteTokens: write, complete: complete && valid && seenInput && seenOutput });
   };
   const reader = response.body.getReader();
   let finished = false;

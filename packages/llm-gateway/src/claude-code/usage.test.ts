@@ -45,3 +45,27 @@ test('telemetry only observes complete numeric usage fields', async () => {
   await response.text();
   expect(recorded).toEqual([{ model: 'claude-opus-5-5', promptTokens: 0, completionTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, complete: false }]);
 });
+
+for (const usage of [{ input_tokens: 100 }, { output_tokens: 53 }, { input_tokens: null, output_tokens: 53 }]) {
+  test(`missing required counters stay incomplete: ${JSON.stringify(usage)}`, async () => {
+    const recorded: unknown[] = [];
+    const text = JSON.stringify({ usage });
+    const response = observeClaudeUsage(Response.json({ usage }), (value) => recorded.push(value));
+    expect(await response.text()).toBe(text);
+    expect(recorded).toEqual([expect.objectContaining({ complete: false, cachedTokens: 0, cacheWriteTokens: 0 })]);
+  });
+}
+
+test('malformed delta invalidates previously observed usage without changing relayed bytes', async () => {
+  const text = 'data: {"type":"message_start","message":{"usage":{"input_tokens":11,"output_tokens":1}}}\n\ndata: {"type":"message_delta","usage":broken}\n\ndata: {"type":"message_stop"}\n\n';
+  const recorded: unknown[] = [];
+  const response = observeClaudeUsage(new Response(text, { headers: { 'content-type': 'text/event-stream' } }), (value) => recorded.push(value));
+  expect(await response.text()).toBe(text);
+  expect(recorded).toEqual([{ model: null, promptTokens: 11, completionTokens: 1, cachedTokens: 0, cacheWriteTokens: 0, complete: false }]);
+});
+
+test('explicit zero required counters and absent optional caches are complete', async () => {
+  const recorded: unknown[] = [];
+  await observeClaudeUsage(Response.json({ usage: { input_tokens: 0, output_tokens: 0 } }), (value) => recorded.push(value)).text();
+  expect(recorded).toEqual([{ model: null, promptTokens: 0, completionTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, complete: true }]);
+});

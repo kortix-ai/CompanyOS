@@ -589,6 +589,25 @@ describe('runCreate: the full create() orchestration', () => {
     expect(handoffs.length).toBe(1);
   });
 
+  // KRTX-4940: a host that stays on its page (the CLI sign-in) selects the
+  // created workspace by the account the server answered with, never by where
+  // the refreshed list happens to put it.
+  test('on success, hands the created project with its account to the host', async () => {
+    const handoffs: Array<{ projectId: string; accountId: string }> = [];
+    const result = await runCreate(
+      { ...INITIAL_FORM_STATE, name: 'x' },
+      null,
+      'user-1',
+      {
+        ...noopClient(),
+        runCreateAttempt: async () => fakeProject('created-elsewhere', 'acct-new'),
+        enterProject: (projectId, project) => handoffs.push({ projectId, accountId: project.account_id }),
+      },
+    );
+    expect(result.ok).toBe(true);
+    expect(handoffs).toEqual([{ projectId: 'created-elsewhere', accountId: 'acct-new' }]);
+  });
+
   /**
    * KRTX-2092: the onboarding chat is the post-signup first run. Project home
    * shows it only while `metadata.onboarding_completed_at` is absent, so a

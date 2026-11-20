@@ -61,7 +61,7 @@ export function accountsQueryOptions(userId?: string | null, enabled = true) {
 }
 
 /**
- * The same, for one account's project list. See {@link accountsQueryOptions}.
+ * The same, for the project list of `useProjects`. See {@link accountsQueryOptions}.
  *
  * @deprecated The query of `useProjects`; use `useWorkspaces`. Kept permanently.
  */

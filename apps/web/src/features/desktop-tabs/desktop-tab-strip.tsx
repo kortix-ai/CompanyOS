@@ -864,7 +864,7 @@ function Keys({ keys }: { keys: string[] }) {
 
 /* ─── Icon + title ────────────────────────────────────────────────────────── */
 
-function TabLabel({
+export function TabLabel({
   route,
   projectId,
   pinned,

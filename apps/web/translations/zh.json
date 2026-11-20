@@ -25523,7 +25523,8 @@
     "open": "待处理",
     "jump": "跳转到 #{number} 的回复",
     "unavailable": "已加载的历史记录中没有此回复。",
-    "loadError": "无法加载回复。请重试。"
+    "loadError": "无法加载回复。请重试。",
+    "openError": "无法打开更改请求"
   },
   "agentCapabilities": {
     "skillsTitle": "技能",
@@ -27481,7 +27482,7 @@
     "newSpace": "新建空间",
     "searchPlaceholder": "搜索空间",
     "emptyTitle": "还没有空间",
-    "emptyDescription": "空间将一个项目、客户或主题的会话归在一起。",
+    "emptyDescription": "空间将一个工作区、客户或主题的会话归在一起。",
     "noResultsTitle": "没有匹配的空间",
     "noResultsDescription": "试试其他名称。",
     "loadFailed": "无法加载空间",
@@ -27589,7 +27590,7 @@
     "owner": "所有者",
     "member": "成员",
     "group": "群组",
-    "groupMembers": "{count} 名成员",
+    "groupMembers": "{count, plural, other {# 名成员}}",
     "remove": "移除",
     "share": "共享",
     "notMember": "会话只能与此工作区的成员共享。"

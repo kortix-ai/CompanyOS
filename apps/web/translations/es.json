@@ -25523,7 +25523,8 @@
     "open": "Abierta",
     "jump": "Ir a la respuesta de #{number}",
     "unavailable": "Esta respuesta no está disponible en el historial cargado.",
-    "loadError": "No se pudo cargar la respuesta. Inténtalo de nuevo."
+    "loadError": "No se pudo cargar la respuesta. Inténtalo de nuevo.",
+    "openError": "No se pudo abrir la solicitud de cambio"
   },
   "agentCapabilities": {
     "skillsTitle": "Skills",
@@ -27481,7 +27482,7 @@
     "newSpace": "Nuevo espacio",
     "searchPlaceholder": "Buscar espacios",
     "emptyTitle": "Aún no hay espacios",
-    "emptyDescription": "Un espacio agrupa las sesiones de un proyecto, cliente o tema.",
+    "emptyDescription": "Un espacio agrupa las sesiones de un espacio de trabajo, cliente o tema.",
     "noResultsTitle": "Ningún espacio coincide",
     "noResultsDescription": "Prueba con otro nombre.",
     "loadFailed": "No se pudieron cargar los espacios",

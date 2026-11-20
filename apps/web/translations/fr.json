@@ -25523,7 +25523,8 @@
     "open": "Ouverte",
     "jump": "Aller à la réponse de #{number}",
     "unavailable": "Cette réponse n'est pas disponible dans l'historique chargé.",
-    "loadError": "Impossible de charger la réponse. Réessayez."
+    "loadError": "Impossible de charger la réponse. Réessayez.",
+    "openError": "Impossible d’ouvrir la demande de modification"
   },
   "agentCapabilities": {
     "skillsTitle": "Skills",
@@ -27481,7 +27482,7 @@
     "newSpace": "Nouvel espace",
     "searchPlaceholder": "Rechercher des espaces",
     "emptyTitle": "Aucun espace pour l'instant",
-    "emptyDescription": "Un espace regroupe les sessions d'un projet, d'un client ou d'un sujet.",
+    "emptyDescription": "Un espace regroupe les sessions d’un espace de travail, d’un client ou d’un sujet.",
     "noResultsTitle": "Aucun espace ne correspond",
     "noResultsDescription": "Essayez un autre nom.",
     "loadFailed": "Impossible de charger les espaces",

@@ -196,7 +196,6 @@
     "./error-boundary": "./src/primitives/error-boundary.tsx",
     "./error-state": "./src/primitives/error-state.tsx",
     "./expandable-search": "./src/primitives/expandable-search.tsx",
-    "./sort-menu": "./src/primitives/sort-menu.tsx",
     "./faded-scroll-area": "./src/primitives/faded-scroll-area.tsx",
     "./favicon-avatar": "./src/primitives/favicon-avatar.tsx",
     "./field": "./src/primitives/field.tsx",
@@ -501,6 +500,7 @@
     "./slider-native": "./src/primitives/slider-native.tsx",
     "./sliding-tab-indicator": "./src/primitives/sliding-tab-indicator.tsx",
     "./slot": "./src/primitives/slot.tsx",
+    "./sort-menu": "./src/primitives/sort-menu.tsx",
     "./split-sheet": "./src/primitives/split-sheet.tsx",
     "./spotlight-card": "./src/primitives/spotlight-card.tsx",
     "./status": "./src/primitives/status.tsx",
@@ -2479,6 +2479,10 @@
       "./slot": {
         "types": "./dist/primitives/slot.d.ts",
         "import": "./dist/primitives/slot.js"
+      },
+      "./sort-menu": {
+        "types": "./dist/primitives/sort-menu.d.ts",
+        "import": "./dist/primitives/sort-menu.js"
       },
       "./split-sheet": {
         "types": "./dist/primitives/split-sheet.d.ts",

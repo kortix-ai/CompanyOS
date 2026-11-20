@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 import { loadEnv } from '../../src/core/env';
 import { createDatabaseProject, deleteDatabaseProject } from '../../src/fixtures/database-project';
@@ -6,6 +6,7 @@ import { createApiJsonClient } from '../helpers/http';
 import { createAuthUser, deleteAuthUser, installBrowserSessionDirect, signIn } from '../helpers/session-auth';
 import { dismissOnboarding, selectAccountForUi } from '../helpers/ui';
 import { ensureOwnedAccount } from '../helpers/accounts';
+import { expectSettingsLayout } from '../helpers/settings-layout';
 
 /**
  * One Settings panel per workspace (design.md §3.2 C7): one rail, no tab bar
@@ -19,43 +20,6 @@ const authOptions = {
 };
 const apiBase = process.env.E2E_API_URL || 'http://localhost:8008/v1';
 const api = createApiJsonClient(apiBase);
-
-/**
- * What a person sees: how many settings navs are on screen, and the open
- * page's column measured against its pane. The column is the outermost
- * box with a max width around the page title; `left` and `right` are the
- * free space beside it, in px.
- */
-function settingsLayout(page: Page) {
-  return page.evaluate(() => {
-    const shown = (el: Element) => {
-      const box = el.getBoundingClientRect();
-      return (
-        box.width > 0 &&
-        box.height > 0 &&
-        box.right > 0 &&
-        box.left < window.innerWidth &&
-        getComputedStyle(el).visibility !== 'hidden' &&
-        !el.closest('[inert], [aria-hidden="true"]')
-      );
-    };
-    const navs = [...document.querySelectorAll('nav[aria-label="Workspace settings"]')].filter(shown).length;
-    const title = [...document.querySelectorAll('main h1')].find(shown);
-    let column: HTMLElement | null = null;
-    for (let el = title?.parentElement; el && el.tagName !== 'MAIN'; el = el.parentElement) {
-      if (getComputedStyle(el).maxWidth !== 'none') column = el;
-    }
-    if (!column) return { navs, left: null, right: null };
-    let pane = column.parentElement;
-    while (pane && pane.tagName !== 'MAIN' && !/auto|scroll/.test(getComputedStyle(pane).overflowY)) {
-      pane = pane.parentElement;
-    }
-    if (!pane) return { navs, left: null, right: null };
-    const inner = pane.getBoundingClientRect().left + pane.clientLeft;
-    const box = column.getBoundingClientRect();
-    return { navs, left: Math.round(box.left - inner), right: Math.round(inner + pane.clientWidth - box.right) };
-  });
-}
 
 test.describe('58 — Workspace settings is one panel', () => {
   test('the rail lists the sections top to bottom, and old links land on their section', async ({ page }) => {
@@ -172,16 +136,7 @@ test.describe('58 — Workspace settings is one panel', () => {
           await expect(page.locator('main h1')).toBeVisible({ timeout: 60_000 });
           // Off the sidebar's edge, so a closed sidebar does not peek open.
           await page.mouse.move(900, 600);
-          await expect
-            .poll(
-              async () => {
-                const layout = await settingsLayout(page);
-                const centered = layout.left !== null && layout.right !== null && Math.abs(layout.left - layout.right) <= 1;
-                return { navs: layout.navs, centered };
-              },
-              { message: `${path}, ${state}`, timeout: 30_000 },
-            )
-            .toEqual({ navs, centered: true });
+          await expectSettingsLayout(page, navs, `${path}, ${state}`);
         }
       };
 

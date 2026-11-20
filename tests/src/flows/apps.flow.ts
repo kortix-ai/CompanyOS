@@ -426,12 +426,30 @@ flow(
       },
     );
 
+    await ctx.step("a source ref with a terminal escape is refused: 400", async () => {
+      (await owner.post(
+        "/v1/workspaces/:projectId/apps/:appId/deployments",
+        {
+          source_commit: "a".repeat(40),
+          source_ref: "synthetic\u001b]52;c;eA==\u0007",
+          artifact_id: artifactId,
+          source: {
+            kind: "oci_image",
+            image: "docker.io/library/nginx:alpine",
+            command: ["nginx", "-g", "daemon off;"],
+            port: 80,
+          },
+        },
+        { params: appParams },
+      )).status(400).body().has("$.issue_count", 1).has("$.issues[0].path", ["source_ref"]);
+    });
+
     await ctx.step("legacy apps:false permits an immutable OCI deployment: 202 queued, version 1, readable by ID", async () => {
       const response = await owner.post(
         "/v1/workspaces/:projectId/apps/:appId/deployments",
         {
           source_commit: "a".repeat(40),
-          source_ref: "synthetic-branch",
+          source_ref: "synthetic/brånch",
           source_force: true,
           artifact_id: artifactId,
           source: {
@@ -443,7 +461,7 @@ flow(
         },
         { params: appParams },
       );
-      response.status(202).body().has("$.status", "queued").has("$.version", 1).exists("$.deployment_id").has("$.source_commit", "a".repeat(40)).has("$.source_ref", "synthetic-branch").has("$.source_force", true);
+      response.status(202).body().has("$.status", "queued").has("$.version", 1).exists("$.deployment_id").has("$.source_commit", "a".repeat(40)).has("$.source_ref", "synthetic/brånch").has("$.source_force", true);
       const deploymentBody = response.json<unknown>();
       if (typeof deploymentBody !== "object" || deploymentBody === null ||
           !("deployment_id" in deploymentBody) || typeof deploymentBody.deployment_id !== "string") {
@@ -452,7 +470,7 @@ flow(
       const deploymentId = deploymentBody.deployment_id;
       (await owner.get("/v1/workspaces/:projectId/apps/:appId/deployments/:deploymentId", {
         params: { ...appParams, deploymentId },
-      })).status(200).body().has("$.deployment.deployment_id", deploymentId).has("$.deployment.source_commit", "a".repeat(40)).has("$.deployment.source_ref", "synthetic-branch").has("$.deployment.source_force", true);
+      })).status(200).body().has("$.deployment.deployment_id", deploymentId).has("$.deployment.source_commit", "a".repeat(40)).has("$.deployment.source_ref", "synthetic/brånch").has("$.deployment.source_force", true);
     });
 
     await ctx.step("delete the test App after the boundary checks", async () => {

@@ -865,7 +865,7 @@ export function registerAppsRoutes(): void {
           artifact_id: z.string().uuid().optional(),
           source: SourceSchema,
           source_commit: z.string().regex(/^[0-9a-f]{40}$|^[0-9a-f]{64}$/).optional(),
-          source_ref: z.string().min(1).max(1024).nullable().optional(),
+          source_ref: z.string().min(1).max(1024).regex(/^[^\p{Cc}\p{Cf}]+$/u).nullable().optional(),
           source_force: z.boolean().optional(),
           provider: z.enum(['platinum', 'daytona']).optional(),
           environment: EnvironmentSchema.optional(),

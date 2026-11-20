@@ -14,6 +14,7 @@ import {
   takeFlagValue,
 } from '../command-helpers.ts';
 import { C, help, pad, status } from '../style.ts';
+import { terminalSafe } from '../token-denial.ts';
 import { accessCommand, accessLinkCommand } from './apps-access.ts';
 import { eventsCommand } from './apps-events.ts';
 import { addAppBlocks } from './apps-launch-yaml.ts';
@@ -754,7 +755,7 @@ async function showCommand(
           ? `  ${C.bold}live${C.reset}`
           : '';
       process.stdout.write(
-        `  v${deployment.version}  ${deployment.status}  ${deployment.deployment_id}${live}${deployment.source_commit ? `  ${deployment.source_commit}${deployment.source_ref ? ` (${deployment.source_ref})` : ''}` : ''}${deployment.source_force ? '  forced' : ''}\n`,
+        `  v${deployment.version}  ${deployment.status}  ${deployment.deployment_id}${live}${deployment.source_commit ? `  ${terminalSafe(deployment.source_commit)}${deployment.source_ref ? ` (${terminalSafe(deployment.source_ref)})` : ''}` : ''}${deployment.source_force ? '  forced' : ''}\n`,
       );
     }
     process.stdout.write('\n');

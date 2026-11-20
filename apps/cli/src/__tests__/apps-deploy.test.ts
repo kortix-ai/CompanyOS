@@ -344,6 +344,16 @@ describe('kortix apps deploy (characterization)', () => {
     expect(result.stdout).toContain('forced');
   });
 
+  test('show neutralizes terminal escapes in a stored source ref', async () => {
+    created = ['storefront'];
+    liveDeployment = deployment({ source_commit: 'b'.repeat(40), source_ref: 'feat\x1b]52;c;cHduZWQ=\x07\x1b[2Kx\nv9  ready' });
+    const result = await runCli(['apps', 'show', 'storefront', '--project', PROJECT], writeConfig(startServer()));
+    expect(result.code).toBe(0);
+    expect(result.stdout).not.toContain('\x1b]52');
+    expect(result.stdout).not.toContain('\x1b[2K');
+    expect(result.stdout).toContain('(featx?v9  ready)');
+  });
+
   test('a live deployment without provenance keeps the git checkout deploy working', async () => {
     gitCheckout();
     liveDeployment = deployment();

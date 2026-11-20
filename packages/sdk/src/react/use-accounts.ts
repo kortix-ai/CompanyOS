@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * The two lists every host opens on: the caller's accounts, and one account's
- * projects.
+ * The two lists every host opens on: the caller's accounts, and their projects
+ * (every account of a person, or one account's with `accountId`).
  *
  * Both already had a client function (`listAccounts`, `listProjectsForAccount`)
  * and a key (`qk.accounts.list`, `qk.projects.list`) — and no hook, so every

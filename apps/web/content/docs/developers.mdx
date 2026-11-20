@@ -9361,7 +9361,7 @@ Every name that says Project has a workspace twin: `Project` → `Workspace`, `p
 
 | Legacy name | Use instead |
 | --- | --- |
-| `listProjects()` · `useProjects(accountId?)` · `UseProjectsOptions` · `projectsQueryOptions` · `ProjectsKey` · `ProjectsListKey` | `listWorkspaces()` · `useWorkspaces()` · `UseWorkspacesOptions`: every workspace of the caller, across accounts. The legacy calls list one account. |
+| `listProjects()` · `useProjects(accountId?)` · `UseProjectsOptions` · `projectsQueryOptions` · `ProjectsKey` · `ProjectsListKey` | `listWorkspaces()` · `useWorkspaces()` · `UseWorkspacesOptions`: every workspace of the caller, across accounts. The legacy calls list, for a person, the projects of every account they belong to, or one account's with `accountId`; a credential bound to one account lists that account's. |
 | `getProject(id)` · `updateProject(id, input)` | `getWorkspace(id)` · `updateWorkspace(id, input)` |
 | `createProject(input)` | `linkRepository(input)` (`POST /v1/workspaces/link-repository`) |
 | `inviteProjectMember(id, email, role)` | `inviteWorkspaceMember(id, input)` |

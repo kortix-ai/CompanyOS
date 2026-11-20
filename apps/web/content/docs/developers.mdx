@@ -2674,7 +2674,7 @@ permanently, so a script written against them keeps working.
 
 | Canonical | Legacy (permanent) | Relation |
 |---|---|---|
-| `GET /v1/workspaces` | `GET /v1/projects` | Different routes. The canonical list holds every workspace you can open, across every account, in one request, with `workspace_id`, `role` and `state`. The legacy list holds one account's projects (`?account_id=`). A workspace key lists its one workspace. |
+| `GET /v1/workspaces` | `GET /v1/projects` | Different routes. The canonical list holds every workspace you can open, across every account, in one request, with `workspace_id`, `role` and `state`. The legacy list holds, for a person (a session or an unscoped personal access token), the projects of every account they belong to, or one account's with `?account_id=`. A credential bound to one account lists that account's; a workspace key lists its one workspace. |
 | `POST /v1/workspaces` | `POST /v1/projects/provision` with `new_workspace: true` | Different routes. The canonical create always makes a new workspace (`201`, the `Workspace`). `Accept: text/event-stream` streams the phases and ends with `{type: "done", project, workspace}`. `POST /v1/projects` imports a GitHub repository into an account. |
 | `GET /v1/workspaces/:workspaceId` | `GET /v1/projects/:projectId` | Different routes. The canonical record adds a top-level `role`, `state`, `split_pending`, `deletion_scheduled_for` and the `workspace` settings block. |
 | `PATCH /v1/workspaces/:workspaceId` | `PATCH /v1/projects/:projectId` | Different routes. The canonical update takes `name`, `icon`, `icon_glyph`, `default_branch`, `manifest_path` and `secret_default_strategy`, and answers `400 workspace_setting_read_only` for a key of the settings block, with `field` and `writer` (the route that writes it). |
@@ -9024,7 +9024,7 @@ Every hook is in `@kortix/sdk/react`. Most are React Query hooks: unless a row s
 | Hook | What it returns |
 | --- | --- |
 | `useAccounts({ userId, enabled })` | The caller's accounts. Pass the signed-in person's `userId` in a host where the person can change without a reload. |
-| `useWorkspaces({ userId, enabled })` | Every workspace the caller can open, across accounts: `{ workspaces, accounts, isLoading, isError, refetch }`. (`useProjects(accountId?)`, one account's list, is deprecated.) |
+| `useWorkspaces({ userId, enabled })` | Every workspace the caller can open, across accounts: `{ workspaces, accounts, isLoading, isError, refetch }`. (`useProjects(accountId?)`, the legacy project list, is deprecated: one account's with `accountId`, else every account of a person.) |
 | `useWorkspaceSessions(projectId, options)` | One workspace's sessions, paged, newest activity first. Read `sessions` (flat) and `fetchNextPage`. Filters as in [Sessions](#sessions). Adds `keepPreviousData` (keep the old rows while a new filter loads), `refetchInterval` and `pollFirstPageOnly` (experimental). |
 | `useWorkspaceModels(projectId)` | Selectable models as `FlatModel[]`. Empty while the list loads. |
 | `useWorkspaceModelPickerCatalog(projectId)` | The model-picker record per model (`reasoning_options`, `temperature`, `limit`). |
@@ -9361,7 +9361,7 @@ Every name that says Project has a workspace twin: `Project` → `Workspace`, `p
 
 | Legacy name | Use instead |
 | --- | --- |
-| `listProjects()` · `useProjects(accountId?)` · `UseProjectsOptions` · `projectsQueryOptions` · `ProjectsKey` · `ProjectsListKey` | `listWorkspaces()` · `useWorkspaces()` · `UseWorkspacesOptions`: every workspace of the caller, across accounts. The legacy calls list one account. |
+| `listProjects()` · `useProjects(accountId?)` · `UseProjectsOptions` · `projectsQueryOptions` · `ProjectsKey` · `ProjectsListKey` | `listWorkspaces()` · `useWorkspaces()` · `UseWorkspacesOptions`: every workspace of the caller, across accounts. The legacy calls list, for a person, the projects of every account they belong to, or one account's with `accountId`; a credential bound to one account lists that account's. |
 | `getProject(id)` · `updateProject(id, input)` | `getWorkspace(id)` · `updateWorkspace(id, input)` |
 | `createProject(input)` | `linkRepository(input)` (`POST /v1/workspaces/link-repository`) |
 | `inviteProjectMember(id, email, role)` | `inviteWorkspaceMember(id, input)` |

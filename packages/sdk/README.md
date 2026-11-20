@@ -1278,7 +1278,7 @@ These project names have no identical twin:
 
 | Legacy name | Use instead | Why |
 |---|---|---|
-| `listProjects()` | `listWorkspaces()` | Lists one account's projects; `listWorkspaces` lists every workspace of the caller |
+| `listProjects()` | `listWorkspaces()` | Lists the projects of every account of a person, or of the one account a credential is bound to; `listWorkspaces` lists every workspace of the caller |
 | `useProjects(accountId?)`, `UseProjectsOptions`, `projectsQueryOptions`, `ProjectsKey`, `ProjectsListKey` | `useWorkspaces()`, `UseWorkspacesOptions` | The same difference, in React |
 | `getProject(id)` | `getWorkspace(id)` | `getWorkspace` adds the role, the state and the settings block |
 | `updateProject(id, input)` | `updateWorkspace(id, input)` | `updateWorkspace` refuses a settings key with `workspace_setting_read_only` |
@@ -1570,7 +1570,7 @@ permanently:
 
 | Canonical | Legacy (permanent) | Note |
 |---|---|---|
-| `GET /v1/workspaces` | `GET /v1/projects` | Not an alias: canonical lists every workspace of the caller in one request; legacy lists one account's projects (`?account_id=`) |
+| `GET /v1/workspaces` | `GET /v1/projects` | Not an alias: canonical lists every workspace of the caller in one request; legacy lists the projects of every account of a person, or one account's with `?account_id=` |
 | `POST /v1/workspaces` | `POST /v1/projects/provision` with `new_workspace: true` | Not an alias: `POST /v1/projects` imports a GitHub repository into an account |
 | `GET`/`PATCH /v1/workspaces/:id` | `GET`/`PATCH /v1/projects/:id` | Not an alias: canonical adds `role`, `state` and the settings block, and refuses a settings key |
 | `/v1/workspaces/:id/<sub-path>` | `/v1/projects/:id/<sub-path>` | Same handler |

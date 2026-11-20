@@ -1482,6 +1482,9 @@ export function validateTriggers(rawNode: unknown, path: string, issues: Manifes
         severity: 'error',
       });
     }
+    if (entry.hard_run_caps !== undefined && typeof entry.hard_run_caps !== 'boolean') {
+      issues.push({ path: `${where}.hard_run_caps`, message: 'hard_run_caps must be a boolean.', severity: 'error' });
+    }
     if (entry.session_readers !== undefined) {
       const parsed = parseTriggerReaders(entry.session_readers);
       if ('error' in parsed) issues.push({ path: `${where}.session_readers`, message: parsed.error, severity: 'error' });

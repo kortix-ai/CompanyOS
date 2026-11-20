@@ -2899,7 +2899,12 @@ export const projectMonitorBoxes = kortixSchema.table(
   ],
 );
 
-/** Durable reservations serialize hard run caps across every firing replica. */
+/**
+ * Durable reservations serialize hard run caps across every firing replica.
+ * The R2a workspace twin is SQL-managed, like the other project FKs:
+ * project_trigger_admissions_project_id_workspaces_fk is NO ACTION,
+ * DEFERRABLE INITIALLY DEFERRED (not expressible in Drizzle), and NOT VALID.
+ */
 export const projectTriggerAdmissions = kortixSchema.table(
   'project_trigger_admissions',
   {

@@ -148,6 +148,39 @@ suite('Workspaces R2a: twin foreign keys into kortix.workspaces', () => {
     });
   });
 
+  test('trigger admissions defer workspace checks, reject a lost workspace, and retain project cascade', async () => {
+    await withClient(async (client) => {
+      try {
+        await client.query('begin');
+        await client.query(`insert into kortix.accounts (account_id, name) values ($1, 'Synthetic admission')`, [ACCOUNT]);
+        await client.query(
+          `insert into kortix.projects (project_id, account_id, name, repo_url) values ($1, $2, 'Synthetic admission', 'https://example.invalid/admission.git')`,
+          [PROJECT, ACCOUNT],
+        );
+        await client.query(`insert into kortix.project_trigger_admissions (project_id, slug) values ($1, 'boundary')`, [PROJECT]);
+        await client.query('commit');
+
+        await client.query('begin');
+        await client.query(`delete from kortix.workspaces where workspace_id = $1`, [PROJECT]);
+        const refused = await client.query('commit').then(
+          () => null,
+          (error: { code?: string; constraint?: string }) => error,
+        );
+        expect(refused?.code).toBe('23503');
+        expect(refused?.constraint).toBe('project_trigger_admissions_project_id_workspaces_fk');
+        const count = async () => Number((await client.query(
+          `select count(*)::int as n from kortix.project_trigger_admissions where project_id = $1`, [PROJECT],
+        )).rows[0].n);
+        expect(await count()).toBe(1);
+        await client.query(`delete from kortix.projects where project_id = $1`, [PROJECT]);
+        expect(await count()).toBe(0);
+      } finally {
+        await client.query('rollback').catch(() => undefined);
+        await client.query(`delete from kortix.accounts where account_id = $1`, [ACCOUNT]);
+      }
+    });
+  });
+
   test('an account whose id is the first uuid: the first pass skips it, the nil-uuid pass restores it', async () => {
     await withClient(async (client) => {
       try {

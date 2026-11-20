@@ -157,6 +157,7 @@ mock.module('../../shared/session-costs', () => ({
     if (!detailFound) return null;
     return { ...summary, model_usage: [], ledger_entries: [] };
   },
+  findSessionCostOwner: async () => null,
   // usage.ts also imports getCostSummary from cost-rollups.ts, which imports
   // this named export from the real session-costs.ts module. This file only
   // exercises the /session-costs routes (getCostSummary is never called),

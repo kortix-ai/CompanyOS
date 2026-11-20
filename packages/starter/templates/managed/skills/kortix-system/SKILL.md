@@ -13,7 +13,7 @@ repository, and update in a running session. Never edit or commit a copy.
 For one your list lacks, or outside a session:
 - `kortix system-skills` lists them; `kortix system-skills get <name>` prints
   one `SKILL.md` and its reference paths; `… file <name> <path>` one reference.
-A flag-gated skill exists only while its flag is on. Optional skills: `kortix marketplace search <query>` (`kortix-marketplace`).
+A flag-gated skill exists only while its flag is on.
 </live-skills>
 <overview>
 ## The model

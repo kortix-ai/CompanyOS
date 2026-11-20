@@ -9,7 +9,7 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { eq } from 'drizzle-orm';
-import { projectSessions } from '@kortix/db';
+import { projectSessionGroupMembers, projectSessions } from '@kortix/db';
 import { SESSION_GROUPS_MAX } from '@kortix/api-contract';
 import { suggestSpaceIcon } from '@kortix/shared';
 import { db } from '../shared/db';
@@ -22,6 +22,7 @@ import {
   reorderSessionGroups,
   setSessionGroup,
 } from '../projects/lib/session-groups';
+import { resolveRequestedSessionGroup } from '../projects/lib/session-create';
 import {
   localTestDatabaseUrl,
   removeSeeded,
@@ -259,5 +260,38 @@ describe('session groups', () => {
       createdBy: creator,
     })).toEqual({ ok: false, code: 'group_limit' });
     expect((await listSessionGroups(project.project_id)).length).toBe(SESSION_GROUPS_MAX);
+  });
+});
+
+describe('the space a new session is filed into', () => {
+  // A space mounts its Files folder read-write in every session in it, so a
+  // fork may inherit its source's space only when the caller sees that space.
+  test('a fork keeps its source private space for its creator and a member it is shared with, and lands outside it for anyone else', async () => {
+    const target = await seedProject('session-groups-forks');
+    try {
+      const space = await create(target, 'Board prep');
+      const source = await seedSession(target, creator);
+      expect(await setSessionGroup(target.project_id, source, space.groupId)).toEqual({ ok: true, groupId: space.groupId });
+      const resolve = (userId: string, body: Record<string, unknown>) =>
+        resolveRequestedSessionGroup({
+          project: { projectId: target.project_id, accountId: target.account_id, metadata: { experimental: { session_groups: true } } },
+          userId,
+          requestingPrincipalType: 'human',
+          body,
+        } as unknown as Parameters<typeof resolveRequestedSessionGroup>[0]);
+      const outsider = crypto.randomUUID();
+
+      expect(await resolve(creator, { fork_from_session_id: source })).toEqual({ groupId: space.groupId });
+      expect(await resolve(outsider, { fork_from_session_id: source })).toEqual({ groupId: null });
+      // Naming the space outright stays a 404 for the outsider, as before.
+      expect(await resolve(outsider, { fork_from_session_id: source, group_id: space.groupId })).toMatchObject({
+        error: { status: 404, body: { code: 'group_not_found' } },
+      });
+
+      await db.insert(projectSessionGroupMembers).values({ groupId: space.groupId, userId: outsider, addedBy: creator });
+      expect(await resolve(outsider, { fork_from_session_id: source })).toEqual({ groupId: space.groupId });
+    } finally {
+      await removeSeeded([target]);
+    }
   });
 });

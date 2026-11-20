@@ -417,14 +417,10 @@ export const AUDIT_ROUTE_LABELS: Readonly<Record<string, AuditRouteLabel | strin
   'GET /v1/health/ready': 'GET /health/ready',
   'ALL /v1/llm-gateway/*': 'ALL /v1/llm/*',
   'ALL /v1/llm/*': { action: 'gateway.request.proxy', title: 'Called LLM gateway' },
-  'GET /v1/marketplace/items': { action: 'marketplace.item.list', title: 'Listed marketplace items' },
-  'GET /v1/marketplace/items/:id': { action: 'marketplace.item.read', title: 'Viewed marketplace item' },
-  'GET /v1/marketplace/items/:id/file': { action: 'marketplace.item.file.read', title: 'Viewed marketplace item file' },
-  'GET /v1/marketplace/marketplaces': { action: 'marketplace.list', title: 'Listed marketplaces' },
-  'GET /v1/marketplace/marketplaces/featured': { action: 'marketplace.featured.list', title: 'Listed featured marketplaces' },
-  'GET /v1/marketplace/sources': { action: 'marketplace.source.list', title: 'Listed marketplace sources' },
-  'POST /v1/marketplace/sources': { action: 'marketplace.source.create', title: 'Added marketplace source' },
-  'DELETE /v1/marketplace/sources/:id': { action: 'marketplace.source.delete', title: 'Removed marketplace source' },
+  // The marketplace was removed (2026-11-20): every path is a 410 stub. Rows
+  // written before then keep their titles in audit-event-labels.ts.
+  'ALL /v1/marketplace': 'ALL /v1/marketplace/*',
+  'ALL /v1/marketplace/*': { action: 'marketplace.retired', title: 'Called the removed marketplace' },
   'DELETE /v1/mcp': 'POST /v1/mcp',
   'GET /v1/mcp': 'POST /v1/mcp',
   'POST /v1/mcp': { action: 'mcp.request', title: 'Called the MCP server' },

@@ -798,7 +798,6 @@ export function localApiEnvironment(options: {
       : {}),
     EMAIL_FROM: "Kortix Local <noreply@kortix.local>",
     AUTH_EMAIL_HOOK_SECRET: LOCAL_AUTH_EMAIL_HOOK_SECRET,
-    KORTIX_MARKETPLACE_EXTERNAL_ENABLED: "0",
     // Private channels are per deployment; SPACE-24..29 run them, a skip fails the local run.
     KORTIX_PRIVATE_CHANNELS_ENABLED: "true",
     KORTIX_MODEL_CATALOG_LIVE_ENABLED: "0",

@@ -2259,7 +2259,6 @@ Every command prints its subcommands and flags with `kortix <command> --help`, o
 | `channels <subcommand>` | Slack and Microsoft Teams connections, and the agent each channel runs. | [Channels](/docs/guide#channels) |
 | `sandboxes <subcommand>` | Sandbox templates, their builds and their health. | [Computers](/docs/guide#computers) |
 | `apps <subcommand>` | Deploy and manage Apps: sites and servers with stable Kortix URLs. | [Apps reference](/docs/developers#apps-reference) |
-| `marketplace <subcommand>` | Search, show, install and uninstall marketplace skills. | [Skills](/docs/guide#skills) |
 
 **Files, changes and triggers**
 
@@ -2675,7 +2674,7 @@ permanently, so a script written against them keeps working.
 
 | Canonical | Legacy (permanent) | Relation |
 |---|---|---|
-| `GET /v1/workspaces` | `GET /v1/projects` | Different routes. The canonical list holds every workspace you can open, across every account, in one request, with `workspace_id`, `role` and `state`. The legacy list holds one account's projects (`?account_id=`). A workspace key lists its one workspace. |
+| `GET /v1/workspaces` | `GET /v1/projects` | Different routes. The canonical list holds every workspace you can open, across every account, in one request, with `workspace_id`, `role` and `state`. The legacy list holds, for a person (a session or an unscoped personal access token), the projects of every account they belong to, or one account's with `?account_id=`. A credential bound to one account lists that account's; a workspace key lists its one workspace. |
 | `POST /v1/workspaces` | `POST /v1/projects/provision` with `new_workspace: true` | Different routes. The canonical create always makes a new workspace (`201`, the `Workspace`). `Accept: text/event-stream` streams the phases and ends with `{type: "done", project, workspace}`. `POST /v1/projects` imports a GitHub repository into an account. |
 | `GET /v1/workspaces/:workspaceId` | `GET /v1/projects/:projectId` | Different routes. The canonical record adds a top-level `role`, `state`, `split_pending`, `deletion_scheduled_for` and the `workspace` settings block. |
 | `PATCH /v1/workspaces/:workspaceId` | `PATCH /v1/projects/:projectId` | Different routes. The canonical update takes `name`, `icon`, `icon_glyph`, `default_branch`, `manifest_path` and `secret_default_strategy`, and answers `400 workspace_setting_read_only` for a key of the settings block, with `field` and `writer` (the route that writes it). |
@@ -6307,8 +6306,7 @@ Renaming the workspace renames both rows: `PATCH /v1/workspaces/:id` with a new 
 | `idempotency_key` | Send the same key on every attempt at one create. A retry then returns the workspace of the first attempt. The key is scoped to the account. It identifies the attempt, not the payload: a reused key with a different `name` returns the first workspace. |
 | `account_id` | The account that owns the workspace. Omitted, and the caller has no workspace or its default account already holds its project: a NEW workspace is created (`201`, its own `account_id`). Named, and that account already holds its project: `409` `workspace_has_project` with `workspace_id` in the body (`isWorkspaceHasProjectError`). Prefer `createWorkspace`. |
 | `starter_template` | `general-knowledge-worker` or `minimal`. |
-| `source_item_id` | Clone a `registry:project` marketplace item instead of the starter. It wins over `starter_template`. |
-| `marketplace_items` | Marketplace item ids to install. |
+| `source_item_id` · `marketplace_items` | **Deprecated.** The marketplace was removed (2026-11-20). `source_item_id` answers `400`; `marketplace_items` is ignored. |
 | `default_branch` | The branch of the new repository. Omit it for the server default. |
 | `icon` · `icon_glyph` | An emoji string, or a `WorkspaceGlyph` object. `icon_glyph` wins when both are set. An invalid value is dropped and never fails the create. |
 
@@ -8504,7 +8502,7 @@ Stable entry points follow semver. A deep path into `dist/` has no semver.
 | `billing` | Plan, credit balance, transactions, usage, per-session usage, subscription. | `/billing/…` |
 | `sandboxShares` | Public share links for one sandbox port. | `/p/share` |
 | `connectStatus()` | Whether the managed OAuth connect provider is configured on this instance. | `/connectors/connect-status` |
-| `marketplace` | The public marketplace catalog and its sources. | `/marketplace/…` |
+| `marketplace` | **Deprecated.** The marketplace was removed (2026-11-20). Every call rejects with `410 ENDPOINT_RETIRED`. Removed in the next major release of the SDK. | `/marketplace/…` |
 | `capture` | Kortix Capture for one account, the device sign-in approval, and the caller's own reads. | `/accounts/{accountId}/capture/…`, `/capture/…` |
 | `notifications` | The caller's notification inbox and preferences, Web Push, and the push tokens of native devices. | `/notifications/…` |
 | `mobileClientPolicy()` | `{ minimum_version, store_url_ios, store_url_android }`. A `null` field means the operator set no value. Needs no token. | `/clients/mobile` |
@@ -8528,7 +8526,7 @@ The same calls exist as functions: `listWorkspaces`, `getWorkspace`, `updateWork
 | --- | --- |
 | `list()` · `listForAccount(accountId)` | Workspaces the caller can open · workspaces in one account. |
 | `get(projectId)` · `detail(projectId)` | The summary · the full detail with config. |
-| `provision(input)` | A new workspace on a new Kortix-managed repository. Input: `{ name, account_id?, seed_starter?, starter_template?: 'general-knowledge-worker' \| 'minimal', marketplace_items?, source_item_id?, default_branch?, icon?, icon_glyph?, idempotency_key? }`. |
+| `provision(input)` | A new workspace on a new Kortix-managed repository. Input: `{ name, account_id?, seed_starter?, starter_template?: 'general-knowledge-worker' \| 'minimal', default_branch?, icon?, icon_glyph?, idempotency_key? }`. |
 | `create(input)` · `createRepo(input)` | A workspace on an existing `repo_url` · a workspace on a new GitHub repository. |
 | `update(projectId, input)` · `archive(projectId)` | Change settings · archive. |
 | `llmCatalog(projectId)` · `modelPicker(projectId)` | The full model catalog · the compact list for a model picker. |
@@ -8554,13 +8552,10 @@ The same calls exist as functions: `listWorkspaces`, `getWorkspace`, `updateWork
 | `gitBackend.get()` | `{ configured, kind: 'app' \| 'pat' \| null, owner }`. Any signed-in user can read it. |
 | `gitBackend.repositories({ search?, limit? })` | Repositories under that owner. Self-host operators only; other callers get `403`. |
 
-#### `kortix.marketplace` and `kortix.sandboxShares`
+#### `kortix.sandboxShares`
 
 | Method | What it does |
 | --- | --- |
-| `marketplace.items(options?)` · `.item(id)` · `.itemFile(id, path)` | Browse the catalog · one item · one file of an item. |
-| `marketplace.marketplaces()` · `.featured()` | All marketplaces · featured marketplaces. |
-| `marketplace.sources.list()` · `.add(input)` · `.remove(id)` | Marketplace sources. |
 | `sandboxShares.list(sandboxId)` · `.create({ sandboxId, port, ttl?, label? })` · `.revoke(sandboxId, token)` | Public share links for one sandbox port. |
 
 ### Accounts, IAM, billing and notifications
@@ -9029,7 +9024,7 @@ Every hook is in `@kortix/sdk/react`. Most are React Query hooks: unless a row s
 | Hook | What it returns |
 | --- | --- |
 | `useAccounts({ userId, enabled })` | The caller's accounts. Pass the signed-in person's `userId` in a host where the person can change without a reload. |
-| `useWorkspaces({ userId, enabled })` | Every workspace the caller can open, across accounts: `{ workspaces, accounts, isLoading, isError, refetch }`. (`useProjects(accountId?)`, one account's list, is deprecated.) |
+| `useWorkspaces({ userId, enabled })` | Every workspace the caller can open, across accounts: `{ workspaces, accounts, isLoading, isError, refetch }`. (`useProjects(accountId?)`, the legacy project list, is deprecated: one account's with `accountId`, else every account of a person.) |
 | `useWorkspaceSessions(projectId, options)` | One workspace's sessions, paged, newest activity first. Read `sessions` (flat) and `fetchNextPage`. Filters as in [Sessions](#sessions). Adds `keepPreviousData` (keep the old rows while a new filter loads), `refetchInterval` and `pollFirstPageOnly` (experimental). |
 | `useWorkspaceModels(projectId)` | Selectable models as `FlatModel[]`. Empty while the list loads. |
 | `useWorkspaceModelPickerCatalog(projectId)` | The model-picker record per model (`reasoning_options`, `temperature`, `limit`). |
@@ -9366,7 +9361,7 @@ Every name that says Project has a workspace twin: `Project` → `Workspace`, `p
 
 | Legacy name | Use instead |
 | --- | --- |
-| `listProjects()` · `useProjects(accountId?)` · `UseProjectsOptions` · `projectsQueryOptions` · `ProjectsKey` · `ProjectsListKey` | `listWorkspaces()` · `useWorkspaces()` · `UseWorkspacesOptions`: every workspace of the caller, across accounts. The legacy calls list one account. |
+| `listProjects()` · `useProjects(accountId?)` · `UseProjectsOptions` · `projectsQueryOptions` · `ProjectsKey` · `ProjectsListKey` | `listWorkspaces()` · `useWorkspaces()` · `UseWorkspacesOptions`: every workspace of the caller, across accounts. The legacy calls list, for a person, the projects of every account they belong to, or one account's with `accountId`; a credential bound to one account lists that account's. |
 | `getProject(id)` · `updateProject(id, input)` | `getWorkspace(id)` · `updateWorkspace(id, input)` |
 | `createProject(input)` | `linkRepository(input)` (`POST /v1/workspaces/link-repository`) |
 | `inviteProjectMember(id, email, role)` | `inviteWorkspaceMember(id, input)` |

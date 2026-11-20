@@ -26,11 +26,6 @@ describe('template root fallback', () => {
     );
   });
 
-  test('keeps an absent optional project root empty', async () => {
-    const { starter } = await fixture();
-    expect(starter.getProjectTemplateFiles()).toEqual([]);
-  });
-
   test('propagates a nested missing entry instead of using the snapshot', async () => {
     const { dir, starter } = await fixture();
     const root = join(dir, 'templates/managed');

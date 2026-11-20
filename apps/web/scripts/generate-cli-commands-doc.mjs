@@ -63,7 +63,6 @@ const COMMANDS = {
   channels: ['Slack and Microsoft Teams connections, and the agent each channel runs.', '[Channels](/docs/guide#channels)'],
   sandboxes: ['Sandbox templates, their builds and their health.', '[Computers](/docs/guide#computers)'],
   apps: ['Deploy and manage Apps: sites and servers with stable Kortix URLs.', '[Apps reference](/docs/developers#apps-reference)'],
-  marketplace: ['Search, show, install and uninstall marketplace skills.', '[Skills](/docs/guide#skills)'],
   files: ['Read the committed repository: files, history, branches, commits, diffs and a zip download.', '[Git](/docs/developers#git)'],
   drive: ["The project's Drive: list, read, upload, move and delete files, and share folders.", '[Drive](/docs/guide#drive)'],
   artifacts: ['Publish, save, share and list docs and pages from Drive, and read their versions.', '[Artifact commands](#artifact-commands)'],

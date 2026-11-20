@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import * as realAccess from '../../projects/lib/access';
 import * as realAuthorize from '../../iam/authorize';
+import * as realDirectoryVisibility from '../../iam/directory-visibility';
 
 const ACCOUNT_ID = '00000000-0000-4000-a000-000000000001';
 const PROJECT_ID = '00000000-0000-4000-a000-000000000002';
@@ -23,6 +24,10 @@ let projectCapabilityInput: {
 } | null = null;
 let projectCapabilityDenied = false;
 let summaryGate: Promise<void> | null = null;
+/** `visibleDirectory`: an admin sees every owner; a plain member only themselves. */
+let directoryView: 'full' | 'own-only' = 'full';
+/** The stored owner of SESSION_ID; undefined = no such session in the account. */
+let sessionOwner: string | null | undefined = USER_ID;
 
 interface TestContext {
   set(key: string, value: unknown): void;
@@ -114,6 +119,15 @@ mock.module('../../shared/cost-rollups', () => ({
   }),
 }));
 
+// visibleDirectory's real `authorize` reads the action catalog in the database.
+mock.module('../../iam/directory-visibility', () => ({
+  ...realDirectoryVisibility,
+  visibleDirectory: async () =>
+    directoryView === 'full'
+      ? { userIds: null, groupIds: null, projectIds: null }
+      : { userIds: new Set([USER_ID]), groupIds: new Set(), projectIds: new Set() },
+}));
+
 // session-costs.ts is a real module usage.ts also imports (for the sibling
 // session-costs routes). It is never exercised in this file, but it pulls in
 // projects/lib/access's resolveSessionOwnerIdentities, which the mock above
@@ -126,6 +140,8 @@ mock.module('../../shared/session-costs', () => ({
   getSessionCostRecord: async () => {
     throw new Error('getSessionCostRecord should not be called from cost-summary tests');
   },
+  findSessionCostOwner: async (input: { sessionId: string }) =>
+    input.sessionId === SESSION_ID && sessionOwner !== undefined ? { ownerId: sessionOwner } : null,
 }));
 
 const { usageApp } = await import('./usage');
@@ -152,6 +168,8 @@ beforeEach(() => {
   projectCapabilityInput = null;
   projectCapabilityDenied = false;
   summaryGate = null;
+  directoryView = 'full';
+  sessionOwner = USER_ID;
 });
 
 describe('GET /v1/usage/cost-summary read guard', () => {
@@ -224,6 +242,32 @@ describe('GET /v1/usage/cost-summary', () => {
     expect(summaryInput?.accountId).toBe(ACCOUNT_ID);
     expect(summaryInput?.sessionId).toBe(SESSION_ID);
     expect(summaryInput?.projectId).toBeUndefined();
+  });
+
+  test('a caller who reads only their own session costs gets their own session, and 404 for anyone else\'s or an unknown one', async () => {
+    directoryView = 'own-only';
+    const url = `/v1/usage/cost-summary?account_id=${ACCOUNT_ID}&session_id=${SESSION_ID}`;
+
+    expect((await createTestApp().request(url)).status).toBe(200);
+    expect(summaryInput?.sessionId).toBe(SESSION_ID);
+
+    summaryInput = null;
+    sessionOwner = '00000000-0000-4000-a000-000000000099';
+    expect((await createTestApp().request(url)).status).toBe(404);
+    expect(summaryInput).toBeNull();
+
+    sessionOwner = undefined;
+    expect((await createTestApp().request(url)).status).toBe(404);
+    expect(summaryInput).toBeNull();
+  });
+
+  test('a caller who sees every owner reads any session of the account', async () => {
+    sessionOwner = '00000000-0000-4000-a000-000000000099';
+    const response = await createTestApp().request(
+      `/v1/usage/cost-summary?account_id=${ACCOUNT_ID}&session_id=${SESSION_ID}`,
+    );
+    expect(response.status).toBe(200);
+    expect(summaryInput?.sessionId).toBe(SESSION_ID);
   });
 
   test('rejects an inverted window with 400', async () => {

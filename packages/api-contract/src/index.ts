@@ -58,7 +58,6 @@ export type OkResponse = z.infer<typeof OkResponseSchema>;
  * Code-level names are the FeatureFlag* family.
  */
 export const FeatureFlagMapSchema = z.object({
-  marketplace: z.boolean(),
   reminders: z.boolean(),
   secrets_egress: z.boolean(),
   us_region: z.boolean(),

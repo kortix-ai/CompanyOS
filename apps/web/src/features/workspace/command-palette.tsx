@@ -895,10 +895,9 @@ export function CommandPalette() {
    * the palette strictly weaker than the mouse: the sidebar switcher
    * (`workspace-menu-section.tsx`) already fans out over every account, so a
    * workspace in a second account was reachable by trackpad and invisible to
-   * ⌘K. There is no single unscoped call that returns everything — `GET
-   * /workspaces` with no `account_id` resolves server-side to ONE default
-   * account (apps/api `resolveProjectAccount`) — so it is one request per
-   * account, exactly as the sidebar does it.
+   * ⌘K. So it is one request per account, exactly as the sidebar does it
+   * (an unscoped `GET /projects` also lists every account, but under a key
+   * the sidebar does not share).
    *
    * Same `qk.projects.list(accountId)` keys and same `contract('inventory')`
    * as the sidebar, so the two controls share cache entries and this costs no
@@ -1286,8 +1285,8 @@ export function CommandPalette() {
   }, [allPaletteItems, hasQuery, debouncedQuery]);
 
   // No `flags` argument any more: Marketplace, Review and Voice were the only
-  // flag-gated rail rows and all three moved to `/workspaces/<id>/config`, whose
-  // own sub-nav composes them. Nothing left in the rail varies by flag.
+  // flag-gated rail rows and all three left the rail. Nothing left in the rail
+  // varies by flag.
   const chromeOffered = useChromeOffered(open);
   const allSettingsGroups = useMemo(
     () => settingsPaletteGroups({ hasProject: !!projectId, chromeOffered }, (key) => tSettingsRail(key as never)),

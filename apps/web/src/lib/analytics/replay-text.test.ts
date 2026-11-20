@@ -7,6 +7,7 @@ import { describe, expect, test } from 'bun:test';
 
 import en from '../../../translations/en.json';
 import { maskReplayText } from './posthog-config';
+import { SESSION_LABELS } from './replay-labels';
 import { messageTexts, normalizeUiText, UiTextIndex } from './replay-text';
 
 const CATALOG = {
@@ -135,5 +136,71 @@ describe('UiTextIndex', () => {
     }
     const canary = 'Zephyrine Quillfeather launch plan';
     expect(show(ui, canary)).toBe(maskReplayText(canary));
+  });
+});
+
+describe('session screen labels', () => {
+  function session(): UiTextIndex {
+    const ui = new UiTextIndex([]);
+    ui.addCatalog(SESSION_LABELS, 'en');
+    ui.addRelativeTimes('en');
+    return ui;
+  }
+
+  test('step summaries, thought rows and tool verbs stay readable', () => {
+    const ui = session();
+    for (const text of [
+      'Completed 16 steps',
+      'Completed 1 step',
+      'Working · 3 steps',
+      'Completed 4 of 6 steps · 2 failed',
+      'Thinking',
+      'Thought for 5s',
+      'Thought for 2m 10s',
+      'Worked for 1m 33s',
+      'Read 2 files, ran 7 commands',
+      'Read 2 files, ran 7 commands · 1 failed',
+      'Asked you a question, searched the web · 1 query, ran 2 commands',
+      'Ran command',
+      'Ran 9 commands',
+      'Read',
+      '2 files',
+      '2 searches',
+      '8 results',
+      'Or type your own answer…',
+    ]) {
+      expect(show(ui, text)).toBe(text);
+    }
+  });
+
+  test('relative times stay readable in the page locale', () => {
+    const ui = session();
+    for (const text of ['6 minutes ago', '1 minute ago', 'yesterday', 'in 2 hours', '3 days ago']) {
+      expect(show(ui, text)).toBe(text);
+    }
+    const de = new UiTextIndex([]);
+    de.addRelativeTimes('de');
+    expect(show(de, 'vor 6 Minuten')).toBe('vor 6 Minuten');
+  });
+
+  test('what a step names stays hidden: a path, a command, a query, a model-written title', () => {
+    const ui = session();
+    for (const text of [
+      'Read /workspace/acme/contract.pdf',
+      'curl -s https://acme.example',
+      'Acme pricing 2026',
+      'Install the Acme dependencies',
+      'Thought for a long time about Acme',
+      'Ran 9 Acme commands',
+      '6 Acme minutes ago',
+      'Read 2 files, Acme',
+      'Acme, ran 7 commands',
+    ]) {
+      expect(show(ui, text)).toBe(maskReplayText(text));
+    }
+    // A file row renders verb and path as separate text nodes.
+    expect(show(ui, 'Read')).toBe('Read');
+    expect(show(ui, ' · 1 failed')).toBe(' · 1 failed');
+    expect(show(ui, 'contract.pdf')).toBe('************');
   });
 });

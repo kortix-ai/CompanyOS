@@ -66,7 +66,15 @@ sensitive or restricted scope starts a new verification.
   of the five connectors: the sign-in, the consent screen with the app name,
   the address bar with the client ID, then the agent using each scope and the
   result in Google's own UI. When the project has two clients, the video shows
-  data access through each.
+  data access through each. Record one browser window, not a screen region: a
+  region records whatever window is on top (2026-11-20, a teammate kept
+  working and the take showed Slack, terminals and a customer dashboard).
+  What worked: a separate Chrome (`--user-data-dir` scratch profile,
+  `--remote-debugging-port`, `--disable-backgrounding-occluded-windows`,
+  `--disable-renderer-backgrounding`) driven with `agent-browser --cdp`, and a
+  ScreenCaptureKit window capture of it, which keeps recording while other
+  windows cover it. Sign that profile in to Google with the kortix.ai test
+  account only, so the account chooser shows no personal address.
 - **Publishing status.** Audience → "In production" before Verification
   Center → "Prepare for verification".
 - **Brand before data access.** Branding → "Verify branding" runs an automated
@@ -100,8 +108,11 @@ sensitive or restricted scope starts a new verification.
   anonymized. An act-as grant ("Open as admin", see SKILL.md) into an account
   with a Google connector needs a customer request or a security or legal
   reason, and the audit log records it.
-- Disconnect revokes the token at Google (`revokeConnectionOAuth2`,
-  `apps/api/src/connectors/oauth2-store.ts`). Keep it that way.
+- Disconnect deletes the stored token. It revokes the grant at Google when the
+  account's last live Kortix Google connection goes (`revokeConnectionOAuth2`,
+  `apps/api/src/connectors/oauth2-store.ts`): Google keeps one grant per
+  account for our client, so revoking it while another connection of the same
+  account is live breaks that connection too. Keep the last-connection revoke.
 - Keep the developer contacts on Branding current. Google sends recertification
   and policy notices there.
 
@@ -110,6 +121,20 @@ sensitive or restricted scope starts a new verification.
 Newest first. Add a line for every submission, Google email, CASA step and
 recertification.
 
+- 2026-11-20: submitted. Verification Center: "Your app's data access is
+  under review." Demo video: unlisted on the Kortix YouTube channel, "Kortix:
+  Google OAuth verification demo (project kortix-connectors)", 16:52, recorded
+  on staging with the one client. Questionnaire: not personal, not internal,
+  not testing-only, not a WordPress plugin; acknowledged the requirements and
+  CASA. Next: answer Google's emails; start CASA Tier 2 when Google asks for
+  it.
+- 2026-11-20: found while recording: disconnecting Drive revoked the
+  account's whole grant and Calendar failed with `credential_rejected` (401).
+  Fixed in #12957 (disconnect revokes only the
+  account's last connection).
+- 2026-11-19: v0.16.0 live in prod. The privacy section is live on
+  kortix.com. Staging's Secrets Manager blob has the Google client
+  (2026-11-18). Prod's blob has none until Google approves.
 - 2026-11-18: project "In production" (0 of 100 unverified users). Branding
   verified and published. Scope justifications and features saved on Data
   Access. Left: the demo video on staging after the next release, then submit

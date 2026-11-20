@@ -10,7 +10,7 @@ import { buildBlumeDocs, getBlumeDocsOutputPaths } from './scripts/blume-docs.mj
 import { BLOG_ORIGIN } from './src/config/blog-origin';
 import { resolveTurbopackFileSystemCacheForBuild } from './src/config/turbopack-build-cache';
 import { locales } from './src/i18n/catalog.mjs';
-import { workspaceRedirects } from './src/lib/workspace-redirects';
+import { DESKTOP_SHELL_HEADER, workspaceRedirects } from './src/lib/workspace-redirects';
 import { SHIPPED_ICON_WEIGHTS } from '@kortix/ui/lib/icon-config';
 import {
   embedContentSecurityPolicy,
@@ -973,6 +973,21 @@ const nextConfig = (): NextConfig => ({
         { source: `/:locale(${locales.join('|')})${page}/:path*`, destination: '/:locale', permanent: true },
         { source: `/markdown${page}.md`, destination: '/markdown/index.md', permanent: true },
         { source: `/markdown${page}/:path*`, destination: '/markdown/index.md', permanent: true },
+      ]),
+      // The marketplace was removed on 2026-11-20. Its pages are indexed public
+      // URLs, so each one (any item path, any locale) lands on the use-case
+      // library with a 308. The desktop shell is excluded: installed shells
+      // list /marketplace as an app path, and a redirect to /use-cases would
+      // open the browser and leave the window empty. The middleware sends the
+      // shell to its landing page instead.
+      ...['/marketplace', '/marketplace/:path*'].flatMap((source) => [
+        { source, destination: '/use-cases', permanent: true, missing: [DESKTOP_SHELL_HEADER] },
+        {
+          source: `/:locale(${locales.join('|')})${source}`,
+          destination: '/:locale/use-cases',
+          permanent: true,
+          missing: [DESKTOP_SHELL_HEADER],
+        },
       ]),
       // /cli was removed on 2026-10-29; the CLI is documented in the docs
       // tree. Exact path only: /cli/authorize is the CLI sign-in flow.

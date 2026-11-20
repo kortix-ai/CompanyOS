@@ -10,8 +10,8 @@
  * number or amount can be a customer's figure.
  *
  * What it gives away: customer text that equals one of our strings, such as a
- * workspace named "Settings", shows. That reveals nothing the catalog does not
- * already say.
+ * workspace named "Settings", or is only our strings joined by commas, shows.
+ * That reveals nothing the catalog does not already say.
  */
 
 import { PROVIDER_LABELS } from '@kortix/llm-catalog/lite';
@@ -33,6 +33,10 @@ const MAX_VARIANTS = 32;
  * agent's output would split into parts.
  */
 const SEGMENT_BREAK = /(\s+[·•—–]\s+)/;
+/** Joins the clauses of one sentence of ours; numbers keep their commas (`NUMBER_RUN`). */
+const CLAUSE_BREAK = ', ';
+
+const RELATIVE_UNITS = ['second', 'minute', 'hour', 'day', 'week', 'month', 'year'] as const;
 
 /** Element kinds of a parsed ICU message (`TYPE` in @formatjs/icu-messageformat-parser). */
 const ICU = {
@@ -126,6 +130,32 @@ export class UiTextIndex {
     }
   }
 
+  /**
+   * Every relative time the browser formats for this locale ("6 minutes ago",
+   * "in 2 hr.", "yesterday"): the session list and message stamps use
+   * `Intl.RelativeTimeFormat`, not the catalog.
+   */
+  addRelativeTimes(locale: string): void {
+    // Serbian renders in Latin script (`relative-time.ts`, `image-gen-tool.tsx`).
+    const tags = locale === 'sr' ? [locale, 'sr-Latn'] : [locale];
+    for (const tag of tags) {
+      for (const numeric of ['always', 'auto'] as const) {
+        for (const style of ['long', 'short', 'narrow'] as const) {
+          let format: Intl.RelativeTimeFormat;
+          try {
+            format = new Intl.RelativeTimeFormat(tag, { numeric, style });
+          } catch {
+            continue;
+          }
+          for (const unit of RELATIVE_UNITS) {
+            // 1, 2 and 5 reach every plural form our locales have.
+            for (const value of [-5, -2, -1, 0, 1, 2, 5]) this.addText(format.format(value, unit));
+          }
+        }
+      }
+    }
+  }
+
   private addText(text: string): void {
     const normalized = normalizeUiText(text);
     if (LETTER.test(normalized)) this.texts.add(normalized);
@@ -158,6 +188,19 @@ export class UiTextIndex {
 
   private hasWhole(text: string): boolean {
     const normalized = normalizeUiText(text);
-    return LETTER.test(normalized) && this.texts.has(normalized);
+    if (!LETTER.test(normalized)) return false;
+    if (this.texts.has(normalized)) return true;
+    // Our step sentences joined into one line, each after the first in lower
+    // case: "Read 2 files, ran 7 commands" (`burstWorkLabel` in @kortix/sdk).
+    // Every clause must be ours, or the whole text hides.
+    const clauses = normalized.split(CLAUSE_BREAK);
+    return (
+      clauses.length > 1 &&
+      clauses.every(
+        (clause) =>
+          LETTER.test(clause) &&
+          (this.texts.has(clause) || this.texts.has(clause[0]!.toUpperCase() + clause.slice(1))),
+      )
+    );
   }
 }

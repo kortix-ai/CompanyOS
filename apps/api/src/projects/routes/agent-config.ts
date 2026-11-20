@@ -523,8 +523,7 @@ export function registerAgentConfigRoutes(): void {
       // single-file commits would let the second write fail AFTER the first
       // landed, stranding kortix.yaml and the agent's prompt file out of sync —
       // commitMultipleFilesToBranch (git/branches.ts) commits every file in one
-      // tree/commit, same helper the marketplace install/uninstall paths use
-      // for their own atomic multi-file writes (marketplace-install-session.ts).
+      // tree/commit.
       const writes = manifestWrites(manifest, manifestPath);
       // The edited prompt file wins over its healed copy (a legacy manifest's first write).
       const files = [...writes.files.filter((file) => file.path !== edit.extraWrite?.path), ...(edit.extraWrite ? [edit.extraWrite] : [])];

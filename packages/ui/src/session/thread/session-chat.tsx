@@ -199,11 +199,14 @@ import { useAutoScroll } from '../../internal/hooks/use-auto-scroll';
 import {
   type AgentRefLike,
   type FileRefLike,
+  appendDriveRefs,
   appendSessionRefs,
   buildAgentRefsBlock,
   buildFileRefsBlock,
+  driveRefsOf,
 } from '../../internal/lib/project-preamble';
 import { playSound } from '../../internal/lib/sounds';
+import { driveUploadsOf } from '../composer/drive-mentions';
 import { track } from '../../lib/telemetry';
 import { cn } from '../../lib/utils';
 import { useChatSendStore } from '../../internal/stores/chat-send-store';
@@ -2856,6 +2859,7 @@ export function SessionChat({
         if (m.kind === 'file') fileMentionRefs.push({ path: m.label, name: m.label });
         else if (m.kind === 'agent') agentMentionRefs.push({ name: m.label });
       }
+      const driveMentionRefs = driveRefsOf(mentions, driveUploadsOf(files));
 
       // Play send sound
       playSound('send');
@@ -2919,6 +2923,7 @@ export function SessionChat({
         const block = buildFileRefsBlock(fileMentionRefs);
         if (block) optimisticText = `${optimisticText}\n\n${block}`;
       }
+      optimisticText = appendDriveRefs(optimisticText, driveMentionRefs);
       if (agentMentionRefs.length > 0) {
         const block = buildAgentRefsBlock(agentMentionRefs);
         if (block) optimisticText = `${optimisticText}\n\n${block}`;
@@ -3119,6 +3124,7 @@ export function SessionChat({
           const block = buildFileRefsBlock(fileMentionRefs);
           if (block) textPrompt.text = `${textPrompt.text}\n\n${block}`;
         }
+        textPrompt.text = appendDriveRefs(textPrompt.text, driveMentionRefs);
         if (agentMentionRefs.length > 0) {
           const block = buildAgentRefsBlock(agentMentionRefs);
           if (block) textPrompt.text = `${textPrompt.text}\n\n${block}`;

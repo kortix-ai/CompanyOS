@@ -6211,6 +6211,9 @@ export const appDeployments = kortixSchema.table(
     readyAt: timestamp('ready_at', { withTimezone: true }),
     failedAt: timestamp('failed_at', { withTimezone: true }),
     createdBy: uuid('created_by').notNull(),
+    sourceCommit: text('source_commit'),
+    sourceRef: text('source_ref'),
+    sourceForce: boolean('source_force').default(false).notNull(),
     sourceSessionId: text('source_session_id').references(() => projectSessions.sessionId, {
       onDelete: 'set null',
     }),

@@ -90,7 +90,11 @@ person.
 8. **A person's events only.** Route events go through `capturePersonEvent`
    (`projects/routes/product-events.ts`): an agent's session token, an API
    key, a service account or an OAuth app sends nothing. Server-side session
-   and turn events count only sessions with `initiator_type = member`.
+   and turn events count only sessions with `initiator_type = member`. One
+   exception, decided 2026-11-20: the `setup_*` events accept a session's own
+   token, because a person often asks the Kortix agent to run the setup. They
+   count as the person who started the session, with `agent = kortix`, and
+   only when `initiator_type = member`.
 
 ## Events
 
@@ -135,8 +139,11 @@ The four `setup_*` API events come from the CLI through `POST /v1/cli/setup-even
 (`apps/api/src/cli/setup-events.ts`, closed schema, 20 a minute per person) and
 `apps/cli/src/setup-telemetry.ts`. Each carries `setup_id` (one guided setup:
 `kortix plan` starts it, it ends 24 hours after its last event), `agent` (the
-coding agent, from `AI_AGENT`, `CLAUDECODE` and each tool's marker) and
-`cli_version`. Outside a run the CLI sends nothing; `DO_NOT_TRACK=1` or
+coding agent, from `AI_AGENT`, `CLAUDECODE` and each tool's marker; the API
+sets `kortix` for a session's own token) and `cli_version`. Inside a Kortix
+session the CLI sends with the session's token, and the route counts the
+event for the person who started the session (rule 8). The token of a
+trigger, channel, API or system session gets `202 {accepted: false}`. Outside a run the CLI sends nothing; `DO_NOT_TRACK=1` or
 `KORTIX_TELEMETRY=0` turns it off.
 
 Request-driven events carry `source` (web, cli, mobile, desktop). API events

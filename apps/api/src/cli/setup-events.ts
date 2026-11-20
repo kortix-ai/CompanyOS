@@ -3,15 +3,20 @@
 // sends it to PostHog as the person behind the credential
 // (shared/product-analytics.ts). Nothing is stored here.
 //
-// - A person only: a browser sign-in or a personal CLI token outside a Kortix
-//   session. An agent's session token, an API key, a service account or an
-//   OAuth app gets `202 {accepted: false}`: automation is not a setup.
+// - A person only. A browser sign-in or a personal CLI token reports as its
+//   person. A session's own token (the agent runs `kortix plan` in its
+//   sandbox) reports as the person who started the session, with agent
+//   `kortix`; a session that no person started (a trigger, a channel, the
+//   API, the system) gets `202 {accepted: false}`, as do an API key, a
+//   service account and an OAuth app: automation is not a setup.
 // - Telemetry never fails the CLI: a refused event is still `202`, only a
 //   malformed body is `400`. The CLI sends with a short timeout and ignores
 //   the answer.
 // - Rate limited per user (createSetupEventRateLimitMiddleware): a setup run
 //   sends about ten events, and every one counts against the PostHog plan.
 import { createRoute, z } from '@hono/zod-openapi';
+import { projectSessions } from '@kortix/db';
+import { and, eq } from 'drizzle-orm';
 import type { Context, MiddlewareHandler } from 'hono';
 import type { AppEnv } from '../types';
 import { auth, errors, json, makeOpenApiApp } from '../openapi';
@@ -19,6 +24,7 @@ import { supabaseAuth } from '../middleware/auth';
 import { analyticsSource } from '../middleware/analytics-source';
 import { callerKortixSessionId } from '../middleware/caller-session';
 import { createSetupEventRateLimitMiddleware } from '../middleware/rate-limit';
+import { db } from '../shared/db';
 import {
   captureProductEvent,
   type ProductEvent,
@@ -115,12 +121,44 @@ const SetupEventReceiptSchema = z
   .object({ accepted: z.boolean().openapi({ description: 'False when the caller is not a person: nothing was sent.' }) })
   .openapi('SetupEventReceipt');
 
+/**
+ * The person who started a session of this workspace, or null when no person
+ * did (`initiator_type` trigger, channel, api or system).
+ */
+async function sessionStarterOf(sessionId: string, workspaceId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ createdBy: projectSessions.createdBy, initiatorType: projectSessions.initiatorType })
+    .from(projectSessions)
+    .where(and(eq(projectSessions.sessionId, sessionId), eq(projectSessions.projectId, workspaceId)))
+    .limit(1);
+  return row?.initiatorType === 'member' ? (row.createdBy ?? null) : null;
+}
+
+/** The person a setup event counts for. `agent` overrides the CLI's guess when the API knows better. */
+interface SetupPerson {
+  userId: string;
+  agent?: (typeof SETUP_AGENTS)[number];
+}
+
 /** The person behind the request, or null for automation. */
-function personOf(c: Context): string | null {
+async function setupPersonOf(c: Context): Promise<SetupPerson | null> {
   const authType = c.get('authType') as string | undefined;
   if (authType !== 'supabase' && authType !== 'pat') return null;
-  if (callerKortixSessionId(c)) return null;
-  return (c.get('userId') as string | undefined) ?? null;
+  const sessionId = callerKortixSessionId(c);
+  if (!sessionId) {
+    const userId = c.get('userId') as string | undefined;
+    return userId ? { userId } : null;
+  }
+  // A session's own token: the workspace fence let it through only because it
+  // is session-bound (middleware/workspace-binding.ts).
+  const workspaceId = c.get('tokenProjectId') as string | undefined;
+  if (!workspaceId) return null;
+  try {
+    const starter = await sessionStarterOf(sessionId, workspaceId);
+    return starter ? { userId: starter, agent: 'kortix' } : null;
+  } catch {
+    return null; // Telemetry never fails the CLI.
+  }
 }
 
 /** One PostHog event per setup run for a milestone that a retry may repeat. */
@@ -161,7 +199,8 @@ export function createCliSetupEventsApp(deps: CliSetupEventsDeps = {}) {
       description:
         'One milestone of a /setup.md run (setup_started, setup_template_added, setup_onboard_run, setup_ready), ' +
         'sent to product analytics as the person behind the credential. Nothing is stored. ' +
-        'Automation (a session token, an API key, a service account, an OAuth app) is answered `accepted: false`.',
+        "A session's own token reports as the person who started the session, with agent `kortix`. " +
+        'Automation (a session no person started, an API key, a service account, an OAuth app) is answered `accepted: false`.',
       ...auth,
       request: {
         body: { required: true, content: { 'application/json': { schema: SetupEventBodySchema } } },
@@ -173,14 +212,16 @@ export function createCliSetupEventsApp(deps: CliSetupEventsDeps = {}) {
     }),
     async (c) => {
       const body = c.req.valid('json') as SetupEventBody;
-      const userId = personOf(c);
-      if (!userId) return c.json({ accepted: false }, 202);
+      const person = await setupPersonOf(c);
+      if (!person) return c.json({ accepted: false }, 202);
+      const properties = setupEventProperties(body);
+      if (person.agent) properties.agent = person.agent;
       capture({
-        userId,
+        userId: person.userId,
         accountId: (c.get('accountId') as string | undefined) ?? undefined,
         event: body.event satisfies ProductEvent,
         dedupeKey: dedupeKeyOf(body),
-        properties: { ...setupEventProperties(body), source: analyticsSource(c) },
+        properties: { ...properties, source: analyticsSource(c) },
       });
       return c.json({ accepted: true }, 202);
     },

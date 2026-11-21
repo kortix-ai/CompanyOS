@@ -1,11 +1,16 @@
-import { WorkspaceSetupPage } from '@kortix/ui/workspace/setup/workspace-setup-page';
+import ProjectIndexPage from '../page';
+import { SetupModalRoute } from './setup-modal-route';
 
-/** `/workspaces/<id>/setup`: the steps only a person can do, on one page. `kortix onboard` opens it. */
-export default async function WorkspaceSetupRoute({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  return <WorkspaceSetupPage projectId={id} />;
+/**
+ * `/workspaces/<id>/setup` on a direct load (`kortix onboard` opens it): the
+ * workspace home with the setup modal over it. A link inside the workspace
+ * never reaches this file: `@modal/(.)setup` intercepts it.
+ */
+export default function WorkspaceSetupRoute() {
+  return (
+    <>
+      <ProjectIndexPage />
+      <SetupModalRoute mode="page" />
+    </>
+  );
 }

@@ -562,6 +562,8 @@
       "backToApp": "Voltar ao aplicativo",
       "close": "Fechar",
       "docs": "Documentação",
+      "search": "Pesquisar preferências",
+      "searchNoResults": "Nenhum resultado",
       "groups": {
         "workspace": "Espaço de trabalho",
         "personal": "Pessoal",
@@ -22474,8 +22476,7 @@
       "install": {
         "title": "Adicione a extensão",
         "description": "Pela Chrome Web Store.",
-        "done": "O Kortix está no Chrome.",
-        "descriptionUnlisted": "Carregue-a no Chrome."
+        "done": "O Kortix está no Chrome."
       },
       "connect": {
         "title": "Entrar",
@@ -22529,7 +22530,6 @@
       "control": "Assumir ou Parar pela barra na página, a qualquer momento.",
       "own": "Somente as suas próprias sessões podem usar o seu navegador."
     },
-    "howToInstall": "Como instalar",
     "copyLink": "Copiar link",
     "linkCopied": "Link copiado",
     "copyFailed": "Não foi possível copiar o link. Tente novamente.",
@@ -27317,27 +27317,32 @@
   },
   "workspaceSetup": {
     "title": "Concluir a configuração",
-    "description": "{done} de {total} concluídos. Uma linha fica concluída assim que é configurada.",
-    "descriptionIdle": "O que os agentes deste workspace precisam de você.",
+    "subtitle": "Seus agentes precisam disso antes de poder trabalhar.",
+    "progress": "{done} de {total} concluídos",
+    "liveNote": "Atualiza conforme você conecta.",
+    "later": "Mais tarde",
     "tryAgain": "Tentar novamente",
     "loadFailed": "Não foi possível carregar as etapas de configuração.",
     "emptyTitle": "Nada a configurar",
     "emptyDescription": "Este workspace não precisa de login, secret ou Slack seu.",
-    "openWorkspace": "Abrir workspace",
     "completeTitle": "Configuração concluída",
     "completeDescription": "Se você iniciou a configuração em um terminal, ela continua lá sozinha.",
     "slackName": "Slack",
-    "kindConnector": "Conector",
-    "kindSecret": "Secret",
-    "kindSlack": "Canal",
+    "sectionOpen": "Precisa de você",
+    "doneSummary": "{count} já configurados",
     "done": "Concluído",
     "connect": "Conectar {name}",
+    "connectShort": "Conectar",
     "reconnect": "Reconectar {name}",
+    "reconnectShort": "Reconectar",
     "setSecret": "Definir {name}",
+    "setShort": "Definir valor",
     "addSlack": "Adicionar o Kortix ao Slack",
     "connectSlack": "Conectar Slack",
     "bannerTitle": "{left, plural, one {Falta # etapa de configuração} other {Faltam # etapas de configuração}}",
-    "bannerDismiss": "Dispensar"
+    "bannerNamed": "{action} para concluir a configuração",
+    "bannerStart": "Iniciar configuração",
+    "bannerContinue": "Continuar configuração"
   },
   "sessionSpaces": {
     "title": "Espaços",

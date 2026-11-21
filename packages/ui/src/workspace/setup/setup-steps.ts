@@ -69,11 +69,3 @@ export function setupSteps({
 export function openStepsFor(steps: SetupStep[], can: { connect: boolean; setSecrets: boolean }): SetupStep[] {
   return steps.filter((step) => !step.done && (step.kind === 'secret' ? can.setSecrets : can.connect));
 }
-
-/**
- * A dismissed banner stays hidden until a step opens that was not open when
- * the viewer dismissed it, for example a connector a later setup added.
- */
-export function setupBannerDismissed(open: SetupStep[], dismissedIds: readonly string[] | null): boolean {
-  return dismissedIds !== null && open.every((step) => dismissedIds.includes(step.id));
-}

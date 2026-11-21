@@ -975,9 +975,10 @@ const envSchema = z.object({
   POSTMAN_API_KEY: optStr,
 
   // ── Kortix in Chrome ─────────────────────────────────────────────────────
-  // Master switch until launch: on in local and dev only. Off, /v1/chrome/* and
-  // the extension's control socket answer 404 and the `chrome` project flag is
-  // unavailable (feature-flags/registry.ts).
+  // On in local, dev, staging and prod; off on a self-hosted server (the store
+  // build signs in to kortix.com only). Off, /v1/chrome/* and the extension's
+  // control socket answer 404 and the `chrome` project flag is unavailable
+  // (feature-flags/registry.ts).
   KORTIX_CHROME_ENABLED: optBoolFalse,
 
   // ── Residential proxy ────────────────────────────────────────────────────

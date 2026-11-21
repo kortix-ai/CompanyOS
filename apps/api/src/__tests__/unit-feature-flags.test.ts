@@ -356,17 +356,16 @@ describe('buildFeatureFlagCatalog', () => {
  * break (d) and take the operator lever with it.
  */
 describe('catalogHidden', () => {
-  test('only internal-only surfaces are hidden: workspace_volume (stateless sandboxes) and chrome (not launched)', () => {
+  test('only internal-only surfaces are hidden: workspace_volume (stateless sandboxes)', () => {
     // `apps` graduated (2026-10-14), `session_log` (2026-10-22), `session_log_restore` (2026-11-05) and
     // `meta_agent` was removed (2026-11-02): none is a flag.
-    expect([...HIDDEN_KEYS].sort()).toEqual(['chrome', 'workspace_volume']);
+    expect([...HIDDEN_KEYS].sort()).toEqual(['workspace_volume']);
   });
 
-  // The web has no Chrome surface (CHROME_LAUNCHED = false, #11436): nothing
-  // may advertise it. Off by default and absent from the catalog while off.
-  test('chrome is off by default and not listed while CHROME_LAUNCHED is false', () => {
-    expect(resolveFeatureFlag({}, 'chrome')).toBe(false);
-    expect(buildFeatureFlagCatalog({}).some((flag) => flag.key === 'chrome')).toBe(false);
+  // Launched 2026-11-21: on by default wherever the API serves /v1/chrome, and listed.
+  test('chrome is on by default where KORTIX_CHROME_ENABLED serves it, and listed', () => {
+    expect(resolveFeatureFlag({}, 'chrome')).toBe(config.KORTIX_CHROME_ENABLED);
+    expect(buildFeatureFlagCatalog({}).find((flag) => flag.key === 'chrome')?.default_enabled).toBe(config.KORTIX_CHROME_ENABLED);
   });
 
   test('workspace_volume is a behavioral flag that defaults off and needs Platinum', () => {

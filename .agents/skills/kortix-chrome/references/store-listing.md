@@ -5,9 +5,10 @@ The text of every field in the Chrome Web Store dashboard for the Kortix extensi
 `src/manifest.json` gains or loses a permission, change its justification here in the same
 commit, and update the dashboard before the next upload.
 
-The dashboard holds this text since 2026-10-13 (Marko); 2026-11-18 added `contextMenus`, the
-side panel parts of `scripting` and the host permission, User activity, and the privacy URL fix.
-The Code column names where each permission is used.
+The dashboard holds this text since 2026-10-13; 2026-11-18 added `contextMenus`, the side panel
+parts of `scripting` and the host permission, User activity, and the privacy URL fix. Version
+1.0.1, submitted 2026-11-18, passed review and went public on 2026-11-21. The Code column names
+where each permission is used.
 
 ## Package
 
@@ -98,22 +99,23 @@ and the Limited Use statement. Change that section and this table together.
 ## Distribution tab
 
 - Visibility: **Public**. Regions: all.
-- Before launch (`CHROME_LAUNCHED` false): turn on **deferred publishing** before you submit, so
-  an approved version waits until the launch PR is live. Then **Publish** in the dashboard.
+- Deferred publishing is off: an approved version goes live at once. Turn it on before you
+  submit a version that needs a Kortix release first (for example a new API route), then select
+  **Publish** after that release is live in prod.
 
 ## Test instructions tab
 
 The reviewer signs in at kortix.com with a reviewer account whose project has the `chrome` flag
 on. The credentials go into this tab only, never into git, Slack or a PR.
 
-The reviewer account is a password user on prod with the Credits tier (Kortix models need it) and
-non-expiring credits. Create it with the Supabase admin API (`email_confirm: true`, no password),
-sign in once with an admin magic link to create the workspace (`POST /v1/projects/provision` with
-`new_workspace: true`), then use the admin API: `POST /v1/admin/api/accounts/:id/tier`
-(`credits`), `POST /v1/admin/api/accounts/:id/credits`, and
-`PUT /v1/admin/api/projects/:id/features` (`chrome`). A person sets the password. After a test
-run, delete the test connection (`DELETE /v1/chrome/connections/:id`) so the reviewer sees only
-their own browser.
+The reviewer account exists on prod since 2026-11-20: a password user with the Credits tier
+(Kortix models need it), non-expiring credits, and a workspace named "Chrome review". A person
+sets its password and pastes it here. To make another one: create the user with the Supabase admin
+API (`email_confirm: true`, no password), sign in once with an admin magic link to create the
+workspace (`POST /v1/projects/provision` with `new_workspace: true`), then use the admin API:
+`POST /v1/admin/api/accounts/:id/tier` (`credits`) and `POST /v1/admin/api/accounts/:id/credits`.
+The `chrome` flag is on by default. After a test run, delete the test connection
+(`DELETE /v1/chrome/connections/:id`) so the reviewer sees only their own browser.
 
 ```text
 Email: <reviewer email>

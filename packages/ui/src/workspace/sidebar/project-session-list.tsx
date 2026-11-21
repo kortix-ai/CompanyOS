@@ -127,6 +127,7 @@ import {
   type ProjectSessionGroup,
 } from '@kortix/sdk';
 import { SpaceFormModal } from '../session-spaces/space-form-modal';
+import { SpaceIconBare } from '../session-spaces/space-icon';
 import {
   qk,
   useProjectSession,
@@ -1752,8 +1753,10 @@ function ProjectSessionRow({
                         disabled={current}
                         onSelect={() => deferAfterClose(() => onMoveToGroup(session.session_id, group.group_id))}
                       >
-                        {current ? <CheckIcon /> : <FolderSimpleIcon />}
-                        <span className="truncate">{group.name}</span>
+                        {/* The space's own icon and name, as the sidebar's Spaces section draws them. */}
+                        <SpaceIconBare space={group} />
+                        <span className="min-w-0 flex-1 truncate first-letter:uppercase">{group.name}</span>
+                        {current ? <CheckIcon className="text-muted-foreground ml-auto" /> : null}
                       </DropdownMenuItem>
                     );
                   })}

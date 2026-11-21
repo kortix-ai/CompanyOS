@@ -1309,6 +1309,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 | `sensitive` | boolean | `false` | `true`: a call that no rule matches needs approval, reads included. |
 | `auth` | map | — | How Kortix sends the credential. The credential lives in Kortix, never in this file. |
 | `auth.type` | `bearer`, `basic`, `custom`, `api_key`, `oauth1`, `hmac`, `aws_sigv4`, `mtls`, `none` | required | `oauth1` works on `openapi`, `postman` and `http` only. |
+| `auth.secret` | string | — | The name of the project secret Kortix sends as the credential. Its value lives in Secrets, never in this file. |
 | `auth.in` | `header`, `query`, `cookie` | `header` | Where the credential goes. |
 | `auth.name` | string | — | The header, query or cookie name. Required for `custom` and `api_key`. |
 | `auth.prefix` | string | — | Text before the credential value, such as `Bearer`. |
@@ -2271,6 +2272,7 @@ Every command prints its subcommands and flags with `kortix <command> --help`, o
 | `review <subcommand>` | The review inbox: change requests, held connector calls and submitted outputs. | [Git](/docs/developers#git) |
 | `triggers <subcommand>` | Every trigger, `kortix.yaml` and runtime: `ls` lists both, `add` writes `kortix.yaml` (with `--on`, `--session` or `--runtime` it creates a runtime trigger), `fire`, `enable`, `disable`, `run`, `pause`, `resume` and `rm` take a slug or a runtime id. | [Triggers](/docs/guide#triggers) |
 | `loops <subcommand>` | A schedule into one session (a loop: a trigger that wakes the session that created it). `kortix loop "…" --in 24h` adds one. Alias: `reminders`. | [Triggers](/docs/guide#triggers) |
+| `chrome <subcommand>` | Inside a session: drive the person's own Chrome through the Kortix extension (`use`, `release`, `ls`, `status`). | [Kortix in Chrome](/docs/connect/chrome) |
 | `artifacts <subcommand>` | Publish, save, share and list docs and pages from Drive, and read their versions. | [Artifact commands](#artifact-commands) |
 | `capture <subcommand>` | Search the Capture timeline of the person you act for. Capture is off until an account admin turns it on. | [Capture](/docs/capture) |
 

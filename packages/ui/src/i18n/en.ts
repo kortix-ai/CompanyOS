@@ -354,6 +354,8 @@ const catalog = {
       "backToApp": "Back to app",
       "close": "Close",
       "docs": "Docs",
+      "search": "Search preferences",
+      "searchNoResults": "No matches",
       "groups": {
         "workspace": "Workspace",
         "personal": "Personal",
@@ -7326,8 +7328,7 @@ const catalog = {
       "install": {
         "title": "Add the extension",
         "description": "From the Chrome Web Store.",
-        "done": "Kortix is in Chrome.",
-        "descriptionUnlisted": "Load it in Chrome."
+        "done": "Kortix is in Chrome."
       },
       "connect": {
         "title": "Sign in",
@@ -7381,7 +7382,6 @@ const catalog = {
       "control": "Take over or Stop from the bar on the page at any time.",
       "own": "Only your own sessions can use your browser."
     },
-    "howToInstall": "How to install",
     "copyLink": "Copy link",
     "linkCopied": "Link copied",
     "copyFailed": "Could not copy the link. Try again.",
@@ -10614,27 +10614,32 @@ const catalog = {
   },
   "workspaceSetup": {
     "title": "Finish setup",
-    "description": "{done} of {total} done. A row turns done as soon as it is set up.",
-    "descriptionIdle": "What the agents of this workspace need from you.",
+    "subtitle": "Your agents need these before they can work.",
+    "progress": "{done} of {total} done",
+    "liveNote": "Updates as you connect.",
+    "later": "Later",
     "tryAgain": "Try again",
     "loadFailed": "Could not load the setup steps.",
     "emptyTitle": "Nothing left to set up",
     "emptyDescription": "This workspace needs no sign-in, secret or Slack from you.",
-    "openWorkspace": "Open workspace",
     "completeTitle": "Setup is complete",
     "completeDescription": "If you started the setup in a terminal, it continues there by itself.",
     "slackName": "Slack",
-    "kindConnector": "Connector",
-    "kindSecret": "Secret",
-    "kindSlack": "Channel",
+    "sectionOpen": "Needs you",
+    "doneSummary": "{count} already set up",
     "done": "Done",
     "connect": "Connect {name}",
+    "connectShort": "Connect",
     "reconnect": "Reconnect {name}",
+    "reconnectShort": "Reconnect",
     "setSecret": "Set {name}",
+    "setShort": "Set value",
     "addSlack": "Add Kortix to Slack",
     "connectSlack": "Connect Slack",
     "bannerTitle": "{left, plural, one {# setup step is left} other {# setup steps are left}}",
-    "bannerDismiss": "Dismiss"
+    "bannerNamed": "{action} to finish setup",
+    "bannerStart": "Start setup",
+    "bannerContinue": "Continue setup"
   },
   "sessionSpaces": {
     "title": "Spaces",

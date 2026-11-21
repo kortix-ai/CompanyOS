@@ -109,7 +109,6 @@
  * Kortix operator on request. Their 403 says "contact Kortix" instead of
  * naming a toggle the caller cannot see (gate.ts).
  */
-import { CHROME_LAUNCHED } from '@kortix/shared/chrome-launch';
 import { config } from '../config';
 import { platinumUsRegion } from '../shared/platinum-region';
 import type { FeatureFlagKey, FeatureFlagStability } from '@kortix/api-contract';
@@ -460,18 +459,16 @@ const FLAGS: readonly FeatureFlagDef[] = [
     stability: 'experimental',
     // Where the API serves /v1/chrome (KORTIX_CHROME_ENABLED: local, dev, staging, prod).
     available: () => config.KORTIX_CHROME_ENABLED,
-    // Not launched (CHROME_LAUNCHED, #11436): the web has no Chrome surface, so
-    // no project gets it by default and the catalog does not offer it. An
-    // operator can still turn it on for one project (the extension's dev pairing).
-    platformDefault: () => CHROME_LAUNCHED,
-    ...(CHROME_LAUNCHED ? {} : { catalogHidden: true as const }),
+    // Launched 2026-11-21: the extension is public in the Chrome Web Store, so
+    // every project gets it where the API serves the routes.
+    platformDefault: () => true,
     enforcement: 'routes',
     enforcementNote:
       'ROUTES: POST /v1/chrome/attach answers 403 `feature_disabled` when the calling session\'s project has it ' +
       'off (chrome/routes.ts); release stays open so a session can always let go. The browsers a person ' +
       'connected are account-level and gated only by KORTIX_CHROME_ENABLED (404 when off). BOX: off, the ' +
       'session has no kortix-chrome skill and its CLI hides and refuses `kortix chrome` (KORTIX_FEATURE_FLAGS). ' +
-      'WEB: no sidebar row, no Chrome card in Apps and extensions, no Settings page.',
+      'WEB: no Chrome card in Apps and extensions and no Chrome promo card. Settings → Kortix in Chrome is account-level and stays.',
   },
   {
     key: 'agent_teams',

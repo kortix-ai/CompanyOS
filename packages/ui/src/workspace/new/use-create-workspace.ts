@@ -608,9 +608,11 @@ export type CreateOrchestrationClient = {
    * on the project by itself (KRTX-1419).
    *
    * Implemented as `router.replace`, never `push`: the form state this
-   * replaces is not somewhere the user may navigate back into.
+   * replaces is not somewhere the user may navigate back into. A host that
+   * stays on its page (the CLI sign-in, KRTX-4940) reads the created
+   * `project` instead, to select its account.
    */
-  enterProject: (projectId: string) => void;
+  enterProject: (projectId: string, project: KortixProject) => void;
   now: () => number;
 };
 
@@ -735,7 +737,7 @@ export async function runCreate(
       // `completeThenNotify` accepts for the wizard's own exits.
       await client.completeOnboarding(project.project_id).catch(() => {});
     }
-    client.enterProject(project.project_id);
+    client.enterProject(project.project_id, project);
     return { ok: true, project };
   } catch (error) {
     return { ok: false, error };
@@ -754,7 +756,9 @@ export async function runCreate(
  * the switcher read — for the owned empty account the GitHub sources act in
  * (`resolveTargetAccountId`). The managed source lets the server choose.
  */
-export function useCreateWorkspace(options?: { enterProject?: (projectId: string) => void }): {
+export function useCreateWorkspace(options?: {
+  enterProject?: (projectId: string, project: KortixProject) => void;
+}): {
   create: (state: NewWorkspaceFormState) => Promise<void>;
   status: CreateStatus;
   error: string | null;

@@ -493,12 +493,16 @@ function ProjectHomeView({
           state either: that page has one job. */}
       {firstChatPending || !onboarded || noAgent || !HomeAnnouncement ? null : <HomeAnnouncement />}
 
-      {/* What changed when a legacy account's workspaces became their own
-          (C9), and the way back to the setup page while a step is open. */}
+      {/* What changed when a legacy account's workspaces became their own (C9). */}
       <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col gap-2 px-4 pt-14 empty:hidden">
         <SplitNoticeBanner workspaceId={projectId} />
-        {/* Keyed: a dismissal belongs to one workspace, and switching reuses this view. */}
-        <SetupBanner key={projectId} projectId={projectId} />
+      </div>
+
+      {/* The way back to the setup page while a step is open: it floats at the
+          bottom of the page, out of the composer's flow. Keyed: switching
+          workspaces reuses this view, and each workspace counts its own steps. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-6 z-20 flex justify-center px-4 empty:hidden">
+        <SetupBanner key={projectId} projectId={projectId} className="pointer-events-auto w-full max-w-xl" />
       </div>
 
       {/* No bubble or "Thinking" row is painted here on send. The page stays

@@ -415,6 +415,8 @@
       "backToApp": "Назад у апликацију",
       "close": "Затвори",
       "docs": "Документација",
+      "search": "Претражи подешавања",
+      "searchNoResults": "Нема резултата",
       "groups": {
         "workspace": "Радни простор",
         "personal": "Лично",
@@ -22474,8 +22476,7 @@
       "install": {
         "title": "Додај проширење",
         "description": "Из Chrome Web Store-а.",
-        "done": "Kortix је у Chrome-у.",
-        "descriptionUnlisted": "Учитај га у Chrome."
+        "done": "Kortix је у Chrome-у."
       },
       "connect": {
         "title": "Пријави се",
@@ -22529,7 +22530,6 @@
       "control": "Преузми контролу или Заустави са траке на страници, у било ком тренутку.",
       "own": "Само твоје сесије могу да користе твој претраживач."
     },
-    "howToInstall": "Како да инсталираш",
     "copyLink": "Копирај везу",
     "linkCopied": "Веза је копирана",
     "copyFailed": "Веза није копирана. Покушај поново.",
@@ -27317,27 +27317,32 @@
   },
   "workspaceSetup": {
     "title": "Završi podešavanje",
-    "description": "Završeno {done} od {total}. Red je završen čim se podesi.",
-    "descriptionIdle": "Šta agentima ovog workspace-a treba od tebe.",
+    "subtitle": "Tvojim agentima ovo treba pre nego što počnu da rade.",
+    "progress": "{done} od {total} gotovo",
+    "liveNote": "Ažurira se dok povezuješ.",
+    "later": "Kasnije",
     "tryAgain": "Pokušaj ponovo",
     "loadFailed": "Koraci podešavanja nisu mogli da se učitaju.",
     "emptyTitle": "Nema više ničega za podešavanje",
     "emptyDescription": "Ovom workspace-u od tebe ne treba prijava, tajna ni Slack.",
-    "openWorkspace": "Otvori workspace",
     "completeTitle": "Podešavanje je završeno",
     "completeDescription": "Ako si podešavanje pokrenuo u terminalu, tamo se nastavlja samo.",
     "slackName": "Slack",
-    "kindConnector": "Konektor",
-    "kindSecret": "Tajna",
-    "kindSlack": "Kanal",
+    "sectionOpen": "Čeka tebe",
+    "doneSummary": "{count} već podešeno",
     "done": "Gotovo",
     "connect": "Poveži {name}",
+    "connectShort": "Poveži",
     "reconnect": "Ponovo poveži {name}",
+    "reconnectShort": "Ponovo poveži",
     "setSecret": "Podesi {name}",
+    "setShort": "Postavi vrednost",
     "addSlack": "Dodaj Kortix u Slack",
     "connectSlack": "Poveži Slack",
     "bannerTitle": "{left, plural, one {Ostao je # korak podešavanja} few {Ostala su # koraka podešavanja} other {Ostalo je # koraka podešavanja}}",
-    "bannerDismiss": "Odbaci"
+    "bannerNamed": "{action} da završiš podešavanje",
+    "bannerStart": "Započni podešavanje",
+    "bannerContinue": "Nastavi podešavanje"
   },
   "sessionSpaces": {
     "title": "Простори",

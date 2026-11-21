@@ -19,7 +19,7 @@ import {
   CommandSeparator,
 } from '../../primitives/command';
 import { SpaceFormModal } from './space-form-modal';
-import { SpaceIcon } from './space-icon';
+import { SpaceIconBare } from './space-icon';
 
 /** Spaces on screen before the popover shows its search field (it stays mounted for the arrow keys). */
 const SEARCH_THRESHOLD = 8;
@@ -60,8 +60,9 @@ export function SpacePicker({
 
   const row = (space: ProjectSessionGroup) => (
     <CommandItem key={space.group_id} value={`space-${space.group_id}`} className="gap-2" onSelect={() => pick(space.group_id)}>
-      <SpaceIcon space={space} size="sm" className="size-5 rounded-[calc(var(--radius)-3px)]" />
-      <span className="min-w-0 flex-1 truncate">{space.name}</span>
+      {/* The space's icon and name as the sidebar's Spaces section draws them: the bare glyph, the name capitalised. */}
+      <SpaceIconBare space={space} />
+      <span className="min-w-0 flex-1 truncate first-letter:uppercase">{space.name}</span>
       {space.group_id === value ? <CheckIcon className="text-foreground size-4 shrink-0" /> : null}
     </CommandItem>
   );
@@ -77,8 +78,8 @@ export function SpacePicker({
             aria-label={picked ? `${t('picker')}: ${picked.name}` : t('picker')}
             className={cn('rounded-lg hit-area-y-3', picked ? 'text-foreground' : 'text-muted-foreground')}
           >
-            {picked ? <SpaceIcon space={picked} size="sm" className="size-5 rounded-[calc(var(--radius)-3px)]" /> : <StackIcon className="size-4 shrink-0" />}
-            <span className="max-w-[140px] truncate">{picked ? picked.name : t('picker')}</span>
+            {picked ? <SpaceIconBare space={picked} /> : <StackIcon className="size-4 shrink-0" />}
+            <span className="max-w-[140px] truncate first-letter:uppercase">{picked ? picked.name : t('picker')}</span>
             <CaretDownIcon className={cn('size-3 transition-transform duration-moderate ease-out', open && 'rotate-180')} />
           </Button>
         </CommandPopoverTrigger>
@@ -90,6 +91,8 @@ export function SpacePicker({
             <CommandGroup forceMount className="[&_[cmdk-group-items]]:flex [&_[cmdk-group-items]]:flex-col [&_[cmdk-group-items]]:gap-px">
               {query ? null : (
                 <CommandItem value="space-none" className="gap-2" onSelect={() => pick(null)}>
+                  {/* The trigger's own "no space" glyph, so every row's name starts on one edge. */}
+                  <StackIcon className="text-muted-foreground size-4 shrink-0" />
                   <span className="text-muted-foreground min-w-0 flex-1 truncate">{t('pickerNone')}</span>
                   {value === null ? <CheckIcon className="text-foreground size-4 shrink-0" /> : null}
                 </CommandItem>

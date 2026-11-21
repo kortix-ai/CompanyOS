@@ -35,7 +35,6 @@ import { useBillingAccountId } from '../../internal/stores/billing-account-conte
 import { useFeatureFlag } from '@kortix/sdk/react';
 import { AppsModal } from '../../internal/apps-and-extensions/apps-modal';
 import { useAppsModalStore } from '../../internal/stores/apps-modal-store';
-import { CHROME_UI_ENABLED } from '../../internal/chrome/use-chrome-offered';
 import {
   MagnifyingGlassIcon,
   NavigationArrowIcon,
@@ -52,8 +51,11 @@ const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(na
 const modSymbol = isMac ? '⌘' : 'Ctrl';
 
 
-/** Workspace pages with a centered bottom composer: home and one session (not the Sessions list). */
-const CENTERED_COMPOSER_ROUTE = /\/workspaces\/[^/]+(?:\/sessions\/[^/]+(?:\/.*)?)?\/?$/;
+/**
+ * Workspace pages with a centered bottom composer: home, one session (not the
+ * Sessions list), and `/setup`, whose modal opens over home with its banner.
+ */
+const CENTERED_COMPOSER_ROUTE = /\/workspaces\/[^/]+(?:\/setup|\/sessions\/[^/]+(?:\/.*)?)?\/?$/;
 /** Workspace pages whose composer runs to the right edge: chat, DMs, channels, Spaces. */
 const FULL_COMPOSER_ROUTE = /\/workspaces\/[^/]+\/(?:c|chat|dm|spaces)(?:\/.*)?$/;
 export function ProjectSidebar({
@@ -100,8 +102,7 @@ export function ProjectSidebar({
   // Chat (`chat`): the spaces list replaces New session, and the session list
   // moves below it, closed by default (fail-closed: off until the project answers).
   const chat = useFeatureFlag(projectId, 'chat').enabled;
-  // The project flag and the web app's master switch (`CHROME_UI_ENABLED`) must both be on.
-  const chrome = useFeatureFlag(projectId, 'chrome').enabled && CHROME_UI_ENABLED;
+  const chrome = useFeatureFlag(projectId, 'chrome').enabled;
 
   // Open the project composer without creating a durable session.
   const newSession = useNewProjectSession(projectId);

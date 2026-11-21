@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { AdminConnector } from '@kortix/sdk';
 
 import type { SecretRow } from '../../customize/sections/view/secrets-view';
-import { openStepsFor, setupBannerDismissed, setupSteps, slackNeeded } from './setup-steps';
+import { openStepsFor, setupSteps, slackNeeded } from './setup-steps';
 
 // The setup page and `kortix onboard --wait` must agree on what is left: these
 // are the page's rules for which steps exist and which are done.
@@ -50,8 +50,7 @@ describe('setupSteps', () => {
   });
 });
 
-// The home banner: it counts only the open steps the viewer can finish, and a
-// dismissal holds until a new step opens.
+// The home banner: it counts only the open steps the viewer can finish.
 describe('setup banner', () => {
   const steps = setupSteps({
     connectors: [connector('linear', { state: 'needs_account' }), connector('github', { state: 'connected' })],
@@ -66,15 +65,5 @@ describe('setup banner', () => {
     expect(ids({ connect: true, setSecrets: false })).toEqual(['connector:linear', 'slack']);
     expect(ids({ connect: false, setSecrets: true })).toEqual(['secret:FACTORY_GITHUB_TOKEN']);
     expect(ids({ connect: false, setSecrets: false })).toEqual([]);
-  });
-
-  test('a dismissal hides the banner until a step opens that was not open then', () => {
-    const open = openStepsFor(steps, { connect: true, setSecrets: true });
-    expect(setupBannerDismissed(open, null)).toBe(false);
-    expect(setupBannerDismissed(open, ['connector:linear', 'secret:FACTORY_GITHUB_TOKEN', 'slack'])).toBe(true);
-    // A finished step does not bring it back.
-    expect(setupBannerDismissed(open.slice(1), ['connector:linear', 'secret:FACTORY_GITHUB_TOKEN', 'slack'])).toBe(true);
-    // A new open step does.
-    expect(setupBannerDismissed(open, ['connector:linear', 'slack'])).toBe(false);
   });
 });

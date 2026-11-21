@@ -179,6 +179,8 @@ botkube-comm-real.yaml
 # Local agent evidence (screenshots, logs). May hold customer data — never commit.
 /output/
 .e2e/artifacts/
+.e2e/results/
+.e2e/timings.json
 .e2e/cache/
 .e2e/sessions/
 .e2e/report.json

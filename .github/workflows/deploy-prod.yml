@@ -944,7 +944,10 @@ jobs:
 
   # ── Build, sign and verify the prod Kortix Capture installers ───────────────
   # Best-effort like build-desktop: no job gates on it. The reusable workflow
-  # installs each installer on its own OS runner before it passes.
+  # installs each installer on its own OS runner before it passes. Its failure
+  # ends this run red but does not hold back the mobile release: the gate
+  # (deploy-prod-gate.yml) lets jobs whose name contains "Kortix Capture" or
+  # "desktop" fail. Keep those words in these job names.
   build-capture:
     name: Build prod Kortix Capture
     needs: version

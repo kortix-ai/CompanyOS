@@ -15,10 +15,7 @@ import { cell, code, onByDefault, repositoryRoot, runRegionGenerator } from './d
 const SCRIPT = 'apps/web/scripts/generate-cli-commands-doc.mjs';
 
 /** In the table, never in the docs. */
-const UNDOCUMENTED = {
-  // Served only where KORTIX_CHROME_ENABLED is on (dev) until the Chrome Web Store listing is public.
-  chrome: 'not launched',
-};
+const UNDOCUMENTED = {};
 
 /** The usage cell, where the table's arguments name more than the docs describe. */
 const USAGE = {};
@@ -70,6 +67,7 @@ const COMMANDS = {
   cr: ['Change requests: list, show, diff, open, merge, request changes, close and reopen.', '[Git](/docs/developers#git)'],
   review: ['The review inbox: change requests, held connector calls and submitted outputs.', '[Git](/docs/developers#git)'],
   triggers: ['Every trigger, `kortix.yaml` and runtime: `ls` lists both, `add` writes `kortix.yaml` (with `--on`, `--session` or `--runtime` it creates a runtime trigger), `fire`, `enable`, `disable`, `run`, `pause`, `resume` and `rm` take a slug or a runtime id.', '[Triggers](/docs/guide#triggers)'],
+  chrome: ["Inside a session: drive the person's own Chrome through the Kortix extension (`use`, `release`, `ls`, `status`).", '[Kortix in Chrome](/docs/connect/chrome)'],
   loops: ['A schedule into one session (a loop: a trigger that wakes the session that created it). `kortix loop "…" --in 24h` adds one. Alias: `reminders`.', '[Triggers](/docs/guide#triggers)'],
   capture: ['Search the Capture timeline of the person you act for. Capture is off until an account admin turns it on.', '[Capture](/docs/capture)'],
   access: ['Grant, list and revoke role assignments for people, groups and agents.', '[Teams](/docs/guide#teams)'],

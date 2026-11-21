@@ -22474,8 +22474,7 @@
       "install": {
         "title": "Adicione a extensão",
         "description": "Pela Chrome Web Store.",
-        "done": "O Kortix está no Chrome.",
-        "descriptionUnlisted": "Carregue-a no Chrome."
+        "done": "O Kortix está no Chrome."
       },
       "connect": {
         "title": "Entrar",
@@ -22529,7 +22528,6 @@
       "control": "Assumir ou Parar pela barra na página, a qualquer momento.",
       "own": "Somente as suas próprias sessões podem usar o seu navegador."
     },
-    "howToInstall": "Como instalar",
     "copyLink": "Copiar link",
     "linkCopied": "Link copiado",
     "copyFailed": "Não foi possível copiar o link. Tente novamente.",

@@ -22474,8 +22474,7 @@
       "install": {
         "title": "Додај проширење",
         "description": "Из Chrome Web Store-а.",
-        "done": "Kortix је у Chrome-у.",
-        "descriptionUnlisted": "Учитај га у Chrome."
+        "done": "Kortix је у Chrome-у."
       },
       "connect": {
         "title": "Пријави се",
@@ -22529,7 +22528,6 @@
       "control": "Преузми контролу или Заустави са траке на страници, у било ком тренутку.",
       "own": "Само твоје сесије могу да користе твој претраживач."
     },
-    "howToInstall": "Како да инсталираш",
     "copyLink": "Копирај везу",
     "linkCopied": "Веза је копирана",
     "copyFailed": "Веза није копирана. Покушај поново.",

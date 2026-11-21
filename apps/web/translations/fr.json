@@ -22474,8 +22474,7 @@
       "install": {
         "title": "Ajouter l’extension",
         "description": "Depuis le Chrome Web Store.",
-        "done": "Kortix est dans Chrome.",
-        "descriptionUnlisted": "Chargez-la dans Chrome."
+        "done": "Kortix est dans Chrome."
       },
       "connect": {
         "title": "Se connecter",
@@ -22529,7 +22528,6 @@
       "control": "Prendre la main ou Arrêter depuis la barre de la page, à tout moment.",
       "own": "Seules vos propres sessions peuvent utiliser votre navigateur."
     },
-    "howToInstall": "Comment l’installer",
     "copyLink": "Copier le lien",
     "linkCopied": "Lien copié",
     "copyFailed": "Impossible de copier le lien. Réessayez.",

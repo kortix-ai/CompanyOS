@@ -22474,8 +22474,7 @@
       "install": {
         "title": "添加扩展程序",
         "description": "来自 Chrome Web Store。",
-        "done": "Kortix 已在 Chrome 中。",
-        "descriptionUnlisted": "在 Chrome 中加载它。"
+        "done": "Kortix 已在 Chrome 中。"
       },
       "connect": {
         "title": "登录",
@@ -22529,7 +22528,6 @@
       "control": "随时可通过页面上的栏接管或停止。",
       "own": "只有你自己的会话可以使用你的浏览器。"
     },
-    "howToInstall": "如何安装",
     "copyLink": "复制链接",
     "linkCopied": "链接已复制",
     "copyFailed": "无法复制链接。请重试。",

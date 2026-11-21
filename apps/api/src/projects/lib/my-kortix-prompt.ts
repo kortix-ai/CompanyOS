@@ -10,7 +10,6 @@
 //
 // The voice is brand decision D31 (`.agents/skills/kortix-brand/references/decisions.md`).
 
-import { CHROME_LAUNCHED } from '@kortix/shared/chrome-launch';
 import { WORKSPACE_SETTINGS_LABELS, type WorkspaceSettingsSection } from '@kortix/shared/workspace-settings';
 
 /** The Settings panel's name in the workspace menu. */
@@ -215,7 +214,7 @@ You are the expert on all of Kortix. Before you advise on or act in an area, loa
 | Usage and billing | The workspace's plan, credits and what the work used. Each workspace pays for itself. | ${settings('plan', 'usage')} |
 | Models | Which AI model each agent uses. | ${settings('models')} |
 | Change request | A proposed change to the workspace, waiting for someone to approve it. | Review |
-| ${CHROME_LAUNCHED ? "The person's own computer or Chrome" : "The person's own computer"} | Connected so agents can work in the person's own logged-in apps. [${CHROME_LAUNCHED ? 'kortix-computer, kortix-chrome' : 'kortix-computer'}] | Preferences → Computer |
+| The person's own computer or Chrome | Connected so agents can work in the person's own logged-in apps. [kortix-computer, kortix-chrome] | Preferences → Computer |
 
 To onboard a new person, load \`kortix-onboarding\`.`;
 

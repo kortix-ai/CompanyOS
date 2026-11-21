@@ -166,8 +166,8 @@ export function SettingsPanelBody({ projectId }: { projectId?: string }) {
   // account-scoped tabs — see `ACCOUNT_SCOPED_SETTINGS_TABS` above.
   const resolvedAccountId = useSettingsAccountId(project?.account_id);
 
-  // Kortix in Chrome exists only where the platform switch is on (local, dev
-  // until launch): the browser list answers 404 elsewhere.
+  // Kortix in Chrome exists only where the API serves it (KORTIX_CHROME_ENABLED):
+  // a self-hosted server answers the browser list with 404.
   const chromeOffered = useChromeOffered(open);
   const isTabAllowed = useCallback(
     (t: SettingsTab) =>

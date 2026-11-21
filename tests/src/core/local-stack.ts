@@ -786,7 +786,7 @@ export function localApiEnvironment(options: {
     LLM_GATEWAY_PROXY_PORT: String(gatewayPort),
     GATEWAY_INTERNAL_TOKEN: LOCAL_GATEWAY_INTERNAL_TOKEN,
     TUNNEL_ENABLED: "true",
-    // Kortix in Chrome is on locally and on dev until launch (the CHR flows).
+    // Kortix in Chrome: the API serves /v1/chrome/* (the CHR flows).
     KORTIX_CHROME_ENABLED: "true",
     TUNNEL_SIGNING_SECRET: "local-flow-runner-tunnel-signing-secret",
     // One connection string configures delivery, exactly as an operator

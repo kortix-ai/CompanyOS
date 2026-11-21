@@ -155,8 +155,8 @@ describe('offered tabs survive the panel filter', () => {
   });
 
   test('Kortix in Chrome is offered only where the platform offers it', () => {
-    // Staging and prod until launch: the browser list answers 404, so no row
-    // leads to a page that cannot load.
+    // A self-hosted server answers the browser list with 404, so no row leads
+    // to a page that cannot load.
     expect(tabsFor({ hasProject: true })).not.toContain('chrome');
     expect(tabsFor({ hasProject: false })).not.toContain('chrome');
     expect(tabsFor(IN_A_PROJECT)).toContain('chrome');

@@ -562,6 +562,8 @@
       "backToApp": "返回应用",
       "close": "关闭",
       "docs": "文档",
+      "search": "搜索偏好设置",
+      "searchNoResults": "无匹配项",
       "groups": {
         "workspace": "工作区",
         "personal": "个人",

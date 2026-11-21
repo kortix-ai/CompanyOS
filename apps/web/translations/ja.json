@@ -817,12 +817,36 @@
       },
       "wallpapers": {
         "dither": "ディザー",
-        "brandmark": "ブランドマーク",
-        "nebula": "ピクセルビーム",
-        "silk": "シルク",
-        "grain": "グレイン",
-        "neuro": "ニューロ",
+        "ember": "エンバー",
+        "prism": "プリズム",
+        "tide": "タイド",
+        "aurora": "オーロラ",
+        "dusk": "ダスク",
+        "eclipse": "エクリプス",
+        "lagoon": "ラグーン",
+        "cumulus": "キュムラス",
+        "moss": "モス",
+        "iris": "アイリス",
+        "custom": "カスタム",
         "blank": "なし"
+      },
+      "custom": {
+        "editColors": "カラーを編集",
+        "shuffle": "ランダム",
+        "palette": "パレット",
+        "paletteLabel": "パレット {count}",
+        "colors": "カラー",
+        "colorLabel": "カラー {count}",
+        "customColor": "カスタムカラー",
+        "addColor": "カラーを追加",
+        "removeColor": "カラーを削除",
+        "resetColors": "リセット",
+        "finish": "仕上げ",
+        "finishes": {
+          "dither": "ディザ",
+          "grain": "グレイン"
+        },
+        "opacity": "不透明度"
       }
     },
     "sessions": {

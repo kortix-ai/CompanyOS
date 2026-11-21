@@ -1,3 +1,4 @@
+import { runWithContext, setContextField } from '../../lib/request-context';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { execFile } from 'node:child_process';
 import { access, chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -65,6 +66,20 @@ afterEach(async () => {
 });
 
 describe('manifest file compare-and-swap', () => {
+  test('persists authenticated attribution on a real manifest commit', async () => {
+    const manifest = await readManifest(project, { forceRefresh: true });
+    if (!manifest) throw new Error('Expected manifest');
+    manifest.raw = { connectors: [], name: 'synthetic-config' };
+    await runWithContext('PATCH', '/config', async () => {
+      setContextField('userId', 'synthetic-actor');
+      setContextField('authSessionId', 'synthetic-session');
+      const result = await commitManifest({ ...project, accountId: 'synthetic-account', name: 'Synthetic', metadata: {}, status: 'active', secretDefaultStrategy: 'runtime', idempotencyKey: null, sandboxProviderGeneration: 0, lastOpenedAt: null, createdAt: new Date(0), updatedAt: new Date(0), splitPending: false }, manifest, 'chore: configure');
+      expect(result).toEqual({ ok: true });
+    });
+    expect(await git(['--git-dir', remotePath, 'log', '-1', '--format=%B', 'main'])).toBe('chore: configure\n\nKortix-Actor: synthetic-actor\nKortix-Session: synthetic-session');
+    expect(await git(['--git-dir', remotePath, 'show', 'main:kortix.yaml'])).toContain('synthetic-config');
+  });
+
   test('removes edited skill files and registration in one commit while preserving shared assets', async () => {
     await mkdir(join(seedPath, 'skills/pdf/custom'), { recursive: true });
     await mkdir(join(seedPath, 'tools'), { recursive: true });

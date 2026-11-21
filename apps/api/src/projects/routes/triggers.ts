@@ -4,6 +4,7 @@ import type { Context } from 'hono';
 import { projectTriggerRuntime } from '@kortix/db';
 import { and, eq } from 'drizzle-orm';
 import { mutateManifestWithRetry } from '../../connectors/manifest-mutation';
+import { addedManifestErrors, manifestIssueSummary } from '../manifest-io';
 import { featureDisabledBody, requireFeatureFlag } from '../../feature-flags/gate';
 import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { loadProjectAgents } from '../agents';
@@ -493,6 +494,8 @@ export function registerTriggersRoutes(): void {
           // An empty prompt is a program agent's payload input; any other agent needs one (extractTriggers knows the agents).
           const refused = extractTriggers({ ...manifest, raw: next.raw }).errors.find((e) => e.slug === draft.slug);
           if (refused) return { ok: false, error: refused.error, status: 400 };
+          const added = addedManifestErrors(manifest.raw, next.raw);
+          if (added.length) return { ok: false, error: manifestIssueSummary(added, manifest.path), status: 400 };
           manifest.raw = next.raw;
           committedManifest = manifest;
           return { ok: true, commitMessage: `chore: add trigger ${draft.slug}` };
@@ -735,6 +738,8 @@ export function registerTriggersRoutes(): void {
           // An empty prompt is a program agent's payload input; any other agent needs one (extractTriggers knows the agents).
           const refused = extractTriggers({ ...manifest, raw: next.raw }).errors.find((e) => e.slug === draft.slug);
           if (refused) return { ok: false, error: refused.error, status: 400 };
+          const added = addedManifestErrors(manifest.raw, next.raw);
+          if (added.length) return { ok: false, error: manifestIssueSummary(added, manifest.path), status: 400 };
           manifest.raw = next.raw;
           committedManifest = manifest;
           return { ok: true, commitMessage: `chore: update trigger ${slug}` };

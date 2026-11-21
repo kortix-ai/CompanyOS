@@ -1,3 +1,4 @@
+import { configCommitMessage } from './config-commit-message';
 import { isAbsolute } from 'node:path';
 import { commitFileToBranch, invalidateProjectMirror } from '../git';
 import { commitMultipleFilesToBranch } from '../git/branches';
@@ -130,6 +131,7 @@ export async function commitRepoFile(
     deletes?: string[];
   },
 ): Promise<{ ok: true } | { error: string; status: number }> {
+  message = configCommitMessage(message);
   const repo = parseGitHubRepoUrl(project.repoUrl);
   if (repo && expectedFileRevision === undefined && !extra) {
     return commitGitHubRepoFile(project, repo, path, content, message);

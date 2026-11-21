@@ -52,8 +52,11 @@ const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(na
 const modSymbol = isMac ? '⌘' : 'Ctrl';
 
 
-/** Workspace pages with a centered bottom composer: home and one session (not the Sessions list). */
-const CENTERED_COMPOSER_ROUTE = /\/workspaces\/[^/]+(?:\/sessions\/[^/]+(?:\/.*)?)?\/?$/;
+/**
+ * Workspace pages with a centered bottom composer: home, one session (not the
+ * Sessions list), and `/setup`, whose modal opens over home with its banner.
+ */
+const CENTERED_COMPOSER_ROUTE = /\/workspaces\/[^/]+(?:\/setup|\/sessions\/[^/]+(?:\/.*)?)?\/?$/;
 /** Workspace pages whose composer runs to the right edge: chat, DMs, channels, Spaces. */
 const FULL_COMPOSER_ROUTE = /\/workspaces\/[^/]+\/(?:c|chat|dm|spaces)(?:\/.*)?$/;
 export function ProjectSidebar({

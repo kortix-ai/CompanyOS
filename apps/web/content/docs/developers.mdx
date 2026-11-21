@@ -1309,6 +1309,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 | `sensitive` | boolean | `false` | `true`: a call that no rule matches needs approval, reads included. |
 | `auth` | map | — | How Kortix sends the credential. The credential lives in Kortix, never in this file. |
 | `auth.type` | `bearer`, `basic`, `custom`, `api_key`, `oauth1`, `hmac`, `aws_sigv4`, `mtls`, `none` | required | `oauth1` works on `openapi`, `postman` and `http` only. |
+| `auth.secret` | string | — | The name of the project secret Kortix sends as the credential. Its value lives in Secrets, never in this file. |
 | `auth.in` | `header`, `query`, `cookie` | `header` | Where the credential goes. |
 | `auth.name` | string | — | The header, query or cookie name. Required for `custom` and `api_key`. |
 | `auth.prefix` | string | — | Text before the credential value, such as `Bearer`. |

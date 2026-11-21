@@ -339,11 +339,11 @@ const showParameters = {
 const shown = (value: unknown) => JSON.stringify(value, null, 2)
 
 /** The `items` carousel, `null` for single-item mode, or why `items` is invalid. */
-function parsedItems(args: Record<string, any>): unknown[] | null | string {
+function parsedItems(args: Record<string, unknown>): unknown[] | null | string {
   if (!args.items) return null
   let parsed: unknown
   try {
-    parsed = JSON.parse(args.items)
+    parsed = JSON.parse(String(args.items))
   } catch {
     return "Invalid JSON in 'items' parameter. Must be a JSON array of objects."
   }
@@ -353,7 +353,7 @@ function parsedItems(args: Record<string, any>): unknown[] | null | string {
 }
 
 /** Why a call is malformed before anything runs: invalid `items`, or a single item without a type. */
-function callError(args: Record<string, any>): string | undefined {
+function callError(args: Record<string, unknown>): string | undefined {
   const items = parsedItems(args)
   if (typeof items === 'string') return items
   if (!items && !args.type) return `'type' is required. Use one of: ${TYPES.join(', ')}. A single item names its own type (type='url' for a link); several items go in 'items'.`

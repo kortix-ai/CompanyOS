@@ -67,7 +67,7 @@ export interface KortixTool {
    * reports the message as the call's error. A model API rejects a top-level `anyOf`, so a
    * conditional requirement lives here, not in `parameters`.
    */
-  validate?(args: Record<string, any>): string | undefined
+  validate?(args: Record<string, unknown>): string | undefined
   execute(args: Record<string, any>, context: ToolContext): unknown
 }
 

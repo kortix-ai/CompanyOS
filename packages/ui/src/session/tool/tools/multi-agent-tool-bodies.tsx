@@ -22,9 +22,13 @@ import {
   UsersThreeIcon,
   type Icon,
 } from '@phosphor-icons/react';
-import { useState, type ReactNode } from 'react';
+import { useContext, useState, type ReactNode } from 'react';
 import type { KortixToolResult, MultiAgentTool } from './kortix-tool-card';
+import { useSessionChildren } from '@kortix/sdk/react';
+import { useSessionIds } from '../../../providers/session-ids';
+import { WorkFoldContext } from '../../turn/turn-work-accordion';
 import {
+  sessionWorkState,
   parsePeerSend,
   parseReachable,
   parseStoppedChild,
@@ -119,10 +123,28 @@ const PEER_GLYPH: Record<PeerMessageStatus, SessionDisplayStatus> = {
  *          │ why it did not arrive, when it did not
  *
  * The state is a glyph and a muted word: a held message waits on a person, it did not fail.
+ * A delivered note to a colleague this session started reads Working while that colleague
+ * works on it: the note handed it work, and the row is where the person sees that. Only the
+ * note whose turn is still open does: a settled one sits in its turn's fold and keeps its state.
  */
-export function PeerSendRow({ send, defaultOpen, forceOpen, locked }: { send: PeerSendSummary; defaultOpen?: boolean; forceOpen?: boolean; locked?: boolean }) {
+export function PeerSendRow({
+  send,
+  receiverId,
+  defaultOpen,
+  forceOpen,
+  locked,
+}: {
+  send: PeerSendSummary;
+  /** The session the platform delivered the note to (`data.to.session_id`). */
+  receiverId?: string | null;
+  defaultOpen?: boolean;
+  forceOpen?: boolean;
+  locked?: boolean;
+}) {
   const t = useTranslations('multiAgent.tools');
   const delivered = send.status === 'delivered';
+  const settled = useContext(WorkFoldContext);
+  const working = useColleagueWorking(delivered && !settled ? { handle: send.to, sessionId: receiverId ?? null } : null);
   const preview = send.summary || firstLineOf(send.message) || undefined;
   const hasBody = !!send.message || (!delivered && !!send.note);
   return (
@@ -130,7 +152,13 @@ export function PeerSendRow({ send, defaultOpen, forceOpen, locked }: { send: Pe
       <BasicTool
         icon={send.to ? <AgentFace handle={send.to} /> : undefined}
         trigger={<AgentTrigger title={send.to ? t('messageToName', { to: send.to }) : t('messageSent')} subtitle={preview} />}
-        triggerAction={<AgentStatus status={PEER_GLYPH[send.status]} label={t(`peerStatus.${send.status}`)} opens={hasBody} />}
+        triggerAction={
+          working ? (
+            <AgentStatus status="running" label={t('state.working')} opens={hasBody} />
+          ) : (
+            <AgentStatus status={PEER_GLYPH[send.status]} label={t(`peerStatus.${send.status}`)} opens={hasBody} />
+          )
+        }
         defaultOpen={defaultOpen}
         forceOpen={forceOpen}
         locked={locked}
@@ -144,6 +172,30 @@ export function PeerSendRow({ send, defaultOpen, forceOpen, locked }: { send: Pe
       </BasicTool>
     </AgentRowScope>
   );
+}
+
+/**
+ * Whether the child of this session a note reached works now: by the session the note was
+ * delivered to, else by its handle (an unnamed child has none). Reads the child list the agents
+ * line under the composer polls (same query key), so the row adds no request of its own.
+ */
+function useColleagueWorking(receiver: { handle: string | null; sessionId: string | null } | null): boolean {
+  const ids = useSessionIds();
+  const ready = !!receiver && (!!receiver.handle || !!receiver.sessionId) && !!ids.projectId && !!ids.sessionId;
+  // The agents line's page size: the query key has no limit, so a smaller page would replace its list.
+  const { sessions } = useSessionChildren(ids.projectId ?? '', ids.sessionId ?? '', { enabled: ready, limit: 50 });
+  if (!ready) return false;
+  return sessions.some(
+    (child) =>
+      (receiver!.sessionId ? child.session_id === receiver!.sessionId : child.agent_handle === receiver!.handle) &&
+      sessionWorkState(child) === 'running',
+  );
+}
+
+/** The session the platform delivered a note to (`data.to.session_id`), or null. */
+export function peerReceiverId(data: unknown): string | null {
+  const id = (data as { to?: { session_id?: unknown } } | null | undefined)?.to?.session_id;
+  return typeof id === 'string' && id ? id : null;
 }
 
 function firstLineOf(text: string | null): string {
@@ -293,7 +345,7 @@ export function multiAgentBody(tool: MultiAgentTool, result: KortixToolResult): 
   switch (tool) {
     case 'send_message': {
       const send = parsePeerSend(result.data);
-      return send ? <PeerSendRow send={send} /> : null;
+      return send ? <PeerSendRow send={send} receiverId={peerReceiverId(result.data)} /> : null;
     }
     case 'list_agents': {
       const agents = parseReachable(result.data);

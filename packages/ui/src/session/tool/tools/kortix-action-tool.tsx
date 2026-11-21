@@ -42,7 +42,7 @@ import {
   type Icon,
 } from '@phosphor-icons/react';
 import { useContext, useMemo } from 'react';
-import { MULTI_AGENT_ICON, multiAgentBody, PeerSendRow, runningKey } from './multi-agent-tool-bodies';
+import { MULTI_AGENT_ICON, multiAgentBody, PeerSendRow, peerReceiverId, runningKey } from './multi-agent-tool-bodies';
 import { parsePeerSend, toolCallConnectorSignIns } from '@kortix/sdk';
 import { useSessionConnectRequests } from '../../prompts/session-connect-card';
 import {
@@ -364,7 +364,7 @@ export function KortixActionTool(props: ToolProps) {
   // A message to another agent is one plain row with the receiver's face, sent or not.
   if (multi === 'send_message') {
     const send = parsePeerSend(result.data);
-    if (send) return <PeerSendRow send={send} defaultOpen={defaultOpen} forceOpen={forceOpen} locked={locked} />;
+    if (send) return <PeerSendRow send={send} receiverId={peerReceiverId(result.data)} defaultOpen={defaultOpen} forceOpen={forceOpen} locked={locked} />;
   }
   const denied = card.status === 'denied';
   // A multi-agent result draws its own body from `data`; the card's rows would say it twice.

@@ -284,7 +284,7 @@ describe('My Kortix memory in the prompt', () => {
       'send no reply between notices',
       'never one reply per notice',
       'the outcome of the whole run',
-      'When a notice needs the person to decide something, answer that one at once',
+      'ask them at once with the `question` tool',
     ]) {
       expect({ rule, found: section.includes(rule) }).toEqual({ rule, found: true });
     }

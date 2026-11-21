@@ -1,4 +1,7 @@
 import { toolCallBlock } from '@kortix/sdk';
+import { qk } from '@kortix/sdk/react';
+import { SessionIdsProvider } from '../../../providers/session-ids';
+import { WorkFoldContext } from '../../turn/turn-work-accordion';
 import './register';
 import { TooltipProvider } from '../../../primitives/tooltip';
 import { ToolRunningContext } from '../shared/infrastructure';
@@ -142,6 +145,46 @@ describe('send_message', () => {
     expect(html).not.toContain('text-kortix-red');
     // The agent-facing note repeats a delivery; it shows only when the message did not arrive.
     expect(text).not.toContain('Sent to reviewer.');
+  });
+
+  test('a note to a colleague of this session that is still working reads Working, then Delivered once it stops', () => {
+    const drawnWith = (working: boolean, folded = false, child: Record<string, unknown> = { session_id: 'ses-reviewer', agent_handle: 'reviewer' }) => {
+      const client = new QueryClient();
+      client.setQueryData(qk.project.sessionChildren('p1', 's1'), {
+        pages: [{ items: [{ ...child, work_state: working ? 'running' : 'idle' }], next_cursor: null }],
+        pageParams: [null],
+      });
+      const Component = ToolRegistry.get('send_message')!;
+      intlErrors = [];
+      const html = renderToStaticMarkup(
+        <IntlTestProvider locale="en" fallback={false} onError={(error) => intlErrors.push(error)}>
+          <QueryClientProvider client={client}>
+            <SessionIdsProvider projectId="p1" sessionId="s1">
+              <TooltipProvider>
+                <WorkFoldContext.Provider value={folded}>
+                  <Component call={done('send_message', SENT)} />
+                </WorkFoldContext.Provider>
+              </TooltipProvider>
+            </SessionIdsProvider>
+          </QueryClientProvider>
+        </IntlTestProvider>,
+      );
+      expect(intlErrors).toEqual([]);
+      return html;
+    };
+    const live = drawnWith(true);
+    expect(live).toContain('data-agent-status="running"');
+    expect(textOf(live)).toContain('Working');
+    const stopped = drawnWith(false);
+    expect(stopped).toContain('data-agent-status="done"');
+    expect(textOf(stopped)).toContain('Delivered');
+    // An older note, folded with its settled turn, keeps its own state while the colleague works on a newer one.
+    const older = drawnWith(true, true);
+    expect(older).toContain('data-agent-status="done"');
+    expect(textOf(older)).toContain('Delivered');
+    // An unnamed colleague has no handle of its own: the session the note reached decides.
+    const unnamed = drawnWith(true, false, { session_id: 'ses-reviewer', agent_handle: null });
+    expect(unnamed).toContain('data-agent-status="running"');
   });
 
   test('a held or refused message says so, with the reason', () => {

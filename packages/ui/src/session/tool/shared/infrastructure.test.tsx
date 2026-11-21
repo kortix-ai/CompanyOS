@@ -572,6 +572,12 @@ describe('shouldShowToolPartInActionsPanel — empty show', () => {
     ).toBe(true);
   });
 
+  test('drops a failed show (2026-11-16: failed shows are not presented) but keeps another failed tool', () => {
+    expect(shouldShowToolPartInActionsPanel(showPart('error', { url: 'https://example.test/a' }))).toBe(false);
+    const bash = toolCallBlock({ type: 'tool', tool: 'bash', callID: 'b', state: { status: 'error', input: { command: 'false' } } } as unknown as ToolPart);
+    expect(shouldShowToolPartInActionsPanel(bash)).toBe(true);
+  });
+
   test('keeps a still-running show — its input has not arrived yet', () => {
     expect(shouldShowToolPartInActionsPanel(showPart('running', {}))).toBe(true);
   });

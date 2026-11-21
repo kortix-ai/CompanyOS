@@ -56,6 +56,7 @@ import type { RailGroup, RailItem } from '@kortix/ui/customize/settings/type';
 import { ChromeConnectionsTab } from '@kortix/ui/customize/settings/tabs/chrome-connections-tab';
 import { useChromeOffered } from '@kortix/ui/internal/chrome/use-chrome-offered';
 import { useSettingsAccountId } from './use-settings-account-id';
+import { useProfileIdentity, type ProfileIdentity } from './tabs/profile-query';
 
 export const ACCOUNT_SCOPED_SETTINGS_TABS: readonly SettingsTab[] = [
   'profile',
@@ -152,6 +153,7 @@ export function SettingsPanelBody({ projectId }: { projectId?: string }) {
   );
   const isMobile = useIsMobile();
   const memberships = useAccountMemberships();
+  const profile = useProfileIdentity(open);
 
   const detail = useQuery({
     queryKey: qk.project.detail(projectId ?? ''),
@@ -190,6 +192,8 @@ export function SettingsPanelBody({ projectId }: { projectId?: string }) {
       backToApp: tSettingsRail('backToApp'),
       close: tSettingsRail('close'),
       docs: tSettingsRail('docs'),
+      search: tSettingsRail('search'),
+      searchNoResults: tSettingsRail('searchNoResults'),
     }),
     [tSettingsRail],
   );
@@ -234,6 +238,7 @@ export function SettingsPanelBody({ projectId }: { projectId?: string }) {
         allItems={allItems}
         organizations={memberships.accounts}
         organizationCopy={organizationCopy}
+        identity={profile.data}
         chrome={chrome}
         startOnPane={paneRequested}
         // The dialog is the personal settings shell wherever it opens from —
@@ -262,6 +267,8 @@ interface SettingsPanelViewProps {
 
   organizations?: readonly AccountMembership[];
   organizationCopy: AccountMembershipsCopy;
+  /** The signed-in person, for the sidebar header. */
+  identity?: ProfileIdentity;
   chrome: SettingsRailChromeCopy;
   modalTitle: string;
   /** Mobile: open on the current tab's pane, not on the section list. */
@@ -280,6 +287,7 @@ export function SettingsPanelView({
   allItems,
   organizations,
   organizationCopy,
+  identity,
   chrome,
   modalTitle,
   startOnPane,
@@ -294,7 +302,10 @@ export function SettingsPanelView({
         aria-describedby={undefined}
         onEscapeKeyDown={(event) => {
           // Escape in a text field belongs to the field (cancel a rename), not the dialog.
-          if (hasOpenFloatingLayer() || hasOpenNestedDialog() || isTextEntry(event.target)) {
+          // The rail's search field is the exception: empty, Escape closes the dialog.
+          const target = event.target as HTMLInputElement | null;
+          const emptySearch = target?.hasAttribute?.('data-settings-search') === true && target.value === '';
+          if (hasOpenFloatingLayer() || hasOpenNestedDialog() || (isTextEntry(event.target) && !emptySearch)) {
             event.preventDefault();
           }
         }}
@@ -324,6 +335,7 @@ export function SettingsPanelView({
           allItems={allItems}
           organizations={organizations}
           organizationCopy={organizationCopy}
+          identity={identity}
           chrome={chrome}
           startOnPane={startOnPane}
         />
@@ -349,6 +361,7 @@ export function SettingsPanelShell({
   allItems,
   organizations = [],
   organizationCopy = DEFAULT_ACCOUNT_MEMBERSHIPS_COPY,
+  identity,
   chrome,
   startOnPane = false,
 }: SettingsPanelShellProps) {
@@ -398,6 +411,7 @@ export function SettingsPanelShell({
           isMobile={isMobile}
           mobilePane={mobilePane}
           railProps={railProps}
+          identity={identity}
           closeButton={closeButton}
           onPick={() => setMobilePane(true)}
         />
@@ -457,6 +471,8 @@ export function SettingsPanelShell({
             <TabsContent
               key={item.tab}
               value={item.tab}
+              // The rail's search can hide this pane's tab; the name stays.
+              aria-label={item.label}
               /* The account pane's gutters (`account-pane.tsx`: 48px around a
                centred column). The pane scrolls, the frame does not. */
               className="flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 py-10 sm:px-12 sm:py-12"

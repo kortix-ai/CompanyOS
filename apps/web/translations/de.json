@@ -562,6 +562,8 @@
       "backToApp": "Zurück zur App",
       "close": "Schließen",
       "docs": "Dokumentation",
+      "search": "Einstellungen durchsuchen",
+      "searchNoResults": "Keine Treffer",
       "groups": {
         "workspace": "Workspace",
         "personal": "Persönlich",

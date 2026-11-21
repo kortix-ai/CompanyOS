@@ -562,6 +562,8 @@
       "backToApp": "アプリに戻る",
       "close": "閉じる",
       "docs": "ドキュメント",
+      "search": "設定を検索",
+      "searchNoResults": "一致する項目はありません",
       "groups": {
         "workspace": "ワークスペース",
         "personal": "個人",

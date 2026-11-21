@@ -354,6 +354,8 @@ const catalog = {
       "backToApp": "Back to app",
       "close": "Close",
       "docs": "Docs",
+      "search": "Search preferences",
+      "searchNoResults": "No matches",
       "groups": {
         "workspace": "Workspace",
         "personal": "Personal",

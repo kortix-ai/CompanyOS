@@ -190,6 +190,25 @@ describe('QueuedPromptList', () => {
     expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*Resume/);
   });
 
+  test('a row parked on an unreachable machine says why it waits', () => {
+    const markup = render({ rows: [row({ id: 'p', unreachable: true }), row({ id: 'q' })] });
+    expect(markup).toContain('data-queued-unreachable');
+    expect(markup).toContain('Waits for the session&#x27;s machine to answer. Kortix keeps retrying.');
+    // Only the parked row carries the line.
+    expect(markup.split('data-queued-unreachable').length - 1).toBe(1);
+  });
+
+  test('a parked steer row does not claim the turn reads it at its next step', () => {
+    // Every prompt is served as steer. A parked one waits for the machine, not the turn.
+    const parked = render({ rows: [row({ id: 'p', steer: true, unreachable: true })] });
+    expect(parked).toContain('data-queued-unreachable');
+    expect(parked).not.toContain('Read at next step');
+    const mixed = render({ rows: [row({ id: 'p', steer: true, unreachable: true }), row({ id: 's', steer: true })] });
+    // The steer row keeps its own note; the header does not speak for both.
+    expect(mixed.split('Read at next step').length - 1).toBe(1);
+    expect(mixed).toContain('data-queued-delivery');
+  });
+
   test('a row with files shows how many', () => {
     const markup = render({ rows: [row({ id: 'a', attachmentCount: 3 })] });
     expect(markup).toContain('3 files');

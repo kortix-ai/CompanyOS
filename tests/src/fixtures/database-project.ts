@@ -279,6 +279,45 @@ export async function seedDatabaseRunningFirstPrompt(
 }
 
 /**
+ * A prompt the drain parked because the session's machine did not answer, as
+ * `parkPromptForUnreachableRuntime` stores it: still `queued`, with
+ * `result.delivery_blocked = 'runtime_unreachable'` and its next attempt
+ * 10 minutes out, so no drain claims it during the test. The row runs as
+ * `userId`.
+ */
+export async function seedDatabaseParkedPrompt(
+  env: Env,
+  input: { projectId: string; sessionId: string; accountId: string; userId: string; text: string },
+  open: OpenProjectDb = openProjectDb,
+): Promise<{ clientMessageId: string }> {
+  const clientMessageId = randomUUID();
+  await withProjectDb(env, "seed a parked prompt for", open, async (client) => {
+    await client.query(
+      `INSERT INTO kortix.session_lifecycle_commands
+         (command_type, source, status, project_id, session_id, account_id,
+          actor_user_id, idempotency_key, payload, result, available_at)
+       VALUES ('continue_session', 'ui', 'queued', $1, $2, $3, $4, $5, $6::jsonb,
+         $7::jsonb, now() + interval '10 minutes')`,
+      [
+        input.projectId,
+        input.sessionId,
+        input.accountId,
+        input.userId,
+        `prompt:${input.sessionId}:${clientMessageId}`,
+        JSON.stringify({
+          text: input.text,
+          clientMessageId,
+          runtimeUnreachableRetries: 1,
+          parts: [{ type: "text", text: input.text }],
+        }),
+        JSON.stringify({ delivery_blocked: "runtime_unreachable", runtime_retries: 1 }),
+      ],
+    );
+  });
+  return { clientMessageId };
+}
+
+/**
  * A turn a member's prompt started and the control plane still holds as
  * running: the prompt row that names the member, the box's `activeTurns`
  * entry, and the ledger row. No sandbox runs, so the turn never ends by

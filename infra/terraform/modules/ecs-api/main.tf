@@ -1032,6 +1032,78 @@ resource "aws_cloudwatch_metric_alarm" "worker_stale_jobs" {
   }
 }
 
+# Kortix/Sessions: running boxes holding a prompt Kortix could not deliver. The
+# lease holder writes one JSON line to stdout every 60 s
+# (apps/api/src/worker/jobs/prompt-delivery-metric.ts):
+#   {"kortix_metric":"prompt_delivery","environment":"prod","unreachable_active_boxes":0,"parked_prompts":2}
+# `unreachable_active_boxes` counts boxes whose session_sandboxes row is
+# `active` and that hold a prompt parked `runtime_unreachable`: the path to a
+# running box is down. A hibernated box parks prompts in ordinary use and is
+# not counted (apps/api/src/projects/session-lifecycle/unreachable-prompts.ts).
+# On 2026-11-11 the Platinum edge on 2 hosts answered nothing for 17 min, 33
+# running boxes were unreachable, and no Kortix alarm fired. Both filters exist
+# without an alarm, so the metrics are there for dashboards and a baseline.
+resource "aws_cloudwatch_log_metric_filter" "worker_unreachable_active_boxes" {
+  count          = var.worker == null ? 0 : 1
+  name           = "${local.worker_name}-unreachable-active-boxes"
+  log_group_name = aws_cloudwatch_log_group.this.name
+  pattern        = "{ $.kortix_metric = \"prompt_delivery\" }"
+
+  metric_transformation {
+    namespace  = "Kortix/Sessions"
+    name       = "UnreachableActiveBoxes"
+    value      = "$.unreachable_active_boxes"
+    unit       = "Count"
+    dimensions = { Environment = "$.environment" }
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "worker_parked_prompts" {
+  count          = var.worker == null ? 0 : 1
+  name           = "${local.worker_name}-parked-prompts"
+  log_group_name = aws_cloudwatch_log_group.this.name
+  pattern        = "{ $.kortix_metric = \"prompt_delivery\" }"
+
+  metric_transformation {
+    namespace  = "Kortix/Sessions"
+    name       = "ParkedPrompts"
+    value      = "$.parked_prompts"
+    unit       = "Count"
+    dimensions = { Environment = "$.environment" }
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "worker_prompt_delivery" {
+  count             = local.worker_alarms && try(var.worker.prompt_delivery_alarm_threshold, null) != null ? 1 : 0
+  alarm_name        = "${local.worker_name}-prompt-delivery"
+  alarm_description = "At least ${coalesce(try(var.worker.prompt_delivery_alarm_threshold, null), 0)} running boxes on ${coalesce(try(var.worker.metric_environment, null), "unset")} have held a prompt Kortix could not deliver for 3 minutes in a row (Kortix/Sessions UnreachableActiveBoxes, Maximum per minute): the path from the API to running session boxes is down, not one box. Check the sandbox provider first. For Platinum: the edge proxy on the hosts those boxes share (journalctl -u platinum-edge-proxy, forwarded requests per minute; learnings entry of 2026-11-11). The counts are in the latest {\"kortix_metric\":\"prompt_delivery\"} line in /ecs/${local.name}."
+  namespace         = "Kortix/Sessions"
+  metric_name       = "UnreachableActiveBoxes"
+  dimensions = {
+    Environment = try(var.worker.metric_environment, null)
+  }
+  # Only the lease holder writes the line. Maximum keeps one report from being
+  # averaged away. 3 of 3 minutes: a parked prompt retries after 30 s, so a box
+  # that answers again within a minute never pages.
+  statistic           = "Maximum"
+  period              = 60
+  evaluation_periods  = 3
+  datapoints_to_alarm = 3
+  threshold           = coalesce(try(var.worker.prompt_delivery_alarm_threshold, null), 0)
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [var.worker.alarm_topic_arn]
+  ok_actions          = [var.worker.alarm_topic_arn]
+
+  tags = {
+    ManagedBy   = "terraform"
+    Name        = "${local.worker_name}-prompt-delivery"
+    Environment = lookup(var.tags, "Environment", "managed")
+    Project     = lookup(var.tags, "Project", "kortix")
+    Service     = lookup(var.tags, "Service", local.name)
+  }
+}
+
 resource "aws_cloudwatch_metric_alarm" "worker_cpu" {
   count             = local.worker_alarms && var.worker != null ? 1 : 0
   alarm_name        = "${local.worker_name}-cpu-high"

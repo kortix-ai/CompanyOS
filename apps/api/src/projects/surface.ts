@@ -25,6 +25,9 @@ export {
 // A My Kortix session's grant, with the list a person allowed a colleague (consumed by platform/services/session-sandbox).
 export { myKortixSessionGrant } from './lib/colleague-access';
 
+// Running boxes holding a prompt Kortix could not deliver (consumed by worker/jobs/prompt-delivery-metric).
+export { countUnreachablePrompts, unreachablePromptsMetricLine } from './session-lifecycle/unreachable-prompts';
+
 // Idle sessions off a fallback model (consumed by worker/jobs/session-model-fallback).
 export { revertIdleSessionFallbacks } from './lib/session-model-fallback-revert';
 

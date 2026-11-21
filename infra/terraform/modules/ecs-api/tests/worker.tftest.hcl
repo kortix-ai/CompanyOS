@@ -55,6 +55,9 @@ run "no_worker_by_default" {
       && length(aws_cloudwatch_metric_alarm.worker_not_running) == 0
       && length(aws_cloudwatch_metric_alarm.worker_stale_jobs) == 0
       && length(aws_cloudwatch_metric_alarm.worker_cpu) == 0
+      && length(aws_cloudwatch_log_metric_filter.worker_unreachable_active_boxes) == 0
+      && length(aws_cloudwatch_log_metric_filter.worker_parked_prompts) == 0
+      && length(aws_cloudwatch_metric_alarm.worker_prompt_delivery) == 0
     )
     error_message = "var.worker = null must create no worker metric filter and no worker alarm."
   }
@@ -245,6 +248,25 @@ run "worker_with_alarms" {
     error_message = "Worker CPU above 80% for two five-minute periods must notify the subscribed topic; a stopped worker must not page."
   }
 
+  # ── prompt delivery: the metrics always, the alarm only with a threshold ──
+  assert {
+    condition = (
+      aws_cloudwatch_log_metric_filter.worker_unreachable_active_boxes[0].pattern == "{ $.kortix_metric = \"prompt_delivery\" }"
+      && aws_cloudwatch_log_metric_filter.worker_unreachable_active_boxes[0].log_group_name == "/ecs/kortix-test"
+      && aws_cloudwatch_log_metric_filter.worker_unreachable_active_boxes[0].metric_transformation[0].namespace == "Kortix/Sessions"
+      && aws_cloudwatch_log_metric_filter.worker_unreachable_active_boxes[0].metric_transformation[0].name == "UnreachableActiveBoxes"
+      && aws_cloudwatch_log_metric_filter.worker_unreachable_active_boxes[0].metric_transformation[0].value == "$.unreachable_active_boxes"
+      && aws_cloudwatch_log_metric_filter.worker_unreachable_active_boxes[0].metric_transformation[0].dimensions == tomap({ Environment = "$.environment" })
+      && aws_cloudwatch_log_metric_filter.worker_parked_prompts[0].metric_transformation[0].name == "ParkedPrompts"
+      && aws_cloudwatch_log_metric_filter.worker_parked_prompts[0].metric_transformation[0].value == "$.parked_prompts"
+    )
+    error_message = "The prompt_delivery JSON line feeds Kortix/Sessions UnreachableActiveBoxes and ParkedPrompts."
+  }
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.worker_prompt_delivery) == 0
+    error_message = "No prompt-delivery alarm without prompt_delivery_alarm_threshold."
+  }
+
   # ── the API service does not move ──
   assert {
     condition = (
@@ -290,6 +312,69 @@ run "alarm_topic_requires_the_metric_environment" {
       task_cpu        = 1024
       task_memory     = 4096
       alarm_topic_arn = "arn:aws:sns:us-east-2:123456789012:kortix-compliance-alerts"
+    }
+  }
+
+  expect_failures = [var.worker]
+}
+
+run "prompt_delivery_alarm_with_a_threshold" {
+  command = plan
+
+  variables {
+    worker = {
+      task_cpu                        = 1024
+      task_memory                     = 4096
+      metric_environment              = "prod"
+      alarm_topic_arn                 = "arn:aws:sns:eu-west-2:123456789012:kortix-compliance-alerts"
+      prompt_delivery_alarm_threshold = 3
+    }
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.worker_prompt_delivery[0].alarm_name == "kortix-test-worker-prompt-delivery"
+      && aws_cloudwatch_metric_alarm.worker_prompt_delivery[0].namespace == "Kortix/Sessions"
+      && aws_cloudwatch_metric_alarm.worker_prompt_delivery[0].metric_name == "UnreachableActiveBoxes"
+      && aws_cloudwatch_metric_alarm.worker_prompt_delivery[0].dimensions == tomap({ Environment = "prod" })
+      && aws_cloudwatch_metric_alarm.worker_prompt_delivery[0].statistic == "Maximum"
+      && aws_cloudwatch_metric_alarm.worker_prompt_delivery[0].comparison_operator == "GreaterThanOrEqualToThreshold"
+      && aws_cloudwatch_metric_alarm.worker_prompt_delivery[0].threshold == 3
+      && aws_cloudwatch_metric_alarm.worker_prompt_delivery[0].period == 60
+      && aws_cloudwatch_metric_alarm.worker_prompt_delivery[0].evaluation_periods == 3
+      && aws_cloudwatch_metric_alarm.worker_prompt_delivery[0].datapoints_to_alarm == 3
+      && aws_cloudwatch_metric_alarm.worker_prompt_delivery[0].treat_missing_data == "notBreaching"
+      && aws_cloudwatch_metric_alarm.worker_prompt_delivery[0].alarm_actions == toset([var.worker.alarm_topic_arn])
+      && aws_cloudwatch_metric_alarm.worker_prompt_delivery[0].ok_actions == toset([var.worker.alarm_topic_arn])
+    )
+    error_message = "3 or more running boxes holding an undelivered prompt for 3 of 3 minutes notify the topic, and so does the recovery."
+  }
+}
+
+run "prompt_delivery_threshold_requires_an_alarm_topic" {
+  command = plan
+
+  variables {
+    worker = {
+      task_cpu                        = 1024
+      task_memory                     = 4096
+      prompt_delivery_alarm_threshold = 3
+    }
+  }
+
+  expect_failures = [var.worker]
+}
+
+run "prompt_delivery_threshold_is_at_least_one" {
+  command = plan
+
+  variables {
+    worker = {
+      task_cpu                        = 1024
+      task_memory                     = 4096
+      metric_environment              = "prod"
+      alarm_topic_arn                 = "arn:aws:sns:eu-west-2:123456789012:kortix-compliance-alerts"
+      prompt_delivery_alarm_threshold = 0
     }
   }
 

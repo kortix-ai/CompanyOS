@@ -327,7 +327,7 @@
     "./workspace/session-spaces/space-icon",
     "./workspace/session-spaces/spaces-page",
     "./workspace/settings/use-leave-workspace",
-    "./workspace/setup/workspace-setup-page",
+    "./workspace/setup/workspace-setup-modal",
     "./workspace/sidebar/footer/project-apps-nav",
     "./workspace/sidebar/footer/project-balance-warning",
     "./workspace/sidebar/footer/project-manifest-issues-alert",

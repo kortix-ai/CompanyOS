@@ -312,9 +312,9 @@ async function renderHandoffs(args: Omit<HandoffArgs, 'openDetail'>, onOpen: (de
   };
 }
 
-describe('a show detail opened while it runs (2026-11-16: failed shows are not presented)', () => {
+describe.each(['show', 'oc-show'])('a %s detail opened while it runs (2026-11-16: failed shows are not presented)', (tool) => {
   const show = (status: 'running' | 'completed' | 'error') =>
-    m.toolCallBlock({ type: 'tool', tool: 'show', callID: 'call-show', state: { status, input: { url: 'https://example.test/a', title: 'Catalog' } } } as never);
+    m.toolCallBlock({ type: 'tool', tool, callID: 'call-show', state: { status, input: { url: 'https://example.test/a', title: 'Catalog' } } } as never);
   const step = (call: import('@kortix/sdk').ToolCallBlock) =>
     ({ id: 'call-show', family: 'other', label: 'Showed', parts: [call], status: 'running' }) as unknown as import('@kortix/sdk').Step<import('@kortix/sdk').ToolCallBlock>;
 

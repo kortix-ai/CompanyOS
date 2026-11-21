@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { narrationToolName } from '@kortix/sdk';
+import { narrationToolName, normalizeActivityToolName } from '@kortix/sdk';
 import { useClearFocusedToolCall, useFocusedAgent, useFocusedToolCallId, useKortixComputerStore } from '../../../internal/stores/kortix-computer-store';
 import { SubagentPanel } from '../../agents/subagent-view';
 import { DetailSidebarToggle, ToolParts } from '../easy/detail-view';
@@ -144,8 +144,9 @@ export function usePanelHandoffs({
   useEffect(() => {
     if (!focusedToolCallId) return;
     const focused = calls.find((c) => c.call_id === focusedToolCallId);
+    const focusedName = normalizeActivityToolName(focused?.name);
     const rememberShow = (key: string) => {
-      openedShowRef.current = focused && (focused.name === 'show' || focused.name === 'show_user') ? { key, callId: focusedToolCallId } : null;
+      openedShowRef.current = focusedName === 'show' || focusedName === 'show_user' ? { key, callId: focusedToolCallId } : null;
     };
     const step = stepForCallId(steps, focusedToolCallId);
     if (step) {

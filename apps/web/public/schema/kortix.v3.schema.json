@@ -1600,7 +1600,11 @@
                 ],
                 "description": "`oauth1` works on `openapi`, `postman` and `http` only."
               },
-              "secret": false,
+              "secret": {
+                "type": "string",
+                "pattern": "^[A-Z_][A-Z0-9_]{0,63}$",
+                "description": "The name of the project secret Kortix sends as the credential. Its value lives in Secrets, never in this file."
+              },
               "in": {
                 "default": "header",
                 "description": "Where the credential goes."

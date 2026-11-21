@@ -443,17 +443,19 @@ connectors:
     expect(missing.warningPaths).toContain('connectors[0].spec');
   });
 
-  test('auth.secret is rejected', () => {
-    const { errorPaths } = summarize(`
+  test('auth.secret names a project secret: a secret name is accepted, anything else is rejected', () => {
+    const connector = (secret: string) => `
 connectors:
   - slug: stripe
     provider: openapi
     spec: https://example.com/openapi.json
     auth:
       type: bearer
-      secret: STRIPE_API_KEY
-`);
-    expect(errorPaths).toContain('connectors[0].auth.secret');
+      secret: ${secret}
+`;
+    expect(summarize(connector('STRIPE_API_KEY')).errorPaths).not.toContain('connectors[0].auth.secret');
+    expect(summarize(connector('sk_live_not_a_name')).errorPaths).toContain('connectors[0].auth.secret');
+    expect(summarize(connector('42')).errorPaths).toContain('connectors[0].auth.secret');
   });
 
   test('a valid `headers` table is accepted', () => {

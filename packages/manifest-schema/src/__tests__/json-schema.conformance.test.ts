@@ -136,10 +136,16 @@ const FIXTURES: Fixture[] = [
 
   // ─── shared sections: connectors.auth ──────────────────────────────────
   {
-    name: 'connectors.auth.secret is forbidden outright (credentials live in the platform)',
-    valid: false,
+    name: 'connectors.auth.secret names a project secret (the value lives in the platform)',
+    valid: true,
     input:
       'connectors:\n  - slug: x\n    provider: openapi\n    spec: https://x/y.json\n    auth:\n      type: bearer\n      secret: TOK\n',
+  },
+  {
+    name: 'connectors.auth.secret that is not a project-secret name is rejected',
+    valid: false,
+    input:
+      'connectors:\n  - slug: x\n    provider: openapi\n    spec: https://x/y.json\n    auth:\n      type: bearer\n      secret: not-a-name\n',
   },
   {
     name: 'connectors.auth.type must be one of the known enum values',

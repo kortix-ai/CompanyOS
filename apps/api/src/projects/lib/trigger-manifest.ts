@@ -3,7 +3,7 @@ import { commitFileToBranch, invalidateProjectMirror } from '../git';
 import { commitMultipleFilesToBranch } from '../git/branches';
 import { isRemotePushPolicyRejection, isTransientGitMirrorError } from '../git/mirror';
 import { commitFile, getFileSha, type GitHubAuthContext } from '../github';
-import { MANIFEST_FILENAME, type GitTriggerSpec, type ParsedManifest, manifestWriteRefusal, manifestWrites, readManifest, synthesizeBlankManifest, triggerSpecToOnRunEntry, triggerSpecToFlatEntry } from '../triggers';
+import { MANIFEST_FILENAME, ManifestWriteRefusedError, type GitTriggerSpec, type ParsedManifest, manifestWrites, readManifest, synthesizeBlankManifest, triggerSpecToOnRunEntry, triggerSpecToFlatEntry } from '../triggers';
 import { parseGitHubRepoUrl, resolveProjectGitAuth, withProjectGitAuth } from './git';
 import type { ProjectRow } from './serializers';
 
@@ -285,10 +285,14 @@ export async function commitManifest(
   // the runtime doesn't read.
   // A manifest with `imports:` writes the file that declares the edited entry
   // (see `manifestWrites`), all in this one commit.
-  const refusal = manifestWriteRefusal(manifest);
-  if (refusal) return { error: refusal.message, status: 409 };
   const manifestFile = manifest.path || project.manifestPath || MANIFEST_FILENAME;
-  const writes = manifestWrites(manifest, manifestFile);
+  let writes: ReturnType<typeof manifestWrites>;
+  try {
+    writes = manifestWrites(manifest, manifestFile);
+  } catch (err) {
+    if (err instanceof ManifestWriteRefusedError) return { error: err.message, status: 409 };
+    throw err;
+  }
   const [first, ...rest] = writes.files;
   if (!first) return { ok: true };
   return commitRepoFile(

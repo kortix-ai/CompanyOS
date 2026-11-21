@@ -57,6 +57,9 @@ export const SPACE_HEADER_ITEMS = ['agents', 'members', 'needs_you', 'new_sessio
 /** Regex matching every legal env-var name. */
 export const ENV_NAME_RE = /^[A-Z_][A-Z0-9_]*$/;
 
+/** A project secret's name (`connectors[].auth.secret`): an env name of at most 64 characters. */
+export const SECRET_NAME_RE = /^[A-Z_][A-Z0-9_]{0,63}$/;
+
 /**
  * Env-var names the runtime owns, which a manifest may therefore not set.
  *

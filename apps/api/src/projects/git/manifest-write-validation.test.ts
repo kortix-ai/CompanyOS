@@ -1,0 +1,185 @@
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { OpenAPIHono } from '@hono/zod-openapi';
+import { execFileSync } from 'node:child_process';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { manifestRetry, mutateManifestWithRetry } from '../../connectors/manifest-mutation';
+import { installHttpErrors } from '../../http-errors';
+import { commitManifest } from '../lib/triggers';
+import { manifestWrites } from '../manifest-io';
+import { readManifest } from '../triggers';
+
+// Every Kortix config write (connectors, triggers, agent scope, agent config,
+// skills) serializes through `manifestWrites` before it commits to the
+// default branch. These tests drive that boundary against a real git remote.
+
+let root: string;
+let previousCache: string | undefined;
+/** The project row the config routes pass in; only the git fields are read here. */
+type ManifestProject = Parameters<typeof mutateManifestWithRetry>[0];
+let project: ManifestProject;
+const sleep = manifestRetry.sleep;
+
+const git = (...args: string[]) => execFileSync('git', args, { cwd: root, stdio: 'pipe' }).toString();
+const remoteHead = () => git('--git-dir', join(root, 'remote.git'), 'rev-parse', 'main').trim();
+const remoteFile = (path: string) => git('--git-dir', join(root, 'remote.git'), 'show', `main:${path}`);
+
+/** Push `files` to the remote's `main` as one commit, the way a person's push lands. */
+async function push(files: Record<string, string>, message: string) {
+  for (const [path, content] of Object.entries(files)) {
+    await mkdir(dirname(join(root, 'work', path)), { recursive: true });
+    await writeFile(join(root, 'work', path), content);
+  }
+  git('-C', 'work', 'add', ...Object.keys(files));
+  git('-C', 'work', '-c', 'user.name=Test', '-c', 'user.email=test@example.test', 'commit', '-q', '-m', message);
+  git('-C', 'work', 'push', '-q', 'origin', 'main');
+}
+
+const SEED = [
+  'agents:',
+  '  helper:',
+  '    tools: "*"',
+  'triggers:',
+  '  - slug: nightly',
+  '    type: cron',
+  '    cron: "0 3 * * *"',
+  '    agent: helper',
+  '    prompt: Run the nightly check.',
+  '',
+].join('\n');
+
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), 'manifest-write-validation-'));
+  previousCache = process.env.KORTIX_GIT_CACHE_DIR;
+  process.env.KORTIX_GIT_CACHE_DIR = join(root, 'cache');
+  git('init', '-q', '--bare', '--initial-branch=main', 'remote.git');
+  git('init', '-q', '--initial-branch=main', 'work');
+  git('-C', 'work', 'remote', 'add', 'origin', join(root, 'remote.git'));
+  project = {
+    projectId: crypto.randomUUID(),
+    accountId: crypto.randomUUID(),
+    name: 'synthetic',
+    metadata: {},
+    repoUrl: join(root, 'remote.git'),
+    defaultBranch: 'main',
+    manifestPath: 'kortix.yaml',
+    gitAuthToken: 'synthetic',
+  } as ManifestProject;
+  manifestRetry.sleep = async () => {};
+});
+
+afterEach(async () => {
+  manifestRetry.sleep = sleep;
+  if (previousCache === undefined) delete process.env.KORTIX_GIT_CACHE_DIR;
+  else process.env.KORTIX_GIT_CACHE_DIR = previousCache;
+  await rm(root, { recursive: true, force: true });
+});
+
+async function read() {
+  const manifest = await readManifest(project, { forceRefresh: true });
+  if (!manifest) throw new Error('Expected the seeded manifest');
+  return manifest;
+}
+
+type Entry = Record<string, unknown>;
+const triggers = (raw: Record<string, unknown>) => raw.triggers as Entry[];
+
+describe('a config write is validated before it commits', () => {
+  test('a write that adds a validation error is refused with the diagnostic; the branch does not move', async () => {
+    await push({ 'kortix.yaml': SEED }, 'seed');
+    const head = remoteHead();
+    const manifest = await read();
+    triggers(manifest.raw)[0]!.cron = 'every night';
+
+    const result = await commitManifest(project, manifest, 'chore: update trigger nightly');
+
+    expect(result).toMatchObject({ status: 409 });
+    expect('error' in result ? result.error : '').toContain('triggers[0].cron: invalid cron expression');
+    expect(remoteHead()).toBe(head);
+    expect(remoteFile('kortix.yaml')).toBe(SEED);
+    expect(triggers((await read()).raw)[0]!.cron).toBe('0 3 * * *');
+  });
+
+  test('a valid write commits and reads back', async () => {
+    await push({ 'kortix.yaml': SEED }, 'seed');
+    const manifest = await read();
+    triggers(manifest.raw)[0]!.cron = '0 4 * * *';
+
+    expect(await commitManifest(project, manifest, 'chore: update trigger nightly')).toEqual({ ok: true });
+    expect(triggers((await read()).raw)[0]!.cron).toBe('0 4 * * *');
+  });
+
+  test('a file that already carries an error stays editable, even when the edit moves that error to another index', async () => {
+    const broken = [SEED, 'connectors:', '  - slug: first', '    provider: http', '    base_url: https://first.example.test', '  - slug: second', '    provider: http', ''].join('\n');
+    await push({ 'kortix.yaml': broken }, 'seed with an error');
+    const manifest = await read();
+    // `second` has no `base_url`: its error moves from connectors[1] to connectors[0].
+    manifest.raw.connectors = (manifest.raw.connectors as Entry[]).filter((entry) => entry.slug !== 'first');
+
+    expect(await commitManifest(project, manifest, 'chore: remove connector first')).toEqual({ ok: true });
+    expect((await read()).raw.connectors).toEqual([{ slug: 'second', provider: 'http' }]);
+  });
+
+  test('imported manifests take part: an invalid edit of an imported entry is refused, a root entry that needs one is accepted', async () => {
+    const root = ['imports:', '  - team.yaml', ''].join('\n');
+    const team = ['agents:', '  helper:', '    tools: "*"', 'triggers:', '  - slug: nightly', '    type: cron', '    cron: "0 3 * * *"', '    agent: helper', '    prompt: Run the nightly check.', ''].join('\n');
+    await push({ 'kortix.yaml': root, 'team.yaml': team }, 'seed with an import');
+
+    const invalid = await read();
+    triggers(invalid.raw)[0]!.agent = 'ghost';
+    const refused = await commitManifest(project, invalid, 'chore: update trigger nightly');
+    expect(refused).toMatchObject({ status: 409 });
+    expect('error' in refused ? refused.error : '').toContain('agent "ghost" does not match any declared agent');
+    expect(remoteFile('team.yaml')).toBe(team);
+
+    // `helper` is declared only in team.yaml: the root file alone would not validate this trigger.
+    const valid = await read();
+    triggers(valid.raw).push({ slug: 'weekly', type: 'cron', cron: '0 5 * * 1', agent: 'helper', prompt: 'Run the weekly check.' });
+    expect(await commitManifest(project, valid, 'chore: add trigger weekly')).toEqual({ ok: true });
+    // A new entry goes to the root file; the imported file is untouched.
+    expect(remoteFile('kortix.yaml')).toContain('slug: weekly');
+    expect(remoteFile('team.yaml')).toBe(team);
+    expect(triggers((await read()).raw).map((entry) => entry.slug).sort()).toEqual(['nightly', 'weekly']);
+  });
+
+  test('a retry after a concurrent write validates the new candidate, not the stale one', async () => {
+    await push({ 'kortix.yaml': SEED }, 'seed');
+    let calls = 0;
+
+    const result = await mutateManifestWithRetry(project, 'the trigger weekly was being added', async (manifest) => {
+      calls += 1;
+      // While the first attempt is in flight, a push removes the agent the new trigger names.
+      if (calls === 1) await push({ 'kortix.yaml': 'agents:\n  other:\n    tools: "*"\n' }, 'concurrent: replace helper');
+      manifest.raw.triggers = [...((manifest.raw.triggers as Entry[] | undefined) ?? []), { slug: 'weekly', type: 'cron', cron: '0 5 * * 1', agent: 'helper', prompt: 'Run the weekly check.' }];
+      return { ok: true, commitMessage: 'chore: add trigger weekly' };
+    });
+
+    expect(calls).toBe(2);
+    expect(result).toMatchObject({ ok: false, status: 409 });
+    expect(result.ok ? '' : result.error).toContain('agent "helper" does not match any declared agent');
+    expect(remoteFile('kortix.yaml')).toBe('agents:\n  other:\n    tools: "*"\n');
+  });
+
+  test('a route that commits through manifestWrites answers 409 manifest_invalid with the issues', async () => {
+    await push({ 'kortix.yaml': SEED }, 'seed');
+    const head = remoteHead();
+    const app = new OpenAPIHono();
+    installHttpErrors(app);
+    app.post('/agent', async (c) => {
+      const manifest = await read();
+      (manifest.raw.agents as Record<string, Record<string, unknown>>).helper!.model = 42;
+      return c.json({ files: manifestWrites(manifest).files.length });
+    });
+
+    const response = await app.request('/agent', { method: 'POST' });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'manifest_invalid',
+      issue_count: 1,
+      issues: [{ path: 'agents.helper.model', message: 'must be a string.', severity: 'error' }],
+    });
+    expect(remoteHead()).toBe(head);
+  });
+});

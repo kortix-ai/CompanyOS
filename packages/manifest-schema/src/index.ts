@@ -46,6 +46,7 @@ import {
   type ConnectorProvider,
   ENV_NAME_RE,
   GRANTABLE_KORTIX_PERMISSIONS,
+  SECRET_NAME_RE,
   isGrantableKortixPermission,
   isHumanOnlyKortixPermission,
   LEGACY_SANDBOX_KEYS,
@@ -1905,11 +1906,13 @@ export function validateConnectors(node: unknown, path: string, issues: Manifest
             severity: 'error',
           });
         }
-        if (auth.secret !== undefined) {
+        // The platform's secret binding writes the NAME of a project secret
+        // here; its value lives in Secrets, never in this file. Same rule as
+        // the runtime parser.
+        if (auth.secret !== undefined && !(typeof auth.secret === 'string' && SECRET_NAME_RE.test(auth.secret.trim()))) {
           issues.push({
             path: `${where}.auth.secret`,
-            message:
-              'auth.secret is no longer supported; set connector credentials in the platform.',
+            message: 'auth.secret must be the name of a project secret (^[A-Z_][A-Z0-9_]{0,63}$); its value lives in Secrets.',
             severity: 'error',
           });
         }

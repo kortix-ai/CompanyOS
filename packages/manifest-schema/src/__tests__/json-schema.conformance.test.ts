@@ -148,6 +148,12 @@ const FIXTURES: Fixture[] = [
       'connectors:\n  - slug: x\n    provider: openapi\n    spec: https://x/y.json\n    auth:\n      type: bearer\n      secret: not-a-name\n',
   },
   {
+    name: 'connectors.auth.secret with surrounding whitespace is not an exact project-secret name',
+    valid: false,
+    input:
+      'connectors:\n  - slug: x\n    provider: openapi\n    spec: https://x/y.json\n    auth:\n      type: bearer\n      secret: " TOK "\n',
+  },
+  {
     name: 'connectors.auth.type must be one of the known enum values',
     valid: false,
     input:

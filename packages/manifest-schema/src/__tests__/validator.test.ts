@@ -456,6 +456,7 @@ connectors:
     expect(summarize(connector('STRIPE_API_KEY')).errorPaths).not.toContain('connectors[0].auth.secret');
     expect(summarize(connector('sk_live_not_a_name')).errorPaths).toContain('connectors[0].auth.secret');
     expect(summarize(connector('42')).errorPaths).toContain('connectors[0].auth.secret');
+    expect(summarize(connector('" STRIPE_API_KEY "')).errorPaths).toContain('connectors[0].auth.secret');
   });
 
   test('a valid `headers` table is accepted', () => {

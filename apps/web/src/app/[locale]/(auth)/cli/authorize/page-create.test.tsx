@@ -48,13 +48,14 @@ const row = (id: string, name: string): Row => ({
   project: { name, icon: null, icon_glyph: null },
 });
 let openable: Row[] = [];
+let listFailed = false;
 mock.module('@kortix/ui/workspace/sidebar/use-workspace-directory', () => ({
   useWorkspaceDirectory: () => ({
     accounts: [],
     workspaces: openable,
     openable,
     loading: false,
-    failedAccountIds: [],
+    failedAccountIds: listFailed ? ['workspaces'] : [],
     reusableAccount: null,
     githubSourceAccount: null,
     retryFailed: () => {},
@@ -65,16 +66,24 @@ mock.module('@kortix/ui/workspace/sidebar/use-workspace-directory', () => ({
 const approved: Array<{ code: string; accountId?: string }> = [];
 const minted: Array<{ name: string; accountId?: string }> = [];
 const delivered: Array<{ url: string; body: unknown }> = [];
+// Set to make the next mint answer the API's 409 `no_workspace`.
+let mintRefusal: Error | null = null;
+const NO_WORKSPACE = 'no_workspace';
 mock.module('@kortix/sdk', () => ({
   approveCliDevice: async (code: string, options?: { accountId?: string }) => {
     approved.push({ code, accountId: options?.accountId });
     return {};
   },
   createAccountToken: async (input: { name: string; accountId?: string }) => {
+    if (mintRefusal) {
+      const refusal = mintRefusal;
+      mintRefusal = null;
+      throw refusal;
+    }
     minted.push({ name: input.name, accountId: input.accountId });
     return { token_id: 'tok-1', secret_key: 'kortix_synthetic_secret' };
   },
-  isNoWorkspaceError: () => false,
+  isNoWorkspaceError: (err: unknown) => err instanceof Error && err.message === NO_WORKSPACE,
   revokeAccountToken: async () => ({}),
 }));
 setGlobal('fetch', async (url: string, init: { body: string }) => {
@@ -138,6 +147,8 @@ function openLink(query: string) {
 }
 beforeEach(() => {
   outcomes = [];
+  listFailed = false;
+  mintRefusal = null;
 });
 afterEach(() => {
   act(() => root?.unmount());
@@ -224,6 +235,33 @@ describe('creating a workspace during a callback sign-in', () => {
     expect(delivered).toEqual([
       { url: CALLBACK, body: { state: 'state-nonce-1', token: 'kortix_synthetic_secret' } },
     ]);
+  });
+
+  test('a 409 no_workspace on Authorize offers the inline create, and the retry targets the created workspace', async () => {
+    openable = [row('one', 'Solo Synthetic')];
+    openLink(CALLBACK_QUERY);
+    mintRefusal = new Error(NO_WORKSPACE);
+    await click(button('Authorize'));
+    expect(document.body.textContent).toContain('Create a workspace to sign in the CLI');
+
+    outcomes = [CREATED];
+    await submitCreate();
+    await click(button('Authorize'));
+    expect(minted).toEqual([{ name: 'CLI · build-box', accountId: 'a-new' }]);
+    expect(delivered.map((entry) => entry.url)).toEqual([CALLBACK]);
+  });
+
+  test('a failed list refresh after the create keeps the consent for the created workspace', async () => {
+    openable = [];
+    openLink(CALLBACK_QUERY);
+    outcomes = [CREATED];
+    await submitCreate();
+
+    listFailed = true;
+    act(() => root?.render(<CliAuthorizePage />));
+    expect(document.body.textContent).not.toContain("Couldn't load your workspaces");
+    await click(button('Authorize'));
+    expect(minted).toEqual([{ name: 'CLI · build-box', accountId: 'a-new' }]);
   });
 
   test('a double submit starts one create', async () => {

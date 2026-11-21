@@ -188,9 +188,10 @@ function CliAuthorizeInner() {
     return <AuthPendingScreen />;
   }
 
-  if (listFailed && !withoutWorkspace && (userCode || (callback && state && validation.ok))) {
+  if (listFailed && !created && !withoutWorkspace && (userCode || (callback && state && validation.ok))) {
     // The one way forward is a retry: approving needs a workspace, and the
-    // person may have one that this page just could not see.
+    // person may have one that this page just could not see. A workspace
+    // created here is known without the list.
     return (
       <AuthStatusScreen
         title={tCli('loadFailedTitle')}

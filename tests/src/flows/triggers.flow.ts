@@ -172,6 +172,22 @@ flow(
         if (!text.includes(needle)) throw new Error(`kortix.yaml lacks "${needle}":\n${text}`);
       }
     });
+    await ctx.step('an undeclared agent → 400 and no manifest commit', async () => {
+      const owner = ctx.client.as(ctx.P.OWNER);
+      const file = () => owner.get('/v1/workspaces/:projectId/files/content', { params: { projectId: p.id }, query: { path: 'kortix.yaml' } });
+      const before = (await file()).status(200).json<{ content: string }>().content;
+      const response = await owner.post('/v1/workspaces/:projectId/triggers', {
+        name: 'Unknown agent', slug: 'unknown-agent', type: 'cron', cron: '0 0 3 * * *', agent: 'ghost', prompt_template: 'Go.',
+      }, { params: { projectId: p.id } });
+      response.status(400);
+      if (!response.json<{ error: string }>().error.includes('triggers[1].run.agent')) throw new Error('missing nested agent error');
+      const after = (await file()).status(200).json<{ content: string }>().content;
+      if (after !== before) throw new Error('rejected trigger changed the manifest');
+      const patched = await owner.patch('/v1/workspaces/:projectId/triggers/:slug', { agent: 'ghost' }, { params: { projectId: p.id, slug: 'nightly' } });
+      patched.status(400);
+      if (!patched.json<{ error: string }>().error.includes('triggers[0].run.agent')) throw new Error('missing PATCH agent error');
+      if ((await file()).status(200).json<{ content: string }>().content !== before) throw new Error('rejected PATCH changed the manifest');
+    });
     await ctx.step('duplicate slug → 409', async () => {
       const r = await ctx.client
         .as(ctx.P.OWNER)

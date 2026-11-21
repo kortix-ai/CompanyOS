@@ -890,3 +890,30 @@ describe('apps: release config (processes, services, mounts, vm, deploy, labels)
     ]);
   });
 });
+
+describe('validateManifest — on/run trigger agent references', () => {
+  const trigger = (agent: unknown) => ({
+    agents: { writer: { prompt: 'Write.', tools: '*' } },
+    triggers: [{ slug: 'digest', on: { every: '5m' }, run: { agent, prompt: 'Go.' } }],
+  });
+
+  test('rejects an undeclared agent at the nested path', () => {
+    const result = summarize(trigger('ghost'));
+    expect(result.valid).toBe(false);
+    expect(result.errorPaths).toEqual(['triggers[0].run.agent']);
+    expect(result.issues[0].message).toContain('does not match any declared agent');
+  });
+
+  test.each(['writer', ' writer ', 'default', 'mykortix', 'meta', undefined, null])('accepts %s', (agent) => {
+    expect(summarize(trigger(agent)).errorPaths).toEqual([]);
+  });
+
+  test.each(['', '   ', 42, false])('rejects invalid agent %s at the nested path', (agent) => {
+    expect(summarize(trigger(agent)).errorPaths).toContain('triggers[0].run.agent');
+  });
+
+  test('keeps flat references checked', () => {
+    expect(summarize({ triggers: [{ slug: 'digest', type: 'cron', every: '5m', agent: 'ghost', prompt: 'Go.' }] }).errorPaths)
+      .toContain('triggers[0].agent');
+  });
+});

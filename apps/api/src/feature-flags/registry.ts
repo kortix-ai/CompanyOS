@@ -468,7 +468,7 @@ const FLAGS: readonly FeatureFlagDef[] = [
       'off (chrome/routes.ts); release stays open so a session can always let go. The browsers a person ' +
       'connected are account-level and gated only by KORTIX_CHROME_ENABLED (404 when off). BOX: off, the ' +
       'session has no kortix-chrome skill and its CLI hides and refuses `kortix chrome` (KORTIX_FEATURE_FLAGS). ' +
-      'WEB: no sidebar row, no Chrome card in Apps and extensions, no Settings page.',
+      'WEB: no Chrome card in Apps and extensions and no Chrome promo card. Settings → Kortix in Chrome is account-level and stays.',
   },
   {
     key: 'agent_teams',

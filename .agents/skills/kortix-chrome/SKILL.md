@@ -25,7 +25,7 @@ before you change any part. A wire change edits that file in the same commit.
 | CLI | `apps/cli/src/commands/chrome.ts` |
 | Agent skill (served to sessions) | `packages/starter/templates/managed/skills/kortix-chrome/SKILL.md` |
 | SDK hooks | `packages/sdk/src/**/chrome*` (`useChromeConnections`, `useUpdateChromeConnection`, `useDeleteChromeConnection`) |
-| Web | `apps/web/src/features/chrome/`, sidebar row `project-chrome-nav.tsx`, settings tab `chrome` (`/settings/chrome`) |
+| Web | `apps/web/src/features/chrome/`, `packages/ui/src/internal/chrome/` (connect steps, Add to Chrome), Apps and extensions card, promo slide `project-chrome-nav.tsx`, settings tab `chrome` (`/settings/chrome`) |
 
 ## How one action travels
 

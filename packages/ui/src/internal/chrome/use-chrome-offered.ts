@@ -11,14 +11,21 @@ import { useQuery } from '@tanstack/react-query';
  * entry — show only once the browser list answers. Project surfaces read the
  * project's `chrome` flag instead.
  *
+ * `true` once the browser list answers, `false` when it fails, `undefined`
+ * while it loads: a page opened at `/settings/chrome` waits for the answer
+ * instead of falling back to another tab.
+ *
  * `enabled`: ask only while the surface that needs the answer is open.
  */
-export function useChromeOffered(enabled = true): boolean {
-  return useQuery({
+export function useChromeOffered(enabled = true): boolean | undefined {
+  const query = useQuery({
     queryKey: chromeKeys.list(),
     queryFn: listChromeConnections,
     enabled,
     staleTime: 60_000,
     retry: false,
-  }).isSuccess;
+  });
+  if (query.isSuccess) return true;
+  if (query.isError) return false;
+  return undefined;
 }

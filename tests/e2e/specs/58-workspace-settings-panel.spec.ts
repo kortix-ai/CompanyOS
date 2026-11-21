@@ -157,6 +157,13 @@ test.describe('58 — Workspace settings is one panel', () => {
         await expect(page.getByRole('navigation', { name: 'Workspace settings' })).toBeVisible();
       });
 
+      await test.step('Repository: the toolbar names the page, no second heading above it', async () => {
+        await page.goto(`/workspaces/${project.id}/admin/repo`, { waitUntil: 'domcontentloaded' });
+        const toolbarTitle = page.locator('main .kx-titlebar-row h1');
+        await expect(toolbarTitle).toHaveText('Repository', { timeout: 60_000 });
+        await expect(page.locator('main h1')).toHaveCount(1);
+      });
+
       await test.step('phone width: one strip of sections, the column fills the pane', async () => {
         await page.setViewportSize({ width: 390, height: 844 });
         await expectLayout('phone', 1);

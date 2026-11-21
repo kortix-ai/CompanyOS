@@ -28,7 +28,7 @@ import {
   GRADIENT_PATTERNS,
   type GradientFinish,
   type GradientPattern,
-} from '../../theme/wallpaper-gradients';
+} from '../theme/wallpaper-gradients';
 
 /** The fewest CSS pixels per canvas pixel. */
 export const PIXEL_SCALE = 2;

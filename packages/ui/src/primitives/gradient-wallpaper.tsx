@@ -7,7 +7,7 @@ import {
   drawGradientStill,
   pixelScale,
   type GradientDrawParams,
-} from '../internal/lib/gradient-wallpaper-gl';
+} from './gradient-wallpaper-gl';
 import {
   DEFAULT_WALLPAPER_OPACITY,
   gradientColors,
@@ -71,7 +71,7 @@ function fallbackBackground(params: GradientDrawParams): string {
  * Nothing here goes through React state per frame. The loop writes one
  * uniform and issues one draw call. It stops while the canvas is off screen,
  * and reduced motion draws a single still frame. See
- * `internal/lib/gradient-wallpaper-gl.ts` for the frame budget.
+ * `primitives/gradient-wallpaper-gl.ts` for the frame budget.
  */
 export const GradientWallpaper = memo(function GradientWallpaper({
   config,

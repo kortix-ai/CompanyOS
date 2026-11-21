@@ -1,6 +1,6 @@
 /**
  * Gradient wallpapers: the data half. One WebGL fragment shader
- * (`internal/lib/gradient-wallpaper-gl.ts`) draws every colored wallpaper and
+ * (`primitives/gradient-wallpaper-gl.ts`) draws every colored wallpaper and
  * the user's custom one. A wallpaper is a `GradientConfig`: a pattern (where
  * the color sits), a finish (ordered dither or film grain) and a palette.
  *

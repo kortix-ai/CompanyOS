@@ -7,7 +7,6 @@ import { dirname, join } from 'node:path';
 import { manifestRetry, mutateManifestWithRetry } from '../../connectors/manifest-mutation';
 import { installHttpErrors } from '../../http-errors';
 import { commitManifest } from '../lib/triggers';
-import { manifestWrites } from '../manifest-io';
 import { readManifest } from '../triggers';
 
 // Every Kortix config write (connectors, triggers, agent scope, agent config,
@@ -102,10 +101,11 @@ describe('a config write is validated before it commits', () => {
     const manifest = await read();
     firstTrigger(manifest.raw).cron = 'every night';
 
-    const result = await commitManifest(project, manifest, 'chore: update trigger nightly');
-
-    expect(result).toMatchObject({ status: 409 });
-    expect('error' in result ? result.error : '').toContain('triggers[0].cron: invalid cron expression');
+    await expect(commitManifest(project, manifest, 'chore: update trigger nightly')).rejects.toMatchObject({
+      code: 'manifest_invalid',
+      message: expect.stringContaining('triggers[0].cron: invalid cron expression'),
+      issues: [expect.objectContaining({ path: 'triggers[0].cron', severity: 'error' })],
+    });
     expect(remoteHead()).toBe(head);
     expect(remoteFile('kortix.yaml')).toBe(SEED);
     expect(firstTrigger((await read()).raw).cron).toBe('0 3 * * *');
@@ -138,9 +138,10 @@ describe('a config write is validated before it commits', () => {
 
     const invalid = await read();
     firstTrigger(invalid.raw).agent = 'ghost';
-    const refused = await commitManifest(project, invalid, 'chore: update trigger nightly');
-    expect(refused).toMatchObject({ status: 409 });
-    expect('error' in refused ? refused.error : '').toContain('agent "ghost" does not match any declared agent');
+    await expect(commitManifest(project, invalid, 'chore: update trigger nightly')).rejects.toMatchObject({
+      code: 'manifest_invalid',
+      message: expect.stringContaining('agent "ghost" does not match any declared agent'),
+    });
     expect(remoteFile('team.yaml')).toBe(team);
 
     // `helper` is declared only in team.yaml: the root file alone would not validate this trigger.
@@ -157,7 +158,7 @@ describe('a config write is validated before it commits', () => {
     await push({ 'kortix.yaml': SEED }, 'seed');
     let calls = 0;
 
-    const result = await mutateManifestWithRetry(project, 'the trigger weekly was being added', async (manifest) => {
+    const result = mutateManifestWithRetry(project, 'the trigger weekly was being added', async (manifest) => {
       calls += 1;
       // While the first attempt is in flight, a push removes the agent the new trigger names.
       if (calls === 1) await push({ 'kortix.yaml': 'agents:\n  other:\n    tools: "*"\n' }, 'concurrent: replace helper');
@@ -165,21 +166,26 @@ describe('a config write is validated before it commits', () => {
       return { ok: true, commitMessage: 'chore: add trigger weekly' };
     });
 
+    await expect(result).rejects.toMatchObject({
+      code: 'manifest_invalid',
+      issues: [expect.objectContaining({ message: expect.stringContaining('agent "helper" does not match any declared agent') })],
+    });
     expect(calls).toBe(2);
-    expect(result).toMatchObject({ ok: false, status: 409 });
-    expect(result.ok ? '' : result.error).toContain('agent "helper" does not match any declared agent');
     expect(remoteFile('kortix.yaml')).toBe('agents:\n  other:\n    tools: "*"\n');
   });
 
-  test('a route that commits through manifestWrites answers 409 manifest_invalid with the issues', async () => {
+  test('a route that commits through the retry answers 409 manifest_invalid with the issues', async () => {
     await push({ 'kortix.yaml': SEED }, 'seed');
     const head = remoteHead();
     const app = new OpenAPIHono();
     installHttpErrors(app);
+    // Renders a failed result the way the trigger, connector and App routes do: `{ error }` only.
     app.post('/agent', async (c) => {
-      const manifest = await read();
-      manifest.raw.agents = { helper: { tools: '*', model: 42 } };
-      return c.json({ files: manifestWrites(manifest).files.length });
+      const result = await mutateManifestWithRetry(project, 'the agent helper was being updated', (manifest) => {
+        manifest.raw.agents = { helper: { tools: '*', model: 42 } };
+        return { ok: true, commitMessage: 'chore: update agent helper' };
+      });
+      return result.ok ? c.json({ ok: true }) : c.json({ error: result.error }, 409);
     });
 
     const response = await app.request('/agent', { method: 'POST' });

@@ -121,6 +121,7 @@ mock.module('../../shared/session-costs', () => ({
   getSessionCostRecord: async () => {
     throw new Error('getSessionCostRecord should not be called from cost-by-project tests');
   },
+  findSessionCostOwner: async () => null,
 }));
 
 const { usageApp } = await import('./usage');

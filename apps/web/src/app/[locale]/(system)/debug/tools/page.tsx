@@ -1674,7 +1674,7 @@ function PanelDetailFixture({
 }) {
   return (
     <div data-panel-fixture={fixture}>
-      <div className="text-muted-foreground/60 mb-2 font-mono text-xs">{label}</div>
+      <div className="text-muted-foreground mb-2 font-mono text-xs">{label}</div>
       <div className="border-border bg-popover w-[420px] rounded-md border p-4 shadow">
         <ToolParts calls={parts.map(blockOf)} sessionId={fixture} summary={summary} />
       </div>
@@ -1712,7 +1712,7 @@ export default function DebugToolsPage() {
         </h2>
         <div className="flex flex-wrap items-start gap-6">
           <div>
-            <div className="text-muted-foreground/60 mb-2 font-mono text-xs">
+            <div className="text-muted-foreground mb-2 font-mono text-xs">
               {tI18nHardcoded.raw('i18nComplete.textd6915875decb')}
             </div>
             <div className="border-border bg-card h-[640px] w-[420px] overflow-hidden rounded-md border">
@@ -1720,7 +1720,7 @@ export default function DebugToolsPage() {
             </div>
           </div>
           <div>
-            <div className="text-muted-foreground/60 mb-2 font-mono text-xs">
+            <div className="text-muted-foreground mb-2 font-mono text-xs">
               {tI18nHardcoded.raw('i18nComplete.text9f088dbebd6c')}
             </div>
             <div className="border-border bg-card h-[640px] w-[420px] overflow-hidden rounded-md border">
@@ -1728,7 +1728,7 @@ export default function DebugToolsPage() {
             </div>
           </div>
           <div>
-            <div className="text-muted-foreground/60 mb-2 font-mono text-xs">
+            <div className="text-muted-foreground mb-2 font-mono text-xs">
               {tI18nHardcoded.raw('i18nComplete.textc793951cc86e')}
             </div>
             <div className="border-border bg-card h-[640px] w-[420px] overflow-hidden rounded-md border">
@@ -1736,7 +1736,7 @@ export default function DebugToolsPage() {
             </div>
           </div>
           <div>
-            <div className="text-muted-foreground/60 mb-2 font-mono text-xs">
+            <div className="text-muted-foreground mb-2 font-mono text-xs">
               {tI18nHardcoded.raw('i18nComplete.text6070217168a4')}
             </div>
             <div className="border-border bg-card h-[640px] w-[420px] overflow-hidden rounded-md border">
@@ -1748,7 +1748,7 @@ export default function DebugToolsPage() {
             </div>
           </div>
           <div>
-            <div className="text-muted-foreground/60 mb-2 font-mono text-xs">
+            <div className="text-muted-foreground mb-2 font-mono text-xs">
               {tI18nHardcoded.raw('i18nComplete.textfafdc02f3d3b')}
             </div>
             <div className="border-border bg-card h-[640px] w-[420px] overflow-hidden rounded-md border">
@@ -1764,7 +1764,7 @@ export default function DebugToolsPage() {
               budget.csv") is visible; Easy mode deliberately never surfaces
               raw step text, only the settled outcome banner (W7). */}
           <div>
-            <div className="text-muted-foreground/60 mb-2 font-mono text-xs">
+            <div className="text-muted-foreground mb-2 font-mono text-xs">
               {tI18nHardcoded.raw('i18nComplete.text03748cd6138a')}
             </div>
             <div className="border-border bg-card h-[640px] w-[420px] overflow-hidden rounded-md border">
@@ -1772,7 +1772,7 @@ export default function DebugToolsPage() {
             </div>
           </div>
           <div>
-            <div className="text-muted-foreground/60 mb-2 font-mono text-xs">
+            <div className="text-muted-foreground mb-2 font-mono text-xs">
               {tI18nHardcoded.raw('i18nComplete.text9b8a8503b147')}
             </div>
             <div className="border-border bg-card h-[640px] w-[420px] overflow-hidden rounded-md border">
@@ -1786,7 +1786,7 @@ export default function DebugToolsPage() {
           {/* A dev-only page, so this caption is a literal: one new fixture is
               not worth a hashed key in every locale file. */}
           <div>
-            <div className="text-muted-foreground/60 mb-2 font-mono text-xs">
+            <div className="text-muted-foreground mb-2 font-mono text-xs">
               Outputs fold — mixed hidden rows (KRTX-1779): says "3 more items"
             </div>
             <div className="border-border bg-card h-[640px] w-[420px] overflow-hidden rounded-md border">
@@ -1859,7 +1859,7 @@ export default function DebugToolsPage() {
         </h2>
         <div className="flex flex-wrap items-start gap-6">
           <div>
-            <div className="text-muted-foreground/60 mb-2 font-mono text-xs">
+            <div className="text-muted-foreground mb-2 font-mono text-xs">
               {tI18nHardcoded.raw('i18nComplete.textd912982e31da')}
             </div>
             <div className="border-border bg-popover h-[560px] w-[520px] overflow-hidden rounded-md border">
@@ -1872,7 +1872,7 @@ export default function DebugToolsPage() {
             </div>
           </div>
           <div>
-            <div className="text-muted-foreground/60 mb-2 font-mono text-xs">
+            <div className="text-muted-foreground mb-2 font-mono text-xs">
               {tI18nHardcoded.raw('i18nComplete.text28f8a1bd60bb')}
             </div>
             <div className="border-border bg-popover h-[560px] w-[520px] overflow-hidden rounded-md border">
@@ -1885,7 +1885,7 @@ export default function DebugToolsPage() {
             </div>
           </div>
           <div>
-            <div className="text-muted-foreground/60 mb-2 font-mono text-xs">
+            <div className="text-muted-foreground mb-2 font-mono text-xs">
               {tI18nHardcoded.raw('i18nComplete.texte5bd74e98514')}
             </div>
             <div className="border-border bg-popover h-[560px] w-[520px] overflow-hidden rounded-md border">
@@ -1938,7 +1938,7 @@ export default function DebugToolsPage() {
           chat → side-panel flow), via ToolActivateContext + focusToolCall. */}
       <ToolActivateContext.Provider value={(callID) => focusToolCall(callID)}>
         <div className="mx-auto w-full max-w-3xl px-6 py-10">
-          <p className="text-muted-foreground/60 mb-6 text-xs">
+          <p className="text-muted-foreground mb-6 text-xs">
             {tHardcodedUi.raw('appDebugToolsPage.line306JsxTextClickAnyRowBelowItOpensInThe')}
           </p>
           {GROUPS.map((group) => (
@@ -1947,7 +1947,7 @@ export default function DebugToolsPage() {
               <div className="space-y-3">
                 {group.rows.map((row) => (
                   <div key={row.label}>
-                    <div className="text-muted-foreground/50 mb-1 font-mono text-xs">
+                    <div className="text-muted-foreground mb-1 font-mono text-xs">
                       {row.label}
                     </div>
                     <div className="border-border/40 bg-card/30 rounded-md border px-4 py-3">

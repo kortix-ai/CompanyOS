@@ -1,6 +1,6 @@
 # Source: the support mailbox (connector event)
 
-Trigger `support-inbox` (connector event `GMAIL_NEW_GMAIL_MESSAGE` on the
+Trigger `support-inbox` (connector event `gmail.message.received` on the
 `gmail` connector). Disabled by default.
 
 Connector events are experimental and off by default: a workspace manager

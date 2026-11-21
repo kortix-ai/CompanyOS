@@ -84,7 +84,7 @@ triggers:
     name: "Support: a new email in the support mailbox"
     enabled: false
     on:
-      event: GMAIL_NEW_GMAIL_MESSAGE
+      event: gmail.message.received
       connector: gmail
     max_runs_per_hour: 30
     max_runs_per_day: 300

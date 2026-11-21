@@ -2,14 +2,14 @@
 # Sources file tickets. factory-intake hands each ready ticket to one worker session.
 # Workers open verified pull requests. Feedback, merge, groom and eval keep it moving.
 # The contract is the `software-factory` skill. The settings are factory.json.
-# Remove the template: delete this file, `factory.json`, `agents/factory.md`, `skills/software-factory/`,
+# Remove the template: delete this file, `factory.json`, `agents/engineer.md`, `skills/software-factory/`,
 # and its line under `imports:` in kortix.yaml.
 
 agents:
-  factory:
+  engineer:
     description: "The Software Factory: files tickets from every source, works each ticket into a verified pull request, reviews, merges and measures."
     mode: primary
-    prompt_file: agents/factory.md
+    prompt_file: agents/engineer.md
     skills: [software-factory, kortix-cli, kortix-connectors]
     secrets: "*"
     connectors: "*"
@@ -42,7 +42,7 @@ triggers:
       cron: "0 */5 * * * *"
     max_runs_per_hour: 12
     run:
-      agent: factory
+      agent: engineer
       session: keyed
       session_key: factory-intake
       prompt: |
@@ -59,7 +59,7 @@ triggers:
       cron: "0 2,12,22,32,42,52 * * * *"
     max_runs_per_hour: 6
     run:
-      agent: factory
+      agent: engineer
       session: keyed
       session_key: factory-feedback
       prompt: |
@@ -82,7 +82,7 @@ triggers:
     max_runs_per_hour: 20
     max_runs_per_day: 200
     run:
-      agent: factory
+      agent: engineer
       session: keyed
       session_key: factory-feedback
       prompt: |
@@ -99,7 +99,7 @@ triggers:
       cron: "0 7,17,27,37,47,57 * * * *"
     max_runs_per_hour: 6
     run:
-      agent: factory
+      agent: engineer
       session: keyed
       session_key: factory-merge
       prompt: |
@@ -115,7 +115,7 @@ triggers:
       cron: "0 0 6 * * *"
     max_runs_per_day: 2
     run:
-      agent: factory
+      agent: engineer
       session: keyed
       session_key: factory-groom
       prompt: |
@@ -131,7 +131,7 @@ triggers:
       cron: "0 0 7 * * 1"
     max_runs_per_day: 1
     run:
-      agent: factory
+      agent: engineer
       session: keyed
       session_key: factory-eval
       prompt: |
@@ -146,7 +146,7 @@ triggers:
       cron: "0 30 5 * * 1"
     max_runs_per_day: 2
     run:
-      agent: factory
+      agent: engineer
       prompt: |
         [factory] role=identity mode=weekly
         Load the `software-factory` skill, then run references/execution/identity.md once.
@@ -166,7 +166,7 @@ triggers:
     max_runs_per_hour: 20
     max_runs_per_day: 100
     run:
-      agent: factory
+      agent: engineer
       prompt: |
         [factory] role=source source=github-issues
         Load the `software-factory` skill, then run references/sources/github-issues.md
@@ -181,7 +181,7 @@ triggers:
       cron: "0 0 3 * * *"
     max_runs_per_day: 1
     run:
-      agent: factory
+      agent: engineer
       prompt: |
         [factory] role=source source=tests
         Load the `software-factory` skill, then run references/sources/tests-e2e.md once
@@ -195,7 +195,7 @@ triggers:
     max_runs_per_hour: 4
     max_runs_per_day: 96
     run:
-      agent: factory
+      agent: engineer
       session: keyed
       session_key: source-slack
       prompt: |
@@ -211,7 +211,7 @@ triggers:
     max_runs_per_hour: 6
     max_runs_per_day: 24
     run:
-      agent: factory
+      agent: engineer
       prompt: |
         [factory] role=source source=errors delivery=push
         Load the `software-factory` skill, then the reference for sources.errors.tracker in
@@ -229,7 +229,7 @@ triggers:
     max_runs_per_hour: 2
     max_runs_per_day: 48
     run:
-      agent: factory
+      agent: engineer
       session: keyed
       session_key: source-errors-poll
       prompt: |
@@ -246,7 +246,7 @@ triggers:
     max_runs_per_hour: 1
     max_runs_per_day: 24
     run:
-      agent: factory
+      agent: engineer
       prompt: |
         [factory] role=source source=logs-anomaly
         Load the `software-factory` skill, then run one pass of
@@ -260,7 +260,7 @@ triggers:
     max_runs_per_hour: 1
     max_runs_per_day: 24
     run:
-      agent: factory
+      agent: engineer
       prompt: |
         [factory] role=source source=db-observer
         Load the `software-factory` skill, then run one pass of
@@ -273,7 +273,7 @@ triggers:
       cron: "0 0 4 * * 2"
     max_runs_per_day: 1
     run:
-      agent: factory
+      agent: engineer
       prompt: |
         [factory] role=source source=codebase-analysis
         Load the `software-factory` skill, then run one pass of
@@ -286,7 +286,7 @@ triggers:
       cron: "0 0 4 * * 3"
     max_runs_per_day: 1
     run:
-      agent: factory
+      agent: engineer
       prompt: |
         [factory] role=source source=dependencies
         Load the `software-factory` skill, then run one pass of
@@ -299,7 +299,7 @@ triggers:
       cron: "0 0 2 * * *"
     max_runs_per_day: 1
     run:
-      agent: factory
+      agent: engineer
       session: keyed
       session_key: source-security
       prompt: |
@@ -316,7 +316,7 @@ triggers:
     max_runs_per_hour: 1
     max_runs_per_day: 12
     run:
-      agent: factory
+      agent: engineer
       session: keyed
       session_key: source-customer-feedback
       prompt: |
@@ -333,7 +333,7 @@ triggers:
     max_runs_per_hour: 20
     max_runs_per_day: 200
     run:
-      agent: factory
+      agent: engineer
       session: keyed
       session_key: source-customer-feedback
       prompt: |

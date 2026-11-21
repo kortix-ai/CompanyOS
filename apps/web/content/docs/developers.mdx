@@ -135,17 +135,20 @@ Ask all your questions in one message. Never print a secret value.
 
 Your agent reads the guide at [kortix.com/setup.md](https://kortix.com/setup.md) and does each step with you:
 
-1. Installs the `kortix` CLI and signs you in (one click in your browser).
-2. Reads the repository, your other repositories and the software you use, and matches them to the [templates](#templates). It asks nothing yet.
-3. Asks every question in one message of at most 8 questions, each with its recommended answer. It starts with what the agents will do in your repository, then asks: the template (the one that fits, and at most one more), its sources to start with, where work lands, the software to connect, the models, and the workspace name. The config always lives in the workspace's own repository, which Kortix hosts, so the code repository gets no Kortix file. The agents reach the code on GitHub. You reply once: `go`, or `go` with changes.
-4. Keeps the agents you already have: each `.claude/agents/<name>.md` becomes an agent whose `prompt_file` is that file, and each folder with a `SKILL.md` becomes a skill.
-5. Writes the dev environment in the workspace repository: a `Dockerfile` at its root (a sandbox template) and the `dev-environment` skill in `skills/dev-environment/` (the install, start and test commands every agent loads).
-6. Uploads only the `.env` names its message listed, never a value it read (`kortix env push --names`, `--only`).
-7. Connects the plan your agents run on: your Claude or ChatGPT subscription, shared with the workspace so triggered sessions use it, or an API key.
-8. Runs `kortix validate`, commits the workspace repository, and runs `kortix onboard --repo <owner/repo>`, which creates the workspace and names the code repository on GitHub.
-9. Stores each template secret: a random webhook secret it generates, and your GitHub token through a link where you paste it, so the value never passes through the agent.
+1. Installs the `kortix` CLI and signs you in (one click in your browser; a new person signs up on the same page).
+2. Reads the repository, your other repositories and the software you use, and matches them to the [templates](#templates). It notes whether your product is one repository (a monorepo counts as one) or several, and the skills and agents you already have. It asks nothing yet.
+3. Asks every question in one message of at most 8 questions, each with its recommended answer. It starts with what the agents will do in your repository, then asks: the template (the one that fits, and at most one more), its sources to start with, where work lands, the software to connect (every app it found, and "Anything missing?"), Slack, the models, and where Kortix lives: in this repository (recommended for one repository or a monorepo), or in a new repository Kortix hosts (recommended for several). You reply once: `go`, or `go` with changes.
+4. Reuses what you have. In your repository, each skill folder stays where it is and is registered in `kortix.yaml` (`skills: { <name>: .claude/skills/<name> }`), and each `.claude/agents/<name>.md` becomes an agent's `prompt_file`. In a new repository, it copies your skills there.
+5. Writes the dev environment: a `Dockerfile` at the root (a sandbox template) and the `dev-environment` skill in `skills/dev-environment/` (the install, start and test commands every agent loads).
+6. Uploads the `.env` names classed `local` that your app reads, never a value it read itself (`kortix env push --names`, `--only`). A `remote` or `prod` name is never uploaded.
+7. Leaves the plan your agents run on to you, on the setup page: your Claude or ChatGPT subscription, shared with the workspace so triggered sessions use it, or an API key.
+8. Runs `kortix validate`, commits the Kortix files (on your default branch, or as a pull request you merge), and runs `kortix onboard`. In your repository, the workspace runs on that GitHub repository through the Kortix GitHub App.
+9. Stores each template secret: it generates a random webhook secret, and opens the [setup page](#plan-one-go-onboard) in your browser, where you connect each app, add Kortix to Slack and paste your GitHub token. No value passes through the agent. With Slack added, your team gives the agents work by mentioning @Kortix in a channel or in a direct message.
 10. Creates the GitHub webhooks with your own `gh`.
-11. Runs one real task and shows you what it made: the pull request, ticket or draft, with its link.
+11. Proves the dev environment: it starts a Kortix session on the workspace image, which installs your app, starts it, runs the tests and opens it with agent-browser while it measures peak memory and disk. It reads the real command output, fixes the `Dockerfile`, the skill or a missing secret, and resizes the sandbox from the measured peaks (`kortix sandboxes update`), until the check passes. The final report names the size and its cost per hour: a running sandbox costs $0.0324 per vCPU-hour plus $0.0108 per GB-hour of memory, and a stopped one only its disk.
+12. Runs one real task and shows you what it made: the pull request, ticket or draft, with its link.
+
+While it runs, the CLI reports each step to Kortix: `kortix plan` starts a setup, then `templates add`, each `onboard` and the first green `doctor --loops`. Each report carries the step's outcome, counts and durations, and the name of the coding agent; never a repository, secret, channel or connector name. Set `DO_NOT_TRACK=1` or `KORTIX_TELEMETRY=0` to turn it off.
 
 #### Plan, one go, onboard
 
@@ -161,6 +164,7 @@ kortix doctor --loops --fix --json         # one green/red list; --fix repairs w
 
 - `kortix plan` classifies each key of every `.env*` file as `local`, `remote` (a URL on another host, or a staging file) or `prod` (a production file, a `PROD`/`LIVE` name, a live-mode key). It reads each value in its own process and prints none. It also proposes the dev environment (runtimes, services, commands) and lists the public reference repositories an agent can adapt.
 - `kortix onboard --yes` runs, in order: `validate`, `ship`, `secrets` (pushes the approved names, generates every unset webhook secret, one intake link for the rest), `webhooks` (a GitHub webhook and label for each webhook trigger that filters on `headers.github_event`, through your `gh`), `slack` (connect link, then the bot joins `--channels`; a private channel needs `/invite`), `connectors` (a sign-in link per declared connector), `sandbox` (builds each image and waits), then the doctor. Each phase skips what is done: run it again after you finish a `user_actions` item. Exit `0`: done and green. `4`: something waits on you. `1`: a phase failed.
+- **The setup page.** Every step only you can do (a model, a connector sign-in, a required secret such as the GitHub token, Slack) is one row on `/workspaces/<workspace_id>/setup`. `kortix onboard` opens it in your browser before the image build and prints `setup_url`; `--no-open` only prints it. `--wait` keeps the run going until the page shows every row done, then finishes the phases that waited (`--wait-timeout`, default 1800 seconds). Anyone who manages the workspace can open the page later to see what is left. While a row is open, the workspace home shows a banner with the number of steps left and a **Finish setup** link back to the page. It shows only to people who can connect apps or set secrets. Dismiss hides it in that browser until a new step opens.
 - `kortix channels join eng bugs` joins the Slack bot to public channels on its own.
 
 A workspace that already reads a repository with no `kortix.yaml` shows **Copy setup prompt** on its home page: the same prompt, with the repository and the branch to push to. Until the push, the workspace home shows only this step, because no agent can run. It checks the branch every 15 seconds and whenever you return to the tab.
@@ -185,7 +189,7 @@ kortix templates add software-factory     # into the repository you stand in
 
 `add` reads the GitHub repository from `origin` and the default branch from `origin/HEAD`; `--repo <owner/repo>` and `--branch <name>` set them. It refuses to overwrite a template file you changed unless you pass `--force`. `--json` prints the secrets and GitHub webhooks the template needs.
 
-The agents of the Software Factory, the AEO Loop and the Automated Changelog use your GitHub token (`GH_TOKEN`) with `gh`: they clone the repository, push `kortix/<slug>` branches and open pull requests. They never push to the default branch. The Sales, Recruiting and Support Factorys need no dev sandbox: their agents work in the systems of record you connect, and they write drafts that a person approves on the **Review** page. A GitHub repository webhook fires a trigger as GitHub sends it: its URL is the trigger's `webhook_url`, its secret is the trigger's webhook secret.
+The agents of the Software Factory, the AEO Loop and the Automated Changelog use a GitHub token with `gh`: the Software Factory its own account's `FACTORY_GITHUB_TOKEN`, the other two your `GH_TOKEN`. They clone the repository, push `kortix/<slug>` branches and open pull requests. They never push to the default branch. An app with a Kortix connector, such as Linear for the Software Factory's tickets, is one sign-in on the setup page instead of a token. The Sales, Recruiting and Support Factorys need no dev sandbox: their agents work in the systems of record you connect, and they write drafts that a person approves on the **Review** page. A GitHub repository webhook fires a trigger as GitHub sends it: its URL is the trigger's `webhook_url`, its secret is the trigger's webhook secret.
 
 If the composer says **No agents available to you**, the workspace has no agent you may run. With no `kortix.yaml` on the branch, set it up as above. With a `kortix.yaml`, a person who manages the workspace grants you an agent: see [Teams](/docs/guide#teams).
 
@@ -737,7 +741,7 @@ datasets/raw export-ignore
 
 **Workspace admin** → **Git repo** (`/workspaces/<workspace_id>/admin/git`) shows the repository, its **Status**, the **Base branch** and the **Manifest file**. It also holds **Work on this locally**, **Use your own Git client** and **People with access**. Workspace admin opens from **Settings** in Customize. The base branch is the branch new sessions and change requests start from.
 
-From the CLI, `kortix workspaces set --branch <branch>` and `--manifest <path>` change the same fields. Both need `project.settings.write`.
+From the CLI, `kortix workspaces set --branch <branch>` and `--manifest <path>` change the same fields. Both need `project.settings.write`. `--icon <emoji>` or `--glyph <Name>:<color>` sets the workspace icon; `kortix workspaces glyphs --json` lists every glyph name and color it takes.
 
 #### GitHub connection
 
@@ -1111,6 +1115,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 | --- | --- | --- | --- |
 | `imports` | list | — | YAML files or folders whose collections merge into this file. See [imports](#imports). |
 | `default_agent` | string | — | The agent a session or trigger runs when it names none, and the agent My Kortix starts when it names none. A declared agent that is enabled and whose `mode` is `primary` or `all`, or `mykortix` when `builtin_agents.my_kortix` is true. Omitted: My Kortix when it is on. |
+| `trigger_session_readers` | map | — | Shared additive reader default for newly created trigger sessions. Existing sharing and IAM are unchanged. No implicit backfill. |
 | `project` | map | — | `name`: the project's name. A push that changes it renames the project, and a rename in Kortix commits it here. `description`: text for people who read the repository. |
 | `env` | map | — | The secret names the project expects. Values live in Secrets, never in this file. See [env keys](#env-keys). |
 | `sandbox` | map | the platform image | Sandbox templates and the project's default template. See [sandbox keys](#sandbox-keys). |
@@ -1240,10 +1245,12 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
+| `session_readers` | map | — | Additive read-only policy for new sessions; overrides trigger_session_readers in full. |
 | `slug` | string | required | Unique. Lowercase letters, digits, `-` and `_`, at most 128 characters. |
 | `name` | string | the slug | The label in the dashboard. |
 | `enabled` | boolean | `true` | `false`: the trigger does not fire. |
 | `filter` | map | — | Payload path → a value (equals), or one operator: `not`, `in`, `exists`, `prefix`, `not_prefix`. A fire runs only when every path matches. |
+| `hard_run_caps` | boolean | — | Atomically cap every fire, including manual fires. No implicit manual override. |
 | `max_runs_per_hour` | integer, 1 or more | `60` | Runs the trigger starts in any 60 minutes. |
 | `max_runs_per_day` | integer, 1 or more | — | Runs the trigger starts in a UTC day. |
 | `max_lateness` | string | — | Schedules only, `60s` or more. A missed fire later than this does not run. |
@@ -1302,6 +1309,7 @@ The workspace registers what exists. Each agent enables what it uses, by name. A
 | `sensitive` | boolean | `false` | `true`: a call that no rule matches needs approval, reads included. |
 | `auth` | map | — | How Kortix sends the credential. The credential lives in Kortix, never in this file. |
 | `auth.type` | `bearer`, `basic`, `custom`, `api_key`, `oauth1`, `hmac`, `aws_sigv4`, `mtls`, `none` | required | `oauth1` works on `openapi`, `postman` and `http` only. |
+| `auth.secret` | string | — | The name of the project secret Kortix sends as the credential. Its value lives in Secrets, never in this file. |
 | `auth.in` | `header`, `query`, `cookie` | `header` | Where the credential goes. |
 | `auth.name` | string | — | The header, query or cookie name. Required for `custom` and `api_key`. |
 | `auth.prefix` | string | — | Text before the credential value, such as `Bearer`. |
@@ -1349,6 +1357,8 @@ permission:
 - **Tools that follow a capability.** `write` follows `edit`. A workspace's own `memory` tool (the ejected copy of the retired Kortix tool) follows `edit`, or `read` when it only views. `image_gen` follows `edit`. `web_search` and `image_search` follow `websearch`. `scrape_webpage` follows `webfetch`.
 - **Action only.** `question`, `webfetch` and `websearch` take an action, not a glob map.
 - **`bash` globs** match each command of a line. In `a; b`, `a | b` or `$(b)`, the strictest answer wins: `deny`, then `ask`, then `allow`.
+- **Heredocs.** A heredoc body is text, not commands, when each command on its line only reads or ignores its input: `cd /tmp; cat > notes.md <<'EOF'`, `git commit -F - <<'EOF'`. A body sent to a program that can run it (`sh <<EOF`, `cat <<EOF | bash`) is matched as commands.
+- **A line that does not parse** (an open quote or bracket) asks when the first word of a restricted glob appears in the line. Otherwise `"*"` decides.
 - **Path globs** match the file, relative to `/workspace`. A path outside `/workspace` also answers to `external_directory`. A path rule does not govern `bash`.
 - **Precedence.** The most specific matching rule wins, whatever the key order. The longest pattern is the most specific.
 - `permission.skill` and `permission.task` are errors. Use `skills` and `subagents`.
@@ -1742,7 +1752,7 @@ kortix tasks 3f2a1b9c ls      # a lead's list from outside the team
 
 Each session row of the API carries the board's fields: `board_state`, `attention` (`question`, `approval` or `null`), `last_activity_at`, `result_excerpt` (at most 280 characters of the last answer), `agent_handle`, `team_lead_session_id` and `inbound`. `kortix sessions status --json` prints `board_state`, `attention`, `agent_handle` and `team_lead_session_id` for each session.
 
-`GET /workspaces/:id/sessions?working=only` lists only the sessions at work now: a live turn on their box, so `working.state` is `working`. Workflow runners, their agents and colleagues are included. The workspace Running view reads it through `useRunningSessions(projectId, { open })` in `@kortix/sdk/react` (`listWorkspaceSessionsPage(projectId, { working: true })`).
+`GET /workspaces/:id/sessions?working=only` lists only the sessions at work now: a live turn on their box, so `working.state` is `working`. Workflow runners, their agents and colleagues are included. SDK callers can read it through `useRunningSessions(projectId, { open })` in `@kortix/sdk/react` (`listWorkspaceSessionsPage(projectId, { working: true })`).
 
 #### Is the work done?
 
@@ -2250,7 +2260,6 @@ Every command prints its subcommands and flags with `kortix <command> --help`, o
 | `channels <subcommand>` | Slack and Microsoft Teams connections, and the agent each channel runs. | [Channels](/docs/guide#channels) |
 | `sandboxes <subcommand>` | Sandbox templates, their builds and their health. | [Computers](/docs/guide#computers) |
 | `apps <subcommand>` | Deploy and manage Apps: sites and servers with stable Kortix URLs. | [Apps reference](/docs/developers#apps-reference) |
-| `marketplace <subcommand>` | Search, show, install and uninstall marketplace skills. | [Skills](/docs/guide#skills) |
 
 **Files, changes and triggers**
 
@@ -2263,6 +2272,7 @@ Every command prints its subcommands and flags with `kortix <command> --help`, o
 | `review <subcommand>` | The review inbox: change requests, held connector calls and submitted outputs. | [Git](/docs/developers#git) |
 | `triggers <subcommand>` | Every trigger, `kortix.yaml` and runtime: `ls` lists both, `add` writes `kortix.yaml` (with `--on`, `--session` or `--runtime` it creates a runtime trigger), `fire`, `enable`, `disable`, `run`, `pause`, `resume` and `rm` take a slug or a runtime id. | [Triggers](/docs/guide#triggers) |
 | `loops <subcommand>` | A schedule into one session (a loop: a trigger that wakes the session that created it). `kortix loop "…" --in 24h` adds one. Alias: `reminders`. | [Triggers](/docs/guide#triggers) |
+| `chrome <subcommand>` | Inside a session: drive the person's own Chrome through the Kortix extension (`use`, `release`, `ls`, `status`). | [Kortix in Chrome](/docs/connect/chrome) |
 | `artifacts <subcommand>` | Publish, save, share and list docs and pages from Drive, and read their versions. | [Artifact commands](#artifact-commands) |
 | `capture <subcommand>` | Search the Capture timeline of the person you act for. Capture is off until an account admin turns it on. | [Capture](/docs/capture) |
 
@@ -2666,7 +2676,7 @@ permanently, so a script written against them keeps working.
 
 | Canonical | Legacy (permanent) | Relation |
 |---|---|---|
-| `GET /v1/workspaces` | `GET /v1/projects` | Different routes. The canonical list holds every workspace you can open, across every account, in one request, with `workspace_id`, `role` and `state`. The legacy list holds one account's projects (`?account_id=`). A workspace key lists its one workspace. |
+| `GET /v1/workspaces` | `GET /v1/projects` | Different routes. The canonical list holds every workspace you can open, across every account, in one request, with `workspace_id`, `role` and `state`. The legacy list holds, for a person (a session or an unscoped personal access token), the projects of every account they belong to, or one account's with `?account_id=`. A credential bound to one account lists that account's; a workspace key lists its one workspace. |
 | `POST /v1/workspaces` | `POST /v1/projects/provision` with `new_workspace: true` | Different routes. The canonical create always makes a new workspace (`201`, the `Workspace`). `Accept: text/event-stream` streams the phases and ends with `{type: "done", project, workspace}`. `POST /v1/projects` imports a GitHub repository into an account. |
 | `GET /v1/workspaces/:workspaceId` | `GET /v1/projects/:projectId` | Different routes. The canonical record adds a top-level `role`, `state`, `split_pending`, `deletion_scheduled_for` and the `workspace` settings block. |
 | `PATCH /v1/workspaces/:workspaceId` | `PATCH /v1/projects/:projectId` | Different routes. The canonical update takes `name`, `icon`, `icon_glyph`, `default_branch`, `manifest_path` and `secret_default_strategy`, and answers `400 workspace_setting_read_only` for a key of the settings block, with `field` and `writer` (the route that writes it). |
@@ -2881,9 +2891,9 @@ Point a coding agent at `https://kortix.com/llms.txt` for the concepts and at
 [Kortix MCP server](/docs/guide#other-ai-tools-mcp) reads the route reference itself through
 `search_api` and `describe_api`.
 
-### Call the LLM gateway from your own app
-
 <a id="use-the-gateway-from-your-own-tools" />
+
+### Call the LLM gateway from your own app
 
 The LLM gateway serves your workspace's models to your own code, with the same providers, routing, fallback models and budgets that sessions use. Your app calls it with a gateway key, through an OpenAI- or Anthropic-compatible endpoint.
 
@@ -4446,14 +4456,14 @@ Set these with `kortix self-host env set`. Each row says what the variable turns
 | `TUNNEL_ENABLED` | Default `true`. `false` turns off [computers](/docs/guide#computers): `/v1/tunnel/*` answers `503` `tunnel_disabled`. |
 | `PLATINUM_API_KEY` | Required. Sessions, App machines and volumes, and Drive (`/drives`). |
 
-OAuth callbacks, such as `<KORTIX_URL>/v1/connectors/oauth2/callback` and the Slack and Teams redirects, use `KORTIX_URL`. Domain mode and a named tunnel keep it stable. A quick tunnel changes it at every restart and breaks every callback you registered.
+OAuth callbacks, such as `<KORTIX_URL>/v1/connectors/oauth2/callback` and the Slack and Teams redirects, use `KORTIX_URL`. Domain mode and a named tunnel keep it stable. A quick tunnel changes it at every restart and breaks every callback you registered. `KORTIX_OAUTH_CALLBACK_ORIGIN` replaces `KORTIX_URL` in the connector callback only: set it to a stable origin the browser reaches, such as `http://localhost:8008` on one machine, and register `<origin>/v1/connectors/oauth2/callback`.
 
 #### Kortix OAuth clients
 
 Some MCP servers in the catalog do not let Kortix register itself. Kortix signs in to them with an OAuth client that you create at the vendor once per instance.
 
 1. At the vendor, create an OAuth app with the redirect URI `<KORTIX_URL>/v1/connectors/oauth2/callback`.
-   - Google: a **Web application** client. Select **Use this client for an AI-powered agent**. Enable the Gmail, Calendar, Drive, Docs and Sheets APIs and their MCP services. Add the scopes from Google's [MCP server guide](https://developers.google.com/workspace/guides/configure-mcp-servers). The Workspace MCP servers are a Google developer preview.
+   - Google: a **Web application** client. Select **Use this client for an AI-powered agent**. Enable the Gmail, Google Calendar, Google Drive, Google Docs, Google Sheets and People APIs. In **Data Access**, add `openid`, `userinfo.email`, `gmail.modify`, `gmail.settings.basic`, `contacts.readonly`, `contacts.other.readonly`, `calendar`, `drive`, `documents` and `spreadsheets` (each under `https://www.googleapis.com/auth/` except `openid`). Kortix serves Gmail, Calendar, Drive, Docs and Sheets itself on Google's REST APIs, with the tool names of Composio's toolkits; see [Google apps](#google-apps).
    - GitHub: an OAuth app (not a GitHub App).
    - X: in the X Developer Console, set up **User authentication** with OAuth 2.0, the app type **Web App, Automated App or Bot** (a confidential client) and the permission **Read and write**. Kortix requests `tweet.read tweet.write users.read offline.access`.
 2. Store the clients as one JSON value:
@@ -4463,6 +4473,18 @@ Some MCP servers in the catalog do not let Kortix register itself. Kortix signs 
    ```
 
 3. Restart the API. The apps of each configured vendor appear in the catalog.
+
+#### Google apps
+
+With a `google` entry in `KORTIX_OAUTH_CLIENTS`, the catalog lists Gmail, Google Calendar, Google Drive, Google Docs and Google Sheets as Kortix apps, and the Composio toolkits for them (`gmail`, `googlecalendar`, `googledrive`, `googledocs`, `googlesheets`) leave the catalog.
+
+- The tools keep the names and arguments of the Composio toolkits (`gmail.fetch_emails`, `gmail.send_email`, `google_calendar.events_list`, `google_drive.find_file`, …), so agents, skills and tool rules written for Composio keep working. A tool answers the object the Composio tool returned as its `data`.
+- Kortix runs the tools inside the API process. The access token reaches only `*.googleapis.com`. A connector's URL is `https://google.mcp.kortix.com/<service>`: an identity, not a network address.
+- Kortix asks for `gmail.modify`, not full mailbox access: `delete_message`, `delete_thread` and `batch_delete_messages` move mail to Trash, where Gmail deletes it after 30 days.
+- A downloaded file (`gmail.get_attachment`, `google_drive.download_file`) comes back as `file.content_base64`, up to 25 MB. Save a large answer with `kortix connectors call … --out result.json`. A file to send or upload goes in `attachments[]` as `content` (base64, or `--attach <file>`) or `url` (public https).
+- An existing Composio connector moves with `kortix connectors move <slug>`, or **Move to Kortix** on its page: the owner signs in to Google once, and the connector keeps its slug, its tool rules and its Gmail, Calendar and Drive event triggers. Google sign-ins cannot move between OAuth apps, so each account signs in again.
+
+Google review: `gmail.modify`, `gmail.settings.basic` and `drive` are restricted scopes. A Google project that is **In production** with these scopes needs Google's verification and a yearly third-party security assessment (CASA). Until then, people see an "unverified app" screen, and at most 100 Google accounts can ever sign in. In **Testing**, Google ends every sign-in after 7 days. A project with the **Internal** user type (Google Workspace only) needs neither, for accounts of that Workspace.
 
 #### Composio toolkits that need your own OAuth app
 
@@ -4521,8 +4543,9 @@ A manual `update` uses the same rollout as the daily run. When another update ho
 
 `init` or `update` without `--tag` moves the instance back to its channel. To change auto-update, the time or the timezone, run `kortix self-host configure`, then `kortix self-host start`.
 
-#### Upgrading an instance that predates the session log
 <a id="sessions-saved-by-an-older-version" />
+
+#### Upgrading an instance that predates the session log
 
 An instance that ran a version before the session log holds some session history in an older v1 store. Version `0.14.9` converts that store by itself, in a background pass on the leader API container. The pass logs this line when it finishes:
 
@@ -4538,8 +4561,9 @@ Later versions do not convert the v1 store. Their `kortix-migrate` step refuses 
 
 A new install updates without these steps.
 
-#### Upgrading: provider keys move to Models → Providers
 <a id="legacy-credential-backfill" />
+
+#### Upgrading: provider keys move to Models → Providers
 
 Older versions kept LLM provider keys (API keys, ChatGPT and OpenCode logins, the Bedrock region, custom provider keys) as project secrets. They now live in **Models → Providers**. From version `0.15.9`, the leader API container moves the old keys there by itself: once a few seconds after it starts, then once a day. It moves each key once, deletes nothing and never logs a value. When a pass ends, `kortix self-host logs kortix-api` shows a line that contains:
 
@@ -6284,8 +6308,7 @@ Renaming the workspace renames both rows: `PATCH /v1/workspaces/:id` with a new 
 | `idempotency_key` | Send the same key on every attempt at one create. A retry then returns the workspace of the first attempt. The key is scoped to the account. It identifies the attempt, not the payload: a reused key with a different `name` returns the first workspace. |
 | `account_id` | The account that owns the workspace. Omitted, and the caller has no workspace or its default account already holds its project: a NEW workspace is created (`201`, its own `account_id`). Named, and that account already holds its project: `409` `workspace_has_project` with `workspace_id` in the body (`isWorkspaceHasProjectError`). Prefer `createWorkspace`. |
 | `starter_template` | `general-knowledge-worker` or `minimal`. |
-| `source_item_id` | Clone a `registry:project` marketplace item instead of the starter. It wins over `starter_template`. |
-| `marketplace_items` | Marketplace item ids to install. |
+| `source_item_id` · `marketplace_items` | **Deprecated.** The marketplace was removed (2026-11-20). `source_item_id` answers `400`; `marketplace_items` is ignored. |
 | `default_branch` | The branch of the new repository. Omit it for the server default. |
 | `icon` · `icon_glyph` | An emoji string, or a `WorkspaceGlyph` object. `icon_glyph` wins when both are set. An invalid value is dropped and never fails the create. |
 
@@ -6507,6 +6530,28 @@ await p.secrets.setGitCredential({ token: process.env.GIT_TOKEN! });
 ```
 
 ### Run triggers
+
+A workspace can declare an additive read-only default for newly created trigger sessions:
+
+```yaml
+trigger_session_readers:
+  humans: members
+  agents: []
+triggers:
+  - slug: daily-report
+    session_readers: { humans: none, agents: [] }
+    on: { cron: "0 0 9 * * *" }
+    run: { prompt: "Write the daily report." }
+```
+
+`session_readers` replaces the shared default in full. Omit it to inherit; an explicit empty map grants nobody. `humans: members` checks current workspace membership on each request. Removing a member removes this reader standing. `agents` lists exact agent names, never wildcards; no agent, including My Kortix, receives an implicit grant. Declaring an agent does not grant it workspace/API permissions: those gates still apply independently.
+
+Reconcile stores the normalized policy for later session creation. It does not reshare existing sessions, reused sessions or pinned targets. No bulk backfill is implicit or exposed by this feature; a later authorized migration must select and audit its targets explicitly. A session retains the reader policy stamped at creation. A later explicit session-sharing choice clears that stamp, including a choice of private. DMs never receive additive readers; private-channel membership and deleted-session gates still apply.
+
+Reader standing permits session inventory, session details, saved log/transcript and authorized trigger-run history reads only. It does not permit prompts, start/restart/stop/delete, configuration or scope changes, sharing, approval answers or runtime proxy access. Existing independent owner/manager privileges remain unchanged.
+
+In trigger history, `status: fired` means delivery, not a successful agent turn. Inspect `run_status`, `run_error` and `ended_at` for terminal execution. Hidden runs are not counted as successes: an empty page with `next_cursor` can still have older authorized records.
+
 
 A trigger starts a session, or calls an App, on a schedule, a webhook or an App event. `p.triggers.create(input)` returns the whole trigger list (`{ triggers, errors, triggers_paused }`).
 
@@ -8459,7 +8504,7 @@ Stable entry points follow semver. A deep path into `dist/` has no semver.
 | `billing` | Plan, credit balance, transactions, usage, per-session usage, subscription. | `/billing/…` |
 | `sandboxShares` | Public share links for one sandbox port. | `/p/share` |
 | `connectStatus()` | Whether the managed OAuth connect provider is configured on this instance. | `/connectors/connect-status` |
-| `marketplace` | The public marketplace catalog and its sources. | `/marketplace/…` |
+| `marketplace` | **Deprecated.** The marketplace was removed (2026-11-20). Every call rejects with `410 ENDPOINT_RETIRED`. Removed in the next major release of the SDK. | `/marketplace/…` |
 | `capture` | Kortix Capture for one account, the device sign-in approval, and the caller's own reads. | `/accounts/{accountId}/capture/…`, `/capture/…` |
 | `notifications` | The caller's notification inbox and preferences, Web Push, and the push tokens of native devices. | `/notifications/…` |
 | `mobileClientPolicy()` | `{ minimum_version, store_url_ios, store_url_android }`. A `null` field means the operator set no value. Needs no token. | `/clients/mobile` |
@@ -8483,7 +8528,7 @@ The same calls exist as functions: `listWorkspaces`, `getWorkspace`, `updateWork
 | --- | --- |
 | `list()` · `listForAccount(accountId)` | Workspaces the caller can open · workspaces in one account. |
 | `get(projectId)` · `detail(projectId)` | The summary · the full detail with config. |
-| `provision(input)` | A new workspace on a new Kortix-managed repository. Input: `{ name, account_id?, seed_starter?, starter_template?: 'general-knowledge-worker' \| 'minimal', marketplace_items?, source_item_id?, default_branch?, icon?, icon_glyph?, idempotency_key? }`. |
+| `provision(input)` | A new workspace on a new Kortix-managed repository. Input: `{ name, account_id?, seed_starter?, starter_template?: 'general-knowledge-worker' \| 'minimal', default_branch?, icon?, icon_glyph?, idempotency_key? }`. |
 | `create(input)` · `createRepo(input)` | A workspace on an existing `repo_url` · a workspace on a new GitHub repository. |
 | `update(projectId, input)` · `archive(projectId)` | Change settings · archive. |
 | `llmCatalog(projectId)` · `modelPicker(projectId)` | The full model catalog · the compact list for a model picker. |
@@ -8509,13 +8554,10 @@ The same calls exist as functions: `listWorkspaces`, `getWorkspace`, `updateWork
 | `gitBackend.get()` | `{ configured, kind: 'app' \| 'pat' \| null, owner }`. Any signed-in user can read it. |
 | `gitBackend.repositories({ search?, limit? })` | Repositories under that owner. Self-host operators only; other callers get `403`. |
 
-#### `kortix.marketplace` and `kortix.sandboxShares`
+#### `kortix.sandboxShares`
 
 | Method | What it does |
 | --- | --- |
-| `marketplace.items(options?)` · `.item(id)` · `.itemFile(id, path)` | Browse the catalog · one item · one file of an item. |
-| `marketplace.marketplaces()` · `.featured()` | All marketplaces · featured marketplaces. |
-| `marketplace.sources.list()` · `.add(input)` · `.remove(id)` | Marketplace sources. |
 | `sandboxShares.list(sandboxId)` · `.create({ sandboxId, port, ttl?, label? })` · `.revoke(sandboxId, token)` | Public share links for one sandbox port. |
 
 ### Accounts, IAM, billing and notifications
@@ -8984,7 +9026,7 @@ Every hook is in `@kortix/sdk/react`. Most are React Query hooks: unless a row s
 | Hook | What it returns |
 | --- | --- |
 | `useAccounts({ userId, enabled })` | The caller's accounts. Pass the signed-in person's `userId` in a host where the person can change without a reload. |
-| `useWorkspaces({ userId, enabled })` | Every workspace the caller can open, across accounts: `{ workspaces, accounts, isLoading, isError, refetch }`. (`useProjects(accountId?)`, one account's list, is deprecated.) |
+| `useWorkspaces({ userId, enabled })` | Every workspace the caller can open, across accounts: `{ workspaces, accounts, isLoading, isError, refetch }`. (`useProjects(accountId?)`, the legacy project list, is deprecated: one account's with `accountId`, else every account of a person.) |
 | `useWorkspaceSessions(projectId, options)` | One workspace's sessions, paged, newest activity first. Read `sessions` (flat) and `fetchNextPage`. Filters as in [Sessions](#sessions). Adds `keepPreviousData` (keep the old rows while a new filter loads), `refetchInterval` and `pollFirstPageOnly` (experimental). |
 | `useWorkspaceModels(projectId)` | Selectable models as `FlatModel[]`. Empty while the list loads. |
 | `useWorkspaceModelPickerCatalog(projectId)` | The model-picker record per model (`reasoning_options`, `temperature`, `limit`). |
@@ -9321,7 +9363,7 @@ Every name that says Project has a workspace twin: `Project` → `Workspace`, `p
 
 | Legacy name | Use instead |
 | --- | --- |
-| `listProjects()` · `useProjects(accountId?)` · `UseProjectsOptions` · `projectsQueryOptions` · `ProjectsKey` · `ProjectsListKey` | `listWorkspaces()` · `useWorkspaces()` · `UseWorkspacesOptions`: every workspace of the caller, across accounts. The legacy calls list one account. |
+| `listProjects()` · `useProjects(accountId?)` · `UseProjectsOptions` · `projectsQueryOptions` · `ProjectsKey` · `ProjectsListKey` | `listWorkspaces()` · `useWorkspaces()` · `UseWorkspacesOptions`: every workspace of the caller, across accounts. The legacy calls list, for a person, the projects of every account they belong to, or one account's with `accountId`; a credential bound to one account lists that account's. |
 | `getProject(id)` · `updateProject(id, input)` | `getWorkspace(id)` · `updateWorkspace(id, input)` |
 | `createProject(input)` | `linkRepository(input)` (`POST /v1/workspaces/link-repository`) |
 | `inviteProjectMember(id, email, role)` | `inviteWorkspaceMember(id, input)` |

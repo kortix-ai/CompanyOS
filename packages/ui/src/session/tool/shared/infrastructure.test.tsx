@@ -172,7 +172,7 @@ describe('BasicTool panel surface — the disclosure row', () => {
 
     expect(html).toContain('Generating slides');
     expect(html).toContain('min-w-0 flex-1 truncate text-sm font-medium');
-    expect(html).toContain('text-muted-foreground/60 shrink-0 font-mono text-xs');
+    expect(html).toContain('text-muted-foreground shrink-0 font-mono text-xs');
     expect(html).toContain('4 slides');
     // Still a row, not the old sticky header.
     expect(html).not.toContain('sticky');

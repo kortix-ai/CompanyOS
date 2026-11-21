@@ -49,7 +49,7 @@ import { probePreviewPort, type PreviewPortProbe } from '@kortix/sdk';
 import { useHasSessionDesktop } from '@kortix/sdk/react';
 import { ArrowSquareOutIcon, MonitorIcon } from '@phosphor-icons/react';
 import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { SESSION_BAR_CLASS } from './panel-chrome';
+import { SESSION_BAR_CLASS } from '../../internal/layout/panel-chrome';
 
 export const DESKTOP_URL = 'http://localhost:6901/';
 /** How often the panel asks again until the desktop answers. */

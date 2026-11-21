@@ -69,7 +69,7 @@ describe('manifest file compare-and-swap', () => {
   test('persists authenticated attribution on a real manifest commit', async () => {
     const manifest = await readManifest(project, { forceRefresh: true });
     if (!manifest) throw new Error('Expected manifest');
-    manifest.raw = { connectors: [], name: 'synthetic-config' };
+    manifest.raw = { connectors: [], project: { name: 'synthetic-config' } };
     await runWithContext('PATCH', '/config', async () => {
       setContextField('userId', 'synthetic-actor');
       setContextField('authSessionId', 'synthetic-session');

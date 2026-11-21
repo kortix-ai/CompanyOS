@@ -58,6 +58,7 @@
     "./checkbox": "./src/primitives/checkbox.tsx",
     "./checkbox-group": "./src/primitives/checkbox-group.tsx",
     "./collapsible": "./src/primitives/collapsible.tsx",
+    "./color-picker": "./src/primitives/color-picker.tsx",
     "./command": "./src/primitives/command.tsx",
     "./components.css": "./src/styles/components.css",
     "./composer": "./src/session/composer/index.ts",
@@ -214,6 +215,7 @@
     "./glyph-picker": "./src/primitives/glyph-picker.tsx",
     "./glyph-registry": "./src/primitives/glyph-registry.tsx",
     "./glyph-tint": "./src/primitives/glyph-tint.ts",
+    "./gradient-wallpaper": "./src/primitives/gradient-wallpaper.tsx",
     "./hint": "./src/primitives/hint.tsx",
     "./histogram-bars": "./src/primitives/histogram-bars.tsx",
     "./hover-card": "./src/primitives/hover-card.tsx",
@@ -723,6 +725,10 @@
       "./collapsible": {
         "types": "./dist/primitives/collapsible.d.ts",
         "import": "./dist/primitives/collapsible.js"
+      },
+      "./color-picker": {
+        "types": "./dist/primitives/color-picker.d.ts",
+        "import": "./dist/primitives/color-picker.js"
       },
       "./command": {
         "types": "./dist/primitives/command.d.ts",
@@ -1338,6 +1344,10 @@
       "./glyph-tint": {
         "types": "./dist/primitives/glyph-tint.d.ts",
         "import": "./dist/primitives/glyph-tint.js"
+      },
+      "./gradient-wallpaper": {
+        "types": "./dist/primitives/gradient-wallpaper.d.ts",
+        "import": "./dist/primitives/gradient-wallpaper.js"
       },
       "./hint": {
         "types": "./dist/primitives/hint.d.ts",

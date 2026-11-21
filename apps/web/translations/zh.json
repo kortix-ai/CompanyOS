@@ -817,12 +817,36 @@
       },
       "wallpapers": {
         "dither": "抖动",
-        "brandmark": "品牌标志",
-        "nebula": "像素光束",
-        "silk": "丝绸",
-        "grain": "颗粒",
-        "neuro": "神经",
+        "ember": "余烬",
+        "prism": "棱镜",
+        "tide": "潮汐",
+        "aurora": "极光",
+        "dusk": "黄昏",
+        "eclipse": "日食",
+        "lagoon": "潟湖",
+        "cumulus": "积云",
+        "moss": "苔藓",
+        "iris": "鸢尾",
+        "custom": "自定义",
         "blank": "空白"
+      },
+      "custom": {
+        "editColors": "编辑颜色",
+        "shuffle": "随机",
+        "palette": "调色板",
+        "paletteLabel": "调色板 {count}",
+        "colors": "颜色",
+        "colorLabel": "颜色 {count}",
+        "customColor": "自定义颜色",
+        "addColor": "添加颜色",
+        "removeColor": "移除颜色",
+        "resetColors": "重置",
+        "finish": "质感",
+        "finishes": {
+          "dither": "抖动",
+          "grain": "颗粒"
+        },
+        "opacity": "不透明度"
       }
     },
     "sessions": {

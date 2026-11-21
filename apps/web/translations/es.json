@@ -817,12 +817,36 @@
       },
       "wallpapers": {
         "dither": "Tramado",
-        "brandmark": "Marca",
-        "nebula": "Rayos de píxeles",
-        "silk": "Seda",
-        "grain": "Granulado",
-        "neuro": "Neuro",
+        "ember": "Brasa",
+        "prism": "Prisma",
+        "tide": "Marea",
+        "aurora": "Aurora",
+        "dusk": "Ocaso",
+        "eclipse": "Eclipse",
+        "lagoon": "Laguna",
+        "cumulus": "Cúmulo",
+        "moss": "Musgo",
+        "iris": "Iris",
+        "custom": "Personalizado",
         "blank": "Vacío"
+      },
+      "custom": {
+        "editColors": "Editar colores",
+        "shuffle": "Aleatorio",
+        "palette": "Paleta",
+        "paletteLabel": "Paleta {count}",
+        "colors": "Colores",
+        "colorLabel": "Color {count}",
+        "customColor": "Color personalizado",
+        "addColor": "Añadir color",
+        "removeColor": "Quitar color",
+        "resetColors": "Restablecer",
+        "finish": "Acabado",
+        "finishes": {
+          "dither": "Tramado",
+          "grain": "Grano"
+        },
+        "opacity": "Opacidad"
       }
     },
     "sessions": {

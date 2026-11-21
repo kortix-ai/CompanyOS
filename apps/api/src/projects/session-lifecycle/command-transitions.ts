@@ -111,8 +111,11 @@ export async function requeueUnlandedPrompt(
       result: sql`COALESCE(${sessionLifecycleCommands.result}, '{}'::jsonb)
         || jsonb_build_object('landing_refusals',
              COALESCE((${sessionLifecycleCommands.result}->>'landing_refusals')::int, 0) + 1)`,
+      // The landing read proved the message is NOT on the box, so an
+      // acceptance this attempt recorded (`consumedOnDelivery`) is void: it
+      // must not close the next attempt as `delivered` at its forward.
       payload: withNextDeliveryAttempt(
-        sql`${sessionLifecycleCommands.payload} || '{"remintOnDelivery": true}'::jsonb`,
+        sql`(${sessionLifecycleCommands.payload} - 'consumedOnDelivery') || '{"remintOnDelivery": true}'::jsonb`,
       ),
       updatedAt: new Date(),
     })
@@ -686,8 +689,13 @@ export async function parkPromptForUnreachableRuntime(
       lockedUntil: null,
       lastError: error,
       result,
+      // `consumedOnDelivery` is dropped too. It records that a turn ACCEPTED
+      // this attempt's POST; an attempt that ends unreachable proved no such
+      // thing (a hung edge makes the proxy accept a turn for a POST that timed
+      // out, `retry.ts` `giveUpForward`). Kept, it would close the NEXT
+      // attempt as `delivered` at its forward, skipping the turn ledger's proof.
       payload: sql`jsonb_set(
-        ${withNextDeliveryAttempt(sql`${sessionLifecycleCommands.payload} - 'stopPausedOnDelivery'`)},
+        ${withNextDeliveryAttempt(sql`${sessionLifecycleCommands.payload} - 'stopPausedOnDelivery' - 'consumedOnDelivery'`)},
         '{runtimeUnreachableRetries}',
         to_jsonb(${retries}::int))`,
       updatedAt: now,

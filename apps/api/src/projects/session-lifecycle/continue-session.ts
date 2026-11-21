@@ -30,6 +30,7 @@ import { effortVariantForPrompt } from '../lib/effort-default';
 import type { ContinueSessionCommand, SessionDeliveryOutcome } from './types';
 import { onDevTunnel, staleDevTunnelReason } from '../../platform/dev-tunnel-stamp';
 import { PromptNeverLandedError, postPrompt, readRuntimeMessage } from './runtime-client';
+import { closeSandboxTurnByMessageId } from '../sandbox-turn-lifecycle';
 
 export async function continueSession(
   command: ContinueSessionCommand,
@@ -203,8 +204,20 @@ export async function continueSession(
     // — 3.6 s later (review finding, 2026-09-05). The throw escapes the loop so
     // the row can go back out under a fresh attempt, key and wire id.
     //
-    // Only a body the edge can drop is read back: see `promptNeedsLandingProof`.
-    if ((delivery === 'accepted' || delivery === 'deduplicated') && promptNeedsLandingProof(bodyBytes)) {
+    // After `accepted`, only a body the edge can drop is read back: see
+    // `promptNeedsLandingProof`.
+    //
+    // `deduplicated` is read back WHATEVER its size. It is the proxy repeating
+    // its OWN claim, and the proxy keeps that claim after an attempt that timed
+    // out, because a timeout cannot prove the box did not take the body
+    // (`retry.ts`, `promptDeliveryMaybeAccepted`). On 2026-11-11 the Platinum
+    // edge on 2 hosts accepted connections and answered nothing for 17 min: the
+    // POST timed out, `deliverWithRetry` re-sent under the same key, the claim
+    // answered `duplicate`, and the row closed as delivered for a prompt the
+    // box never had. `deduplicated` only follows an earlier attempt of this
+    // same delivery, so an ordinary prompt still pays no read.
+    const dedupedWithId = delivery === 'deduplicated' && !!command.wireMessageId?.trim();
+    if (dedupedWithId || (delivery === 'accepted' && promptNeedsLandingProof(bodyBytes))) {
       const landing = await confirmPromptLanded({
         messageId: command.wireMessageId,
         readMessage: async (messageId) => {
@@ -213,6 +226,18 @@ export async function continueSession(
           return readRuntimeMessage({ endpoint, runtimeSessionId, externalId }, messageId);
         },
       });
+      // The box could not be asked (the edge is still hung, the box is
+      // resuming). After a `duplicate` answer nothing has shown the prompt
+      // reached the box, so it is not delivered yet: `deliverWithRetry` asks
+      // again, and a spent deadline parks the row on the runtime-unreachable
+      // ladder, whose next attempt reads the transcript before it re-sends.
+      if (landing === 'unknown' && delivery === 'deduplicated') {
+        logger.warn('[session-lifecycle] the proxy answered duplicate and the box could not be read; not delivered yet', {
+          session_id: sessionId,
+          wire_message_id: command.wireMessageId,
+        });
+        return 'unreachable';
+      }
       if (landing === 'unknown') {
         logger.warn('[session-lifecycle] large prompt accepted; the landing read could not answer', {
           session_id: sessionId,
@@ -228,6 +253,21 @@ export async function continueSession(
           delivery,
           parts: command.parts?.length ?? 0,
         });
+        // The proxy accepted a turn for this message when the POST answered,
+        // or timed out (`retry.ts`, `giveUpForward`). The box does not have the
+        // message, so that turn is not running. Close it: left open it holds
+        // the re-sent prompt behind `turn_active` and shows the session as
+        // working until the active-turn renewal sees the daemon idle (every
+        // 20 s, backing off to 5 min while the box was unreadable).
+        // Best-effort: a failed close leaves that renewal as the backstop.
+        if (command.wireMessageId) {
+          await closeSandboxTurnByMessageId(sessionId, command.wireMessageId, 'abandoned').catch((err) =>
+            logger.warn('[session-lifecycle] the turn of a prompt that never landed was not closed', {
+              session_id: sessionId,
+              wire_message_id: command.wireMessageId,
+              error: err instanceof Error ? err.message : String(err),
+            }));
+        }
         throw new PromptNeverLandedError(command.wireMessageId);
       }
     }

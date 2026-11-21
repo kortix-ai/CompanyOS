@@ -83,14 +83,24 @@ async function read() {
 }
 
 type Entry = Record<string, unknown>;
-const triggers = (raw: Record<string, unknown>) => raw.triggers as Entry[];
+const isEntry = (value: unknown): value is Entry => typeof value === 'object' && value !== null && !Array.isArray(value);
+/** The entries of the manifest list `key` (the same objects, so an edit lands in `raw`); empty when absent. */
+function entries(raw: Entry, key: string): Entry[] {
+  const list = raw[key];
+  return Array.isArray(list) ? list.filter(isEntry) : [];
+}
+function firstTrigger(raw: Entry): Entry {
+  const [first] = entries(raw, 'triggers');
+  if (!first) throw new Error('Expected a trigger');
+  return first;
+}
 
 describe('a config write is validated before it commits', () => {
   test('a write that adds a validation error is refused with the diagnostic; the branch does not move', async () => {
     await push({ 'kortix.yaml': SEED }, 'seed');
     const head = remoteHead();
     const manifest = await read();
-    triggers(manifest.raw)[0]!.cron = 'every night';
+    firstTrigger(manifest.raw).cron = 'every night';
 
     const result = await commitManifest(project, manifest, 'chore: update trigger nightly');
 
@@ -98,16 +108,16 @@ describe('a config write is validated before it commits', () => {
     expect('error' in result ? result.error : '').toContain('triggers[0].cron: invalid cron expression');
     expect(remoteHead()).toBe(head);
     expect(remoteFile('kortix.yaml')).toBe(SEED);
-    expect(triggers((await read()).raw)[0]!.cron).toBe('0 3 * * *');
+    expect(firstTrigger((await read()).raw).cron).toBe('0 3 * * *');
   });
 
   test('a valid write commits and reads back', async () => {
     await push({ 'kortix.yaml': SEED }, 'seed');
     const manifest = await read();
-    triggers(manifest.raw)[0]!.cron = '0 4 * * *';
+    firstTrigger(manifest.raw).cron = '0 4 * * *';
 
     expect(await commitManifest(project, manifest, 'chore: update trigger nightly')).toEqual({ ok: true });
-    expect(triggers((await read()).raw)[0]!.cron).toBe('0 4 * * *');
+    expect(firstTrigger((await read()).raw).cron).toBe('0 4 * * *');
   });
 
   test('a file that already carries an error stays editable, even when the edit moves that error to another index', async () => {
@@ -115,7 +125,7 @@ describe('a config write is validated before it commits', () => {
     await push({ 'kortix.yaml': broken }, 'seed with an error');
     const manifest = await read();
     // `second` has no `base_url`: its error moves from connectors[1] to connectors[0].
-    manifest.raw.connectors = (manifest.raw.connectors as Entry[]).filter((entry) => entry.slug !== 'first');
+    manifest.raw.connectors = entries(manifest.raw, 'connectors').filter((entry) => entry.slug !== 'first');
 
     expect(await commitManifest(project, manifest, 'chore: remove connector first')).toEqual({ ok: true });
     expect((await read()).raw.connectors).toEqual([{ slug: 'second', provider: 'http' }]);
@@ -127,7 +137,7 @@ describe('a config write is validated before it commits', () => {
     await push({ 'kortix.yaml': root, 'team.yaml': team }, 'seed with an import');
 
     const invalid = await read();
-    triggers(invalid.raw)[0]!.agent = 'ghost';
+    firstTrigger(invalid.raw).agent = 'ghost';
     const refused = await commitManifest(project, invalid, 'chore: update trigger nightly');
     expect(refused).toMatchObject({ status: 409 });
     expect('error' in refused ? refused.error : '').toContain('agent "ghost" does not match any declared agent');
@@ -135,12 +145,12 @@ describe('a config write is validated before it commits', () => {
 
     // `helper` is declared only in team.yaml: the root file alone would not validate this trigger.
     const valid = await read();
-    triggers(valid.raw).push({ slug: 'weekly', type: 'cron', cron: '0 5 * * 1', agent: 'helper', prompt: 'Run the weekly check.' });
+    valid.raw.triggers = [...entries(valid.raw, 'triggers'), { slug: 'weekly', type: 'cron', cron: '0 5 * * 1', agent: 'helper', prompt: 'Run the weekly check.' }];
     expect(await commitManifest(project, valid, 'chore: add trigger weekly')).toEqual({ ok: true });
     // A new entry goes to the root file; the imported file is untouched.
     expect(remoteFile('kortix.yaml')).toContain('slug: weekly');
     expect(remoteFile('team.yaml')).toBe(team);
-    expect(triggers((await read()).raw).map((entry) => entry.slug).sort()).toEqual(['nightly', 'weekly']);
+    expect(entries((await read()).raw, 'triggers').map((entry) => entry.slug).sort()).toEqual(['nightly', 'weekly']);
   });
 
   test('a retry after a concurrent write validates the new candidate, not the stale one', async () => {
@@ -151,7 +161,7 @@ describe('a config write is validated before it commits', () => {
       calls += 1;
       // While the first attempt is in flight, a push removes the agent the new trigger names.
       if (calls === 1) await push({ 'kortix.yaml': 'agents:\n  other:\n    tools: "*"\n' }, 'concurrent: replace helper');
-      manifest.raw.triggers = [...((manifest.raw.triggers as Entry[] | undefined) ?? []), { slug: 'weekly', type: 'cron', cron: '0 5 * * 1', agent: 'helper', prompt: 'Run the weekly check.' }];
+      manifest.raw.triggers = [...entries(manifest.raw, 'triggers'), { slug: 'weekly', type: 'cron', cron: '0 5 * * 1', agent: 'helper', prompt: 'Run the weekly check.' }];
       return { ok: true, commitMessage: 'chore: add trigger weekly' };
     });
 
@@ -168,7 +178,7 @@ describe('a config write is validated before it commits', () => {
     installHttpErrors(app);
     app.post('/agent', async (c) => {
       const manifest = await read();
-      (manifest.raw.agents as Record<string, Record<string, unknown>>).helper!.model = 42;
+      manifest.raw.agents = { helper: { tools: '*', model: 42 } };
       return c.json({ files: manifestWrites(manifest).files.length });
     });
 

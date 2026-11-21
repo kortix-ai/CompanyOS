@@ -54,7 +54,7 @@ const FALLBACK_AT: Record<GradientPattern, string> = {
  */
 function fallbackBackground(params: GradientDrawParams): string {
   const at =
-    params.pattern === 'bloom' && params.anchor
+    (params.pattern === 'bloom' || params.pattern === 'sheet') && params.anchor
       ? `${params.anchor[0] * 100}% ${params.anchor[1] * 100}%`
       : FALLBACK_AT[params.pattern];
   // The palette runs edge to core, the glow runs core to edge. `59` is 35%
@@ -253,13 +253,18 @@ export function GradientWallpaperStill({ config }: { config: GradientConfig }) {
   const { isDark } = useWallpaperTheme();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Keyed by what the shader draws, not by object identity: a settings
+  // change elsewhere rebuilds every config object, and opacity is CSS.
+  const params = drawParams(config, isDark);
+  const drawKey = JSON.stringify(params);
+
   // Drawn in the frame after commit. A color drag changes `config` many
   // times per frame, and only the last change draws.
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const params = drawParams(config, isDark);
+      const params: GradientDrawParams = JSON.parse(drawKey);
       if (drawGradientStill(params, canvas)) {
         canvas.style.background = '';
         return;
@@ -269,7 +274,7 @@ export function GradientWallpaperStill({ config }: { config: GradientConfig }) {
       canvas.style.background = fallbackBackground(params);
     });
     return () => cancelAnimationFrame(frame);
-  }, [config, isDark]);
+  }, [drawKey]);
 
   return (
     <canvas

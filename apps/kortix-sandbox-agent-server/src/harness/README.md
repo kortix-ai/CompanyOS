@@ -1049,6 +1049,12 @@ and project tools that governance registers, the `./` pi packages, and the
 root `AGENTS.md` (else `CLAUDE.md`). A descriptor's `config_dir` (an older
 API's) is ignored: the release manifest records `config_dir: null`.
 
+- **Retention.** Materialized release directories and manifests stay for the
+  session sandbox lifetime. Earlier system prompts and bootstrap symlinks can
+  still name them after convergence or daemon restart. Cleanup removes staging
+  entries, not historical releases. Retention does not authorize a fallback:
+  boot still requires a proven pointer and verifies release content. Releases
+  already removed by an older daemon are not restored by this retention rule.
 - **Boot.** The box never checks out the project repository. `/workspace`
   starts empty, and an agent that needs the files runs `kortix workspaces
   clone`. `lifecycle.start()` waits for the config only: the desired release

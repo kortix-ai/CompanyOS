@@ -283,6 +283,7 @@ npm view @kortix/sdk version
 npm view @kortix/agent-tunnel version
 npm view @kortix/llm-catalog version
 gh release view "vX.Y.Z" --repo kortix-ai/CompanyOS --json name,body,assets --jq '{name,assetCount:(.assets|length)}'   # 24 assets
+for i in api gateway frontend; do for t in X.Y.Z prod; do curl -fsS "https://hub.docker.com/v2/repositories/kortix/kortix-$i/tags/$t" | jq -r --arg t "$i:$t" '"\($t) \(.digest)"'; done; done   # :prod digest = :X.Y.Z digest
 ```
 
 The API and the gateway report the promoted staging SHA: deploy-prod retags

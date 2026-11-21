@@ -366,6 +366,7 @@ export interface AuthorizationServerMetadata {
   issuer?: string;
   application: Partial<OAuth2ApplicationInput>;
   registration_endpoint?: string;
+  client_id_metadata_document_supported?: boolean;
   token_endpoint_auth_methods_supported?: string[];
   code_challenge_methods_supported?: string[];
   scopes_supported?: string[];
@@ -406,6 +407,7 @@ export async function fetchAuthorizationServerMetadata(
       scopes,
     },
     registration_endpoint: httpsMetadataUrl(payload.registration_endpoint),
+    client_id_metadata_document_supported: payload.client_id_metadata_document_supported === true,
     token_endpoint_auth_methods_supported: stringList(
       payload.token_endpoint_auth_methods_supported,
     ),

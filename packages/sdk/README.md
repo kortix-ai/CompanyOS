@@ -806,6 +806,8 @@ await project.sessions.create({
 });
 ```
 
+MCP OAuth discovery reports `client_id_metadata_document_supported` when the authorization server accepts a hosted client metadata document. Kortix prefers this public-client path over dynamic registration and keeps Authorization Code + PKCE. A server that rejects the hosted callback without CIMD returns `oauth_client_registration_refused`; connect with an API token instead.
+
 For bring-your-own authorization, each logged-in member creates their own
 connection without supplying an owner id; Kortix derives ownership from the bearer
 token:

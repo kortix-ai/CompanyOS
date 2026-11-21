@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { buildOAuth2AuthorizationRequest, exchangeOAuth2AuthorizationCode } from './oauth2-lifecycle';
 import { HTTPException } from 'hono/http-exception';
 import {
   registerOAuth2Client,
@@ -138,7 +139,7 @@ describe('registerOAuth2Client — RFC 7591 dynamic client registration', () => 
           },
         },
       ),
-    ).rejects.toThrow('invalid_redirect_uri');
+    ).rejects.toThrow('Connect with an API token instead');
     expect('scope' in body).toBe(false);
   });
 
@@ -188,5 +189,61 @@ describe('registerOAuth2Client — RFC 7591 dynamic client registration', () => 
     expect(error).toBeInstanceOf(HTTPException);
     expect((error as HTTPException).status).toBe(400);
     expect((error as Error).message).toContain('client_id');
+  });
+});
+
+describe('CIMD hosted clients', () => {
+  test('uses the metadata document instead of registering a hosted redirect', async () => {
+    let registrationCalls = 0;
+    const client = await registerOAuth2Client({
+      registrationEndpoint: 'https://auth.example.test/register',
+      redirectUri: 'https://api.kortix.com/v1/connectors/oauth2/callback',
+      clientIdMetadataDocumentSupported: true,
+    }, { fetchImpl: async () => {
+      registrationCalls++;
+      return Response.json({ error: 'invalid_redirect_uri' }, { status: 400 });
+    } });
+    expect(client).toEqual({
+      client_id: 'https://api.kortix.com/.well-known/oauth-client.json',
+      token_endpoint_auth_method: 'none',
+    });
+    expect(registrationCalls).toBe(0);
+    const application = {
+      ...client,
+      authorization_url: 'https://auth.example.test/authorize',
+      token_url: 'https://auth.example.test/token',
+    };
+    const callbackUrl = 'https://api.kortix.com/v1/connectors/oauth2/callback';
+    const authorization = buildOAuth2AuthorizationRequest(application, { callbackUrl });
+    const url = new URL(authorization.authorizationUrl);
+    expect(url.searchParams.get('client_id')).toBe(client.client_id);
+    expect(url.searchParams.get('redirect_uri')).toBe(callbackUrl);
+    expect(url.searchParams.get('code_challenge_method')).toBe('S256');
+    const tokens = await exchangeOAuth2AuthorizationCode(application, {
+      code: 'synthetic-code', callbackUrl, pkceVerifier: authorization.pkceVerifier,
+    }, { fetchImpl: async (_url, init) => {
+      const body = new URLSearchParams(String(init?.body));
+      expect(body.get('client_id')).toBe(client.client_id);
+      expect(body.get('redirect_uri')).toBe(callbackUrl);
+      expect(body.get('code_verifier')).toBe(authorization.pkceVerifier);
+      expect(body.has('client_secret')).toBe(false);
+      return Response.json({ access_token: 'synthetic-token', token_type: 'Bearer' });
+    } });
+    expect(tokens.access_token).toBe('synthetic-token');
+  });
+
+  test('returns a typed registration refusal with a token fallback', async () => {
+    const error = await registerOAuth2Client({
+      registrationEndpoint: 'https://auth.example.test/register',
+      redirectUri: 'https://api.kortix.com/v1/connectors/oauth2/callback',
+    }, { fetchImpl: async () => Response.json({ error: 'invalid_redirect_uri' }, { status: 400 }) })
+      .catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(HTTPException);
+    if (!(error instanceof HTTPException)) throw new Error('Expected HTTPException');
+    expect(error.status).toBe(400);
+    expect(await error.getResponse().json()).toEqual({
+      code: 'oauth_client_registration_refused',
+      error: 'The authorization server auth.example.test refused the hosted OAuth callback. Connect with an API token instead.',
+    });
   });
 });

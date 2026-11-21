@@ -1,3 +1,4 @@
+import { nativeOAuth2CallbackUrl } from './connectors/oauth2-callback-url';
 import { wellKnownResponse } from '@kortix/shared/well-known';
 import { createRoute, z } from '@hono/zod-openapi';
 import { config } from './config';
@@ -93,6 +94,18 @@ installHttpMiddleware(app);
 for (const path of ['/.well-known/security.txt', '/robots.txt', '/sitemap.xml']) {
   app.get(path, (c) => wellKnownResponse(c.req.path) ?? c.notFound());
 }
+app.get('/.well-known/oauth-client.json', (c) => {
+  const callback = nativeOAuth2CallbackUrl(c.req.url, config.KORTIX_OAUTH_CALLBACK_ORIGIN || config.KORTIX_URL);
+  return c.json({
+    client_id: new URL('/.well-known/oauth-client.json', callback).href,
+    client_name: 'Kortix',
+    client_uri: 'https://kortix.com',
+    redirect_uris: [callback],
+    token_endpoint_auth_method: 'none',
+    grant_types: ['authorization_code', 'refresh_token'],
+    response_types: ['code'],
+  });
+});
 registerSystemRoutes(app);
 registerClientRoutes(app);
 

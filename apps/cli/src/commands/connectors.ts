@@ -2600,6 +2600,7 @@ export interface OAuth2ResourceDiscoveryLike {
     resource?: string;
   };
   registration_endpoint?: string;
+  client_id_metadata_document_supported?: boolean;
   /** A catalogue app the server signs in to with Kortix's own OAuth client. */
   kortix_client?: boolean;
   token_endpoint_auth_methods_supported?: string[];
@@ -2641,9 +2642,10 @@ export function oauth2AuthorizeSteps(
 
   // A catalogue app with no dynamic registration (`kortix_client`): the server
   // signs in with Kortix's own client, so the registration names no endpoint.
-  if ((discovery.registration_endpoint || discovery.kortix_client) && !opts.clientId) {
+  if ((discovery.registration_endpoint || discovery.client_id_metadata_document_supported || discovery.kortix_client) && !opts.clientId) {
     return {
       register: {
+        ...(discovery.client_id_metadata_document_supported ? { client_id_metadata_document_supported: true } : {}),
         ...(discovery.registration_endpoint
           ? { registration_endpoint: discovery.registration_endpoint }
           : {}),

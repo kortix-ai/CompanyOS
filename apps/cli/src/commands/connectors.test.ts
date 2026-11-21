@@ -103,6 +103,13 @@ describe('oauth2AuthorizeSteps', () => {
     });
   });
 
+  test('CIMD discovery reaches registration with or without DCR', () => {
+    for (const registration_endpoint of [undefined, DISCOVERY_WITH_DCR.registration_endpoint]) {
+      const steps = oauth2AuthorizeSteps({ ...DISCOVERY_WITH_DCR, registration_endpoint, client_id_metadata_document_supported: true }, {});
+      expect(steps).toMatchObject({ register: { client_id_metadata_document_supported: true } });
+    }
+  });
+
   test('--scope narrows what the authorization request asks for', () => {
     const steps = oauth2AuthorizeSteps(DISCOVERY_WITH_DCR, { scopes: ['mcp:execute'] });
     expect(steps).toMatchObject({ scopes: ['mcp:execute'] });

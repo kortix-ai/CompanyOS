@@ -2169,6 +2169,7 @@ flow(
   {
     domain: 'connectors',
     routes: [
+      'GET /.well-known/oauth-client.json',
       'POST /v1/projects/:projectId/connectors/:slug/oauth2/connection',
       'PUT /v1/projects/:projectId/connections/:connectionId/oauth2/application',
       'GET /v1/projects/:projectId/connections/:connectionId/oauth2/application',
@@ -2183,6 +2184,20 @@ flow(
     ],
   },
   async (ctx) => {
+    await ctx.step('the public CIMD document identifies the hosted callback', async () => {
+      const document = await ctx.client.get('/.well-known/oauth-client.json');
+      document.status(200);
+      const metadata = document.json<{ client_name: string; client_id: string; redirect_uris: string[]; token_endpoint_auth_method: string }>();
+      if (metadata.client_name !== 'Kortix' || metadata.token_endpoint_auth_method !== 'none') {
+        throw new Error('CIMD must describe the Kortix public client');
+      }
+      if (metadata.redirect_uris.length !== 1 || !metadata.redirect_uris[0]?.endsWith('/v1/connectors/oauth2/callback')) {
+        throw new Error('CIMD must bind the connector callback');
+      }
+      if (!metadata.client_id.endsWith('/.well-known/oauth-client.json')) {
+        throw new Error('CIMD client_id must identify the document');
+      }
+    });
     const p = await ctx.fixtures.project({ managedGit: true });
     const slug = `ke2e-oauth2-${Date.now().toString(36)}`;
     const connector = await ctx.client.as(ctx.P.OWNER).post(

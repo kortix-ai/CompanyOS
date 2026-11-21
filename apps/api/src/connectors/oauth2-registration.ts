@@ -48,7 +48,8 @@ function isSupportedAuthMethod(value: unknown): value is OAuth2TokenEndpointAuth
 
 export async function registerOAuth2Client(
   input: {
-    registrationEndpoint: string;
+    registrationEndpoint?: string;
+    clientIdMetadataDocumentSupported?: boolean;
     redirectUri: string;
     scopes?: string[];
     tokenEndpointAuthMethodsSupported?: string[];
@@ -56,6 +57,13 @@ export async function registerOAuth2Client(
   },
   runtime: OAuth2LifecycleRuntime = {},
 ): Promise<RegisteredOAuth2Client> {
+  if (input.clientIdMetadataDocumentSupported) {
+    return {
+      client_id: new URL('/.well-known/oauth-client.json', input.redirectUri).href,
+      token_endpoint_auth_method: 'none',
+    };
+  }
+  if (!input.registrationEndpoint) throw new Error('No OAuth client registration endpoint');
   const requested = selectTokenEndpointAuthMethod(input.tokenEndpointAuthMethodsSupported);
   const body = {
     client_name: input.clientName?.trim() || KORTIX_OAUTH2_CLIENT_NAME,
@@ -81,6 +89,13 @@ export async function registerOAuth2Client(
   );
   const payload = await boundedJson(response);
   if (response.status !== 200 && response.status !== 201) {
+    if (payload.error === 'invalid_redirect_uri') {
+      const message = `The authorization server ${new URL(input.registrationEndpoint).hostname} refused the hosted OAuth callback. Connect with an API token instead.`;
+      throw new HTTPException(400, {
+        message,
+        res: Response.json({ code: 'oauth_client_registration_refused', error: message }, { status: 400 }),
+      });
+    }
     // The authorization server of the connection the user configured refused
     // the registration (RFC 7591 `invalid_client_metadata`, KRTX-4709) or is
     // failing: a property of that server, not a Kortix defect. Answer it as a

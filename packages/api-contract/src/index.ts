@@ -857,6 +857,7 @@ export const OAuth2ResourceDiscoverySchema = z
       .omit({ has_client_secret: true, has_private_key: true })
       .optional(),
     registration_endpoint: z.string().optional(),
+    client_id_metadata_document_supported: z.boolean().optional(),
     /** Kortix signs in with its own OAuth client: a catalogue app whose server
      *  has no dynamic registration. Register without `registration_endpoint`. */
     kortix_client: z.boolean().optional(),
@@ -875,6 +876,7 @@ export type OAuth2ResourceDiscovery = z.infer<typeof OAuth2ResourceDiscoverySche
 export const OAuth2ClientRegistrationInputSchema = z
   .object({
     registration_endpoint: OAuth2HttpsUrlSchema.optional(),
+    client_id_metadata_document_supported: z.boolean().optional(),
     /** Authorization server issuer, recorded for RFC 9207 `iss` validation. */
     issuer: OAuth2HttpsUrlSchema.optional(),
     client_name: z.string().trim().min(1).max(128).optional(),

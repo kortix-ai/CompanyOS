@@ -303,3 +303,9 @@ describe('waitForConnectionOAuth2', () => {
     await expect(wait).rejects.toThrow('cancelled');
   });
 });
+
+test('CIMD-only authorization servers can sign in without dynamic registration', () => {
+  const discovery = { ...FULL, registration_endpoint: undefined, client_id_metadata_document_supported: true };
+  expect(oauth2AutoConnectPlan(discovery).kind).toBe('register');
+  expect(buildOAuth2ClientRegistrationInput(discovery).client_id_metadata_document_supported).toBe(true);
+});

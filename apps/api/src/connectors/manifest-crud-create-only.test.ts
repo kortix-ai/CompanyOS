@@ -563,7 +563,7 @@ describe('policy ownership characterization', () => {
 
 test('existing set without edits and rename to itself do not commit, but sync only the slug', async () => {
   storedConnectors = [{ slug: 'mail-primary', provider: 'mcp', url: 'https://example.test/mcp', policy_sets: { reader: {} } }];
-  expect(await upsertConnectorPolicySetInManifest('project-1', 'account-1', 'mail-primary', 'reader')).toMatchObject({ ok: true });
+  expect(await upsertConnectorPolicySetInManifest('project-1', 'account-1', 'mail-primary', 'reader', undefined)).toMatchObject({ ok: true });
   expect(await renameConnectorPolicySetInManifest('project-1', 'account-1', 'mail-primary', 'reader', 'reader')).toMatchObject({ ok: true });
   expect(commitCalls).toBe(0);
   expect(syncCalls).toBe(2);

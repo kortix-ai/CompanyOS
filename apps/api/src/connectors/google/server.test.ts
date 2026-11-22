@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { createConnectorEgressFetch } from '../egress';
 import { GOOGLE_SERVICES, googleMcpUrl, googleServiceForUrl } from './host';
 import { GOOGLE_TOOLS, dispatchGoogleMcp } from './server';
-import type { GoogleFetch } from './client';
+import { createGoogleClient, type GoogleFetch } from './client';
 
 const TOKEN = 'ya29.test-token';
 
@@ -146,5 +146,66 @@ describe('Kortix Google MCP servers', () => {
     expect(res.status).toBe(200);
     const names = JSON.parse(await res.text()).result.tools.map((t: { name: string }) => t.name);
     expect(names).toContain('events_list');
+  });
+});
+
+
+describe('Google gateway cancellation', () => {
+  test('an already-aborted MCP request makes no provider request', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('gateway deadline'));
+    let calls = 0;
+    const request = new Request(rpc('gmail', 'tools/call', { name: 'fetch_emails' }), { signal: controller.signal });
+    const response = await dispatchGoogleMcp(request, { fetchImpl: async () => {
+      calls++;
+      return Response.json({ messages: [] });
+    } });
+    expect(calls).toBe(0);
+    expect((await response.json()).result.isError).toBe(true);
+  });
+
+  test('in-flight cancellation reaches fetch and prevents later detail batches', async () => {
+    const controller = new AbortController();
+    const request = new Request(rpc('gmail', 'tools/call', { name: 'fetch_emails', arguments: { max_results: 20 } }), { signal: controller.signal });
+    let calls = 0;
+    const response = await dispatchGoogleMcp(request, { fetchImpl: async (_url, init) => {
+      calls++;
+      expect(init.signal).toBe(request.signal);
+      if (calls === 1) return Response.json({ messages: Array.from({ length: 20 }, (_, i) => ({ id: `message-${i}`, threadId: `thread-${i}` })) });
+      controller.abort(new Error('gateway deadline'));
+      init.signal?.throwIfAborted();
+      return Response.json({ id: 'unexpected' });
+    } });
+    expect(calls).toBe(2);
+    expect((await response.json()).result.isError).toBe(true);
+  });
+
+  test('a pending provider fetch observes the gateway abort', async () => {
+    const controller = new AbortController();
+    let observedAbort = false;
+    const request = new Request(rpc('drive', 'tools/call', { name: 'list_files' }), { signal: controller.signal });
+    const response = await dispatchGoogleMcp(request, { fetchImpl: async (_url, init) => {
+      if (!init.signal) throw new Error('missing gateway signal');
+      return new Promise<Response>((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => {
+          observedAbort = true;
+          reject(init.signal?.reason);
+        }, { once: true });
+        controller.abort(new Error('gateway deadline'));
+      });
+    } });
+    expect(observedAbort).toBe(true);
+    expect((await response.json()).result.isError).toBe(true);
+  });
+
+  test('cancellation during retry backoff prevents a second provider attempt', async () => {
+    const controller = new AbortController();
+    let calls = 0;
+    const google = createGoogleClient({ token: TOKEN, signal: controller.signal,
+      fetchImpl: async () => { calls++; return new Response('', { status: 503 }); },
+      sleep: async () => { controller.abort(new Error('gateway deadline')); },
+    });
+    await expect(google.json({ url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages' })).rejects.toThrow('gateway deadline');
+    expect(calls).toBe(1);
   });
 });

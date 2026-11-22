@@ -24,7 +24,7 @@ import {
 import {
   DriveStorageError,
   commitVolumeUpload,
-  getDriveVolume,
+  driveVolumeHead,
   listVolumeFilesPage,
   moveVolumeFile,
   planVolumeUpload,
@@ -240,7 +240,7 @@ export function registerSessionDriveSyncRoutes(): void {
     const got = await driveFor(c, 'read', mount?.subdir ?? '/');
     if (got instanceof Response) return got;
     const head = await storage(c, () =>
-      readDriveVolume(got.drive, (volume) => getDriveVolume(volume).then((v) => v.head_commit_id ?? null), () => null),
+      readDriveVolume(got.drive, (volume) => driveVolumeHead(volume).then((h) => h.token), () => null),
     );
     if (head instanceof Response) return head;
     return c.json({ head });

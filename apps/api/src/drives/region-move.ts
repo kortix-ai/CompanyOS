@@ -52,6 +52,7 @@ import {
   commitVolumeUpload,
   deleteDriveVolume,
   detachSandboxVolume,
+  driveVolumeHead,
   getDriveVolume,
   listVolumeFilesPage,
   listVolumeMounts,
@@ -326,7 +327,7 @@ export async function moveDriveToRegion(driveId: string, to: MoveTarget, opts: {
         report.detached++;
       }
       await awaitSaved(from);
-      fromHead = (await getDriveVolume(from)).head_commit_id ?? null;
+      fromHead = (await driveVolumeHead(from)).token;
       tree = await readTree(from);
       Object.assign(report, { files: tree.files.length, dirs: tree.dirs.length, bytes: tree.bytes });
 
@@ -343,7 +344,7 @@ export async function moveDriveToRegion(driveId: string, to: MoveTarget, opts: {
 
       // 5. Verify.
       await verifyCopy(target, tree, hashes);
-      const head = (await getDriveVolume(from)).head_commit_id ?? null;
+      const head = (await driveVolumeHead(from)).token;
       if (head !== fromHead) throw new MoveRefusal('the old volume changed during the copy');
       if ((await listVolumeMounts(from)).length) throw new MoveRefusal('a box mounted the old volume during the copy');
     }
@@ -433,11 +434,11 @@ export async function purgeMovedVolumes(opts: { olderThanMs: number; apply: bool
       out.push({ driveId: row.driveId, volume, outcome: 'kept', reason: 'inside the retention window' });
       continue;
     }
-    const info = await getDriveVolume(volume).catch((err) => {
+    const info = await driveVolumeHead(volume).catch((err) => {
       if (err instanceof DriveStorageError && err.code === 'volume_not_found') return null;
       throw err;
     });
-    if (info && (info.head_commit_id ?? null) !== (move.from_head ?? null)) {
+    if (info && info.token !== (move.from_head ?? null)) {
       out.push({ driveId: row.driveId, volume, outcome: 'kept', reason: 'it changed after the move; compare it with the new volume by hand' });
       continue;
     }

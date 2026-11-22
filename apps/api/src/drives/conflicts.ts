@@ -56,7 +56,10 @@ export async function scanDriveConflicts(drive: DriveRow): Promise<string[]> {
   if (!drive.platinumVolumeId) return [];
   let head: string | null;
   try {
-    head = (await getDriveVolume(driveVolume(drive), AbortSignal.timeout(5_000))).head_commit_id ?? null;
+    const info = await getDriveVolume(driveVolume(drive), AbortSignal.timeout(5_000));
+    // A shared volume is live: nothing merges, so storage makes no conflict copy to find.
+    if (info.type === 'sharedfs') return [];
+    head = info.head_commit_id ?? null;
   } catch (err) {
     if (isMissingVolume(err)) return [];
     throw err;

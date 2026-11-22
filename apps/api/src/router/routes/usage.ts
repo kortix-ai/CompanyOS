@@ -591,21 +591,15 @@ usageApp.openapi(
     const { accountId, projectId } = await resolveSessionCostScope(c, c.req.query('project_id') || undefined);
     const ownerId = await sessionCostOwner(c, accountId, requestedOwnerId);
 
-    if (c.req.query('format') === 'csv') {
-      // Same filtered query as the JSON branch (accountId, projectId, ownerId,
-      // window, sort) — only limit/offset differ, because a CSV export wants
-      // up to CSV_ROW_CAP rows in one shot, not one paginated page of it.
-      const page = await withCostReadGuard(() =>
-        listSessionCosts({
-          accountId,
-          projectId,
-          ownerId,
-          window: parsed.window,
-          sort: parsed.sort,
-          limit: CSV_ROW_CAP,
-          offset: 0,
-        }),
-      );
+    const csv = c.req.query('format') === 'csv';
+    // Same filtered query as the JSON branch (accountId, projectId, ownerId,
+    // window, sort) — only limit/offset differ, because a CSV export wants
+    // up to CSV_ROW_CAP rows in one shot, not one paginated page of it.
+    const page = await withCostReadGuard(() =>
+      listSessionCosts({ accountId, projectId, ownerId, ...parsed, ...(csv ? { limit: CSV_ROW_CAP, offset: 0 } : {}) }),
+    );
+
+    if (csv) {
       const body = toCsv(
         [
           'session_id',
@@ -642,9 +636,7 @@ usageApp.openapi(
       });
     }
 
-    return c.json(
-      await withCostReadGuard(() => listSessionCosts({ accountId, projectId, ownerId, ...parsed })),
-    );
+    return c.json(page);
   },
 );
 
@@ -766,21 +758,15 @@ usageApp.openapi(
         ? undefined
         : accessible.mode === 'allow_only' ? accessible.allowed : new Set<string>();
 
-    if (c.req.query('format') === 'csv') {
-      // Same filtered query as the JSON branch (accountId, window, sort) —
-      // only limit/offset differ, because a CSV export wants up to
-      // CSV_ROW_CAP rows in one shot, not one paginated page of it.
-      const page = await withCostReadGuard(() =>
-        listCostByProject({
-          accountId,
-          projectId,
-          visibleProjectIds,
-          window,
-          sort,
-          limit: CSV_ROW_CAP,
-          offset: 0,
-        }),
-      );
+    const csv = c.req.query('format') === 'csv';
+    // Same filtered query as the JSON branch (accountId, window, sort) —
+    // only limit/offset differ, because a CSV export wants up to
+    // CSV_ROW_CAP rows in one shot, not one paginated page of it.
+    const page = await withCostReadGuard(() =>
+      listCostByProject({ accountId, projectId, visibleProjectIds, window, sort, limit: csv ? CSV_ROW_CAP : limit, offset: csv ? 0 : offset }),
+    );
+
+    if (csv) {
       const body = toCsv(
         [
           'project_id',
@@ -808,11 +794,7 @@ usageApp.openapi(
       });
     }
 
-    return c.json(
-      await withCostReadGuard(() =>
-        listCostByProject({ accountId, projectId, visibleProjectIds, window, sort, limit, offset }),
-      ),
-    );
+    return c.json(page);
   },
 );
 

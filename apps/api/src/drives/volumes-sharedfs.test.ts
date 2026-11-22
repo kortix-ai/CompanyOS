@@ -6,18 +6,22 @@
 import { createHash } from 'node:crypto';
 import { afterEach, expect, mock, test } from 'bun:test';
 
-type Vol = { id: string; type: 'block' | 'sharedfs'; head: string | null; files: Map<string, Uint8Array> };
+type Vol = { id: string; type: 'block' | 'sharedfs'; head: string | null; files: Map<string, Uint8Array>; stamp?: string | null; dirs?: Set<string> };
 
 let served = false;
 let vols = new Map<string, Vol>();
 let calls: string[] = [];
+let queries: string[] = [];
 let uploads = new Map<string, { vol: string; files: Array<{ path: string; blocks: string[] }> }>();
 let blocks = new Map<string, Uint8Array>();
 let commits = 0;
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const refuse = (status: number, code: string) => json({ error: code, code }, status);
-const info = (name: string, v: Vol) => ({ id: v.id, name, type: v.type, head_commit_id: v.head, logical_bytes: 0, file_count: v.files.size, last_commit_at: null });
+const info = (name: string, v: Vol) => ({
+  id: v.id, name, type: v.type, head_commit_id: v.head, logical_bytes: 0, file_count: v.files.size, last_commit_at: null,
+  ...(v.stamp !== undefined ? { head_stamp: v.stamp } : {}),
+});
 const bytesOf = async (body: unknown) => new Uint8Array(await new Response(body as BodyInit).arrayBuffer());
 
 function commit(v: Vol) {
@@ -28,6 +32,8 @@ async function fakeStorage(path: string, init: RequestInit = {}): Promise<Respon
   const method = (init.method ?? 'GET').toUpperCase();
   const url = new URL(path, 'http://storage');
   calls.push(`${method} ${url.pathname}`);
+  queries.push(url.search);
+  if (/^\/v1\/sandboxes\/[^/]+\/volumes\//.test(url.pathname) && method === 'POST') return refuse(409, 'sharedfs_writers_full');
   if (url.pathname === '/v1/volumes' && method === 'POST') {
     const body = JSON.parse(String(init.body)) as { name: string; type?: string };
     if (vols.has(body.name)) return refuse(409, 'volume_exists');
@@ -78,6 +84,10 @@ async function fakeStorage(path: string, init: RequestInit = {}): Promise<Respon
     if (!entries.size) return refuse(404, 'not_found');
     return json({ entries: [...entries.values()], next_cursor: null });
   }
+  if (sub === '/files/folder' && method === 'POST') {
+    (v.dirs ??= new Set()).add(String((JSON.parse(String(init.body)) as { path: string }).path));
+    return json({ outcome: 'created', commit_id: null }, 201);
+  }
   if (sub === '/files' && method === 'DELETE') {
     for (const fp of [...v.files.keys()]) if (fp === p || fp.startsWith(`${p}/`)) v.files.delete(fp);
     commit(v);
@@ -115,6 +125,7 @@ mock.module('../shared/platinum', () => ({
 const {
   openDriveVolume, knownVolumeType, planVolumeUpload, putVolumeUploadBlock, commitVolumeUpload,
   writeVolumeFiles, driveVolumeHead, volumeFolderUsage, readVolumeFile, listVolumeFiles, DriveStorageError,
+  attachSandboxVolume, makeVolumeFolder, writeVolumeFile, isKortixInternalPath, isSharedUploadStaging,
 } = await import('./volumes');
 
 let n = 0;
@@ -139,6 +150,7 @@ afterEach(() => {
   served = false;
   vols = new Map();
   calls = [];
+  queries = [];
   uploads = new Map();
   blocks = new Map();
 });
@@ -286,4 +298,50 @@ test('listing a shared staging folder never needs the listing memo', async () =>
   const plan = (await planVolumeUpload(volume, { files: [{ path: '/A/s.bin', size: 5, blocks: parts.map((p) => p.sha) }] })) as { upload_id: string };
   const staged = await listVolumeFiles(volume, `/.kortix-uploads/${plan.upload_id}`, false, AbortSignal.timeout(1_000));
   expect(staged.map((e) => e.path)).toEqual([`/.kortix-uploads/${plan.upload_id}/plan.json`]);
+});
+
+test('the head of a shared volume is storage\'s head stamp when it has one, else the token from its usage', async () => {
+  const shared = fresh();
+  vols.set(shared.name, { id: 's', type: 'sharedfs', head: 'c7', files: new Map(), stamp: '0000000000000000002a' });
+  expect(await driveVolumeHead(shared)).toEqual({ token: 'stamp:0000000000000000002a', commit: null });
+  // One call: the stamp needs no usage read.
+  expect(calls).toEqual([`GET /v1/volumes/${shared.name}`]);
+  vols.get(shared.name)!.stamp = '0000000000000000002b';
+  expect((await driveVolumeHead(shared)).token).toBe('stamp:0000000000000000002b');
+  // Never written, or storage could not read it: the usage token, as before.
+  vols.get(shared.name)!.stamp = null;
+  expect((await driveVolumeHead(shared)).token).toStartWith('live:');
+  // A block volume's head is its head commit, whatever else it carries.
+  const block = fresh();
+  vols.set(block.name, { id: 'b', type: 'block', head: 'c9', files: new Map() });
+  expect(await driveVolumeHead(block)).toEqual({ token: 'c9', commit: 'c9' });
+});
+
+test('a shared volume with every writer slot taken refuses a mount as busy, not as a name clash', async () => {
+  const err = await attachSandboxVolume('sbx-1', '/drives/Files', { volume: fresh(), readOnly: false }).catch((e: unknown) => e);
+  expect(err).toBeInstanceOf(DriveStorageError);
+  expect((err as InstanceType<typeof DriveStorageError>).status).toBe(409);
+  expect((err as InstanceType<typeof DriveStorageError>).code).toBe('sharedfs_writers_full');
+  expect((err as Error).message).not.toContain('already exists');
+});
+
+test('a folder is made with its parents, and a write may carry the file\'s mode', async () => {
+  served = true;
+  const volume = fresh();
+  await openDriveVolume(volume, undefined, { preferShared: true });
+  await makeVolumeFolder(volume, '/A/empty');
+  expect([...vols.get(volume.name)!.dirs!]).toEqual(['/A/empty']);
+  await writeVolumeFile(volume, '/A/run.sh', fileOf(4, 8), { overwrite: false, mode: 0o100755 });
+  expect(new URLSearchParams(queries.at(-1)).get('mode')).toBe('755');
+  // Without a mode the write is the one it always was.
+  await writeVolumeFile(volume, '/A/b.txt', fileOf(4, 9), { overwrite: false });
+  expect(new URLSearchParams(queries.at(-1)).has('mode')).toBe(false);
+});
+
+test('Kortix\'s own bookkeeping at a drive\'s root is known by its path', () => {
+  expect(['/.kortix-uploads/sfs-1/plan.json', '/.kortix-folded/d1', '/.kortix'].every(isKortixInternalPath)).toBe(true);
+  expect(['/A/.kortix-uploads', '/kortix', '/Users/a/.kortix-x'].some(isKortixInternalPath)).toBe(false);
+  expect(isSharedUploadStaging('/.kortix-uploads/sfs-1/abc')).toBe(true);
+  expect(isSharedUploadStaging('/.kortix-uploads')).toBe(true);
+  expect(isSharedUploadStaging('/.kortix-folded/d1')).toBe(false);
 });

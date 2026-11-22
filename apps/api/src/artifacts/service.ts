@@ -43,6 +43,7 @@ import {
 import {
   type DriveVolume,
   DriveStorageError,
+  isKortixInternalPath,
   listVolumeCommits,
   listVolumeFiles,
   readVolumeFile,
@@ -473,7 +474,7 @@ export async function listFiles(row: ArtifactRow, at?: string): Promise<Array<{ 
     }
     const prefix = row.root === '/' ? '/' : `${row.root}/`;
     return (await listVolumeFiles(volume, row.root, true, undefined, at))
-      .filter((e) => e.type === 'file')
+      .filter((e) => e.type === 'file' && !isKortixInternalPath(e.path))
       .map((e) => ({ path: e.path.slice(prefix.length), size: e.size, content_type: contentTypeFor(e.path) }))
       .sort((a, b) => a.path.localeCompare(b.path));
   }, () => []);

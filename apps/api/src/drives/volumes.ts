@@ -327,6 +327,11 @@ async function call(volume: DriveVolume | null, path: string, init: RequestInit 
     case 409:
       if (code === 'volume_busy') throw new DriveStorageError(409, 'The drive is attached to a running session', code);
       if (code === 'not_a_directory') throw new DriveStorageError(409, 'That path is a file, not a folder', code);
+      // A shared volume takes a fixed number of read-write mounts at once (a
+      // mount, never a file write): the drive is busy, not a name clash.
+      if (code === 'sharedfs_writers_full') {
+        throw new DriveStorageError(409, 'Too many sessions have these files open right now. Close a session that uses them, or try again in a minute.', code);
+      }
       if (code === 'volume_in_other_region') {
         logger.warn(`[drives] ${init.method ?? 'GET'} ${path} -> 409 ${text.slice(0, 300)}`);
         throw new DriveStorageError(409, 'These files live in another region than this session', code);
@@ -390,6 +395,21 @@ export interface VolumeInfo {
   size_limit_bytes?: number | null;
   /** Absent from a storage version without shared volumes: block. */
   type?: VolumeType;
+  /**
+   * A shared volume's head stamp: moves on every write. Null when the volume
+   * was never written or storage could not read it; absent for a block volume.
+   */
+  head_stamp?: string | null;
+}
+
+/**
+ * Kortix's own bookkeeping at a drive's root (`/.kortix-folded` fold markers,
+ * `/.kortix-uploads` staging of a shared volume's block upload): no person's
+ * file. Every walk of a drive that shows, indexes or syncs files skips it,
+ * as the Files listing does.
+ */
+export function isKortixInternalPath(path: string): boolean {
+  return path.startsWith('/.kortix');
 }
 
 // replica-local: the type storage last reported per volume name. A wrong or
@@ -549,9 +569,13 @@ export interface DriveVolumeHead {
  * moved (search index, conflict scan, drive sync, region move). A block
  * volume's token is its head commit, as before. A shared volume has no head
  * commit (or keeps the one it had before it was converted, which never moves
- * again), so its token is built from what it holds now: the newest change
- * time of any entry, the file count and the bytes. A shared volume too large
- * to count answers a new token every time, so the caller re-reads it.
+ * again), so its token is storage's head stamp, which moves on every write.
+ * Without one (never written, or storage could not read it), the token is
+ * built from what it holds now: the newest change time of any entry, the file
+ * count and the bytes. A shared volume too large to count answers a new token
+ * every time, so the caller re-reads it. Either moves with Kortix's own
+ * staging under `/.kortix-uploads` too (storage cannot leave a folder out):
+ * that costs a caller one re-read, which skips the staging as every walker does.
  */
 export async function driveVolumeHead(volume: DriveVolume, signal?: AbortSignal): Promise<DriveVolumeHead> {
   const info = await getDriveVolume(volume, signal);
@@ -559,6 +583,7 @@ export async function driveVolumeHead(volume: DriveVolume, signal?: AbortSignal)
     const head = info.head_commit_id ?? null;
     return { token: head, commit: head };
   }
+  if (typeof info.head_stamp === 'string' && info.head_stamp) return { token: `stamp:${info.head_stamp}`, commit: null };
   const u = await callJson<SharedVolumeUsage>(volume, `${v(volume)}/usage`, signal ? { signal } : {});
   const token = u.too_large ? `live:${Date.now()}` : `live:${u.last_change_at ?? '-'}:${u.file_count ?? '-'}:${u.used_bytes ?? '-'}`;
   return { token, commit: null };
@@ -654,9 +679,11 @@ export async function writeVolumeFile(
   volume: DriveVolume,
   path: string,
   body: Uint8Array<ArrayBuffer>,
-  opts: { overwrite: boolean; ifMatch?: string },
+  opts: { overwrite: boolean; ifMatch?: string; mode?: number },
 ): Promise<{ path: string; size: number; version?: string; commit?: VolumeWriteCommit }> {
   const q = new URLSearchParams({ path, overwrite: String(opts.overwrite) });
+  // A shared volume takes the file's permission bits with the write, in octal.
+  if (opts.mode !== undefined) q.set('mode', (opts.mode & 0o7777).toString(8));
   const r = await callJson<{ path: string; size: number; version?: string }>(volume, `${v(volume)}/files/content?${q}`, {
     method: 'PUT',
     body,
@@ -764,6 +791,11 @@ const SHARED_UPLOAD_ID = /^sfs-(\d{13})-[0-9a-f]{16}$/;
 /** A staging folder older than this is an abandoned upload, removed by the next plan's sweep. */
 const SHARED_UPLOAD_TTL_MS = 6 * 60 * 60_000;
 const SHA256 = /^[0-9a-f]{64}$/;
+
+/** A path in the staging folder of a shared volume's block upload: half an upload, never a drive file. */
+export function isSharedUploadStaging(path: string): boolean {
+  return path === SHARED_UPLOADS_DIR || path.startsWith(`${SHARED_UPLOADS_DIR}/`);
+}
 
 export function isSharedUploadId(uploadId: string): boolean {
   return SHARED_UPLOAD_ID.test(uploadId);
@@ -951,6 +983,20 @@ async function writeSharedFiles(
     );
   }
   return undefined;
+}
+
+/** An empty folder, with any missing parents (`POST /files/folder`); one that exists already is fine. */
+export async function makeVolumeFolder(volume: DriveVolume, path: string): Promise<void> {
+  try {
+    await call(volume, `${v(volume)}/files/folder`, {
+      method: 'POST',
+      body: JSON.stringify({ path }),
+      signal: AbortSignal.timeout(FILE_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err instanceof DriveStorageError && err.code === 'path_exists') return;
+    throw err;
+  }
 }
 
 export async function moveVolumeFile(volume: DriveVolume, src: string, dst: string): Promise<void> {

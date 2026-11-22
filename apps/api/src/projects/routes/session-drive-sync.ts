@@ -25,6 +25,7 @@ import {
   DriveStorageError,
   commitVolumeUpload,
   driveVolumeHead,
+  isKortixInternalPath,
   listVolumeFilesPage,
   moveVolumeFile,
   planVolumeUpload,
@@ -261,7 +262,8 @@ export function registerSessionDriveSyncRoutes(): void {
       ),
     );
     if (page instanceof Response) return page;
-    return c.json(page);
+    // Kortix's own bookkeeping (staging of a shared upload, fold markers) never syncs into a box.
+    return c.json({ ...page, entries: page.entries.filter((e) => !isKortixInternalPath(e.path)) });
   });
 
   projectsApp.get(`${base}/:driveId/files/stat`, async (c: Ctx) => {

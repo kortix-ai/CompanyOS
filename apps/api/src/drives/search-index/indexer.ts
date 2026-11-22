@@ -27,6 +27,7 @@ import {
   type VolumeEntry,
   driveStorageAvailable,
   driveVolumeHead,
+  isKortixInternalPath,
   isMissingVolume,
   listVolumeFilesPage,
   readVolumeFile,
@@ -78,7 +79,7 @@ async function listAtHead(volume: DriveVolume, head: string | null): Promise<{ e
       ...(head ? { at: head } : {}),
     });
     for (const e of page.entries) {
-      if (e.type === 'symlink' || baseName(e.path) === FOLDER_MARKER || !e.path.startsWith('/')) continue;
+      if (e.type === 'symlink' || baseName(e.path) === FOLDER_MARKER || !e.path.startsWith('/') || isKortixInternalPath(e.path)) continue;
       entries.push(e);
       if (entries.length >= MAX_INDEX_ENTRIES) return { entries, truncated: true };
     }

@@ -751,7 +751,7 @@ export function ToolParts({
       >
         {summary && <p className="text-muted-foreground px-2 pb-2 text-sm text-pretty">{summary}</p>}
         {failed && (
-          <div className="border-kortix-red/30 bg-kortix-red/5 text-foreground mb-2 rounded-md border px-3 py-2 text-sm">
+          <div className="bg-kortix-red/15 text-foreground mb-2 rounded-md px-3 py-2 text-sm">
             {tI18nComplete.raw('text4e1c9bd64a7d')}
           </div>
         )}

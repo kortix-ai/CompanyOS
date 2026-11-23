@@ -138,7 +138,9 @@ export function StepHeader({
       )}
       <h1
         className={cn(
-          'text-foreground text-2xl font-medium tracking-tight text-balance md:mt-6',
+          'text-foreground text-2xl tracking-tight text-balance md:mt-6',
+          // The sign-in frame sets its headings in medium; other screens keep semibold.
+          frame.centered ? 'font-medium' : 'font-semibold',
           mark && markOnMobile && 'mt-6',
         )}
       >

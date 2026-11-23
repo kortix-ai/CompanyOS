@@ -138,6 +138,17 @@ describe('resolveFeatureFlag — explicit override wins', () => {
     expect(buildFeatureFlagCatalog(metadata).map((flag) => flag.key)).not.toContain('llm_gateway');
   });
 
+  test('workspace_volume graduated: stateless sandboxes need no flag and a stored override is inert', () => {
+    // 2026-11-23: every new Platinum session keeps /workspace on its own volume
+    // (platform/services/workspace-volume.ts); KORTIX_WORKSPACE_VOLUMES=off is
+    // the only off switch. A stored `false` must not resurface as a key, a
+    // catalog row, or an operator-only refusal.
+    expect(isFeatureFlagKey('workspace_volume')).toBe(false);
+    const metadata = { experimental: { workspace_volume: false } };
+    expect(Object.keys(resolveFeatureFlags(metadata))).not.toContain('workspace_volume');
+    expect(buildFeatureFlagCatalog(metadata).map((flag) => flag.key)).not.toContain('workspace_volume');
+  });
+
   test('pooled_provider_secrets graduated: provider keys need no flag and a stored override is inert', () => {
     // 2026-11-12: named provider keys, sharing, per-session key selection and
     // named ChatGPT/Claude sign-ins are on for every project. A stored `false`
@@ -356,22 +367,16 @@ describe('buildFeatureFlagCatalog', () => {
  * break (d) and take the operator lever with it.
  */
 describe('catalogHidden', () => {
-  test('only internal-only surfaces are hidden: workspace_volume (stateless sandboxes)', () => {
-    // `apps` graduated (2026-10-14), `session_log` (2026-10-22), `session_log_restore` (2026-11-05) and
-    // `meta_agent` was removed (2026-11-02): none is a flag.
-    expect([...HIDDEN_KEYS].sort()).toEqual(['workspace_volume']);
+  test('no flag is hidden today: hiding one is a dated, reviewed decision', () => {
+    // `apps` graduated (2026-10-14), `session_log` (2026-10-22), `session_log_restore` (2026-11-05),
+    // `workspace_volume` (2026-11-23) and `meta_agent` was removed (2026-11-02): none is a flag.
+    expect([...HIDDEN_KEYS].sort()).toEqual([]);
   });
 
   // Launched 2026-11-21: on by default wherever the API serves /v1/chrome, and listed.
   test('chrome is on by default where KORTIX_CHROME_ENABLED serves it, and listed', () => {
     expect(resolveFeatureFlag({}, 'chrome')).toBe(config.KORTIX_CHROME_ENABLED);
     expect(buildFeatureFlagCatalog({}).find((flag) => flag.key === 'chrome')?.default_enabled).toBe(config.KORTIX_CHROME_ENABLED);
-  });
-
-  test('workspace_volume is a behavioral flag that defaults off and needs Platinum', () => {
-    const def = REGISTERED_FEATURE_FLAGS.find((f) => f.key === 'workspace_volume');
-    expect(def?.enforcement).toBe('behavioral');
-    expect(resolveFeatureFlag({}, 'workspace_volume')).toBe(false);
   });
 
   for (const key of HIDDEN_KEYS) {

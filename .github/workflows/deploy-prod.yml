@@ -1330,11 +1330,11 @@ jobs:
       # s3:DeleteObject, and expiry is safe because the archive is a cache the
       # API rebuilds from its Git mirror.
       #
-      # KORTIX_WORKSPACE_VOLUMES=on turns `workspace_volume` (stateless
-      # sandboxes) on for every prod project that has made no choice: each new
-      # session keeps /workspace on its own Platinum volume, and a box stopped
-      # for KORTIX_SANDBOX_IDLE_DELETE_MINUTES is deleted. A project an
-      # operator set to `false` stays off. Rollback: remove the key and
+      # KORTIX_WORKSPACE_VOLUMES=on: stateless sandboxes (each new session
+      # keeps /workspace on its own Platinum volume; a box stopped for
+      # KORTIX_SANDBOX_IDLE_DELETE_MINUTES is deleted). The code default is on
+      # since 2026-11-23; the key stays so a rollback to an older image, where
+      # unset meant off, keeps it on. Kill switch: set it to `off` and
       # redeploy; sessions that already have a volume keep it.
       #
       # KORTIX_CHROME_ENABLED=true serves Kortix in Chrome (/v1/chrome/* and the

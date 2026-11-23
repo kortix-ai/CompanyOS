@@ -277,6 +277,12 @@ describe('resolveFeatureFlag', () => {
     expect(resolveFeatureFlag(undefined, 'reminders')).toBe(false);
   });
 
+  test('workspace_volume reads the row: the API sends whether new sessions are stateless (Platinum), not a constant', () => {
+    expect(resolveFeatureFlag({ workspace_volume: true }, 'workspace_volume')).toBe(true);
+    expect(resolveFeatureFlag({ workspace_volume: false }, 'workspace_volume')).toBe(false);
+    expect(resolveFeatureFlag(undefined, 'workspace_volume')).toBe(false);
+  });
+
   test('graduated keys are on for every project, even against a contrary row', () => {
     expect(resolveFeatureFlag({ review_center: false }, 'review_center')).toBe(true);
     expect(resolveFeatureFlag({ agent_tunnel: false }, 'agent_tunnel')).toBe(true);
@@ -300,7 +306,6 @@ describe('useFeatureFlags', () => {
     'chat',
     'shared_drives',
     'goals',
-    'workspace_volume',
     'email_channel',
     'session_groups',
     'chrome',
@@ -317,6 +322,7 @@ describe('useFeatureFlags', () => {
     'volumes',
     'drives',
     'artifacts',
+    'workspace_volume',
     'session_log',
   ] as const;
 

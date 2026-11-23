@@ -928,7 +928,6 @@ describe('envelopes', () => {
       'chat',
       'shared_drives',
       'goals',
-      'workspace_volume',
       'email_channel',
       'session_groups',
       'chrome',

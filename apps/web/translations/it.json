@@ -1313,10 +1313,6 @@
           "name": "Obiettivi",
           "description": "Assegna a un agente un obiettivo di cui resta responsabile finché un controllo indipendente non conferma il risultato. Pianifica, lavora, attende, sollecita le persone e conserva il suo stato in una cartella Goals in File. Richiede Volumi e Cicli attivi."
         },
-        "workspace_volume": {
-          "name": "Sandbox senza stato",
-          "description": "Ogni sessione conserva solo /workspace, su un volume dedicato. Una sandbox ferma da un'ora viene eliminata e l'apertura successiva ne avvia una nuova con gli stessi file e la stessa conversazione. I programmi della sandbox precedente non sono più in esecuzione. Kortix lo attiva per workspace."
-        },
         "email_channel": {
           "name": "Canale email",
           "description": "Dai all'agente una casella email su Resend: la posta in arrivo avvia e continua le sessioni, e l'agente legge, risponde e invia dalla casella. Usa la tua chiave API Resend e il tuo dominio."

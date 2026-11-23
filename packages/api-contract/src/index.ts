@@ -65,7 +65,6 @@ export const FeatureFlagMapSchema = z.object({
   chat: z.boolean(),
   shared_drives: z.boolean(),
   goals: z.boolean(),
-  workspace_volume: z.boolean(),
   email_channel: z.boolean(),
   session_groups: z.boolean(),
   chrome: z.boolean(),
@@ -229,6 +228,8 @@ export const ProjectSchema = z.object({
     artifact_comments: z.literal(false).optional(),
     /** Not a flag since 2026-11-02 (every project has a Drive); `true` wherever the platform stores a Drive (Platinum), for older SDK, CLI and hosts. */
     drives: z.boolean().optional(),
+    /** Not a flag since 2026-11-23 (stateless sandboxes: every new Platinum session keeps /workspace on its own volume); `true` wherever new sessions get that volume (Platinum, and the deployment did not set `KORTIX_WORKSPACE_VOLUMES=off`), for older SDK, web and CLI clients. */
+    workspace_volume: z.boolean().optional(),
     /** @deprecated Merged into `chat` (2026-11); equal to `chat`, for released TUI, mobile and CLI builds that show Channels only while it is true. */
     project_channels: z.boolean().optional(),
   }),

@@ -1313,10 +1313,6 @@
           "name": "Objetivos",
           "description": "Dê a um agente um objetivo pelo qual ele responde até que uma verificação independente confirme o resultado. Ele planeja, trabalha, espera, cobra as pessoas e guarda seu estado em uma pasta Goals em Arquivos. Requer Volumes e Ciclos ativados."
         },
-        "workspace_volume": {
-          "name": "Sandboxes sem estado",
-          "description": "Cada sessão mantém apenas o /workspace, em um volume próprio. Uma sandbox parada por uma hora é excluída, e a próxima abertura inicia uma nova com os mesmos arquivos e a mesma conversa. Os programas da sandbox anterior não estão mais em execução. A Kortix ativa por espaço de trabalho."
-        },
         "email_channel": {
           "name": "Canal de e-mail",
           "description": "Dê ao agente uma caixa de entrada no Resend: e-mails recebidos iniciam e continuam sessões, e o agente lê, responde e envia a partir da caixa. Use sua própria chave de API e domínio do Resend."

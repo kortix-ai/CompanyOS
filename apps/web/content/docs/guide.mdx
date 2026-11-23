@@ -766,6 +766,7 @@ A sleeping computer uses no compute. Its `/workspace` files count as [storage](/
 - `/workspace` holds the session's files for the life of the session.
 - `/drives` holds your Drive files, shared across sessions and kept until you delete them. See [Drive](/docs/guide#drive).
 - Anything else (the home directory, `/tmp`, installed packages) can be gone when the session wakes. Put tools in a sandbox template.
+- Programs do not keep running. A computer that sleeps for an hour is replaced: the next wake starts a new computer with the same `/workspace` and conversation. A dev server, a watcher or a background job from before is not running, and the agent is told so.
 
 A sandbox template sets what is installed on the cloud computer and how large it is. Set it once for the whole workspace in **Workspace admin** → **Sandbox templates**. The keys are in the [kortix.yaml reference](/docs/developers#kortixyaml-reference).
 

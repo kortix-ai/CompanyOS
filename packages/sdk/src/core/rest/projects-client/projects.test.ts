@@ -1032,7 +1032,6 @@ test('FEATURE_FLAG_KEYS lists every flag key exactly once', () => {
     'secrets_egress',
     'us_region',
     'event_triggers',
-    'workspace_volume',
     'chat',
     'shared_drives',
     'goals',
@@ -1070,6 +1069,18 @@ test('a graduated flag key still typechecks but is no longer a served flag', () 
   // actually serves, so it drops the key.
   const graduated: FeatureFlagKey = 'review_center';
   expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
+});
+
+test('workspace_volume graduated: every Platinum session is stateless, the key still typechecks', () => {
+  // Stateless sandboxes are the default since 2026-11-23: every new Platinum
+  // session keeps /workspace on its own volume. The API sends
+  // `experimental.workspace_volume` (whether new sessions get a volume) for
+  // older clients, but it no longer lists, resolves, or accepts the key.
+  const graduated: FeatureFlagKey = 'workspace_volume';
+  expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
+  const project = { experimental: {} } as Pick<KortixProject, 'experimental'>;
+  const sent: boolean | undefined = project.experimental?.workspace_volume;
+  expect(sent).toBeUndefined();
 });
 
 test('pooled_provider_secrets graduated: provider keys need no flag, the key still typechecks', () => {

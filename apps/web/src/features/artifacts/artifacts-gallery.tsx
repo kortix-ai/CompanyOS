@@ -64,6 +64,7 @@ function sortArtifacts(artifacts: Artifact[], sort: ArtifactSort): Artifact[] {
  */
 export function ArtifactsGallery({ projectId }: { projectId: string }) {
   const t = useTranslations('artifacts');
+  const tCommon = useTranslations('common');
   const folders = useArtifactFolders(projectId);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -145,7 +146,7 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 pb-20 md:px-8">
           {folderId ? <nav aria-label={t('folderNavigation')} className="flex min-w-0 items-center gap-2 text-sm">
             <Button variant="ghost" size="sm" onClick={() => setFolderId(null)} aria-current={!folderId ? 'page' : undefined}>{t('title')}</Button>
-            {folderId ? <><span aria-hidden="true">/</span><span className="truncate font-medium" aria-current="page">{currentFolder?.name ?? (folders.isError ? t('folderLoadFailed') : folders.isSuccess ? t('folderUnavailable') : <Loading className="size-3.5" aria-label={t('folderNavigation')} />)}</span>{currentFolder ? <ArtifactFolderActions folder={currentFolder} projectId={projectId} /> : null}</> : null}
+            {folderId ? <><span aria-hidden="true">/</span><span className="truncate font-medium" aria-current="page">{currentFolder?.name ?? (folders.isError ? t('folderLoadFailed') : folders.isSuccess ? t('folderUnavailable') : <span role="status" aria-label={tCommon('loading')}><Loading className="size-3.5" /></span>)}</span>{currentFolder ? <ArtifactFolderActions folder={currentFolder} projectId={projectId} /> : null}</> : null}
           </nav> : null}
           {!folderId && folders.isError ? <ErrorState title={t('folderLoadFailed')} action={<Button variant="outline" size="sm" onClick={() => folders.refetch()}>{t('retry')}</Button>} /> : null}
           {!folderId && !filtered && folders.data?.length ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{folders.data.map(folder => <ArtifactFolderTile key={folder.folder_id} folder={folder} projectId={projectId} onOpen={() => setFolderId(folder.folder_id)} />)}</div> : null}
@@ -202,8 +203,8 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
                 ))}
               </div>
             ) : (<>
-              {shown.length === 0 && !create.isPending && paged && filtered && server.isLoading ? (
-                <div role="status" aria-label={t('search')} className="flex justify-center py-12"><Loading className="size-5" /></div>
+              {shown.length === 0 && !create.isPending && paged && filtered && (server.isLoading || server.isPlaceholderData) ? (
+                <div role="status" aria-label={tCommon('loading')} className="flex justify-center py-12"><Loading className="size-5" /></div>
               ) : shown.length === 0 && !create.isPending ? (
               <EmptyState
                 title={

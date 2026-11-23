@@ -7,9 +7,9 @@
  *
  * A section is a plain title over its rows, always open. No header button, no
  * caret, no count chip: the rows ARE the count. Sections are divided by one
- * hairline on the column's inset (`mx-5`), never full-bleed.
+ * hairline on the column's inset (`mx-2.5`), never full-bleed.
  *
- * The column's one text edge is `px-5`. Rows sit on `mx-3` and pad `px-2`, so
+ * The column's one text edge is `px-2.5`. Rows sit on `mx-1.5` and pad `px-1`, so
  * their text starts on the same x as the title and their hover fill reaches a
  * little past it — see `PANEL_ROW`.
  */
@@ -20,7 +20,7 @@ import type { ReactNode } from 'react';
 /** The row every section draws: one height, one hover, one text edge. Its
  *  parent is a flex row (`<li className="flex">`) so `flex-1` fills it. */
 export const PANEL_ROW = cn(
-  'mx-3 flex h-8 flex-1 min-w-0 items-center gap-3 rounded-md px-2 text-left text-sm',
+  'mx-1.5 flex h-8 flex-1 min-w-0 items-center gap-3 rounded-md px-1 text-left text-sm',
   'hover:bg-hover transition-colors duration-(--duration-fast) ease-out',
   'disabled:cursor-default disabled:hover:bg-transparent',
 );
@@ -72,8 +72,8 @@ export function PanelCard({
       )}
     >
       {/* Between sections only: the first section draws no rule above it. */}
-      <div className="border-border mx-5 border-t group-first/section:hidden" aria-hidden />
-      <header className="flex min-h-8 shrink-0 items-center justify-between gap-2 px-5 pt-4 pb-1.5">
+      <div className="border-border mx-2.5 border-t group-first/section:hidden" aria-hidden />
+      <header className="flex min-h-8 shrink-0 items-center justify-between gap-2 px-2.5 pt-4 pb-1.5">
         <span className="flex min-w-0 flex-col gap-0.5">
           <span className="flex min-w-0 items-center gap-2">
             <h3 className="text-foreground truncate text-sm font-medium">{title}</h3>
@@ -85,7 +85,7 @@ export function PanelCard({
       </header>
       <div className={cn(fill && 'flex min-h-0 flex-col', contentClassName)}>
         {isEmpty ? (
-          <div className="flex flex-col items-start gap-2 px-5">
+          <div className="flex flex-col items-start gap-2 px-2.5">
             {emptyText && <p className="text-muted-foreground text-sm text-pretty">{emptyText}</p>}
             {emptyActions}
           </div>

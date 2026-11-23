@@ -87,7 +87,7 @@ export function ContextMeter({ usage }: { usage: ContextUsage }) {
 
   return (
     <div className="flex flex-col">
-      <div className="flex items-center justify-between gap-2 px-5 text-sm tabular-nums">
+      <div className="flex items-center justify-between gap-2 px-2.5 text-sm tabular-nums">
         <span className="text-foreground flex items-center gap-1.5">
           {/* Nearly full: the composer ring's tone as a dot, never as tinted text. */}
           {limit && usage.tone !== 'info' && (
@@ -103,7 +103,7 @@ export function ContextMeter({ usage }: { usage: ContextUsage }) {
       </div>
 
       {/* One track, the parts laid end to end at their share of the window. */}
-      <div className="bg-muted mx-5 mt-2 flex h-1 gap-px overflow-hidden rounded-full" aria-hidden>
+      <div className="bg-muted mx-2.5 mt-2 flex h-1 gap-px overflow-hidden rounded-full" aria-hidden>
         {parts.map((p) => (
           <span key={p.key} className={p.swatch} style={{ width: `${share(p.value) * 100}%` }} />
         ))}
@@ -142,7 +142,7 @@ function MeterRow({
   className?: string;
 }) {
   return (
-    <div className={cn('mx-3 flex h-7 items-center gap-3 px-2 text-sm tabular-nums', className)}>
+    <div className={cn('mx-1.5 flex h-7 items-center gap-3 px-1 text-sm tabular-nums', className)}>
       <span className="flex w-5 shrink-0 items-center justify-center" aria-hidden>
         <span className={cn('size-2.5 rounded-xs', swatch)} />
       </span>

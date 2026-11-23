@@ -137,9 +137,9 @@ export function PlanPanelCard({ sessionId }: { sessionId: string }) {
           </span>
         ) : undefined
       }
-      // `px-5` matches the title's inset, so a step's glyph sits on the
+      // `px-2.5` matches the title's inset, so a step's glyph sits on the
       // same left edge as the title above it.
-      contentClassName="px-5 pb-3"
+      contentClassName="px-2.5 pb-3"
     >
       <PlanSteps rows={rows} />
     </PanelCard>

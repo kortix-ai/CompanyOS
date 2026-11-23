@@ -220,7 +220,7 @@ export function OutputRows({
             <div key={group.kind}>
               <p
                 className={cn(
-                  'text-muted-foreground px-5 pb-1 text-xs',
+                  'text-muted-foreground px-2.5 pb-1 text-xs',
                   i > 0 && 'pt-3',
                 )}
               >

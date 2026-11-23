@@ -54,7 +54,7 @@ describe('BasicTool panel surface — the disclosure row', () => {
     );
 
     // The design-system panel row, not a pane-wide sticky header.
-    expect(html).toContain('border-border border-b last:border-b-0');
+    expect(html).toContain('bg-popover border-border overflow-hidden rounded-md border');
     expect(html).not.toContain('sticky');
     expect(html).not.toContain('pt-4');
     expect(html).not.toContain('pb-3');
@@ -87,7 +87,7 @@ describe('BasicTool panel surface — the disclosure row', () => {
     expect(html).toContain('the payload');
     // Body chrome: a seam under the trigger, the row's own padding — never the
     // old `p-4` pane body.
-    expect(html).toContain('px-2 pb-3 text-sm');
+    expect(html).toContain('border-border border-t px-3 py-3 text-sm');
   });
 
   test('forceOpen opens the row on its FIRST render, not a frame later', () => {

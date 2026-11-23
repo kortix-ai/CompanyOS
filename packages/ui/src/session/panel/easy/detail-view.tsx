@@ -761,9 +761,8 @@ export function ToolParts({
             `calls`: `collapseSnapshots` can fold three `todo_write` calls into
             the single row that is actually drawn, and that lone row is a
             single-part detail by every measure the reader has. */}
-        {/* The list draws the hairline between rows: each renderer wraps its row
-            in its own box, so a row cannot see that another follows it. */}
-        <div className="divide-border flex flex-col divide-y">
+        {/* One card per call, spaced apart. */}
+        <div className="flex flex-col gap-2">
           {visible.map((call) => (
             <ToolPartRenderer
               key={call.call_id}

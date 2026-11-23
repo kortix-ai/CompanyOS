@@ -129,7 +129,7 @@ describe('GetMemTool joins the shared BasicTool shell', () => {
     );
 
     expect(html).not.toContain('sticky');
-    expect(html).toContain('border-border border-b last:border-b-0');
+    expect(html).toContain('bg-popover border-border overflow-hidden rounded-md border');
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('Recalled');
 

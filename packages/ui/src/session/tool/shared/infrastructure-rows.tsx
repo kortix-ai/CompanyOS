@@ -23,10 +23,11 @@ import { type TriggerTitle } from '../../../internal/session-types';
  * A row inverts it: the detail opens as a list of one-line summaries, and the
  * reader expands the one they came for.
  *
- * The rows are one list, not a stack of cards: a hairline between rows, a
- * rounded hover fill, and a `CaretRightIcon` that points down once a row is
- * open. The verb ("Ran command") is meta ink; the value it acted on (the
- * command, the path, the query) is the bright text.
+ * Each call is its own card (`bg-popover rounded-md border`), and the list
+ * spaces the cards apart (`ToolParts`, `gap-2`). The caret points down once a
+ * card is open, and the body opens under one hairline inside the card. The
+ * verb ("Ran command") is meta ink; the value it acted on (the command, the
+ * path, the query) is the bright text.
  *
  * Interaction is gated on having a body — a childless call has nothing to
  * disclose, so it gets no chevron, no `role="button"`, and no cursor change
@@ -73,7 +74,7 @@ function PanelToolRow({
         // `items-start` + one-line slots (`h-[1lh]`): every glyph sits on the
         // first line, so a two-line row (an agent and its task) keeps its
         // icon, state and caret beside the name, not between the lines.
-        'flex min-h-10 w-full items-start gap-2.5 rounded-md px-2 py-2 text-left text-sm',
+        'flex min-h-10 w-full items-start gap-2.5 px-3 py-2.5 text-left text-sm',
         hasBody && 'transition-colors duration-(--duration-fast)',
         hasBody && !locked && 'hover:bg-hover cursor-pointer',
       )}
@@ -124,8 +125,7 @@ function PanelToolRow({
     <Disclosure
       open={open}
       onOpenChange={onOpenChange}
-      data-panel-flat
-      className="border-border border-b last:border-b-0"
+      className="bg-popover border-border overflow-hidden rounded-md border"
     >
       {hasBody ? <DisclosureTrigger>{row}</DisclosureTrigger> : row}
       {/* Animated for the same reason the inline row is — see
@@ -134,7 +134,7 @@ function PanelToolRow({
           border on a `height: 0` box draws a hairline across a closed row. */}
       {hasBody && (
         <DisclosureContent>
-          <div className={cn('px-2 pb-3 text-sm', className)}>
+          <div className={cn('border-border border-t px-3 py-3 text-sm', className)}>
             {children}
           </div>
         </DisclosureContent>

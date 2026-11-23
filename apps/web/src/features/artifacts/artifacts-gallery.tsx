@@ -65,6 +65,7 @@ function sortArtifacts(artifacts: Artifact[], sort: ArtifactSort): Artifact[] {
 export function ArtifactsGallery({ projectId }: { projectId: string }) {
   const t = useTranslations('artifacts');
   const folders = useArtifactFolders(projectId);
+  const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const folderId = searchParams.get('folder');
@@ -72,7 +73,7 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
     const params = new URLSearchParams(searchParams.toString());
     if (id) params.set('folder', id);
     else params.delete('folder');
-    router.replace(`${pathname}${params.size ? `?${params}` : ''}`, { scroll: false });
+    router.push(`${pathname}${params.size ? `?${params}` : ''}`, { scroll: false });
   };
   const [creatingFolder, setCreatingFolder] = useState(false);
   const currentFolder = folders.data?.find(f => f.folder_id === folderId);
@@ -82,7 +83,6 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
   const searchRef = useRef<HTMLInputElement>(null);
   useSlashFocus(searchRef);
   const grid = useColumnWidth();
-  const router = useRouter();
   const { create } = useArtifactMutations(projectId);
   const newDoc = async () => {
     try {
@@ -99,7 +99,8 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
   const all = useArtifacts(projectId, { scope: 'all', folder_id: folderId ?? (filtered ? undefined : 'root') });
   const paged = (all.data?.length ?? 0) >= LIST_PAGE;
   const server = useArtifacts(paged && filtered ? projectId : null, { scope, q: query || undefined, folder_id: folderId ?? undefined });
-  const list = paged && filtered ? server : all;
+  // Keep loaded cards while the first server-filtered page is in flight.
+  const list = paged && filtered && (server.data !== undefined || server.isError) ? server : all;
   const cards = list.data ?? [];
   // An artifact sits in its bound space, else its agent's space, else Project-wide.
   // Spaces are Work in progress: with `chat` off every artifact is
@@ -180,7 +181,9 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
             </div>
 
             <div id="artifact-gallery-panel" role="tabpanel" aria-labelledby={`artifact-scope-${scope}`} tabIndex={0}>
-            {folderId && folders.isFetched && !currentFolder ? (
+            {folderId && folders.isError ? (
+              <ErrorState title={t('folderLoadFailed')} action={<Button size="sm" variant="outline" onClick={() => folders.refetch()}>{t('retry')}</Button>} />
+            ) : folderId && folders.isSuccess && !currentFolder ? (
               <ErrorState title={t('folderUnavailable')} action={<Button size="sm" variant="outline" onClick={() => setFolderId(null)}>{t('title')}</Button>} />
             ) : list.isError ? (
               <ErrorState

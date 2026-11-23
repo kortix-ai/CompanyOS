@@ -38,8 +38,8 @@ const artifacts = [
 const realSdkReact = await import('@kortix/sdk/react');
 mock.module('@kortix/sdk/react', () => ({
   ...realSdkReact,
-  useArtifacts: (id: string | null) =>
-    id ? { data: artifacts, isLoading: false, isError: false, refetch: async () => {} } : { data: undefined, isLoading: false, isError: false },
+  useArtifacts: (id: string | null, filter?: { q?: string }) =>
+    id && filter?.q ? { data: undefined, isLoading: true, isError: false } : id ? { data: artifacts, isLoading: false, isError: false, refetch: async () => {} } : { data: undefined, isLoading: false, isError: false },
   useArtifactMutations: () => ({
     create: { mutateAsync: async () => ({ artifact_id: 'new' }), isPending: false },
     update: { mutate: () => {}, isPending: false },
@@ -125,4 +125,16 @@ test('the Pinned scope tab keeps the same cards mounted and hides the unpinned o
   expect(cardLinks().map((a) => a.textContent)).toEqual(['Alpha doc', 'Beta doc']);
   expect(hiddenWrapperOf('Alpha doc')).not.toBeNull();
   expect(hiddenWrapperOf('Beta doc')).toBeNull();
+});
+
+test('a cold server search at the page limit keeps existing previews mounted', async () => {
+  const extras = Array.from({ length: 98 }, (_, i) => artifact(`extra-${i}`, `Extra ${i}`, 'user-1', false, 'private'));
+  artifacts.push(...extras);
+  try {
+    await act(render);
+    const previewLink = linkOf('Beta doc');
+    await type('beta');
+    expect(linkOf('Beta doc')).toBe(previewLink);
+    expect(cardLinks()).toHaveLength(100);
+  } finally { artifacts.splice(2); }
 });

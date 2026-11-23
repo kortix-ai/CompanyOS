@@ -1,5 +1,5 @@
 -- Validate separately: adding gallery_folder_id holds ACCESS EXCLUSIVE until commit.
--- The preceding concurrent migration indexes folder membership first.
+-- The preceding concurrent index serves deletion; validation scans artifacts.
 set lock_timeout = '2s';
 set statement_timeout = '30min';
 -- squawk-ignore constraint-missing-not-valid

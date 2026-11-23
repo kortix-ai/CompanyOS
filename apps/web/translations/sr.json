@@ -3095,7 +3095,7 @@
     "unified": {
       "welcome": "Добродошли у {name}",
       "email": "Имејл",
-      "emailPlaceholder": "Ваша имејл адреса",
+      "emailPlaceholder": "Унеси своју имејл адресу…",
       "password": "Лозинка",
       "showPassword": "Прикажи лозинку",
       "hidePassword": "Сакриј лозинку",

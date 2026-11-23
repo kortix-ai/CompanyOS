@@ -1834,7 +1834,7 @@ const catalog = {
     "unified": {
       "welcome": "Welcome to {name}",
       "email": "Email",
-      "emailPlaceholder": "Your email address",
+      "emailPlaceholder": "Enter your email address…",
       "password": "Password",
       "showPassword": "Show password",
       "hidePassword": "Hide password",

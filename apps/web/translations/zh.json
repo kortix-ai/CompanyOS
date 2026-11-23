@@ -3095,7 +3095,7 @@
     "unified": {
       "welcome": "欢迎使用 {name}",
       "email": "邮箱",
-      "emailPlaceholder": "您的邮箱地址",
+      "emailPlaceholder": "输入你的邮箱地址…",
       "password": "密码",
       "showPassword": "显示密码",
       "hidePassword": "隐藏密码",

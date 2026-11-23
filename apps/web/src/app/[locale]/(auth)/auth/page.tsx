@@ -1140,7 +1140,11 @@ function AuthCardForm({
             logs "Encountered a script tag while rendering React component". */}
         <form onSubmit={handleEntryContinue} className="space-y-5" data-hydrate-guard>
           <div className="space-y-3">
-            <FieldLabel htmlFor="email">{t('email')}</FieldLabel>
+            {/* No visible label: the placeholder shows the ask, and the field
+                keeps its accessible name for screen readers. */}
+            <label htmlFor="email" className="sr-only">
+              {t('email')}
+            </label>
             <Input
               ref={emailRef}
               id="email"

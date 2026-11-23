@@ -3095,7 +3095,7 @@
     "unified": {
       "welcome": "{name}へようこそ",
       "email": "メールアドレス",
-      "emailPlaceholder": "メールアドレスを入力",
+      "emailPlaceholder": "メールアドレスを入力…",
       "password": "パスワード",
       "showPassword": "パスワードを表示",
       "hidePassword": "パスワードを非表示",

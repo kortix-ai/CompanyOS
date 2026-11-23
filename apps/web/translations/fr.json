@@ -3095,7 +3095,7 @@
     "unified": {
       "welcome": "Bienvenue sur {name}",
       "email": "E-mail",
-      "emailPlaceholder": "Votre adresse e-mail",
+      "emailPlaceholder": "Saisissez votre adresse e-mail…",
       "password": "Mot de passe",
       "showPassword": "Afficher le mot de passe",
       "hidePassword": "Masquer le mot de passe",

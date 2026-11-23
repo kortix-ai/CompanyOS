@@ -19,10 +19,13 @@ import { flattenModels } from '@kortix/sdk';
 import {
   useProjectSession,
   useRuntimeProviders,
+  useRuntimeSupports,
   useSessionLogThread,
   useSessionModelUsage,
 } from '@kortix/sdk/react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { Button } from '../../../primitives/button';
+import { CompactModal } from '../../header/compact-modal';
 import { useTranslations } from '../../../i18n';
 import { cn } from '../../../lib/utils';
 import { STATUS_DOT } from '../../../primitives/status';
@@ -67,8 +70,17 @@ export function useSessionContextUsage(): ContextUsage | null {
   }, [panel, messages, models, modelKey]);
 }
 
+/** Offer Compact once the window is nearly full (the composer ring's warning tone, 70%). */
+export function offersCompact(usage: Pick<ContextUsage, 'limit' | 'tone'>, supported: boolean): boolean {
+  return supported && usage.limit != null && (usage.tone === 'warning' || usage.tone === 'destructive');
+}
+
 export function ContextMeter({ usage }: { usage: ContextUsage }) {
   const t = useTranslations('hardcodedUi.i18nComplete');
+  const tProgress = useTranslations('hardcodedUi.featuresSessionComposerTokenProgress');
+  const runtimeSessionId = useOptionalSessionPanel()?.sessionId;
+  const compact = offersCompact(usage, useRuntimeSupports('session.compact')) && Boolean(runtimeSessionId);
+  const [compactOpen, setCompactOpen] = useState(false);
   const { breakdown, limit } = usage;
   // The bar's scale: the window when known, else the tokens themselves.
   const scale = limit ?? breakdown.total;
@@ -123,6 +135,20 @@ export function ContextMeter({ usage }: { usage: ContextUsage }) {
           />
         )}
       </dl>
+
+      {compact && runtimeSessionId && (
+        <>
+          <div className="flex items-center justify-between gap-2 px-2.5 pt-3">
+            <span className="text-muted-foreground text-sm tabular-nums">
+              {tProgress('remainingCount', { remaining: formatContextCount(free ?? 0) })}
+            </span>
+            <Button variant="secondary" size="sm" onClick={() => setCompactOpen(true)}>
+              {t.raw('textee1ca259e05b')}
+            </Button>
+          </div>
+          <CompactModal sessionId={runtimeSessionId} open={compactOpen} onOpenChange={setCompactOpen} />
+        </>
+      )}
     </div>
   );
 }

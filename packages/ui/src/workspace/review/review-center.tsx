@@ -829,6 +829,10 @@ export function ReviewCenter({
   // not clear the spinner, so the row cannot flicker back to "needs you" and a
   // second verdict cannot go out.
   const [inFlight, setInFlight] = useState<{ id: string; status: ReviewStatus } | null>(null);
+  // Every verdict still waiting for the server, by item: the swipe deck sends
+  // one per Undo window, so several can overlap. A refetch keeps each one's
+  // optimistic status until its own request settles.
+  const pendingStatusesRef = useRef<Map<string, ReviewStatus>>(new Map());
 
   const undoRef = useRef<ReviewItem[] | null>(null);
   // Query root for scroll-into-view — a container of the [data-idx] rows. It wraps
@@ -1025,7 +1029,9 @@ export function ReviewCenter({
   if (initialItems !== initialItemsSeen) {
     setInitialItemsSeen(initialItems);
     if (initialItems) {
-      setItems(inFlight ? setStatus(initialItems, inFlight.id, inFlight.status) : initialItems);
+      let next = inFlight ? setStatus(initialItems, inFlight.id, inFlight.status) : initialItems;
+      for (const [id, status] of pendingStatusesRef.current) next = setStatus(next, id, status);
+      setItems(next);
     }
     if (!inFlight) {
       setPendingId(null);
@@ -1100,7 +1106,10 @@ export function ReviewCenter({
     }
     // Wait for the server: no "done" toast before it answers, and a refused
     // verdict puts the item back where it was.
-    if (optimistic) setInFlight(optimistic);
+    if (optimistic) {
+      setInFlight(optimistic);
+      pendingStatusesRef.current.set(optimistic.id, optimistic.status);
+    }
     void Promise.resolve(result)
       .then(
         (value) => {
@@ -1117,6 +1126,7 @@ export function ReviewCenter({
       )
       .finally(() => {
         if (!optimistic) return;
+        pendingStatusesRef.current.delete(optimistic.id);
         setInFlight(null);
         setPendingId(null);
         setPendingDecision(null);
@@ -2028,6 +2038,10 @@ export function ReviewCenter({
             </div>
           ) : null}
           {cards && (deckTab === 'reviews' || !needsYouDeck || sessionAsks.length === 0) ? deckBody : null}
+          {/* A failed next-page read stops the automatic paging: offer Retry under the deck. */}
+          {cards && deckTab === 'reviews' && visible.length > 0 && loadMore?.isError ? (
+            <div className="flex shrink-0 justify-center pb-2">{loadMoreButton}</div>
+          ) : null}
           {wide && !cards ? visibleAsks.map((ask) => (
             <Button
               key={ask.id}

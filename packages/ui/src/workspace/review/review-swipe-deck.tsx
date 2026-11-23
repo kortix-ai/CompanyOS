@@ -244,7 +244,9 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
   }
 
   const below = deck.slice(1, 1 + STACK_DEPTH);
-  const blocked = !yes && !no && top.kind !== 'decision' ? t('noVerdict') : undefined;
+  // Why a verdict control is off: a decision is answered from its options;
+  // anything else, this viewer may not give that verdict.
+  const offReason = top.kind === 'decision' ? t('needsChoice') : t('noVerdict');
 
   return (
     <div
@@ -303,7 +305,7 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
             <ArrowCounterClockwiseIcon className="size-4" />
           </DeckButton>
           <DeckButton
-            label={no ? verdictLabel(top, no) : (blocked ?? t('needsChoice'))}
+            label={no ? verdictLabel(top, no) : offReason}
             kbd="ArrowLeft"
             disabled={!no}
             onClick={() => decide('left')}
@@ -315,7 +317,7 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
             )}
           </DeckButton>
           <DeckButton
-            label={yes ? verdictLabel(top, yes) : (blocked ?? t('needsChoice'))}
+            label={yes ? verdictLabel(top, yes) : offReason}
             kbd="ArrowRight"
             disabled={!yes}
             onClick={() => decide('right')}

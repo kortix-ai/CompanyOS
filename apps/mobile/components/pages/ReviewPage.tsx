@@ -158,14 +158,17 @@ export function ReviewPage({
   const sendVerdict = React.useCallback(
     (item: ReviewItem, verdict: ReviewVerdict, text?: string) => {
       const plan = planReviewVerdict(item.id, verdict, text);
-      if (!plan) return;
-      verdictMutation.mutate({
+      if (!plan) return Promise.resolve();
+      // Settles once the list holds the result (useReviewVerdict's onSuccess
+      // writes it); the deck keeps the card hidden until then. Errors toast
+      // through the hook's onError.
+      return verdictMutation.mutateAsync({
         itemId: item.id,
         verdict,
         plan,
         kind: item.kind,
         number: item.kind === 'change' ? item.detail.number : undefined,
-      });
+      }).catch(() => undefined);
     },
     [verdictMutation],
   );

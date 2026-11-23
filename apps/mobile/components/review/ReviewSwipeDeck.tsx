@@ -89,8 +89,11 @@ interface ReviewSwipeDeckProps {
   items: ReviewItem[];
   /** Whether this viewer may give `verdict` on `item` (KRTX-1720). */
   allows: (item: ReviewItem, verdict: ReviewVerdict) => boolean;
-  /** Sends a verdict. Runs after the Undo window. `text`: a decision's answer. */
-  onDecide: (item: ReviewItem, verdict: ReviewVerdict, text?: string) => void;
+  /**
+   * Sends a verdict. Runs after the Undo window. `text`: a decision's answer
+   * or what should change. The card stays hidden until the promise settles.
+   */
+  onDecide: (item: ReviewItem, verdict: ReviewVerdict, text?: string) => Promise<unknown> | void;
   /** Opens one item's detail sheet. */
   onOpen: (item: ReviewItem) => void;
   /** A left swipe on a change or an output: the sheet asks what should change. */
@@ -118,6 +121,9 @@ export function ReviewSwipeDeck({
   const accent = THEME.accent[isDark ? 'dark' : 'light'];
   const [skipped, setSkipped] = React.useState<string[]>([]);
   const [staged, setStaged] = React.useState<ReadonlyMap<string, Staged>>(() => new Map());
+  // Verdicts sent and not yet settled: the list still holds the item until
+  // the request lands, so the deck keeps hiding it.
+  const [sending, setSending] = React.useState<ReadonlySet<string>>(() => new Set());
   const stagedRef = React.useRef(staged);
   stagedRef.current = staged;
   const onDecideRef = React.useRef(onDecide);
@@ -144,10 +150,10 @@ export function ReviewSwipeDeck({
 
   // Skipped cards go to the back, in the order they were skipped.
   const deck = React.useMemo(() => {
-    const open = items.filter((item) => !staged.has(item.id));
+    const open = items.filter((item) => !staged.has(item.id) && !sending.has(item.id));
     const rank = (id: string) => skipped.indexOf(id);
     return [...open].sort((a, b) => rank(a.id) - rank(b.id));
-  }, [items, staged, skipped]);
+  }, [items, staged, sending, skipped]);
 
   const top = deck[0] ?? null;
   const swipe = top ? reviewSwipeVerdicts(top.kind) : null;
@@ -167,8 +173,15 @@ export function ReviewSwipeDeck({
       flyingRef.current = null;
       progress.value = 0;
       const timer = setTimeout(() => {
+        setSending((prev) => new Set(prev).add(item.id));
         unstage(item.id);
-        onDecideRef.current(item, verdict, text);
+        void Promise.resolve(onDecideRef.current(item, verdict, text)).finally(() =>
+          setSending((prev) => {
+            const next = new Set(prev);
+            next.delete(item.id);
+            return next;
+          }),
+        );
       }, UNDO_MS);
       setStaged((prev) => new Map(prev).set(item.id, { item, verdict, text, timer }));
       toast.info(`${reviewVerdictLabel(item.kind, verdict)}: ${item.title}`, {
@@ -191,10 +204,14 @@ export function ReviewSwipeDeck({
     [progress, toast, unstage],
   );
 
+  /** Registers the verdict of a card that starts to leave. False while one already flies. */
   const accept = React.useCallback((item: ReviewItem, dir: Direction) => {
+    if (flyingRef.current) return false;
     const sides = reviewSwipeVerdicts(item.kind);
     const verdict = dir === 'right' ? sides.right : sides.left;
-    if (verdict) flyingRef.current = { item, verdict };
+    if (!verdict) return false;
+    flyingRef.current = { item, verdict };
+    return true;
   }, []);
 
   const swiped = React.useCallback(
@@ -240,9 +257,10 @@ export function ReviewSwipeDeck({
           onSendBack={() => onSendBack(top)}
           canAnswer={allows(top, 'answer')}
           progress={progress}
-          onAccepted={(dir) => accept(top, dir)}
+          onAccepted={(dir) => void accept(top, dir)}
           onSwiped={(dir) => swiped(top, dir)}
           onAnswer={(text) => {
+            if (flyingRef.current) return;
             flyingRef.current = { item: top, verdict: 'answer', text };
             cardRef.current?.fling('right', () => stage(top, 'answer', text));
           }}
@@ -272,8 +290,7 @@ export function ReviewSwipeDeck({
                 onSendBack(top);
                 return;
               }
-              accept(top, 'left');
-              cardRef.current?.fling('left', () => swiped(top, 'left'));
+              if (accept(top, 'left')) cardRef.current?.fling('left', () => swiped(top, 'left'));
             }}>
             {no === 'changes' ? (
               <Icon as={ArrowBendUpLeftIcon} size={26} color={accent.orange} />
@@ -285,8 +302,7 @@ export function ReviewSwipeDeck({
             label={yes ? reviewVerdictLabel(top.kind, yes) : 'Yes'}
             disabled={!yes}
             onPress={() => {
-              accept(top, 'right');
-              cardRef.current?.fling('right', () => swiped(top, 'right'));
+              if (accept(top, 'right')) cardRef.current?.fling('right', () => swiped(top, 'right'));
             }}>
             <Icon as={CheckIcon} size={26} color={accent.green} />
           </RoundAction>
@@ -391,6 +407,9 @@ const SwipeCard = React.forwardRef<
   const reduced = useReducedMotion();
   const tx = useSharedValue(0);
   const gone = useSharedValue(0);
+  // Set once a verdict is accepted: the card is leaving, and a second drag
+  // or press must not cancel the fly-off (and with it the Undo window).
+  const flying = useSharedValue(false);
   const canRight = !!yesLabel;
   const canLeft = !!noLabel;
   const threshold = width * SWIPE_SHARE;
@@ -398,6 +417,8 @@ const SwipeCard = React.forwardRef<
 
   const fling = React.useCallback(
     (dir: Direction, then: () => void) => {
+      if (flying.value) return;
+      flying.value = true;
       haptics.medium();
       if (reduced) {
         gone.value = withTiming(1, { duration: EXIT_MS }, (finished) => {
@@ -410,7 +431,7 @@ const SwipeCard = React.forwardRef<
       });
       progress.value = withTiming(1, { duration: EXIT_MS, easing: EXIT_EASING });
     },
-    [off, reduced, tx, gone, progress],
+    [off, reduced, tx, gone, progress, flying],
   );
   React.useImperativeHandle(ref, () => ({ fling }), [fling]);
 
@@ -421,6 +442,7 @@ const SwipeCard = React.forwardRef<
     .failOffsetY([-10, 10])
     .onUpdate((e) => {
       'worklet';
+      if (flying.value) return;
       const dx = e.translationX;
       // A side with no verdict resists: the card moves a third as far.
       const blocked = (dx > 0 && !canRight) || (dx < 0 && !canLeft);
@@ -434,6 +456,7 @@ const SwipeCard = React.forwardRef<
     })
     .onEnd((e) => {
       'worklet';
+      if (flying.value) return;
       const dx = tx.value;
       const right = canRight && dx > 0 && (dx > threshold || e.velocityX > FLICK_VELOCITY);
       const left = canLeft && dx < 0 && (dx < -threshold || e.velocityX < -FLICK_VELOCITY);
@@ -447,6 +470,7 @@ const SwipeCard = React.forwardRef<
       }
       if (right || left) {
         const dir: Direction = right ? 'right' : 'left';
+        flying.value = true;
         scheduleOnRN(onAccepted, dir);
         scheduleOnRN(haptics.medium);
         tx.value = withTiming(right ? off : -off, { duration: EXIT_MS, easing: EXIT_EASING }, (finished) => {
@@ -501,6 +525,8 @@ const SwipeCard = React.forwardRef<
           if (event.nativeEvent.actionName === 'yes') {
             onAccepted('right');
             fling('right', () => onSwiped('right'));
+          } else if (event.nativeEvent.actionName === 'no' && sendsBack) {
+            onSendBack();
           } else if (event.nativeEvent.actionName === 'no') {
             onAccepted('left');
             fling('left', () => onSwiped('left'));

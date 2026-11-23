@@ -416,6 +416,53 @@
       "slack": {
         "status": "skipped"
       }
+    },
+    "2026-W47": {
+      "week": "2026-W47",
+      "start": "2026-11-16T00:00:00.000Z",
+      "end": "2026-11-23T00:00:00.000Z",
+      "releases": [
+        "v0.16.4",
+        "v0.16.2",
+        "v0.16.1",
+        "v0.16.0"
+      ],
+      "highlights": [
+        {
+          "text": "Organize sessions, files and tabs in private, shareable spaces, and mention Drive files directly in chat.",
+          "tags": [
+            "v0.16.2"
+          ]
+        },
+        {
+          "text": "Kortix in Chrome is available on the Chrome Web Store, with installation links in settings and on the download page.",
+          "tags": [
+            "v0.16.4"
+          ]
+        },
+        {
+          "text": "Gmail, Google Calendar, Drive, Docs and Sheets connect through Kortix instead of a third-party connector service.",
+          "tags": [
+            "v0.16.0"
+          ]
+        },
+        {
+          "text": "Guided setup offers a matching template, connects Linear and Slack, and proves your development environment.",
+          "tags": [
+            "v0.16.0"
+          ]
+        },
+        {
+          "text": "The desktop app has browser-style tabs, and the CLI reports token, cache and paid spend per session.",
+          "tags": [
+            "v0.16.0"
+          ]
+        }
+      ],
+      "generated_at": "2026-11-23T06:06:34.822Z",
+      "slack": {
+        "status": "skipped"
+      }
     }
   }
 }

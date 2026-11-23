@@ -90,7 +90,7 @@ export function AuthFrame({
   aside?: React.ReactNode;
   /** Centers the column: every step header, quiet-link row and the legal footer. */
   centered?: boolean;
-  /** The mark every step header shows by default (the Kortix app tile). */
+  /** The mark every step header shows by default (the Kortix symbol on /auth). */
   mark?: React.ReactNode;
   /**
    * The dither pane beside the form on wide screens. Auth and consent screens
@@ -155,7 +155,11 @@ export function AuthCardShell({
    * The host's sign-in frame (story pane, centered column, app tile), so a
    * sub-flow matches the page it came from. A centered frame holds still.
    */
-  frame?: { aside?: React.ReactNode; centered?: boolean; mark?: React.ReactNode };
+  frame?: {
+    aside?: React.ReactNode;
+    centered?: boolean;
+    mark?: React.ReactNode;
+  };
 }) {
   const body = (
     <>
@@ -164,7 +168,11 @@ export function AuthCardShell({
     </>
   );
   return (
-    <AuthFrame aside={frame?.aside} centered={frame?.centered} mark={frame?.mark}>
+    <AuthFrame
+      aside={frame?.aside}
+      centered={frame?.centered}
+      mark={frame?.mark}
+    >
       {frame?.centered ? (
         <>
           <StepHeader title={title} description={description} />

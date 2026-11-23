@@ -2264,6 +2264,8 @@
       "finished": "完了",
       "finishedTasks": "完了したタスク",
       "noRunningTasks": "実行中のタスクはありません",
+      "finishedCount": "{count} 件完了",
+      "running": "実行中",
       "resizePane": "ペインのサイズを変更"
     }
   },

@@ -39,6 +39,7 @@ import type { ContextUsage } from '../../composer/context-usage';
 import { cn } from '../../../lib/utils';
 import {
   CaretRightIcon,
+  ChatsTeardropIcon,
   FileTextIcon as FileText,
   GlobeIcon as Globe,
   PlusIcon as Plus,
@@ -49,6 +50,7 @@ import { familyForTool, narrateFailedStep, narrateStep } from '@kortix/sdk';
 import type { Detail } from './detail-view';
 import { safeHttpUrl } from '@kortix/shared';
 import { ToolParts } from './detail-view';
+import { multiAgentTool } from '../../tool/tools/kortix-tool-card';
 import { PANEL_ROW, PANEL_ROW_ICON, PanelCard } from './panel-card';
 import { STATUS_DOT } from '../../../primitives/status';
 import { StepIcon } from './step-icon';
@@ -142,7 +144,13 @@ export function ContextCard({
       label: tool.label,
       count: tool.calls?.length ?? 1,
       failed,
-      icon: <StepIcon family={family} status={failed ? 'error' : 'done'} tone="foreground" />,
+      // A message to another agent is a conversation, not a settings change: its own glyph.
+      icon:
+        multiAgentTool(tool.calls?.[0]?.name ?? '') === 'send_message' ? (
+          <ChatsTeardropIcon className={cn('size-4 shrink-0', failed ? 'text-kortix-red' : 'text-foreground')} />
+        ) : (
+          <StepIcon family={family} status={failed ? 'error' : 'done'} tone="foreground" />
+        ),
       body: <ToolParts calls={tool.calls ?? []} sessionId={sessionId} summary={summary} />,
     });
   }

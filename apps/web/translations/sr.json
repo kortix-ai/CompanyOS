@@ -2264,6 +2264,8 @@
       "finished": "Завршено",
       "finishedTasks": "Завршени задаци",
       "noRunningTasks": "Нема задатака у току",
+      "finishedCount": "{count} завршено",
+      "running": "У току",
       "resizePane": "Промени величину окна"
     }
   },

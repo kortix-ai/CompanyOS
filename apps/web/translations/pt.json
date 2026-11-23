@@ -2264,6 +2264,8 @@
       "finished": "Concluídas",
       "finishedTasks": "Tarefas concluídas",
       "noRunningTasks": "Nenhuma tarefa em andamento",
+      "finishedCount": "{count} concluídas",
+      "running": "Em andamento",
       "resizePane": "Redimensionar painel"
     }
   },

@@ -1634,6 +1634,8 @@ const catalog = {
       "finished": "Finished",
       "finishedTasks": "Finished tasks",
       "noRunningTasks": "No tasks running",
+      "finishedCount": "{count} finished",
+      "running": "Running",
       "resizePane": "Resize pane"
     }
   },

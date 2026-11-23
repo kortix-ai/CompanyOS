@@ -43,9 +43,11 @@ export function BackgroundTasksCard({
               onClick={() =>
                 focusAgent({ sessionId: row.sessionId, title: row.handle, handle: row.handle, task: row.line ?? undefined })
               }
-              className={cn(PANEL_ROW, 'cursor-pointer')}
+              // The state glyph is 14px, not a 16px icon: a tighter slot and gap
+              // keep it beside the name instead of floating off it.
+              className={cn(PANEL_ROW, 'cursor-pointer gap-2')}
             >
-              <span className={PANEL_ROW_ICON}>
+              <span className={cn(PANEL_ROW_ICON, 'w-4')}>
                 <AgentStateMark state={row.state} />
               </span>
               <span className="text-foreground max-w-full shrink-0 truncate">{row.handle}</span>

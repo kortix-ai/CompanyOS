@@ -104,10 +104,11 @@
  * that makes it the default, delete it in the next one. The comment on the
  * entry names the release and the spec section that ends it.
  *
- * The same state also serves INTERNAL-ONLY surfaces (`workspace_volume`):
- * not offered in Settings, on by the operator default or per project by a
- * Kortix operator on request. Their 403 says "contact Kortix" instead of
- * naming a toggle the caller cannot see (gate.ts).
+ * The same state also serves INTERNAL-ONLY surfaces: not offered in Settings,
+ * on by the operator default or per project by a Kortix operator on request.
+ * Their 403 says "contact Kortix" instead of naming a toggle the caller cannot
+ * see (gate.ts). No flag is hidden today: the last one, `workspace_volume`
+ * (stateless sandboxes), graduated on 2026-11-23.
  */
 import { config } from '../config';
 import { platinumUsRegion } from '../shared/platinum-region';
@@ -404,34 +405,13 @@ const FLAGS: readonly FeatureFlagDef[] = [
       'Grants made while on stay stored and count again when it is turned on; a change reaches running sessions at their next mount enforcement or boot. ' +
       'WEB: the Drive tree shows only My files while off (no Drives section, no All files, no Share).',
   },
-  {
-    key: 'workspace_volume',
-    // The key keeps its name: it is in the SDK's FeatureFlagKey and stored on projects.
-    name: 'Stateless sandboxes',
-    description:
-      "Every new Platinum session keeps only /workspace, on its own Platinum volume, so the sandbox is disposable: one stopped for an hour (KORTIX_SANDBOX_IDLE_DELETE_MINUTES) is deleted, and the next open boots a new sandbox on the same files and conversation. Programs that ran in the old sandbox are not running, and the agent is told so. Not a Settings toggle: Kortix turns it on.",
-    stability: 'experimental',
-    // Every workspace volume is a Platinum volume.
-    available: () => Boolean(config.PLATINUM_API_KEY),
-    // Off unless the operator sets KORTIX_WORKSPACE_VOLUMES=on (dev and prod
-    // do: deploy-dev.yml, deploy-prod.yml). Staging and self-host leave it unset.
-    platformDefault: () => workspaceVolumesSwitch() === 'on',
-    // Internal-only, never a Settings toggle. A Kortix operator sets one
-    // project's choice (PUT /v1/admin/api/projects/:id/features); `false` keeps
-    // that project off while the default is on.
-    catalogHidden: true,
-    enforcement: 'behavioral',
-    enforcementNote:
-      'BEHAVIORAL only. Read once per session, at POST /sessions (platform/services/workspace-volume.ts): on, a ' +
-      'Platinum session is inserted with `metadata.workspace_volume` and every box it ever gets mounts volume ' +
-      'kws-<session_id> at /workspace, in the region the volume was created in, with KORTIX_WORKSPACE_VOLUME=1 and ' +
-      'the session-log restore on. Turning the flag off changes no session that has a volume. ' +
-      'KORTIX_WORKSPACE_VOLUMES=on makes it the default for every project without its own choice; ' +
-      'KORTIX_WORKSPACE_VOLUMES=off stops new volumes everywhere. A box stopped longer than ' +
-      'KORTIX_SANDBOX_IDLE_DELETE_MINUTES (default 60) is deleted (projects/reaping/idle-volume-retire.ts). The ' +
-      'volume is deleted with the session content: by the retention purge after the trash window ' +
-      '(projects/session-log-purge.ts) or by account erasure.',
-  },
+  // `workspace_volume` graduated (2026-11-23): stateless sandboxes are the
+  // default. Every new Platinum session keeps /workspace on its own volume
+  // (platform/services/workspace-volume.ts), and a box stopped for
+  // KORTIX_SANDBOX_IDLE_DELETE_MINUTES is replaced on the next open. The only
+  // off switch is the deployment's KORTIX_WORKSPACE_VOLUMES=off. A stored
+  // `experimental.workspace_volume` override is inert; the serializer sends
+  // whether new sessions get a volume, for older SDKs, hosts and CLIs.
   {
     key: 'session_groups',
     // Product word "Spaces" since 2026-11-17; the key keeps its name (stored on projects).
@@ -755,18 +735,6 @@ export function buildFeatureFlagCatalog(metadata: unknown): FeatureFlagView[] {
       scope: 'project' as const,
     }];
   });
-}
-
-/**
- * KORTIX_WORKSPACE_VOLUMES: `on` (or 1/true/yes) makes `workspace_volume` the
- * default for a project without its own choice; `off` (or 0/false/no) gives
- * no new session a volume; unset or anything else leaves it to each project.
- */
-export function workspaceVolumesSwitch(): 'on' | 'off' | null {
-  const value = (config.KORTIX_WORKSPACE_VOLUMES ?? '').trim().toLowerCase();
-  if (/^(1|on|true|yes)$/.test(value)) return 'on';
-  if (/^(0|off|false|no)$/.test(value)) return 'off';
-  return null;
 }
 
 /** True when only a platform operator may write this flag. */

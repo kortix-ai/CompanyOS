@@ -1313,10 +1313,6 @@
           "name": "Циљеви",
           "description": "Дајте агенту циљ за који је одговоран док независна провера не потврди исход. Планира, ради, чека, подсећа људе и чува своје стање у фасцикли Goals у Фајловима. Захтева укључене Volumene и Петље."
         },
-        "workspace_volume": {
-          "name": "Sandboxi bez stanja",
-          "description": "Svaka sesija čuva samo /workspace, na zasebnom volumenu. Sandbox koji je zaustavljen sat vremena se briše, a sledeće otvaranje pokreće novi sa istim fajlovima i razgovorom. Programi iz starog sandboxa više ne rade. Kortix ga uključuje по радном простору."
-        },
         "email_channel": {
           "name": "Kanal e-pošte",
           "description": "Dajte agentu poštansko sanduče na Resend-u: dolazna pošta pokreće i nastavlja sesije, a agent čita, odgovara i šalje iz sandučeta. Koristite sopstveni Resend API ključ i domen."

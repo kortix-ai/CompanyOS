@@ -1313,10 +1313,6 @@
           "name": "Objectifs",
           "description": "Confiez à un agent un objectif dont il reste responsable jusqu’à ce qu’une vérification indépendante confirme le résultat. Il planifie, travaille, attend, relance les personnes et conserve son état dans un dossier Goals dans Fichiers. Nécessite Volumes et Boucles activés."
         },
-        "workspace_volume": {
-          "name": "Sandboxes sans état",
-          "description": "Chaque session ne garde que /workspace, sur son propre volume. Une sandbox arrêtée depuis une heure est supprimée, et la prochaine ouverture en démarre une nouvelle avec les mêmes fichiers et la même conversation. Les programmes de l'ancienne sandbox ne tournent plus. Kortix l'active par espace de travail."
-        },
         "email_channel": {
           "name": "Canal e-mail",
           "description": "Donnez à l'agent une boîte e-mail sur Resend : les e-mails reçus démarrent et poursuivent des sessions, et l'agent lit, répond et envoie depuis la boîte. Utilisez votre propre clé API Resend et votre domaine."

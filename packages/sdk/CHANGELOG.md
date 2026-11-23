@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Changed (stateless sandboxes need no flag)
+- The `workspace_volume` project flag ("Stateless sandboxes") graduated (2026-11-23): every new
+  Platinum session keeps `/workspace` on its own volume, and a box stopped for an hour is
+  replaced on the next open. `FeatureFlagKey` keeps `workspace_volume`, marked `@deprecated`;
+  `FEATURE_FLAG_KEYS` no longer lists it. The API still sends
+  `experimental.workspace_volume`: whether new sessions get a volume (Platinum is configured and
+  the deployment did not set `KORTIX_WORKSPACE_VOLUMES=off`). `useFeatureFlag(projectId,
+  'workspace_volume')` and `useFeatureFlags` read that value. `KortixProject.experimental.workspace_volume`
+  is optional now.
+
 ### Removed (breaking: the v1 transcript, session-log major P8.4)
 The API serves no `GET /v1/{workspaces|projects}/:id/sessions/:sid/transcript` and no
 `/v1/public/session-shares/**`. The session log (`kortix.session/2`, `GET …/log`) is every

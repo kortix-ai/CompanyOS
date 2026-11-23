@@ -83,11 +83,13 @@ that has made no choice. Only dev sets it (`deploy-dev.yml`).
 
 ### Stateless sandboxes
 
-`KORTIX_WORKSPACE_VOLUMES=on` turns `workspace_volume` (stateless sandboxes) on
-for every project that has made no choice. Each new Platinum session keeps
-`/workspace` on its own volume, and a box stopped for
-`KORTIX_SANDBOX_IDLE_DELETE_MINUTES` (default 60) is deleted. `off` gives no
-new session a volume. Unset leaves it to each project's operator override.
+Stateless sandboxes are the default since 2026-11-23 (the `workspace_volume`
+flag graduated). Each new Platinum session keeps `/workspace` on its own
+volume, and a box stopped for `KORTIX_SANDBOX_IDLE_DELETE_MINUTES` (default 60)
+is deleted. `KORTIX_WORKSPACE_VOLUMES=off` is the kill switch: no new session
+gets a volume, and sessions that already have one keep it. Unset or `on`
+means on. Dev and prod still set `on`, so a rollback to an image from before
+the graduation (where unset meant off) keeps the same behavior.
 Dev and prod set `on` (`deploy-dev.yml`, `deploy-prod.yml`). Staging and
 self-host leave it unset. A session
 that already has a volume keeps it whatever the value is later.

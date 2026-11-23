@@ -113,6 +113,7 @@ export type FeatureFlagKey =
   /** Shared Drives: an admin makes a Drive and adds agents to it. Off by default: people have only My files. */
   | 'shared_drives'
   | 'goals'
+  /** @deprecated Graduated 2026-11-23 — stateless sandboxes: every new Platinum session keeps /workspace on its own volume, and a box stopped for an hour is replaced on the next open. The API sends whether new sessions get a volume (Platinum, and the deployment did not set `KORTIX_WORKSPACE_VOLUMES=off`), so `useFeatureFlag(id, 'workspace_volume')` reads that. */
   | 'workspace_volume'
   /** @deprecated Graduated 2026-11-06 — every project has Artifacts wherever the platform stores Files (Platinum). The API sends `true` there, so `useFeatureFlag(id, 'artifacts')` reads Artifacts availability. Removed in the next major. */
   | 'artifacts'
@@ -147,7 +148,7 @@ export type FeatureFlagKey =
   /** @deprecated Withdrawn — agents messaging people left the product. The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'human_messaging';
 
-/** The keys of {@link FeatureFlagKey} that are no flag: the API never sends them, or (`llm_gateway`, `session_log`, `session_log_restore`, `pi_harness`, `genui`, `meta_agent`, `notification_center`, `pooled_provider_secrets`) sends a constant `true`, or (`volumes`, `drives`, `artifacts`) sends whether the platform stores a Drive, or (`artifact_comments`) sends a constant `false`. */
+/** The keys of {@link FeatureFlagKey} that are no flag: the API never sends them, or (`llm_gateway`, `session_log`, `session_log_restore`, `pi_harness`, `genui`, `meta_agent`, `notification_center`, `pooled_provider_secrets`) sends a constant `true`, or (`volumes`, `drives`, `artifacts`) sends whether the platform stores a Drive, or (`workspace_volume`) sends whether new sessions get a /workspace volume, or (`artifact_comments`) sends a constant `false`. */
 type GraduatedFeatureFlagKey =
   | 'agent_tunnel'
   | 'marketplace'
@@ -178,7 +179,8 @@ type GraduatedFeatureFlagKey =
   | 'notification_center'
   | 'pooled_provider_secrets'
   | 'artifacts'
-  | 'artifact_comments';
+  | 'artifact_comments'
+  | 'workspace_volume';
 /** The keys `KortixProject.experimental` carries on every response. */
 type ServedFeatureFlagKey = Exclude<FeatureFlagKey, GraduatedFeatureFlagKey>;
 
@@ -195,7 +197,6 @@ export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'chat',
   'shared_drives',
   'goals',
-  'workspace_volume',
   'email_channel',
   'session_groups',
   'chrome',
@@ -237,7 +238,7 @@ export interface FeatureFlagView {
    */
   default_enabled?: boolean;
   /**
-   * True for an internal-only flag (`workspace_volume`). The
+   * True for an internal-only flag (none since `workspace_volume` graduated on 2026-11-23). The
    * catalog lists one only while it is on, so agents and people can see it.
    * Only a Kortix platform operator can change it: `PATCH /features` answers
    * `403` with `feature_operator_only`. Absent on servers older than this field.

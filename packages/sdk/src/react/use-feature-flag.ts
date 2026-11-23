@@ -49,13 +49,15 @@ export function resolveFeatureFlag(
  * The keys {@link useFeatureFlags} carries. `FEATURE_FLAG_KEYS` — every flag a
  * surface can gate on — plus the graduated keys the API still resolves per
  * project: `volumes`, `drives` and `artifacts` each read whether the platform
- * stores Files (Platinum), and `session_log` the API sends `true`.
+ * stores Files (Platinum), `workspace_volume` whether new sessions get a
+ * /workspace volume, and `session_log` the API sends `true`.
  */
 const SERVED_FLAG_MAP_KEYS: readonly FeatureFlagKey[] = [
   ...FEATURE_FLAG_KEYS,
   'volumes',
   'drives',
   'artifacts',
+  'workspace_volume',
   'session_log',
 ];
 

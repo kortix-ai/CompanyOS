@@ -1900,7 +1900,6 @@ export async function createProjectSession(input: {
   const sandboxRegion = await resolveSessionPlacement(projectId, project.metadata);
   const workspaceVolume = startWorkspaceVolume({
     sessionId: identity.sessionId,
-    projectMetadata: project.metadata,
     location: sandboxRegion.location,
   });
   const requestedSpace = await resolveRequestedSessionSpace(input);

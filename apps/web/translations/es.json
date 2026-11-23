@@ -1313,10 +1313,6 @@
           "name": "Objetivos",
           "description": "Asigna a un agente un objetivo del que se encarga hasta que una comprobación independiente confirme el resultado. Planifica, trabaja, espera, hace seguimiento con las personas y guarda su estado en una carpeta Goals en Archivos. Requiere Volúmenes y Bucles activados."
         },
-        "workspace_volume": {
-          "name": "Sandboxes sin estado",
-          "description": "Cada sesión conserva solo /workspace, en su propio volumen. Un sandbox detenido durante una hora se elimina, y la siguiente apertura inicia uno nuevo con los mismos archivos y la misma conversación. Los programas del sandbox anterior ya no se ejecutan. Kortix lo activa por espacio de trabajo."
-        },
         "email_channel": {
           "name": "Canal de correo",
           "description": "Da al agente una bandeja de correo en Resend: el correo entrante inicia y continúa sesiones, y el agente lee, responde y envía desde la bandeja. Usa tu propia clave de API y dominio de Resend."

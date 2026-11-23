@@ -22,7 +22,7 @@ import {
   useSpaceFilter,
   useSpacesEnabled,
 } from '@kortix/ui/workspace';
-import { FolderPlusIcon, MagnifyingGlassIcon, PlusIcon } from '@phosphor-icons/react';
+import { CaretRightIcon, FolderPlusIcon, MagnifyingGlassIcon, PlusIcon } from '@phosphor-icons/react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useRef, useState } from 'react';
 
@@ -134,7 +134,38 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
   return (
     <div role="region" aria-label={t('title')} className="flex h-svh flex-col overflow-hidden">
       {creatingFolder ? <ArtifactFolderEditor projectId={projectId} parentId={currentFolder?.folder_id ?? null} onClose={() => setCreatingFolder(false)} /> : null}
-      <ProjectPageHeader title={t('title')}>
+      <ProjectPageHeader
+        // In a folder the header is its path: Artifacts › parents › the folder (the h1), then its menu.
+        title={
+          !folderId
+            ? t('title')
+            : (currentFolder?.name ?? (folders.isError ? t('folderLoadFailed') : folders.isSuccess ? t('folderUnavailable') : ''))
+        }
+        breadcrumb={
+          folderId ? (
+            <nav aria-label={t('folderNavigation')} className="flex min-w-0 shrink items-center gap-1">
+              {/* A phone shows only the parent crumb: the open folder's name keeps the room. */}
+              <span className={`min-w-0 shrink items-center ${ancestors.length ? 'hidden sm:flex' : 'flex'}`}>
+                <ArtifactFolderCrumb projectId={projectId} folderId={null} name={t('title')} onOpen={() => setFolderId(null)} back={!ancestors.length} />
+              </span>
+              {ancestors.map((folder, index) => (
+                <span key={folder.folder_id} className={`min-w-0 shrink items-center gap-1 ${index === ancestors.length - 1 ? 'flex' : 'hidden sm:flex'}`}>
+                  <CaretRightIcon className="text-muted-foreground hidden size-3 shrink-0 sm:block" aria-hidden />
+                  <ArtifactFolderCrumb projectId={projectId} folderId={folder.folder_id} name={folder.name} onOpen={() => setFolderId(folder.folder_id)} back={index === ancestors.length - 1} />
+                </span>
+              ))}
+              <CaretRightIcon className="text-muted-foreground hidden size-3 shrink-0 sm:block" aria-hidden />
+            </nav>
+          ) : undefined
+        }
+        titleAccessory={
+          folderId && !currentFolder && !folders.isSuccess && !folders.isError ? (
+            <span role="status" aria-label={tCommon('loading')}><Loading className="size-3.5" /></span>
+          ) : currentFolder ? (
+            <ArtifactFolderActions folder={currentFolder} folders={allFolders} projectId={projectId} />
+          ) : undefined
+        }
+      >
         <Button size="sm" variant="outline" className="gap-1.5" aria-label={t('newFolder')} onClick={() => setCreatingFolder(true)} disabled={!!folderId && !currentFolder}><FolderPlusIcon className="size-3.5" /><span className="sr-only sm:not-sr-only">{t('newFolder')}</span></Button>
         <SortMenu
           value={sort}
@@ -149,23 +180,6 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
       </ProjectPageHeader>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 pb-20 md:px-8">
-          {folderId ? (
-            <nav aria-label={t('folderNavigation')} className="flex min-w-0 items-center gap-1 text-sm">
-              <ArtifactFolderCrumb projectId={projectId} folderId={null} name={t('title')} onOpen={() => setFolderId(null)} />
-              {ancestors.map((folder) => (
-                <span key={folder.folder_id} className="flex min-w-0 items-center gap-1">
-                  <span aria-hidden className="text-muted-foreground">/</span>
-                  <ArtifactFolderCrumb projectId={projectId} folderId={folder.folder_id} name={folder.name} onOpen={() => setFolderId(folder.folder_id)} />
-                </span>
-              ))}
-              <span aria-hidden className="text-muted-foreground">/</span>
-              {/* The open folder keeps its name; the crumbs above it give way first. */}
-              <span className="max-w-[45%] shrink-0 truncate px-2 font-medium" aria-current="page" title={currentFolder?.name}>
-                {currentFolder?.name ?? (folders.isError ? t('folderLoadFailed') : folders.isSuccess ? t('folderUnavailable') : <span role="status" aria-label={tCommon('loading')}><Loading className="size-3.5" /></span>)}
-              </span>
-              {currentFolder ? <ArtifactFolderActions folder={currentFolder} folders={allFolders} projectId={projectId} /> : null}
-            </nav>
-          ) : null}
           {!folderId && folders.isError ? <ErrorState title={t('folderLoadFailed')} action={<Button variant="outline" size="sm" onClick={() => folders.refetch()}>{t('retry')}</Button>} /> : null}
           {!filtered && childFolders.length ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{childFolders.map(folder => <ArtifactFolderTile key={folder.folder_id} folder={folder} folders={allFolders} projectId={projectId} onOpen={() => setFolderId(folder.folder_id)} />)}</div> : null}
           <section className="flex flex-col gap-4">

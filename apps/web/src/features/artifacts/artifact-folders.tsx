@@ -33,7 +33,7 @@ import {
   ProjectIconField,
   type ProjectIconValue,
 } from '@kortix/ui/workspace/projects/modal/project-icon-field';
-import { DotsThreeIcon, FolderIcon, PencilSimpleIcon, TrashIcon } from '@phosphor-icons/react';
+import { CaretLeftIcon, DotsThreeIcon, FolderIcon, PencilSimpleIcon, TrashIcon } from '@phosphor-icons/react';
 import { useRef, useState } from 'react';
 
 import { isArtifactDrag, readArtifactDrag } from './artifact-card';
@@ -262,27 +262,30 @@ export function ArtifactFolderCrumb({
   folderId,
   name,
   onOpen,
+  back = false,
 }: {
   projectId: string;
   /** null: the gallery root. */
   folderId: string | null;
   name: string;
   onOpen: () => void;
+  /** The crumb a phone keeps: there it is a back arrow, named for screen readers. */
+  back?: boolean;
 }) {
   const drop = useArtifactDropTarget(projectId, folderId, name);
+  // A header crumb, as on Goals: muted text that opens its level; a drop ring while a card or folder hovers.
   return (
-    <Button
+    <button
+      type="button"
       {...drop.props}
-      variant="ghost"
-      size="sm"
       onClick={onOpen}
       data-drop-over={drop.over || undefined}
       aria-busy={drop.pending || undefined}
-      className="data-[drop-over]:bg-secondary data-[drop-over]:ring-ring max-w-48 min-w-0 shrink data-[drop-over]:ring-2"
+      className="text-muted-foreground hover:text-foreground focus-visible:ring-ring data-[drop-over]:bg-secondary data-[drop-over]:text-foreground data-[drop-over]:ring-ring flex max-w-40 min-w-0 shrink items-center gap-1 rounded-sm px-1 text-sm max-sm:min-h-8 max-sm:min-w-8 max-sm:justify-center outline-none focus-visible:ring-2 data-[drop-over]:ring-2"
     >
-      {drop.pending ? <Loading className="size-3.5" /> : null}
-      <span className="truncate" title={name}>{name}</span>
-    </Button>
+      {drop.pending ? <Loading className="size-3.5 shrink-0" /> : back ? <CaretLeftIcon className="size-4 shrink-0 sm:hidden" aria-hidden /> : null}
+      <span className={back ? 'max-sm:sr-only truncate' : 'truncate'} title={name}>{name}</span>
+    </button>
   );
 }
 

@@ -772,8 +772,8 @@ flow(
 // while it runs, only Postgres grants stand between them and the database. The
 // 2026-09-24 incident: both could call the wallet RPCs (mint/drain credits on
 // any account) and read `kortix` tables. Kortix never calls the Data API (the
-// API reaches Postgres directly), so it is off on local Supabase
-// (`supabase/config.toml` `[api] enabled = false`) and on the hosted dev,
+// API reaches Postgres directly), so local Supabase starts without it (every
+// `supabase start` passes `-x postgrest`) and it is off on the hosted dev,
 // staging and prod projects (dashboard: Integrations → Data API, since
 // 2026-11-23). The grants stay locked down as a second layer; the DB suites
 // assert them (`apps/api/src/__tests__/integration-kortix-rls.test.ts`,
@@ -868,7 +868,7 @@ flow(
               // off keeps running it until the containers are recreated.
               const fix =
                 ctx.env.target === 'local'
-                  ? ' Local Supabase still runs PostgREST: run `supabase stop` in supabase/, then start it again (`pnpm dev`).'
+                  ? ' Local Supabase still runs PostgREST from an older start: run `supabase stop` in supabase/, then start it again (`pnpm dev` passes `-x postgrest`).'
                   : '';
               throw new Error(
                 `SEC-K: the Data API answered ${who} for ${what}: ${res.status} ${body.slice(0, 200)}.${fix}`,

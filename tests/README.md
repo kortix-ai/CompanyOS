@@ -403,7 +403,7 @@ infrastructure does not change test logic.
 The capture retries Supabase startup for up to 40 minutes. This absorbs bounded
 registry rate limits while preserving the 45-minute cold preparation budget.
 The capture and fresh local stack start Supabase with `--ignore-health-check`.
-Local Supabase runs no PostgREST (`[api] enabled = false` in
+Local Supabase starts without PostgREST (`-x postgrest`; see
 `supabase/config.toml`; flow SEC-K checks that the Data API stays off). The
 runner still requires migrations and service readiness before it starts flows.
 

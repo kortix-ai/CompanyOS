@@ -319,13 +319,15 @@ export async function ensureLocalSupabase(
   // `studio` (the dashboard) and `imgproxy` (storage image transforms): no
   // test uses either, and they were the largest pulls of a CI lane's
   // 108 s `supabase start` (browser-1, run 38777589705). scripts/dev-local.sh
-  // excludes the same two.
+  // excludes the same two. `postgrest`: nothing calls the Data API (flow
+  // SEC-K), and on a fresh database it made the start wait its 30 s health
+  // timeout for the `kortix` schema, which exists only after migrations.
   const command = [
     ...localSupabaseCommand(topology),
     "start",
     "--ignore-health-check",
     "-x",
-    "studio,imgproxy",
+    "studio,imgproxy,postgrest",
   ];
   const started = Bun.spawn(command, {
     cwd: topology.root,

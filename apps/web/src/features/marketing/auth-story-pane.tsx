@@ -138,7 +138,7 @@ function Headline({ text, still }: { text: string; still: boolean }) {
  */
 function LogoTile({ logo }: { logo: (typeof WORKS_WITH)[number] }) {
   return (
-    <li className="bg-card flex h-14 shrink-0 items-center gap-2.5 rounded-md px-5">
+    <li className="bg-popover flex h-14 shrink-0 items-center gap-2.5 rounded-md px-5">
       {FULL_COLOR_LOGOS.has(logo.slug) ? (
         // eslint-disable-next-line @next/next/no-img-element -- a 20px static SVG; next/image adds nothing here
         <img

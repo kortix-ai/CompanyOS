@@ -115,7 +115,8 @@ export function AuthFrame({
       <div className="relative flex min-h-svh flex-1 flex-col px-6">
         <AuthMobileLogo />
         <main className="flex flex-1 flex-col items-center justify-center py-24">
-          <div className="w-full max-w-[380px]">{children}</div>
+          {/* The centered sign-in column is 22rem: between max-w-xs (20rem) and max-w-sm (24rem). */}
+          <div className={cn('w-full', centered ? 'max-w-[22rem]' : 'max-w-[380px]')}>{children}</div>
         </main>
         {footerVariant === 'none' ? null : centered ? (
           // Out of flow, so the form centres on the full height, level with

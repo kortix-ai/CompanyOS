@@ -3,7 +3,8 @@ import { statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { WALLPAPER_DOWNLOADS } from './wallpaper-downloads';
-import { WALLPAPERS } from '@kortix/ui/theme';
+
+const DOWNLOADABLE = ['dither', 'brandmark', 'nebula', 'silk', 'grain', 'neuro'];
 
 const PUBLIC_DIR = join(import.meta.dir, '../../public');
 
@@ -24,10 +25,10 @@ describe('wallpaper downloads manifest', () => {
     }
   });
 
-  test('offers every wallpaper a Kortix home can render, in both themes', () => {
-    const renderable = WALLPAPERS.filter((w) => w.type !== 'none').map((w) => w.id);
-
-    for (const id of renderable) {
+  test('offers every exported wallpaper in both themes', () => {
+    // The fixed set `scripts/generate-wallpapers.mjs` exports. The gradient
+    // wallpapers and Custom are drawn on the client and have no download.
+    for (const id of DOWNLOADABLE) {
       for (const theme of ['light', 'dark'] as const) {
         const hit = WALLPAPER_DOWNLOADS.find(
           (w) => w.group === 'product' && w.id === id && w.theme === theme,

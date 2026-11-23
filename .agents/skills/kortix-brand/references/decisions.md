@@ -10,6 +10,16 @@ Ids: `D1` to `D8` and `D4a` to `D4k` come from the 2026-10-01 brand-kit build. `
 
 ---
 
+## 2026-11-21
+
+### D43 Wallpapers carry color: ten gradients and a custom one replace the monochrome set
+- **Date:** 2026-11-21
+- **Decision:** The wallpaper picker is Dither (the default, unchanged), ten colored gradients, Blank and Custom. Brandmark, Pixel Beams, Silk, Grain and Neuro leave the picker. A person who had one selected gets Dither. Custom is a palette only: 2 to 5 colors, from 18 ready-made palettes or a picker per color, drawn as Ember's dithered corner bloom. No shape, finish, placement or saved presets: those were built and removed the same day as too complex. Every gradient keeps the area behind the centered content clear (`calm` on its `GradientConfig`).
+- **Why:** the founder-side ask on 2026-11-21: the monochrome set read as ugly, and the references were dithered color blooms and grained gradients on a dark page. Color in a wallpaper is art, not chrome: it sits in the art layer (D4d) and no control takes a color from it.
+- **Where:** `packages/ui/src/theme/wallpaper-gradients.ts` (presets), `packages/ui/src/theme/wallpapers.ts` (registry), [graphic-elements.md](visual/graphic-elements.md) "Wallpapers".
+- **Supersedes:** the unwritten "wallpapers are monochrome" convention. No earlier entry stated it.
+- **Source:** the `wallpapers-v2` branch.
+
 ## 2026-11-09
 
 ### D42 The home hero has no trait line: title, then subhead

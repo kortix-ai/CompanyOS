@@ -14,7 +14,6 @@ import type {
   SetStateAction,
 } from 'react';
 import { lazy, Suspense, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { useToastClearance } from '../../primitives/toast-clearance';
 
 import { SpaceMentionContext } from './menus/space-mentions';
 import type { DriveMentionSource } from './menus/mention-menu';
@@ -225,8 +224,6 @@ export function ComposerCard({
 }: ComposerCardProps) {
   const connectionsAbove = useContext(ModelConnectionLayoutContext) === 'above';
   const cardRef = useRef<HTMLDivElement>(null);
-  // A composer docked at the window bottom keeps toasts above its Send/Stop button.
-  useToastClearance(cardRef, slashMenuPlacement === 'above');
   const { attachAccept, modelPickerEnabled } = useUiHostConfig();
   const inlineUnderbar = underbarPlacement === 'inline';
 

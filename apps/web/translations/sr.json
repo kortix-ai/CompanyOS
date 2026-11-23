@@ -817,12 +817,36 @@
       },
       "wallpapers": {
         "dither": "Дитеринг",
-        "brandmark": "Знак бренда",
-        "nebula": "Пикселски зраци",
-        "silk": "Свила",
-        "grain": "Зрно",
-        "neuro": "Неуро",
+        "ember": "Жар",
+        "prism": "Призма",
+        "tide": "Плима",
+        "aurora": "Аурора",
+        "dusk": "Сумрак",
+        "eclipse": "Помрачење",
+        "lagoon": "Лагуна",
+        "cumulus": "Кумулус",
+        "moss": "Маховина",
+        "iris": "Ирис",
+        "custom": "Прилагођено",
         "blank": "Празно"
+      },
+      "custom": {
+        "editColors": "Уреди боје",
+        "shuffle": "Насумично",
+        "palette": "Палета",
+        "paletteLabel": "Палета {count}",
+        "colors": "Боје",
+        "colorLabel": "Боја {count}",
+        "customColor": "Прилагођена боја",
+        "addColor": "Додај боју",
+        "removeColor": "Уклони боју",
+        "resetColors": "Врати",
+        "finish": "Завршна обрада",
+        "finishes": {
+          "dither": "Дитеринг",
+          "grain": "Зрно"
+        },
+        "opacity": "Непрозирност"
       }
     },
     "sessions": {

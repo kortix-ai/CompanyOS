@@ -1934,3 +1934,17 @@ CLI: `kortix sessions model get [session-id]`, `set [session-id] <model>`,
 and `switch [session-id] <model> --prompt "Continue verification" --idempotency-key verification-model-1`.
 The new verbs default to `KORTIX_SESSION_ID`. The existing `sessions model <session-id> <model>` remains supported.
 Never send a peer message to yourself to continue a model switch.
+
+### Artifact gallery folders
+
+`listArtifactFolders`, `createArtifactFolder`, `updateArtifactFolder`, and
+`deleteArtifactFolder` organize a workspace's artifact gallery. Folder names
+are workspace-visible. Only the creator or a caller with artifact management
+permission can edit or delete a folder. Folder membership grants no access.
+
+Pass `folder_id` when publishing, sharing, or updating an artifact. Pass `null`
+to move it to the root. `listArtifacts(projectId, { folder_id: 'root' })` lists
+unfiled artifacts; omit the filter to search all folders. Deleting a folder
+returns its artifacts to the root. Artifact IDs, Files paths, and links stay
+unchanged. React consumers use `useArtifactFolders` and
+`useArtifactFolderMutations` from `@kortix/sdk/react`.

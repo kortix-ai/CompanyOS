@@ -3,6 +3,7 @@
 import {
   PROJECT_WIDE_SPACE,
   type Artifact,
+  type ArtifactFolder,
   type ManifestSpace,
 } from '@kortix/sdk';
 import { prefetchArtifact, useArtifactMutations } from '@kortix/sdk/react';
@@ -101,7 +102,9 @@ export const ArtifactCard = memo(function ArtifactCard({
   space,
   current,
   spaces,
+  folders = [],
 }: {
+  folders?: ArtifactFolder[];
   projectId: string;
   artifact: Artifact;
   hidden?: boolean;
@@ -198,6 +201,15 @@ export const ArtifactCard = memo(function ArtifactCard({
                 <DropdownMenuItem onSelect={() => setSharing(true)}>
                   <ShareNetworkIcon /> {t('share')}
                 </DropdownMenuItem>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger><StackSimpleIcon />{t('moveToFolder')}</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto">
+                    <DropdownMenuRadioGroup value={artifact.folder_id ?? 'root'} onValueChange={next => { if (next !== (artifact.folder_id ?? 'root')) mutations.update.mutate({ artifactId: artifact.artifact_id, folder_id: next === 'root' ? null : next }, { onSuccess: () => successToast(t('moved')), onError: () => errorToast(t('moveFailed')) }); }}>
+                      <DropdownMenuRadioItem value="root">{t('folderRoot')}</DropdownMenuRadioItem>
+                      {folders.map(folder => <DropdownMenuRadioItem key={folder.folder_id} value={folder.folder_id}>{folder.name}</DropdownMenuRadioItem>)}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
                 {spaces.length ? (
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger>

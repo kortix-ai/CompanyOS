@@ -58,6 +58,8 @@ mock.module('@/features/providers/auth-provider', () => ({
 const realNav = await import('next/navigation');
 mock.module('next/navigation', () => ({
   ...realNav,
+  useSearchParams: () => new URLSearchParams(''),
+  usePathname: () => '/workspaces/p1/artifacts',
   useRouter: () => ({ push: () => {}, replace: () => {}, prefetch: () => {}, back: () => {} }),
 }));
 const realUiProvider = { ...(await import('@kortix/ui/providers/ui-provider')) };

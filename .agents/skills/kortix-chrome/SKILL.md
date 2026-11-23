@@ -89,23 +89,64 @@ the CLI offer Kortix in Chrome to every project from the same date. Every field 
 (listing text, permission justifications, data disclosures, test instructions, assets) is in
 [references/store-listing.md](references/store-listing.md).
 
-An approved version goes live at once unless **deferred publishing** is on. Every upload goes
-through review again.
+### Ship a change: raise the version, the release does the rest
 
-1. Raise `version` in `src/manifest.json`. The store accepts only a version higher than the last upload.
-2. `bun run package` → `release/kortix-chrome-<version>.zip`: the store build (kortix.com only)
-   without the manifest `key`, which the store rejects.
-3. Dashboard → **Package** → **Upload new package**, then **Submit for review**.
-4. Claude in Chrome cannot read or click the dashboard: Chrome blocks every extension on Web Store
-   pages ("The extensions gallery cannot be scripted"). A person clicks; the agent prepares the fields.
-5. The store fetches the Homepage and Support URLs before it allows a submit. A 404 blocks it
-   ("Support URL is not reachable"). The listing uses `https://kortix.com/support`.
-6. Reviewers sign in at kortix.com, so prod must serve `/v1/chrome/connections` (401, not 404).
-   `deploy-prod.yml` sets `KORTIX_CHROME_ENABLED=true`. The `chrome` flag is on by default.
-   Give the reviewer the prod reviewer account in the Test instructions tab
-   ([references/store-listing.md](references/store-listing.md#test-instructions-tab)).
-7. A brand-new item needs `key.pem` at the zip root on its first upload only:
-   `dotenvx get BROWSER_EXTENSION_KEY_PEM_B64 -f apps/api/.env | base64 -d > key.pem`.
+**A change to the extension needs a version bump.** Raise `version` in `src/manifest.json` in the
+same PR (`1.0.1` → `1.0.2`). Bump once per release, not once per PR: a version that has not
+reached the store yet carries every later change too.
+
+After each prod release, `.github/workflows/chrome-store.yml` (**Chrome Web Store**) runs
+`scripts/store-release.ts` on the deployed `prod` commit:
+
+| Store state | The run |
+|---|---|
+| repo version above every store version | builds the store zip, uploads it, submits it for review; the store publishes it after approval (usually days, up to weeks) |
+| a version in review | waits; the first release after the review uploads the newer version. It never cancels a review: releases come faster than reviews |
+| repo version is live, no extension file changed after it was set | nothing |
+| repo version is live, extension files changed after it | fails: raise the version on dev |
+| rejected, taken down, or a store version above the repo | fails with the reason |
+
+The upload starts only after Deploy Prod proved prod serves the release
+(`deploy-prod-gate.yml`), so an approved version never waits for an API or web change.
+Deferred publishing stays off. A red run, a warning or a submit posts to the release Slack channel.
+"Extension files" are the inputs of `scripts/build.ts` (`INPUTS` in `store-release.ts`; keep the
+two in step), test files excluded.
+
+By hand: Actions → **Chrome Web Store** → Run workflow (`dry_run` reads the store and builds only).
+It always uses the `prod` branch. Locally, with the two credentials in the environment:
+`bun apps/chrome-extension/scripts/store-release.ts --dry-run`.
+
+### One-time setup: the service account
+
+The workflow reads `CHROME_WEB_STORE_SERVICE_ACCOUNT_KEY` (JSON key) and
+`CHROME_WEB_STORE_PUBLISHER_ID` from AWS Secrets Manager `kortix-ci-env`.
+
+1. Google Cloud console: enable the **Chrome Web Store API** in a project, create a service account
+   with no roles, and download a JSON key for it.
+2. Developer Dashboard → **Account** → service accounts: add the service account email (one per
+   publisher). Copy the publisher ID from **Publisher** → **Settings**.
+3. `apps/chrome-extension/scripts/store-credentials.sh <key.json> <publisher-id>` stores both and
+   runs a dry run against the store. Delete the downloaded key file after. Rotate with `--replace`.
+
+### Store rules that still hold
+
+- Every upload goes through review again. The store accepts only a version higher than the last upload.
+- `bun run package` → `release/kortix-chrome-<version>.zip` is the store build (kortix.com only)
+  without the manifest `key`, which the store rejects. A manual upload is Dashboard → **Package** →
+  **Upload new package** → **Submit for review**. Upload by hand only after prod serves what the
+  version needs; otherwise turn deferred publishing on first.
+- Claude in Chrome cannot read or click the dashboard: Chrome blocks every extension on Web Store
+  pages ("The extensions gallery cannot be scripted"). A person clicks; the agent prepares the fields.
+- The store fetches the Homepage and Support URLs before it allows a submit. A 404 blocks it
+  ("Support URL is not reachable"). The listing uses `https://kortix.com/support`.
+- Reviewers sign in at kortix.com, so prod must serve `/v1/chrome/connections` (401, not 404).
+  `deploy-prod.yml` sets `KORTIX_CHROME_ENABLED=true`. The `chrome` flag is on by default.
+  The Test instructions tab must give the reviewer a working prod reviewer account
+  ([references/store-listing.md](references/store-listing.md#test-instructions-tab)); the tab
+  carries over to every automatic upload.
+- A brand-new item needs `key.pem` at the zip root on its first upload only:
+  `dotenvx get BROWSER_EXTENSION_KEY_PEM_B64 -f apps/api/.env | base64 -d > key.pem`. The API
+  cannot create an item.
 
 ## Extension surfaces
 

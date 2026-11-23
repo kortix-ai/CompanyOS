@@ -12,9 +12,11 @@ where each permission is used.
 
 ## Package
 
-`bun run package` in `apps/chrome-extension` writes `release/kortix-chrome-<version>.zip`.
-Dashboard → **Package** → **Upload new package**. The store accepts only a version higher than
-the last upload.
+The **Chrome Web Store** workflow (`.github/workflows/chrome-store.yml`) uploads and submits each
+new `version` after the prod release ([SKILL.md](../SKILL.md#ship-a-change-raise-the-version-the-release-does-the-rest)).
+By hand: `bun run package` in `apps/chrome-extension` writes `release/kortix-chrome-<version>.zip`,
+then Dashboard → **Package** → **Upload new package**. The store accepts only a version higher
+than the last upload.
 
 ## Store listing tab
 
@@ -99,9 +101,11 @@ and the Limited Use statement. Change that section and this table together.
 ## Distribution tab
 
 - Visibility: **Public**. Regions: all.
-- Deferred publishing is off: an approved version goes live at once. Turn it on before you
-  submit a version that needs a Kortix release first (for example a new API route), then select
-  **Publish** after that release is live in prod.
+- Deferred publishing is off: an approved version goes live at once. The workflow uploads only
+  after prod serves the release, so it needs no deferral. Keep it off: a version held by deferred
+  publishing (`STAGED`) stops every later automatic upload until a person publishes it. Turn it
+  on only for a manual upload that needs a Kortix release first (for example a new API route),
+  then select **Publish** after that release is live in prod.
 
 ## Test instructions tab
 

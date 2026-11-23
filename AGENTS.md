@@ -419,6 +419,13 @@ Mobile changes merged into `dev` automatically build iOS for TestFlight with
 the production API. This dedicated workflow does not submit App Review or
 release to the App Store. See `apps/mobile/BUILD_GUIDE.md`.
 
+## Chrome extension versioning
+
+**A change to `apps/chrome-extension` requires a version bump.** Raise `version` in
+`apps/chrome-extension/src/manifest.json` in the same PR, once per release. After each prod
+release, the **Chrome Web Store** workflow uploads that version and submits it for review. It fails
+when extension files changed but the version did not. See the **kortix-chrome** skill.
+
 ## Architecture: `@kortix/sdk` is the source of truth
 
 `@kortix/sdk` is the **single source of truth** for everything that talks to the

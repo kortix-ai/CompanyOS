@@ -302,6 +302,12 @@ Connect (runbook: `apps/mobile/BUILD_GUIDE.md`). Both also run when
 (`deploy-prod-gate.yml`); any other failed job stops them, and you then
 dispatch them by hand once prod is live.
 
+`Deploy Prod` also starts `Chrome Web Store` on the same gate. It uploads and
+submits the extension when `apps/chrome-extension/src/manifest.json` carries a
+new version, and the store publishes it after review. It must end green. A red
+run names the cause: extension files changed without a version bump, a
+rejection, or a store-side problem (runbook: the **kortix-chrome** skill).
+
 ### Step 10 — self-host `:stable`
 
 `:stable` moves **only** on the user's explicit, per-release consent — never

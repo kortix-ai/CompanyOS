@@ -29,5 +29,5 @@ writeFileSync(join(stage, 'manifest.json'), `${JSON.stringify(manifest, null, 2)
 run(['zip', '-r', '-X', '-q', zip, '.'], stage);
 
 console.log(`\n${zip}\nversion ${manifest.version}, ${Math.round(statSync(zip).size / 1024)} KB, no key`);
-console.log('Upload it in the Chrome Web Store dashboard: Package → Upload new package.');
-console.log('The store accepts only a version higher than the last upload: raise "version" in src/manifest.json first.');
+console.log('After each prod release, .github/workflows/chrome-store.yml uploads a new version itself.');
+console.log('By hand: Dashboard → Package → Upload new package. The store accepts only a version higher than the last upload.');

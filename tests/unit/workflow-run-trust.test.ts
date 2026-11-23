@@ -16,9 +16,9 @@ const followers = readdirSync(dir)
   .filter(({ source }) => /^ {2}workflow_run:/m.test(source) && source.includes('workflow_run.head_sha'));
 
 describe('workflow_run followers that run the triggering commit', () => {
-  test('exist (the scan finds the mobile and staging deploy followers)', () => {
+  test('exist (the scan finds the Chrome, mobile and staging deploy followers)', () => {
     expect(followers.map((f) => f.name)).toEqual(
-      expect.arrayContaining(['deploy-staging.yml', 'mobile-ota.yml', 'mobile-store.yml']),
+      expect.arrayContaining(['chrome-store.yml', 'deploy-staging.yml', 'mobile-ota.yml', 'mobile-store.yml']),
     );
   });
 

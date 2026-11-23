@@ -1,0 +1,108 @@
+name: Chrome Web Store
+
+# Releases the Kortix in Chrome extension version of the deployed `prod` commit
+# to the Chrome Web Store. apps/chrome-extension/scripts/store-release.ts
+# compares "version" in apps/chrome-extension/src/manifest.json with the store:
+#   - higher than every store version: build, upload, submit for review. The
+#     store publishes it automatically after approval (hours to days);
+#   - a submission in review: wait; the first release after the review uploads;
+#   - equal to the live version, but extension files changed after it was set:
+#     fail, asking for a version bump on dev.
+# A release with no new extension version changes nothing.
+#
+#   Deploy Prod succeeded  -> the deployed commit (a run that failed only in
+#                             its Kortix Capture or desktop builds counts too:
+#                             deploy-prod-gate.yml)
+#   workflow_dispatch      -> the `prod` branch, never unreleased dev code
+#
+# The upload starts only after prod serves the release, so an approved version
+# never needs an API or web change that is not live yet.
+# Credentials: CHROME_WEB_STORE_SERVICE_ACCOUNT_KEY and
+# CHROME_WEB_STORE_PUBLISHER_ID in kortix-ci-env (store-credentials.sh).
+# Runbook: .agents/skills/kortix-chrome/SKILL.md ("Publish to the Chrome Web Store").
+
+on:
+  # workflow_run loads THIS file from dev, then checks out the deployed commit.
+  workflow_run:
+    workflows: [Deploy Prod]
+    types: [completed]
+    branches: [prod]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Read the store state and build the package, upload nothing
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write # aws-env reads the store credentials from AWS Secrets Manager
+
+jobs:
+  gate:
+    name: Deploy Prod gate
+    # Only a Deploy Prod run of `prod` in this repository, started by a push
+    # or a person, reaches the gate. A pull request can run its own copy of a
+    # workflow named "Deploy Prod"; that run must never reach the credentials.
+    if: >-
+      github.event_name == 'workflow_run' &&
+      contains(fromJSON('["push", "workflow_dispatch"]'), github.event.workflow_run.event) &&
+      github.event.workflow_run.head_branch == 'prod' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    permissions:
+      actions: read # the gate reads the jobs of the Deploy Prod run
+    uses: ./.github/workflows/deploy-prod-gate.yml
+
+  release:
+    name: Release to the Chrome Web Store
+    needs: gate
+    if: >-
+      !cancelled() &&
+      (github.event_name == 'workflow_dispatch' || needs.gate.outputs.ship == 'true')
+    runs-on: ${{ vars.CI_RUNNER_S || 'ubuntu-24.04' }}
+    timeout-minutes: 20
+    # One release at a time, never cancelled: the next run reads the store
+    # state again, so a run that stopped halfway is finished by the next one.
+    concurrency:
+      group: chrome-store
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The released code only: the store build signs in to kortix.com.
+          ref: ${{ github.event.workflow_run.head_sha || 'prod' }}
+          # The script finds the commit that set the version (git log), so it
+          # needs the history.
+          fetch-depth: 0
+
+      # Before any credential is read: the commit must be part of `prod`.
+      - name: Require a commit of prod
+        run: |
+          git merge-base --is-ancestor HEAD origin/prod || {
+            echo "::error::$(git rev-parse HEAD) is not a commit of origin/prod; refusing to release it."
+            exit 1
+          }
+
+      - name: Check out the aws-env action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .aws-env
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - name: Read credentials from AWS Secrets Manager
+        uses: ./.aws-env/.github/actions/aws-env
+        with:
+          keys: |
+            CHROME_WEB_STORE_SERVICE_ACCOUNT_KEY
+            CHROME_WEB_STORE_PUBLISHER_ID
+            SLACK_BOT_TOKEN?
+            SLACK_RELEASE_CHANNEL?
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+
+      # The build uses Bun built-ins only: no dependency install.
+      - name: Release
+        run: bun apps/chrome-extension/scripts/store-release.ts ${{ inputs.dry_run && '--dry-run' || '' }}

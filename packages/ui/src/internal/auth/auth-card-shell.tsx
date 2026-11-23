@@ -15,7 +15,7 @@ import { UiLink as Link } from '../../providers/ui-provider';
 
 import { useDesktopBackTarget } from '../desktop/desktop-back-button';
 import { AuthArt } from './auth-art';
-import { AuthMobileLogo, Rise, StepHeader } from './auth-primitives';
+import { AuthFrameContext, AuthMobileLogo, Rise, StepHeader } from './auth-primitives';
 import { openExternalRoute } from '../lib/desktop';
 import { cn } from '../lib/utils';
 
@@ -79,6 +79,7 @@ export function AuthFrame({
   art = false,
   aside,
   centered = false,
+  mark,
 }: {
   children: React.ReactNode;
   /**
@@ -87,8 +88,10 @@ export function AuthFrame({
    * branded or self-hosted frame passes nothing. Hidden below `lg`.
    */
   aside?: React.ReactNode;
-  /** Centers the legal footer, for a page whose entry column is centered. */
+  /** Centers the column: every step header, quiet-link row and the legal footer. */
   centered?: boolean;
+  /** The mark every step header shows by default (the Kortix app tile). */
+  mark?: React.ReactNode;
   /**
    * The dither pane beside the form on wide screens. Auth and consent screens
    * keep it; an in-app gate that only borrows this frame (a checkout, a
@@ -116,7 +119,9 @@ export function AuthFrame({
         <AuthMobileLogo />
         <main className="flex flex-1 flex-col items-center justify-center py-24">
           {/* The centered sign-in column is 340px wide. */}
-          <div className={cn('w-full', centered ? 'max-w-[340px]' : 'max-w-[380px]')}>{children}</div>
+          <div className={cn('w-full', centered ? 'max-w-[340px]' : 'max-w-[380px]')}>
+            <AuthFrameContext.Provider value={{ centered, mark }}>{children}</AuthFrameContext.Provider>
+          </div>
         </main>
         {footerVariant === 'none' ? null : centered ? (
           // Out of flow, so the form centres on the full height, level with
@@ -139,22 +144,40 @@ export function AuthCardShell({
   description,
   children,
   footer,
+  frame,
 }: {
   title: string;
   description: React.ReactNode;
   children?: React.ReactNode;
   /** Optional footer below the content (e.g. a "Back to sign in" link). */
   footer?: React.ReactNode;
+  /**
+   * The host's sign-in frame (story pane, centered column, app tile), so a
+   * sub-flow matches the page it came from. A centered frame holds still.
+   */
+  frame?: { aside?: React.ReactNode; centered?: boolean; mark?: React.ReactNode };
 }) {
+  const body = (
+    <>
+      {children}
+      {footer ? <div className={cn('mt-6', frame?.centered && 'text-center')}>{footer}</div> : null}
+    </>
+  );
   return (
-    <AuthFrame>
-      <Rise>
-        <StepHeader title={title} description={description} />
-      </Rise>
-      <Rise delay={0.06}>
-        {children}
-        {footer ? <div className="mt-6">{footer}</div> : null}
-      </Rise>
+    <AuthFrame aside={frame?.aside} centered={frame?.centered} mark={frame?.mark}>
+      {frame?.centered ? (
+        <>
+          <StepHeader title={title} description={description} />
+          {body}
+        </>
+      ) : (
+        <>
+          <Rise>
+            <StepHeader title={title} description={description} />
+          </Rise>
+          <Rise delay={0.06}>{body}</Rise>
+        </>
+      )}
     </AuthFrame>
   );
 }

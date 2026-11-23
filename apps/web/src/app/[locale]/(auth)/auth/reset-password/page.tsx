@@ -10,11 +10,13 @@ import { ConnectingScreen } from '@/components/dashboard/connecting-screen';
 import { Button } from '@kortix/ui/button';
 import { Input } from '@kortix/ui/input';
 import { FieldError, FieldLabel } from '@kortix/ui/internal/auth/auth-primitives';
+import { useKortixAuthFrame } from '@/features/auth/kortix-auth-frame';
 import { AuthCardShell, BackToSignIn } from '@kortix/ui/internal/auth/auth-card-shell';
 import { resetPassword } from '../actions';
 
 function ResetPasswordContent() {
   const t = useTranslations('auth.passwordReset');
+  const frame = useKortixAuthFrame();
   const router = useRouter();
   const searchParams = useSearchParams();
   const code = searchParams.get('code');
@@ -51,6 +53,7 @@ function ResetPasswordContent() {
   if (!code && !success) {
     return (
       <AuthCardShell
+        frame={frame}
         title={t('expired.title')}
         description={t('expired.description')}
         footer={<BackToSignIn />}
@@ -65,6 +68,7 @@ function ResetPasswordContent() {
   if (success) {
     return (
       <AuthCardShell
+        frame={frame}
         title={t('success.title')}
         description={t('success.description')}
         footer={<BackToSignIn />}
@@ -78,6 +82,7 @@ function ResetPasswordContent() {
 
   return (
     <AuthCardShell
+        frame={frame}
       title={t('form.title')}
       description={t('form.description')}
       footer={<BackToSignIn />}

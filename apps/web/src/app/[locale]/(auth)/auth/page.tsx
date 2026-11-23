@@ -39,8 +39,8 @@ import { Input } from '@kortix/ui/input';
 import Loading from '@kortix/ui/loading';
 import { errorToast } from '@kortix/ui/toast';
 import { AuthFrame } from '@kortix/ui/internal/auth/auth-card-shell';
-import { useBrandName, useBranding } from '@kortix/ui/internal/branding/branding-provider';
-import { AuthStoryPane } from '@/features/marketing/auth-story-pane';
+import { useBrandName } from '@kortix/ui/internal/branding/branding-provider';
+import { useKortixAuthFrame } from '@/features/auth/kortix-auth-frame';
 import {
   FieldError,
   FieldLabel,
@@ -186,25 +186,6 @@ function isSsoIdentityOf(
 
 /* ─── Small shared pieces ──────────────────────────────────────────────── */
 
-/**
- * The Kortix app tile above the sign-in heading: the same square the use-case
- * covers carry. A branded instance shows its own mark instead.
- */
-function KortixTile() {
-  return (
-    // A 96px copy (2x for a 48px tile) of the 1000px use-case cover.
-    // eslint-disable-next-line @next/next/no-img-element -- static 6KB tile; next/image pulls the Next runtime into this page's tests
-    <img
-      src="/usecases/logos/kortix-96.png"
-      alt=""
-      width={48}
-      height={48}
-      decoding="async"
-      className="size-12 rounded-md object-cover"
-    />
-  );
-}
-
 function PasswordInput({
   id,
   name,
@@ -269,8 +250,6 @@ function AuthCardForm({
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const t = useTranslations('auth.unified');
   const brandName = useBrandName();
-  // A branded instance keeps its own mark (KortixLogo swaps it) and no story pane.
-  const branded = useBranding() !== null;
   const enabledMethods = useMemo(() => parseAuthMethods(getEnv().AUTH_METHODS), []);
   const magicLinkEnabled = enabledMethods.includes('magic');
   const passwordEnabled = enabledMethods.includes('password');
@@ -1130,11 +1109,7 @@ function AuthCardForm({
       <m.div {...rise(0)}>
         {/* One system: no sign-in/sign-up toggle. Continue routes new emails
             into registration and existing ones into sign-in automatically. */}
-        <StepHeader
-          align="center"
-          title={t('welcome', { name: brandName })}
-          mark={branded ? undefined : <KortixTile />}
-        />
+        <StepHeader title={t('welcome', { name: brandName })} />
       </m.div>
 
       <m.div {...rise(0.06)}>
@@ -1196,7 +1171,6 @@ function AuthCardForm({
             performs, rendered only when this deployment has SAML enabled, so
             self-hosted installs without SSO never show a dead door. */}
         <QuietLinks
-          align="center"
           links={[
             passwordEnabled && magicLinkEnabled
               ? {
@@ -1235,7 +1209,7 @@ const STALE_SESSION_FALLBACK_MS = 2500;
 
 function AuthContent() {
   const t = useTranslations('auth.unified');
-  const branded = useBranding() !== null;
+  const frame = useKortixAuthFrame();
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1416,7 +1390,7 @@ function AuthContent() {
   // A stale/invalidated session (sessionExpired, or forceForm from the
   // safety-net timeout) also lands here — never a dead shell.
   return (
-    <AuthFrame centered aside={branded ? undefined : <AuthStoryPane />}>
+    <AuthFrame {...frame}>
       <AuthCardForm
         callbackError={searchParams.get('expired') === 'true' || searchParams.has('error') || searchParams.has('error_code')}
         returnUrl={returnUrl}

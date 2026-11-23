@@ -11,7 +11,7 @@ import {
   InfoIcon as InfoCircleSolid,
 } from '@phosphor-icons/react';
 import { m, useReducedMotion } from 'motion/react';
-import { useEffect, useRef } from 'react';
+import { createContext, useContext, useEffect, useRef } from 'react';
 
 import { inputFocusClasses, inputSurfaceClasses } from '../../primitives/input';
 import { KortixLogo } from '../../primitives/kortix-logo';
@@ -28,6 +28,15 @@ import { cn } from '../lib/utils';
 import { UiLink as Link } from '../../providers/ui-provider';
 
 export const AUTH_EASE = [0.23, 1, 0.32, 1] as const;
+
+/**
+ * What the enclosing AuthFrame tells the steps inside it: whether the column
+ * is centered, and the mark a header shows by default. Every step header and
+ * quiet-link row in a centered frame lines up without per-step props.
+ */
+export const AuthFrameContext = createContext<{ centered: boolean; mark?: React.ReactNode }>({
+  centered: false,
+});
 
 /** Gentle entrance: header first, body ~60ms behind. Opacity-only under reduced motion. */
 export function Rise({
@@ -87,9 +96,9 @@ export function AuthMobileLogo() {
 export function StepHeader({
   title,
   description,
-  mark,
+  mark: markProp,
   markOnMobile = false,
-  align = 'start',
+  align: alignProp,
 }: {
   /** A string, or a string led by a status mark (a decided approval). */
   title: React.ReactNode;
@@ -106,6 +115,9 @@ export function StepHeader({
   /** `center` centers the mark, title and description on one axis. */
   align?: 'start' | 'center';
 }) {
+  const frame = useContext(AuthFrameContext);
+  const align = alignProp ?? (frame.centered ? 'center' : 'start');
+  const mark = markProp ?? frame.mark;
   return (
     <div className={cn('mb-8', align === 'center' && 'text-center')}>
       {mark ? (
@@ -126,7 +138,7 @@ export function StepHeader({
       )}
       <h1
         className={cn(
-          'text-foreground text-2xl font-semibold tracking-tight text-balance md:mt-6',
+          'text-foreground text-2xl font-medium tracking-tight text-balance md:mt-6',
           mark && markOnMobile && 'mt-6',
         )}
       >
@@ -169,7 +181,7 @@ export function QuietLinks({
   links,
   disabled = false,
   className,
-  align = 'start',
+  align: alignProp,
 }: {
   links: Array<QuietLink | null | false | undefined>;
   disabled?: boolean;
@@ -177,6 +189,8 @@ export function QuietLinks({
   /** `center` centers the row and drops the lead middot instead of clipping it. */
   align?: 'start' | 'center';
 }) {
+  const frame = useContext(AuthFrameContext);
+  const align = alignProp ?? (frame.centered ? 'center' : 'start');
   const shown = links.filter(Boolean) as QuietLink[];
   if (shown.length === 0) return null;
   // Every entry leads with its middot, and the row is pulled left by one

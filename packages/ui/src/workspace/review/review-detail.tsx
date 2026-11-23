@@ -152,7 +152,7 @@ function ChangeBody({
         </div>
       )}
 
-      {(verification.length > 0 || d.previewUrl) && (
+      {(verification.length > 0 || httpUrl(d.previewUrl)) && (
         <Item variant="outline" size="sm">
           <ItemContent>
             <ItemTitle>{tI18nComplete.raw('text7140f4f19dec')}</ItemTitle>
@@ -166,10 +166,10 @@ function ChangeBody({
               </div>
             )}
           </ItemContent>
-          {d.previewUrl && (
+          {httpUrl(d.previewUrl) && (
             <ItemActions>
               <Button variant="outline" size="sm" asChild>
-                <a href={d.previewUrl} target="_blank" rel="noopener noreferrer">
+                <a href={httpUrl(d.previewUrl)} target="_blank" rel="noopener noreferrer">
                   {tI18nComplete.raw('textf7afe3dde18c')}
                 </a>
               </Button>
@@ -422,6 +422,20 @@ function ApprovalBody({
   );
 }
 
+/**
+ * An agent-supplied link, only when it is http(s). A `javascript:` or `data:`
+ * URL in a review item's detail must never become a clickable href.
+ */
+export function httpUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // ── output ────────────────────────────────────────────────────────────────
 /** File kinds an output draws inline. Everything else is a row that opens it. */
 const INLINE_MEDIA = new Set(['image', 'video', 'audio']);
@@ -515,9 +529,9 @@ export function OutputBody({ item }: { item: Extract<ReviewItem, { kind: 'output
           </ul>
         </section>
       ) : null}
-      {d.previewUrl ? (
+      {httpUrl(d.previewUrl) ? (
         <Button variant="outline" size="sm" className="gap-1.5" asChild>
-          <a href={d.previewUrl} target="_blank" rel="noopener noreferrer">
+          <a href={httpUrl(d.previewUrl)} target="_blank" rel="noopener noreferrer">
             {tI18nComplete.raw('textf7afe3dde18c')}
             <ArrowUpRight className="size-3.5 shrink-0" />
           </a>

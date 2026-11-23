@@ -140,6 +140,8 @@ export type FeatureFlagKey =
   | 'evals'
   /** Desktop tabs: the desktop app shows browser-style tabs in the title bar for this project's pages. Client-only, off by default. */
   | 'desktop_tabs'
+  /** Review cards: the Review page's Needs you opens as a swipe deck, one item at a time (right approves, left sends it back with feedback). Client-only, off by default. */
+  | 'review_swipe'
   /** Calendar: a shared calendar of dated items with the people on them and comments, plus the project's scheduled triggers (`kortix calendar`). Experimental, off by default. */
   | 'calendar'
   /** @deprecated Withdrawn — agents messaging people left the product. The API no longer lists, resolves, or accepts it. Removed in the next major. */
@@ -206,6 +208,7 @@ export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'evals',
   'desktop_tabs',
   'calendar',
+  'review_swipe',
 ] as const;
 
 /**

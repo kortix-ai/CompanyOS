@@ -874,6 +874,10 @@ const catalog = {
         "calendar": {
           "name": "Calendar",
           "description": "A shared calendar for people and agents: dated items with the people on them and comments, beside the scheduled triggers and Loops. Mention someone with @ to notify them. Agents use `kortix calendar`."
+        },
+        "review_swipe": {
+          "name": "Review cards",
+          "description": "The Review page's Needs you opens as a swipe deck: one item per card. Swipe right to approve or merge, left to send it back to the agent with what should change."
         }
       },
       "channelsSwitch": {
@@ -6515,7 +6519,13 @@ const catalog = {
       "conflicts": "{count, plural, one {# conflict} other {# conflicts}}",
       "items": "{count, plural, one {# item} other {# items}}",
       "showCards": "Show as cards",
-      "showList": "Show as list"
+      "showList": "Show as list",
+      "sendBack": "Send back",
+      "whatShouldChange": "What should change?",
+      "sendToAgent": "Send to agent",
+      "cancel": "Cancel",
+      "reviews": "Reviews",
+      "questions": "Questions"
     }
   },
   "commandPalette": {

@@ -31,7 +31,7 @@ import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { SheetScrollView } from '@/components/kortix/sheet-parts';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { useCans } from '@kortix/sdk/react';
+import { useCans, useFeatureFlag } from '@kortix/sdk/react';
 import { reviewVerdictAllowed, type ReviewVerdict } from '@kortix/sdk';
 import { useColorScheme } from 'nativewind';
 import {
@@ -56,7 +56,7 @@ import {
 import { useToast } from '@/components/kortix/toast-provider';
 import { OpenCRSheet } from '@/components/review/OpenCRSheet';
 import { shortRef } from '@/lib/review/review-detail';
-import { ReviewDetailSheet } from '@/components/review/ReviewDetailSheet';
+import { ReviewDetailSheet, type ReviewDetailSheetRef } from '@/components/review/ReviewDetailSheet';
 import { ReviewSwipeDeck } from '@/components/review/ReviewSwipeDeck';
 import { REVIEW_KIND_ICONS } from '@/components/review/review-icons';
 import { Button } from '@/components/ui/button';
@@ -121,7 +121,7 @@ export function ReviewPage({
 }: ReviewPageProps) {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
-  const sheetRef = React.useRef<SheetRef>(null);
+  const sheetRef = React.useRef<ReviewDetailSheetRef>(null);
   const createSheetRef = React.useRef<BottomSheetModal>(null);
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -138,10 +138,13 @@ export function ReviewPage({
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const cans = useCans({ projectId }, REVIEW_CONTROL_ACTIONS);
   const canOpenChange = changeRequestControlsFrom(cans).canOpen;
-  // Needs you opens on the swipe deck (one card at a time); the header
-  // button switches to the list. Waiting and Done hold nothing to decide.
-  const [view, setView] = React.useState<'cards' | 'list'>('cards');
-  const cards = view === 'cards' && segment === 'needs_you';
+  // Behind `review_swipe`: Needs you opens on the swipe deck (one card at a
+  // time) and the header button switches to the list. Off, it is the list.
+  // Waiting and Done hold nothing to decide.
+  const deckEnabled = useFeatureFlag(projectId, 'review_swipe').enabled;
+  const [choice, setView] = React.useState<'cards' | 'list' | null>(null);
+  const view = choice ?? (deckEnabled ? 'cards' : 'list');
+  const cards = deckEnabled && view === 'cards' && segment === 'needs_you';
   const verdictMutation = useReviewVerdict(projectId, {
     onSuccess: (input) => {
       haptics.success();
@@ -249,7 +252,7 @@ export function ReviewPage({
         addLabel="Open a change request"
         rightActions={
           <>
-          {segment === 'needs_you' ? (
+          {deckEnabled && segment === 'needs_you' ? (
             <Button
               variant="ghost"
               size={HEADER_BUTTON_SIZE}
@@ -290,6 +293,11 @@ export function ReviewPage({
               allows={(item, verdict) => reviewVerdictAllowed(item, verdict, cans)}
               onDecide={sendVerdict}
               onOpen={(item) => openItem(item.id)}
+              onSendBack={(item) => {
+                haptics.tap();
+                setSelectedId(item.id);
+                sheetRef.current?.openSendBack();
+              }}
               // No segment bar under the deck: only the home indicator.
               bottomInset={Math.max(insets.bottom, 12)}
             />

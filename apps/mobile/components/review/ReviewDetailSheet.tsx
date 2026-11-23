@@ -283,8 +283,14 @@ function RequestChangesComposer({
   );
 }
 
+/** The sheet's handle: open and close, and open on "What should change?". */
+export interface ReviewDetailSheetRef extends SheetRef {
+  /** Opens with the Request changes composer up (the deck's left swipe). */
+  openSendBack: () => void;
+}
+
 export const ReviewDetailSheet = React.forwardRef<
-SheetRef, ReviewDetailSheetProps>(
+ReviewDetailSheetRef, ReviewDetailSheetProps>(
   ({ projectId, item, onDismiss, onOpenSession }, ref) => {
     const modalRef = React.useRef<BottomSheetModal>(null);
     const { height } = useWindowDimensions();
@@ -334,6 +340,11 @@ SheetRef, ReviewDetailSheetProps>(
     }, []);
     React.useImperativeHandle(ref, () => ({
       open: () => {
+        presentedRef.current = true;
+        modalRef.current?.present();
+      },
+      openSendBack: () => {
+        setAskingFeedback(true);
         presentedRef.current = true;
         modalRef.current?.present();
       },

@@ -655,17 +655,20 @@ const REVIEW_VIEW_KEY = 'kortix.review.view';
 
 /** The Needs you view, kept per browser. Storage may be absent or throw. */
 function useReviewView(fallback: ReviewView): [ReviewView, (next: ReviewView) => void] {
-  const [view, setView] = useState<ReviewView>(fallback);
+  // The viewer's own choice, else the default (which can change once the
+  // project's flags load).
+  const [choice, setChoice] = useState<ReviewView | null>(null);
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(REVIEW_VIEW_KEY);
-      if (saved === 'list' || saved === 'cards') setView(saved);
+      if (saved === 'list' || saved === 'cards') setChoice(saved);
     } catch {
       // No storage: the fallback stands.
     }
   }, []);
+  const view = choice ?? fallback;
   const choose = useCallback((next: ReviewView) => {
-    setView(next);
+    setChoice(next);
     try {
       window.localStorage.setItem(REVIEW_VIEW_KEY, next);
     } catch {
@@ -697,7 +700,10 @@ export function ReviewCenter({
   onSelectAsk,
   selectedAskId,
   defaultView = 'list',
+  deckEnabled = false,
 }: {
+  /** The `review_swipe` flag: Needs you may show as the swipe deck. Off, it is the list. */
+  deckEnabled?: boolean;
   /**
    * How Needs you opens: the list, or the swipe deck (one card at a time).
    * The viewer's own choice, once made, is kept in this browser.
@@ -793,7 +799,8 @@ export function ReviewCenter({
   const [grouped, setGrouped] = useState(false);
   const [view, setView] = useReviewView(defaultView);
   // The deck shows Needs you only: Waiting and Done hold nothing to decide.
-  const cards = view === 'cards' && segment === 'needs_you';
+  const cards = deckEnabled && view === 'cards' && segment === 'needs_you';
+  const [deckTabChoice, setDeckTab] = useState<'reviews' | 'questions' | null>(null);
   // The open review lives in the URL (`?id=<review item id>`), not in state,
   // so a refresh or a shared link lands on the same page.
   const search = useUiSearchParams();
@@ -861,6 +868,8 @@ export function ReviewCenter({
     () => filterItems(items, segment, kindFilter, query, sessionFilter),
     [items, segment, kindFilter, query, sessionFilter],
   );
+  // Reviews first; questions when no review waits, until the viewer picks.
+  const deckTab = deckTabChoice ?? (visible.length === 0 && sessionAsks.length > 0 ? 'questions' : 'reviews');
   // The deck shows one card at a time: as it runs low, read the next page.
   const loadNext = loadMore && !loadMore.isLoading && !loadMore.isError ? loadMore.onLoadMore : null;
   useEffect(() => {
@@ -1668,10 +1677,18 @@ export function ReviewCenter({
         allows={verdictAllowed}
         paused={!!selected}
         onOpen={(item) => setSelectedId(item.id)}
-        onDecide={(item, verdict) =>
+        onDecide={(item, verdict, feedback) =>
           actions.resolve(
             item.id,
-            verdict === 'approve' ? 'approved' : verdict === 'reject' ? 'rejected' : 'dismissed',
+            verdict === 'approve'
+              ? 'approved'
+              : verdict === 'reject'
+                ? 'rejected'
+                : verdict === 'changes'
+                  ? 'changes_requested'
+                  : 'dismissed',
+            undefined,
+            feedback,
           )
         }
       />
@@ -1789,7 +1806,7 @@ export function ReviewCenter({
           </Tabs>
 
           <div className="ml-auto flex shrink-0 items-center gap-0.5">
-            {segment === 'needs_you' ? (
+            {deckEnabled && segment === 'needs_you' ? (
               <Hint label={cards ? tDeck('showList') : tDeck('showCards')}>
                 <Button
                   type="button"
@@ -1985,16 +2002,32 @@ export function ReviewCenter({
           {/* Narrow inbox: no detail pane beside the list, so the deck sits
               above it. It mounts in one place only, and never while an item
               hides the list: its keys answer asks. */}
-          {segment === 'needs_you' && needsYouDeck && (!wide || cards) ? (
+          {cards && needsYouDeck && sessionAsks.length > 0 ? (
+            // One stack at a time: the review cards, or the questions agents
+            // ask. Two decks stacked on one screen read as clutter.
+            <div className="flex shrink-0 justify-center pt-1">
+              <Tabs value={deckTab} onValueChange={(v) => setDeckTab(v as 'reviews' | 'questions')}>
+                <TabsList variant="secondary" size="sm">
+                  <TabsTrigger value="reviews" className="w-fit flex-none gap-1.5 px-2.5">
+                    {tDeck('reviews')}
+                    <CountBadge count={visible.length} />
+                  </TabsTrigger>
+                  <TabsTrigger value="questions" className="w-fit flex-none gap-1.5 px-2.5">
+                    {tDeck('questions')}
+                    <CountBadge count={sessionAsks.length} />
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+          ) : null}
+          {segment === 'needs_you' && needsYouDeck && (cards ? deckTab === 'questions' : !wide) ? (
             // `peer`: when the deck draws nothing (its Undo window after the
             // last card), the list's empty state below shows instead.
             <div className="peer px-1 pt-1 pb-3 empty:hidden">
               {needsYouDeck({ paused: !!selected })}
             </div>
           ) : null}
-          {cards ? (
-            deckBody
-          ) : null}
+          {cards && (deckTab === 'reviews' || !needsYouDeck || sessionAsks.length === 0) ? deckBody : null}
           {wide && !cards ? visibleAsks.map((ask) => (
             <Button
               key={ask.id}

@@ -1,7 +1,7 @@
 import { afterEach, expect, jest, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import React, { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
 import type { ReviewVerdict } from '@kortix/sdk';
 import { IntlTestProvider } from '../../test-utils/intl';
 import { TestUiHost } from '../../test-utils/ui-host';
@@ -23,6 +23,13 @@ Object.assign(globalThis, {
   ShadowRoot: win.ShadowRoot,
 });
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
+const globals = globalThis as Record<string, unknown>;
+for (const key of Object.getOwnPropertyNames(win)) {
+  if (/^[A-Z]/.test(key) && !(key in globals)) globals[key] = Reflect.get(win, key);
+}
+for (const key of ['Event', 'KeyboardEvent', 'MouseEvent', 'PointerEvent']) globals[key] = Reflect.get(win, key);
+// After the globals: react-dom decides at load whether the DOM has `input` events.
+const { createRoot } = await import('react-dom/client');
 const { ReviewSwipeDeck } = await import('./review-swipe-deck');
 
 const base = {
@@ -66,7 +73,10 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-function mount(items: ReviewItem[], onDecide: (item: ReviewItem, verdict: ReviewVerdict) => void) {
+function mount(
+  items: ReviewItem[],
+  onDecide: (item: ReviewItem, verdict: ReviewVerdict, feedback?: string) => void,
+) {
   const host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -83,7 +93,9 @@ function mount(items: ReviewItem[], onDecide: (item: ReviewItem, verdict: Review
 }
 
 const button = (host: HTMLElement, label: string) =>
-  host.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  host.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`) ??
+  [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === label) ??
+  null;
 
 test('Merge on a change sends approve after the Undo window, not before', () => {
   jest.useFakeTimers();
@@ -98,13 +110,23 @@ test('Merge on a change sends approve after the Undo window, not before', () => 
   expect(decided).toEqual([['cr:synthetic-1', 'approve']]);
 });
 
-test('Close on a change sends reject', () => {
+test('Send back on a change asks what should change, then sends it with the note', async () => {
   jest.useFakeTimers();
-  const decided: ReviewVerdict[] = [];
-  const host = mount([change], (_item, verdict) => decided.push(verdict));
-  act(() => button(host, 'Close')!.click());
+  const decided: [ReviewVerdict, string | undefined][] = [];
+  const host = mount([change], (_item, verdict, feedback) => decided.push([verdict, feedback]));
+  act(() => button(host, 'Send back')!.click());
+  const box = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="What should change?"]');
+  expect(box).not.toBeNull();
+  expect(button(host, 'Send to agent')?.disabled).toBe(true);
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(win.HTMLTextAreaElement.prototype, 'value')!.set!;
+    setter.call(box, 'Make the title shorter');
+    box!.dispatchEvent(new win.Event('input', { bubbles: true }) as unknown as Event);
+  });
+  expect(button(host, 'Send to agent')?.disabled).toBe(false);
+  act(() => button(host, 'Send to agent')!.click());
   act(() => jest.advanceTimersByTime(6_000));
-  expect(decided).toEqual(['reject']);
+  expect(decided).toEqual([['changes', 'Make the title shorter']]);
 });
 
 test('a decision offers no swipe verdict: both verdict buttons are disabled and say why', () => {

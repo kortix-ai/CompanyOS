@@ -610,6 +610,20 @@ const FLAGS: readonly FeatureFlagDef[] = [
       'Off, the desktop title bar is the one it was before, and the tabs saved in the window\'s local storage stay until the flag is on again.',
   },
   {
+    key: 'review_swipe',
+    name: 'Review cards',
+    description:
+      "The Review page's Needs you opens as a swipe deck: one item per card. Swipe right to approve or merge, left to send it back to the agent with what should change.",
+    stability: 'experimental',
+    available: () => true,
+    platformDefault: () => false,
+    enforcement: 'ui-only',
+    enforcementNote:
+      'UI-ONLY: the deck is another view of the same review items (packages/ui/src/workspace/review/review-swipe-deck.tsx, ' +
+      'apps/mobile/components/review/ReviewSwipeDeck.tsx). Every verdict goes through the routes the list already uses, ' +
+      'so the server has nothing to refuse. Off, Needs you is the list.',
+  },
+  {
     key: 'calendar',
     name: 'Calendar',
     description:

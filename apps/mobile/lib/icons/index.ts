@@ -11,6 +11,7 @@
  */
 import { AlarmIcon as AlarmGlyph } from 'phosphor-react-native/src/icons/Alarm';
 import { ArchiveIcon as ArchiveGlyph } from 'phosphor-react-native/src/icons/Archive';
+import { ArrowBendUpLeftIcon as ArrowBendUpLeftGlyph } from 'phosphor-react-native/src/icons/ArrowBendUpLeft';
 import { ArrowClockwiseIcon as ArrowClockwiseGlyph } from 'phosphor-react-native/src/icons/ArrowClockwise';
 import { ArrowCounterClockwiseIcon as ArrowCounterClockwiseGlyph } from 'phosphor-react-native/src/icons/ArrowCounterClockwise';
 import { ArrowDownIcon as ArrowDownGlyph } from 'phosphor-react-native/src/icons/ArrowDown';
@@ -197,6 +198,7 @@ import { withAppWeight, withFixedWeight } from './bind';
 
 export const AlarmIcon = withAppWeight(AlarmGlyph, 'AlarmIcon');
 export const ArchiveIcon = withAppWeight(ArchiveGlyph, 'ArchiveIcon');
+export const ArrowBendUpLeftIcon = withAppWeight(ArrowBendUpLeftGlyph, 'ArrowBendUpLeftIcon');
 export const ArrowClockwiseIcon = withAppWeight(ArrowClockwiseGlyph, 'ArrowClockwiseIcon');
 export const ArrowCounterClockwiseIcon = withAppWeight(ArrowCounterClockwiseGlyph, 'ArrowCounterClockwiseIcon');
 export const ArrowDownIcon = withAppWeight(ArrowDownGlyph, 'ArrowDownIcon');

@@ -313,6 +313,7 @@ describe('useFeatureFlags', () => {
     'evals',
     'desktop_tabs',
     'calendar',
+    'review_swipe',
     'volumes',
     'drives',
     'artifacts',

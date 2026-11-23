@@ -78,6 +78,7 @@ export const FeatureFlagMapSchema = z.object({
   evals: z.boolean(),
   desktop_tabs: z.boolean(),
   calendar: z.boolean(),
+  review_swipe: z.boolean(),
 });
 export type FeatureFlagMap = z.infer<typeof FeatureFlagMapSchema>;
 

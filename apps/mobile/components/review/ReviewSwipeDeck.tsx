@@ -43,6 +43,7 @@ import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { haptics } from '@/lib/haptics';
 import {
+  ArrowBendUpLeftIcon,
   ArrowCounterClockwiseIcon,
   ArrowsOutSimpleIcon,
   CheckIcon,
@@ -92,6 +93,8 @@ interface ReviewSwipeDeckProps {
   onDecide: (item: ReviewItem, verdict: ReviewVerdict, text?: string) => void;
   /** Opens one item's detail sheet. */
   onOpen: (item: ReviewItem) => void;
+  /** A left swipe on a change or an output: the sheet asks what should change. */
+  onSendBack: (item: ReviewItem) => void;
   /** Bottom inset: the pinned segment bar covers this much of the page. */
   bottomInset: number;
 }
@@ -100,7 +103,15 @@ interface CardHandle {
   fling: (dir: Direction, then: () => void) => void;
 }
 
-export function ReviewSwipeDeck({ projectId, items, allows, onDecide, onOpen, bottomInset }: ReviewSwipeDeckProps) {
+export function ReviewSwipeDeck({
+  projectId,
+  items,
+  allows,
+  onDecide,
+  onOpen,
+  onSendBack,
+  bottomInset,
+}: ReviewSwipeDeckProps) {
   const toast = useToast();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -225,6 +236,8 @@ export function ReviewSwipeDeck({ projectId, items, allows, onDecide, onOpen, bo
           item={top}
           yesLabel={yes ? reviewVerdictLabel(top.kind, yes) : null}
           noLabel={no ? reviewVerdictLabel(top.kind, no) : null}
+          sendsBack={no === 'changes'}
+          onSendBack={() => onSendBack(top)}
           canAnswer={allows(top, 'answer')}
           progress={progress}
           onAccepted={(dir) => accept(top, dir)}
@@ -250,13 +263,23 @@ export function ReviewSwipeDeck({ projectId, items, allows, onDecide, onOpen, bo
             <Icon as={ArrowCounterClockwiseIcon} size={18} className="text-foreground" />
           </RoundAction>
           <RoundAction
-            label={no ? reviewVerdictLabel(top.kind, no) : 'No'}
+            label={no === 'changes' ? 'Send back' : no ? reviewVerdictLabel(top.kind, no) : 'No'}
             disabled={!no}
             onPress={() => {
+              // Sending back needs the words: the sheet asks what should change.
+              if (no === 'changes') {
+                haptics.tap();
+                onSendBack(top);
+                return;
+              }
               accept(top, 'left');
               cardRef.current?.fling('left', () => swiped(top, 'left'));
             }}>
-            <Icon as={XIcon} size={26} color={accent.red} />
+            {no === 'changes' ? (
+              <Icon as={ArrowBendUpLeftIcon} size={26} color={accent.orange} />
+            ) : (
+              <Icon as={XIcon} size={26} color={accent.red} />
+            )}
           </RoundAction>
           <RoundAction
             label={yes ? reviewVerdictLabel(top.kind, yes) : 'Yes'}
@@ -351,12 +374,15 @@ const SwipeCard = React.forwardRef<
     progress: SharedValue<number>;
     /** A swipe passed the threshold: the verdict is decided, the card still flies. */
     onAccepted: (dir: Direction) => void;
+    /** Left means "send it back": the card returns and the sheet asks what should change. */
+    sendsBack: boolean;
+    onSendBack: () => void;
     onSwiped: (dir: Direction) => void;
     onAnswer: (text: string | undefined) => void;
     onOpen: () => void;
   }
 >(function SwipeCard(
-  { projectId, item, yesLabel, noLabel, canAnswer, progress, onAccepted, onSwiped, onAnswer, onOpen },
+  { projectId, item, yesLabel, noLabel, sendsBack, onSendBack, canAnswer, progress, onAccepted, onSwiped, onAnswer, onOpen },
   ref,
 ) {
   const { width } = useWindowDimensions();
@@ -412,6 +438,13 @@ const SwipeCard = React.forwardRef<
       const right = canRight && dx > 0 && (dx > threshold || e.velocityX > FLICK_VELOCITY);
       const left = canLeft && dx < 0 && (dx < -threshold || e.velocityX < -FLICK_VELOCITY);
       crossed.value = false;
+      if (left && sendsBack) {
+        // The card comes back; the sheet asks what should change.
+        tx.value = withSpring(0, { ...RETURN_SPRING, velocity: e.velocityX });
+        progress.value = withTiming(0, { duration: 160 });
+        scheduleOnRN(onSendBack);
+        return;
+      }
       if (right || left) {
         const dir: Direction = right ? 'right' : 'left';
         scheduleOnRN(onAccepted, dir);
@@ -498,7 +531,7 @@ const SwipeCard = React.forwardRef<
         {/* The verdict a release gives: the card takes its colour, green
             for yes, red for no, deeper as the drag nears the decision. */}
         {yesLabel ? <Tint tone="green" style={yesStyle} /> : null}
-        {noLabel ? <Tint tone="red" style={noStyle} /> : null}
+        {noLabel ? <Tint tone={sendsBack ? 'orange' : 'red'} style={noStyle} /> : null}
 
         <View className="absolute right-3 top-3">
           <GlassButtons>
@@ -518,7 +551,7 @@ const SwipeCard = React.forwardRef<
 });
 
 /** A wash of the verdict's colour over the whole card. */
-function Tint({ tone, style }: { tone: 'green' | 'red'; style: ReturnType<typeof useAnimatedStyle> }) {
+function Tint({ tone, style }: { tone: 'green' | 'red' | 'orange'; style: ReturnType<typeof useAnimatedStyle> }) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
   const color = THEME.accent[isDark ? 'dark' : 'light'][tone];

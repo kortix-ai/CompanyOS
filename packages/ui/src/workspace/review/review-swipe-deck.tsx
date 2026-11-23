@@ -15,6 +15,7 @@
 
 import type { ReviewVerdict } from '@kortix/sdk';
 import {
+  ArrowBendUpLeftIcon,
   ArrowCounterClockwiseIcon,
   ArrowsOutSimpleIcon,
   CheckIcon,
@@ -39,6 +40,7 @@ import { Button } from '../../primitives/button';
 import { EmptyState } from '../../primitives/empty-state';
 import { undoToast } from '../../primitives/toast';
 import { reviewApprovalDetails } from './approval-modal';
+import { OutputBody } from './review-detail';
 import { formatItemAge } from './review-actions';
 import { ROW_TILE, reviewKindLabel } from './review-meta';
 import { reviewSwipeVerdicts } from './review-swipe';
@@ -61,6 +63,8 @@ type Direction = 'left' | 'right';
 interface Staged {
   item: ReviewItem;
   verdict: ReviewVerdict;
+  /** What should change, for a `changes` verdict. */
+  feedback?: string;
   timer: ReturnType<typeof setTimeout>;
 }
 
@@ -69,8 +73,8 @@ export interface ReviewSwipeDeckProps {
   items: ReviewItem[];
   /** Whether this viewer may give `verdict` on `item` (KRTX-1720). */
   allows: (item: ReviewItem, verdict: ReviewVerdict) => boolean;
-  /** Sends a verdict. Runs after the Undo window. */
-  onDecide: (item: ReviewItem, verdict: ReviewVerdict) => void;
+  /** Sends a verdict. Runs after the Undo window. `feedback`: what should change. */
+  onDecide: (item: ReviewItem, verdict: ReviewVerdict, feedback?: string) => void;
   /** Opens one item's detail. */
   onOpen: (item: ReviewItem) => void;
   /** True while an item's detail covers the deck: its keys are off. */
@@ -82,6 +86,10 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
   const [skipped, setSkipped] = useState<string[]>([]);
   const [staged, setStaged] = useState<ReadonlyMap<string, Staged>>(() => new Map());
   const [leaving, setLeaving] = useState<{ id: string; dir: Direction } | null>(null);
+  // The card whose "what should change?" box is open (a left swipe on a
+  // change or an output), and its text.
+  const [asking, setAsking] = useState<string | null>(null);
+  const [note, setNote] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
   const stagedRef = useRef(staged);
   stagedRef.current = staged;
@@ -89,9 +97,12 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
   onDecideRef.current = onDecide;
   // A verdict accepted while its card still flies off: registered at once,
   // so leaving the page mid-animation still sends it.
-  const flyingRef = useRef<{ item: ReviewItem; verdict: ReviewVerdict; timer: ReturnType<typeof setTimeout> } | null>(
-    null,
-  );
+  const flyingRef = useRef<{
+    item: ReviewItem;
+    verdict: ReviewVerdict;
+    feedback?: string;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
 
   // The deck takes focus when it shows, so its keys work at once.
   useEffect(() => {
@@ -104,11 +115,11 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
       const flying = flyingRef.current;
       if (flying) {
         clearTimeout(flying.timer);
-        onDecideRef.current(flying.item, flying.verdict);
+        onDecideRef.current(flying.item, flying.verdict, flying.feedback);
       }
       for (const entry of stagedRef.current.values()) {
         clearTimeout(entry.timer);
-        onDecideRef.current(entry.item, entry.verdict);
+        onDecideRef.current(entry.item, entry.verdict, entry.feedback);
       }
     },
     [],
@@ -128,6 +139,7 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
 
   const verdictLabel = useCallback(
     (item: ReviewItem, verdict: ReviewVerdict) => {
+      if (verdict === 'changes') return t('sendBack');
       if (item.kind === 'change') return verdict === 'approve' ? t('merge') : t('close');
       if (item.kind === 'approval') return verdict === 'approve' ? t('approve') : t('deny');
       return verdict === 'approve' ? t('approve') : t('dismiss');
@@ -136,16 +148,16 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
   );
 
   const stage = useCallback(
-    (item: ReviewItem, verdict: ReviewVerdict) => {
+    (item: ReviewItem, verdict: ReviewVerdict, feedback?: string) => {
       const timer = setTimeout(() => {
         setStaged((prev) => {
           const next = new Map(prev);
           next.delete(item.id);
           return next;
         });
-        onDecideRef.current(item, verdict);
+        onDecideRef.current(item, verdict, feedback);
       }, UNDO_MS);
-      setStaged((prev) => new Map(prev).set(item.id, { item, verdict, timer }));
+      setStaged((prev) => new Map(prev).set(item.id, { item, verdict, feedback, timer }));
       undoToast(t('staged', { verdict: verdictLabel(item, verdict), title: item.title }), {
         duration: UNDO_MS,
         undoLabel: t('undo'),
@@ -166,21 +178,42 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
     [t, verdictLabel],
   );
 
+  /** The card flies off; its verdict is registered now and staged once it is gone. */
+  const fly = useCallback(
+    (item: ReviewItem, dir: Direction, verdict: ReviewVerdict, feedback?: string) => {
+      setLeaving({ id: item.id, dir });
+      const timer = setTimeout(() => {
+        flyingRef.current = null;
+        setLeaving(null);
+        stage(item, verdict, feedback);
+      }, EXIT_MS);
+      flyingRef.current = { item, verdict, feedback, timer };
+    },
+    [stage],
+  );
+
   const decide = useCallback(
     (dir: Direction) => {
       if (!top || leaving) return;
       const verdict = dir === 'right' ? yes : no;
       if (!verdict) return;
-      setLeaving({ id: top.id, dir });
-      const timer = setTimeout(() => {
-        flyingRef.current = null;
-        setLeaving(null);
-        stage(top, verdict);
-      }, EXIT_MS);
-      flyingRef.current = { item: top, verdict, timer };
+      // Sending back needs the words: the card stays and asks what should change.
+      if (verdict === 'changes') {
+        setAsking(top.id);
+        return;
+      }
+      fly(top, dir, verdict);
     },
-    [top, leaving, yes, no, stage],
+    [top, leaving, yes, no, fly],
   );
+
+  const sendBack = useCallback(() => {
+    const text = note.trim();
+    if (!top || !text) return;
+    setAsking(null);
+    setNote('');
+    fly(top, 'left', 'changes', text);
+  }, [top, note, fly]);
 
   const skip = useCallback(() => {
     if (!top || deck.length < 2) return;
@@ -189,6 +222,8 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
 
   const onKeyDown = (event: ReactKeyboardEvent) => {
     if (paused || !top || event.metaKey || event.ctrlKey || event.altKey) return;
+    // The "what should change?" box owns its keys.
+    if (asking === top.id) return;
     const key = event.key.toLowerCase();
     if (key === 'arrowright') decide('right');
     else if (key === 'arrowleft') decide('left');
@@ -245,12 +280,24 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
           leaving={leaving?.id === top.id ? leaving.dir : null}
           canRight={!!yes}
           canLeft={!!no}
+          leftTone={no === 'changes' ? 'orange' : 'red'}
           onSwipe={decide}
           onOpen={() => onOpen(top)}
         />
 
-        {/* The actions float over the card's bottom edge, no captions: each
-            names itself to a screen reader and in its tooltip. */}
+        {asking === top.id ? (
+          <SendBackBox
+            value={note}
+            onChange={setNote}
+            onCancel={() => {
+              setAsking(null);
+              setNote('');
+            }}
+            onSend={sendBack}
+          />
+        ) : (
+        /* The actions float over the card's bottom edge, no captions: each
+            names itself to a screen reader and in its tooltip. */
         <div className="pointer-events-none absolute inset-x-0 bottom-4 flex items-center justify-center gap-4">
           <DeckButton label={t('skip')} kbd="S" size="sm" disabled={deck.length < 2} onClick={skip}>
             <ArrowCounterClockwiseIcon className="size-4" />
@@ -261,7 +308,11 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
             disabled={!no}
             onClick={() => decide('left')}
           >
-            <XIcon weight="bold" className="text-kortix-red size-6" />
+            {no === 'changes' ? (
+              <ArrowBendUpLeftIcon weight="bold" className="text-kortix-orange size-6" />
+            ) : (
+              <XIcon weight="bold" className="text-kortix-red size-6" />
+            )}
           </DeckButton>
           <DeckButton
             label={yes ? verdictLabel(top, yes) : (blocked ?? t('needsChoice'))}
@@ -275,6 +326,47 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
             <ArrowsOutSimpleIcon className="size-4" />
           </DeckButton>
         </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** "What should change?": the note a left swipe sends back to the agent. */
+function SendBackBox({
+  value,
+  onChange,
+  onCancel,
+  onSend,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onCancel: () => void;
+  onSend: () => void;
+}) {
+  const t = useTranslations('hardcodedUi.reviewDeck');
+  return (
+    <div className="bg-background border-border absolute inset-x-3 bottom-3 z-10 flex flex-col gap-2 rounded-xl border p-3 shadow-lg">
+      <textarea
+        autoFocus
+        rows={3}
+        value={value}
+        aria-label={t('whatShouldChange')}
+        placeholder={t('whatShouldChange')}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') onCancel();
+          else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) onSend();
+        }}
+        className="text-foreground placeholder:text-muted-foreground min-h-16 w-full resize-none bg-transparent text-sm outline-none"
+      />
+      <div className="flex items-center justify-end gap-2">
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          {t('cancel')}
+        </Button>
+        <Button type="button" size="sm" disabled={!value.trim()} onClick={onSend}>
+          {t('sendToAgent')}
+        </Button>
       </div>
     </div>
   );
@@ -320,6 +412,7 @@ function SwipeCard({
   leaving,
   canRight,
   canLeft,
+  leftTone,
   onSwipe,
   onOpen,
 }: {
@@ -327,6 +420,8 @@ function SwipeCard({
   leaving: Direction | null;
   canRight: boolean;
   canLeft: boolean;
+  /** Orange when no means "send it back", red when it means deny or dismiss. */
+  leftTone: 'orange' | 'red';
   onSwipe: (dir: Direction) => void;
   onOpen: () => void;
 }) {
@@ -339,6 +434,8 @@ function SwipeCard({
 
   const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0 || leaving) return;
+    // A control inside the card (a video's play, a file row) keeps its click.
+    if ((event.target as HTMLElement).closest('video, audio, button, a, input, textarea, [role="button"]')) return;
     start.current = { x: event.clientX, moved: false };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -407,7 +504,10 @@ function SwipeCard({
       />
       <div
         aria-hidden
-        className="bg-kortix-red/15 pointer-events-none absolute inset-0"
+        className={cn(
+          'pointer-events-none absolute inset-0',
+          leftTone === 'orange' ? 'bg-kortix-orange/15' : 'bg-kortix-red/15',
+        )}
         style={{ opacity: drag < 0 && canLeft ? progress : 0 }}
       />
     </article>
@@ -514,10 +614,14 @@ function KindDetail({ item }: { item: ReviewItem }) {
     );
   }
   if (item.kind === 'output') {
-    // The note often repeats the summary word for word: say it once.
-    return item.detail.note && item.detail.note !== item.summary ? (
-      <p className="text-foreground text-sm">{item.detail.note}</p>
-    ) : null;
+    // What the agent made, drawn as in the detail: the video, image or text
+    // is the card's face. The note often repeats the summary: say it once.
+    const shown = item.detail.note === item.summary ? { ...item, detail: { ...item.detail, note: '' } } : item;
+    return (
+      <div className="flex flex-col gap-4">
+        <OutputBody item={shown} />
+      </div>
+    );
   }
   if (item.kind === 'decision') {
     return (

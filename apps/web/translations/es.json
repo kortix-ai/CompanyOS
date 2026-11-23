@@ -1372,6 +1372,10 @@
         "calendar": {
           "name": "Calendario",
           "description": "Un calendario compartido para personas y agentes: elementos con fecha, participantes y comentarios, junto a los disparadores y Loops programados. Menciona a alguien con @ para avisarle. Los agentes usan `kortix calendar`."
+        },
+        "review_swipe": {
+          "name": "Tarjetas de revisión",
+          "description": "«Te necesita» en la página de revisión se abre como un mazo de tarjetas: un elemento por tarjeta. Desliza a la derecha para aprobar o fusionar, a la izquierda para devolverlo al agente con lo que debe cambiar."
         }
       },
       "channelsSwitch": {
@@ -21598,7 +21602,13 @@
       "conflicts": "{count, plural, one {# conflicto} other {# conflictos}}",
       "items": "{count, plural, one {# elemento} other {# elementos}}",
       "showCards": "Ver como tarjetas",
-      "showList": "Ver como lista"
+      "showList": "Ver como lista",
+      "sendBack": "Devolver",
+      "whatShouldChange": "¿Qué debe cambiar?",
+      "sendToAgent": "Enviar al agente",
+      "cancel": "Cancelar",
+      "reviews": "Revisiones",
+      "questions": "Preguntas"
     }
   },
   "commandPalette": {

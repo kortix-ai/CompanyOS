@@ -1372,6 +1372,10 @@
         "calendar": {
           "name": "Calendario",
           "description": "Un calendario condiviso per persone e agenti: elementi con una data, i partecipanti e commenti, accanto ai trigger e ai Loop pianificati. Menziona qualcuno con @ per avvisarlo. Gli agenti usano `kortix calendar`."
+        },
+        "review_swipe": {
+          "name": "Schede di revisione",
+          "description": "«Serve a te» nella pagina Revisione si apre come un mazzo di schede: un elemento per scheda. Scorri a destra per approvare o unire, a sinistra per rimandarlo all’agente con cosa cambiare."
         }
       },
       "channelsSwitch": {
@@ -21598,7 +21602,13 @@
       "conflicts": "{count, plural, one {# conflitto} other {# conflitti}}",
       "items": "{count, plural, one {# elemento} other {# elementi}}",
       "showCards": "Mostra come schede",
-      "showList": "Mostra come elenco"
+      "showList": "Mostra come elenco",
+      "sendBack": "Rimanda",
+      "whatShouldChange": "Cosa deve cambiare?",
+      "sendToAgent": "Invia all’agente",
+      "cancel": "Annulla",
+      "reviews": "Revisioni",
+      "questions": "Domande"
     }
   },
   "commandPalette": {

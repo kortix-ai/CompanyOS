@@ -72,7 +72,7 @@ import { useReviewItems } from '@/lib/review/use-review';
 import type { ProjectSession } from '@/lib/projects/projects-client';
 import { haptics } from '@/lib/haptics';
 import { playSound } from '@/lib/sounds';
-import { ReviewDetailSheet } from '@/components/review/ReviewDetailSheet';
+import { ReviewDetailSheet, type ReviewDetailSheetRef } from '@/components/review/ReviewDetailSheet';
 import { requestPushPermissionOnce } from '@/lib/notifications/registration';
 import { Icon } from '@/components/ui/icon';
 import { MOTION, THEME, withAlpha } from '@/lib/utils/theme';
@@ -1150,7 +1150,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
       : [];
     return anchorChangeRequests(sessionChanges, starts);
   }, [sessionChanges, turnStartsKey]);
-  const changeSheetRef = useRef<SheetRef>(null);
+  const changeSheetRef = useRef<ReviewDetailSheetRef>(null);
   const [selectedChangeId, setSelectedChangeId] = useState<string | null>(null);
   // Read from the live list, so a merge made elsewhere updates the open sheet.
   const selectedChange = useMemo(

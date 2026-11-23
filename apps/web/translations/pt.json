@@ -1372,6 +1372,10 @@
         "calendar": {
           "name": "Calendário",
           "description": "Um calendário compartilhado para pessoas e agentes: itens com data, participantes e comentários, ao lado dos gatilhos e Loops agendados. Mencione alguém com @ para notificá-lo. Os agentes usam `kortix calendar`."
+        },
+        "review_swipe": {
+          "name": "Cartões de revisão",
+          "description": "«Precisa de você» na página de revisão abre como uma pilha de cartões: um item por cartão. Deslize para a direita para aprovar ou mesclar, para a esquerda para devolver ao agente com o que deve mudar."
         }
       },
       "channelsSwitch": {
@@ -21598,7 +21602,13 @@
       "conflicts": "{count, plural, one {# conflito} other {# conflitos}}",
       "items": "{count, plural, one {# item} other {# itens}}",
       "showCards": "Mostrar como cartões",
-      "showList": "Mostrar como lista"
+      "showList": "Mostrar como lista",
+      "sendBack": "Devolver",
+      "whatShouldChange": "O que deve mudar?",
+      "sendToAgent": "Enviar ao agente",
+      "cancel": "Cancelar",
+      "reviews": "Revisões",
+      "questions": "Perguntas"
     }
   },
   "commandPalette": {

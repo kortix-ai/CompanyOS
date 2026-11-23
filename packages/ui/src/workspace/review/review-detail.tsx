@@ -471,7 +471,7 @@ function OutputFileRow({
  * session. A workspace path needs a running box, which the inbox does not
  * have, so it is listed and not opened.
  */
-function OutputBody({ item }: { item: Extract<ReviewItem, { kind: 'output' }> }) {
+export function OutputBody({ item }: { item: Extract<ReviewItem, { kind: 'output' }> }) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const projectId = useProjectContext()?.projectId;
   const sessionId = item.sessionId;

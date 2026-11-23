@@ -1372,6 +1372,10 @@
         "calendar": {
           "name": "Kalendar",
           "description": "Zajednički kalendar za ljude i agente: stavke sa datumom, učesnicima i komentarima, pored zakazanih okidača i petlji. Pomeni nekoga sa @ da ga obavestiš. Agenti koriste `kortix calendar`."
+        },
+        "review_swipe": {
+          "name": "Kartice za pregled",
+          "description": "„Čeka tebe“ na stranici Pregled otvara se kao špil kartica: jedna stavka po kartici. Prevuci desno da odobriš ili spojiš, levo da je vratiš agentu sa onim što treba promeniti."
         }
       },
       "channelsSwitch": {
@@ -21598,7 +21602,13 @@
       "conflicts": "{count, plural, one {# konflikt} few {# konflikta} other {# konflikata}}",
       "items": "{count, plural, one {# stavka} few {# stavke} other {# stavki}}",
       "showCards": "Prikaži kao kartice",
-      "showList": "Prikaži kao listu"
+      "showList": "Prikaži kao listu",
+      "sendBack": "Vrati",
+      "whatShouldChange": "Šta treba promeniti?",
+      "sendToAgent": "Pošalji agentu",
+      "cancel": "Otkaži",
+      "reviews": "Pregledi",
+      "questions": "Pitanja"
     }
   },
   "commandPalette": {

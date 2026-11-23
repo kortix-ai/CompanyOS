@@ -1372,6 +1372,10 @@
         "calendar": {
           "name": "Calendrier",
           "description": "Un calendrier partagé pour les personnes et les agents : des éléments avec une date, des participants et des commentaires, à côté des déclencheurs et Loops planifiés. Mentionnez quelqu’un avec @ pour le notifier. Les agents utilisent `kortix calendar`."
+        },
+        "review_swipe": {
+          "name": "Cartes de revue",
+          "description": "« Vous attend » sur la page Revue s’ouvre en pile de cartes : un élément par carte. Glissez à droite pour approuver ou fusionner, à gauche pour le renvoyer à l’agent avec ce qui doit changer."
         }
       },
       "channelsSwitch": {
@@ -21598,7 +21602,13 @@
       "conflicts": "{count, plural, one {# conflit} other {# conflits}}",
       "items": "{count, plural, one {# élément} other {# éléments}}",
       "showCards": "Afficher en cartes",
-      "showList": "Afficher en liste"
+      "showList": "Afficher en liste",
+      "sendBack": "Renvoyer",
+      "whatShouldChange": "Que faut-il changer ?",
+      "sendToAgent": "Envoyer à l’agent",
+      "cancel": "Annuler",
+      "reviews": "Revues",
+      "questions": "Questions"
     }
   },
   "commandPalette": {

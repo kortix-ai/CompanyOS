@@ -1372,6 +1372,10 @@
         "calendar": {
           "name": "Kalender",
           "description": "Ein gemeinsamer Kalender für Menschen und Agenten: Einträge mit Datum, Beteiligten und Kommentaren, neben den geplanten Triggern und Loops. Erwähne jemanden mit @, um ihn zu benachrichtigen. Agenten nutzen `kortix calendar`."
+        },
+        "review_swipe": {
+          "name": "Review-Karten",
+          "description": "„Braucht dich“ auf der Review-Seite öffnet sich als Kartenstapel: ein Eintrag pro Karte. Nach rechts wischen genehmigt oder mergt, nach links schickt es mit deinem Änderungswunsch an den Agenten zurück."
         }
       },
       "channelsSwitch": {
@@ -21598,7 +21602,13 @@
       "conflicts": "{count, plural, one {# Konflikt} other {# Konflikte}}",
       "items": "{count, plural, one {# Eintrag} other {# Einträge}}",
       "showCards": "Als Karten zeigen",
-      "showList": "Als Liste zeigen"
+      "showList": "Als Liste zeigen",
+      "sendBack": "Zurückschicken",
+      "whatShouldChange": "Was soll sich ändern?",
+      "sendToAgent": "An Agenten senden",
+      "cancel": "Abbrechen",
+      "reviews": "Reviews",
+      "questions": "Fragen"
     }
   },
   "commandPalette": {

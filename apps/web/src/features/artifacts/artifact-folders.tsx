@@ -24,6 +24,7 @@ import {
   Modal,
   ModalBody,
   ModalContent,
+  ModalDescription,
   ModalFooter,
   ModalHeader,
   ModalTitle,
@@ -37,7 +38,7 @@ import { CaretLeftIcon, DotsThreeIcon, FolderIcon, PencilSimpleIcon, TrashIcon }
 import { useRef, useState } from 'react';
 
 import { isArtifactDrag, readArtifactDrag } from './artifact-card';
-import { FolderTreeRadioItems, ROOT_FOLDER, folderSubtree } from './artifact-folder-tree';
+import { FolderMenuIcon, FolderTreeRadioItems, ROOT_FOLDER, folderSubtree } from './artifact-folder-tree';
 
 /** The drag type of a folder tile. Its id rides in `draggedFolder`: a dragover cannot read the payload. */
 const FOLDER_DRAG_TYPE = 'application/x-kortix-artifact-folder';
@@ -107,13 +108,13 @@ export function useArtifactDropTarget(projectId: string, folderId: string | null
 export function ArtifactFolderEditor({
   projectId,
   folder,
-  parentId = null,
+  parent = null,
   onClose,
 }: {
   projectId: string;
   folder?: ArtifactFolder;
   /** A new folder is created inside this one (null: the gallery root). */
-  parentId?: string | null;
+  parent?: ArtifactFolder | null;
   onClose: () => void;
 }) {
   const t = useTranslations('artifacts');
@@ -137,7 +138,7 @@ export function ArtifactFolderEditor({
     };
     try {
       if (folder) await mutations.update.mutateAsync({ folderId: folder.folder_id, ...input });
-      else await mutations.create.mutateAsync({ ...input, parent_folder_id: parentId });
+      else await mutations.create.mutateAsync({ ...input, parent_folder_id: parent?.folder_id ?? null });
       successToast(t(folder ? 'folderSaved' : 'folderCreated'));
       onClose();
     } catch {
@@ -154,6 +155,14 @@ export function ArtifactFolderEditor({
       <ModalContent className="lg:max-w-sm">
         <ModalHeader>
           <ModalTitle>{t(folder ? 'editFolder' : 'newFolder')}</ModalTitle>
+          {/* A subfolder says where it lands: the open folder, with its own icon. */}
+          {!folder && parent ? (
+            <ModalDescription className="flex min-w-0 items-center gap-1.5">
+              <span className="shrink-0">{t('folderCreateIn')}</span>
+              <FolderMenuIcon folder={parent} />
+              <span className="text-foreground truncate font-medium" title={parent.name}>{parent.name}</span>
+            </ModalDescription>
+          ) : null}
         </ModalHeader>
         <form onSubmit={submit}>
           <ModalBody>

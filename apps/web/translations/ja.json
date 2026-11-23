@@ -25178,6 +25178,7 @@
     "newFolder": "新しいフォルダー",
     "editFolder": "フォルダーを編集",
     "folderName": "フォルダー名",
+    "folderCreateIn": "作成先",
     "folderSaved": "フォルダーを保存しました",
     "folderCreated": "フォルダーを作成しました",
     "folderSaveFailed": "フォルダーを保存できませんでした。もう一度お試しください。",

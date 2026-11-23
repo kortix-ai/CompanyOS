@@ -25178,6 +25178,7 @@
     "newFolder": "Nouveau dossier",
     "editFolder": "Modifier le dossier",
     "folderName": "Nom du dossier",
+    "folderCreateIn": "Dans",
     "folderSaved": "Dossier enregistré",
     "folderCreated": "Dossier créé",
     "folderSaveFailed": "Impossible d’enregistrer le dossier. Réessayez.",

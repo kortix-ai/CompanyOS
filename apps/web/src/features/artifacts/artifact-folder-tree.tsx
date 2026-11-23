@@ -6,10 +6,38 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
 } from '@kortix/ui/dropdown-menu';
-import { EntityAvatar } from '@kortix/ui/entity-avatar';
+import { glyphFace } from '@kortix/ui/glyph-face';
+import { glyphForeground, glyphStyle } from '@kortix/ui/glyph-tint';
 import { FolderIcon, FolderSimpleDashedIcon } from '@phosphor-icons/react';
+import { createElement } from 'react';
 
 import { useTranslations } from '@/i18n/use-translations';
+
+/**
+ * A folder's icon alone, at menu-icon size: its glyph in its own colour, its
+ * emoji, or a plain folder. No tile: in a menu row the icon sits beside the
+ * name like every other menu icon.
+ */
+export function FolderMenuIcon({ folder }: { folder: ArtifactFolder }) {
+  const Glyph = folder.icon_glyph ? glyphFace(folder.icon_glyph.name) : null;
+  if (Glyph && folder.icon_glyph) {
+    // createElement: the glyph is looked up by name, not a component declared here.
+    return createElement(Glyph, {
+      weight: 'fill',
+      'aria-hidden': true,
+      className: `size-4 shrink-0 ${glyphForeground(folder.icon_glyph.color)}`,
+      style: glyphStyle(folder.icon_glyph.color),
+    });
+  }
+  if (folder.icon) {
+    return (
+      <span aria-hidden className="flex size-4 shrink-0 items-center justify-center text-sm leading-none">
+        {folder.icon}
+      </span>
+    );
+  }
+  return <FolderIcon aria-hidden className="text-muted-foreground size-4 shrink-0" />;
+}
 
 /** The gallery root in a folder picker's radio value. */
 export const ROOT_FOLDER = 'root';
@@ -85,9 +113,7 @@ export function FolderTreeRadioItems({
       }}
     >
       <DropdownMenuRadioItem value={ROOT_FOLDER} textValue={t('folderRoot')}>
-        <span className="text-muted-foreground flex size-5 shrink-0 items-center justify-center">
-          <FolderSimpleDashedIcon className="size-4" />
-        </span>
+        <FolderSimpleDashedIcon aria-hidden className="text-muted-foreground size-4 shrink-0" />
         <span className="truncate">{t('folderRoot')}</span>
       </DropdownMenuRadioItem>
       {rows.length ? <DropdownMenuSeparator /> : null}
@@ -95,14 +121,7 @@ export function FolderTreeRadioItems({
         <DropdownMenuRadioItem key={folder.folder_id} value={folder.folder_id} textValue={folder.name}>
           {/* One step per level: the tree reads without connector lines. */}
           {depth ? <span aria-hidden className="shrink-0" style={{ width: `${depth}rem` }} /> : null}
-          <EntityAvatar
-            emoji={folder.icon}
-            glyph={folder.icon_glyph}
-            icon={FolderIcon}
-            label={folder.name}
-            size="xs"
-            className="shrink-0"
-          />
+          <FolderMenuIcon folder={folder} />
           <span className="truncate" title={folder.name}>
             {folder.name}
           </span>

@@ -25178,6 +25178,7 @@
     "newFolder": "Нова фасцикла",
     "editFolder": "Уреди фасциклу",
     "folderName": "Назив фасцикле",
+    "folderCreateIn": "У",
     "folderSaved": "Фасцикла је сачувана",
     "folderCreated": "Фасцикла је направљена",
     "folderSaveFailed": "Није могуће сачувати фасциклу. Покушајте поново.",

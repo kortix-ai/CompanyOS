@@ -25178,6 +25178,7 @@
     "newFolder": "Nova pasta",
     "editFolder": "Editar pasta",
     "folderName": "Nome da pasta",
+    "folderCreateIn": "Em",
     "folderSaved": "Pasta salva",
     "folderCreated": "Pasta criada",
     "folderSaveFailed": "Não foi possível salvar a pasta. Tente novamente.",

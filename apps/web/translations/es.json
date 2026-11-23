@@ -25178,6 +25178,7 @@
     "newFolder": "Nueva carpeta",
     "editFolder": "Editar carpeta",
     "folderName": "Nombre de la carpeta",
+    "folderCreateIn": "En",
     "folderSaved": "Carpeta guardada",
     "folderCreated": "Carpeta creada",
     "folderSaveFailed": "No se pudo guardar la carpeta. Inténtalo de nuevo.",

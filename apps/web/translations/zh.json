@@ -25178,6 +25178,7 @@
     "newFolder": "新建文件夹",
     "editFolder": "编辑文件夹",
     "folderName": "文件夹名称",
+    "folderCreateIn": "位置",
     "folderSaved": "文件夹已保存",
     "folderCreated": "文件夹已创建",
     "folderSaveFailed": "无法保存文件夹，请重试。",

@@ -133,7 +133,7 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
 
   return (
     <div role="region" aria-label={t('title')} className="flex h-svh flex-col overflow-hidden">
-      {creatingFolder ? <ArtifactFolderEditor projectId={projectId} parentId={currentFolder?.folder_id ?? null} onClose={() => setCreatingFolder(false)} /> : null}
+      {creatingFolder ? <ArtifactFolderEditor projectId={projectId} parent={currentFolder ?? null} onClose={() => setCreatingFolder(false)} /> : null}
       <ProjectPageHeader
         // In a folder the header is its path: Artifacts › parents › the folder (the h1), then its menu.
         title={

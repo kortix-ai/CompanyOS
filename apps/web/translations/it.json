@@ -25178,6 +25178,7 @@
     "newFolder": "Nuova cartella",
     "editFolder": "Modifica cartella",
     "folderName": "Nome della cartella",
+    "folderCreateIn": "In",
     "folderSaved": "Cartella salvata",
     "folderCreated": "Cartella creata",
     "folderSaveFailed": "Impossibile salvare la cartella. Riprova.",

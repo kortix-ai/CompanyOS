@@ -25178,6 +25178,7 @@
     "newFolder": "Neuer Ordner",
     "editFolder": "Ordner bearbeiten",
     "folderName": "Ordnername",
+    "folderCreateIn": "In",
     "folderSaved": "Ordner gespeichert",
     "folderCreated": "Ordner erstellt",
     "folderSaveFailed": "Ordner konnte nicht gespeichert werden. Erneut versuchen.",

@@ -8546,6 +8546,7 @@ const catalog = {
     "newFolder": "New folder",
     "editFolder": "Edit folder",
     "folderName": "Folder name",
+    "folderCreateIn": "In",
     "folderSaved": "Folder saved",
     "folderCreated": "Folder created",
     "folderSaveFailed": "Could not save the folder. Try again.",

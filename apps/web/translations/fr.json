@@ -2261,6 +2261,9 @@
       "outputNew": "Nouveau",
       "outputUpdated": "Mis à jour",
       "backgroundTasks": "Tâches en arrière-plan",
+      "finished": "Terminées",
+      "finishedTasks": "Tâches terminées",
+      "noRunningTasks": "Aucune tâche en cours",
       "resizePane": "Redimensionner le panneau"
     }
   },

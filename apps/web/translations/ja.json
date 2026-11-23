@@ -2261,6 +2261,9 @@
       "outputNew": "新規",
       "outputUpdated": "更新済み",
       "backgroundTasks": "バックグラウンドタスク",
+      "finished": "完了",
+      "finishedTasks": "完了したタスク",
+      "noRunningTasks": "実行中のタスクはありません",
       "resizePane": "ペインのサイズを変更"
     }
   },

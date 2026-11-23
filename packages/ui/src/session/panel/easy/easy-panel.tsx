@@ -94,7 +94,7 @@ export function EasyPanel() {
         onAddContext={() => useSessionComposerPrefillStore.getState().requestAttach(sessionId)}
       />
       {apps.length > 0 && <AppsCard apps={apps} onOpenApp={(a) => handleOpenOutput(a, apps)} />}
-      <BackgroundTasksCard projectId={panel.projectId} sessionId={panel.projectSessionId} live={isSessionBusy} />
+      <BackgroundTasksCard projectId={panel.projectId} sessionId={panel.projectSessionId} live={isSessionBusy} onOpenDetail={openDetail} />
       {/* Last, under Preview, and conditional like it — the card draws itself
           away when the session has no plan (see `plan-card.tsx`). */}
       {!planInChat && <PlanPanelCard sessionId={sessionId} />}

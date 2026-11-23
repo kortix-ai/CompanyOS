@@ -2261,6 +2261,9 @@
       "outputNew": "Ново",
       "outputUpdated": "Ажурирано",
       "backgroundTasks": "Позадински задаци",
+      "finished": "Завршено",
+      "finishedTasks": "Завршени задаци",
+      "noRunningTasks": "Нема задатака у току",
       "resizePane": "Промени величину окна"
     }
   },

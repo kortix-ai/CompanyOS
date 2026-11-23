@@ -369,6 +369,15 @@ describe('deriveContext', () => {
     expect(tools.some((t) => t.label === 'Terminal')).toBe(true);
   });
 
+  it('a question the agent asked the user is not context', () => {
+    const { tools } = deriveContext([
+      part('question', { questions: [{ question: 'Which price should we test?' }] }),
+      part('ask', { question: 'Ship it?' }),
+      part('bash', { command: 'ls' }),
+    ]);
+    expect(tools.map((t) => t.label)).toEqual(['Terminal']);
+  });
+
   // ─── BUG 1 — anything that produced an Output must never also appear in
   // Context's "Tools used" bucket. `edit` already gets this right (see the
   // test above); `create` (image_gen/video_gen/presentation_gen/show) did

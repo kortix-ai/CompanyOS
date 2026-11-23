@@ -590,6 +590,9 @@ export function deriveContext(calls: ToolCallBlock[]): {
 
     const family = familyForTool(call.name);
     if (family === 'hidden') continue; // context-engine bookkeeping — never shown
+    // A question the agent asked the user is not something it looked at: the
+    // chat already shows it, with the answer.
+    if (toolKind(call.name) === 'question') continue;
 
     if (toolKind(call.name) === 'read') {
       const path = filePathOf(call) ?? getToolPrimaryArg(call);

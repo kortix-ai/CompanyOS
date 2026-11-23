@@ -16,7 +16,11 @@
  */
 
 import { useTranslations } from '@/i18n/use-translations';
-import { EyeIcon as Eye, EyeSlashIcon as EyeOff } from '@phosphor-icons/react';
+import {
+  EyeIcon as Eye,
+  EyeSlashIcon as EyeOff,
+  PencilSimpleIcon,
+} from '@phosphor-icons/react';
 import { m } from 'motion/react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -1036,22 +1040,7 @@ function AuthCardForm({
     return (
       <>
         <m.div {...rise(0)}>
-          <StepHeader
-            title={t(`credentials.${credentialKey}.title`)}
-            description={
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="text-foreground truncate">{email}</span>
-                <button
-                  type="button"
-                  onClick={goToEntry}
-                  aria-label={t('changeEmail')}
-                  className="hover:text-foreground -my-2 shrink-0 py-2 transition-colors"
-                >
-                  {t('edit')}
-                </button>
-              </span>
-            }
-          />
+          <StepHeader title={t(`credentials.${credentialKey}.title`)} />
         </m.div>
 
         <m.div {...rise(0.06)}>
@@ -1060,15 +1049,32 @@ function AuthCardForm({
           {info && <InfoStrip message={info} />}
 
           <form onSubmit={handleCredentialsSubmit} className="space-y-5">
-            {/* Password managers pair the password with this account. */}
-            <input
-              type="email"
-              name="username"
-              autoComplete="username"
-              value={email}
-              readOnly
-              hidden
-            />
+            {/* The address this password is for. Read-only: the pen goes back
+                to the entry step to change it. Password managers pair the
+                password with this field (autoComplete="username"). */}
+            <div className="space-y-3">
+              <FieldLabel htmlFor="credentials-email">{t('email')}</FieldLabel>
+              <div className="relative">
+                <Input
+                  id="credentials-email"
+                  type="email"
+                  name="username"
+                  size="md"
+                  autoComplete="username"
+                  value={email}
+                  readOnly
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={goToEntry}
+                  aria-label={t('changeEmail')}
+                  className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-0 flex w-10 items-center justify-center transition-colors"
+                >
+                  <PencilSimpleIcon className="size-4" />
+                </button>
+              </div>
+            </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <FieldLabel htmlFor="password">{t('password')}</FieldLabel>

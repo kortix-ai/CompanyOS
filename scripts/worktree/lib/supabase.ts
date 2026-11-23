@@ -61,7 +61,7 @@ export async function startSupabaseFullStack(name: string, ports: Ports): Promis
   if (!portInUse(ports.sbApi).inUse) {
     await run([supabaseBin(), '--workdir', supaWorkdir(name), 'stop']);
   }
-  return run([supabaseBin(), '--workdir', supaWorkdir(name), 'start']);
+  return run([supabaseBin(), '--workdir', supaWorkdir(name), 'start', '-x', 'postgrest']);
 }
 
 export function slotDbUrl(ports: Pick<Ports, 'sbDb'>): string {
@@ -139,7 +139,7 @@ export async function ensurePrimarySupabase(root: string): Promise<Record<string
   // NEVER add --no-backup: it deletes the data volumes, i.e. the primary
   // checkout's local Postgres that every shared-db worktree runs against.
   await run([supabaseBin(), 'stop'], { cwd: root });
-  const started = await run([supabaseBin(), 'start'], { cwd: root });
+  const started = await run([supabaseBin(), 'start', '-x', 'postgrest'], { cwd: root });
   if (started !== 0) return {};
   env = primarySupabaseStatusEnv(root);
   return env;

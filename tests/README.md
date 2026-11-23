@@ -296,6 +296,7 @@ failed `deployed` flow fails the gate.
 | Web push keys | NOTIF-4 |
 | Internal cron key | BILL-13 |
 | Database writes over the deployed pool | ACCT-2, PROJ-1 |
+| Supabase Data API stays off | SEC-K |
 
 44 flows, picked for stability: in the 8 release-gate runs from 2026-10-13 to
 2026-10-15, 43 passed every run and
@@ -401,10 +402,10 @@ infrastructure does not change test logic.
 
 The capture retries Supabase startup for up to 40 minutes. This absorbs bounded
 registry rate limits while preserving the 45-minute cold preparation budget.
-The capture and fresh local stack use Supabase's `--ignore-health-check` only
-before migrations. This prevents PostgREST from rejecting a new database before
-the `kortix` schema exists. The runner still requires migrations and service
-readiness before it starts flows.
+The capture and fresh local stack start Supabase with `--ignore-health-check`.
+Local Supabase starts without PostgREST (`-x postgrest`; see
+`supabase/config.toml`; flow SEC-K checks that the Data API stays off). The
+runner still requires migrations and service readiness before it starts flows.
 
 The worker logs whether Platinum used `via=restore` or `via=cold-boot`. It waits
 for the warm marker before it runs tests. It fetches the requested public Git

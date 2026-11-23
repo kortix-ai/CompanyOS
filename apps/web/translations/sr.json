@@ -25191,6 +25191,7 @@
     "folderDeleted": "Фасцикла је избрисана",
     "folderDeleteFailed": "Није могуће избрисати фасциклу. Покушајте поново.",
     "folderNavigation": "Фасцикле артефаката",
+    "folderPathMore": "Прикажи путању фасцикли",
     "folderUnavailable": "Фасцикла није доступна",
     "folderLoadFailed": "Није могуће учитати фасцикле",
     "moveToFolder": "Премести у фасциклу",

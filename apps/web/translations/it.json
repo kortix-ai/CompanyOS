@@ -25191,6 +25191,7 @@
     "folderDeleted": "Cartella eliminata",
     "folderDeleteFailed": "Impossibile eliminare la cartella. Riprova.",
     "folderNavigation": "Cartelle degli artefatti",
+    "folderPathMore": "Mostra il percorso delle cartelle",
     "folderUnavailable": "Cartella non disponibile",
     "folderLoadFailed": "Impossibile caricare le cartelle",
     "moveToFolder": "Sposta nella cartella",

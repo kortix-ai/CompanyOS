@@ -8559,6 +8559,7 @@ const catalog = {
     "folderDeleted": "Folder deleted",
     "folderDeleteFailed": "Could not delete the folder. Try again.",
     "folderNavigation": "Artifact folders",
+    "folderPathMore": "Show folder path",
     "folderUnavailable": "Folder unavailable",
     "folderLoadFailed": "Could not load folders",
     "moveToFolder": "Move to folder",

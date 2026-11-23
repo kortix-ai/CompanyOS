@@ -25191,6 +25191,7 @@
     "folderDeleted": "Dossier supprimé",
     "folderDeleteFailed": "Impossible de supprimer le dossier. Réessayez.",
     "folderNavigation": "Dossiers d’artefacts",
+    "folderPathMore": "Afficher le chemin des dossiers",
     "folderUnavailable": "Dossier indisponible",
     "folderLoadFailed": "Impossible de charger les dossiers",
     "moveToFolder": "Déplacer vers un dossier",

@@ -25191,6 +25191,7 @@
     "folderDeleted": "Carpeta eliminada",
     "folderDeleteFailed": "No se pudo eliminar la carpeta. Inténtalo de nuevo.",
     "folderNavigation": "Carpetas de artefactos",
+    "folderPathMore": "Mostrar la ruta de carpetas",
     "folderUnavailable": "Carpeta no disponible",
     "folderLoadFailed": "No se pudieron cargar las carpetas",
     "moveToFolder": "Mover a carpeta",

@@ -1,15 +1,23 @@
 'use client';
 
 import type { ArtifactFolder } from '@kortix/sdk';
+import { useArtifactFolders } from '@kortix/sdk/react';
+import { BreadcrumbItem, BreadcrumbLink, BreadcrumbSeparator } from '@kortix/ui/breadcrumb';
+import { Button } from '@kortix/ui/button';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
 } from '@kortix/ui/dropdown-menu';
 import { glyphFace } from '@kortix/ui/glyph-face';
 import { glyphForeground, glyphStyle } from '@kortix/ui/glyph-tint';
-import { FolderIcon, FolderSimpleDashedIcon } from '@phosphor-icons/react';
-import { createElement } from 'react';
+import { CaretRightIcon, DotsThreeIcon, FolderIcon, FolderSimpleDashedIcon } from '@phosphor-icons/react';
+import Link from 'next/link';
+import { Fragment, createElement } from 'react';
 
 import { useTranslations } from '@/i18n/use-translations';
 
@@ -128,5 +136,88 @@ export function FolderTreeRadioItems({
         </DropdownMenuRadioItem>
       ))}
     </DropdownMenuRadioGroup>
+  );
+}
+
+/** Up to this many folders show in full; a longer path keeps the first and the last. */
+const FULL_PATH = 3;
+
+function folderHref(projectId: string, folderId: string) {
+  return `/workspaces/${projectId}/artifacts?folder=${encodeURIComponent(folderId)}`;
+}
+
+function PathSeparator({ className }: { className?: string }) {
+  return (
+    <BreadcrumbSeparator className={className}>
+      <CaretRightIcon />
+    </BreadcrumbSeparator>
+  );
+}
+
+/** A ⋯ crumb: a menu of the folders it stands for, top first, each with its icon. */
+function CollapsedFolders({ projectId, folders, className }: { projectId: string; folders: ArtifactFolder[]; className?: string }) {
+  const t = useTranslations('artifacts');
+  return (
+    <BreadcrumbItem className={className}>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon-sm" aria-label={t('folderPathMore')} className="text-muted-foreground -mx-1.5 shrink-0">
+            <DotsThreeIcon className="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="max-w-64">
+          {folders.map((folder) => (
+            <DropdownMenuItem key={folder.folder_id} asChild>
+              <Link href={folderHref(projectId, folder.folder_id)}>
+                <FolderMenuIcon folder={folder} />
+                <span className="truncate" title={folder.name}>
+                  {folder.name}
+                </span>
+              </Link>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </BreadcrumbItem>
+  );
+}
+
+/**
+ * The folders an artifact sits in, as breadcrumb items after "Artifacts ›":
+ * each opens its folder in the gallery. A path longer than three keeps the
+ * first and the last and folds the middle into a ⋯ menu; a phone folds every
+ * folder into that menu, so the artifact's title keeps the room.
+ */
+export function ArtifactFolderPath({ projectId, folderId }: { projectId: string; folderId: string | null | undefined }) {
+  const folders = useArtifactFolders(projectId);
+  const path = folderPath(folders.data ?? [], folderId ?? null);
+  if (!path.length) return null;
+  const folded = path.length > FULL_PATH ? path.slice(1, -1) : [];
+  const shown = path.length > FULL_PATH ? [path[0]!, null, path[path.length - 1]!] : path;
+  return (
+    <>
+      {/* Phone: one ⋯ for the whole path. */}
+      <CollapsedFolders projectId={projectId} folders={path} className="sm:hidden" />
+      <PathSeparator className="sm:hidden" />
+      {shown.map((folder, index) =>
+        folder ? (
+          <Fragment key={folder.folder_id}>
+            <BreadcrumbItem className="hidden max-w-40 min-w-0 sm:inline-flex">
+              <BreadcrumbLink asChild>
+                <Link href={folderHref(projectId, folder.folder_id)} className="truncate" title={folder.name}>
+                  {folder.name}
+                </Link>
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <PathSeparator className="hidden sm:list-item" />
+          </Fragment>
+        ) : (
+          <Fragment key={`folded-${index}`}>
+            <CollapsedFolders projectId={projectId} folders={folded} className="hidden sm:inline-flex" />
+            <PathSeparator className="hidden sm:list-item" />
+          </Fragment>
+        ),
+      )}
+    </>
   );
 }

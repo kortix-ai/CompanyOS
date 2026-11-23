@@ -25191,6 +25191,7 @@
     "folderDeleted": "Pasta excluída",
     "folderDeleteFailed": "Não foi possível excluir a pasta. Tente novamente.",
     "folderNavigation": "Pastas de artefatos",
+    "folderPathMore": "Mostrar caminho das pastas",
     "folderUnavailable": "Pasta indisponível",
     "folderLoadFailed": "Não foi possível carregar as pastas",
     "moveToFolder": "Mover para pasta",

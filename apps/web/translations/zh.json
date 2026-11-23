@@ -25191,6 +25191,7 @@
     "folderDeleted": "文件夹已删除",
     "folderDeleteFailed": "无法删除文件夹，请重试。",
     "folderNavigation": "作品文件夹",
+    "folderPathMore": "显示文件夹路径",
     "folderUnavailable": "文件夹不可用",
     "folderLoadFailed": "无法加载文件夹",
     "moveToFolder": "移至文件夹",

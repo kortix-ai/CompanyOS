@@ -25191,6 +25191,7 @@
     "folderDeleted": "フォルダーを削除しました",
     "folderDeleteFailed": "フォルダーを削除できませんでした。もう一度お試しください。",
     "folderNavigation": "アーティファクトのフォルダー",
+    "folderPathMore": "フォルダのパスを表示",
     "folderUnavailable": "フォルダーを利用できません",
     "folderLoadFailed": "フォルダーを読み込めませんでした",
     "moveToFolder": "フォルダーに移動",

@@ -25191,6 +25191,7 @@
     "folderDeleted": "Ordner gelöscht",
     "folderDeleteFailed": "Ordner konnte nicht gelöscht werden. Erneut versuchen.",
     "folderNavigation": "Artefaktordner",
+    "folderPathMore": "Ordnerpfad anzeigen",
     "folderUnavailable": "Ordner nicht verfügbar",
     "folderLoadFailed": "Ordner konnten nicht geladen werden",
     "moveToFolder": "In Ordner verschieben",

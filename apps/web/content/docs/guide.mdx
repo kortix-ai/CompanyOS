@@ -1393,7 +1393,7 @@ Each session runs in its own isolated sandbox. Secrets and connector logins are 
 
 Every session starts its own isolated cloud computer, called a sandbox. The agent works there on its own branch of the workspace's repository. By default, a session can push only to its own branch, and its work reaches the shared repository only when a person merges its change request. See [How agents' work reaches the workspace repository](#how-agents-work-reaches-the-project-repository).
 
-An agent without **Workspace repository access** gets no copy of the repository. Its session cannot read the repository, push to it or merge into it.
+An agent without **Workspace repository access** gets no copy of the repository. Its session cannot read the repository, push to it or merge into it. It receives only the files its agent uses: the root `AGENTS.md`, its skills, its project tools and the files they import, and its local extensions.
 
 #### Agents have their own limits
 

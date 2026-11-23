@@ -38,7 +38,7 @@ import {
   resolveReleaseTreeSource,
   storeConfigArchive,
 } from './builder';
-import { readFileTree } from './release-tree';
+import { readFileTree, variantAgent, type ConfigReleaseVariant } from './release-tree';
 import {
   CONFIG_ARCHIVE_URL_TTL_SECONDS,
   configArchiveKey,
@@ -178,7 +178,8 @@ export async function serveConfigArchive(
   deps: ServeConfigArchiveDeps = {},
   /** The commit a composed release tree was built from (the path's `?commit=`). */
   composedFrom?: string | null,
-  agent?: string | null,
+  /** The one-agent variant the path's `?agent=` / `&scope=` name (`archiveQueryVariant`). */
+  variant?: ConfigReleaseVariant | null,
 ): Promise<Response> {
   const store = deps.store ?? getConfigArchiveStore();
   const key = configArchiveKey(project.projectId, treeId);
@@ -207,7 +208,7 @@ export async function serveConfigArchive(
     } catch (error) {
       console.warn(`[config-releases] store read ${key} failed for a mirror-less tree: ${(error as Error).message}`);
     }
-    const composed = await composedArchiveBuilder(repo, project, treeId, composedFrom, agent);
+    const composed = await composedArchiveBuilder(repo, project, treeId, composedFrom, variant);
     if (!composed) return json(404, { error: 'Not found' });
     build = composed;
   } else {
@@ -243,16 +244,17 @@ async function composedArchiveBuilder(
   project: GitBackedProject,
   treeId: string,
   commit: string | null | undefined,
-  agent?: string | null,
+  variant?: ConfigReleaseVariant | null,
 ): Promise<(() => Promise<Buffer>) | null> {
   if (!commit || !/^[0-9a-f]{40}$/.test(commit)) return null;
   const known = await runGitCapture(['cat-file', '-e', `${commit}^{commit}`], repo);
   if (known.exitCode !== 0) return null;
+  const agent = variant ? variantAgent(variant) : null;
   if (agent && !/^[a-zA-Z0-9_-]+$/.test(agent)) return null;
-  if (agent) {
-    // The agent variant's release holds only its project tool modules (`toolsRelease`).
-    const release = await buildConfigRelease(project, commit, `agent:${agent}`).catch(() => null);
-    const files = release?.tools_only && release.config_tree_id === treeId ? release.files : null;
+  if (variant && agent) {
+    // A one-agent release holds the files `agentRelease` lists, in a tree no mirror holds.
+    const release = await buildConfigRelease(project, commit, variant).catch(() => null);
+    const files = release?.config_tree_id === treeId ? release.files : null;
     if (files) return async () => (await readFileTree(repo, files, { archive: true })).archive!;
   }
   const resolved = await resolveReleaseTreeSource(repo, project, commit).catch(() => null);

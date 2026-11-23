@@ -21,6 +21,7 @@ import { childProcessEnv } from '../config';
 import { ensureCommitTrees, ensureStoreObjects, ensureTreeContents, execFileAsync, runGitCapture, spawn } from '../projects/git/mirror';
 import type { GitBackedProject } from '../projects/git/types';
 import { isObjectFetchTooLarge } from '../shared/over-limit-memo';
+import { bumpBounded } from '../shared/ttl-memo';
 
 /**
  * The release archive cap. A release is the repository's whole tree at the
@@ -43,7 +44,20 @@ export const HEX40 = /^[0-9a-f]{40}$/;
  * config dir. Its box holds no project checkout and its image has no `bun`,
  * so a project config dir with tool dependencies can never load there.
  */
-export type ConfigReleaseVariant = 'project' | 'none' | 'mykortix' | `agent:${string}`;
+export type ConfigReleaseVariant = 'project' | 'none' | 'mykortix' | `agent:${string}` | `repo-agent:${string}`;
+
+/**
+ * The agent of a one-agent variant, or null. `agent:<name>` is the release of
+ * a session without repository access (`exact` file list). `repo-agent:<name>`
+ * is the per-agent release of a session with repository access (`folders`
+ * file list): built, not yet assigned to any session
+ * (`.agents/skills/learnings/work/per-agent-config-release/`).
+ */
+export function variantAgent(variant: ConfigReleaseVariant): string | null {
+  if (variant.startsWith('agent:')) return variant.slice('agent:'.length);
+  if (variant.startsWith('repo-agent:')) return variant.slice('repo-agent:'.length);
+  return null;
+}
 
 /** One tracked file: `[path relative to the repository root, git mode, blob ID]`. */
 export type ConfigReleaseFile = [path: string, mode: string, blob: string];
@@ -235,6 +249,11 @@ async function gitWithInput(
   args: string[],
   records: string[],
 ): Promise<string> {
+  return (await gitStdin(repo, env, args, records.map((record) => `${record}\0`).join(''))).toString('utf8');
+}
+
+/** `git <args>` in `repo` with `input` on stdin; its stdout bytes. Throws on a non-zero exit. */
+async function gitStdin(repo: string, env: Record<string, string>, args: string[], input: string): Promise<Buffer> {
   const child = spawn('git', args, {
     cwd: repo,
     // It may read the mirror (alternates), which must never fetch on its own.
@@ -249,11 +268,35 @@ async function gitWithInput(
     child.once('error', reject);
     child.once('close', resolveExit);
   });
-  child.stdin.end(records.map((record) => `${record}\0`).join(''));
+  child.stdin.end(input);
   if ((await exit) !== 0) {
     throw new Error(`git ${args[0]} failed: ${Buffer.concat(stderr).toString('utf8').trim()}`);
   }
-  return Buffer.concat(stdout).toString('utf8');
+  return Buffer.concat(stdout);
+}
+
+/**
+ * The bytes of each blob of `blobs` the mirror holds, in one `git cat-file
+ * --batch`: one process for a whole round, not one per file. A missing blob,
+ * or one over `maxBytes`, is absent from the result.
+ */
+async function readBlobs(mirror: string, blobs: readonly string[], maxBytes = Number.POSITIVE_INFINITY): Promise<Map<string, Buffer>> {
+  const wanted = [...new Set(blobs)].filter((blob) => HEX40.test(blob));
+  const out = new Map<string, Buffer>();
+  if (wanted.length === 0) return out;
+  const raw = await gitStdin(mirror, {}, ['cat-file', '--batch'], `${wanted.join('\n')}\n`);
+  let at = 0;
+  while (at < raw.length) {
+    const eol = raw.indexOf(0x0a, at);
+    if (eol < 0) break;
+    const [oid, type, size] = raw.subarray(at, eol).toString('utf8').split(' ');
+    at = eol + 1;
+    if (type === 'missing' || size === undefined) continue;
+    const bytes = Number(size);
+    if (type === 'blob' && bytes <= maxBytes) out.set(oid!, raw.subarray(at, at + bytes));
+    at += bytes + 1;
+  }
+  return out;
 }
 
 /** `tree` without `paths`, through a throwaway index in `repo`. */
@@ -382,14 +425,27 @@ export async function readFileTree(
 /** What Bun tries, in order, for a relative import: the path, then each extension, then a directory index. */
 const IMPORT_SUFFIXES = ['', '.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs', '.json'];
 
+/** A file Bun parses for imports. */
+const CODE_FILE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
+
+// replica-local: the import specifiers of a blob at a path; a blob never changes, so a miss only parses it again.
+const parsedImports = new Map<string, string[]>();
+// replica-local: the relative references of a skill text blob; a miss only reads it again.
+const textReferences = new Map<string, string[]>();
+const MAX_PARSED_IMPORTS = 20_000;
+
+/** Every file of `rootTree`, by path. */
+async function treeFiles(mirror: string, rootTree: string): Promise<Map<string, ConfigReleaseFile>> {
+  return new Map((await listConfigFiles(mirror, rootTree)).map((file) => [file[0], file]));
+}
+
 /**
- * The files the project tool modules `modules` load: each module and every
- * file it imports by a relative specifier, transitively, from the root tree
- * `rootTree`. A package import is not followed. A module that is not in the
- * tree is left out, and the box reports it as missing.
+ * The files the modules `modules` load: each module and every file it imports
+ * by a relative specifier, transitively, from `tree`. A package import is not
+ * followed. A module that is not in the tree is left out, and the box reports
+ * it as missing.
  */
-export async function toolModuleFiles(mirror: string, rootTree: string, modules: readonly string[]): Promise<ConfigReleaseFile[]> {
-  const tree = new Map((await listConfigFiles(mirror, rootTree)).map((file) => [file[0], file]));
+async function importClosure(mirror: string, tree: ReadonlyMap<string, ConfigReleaseFile>, modules: readonly string[]): Promise<ConfigReleaseFile[]> {
   const found = new Map<string, ConfigReleaseFile>();
   let queue = [...modules];
   // One round per import depth: one download for the modules the round parses.
@@ -402,17 +458,24 @@ export async function toolModuleFiles(mirror: string, rootTree: string, modules:
       if (file[1] !== '120000' && !path.endsWith('.json')) round.push(file);
     }
     queue = [];
-    await ensureStoreObjects(mirror, round.map(([, , blob]) => blob));
+    const unparsed = round.filter(([path, , blob]) => !parsedImports.has(`${blob}\0${path}`));
+    await ensureStoreObjects(mirror, unparsed.map(([, , blob]) => blob));
+    const sources = await readBlobs(mirror, unparsed.map(([, , blob]) => blob));
     for (const [path, , blob] of round) {
-      const source = await runGitCapture(['cat-file', 'blob', blob], mirror);
-      const loader = path.endsWith('.tsx') ? 'tsx' : path.endsWith('.jsx') ? 'jsx' : /\.[cm]?ts$/.test(path) ? 'ts' : 'js';
-      let imports: Array<{ path: string }> = [];
-      try {
-        imports = new Bun.Transpiler({ loader }).scanImports(source.stdout);
-      } catch {
-        // A syntax error: the box reports it when it imports the module.
+      const key = `${blob}\0${path}`;
+      let imports = parsedImports.get(key);
+      if (!imports) {
+        const source = sources.get(blob);
+        const loader = path.endsWith('.tsx') ? 'tsx' : path.endsWith('.jsx') ? 'jsx' : /\.[cm]?ts$/.test(path) ? 'ts' : 'js';
+        imports = [];
+        try {
+          if (source) imports = new Bun.Transpiler({ loader }).scanImports(source.toString('utf8')).map((entry) => entry.path);
+        } catch {
+          // A syntax error: the box reports it when it imports the module.
+        }
+        if (source) bumpBounded(parsedImports, key, imports, MAX_PARSED_IMPORTS);
       }
-      for (const { path: specifier } of imports) {
+      for (const specifier of imports) {
         if (!specifier.startsWith('./') && !specifier.startsWith('../')) continue;
         const base = posix.normalize(posix.join(posix.dirname(path), specifier));
         // `./x.js` names `x.ts` in TypeScript, and Bun resolves it so.
@@ -426,18 +489,167 @@ export async function toolModuleFiles(mirror: string, rootTree: string, modules:
 }
 
 /**
- * Every file under the skill folders `folders` (repo-relative, as
- * `compiled.skills` names them) in the root tree `rootTree`. A folder that is
- * not in the tree adds nothing; the box then lists no such skill. A path that
- * leaves the repository is ignored.
+ * How much of the repository a one-agent file list takes around what the
+ * agent names.
+ *
+ * - `exact`: a session WITHOUT repository access. The tool modules and the
+ *   files they import, nothing beside them: a file the agent may not use is
+ *   never disclosed.
+ * - `folders`: a session WITH repository access, which holds the whole
+ *   checkout in `/workspace` anyway. Whole folders around every tool file, and
+ *   the package and compiler config above them, so a tool that reads a file
+ *   next to itself at run time still finds it. #9197 replaced a release that
+ *   dropped such files; this list must never drop a file the agent reads.
  */
-export async function skillFolderFiles(mirror: string, rootTree: string, folders: readonly string[]): Promise<ConfigReleaseFile[]> {
-  const prefixes = folders.flatMap((folder) => {
+export type AgentFileScope = 'exact' | 'folders';
+
+export interface AgentFileListInput {
+  /** Repo-relative modules of the project tools an agent of the set may call. */
+  toolModules: readonly string[];
+  /** Repo-relative folders of the registered skills an agent of the set may load. */
+  skillFolders: readonly string[];
+  /** Repo-relative sources of the local pi packages an agent of the set enables: a file or a folder. */
+  packageSources: readonly string[];
+  /** Files taken whenever the tree holds them (the root `AGENTS.md`, the manifest). */
+  rootFiles: readonly string[];
+  scope: AgentFileScope;
+}
+
+/** The config files a tool's module resolution reads, in its folder or any folder above it. */
+const RESOLUTION_FILES = [
+  'package.json',
+  'tsconfig.json',
+  'jsconfig.json',
+  'bunfig.toml',
+  'bun.lock',
+  'bun.lockb',
+  'package-lock.json',
+  'pnpm-lock.yaml',
+  'yarn.lock',
+  '.npmrc',
+];
+
+/** The folder of a repo-relative path, with its trailing slash; `''` at the root. */
+function folderOf(path: string): string {
+  const cut = path.lastIndexOf('/');
+  return cut < 0 ? '' : path.slice(0, cut + 1);
+}
+
+/** `relative` resolved against the folder of `from`, or null when it leaves the repository or is not a path. */
+function resolveRelative(from: string, relative: string): string | null {
+  const clean = relative.split(/[?#]/)[0]!.trim();
+  if (!clean || /^[a-z][a-z0-9+.-]*:/i.test(clean) || clean.startsWith('/')) return null;
+  const joined = posix.normalize(posix.join(folderOf(from), clean)).replace(/\/+$/, '');
+  if (!joined || joined === '.' || joined === '..' || joined.startsWith('../')) return null;
+  return joined;
+}
+
+/** Markdown link targets and quoted `./` / `../` paths in a text file. */
+function relativeReferences(text: string): string[] {
+  const out: string[] = [];
+  for (const match of text.matchAll(/\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g)) out.push(match[1]!);
+  for (const match of text.matchAll(/[`'"](\.\.?\/[^`'"\s]+)[`'"]/g)) out.push(match[1]!);
+  return out;
+}
+
+/** A text file a skill may link from. Bounded so a huge file is never scanned. */
+const SKILL_TEXT_FILE = /\.(?:md|mdx|txt)$/i;
+const MAX_SCANNED_TEXT_BYTES = 1024 * 1024;
+
+/**
+ * The files one agent's release holds (see `AgentFileScope`), from the root
+ * tree `rootTree`:
+ *
+ * - each of `rootFiles` the tree holds;
+ * - every file under each skill folder, and under each package folder (a
+ *   package that is one file is its folder, as the box reads it, except at
+ *   the repository root);
+ * - each tool module and every file it imports by a relative specifier;
+ * - every path a skill's text files link to by a relative path (a file, or
+ *   every file under a folder), as the model reads the skill from the release;
+ * - `folders` only: every file under the folder of each tool file (never the
+ *   repository root), the files those import, and the module-resolution
+ *   config (`RESOLUTION_FILES`) in each folder from there up to the root.
+ *
+ * Paths never move: each file keeps the path the repository gives it.
+ */
+export async function agentReleaseFiles(mirror: string, rootTree: string, input: AgentFileListInput): Promise<ConfigReleaseFile[]> {
+  const tree = await treeFiles(mirror, rootTree);
+  const out = new Map<string, ConfigReleaseFile>();
+  const take = (file: ConfigReleaseFile | undefined) => {
+    if (file) out.set(file[0], file);
+  };
+  const underFolder = (folder: string) => {
+    if (!folder) return;
+    for (const [path, file] of tree) if (path.startsWith(folder)) take(file);
+  };
+  const folderOrFile = (path: string) => {
+    if (tree.has(path)) take(tree.get(path));
+    else underFolder(`${path}/`);
+  };
+
+  for (const path of input.rootFiles) take(tree.get(path));
+
+  const skillPrefixes = input.skillFolders.flatMap((folder) => {
     const clean = posix.normalize(folder.trim()).replace(/^(\.\/)+/, '').replace(/\/+$/, '');
     return !clean || clean === '.' || clean.startsWith('../') || clean === '..' || clean.startsWith('/') ? [] : [`${clean}/`];
   });
-  if (prefixes.length === 0) return [];
-  return (await listConfigFiles(mirror, rootTree)).filter(([path]) => prefixes.some((prefix) => path.startsWith(prefix)));
+  for (const prefix of skillPrefixes) underFolder(prefix);
+
+  for (const source of input.packageSources) {
+    const clean = resolveRelative('', source);
+    if (!clean) continue;
+    if (tree.has(clean) && /\.[cm]?[jt]sx?$/.test(clean)) {
+      const folder = folderOf(clean);
+      if (folder) underFolder(folder);
+      else take(tree.get(clean));
+    } else {
+      folderOrFile(clean);
+    }
+  }
+
+  // The links of every skill text file. The blobs ship anyway; a blob is read once per process.
+  const texts = [...out.values()].filter(([path, mode]) => mode !== '120000' && SKILL_TEXT_FILE.test(path) && skillPrefixes.some((prefix) => path.startsWith(prefix)));
+  const unread = texts.filter(([, , blob]) => !textReferences.has(blob)).map(([, , blob]) => blob);
+  if (unread.length > 0) {
+    await ensureStoreObjects(mirror, unread);
+    const read = await readBlobs(mirror, unread, MAX_SCANNED_TEXT_BYTES);
+    // A blob over the bound links nothing; one that did not arrive is asked again next time.
+    for (const blob of unread) {
+      const bytes = read.get(blob);
+      if (bytes) bumpBounded(textReferences, blob, relativeReferences(bytes.toString('utf8')), MAX_PARSED_IMPORTS);
+    }
+  }
+  for (const [path, , blob] of texts) {
+    for (const reference of textReferences.get(blob) ?? []) {
+      const target = resolveRelative(path, reference);
+      if (target) folderOrFile(target);
+    }
+  }
+
+  let tools = await importClosure(mirror, tree, input.toolModules);
+  if (input.scope === 'folders' && tools.length > 0) {
+    // To a fixed point: a file a folder brings in may import from another folder.
+    const folders = new Set<string>();
+    for (;;) {
+      const next = tools.map(([path]) => folderOf(path)).filter((folder) => folder && !folders.has(folder));
+      if (next.length === 0) break;
+      for (const folder of next) folders.add(folder);
+      const code = [...tree.keys()].filter((path) => CODE_FILE.test(path) && [...folders].some((folder) => path.startsWith(folder)));
+      tools = await importClosure(mirror, tree, [...tools.map(([path]) => path), ...code]);
+    }
+    for (const folder of folders) underFolder(folder);
+    for (const [path] of tools) {
+      const parts = path.split('/').slice(0, -1);
+      for (let depth = parts.length; depth >= 0; depth -= 1) {
+        const dir = parts.slice(0, depth).join('/');
+        for (const name of RESOLUTION_FILES) take(tree.get(dir ? `${dir}/${name}` : name));
+      }
+    }
+  }
+  for (const file of tools) take(file);
+
+  return [...out.values()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 }
 
 /**

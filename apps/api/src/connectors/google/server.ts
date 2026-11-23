@@ -101,13 +101,13 @@ function hint(error: GoogleApiError): string {
   return '';
 }
 
-async function callTool(service: GoogleService, rpc: Rpc, token: string, fetchImpl?: GoogleFetch): Promise<Answer> {
+async function callTool(service: GoogleService, rpc: Rpc, token: string, signal: AbortSignal, fetchImpl?: GoogleFetch): Promise<Answer> {
   const name = rpc.params.name;
   if (typeof name !== 'string') return rpcError(rpc.id, -32602, 'Invalid params: name must be a tool name');
   const tool = GOOGLE_TOOLS[service].find((t) => t.name === name);
   if (!tool) return rpcError(rpc.id, -32602, `Unknown tool: ${name}. tools/list names the ${SERVICE_TITLES[service]} tools.`);
   const args = rpc.params.arguments && typeof rpc.params.arguments === 'object' ? (rpc.params.arguments as Record<string, unknown>) : {};
-  const google = createGoogleClient({ token, fetchImpl });
+  const google = createGoogleClient({ token, fetchImpl, signal });
   try {
     const output = await tool.run(args, { google });
     return { status: 200, body: { jsonrpc: '2.0', id: rpc.id, result: toolResult(output) } };
@@ -169,7 +169,7 @@ async function answer(service: GoogleService, request: Request, fetchImpl?: Goog
     case 'tools/list':
       return { status: 200, body: { jsonrpc: '2.0', id: rpc.id, result: { tools: GOOGLE_TOOLS[service].map(toolListing) } } };
     case 'tools/call':
-      return callTool(service, rpc, token, fetchImpl);
+      return callTool(service, rpc, token, request.signal, fetchImpl);
     default:
       return rpcError(rpc.id, -32601, `Method not found: ${rpc.method}`);
   }

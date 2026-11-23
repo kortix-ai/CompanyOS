@@ -73,12 +73,7 @@ export function rateLimitWaitMs(message: string): number | null {
   return Math.min(10_000, Math.max(250, seconds * 1000)) + Math.floor(Math.random() * 500);
 }
 
-let ops: BoxOps = liveOps;
-export const boxOps = (): BoxOps => ops;
-/** Swap the sandbox channel for a test; null restores the live one. */
-export function setBoxOpsForTests(next: BoxOps | null): void {
-  ops = next ?? liveOps;
-}
+export const boxOps = (): BoxOps => liveOps;
 
 /** The trial session's sandbox once the provider has created it, and whether it runs. */
 export async function sessionBox(sessionId: string): Promise<{ box: Box | null; status: string } | null> {

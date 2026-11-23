@@ -21574,6 +21574,31 @@
     "reviewPane": {
       "emptyTitle": "Wähle einen Eintrag",
       "emptyDescription": "Die Details öffnen sich hier. Mit J und K bewegst du dich durch die Liste."
+    },
+    "reviewDeck": {
+      "label": "Review-Karten",
+      "remaining": "{count, plural, one {# Karte übrig} other {# Karten übrig}}",
+      "merge": "Mergen",
+      "close": "Schließen",
+      "approve": "Genehmigen",
+      "deny": "Ablehnen",
+      "dismiss": "Verwerfen",
+      "yes": "Ja",
+      "no": "Nein",
+      "skip": "Überspringen",
+      "open": "Öffnen",
+      "undo": "Rückgängig",
+      "staged": "{verdict}: {title}",
+      "needsChoice": "Öffnen, um eine Antwort zu wählen",
+      "noVerdict": "Du kannst hier nicht entscheiden. Öffne es für Details.",
+      "emptyTitle": "Alles erledigt",
+      "emptyDescription": "Gerade wartet nichts auf dich.",
+      "highRisk": "Hohes Risiko",
+      "files": "{count, plural, one {# Datei} other {# Dateien}}",
+      "conflicts": "{count, plural, one {# Konflikt} other {# Konflikte}}",
+      "items": "{count, plural, one {# Eintrag} other {# Einträge}}",
+      "showCards": "Als Karten zeigen",
+      "showList": "Als Liste zeigen"
     }
   },
   "commandPalette": {

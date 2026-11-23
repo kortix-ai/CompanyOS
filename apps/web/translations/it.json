@@ -21574,6 +21574,31 @@
     "reviewPane": {
       "emptyTitle": "Seleziona un elemento",
       "emptyDescription": "I dettagli si aprono qui. Premi J e K per scorrere l’elenco."
+    },
+    "reviewDeck": {
+      "label": "Schede di revisione",
+      "remaining": "{count, plural, one {# scheda rimasta} other {# schede rimaste}}",
+      "merge": "Unisci",
+      "close": "Chiudi",
+      "approve": "Approva",
+      "deny": "Nega",
+      "dismiss": "Ignora",
+      "yes": "Sì",
+      "no": "No",
+      "skip": "Salta",
+      "open": "Apri",
+      "undo": "Annulla",
+      "staged": "{verdict}: {title}",
+      "needsChoice": "Aprila per scegliere una risposta",
+      "noVerdict": "Non puoi decidere qui. Aprila per i dettagli.",
+      "emptyTitle": "Tutto in pari",
+      "emptyDescription": "Al momento non c’è nulla per te.",
+      "highRisk": "Rischio alto",
+      "files": "{count, plural, one {# file} other {# file}}",
+      "conflicts": "{count, plural, one {# conflitto} other {# conflitti}}",
+      "items": "{count, plural, one {# elemento} other {# elementi}}",
+      "showCards": "Mostra come schede",
+      "showList": "Mostra come elenco"
     }
   },
   "commandPalette": {

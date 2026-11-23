@@ -21574,6 +21574,31 @@
     "reviewPane": {
       "emptyTitle": "Izaberi stavku",
       "emptyDescription": "Detalji se otvaraju ovde. Pritisni J i K da se krećeš kroz listu."
+    },
+    "reviewDeck": {
+      "label": "Kartice za pregled",
+      "remaining": "{count, plural, one {Preostala # kartica} few {Preostale # kartice} other {Preostalo # kartica}}",
+      "merge": "Spoji",
+      "close": "Zatvori",
+      "approve": "Odobri",
+      "deny": "Odbij",
+      "dismiss": "Odbaci",
+      "yes": "Da",
+      "no": "Ne",
+      "skip": "Preskoči",
+      "open": "Otvori",
+      "undo": "Poništi",
+      "staged": "{verdict}: {title}",
+      "needsChoice": "Otvori da izabereš odgovor",
+      "noVerdict": "Ne možeš da odlučiš o ovome. Otvori za detalje.",
+      "emptyTitle": "Sve je završeno",
+      "emptyDescription": "Trenutno ništa ne čeka na tebe.",
+      "highRisk": "Visok rizik",
+      "files": "{count, plural, one {# fajl} few {# fajla} other {# fajlova}}",
+      "conflicts": "{count, plural, one {# konflikt} few {# konflikta} other {# konflikata}}",
+      "items": "{count, plural, one {# stavka} few {# stavke} other {# stavki}}",
+      "showCards": "Prikaži kao kartice",
+      "showList": "Prikaži kao listu"
     }
   },
   "commandPalette": {

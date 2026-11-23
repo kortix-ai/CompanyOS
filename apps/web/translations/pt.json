@@ -21574,6 +21574,31 @@
     "reviewPane": {
       "emptyTitle": "Selecione um item",
       "emptyDescription": "Os detalhes abrem aqui. Pressione J e K para percorrer a lista."
+    },
+    "reviewDeck": {
+      "label": "Cartões de revisão",
+      "remaining": "{count, plural, one {# cartão restante} other {# cartões restantes}}",
+      "merge": "Mesclar",
+      "close": "Fechar",
+      "approve": "Aprovar",
+      "deny": "Negar",
+      "dismiss": "Dispensar",
+      "yes": "Sim",
+      "no": "Não",
+      "skip": "Pular",
+      "open": "Abrir",
+      "undo": "Desfazer",
+      "staged": "{verdict}: {title}",
+      "needsChoice": "Abra para escolher uma resposta",
+      "noVerdict": "Você não pode decidir isto. Abra para ver os detalhes.",
+      "emptyTitle": "Tudo em dia",
+      "emptyDescription": "Nada precisa de você agora.",
+      "highRisk": "Risco alto",
+      "files": "{count, plural, one {# arquivo} other {# arquivos}}",
+      "conflicts": "{count, plural, one {# conflito} other {# conflitos}}",
+      "items": "{count, plural, one {# item} other {# itens}}",
+      "showCards": "Mostrar como cartões",
+      "showList": "Mostrar como lista"
     }
   },
   "commandPalette": {

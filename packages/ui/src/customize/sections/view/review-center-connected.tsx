@@ -378,6 +378,8 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
           : undefined
       }
       initialItems={items}
+      // The Review page opens on the swipe deck (one card at a time).
+      defaultView="cards"
       segment={segment}
       onSegmentChange={setSegment}
       loadMore={

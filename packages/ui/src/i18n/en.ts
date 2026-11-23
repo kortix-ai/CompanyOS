@@ -6491,6 +6491,31 @@ const catalog = {
     "reviewPane": {
       "emptyTitle": "Select an item",
       "emptyDescription": "Its details open here. Press J and K to move through the list."
+    },
+    "reviewDeck": {
+      "label": "Review cards",
+      "remaining": "{count, plural, one {# card left} other {# cards left}}",
+      "merge": "Merge",
+      "close": "Close",
+      "approve": "Approve",
+      "deny": "Deny",
+      "dismiss": "Dismiss",
+      "yes": "Yes",
+      "no": "No",
+      "skip": "Skip",
+      "open": "Open",
+      "undo": "Undo",
+      "staged": "{verdict}: {title}",
+      "needsChoice": "Open it to choose an answer",
+      "noVerdict": "You cannot decide this one. Open it for details.",
+      "emptyTitle": "You are all caught up",
+      "emptyDescription": "Nothing needs you right now.",
+      "highRisk": "High risk",
+      "files": "{count, plural, one {# file} other {# files}}",
+      "conflicts": "{count, plural, one {# conflict} other {# conflicts}}",
+      "items": "{count, plural, one {# item} other {# items}}",
+      "showCards": "Show as cards",
+      "showList": "Show as list"
     }
   },
   "commandPalette": {

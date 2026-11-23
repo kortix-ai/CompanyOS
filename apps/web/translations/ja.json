@@ -21574,6 +21574,31 @@
     "reviewPane": {
       "emptyTitle": "項目を選択してください",
       "emptyDescription": "詳細はここに表示されます。J と K でリストを移動できます。"
+    },
+    "reviewDeck": {
+      "label": "レビューカード",
+      "remaining": "{count, plural, other {残り # 枚}}",
+      "merge": "マージ",
+      "close": "閉じる",
+      "approve": "承認",
+      "deny": "拒否",
+      "dismiss": "却下",
+      "yes": "はい",
+      "no": "いいえ",
+      "skip": "スキップ",
+      "open": "開く",
+      "undo": "元に戻す",
+      "staged": "{verdict}: {title}",
+      "needsChoice": "開いて回答を選んでください",
+      "noVerdict": "この項目は決定できません。開いて詳細を確認してください。",
+      "emptyTitle": "すべて完了しました",
+      "emptyDescription": "現在対応が必要なものはありません。",
+      "highRisk": "高リスク",
+      "files": "{count, plural, other {# ファイル}}",
+      "conflicts": "{count, plural, other {# 件の競合}}",
+      "items": "{count, plural, other {# 件}}",
+      "showCards": "カードで表示",
+      "showList": "リストで表示"
     }
   },
   "commandPalette": {

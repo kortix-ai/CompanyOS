@@ -21574,6 +21574,31 @@
     "reviewPane": {
       "emptyTitle": "Sélectionnez un élément",
       "emptyDescription": "Ses détails s’ouvrent ici. Appuyez sur J et K pour parcourir la liste."
+    },
+    "reviewDeck": {
+      "label": "Cartes de revue",
+      "remaining": "{count, plural, one {# carte restante} other {# cartes restantes}}",
+      "merge": "Fusionner",
+      "close": "Fermer",
+      "approve": "Approuver",
+      "deny": "Refuser",
+      "dismiss": "Ignorer",
+      "yes": "Oui",
+      "no": "Non",
+      "skip": "Passer",
+      "open": "Ouvrir",
+      "undo": "Annuler",
+      "staged": "{verdict} : {title}",
+      "needsChoice": "Ouvrez-la pour choisir une réponse",
+      "noVerdict": "Vous ne pouvez pas décider ici. Ouvrez-la pour les détails.",
+      "emptyTitle": "Tout est à jour",
+      "emptyDescription": "Rien ne vous attend pour l’instant.",
+      "highRisk": "Risque élevé",
+      "files": "{count, plural, one {# fichier} other {# fichiers}}",
+      "conflicts": "{count, plural, one {# conflit} other {# conflits}}",
+      "items": "{count, plural, one {# élément} other {# éléments}}",
+      "showCards": "Afficher en cartes",
+      "showList": "Afficher en liste"
     }
   },
   "commandPalette": {

@@ -32,6 +32,7 @@ import { SheetScrollView } from '@/components/kortix/sheet-parts';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useCans } from '@kortix/sdk/react';
+import { reviewVerdictAllowed, type ReviewVerdict } from '@kortix/sdk';
 import { useColorScheme } from 'nativewind';
 import {
   REVIEW_CONTROL_ACTIONS,
@@ -56,22 +57,32 @@ import { useToast } from '@/components/kortix/toast-provider';
 import { OpenCRSheet } from '@/components/review/OpenCRSheet';
 import { shortRef } from '@/lib/review/review-detail';
 import { ReviewDetailSheet } from '@/components/review/ReviewDetailSheet';
+import { ReviewSwipeDeck } from '@/components/review/ReviewSwipeDeck';
 import { REVIEW_KIND_ICONS } from '@/components/review/review-icons';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 import { haptics } from '@/lib/haptics';
-import { BellIcon, CheckCircleIcon, ClockCounterClockwiseIcon, ClockIcon } from '@/lib/icons';
+import {
+  BellIcon,
+  CardsThreeIcon,
+  CheckCircleIcon,
+  ClockCounterClockwiseIcon,
+  ClockIcon,
+  ListIcon,
+} from '@/lib/icons';
 import { useProjectBranches, useProjectSessions } from '@/lib/projects/hooks';
 import { relativeTime } from '@/lib/projects/triggers-format';
 import {
   REVIEW_SEGMENTS,
   formatReviewAge,
   reviewItemTone,
+  reviewVerdictToast,
   type ReviewTone,
 } from '@/lib/review/review-meta';
-import { reviewKeys, useReviewItems } from '@/lib/review/use-review';
+import { planReviewVerdict } from '@/lib/review/review-verdict';
+import { reviewKeys, useReviewItems, useReviewVerdict } from '@/lib/review/use-review';
 import { THEME } from '@/lib/utils/theme';
 import { sessionDisplayTitle } from '@/lib/session/session-list';
 import type { PageTab } from '@/stores/tab-store';
@@ -125,9 +136,36 @@ export function ReviewPage({
   const [versionsOpened, setVersionsOpened] = React.useState(false);
   const branchesQuery = useProjectBranches(projectId, versionsOpened);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
-  const canOpenChange = changeRequestControlsFrom(
-    useCans({ projectId }, REVIEW_CONTROL_ACTIONS),
-  ).canOpen;
+  const cans = useCans({ projectId }, REVIEW_CONTROL_ACTIONS);
+  const canOpenChange = changeRequestControlsFrom(cans).canOpen;
+  // Needs you opens on the swipe deck (one card at a time); the header
+  // button switches to the list. Waiting and Done hold nothing to decide.
+  const [view, setView] = React.useState<'cards' | 'list'>('cards');
+  const cards = view === 'cards' && segment === 'needs_you';
+  const verdictMutation = useReviewVerdict(projectId, {
+    onSuccess: (input) => {
+      haptics.success();
+      toast.success(reviewVerdictToast(input.kind, input.verdict, input.number));
+    },
+    onError: (failure) => {
+      haptics.warning();
+      toast.error((failure as Error)?.message ?? 'The review action failed');
+    },
+  });
+  const sendVerdict = React.useCallback(
+    (item: ReviewItem, verdict: ReviewVerdict, text?: string) => {
+      const plan = planReviewVerdict(item.id, verdict, text);
+      if (!plan) return;
+      verdictMutation.mutate({
+        itemId: item.id,
+        verdict,
+        plan,
+        kind: item.kind,
+        number: item.kind === 'change' ? item.detail.number : undefined,
+      });
+    },
+    [verdictMutation],
+  );
 
   // Session titles name the thread a connector approval came from.
   const sessionsQuery = useProjectSessions(projectId, { poll: false });
@@ -165,6 +203,10 @@ export function ReviewPage({
     () => items.filter((item) => reviewSegmentForStatus(item.status) === segment),
     [items, segment],
   );
+  // The deck reads one page at a time: as it runs low, the next page loads.
+  React.useEffect(() => {
+    if (cards && visible.length < 3 && hasNextPage && !isFetchingNextPage) void fetchNextPage();
+  }, [cards, visible.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
   const toneColor = React.useCallback(
     (tone: ReviewTone) =>
       tone === 'muted'
@@ -206,6 +248,20 @@ export function ReviewPage({
         }
         addLabel="Open a change request"
         rightActions={
+          <>
+          {segment === 'needs_you' ? (
+            <Button
+              variant="ghost"
+              size={HEADER_BUTTON_SIZE}
+              className="rounded-full"
+              onPress={() => {
+                haptics.selection();
+                setView(cards ? 'list' : 'cards');
+              }}
+              accessibilityLabel={cards ? 'Show as list' : 'Show as cards'}>
+              <Icon as={cards ? ListIcon : CardsThreeIcon} size={HEADER_ICON_SIZE} className="text-foreground" />
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
             size={HEADER_BUTTON_SIZE}
@@ -219,11 +275,25 @@ export function ReviewPage({
             accessibilityHint="Opens the workspace's versions">
             <Icon as={ClockCounterClockwiseIcon} size={HEADER_ICON_SIZE} className="text-foreground" />
           </Button>
+          </>
         }
       />
 
-      <PageContent>
+      {/* Above the header (zIndex 1) while cards show: a card dragged up and
+          tilted draws over it instead of being cut by it. */}
+      <PageContent style={cards ? { zIndex: 2 } : undefined}>
         <View className="flex-1">
+          {cards && !isLoading && !(isError && !data) ? (
+            <ReviewSwipeDeck
+              projectId={projectId}
+              items={visible}
+              allows={(item, verdict) => reviewVerdictAllowed(item, verdict, cans)}
+              onDecide={sendVerdict}
+              onOpen={(item) => openItem(item.id)}
+              // No segment bar under the deck: only the home indicator.
+              bottomInset={Math.max(insets.bottom, 12)}
+            />
+          ) : (
           <ScrollView
             className="flex-1"
             contentContainerStyle={{ paddingBottom: contentInset }}
@@ -288,9 +358,11 @@ export function ReviewPage({
               </View>
             )}
           </ScrollView>
+          )}
 
           {/* Pinned bottom bar: the floating capsule, over a fade of
               the page — the same bar as the switcher sheet's. */}
+          {cards ? null : (
           <PinnedBar controlHeight={FLOATING_BAR_HEIGHT} background={pageBackground} className="justify-center px-4">
             <FloatingTabCapsule
               glass
@@ -304,6 +376,7 @@ export function ReviewPage({
               }}
             />
           </PinnedBar>
+          )}
         </View>
       </PageContent>
 

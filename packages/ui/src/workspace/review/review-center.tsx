@@ -64,6 +64,7 @@ import { selectRange, toggleId } from '../../internal/selection/selection';
 import type { SessionAsk, ReviewVerdict } from '@kortix/sdk';
 import {
   ArrowLeftIcon as ArrowLeft,
+  CardsIcon as Cards,
   ChatsIcon as Chats,
   CheckCircleIcon as CheckCircleSolid,
   CheckSquareIcon,
@@ -74,6 +75,7 @@ import {
   ShapesIcon as Shapes,
   ShieldCheckIcon as ShieldCheck,
   TrayIcon as Tray,
+  RowsIcon as Rows,
   WarningIcon,
   XIcon as X,
 } from '@phosphor-icons/react';
@@ -105,6 +107,7 @@ import {
   reviewApprovalDetails,
 } from './approval-modal';
 import { ClosePaneButton, type ReviewActions, ReviewDetail } from './review-detail';
+import { ReviewSwipeDeck } from './review-swipe-deck';
 import {
   ROW_MERGED_GLYPH,
   ROW_STATUS_GLYPH,
@@ -647,6 +650,31 @@ function useContainerWide(ref: React.RefObject<HTMLElement | null>, min: number)
   return wide;
 }
 
+export type ReviewView = 'list' | 'cards';
+const REVIEW_VIEW_KEY = 'kortix.review.view';
+
+/** The Needs you view, kept per browser. Storage may be absent or throw. */
+function useReviewView(fallback: ReviewView): [ReviewView, (next: ReviewView) => void] {
+  const [view, setView] = useState<ReviewView>(fallback);
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(REVIEW_VIEW_KEY);
+      if (saved === 'list' || saved === 'cards') setView(saved);
+    } catch {
+      // No storage: the fallback stands.
+    }
+  }, []);
+  const choose = useCallback((next: ReviewView) => {
+    setView(next);
+    try {
+      window.localStorage.setItem(REVIEW_VIEW_KEY, next);
+    } catch {
+      // No storage: the choice lasts this visit.
+    }
+  }, []);
+  return [view, choose];
+}
+
 export function ReviewCenter({
   initialItems,
   segment: segmentProp,
@@ -668,7 +696,13 @@ export function ReviewCenter({
   sessionAsks = [],
   onSelectAsk,
   selectedAskId,
+  defaultView = 'list',
 }: {
+  /**
+   * How Needs you opens: the list, or the swipe deck (one card at a time).
+   * The viewer's own choice, once made, is kept in this browser.
+   */
+  defaultView?: ReviewView;
   /**
    * The asks deck (questions and approvals agents wait on): in the empty
    * detail pane, or above the list on a narrow inbox. It stays mounted while
@@ -728,6 +762,7 @@ export function ReviewCenter({
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const tBulk = useTranslations('hardcodedUi.reviewBulk');
   const tSidebar = useTranslations('sidebar');
+  const tDeck = useTranslations('hardcodedUi.reviewDeck');
   const segments = useMemo(
     () => localizeUiCatalog(SEGMENTS, tI18nComplete, PRODUCT_CATALOG_TRANSLATION_KEYS),
     [tI18nComplete],
@@ -756,6 +791,9 @@ export function ReviewCenter({
   // a session's reviews + approvals sit together. Both operate on `sessionId`.
   const [sessionFilter, setSessionFilter] = useState<string | 'all'>('all');
   const [grouped, setGrouped] = useState(false);
+  const [view, setView] = useReviewView(defaultView);
+  // The deck shows Needs you only: Waiting and Done hold nothing to decide.
+  const cards = view === 'cards' && segment === 'needs_you';
   // The open review lives in the URL (`?id=<review item id>`), not in state,
   // so a refresh or a shared link lands on the same page.
   const search = useUiSearchParams();
@@ -1602,6 +1640,24 @@ export function ReviewCenter({
       </ul>
     );
 
+  const deckBody =
+    (isError || isLoading) && items.length === 0 ? (
+      listBody
+    ) : (
+      <ReviewSwipeDeck
+        items={visible}
+        allows={verdictAllowed}
+        paused={!!selected}
+        onOpen={(item) => setSelectedId(item.id)}
+        onDecide={(item, verdict) =>
+          actions.resolve(
+            item.id,
+            verdict === 'approve' ? 'approved' : verdict === 'reject' ? 'rejected' : 'dismissed',
+          )
+        }
+      />
+    );
+
   /** Nothing open: a quiet prompt to pick a row. */
   const paneEmpty = (
     <div className="flex min-h-full flex-1 items-center justify-center px-6 py-8">
@@ -1675,7 +1731,7 @@ export function ReviewCenter({
     paneEmpty
   );
   // Wide inbox, Needs you: the asks deck holds the empty pane.
-  const deckInPane = wide && segment === 'needs_you' && !!needsYouDeck;
+  const deckInPane = wide && segment === 'needs_you' && !!needsYouDeck && !cards;
 
   return (
     // Two panes in a named container: the inbox's own width picks the layout,
@@ -1684,8 +1740,14 @@ export function ReviewCenter({
     <div ref={rootRef} className="@container/inbox relative flex h-full min-h-0">
       <div
         className={cn(
-          'border-border min-h-0 w-full min-w-0 flex-col @3xl/inbox:flex @3xl/inbox:w-sm @3xl/inbox:shrink-0 @6xl/inbox:w-md @3xl/inbox:border-r',
-          selected ? 'hidden' : 'flex',
+          'border-border min-h-0 w-full min-w-0 flex-col',
+          // The deck takes the whole inbox: one card, centred, no pane beside it.
+          cards
+            ? selected ? 'hidden' : 'flex'
+            : cn(
+                '@3xl/inbox:flex @3xl/inbox:w-sm @3xl/inbox:shrink-0 @6xl/inbox:w-md @3xl/inbox:border-r',
+                selected ? 'hidden' : 'flex',
+              ),
         )}
       >
         {/* List header: which list on the left, how to narrow it on the right. */}
@@ -1708,6 +1770,21 @@ export function ReviewCenter({
           </Tabs>
 
           <div className="ml-auto flex shrink-0 items-center gap-0.5">
+            {segment === 'needs_you' ? (
+              <Hint label={cards ? tDeck('showList') : tDeck('showCards')}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={cards ? tDeck('showList') : tDeck('showCards')}
+                  data-testid="review-view-toggle"
+                  className="text-muted-foreground"
+                  onClick={() => setView(cards ? 'list' : 'cards')}
+                >
+                  {cards ? <Rows className="size-4" /> : <Cards className="size-4" />}
+                </Button>
+              </Hint>
+            ) : null}
             <Hint
               label={
                 <span className="flex items-center gap-1.5">
@@ -1887,14 +1964,17 @@ export function ReviewCenter({
           {/* Narrow inbox: no detail pane beside the list, so the deck sits
               above it. It mounts in one place only, and never while an item
               hides the list: its keys answer asks. */}
-          {segment === 'needs_you' && needsYouDeck && !wide ? (
+          {segment === 'needs_you' && needsYouDeck && (!wide || cards) ? (
             // `peer`: when the deck draws nothing (its Undo window after the
             // last card), the list's empty state below shows instead.
             <div className="peer px-1 pt-1 pb-3 empty:hidden">
               {needsYouDeck({ paused: !!selected })}
             </div>
           ) : null}
-          {wide ? visibleAsks.map((ask) => (
+          {cards ? (
+            deckBody
+          ) : null}
+          {wide && !cards ? visibleAsks.map((ask) => (
             <Button
               key={ask.id}
               data-testid="review-ask-row"
@@ -1918,8 +1998,8 @@ export function ReviewCenter({
               </span>
             </Button>
           )) : null}
-          {listBody}
-          {visible.length > 0 && loadMore ? <div className="pt-2">{loadMoreButton}</div> : null}
+          {cards ? null : listBody}
+          {visible.length > 0 && loadMore && !cards ? <div className="pt-2">{loadMoreButton}</div> : null}
         </div>
 
         {selectMode && segment === 'needs_you' ? (
@@ -1954,7 +2034,8 @@ export function ReviewCenter({
 
       <div
         className={cn(
-          'min-h-0 min-w-0 flex-1 flex-col @3xl/inbox:flex',
+          'min-h-0 min-w-0 flex-1 flex-col',
+          !cards && '@3xl/inbox:flex',
           selected ? 'flex' : 'hidden',
         )}
       >

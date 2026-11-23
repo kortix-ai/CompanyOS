@@ -21574,6 +21574,31 @@
     "reviewPane": {
       "emptyTitle": "选择一个项目",
       "emptyDescription": "详情会在这里打开。按 J 和 K 在列表中移动。"
+    },
+    "reviewDeck": {
+      "label": "审阅卡片",
+      "remaining": "{count, plural, other {剩余 # 张}}",
+      "merge": "合并",
+      "close": "关闭",
+      "approve": "批准",
+      "deny": "拒绝",
+      "dismiss": "忽略",
+      "yes": "是",
+      "no": "否",
+      "skip": "跳过",
+      "open": "打开",
+      "undo": "撤销",
+      "staged": "{verdict}：{title}",
+      "needsChoice": "打开以选择答案",
+      "noVerdict": "你无法决定此项。打开查看详情。",
+      "emptyTitle": "全部处理完毕",
+      "emptyDescription": "目前没有需要你处理的内容。",
+      "highRisk": "高风险",
+      "files": "{count, plural, other {# 个文件}}",
+      "conflicts": "{count, plural, other {# 处冲突}}",
+      "items": "{count, plural, other {# 项}}",
+      "showCards": "以卡片显示",
+      "showList": "以列表显示"
     }
   },
   "commandPalette": {

@@ -53,7 +53,8 @@ export function AuthLegalFooter({ centered = false }: { centered?: boolean } = {
     <footer
       className={cn(
         'text-muted-foreground mx-auto w-full max-w-[380px] pb-8 text-xs text-balance',
-        centered && 'text-center',
+        // 12px, one step under the 13px floor: the product owner asked for a quieter legal line on /auth.
+        centered && 'text-center text-[0.75rem]', // audit:allow owner-requested 12px legal line
       )}
     >
       {t.rich('byContinuingYouAgree', {
@@ -116,7 +117,15 @@ export function AuthFrame({
         <main className="flex flex-1 flex-col items-center justify-center py-24">
           <div className="w-full max-w-[380px]">{children}</div>
         </main>
-        {footerVariant === 'none' ? null : <AuthLegalFooter centered={centered} />}
+        {footerVariant === 'none' ? null : centered ? (
+          // Out of flow, so the form centres on the full height, level with
+          // the story pane's headline. main's bottom padding clears it.
+          <div className="absolute inset-x-0 bottom-0 px-6">
+            <AuthLegalFooter centered />
+          </div>
+        ) : (
+          <AuthLegalFooter />
+        )}
       </div>
       {/* The art stays put while a long form scrolls beside it. */}
       {art ? <AuthArt className="sticky top-0 hidden h-svh w-1/2 shrink-0 lg:block" /> : null}

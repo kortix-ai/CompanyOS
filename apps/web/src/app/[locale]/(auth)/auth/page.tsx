@@ -18,7 +18,6 @@
 import { useTranslations } from '@/i18n/use-translations';
 import { EyeIcon as Eye, EyeSlashIcon as EyeOff } from '@phosphor-icons/react';
 import { m } from 'motion/react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { type FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react';
@@ -189,13 +188,14 @@ function isSsoIdentityOf(
  */
 function KortixTile() {
   return (
-    // next/image serves a 48px rendition of the 1000px source.
-    <Image
-      src="/usecases/logos/kortix.png"
+    // A 96px copy (2x for a 48px tile) of the 1000px use-case cover.
+    // eslint-disable-next-line @next/next/no-img-element -- static 6KB tile; next/image pulls the Next runtime into this page's tests
+    <img
+      src="/usecases/logos/kortix-96.png"
       alt=""
       width={48}
       height={48}
-      priority
+      decoding="async"
       className="size-12 rounded-md object-cover"
     />
   );
@@ -302,7 +302,6 @@ function AuthCardForm({
   const [resendIn, setResendIn] = useState(0);
   const emailRef = useRef<HTMLInputElement>(null);
 
-  // Gentle two-part entrance per step: header first, body 60ms behind.
   // The form column holds still: the story pane beside it carries the motion,
   // and a sign-in form is the task, not a show. Each step paints in place.
   const rise = (_delay = 0) => ({ initial: false as const });
@@ -1128,7 +1127,6 @@ function AuthCardForm({
         <StepHeader
           align="center"
           title={t('welcome', { name: brandName })}
-          description={t('automaticAccount')}
           mark={branded ? undefined : <KortixTile />}
         />
       </m.div>

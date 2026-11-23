@@ -138,7 +138,7 @@ function Headline({ text, still }: { text: string; still: boolean }) {
  */
 function LogoTile({ logo }: { logo: (typeof WORKS_WITH)[number] }) {
   return (
-    <li className="bg-background flex h-14 shrink-0 items-center gap-2.5 rounded-md px-5">
+    <li className="bg-card flex h-14 shrink-0 items-center gap-2.5 rounded-md px-5">
       {FULL_COLOR_LOGOS.has(logo.slug) ? (
         // eslint-disable-next-line @next/next/no-img-element -- a 20px static SVG; next/image adds nothing here
         <img
@@ -146,6 +146,7 @@ function LogoTile({ logo }: { logo: (typeof WORKS_WITH)[number] }) {
           alt=""
           aria-hidden
           decoding="async"
+          loading="lazy"
           className="size-5 shrink-0 object-contain"
         />
       ) : (
@@ -177,7 +178,8 @@ export function AuthStoryPane({ className }: { className?: string }) {
   const hydrated = useSyncExternalStore(noop, () => true, () => false);
   const [index, setIndex] = useState(0);
   useEffect(() => {
-    if (reduceMotion) return;
+    // A window without matchMedia (a test DOM) holds the first line.
+    if (reduceMotion || typeof window.matchMedia !== 'function') return;
     // The pane is display:none below lg; rotate only while it shows.
     const wide = window.matchMedia(WIDE);
     let timer: ReturnType<typeof setInterval> | undefined;
@@ -230,7 +232,7 @@ export function AuthStoryPane({ className }: { className?: string }) {
         </div>
       </div>
 
-      <div className="absolute inset-x-0 bottom-10">
+      <div className="absolute inset-x-0 bottom-10 [@media(max-height:35rem)]:hidden">
         <p className="text-muted-foreground mb-4 text-center text-sm">{t('worksWith')}</p>
         {/* audit:allow --duration is the loop period of the marquee keyframes, not a transition. */}
         <div

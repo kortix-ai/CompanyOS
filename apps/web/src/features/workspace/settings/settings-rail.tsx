@@ -68,7 +68,7 @@ function RailNav({
   const [query, setQuery] = useState('');
   // `useIsMobile` reads false on a cold phone open, so the desktop rail can
   // mount for a frame there. The viewport at mount decides focus instead
-  // (768px: `MOBILE_BREAKPOINT` in `@kortix/ui/hooks/use-mobile`).
+  // (768px: `MOBILE_BREAKPOINT` in `packages/ui/src/hooks/use-mobile.ts`).
   const [desktopAtMount] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches,
   );

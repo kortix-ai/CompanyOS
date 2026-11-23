@@ -823,7 +823,7 @@
   },
   "src/connectors/manifest-crud.ts": {
     "kortix-api/projects-surface": {
-      "count": 3
+      "count": 2
     }
   },
   "src/connectors/manifest-mutation.ts": {

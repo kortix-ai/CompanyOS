@@ -52,6 +52,20 @@ function header(headers: unknown, name: string): string {
   return isPlainRecord(hit) && typeof hit.value === 'string' ? hit.value : '';
 }
 
+function draftPreview(message: Record<string, unknown>, resolvedFrom: string): Record<string, unknown> {
+  const headers = isPlainRecord(message.payload) ? message.payload.headers : null;
+  const attachments = Array.isArray(message.attachmentList) ? message.attachmentList : [];
+  return {
+    from: resolvedFrom,
+    to: header(headers, 'to'),
+    cc: header(headers, 'cc'),
+    bcc: header(headers, 'bcc'),
+    subject: header(headers, 'subject'),
+    body: typeof message.messageText === 'string' ? message.messageText : '',
+    attachments: attachments.flatMap((a) => (isPlainRecord(a) && typeof a.filename === 'string' && a.filename ? [a.filename] : [])),
+  };
+}
+
 /**
  * `GMAIL_SEND_DRAFT {draft_id}`: one `GMAIL_GET_DRAFT {draft_id, format: full}`
  * read. Shape verified against a live mailbox on 2026-10-20:
@@ -66,17 +80,7 @@ async function gmailSendDraft(ctx: ApprovalEnricherContext): Promise<Record<stri
   const draft = await composioRead(ctx, 'GMAIL_GET_DRAFT', { draft_id: draftId, format: 'full' });
   const message = draft?.id === draftId && isPlainRecord(draft.message) ? draft.message : null;
   if (!message) return null;
-  const headers = isPlainRecord(message.payload) ? message.payload.headers : null;
-  const attachments = Array.isArray(message.attachmentList) ? message.attachmentList : [];
-  return {
-    from: header(headers, 'from') || (await gmailSender(ctx)) || '',
-    to: header(headers, 'to'),
-    cc: header(headers, 'cc'),
-    bcc: header(headers, 'bcc'),
-    subject: header(headers, 'subject'),
-    body: typeof message.messageText === 'string' ? message.messageText : '',
-    attachments: attachments.flatMap((a) => (isPlainRecord(a) && typeof a.filename === 'string' && a.filename ? [a.filename] : [])),
-  };
+  return draftPreview(message, header(isPlainRecord(message.payload) ? message.payload.headers : null, 'from') || (await gmailSender(ctx)) || '');
 }
 
 /**
@@ -123,18 +127,9 @@ async function kortixGmailSendDraft(ctx: ApprovalEnricherContext): Promise<Recor
   const draft = await mcpRead(ctx, 'get_draft', { draft_id: draftId, format: 'full' });
   const message = draft?.id === draftId && isPlainRecord(draft.message) ? draft.message : null;
   if (!message) return null;
-  const headers = isPlainRecord(message.payload) ? message.payload.headers : null;
-  const attachments = Array.isArray(message.attachmentList) ? message.attachmentList : [];
-  const profile = header(headers, 'from') ? null : await mcpRead(ctx, 'get_profile', {});
-  return {
-    from: header(headers, 'from') || (typeof profile?.emailAddress === 'string' ? profile.emailAddress : ''),
-    to: header(headers, 'to'),
-    cc: header(headers, 'cc'),
-    bcc: header(headers, 'bcc'),
-    subject: header(headers, 'subject'),
-    body: typeof message.messageText === 'string' ? message.messageText : '',
-    attachments: attachments.flatMap((a) => (isPlainRecord(a) && typeof a.filename === 'string' && a.filename ? [a.filename] : [])),
-  };
+  const from = header(isPlainRecord(message.payload) ? message.payload.headers : null, 'from');
+  const profile = from ? null : await mcpRead(ctx, 'get_profile', {});
+  return draftPreview(message, from || (typeof profile?.emailAddress === 'string' ? profile.emailAddress : ''));
 }
 
 /** Kortix Gmail `send_email`, `reply_to_thread`, `forward_message`: the sender the arguments do not show. */

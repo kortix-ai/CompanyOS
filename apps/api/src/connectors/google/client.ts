@@ -132,6 +132,7 @@ export function createGoogleClient(opts: {
     }
     const init: RequestInit = { method: request.method ?? 'GET', headers, body, signal: opts.signal };
     for (let attempt = 0; ; attempt++) {
+      opts.signal?.throwIfAborted();
       const response = await fetchImpl(url.href, init);
       if (response.ok) return response;
       if (attempt < BACKOFF_MS.length && (await isRetryable(response))) {

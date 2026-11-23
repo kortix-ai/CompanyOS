@@ -606,13 +606,6 @@ export function ProjectAdminDashboard({
                       active === 'apps' && HOST_PANE_CLASS,
                     )}
                   >
-                    {/* The repository browser has no page header of its own, only
-                        its toolbar: the settings page header sits above it. */}
-                    {active === 'repo' && !content ? (
-                      <div className={cn(SETTINGS_PAGE_COLUMN_CLASS, 'shrink-0 pb-6')}>
-                        <SettingsPageHeader title={activeRow.label} />
-                      </div>
-                    ) : null}
                     {content ?? <ProjectPage projectId={projectId} />}
                   </div>
                 ) : (

@@ -50,7 +50,7 @@ FOUND=0
 EXCLUDE_RE='(globals\.css|packages/ui/src/styles/|\.test\.|\.stories\.|\.generated\.|packages/ui/src/i18n/en\.ts|/browser-noise/|/lib/blog-posts|node_modules|\.next)'
 
 # Art layer (D4d): raw hex, gradients and WebGL live here and only here.
-ART_RE='(/paper-wallpaper-shaders\.|/wallpaper-shaders\.|/wallpaper-background\.|/shader-wallpaper\.|/shader-safe\.|/pixel-kortix-mark\.|/dot-matrix/|/kortix-hyper-logo\.|/prismatic-burst\.|/animated-bg\.|/dotmatrix-loader\.|/kortix-logo\.tsx|/components/brand/brand-logos\.)'
+ART_RE='(/paper-wallpaper-shaders\.|/wallpaper-gradients\.|/gradient-wallpaper|/wallpaper-shaders\.|/wallpaper-background\.|/shader-wallpaper\.|/shader-safe\.|/pixel-kortix-mark\.|/dot-matrix/|/kortix-hyper-logo\.|/prismatic-burst\.|/animated-bg\.|/dotmatrix-loader\.|/kortix-logo\.tsx|/components/brand/brand-logos\.)'
 
 # Third-party logo files: provider colors are the escape hatch. House glyphs in the
 # same folder (kortix, home, download, solid-check-icon, sidebar-toggle, plus, close,

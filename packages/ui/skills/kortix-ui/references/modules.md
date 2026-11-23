@@ -37,6 +37,8 @@ Names: `Close`, `Copy`, `SidebarGlyph`, `SolidRightArrow`
 ## `@kortix/ui/theme`
 
 Source: `src/theme/index.ts`. White-label theming: tokens to CSS, a themed subtree, the session wallpapers.
+The colored wallpapers are data (`src/theme/wallpaper-gradients.ts`): a `GradientConfig` is a pattern, a finish
+and a palette; `normalizeCustomWallpaper` and `normalizePresetOverrides` clean a saved setting.
 
 Props: `ThemeScope`: `theme`, `className`, any `div` prop. `themeToCss(theme, selector?)`. Every key: `theming.md`.
 
@@ -52,7 +54,7 @@ export function Preview({ children }: { children: ReactNode }) {
 }
 ```
 
-Names: `THEME_COLOR_VARS`, `themeToCss`, `themeToCssVars`, `KortixTheme`, `ThemeColor`, `ThemeColors`, `ThemeCssVars`, `ThemeDurationStep`, `ThemeEasing`, `ThemeShadowStep`, `ThemeTextStep`, `ThemeScope`, `ThemeScopeProps`, `DEFAULT_WALLPAPER_ID`, `WALLPAPERS`, `getWallpaperById`, `Wallpaper`
+Names: `THEME_COLOR_VARS`, `themeToCss`, `themeToCssVars`, `KortixTheme`, `ThemeColor`, `ThemeColors`, `ThemeCssVars`, `ThemeDurationStep`, `ThemeEasing`, `ThemeShadowStep`, `ThemeTextStep`, `ThemeScope`, `ThemeScopeProps`, `DEFAULT_WALLPAPER_ID`, `WALLPAPERS`, `getWallpaperById`, `Wallpaper`, `getSelectableWallpaper`, `PickerWallpaper`, `PickerWallpaperId`, `GRADIENT_PRESETS`, `GRADIENT_PATTERNS`, `GRADIENT_FINISHES`, `GRADIENT_MIN_COLORS`, `GRADIENT_MAX_COLORS`, `GradientConfig`, `GradientPattern`, `GradientFinish`, `GradientWallpaperId`, `gradientColors`, `CUSTOM_PALETTES`, `CUSTOM_COLOR_PRESETS`, `DEFAULT_CUSTOM_WALLPAPER`, `CustomWallpaperConfig`, `customGradientConfig`, `normalizeCustomWallpaper`, `nextCustomColor`, `randomCustomColors`, `randomCustomWallpaper`, `PresetOverride`, `PresetOverrides`, `normalizePresetOverrides`, `presetWithOverride`, `DEFAULT_WALLPAPER_OPACITY`, `OPACITY_LIMITS`
 
 ## `@kortix/ui/i18n`
 

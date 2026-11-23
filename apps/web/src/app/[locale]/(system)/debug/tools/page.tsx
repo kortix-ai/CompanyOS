@@ -11,10 +11,12 @@ import {
 } from '@kortix/ui/session-panel';
 import { ToolParts } from '@kortix/ui/session/panel/easy/detail-view';
 import { FileViewer } from '@kortix/ui/file-viewer';
+// Registers the tool renderers: without it every row renders the generic fallback card.
+import '@kortix/ui/session/tool/tools/register';
 import { ToolActivateContext, ToolPartRenderer } from '@kortix/ui/session';
 import { useKortixComputerStore } from '@kortix/ui/internal/stores/kortix-computer-store';
 import { useEffect, useState } from 'react';
-import { sessionLogOfV1Rows, type ToolCallBlock } from '@kortix/sdk';
+import { sessionLogOfV1Rows, sessionLogShowGroupCall, sessionLogTurnSegments, type ToolCallBlock } from '@kortix/sdk';
 import { useSessionLogThread, useSessionStateStore } from '@kortix/sdk/react';
 
 /**
@@ -360,8 +362,20 @@ const TRIGGERS_GET_OUTPUT = JSON.stringify(
   2,
 );
 
-type Row = { label: string; node: React.ReactNode };
+/** `group`: adjacent `show` calls, drawn as the transcript draws them (`sessionLogTurnSegments`); `node` is the last. */
+type Row = { label: string; node: React.ReactNode; group?: unknown[] };
 type Group = { title: string; rows: Row[] };
+
+const SHOW_RETRY_URL = 'https://example.test/workspaces/synthetic/artifacts/synthetic';
+const SHOW_RETRY = part('show', done({ action: 'show', type: 'url', url: SHOW_RETRY_URL, title: 'Automation use-case catalog' }, ''));
+const SHOW_FAILED = part('show', errored({ action: 'show', path: '/workspace/missing.png', title: 'Missing chart' }, "'type' is required."));
+
+/** A row's calls as the transcript draws them: a failed show is no segment, a run of shows is one card. */
+function showRowCalls(group: unknown[]): ToolCallBlock[] {
+  return sessionLogTurnSegments(group.map(blockOf)).flatMap((segment) =>
+    segment.kind === 'show-group' ? [sessionLogShowGroupCall(segment.blocks)] : segment.kind === 'standalone' ? [segment.block] : [],
+  );
+}
 
 const GROUPS: Group[] = [
   {
@@ -726,6 +740,25 @@ const GROUPS: Group[] = [
             '',
           ),
         ),
+      },
+      {
+        label: 'show (failed call, then its retry)',
+        node: SHOW_RETRY,
+        group: [
+          part(
+            'show',
+            errored(
+              { action: 'show', url: SHOW_RETRY_URL, title: 'Automation use-case catalog' },
+              "'type' is required. Use one of: file, image, url, text, error, video, audio, code, markdown, pdf, html, csv, xlsx, docx, pptx. A single item names its own type (type='url' for a link); several items go in 'items'.",
+            ),
+          ),
+          SHOW_RETRY,
+        ],
+      },
+      {
+        label: 'show (every call failed: nothing is drawn)',
+        node: SHOW_FAILED,
+        group: [SHOW_FAILED],
       },
       {
         label: 'show (carousel pills)',
@@ -1918,11 +1951,9 @@ export default function DebugToolsPage() {
                       {row.label}
                     </div>
                     <div className="border-border/40 bg-card/30 rounded-md border px-4 py-3">
-                      <ToolPartRenderer
-                        call={blockOf(row.node)}
-                        sessionId="debug"
-                        disableNavigation
-                      />
+                      {(row.group ? showRowCalls(row.group) : [blockOf(row.node)]).map((call) => (
+                        <ToolPartRenderer key={call.id} call={call} sessionId="debug" disableNavigation />
+                      ))}
                     </div>
                   </div>
                 ))}

@@ -35,15 +35,16 @@ export function ProjectPageHeader({
   children?: React.ReactNode;
 }) {
   const sidebar = useOptionalSidebar();
-  // Inside Workspace settings (Repository) the settings page header above is
-  // the page's h1 and names the page: this row is only the browser's toolbar.
-  const inSettings = useSettingsPageTitle() !== null;
+  // Inside Workspace settings (Repository) this row is the page header: its
+  // h1 reads the settings rail word, so no second heading sits above it, and
+  // the settings title bar owns the one sidebar opener.
+  const settingsTitle = useSettingsPageTitle();
   return (
     <div className={PROJECT_PAGE_HEADER_CLASS} data-sidebar-collapsed={sidebar?.state === 'collapsed' || undefined}>
-      <SidebarToggle />
+      {settingsTitle === null ? <SidebarToggle /> : null}
       <div className="kx-titlebar-tabs flex h-full min-w-0 flex-1 items-center gap-1.5">
         {breadcrumb}
-        {inSettings ? null : <h1 className="text-foreground truncate text-sm font-medium">{title}</h1>}
+        <h1 className="text-foreground truncate text-sm font-medium">{settingsTitle ?? title}</h1>
         {titleAccessory}
       </div>
       {children ? <div className="flex shrink-0 items-center gap-2">{children}</div> : null}

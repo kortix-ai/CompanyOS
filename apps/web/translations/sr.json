@@ -25186,7 +25186,7 @@
     "folderActions": "Радње за {name}",
     "deleteFolder": "Избриши фасциклу",
     "deleteFolderTitle": "Избрисати „{name}“?",
-    "deleteFolderHint": "Артефакти ће се вратити у Артефакте. Датотеке и везе остају доступне.",
+    "deleteFolderHint": "Подфасцикле и артефакти прелазе један ниво више. Датотеке и везе остају доступне.",
     "folderDeleted": "Фасцикла је избрисана",
     "folderDeleteFailed": "Није могуће избрисати фасциклу. Покушајте поново.",
     "folderNavigation": "Фасцикле артефаката",
@@ -25195,6 +25195,7 @@
     "moveToFolder": "Премести у фасциклу",
     "movedToFolder": "Premešteno u {name}",
     "emptyUnfiled": "Nema artefakata van fascikli",
+    "emptyFolder": "Нема артефаката у овој фасцикли",
     "folderRoot": "Без фасцикле",
     "title": "Артефакти",
     "type": {

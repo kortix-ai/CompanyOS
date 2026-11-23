@@ -1944,7 +1944,9 @@ permission can edit or delete a folder. Folder membership grants no access.
 
 Pass `folder_id` when publishing, sharing, or updating an artifact. Pass `null`
 to move it to the root. `listArtifacts(projectId, { folder_id: 'root' })` lists
-unfiled artifacts; omit the filter to search all folders. Deleting a folder
-returns its artifacts to the root. Artifact IDs, Files paths, and links stay
+unfiled artifacts; omit the filter to search all folders. Folders nest: pass
+`parent_folder_id` to create a folder inside another or to move it (`null`:
+the root); a move into its own subtree returns `409`. Deleting a folder moves
+its subfolders and artifacts up one level. Artifact IDs, Files paths, and links stay
 unchanged. React consumers use `useArtifactFolders` and
 `useArtifactFolderMutations` from `@kortix/sdk/react`.

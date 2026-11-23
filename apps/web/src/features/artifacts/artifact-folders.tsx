@@ -10,6 +10,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@kortix/ui/dropdown-menu';
 import { EntityAvatar } from '@kortix/ui/entity-avatar';
@@ -33,55 +37,68 @@ import { DotsThreeIcon, FolderIcon, PencilSimpleIcon, TrashIcon } from '@phospho
 import { useRef, useState } from 'react';
 
 import { isArtifactDrag, readArtifactDrag } from './artifact-card';
+import { FolderTreeRadioItems, ROOT_FOLDER, folderSubtree } from './artifact-folder-tree';
+
+/** The drag type of a folder tile. Its id rides in `draggedFolder`: a dragover cannot read the payload. */
+const FOLDER_DRAG_TYPE = 'application/x-kortix-artifact-folder';
+/** The folder being dragged, and where it may not land (itself and its subfolders). */
+let draggedFolder: { id: string; parentId: string | null; blocked: Set<string> } | null = null;
+
+/** A dragged folder may land on `target` (null: the root): not inside itself, not where it already is. */
+function folderDropAllowed(event: React.DragEvent, target: string | null) {
+  if (!event.dataTransfer.types.includes(FOLDER_DRAG_TYPE) || !draggedFolder) return false;
+  if (target && draggedFolder.blocked.has(target)) return false;
+  return draggedFolder.parentId !== target;
+}
 
 /**
- * A drop target for a dragged artifact card: `folderId` null is the root. It
- * accepts only a card (not files or text), shows `over` while one hovers, and
- * moves the artifact on drop unless it already sits there.
+ * A drop target for a dragged artifact card or folder tile: `folderId` null is
+ * the root. It accepts only those two (not files or text), and a folder only
+ * where it may go. It shows `over` while one hovers and moves it on drop.
  */
 export function useArtifactDropTarget(projectId: string, folderId: string | null, name: string) {
   const t = useTranslations('artifacts');
   const { update } = useArtifactMutations(projectId);
+  const folderMutations = useArtifactFolderMutations(projectId);
   const [over, setOver] = useState(false);
   // dragenter/dragleave fire for every child: count them, so crossing a child does not flicker.
   const depth = useRef(0);
-  const reset = () => {
-    depth.current = 0;
-    setOver(false);
-  };
+  const accepts = (event: React.DragEvent) => isArtifactDrag(event) || folderDropAllowed(event, folderId);
+  const toast = { onSuccess: () => successToast(t('movedToFolder', { name })), onError: () => errorToast(t('moveFailed')) };
   return {
     over,
-    pending: update.isPending,
+    pending: update.isPending || folderMutations.update.isPending,
     props: {
       onDragEnter: (event: React.DragEvent) => {
-        if (!isArtifactDrag(event)) return;
+        if (!accepts(event)) return;
         event.preventDefault();
         depth.current += 1;
         setOver(true);
       },
       onDragOver: (event: React.DragEvent) => {
-        if (!isArtifactDrag(event)) return;
+        if (!accepts(event)) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = 'move';
       },
       onDragLeave: (event: React.DragEvent) => {
-        if (!isArtifactDrag(event)) return;
+        if (!accepts(event)) return;
         depth.current = Math.max(0, depth.current - 1);
         if (depth.current === 0) setOver(false);
       },
       onDrop: (event: React.DragEvent) => {
-        if (!isArtifactDrag(event)) return;
+        if (!accepts(event)) return;
         event.preventDefault();
-        reset();
+        depth.current = 0;
+        setOver(false);
+        if (folderDropAllowed(event, folderId)) {
+          const moving = draggedFolder!.id;
+          draggedFolder = null;
+          folderMutations.update.mutate({ folderId: moving, parent_folder_id: folderId }, toast);
+          return;
+        }
         const drag = readArtifactDrag(event);
         if (!drag || drag.folderId === folderId) return;
-        update.mutate(
-          { artifactId: drag.artifactId, folder_id: folderId },
-          {
-            onSuccess: () => successToast(t('movedToFolder', { name })),
-            onError: () => errorToast(t('moveFailed')),
-          },
-        );
+        update.mutate({ artifactId: drag.artifactId, folder_id: folderId }, toast);
       },
     },
   };
@@ -90,10 +107,13 @@ export function useArtifactDropTarget(projectId: string, folderId: string | null
 export function ArtifactFolderEditor({
   projectId,
   folder,
+  parentId = null,
   onClose,
 }: {
   projectId: string;
   folder?: ArtifactFolder;
+  /** A new folder is created inside this one (null: the gallery root). */
+  parentId?: string | null;
   onClose: () => void;
 }) {
   const t = useTranslations('artifacts');
@@ -117,7 +137,7 @@ export function ArtifactFolderEditor({
     };
     try {
       if (folder) await mutations.update.mutateAsync({ folderId: folder.folder_id, ...input });
-      else await mutations.create.mutateAsync(input);
+      else await mutations.create.mutateAsync({ ...input, parent_folder_id: parentId });
       successToast(t(folder ? 'folderSaved' : 'folderCreated'));
       onClose();
     } catch {
@@ -179,20 +199,40 @@ export function ArtifactFolderEditor({
 
 export function ArtifactFolderTile({
   folder,
+  folders,
   projectId,
   onOpen,
 }: {
   folder: ArtifactFolder;
+  /** Every folder: what a drag of this one may not land in. */
+  folders: ArtifactFolder[];
   projectId: string;
   onOpen: () => void;
 }) {
   const drop = useArtifactDropTarget(projectId, folder.folder_id, folder.name);
+  const [dragging, setDragging] = useState(false);
   return (
     <div
       {...drop.props}
+      // Drag a folder onto another folder (or a crumb) to nest it there.
+      draggable={folder.can_manage}
+      onDragStart={(event) => {
+        event.dataTransfer.setData(FOLDER_DRAG_TYPE, folder.folder_id);
+        event.dataTransfer.effectAllowed = 'move';
+        draggedFolder = {
+          id: folder.folder_id,
+          parentId: folder.parent_folder_id ?? null,
+          blocked: folderSubtree(folders, folder.folder_id),
+        };
+        setDragging(true);
+      }}
+      onDragEnd={() => {
+        draggedFolder = null;
+        setDragging(false);
+      }}
       data-drop-over={drop.over || undefined}
       aria-busy={drop.pending || undefined}
-      className="bg-secondary/50 data-[drop-over]:bg-secondary data-[drop-over]:ring-ring flex min-w-0 items-center gap-2 rounded-md px-3 py-2 transition-colors data-[drop-over]:ring-2"
+      className={`bg-secondary/50 data-[drop-over]:bg-secondary data-[drop-over]:ring-ring flex min-w-0 items-center gap-2 rounded-md px-3 py-2 transition-[background-color,opacity] data-[drop-over]:ring-2 ${dragging ? 'opacity-40' : ''}`}
     >
       <button
         type="button"
@@ -211,15 +251,25 @@ export function ArtifactFolderTile({
         </span>
         {drop.pending ? <Loading className="text-muted-foreground ms-auto size-3.5 shrink-0" /> : null}
       </button>
-      <ArtifactFolderActions folder={folder} projectId={projectId} />
+      <ArtifactFolderActions folder={folder} folders={folders} projectId={projectId} />
     </div>
   );
 }
 
-/** The "Artifacts" crumb inside a folder: it opens the root, and a card dropped on it leaves the folder. */
-export function ArtifactRootCrumb({ projectId, onOpen }: { projectId: string; onOpen: () => void }) {
-  const t = useTranslations('artifacts');
-  const drop = useArtifactDropTarget(projectId, null, t('title'));
+/** A crumb above a folder's contents: it opens that level, and a card or folder dropped on it moves there. */
+export function ArtifactFolderCrumb({
+  projectId,
+  folderId,
+  name,
+  onOpen,
+}: {
+  projectId: string;
+  /** null: the gallery root. */
+  folderId: string | null;
+  name: string;
+  onOpen: () => void;
+}) {
+  const drop = useArtifactDropTarget(projectId, folderId, name);
   return (
     <Button
       {...drop.props}
@@ -228,15 +278,23 @@ export function ArtifactRootCrumb({ projectId, onOpen }: { projectId: string; on
       onClick={onOpen}
       data-drop-over={drop.over || undefined}
       aria-busy={drop.pending || undefined}
-      className="data-[drop-over]:bg-secondary data-[drop-over]:ring-ring data-[drop-over]:ring-2"
+      className="data-[drop-over]:bg-secondary data-[drop-over]:ring-ring max-w-48 min-w-0 shrink data-[drop-over]:ring-2"
     >
       {drop.pending ? <Loading className="size-3.5" /> : null}
-      {t('title')}
+      <span className="truncate" title={name}>{name}</span>
     </Button>
   );
 }
 
-export function ArtifactFolderActions({ folder, projectId }: { folder: ArtifactFolder; projectId: string }) {
+export function ArtifactFolderActions({
+  folder,
+  folders,
+  projectId,
+}: {
+  folder: ArtifactFolder;
+  folders: ArtifactFolder[];
+  projectId: string;
+}) {
   const t = useTranslations('artifacts');
   const mutations = useArtifactFolderMutations(projectId);
   const [editing, setEditing] = useState(false);
@@ -258,6 +316,29 @@ export function ArtifactFolderActions({ folder, projectId }: { folder: ArtifactF
               <PencilSimpleIcon />
               {t('editFolder')}
             </DropdownMenuItem>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <FolderIcon /> {t('moveToFolder')}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="max-h-[var(--radix-dropdown-menu-content-available-height)] max-w-64 overflow-y-auto">
+                <FolderTreeRadioItems
+                  folders={folders}
+                  value={folder.parent_folder_id ?? ROOT_FOLDER}
+                  exclude={folderSubtree(folders, folder.folder_id)}
+                  onValueChange={(parent) => {
+                    const name = parent ? folders.find((f) => f.folder_id === parent)?.name : t('title');
+                    mutations.update.mutate(
+                      { folderId: folder.folder_id, parent_folder_id: parent },
+                      {
+                        onSuccess: () => successToast(t('movedToFolder', { name: name ?? t('title') })),
+                        onError: () => errorToast(t('moveFailed')),
+                      },
+                    );
+                  }}
+                />
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => setRemoving(true)}>
               <TrashIcon />
               {t('deleteFolder')}

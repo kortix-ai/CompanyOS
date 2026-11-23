@@ -25186,7 +25186,7 @@
     "folderActions": "Acciones para {name}",
     "deleteFolder": "Eliminar carpeta",
     "deleteFolderTitle": "¿Eliminar «{name}»?",
-    "deleteFolderHint": "Los artefactos volverán a Artefactos. Los archivos y enlaces seguirán disponibles.",
+    "deleteFolderHint": "Sus subcarpetas y artefactos suben un nivel. Los archivos y enlaces siguen disponibles.",
     "folderDeleted": "Carpeta eliminada",
     "folderDeleteFailed": "No se pudo eliminar la carpeta. Inténtalo de nuevo.",
     "folderNavigation": "Carpetas de artefactos",
@@ -25195,6 +25195,7 @@
     "moveToFolder": "Mover a carpeta",
     "movedToFolder": "Movido a {name}",
     "emptyUnfiled": "No hay artefactos sin carpeta",
+    "emptyFolder": "No hay artefactos en esta carpeta",
     "folderRoot": "Sin carpeta",
     "title": "Artefactos",
     "type": {

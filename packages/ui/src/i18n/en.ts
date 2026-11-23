@@ -8554,7 +8554,7 @@ const catalog = {
     "folderActions": "Actions for {name}",
     "deleteFolder": "Delete folder",
     "deleteFolderTitle": "Delete “{name}”?",
-    "deleteFolderHint": "The artifacts in this folder will return to Artifacts. Their files and links will stay available.",
+    "deleteFolderHint": "Its subfolders and artifacts move up one level. Their files and links stay available.",
     "folderDeleted": "Folder deleted",
     "folderDeleteFailed": "Could not delete the folder. Try again.",
     "folderNavigation": "Artifact folders",
@@ -8563,6 +8563,7 @@ const catalog = {
     "moveToFolder": "Move to folder",
     "movedToFolder": "Moved to {name}",
     "emptyUnfiled": "No unfiled artifacts",
+    "emptyFolder": "No artifacts in this folder",
     "folderRoot": "No folder",
     "title": "Artifacts",
     "type": {

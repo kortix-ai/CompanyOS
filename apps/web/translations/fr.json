@@ -25186,7 +25186,7 @@
     "folderActions": "Actions pour {name}",
     "deleteFolder": "Supprimer le dossier",
     "deleteFolderTitle": "Supprimer « {name} » ?",
-    "deleteFolderHint": "Les artefacts retourneront dans Artefacts. Les fichiers et les liens resteront disponibles.",
+    "deleteFolderHint": "Ses sous-dossiers et artefacts remontent d’un niveau. Les fichiers et les liens restent disponibles.",
     "folderDeleted": "Dossier supprimé",
     "folderDeleteFailed": "Impossible de supprimer le dossier. Réessayez.",
     "folderNavigation": "Dossiers d’artefacts",
@@ -25195,6 +25195,7 @@
     "moveToFolder": "Déplacer vers un dossier",
     "movedToFolder": "Déplacé vers {name}",
     "emptyUnfiled": "Aucun artefact sans dossier",
+    "emptyFolder": "Aucun artefact dans ce dossier",
     "folderRoot": "Aucun dossier",
     "title": "Artefacts",
     "type": {

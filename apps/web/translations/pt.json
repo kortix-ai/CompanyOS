@@ -25186,7 +25186,7 @@
     "folderActions": "Ações para {name}",
     "deleteFolder": "Excluir pasta",
     "deleteFolderTitle": "Excluir “{name}”?",
-    "deleteFolderHint": "Os artefatos voltarão para Artefatos. Os arquivos e links continuarão disponíveis.",
+    "deleteFolderHint": "As subpastas e os artefatos sobem um nível. Os arquivos e links continuam disponíveis.",
     "folderDeleted": "Pasta excluída",
     "folderDeleteFailed": "Não foi possível excluir a pasta. Tente novamente.",
     "folderNavigation": "Pastas de artefatos",
@@ -25195,6 +25195,7 @@
     "moveToFolder": "Mover para pasta",
     "movedToFolder": "Movido para {name}",
     "emptyUnfiled": "Nenhum artefato sem pasta",
+    "emptyFolder": "Nenhum artefato nesta pasta",
     "folderRoot": "Sem pasta",
     "title": "Artefatos",
     "type": {

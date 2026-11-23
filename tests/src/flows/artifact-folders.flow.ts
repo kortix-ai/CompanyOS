@@ -5,6 +5,7 @@ const ONE = `${LIST}/:folderId`;
 
 type Folder = {
   folder_id: string;
+  parent_folder_id: string | null;
   name: string;
   icon: string | null;
   icon_glyph: { name: string; color: string } | null;
@@ -135,6 +136,42 @@ flow(
           .body()
           .has("$.folders", []);
         (await owner.del(ONE, { params: p })).status(404);
+      },
+    );
+    await ctx.step(
+      "nest a folder, refuse a missing or foreign parent and every cycle, then delete the parent and read its subfolder one level up",
+      async () => {
+        const create = (body: Record<string, unknown>) => owner.post(LIST, body, { params });
+        const parent = (await create({ name: "Campaigns" })).status(201).json<Folder>();
+        if (parent.parent_folder_id !== null) throw new Error("A root folder has a parent");
+        const child = (await create({ name: "Q4", parent_folder_id: parent.folder_id }))
+          .status(201)
+          .json<Folder>();
+        if (child.parent_folder_id !== parent.folder_id) throw new Error("Subfolder parent differs");
+        (await create({ name: "Lost", parent_folder_id: crypto.randomUUID() })).status(404);
+        const other = await ctx.fixtures.project();
+        const foreign = (await owner.post(LIST, { name: "Elsewhere" }, { params: { projectId: other.id } }))
+          .status(201)
+          .json<Folder>();
+        (await create({ name: "Cross", parent_folder_id: foreign.folder_id })).status(404);
+        const one = (folderId: string) => ({ params: { ...params, folderId } });
+        (await owner.patch(ONE, { parent_folder_id: parent.folder_id }, one(parent.folder_id))).status(409);
+        (await owner.patch(ONE, { parent_folder_id: child.folder_id }, one(parent.folder_id))).status(409);
+        (await reader.patch(ONE, { parent_folder_id: null }, one(child.folder_id))).status(403);
+        (await owner.patch(ONE, { parent_folder_id: null }, one(child.folder_id)))
+          .status(200)
+          .body()
+          .has("$.parent_folder_id", null)
+          .has("$.name", "Q4");
+        (await owner.patch(ONE, { parent_folder_id: parent.folder_id }, one(child.folder_id)))
+          .status(200)
+          .body()
+          .has("$.parent_folder_id", parent.folder_id);
+        (await owner.del(ONE, one(parent.folder_id))).status(200);
+        const rows = (await owner.get(LIST, { params })).status(200).json<{ folders: Folder[] }>().folders;
+        if (rows.length !== 1 || rows[0]!.folder_id !== child.folder_id || rows[0]!.parent_folder_id !== null)
+          throw new Error("The subfolder did not move up to the root");
+        (await owner.del(ONE, one(child.folder_id))).status(200);
       },
     );
   },

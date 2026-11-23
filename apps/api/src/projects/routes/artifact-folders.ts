@@ -35,6 +35,7 @@ const Fields = z.object({
     .transform((v) => normalizeProjectGlyph(v)!)
     .nullable()
     .optional(),
+  parent_folder_id: z.string().uuid().nullable().optional(),
 });
 const Body = Fields.refine((v) => !(v.icon && v.icon_glyph), {
   message: "Choose an emoji or an icon",
@@ -45,6 +46,7 @@ const PatchBody = Fields.partial().refine((v) => !(v.icon && v.icon_glyph), {
 const Folder = z.object({
   folder_id: z.string(),
   project_id: z.string(),
+  parent_folder_id: z.string().nullable(),
   name: z.string(),
   icon: z.string().nullable(),
   icon_glyph: z.object({ name: z.string(), color: z.string() }).nullable(),
@@ -54,6 +56,7 @@ type Row = GalleryFolderRow;
 const serialize = (r: Row, userId: string, manage: boolean) => ({
   folder_id: r.folderId,
   project_id: r.projectId,
+  parent_folder_id: r.parentFolderId,
   name: r.name,
   icon: r.icon,
   icon_glyph: r.iconGlyph,
@@ -110,13 +113,15 @@ export function registerArtifactFolderRoutes() {
       const access = await authorizeArtifactCaller(c, workspaceId, "write");
       if (!access.ok) return access.response;
       const body = c.req.valid("json");
-      const row = await createGalleryFolder(
+      const created = await createGalleryFolder(
         workspaceId,
         access.viewer.userId,
         body,
       );
+      if (created.status === 404)
+        return c.json({ error: "Parent folder not found" }, 404);
       return c.json(
-        serialize(row!, access.viewer.userId, access.viewer.manageAny),
+        serialize(created.row, access.viewer.userId, access.viewer.manageAny),
         201,
       );
     },
@@ -129,8 +134,8 @@ export function registerArtifactFolderRoutes() {
         tags: ["artifacts"],
         summary:
           method === "patch"
-            ? "Rename a gallery folder or change its icon"
-            : "Delete a gallery folder; keep its artifacts at root",
+            ? "Rename a gallery folder, change its icon, or move it into another folder"
+            : "Delete a gallery folder; its subfolders and artifacts move up one level",
         ...auth,
         request: {
           params: FolderParams,
@@ -148,7 +153,7 @@ export function registerArtifactFolderRoutes() {
             z.union([Folder, z.object({ deleted: z.literal(true) })]),
             "Updated",
           ),
-          ...errors(400, 403, 404),
+          ...errors(400, 403, 404, 409),
         },
       }),
       async (c) => {
@@ -169,7 +174,12 @@ export function registerArtifactFolderRoutes() {
                 PatchBody.parse(await c.req.json()),
               );
         if (result.status === 404)
-          return c.json({ error: "Folder not found" }, 404);
+          return c.json(
+            { error: "parent" in result ? "Parent folder not found" : "Folder not found" },
+            404,
+          );
+        if (result.status === 409)
+          return c.json({ error: "A folder cannot move into itself or one of its subfolders" }, 409);
         if (result.status === 403)
           return c.json({ error: "You cannot manage this folder" }, 403);
         if (!result.row) return c.json({ deleted: true as const }, 200);

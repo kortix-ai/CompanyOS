@@ -1835,6 +1835,13 @@
       "when": 1795471712298,
       "tag": "20261123220832_artifact_folder_lookup_index",
       "breakpoints": true
+    },
+    {
+      "idx": 262,
+      "version": "7",
+      "when": 1795476260836,
+      "tag": "20261123232420_artifact_folder_parent",
+      "breakpoints": true
     }
   ]
 }

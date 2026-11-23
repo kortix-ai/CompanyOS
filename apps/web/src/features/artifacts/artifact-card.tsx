@@ -22,7 +22,6 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@kortix/ui/dropdown-menu';
-import { EntityAvatar } from '@kortix/ui/entity-avatar';
 import Hint from '@kortix/ui/hint';
 import Loading from '@kortix/ui/loading';
 import { errorToast, successToast } from '@kortix/ui/toast';
@@ -30,7 +29,6 @@ import {
   ArrowSquareOutIcon,
   DotsThreeIcon,
   FolderIcon,
-  FolderSimpleDashedIcon,
   PushPinIcon,
   PushPinSlashIcon,
   ShareNetworkIcon,
@@ -49,6 +47,7 @@ import {
   artifactHref,
   relativeTime,
 } from './artifact-meta';
+import { FolderTreeRadioItems, ROOT_FOLDER } from './artifact-folder-tree';
 import { ShareArtifactDialog } from './share-artifact-dialog';
 
 /** The drag payload of a card: its id and current folder, read by a folder drop target. */
@@ -256,31 +255,11 @@ export const ArtifactCard = memo(function ArtifactCard({
                     <FolderIcon /> {t('moveToFolder')}
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="max-h-[var(--radix-dropdown-menu-content-available-height)] max-w-64 overflow-y-auto">
-                    <DropdownMenuRadioGroup
-                      value={artifact.folder_id ?? 'root'}
-                      onValueChange={(next) => moveToFolder(next === 'root' ? null : next)}
-                    >
-                      <DropdownMenuRadioItem value="root" textValue={t('folderRoot')}>
-                        <span className="text-muted-foreground flex size-5 shrink-0 items-center justify-center">
-                          <FolderSimpleDashedIcon className="size-4" />
-                        </span>
-                        <span className="truncate">{t('folderRoot')}</span>
-                      </DropdownMenuRadioItem>
-                      {folders.length ? <DropdownMenuSeparator /> : null}
-                      {folders.map((folder) => (
-                        <DropdownMenuRadioItem key={folder.folder_id} value={folder.folder_id} textValue={folder.name}>
-                          <EntityAvatar
-                            emoji={folder.icon}
-                            glyph={folder.icon_glyph}
-                            icon={FolderIcon}
-                            label={folder.name}
-                            size="xs"
-                            className="shrink-0"
-                          />
-                          <span className="truncate" title={folder.name}>{folder.name}</span>
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
+                    <FolderTreeRadioItems
+                      folders={folders}
+                      value={artifact.folder_id ?? ROOT_FOLDER}
+                      onValueChange={moveToFolder}
+                    />
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
                 {spaces.length ? (

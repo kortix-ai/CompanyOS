@@ -25186,7 +25186,7 @@
     "folderActions": "Aktionen für {name}",
     "deleteFolder": "Ordner löschen",
     "deleteFolderTitle": "„{name}“ löschen?",
-    "deleteFolderHint": "Die Artefakte werden nach Artefakte verschoben. Dateien und Links bleiben verfügbar.",
+    "deleteFolderHint": "Unterordner und Artefakte rücken eine Ebene nach oben. Dateien und Links bleiben verfügbar.",
     "folderDeleted": "Ordner gelöscht",
     "folderDeleteFailed": "Ordner konnte nicht gelöscht werden. Erneut versuchen.",
     "folderNavigation": "Artefaktordner",
@@ -25195,6 +25195,7 @@
     "moveToFolder": "In Ordner verschieben",
     "movedToFolder": "Verschoben nach {name}",
     "emptyUnfiled": "Keine Artefakte ohne Ordner",
+    "emptyFolder": "Keine Artefakte in diesem Ordner",
     "folderRoot": "Kein Ordner",
     "title": "Artefakte",
     "type": {

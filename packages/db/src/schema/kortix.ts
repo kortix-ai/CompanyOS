@@ -10069,6 +10069,8 @@ export const cliDeviceGrants = kortixSchema.table('cli_device_grants', {
 export const artifactFolders = kortixSchema.table('artifact_folders', {
   folderId: uuid('folder_id').defaultRandom().primaryKey(),
   projectId: uuid('project_id').notNull().references(() => projects.projectId, { onDelete: 'cascade' }),
+  /** The folder this one sits in; null at the gallery root. Same project, no cycles (the API checks both). */
+  parentFolderId: uuid('parent_folder_id').references((): AnyPgColumn => artifactFolders.folderId, { onDelete: 'set null' }),
   name: text('name').notNull(),
   icon: text('icon'),
   iconGlyph: jsonb('icon_glyph').$type<{ name: string; color: string }>(),
@@ -10076,6 +10078,7 @@ export const artifactFolders = kortixSchema.table('artifact_folders', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index('idx_artifact_folders_project').on(table.projectId),
+  index('idx_artifact_folders_parent').on(table.parentFolderId).where(sql`${table.parentFolderId} is not null`),
   check('artifact_folders_name_check', sql`char_length(btrim(${table.name})) between 1 and 100`),
 ]).enableRLS();
 

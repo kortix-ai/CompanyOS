@@ -25186,7 +25186,7 @@
     "folderActions": "Azioni per {name}",
     "deleteFolder": "Elimina cartella",
     "deleteFolderTitle": "Eliminare «{name}»?",
-    "deleteFolderHint": "Gli artefatti torneranno in Artefatti. I file e i collegamenti resteranno disponibili.",
+    "deleteFolderHint": "Le sottocartelle e gli artefatti salgono di un livello. I file e i collegamenti restano disponibili.",
     "folderDeleted": "Cartella eliminata",
     "folderDeleteFailed": "Impossibile eliminare la cartella. Riprova.",
     "folderNavigation": "Cartelle degli artefatti",
@@ -25195,6 +25195,7 @@
     "moveToFolder": "Sposta nella cartella",
     "movedToFolder": "Spostato in {name}",
     "emptyUnfiled": "Nessun artefatto senza cartella",
+    "emptyFolder": "Nessun artefatto in questa cartella",
     "folderRoot": "Nessuna cartella",
     "title": "Artefatti",
     "type": {

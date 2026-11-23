@@ -64,3 +64,16 @@ test('deleteArtifactFolder rejects an HTTP permission failure', async () => {
   globalThis.fetch = mock(async () => Response.json({ error: 'Forbidden' }, { status: 403 })) as unknown as typeof fetch;
   await expect(api.deleteArtifactFolder('p1', 'f1')).rejects.toThrow();
 });
+
+test('a folder is created inside another and moved between parents', async () => {
+  const calls: { method: string; body: unknown }[] = [];
+  configureKortix({ backendUrl: 'http://test.local', getToken: async () => 'tok' });
+  globalThis.fetch = mock(async (_url: unknown, opts: RequestInit = {}) => {
+    calls.push({ method: opts.method ?? 'GET', body: opts.body ? JSON.parse(String(opts.body)) : undefined });
+    return Response.json({ folder_id: 'child', parent_folder_id: 'parent', name: 'Q4', project_id: 'p1', icon: null, icon_glyph: null, can_manage: true });
+  }) as unknown as typeof fetch;
+  const created: api.ArtifactFolder = await api.createArtifactFolder('p1', { name: 'Q4', parent_folder_id: 'parent' });
+  await api.updateArtifactFolder('p1', 'child', { parent_folder_id: null });
+  expect(created.parent_folder_id).toBe('parent');
+  expect(calls.map((c) => c.body)).toEqual([{ name: 'Q4', parent_folder_id: 'parent' }, { parent_folder_id: null }]);
+});

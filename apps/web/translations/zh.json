@@ -25186,7 +25186,7 @@
     "folderActions": "{name}的操作",
     "deleteFolder": "删除文件夹",
     "deleteFolderTitle": "删除“{name}”？",
-    "deleteFolderHint": "此文件夹中的作品将返回作品列表。文件和链接仍可使用。",
+    "deleteFolderHint": "其子文件夹和作品将上移一级。文件和链接仍可使用。",
     "folderDeleted": "文件夹已删除",
     "folderDeleteFailed": "无法删除文件夹，请重试。",
     "folderNavigation": "作品文件夹",
@@ -25195,6 +25195,7 @@
     "moveToFolder": "移至文件夹",
     "movedToFolder": "已移动到 {name}",
     "emptyUnfiled": "没有未归档的产物",
+    "emptyFolder": "此文件夹中没有作品",
     "folderRoot": "无文件夹",
     "title": "工件",
     "type": {

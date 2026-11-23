@@ -288,6 +288,8 @@ export function parseArtifactUrl(url: string): { projectId: string | null; artif
 export interface ArtifactFolder {
   folder_id: string;
   project_id: string;
+  /** The folder this one sits in; null at the gallery root. */
+  parent_folder_id: string | null;
   name: string;
   icon: string | null;
   icon_glyph: { name: string; color: string } | null;
@@ -296,6 +298,8 @@ export interface ArtifactFolder {
 
 export interface ArtifactFolderInput {
   name: string;
+  /** Create inside, or move into, this folder; null moves it to the gallery root. */
+  parent_folder_id?: string | null;
   icon?: string | null;
   icon_glyph?: { name: string; color: string } | null;
 }
@@ -309,7 +313,7 @@ export async function createArtifactFolder(projectId: string, input: ArtifactFol
 export async function updateArtifactFolder(projectId: string, folderId: string, input: Partial<ArtifactFolderInput>): Promise<ArtifactFolder> {
   return unwrap(await backendApi.patch<ArtifactFolder>(`${base(projectId)}/folders/${encodeURIComponent(folderId)}`, input));
 }
-/** Removes the folder; its artifacts return to the gallery root. */
+/** Removes the folder; its subfolders and artifacts move up one level. */
 export async function deleteArtifactFolder(projectId: string, folderId: string): Promise<void> {
   unwrap(await backendApi.delete(`${base(projectId)}/folders/${encodeURIComponent(folderId)}`));
 }

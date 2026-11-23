@@ -86,47 +86,69 @@ export function ContextMeter({ usage }: { usage: ContextUsage }) {
   ].filter((p) => p.value > 0);
 
   return (
-    <div className="px-4 pb-1">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-foreground flex items-center gap-1.5 text-sm tabular-nums">
-          {/* Nearly full: the ring's tone as a dot, never as tinted text. */}
+    <div className="flex flex-col">
+      <div className="flex items-center justify-between gap-2 px-5 text-sm tabular-nums">
+        <span className="text-foreground flex items-center gap-1.5">
+          {/* Nearly full: the composer ring's tone as a dot, never as tinted text. */}
           {limit && usage.tone !== 'info' && (
             <span className={cn('size-1.5 rounded-full', STATUS_DOT[usage.tone])} aria-hidden />
           )}
           {limit ? `${usage.percent}% ${t.raw('textf83916135509')}` : formatContextCount(breakdown.total)}
         </span>
         {limit && (
-          <span className="text-muted-foreground text-xs tabular-nums">
+          <span className="text-muted-foreground">
             {formatContextCount(breakdown.total)} / {formatContextCount(limit)}
           </span>
         )}
       </div>
 
       {/* One track, the parts laid end to end at their share of the window. */}
-      <div className="bg-muted mt-2 flex h-1.5 w-full gap-px overflow-hidden rounded-full" aria-hidden>
+      <div className="bg-muted mx-5 mt-2 flex h-1 gap-px overflow-hidden rounded-full" aria-hidden>
         {parts.map((p) => (
           <span key={p.key} className={p.swatch} style={{ width: `${share(p.value) * 100}%` }} />
         ))}
       </div>
 
-      <dl className="mt-2.5 flex flex-col">
+      <dl className="mt-2 flex flex-col">
         {parts.map((p) => (
-          <div key={p.key} className="flex h-7 items-center gap-2.5 text-sm">
-            <span className={cn('size-2 shrink-0 rounded-full', p.swatch)} aria-hidden />
-            <dt className="text-muted-foreground min-w-0 flex-1 truncate">{p.label}</dt>
-            <dd className="text-foreground tabular-nums">{formatContextCount(p.value)}</dd>
-            {limit && <dd className="text-muted-foreground w-12 text-right tabular-nums">{pct(p.value)}</dd>}
-          </div>
+          <MeterRow key={p.key} swatch={p.swatch} label={p.label} value={p.value} percent={limit ? pct(p.value) : null} />
         ))}
         {free != null && (
-          <div className="flex h-7 items-center gap-2.5 text-sm">
-            <span className="bg-muted size-2 shrink-0 rounded-full ring-1 ring-border ring-inset" aria-hidden />
-            <dt className="text-muted-foreground min-w-0 flex-1 truncate">{t.raw('text64cd989efc14')}</dt>
-            <dd className="text-foreground tabular-nums">{formatContextCount(free)}</dd>
-            <dd className="text-muted-foreground w-12 text-right tabular-nums">{pct(free)}</dd>
-          </div>
+          <MeterRow
+            className="mt-2"
+            swatch="bg-muted ring-1 ring-border ring-inset"
+            label={t.raw('text64cd989efc14')}
+            value={free}
+            percent={pct(free)}
+          />
         )}
       </dl>
+    </div>
+  );
+}
+
+/** One legend row: swatch, label, tokens, share. Columns line up down the list. */
+function MeterRow({
+  swatch,
+  label,
+  value,
+  percent,
+  className,
+}: {
+  swatch: string;
+  label: string;
+  value: number;
+  percent: string | null;
+  className?: string;
+}) {
+  return (
+    <div className={cn('mx-3 flex h-7 items-center gap-3 px-2 text-sm tabular-nums', className)}>
+      <span className="flex w-5 shrink-0 items-center justify-center" aria-hidden>
+        <span className={cn('size-2.5 rounded-xs', swatch)} />
+      </span>
+      <dt className="text-muted-foreground min-w-0 flex-1 truncate">{label}</dt>
+      <dd className="text-muted-foreground text-right">{formatContextCount(value)}</dd>
+      {percent && <dd className="text-foreground w-14 text-right">{percent}</dd>}
     </div>
   );
 }

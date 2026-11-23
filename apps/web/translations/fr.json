@@ -2260,6 +2260,7 @@
     "panel": {
       "outputNew": "Nouveau",
       "outputUpdated": "Mis à jour",
+      "backgroundTasks": "Tâches en arrière-plan",
       "resizePane": "Redimensionner le panneau"
     }
   },

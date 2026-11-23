@@ -1630,6 +1630,7 @@ const catalog = {
     "panel": {
       "outputNew": "New",
       "outputUpdated": "Updated",
+      "backgroundTasks": "Background tasks",
       "resizePane": "Resize pane"
     }
   },

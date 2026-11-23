@@ -2260,6 +2260,7 @@
     "panel": {
       "outputNew": "新規",
       "outputUpdated": "更新済み",
+      "backgroundTasks": "バックグラウンドタスク",
       "resizePane": "ペインのサイズを変更"
     }
   },

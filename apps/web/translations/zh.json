@@ -2260,6 +2260,7 @@
     "panel": {
       "outputNew": "新",
       "outputUpdated": "已更新",
+      "backgroundTasks": "后台任务",
       "resizePane": "调整窗格大小"
     }
   },

@@ -2260,6 +2260,7 @@
     "panel": {
       "outputNew": "Ново",
       "outputUpdated": "Ажурирано",
+      "backgroundTasks": "Позадински задаци",
       "resizePane": "Промени величину окна"
     }
   },

@@ -864,8 +864,14 @@ flow(
             });
             const body = await res.text();
             if (!dataApiAnswerIsOff(res.status, body)) {
+              // A local Supabase started before config.toml turned PostgREST
+              // off keeps running it until the containers are recreated.
+              const fix =
+                ctx.env.target === 'local'
+                  ? ' Local Supabase still runs PostgREST: run `supabase stop` in supabase/, then start it again (`pnpm dev`).'
+                  : '';
               throw new Error(
-                `SEC-K: the Data API answered ${who} for ${what}: ${res.status} ${body.slice(0, 200)}`,
+                `SEC-K: the Data API answered ${who} for ${what}: ${res.status} ${body.slice(0, 200)}.${fix}`,
               );
             }
           }

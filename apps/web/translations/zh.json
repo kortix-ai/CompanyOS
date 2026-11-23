@@ -2262,8 +2262,6 @@
       "outputUpdated": "已更新",
       "backgroundTasks": "后台任务",
       "finished": "已完成",
-      "finishedTasks": "已完成的任务",
-      "noRunningTasks": "没有进行中的任务",
       "finishedCount": "已完成 {count} 个",
       "running": "进行中",
       "resizePane": "调整窗格大小"

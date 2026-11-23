@@ -2262,8 +2262,6 @@
       "outputUpdated": "Actualizado",
       "backgroundTasks": "Tareas en segundo plano",
       "finished": "Terminadas",
-      "finishedTasks": "Tareas terminadas",
-      "noRunningTasks": "No hay tareas en curso",
       "finishedCount": "{count} terminadas",
       "running": "En curso",
       "resizePane": "Cambiar el tamaño del panel"

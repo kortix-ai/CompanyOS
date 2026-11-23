@@ -2262,8 +2262,6 @@
       "outputUpdated": "Mis à jour",
       "backgroundTasks": "Tâches en arrière-plan",
       "finished": "Terminées",
-      "finishedTasks": "Tâches terminées",
-      "noRunningTasks": "Aucune tâche en cours",
       "finishedCount": "{count} terminées",
       "running": "En cours",
       "resizePane": "Redimensionner le panneau"

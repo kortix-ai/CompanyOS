@@ -2262,8 +2262,6 @@
       "outputUpdated": "Aggiornato",
       "backgroundTasks": "Attività in background",
       "finished": "Completate",
-      "finishedTasks": "Attività completate",
-      "noRunningTasks": "Nessuna attività in corso",
       "finishedCount": "{count} completate",
       "running": "In corso",
       "resizePane": "Ridimensiona il riquadro"

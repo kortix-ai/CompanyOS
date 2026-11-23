@@ -2262,8 +2262,6 @@
       "outputUpdated": "Aktualisiert",
       "backgroundTasks": "Hintergrundaufgaben",
       "finished": "Erledigt",
-      "finishedTasks": "Erledigte Aufgaben",
-      "noRunningTasks": "Keine laufenden Aufgaben",
       "finishedCount": "{count} erledigt",
       "running": "Läuft",
       "resizePane": "Bereichsgröße ändern"

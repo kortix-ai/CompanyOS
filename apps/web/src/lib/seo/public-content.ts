@@ -81,14 +81,6 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
   },
   {
     kind: 'marketing',
-    slug: 'marketplace',
-    title: 'Marketplace: agents, skills and workspace templates',
-    description:
-      'Browse skills, agents, and commands from every source. Add them to a Kortix workspace in one click.',
-    htmlPath: '/marketplace',
-  },
-  {
-    kind: 'marketing',
     slug: 'developers',
     title: 'Developers: CLI, SDK and API for AI agents',
     description:
@@ -101,7 +93,7 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
     slug: 'careers',
     title: 'Careers',
     description:
-      'Open positions at Kortix — FDE, GTM and MTS. Belgrade, Serbia and San Francisco. We hire for prolonged ownership.',
+      'Open positions at Kortix — FDE, GTM and MTS. Belgrade, Serbia and the US. We hire for prolonged ownership.',
     htmlPath: '/careers',
   },
   {

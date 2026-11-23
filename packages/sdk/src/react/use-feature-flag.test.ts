@@ -114,9 +114,9 @@ describe('useFeatureFlag', () => {
   });
 
   test('one flag never reads another flag`s slot', () => {
-    withDetail({ marketplace: true, reminders: false });
+    withDetail({ shared_drives: true, reminders: false });
 
-    expect(useFeatureFlag('p', 'marketplace').enabled).toBe(true);
+    expect(useFeatureFlag('p', 'shared_drives').enabled).toBe(true);
     expect(useFeatureFlag('p', 'reminders').enabled).toBe(false);
   });
 
@@ -293,7 +293,6 @@ describe('resolveFeatureFlag', () => {
 describe('useFeatureFlags', () => {
   /** The keys the map carries: FEATURE_FLAG_KEYS plus the graduated keys the API still resolves per project. */
   const SERVED_MAP_KEYS = [
-    'marketplace',
     'reminders',
     'secrets_egress',
     'us_region',
@@ -347,7 +346,7 @@ describe('useFeatureFlags', () => {
   test('resolves each served key fail-closed from the row', () => {
     // Only `=== true` may resolve, identical to `useFeatureFlag`.
     withDetail({
-      marketplace: true,
+      shared_drives: true,
       event_triggers: 'true' as unknown as boolean,
       artifacts: true,
       session_log: true,
@@ -355,13 +354,13 @@ describe('useFeatureFlags', () => {
     });
     const { flags } = useFeatureFlags('p');
 
-    expect(flags.marketplace).toBe(true);
+    expect(flags.shared_drives).toBe(true);
     expect(flags.event_triggers).toBe(false);
     expect(flags.artifacts).toBe(true);
     expect(flags.session_log).toBe(true);
     expect(flags.volumes).toBe(false);
     for (const key of SERVED_MAP_KEYS) {
-      if (['marketplace', 'event_triggers', 'artifacts', 'session_log', 'volumes'].includes(key)) continue;
+      if (['shared_drives', 'event_triggers', 'artifacts', 'session_log', 'volumes'].includes(key)) continue;
       expect(flags[key]).toBe(false);
     }
   });
@@ -379,11 +378,11 @@ describe('useFeatureFlags', () => {
     nextResult = { data: undefined, isLoading: true };
     const loading = useFeatureFlags('p');
     expect(loading.isLoading).toBe(true);
-    expect(loading.flags.marketplace).toBe(false);
+    expect(loading.flags.shared_drives).toBe(false);
 
-    nextResult = { data: { experimental: { marketplace: true } }, isLoading: false };
+    nextResult = { data: { experimental: { shared_drives: true } }, isLoading: false };
     const ready = useFeatureFlags('p');
     expect(ready.isLoading).toBe(false);
-    expect(ready.flags.marketplace).toBe(true);
+    expect(ready.flags.shared_drives).toBe(true);
   });
 });

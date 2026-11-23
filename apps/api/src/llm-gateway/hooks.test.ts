@@ -81,6 +81,7 @@ mock.module('../repositories/account-tokens', () => ({
 
 // The order of the trace row write and the budget checks, per test.
 let calls: string[] = [];
+let budgetReleases = 0;
 
 // Settlement stops at the usage write, after it names the row's route.
 mock.module('../shared/usage-events', () => ({
@@ -107,7 +108,7 @@ mock.module('./budgets', () => ({
     calls.push(`checkBudget ${action ?? 'block'}`);
     return { exceeded: false };
   },
-  releaseBudgetReservation: () => {},
+  releaseBudgetReservation: () => { budgetReleases += 1; },
 }));
 
 // A minimal stand-in for the real `BillingGateError` (HTTPException + `.reason`)
@@ -164,13 +165,12 @@ describe('authorizeRequest — billing 402 carries the real reason, not a hardco
     if (!result.ok) expect(result.errorCode).toBe(reason);
   });
 
-  test('a non-BillingGateError billing failure falls back to subscription_required (unknown reason, not a crash)', async () => {
+  // prod 2026-11-12: a stalled control plane answered funded accounts "subscription_required".
+  test('a non-BillingGateError billing failure is no verdict: it propagates (route 5xx, gateway 503), never a 402', async () => {
     billingThrow = () => {
       throw new Error('some other billing failure');
     };
-    const result = await authorizeRequest('good');
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errorCode).toBe('subscription_required');
+    await expect(authorizeRequest('good')).rejects.toThrow('some other billing failure');
   });
 
   // `none` and `free` are the plans without managed models.
@@ -485,4 +485,13 @@ describe('the usage row names the gateway route that served the request', () => 
     await persistGatewayTrace({ ...trace, metadata: { operation: 'images.generations' } });
     expect(calls).toEqual(['trace row']);
   });
+});
+
+ test('Claude subscription usage does not release a paid request budget reservation', async () => {
+  budgetReleases = 0;
+  const event = { accountId: 'acct-1', actorUserId: 'user-1', projectId: 'proj-1', provider: 'claude-agent', model: 'claude-agent/opus', promptTokens: 11, completionTokens: 53, cachedTokens: 0, cacheWriteTokens: 0, upstreamCost: 0, finalCost: 0, billingMode: 'none' as const, streaming: false, requestId: 'synthetic-claude' };
+  await recordGatewayUsage(event).catch(() => {});
+  expect(budgetReleases).toBe(0);
+  await recordGatewayUsage({ ...event, provider: 'openai' }).catch(() => {});
+  expect(budgetReleases).toBe(1);
 });

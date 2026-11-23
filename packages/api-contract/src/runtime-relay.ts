@@ -23,6 +23,11 @@ export const DAEMON_TURN_STREAM_KINDS = [
    * boundary. apps/api closes that message's inbox row as delivered.
    */
   'steer_read',
+  /**
+   * A stopped turn dropped a steered message (`turn_message_id`) it never read.
+   * apps/api puts that message's inbox row back on the queue for the next turn.
+   */
+  'steer_dropped',
 ] as const;
 export type DaemonTurnStreamKind = (typeof DAEMON_TURN_STREAM_KINDS)[number];
 

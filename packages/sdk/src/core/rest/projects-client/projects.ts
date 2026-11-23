@@ -52,6 +52,7 @@ import {
 export type FeatureFlagKey =
   /** @deprecated Graduated — computers need no flag (the platform's `TUNNEL_ENABLED` is the only gate). Removed in the next major. */
   | 'agent_tunnel'
+  /** @deprecated Withdrawn — the marketplace was removed (2026-11-20). The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'marketplace'
   /** @deprecated Graduated — integrations.sh is part of the one Kortix catalog. Removed in the next major. */
   | 'connectors_api_discover'
@@ -139,7 +140,7 @@ export type FeatureFlagKey =
   | 'evals'
   /** Desktop tabs: the desktop app shows browser-style tabs in the title bar for this project's pages. Client-only, off by default. */
   | 'desktop_tabs'
-  /** Calendar: a shared calendar of dated items with an owner and comments, plus the project's scheduled triggers (`kortix calendar`). Experimental, off by default. */
+  /** Calendar: a shared calendar of dated items with the people on them and comments, plus the project's scheduled triggers (`kortix calendar`). Experimental, off by default. */
   | 'calendar'
   /** @deprecated Withdrawn — agents messaging people left the product. The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'human_messaging';
@@ -147,6 +148,7 @@ export type FeatureFlagKey =
 /** The keys of {@link FeatureFlagKey} that are no flag: the API never sends them, or (`llm_gateway`, `session_log`, `session_log_restore`, `pi_harness`, `genui`, `meta_agent`, `notification_center`, `pooled_provider_secrets`) sends a constant `true`, or (`volumes`, `drives`, `artifacts`) sends whether the platform stores a Drive, or (`artifact_comments`) sends a constant `false`. */
 type GraduatedFeatureFlagKey =
   | 'agent_tunnel'
+  | 'marketplace'
   | 'teams'
   | 'review_center'
   | 'agent_principal'
@@ -184,7 +186,6 @@ type ServedFeatureFlagKey = Exclude<FeatureFlagKey, GraduatedFeatureFlagKey>;
  * drift tests compare this against the API's `FEATURE_FLAG_KEYS`.
  */
 export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
-  'marketplace',
   'reminders',
   'secrets_egress',
   'us_region',
@@ -356,6 +357,10 @@ export interface ProjectConfigSummary {
   agents: Array<{
     name: string;
     path: string;
+    /** `kortix.yaml` `agents.<name>.title`: the agent's name as people read it
+     *  ("GitHub PR reviewer"). `name` stays its id. Absent from an older API;
+     *  null when the manifest sets none. Pass it to `agentDisplayName`. */
+    title?: string | null;
     description: string | null;
     mode: string | null;
     /** Internal automation remains registered but is not offered by agent pickers. */
@@ -617,7 +622,7 @@ export interface CreateProjectRepoInput {
   private?: boolean;
   description?: string;
   starter_template?: 'general-knowledge-worker' | 'minimal';
-  /** Clone a `registry:project` item into the new GitHub repository. */
+  /** @deprecated The marketplace was removed (2026-11-20); the API answers `400` when this field is set. Removed in the next major. */
   source_item_id?: string;
   /** Optional emoji icon for the new project. Invalid values are dropped
    *  server-side; they never fail the create. */
@@ -640,10 +645,9 @@ export interface ProvisionProjectInput {
    *  server's own default (`apps/api/src/projects/routes/projects.ts`). */
   default_branch?: string;
   starter_template?: 'general-knowledge-worker' | 'minimal';
+  /** @deprecated The marketplace was removed (2026-11-20); the API ignores this field. Removed in the next major. */
   marketplace_items?: string[];
-  /** Clone a `registry:project` marketplace item instead of the blank
-   *  starter — e.g. `"kortix-projects:support-agent-kit"`. Implies
-   *  seed_starter and takes precedence over starter_template. */
+  /** @deprecated The marketplace was removed (2026-11-20); the API answers `400` when this field is set. Removed in the next major. */
   source_item_id?: string;
   /** Optional emoji icon for the new project. Invalid values are dropped
    *  server-side; they never fail the create. */
@@ -689,7 +693,7 @@ export interface RepoCollaboratorInvite {
 }
 
 /**
- * @deprecated Use `listWorkspaces`: every workspace of the caller, across accounts. This lists one account's projects. Kept permanently.
+ * @deprecated Use `listWorkspaces`: every workspace of the caller, across accounts. For a person (a session or an unscoped personal access token) this lists the projects of every account they belong to; a credential bound to one account (a workspace key, an account API key) lists that account's. Kept permanently.
  */
 export async function listProjects() {
   return unwrap(await backendApi.get<KortixProject[]>('/projects'));

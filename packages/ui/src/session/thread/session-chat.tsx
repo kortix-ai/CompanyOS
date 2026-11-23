@@ -199,11 +199,14 @@ import { useAutoScroll } from '../../internal/hooks/use-auto-scroll';
 import {
   type AgentRefLike,
   type FileRefLike,
+  appendDriveRefs,
   appendSessionRefs,
   buildAgentRefsBlock,
   buildFileRefsBlock,
+  driveRefsOf,
 } from '../../internal/lib/project-preamble';
 import { playSound } from '../../internal/lib/sounds';
+import { driveUploadsOf } from '../composer/drive-mentions';
 import { track } from '../../lib/telemetry';
 import { cn } from '../../lib/utils';
 import { useChatSendStore } from '../../internal/stores/chat-send-store';
@@ -281,6 +284,7 @@ import {
   useSessionWorkingStore,
   useAnswerSessionAsk,
   useSessionNeedsYou,
+  useNetworkOnline,
 } from '@kortix/sdk/react';
 import { useStableCallback } from '../../internal/hooks/use-stable-callback';
 import { useReloadForensics } from '../status/reload-forensics';
@@ -962,6 +966,7 @@ export function SessionChat({
     providers,
     config,
     sessionId,
+    projectSessionId,
     boundAgentName,
     defaultAgentName: projectConfig?.default_agent,
     projectSession: projectSessionRow,
@@ -1123,6 +1128,12 @@ export function SessionChat({
    * it — a refused send, Stop, and leaving the session.
    */
   const receiptSessionId = projectSessionId ?? '';
+  // The browser reports no network: a send waits for it (the SDK holds the
+  // POST), so it takes no receipt until it goes out, and the composer shows
+  // the offline line instead of a turn that never started (finding 07).
+  const networkOnline = useNetworkOnline();
+  const networkOnlineRef = useRef(networkOnline);
+  networkOnlineRef.current = networkOnline;
   const noteSendReceipt = useCallback(
     (messageId: string, turnId: string | null = messageId) =>
       useSessionWorkingStore
@@ -1883,9 +1894,27 @@ export function SessionChat({
       }));
     return parked.length ? [...livePermissions, ...parked] : livePermissions;
   }, [livePermissions, parkedAsks, sessionId]);
+  // A question the person answered or dismissed stays hidden for this mount,
+  // even while a source still lists it: the live list can keep a replied
+  // question for minutes (until the turn moves on), and the parked-asks poll
+  // lags the answer. A card that came back would show nothing, because the
+  // prompt hides itself once replied, and its collapsed wrapper left an empty
+  // strip above the composer. A reply that fails releases the id, and the card
+  // comes back as a fresh, answerable one (`questionRetries` remounts it).
   const suppressedQuestionIdsRef = useRef<Map<string, number>>(new Map());
-  const suppressQuestionFor = useCallback((requestId: string, ms = 15000) => {
+  // Retries per question: a failed reply remounts only its own card.
+  const [questionRetries, setQuestionRetries] = useState<Record<string, number>>({});
+  // A ref write renders nothing: the tick makes the question lists re-read the
+  // map, so a hidden card leaves at once instead of after the reply lands.
+  const [suppressTick, setSuppressTick] = useState(0);
+  const suppressQuestionFor = useCallback((requestId: string, ms = Number.POSITIVE_INFINITY) => {
     suppressedQuestionIdsRef.current.set(requestId, Date.now() + ms);
+    setSuppressTick((n) => n + 1);
+  }, []);
+  const releaseQuestion = useCallback((requestId: string) => {
+    suppressedQuestionIdsRef.current.delete(requestId);
+    setSuppressTick((n) => n + 1);
+    setQuestionRetries((retries) => ({ ...retries, [requestId]: (retries[requestId] ?? 0) + 1 }));
   }, []);
   const isQuestionSuppressed = useCallback((requestId: string) => {
     const expiresAt = suppressedQuestionIdsRef.current.get(requestId);
@@ -1902,7 +1931,9 @@ export function SessionChat({
         sessionState?.questions ??
         Object.values(allQuestions).filter((q) => q.sessionID === sessionId)
       ).filter((q) => !isQuestionSuppressed(q.id)),
-    [sessionState?.questions, allQuestions, sessionId, isQuestionSuppressed],
+    // `suppressTick` re-reads the suppression map when a card hides or returns.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sessionState?.questions, allQuestions, sessionId, isQuestionSuppressed, suppressTick],
   );
   const pendingQuestions = useMemo(() => {
     const live = new Set(liveQuestions.map((q) => q.id));
@@ -1910,7 +1941,8 @@ export function SessionChat({
       .filter((ask) => ask.kind === 'question' && ask.question && !live.has(ask.request_id) && !isQuestionSuppressed(ask.request_id))
       .map((ask): QuestionRequest => ({ id: ask.request_id, sessionID: sessionId, questions: ask.question!.questions as QuestionRequest['questions'] }));
     return parked.length ? [...liveQuestions, ...parked] : liveQuestions;
-  }, [liveQuestions, parkedAsks, sessionId, isQuestionSuppressed]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveQuestions, parkedAsks, sessionId, isQuestionSuppressed, suppressTick]);
   /**
    * The runtime is parked on an answer only the user can give.
    *
@@ -1986,13 +2018,12 @@ export function SessionChat({
   // stayed open (KRTX-4450). A question in neither list is one just answered,
   // held only for its fade-out: unlocked, so text typed into the fade is a
   // message, never a swallowed answer.
+  // From the filtered list: a question hidden after its answer (still in the
+  // asks cache while the reply lands) must not take the next message.
   const questionLock = useMemo(() => {
     if (!renderedQuestion) return false;
-    return (
-      liveQuestions.some((q) => q.id === renderedQuestion.id) ||
-      parkedAskIdByRequest.has(renderedQuestion.id)
-    );
-  }, [renderedQuestion, liveQuestions, parkedAskIdByRequest]);
+    return pendingQuestions.some((q) => q.id === renderedQuestion.id);
+  }, [renderedQuestion, pendingQuestions]);
   // Transcript-placed waiting entries share the turn renderer. The inbox marks their IDs as
   // pending until delivery; a client-minted wire ID does not place a message.
   // Each is the user message `sessionLogPromptMessage` mints for its prompt.
@@ -2584,13 +2615,20 @@ export function SessionChat({
         sessionState?.questions.find((question) => question.id === requestId) ??
         useRuntimePendingStore.getState().questions[requestId];
 
+      // Hide the card at once; the question leaves the store only once the
+      // answer lands. A failed reply then needs no restore (which could bring
+      // back a question the runtime did answer): releasing the hide is enough.
       suppressQuestionFor(requestId);
-      // Optimistically remove the question so the textarea shows immediately
-      removeQuestion(requestId);
       const parkedAskId = liveQuestions.some((q) => q.id === requestId) ? undefined : parkedAskIdByRequest.get(requestId);
       if (parkedAskId) {
         // Parked: the answer reaches the agent as a message that quotes the question.
-        answerParkedAsk.mutate({ askId: parkedAskId, answer: { answers } });
+        // Awaited per request: a second decision must not replace this one's outcome.
+        try {
+          await answerParkedAsk.mutateAsync({ askId: parkedAskId, answer: { answers } });
+          removeQuestion(requestId);
+        } catch {
+          releaseQuestion(requestId);
+        }
         return;
       }
 
@@ -2598,6 +2636,7 @@ export function SessionChat({
       // block id. This cache survives updates that may overwrite the call
       // before the server includes its answers; the transcript's answered
       // questions read from it as a fallback.
+      let cachedBlockId: string | null = null;
       if (questionReq?.tool?.messageID) {
         const { messageID, callID } = questionReq.tool;
         const message = threadRef.current?.messages.find((m) => m.message_id === messageID);
@@ -2605,6 +2644,7 @@ export function SessionChat({
           (b) => b.type === 'tool_call' && isQuestionTool(b.name) && b.call_id === callID,
         );
         if (match?.type === 'tool_call') {
+          cachedBlockId = match.id;
           optimisticAnswersCache.set(match.id, {
             answers,
             input:
@@ -2618,11 +2658,15 @@ export function SessionChat({
       try {
         if (sessionState) await sessionState.answerQuestion(requestId, answers);
         else await replyToQuestion(requestId, answers);
+        removeQuestion(requestId);
       } catch {
-        // ignore — SSE "question.replied" event will also remove it
+        // The answer did not land: the card comes back, fresh, if the question
+        // is still open. The cached answer goes: the transcript must not show it.
+        if (cachedBlockId) optimisticAnswersCache.delete(cachedBlockId);
+        releaseQuestion(requestId);
       }
     },
-    [sessionState, removeQuestion, suppressQuestionFor, liveQuestions, parkedAskIdByRequest, answerParkedAsk],
+    [sessionState, removeQuestion, suppressQuestionFor, releaseQuestion, liveQuestions, parkedAskIdByRequest, answerParkedAsk],
   );
 
   const handleQuestionReject = useCallback(
@@ -2633,14 +2677,18 @@ export function SessionChat({
       const parkedAskId = liveQuestions.some((q) => q.id === requestId) ? undefined : parkedAskIdByRequest.get(requestId);
       if (parkedAskId) {
         // Dismissing a parked question closes it; nothing runs, so nothing is stopped.
-        answerParkedAsk.mutate({ askId: parkedAskId, answer: { dismiss: true } });
+        try {
+          await answerParkedAsk.mutateAsync({ askId: parkedAskId, answer: { dismiss: true } });
+        } catch {
+          releaseQuestion(requestId);
+        }
         return;
       }
       try {
         if (sessionState) await sessionState.rejectQuestion(requestId);
         else await rejectQuestion(requestId);
       } catch {
-        // ignore — SSE "question.rejected" event will also remove it
+        // ignore — the cancel below ends the turn the question holds
       }
       // Also abort the session so the "The operation was aborted." banner
       // appears. Routed through `issueSessionCancel` (T10) so this
@@ -2652,7 +2700,7 @@ export function SessionChat({
         issueSessionCancel();
       }
     },
-    [sessionState, removeQuestion, abortSession, suppressQuestionFor, issueSessionCancel],
+    [sessionState, removeQuestion, abortSession, suppressQuestionFor, releaseQuestion, liveQuestions, parkedAskIdByRequest, answerParkedAsk, issueSessionCancel],
   );
   // A compaction turn of any state (`turn.compaction`), so a failed attempt's
   // turn suppresses the optimistic "Compacting…" marker instead of leaving it
@@ -2848,6 +2896,7 @@ export function SessionChat({
         if (m.kind === 'file') fileMentionRefs.push({ path: m.label, name: m.label });
         else if (m.kind === 'agent') agentMentionRefs.push({ name: m.label });
       }
+      const driveMentionRefs = driveRefsOf(mentions, driveUploadsOf(files));
 
       // Play send sound
       playSound('send');
@@ -2911,6 +2960,7 @@ export function SessionChat({
         const block = buildFileRefsBlock(fileMentionRefs);
         if (block) optimisticText = `${optimisticText}\n\n${block}`;
       }
+      optimisticText = appendDriveRefs(optimisticText, driveMentionRefs);
       if (agentMentionRefs.length > 0) {
         const block = buildAgentRefsBlock(agentMentionRefs);
         if (block) optimisticText = `${optimisticText}\n\n${block}`;
@@ -3111,6 +3161,7 @@ export function SessionChat({
           const block = buildFileRefsBlock(fileMentionRefs);
           if (block) textPrompt.text = `${textPrompt.text}\n\n${block}`;
         }
+        textPrompt.text = appendDriveRefs(textPrompt.text, driveMentionRefs);
         if (agentMentionRefs.length > 0) {
           const block = buildAgentRefsBlock(agentMentionRefs);
           if (block) textPrompt.text = `${textPrompt.text}\n\n${block}`;
@@ -3191,7 +3242,11 @@ export function SessionChat({
         // The prompt is out of this tab's hands the moment the row lands, so the
         // receipt is taken BEFORE the POST: it is what holds the composer on
         // "working" until `GET .../turn` reports the turn the inbox admitted.
-        noteSendReceipt(messageID, receiptTurnId);
+        // Offline: no receipt yet. The POST waits for the network; the receipt is
+        // taken when the server has the prompt, so no Thinking row stands for a
+        // send that has not left the page.
+        const heldOffline = !networkOnlineRef.current;
+        if (!heldOffline) noteSendReceipt(messageID, receiptTurnId);
         const result = await (async () => {
           try {
             if (!projectId || !projectSessionId) {
@@ -3232,6 +3287,7 @@ export function SessionChat({
             // for it. `useSessionPrompts` raises the inbox floor at the same
             // moment, which is what covers the window before the row is
             // delivered and becomes a turn.
+            if (heldOffline) noteSendReceipt(messageID, receiptTurnId);
             acceptSendReceipt(messageID);
             attachments?.release();
             // The durable row now carries this prompt, so the tab-local draft
@@ -3244,6 +3300,7 @@ export function SessionChat({
             // Resolve that verdict before the composer can restore its draft:
             // recoverFromSendFailure checks asynchronously and returns an error now.
             if (!keepsPainted && (await inboxRowExists().catch(() => false))) {
+              if (heldOffline) noteSendReceipt(messageID, receiptTurnId);
               acceptSendReceipt(messageID);
               attachments?.release();
               if (!paintTranscript)
@@ -4192,7 +4249,7 @@ export function SessionChat({
             )}
           >
             <QuestionPrompt
-              key={renderedQuestion.id}
+              key={`${renderedQuestion.id}:${questionRetries[renderedQuestion.id] ?? 0}`}
               ref={questionPromptRef}
               request={renderedQuestion}
               onReply={handleQuestionReply}
@@ -4211,6 +4268,7 @@ export function SessionChat({
       pendingPermissions,
       handlePermissionReply,
       renderedQuestion,
+      questionRetries,
       questionPromptVisible,
       handleQuestionReply,
       handleQuestionReject,
@@ -5067,7 +5125,7 @@ export function SessionChat({
                     )}
 
                     {/* Persisted failures can precede any transcript message (for
-                        example, a marketplace install rejected at admission). */}
+                        example, a session rejected at admission). */}
                     {[
                       ...(turnOutcome.recent_failures ?? []),
                       ...(turnOutcome.last_ended?.end_reason === 'failed' &&
@@ -5204,6 +5262,15 @@ export function SessionChat({
           {/* Input — hidden in read-only mode (sub-session modal) */}
           {!readOnly && (
             <>
+              {/* The browser has no network: a send waits for it, and the work
+                  timer is not live. One quiet line says so (finding 07). */}
+              {!networkOnline && (
+                <div className={cn(COMPOSER_SHELL_CLASS, 'pb-1.5')}>
+                  <p role="status" aria-live="polite" className="text-muted-foreground text-xs">
+                    {tQueue('offlineReconnecting')}
+                  </p>
+                </div>
+              )}
               <SessionChatInput
                 // `undefined`, not `true`, once released: the composer's own
                 // viewport rule (>= 640px) still decides, so this never forces

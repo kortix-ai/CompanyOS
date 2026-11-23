@@ -87,7 +87,7 @@ import {
   type SessionActionsSheetRef,
 } from '@/components/session/SessionActionsSheet';
 import { Drawer } from 'react-native-drawer-layout';
-import { DrawerPeekCard, useDrawerBackdropColor } from '@/components/session/DrawerPeekCard';
+import { DrawerPeekCard, DrawerSidebarDim, useDrawerBackdropColor } from '@/components/session/DrawerPeekCard';
 import { haptics } from '@/lib/haptics';
 import {
   useProject,
@@ -187,13 +187,6 @@ const coveringRouteOptions = ({ route }: { route: { params?: object } }) => ({
 
 /** Shared empty list: a fresh `[]` per render would re-render the thread. */
 const EMPTY_SUB_AGENTS: ProjectSession[] = [];
-
-/**
- * What the waking view says. The composer there is disabled, so it promises
- * no send (the SDK's `SESSION_NOTICE.waking` says messages queue; web keeps
- * its live send button, mobile does not).
- */
-const WAKING_NOTICE = "Waking this session's computer. You can send messages when it's ready.";
 
 export function ProjectScreen() {
   const { id: projectId } = useLocalSearchParams<{ id: string }>();
@@ -597,24 +590,26 @@ export function ProjectScreen() {
   // Settings page is reached from Settings (drawer avatar) → project row.
   const renderDrawer = useCallback(
     () => (
-      <ProjectLeftDrawer
-        projectId={projectId}
-        activeProjectSessionId={shownSessionId}
-        activeRuntimeSessionId={shownRuntimeId}
-        activeParentSessionId={activeParentSessionId}
-        reviewNeedsYouCount={reviewNeedsYouCount}
-        needsYouBySession={needsYouSessions}
-        // New session opens project home: its composer starts the session.
-        onNewSession={startNewSession}
-        onOpenProjectSession={openSessionFromDrawer}
-        onOpenSubsession={openSubsessionFromDrawer}
-        onNavigateRoute={navigateDrawerRoute}
-        onOpenPage={openDrawerPage}
-        onSessionActions={openSessionActions}
-        onOpenSwitcher={openSwitcher}
-        onClose={closeDrawer}
-        open={drawerOpen}
-      />
+      <DrawerSidebarDim>
+        <ProjectLeftDrawer
+          projectId={projectId}
+          activeProjectSessionId={shownSessionId}
+          activeRuntimeSessionId={shownRuntimeId}
+          activeParentSessionId={activeParentSessionId}
+          reviewNeedsYouCount={reviewNeedsYouCount}
+          needsYouBySession={needsYouSessions}
+          // New session opens project home: its composer starts the session.
+          onNewSession={startNewSession}
+          onOpenProjectSession={openSessionFromDrawer}
+          onOpenSubsession={openSubsessionFromDrawer}
+          onNavigateRoute={navigateDrawerRoute}
+          onOpenPage={openDrawerPage}
+          onSessionActions={openSessionActions}
+          onOpenSwitcher={openSwitcher}
+          onClose={closeDrawer}
+          open={drawerOpen}
+        />
+      </DrawerSidebarDim>
     ),
     [
       projectId,
@@ -810,7 +805,6 @@ export function ProjectScreen() {
               restarting={restartingSession}
               showLoader={!viewDrawerOpen}
               thread={savedCopyThread}
-              statusLabel={WAKING_NOTICE}
               sessionId={savedCopyRootId ?? undefined}
               empty={connectingEmpty}
               projectId={projectId}
@@ -969,11 +963,14 @@ export function ProjectScreen() {
         open={drawerOpen}
         onOpen={openDrawer}
         onClose={closeDrawer}
-        // The ChatGPT-style peek card (Jay, 2026-11-11): the sidebar, 82% of
-        // the window (max 360pt), on the chrome surface; the page slides
-        // right by that width and turns into a rounded card (DrawerPeekCard).
-        // The overlay is transparent: a tap on the peek strip closes.
-        drawerType="slide"
+        // The Claude / ChatGPT iOS sidebar (Jay, 2026-11-11, 2026-11-15): the
+        // sidebar, 82% of the window (max 360pt), lies still on the chrome
+        // surface BEHIND the page ("back"); the page slides over it by that
+        // width as a rounded card (DrawerPeekCard), and the sidebar darkens
+        // while the card covers it (DrawerSidebarDim). "slide" moved both
+        // together, one flat sheet. The overlay is transparent: a tap on the
+        // peek strip closes.
+        drawerType="back"
         drawerStyle={drawerStyle}
         style={{ backgroundColor: drawerBackdrop }}
         overlayStyle={{ backgroundColor: 'transparent' }}

@@ -3,11 +3,12 @@
 import { CommandPaletteBoundary } from '@/features/workspace/command-palette-boundary';
 import { DriveUploadTray } from '@kortix/ui/files';
 import { VoiceCallCard } from '@kortix/ui/session/voice/voice-call-card';
-import { AppPreviewPoolLoader } from '@/features/apps/app-preview-pool-loader';
+import { AppPreviewPoolLoader, usePreviewPoolProject } from '@/features/apps/app-preview-pool-loader';
 import { ArtifactFramePreloader } from '@/features/artifacts/artifact-frame-preloader';
+import { previewPoolAllowed } from './preview-pool-route';
 import { useTranslations } from '@/i18n/use-translations';
 import { useQuery } from '@tanstack/react-query';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useState } from 'react';
 
 import { TITLEBAR_CONTROL_CLASS } from '@kortix/ui/internal/desktop/titlebar-control';
@@ -39,10 +40,6 @@ import { writeLastProjectId } from '@kortix/ui/internal/lib/onboarding/last-proj
 import { cn, uiRoutes } from '@kortix/ui';
 import { BillingAccountProvider } from '@kortix/ui/internal/stores/billing-account-context';
 import { useProjectSessionTabsStore } from '@/stores/project-session-tabs-store';
-import { GlobalUpgradeModal } from '@/features/billing/global-upgrade-modal';
-import { isBillingEnabled } from '@/lib/config';
-import { ConnectModelStep } from '@kortix/ui/session/models/connect-model-step';
-import { useWorkspaceModelGate } from '@kortix/ui/session/models/use-workspace-model-gate';
 import { getProject, getProjectDetail } from '@kortix/sdk';
 import {
   contract,
@@ -239,12 +236,6 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
 
   const openTab = useProjectSessionTabsStore((s) => s.openTab);
 
-  // No workspace page opens until the viewer can run a model: a new workspace
-  // lands on "Connect a model" right after setup, and so does any workspace
-  // whose models are all gone (Free plan, nothing connected). Paid plans run
-  // on Kortix models and pass.
-  const modelGate = useWorkspaceModelGate(projectId);
-
   useLayoutEffect(() => {
     if (activeSessionId) openTab(projectId, activeSessionId);
   }, [projectId, activeSessionId, openTab]);
@@ -255,19 +246,7 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
     return <div className="bg-background min-h-screen" />;
   }
 
-  // The same frame the access check and the route loaders paint, so a
-  // workspace that waits for its model answer shows one continuous screen.
-  if (modelGate === 'pending') return <ProjectPendingScreen />;
-
-  if (modelGate === 'blocked') {
-    return (
-      // The account the upgrade dialog and the plan check read: this workspace's.
-      <BillingAccountProvider accountId={projectAccountId ?? null} resolved={!!projectAccountId}>
-        <ConnectModelStep projectId={projectId} workspaceName={projectRow?.name} />
-        {isBillingEnabled() && <GlobalUpgradeModal />}
-      </BillingAccountProvider>
-    );
-  }
+  // Model availability gates the composer, not navigation or workspace settings.
 
   return (
     // `resolved` is what keeps the sidebar's billing items from flickering:
@@ -313,11 +292,10 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
             project. Without a call, nothing. */}
         <VoiceCallCard />
 
-        {/* App previews load here in the background and stay loaded while
-            the project is open, so the Apps page shows them at once. */}
-        <AppPreviewPoolLoader projectId={projectId} />
-        {/* Artifact pages too, in the same frame pool (flag `artifacts`). */}
-        <ArtifactFramePreloader projectId={projectId} />
+        {/* App previews and artifact pages load here in the background and
+            stay loaded while the project is open, so the Apps and Artifacts
+            pages show them at once. Not started by a settings page. */}
+        <PreviewPool projectId={projectId} />
 
         <Suspense fallback={null}>
           <PresentationViewerWrapper />
@@ -326,6 +304,32 @@ export function ProjectShell({ projectId, initialSidebarOpen, children }: Projec
         <PersonalOnboardingWelcome projectId={projectId} />
       </AppProviders>
     </BillingAccountProvider>
+  );
+}
+
+/**
+ * The background preview pool, started by the first project route that is not
+ * a settings page (`previewPoolAllowed`) and kept mounted after that, so a move
+ * into settings keeps the warm frames and a move back loads nothing again.
+ */
+function PreviewPool({ projectId }: { projectId: string }) {
+  usePreviewPoolProject(projectId);
+  const allowed = previewPoolAllowed(usePathname());
+  // Started per project. A project switch normally remounts the shell, but
+  // if a shell is ever reused, any project change resets the latch (a
+  // settings page included): the old project's frames are gone
+  // (`usePreviewPoolProject`).
+  const [pool, setPool] = useState({ projectId, started: allowed });
+  if (pool.projectId !== projectId || (allowed && !pool.started)) {
+    setPool({ projectId, started: allowed });
+  }
+  if (pool.projectId !== projectId || !pool.started) return null;
+  return (
+    <>
+      <AppPreviewPoolLoader projectId={projectId} />
+      {/* Artifact pages too, in the same frame pool (flag `artifacts`). */}
+      <ArtifactFramePreloader projectId={projectId} />
+    </>
   );
 }
 

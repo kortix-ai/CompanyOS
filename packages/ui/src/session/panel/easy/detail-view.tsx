@@ -46,28 +46,19 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
-import { ToolPartRenderer, ToolSurfaceContext } from '../../tool/tool-renderers';
+import { isUnpresentedFailure, ToolPartRenderer, ToolSurfaceContext } from '../../tool/tool-renderers';
 import { PanelWidthButton } from '../../../files/viewer/viewer-actions';
+import { DOCKED_LAYER_CLASS, SESSION_BAR_CLASS } from '../../../internal/layout/panel-chrome';
 
 import { CloseButton, DetailSidebarToggle } from '../../../files/viewer/viewer-chrome';
 
 export { CloseButton, DetailSidebarToggle };
 
-/**
- * The card frame both layers wear — the detail card and the persistent layer.
- * ONE constant, because they are two states of one shell: inset from the top,
- * left and bottom so the card reads as sitting IN the panel rather than nailed
- * over it, flush to the right edge so an arrival slides in from off-panel.
- *
- * This used to be copy-pasted into `easy-panel.tsx`'s standalone terminal
- * `m.div`, which is exactly how the terminal drifted into looking like its
- * own sidebar instead of a view inside this shell. Shared, the two cannot drift.
- */
-const CARD_FRAME =
-  'bg-popover border-border absolute inset-y-3 right-3 left-3 flex min-w-0 flex-col overflow-hidden rounded-md border shadow-md';
+/** The layer's header bar — the same bar as the chat's session header. */
+const LAYER_BAR_CLASS = cn(SESSION_BAR_CLASS, 'justify-between gap-2 px-3');
 
 /**
- * A layer that lives inside the detail card frame but must NEVER unmount.
+ * A layer that lives inside the docked detail frame but must NEVER unmount.
  *
  * The terminal is the only one: `SessionTerminalPanel` owns a long-lived PTY
  * WebSocket, and the keyed `AnimatePresence` below tears a `Detail`'s body down
@@ -581,15 +572,17 @@ export function DetailLayer({
             initial="hidden"
             animate="visible"
             exit="hidden"
-            // `CARD_FRAME` is shared with the persistent layer below, so the
+            // `DOCKED_LAYER_CLASS` is shared with the persistent layer below
+            // (`panel-chrome.ts`): docked edge to edge, and an arrival still
+            // slides in from the right edge, which the panel clips. Shared, so the
             // two states of this shell can never drift apart visually.
             // `outline-none`: this container is programmatically focused on
             // open (the a11y focus management above). A keyboard-initiated
             // open — the ⌘K "Open Browser"/"Open Terminal" commands — makes
             // that focus :focus-visible, which drew a focus ring around the
             // whole card. The container is a focus TARGET (tabIndex -1), not
-            // a control; its frame is the border, never an outline.
-            className={cn(CARD_FRAME, 'outline-none')}
+            // a control; the panel's `border-l` frames it, never an outline.
+            className={cn(DOCKED_LAYER_CLASS, 'outline-none')}
           >
             {/* The content layer: keyed on `detail.key`, so paging to a
                 sibling swaps THIS, not the card above. `popLayout` pulls the
@@ -609,11 +602,11 @@ export function DetailLayer({
                 className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
               >
                 {!detail.hideHeader && (
-                  // No rule under the header: the card's own border already
-                  // separates this from the panel, and a second line inside it just
-                  // boxes the title in. Close sits far right, where a close always
-                  // is — a back chevron implies a stack the user isn't in.
-                  <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-2.5">
+                  // The rule under the header lines up with the chat header's
+                  // rule (`SESSION_BAR_CLASS`). Close sits far right, where a
+                  // close always is — a back chevron implies a stack the user
+                  // isn't in.
+                  <div className={LAYER_BAR_CLASS}>
                     <span className="flex min-w-0 items-center gap-2">
                       <DetailSidebarToggle className="size-7" />
                       {detail.icon}
@@ -632,7 +625,6 @@ export function DetailLayer({
                   className={cn(
                     'min-h-0 min-w-0 flex-1 overflow-auto',
                     detail.padded !== false && 'p-4',
-                    !detail.hideHeader && detail.padded !== false && 'pt-0',
                   )}
                 >
                   {detail.body}
@@ -660,9 +652,9 @@ export function DetailLayer({
           transition={persistentMotion.transition}
           aria-hidden={!persistentOpen}
           inert={!persistentOpen || undefined}
-          className={cn(CARD_FRAME, !persistentOpen && 'pointer-events-none')}
+          className={cn(DOCKED_LAYER_CLASS, !persistentOpen && 'pointer-events-none')}
         >
-          <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-2.5">
+          <div className={LAYER_BAR_CLASS}>
             <span className="flex min-w-0 items-center gap-2">
               <DetailSidebarToggle className="size-7" />
               {persistentLayer.icon}
@@ -725,7 +717,8 @@ export function ToolParts({
   summary?: string;
 }) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
-  const visible = collapseSnapshots(calls);
+  // A failed `show` presented nothing: no row, no failure banner, no full-height slot.
+  const visible = collapseSnapshots(calls).filter((call) => !isUnpresentedFailure(call));
   // A step's own icon already went red for this (StepIcon, ContextCard) — but
   // that glance lives on the panel's home, one screen back. Once the user has
   // actually opened the failed step, the detail must say so too, not just show
@@ -742,7 +735,8 @@ export function ToolParts({
     <ToolSurfaceContext.Provider value="panel">
       <div
         className={cn(
-          'flex min-w-0 flex-col gap-2',
+          // One list: the rows' own hairlines space them.
+          'flex min-w-0 flex-col',
           fillsPanel && 'h-full',
           // Tool views cap their own scroll height for the inline chat, where
           // they're one item among many. Here the detail IS the tool — a web
@@ -755,9 +749,9 @@ export function ToolParts({
           '[&_[data-scrollable]]:max-h-none',
         )}
       >
-        {summary && <p className="text-muted-foreground text-sm text-pretty">{summary}</p>}
+        {summary && <p className="text-muted-foreground px-2 pb-2 text-sm text-pretty">{summary}</p>}
         {failed && (
-          <div className="border-kortix-red/30 bg-kortix-red/5 text-foreground rounded-md border px-3 py-2 text-sm">
+          <div className="bg-kortix-red/15 text-foreground mb-2 rounded-md px-3 py-2 text-sm">
             {tI18nComplete.raw('text4e1c9bd64a7d')}
           </div>
         )}
@@ -767,14 +761,17 @@ export function ToolParts({
             `calls`: `collapseSnapshots` can fold three `todo_write` calls into
             the single row that is actually drawn, and that lone row is a
             single-part detail by every measure the reader has. */}
-        {visible.map((call) => (
-          <ToolPartRenderer
-            key={call.call_id}
-            call={call}
-            sessionId={sessionId}
-            defaultOpen={visible.length === 1}
-          />
-        ))}
+        {/* One card per call, spaced apart. */}
+        <div className="flex flex-col gap-2">
+          {visible.map((call) => (
+            <ToolPartRenderer
+              key={call.call_id}
+              call={call}
+              sessionId={sessionId}
+              defaultOpen={visible.length === 1}
+            />
+          ))}
+        </div>
       </div>
     </ToolSurfaceContext.Provider>
   );

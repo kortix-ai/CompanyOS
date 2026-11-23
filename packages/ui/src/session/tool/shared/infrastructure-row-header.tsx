@@ -19,7 +19,7 @@ import { isTriggerTitle } from './infrastructure-parts';
 // without an `!important` arms race inside a shared class.
 export const TOOL_ROW_CLASS = cn(
   'flex items-center gap-1.5 py-0.5',
-  'text-xs text-muted-foreground/70 transition-colors select-none max-w-full group',
+  'text-xs text-muted-foreground transition-colors select-none max-w-full group',
   '[&>span:first-child>svg]:size-4 [&>span:first-child>svg:not([data-tone])]:text-muted-foreground',
 );
 
@@ -138,9 +138,9 @@ function InlineTriggerTitle({
           )}
           {args.length > 0 && (
             <>
-              {subtitle && <span className="text-muted-foreground/40 shrink-0">·</span>}
+              {subtitle && <span className="text-muted-foreground shrink-0">·</span>}
               <span
-                className="text-muted-foreground/40 min-w-0 truncate text-sm"
+                className="text-muted-foreground min-w-0 truncate text-sm"
                 title={args.join(' · ')}
               >
                 {args.join(' · ')}
@@ -244,18 +244,20 @@ export function PanelRowTitle({
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
       {running ? (
-        <TextShimmer className={cn(PANEL_TITLE_CLASS, 'text-sm font-medium')}>
+        <TextShimmer className={cn(PANEL_TITLE_CLASS, 'text-sm')}>
           {trigger.title || 'Working'}
         </TextShimmer>
       ) : (
-        <span className={cn('text-foreground text-sm font-medium', PANEL_TITLE_CLASS)}>
+        // The verb is meta ink when a value follows it: the value is what the
+        // reader scans for. Alone, the title is the row's name.
+        <span className={cn('text-sm', subtitle ? 'text-muted-foreground' : 'text-foreground', PANEL_TITLE_CLASS)}>
           {trigger.title}
         </span>
       )}
       {subtitle && (
         <span
           className={cn(
-            'text-muted-foreground min-w-0 truncate font-mono text-xs',
+            'text-foreground min-w-0 truncate font-mono text-xs',
             onSubtitleClick &&
               'hover:text-foreground cursor-pointer underline-offset-2 hover:underline',
           )}
@@ -297,7 +299,7 @@ export function PanelRowTitle({
       )}
       {args.length > 0 && (
         <span
-          className="text-muted-foreground/60 min-w-0 truncate font-mono text-xs"
+          className="text-muted-foreground min-w-0 truncate font-mono text-xs"
           title={args.join(' · ')}
         >
           {args.join(' · ')}

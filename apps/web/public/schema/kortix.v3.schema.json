@@ -142,6 +142,29 @@
       "deprecated": true,
       "description": "Selects nothing: every new session runs pi."
     },
+    "trigger_session_readers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "humans": {
+          "type": "string",
+          "enum": [
+            "none",
+            "members"
+          ],
+          "description": "Current human account members may read newly created trigger sessions. No mutation rights. Default: none."
+        },
+        "agents": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+          },
+          "description": "Explicit named monitoring agents. Read only; no implicit agent access. Default: []."
+        }
+      },
+      "description": "Shared additive reader default for newly created trigger sessions. Existing sharing and IAM are unchanged. No implicit backfill."
+    },
     "project": {
       "type": "object",
       "description": "`name`: the project's name. A push that changes it renames the project, and a rename in Kortix commits it here. `description`: text for people who read the repository.",
@@ -322,6 +345,29 @@
               "type"
             ],
             "properties": {
+              "session_readers": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "humans": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "members"
+                    ],
+                    "description": "Current human account members may read newly created trigger sessions. No mutation rights. Default: none."
+                  },
+                  "agents": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+                    },
+                    "description": "Explicit named monitoring agents. Read only; no implicit agent access. Default: []."
+                  }
+                },
+                "description": "Additive read-only policy for new sessions; overrides trigger_session_readers in full."
+              },
               "slug": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
@@ -565,6 +611,10 @@
               "expect_event_within": {
                 "type": "string",
                 "pattern": "^([1-9][0-9]*)(s|m|h|d)$"
+              },
+              "hard_run_caps": {
+                "type": "boolean",
+                "description": "Atomically cap every fire, including manual fires. No implicit manual override."
               },
               "max_runs_per_hour": {
                 "type": "integer",
@@ -974,6 +1024,29 @@
               "run"
             ],
             "properties": {
+              "session_readers": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "humans": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "members"
+                    ],
+                    "description": "Current human account members may read newly created trigger sessions. No mutation rights. Default: none."
+                  },
+                  "agents": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+                    },
+                    "description": "Explicit named monitoring agents. Read only; no implicit agent access. Default: []."
+                  }
+                },
+                "description": "Additive read-only policy for new sessions; overrides trigger_session_readers in full."
+              },
               "slug": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$",
@@ -1117,6 +1190,10 @@
                   ]
                 },
                 "description": "Payload path → a value (equals), or one operator: `not`, `in`, `exists`, `prefix`, `not_prefix`. A fire runs only when every path matches."
+              },
+              "hard_run_caps": {
+                "type": "boolean",
+                "description": "Atomically cap every fire, including manual fires. No implicit manual override."
               },
               "max_runs_per_hour": {
                 "type": "integer",
@@ -1523,7 +1600,11 @@
                 ],
                 "description": "`oauth1` works on `openapi`, `postman` and `http` only."
               },
-              "secret": false,
+              "secret": {
+                "type": "string",
+                "pattern": "^[A-Z_][A-Z0-9_]{0,63}$",
+                "description": "The name of the project secret Kortix sends as the credential. Its value lives in Secrets, never in this file."
+              },
               "in": {
                 "default": "header",
                 "description": "Where the credential goes."
@@ -2899,7 +2980,7 @@
                         },
                         "name": {
                           "type": "string",
-                          "description": "A dataset of the Harbor registry, such as `terminal-bench`."
+                          "description": "A Harbor Hub package `org/name` (under `tasks` a task, under `datasets` a dataset), optionally `@ref`; or a dataset of the legacy Harbor registry, such as `terminal-bench`."
                         },
                         "git_url": {
                           "type": "string",
@@ -2914,7 +2995,11 @@
                             "string",
                             "number"
                           ],
-                          "description": "The dataset version, such as `2.0`."
+                          "description": "The legacy registry dataset version, such as `2.0`, or a Harbor Hub ref."
+                        },
+                        "ref": {
+                          "type": "string",
+                          "description": "A Harbor Hub ref: a tag (`latest`), a revision (`3`) or `sha256:<digest>`. Default: `latest`."
                         },
                         "task_names": {
                           "type": "array",
@@ -2943,7 +3028,7 @@
             ]
           },
           "datasets": {
-            "description": "Folders of tasks, or datasets of the Harbor registry (`{ name: terminal-bench, version: \"2.0\" }`).",
+            "description": "Folders of tasks, Harbor Hub datasets (`{ name: terminal-bench/terminal-bench-2-1 }`), or datasets of the legacy Harbor registry (`{ name: terminal-bench, version: \"2.0\" }`).",
             "anyOf": [
               {
                 "type": "string"
@@ -2964,7 +3049,7 @@
                         },
                         "name": {
                           "type": "string",
-                          "description": "A dataset of the Harbor registry, such as `terminal-bench`."
+                          "description": "A Harbor Hub package `org/name` (under `tasks` a task, under `datasets` a dataset), optionally `@ref`; or a dataset of the legacy Harbor registry, such as `terminal-bench`."
                         },
                         "git_url": {
                           "type": "string",
@@ -2979,7 +3064,11 @@
                             "string",
                             "number"
                           ],
-                          "description": "The dataset version, such as `2.0`."
+                          "description": "The legacy registry dataset version, such as `2.0`, or a Harbor Hub ref."
+                        },
+                        "ref": {
+                          "type": "string",
+                          "description": "A Harbor Hub ref: a tag (`latest`), a revision (`3`) or `sha256:<digest>`. Default: `latest`."
                         },
                         "task_names": {
                           "type": "array",
@@ -3396,6 +3485,12 @@
       "additionalProperties": {
         "type": "object",
         "properties": {
+          "title": {
+            "type": "string",
+            "pattern": "\\S",
+            "maxLength": 80,
+            "description": "The agent's name as people read it, e.g. \"GitHub PR reviewer\". The key under `agents` stays its id: sessions, triggers and @-mentions use the key. Default: the key in sentence case."
+          },
           "description": {
             "type": "string",
             "description": "What the agent does. An agent that may start it as a subagent reads it to choose."

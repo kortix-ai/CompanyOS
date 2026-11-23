@@ -18,6 +18,7 @@
  * has one shape.
  */
 
+import { parseTriggerReaders, type TriggerReaders } from './trigger-readers';
 import { validateAgentPolicySetRefs } from './policy-sets';
 import {
   AGENT_MODES_V2,
@@ -40,6 +41,7 @@ import {
   SPACE_TAB_TYPES,
   TOOL_NAME_RE,
   parseDurationSeconds,
+  AGENT_TITLE_MAX_LENGTH,
 } from './constants';
 
 export { SPACE_HEADER_ITEMS, SPACE_TAB_TYPES };
@@ -132,6 +134,12 @@ export function grantedNamesV3(value: unknown, universe: readonly string[]): str
 
 /** One `agents.<name>` entry. Behavior and grants in one block. */
 export interface AgentBlockV3 {
+  /**
+   * The agent's name as people read it ("GitHub PR reviewer"). The map key stays the
+   * agent's id: sessions, triggers and @-mentions use the key. Absent: the key in
+   * sentence case (`agentDisplayName`).
+   */
+  title?: string;
   description?: string;
   mode?: 'primary' | 'subagent' | 'all';
   model?: string;
@@ -399,6 +407,7 @@ export interface ManifestV3 {
   connectors?: Array<Record<string, unknown>>;
   apps?: Record<string, unknown>;
   triggers?: Array<Record<string, unknown>>;
+  trigger_session_readers?: TriggerReaders;
   policy?: Record<string, unknown>;
   policies?: Array<Record<string, unknown>>;
   /** `ttl`: how long a held connector call waits for a decision (`30m`, `4h`, `7d`). */
@@ -429,6 +438,7 @@ const TOP_LEVEL_KEYS_V3 = [
   'connectors',
   'apps',
   'triggers',
+  'trigger_session_readers',
   'policy',
   'policies',
   'approvals',
@@ -464,6 +474,7 @@ const BEHAVIOR_KEYS_V3 = [
 
 /** Every key an `agents.<name>` block may hold. The agent page maps each to a row. */
 export const AGENT_BLOCK_KEYS_V3 = [
+  'title',
   ...BEHAVIOR_KEYS_V3,
   'prompt',
   'prompt_file',
@@ -489,6 +500,8 @@ export const AGENT_BLOCK_KEYS_V3 = [
   'network_egress',
 ] as const;
 const AGENT_KEYS_V3 = new Set<string>(AGENT_BLOCK_KEYS_V3);
+
+export { AGENT_TITLE_MAX_LENGTH } from './constants';
 
 /** Agent keys of earlier versions, with what replaces each in v3. */
 const RETIRED_AGENT_KEYS_V3: Record<string, string> = {
@@ -534,6 +547,10 @@ export function validateManifestBody(parsed: Record<string, unknown>, issues: Ma
   validateEnv(parsed.env, 'env', issues);
   validateSandbox(parsed.sandbox, 'sandbox', issues);
   validateRuntimeV2(parsed.runtime, 'runtime', issues);
+  if (parsed.trigger_session_readers !== undefined) {
+    const readers = parseTriggerReaders(parsed.trigger_session_readers);
+    if ('error' in readers) issues.push({ path: 'trigger_session_readers', message: readers.error, severity: 'error' });
+  }
   validateTriggers(parsed.triggers, 'triggers', issues, triggerAgentContextV3(parsed));
   validateConnectors(parsed.connectors, 'connectors', issues);
   validateAppsV2(parsed.apps, 'apps', issues);
@@ -866,6 +883,9 @@ function validateAgentBlockV3(
     }
   }
 
+  if (entry.title !== undefined && (typeof entry.title !== 'string' || !entry.title.trim() || entry.title.trim().length > AGENT_TITLE_MAX_LENGTH)) {
+    issues.push({ path: `${where}.title`, message: `must be a non-empty string of at most ${AGENT_TITLE_MAX_LENGTH} characters.`, severity: 'error' });
+  }
   if (entry.prompt !== undefined && (typeof entry.prompt !== 'string' || !entry.prompt.trim())) {
     issues.push({ path: `${where}.prompt`, message: 'must be a non-empty string.', severity: 'error' });
   }

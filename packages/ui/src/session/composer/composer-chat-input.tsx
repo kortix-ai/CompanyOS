@@ -16,7 +16,8 @@ import type { AttachmentSubmission } from './attachment-submission';
 import type { ComposerSendReset } from './composer-reset';
 import { type Command, type ModelKey, useProjectConfig, useRuntimeAgents, useRuntimeCommands, useRuntimeConfig, useRuntimeProviders, useSessionModelSelection } from '@kortix/sdk/react';
 import { appendMentionRefs } from '../../internal/lib/project-preamble';
-import { resolveComposerAgent, withChannelAgents } from './composer-agent-access';
+import { driveUploadsOf } from './drive-mentions';
+import { chatStartAgent, resolveComposerAgent, withChannelAgents } from './composer-agent-access';
 import { inheritedModelFor } from './chat-input/chat-input-summary';
 import type { DraftScope } from './draft/composer-draft';
 
@@ -175,14 +176,20 @@ export function ComposerChatInput({
   const { data: providers, isLoading: providersLoading } = useRuntimeProviders();
   const { data: config } = useRuntimeConfig();
   const projectConfig = useProjectConfig(projectId);
-  const startAgent = defaultAgentName || projectConfig?.default_agent;
+  // A new chat starts on the place's agent (a channel's), else My Kortix when
+  // the workspace runs it, else kortix.yaml `default_agent` (`chatStartAgent`).
+  const startAgent = defaultAgentName || chatStartAgent(projectConfig);
   const local = useSessionModelSelection({
     agents,
     providers,
     config,
     sessionId,
+    projectSessionId: sessionId,
     boundAgentName,
     defaultAgentName: startAgent,
+    // A new workspace chat remembers the person's pick and starts the next one
+    // on it. A place with its own default agent (a channel) keeps that default.
+    rememberAgent: !sessionId && !boundAgentName && !defaultAgentName,
     projectSession,
   });
   const setAgent = local.agent.set;
@@ -326,7 +333,7 @@ export function ComposerChatInput({
       // A first message has no session send to write the `@` mention blocks
       // (`session-chat.tsx` `handleSend`), so they go into the text here.
       onSend={(text, files, mentions, attachments, placement) =>
-        onSend(appendMentionRefs(text, mentions), files, { ...options(), placement }, attachments)
+        onSend(appendMentionRefs(text, mentions, driveUploadsOf(files)), files, { ...options(), placement }, attachments)
       }
       promptAttachments={promptAttachments}
       onCommand={onCommand ? (cmd, args) => onCommand(cmd, args, options()) : undefined}

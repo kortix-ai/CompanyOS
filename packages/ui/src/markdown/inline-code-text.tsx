@@ -1,6 +1,6 @@
 import type React from 'react';
 
-import { INLINE_CODE } from './code/inline-chip';
+import { INLINE_CODE } from './inline-chip';
 
 export type InlineCodeSegment = { kind: 'text' | 'code'; value: string };
 
@@ -24,6 +24,41 @@ export function splitInlineCode(input: string): InlineCodeSegment[] {
   }
   if (last < input.length) segments.push({ kind: 'text', value: input.slice(last) });
   return segments;
+}
+
+/**
+ * A markdown string as the plain words it shows, for one-line text that
+ * cannot hold markup: a card's summary, an accessible description, a link
+ * name. Code spans lose their backticks, links and images keep their text,
+ * emphasis markers go, and line breaks collapse to single spaces.
+ * `memory_reflector`-style identifiers keep their underscores.
+ */
+export function plainTextFromMarkdown(input: string): string {
+  return splitInlineCode(input)
+    .map((segment) =>
+      segment.kind === 'code'
+        ? segment.value
+        : segment.value
+            .replace(/!?\[([^[\]]*)\]\([^()\s]*\)/g, '$1')
+            .replace(/(\*\*|__|~~)(?=\S)([\s\S]*?\S)\1/g, '$2')
+            .replace(/(^|[^\w*])\*(?=\S)([^*]*?\S)\*(?![\w*])/g, '$1$2')
+            .replace(/(^|[^\w])_(?=\S)([^_]*?\S)_(?!\w)/g, '$1$2'),
+    )
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * The first sentence of `plainTextFromMarkdown(input)`, capped at `max`
+ * characters with an ellipsis: what a card's `aria-describedby` reads, so a
+ * Tab stop announces a summary instead of a whole SKILL.md description.
+ */
+export function shortSummary(input: string, max = 160): string {
+  const text = plainTextFromMarkdown(input);
+  const sentence = /^.+?[.!?](?=\s|$)/.exec(text)?.[0] ?? text;
+  if (sentence.length <= max) return sentence;
+  return `${sentence.slice(0, max - 1).trimEnd()}…`;
 }
 
 /**

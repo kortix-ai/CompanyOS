@@ -1,36 +1,26 @@
 ---
 title: Kortix in Chrome
 description: Add the Kortix extension to Chrome so a session can open pages, read them and click, with your logins, while you watch and can stop it.
-noindex: true
-hidden: true
-ai:
-  exclude: true
 ---
-
-{/* Not launched: the API serves Kortix in Chrome only where KORTIX_CHROME_ENABLED is on (dev). `noindex` keeps this page out of search, the sitemap, llms.txt and the Markdown copies; the app links to it where the feature is on. Remove it at launch. */}
 
 Kortix in Chrome is a Chrome extension that connects your own browser to Kortix. You add the extension and sign in once. After that, any of your sessions can drive that browser, including the sites you are already signed in to. This page is for members who connect a browser, decide what agents may reach, and stop an agent that uses it.
 
-Kortix in Chrome is experimental. A workspace can turn it off under **Workspace admin** → **Feature flags**; when it is off, a session cannot attach a browser and the sidebar row and the **Kortix in Chrome** settings page are hidden.
+Kortix in Chrome is experimental. A workspace can turn it off under **Workspace admin** → **Feature flags**; when it is off, a session cannot attach a browser, and the workspace does not offer **Kortix in Chrome** under **Apps and extensions**.
 
 The extension is not a sandbox browser and not [a computer](/docs/guide#computers). Pages open in your real browser, as you. It runs in Chrome 125 or later, and in Edge, Brave and Arc. Safari, Firefox, the Kortix desktop app and phones cannot run it.
 
 ## How to install
 
-The Chrome Web Store listing is not public yet. Until it is, load the extension from the Kortix repository:
+Install **Kortix** from the [Chrome Web Store](https://chromewebstore.google.com/detail/gefbbnjgoiljpbnalgafbhbfdhikgjek): select **Add to Chrome**, then **Add extension**. Chrome opens a Kortix tab, **Let Kortix use this browser**. Continue with step 3 below.
 
-1. Build it: run `bun run build` in `apps/chrome-extension`. The build writes `apps/chrome-extension/dist`.
-2. In Chrome, Edge, Brave or Arc, open `chrome://extensions` and turn on **Developer mode**.
-3. Select **Load unpacked** and choose the `dist` folder.
-
-When the listing is public, **Add to Chrome** replaces these steps.
+The extension signs in to kortix.com. A self-hosted Kortix server does not offer Kortix in Chrome.
 
 ## Connect the browser
 
-1. Open **Settings → Kortix in Chrome**, or select **Kortix in Chrome** in the sidebar. The dialog **Add Kortix to Chrome** shows three steps.
-2. **Add the extension.** The step turns green when Kortix finds the extension. If it does not, reload the Kortix page.
-3. **Sign in.** Select **Connect**. Chrome opens a Kortix tab. Check the **Kortix server**, then select **Connect to Kortix**. The tab goes to the Kortix sign-in page. Select **Allow**.
-4. **Connected.** The tab comes back, and you name the browser and choose its access. The browser appears with an online dot. Select **Done**.
+1. Open **Settings → Kortix in Chrome**. The page shows three steps: **Add the extension**, **Sign in** and **Connected**. The workspace menu has the same **Add to Chrome** button under **Apps and extensions**.
+2. **Add the extension.** Select **Add to Chrome**. The Chrome Web Store opens: select **Add to Chrome** there. The step turns green when Kortix finds the extension. If it does not, reload the Kortix page.
+3. **Sign in.** Chrome opens a Kortix tab after the install. Select **Connect to Kortix**. The tab goes to the Kortix sign-in page. Select **Allow**. If the extension was already there, select **Connect** on the Kortix page to open that tab.
+4. **Connected.** The tab comes back. Name the browser, choose **Access** and **Tabs**, and select **Finish**. In Kortix, the browser appears with an online dot.
 
 The extension stays signed in. In a browser that cannot run the extension, the dialog tells you to open Kortix in Chrome, Edge, Brave or Arc, and offers **Copy link**.
 
@@ -136,4 +126,4 @@ Ask the agent in plain words, for example "Use my browser to check the invoices 
 | `chrome_dial_failed` | The extension could not open the connection to the session. | Check that Chrome is open and the extension is signed in, then run `kortix chrome use` again. |
 | `feature_disabled` | The workspace has **Kortix in Chrome** turned off. | Turn it on under **Workspace admin** → **Feature flags**. |
 
-If the dialog does not show the extension as added, finish in the Kortix tab Chrome opened, or reload the Kortix page. If you leave the sign-in page without **Allow**, select **Connect to Kortix** again. A server that does not offer the Chrome extension yet is named on the Kortix tab before any sign-in.
+If the dialog does not show the extension as added, finish in the Kortix tab Chrome opened, or reload the Kortix page. If you leave the sign-in page without **Allow**, select **Connect to Kortix** again.

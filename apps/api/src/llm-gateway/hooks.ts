@@ -335,11 +335,14 @@ export async function authorizeRequest(
       const billing = await assertLlmBillingActive(principal.accountId);
       if (billing?.holdUsd) principal = { ...principal, billingHold: { amountUsd: billing.holdUsd } };
     } catch (err) {
+      // Only a refusal is a 402. A wallet fault or a timeout is thrown: the
+      // route answers 5xx and the gateway a retryable 503 (prod 2026-11-12).
+      if (!(err instanceof BillingGateError)) throw err;
       return {
         ok: false,
         status: 402,
-        errorCode: err instanceof BillingGateError ? err.reason : 'subscription_required',
-        message: err instanceof Error ? err.message : 'Billing inactive',
+        errorCode: err.reason,
+        message: err.message,
         principal,
       };
     }
@@ -481,7 +484,8 @@ const routeOf = (event: UsageEvent) => OPERATION_ROUTES.get(event.operation) ?? 
 export async function recordGatewayUsage(event: UsageEvent): Promise<void> {
   // The request is over: its cost is in the logged spend (or it cost nothing),
   // so its in-flight budget reservation must stop counting.
-  releaseBudgetReservation(event.projectId, event.actorUserId);
+  // Claude passthrough authenticates without taking a block-budget reservation.
+  if (event.provider !== 'claude-agent') releaseBudgetReservation(event.projectId, event.actorUserId);
   const pureHoldRefund = isPureHoldRefund(event);
   // A pure hold refund observed nothing — no upstream call happened.
   if (!pureHoldRefund) extendDeadlineForLlmActivity(event.sessionId);

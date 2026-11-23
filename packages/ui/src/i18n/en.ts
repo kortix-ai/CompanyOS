@@ -106,6 +106,7 @@ const catalog = {
     "savedVerified": "Key saved and verified",
     "savedInvalid": "Key saved, but {provider} refused it: {message}",
     "checkError": "The key could not be checked",
+    "keyRejected": "Your {provider} key was rejected. Update it in Models.",
     "openProviderInModels": "Open {provider} in Models",
     "member": "member",
     "members": "members",
@@ -199,7 +200,8 @@ const catalog = {
     },
     "agentAccess": "Agents: {agents}",
     "allAgents": "All agents",
-    "noAgents": "No agents"
+    "noAgents": "No agents",
+    "deliveredOnceSet": "Delivered once a value is set"
   },
   "common": {
     "cancel": "Cancel",
@@ -242,7 +244,6 @@ const catalog = {
       "registering": "Registering workspace",
       "seeding": "Seeding starter files"
     },
-    "templateSeed": "This workspace will be seeded from the template you picked.",
     "account": {
       "label": "Account",
       "createIn": "Create in {account}",
@@ -353,6 +354,8 @@ const catalog = {
       "backToApp": "Back to app",
       "close": "Close",
       "docs": "Docs",
+      "search": "Search preferences",
+      "searchNoResults": "No matches",
       "groups": {
         "workspace": "Workspace",
         "personal": "Personal",
@@ -459,6 +462,7 @@ const catalog = {
       "secretsCommand": "Secrets command",
       "ownClientTitle": "Use your own Git client",
       "ownClientDescription": "Clone with plain <code>git</code> instead of the Kortix command line.",
+      "ownClientHelp": "Clone from this address with any Git client. When git asks, enter any username and a Kortix API key as the password — the Kortix command line does this for you through its credential helper; plain <code>git</code> does not.",
       "cloneAddressDescription": "Clone from this address with any Git client. Kortix signs the request for you, so there is no access token to create, paste, or keep on your machine.",
       "cloneAddress": "Clone address",
       "peopleTitle": "People with access",
@@ -673,15 +677,16 @@ const catalog = {
         "startup": "Startup"
       },
       "statuses": {
-        "ready": "ready",
-        "building": "building",
-        "failed": "failed"
+        "ready": "Ready",
+        "building": "Building",
+        "failed": "Failed"
       },
       "stale": {
         "superseded": "Didn’t finish, and a newer setup has replaced it",
         "recovered": "Didn’t finish, but the environment is ready now",
         "retrying": "Didn’t finish — a new attempt is running"
       },
+      "supersededGroup": "{count, plural, one {# older build replaced} other {# older builds replaced}}",
       "outcomes": {
         "ready": "Ready for new sessions",
         "building": "Being prepared now",
@@ -790,10 +795,6 @@ const catalog = {
       "permission": "You need the workspace's settings permission to change a feature flag.",
       "updateFailed": "Failed to update {key}",
       "flags": {
-        "marketplace": {
-          "name": "Marketplace",
-          "description": "Browse and install skills from community and vendor registries. Sources, updates, and team scopes are still changing."
-        },
         "secrets_egress": {
           "name": "Network-Enforced Secrets",
           "description": "Control which tools and destinations can receive workspace secrets."
@@ -823,12 +824,12 @@ const catalog = {
           "description": "Give the agent an email inbox on Resend: inbound mail starts and continues sessions, and the agent reads, replies and sends from the inbox. Bring your own Resend API key and domain."
         },
         "chat": {
-          "name": "Spaces",
-          "description": "Spaces with Kortix, the way Slack works: every message is a thread, Kortix's newest reply shows under it, Kortix can start threads, and you share spaces with people. Replaces the session list in the sidebar."
+          "name": "Channels",
+          "description": "Channels with Kortix, the way Slack works: every message is a thread, Kortix's newest reply shows under it, Kortix can start threads, and you share channels with people. Replaces the session list in the sidebar."
         },
         "session_groups": {
-          "name": "Session groups",
-          "description": "Group the sidebar's sessions into named folders that everyone in the workspace shares, for example one per store or client. Move a session into a group from its menu or by dragging it; reorder and collapse the groups."
+          "name": "Spaces",
+          "description": "Group sessions into spaces, each with its own files and tabs. A new space is private to you; share it with people or with the whole workspace. Start a session in a space from its page or from the Space picker under the composer. Every session in a space knows what the space is for and mounts its Files folder."
         },
         "chrome": {
           "name": "Kortix in Chrome",
@@ -872,7 +873,7 @@ const catalog = {
         },
         "calendar": {
           "name": "Calendar",
-          "description": "A shared calendar for people and agents: items with a date, an owner and comments, beside the scheduled triggers and Loops. Mention someone with @ to notify them. Agents use `kortix calendar`."
+          "description": "A shared calendar for people and agents: dated items with the people on them and comments, beside the scheduled triggers and Loops. Mention someone with @ to notify them. Agents use `kortix calendar`."
         }
       },
       "channelsSwitch": {
@@ -1066,6 +1067,22 @@ const catalog = {
     "referralShareTitle": "Refer Friends",
     "referralShareSubtitle": "Get 400 credits",
     "new": "New",
+    "mcpPromo": {
+      "title": "Use Kortix in ChatGPT and Claude",
+      "description": "Add Kortix to the AI chat you already use. Start agents, follow their work and use your connectors from there.",
+      "cta": "Connect"
+    },
+    "desktopPromo": {
+      "title": "Get the desktop app",
+      "description": "Hand Kortix a task from any app with Quick Entry, and connect this computer in one click.",
+      "cta": "Download"
+    },
+    "phonePromo": {
+      "title": "Kortix on your phone",
+      "description": "Every session in your pocket. A push tells you when one finishes or needs your answer.",
+      "cta": "Get the app"
+    },
+    "promos": "Ways to use Kortix",
     "upgrade": "Upgrade",
     "chats": "Chats",
     "library": "Files",
@@ -1172,8 +1189,8 @@ const catalog = {
         "needsInput": "Needs input",
         "starting": "Waking",
         "running": "Working",
-        "done": "Ready",
-        "stopped": "Asleep",
+        "done": "Done",
+        "stopped": "Stopped",
         "failed": "Failed",
         "legacy": "Legacy"
       }
@@ -1202,6 +1219,9 @@ const catalog = {
       "title": "{file} has {errors, plural, one {# error} other {# errors}} and {warnings, plural, one {# warning} other {# warnings}}",
       "titleErrors": "{file} has {errors, plural, one {# error} other {# errors}}",
       "titleWarnings": "{file} has {warnings, plural, one {# warning} other {# warnings}}",
+      "count": "{errors, plural, one {# error} other {# errors}} and {warnings, plural, one {# warning} other {# warnings}}",
+      "countErrors": "{errors, plural, one {# error} other {# errors}}",
+      "countWarnings": "{warnings, plural, one {# warning} other {# warnings}}",
       "errorsOff": "Agents and triggers with an error are off until it is fixed.",
       "warningsOnly": "Everything still runs.",
       "error": "Error",
@@ -1272,7 +1292,8 @@ const catalog = {
         "project": "Whole workspace"
       },
       "ownerAccess": "{owner} · {access}",
-      "labels": "Labels"
+      "labels": "Labels",
+      "members": "Members"
     },
     "loadingMore": "Loading…",
     "loadMoreSessions": "Load more sessions",
@@ -1325,36 +1346,42 @@ const catalog = {
       "pinnedMark": "Pinned"
     },
     "sessionGroups": {
-      "newGroup": "New group",
-      "newGroupFromMenu": "New group…",
-      "createTitle": "New group",
-      "createDescription": "Everyone in this workspace sees the group. Move a session into it from the session's menu, or drag the session onto it.",
-      "namePlaceholder": "Group name",
-      "create": "Create group",
-      "created": "Group created",
-      "createFailed": "Could not create the group",
-      "rename": "Rename group",
+      "newGroup": "New space",
+      "newGroupFromMenu": "New space…",
+      "createTitle": "New space",
+      "createDescription": "Everyone in this workspace sees the space. Move a session into it from the session's menu, or drag the session onto it.",
+      "namePlaceholder": "Space name",
+      "create": "Create space",
+      "created": "Space created",
+      "createFailed": "Could not create the space",
+      "rename": "Rename space",
       "save": "Save",
-      "renamed": "Group renamed",
-      "renameFailed": "Could not rename the group",
-      "nameTaken": "Another group in this workspace has that name.",
-      "limit": "A workspace has at most 50 groups.",
+      "renamed": "Space renamed",
+      "renameFailed": "Could not rename the space",
+      "nameTaken": "Another space in this workspace has that name.",
+      "limit": "A workspace has at most 50 spaces.",
       "cancel": "Cancel",
-      "delete": "Delete group",
-      "deleteTitle": "Delete this group?",
-      "deleteDescription": "{name} is deleted for everyone in this workspace. Its sessions stay, in no group. This cannot be undone.",
-      "deleted": "Group deleted",
-      "deleteFailed": "Could not delete the group",
+      "delete": "Delete space",
+      "deleteTitle": "Delete this space?",
+      "deleteDescription": "{name} is deleted for everyone in this workspace. Its sessions stay, in no space. This cannot be undone.",
+      "deleted": "Space deleted",
+      "deleteFailed": "Could not delete the space",
       "moveUp": "Move up",
       "moveDown": "Move down",
-      "reorderFailed": "Could not reorder the groups",
-      "moveTo": "Move to group",
-      "removeFromGroup": "Remove from group",
+      "collapseOthers": "Collapse others",
+      "reorderFailed": "Could not reorder the spaces",
+      "moveTo": "Move to space",
+      "removeFromGroup": "Remove from space",
       "moved": "Session moved",
-      "noGroup": "No group",
+      "noGroup": "No space",
       "moveFailed": "Could not move the session",
       "empty": "Drag a session here",
-      "groupOptions": "Group options"
+      "groupOptions": "Space options",
+      "openSpace": "Open space",
+      "showSessions": "Show sessions",
+      "hideSessions": "Hide sessions",
+      "heading": "Spaces",
+      "allSpaces": "All spaces"
     },
     "recentlyDeleted": {
       "view": "Recently deleted",
@@ -1382,7 +1409,15 @@ const catalog = {
       "noMessages": "No messages yet",
       "more": "More"
     },
-    "calendar": "Calendar"
+    "calendar": "Calendar",
+    "running": "Running",
+    "runningCount": "{count, plural, one {# session running} other {# sessions running}}",
+    "runningTitle": "Running now",
+    "runningEmpty": "Nothing is running.",
+    "runningFailed": "Couldn't read what is running.",
+    "runningRetry": "Try again",
+    "runningIn": "in {title}",
+    "runningFirst": "Showing the first {count}."
   },
   "sessionPage": {
     "backToProject": "Back to workspace",
@@ -1396,7 +1431,7 @@ const catalog = {
       "copyFailed": "Could not copy the prompt."
     },
     "missing": {
-      "title": "Couldn't start session",
+      "title": "Session not found",
       "message": "This session is no longer available, or you do not have access to it."
     },
     "legacy": {
@@ -1547,7 +1582,9 @@ const catalog = {
       "commandsAndActions": "Commands and actions",
       "toUse": "to use",
       "use": "Use",
-      "noOneMatches": "No one matches"
+      "noOneMatches": "No one matches",
+      "drive": "Drive",
+      "driveSearchFailed": "Could not search Drive."
     },
     "history": {
       "restoreTitle": "Some earlier content could not be restored",
@@ -1589,6 +1626,15 @@ const catalog = {
       "resume": "Resume",
       "agentIsWorking": "{agent} is working",
       "needsYouOn": "Needs you: {header}"
+    },
+    "panel": {
+      "outputNew": "New",
+      "outputUpdated": "Updated",
+      "backgroundTasks": "Background tasks",
+      "finished": "Finished",
+      "finishedCount": "{count} finished",
+      "running": "Running",
+      "resizePane": "Resize pane"
     }
   },
   "agents": {
@@ -1680,6 +1726,8 @@ const catalog = {
     "chatInputMachine": "Machine",
     "chatInputMachineDescription": "The machine template this session starts on.",
     "sending": "Sending",
+    "notSentYet": "Not sent yet · sends when you’re back online",
+    "offlineReconnecting": "Offline — reconnecting…",
     "stop": "Stop",
     "startingSession": "Starting session…",
     "sessionStarted": "Session started",
@@ -1695,7 +1743,8 @@ const catalog = {
     "hintSettings": "Press {modifier}, to open settings",
     "hintCompact": "Ask to compact the session when it gets long",
     "myKortixRoutes": "Routes each task to the right agent",
-    "chatInputReset": "Reset"
+    "chatInputReset": "Reset",
+    "queuedDisconnected": "This session lost its connection to Kortix. Start a new session to continue."
   },
   "auth": {
     "haveReferralCode": "Have a referral code?",
@@ -2102,7 +2151,17 @@ const catalog = {
       "jsonKeys": "{count, plural, one {JSON · # key} other {JSON · # keys}}",
       "jsonItems": "{count, plural, one {JSON · # item} other {JSON · # items}}",
       "failedSentence": "The workflow stopped before it finished.",
-      "runningCount": "{count} running"
+      "runningCount": "{count} running",
+      "spent": "Spent {credits} credits",
+      "spentHint": "What Kortix billed for this run so far: model calls and computer time of the run and its agents.",
+      "waitingForYou": "Waiting for you · not started",
+      "cancelled": "Cancelled — nothing ran",
+      "answeredInChat": "Answered in chat — nothing ran",
+      "stoppedByYou": "Stopped by you",
+      "attempt": "attempt {count}",
+      "quietFor": "Quiet for {minutes} min",
+      "quietCount": "{count} quiet",
+      "holdingWorking": "Holding · {count} still working"
     },
     "agent": {
       "backgroundWorking": "Working in the background",
@@ -2116,7 +2175,18 @@ const catalog = {
         "completed": "Done",
         "failed": "Didn’t finish",
         "stopped": "Stopped"
-      }
+      },
+      "card": {
+        "session": "Session",
+        "copyId": "Copy session ID",
+        "openNewTab": "Open in new tab",
+        "model": "Model",
+        "runsAs": "Runs as",
+        "inline": "Ran inside this session, so it has no session of its own to open."
+      },
+      "notStarted": "Didn’t start",
+      "notStartedSentence": "Kortix couldn’t start this colleague. Nothing ran.",
+      "policyBlocked": "Blocked by this project’s policy. Ask a project admin to allow it."
     }
   },
   "agentScope": {
@@ -2193,7 +2263,7 @@ const catalog = {
       "automation_recovered": "A failing trigger or loop works again.",
       "capture_device_down": "A Kortix Capture computer is not recording. Sent to people who manage Capture.",
       "capture_device_recovered": "A Kortix Capture computer that stopped records again.",
-      "mention": "Someone else mentions you or assigns you an item on the calendar."
+      "mention": "Someone else mentions you or adds you to an item on the calendar."
     },
     "inbox": {
       "title": "Inbox",
@@ -2719,7 +2789,9 @@ const catalog = {
       "budgetExceeded": "Too many unsent uploads. Unused uploads expire within 24 hours.",
       "tooLarge": "This file is larger than 50 MiB.",
       "expired": "This upload expired. Remove it and attach the file again.",
-      "checkConnection": "Check your connection, then retry."
+      "checkConnection": "Check your connection, then retry.",
+      "driveFileUnavailable": "{name} could not be attached from Drive. It may have moved, or you can no longer open it.",
+      "driveFilePending": "Wait for the Drive file to finish attaching, then send."
     },
     "i18nComplete": {
       "noModelAddProviderKey": "Add provider key",
@@ -2730,6 +2802,7 @@ const catalog = {
       "text38e64d6a8162": "Commits a SKILL.md to the workspace's default branch. No model or chat needed.",
       "text39cfc32bd12c": "Pasted text",
       "text23d0bb29fca0": "{count, plural, one {# word} other {# words}}",
+      "text3e310b75051c": "Run again",
       "text426699d5a8c0": "{count, plural, one {# character} other {# characters}}",
       "text8782b778c202": "Delete {value0}",
       "text0005b85debac": "Sound pack played for session events.",
@@ -2844,6 +2917,10 @@ const catalog = {
       "text0af465ef42c0": "On failure",
       "text0b1bdec38bf0": "Default template",
       "text0b348466332c": "Nothing changed yet",
+      "textf83916135509": "used",
+      "texta251c18205f1": "Cached",
+      "text64cd989efc14": "Free space",
+      "textcc6d004b577f": "This file has no changes against the base.",
       "text0b38e3daeb93": "All secrets",
       "text0b5260e1b405": "Updating",
       "text0b5796519393": "SCIM keeps users and groups in sync, including offboarding",
@@ -3145,6 +3222,7 @@ const catalog = {
       "text25054dad693a": "Searched sessions",
       "text2515f730f2e2": "Reuses our existing DB and backups. Simplest to operate.",
       "text2534086de9fe": "Show panel",
+      "text40cd6293d193": "Hide panel",
       "text2534e74d5120": "What should the agent change?",
       "text253b18a02165": "Starting up",
       "text25c9ab3f2bf6": "Can't show these links",
@@ -3260,7 +3338,6 @@ const catalog = {
       "text2f3263f5c933": "e.g. GMAPS-primary",
       "text2f485b9971df": "You're all caught up",
       "text2f5525e787a5": "Pick workspace members to add to this group.",
-      "text2f72fafe0ce1": "instead of the Kortix command line.",
       "text2f77668a9dfb": "Message",
       "text2f80158a9d89": "research/",
       "text2f883b75cd2d": "Search a URL or port",
@@ -3777,7 +3854,6 @@ const catalog = {
       "text5a41803b2dd1": "Deny all",
       "text5a517d8378f5": "Could not create key",
       "text5a5735e88fae": "— default",
-      "text5a7b24722fae": "Clone a full, working Kortix workspace in one click, or add skills from every source into your own.",
       "text5a9622af8882": "errorBody",
       "text5aa40906d187": "No secrets yet",
       "text5aaf2a8498fd": "Add an image or document",
@@ -4134,7 +4210,6 @@ const catalog = {
       "text76c02b7eddca": "Search skills",
       "text76f48924ee10": "The sandbox holds a handle under this key. Kortix swaps the real value in outside the sandbox, and only on a request to one of these hosts.",
       "text77184595bde3": "Ascending",
-      "text7760401b25c7": "Clone with plain",
       "text7761b572aba8": "Browser notifications",
       "text778ed69bedf7": "Preparing changes…",
       "text77a860cbc585": "Send to agent",
@@ -4207,7 +4282,6 @@ const catalog = {
       "text7ecec93ed268": "Kortix home",
       "text7ed62f13532a": "Session event",
       "text7ed6733a3900": "Delete {value0} {value1}?",
-      "text7eebc3924618": "Marketplace — Clone a ready-made Kortix workspace",
       "text7eeffb726e71": "Features you can switch on before they are generally available.",
       "text7f619d9e30a8": "Workspace secrets handed to this agent's sessions as environment variables.",
       "text7f619ff13aa8": "Loading providers",
@@ -4833,7 +4907,7 @@ const catalog = {
       "textb27e54100c96": "Instructions and scripts this agent can load into a session.",
       "textb27fb38ba323": "Slack",
       "textb2ac0da7c543": "Whole team",
-      "textb2c293b68745": ".kortix/connectors/routes.toml",
+      "textb2c293b68745": "connectors/routes.toml",
       "textb301cac49225": "Ask agent to sync",
       "textb3278e5f53cc": "Copy file contents",
       "textb32e10370ffe": "Granted {value0} to {value1}",
@@ -4888,7 +4962,6 @@ const catalog = {
       "textb6d85433a7ee": "Sessions could not be loaded",
       "textb70354a1faae": "Foo 7B",
       "textb728bd912cde": "Could not load the routing policy.",
-      "textb74106e21108": "does not.",
       "textb7416a669c6b": "Recalled",
       "textb7595e2a8639": "steps",
       "textb762cc8a7284": "Reflects on recent activity and curates .kortix/memory, opening a memory CR each run.",
@@ -5065,7 +5138,6 @@ const catalog = {
       "textc58e371231b7": "DynamoDB",
       "textc5a9e0731890": "These are the redacted values the connector will receive.",
       "textc5bb9fda9711": "Every agent in this workspace today ({value0}). Agents added later need a new grant — agents are closed until someone is granted them.",
-      "textc608981d8d68": "Marketplace",
       "textc6092ea6beec": "Sample request copied",
       "textc614ae8886f0": "Path to folder",
       "textc616e8ff6ba3": "Session · {value0}",
@@ -5455,7 +5527,6 @@ const catalog = {
       "texte2d15fe36f4d": "Almost ready...",
       "texte2ee2909fe27": "Ctrl",
       "texte3190ee3d8a8": "Unable to display workbook",
-      "texte327e6c1348b": "Clone from this address with any Git client. When git asks, enter any username and a Kortix API key as the password — the Kortix command line does this for you through its credential helper, plain",
       "texte391550d9883": "No agent can receive this secret",
       "texte392a3891c07": "Suspended",
       "texte3ba17e32240": "30d",
@@ -5573,7 +5644,7 @@ const catalog = {
       "textecb89227d17e": "This workspace starts every session with this model — pick a different default before turning it off.",
       "textecbc89cd37a0": "Started",
       "textecbd276ebec2": "Try a search.",
-      "textecccd43d1878": ".kortix/connectors/schema.graphql",
+      "textecccd43d1878": "connectors/schema.graphql",
       "texteccce15347a4": "You do not have access to preview this App.",
       "textecdcf83028e7": "Review parameters",
       "textece53d1bdd76": "Plan credits",
@@ -6619,11 +6690,14 @@ const catalog = {
     "noCapUnlimited": "No cap · spend is unlimited",
     "tokensSub": "{in} in · {out} out",
     "unknownValue": "Unknown",
-    "estimateCoverageUnavailable": "Estimate coverage unavailable.",
     "estimatesSeparate": "Actual spend above is separate. Estimates are never added to charges.",
     "estimatedUsageValueLabel": "LLM estimated usage value (not a bill):",
-    "pricedRequests": "{count} priced requests",
-    "unpricedRequests": "{count} unpriced requests",
+    "pricedRequests": "{count, number} priced requests",
+    "unpricedRequests": "{count, number} unpriced requests",
+    "failedRequests": "{count, number} failed requests",
+    "estimateInfoLabel": "About this estimate",
+    "estimateDetail": "Successful model calls priced at public list rates. Failed requests and models without a known rate are not priced.",
+    "estimateRateVersion": "Rate table: {version}",
     "llmEstimateLabel": "LLM estimate:"
   },
   "triggerComposer": {
@@ -6754,14 +6828,14 @@ const catalog = {
     "loadErrorBody": "Check your connection and try again."
   },
   "sessionOversight": {
-    "label": "Admins can open every session",
-    "description": "Workspace owners and admins can open any session in this workspace, including private ones. Every session opened this way is in the audit log.",
-    "ownerOnlyDescription": "Workspace owners and admins can open any session in this workspace, including private ones. Only a workspace owner can change this.",
+    "label": "Admins can open every session and space",
+    "description": "Workspace owners and admins can open any session and space in this workspace, including private ones. Every session opened this way is in the audit log.",
+    "ownerOnlyDescription": "Workspace owners and admins can open any session and space in this workspace, including private ones. Only a workspace owner can change this.",
     "enableTitle": "Let admins open every session?",
-    "enableDescription": "Workspace owners and admins will be able to open every session in this workspace, including sessions members kept private. Members see a notice in the share dialog. Each session opened this way is recorded in the audit log.",
+    "enableDescription": "Workspace owners and admins will be able to open every session and space in this workspace, including the ones members kept private. Members see a notice in the share dialog. Each session opened this way is recorded in the audit log.",
     "enableConfirm": "Turn on",
     "disableTitle": "Stop admins opening every session?",
-    "disableDescription": "Private sessions go back to owner-only. Admins keep access only to sessions shared with them.",
+    "disableDescription": "Private sessions and spaces go back to their owners and the people they are shared with. Admins keep access only to what is shared with them.",
     "disableConfirm": "Turn off",
     "enabledToast": "Admins can now open every session",
     "disabledToast": "Private sessions are owner-only again",
@@ -6970,6 +7044,7 @@ const catalog = {
     "installProfileHint": "The name people see for this connector in Kortix.",
     "wayComposio": "Connects through Composio, a third-party partner that runs the sign-in for you: you sign in to {name} in one click, and Composio keeps the login.",
     "wayMcpOneClick": "Connects to {name}'s own MCP server. You only sign in to {name}.",
+    "wayKortixGoogle": "Kortix connects to {name} through Google's API. You only sign in to Google.",
     "wayMcpSetup": "Connects to {name}'s own MCP server. It needs your own OAuth app or an API key, set after install.",
     "wayApi": "Connects to {name}'s {kind} directly. Add an account with its API key or token after install.",
     "installsWay": "Installs via {kind}",
@@ -6988,8 +7063,8 @@ const catalog = {
     "toolsAfterInstall": "This {kind} lists its tools after install.",
     "typeFilterLabel": "Connector type",
     "typeFilterAll": "All types",
-    "moveComposioTitle": "{app} has its own MCP server",
-    "moveComposioBody": "This connector runs through Composio. You can switch it to {app}'s own MCP server: sign in once and it switches. Agents, triggers and kortix.yaml keep using {slug}.",
+    "moveComposioTitle": "{app} can connect without Composio",
+    "moveComposioBody": "This connector runs through Composio. Kortix can connect it directly: sign in once and it switches. Agents, triggers and kortix.yaml keep using {slug}.",
     "moveComposioAction": "Switch to MCP",
     "wayChannel": "Built into Kortix: people message the agent in {name}, with no third party. Set it up once on its page.",
     "waySetUp": "Set up",
@@ -7124,11 +7199,13 @@ const catalog = {
     "areaDescription": "Connect apps and channels to your agents, and decide what they may do.",
     "wayMoreNamed": "More for {name}",
     "otherWaysLead": "Other ways:",
-    "typeFilterKortix": "Kortix"
+    "typeFilterKortix": "Kortix",
+    "scopeAll": "All",
+    "scopeAdded": "Added"
   },
   "connectMcp": {
     "title": "Connect Kortix over MCP",
-    "description": "Use Kortix from Claude, Claude Code, Cursor, Codex, or any MCP client. You sign in once. Nothing to install.",
+    "description": "Use Kortix from Claude, ChatGPT, Claude Code, Cursor, Codex, or any MCP client. You sign in once. Nothing to install.",
     "docs": "Docs",
     "done": "Done",
     "copy": "Copy",
@@ -7138,6 +7215,7 @@ const catalog = {
     "copyUrl": "Copy URL",
     "via": {
       "claude": "Settings → Connectors",
+      "chatgpt": "Developer mode → custom connector",
       "claude-code": "One terminal command",
       "cursor": "One-click install",
       "codex": "Two terminal commands",
@@ -7266,8 +7344,7 @@ const catalog = {
       "install": {
         "title": "Add the extension",
         "description": "From the Chrome Web Store.",
-        "done": "Kortix is in Chrome.",
-        "descriptionUnlisted": "Load it in Chrome."
+        "done": "Kortix is in Chrome."
       },
       "connect": {
         "title": "Sign in",
@@ -7321,7 +7398,6 @@ const catalog = {
       "control": "Take over or Stop from the bar on the page at any time.",
       "own": "Only your own sessions can use your browser."
     },
-    "howToInstall": "How to install",
     "copyLink": "Copy link",
     "linkCopied": "Link copied",
     "copyFailed": "Could not copy the link. Try again.",
@@ -7400,6 +7476,13 @@ const catalog = {
     "onlyYouDescription": "Only you, in every workspace, in your private sessions.",
     "everyoneDescription": "Everyone in the workspace can use it, including automations.",
     "promoLine": "Let Kortix work with your local files and take control of your computer.",
+    "promo": {
+      "title": "Connect your work computer",
+      "titleThis": "Connect this computer",
+      "description": "Agents work with your local files, run programs and use the apps on your screen. You decide what they may do.",
+      "cta": "Connect",
+      "ctaOneClick": "Connect in one click"
+    },
     "dismissPromo": "Dismiss",
     "useCliInstead": "Use the CLI instead",
     "cliHint": "The command shows a code and opens a page where you approve this device. It then runs in the background.",
@@ -8001,7 +8084,7 @@ const catalog = {
   },
   "calendar": {
     "title": "Calendar",
-    "gateDescription": "A shared calendar for people and agents: items with a date, an owner and comments, beside your scheduled triggers and Loops.",
+    "gateDescription": "A shared calendar for people and agents: dated items with the people on them and comments, beside your scheduled triggers and Loops.",
     "newItem": "New item",
     "today": "Today",
     "previousWeek": "Previous week",
@@ -8018,12 +8101,14 @@ const catalog = {
     },
     "people": "People",
     "agents": "Agents",
+    "searchPeople": "Search people and agents",
     "noDate": "No date",
     "noDateHint": "Items without a date wait here.",
     "allDay": "All day",
+    "startTime": "Start time",
+    "endTime": "End time",
     "overdue": "Overdue",
     "status": {
-      "open": "Open",
       "done": "Done"
     },
     "comments": "{count, plural, one {# comment} other {# comments}}",
@@ -8036,9 +8121,7 @@ const catalog = {
     "dayEntries": "{day}, {count, plural, one {# entry} other {# entries}}",
     "showWeekOf": "Show the week of {day}",
     "more": "{count} more",
-    "nobody": "Nobody",
     "when": "When",
-    "owner": "Owner",
     "created": "Created",
     "clearDate": "Remove date",
     "saveFailed": "The change was not saved.",
@@ -8236,7 +8319,7 @@ const catalog = {
       "newAgent": "New agent",
       "newAgentHelp": "My Kortix writes the agent into kortix.yaml and opens a change request.",
       "name": "Name",
-      "namePlaceholder": "market-scan",
+      "namePlaceholder": "Market scan",
       "nameHelp": "Lowercase letters, digits and dashes. Saved as <slug></slug>.",
       "nameTaken": "An agent with this name already exists.",
       "howToStart": "How to start",
@@ -8418,36 +8501,6 @@ const catalog = {
       "jsonNotSet": "JSON · not set",
       "jsonSet": "JSON · set"
     }
-  },
-  "turnShare": {
-    "shareResponse": "Share response",
-    "whatToInclude": "What to include",
-    "responseOnly": "Response only",
-    "responseOnlyHint": "Your prompt stays private",
-    "promptAndResponse": "Prompt and response",
-    "promptAndResponseHint": "Includes the prompt",
-    "publicLink": "Public link",
-    "publicLinkHint": "Anyone with the link can read it",
-    "turnOffLink": "Turn off link",
-    "cancel": "Cancel",
-    "copyLink": "Copy link",
-    "copied": "Copied",
-    "linkCopied": "Link copied",
-    "linkUpdated": "Link updated",
-    "responseShared": "Response shared",
-    "stale": "Response changed since you shared it",
-    "updateLink": "Update link",
-    "loadError": "Could not load the share settings. Try again.",
-    "shareError": "Could not share the response. Try again.",
-    "unshareError": "Could not stop sharing. Try again.",
-    "copyError": "Could not copy the link. Copy it from the field.",
-    "tryKortix": "Try Kortix",
-    "goneTitle": "This link is no longer active",
-    "goneHint": "The response it pointed to is no longer public.",
-    "busyTitle": "This page is busy",
-    "busyHint": "Refresh in a moment.",
-    "fallbackTitle": "Shared response",
-    "stopNote": "The link will stop working."
   },
   "artifacts": {
     "title": "Artifacts",
@@ -8740,6 +8793,7 @@ const catalog = {
   },
   "sessionChangeRequests": {
     "title": "Change requests",
+    "openError": "Could not open change request",
     "open": "Open",
     "jump": "Jump to response for #{number}",
     "unavailable": "This response is not available in the loaded history.",
@@ -9731,6 +9785,7 @@ const catalog = {
       },
       "workingFor": "working · {elapsed}",
       "runsAs": "runs as {agent}",
+      "stateCount": "{count} {state}",
       "teamRole": "Role for this session only",
       "attention": {
         "question": "Has a question for you",
@@ -9829,7 +9884,11 @@ const catalog = {
         "resume": "Could not resume the run",
         "stop": "Could not stop the run",
         "restart": "Could not restart {label}"
-      }
+      },
+      "hold": "Hold new agents",
+      "holdShort": "Hold new agents",
+      "holdHint": "Hold new agents: none starts until you resume; agents already working go on (p)",
+      "holding": "Holding new agents"
     },
     "board": {
       "layoutLabel": "Layout",
@@ -10125,6 +10184,9 @@ const catalog = {
       "personalKeysEmpty": "No personal keys. kortix login makes one; keys for a script are made in a workspace's Settings › API keys.",
       "securityDescription": "Sign-in rules, who may open whose sessions, and the rules every API key follows.",
       "rolesDescription": "Built-in and custom roles. Assign them from Members.",
+      "builtInRoles": "Built-in roles",
+      "memberGroupsEnterprise": "Groups are part of Enterprise.",
+      "openGroups": "Open Groups",
       "workspaceId": "Workspace ID",
       "workspaceIdDescription": "For the CLI, the API, and support.",
       "leaveWorkspace": "Leave workspace",
@@ -10138,7 +10200,7 @@ const catalog = {
       "apiKeysDescription": "Keys for scripts, CI and integrations. A key acts as you, an agent or a bot. The rules every key follows are in Security.",
       "keys": {
         "title": "API keys",
-        "description": "Keys for scripts, CI and integrations. A key acts as you, an agent or a bot; Works in sets which workspaces it reaches.",
+        "description": "Keys for scripts, CI and integrations. A key acts as you, an agent or a bot. It works in this workspace unless you pick all your workspaces.",
         "newKey": "New key",
         "count": "{count, plural, one {# key} other {# keys}}",
         "emptyTitle": "No API keys",
@@ -10483,7 +10545,7 @@ const catalog = {
     "progressLabel": "Progress",
     "ranFor": "Ran for {time}",
     "recentJobs": "Recent jobs",
-    "registryGroup": "Harbor registry",
+    "registryGroup": "Harbor",
     "registryTasksHint": "Harbor registry datasets list their tasks on their own page",
     "registryUnavailable": "The Harbor registry could not be read ({reason}). Your suites and the built-in datasets are listed.",
     "retryN": "retry {n}",
@@ -10557,7 +10619,7 @@ const catalog = {
       "all": "All",
       "suite": "Yours",
       "builtin": "Built-in",
-      "registry": "Harbor registry"
+      "registry": "Harbor"
     },
     "taskTab": {
       "instruction": "Instruction",
@@ -10566,6 +10628,154 @@ const catalog = {
       "results": "Results"
     },
     "colTaskCount": "Tasks"
+  },
+  "workspaceSetup": {
+    "title": "Finish setup",
+    "subtitle": "Your agents need these before they can work.",
+    "progress": "{done} of {total} done",
+    "liveNote": "Updates as you connect.",
+    "later": "Later",
+    "tryAgain": "Try again",
+    "loadFailed": "Could not load the setup steps.",
+    "emptyTitle": "Nothing left to set up",
+    "emptyDescription": "This workspace needs no sign-in, secret or Slack from you.",
+    "completeTitle": "Setup is complete",
+    "completeDescription": "If you started the setup in a terminal, it continues there by itself.",
+    "slackName": "Slack",
+    "sectionOpen": "Needs you",
+    "doneSummary": "{count} already set up",
+    "done": "Done",
+    "connect": "Connect {name}",
+    "connectShort": "Connect",
+    "reconnect": "Reconnect {name}",
+    "reconnectShort": "Reconnect",
+    "setSecret": "Set {name}",
+    "setShort": "Set value",
+    "addSlack": "Add Kortix to Slack",
+    "connectSlack": "Connect Slack",
+    "bannerTitle": "{left, plural, one {# setup step is left} other {# setup steps are left}}",
+    "bannerNamed": "{action} to finish setup",
+    "bannerStart": "Start setup",
+    "bannerContinue": "Continue setup"
+  },
+  "sessionSpaces": {
+    "title": "Spaces",
+    "description": "Group related sessions. Every session in a space shares its files and knows what it is for.",
+    "newSpace": "New space",
+    "searchPlaceholder": "Search spaces",
+    "emptyTitle": "No spaces yet",
+    "emptyDescription": "A space groups the sessions of one workspace, client or topic.",
+    "noResultsTitle": "No space matches",
+    "noResultsDescription": "Try another name.",
+    "loadFailed": "Could not load the spaces",
+    "tryAgain": "Try again",
+    "createTitle": "New space",
+    "editTitle": "Edit space",
+    "nameLabel": "Name",
+    "namePlaceholder": "Name your space",
+    "descriptionLabel": "What is it for?",
+    "descriptionPlaceholder": "Goals, context, and how to work here. Every session in the space reads this.",
+    "create": "Create space",
+    "save": "Save",
+    "cancel": "Cancel",
+    "created": "Space created",
+    "saved": "Space saved",
+    "createFailed": "Could not create the space",
+    "saveFailed": "Could not save the space",
+    "iconSaveFailed": "Could not change the icon",
+    "createdSpace": "Created this space",
+    "nameTaken": "Another space in this workspace has that name.",
+    "limit": "A workspace has at most 50 spaces.",
+    "delete": "Delete space",
+    "deleteTitle": "Delete this space?",
+    "deleteDescription": "{name} is deleted for everyone in this workspace. Its sessions stay, in no space, and its files stay in Files. This cannot be undone.",
+    "deleted": "Space deleted",
+    "deleteFailed": "Could not delete the space",
+    "options": "Space options",
+    "composerPlaceholder": "New session in {name}",
+    "sessionsHeading": "Sessions",
+    "sessionsEmptyTitle": "No sessions yet",
+    "sessionsEmptyDescription": "Start one above, or move a session here from its menu in the sidebar.",
+    "sessionsLoadFailed": "Could not load the sessions",
+    "visibility": "Everyone in this workspace",
+    "notFoundTitle": "This space does not exist",
+    "notFoundDescription": "It was deleted, or the link is wrong.",
+    "allSpaces": "All spaces",
+    "picker": "Space",
+    "pickerNone": "No space",
+    "pickerSearch": "Search spaces",
+    "pickerEmpty": "No space matches",
+    "gateDescription": "Group related sessions into spaces that share files and context.",
+    "loadMore": "Load more",
+    "share": "Share",
+    "shareTitle": "Share {name}",
+    "shareDescription": "Everyone you add sees every session in this space and its files.",
+    "shareEveryone": "Everyone in this workspace",
+    "shareSearch": "Search people",
+    "shared": "Sharing updated",
+    "shareFailed": "Could not change who sees the space",
+    "shareNotMember": "Share a space only with members of this workspace.",
+    "sharedWith": "{count, plural, one {Shared with # person} other {Shared with # people}}",
+    "private": "Private",
+    "tabHome": "Home",
+    "tabFiles": "Files",
+    "editDetails": "Edit details",
+    "everyone": "Everyone",
+    "searchSessions": "Search sessions",
+    "noSessionsMatch": "No session matches",
+    "noDescription": "Add what this space is for",
+    "sessionCount": "{count, plural, =0 {No sessions} one {# session} other {# sessions}}",
+    "activeAgo": "active {when}",
+    "onlyYou": "Only you",
+    "about": "About",
+    "edit": "Edit",
+    "people": "People",
+    "openFiles": "Open",
+    "filesEmpty": "No files yet",
+    "peopleCount": "{count, plural, one {# person} other {# people}}",
+    "morePeople": "{count, plural, one {# more person} other {# more people}}",
+    "moreFiles": "{count, plural, one {# more file} other {# more files}}",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "thisWeek": "This week",
+    "earlier": "Earlier",
+    "shareAddPlaceholder": "Add people by name or email…",
+    "sharePeopleWithAccess": "People with access",
+    "shareOwner": "Owner",
+    "shareRemove": "Remove",
+    "shareGeneralAccess": "General access",
+    "shareRestricted": "Only people added",
+    "shareRestrictedHint": "Only the people above can open this space.",
+    "shareEveryoneHint": "Everyone in this workspace can open this space.",
+    "copyLink": "Copy link",
+    "linkCopied": "Link copied",
+    "linkCopyFailed": "Could not copy the link",
+    "shareRemoveTitle": "Remove access?",
+    "shareRemoveDescription": "{name} can no longer open this space, its sessions or its files. You can add them again later.",
+    "roleMember": "Member",
+    "shareChange": "Change",
+    "spaceMember": "Member of this space",
+    "workspaceOwner": "Workspace owner",
+    "workspaceAdmin": "Workspace admin",
+    "addedOn": "Added to this space {date}",
+    "sortBy": "Sort: {mode}",
+    "sortActivity": "Last activity",
+    "sortName": "Name",
+    "sortCreated": "Date created",
+    "yourSpaces": "Your spaces",
+    "sharedWithYou": "Shared with you",
+    "sharedShort": "Shared"
+  },
+  "sessionShare": {
+    "addPlaceholder": "Add people or groups by name or email…",
+    "peopleWithAccess": "People with access",
+    "owner": "Owner",
+    "member": "Member",
+    "group": "Group",
+    "groupMembers": "{count, plural, one {# member} other {# members}}",
+    "remove": "Remove",
+    "share": "Share",
+    "notMember": "Share a session only with members of this workspace."
   }
 };
 

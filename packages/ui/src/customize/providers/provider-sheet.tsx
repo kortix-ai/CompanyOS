@@ -66,7 +66,9 @@ import { errorToast, successToast } from '../../primitives/toast';
 import {
   ProviderLogoStatus,
   connectedVia,
+  providerConnectionIds,
   providerMethod,
+  providerRowConnected,
   type ProviderStatus,
   supportsPooledProviderKey,
   useManagedProvider,
@@ -519,6 +521,7 @@ function ConnectionRow({ title, detail, action }: { title: string; detail: strin
 /** Save and remove for one provider's key. */
 export function useProviderKey(projectId: string, entry: LlmProviderEntry | undefined) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
+  const tKeys = useTranslations('pooledSecrets');
   const queryClient = useQueryClient();
   const [values, setValues] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -528,7 +531,7 @@ export function useProviderKey(projectId: string, entry: LlmProviderEntry | unde
       // LLM provider credentials are ALWAYS project-wide — a per-user key is
       // invisible to the gateway's shared-row resolution and every model turn
       // dies with "No upstream configured" (2026-07-07 prod incident).
-      await Promise.all(
+      const saved = await Promise.all(
         target.envVars.map((envVar) =>
           upsertProjectSecret(projectId, {
             name: envVar,
@@ -538,12 +541,20 @@ export function useProviderKey(projectId: string, entry: LlmProviderEntry | unde
           }),
         ),
       );
-      return target;
+      // The save answers with the provider's check of the key (`verification`).
+      const refused = saved.find((secret) => secret.verification?.status === 'invalid')?.verification;
+      return { target, refused: refused ? tKeys('savedInvalid', { provider: target.label, message: refused.message }) : null };
     },
-    onSuccess: (target) => {
-      successToast(tI18nComplete('textbc8686cf8d63', { value0: target.label }));
-      setValues({});
-      setError(null);
+    onSuccess: ({ target, refused }) => {
+      // A refused key is saved, but every turn on it fails: the field stays open with the provider's words.
+      if (refused) {
+        errorToast(refused);
+        setError(refused);
+      } else {
+        successToast(tI18nComplete('textbc8686cf8d63', { value0: target.label }));
+        setValues({});
+        setError(null);
+      }
       queryClient.invalidateQueries({ queryKey: qk.project.secrets(projectId) });
       refreshProjectProviderState(queryClient, projectId, { expectProviderId: target.id });
     },
@@ -584,7 +595,7 @@ export function useProviderKey(projectId: string, entry: LlmProviderEntry | unde
       setValues({});
       setError(null);
     },
-    save: () => entry && save.mutateAsync(entry).then(() => true, () => false),
+    save: () => entry && save.mutateAsync(entry).then(({ refused }) => !refused, () => false),
     saving: save.isPending,
     remove: () => entry && remove.mutateAsync(entry).then(() => true, () => false),
     removing: remove.isPending,
@@ -906,15 +917,17 @@ export function ProviderSheet({
   if (!entry) return null;
 
   const method = providerMethod(entry);
-  const connectedIdSet = new Set(connectedProviders.map((provider) => provider.id));
-  const keyConnected = connectedProviders.some((provider) => provider.id === entry.id);
-  const subscriptionConnected = connectedProviders.some(
-    (provider) => provider.id === (entry.id === 'openai' ? 'codex' : entry.id),
+  // Project connections plus account-shared ones: a shared ChatGPT login
+  // (`codex`) connects OpenAI, and the header says how.
+  const connectedIdSet = providerConnectionIds(
+    connectedProviders.map((provider) => provider.id),
+    pooled.pooledProviderIds,
   );
+  const keyConnected = connectedProviders.some((provider) => provider.id === entry.id);
   const status: ProviderStatus =
     method === 'included'
       ? 'included'
-      : keyConnected || subscriptionConnected || pooled.pooledProviderIds.has(entry.id)
+      : providerRowConnected(entry.id, connectedIdSet)
         ? 'connected'
         : 'none';
 

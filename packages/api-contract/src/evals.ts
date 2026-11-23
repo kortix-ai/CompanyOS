@@ -66,7 +66,8 @@ export type EvalAgentConfig = z.infer<typeof EvalAgentConfigSchema>;
 export const EvalTaskSourceSchema = z.object({
   path: z.string().min(1).max(500).nullish(),
   name: z.string().min(1).max(200).nullish(),
-  version: z.string().min(1).max(60).nullish(),
+  /** A registry dataset's version, or a Harbor Hub ref: a tag, a revision or `sha256:<digest>`. */
+  version: z.string().min(1).max(80).nullish(),
   /** A public git repository (https on github.com, gitlab.com or huggingface.co); `path` is inside it. */
   git_url: z.string().url().max(500).nullish(),
   /** The commit, branch or tag of `git_url`. A branch or tag is resolved to its commit when the job starts. Default: the default branch. */
@@ -196,6 +197,26 @@ export const EvalTaskDetailResponseSchema = z.object({
 });
 export type EvalTaskDetailResponse = z.infer<typeof EvalTaskDetailResponseSchema>;
 
+export const EVAL_JOB_STATUSES = ['queued', 'running', 'completed', 'cancelled'] as const;
+export type EvalJobStatus = (typeof EVAL_JOB_STATUSES)[number];
+
+/**
+ * `queued` waits for a slot. `starting` boots the sandbox. `agent_running`
+ * runs the agent. `verifying` runs `tests/test.sh`. `completed` ended with no
+ * exception; `errored` ended with one (it may still hold a valid reward).
+ */
+export const EVAL_TRIAL_STATUSES = [
+  'queued',
+  'starting',
+  'agent_running',
+  'verifying',
+  'completed',
+  'errored',
+  'cancelled',
+] as const;
+export type EvalTrialStatus = (typeof EVAL_TRIAL_STATUSES)[number];
+export const EVAL_TRIAL_TERMINAL: readonly EvalTrialStatus[] = ['completed', 'errored', 'cancelled'];
+
 /** The last run of one attempt of this task in some job: its result and the job it belongs to. */
 export const EvalTaskResultSchema = z.object({
   job_id: z.string(),
@@ -204,15 +225,7 @@ export const EvalTaskResultSchema = z.object({
   agent: z.string(),
   model: z.string().nullable(),
   attempt: z.number().int(),
-  status: z.enum([
-    'queued',
-    'starting',
-    'agent_running',
-    'verifying',
-    'completed',
-    'errored',
-    'cancelled',
-  ]),
+  status: z.enum(EVAL_TRIAL_STATUSES),
   rewards: z.record(z.string(), z.number()).nullable(),
   reward_valid: z.boolean(),
   exception_type: z.string().nullable(),
@@ -249,7 +262,8 @@ export const EvalDatasetSchema = z.object({
   version: z.string(),
   /** Every version, newest first. */
   versions: z.array(z.string()),
-  kind: z.enum(['builtin', 'registry']),
+  /** `hub`: a Harbor Hub package (`org/name`); `registry`: Harbor's legacy registry.json. */
+  kind: z.enum(['builtin', 'hub', 'registry']),
   description: z.string(),
   /** Tasks of `version`; null when not known without reading the dataset. */
   n_tasks: z.number().int().nullable(),
@@ -273,25 +287,6 @@ export const EvalTasksResponseSchema = z.object({
 
 // ── Jobs and trials ──────────────────────────────────────────────────────────
 
-export const EVAL_JOB_STATUSES = ['queued', 'running', 'completed', 'cancelled'] as const;
-export type EvalJobStatus = (typeof EVAL_JOB_STATUSES)[number];
-
-/**
- * `queued` waits for a slot. `starting` boots the sandbox. `agent_running`
- * runs the agent. `verifying` runs `tests/test.sh`. `completed` ended with no
- * exception; `errored` ended with one (it may still hold a valid reward).
- */
-export const EVAL_TRIAL_STATUSES = [
-  'queued',
-  'starting',
-  'agent_running',
-  'verifying',
-  'completed',
-  'errored',
-  'cancelled',
-] as const;
-export type EvalTrialStatus = (typeof EVAL_TRIAL_STATUSES)[number];
-export const EVAL_TRIAL_TERMINAL: readonly EvalTrialStatus[] = ['completed', 'errored', 'cancelled'];
 
 export const EvalExceptionSchema = z.object({
   exception_type: z.string(),

@@ -18,11 +18,13 @@
 // resolveSessionPlacement): a box mounts only a volume of its own region.
 
 import { logger } from '../lib/logger';
-import { accountMembers, driveConflicts, driveMountRevocations, drives, iamRoles, projectSessions, projectSpaceLinks, projectSpaceMembers, projectSpaces, roleAssignments, serviceAccounts, sessionSandboxes } from '@kortix/db';
-import { spaceDriveFolders } from '@kortix/shared';
+import { accountMembers, driveConflicts, driveMountRevocations, drives, iamRoles, projectSessionGroups, projectSessions, projectSpaceLinks, projectSpaceMembers, projectSpaces, roleAssignments, serviceAccounts, sessionSandboxes } from '@kortix/db';
+import { SESSION_GROUPS_DIR, sessionGroupDriveFolder, spaceDriveFolders } from '@kortix/shared';
+import { groupFolderAccess } from '../shared/session-group-access';
 import { privateChannelAccess } from '../shared/space-access';
 import { and, asc, count, desc, eq, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import { projectFeatureFlagEnabled } from '../feature-flags/for-project';
+import { hasAccountSessionOversight } from '../iam/session-oversight';
 import { resolveSessionSandboxRegion } from '../platform/services/sandbox-region';
 import { SYSTEM_ACTOR, assignRole, revokeAssignment } from '../iam/assignments';
 import { resolvePrincipal } from '../iam/authorize';
@@ -61,6 +63,7 @@ import {
   execInSandbox,
   getDriveVolume,
   isMissingVolume,
+  knownVolumeType,
   moveVolumeFile,
   openDriveVolume,
   sandboxMountLimit,
@@ -73,6 +76,7 @@ import {
 import { isDriveSyncBox } from './sync';
 import { moveFolderGrants } from './queries';
 import { projectsView } from '../workspaces/rows';
+import { objectGrantScoped } from '../iam/workspace-scope';
 
 export type DriveRow = typeof drives.$inferSelect;
 
@@ -232,10 +236,15 @@ export async function ensureProjectDrive(accountId: string, projectId: string): 
   return created;
 }
 
-/** Open (create when missing) the drive's volume in its region and return the volume every storage call uses. */
+/**
+ * Open (create when missing) the drive's volume in its region and return the
+ * volume every storage call uses. A drive that never had a volume gets a
+ * shared one when storage serves shared volumes, else a block volume as
+ * before (drives/volumes.ts openDriveVolume).
+ */
 export async function openVolumeFor(drive: DriveRow, signal?: AbortSignal): Promise<DriveVolume> {
   const volume = driveVolume(drive);
-  const vol = await openDriveVolume(volume, signal);
+  const vol = await openDriveVolume(volume, signal, { preferShared: !drive.platinumVolumeId });
   if (drive.platinumVolumeId !== vol.id) {
     // Only while the row still names this volume: a row read before a region
     // move swapped it must not put an old volume's id on the moved row.
@@ -312,7 +321,7 @@ export async function listFolderGrants(drive: DriveRow): Promise<FolderGrant[]> 
     .where(
       and(
         eq(roleAssignments.accountId, drive.accountId),
-        eq(roleAssignments.scopeType, 'project'),
+        objectGrantScoped(),
         eq(roleAssignments.scopeId, drive.projectId),
         eq(roleAssignments.objectType, 'folder'),
         isNull(iamRoles.accountId),
@@ -366,7 +375,7 @@ export async function setFolderGrant(input: {
     .where(
       and(
         eq(roleAssignments.accountId, drive.accountId),
-        eq(roleAssignments.scopeType, 'project'),
+        objectGrantScoped(),
         eq(roleAssignments.scopeId, drive.projectId),
         eq(roleAssignments.objectType, 'folder'),
         eq(roleAssignments.objectId, input.path),
@@ -472,6 +481,12 @@ export async function driveSubjectFor(
   // is an ordinary folder.
   const folders = await privateChannelFoldersFor(drive.projectId!, userId, bound);
   grants = onlyVisiblePrivateGrants(grants, folders);
+  // Seeing a Space is the key to its folder: a grant computed now, never
+  // stored, so sharing and unsharing take effect on the next request.
+  for (const folder of folders.visible) {
+    if (!folder.startsWith(`${SESSION_GROUPS_DIR}/`)) continue;
+    grants = [...grants, { path: folder, level: 'write', principalType: 'user', principalId: userId, source: 'system' }];
+  }
   const privateChannelFolders = folders.all;
   // A private channel's thread writes only its channel's folder (the twin of
   // `sessionMountCandidates`): its person's write elsewhere, admin included, is read here.
@@ -529,9 +544,13 @@ function privateFolderOfSpace(spaceId: string): string | null {
  * session-bound credential (`bound`). One read, memoized with `hiddenSpaceIds`.
  */
 export async function privateChannelFoldersFor(projectId: string, userId: string, bound: string | null): Promise<PrivateChannelFolderAccess> {
-  const { all, hidden } = await privateChannelAccess(projectId, userId, bound);
-  const allFolders = new Set<string>();
-  const visible = new Set<string>();
+  const [{ all, hidden }, spaces] = await Promise.all([
+    privateChannelAccess(projectId, userId, bound),
+    groupFolderAccess(projectId, userId, bound, (accountId) => hasAccountSessionOversight(userId, accountId)),
+  ]);
+  // A Space's folder (`/Spaces/<group_id>`) is reserved the same way: only the people who see the space reach it.
+  const allFolders = new Set<string>(spaces.all);
+  const visible = new Set<string>(spaces.visible);
   for (const spaceId of all) {
     const folder = privateFolderOfSpace(spaceId);
     if (!folder) continue;
@@ -543,7 +562,17 @@ export async function privateChannelFoldersFor(projectId: string, userId: string
 
 /** The project's private channel folders, read now (no memo): for mounts and grant sync. */
 export async function projectPrivateChannelFolders(projectId: string): Promise<Set<string>> {
-  return new Set((await privateChannelRows(projectId)).flatMap((row) => (row.folder ? [row.folder] : [])));
+  const [channels, groups] = await Promise.all([
+    privateChannelRows(projectId),
+    db.select({ groupId: projectSessionGroups.groupId }).from(projectSessionGroups).where(eq(projectSessionGroups.projectId, projectId)),
+  ]);
+  return new Set([
+    ...channels.flatMap((row) => (row.folder ? [row.folder] : [])),
+    ...groups.flatMap((row) => {
+      const folder = sessionGroupDriveFolder(row.groupId);
+      return folder ? [folder] : [];
+    }),
+  ]);
 }
 
 /** The project's private channels (archived included) with their folder (`/Channels/<space_id>`) and slug. */
@@ -640,14 +669,57 @@ export async function sessionSpaceFolder(projectId: string, sessionId: string, g
   return personal ? (spaceDriveFolders('dm', row.dmAgentName, personal)?.files ?? null) : null;
 }
 
-/** With `chat` on, the session is filed in a space, so its box mounts that space's files (`sessionSpaceFolder`). */
+/**
+ * The session's space is filed in, with `session_groups` on: its own group, or
+ * for a session another session started, its parent's (a child is never filed
+ * itself). Null for no group or the flag off.
+ */
+export async function sessionGroupOf(projectId: string, sessionId: string): Promise<{ groupId: string; name: string; description: string | null } | null> {
+  if (!(await projectFeatureFlagEnabled(projectId, 'session_groups'))) return null;
+  const rows = (await db.execute(sql`
+    SELECT g.group_id, g.name, g.description
+      FROM kortix.project_sessions s
+      LEFT JOIN kortix.project_sessions p
+        ON p.project_id = s.project_id
+       AND p.session_id = coalesce(s.parent_session_id, s.metadata->>'spawned_by_session')
+      JOIN kortix.project_session_groups g
+        ON g.project_id = s.project_id
+       AND g.group_id = coalesce(s.group_id, p.group_id)
+     WHERE s.session_id = ${sessionId} AND s.project_id = ${projectId}
+     LIMIT 1
+  `)) as unknown as Array<{ group_id: string; name: string; description: string | null }>;
+  const row = rows[0];
+  if (!row) return null;
+  return { groupId: row.group_id, name: row.name, description: row.description };
+}
+
+/** The Files folder of the session's space (`sessionGroupOf`), which its box mounts read-write; null for none. */
+export async function sessionGroupFolder(projectId: string, sessionId: string): Promise<string | null> {
+  const group = await sessionGroupOf(projectId, sessionId);
+  return group ? sessionGroupDriveFolder(group.groupId) : null;
+}
+
+/** Each space's folder (`sessionGroupDriveFolder`) and the space's name, for the Files listing of `/Spaces`. */
+export async function sessionGroupFolderNames(projectId: string): Promise<Map<string, string>> {
+  const rows = await db
+    .select({ groupId: projectSessionGroups.groupId, name: projectSessionGroups.name })
+    .from(projectSessionGroups)
+    .where(eq(projectSessionGroups.projectId, projectId));
+  return new Map(rows.flatMap((row) => {
+    const folder = sessionGroupDriveFolder(row.groupId);
+    return folder ? [[folder, row.name] as const] : [];
+  }));
+}
+
+/** The session is filed in a channel (`chat` on) or a space (`session_groups` on), so its box mounts that folder. */
 export async function sessionMountsSpaceFiles(projectId: string, sessionId: string): Promise<boolean> {
   const [row] = await db
     .select({ spaceId: projectSessions.spaceId })
     .from(projectSessions)
     .where(and(eq(projectSessions.sessionId, sessionId), eq(projectSessions.projectId, projectId)))
     .limit(1);
-  return !!row?.spaceId && (await projectFeatureFlagEnabled(projectId, 'chat'));
+  if (row?.spaceId && (await projectFeatureFlagEnabled(projectId, 'chat'))) return true;
+  return (await sessionGroupFolder(projectId, sessionId)) !== null;
 }
 
 /** The project's `shared_drives` flag: off, nothing but people's own folders (and private channels') reaches anyone. */
@@ -702,6 +774,8 @@ export interface RecordedDriveMount {
   role?: 'me' | 'drive';
   /** Reached through the session's person (their folder or a share with them), not its agent or project. */
   viaPerson?: boolean;
+  /** The drive's volume is shared: every write is live in every mount, with no merge and no conflict copy. */
+  live?: true;
 }
 
 export interface SkippedDrive {
@@ -887,18 +961,23 @@ export async function planSessionDrives(input: {
     grants = await listFolderGrants(drive);
   }
   // `shared_drives` off: no folder mounts through the agent, only the person's own (and a private channel's).
-  const [agentId, groupIds, channelFolder, privateChannelFolders, spaceFolder] = await Promise.all([
+  const [agentId, groupIds, channelFolder, privateChannelFolders, channelSpaceFolder, groupFolder] = await Promise.all([
     sharedDrivesOn(projectId).then((on) => (on ? agentServiceAccountId(accountId, projectId, agentName) : null)),
     owner ? groupIdsOf(owner, accountId) : Promise.resolve(new Set<string>()),
     sessionPrivateChannelFolder(sessionId),
     projectPrivateChannelFolders(projectId),
     sessionSpaceFolder(projectId, sessionId, grants),
+    sessionGroupFolder(projectId, sessionId),
   ]);
+  // A channel's folder wins over a space's: a session in both mounts the channel's.
+  const spaceFolder = channelSpaceFolder ?? groupFolder;
   const own = owner ? personalFolderFor(grants, owner) : null;
   // A private channel's folder mounts only in that channel's threads (and
   // their subagents, which inherit the channel), never through a member's grant.
   // With `chat` on, a public channel's or a DM's folder mounts in its threads
   // and their workers the same way (`spaceFolder`).
+  // With `session_groups` on, a space's folder mounts in its sessions and
+  // their children the same way.
   const candidates = sessionMountCandidates(grants, { agentId, owner, groupIds, own, channelFolder, privateChannelFolders, spaceFolder });
   const plan = planFolderMounts(candidates, input.slots ?? (await sandboxMountLimit()), privateChannelFolders);
   return { drive, mounts: plan.mounts, skipped: plan.skipped };
@@ -915,6 +994,7 @@ function toRecorded(drive: DriveRow, p: PlannedFolderMount, mountPath = p.mountP
     subdir: p.path,
     role: p.desktop ? 'me' : 'drive',
     ...(p.viaPerson ? { viaPerson: true } : {}),
+    ...(knownVolumeType(drive.platinumVolumeName) === 'sharedfs' ? { live: true as const } : {}),
   };
 }
 
@@ -976,6 +1056,8 @@ export async function sessionVolumeMounts(input: {
   for (const p of plan.mounts) {
     planned.volumes[p.mountPath] = { volume: volume.name, ...(p.readOnly ? { read_only: true } : {}), subdir: p.path, share: 'node' };
   }
+  // The open just read the volume's type: the mounts recorded before it say it now.
+  if (knownVolumeType(volume.name) === 'sharedfs') planned.mounts = planned.mounts.map((m) => ({ ...m, live: true as const }));
   return planned;
 }
 
@@ -1412,10 +1494,14 @@ export function renderDriveNotes(
   /** A private channel's thread: every fact stays in the channel's folder, never a shared Drive or the user's folder. */
   opts: { privateChannel?: boolean } = {},
 ): string {
+  // A shared volume is live: no merge, so no conflict copy. Mounts of one session are all of the project's one drive.
+  const live = mounts.some((m) => m.live);
   const lines = [
     '# Files in this session',
     '',
-    'Folders of this workspace’s Files, synced both ways within seconds with the Kortix web app and every other session that mounts them.',
+    live
+      ? 'Folders of this workspace’s Files, shared live with the Kortix web app and every other session that mounts them.'
+      : 'Folders of this workspace’s Files, synced both ways within seconds with the Kortix web app and every other session that mounts them.',
     'Files here outlive this sandbox. Generated by Kortix; do not edit.',
     '',
     '| Path | Folder | Access |',
@@ -1449,8 +1535,15 @@ export function renderDriveNotes(
   lines.push(
     'A folder that is not listed here is not available to this session. A workspace admin can grant a folder to this agent in Files.',
     '',
-    'When two writers change the same file at the same time, both versions are kept: the other one is saved beside it as',
-    '"<name> (conflict <date> <time>)<ext>". Nothing is lost. Tell the user about a conflict copy you see; do not delete it on your own.',
+    ...(live
+      ? [
+          'These folders are live: a write here reaches the Kortix web app and every other session that mounts the folder within seconds.',
+          'There is nothing to save, sync or commit. When two writers change the same file, the last write wins: write a file whole, and re-read a file another writer may change before you edit it.',
+        ]
+      : [
+          'When two writers change the same file at the same time, both versions are kept: the other one is saved beside it as',
+          '"<name> (conflict <date> <time>)<ext>". Nothing is lost. Tell the user about a conflict copy you see; do not delete it on your own.',
+        ]),
     '',
   );
   if (skippedMessage) {

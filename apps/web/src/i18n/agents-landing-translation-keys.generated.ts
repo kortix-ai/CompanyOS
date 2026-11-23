@@ -19,7 +19,6 @@ export const AGENTS_LANDING_TRANSLATION_KEYS: Readonly<Record<string, string>> =
   '/guides/bank-feed': 'text31cba4f6e839',
   '/guides/close': 'textfed420ba35cf',
   '/guides/payouts': 'textb18cf0d798a5',
-  '/marketplace': 'text95779fa23e0c',
   '#072': 'text08de25464f74',
   '#094': 'text15e1da118b5d',
   '#118': 'text06d7d914d63c',
@@ -110,9 +109,6 @@ export const AGENTS_LANDING_TRANSLATION_KEYS: Readonly<Record<string, string>> =
   'Brand & content': 'text6c8a12831e1d',
   'Browse agents, skills and whole workspaces, add one to your workspace in a click, and what arrives is files in your repo — not a dependency you rent. It is labelled beta because sources and updates are still moving, and it is on for every workspace.':
     'text0970b91b1fea',
-  'Browse the marketplace': 'textfd5be8c298fd',
-  'Browse the marketplace without signing in. Kortix ships its own registry — 62 agents, 61 skills and 62 workspace templates — and you can switch on curated outside registries with one click. None load by default.':
-    'text43298f298ad8',
   'Build the workforce': 'text63803e6b696c',
   'Builds the outbound campaign and runs it.': 'textdf0b5ba1b462',
   'By role': 'textc78b5e29dfe3',
@@ -201,7 +197,6 @@ export const AGENTS_LANDING_TRANSLATION_KEYS: Readonly<Record<string, string>> =
   Linear: 'texte6950b45d25c',
   Marketing: 'textf5904cf7a123',
   'marketing/seo-weekly.xlsx': 'text303a578ba016',
-  Marketplace: 'textc608981d8d68',
   'Merging is a separate power': 'text062aba2180ea',
   MicrosoftTeams: 'text48cbbdc692b0',
   Mobile: 'textcbaad3cf4a65',

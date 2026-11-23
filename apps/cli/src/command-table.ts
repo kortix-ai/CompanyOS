@@ -215,11 +215,6 @@ export const TIERS: readonly CommandTier[] = [
             args: '<subcommand>',
             blurb: 'Deploy Apps (sites and servers) with stable Kortix URLs',
           },
-          {
-            name: 'marketplace',
-            args: '<subcommand>',
-            blurb: 'Search, show, install, and uninstall workspace marketplace skills',
-          },
         ],
       },
       {
@@ -277,7 +272,7 @@ export const TIERS: readonly CommandTier[] = [
           {
             name: 'calendar',
             args: '<subcommand>',
-            blurb: 'The shared calendar: dated items with an owner and comments; @mention a person to ask them: ls, add, show, edit, done, comment, rm',
+            blurb: 'The shared calendar: dated items with the people on them and comments; @mention a person to ask them: ls, add, show, edit, done, comment, rm',
             featureFlag: 'calendar',
           },
           {

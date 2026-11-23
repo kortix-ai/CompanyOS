@@ -8,11 +8,11 @@ export const EMAIL_COLORS = {
   inkMuted: '#666666', // --muted-foreground
   hairline: '#e2e2e2', // --border
   kortixBase: '#0099ff', // --kortix-base
-  success: '#199338', // --kortix-green
-  error: '#f14b4c', // --kortix-red
-  warning: '#d18b19', // --kortix-orange
-  pending: '#cca300', // --kortix-yellow
-  info: '#2b91f7', // --kortix-blue
+  success: '#037225', // --kortix-green
+  error: '#c21425', // --kortix-red
+  warning: '#b47508', // --kortix-orange
+  pending: '#9f7f02', // --kortix-yellow
+  info: '#1784e9', // --kortix-blue
 } as const;
 
 // System stacks only: email clients cannot load Roobert (decisions D8a, Q27).

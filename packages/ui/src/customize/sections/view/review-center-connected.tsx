@@ -221,25 +221,27 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
     accepted: () => void,
     refused: (error: unknown) => void,
   ) {
+    // Each call awaits its own promise: per-call `mutate` callbacks fire only
+    // for an observer's latest call, so two verdicts flushed together (the
+    // swipe deck's Undo windows) would drop the first one's result.
     // The shared parameter-review component calls this for one exact action.
     const executionId = connectorCallId(id);
     if (executionId) {
-      resolve.mutate(
-        { executionId, decision: verdict === 'approve' ? 'approve' : 'deny', note: feedback },
-        {
-          onSuccess: () => {
+      resolve
+        .mutateAsync({ executionId, decision: verdict === 'approve' ? 'approve' : 'deny', note: feedback })
+        .then(
+          () => {
             if (verdict === 'approve') successToast(tI18nComplete.raw('text2b2b0a697042'));
             else infoToast(tI18nComplete.raw('textda404deb110f'));
             announced();
           },
-          onError: (e) => {
+          (e: Error) => {
             refused(e);
             if (!isApprovalExpiredError(e)) return errorToast(e.message);
             errorToast(tHardcodedUi('approvalPage.expiredHint'));
             refreshInbox();
           },
-        },
-      );
+        );
       return;
     }
     // Change Requests ship/close through their own flow — the review `/act`
@@ -247,13 +249,13 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
     const crId = crChangeRequestId(id);
     if (crId) {
       if (verdict === 'approve') {
-        merge.mutate(crId, {
-          onSuccess: () => {
+        merge.mutateAsync(crId).then(
+          () => {
             successToast(tI18nComplete.raw('text0cad31cba248'));
             refreshInbox();
             announced();
           },
-          onError: (e) => {
+          (e: Error) => {
             refused(e);
             if ((e as { code?: string }).code === 'MERGE_CONFLICT') {
               const item = items.find((candidate) => candidate.id === id);
@@ -275,19 +277,19 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
             }
             errorToast(e.message);
           },
-        });
+        );
       } else if (verdict === 'reject') {
-        close.mutate(crId, {
-          onSuccess: () => {
+        close.mutateAsync(crId).then(
+          () => {
             infoToast(tI18nComplete.raw('text67382c89fdde'));
             refreshInbox();
             announced();
           },
-          onError: (e) => {
+          (e: Error) => {
             refused(e);
             errorToast(e.message);
           },
-        });
+        );
       } else {
         // "Request changes" → persist the note on the change AND deliver it to the
         // agent that opened it (backend boots the sandbox + sends the prompt). No
@@ -298,37 +300,28 @@ export function ReviewCenterConnected({ projectName }: { projectName: string }) 
           refused(new Error('A change request needs a note.'));
           return;
         }
-        requestChanges.mutate(
-          { crId, feedback: note },
-          {
-            onSuccess: (res) => {
-              successToast(
-                res.delivering
-                  ? tI18nComplete.raw('text99764404a562')
-                  : tI18nComplete.raw('text871f77182091'),
-              );
-              refreshInbox();
-              announced();
-            },
-            onError: (e) => {
-              refused(e);
-              errorToast(e.message);
-            },
+        requestChanges.mutateAsync({ crId, feedback: note }).then(
+          (res) => {
+            successToast(
+              res.delivering
+                ? tI18nComplete.raw('text99764404a562')
+                : tI18nComplete.raw('text871f77182091'),
+            );
+            refreshInbox();
+            announced();
+          },
+          (e: Error) => {
+            refused(e);
+            errorToast(e.message);
           },
         );
       }
       return;
     }
-    act.mutate(
-      { id, verdict, feedback },
-      {
-        onSuccess: accepted,
-        onError: (e) => {
-          refused(e);
-          errorToast(e.message);
-        },
-      },
-    );
+    act.mutateAsync({ id, verdict, feedback }).then(accepted, (e: Error) => {
+      refused(e);
+      errorToast(e.message);
+    });
   }
 
   // Bulk verdicts send every id the inbox chose: native, and `call:` for

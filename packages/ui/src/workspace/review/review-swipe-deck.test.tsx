@@ -107,14 +107,25 @@ test('Close on a change sends reject', () => {
   expect(decided).toEqual(['reject']);
 });
 
-test('a decision offers no swipe verdict: Yes and No are disabled', () => {
+test('a decision offers no swipe verdict: both verdict buttons are disabled and say why', () => {
   const host = mount([decision], () => {});
-  expect(button(host, 'Yes')?.disabled).toBe(true);
-  expect(button(host, 'No')?.disabled).toBe(true);
-  expect(host.textContent).toContain('Open it to choose an answer');
+  const verdicts = host.querySelectorAll<HTMLButtonElement>('button[aria-label="Open it to choose an answer"]');
+  expect(verdicts.length).toBe(2);
+  expect([...verdicts].every((b) => b.disabled)).toBe(true);
 });
 
 test('an empty deck says the viewer is caught up', () => {
   const host = mount([], () => {});
   expect(host.textContent).toContain('You are all caught up');
+});
+
+test('leaving the page while the card flies off still sends its verdict', () => {
+  jest.useFakeTimers();
+  const decided: ReviewVerdict[] = [];
+  const host = mount([change], (_item, verdict) => decided.push(verdict));
+  act(() => button(host, 'Merge')!.click());
+  act(() => jest.advanceTimersByTime(50));
+  act(() => root?.unmount());
+  root = null;
+  expect(decided).toEqual(['approve']);
 });

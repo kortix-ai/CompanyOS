@@ -145,8 +145,9 @@ function VerdictFooter({
 }) {
   // The sheet's own surface: none on the iOS 26 native glass.
   const background = useSheetSurface() ?? undefined;
-  // `verdicts` lists the primary first. A lone Dismiss (a decision) stays a pill.
-  const dismiss = verdicts.length > 1 && verdicts.includes('dismiss') ? ('dismiss' as const) : null;
+  // `verdicts` lists the primary first. Dismiss is always the round ✕, even
+  // alone (a decision answers from its option rows).
+  const dismiss = verdicts.includes('dismiss') ? ('dismiss' as const) : null;
   const rest = verdicts.filter((verdict) => verdict !== dismiss);
   const primary = rest[0];
   const pills = [...rest].reverse();

@@ -111,6 +111,9 @@ export function ReviewSwipeDeck({ projectId, items, allows, onDecide, onOpen, bo
   stagedRef.current = staged;
   const onDecideRef = React.useRef(onDecide);
   onDecideRef.current = onDecide;
+  // A verdict accepted while its card still flies off: registered at once,
+  // so leaving the page mid-animation still sends it.
+  const flyingRef = React.useRef<{ item: ReviewItem; verdict: ReviewVerdict; text?: string } | null>(null);
   const cardRef = React.useRef<CardHandle>(null);
   // A drag's progress toward a decision, 0..1: the card under it grows into place.
   const progress = useSharedValue(0);
@@ -118,6 +121,8 @@ export function ReviewSwipeDeck({ projectId, items, allows, onDecide, onOpen, bo
   // Leaving the page sends what waits: Undo is a short grace, not a draft.
   React.useEffect(
     () => () => {
+      const flying = flyingRef.current;
+      if (flying) onDecideRef.current(flying.item, flying.verdict, flying.text);
       for (const entry of stagedRef.current.values()) {
         clearTimeout(entry.timer);
         onDecideRef.current(entry.item, entry.verdict, entry.text);
@@ -148,6 +153,7 @@ export function ReviewSwipeDeck({ projectId, items, allows, onDecide, onOpen, bo
 
   const stage = React.useCallback(
     (item: ReviewItem, verdict: ReviewVerdict, text?: string) => {
+      flyingRef.current = null;
       progress.value = 0;
       const timer = setTimeout(() => {
         unstage(item.id);
@@ -173,6 +179,12 @@ export function ReviewSwipeDeck({ projectId, items, allows, onDecide, onOpen, bo
     },
     [progress, toast, unstage],
   );
+
+  const accept = React.useCallback((item: ReviewItem, dir: Direction) => {
+    const sides = reviewSwipeVerdicts(item.kind);
+    const verdict = dir === 'right' ? sides.right : sides.left;
+    if (verdict) flyingRef.current = { item, verdict };
+  }, []);
 
   const swiped = React.useCallback(
     (item: ReviewItem, dir: Direction) => {
@@ -215,8 +227,12 @@ export function ReviewSwipeDeck({ projectId, items, allows, onDecide, onOpen, bo
           noLabel={no ? reviewVerdictLabel(top.kind, no) : null}
           canAnswer={allows(top, 'answer')}
           progress={progress}
+          onAccepted={(dir) => accept(top, dir)}
           onSwiped={(dir) => swiped(top, dir)}
-          onAnswer={(text) => cardRef.current?.fling('right', () => stage(top, 'answer', text))}
+          onAnswer={(text) => {
+            flyingRef.current = { item: top, verdict: 'answer', text };
+            cardRef.current?.fling('right', () => stage(top, 'answer', text));
+          }}
           onOpen={() => {
             haptics.tap();
             onOpen(top);
@@ -236,13 +252,19 @@ export function ReviewSwipeDeck({ projectId, items, allows, onDecide, onOpen, bo
           <RoundAction
             label={no ? reviewVerdictLabel(top.kind, no) : 'No'}
             disabled={!no}
-            onPress={() => cardRef.current?.fling('left', () => swiped(top, 'left'))}>
+            onPress={() => {
+              accept(top, 'left');
+              cardRef.current?.fling('left', () => swiped(top, 'left'));
+            }}>
             <Icon as={XIcon} size={26} color={accent.red} />
           </RoundAction>
           <RoundAction
             label={yes ? reviewVerdictLabel(top.kind, yes) : 'Yes'}
             disabled={!yes}
-            onPress={() => cardRef.current?.fling('right', () => swiped(top, 'right'))}>
+            onPress={() => {
+              accept(top, 'right');
+              cardRef.current?.fling('right', () => swiped(top, 'right'));
+            }}>
             <Icon as={CheckIcon} size={26} color={accent.green} />
           </RoundAction>
           <RoundAction
@@ -327,11 +349,16 @@ const SwipeCard = React.forwardRef<
     noLabel: string | null;
     canAnswer: boolean;
     progress: SharedValue<number>;
+    /** A swipe passed the threshold: the verdict is decided, the card still flies. */
+    onAccepted: (dir: Direction) => void;
     onSwiped: (dir: Direction) => void;
     onAnswer: (text: string | undefined) => void;
     onOpen: () => void;
   }
->(function SwipeCard({ projectId, item, yesLabel, noLabel, canAnswer, progress, onSwiped, onAnswer, onOpen }, ref) {
+>(function SwipeCard(
+  { projectId, item, yesLabel, noLabel, canAnswer, progress, onAccepted, onSwiped, onAnswer, onOpen },
+  ref,
+) {
   const { width } = useWindowDimensions();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -387,6 +414,7 @@ const SwipeCard = React.forwardRef<
       crossed.value = false;
       if (right || left) {
         const dir: Direction = right ? 'right' : 'left';
+        scheduleOnRN(onAccepted, dir);
         scheduleOnRN(haptics.medium);
         tx.value = withTiming(right ? off : -off, { duration: EXIT_MS, easing: EXIT_EASING }, (finished) => {
           if (finished) scheduleOnRN(onSwiped, dir);
@@ -437,8 +465,13 @@ const SwipeCard = React.forwardRef<
           ...(canLeft ? [{ name: 'no', label: noLabel ?? '' }] : []),
         ]}
         onAccessibilityAction={(event) => {
-          if (event.nativeEvent.actionName === 'yes') fling('right', () => onSwiped('right'));
-          else if (event.nativeEvent.actionName === 'no') fling('left', () => onSwiped('left'));
+          if (event.nativeEvent.actionName === 'yes') {
+            onAccepted('right');
+            fling('right', () => onSwiped('right'));
+          } else if (event.nativeEvent.actionName === 'no') {
+            onAccepted('left');
+            fling('left', () => onSwiped('left'));
+          }
         }}>
         <SurfaceContext.Provider value="sheet">
           <ScrollView

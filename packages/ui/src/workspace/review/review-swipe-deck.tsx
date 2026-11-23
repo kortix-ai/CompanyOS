@@ -37,7 +37,6 @@ import { approvalIdentity } from '../../markdown/setup-links/approval-decision';
 import { ConnectorAppMark } from '../../markdown/setup-links/connector-handshake';
 import { Button } from '../../primitives/button';
 import { EmptyState } from '../../primitives/empty-state';
-import { Kbd } from '../../primitives/kbd';
 import { undoToast } from '../../primitives/toast';
 import { reviewApprovalDetails } from './approval-modal';
 import { formatItemAge } from './review-actions';
@@ -88,6 +87,11 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
   stagedRef.current = staged;
   const onDecideRef = useRef(onDecide);
   onDecideRef.current = onDecide;
+  // A verdict accepted while its card still flies off: registered at once,
+  // so leaving the page mid-animation still sends it.
+  const flyingRef = useRef<{ item: ReviewItem; verdict: ReviewVerdict; timer: ReturnType<typeof setTimeout> } | null>(
+    null,
+  );
 
   // The deck takes focus when it shows, so its keys work at once.
   useEffect(() => {
@@ -97,6 +101,11 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
   // Leaving the page sends what waits: Undo is a short grace, not a draft.
   useEffect(
     () => () => {
+      const flying = flyingRef.current;
+      if (flying) {
+        clearTimeout(flying.timer);
+        onDecideRef.current(flying.item, flying.verdict);
+      }
       for (const entry of stagedRef.current.values()) {
         clearTimeout(entry.timer);
         onDecideRef.current(entry.item, entry.verdict);
@@ -163,10 +172,12 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
       const verdict = dir === 'right' ? yes : no;
       if (!verdict) return;
       setLeaving({ id: top.id, dir });
-      setTimeout(() => {
+      const timer = setTimeout(() => {
+        flyingRef.current = null;
         setLeaving(null);
         stage(top, verdict);
       }, EXIT_MS);
+      flyingRef.current = { item: top, verdict, timer };
     },
     [top, leaving, yes, no, stage],
   );
@@ -182,7 +193,8 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
     if (key === 'arrowright') decide('right');
     else if (key === 'arrowleft') decide('left');
     else if (key === 's') skip();
-    else if (key === 'enter') onOpen(top);
+    // Enter on a focused control (Merge, Close) is that control's click.
+    else if (key === 'enter' && event.target === event.currentTarget) onOpen(top);
     else return;
     event.preventDefault();
     event.stopPropagation();
@@ -197,6 +209,7 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
   }
 
   const below = deck.slice(1, 1 + STACK_DEPTH);
+  const blocked = !yes && !no && top.kind !== 'decision' ? t('noVerdict') : undefined;
 
   return (
     <div
@@ -206,23 +219,21 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
       onKeyDown={onKeyDown}
       aria-label={t('label')}
       role="region"
-      className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-5 px-4 py-6 outline-none"
+      // The card fills the inbox's height, as a dating app's card fills the
+      // screen; the whole review scrolls inside it.
+      className="mx-auto flex min-h-96 w-full max-w-xl flex-1 flex-col px-3 pt-2 pb-3 outline-none"
     >
-      <p className="text-muted-foreground text-center text-xs tabular-nums" aria-live="polite">
-        {t('remaining', { count: deck.length })}
-      </p>
-
-      <div className="relative">
+      <div className="relative min-h-0 flex-1">
         {/* The cards under the top one: smaller and lower, no content to read. */}
         {below
           .map((item, index) => (
             <div
               key={item.id}
               aria-hidden
-              className="bg-card border-border absolute inset-0 rounded-xl border"
+              className="bg-card border-border absolute inset-0 rounded-2xl border"
               style={{
-                transform: `translateY(${(index + 1) * 10}px) scale(${1 - (index + 1) * 0.04})`,
-                opacity: 1 - (index + 1) * 0.3,
+                transform: `translateY(${(index + 1) * 8}px) scale(${1 - (index + 1) * 0.03})`,
+                opacity: 1 - (index + 1) * 0.35,
                 transition: `transform 220ms ${EASE_OUT}, opacity 220ms ${EASE_OUT}`,
               }}
             />
@@ -234,48 +245,46 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
           leaving={leaving?.id === top.id ? leaving.dir : null}
           canRight={!!yes}
           canLeft={!!no}
-          rightLabel={yes ? verdictLabel(top, yes) : ''}
-          leftLabel={no ? verdictLabel(top, no) : ''}
           onSwipe={decide}
           onOpen={() => onOpen(top)}
         />
-      </div>
 
-      <div className="flex items-center justify-center gap-3">
-        <DeckButton label={no ? verdictLabel(top, no) : t('no')} kbd="←" disabled={!no} onClick={() => decide('left')}>
-          <XIcon weight="bold" className="size-5" />
-        </DeckButton>
-        <DeckButton label={t('skip')} kbd="S" size="sm" disabled={deck.length < 2} onClick={skip}>
-          <ArrowCounterClockwiseIcon className="size-4" />
-        </DeckButton>
-        <DeckButton label={t('open')} kbd="↵" size="sm" onClick={() => onOpen(top)}>
-          <ArrowsOutSimpleIcon className="size-4" />
-        </DeckButton>
-        <DeckButton
-          label={yes ? verdictLabel(top, yes) : t('yes')}
-          kbd="→"
-          tone="primary"
-          disabled={!yes}
-          onClick={() => decide('right')}
-        >
-          <CheckIcon weight="bold" className="size-5" />
-        </DeckButton>
+        {/* The actions float over the card's bottom edge, no captions: each
+            names itself to a screen reader and in its tooltip. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-4 flex items-center justify-center gap-4">
+          <DeckButton label={t('skip')} kbd="S" size="sm" disabled={deck.length < 2} onClick={skip}>
+            <ArrowCounterClockwiseIcon className="size-4" />
+          </DeckButton>
+          <DeckButton
+            label={no ? verdictLabel(top, no) : (blocked ?? t('needsChoice'))}
+            kbd="ArrowLeft"
+            disabled={!no}
+            onClick={() => decide('left')}
+          >
+            <XIcon weight="bold" className="text-kortix-red size-6" />
+          </DeckButton>
+          <DeckButton
+            label={yes ? verdictLabel(top, yes) : (blocked ?? t('needsChoice'))}
+            kbd="ArrowRight"
+            disabled={!yes}
+            onClick={() => decide('right')}
+          >
+            <CheckIcon weight="bold" className="text-kortix-green size-6" />
+          </DeckButton>
+          <DeckButton label={t('open')} kbd="Enter" size="sm" onClick={() => onOpen(top)}>
+            <ArrowsOutSimpleIcon className="size-4" />
+          </DeckButton>
+        </div>
       </div>
-      {!yes && !no ? (
-        <p className="text-muted-foreground -mt-2 text-center text-xs">
-          {top.kind === 'decision' ? t('needsChoice') : t('noVerdict')}
-        </p>
-      ) : null}
     </div>
   );
 }
 
-/** One round control under the stack, its name in the caption under it. */
+/** One round control over the card. Its name is its tooltip and accessible name. */
 function DeckButton({
   label,
   kbd,
   size = 'lg',
-  tone = 'secondary',
   disabled,
   onClick,
   children,
@@ -283,31 +292,26 @@ function DeckButton({
   label: string;
   kbd: string;
   size?: 'sm' | 'lg';
-  tone?: 'primary' | 'secondary';
   disabled?: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center gap-1.5">
-      <Button
-        type="button"
-        variant={tone === 'primary' ? 'default' : 'secondary'}
-        aria-label={label}
-        disabled={disabled}
-        onClick={onClick}
-        className={cn(
-          'rounded-full p-0 transition-transform duration-150 ease-out active:scale-95',
-          size === 'lg' ? 'size-14' : 'size-11',
-        )}
-      >
-        {children}
-      </Button>
-      <span className="text-muted-foreground flex items-center gap-1 text-xs">
-        <span className="max-w-20 truncate">{label}</span>
-        <Kbd className="hidden @3xl/inbox:inline-flex">{kbd}</Kbd>
-      </span>
-    </div>
+    <Button
+      type="button"
+      variant="outline"
+      aria-label={label}
+      aria-keyshortcuts={kbd}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        'bg-background pointer-events-auto rounded-full p-0 shadow-md transition-transform duration-150 ease-out active:scale-95',
+        size === 'lg' ? 'size-14' : 'size-11',
+      )}
+    >
+      {children}
+    </Button>
   );
 }
 
@@ -316,8 +320,6 @@ function SwipeCard({
   leaving,
   canRight,
   canLeft,
-  rightLabel,
-  leftLabel,
   onSwipe,
   onOpen,
 }: {
@@ -325,8 +327,6 @@ function SwipeCard({
   leaving: Direction | null;
   canRight: boolean;
   canLeft: boolean;
-  rightLabel: string;
-  leftLabel: string;
   onSwipe: (dir: Direction) => void;
   onOpen: () => void;
 }) {
@@ -367,14 +367,14 @@ function SwipeCard({
 
   const x = leaving ? (leaving === 'right' ? 1 : -1) * 640 : drag;
   const progress = Math.min(1, Math.abs(drag) / SWIPE_PX);
-  const transform = `translateX(${x}px) rotate(${x / 24}deg)`;
+  const transform = `translateX(${x}px) rotate(${x / 30}deg)`;
 
   return (
     <article
       data-testid="review-swipe-card"
       aria-label={item.title}
       className={cn(
-        'bg-card border-border relative flex min-h-80 cursor-grab touch-pan-y flex-col overflow-hidden rounded-xl border shadow-sm select-none',
+        'bg-card border-border absolute inset-0 flex cursor-grab touch-pan-y flex-col overflow-hidden rounded-2xl border shadow-sm select-none',
         dragging && 'cursor-grabbing',
       )}
       style={{
@@ -392,38 +392,25 @@ function SwipeCard({
         setDrag(0);
       }}
     >
-      {/* The verdict a release gives, stamped on the side it leaves by. */}
-      <Stamp label={rightLabel} side="left" tone="yes" opacity={drag > 0 && canRight ? progress : 0} />
-      <Stamp label={leftLabel} side="right" tone="no" opacity={drag < 0 && canLeft ? progress : 0} />
-      <CardBody item={item} />
+      {/* The whole review scrolls inside the card, clear of the actions. */}
+      <div className="min-h-0 flex-1 overflow-y-auto pb-24">
+        <CardBody item={item} />
+      </div>
+      {/* The content fades out under the floating actions. */}
+      <div aria-hidden className="from-card pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t to-transparent" />
+      {/* The verdict a release gives: the card takes its colour, green for
+          yes, red for no, deeper as the drag nears the decision. */}
+      <div
+        aria-hidden
+        className="bg-kortix-green/15 pointer-events-none absolute inset-0"
+        style={{ opacity: drag > 0 && canRight ? progress : 0 }}
+      />
+      <div
+        aria-hidden
+        className="bg-kortix-red/15 pointer-events-none absolute inset-0"
+        style={{ opacity: drag < 0 && canLeft ? progress : 0 }}
+      />
     </article>
-  );
-}
-
-function Stamp({
-  label,
-  side,
-  tone,
-  opacity,
-}: {
-  label: string;
-  side: 'left' | 'right';
-  tone: 'yes' | 'no';
-  opacity: number;
-}) {
-  if (!label) return null;
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        'pointer-events-none absolute top-4 z-10 rounded-md border-2 px-2 py-0.5 text-sm font-semibold tracking-wide uppercase',
-        side === 'left' ? 'left-4 -rotate-12' : 'right-4 rotate-12',
-        tone === 'yes' ? 'border-kortix-green text-kortix-green' : 'border-kortix-red text-kortix-red',
-      )}
-      style={{ opacity }}
-    >
-      {label}
-    </span>
   );
 }
 
@@ -438,7 +425,7 @@ function CardBody({ item }: { item: ReviewItem }) {
   const tile = ROW_TILE[item.kind];
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-5">
+    <div className="flex flex-col gap-5 p-6">
       <div className="flex items-center gap-2.5">
         {who ? (
           <ConnectorAppMark name={who.connector ?? item.title} slug={who.slug} iconUrl={who.iconUrl} size="md" />
@@ -460,9 +447,9 @@ function CardBody({ item }: { item: ReviewItem }) {
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <h3 className="text-foreground line-clamp-3 text-lg leading-snug font-medium text-pretty">{item.title}</h3>
+        <h3 className="text-foreground text-2xl leading-tight font-medium tracking-tight text-pretty">{item.title}</h3>
         {item.summary ? (
-          <p className="text-muted-foreground line-clamp-3 text-sm text-pretty">{item.summary}</p>
+          <p className="text-muted-foreground text-base text-pretty">{item.summary}</p>
         ) : null}
       </div>
 
@@ -478,28 +465,31 @@ function KindDetail({ item }: { item: ReviewItem }) {
     const { additions, deletions, files } = item.detail.advanced;
     const conflicts = item.detail.conflicts?.length ?? 0;
     return (
-      <div className="mt-auto flex flex-col gap-3">
+      <div className="flex flex-col gap-3">
         {item.detail.whatChanged.length > 0 ? (
           <ul className="text-foreground flex flex-col gap-1 text-sm">
             {item.detail.whatChanged.slice(0, 3).map((line) => (
               <li key={line} className="flex gap-2">
                 <span aria-hidden className="text-muted-foreground">·</span>
-                <span className="line-clamp-1">{line}</span>
+                <span>{line}</span>
               </li>
             ))}
           </ul>
         ) : null}
+        {/* A change request from the list carries no diff yet: no stats beat "0 files +0 −0". */}
+        {files.length > 0 || additions > 0 || deletions > 0 || conflicts > 0 ? (
         <div className="border-border flex items-center gap-3 border-t pt-3 text-xs tabular-nums">
-          <span className="text-muted-foreground">{t('files', { count: files.length })}</span>
-          <span className="text-kortix-green">+{additions}</span>
-          <span className="text-kortix-red">−{deletions}</span>
-          {conflicts > 0 ? (
-            <span className="text-muted-foreground ml-auto flex items-center gap-1">
-              <WarningIcon weight="fill" className="text-kortix-orange size-3.5" />
-              {t('conflicts', { count: conflicts })}
-            </span>
-          ) : null}
-        </div>
+            <span className="text-muted-foreground">{t('files', { count: files.length })}</span>
+            <span className="text-kortix-green">+{additions}</span>
+            <span className="text-kortix-red">−{deletions}</span>
+            {conflicts > 0 ? (
+              <span className="text-muted-foreground ml-auto flex items-center gap-1">
+                <WarningIcon weight="fill" className="text-kortix-orange size-3.5" />
+                {t('conflicts', { count: conflicts })}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -508,7 +498,7 @@ function KindDetail({ item }: { item: ReviewItem }) {
     if (!call) return null;
     const args = call.argsPreview.slice(0, 4);
     return (
-      <div className="mt-auto flex flex-col gap-3">
+      <div className="flex flex-col gap-3">
         {call.consequence ? <p className="text-foreground text-sm">{call.consequence}</p> : null}
         {args.length > 0 ? (
           <dl className="bg-muted/50 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg p-3 font-mono text-xs">
@@ -524,13 +514,14 @@ function KindDetail({ item }: { item: ReviewItem }) {
     );
   }
   if (item.kind === 'output') {
-    return item.detail.note ? (
-      <p className="text-foreground mt-auto line-clamp-4 text-sm">{item.detail.note}</p>
+    // The note often repeats the summary word for word: say it once.
+    return item.detail.note && item.detail.note !== item.summary ? (
+      <p className="text-foreground text-sm">{item.detail.note}</p>
     ) : null;
   }
   if (item.kind === 'decision') {
     return (
-      <div className="mt-auto flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
         <p className="text-foreground text-sm font-medium">{item.detail.question}</p>
         <ul className="flex flex-col gap-1">
           {item.detail.options.slice(0, 4).map((option) => (
@@ -542,8 +533,8 @@ function KindDetail({ item }: { item: ReviewItem }) {
       </div>
     );
   }
-  return item.detail.note ? (
-    <p className="text-foreground mt-auto line-clamp-4 text-sm">
+  return item.detail.note && item.detail.note !== item.summary ? (
+    <p className="text-foreground text-sm">
       {item.detail.note}
       <span className="text-muted-foreground"> · {t('items', { count: item.detail.children.length })}</span>
     </p>

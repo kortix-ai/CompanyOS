@@ -861,6 +861,11 @@ export function ReviewCenter({
     () => filterItems(items, segment, kindFilter, query, sessionFilter),
     [items, segment, kindFilter, query, sessionFilter],
   );
+  // The deck shows one card at a time: as it runs low, read the next page.
+  const loadNext = loadMore && !loadMore.isLoading && !loadMore.isError ? loadMore.onLoadMore : null;
+  useEffect(() => {
+    if (cards && loadNext && visible.length < 3) loadNext();
+  }, [cards, loadNext, visible.length]);
   /** After a verdict the item leaves its list: open the row that took its
    *  place (the next one, else the one above).
    *  Reads the list as it was before the verdict. */
@@ -1092,7 +1097,14 @@ export function ReviewCenter({
         (value) => {
           if (value !== REVIEW_VERDICT_ANNOUNCED) announce();
         },
-        () => setItems(before),
+        // A refused verdict puts back only its own item: other verdicts
+        // in flight (the deck sends one per Undo window) keep theirs.
+        () =>
+          setItems((current) => {
+            if (!optimistic) return before;
+            const prior = before.find((i) => i.id === optimistic.id);
+            return prior ? current.map((i) => (i.id === prior.id ? prior : i)) : current;
+          }),
       )
       .finally(() => {
         if (!optimistic) return;
@@ -1321,6 +1333,9 @@ export function ReviewCenter({
         else dismissIds([openItem.id]);
         return;
       }
+      // The deck owns its keys; the hidden list's cursor must not decide
+      // an item the deck does not show.
+      if (cards) return;
       if (visible.length === 0) return;
       // j/k/x move from the open item's row when one is open, else from the
       // cursor's row. Select mode moves the cursor, not the open item: there
@@ -1643,6 +1658,10 @@ export function ReviewCenter({
   const deckBody =
     (isError || isLoading) && items.length === 0 ? (
       listBody
+    ) : visible.length === 0 && loadMore ? (
+      // Nothing on the pages read so far, and more pages exist: never
+      // "caught up" (KRTX-1727).
+      <div className="pt-6">{loadMoreButton}</div>
     ) : (
       <ReviewSwipeDeck
         items={visible}
@@ -1958,6 +1977,8 @@ export function ReviewCenter({
         <div
           className={cn(
             'min-h-0 flex-1 overflow-y-auto p-1.5',
+            // The deck fills what the asks above it leave.
+            cards && 'flex flex-col',
             selectMode && segment === 'needs_you' && 'pb-20',
           )}
         >

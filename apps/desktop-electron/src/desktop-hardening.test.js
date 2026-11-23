@@ -55,6 +55,18 @@ describe('window state restoration', () => {
     });
   });
 
+  it('uses and restores the narrow macOS width without changing other platforms', () => {
+    const saved = { bounds: { x: 100, y: 100, width: 172, height: 480 } };
+    expect(windowState.minimumWindowWidth('darwin')).toBe(172);
+    expect(windowState.minimumWindowWidth('win32')).toBe(720);
+    expect(windowState.minimumWindowWidth('linux')).toBe(720);
+    expect(windowState.restoreWindowState(saved, [primary], primary, undefined, 'darwin').bounds.width).toBe(172);
+    expect(windowState.restoreWindowState(saved, [primary], primary, undefined, 'win32').bounds.width).toBe(720);
+    expect(windowState.restoreWindowState(
+      { bounds: { ...saved.bounds, width: 125 } }, [primary], primary, undefined, 'darwin',
+    ).bounds.width).toBe(172);
+  });
+
   it('makes partially visible and oversized saved bounds fully visible', () => {
     expect(
       windowState.restoreWindowState?.(

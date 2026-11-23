@@ -1,5 +1,11 @@
 const MIN_WIDTH = 720;
 const MIN_HEIGHT = 480;
+// A narrow conversation strip on macOS. Keep the existing floor on other OSes.
+const MAC_MIN_WIDTH = 172;
+
+function minimumWindowWidth(platform) {
+  return platform === 'darwin' ? MAC_MIN_WIDTH : MIN_WIDTH;
+}
 
 function contains(outer, inner) {
   return (
@@ -26,16 +32,17 @@ function centeredBounds(display, width, height) {
   };
 }
 
-function restoreWindowState(saved, displays, primaryDisplay, fallbackBounds) {
+function restoreWindowState(saved, displays, primaryDisplay, fallbackBounds, platform) {
+  const minWidth = minimumWindowWidth(platform);
   const fallback = fallbackBounds || {
-    width: MIN_WIDTH,
+    width: minWidth,
     height: MIN_HEIGHT,
   };
   const raw = saved?.bounds || fallback;
   const bounds = {
     x: Number.isFinite(raw.x) ? Math.round(raw.x) : undefined,
     y: Number.isFinite(raw.y) ? Math.round(raw.y) : undefined,
-    width: Math.max(MIN_WIDTH, Math.round(Number(raw.width) || fallback.width)),
+    width: Math.max(minWidth, Math.round(Number(raw.width) || fallback.width)),
     height: Math.max(MIN_HEIGHT, Math.round(Number(raw.height) || fallback.height)),
   };
   const positioned = Number.isFinite(bounds.x) && Number.isFinite(bounds.y);
@@ -70,4 +77,4 @@ function restoreWindowState(saved, displays, primaryDisplay, fallbackBounds) {
   };
 }
 
-module.exports = { MIN_WIDTH, MIN_HEIGHT, restoreWindowState };
+module.exports = { MIN_HEIGHT, minimumWindowWidth, restoreWindowState };

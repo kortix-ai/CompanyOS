@@ -16,7 +16,7 @@ import {
   useVisibleAgents,
 } from '@kortix/sdk/react';
 import { isMyKortixAgentName } from '@kortix/shared';
-import { CaretDownIcon, LockSimpleIcon } from '@phosphor-icons/react';
+import { ArrowSquareOutIcon, CaretDownIcon, LockSimpleIcon } from '@phosphor-icons/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -1042,8 +1042,13 @@ function ThreadPanel({
           </div>
         </div>
         {fullHref ? (
-          <Link href={fullHref} className="text-muted-foreground hover:text-foreground shrink-0 px-2 text-xs">
-            {t('openFullSession')}
+          <Link
+            href={fullHref}
+            aria-label={t('openFullSession')}
+            className="kx-thread-full-session text-muted-foreground hover:text-foreground shrink-0 px-2 text-xs"
+          >
+            <span>{t('openFullSession')}</span>
+            <ArrowSquareOutIcon aria-hidden className="kx-thread-full-session-icon hidden size-4" />
           </Link>
         ) : null}
         <Hint label={t('closeThread')} side="bottom">

@@ -28,7 +28,7 @@ const { menuContextForUrl, copyableUrl, TAB_MENU_IDS, HIDDEN_TAB_MENU_IDS } = re
 const { PANEL_TOGGLE_COMMAND, forwardsPanelToggle } = require('./panel-shortcut');
 const { decidePopup, isAllowedPopupNavigation } = require('./popup-rules');
 const { backgroundForTheme, normalizeChoice, normalizeTheme } = require('./theme-state');
-const { MIN_HEIGHT, MIN_WIDTH, restoreWindowState } = require('./window-state');
+const { MIN_HEIGHT, minimumWindowWidth, restoreWindowState } = require('./window-state');
 const { buildFrontendMenu } = require('./frontend-menu');
 const { buildAppMenuTemplate } = require('./app-menu');
 const { resolveChannel } = require('./update-channel');
@@ -316,7 +316,7 @@ function launchSize() {
 
 function restoredWindowState() {
   const { screen } = require('electron');
-  return restoreWindowState(readWindowState(), screen.getAllDisplays(), screen.getPrimaryDisplay(), launchSize());
+  return restoreWindowState(readWindowState(), screen.getAllDisplays(), screen.getPrimaryDisplay(), launchSize(), process.platform);
 }
 
 function createSplash() {
@@ -359,7 +359,7 @@ function createMainWindow() {
 
   mainWindow = new BrowserWindow({
     ...restored.bounds,
-    minWidth: MIN_WIDTH,
+    minWidth: minimumWindowWidth(process.platform),
     minHeight: MIN_HEIGHT,
     show: false, // revealed once the remote app finishes loading (splash covers the gap)
     backgroundColor: currentBackgroundColor(),

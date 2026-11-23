@@ -22422,6 +22422,8 @@
     "redirectsTo": "戻り先",
     "workspaceLabel": "ワークスペース",
     "workspaceHint": "{client} がアクセスできるのはこのワークスペースだけです。",
+    "workspaceAll": "すべてのワークスペース",
+    "workspaceAllHint": "{client} は、あなたが開けるすべてのワークスペースで、今後も含めてあなたとして操作し、新しいワークスペースを作成できます。自分で使うアプリの場合にのみ選択してください。",
     "scopes": {
       "profile": "プロフィールを表示",
       "email": "メールアドレスを表示",

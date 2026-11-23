@@ -22422,6 +22422,8 @@
     "redirectsTo": "完成后返回至",
     "workspaceLabel": "工作区",
     "workspaceHint": "{client} 只能访问此工作区。",
+    "workspaceAll": "我的所有工作区",
+    "workspaceAllHint": "{client} 将以你的身份访问你能打开的每个工作区（包括以后加入的），并可以创建新工作区。仅对你自己使用的应用选择此项。",
     "scopes": {
       "profile": "查看你的个人资料",
       "email": "查看你的电子邮件地址",

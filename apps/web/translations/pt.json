@@ -22422,6 +22422,8 @@
     "redirectsTo": "Leva você de volta para",
     "workspaceLabel": "Espaço de trabalho",
     "workspaceHint": "{client} acessa somente este espaço de trabalho.",
+    "workspaceAll": "Todos os meus espaços de trabalho",
+    "workspaceAllHint": "{client} age como você em todos os espaços de trabalho que você pode abrir, agora e depois, e pode criar novos espaços de trabalho. Escolha isto apenas para um app que você mesmo usa.",
     "scopes": {
       "profile": "Ver seu perfil",
       "email": "Ver seu endereço de e-mail",

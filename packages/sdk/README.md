@@ -1310,7 +1310,7 @@ reason.
 | `workspace_setting_read_only` | 400 | `updateWorkspace` named a setting; `field` and `writer` (the route that writes it) are in the body | `WORKSPACE_SETTING_READ_ONLY_CODE` |
 | `workspace_ambiguous` | 409 | A legacy account key names several workspaces (not split yet): name the workspace id | — |
 | `no_workspace` | 409 | The caller belongs to no workspace | `NO_WORKSPACE_CODE` · `isNoWorkspaceError` |
-| `new_workspace_requires_person` | 403 | Only a person creates a workspace (not an API key, a service account or a workspace key) | — |
+| `new_workspace_requires_person` | 403 | Only a person creates a workspace (not an API key, a service account, a workspace key, an OAuth token bound to one workspace or an App viewer token) | — |
 | `account_creation_restricted` | 403 | The deployment lets only its admin create workspaces | — |
 | `project_limit_reached` | 403 | Deprecated: an older API's plan cap. Current APIs answer `workspace_has_project` | — |
 
@@ -1337,8 +1337,9 @@ const ws = await createWorkspace(
 ```
 
 Codes: `403 account_creation_restricted` (the deployment restricts account
-creation), `403 new_workspace_requires_person` (an API key, a service account
-or a workspace key), `403 impersonation_invalid`, `409 provision_in_flight`
+creation), `403 new_workspace_requires_person` (an API key, a service account,
+a workspace key, an OAuth token bound to one workspace or an App viewer token),
+`403 impersonation_invalid`, `409 provision_in_flight`
 (retry with the same key).
 
 The canonical server-side wrapper shape — catch a 402 and pass the payload

@@ -44,6 +44,7 @@ import { isPlatformAdmin } from '../../shared/platform-roles';
 import { deleteManagedProjectRepo, purgeProjectConnectors } from '../lib/project-deletion';
 import { accountRolesForUser } from '../../iam/read-models';
 import { newWorkspaceCallerDenial } from '../new-workspace';
+import { newWorkspaceCallerOf } from '../lib/new-workspace-caller';
 import {
   asWorkspaceId,
   closeWorkspace,
@@ -419,12 +420,7 @@ export function registerProjectSettingsRoutes(): void {
       const record = await getWorkspace(workspaceId);
       const role = record ? (await accountRolesForUser(userId)).get(record.accountId) : undefined;
       if (!record || !role) return c.json({ error: 'Workspace not found', code: 'workspace_not_found' }, 404);
-      const denial = newWorkspaceCallerDenial({
-        userId,
-        email: (c.get('userEmail') as string | undefined) || null,
-        authType: c.get('authType') as string | undefined,
-        scopedCredential: Boolean(c.get('tokenProjectId')) || isProjectSessionPrincipal(c),
-      });
+      const denial = newWorkspaceCallerDenial(newWorkspaceCallerOf(c));
       if (denial) return c.json(denial.body as never, denial.status as 403);
       if (role !== 'owner' && role !== 'admin') return c.json({ error: 'Owner or admin role required' }, 403);
       let target: Awaited<ReturnType<typeof prepareWorkspaceSetup>>;

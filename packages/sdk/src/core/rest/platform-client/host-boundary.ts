@@ -217,7 +217,8 @@ export function getOAuthConsentRequest(
 /**
  * Approve or deny a pending OAuth request. `workspaceId` binds the grant: the
  * issued token reaches that workspace only, like a workspace key. Without it
- * the token acts as the person in every workspace (older consent screens).
+ * the token acts as the person in every workspace and may create workspaces
+ * (the consent screen's All my workspaces choice).
  */
 export function submitOAuthConsent(
   input: { requestId: string; approved: boolean; workspaceId?: string },

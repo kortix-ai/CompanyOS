@@ -22422,6 +22422,8 @@
     "redirectsTo": "Leitet dich zurück zu",
     "workspaceLabel": "Workspace",
     "workspaceHint": "{client} erreicht nur diesen Workspace.",
+    "workspaceAll": "Alle meine Workspaces",
+    "workspaceAllHint": "{client} handelt als du in jedem Workspace, den du öffnen kannst, jetzt und später, und kann neue Workspaces erstellen. Wähle das nur für eine App, die du selbst betreibst.",
     "scopes": {
       "profile": "Dein Profil ansehen",
       "email": "Deine E-Mail-Adresse ansehen",

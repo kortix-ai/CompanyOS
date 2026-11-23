@@ -1,9 +1,10 @@
 // The storage behind a drive: one Platinum volume in drive sync mode. Every
 // call here speaks the Platinum volumes API; nothing above this file does.
 
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { drives } from '@kortix/db';
 import { eq } from 'drizzle-orm';
+import { config } from '../config';
 import { logger } from '../lib/logger';
 import { db } from '../shared/db';
 import { isPlatinumConfigured, platinumFetch, platinumRegionControlPlane } from '../shared/platinum';
@@ -796,7 +797,7 @@ export async function commitVolumeUpload(volume: DriveVolume, uploadId: string):
 
 const SHARED_UPLOADS_DIR = '/.kortix-uploads';
 /** `sfs-<created ms>-<16 hex>`: a storage upload id never has this shape. */
-const SHARED_UPLOAD_ID = /^sfs-(\d{13})-[0-9a-f]{16}$/;
+const SHARED_UPLOAD_ID = /^sfs-(\d{13})-[0-9a-f]{16}-[0-9a-f]{32}$/;
 /** A staging folder older than this is an abandoned upload, removed by the next plan's sweep. */
 const SHARED_UPLOAD_TTL_MS = 6 * 60 * 60_000;
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -839,12 +840,43 @@ function sharedUploadPlan(plan: unknown): SharedUploadPlan {
 
 const sharedUploadDir = (uploadId: string) => `${SHARED_UPLOADS_DIR}/${uploadId}`;
 
+/**
+ * The upload id seals its plan: the staged plan.json lives on the volume, where
+ * any session with the drive mounted can rewrite it, so the id carries a MAC of
+ * the exact plan bytes under the server secret and every later step checks it.
+ * A rewritten plan reads as tampered, never as a list of paths to write.
+ */
+function sealPlan(base: string, planJson: string): string {
+  return createHmac('sha256', config.API_KEY_SECRET).update(`shared-upload\n${base}\n${planJson}`).digest('hex').slice(0, 32);
+}
+
+/** The upload's plan, as sealed into its id; 404 when gone, 409 when rewritten. */
+async function loadSharedUploadPlan(volume: DriveVolume, uploadId: string): Promise<SharedUploadPlan> {
+  const m = /^(sfs-\d{13}-[0-9a-f]{16})-([0-9a-f]{32})$/.exec(uploadId);
+  if (!m) throw new DriveStorageError(404, 'Upload not found', 'upload_not_found');
+  let text: string;
+  try {
+    text = await (await readVolumeFile(volume, `${sharedUploadDir(uploadId)}/plan.json`)).text();
+  } catch (err) {
+    if (err instanceof DriveStorageError && err.status === 404) throw new DriveStorageError(404, 'Upload not found', 'upload_not_found');
+    throw err;
+  }
+  const want = Buffer.from(sealPlan(m[1]!, text), 'hex');
+  const got = Buffer.from(m[2]!, 'hex');
+  if (want.length !== got.length || !timingSafeEqual(want, got)) {
+    throw new DriveStorageError(409, 'The upload changed after it was planned. Start the upload again.', 'upload_tampered');
+  }
+  return sharedUploadPlan(JSON.parse(text));
+}
+
 async function planSharedUpload(volume: DriveVolume, raw: unknown): Promise<{ upload_id: string; missing: string[]; expires_at: string }> {
   const plan = sharedUploadPlan(raw);
   const now = Date.now();
-  const uploadId = `sfs-${now}-${randomBytes(8).toString('hex')}`;
+  const base = `sfs-${now}-${randomBytes(8).toString('hex')}`;
+  const planJson = JSON.stringify(plan);
+  const uploadId = `${base}-${sealPlan(base, planJson)}`;
   void sweepSharedUploads(volume, now);
-  await writeVolumeFile(volume, `${sharedUploadDir(uploadId)}/plan.json`, new TextEncoder().encode(JSON.stringify(plan)), { overwrite: false });
+  await writeVolumeFile(volume, `${sharedUploadDir(uploadId)}/plan.json`, new TextEncoder().encode(planJson), { overwrite: false });
   return {
     upload_id: uploadId,
     missing: [...new Set(plan.files.flatMap((f) => f.blocks))],
@@ -854,21 +886,21 @@ async function planSharedUpload(volume: DriveVolume, raw: unknown): Promise<{ up
 
 async function putSharedUploadBlock(volume: DriveVolume, uploadId: string, sha: string, body: Uint8Array<ArrayBuffer>): Promise<void> {
   if (!SHA256.test(sha)) throw new DriveStorageError(400, 'A block is named by its lowercase sha256');
+  if (body.byteLength > BLOCK_BYTES) throw new DriveStorageError(400, 'A block is at most 1 MiB', 'block_too_large');
   if (createHash('sha256').update(body).digest('hex') !== sha) {
     throw new DriveStorageError(400, 'The block does not match its sha256', 'block_mismatch');
+  }
+  // Only blocks the sealed plan names are staged: the plan is what the limits were checked against.
+  const plan = await loadSharedUploadPlan(volume, uploadId);
+  if (!plan.files.some((f) => f.blocks.includes(sha))) {
+    throw new DriveStorageError(400, 'The upload plan does not name this block', 'block_not_in_plan');
   }
   await writeVolumeFile(volume, `${sharedUploadDir(uploadId)}/${sha}`, body, { overwrite: true });
 }
 
 async function commitSharedUpload(volume: DriveVolume, uploadId: string): Promise<{ outcome: 'written'; commit_id: null; files: number }> {
   const dir = sharedUploadDir(uploadId);
-  let plan: SharedUploadPlan;
-  try {
-    plan = sharedUploadPlan(await (await readVolumeFile(volume, `${dir}/plan.json`)).json());
-  } catch (err) {
-    if (err instanceof DriveStorageError && err.status === 404) throw new DriveStorageError(404, 'Upload not found', 'upload_not_found');
-    throw err;
-  }
+  const plan = await loadSharedUploadPlan(volume, uploadId);
   // Every block the plan names must be staged, at its size, before any file lands.
   const staged = new Map<string, number>();
   let cursor: string | undefined;

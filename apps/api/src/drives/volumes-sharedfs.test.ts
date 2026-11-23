@@ -217,7 +217,7 @@ test('a drive converted to a shared volume in place: the block upload runs on fi
   const plan = (await planVolumeUpload(volume, { files: [{ path: '/A/big.bin', size: bytes.byteLength, blocks: parts.map((p) => p.sha) }], overwrite: true })) as {
     upload_id: string; missing: string[]; expires_at: string;
   };
-  expect(plan.upload_id).toMatch(/^sfs-\d{13}-[0-9a-f]{16}$/);
+  expect(plan.upload_id).toMatch(/^sfs-\d{13}-[0-9a-f]{16}-[0-9a-f]{32}$/);
   expect(plan.missing.sort()).toEqual(parts.map((p) => p.sha).sort());
   expect(knownVolumeType(volume.name)).toBe('sharedfs');
   for (const p of parts) await putVolumeUploadBlock(volume, plan.upload_id, p.sha, p.bytes);
@@ -369,4 +369,38 @@ test('a version storage no longer keeps is not found, not a name clash', async (
   expect(err).toBeInstanceOf(DriveStorageError);
   expect(err.status).toBe(404);
   expect(err.code).toBe('read_point_gone');
+});
+
+async function sharedUploadOf(bytes: Uint8Array) {
+  const volume = fresh();
+  vols.set(volume.name, { id: 'b', type: 'block', head: 'c0', files: new Map() });
+  await openDriveVolume(volume);
+  vols.get(volume.name)!.type = 'sharedfs';
+  const parts = blocksOf(bytes);
+  const plan = (await planVolumeUpload(volume, { files: [{ path: '/A/f.bin', size: bytes.byteLength, blocks: parts.map((p) => p.sha) }], overwrite: true })) as { upload_id: string };
+  return { volume, parts, plan };
+}
+
+test('a block the sealed plan does not name is refused, never staged', async () => {
+  const { volume, plan } = await sharedUploadOf(fileOf(MIB + 3, 4));
+  const stray = new Uint8Array(1024).fill(7);
+  const err = await putVolumeUploadBlock(volume, plan.upload_id, sha(stray), stray).catch((e: unknown) => e);
+  expect(err).toBeInstanceOf(DriveStorageError);
+  expect((err as InstanceType<typeof DriveStorageError>).code).toBe('block_not_in_plan');
+  expect([...vols.get(volume.name)!.files.keys()].some((k) => k.endsWith(sha(stray)))).toBe(false);
+});
+
+test('a plan rewritten on the volume after planning is refused at block and commit', async () => {
+  const { volume, parts, plan } = await sharedUploadOf(fileOf(MIB + 3, 5));
+  const files = vols.get(volume.name)!.files;
+  const planPath = [...files.keys()].find((k) => k.endsWith('/plan.json'))!;
+  // A session with the drive mounted points the upload at another path.
+  const forged = JSON.parse(new TextDecoder().decode(files.get(planPath)!));
+  forged.files[0].path = '/Secrets/overwritten.bin';
+  files.set(planPath, new TextEncoder().encode(JSON.stringify(forged)));
+  const atBlock = await putVolumeUploadBlock(volume, plan.upload_id, parts[0]!.sha, parts[0]!.bytes).catch((e: unknown) => e);
+  expect((atBlock as InstanceType<typeof DriveStorageError>).code).toBe('upload_tampered');
+  const atCommit = await commitVolumeUpload(volume, plan.upload_id).catch((e: unknown) => e);
+  expect((atCommit as InstanceType<typeof DriveStorageError>).code).toBe('upload_tampered');
+  expect(files.has('/Secrets/overwritten.bin')).toBe(false);
 });

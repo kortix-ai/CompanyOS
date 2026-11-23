@@ -12,7 +12,7 @@ import { Fragment, Suspense, useState, type ReactNode } from 'react';
 
 import { TERMS_LAST_UPDATED, TERMS_OF_SERVICE } from './terms-of-service';
 
-const LEGAL_LAST_UPDATED = 'November 20, 2026';
+const LEGAL_LAST_UPDATED = 'November 23, 2026';
 
 type LegalTab = 'imprint' | 'terms' | 'privacy';
 
@@ -401,6 +401,10 @@ function PrivacyPolicy() {
               We never use Google user data to develop, improve, or train generalized or
               non-personalized AI or machine-learning models.
             </li>
+            <li>
+              We do not create aggregated or anonymized data sets from Google user data, and we do
+              not use it for any purpose other than the features above.
+            </li>
           </Bullets>
         </Clause>
         <Clause lead="How we store and protect it">
@@ -408,6 +412,10 @@ function PrivacyPolicy() {
             <li>
               Your Google access and refresh tokens are encrypted at rest. Only Kortix servers use
               them, and only to call Google APIs. Agent sandboxes never receive them.
+            </li>
+            <li>
+              Google user data is encrypted in transit (TLS) between Google, Kortix, and the AI
+              model provider.
             </li>
             <li>
               Google data that an agent reads becomes part of that session&apos;s conversation and
@@ -421,13 +429,15 @@ function PrivacyPolicy() {
           <Bullets>
             <li>
               The AI model provider of the model that runs a session receives the Google data that
-              the agent reads in that session, to generate the agent&apos;s reply. Kortix-managed
-              models run at the providers on our{' '}
+              the agent reads in that session, only to generate the agent&apos;s reply.
+              Kortix-managed models run with zero data retention: the provider does not store the
+              data and does not use it to train AI models. They run at the providers on our{' '}
               <Link href="/legal/subprocessors" className={LINK}>
                 subprocessors page
               </Link>
               . A model that you connect with your own API key or account runs at that provider,
-              under your agreement with it.
+              because you chose it, under your agreement with it. Choose a provider plan or setting
+              that does not train on your data.
             </li>
             <li>Third-party services that you instruct an agent to send it to.</li>
             <li>

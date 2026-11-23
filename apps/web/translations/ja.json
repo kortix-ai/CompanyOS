@@ -3161,7 +3161,7 @@
         "title": "パスワードをリセット",
         "description": "リセット用のリンクをメールで送信します。",
         "email": "メールアドレス",
-        "emailPlaceholder": "メールアドレスを入力",
+        "emailPlaceholder": "メールアドレスを入力…",
         "sending": "リンクを送信中…",
         "submit": "リセットリンクを送信"
       },

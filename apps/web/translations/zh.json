@@ -3161,7 +3161,7 @@
         "title": "重置密码",
         "description": "我们会向你发送重置链接。",
         "email": "邮箱",
-        "emailPlaceholder": "您的邮箱地址",
+        "emailPlaceholder": "输入你的邮箱地址…",
         "sending": "正在发送链接…",
         "submit": "发送重置链接"
       },

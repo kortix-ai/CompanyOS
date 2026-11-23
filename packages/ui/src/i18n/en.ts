@@ -1900,7 +1900,7 @@ const catalog = {
         "title": "Reset your password",
         "description": "We'll email you a reset link.",
         "email": "Email",
-        "emailPlaceholder": "Your email address",
+        "emailPlaceholder": "Enter your email address…",
         "sending": "Sending link…",
         "submit": "Send reset link"
       },

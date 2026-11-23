@@ -3161,7 +3161,7 @@
         "title": "Réinitialiser votre mot de passe",
         "description": "Nous vous enverrons un lien de réinitialisation.",
         "email": "E-mail",
-        "emailPlaceholder": "Votre adresse e-mail",
+        "emailPlaceholder": "Saisissez votre adresse e-mail…",
         "sending": "Envoi du lien…",
         "submit": "Envoyer le lien de réinitialisation"
       },

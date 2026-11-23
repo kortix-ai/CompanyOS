@@ -3161,7 +3161,7 @@
         "title": "Reimposta la password",
         "description": "Ti invieremo un link per reimpostarla.",
         "email": "Email",
-        "emailPlaceholder": "Il tuo indirizzo email",
+        "emailPlaceholder": "Inserisci il tuo indirizzo email…",
         "sending": "Invio del link…",
         "submit": "Invia link di reimpostazione"
       },

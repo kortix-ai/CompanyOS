@@ -3161,7 +3161,7 @@
         "title": "Restablece tu contraseña",
         "description": "Te enviaremos un enlace para restablecerla.",
         "email": "Correo electrónico",
-        "emailPlaceholder": "Tu dirección de correo electrónico",
+        "emailPlaceholder": "Introduce tu correo electrónico…",
         "sending": "Enviando enlace…",
         "submit": "Enviar enlace de restablecimiento"
       },

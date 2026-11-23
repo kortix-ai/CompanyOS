@@ -3161,7 +3161,7 @@
         "title": "Redefina sua senha",
         "description": "Enviaremos um link de redefinição.",
         "email": "E-mail",
-        "emailPlaceholder": "Seu endereço de e-mail",
+        "emailPlaceholder": "Digite seu endereço de e-mail…",
         "sending": "Enviando link…",
         "submit": "Enviar link de redefinição"
       },

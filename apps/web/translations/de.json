@@ -3161,7 +3161,7 @@
         "title": "Passwort zurücksetzen",
         "description": "Wir senden dir einen Link zum Zurücksetzen.",
         "email": "E-Mail",
-        "emailPlaceholder": "Ihre E-Mail-Adresse",
+        "emailPlaceholder": "E-Mail-Adresse eingeben…",
         "sending": "Link wird gesendet …",
         "submit": "Link zum Zurücksetzen senden"
       },

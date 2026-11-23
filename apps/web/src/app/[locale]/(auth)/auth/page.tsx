@@ -17,7 +17,8 @@
 
 import { useTranslations } from '@/i18n/use-translations';
 import { EyeIcon as Eye, EyeSlashIcon as EyeOff } from '@phosphor-icons/react';
-import { m, useReducedMotion } from 'motion/react';
+import { m } from 'motion/react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { type FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react';
@@ -35,7 +36,8 @@ import { Input } from '@kortix/ui/input';
 import Loading from '@kortix/ui/loading';
 import { errorToast } from '@kortix/ui/toast';
 import { AuthFrame } from '@kortix/ui/internal/auth/auth-card-shell';
-import { useBrandName } from '@kortix/ui/internal/branding/branding-provider';
+import { useBrandName, useBranding } from '@kortix/ui/internal/branding/branding-provider';
+import { AuthStoryPane } from '@/features/marketing/auth-story-pane';
 import {
   FieldError,
   FieldLabel,
@@ -83,7 +85,6 @@ type Step = 'entry' | 'sso' | 'credentials' | 'link';
 // The API's per-address window (apps/api/src/auth/email-cooldown.ts): a resend
 // offered sooner would only be answered "already sent".
 const RESEND_COOLDOWN_SECONDS = AUTH_EMAIL_COOLDOWN_SECONDS;
-const EASE = [0.23, 1, 0.32, 1] as const;
 
 // sessionStorage key holding the address a stale-bundle recovery is handing
 // back to the form with. Consumed by the prefill effect on the next mount.
@@ -182,6 +183,24 @@ function isSsoIdentityOf(
 
 /* ─── Small shared pieces ──────────────────────────────────────────────── */
 
+/**
+ * The Kortix app tile above the sign-in heading: the same square the use-case
+ * covers carry. A branded instance shows its own mark instead.
+ */
+function KortixTile() {
+  return (
+    // next/image serves a 48px rendition of the 1000px source.
+    <Image
+      src="/usecases/logos/kortix.png"
+      alt=""
+      width={48}
+      height={48}
+      priority
+      className="size-12 rounded-md object-cover"
+    />
+  );
+}
+
 function PasswordInput({
   id,
   name,
@@ -246,7 +265,8 @@ function AuthCardForm({
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const t = useTranslations('auth.unified');
   const brandName = useBrandName();
-  const prefersReducedMotion = useReducedMotion();
+  // A branded instance keeps its own mark (KortixLogo swaps it) and no story pane.
+  const branded = useBranding() !== null;
   const enabledMethods = useMemo(() => parseAuthMethods(getEnv().AUTH_METHODS), []);
   const magicLinkEnabled = enabledMethods.includes('magic');
   const passwordEnabled = enabledMethods.includes('password');
@@ -283,11 +303,9 @@ function AuthCardForm({
   const emailRef = useRef<HTMLInputElement>(null);
 
   // Gentle two-part entrance per step: header first, body 60ms behind.
-  const rise = (delay = 0) => ({
-    initial: { opacity: 0, y: prefersReducedMotion ? 0 : 8 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.3, delay, ease: EASE },
-  });
+  // The form column holds still: the story pane beside it carries the motion,
+  // and a sign-in form is the task, not a show. Each step paints in place.
+  const rise = (_delay = 0) => ({ initial: false as const });
 
   useEffect(() => {
     // The cooldown ticks on every step, not just the link step: a rate-limited
@@ -1107,21 +1125,16 @@ function AuthCardForm({
       <m.div {...rise(0)}>
         {/* One system: no sign-in/sign-up toggle. Continue routes new emails
             into registration and existing ones into sign-in automatically. */}
-        <StepHeader title={t('welcome', { name: brandName })} description={t('automaticAccount')} />
+        <StepHeader
+          align="center"
+          title={t('welcome', { name: brandName })}
+          description={t('automaticAccount')}
+          mark={branded ? undefined : <KortixTile />}
+        />
       </m.div>
 
       <m.div {...rise(0.06)}>
         {info && <InfoStrip message={info} />}
-
-        {googleEnabled && (
-          <>
-            <GoogleSignIn
-              returnUrl={returnUrl}
-              mobileCallbackState={mobileCallbackState ?? undefined}
-            />
-            <OrDivider label={t('or')} />
-          </>
-        )}
 
         {/* The pre-hydration submit guard targets this attribute. It ships
             from the root layout <head> (lib/auth/entry-hydration-guard.ts):
@@ -1163,11 +1176,23 @@ function AuthCardForm({
           </Button>
         </form>
 
+        {/* Email leads; the provider sits under an "or", one tap away. */}
+        {googleEnabled && (
+          <>
+            <OrDivider label={t('or')} />
+            <GoogleSignIn
+              returnUrl={returnUrl}
+              mobileCallbackState={mobileCallbackState ?? undefined}
+            />
+          </>
+        )}
+
         {/* The alternatives share one quiet row. SSO is the discoverable
             counterpart of the silent home-realm discovery Continue already
             performs, rendered only when this deployment has SAML enabled, so
             self-hosted installs without SSO never show a dead door. */}
         <QuietLinks
+          align="center"
           links={[
             passwordEnabled && magicLinkEnabled
               ? {
@@ -1206,6 +1231,7 @@ const STALE_SESSION_FALLBACK_MS = 2500;
 
 function AuthContent() {
   const t = useTranslations('auth.unified');
+  const branded = useBranding() !== null;
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1386,7 +1412,7 @@ function AuthContent() {
   // A stale/invalidated session (sessionExpired, or forceForm from the
   // safety-net timeout) also lands here — never a dead shell.
   return (
-    <AuthFrame>
+    <AuthFrame centered aside={branded ? undefined : <AuthStoryPane />}>
       <AuthCardForm
         callbackError={searchParams.get('expired') === 'true' || searchParams.has('error') || searchParams.has('error_code')}
         returnUrl={returnUrl}

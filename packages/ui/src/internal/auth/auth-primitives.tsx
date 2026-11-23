@@ -89,6 +89,7 @@ export function StepHeader({
   description,
   mark,
   markOnMobile = false,
+  align = 'start',
 }: {
   /** A string, or a string led by a status mark (a decided approval). */
   title: React.ReactNode;
@@ -102,13 +103,26 @@ export function StepHeader({
    *  where no corner logo stands in for it on mobile. */
   markOnMobile?: boolean;
   description?: React.ReactNode;
+  /** `center` centers the mark, title and description on one axis. */
+  align?: 'start' | 'center';
 }) {
   return (
-    <div className="mb-8">
+    <div className={cn('mb-8', align === 'center' && 'text-center')}>
       {mark ? (
-        <div className={markOnMobile ? undefined : 'hidden md:block'}>{mark}</div>
+        <div
+          className={cn(
+            markOnMobile ? 'block' : 'hidden md:block',
+            align === 'center' && (markOnMobile ? 'flex justify-center' : 'md:flex md:justify-center'),
+          )}
+        >
+          {mark}
+        </div>
       ) : (
-        <KortixLogo variant="icon" size={22} className="text-foreground hidden md:block" />
+        <KortixLogo
+          variant="icon"
+          size={22}
+          className={cn('text-foreground hidden md:block', align === 'center' && 'md:mx-auto')}
+        />
       )}
       <h1
         className={cn(
@@ -155,10 +169,13 @@ export function QuietLinks({
   links,
   disabled = false,
   className,
+  align = 'start',
 }: {
   links: Array<QuietLink | null | false | undefined>;
   disabled?: boolean;
   className?: string;
+  /** `center` centers the row and drops the lead middot instead of clipping it. */
+  align?: 'start' | 'center';
 }) {
   const shown = links.filter(Boolean) as QuietLink[];
   if (shown.length === 0) return null;
@@ -167,7 +184,14 @@ export function QuietLinks({
   // clean, with no dot in front of it.
   return (
     <div className={cn('text-muted-foreground mt-5 overflow-x-clip text-sm', className)}>
-      <p className="-ml-4 flex flex-wrap items-center gap-x-2">
+      <p
+        className={cn(
+          'flex flex-wrap items-center gap-x-2',
+          align === 'center'
+            ? 'justify-center [&>span:first-child>span:first-child]:hidden'
+            : '-ml-4',
+        )}
+      >
         {shown.map((link) => (
           <span key={link.key} className="flex items-center gap-x-2 whitespace-nowrap">
             <span aria-hidden className="w-2 text-center select-none">

@@ -1940,6 +1940,13 @@ const catalog = {
       "errorTitle": "Couldn't sign in",
       "errorBody": "Sign in to Kortix in a browser tab, then reopen this panel.",
       "signIn": "Sign in"
+    },
+    "story": {
+      "label": "About Kortix CompanyOS",
+      "outcome": "Hand it an outcome. AI agents run it 24/7.",
+      "repo": "Your agents, skills, and memory in one repo you own.",
+      "approve": "Agents do the work. You approve what ships.",
+      "worksWith": "Works with the tools your team already uses"
     }
   },
   "tools": {

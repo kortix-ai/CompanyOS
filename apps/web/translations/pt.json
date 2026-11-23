@@ -3201,6 +3201,13 @@
       "errorTitle": "Não foi possível iniciar sessão",
       "errorBody": "Inicia sessão no Kortix num separador do navegador e volta a abrir este painel.",
       "signIn": "Entrar"
+    },
+    "story": {
+      "label": "Sobre o Kortix CompanyOS",
+      "outcome": "Defina um resultado. Agentes de IA trabalham nele 24/7.",
+      "repo": "Seus agentes, skills e memória em um repositório que é seu.",
+      "approve": "Os agentes fazem o trabalho. Você aprova o que vai ao ar.",
+      "worksWith": "Funciona com as ferramentas que sua equipe já usa"
     }
   },
   "onboarding": {

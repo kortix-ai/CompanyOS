@@ -3201,6 +3201,13 @@
       "errorTitle": "无法登录",
       "errorBody": "请先在浏览器标签页中登录 Kortix，然后重新打开此面板。",
       "signIn": "登录"
+    },
+    "story": {
+      "label": "关于 Kortix CompanyOS",
+      "outcome": "交给它一个目标，AI 智能体全天候执行。",
+      "repo": "你的智能体、技能和记忆，都在你拥有的一个仓库里。",
+      "approve": "智能体完成工作，由你批准上线内容。",
+      "worksWith": "与团队已在使用的工具协同工作"
     }
   },
   "onboarding": {

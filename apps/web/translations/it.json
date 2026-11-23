@@ -3201,6 +3201,13 @@
       "errorTitle": "Accesso non riuscito",
       "errorBody": "Accedi a Kortix in una scheda del browser, poi riapri questo pannello.",
       "signIn": "Accedi"
+    },
+    "story": {
+      "label": "Informazioni su Kortix CompanyOS",
+      "outcome": "Indica un risultato. Gli agenti IA ci lavorano 24/7.",
+      "repo": "I tuoi agenti, skill e memoria in un repository tutto tuo.",
+      "approve": "Gli agenti fanno il lavoro. Tu approvi cosa va online.",
+      "worksWith": "Funziona con gli strumenti che il tuo team usa già"
     }
   },
   "onboarding": {

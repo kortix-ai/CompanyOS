@@ -17,12 +17,13 @@ import { useDesktopBackTarget } from '../desktop/desktop-back-button';
 import { AuthArt } from './auth-art';
 import { AuthMobileLogo, Rise, StepHeader } from './auth-primitives';
 import { openExternalRoute } from '../lib/desktop';
+import { cn } from '../lib/utils';
 
 // The phone-verification page builds its own frame around a sign-out control.
 export { AuthArt };
 
 /** Tiny legal line pinned to the bottom of every auth surface: one sentence on every page. */
-export function AuthLegalFooter() {
+export function AuthLegalFooter({ centered = false }: { centered?: boolean } = {}) {
   const t = useTranslations('auth');
   const onLegalClick = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     if (openExternalRoute(href)) event.preventDefault();
@@ -49,7 +50,12 @@ export function AuthLegalFooter() {
   return (
     // The same 380px column as the form, so the legal line shares its left
     // edge. A link never breaks inside its name.
-    <footer className="text-muted-foreground mx-auto w-full max-w-[380px] pb-8 text-xs text-balance">
+    <footer
+      className={cn(
+        'text-muted-foreground mx-auto w-full max-w-[380px] pb-8 text-xs text-balance',
+        centered && 'text-center',
+      )}
+    >
       {t.rich('byContinuingYouAgree', {
         termsOfService: () => terms,
         privacyPolicy: () => privacy,
@@ -70,8 +76,18 @@ export function AuthFrame({
   backHref,
   // Off for now: the pane comes back by passing `art`.
   art = false,
+  aside,
+  centered = false,
 }: {
   children: React.ReactNode;
+  /**
+   * A pane left of the form on wide screens (`lg` and up), half the width.
+   * The host supplies it: the Kortix sign-in page passes its story pane, a
+   * branded or self-hosted frame passes nothing. Hidden below `lg`.
+   */
+  aside?: React.ReactNode;
+  /** Centers the legal footer, for a page whose entry column is centered. */
+  centered?: boolean;
   /**
    * The dither pane beside the form on wide screens. Auth and consent screens
    * keep it; an in-app gate that only borrows this frame (a checkout, a
@@ -93,12 +109,14 @@ export function AuthFrame({
   useDesktopBackTarget(backHref);
   return (
     <div className="bg-background flex min-h-svh">
+      {/* The pane stays put while a long form scrolls beside it. */}
+      {aside ? <div className="sticky top-0 hidden h-svh w-1/2 shrink-0 lg:block">{aside}</div> : null}
       <div className="relative flex min-h-svh flex-1 flex-col px-6">
         <AuthMobileLogo />
         <main className="flex flex-1 flex-col items-center justify-center py-24">
           <div className="w-full max-w-[380px]">{children}</div>
         </main>
-        {footerVariant === 'none' ? null : <AuthLegalFooter />}
+        {footerVariant === 'none' ? null : <AuthLegalFooter centered={centered} />}
       </div>
       {/* The art stays put while a long form scrolls beside it. */}
       {art ? <AuthArt className="sticky top-0 hidden h-svh w-1/2 shrink-0 lg:block" /> : null}

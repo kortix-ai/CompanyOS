@@ -3201,6 +3201,13 @@
       "errorTitle": "Anmeldung nicht möglich",
       "errorBody": "Melde dich in einem Browser-Tab bei Kortix an und öffne dieses Panel dann erneut.",
       "signIn": "Anmelden"
+    },
+    "story": {
+      "label": "Über Kortix CompanyOS",
+      "outcome": "Gib ein Ergebnis vor. KI-Agenten arbeiten rund um die Uhr daran.",
+      "repo": "Deine Agenten, Skills und dein Wissen in einem Repo, das dir gehört.",
+      "approve": "Agenten erledigen die Arbeit. Du gibst frei, was live geht.",
+      "worksWith": "Funktioniert mit den Tools, die dein Team schon nutzt"
     }
   },
   "onboarding": {

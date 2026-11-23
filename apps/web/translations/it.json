@@ -1318,8 +1318,8 @@
           "description": "Dai all'agente una casella email su Resend: la posta in arrivo avvia e continua le sessioni, e l'agente legge, risponde e invia dalla casella. Usa la tua chiave API Resend e il tuo dominio."
         },
         "chat": {
-          "name": "Canali",
-          "description": "Canali con Kortix, come in Slack: ogni messaggio è un thread, l'ultima risposta di Kortix appare sotto, Kortix può avviare thread e condividi i canali con altre persone. Sostituisce l'elenco delle sessioni nella barra laterale."
+          "name": "Spazi in stile Slack",
+          "description": "Usa canali e messaggi diretti in stile Slack, dove ogni messaggio avvia un thread. Passa la barra laterale al layout chat. Separato da Spazi, che raggruppa sessioni, file e schede."
         },
         "session_groups": {
           "name": "Spazi",
@@ -1347,11 +1347,11 @@
         },
         "chat_front": {
           "name": "Spaces-Router",
-          "description": "Con Spaces attivo, l’agente con cui chatti in un thread è un router: svolge da sé il lavoro rapido (una risposta, un testo breve, uno sguardo ai file del thread) e passa il lavoro più lungo agli agenti dello spazio. Risponde come una persona, con messaggi brevi. Un agente salva il risultato completo come file nel thread, e il router collega quel file invece di riscriverlo. «Mostra lavoro» sotto un messaggio apre il lavoro dietro. Richiede My Kortix attivo in kortix.yaml."
+          "description": "Con gli Spazi in stile Slack attivi, l’agente con cui chatti in un thread è un router: svolge da sé il lavoro rapido (una risposta, un testo breve, uno sguardo ai file del thread) e passa il lavoro più lungo agli agenti dello spazio. Risponde come una persona, con messaggi brevi. Un agente salva il risultato completo come file nel thread, e il router collega quel file invece di riscriverlo. «Mostra lavoro» sotto un messaggio apre il lavoro dietro. Richiede My Kortix attivo in kortix.yaml."
         },
         "spaces_proactive": {
           "name": "Spaces-Proactive",
-          "description": "Con gli Spazi attivi, uno spazio può sorvegliarsi da solo: attiva Proattivo nei suoi dettagli e un agente legge cosa succede (thread conclusi, domande rimaste aperte, persone che entrano) e scrive in chat solo quando conta: un risultato da condividere, una decisione da prendere o qualcosa in ritardo. Può anche avviare un thread che fa il lavoro. Riepilogo giornaliero facoltativo alle 9:00."
+          "description": "Con gli Spazi in stile Slack attivi, uno spazio può sorvegliarsi da solo: attiva Proattivo nei suoi dettagli e un agente legge cosa succede (thread conclusi, domande rimaste aperte, persone che entrano) e scrive in chat solo quando conta: un risultato da condividere, una decisione da prendere o qualcosa in ritardo. Può anche avviare un thread che fa il lavoro. Riepilogo giornaliero facoltativo alle 9:00."
         },
         "program_agents": {
           "name": "Agenti programma",
@@ -1375,12 +1375,12 @@
         }
       },
       "channelsSwitch": {
-        "onTitle": "Attivare gli Spazi per {project}?",
-        "onBody": "Tutti in questo workspace ottengono gli Spazi al posto dell’elenco delle sessioni. Tutte le sessioni esistenti passano in #general. Puoi disattivarlo in qualsiasi momento; non viene eliminato nulla.",
+        "onTitle": "Attivare gli Spazi in stile Slack per {project}?",
+        "onBody": "Tutti in questo workspace ottengono gli Spazi in stile Slack al posto dell’elenco delle sessioni. Tutte le sessioni esistenti passano in #general. Puoi disattivarlo in qualsiasi momento; non viene eliminato nulla.",
         "drive": "Attiva anche Drive, così gli spazi hanno i File.",
         "turnOn": "Attiva",
         "cancel": "Annulla",
-        "offTitle": "Disattivare gli Spazi?",
+        "offTitle": "Disattivare gli Spazi in stile Slack?",
         "offBody": "Spazi, memoria, file e link restano salvati. L’elenco delle sessioni torna per tutti.",
         "turnOff": "Disattiva"
       },

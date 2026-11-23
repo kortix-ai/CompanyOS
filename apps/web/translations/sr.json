@@ -1318,8 +1318,8 @@
           "description": "Dajte agentu poštansko sanduče na Resend-u: dolazna pošta pokreće i nastavlja sesije, a agent čita, odgovara i šalje iz sandučeta. Koristite sopstveni Resend API ključ i domen."
         },
         "chat": {
-          "name": "Канали",
-          "description": "Канали са Kortix-ом, као у Slack-у: свака порука је нит, најновији одговор Kortix-а стоји испод ње, Kortix може да започне нити, а канале делиш са другима. Замењује листу сесија на бочној траци."
+          "name": "Простори у Slack стилу",
+          "description": "Користи канале и директне поруке у Slack стилу, где свака порука започиње нит. Пребацује бочну траку на изглед ћаскања. Одвојено од Простора који групишу сесије, датотеке и картице."
         },
         "session_groups": {
           "name": "Простори",
@@ -1347,11 +1347,11 @@
         },
         "chat_front": {
           "name": "Spaces-Router",
-          "description": "Када су Spaces укључени, агент са којим разговараш у нити је рутер: брзе послове ради сам (одговор, кратак текст, поглед у фајлове нити), а дуже послове предаје агентима простора. Одговара као особа, кратким порукама. Агент чува цео резултат као фајл у нити, а рутер линкује тај фајл уместо да га преписује. „Прикажи рад“ испод поруке отвара рад иза ње. Потребан је укључен My Kortix у kortix.yaml."
+          "description": "Када су Простори у Slack стилу укључени, агент са којим разговараш у нити је рутер: брзе послове ради сам (одговор, кратак текст, поглед у фајлове нити), а дуже послове предаје агентима простора. Одговара као особа, кратким порукама. Агент чува цео резултат као фајл у нити, а рутер линкује тај фајл уместо да га преписује. „Прикажи рад“ испод поруке отвара рад иза ње. Потребан је укључен My Kortix у kortix.yaml."
         },
         "spaces_proactive": {
           "name": "Spaces-Proactive",
-          "description": "Kada su Prostori uključeni, prostor može sam sebe da prati: uključite Proaktivno u njegovim detaljima, i agent čita šta se tu dešava (završene niti, otvorena pitanja, ljudi koji se pridruže) i piše u čet samo kada je važno: rezultat vredan deljenja, odluka koju treba da donesete ili nešto što kasni. Može i da pokrene nit koja obavlja posao. Opcioni dnevni pregled u 9:00."
+          "description": "Kada su Prostori u Slack stilu uključeni, prostor može sam sebe da prati: uključite Proaktivno u njegovim detaljima, i agent čita šta se tu dešava (završene niti, otvorena pitanja, ljudi koji se pridruže) i piše u čet samo kada je važno: rezultat vredan deljenja, odluka koju treba da donesete ili nešto što kasni. Može i da pokrene nit koja obavlja posao. Opcioni dnevni pregled u 9:00."
         },
         "program_agents": {
           "name": "Programski agenti",
@@ -1375,12 +1375,12 @@
         }
       },
       "channelsSwitch": {
-        "onTitle": "Укључити просторе за {project}?",
-        "onBody": "Сви у овом радном простору добијају Просторе уместо листе сесија. Све постојеће сесије прелазе у #general. Можеш то искључити кад год желиш; ништа се не брише.",
+        "onTitle": "Укључити просторе у Slack стилу за {project}?",
+        "onBody": "Сви у овом радном простору добијају Просторе у Slack стилу уместо листе сесија. Све постојеће сесије прелазе у #general. Можеш то искључити кад год желиш; ништа се не брише.",
         "drive": "Укључи и Drive, да простори добију датотеке.",
         "turnOn": "Укључи",
         "cancel": "Откажи",
-        "offTitle": "Искључити просторе?",
+        "offTitle": "Искључити просторе у Slack стилу?",
         "offBody": "Простори, меморија, датотеке и линкови остају сачувани. Листа сесија се враћа свима.",
         "turnOff": "Искључи"
       },

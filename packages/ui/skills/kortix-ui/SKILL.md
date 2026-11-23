@@ -37,7 +37,8 @@ Module entries and `@kortix/ui/theme` need 0.14.4+. Inside `kortix-ai/CompanyOS`
 | A selection, unsaved edits or a pending paste needs actions | `ActionBar` in an `ActionBarDock` at the bottom of the column; actions take `kbd`, `tone`, `emphasis` | `action-bar` |
 | Tabs and filters                  | `Tabs`, `TabsList size="xs"`, `TabsTrigger`                                                                          | `tabs`                                |
 | Menu, picker, palette             | `DropdownMenu`, `Popover`, `Command`                                                                           | `dropdown-menu`, `popover`, `command` |
-| Table and empty list              | `Table`; `Empty` with one muted line                                                                           | `table`, `empty`                      |
+| Table                             | `Table`                                                                                                        | `table`                               |
+| Empty, failed or finished view    | `EmptyState art="search"` (or `locked`, `offline`, `done`, `chat`, `agent`, `connect`, `folder`, `document`, `list`, `image`, `key`), `icon={…}` for any other noun; `ErrorState` for a failure | `empty-state`, `empty-art`, `error-state` |
 
 A new primitive is the last step: tokens only, a small API, and a section on `/design-system`.
 

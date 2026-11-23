@@ -235,10 +235,11 @@ export function ChangeRequestDetailDialog({ crId, onClose, onOpenChangeRequest }
             ) : null}
             <ModalClose asChild>
               <Button
-                variant="secondary"
-                size="icon-base"
+                variant="ghost"
+                size="sm"
+                iconOnly
                 aria-label={tI18nComplete.raw('text7d9eb7acb13e')}
-              >
+               className="text-muted-foreground hover:text-foreground">
                 <XIcon className="size-4" />
               </Button>
             </ModalClose>
@@ -251,7 +252,7 @@ export function ChangeRequestDetailDialog({ crId, onClose, onOpenChangeRequest }
             they were a mono chip and a branch badge, which gave two facts
             nobody acts on the visual weight of the title itself.
         --------------------------------------------------------------- */}
-        <ModalHeader className="flex shrink-0 flex-col space-y-0 border-b px-5 py-4 pr-48">
+        <ModalHeader className="mt-0 flex shrink-0 flex-col space-y-0 border-b px-5 py-4 pr-48">
           {!cr ? (
             <div className="space-y-2">
               <ModalTitle className="sr-only">{tI18nComplete.raw('text28b00af7cb71')}</ModalTitle>

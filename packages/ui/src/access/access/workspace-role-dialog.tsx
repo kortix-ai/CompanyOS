@@ -89,7 +89,7 @@ export function WorkspaceRoleDialog({
           <Field className="gap-1.5">
             <FieldLabel htmlFor="workspace-role">{t('roleLabel')}</FieldLabel>
             <Select value={role} onValueChange={(value) => setPicked(value as WorkspaceRole)} disabled={save.isPending}>
-              <SelectTrigger id="workspace-role" size="md" className="w-full">
+              <SelectTrigger id="workspace-role" size="lg" className="w-full">
                 <SelectValue>{tRoles(`${role}.label`)}</SelectValue>
               </SelectTrigger>
               <SelectContent>

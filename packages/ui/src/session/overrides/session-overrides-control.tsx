@@ -218,7 +218,8 @@ export function SessionOverridesControl({ onSave, ...contentProps }: SessionOver
         <Button
           type="button"
           variant="ghost"
-          size="icon"
+          size="md"
+          iconOnly
           disabled={contentProps.saving}
           aria-label={t('sessionOverrides')}
           className="text-muted-foreground hover:text-foreground data-[state=open]:text-foreground hit-area-3"

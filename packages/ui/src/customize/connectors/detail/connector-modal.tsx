@@ -75,9 +75,10 @@ export function ConnectorModal({
               headerEnd={
                 <ModalClose asChild>
                   <Button
-                    variant="secondary"
-                    size="icon-sm"
-                    className="shrink-0"
+                variant="ghost"
+                size="sm"
+                iconOnly
+                    className="shrink-0 text-muted-foreground hover:text-foreground"
                     aria-label={tI18nComplete.raw('text7d9eb7acb13e')}
                   >
                     <Close className="text-foreground size-4 stroke-1" />

@@ -52,6 +52,7 @@
     "./button-group": "./src/primitives/button-group.tsx",
     "./calendar": "./src/primitives/calendar.tsx",
     "./card": "./src/primitives/card.tsx",
+    "./card-surface": "./src/primitives/card-surface.tsx",
     "./chain-of-thought": "./src/primitives/chain-of-thought.tsx",
     "./changes": "./src/changes/index.ts",
     "./chart": "./src/primitives/chart.tsx",
@@ -59,6 +60,7 @@
     "./checkbox-group": "./src/primitives/checkbox-group.tsx",
     "./collapsible": "./src/primitives/collapsible.tsx",
     "./color-picker": "./src/primitives/color-picker.tsx",
+    "./combobox": "./src/primitives/combobox.tsx",
     "./command": "./src/primitives/command.tsx",
     "./components.css": "./src/styles/components.css",
     "./composer": "./src/session/composer/index.ts",
@@ -701,6 +703,10 @@
         "types": "./dist/primitives/card.d.ts",
         "import": "./dist/primitives/card.js"
       },
+      "./card-surface": {
+        "types": "./dist/primitives/card-surface.d.ts",
+        "import": "./dist/primitives/card-surface.js"
+      },
       "./chain-of-thought": {
         "types": "./dist/primitives/chain-of-thought.d.ts",
         "import": "./dist/primitives/chain-of-thought.js"
@@ -728,6 +734,10 @@
       "./color-picker": {
         "types": "./dist/primitives/color-picker.d.ts",
         "import": "./dist/primitives/color-picker.js"
+      },
+      "./combobox": {
+        "types": "./dist/primitives/combobox.d.ts",
+        "import": "./dist/primitives/combobox.js"
       },
       "./command": {
         "types": "./dist/primitives/command.d.ts",

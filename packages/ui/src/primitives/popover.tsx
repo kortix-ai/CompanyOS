@@ -20,7 +20,7 @@ import {
 import { usePortalContainer } from '../lib/portal-container';
 import { cn } from '../lib/utils';
 import { floatingZ, useDialogDepth } from '../lib/z-stack';
-import { FLOATING_PANEL_SURFACE } from './menu-recipe';
+import { FLOATING_PANEL_MOTION, FLOATING_PANEL_SURFACE } from './menu-recipe';
 import { triggerVariants, type TriggerVariantProps } from './trigger-variants';
 
 /**
@@ -37,7 +37,7 @@ import { triggerVariants, type TriggerVariantProps } from './trigger-variants';
  * a `w-72` default, and `outline-hidden` because the popover focuses the panel
  * itself on open and the ring would trace the whole card.
  */
-const POPOVER_PANEL = cn(FLOATING_PANEL_SURFACE, 'w-72 p-4 outline-hidden');
+const POPOVER_PANEL = cn(FLOATING_PANEL_SURFACE, FLOATING_PANEL_MOTION, 'w-72 p-4 outline-hidden');
 
 type Anchor = Element | { getBoundingClientRect(): DOMRect } | null;
 

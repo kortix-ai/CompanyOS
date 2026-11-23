@@ -3,20 +3,21 @@
 /**
  * Kortix <EmptyState> — centered empty view.
  *
- * Minimal. The fanned-card artwork (`EmptyArt`, with `icon` on its front card,
- * or a blank document without one), a one-line headline, an optional body,
- * and up to two actions (primary + secondary). Every empty view draws the
- * same picture, title and body; only the glyph and the words change.
+ * Minimal. The card artwork (`EmptyArt`, D49), a one-line headline, an
+ * optional one-line body, and up to two actions (primary + secondary). Name
+ * the situation with `art` (`search`, `error`, `locked`, `done`, …) or pass
+ * `icon` for any other noun on the fan. The catalogue and when to use each
+ * kind: .agents/skills/kortix-design-system/references/empty-states.md.
  *
  *   <EmptyState
- *     icon={IconInbox}
+ *     art="search"
  *     title="No issues yet"
  *     description="Create your first issue with C, or press N in any tab."
  *     action={<Button>New issue</Button>}
  *   />
  */
 
-import { EmptyArt } from './empty-art';
+import { EmptyArt, type EmptyArtKind } from './empty-art';
 import {
   Empty,
   EmptyContent,
@@ -35,6 +36,8 @@ import type { ReactNode } from 'react';
 
 export interface EmptyStateProps {
   icon?: LucideIcon | IconMynauiType | IconType;
+  /** The picture for the situation (D49). Without it: the fan with `icon`, or a document. */
+  art?: EmptyArtKind;
   /** Custom artwork in place of `EmptyArt`. */
   media?: ReactNode;
   title: ReactNode;
@@ -47,6 +50,7 @@ export interface EmptyStateProps {
 
 export function EmptyState({
   icon: IconComponent,
+  art,
   media,
   title,
   description,
@@ -58,14 +62,16 @@ export function EmptyState({
   const maxW = size === 'sm' ? 'max-w-[240px]' : 'max-w-[320px]';
 
   return (
-    <Empty className={cn('', className)}>
-      <EmptyHeader className={maxW}>
-        <EmptyMedia className="mb-5">{media ?? <EmptyArt icon={IconComponent} />}</EmptyMedia>
-        <EmptyTitle className="text-foreground text-sm font-semibold tracking-tight">
+    <Empty className={cn('gap-4', className)}>
+      <EmptyHeader className={cn('gap-0', maxW)}>
+        <EmptyMedia className="mb-3">
+          {media ?? <EmptyArt kind={art} icon={IconComponent} />}
+        </EmptyMedia>
+        <EmptyTitle className="text-foreground text-sm leading-5 font-medium">
           {title}
         </EmptyTitle>
         {description && (
-          <EmptyDescription className="text-muted-foreground mt-1.5">
+          <EmptyDescription className="text-muted-foreground mt-1 text-xs leading-normal">
             {description}
           </EmptyDescription>
         )}

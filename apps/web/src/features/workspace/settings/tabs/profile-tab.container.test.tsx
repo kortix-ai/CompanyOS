@@ -5,6 +5,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, create } from 'react-test-renderer';
 import * as realModal from '@kortix/ui/modal';
 
+/** The rendered text of a test node: Button wraps its label in a <span>, so a
+ *  label is not always a direct child. */
+const textOf = (node: unknown): string =>
+  typeof node === 'string'
+    ? node
+    : ((node as { children?: unknown[] }).children ?? []).map(textOf).join('');
+
 /**
  * The Delete-account dialog's own state contract (KRTX-1403): the
  * confirmation input starts empty on every open, whichever path closed it
@@ -125,8 +132,8 @@ describe('ProfileTab — the delete dialog opens fresh', () => {
       const trigger = root.findAll(
         (n) =>
           n.props.className?.includes?.('text-destructive') &&
-          n.children.length === 1 &&
-          n.children[0] === 'deleteAccount',
+          n.type === 'button' &&
+          textOf(n) === 'deleteAccount',
       )[0];
       expect(trigger).toBeDefined();
 
@@ -193,7 +200,7 @@ describe('ProfileTab — a failed deletion-status check fails closed', () => {
       expect(failedCopy).not.toHaveLength(0);
       // Retry refetches the status — the recovery path.
       const retry = root.findAll(
-        (n) => n.children.length === 1 && n.children[0] === 'retry' && n.props.onClick,
+        (n) => n.type === 'button' && textOf(n) === 'retry' && n.props.onClick,
       )[0];
       expect(retry).toBeDefined();
       await act(async () => retry.props.onClick());
@@ -234,7 +241,7 @@ describe('ProfileTab — a failed deletion-status check fails closed', () => {
       );
       expect(failedCopy).not.toHaveLength(0);
       const retry = root.findAll(
-        (n) => n.children.length === 1 && n.children[0] === 'retry' && n.props.onClick,
+        (n) => n.type === 'button' && textOf(n) === 'retry' && n.props.onClick,
       )[0];
       expect(retry).toBeDefined();
     } finally {
@@ -268,7 +275,7 @@ describe('ProfileTab — a failed deletion-status check fails closed', () => {
       );
       expect(failedCopy).toHaveLength(0);
       const retry = root.findAll(
-        (n) => n.children.length === 1 && n.children[0] === 'retry' && n.props.onClick,
+        (n) => n.type === 'button' && textOf(n) === 'retry' && n.props.onClick,
       );
       expect(retry).toHaveLength(0);
       const scheduled = root.findAll(
@@ -296,8 +303,8 @@ describe('ProfileTab — deletion date before consent', () => {
       const trigger = root.findAll(
         (n) =>
           n.props.className?.includes?.('text-destructive') &&
-          n.children.length === 1 &&
-          n.children[0] === 'deleteAccount',
+          n.type === 'button' &&
+          textOf(n) === 'deleteAccount',
       )[0];
       await act(async () => trigger.props.onClick());
       const { ProfileTabView } = await import('./profile-tab');

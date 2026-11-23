@@ -910,7 +910,7 @@ export function CreateApiKeyDialog({
                       onValueChange={(value) => setAccess(value as KeyAccess)}
                       disabled={mutation.isPending}
                     >
-                      <SelectTrigger id="workspace-api-key-access" size="md" className="w-full">
+                      <SelectTrigger id="workspace-api-key-access" size="lg" className="w-full">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -949,7 +949,7 @@ export function CreateApiKeyDialog({
                 <div className="space-y-1.5">
                   <Label htmlFor="personal-api-key-scope">{t('scope')}</Label>
                   <Select value={scope} onValueChange={setScope} disabled={mutation.isPending}>
-                    <SelectTrigger id="personal-api-key-scope" size="md" className="w-full">
+                    <SelectTrigger id="personal-api-key-scope" size="lg" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -977,7 +977,7 @@ export function CreateApiKeyDialog({
                     onValueChange={setExpiry}
                     disabled={mutation.isPending}
                   >
-                    <SelectTrigger id="personal-api-key-expiry" size="md" className="w-full">
+                    <SelectTrigger id="personal-api-key-expiry" size="lg" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

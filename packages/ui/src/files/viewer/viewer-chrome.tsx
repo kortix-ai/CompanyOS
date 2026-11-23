@@ -25,10 +25,11 @@ export function CloseButton({
   return (
     <Button
       variant={variant}
-      size="icon"
+      size="md"
+      iconOnly
       onClick={onClose}
       aria-label={tI18nComplete.raw('text7d9eb7acb13e')}
-      className="size-7 shrink-0 active:scale-[0.96]"
+      className="shrink-0"
     >
       {/* `size-3.5`, not `size-4`: an X is a full-bleed glyph — it fills its
           own box corner to corner, where an arrow or a caret leaves margin. At

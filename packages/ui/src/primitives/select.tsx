@@ -21,12 +21,13 @@ import { withPortalContainer } from '../lib/portal-container';
 import { cn } from '../lib/utils';
 import { floatingZ, useDialogDepth } from '../lib/z-stack';
 import {
+  FLOATING_PANEL_SURFACE,
   MENU_INDICATOR,
   MENU_INDICATOR_ICON,
   MENU_INSET_END,
   MENU_LABEL,
-  MENU_PANEL_STATIC,
   MENU_SEPARATOR,
+  SELECT_PANEL_MOTION,
   menuRow,
   type MenuRowSize,
 } from './menu-recipe';
@@ -51,7 +52,7 @@ const SelectPortal = withPortalContainer(SelectPrimitive.Portal);
  * on the frame it mounts and unmounts on the frame it closes. See
  * `dropdown-menu.tsx` for why.
  */
-const SELECT_PANEL = cn(MENU_PANEL_STATIC, 'min-w-56 overflow-hidden');
+const SELECT_PANEL = cn(FLOATING_PANEL_SURFACE, SELECT_PANEL_MOTION, 'min-w-56 overflow-hidden p-1 py-[0.25rem]');
 
 /* ---------- item labels for the trigger ---------- */
 
@@ -210,7 +211,7 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
       {arrow && (
         // Children, not `render`: without children Base UI fills the icon with a `▼` glyph.
         <SelectPrimitive.Icon className="flex shrink-0">
-          <ChevronDown className={cn(TRIGGER_CARET_CLASS, TRIGGER_ICON_SIZE[size ?? 'sm'])} />
+          <ChevronDown className={cn(TRIGGER_CARET_CLASS, TRIGGER_ICON_SIZE[size ?? 'md'])} />
         </SelectPrimitive.Icon>
       )}
     </SelectPrimitive.Trigger>
@@ -353,10 +354,11 @@ const SelectItem = React.forwardRef<
       // `MENU_INSET_END` reserves the trailing slot on every row, checked or
       // not, so a long label truncates before the check instead of running
       // under it, and the check column is the same x on every row.
+      // A described row is a two-column grid: the check in a fixed 16px column
+      // on the left, the label over its description on the right (D44).
       className={cn(
         menuRow(size, 'default'),
-        MENU_INSET_END,
-        description && 'items-start',
+        description ? 'grid grid-cols-[1rem_1fr] items-start gap-x-2 py-2 ps-2 pe-3' : MENU_INSET_END,
         className,
       )}
       {...props}
@@ -369,7 +371,7 @@ const SelectItem = React.forwardRef<
         // Absolute inside a flex row: its static position follows the row's
         // `items-*`, so it centres on a one-line row. On a described row it tops
         // out, and `mt-0.5` centres the ~15px slot on the 20px first line.
-        className={cn(MENU_INDICATOR, 'absolute right-2', description && 'mt-0.5')}
+        className={cn(MENU_INDICATOR, description ? 'mt-0.5' : 'absolute right-2')}
       >
         <SelectPrimitive.ItemIndicator>
           <Check className={MENU_INDICATOR_ICON} />
@@ -378,8 +380,8 @@ const SelectItem = React.forwardRef<
 
       {description ? (
         <div className="flex min-w-0 flex-col gap-0.5">
-          <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
-          <span className="text-muted-foreground max-w-64 text-xs whitespace-normal">
+          <SelectPrimitive.ItemText className="text-foreground text-sm font-medium">{children}</SelectPrimitive.ItemText>
+          <span className="text-muted-foreground max-w-64 text-xs font-normal whitespace-normal">
             {description}
           </span>
         </div>

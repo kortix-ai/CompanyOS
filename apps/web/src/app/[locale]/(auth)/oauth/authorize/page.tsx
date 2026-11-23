@@ -313,7 +313,7 @@ function OAuthConsent() {
             <div className="space-y-1.5">
               <Label htmlFor="oauth-consent-workspace">{t('workspaceLabel')}</Label>
               <Select value={workspaceId} onValueChange={setWorkspaceId} disabled={submitting}>
-                <SelectTrigger id="oauth-consent-workspace" size="md" className="w-full">
+                <SelectTrigger id="oauth-consent-workspace" size="lg" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

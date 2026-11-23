@@ -470,7 +470,7 @@ function CreateWorkspaceKeyDialog({
                     onValueChange={(value) => setDraft((d) => ({ ...d, actsAs: value as WorkspaceKeyPrincipal }))}
                     disabled={mutation.isPending}
                   >
-                    <SelectTrigger id="workspace-key-acts-as" size="md" className="w-full">
+                    <SelectTrigger id="workspace-key-acts-as" size="lg" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -493,7 +493,7 @@ function CreateWorkspaceKeyDialog({
                   <div className="space-y-1.5">
                     <Label htmlFor="workspace-key-agent">{t('agent')}</Label>
                     <Select value={draft.agent} onValueChange={(agent) => setDraft((d) => ({ ...d, agent }))} disabled={mutation.isPending}>
-                      <SelectTrigger id="workspace-key-agent" size="md" className="w-full">
+                      <SelectTrigger id="workspace-key-agent" size="lg" className="w-full">
                         <SelectValue placeholder={t('agentPlaceholder')} />
                       </SelectTrigger>
                       <SelectContent>
@@ -511,7 +511,7 @@ function CreateWorkspaceKeyDialog({
                   <div className="space-y-1.5">
                     <Label htmlFor="workspace-key-bot">{t('bot')}</Label>
                     <Select value={draft.bot} onValueChange={(bot) => setDraft((d) => ({ ...d, bot }))} disabled={mutation.isPending}>
-                      <SelectTrigger id="workspace-key-bot" size="md" className="w-full">
+                      <SelectTrigger id="workspace-key-bot" size="lg" className="w-full">
                         <SelectValue placeholder={t('botPlaceholder')} />
                       </SelectTrigger>
                       <SelectContent>
@@ -579,7 +579,7 @@ function CreateWorkspaceKeyDialog({
                 <div className="space-y-1.5">
                   <Label htmlFor="workspace-key-access">{tWorkspaces('keyAccess')}</Label>
                   <Select value={access} onValueChange={(value) => setAccess(value as KeyAccess)} disabled={mutation.isPending}>
-                    <SelectTrigger id="workspace-key-access" size="md" className="w-full">
+                    <SelectTrigger id="workspace-key-access" size="lg" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -612,7 +612,7 @@ function CreateWorkspaceKeyDialog({
                 <div className="space-y-1.5">
                   <Label htmlFor="workspace-key-expiry">{tTokens('expires')}</Label>
                   <Select value={selectedExpiry} onValueChange={setExpiry} disabled={mutation.isPending}>
-                    <SelectTrigger id="workspace-key-expiry" size="md" className="w-full">
+                    <SelectTrigger id="workspace-key-expiry" size="lg" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

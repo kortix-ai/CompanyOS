@@ -2,6 +2,13 @@ import { expect, mock, test } from 'bun:test';
 import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
+/** The rendered text of a test node: Button wraps its label in a <span>, so a
+ *  label is not always a direct child. */
+const textOf = (node: unknown): string =>
+  typeof node === 'string'
+    ? node
+    : ((node as { children?: unknown[] }).children ?? []).map(textOf).join('');
+
 const translationsMock = () => ({
   useTranslations: () => ({ raw: (key: string) => key }),
 });
@@ -77,7 +84,7 @@ async function render(element: React.ReactElement) {
 async function click(renderer: ReactTestRenderer, label: string) {
   const button = renderer.root
     .findAllByType('button')
-    .find((node) => node.children.includes(label));
+    .find((node) => textOf(node) === label);
   expect(button).toBeDefined();
   if (!button) throw new Error(`Missing button: ${label}`);
   await act(() => button.props.onClick());
@@ -111,7 +118,7 @@ for (const platform of ['slack', 'teams'])
     const commit = platform === 'slack' ? 'textaa665ddf2727' : 'text5df0a8e1f30f';
     const commitButton = renderer.root
       .findAllByType('button')
-      .find((node) => node.children.includes(commit));
+      .find((node) => textOf(node) === commit);
     if (!commitButton) throw new Error(`Missing button: ${commit}`);
     expect(commitButton.props.disabled).toBe(true);
     for (const input of inputs)

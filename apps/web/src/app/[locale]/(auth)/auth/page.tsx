@@ -207,7 +207,6 @@ function PasswordInput({
         id={id}
         name={name}
         type={show ? 'text' : 'password'}
-        size="md"
         placeholder={placeholder}
         required
         autoComplete={autoComplete}
@@ -1135,7 +1134,6 @@ function AuthCardForm({
               id="email"
               name="email"
               type="email"
-              size="md"
               placeholder={t('emailPlaceholder')}
               // Controlled: React owns the value. The one exception is the
               // hydration moment — React 19 resets the field to the rendered

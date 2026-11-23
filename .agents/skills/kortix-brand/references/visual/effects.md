@@ -32,7 +32,7 @@ Radius, borders, elevation, glass, selection and the other surface effects. Valu
 
 ## Elevation
 
-Web defines no shadow tokens. `shadow-*` renders the stock Tailwind ladder (`elevation.source`). No custom ladder exists (E2 in `decisions.md`). The meaning below is the rule.
+`shadow-xs` to `shadow-2xl` are stacked smooth shadows (`elevation.steps`, from shadow-plugin, D44), read through a variable of the same name so a host can re-theme a step. `shadow-ring-xs` to `shadow-ring-2xl` add a 1px hairline as the last layer, `--shadow-ring-color`: black at 5% in light, white at 18% in dark. The meaning below is the rule.
 
 | Step | Use |
 | --- | --- |
@@ -45,7 +45,7 @@ Web defines no shadow tokens. `shadow-*` renders the stock Tailwind ladder (`ele
 
 **Rule.** Elevation means "floats above the page". If it sits in flow, give it a border. — *Why:* shadow on a flat card is decoration, and "pop" is not a requirement. — *Where:* app, marketing. Large marketing previews may use `shadow-2xl`. — *When silent:* border only.
 
-**Rule.** Pair an overlay shadow with a hairline border: `bg-popover border shadow-md`. — *Why:* in dark mode a drop shadow is invisible on black, so the hairline draws the edge. — *Where:* app. — *When silent:* both.
+**Rule.** Give an overlay one edge: `bg-popover shadow-ring-md`, never `border` plus `shadow-*`. — *Why:* a border paints a hard stroke and the shadow starts outside it, so the two read as a grey double edge (D44). The ring layer still draws the edge in dark mode, where a drop shadow is invisible on black. — *Where:* app. — *When silent:* `FLOATING_PANEL_SURFACE` in `menu-recipe.ts`.
 
 **Rule.** Never write `dark:shadow-*` or `shadow-[…]` when a step fits. — *Why:* steps keep depth consistent across themes. `command.tsx` ships one bracket shadow today; treat it as debt. — *Where:* app. — *When silent:* the step above or below.
 

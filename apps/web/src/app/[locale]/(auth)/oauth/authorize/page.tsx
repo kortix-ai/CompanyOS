@@ -105,8 +105,8 @@ async function loadAndMaybeApprove(
   };
   request.offersAllWorkspaces = request.asksWorkspace && request.scopes.includes('kortix');
   if (request.asksWorkspace) {
-    // A failed list leaves only All my workspaces (or nothing) to pick: Allow
-    // stays disabled until the person picks it, never an implicit unbound grant.
+    // A failed list leaves only All my workspaces (the default) to pick, or
+    // nothing when the app does not ask for `kortix`.
     request.workspaces = (await listWorkspaces().catch(() => [])).map((w) => ({
       workspace_id: w.workspace_id,
       name: w.name,
@@ -207,8 +207,14 @@ function OAuthConsent() {
       }
       setError(null);
       setConsentRequest(result.request);
-      // One workspace is the default. All my workspaces is always a deliberate pick.
-      setWorkspaceId((current) => current || result.request.workspaces[0]?.workspace_id || '');
+      // All my workspaces is the default when the app asks to act as the
+      // person; a single workspace is the narrower pick.
+      setWorkspaceId(
+        (current) =>
+          current
+          || (result.request.offersAllWorkspaces ? ALL_WORKSPACES : result.request.workspaces[0]?.workspace_id)
+          || '',
+      );
     });
     return () => {
       cancelled = true;
@@ -332,14 +338,14 @@ function OAuthConsent() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  {consentRequest.offersAllWorkspaces ? (
+                    <SelectItem value={ALL_WORKSPACES}>{t('workspaceAll')}</SelectItem>
+                  ) : null}
                   {consentRequest.workspaces.map((w) => (
                     <SelectItem key={w.workspace_id} value={w.workspace_id}>
                       {w.name}
                     </SelectItem>
                   ))}
-                  {consentRequest.offersAllWorkspaces ? (
-                    <SelectItem value={ALL_WORKSPACES}>{t('workspaceAll')}</SelectItem>
-                  ) : null}
                 </SelectContent>
               </Select>
               {workspaceId === ALL_WORKSPACES ? (

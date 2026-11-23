@@ -30,6 +30,7 @@ import { bumpBounded } from '../shared/ttl-memo';
 import { configArchiveKey, getConfigArchiveStore, type ConfigArchiveStore } from './store';
 import type { ConfigReleaseFile, ConfigReleaseVariant } from './release-tree';
 import {
+  agentReleaseFiles,
   buildConfigArchive,
   commitRootTree,
   ConfigArchiveTooLargeError,
@@ -40,11 +41,11 @@ import {
   readComposedRelease,
   readFileTree,
   resolveReleaseTreeSource,
-  skillFolderFiles,
-  toolModuleFiles,
+  variantAgent,
 } from './release-tree';
 
 export {
+  agentReleaseFiles,
   buildConfigArchive,
   ConfigArchiveTooLargeError,
   isComposedSource,
@@ -53,8 +54,9 @@ export {
   MAX_CONFIG_ARCHIVE_BYTES,
   readComposedRelease,
   resolveReleaseTreeSource,
+  variantAgent,
 } from './release-tree';
-export type { ConfigReleaseVariant } from './release-tree';
+export type { AgentFileScope, ConfigReleaseVariant } from './release-tree';
 
 /**
  * The descriptor formats. `v2` is what a daemon that sends no `accept` gets:
@@ -144,7 +146,7 @@ export interface ConfigReleaseDescriptor {
 export type ConfigRelease = Omit<ConfigReleaseDescriptor, 'format' | 'mode' | 'agent_repoint' | 'snapshot'> & {
   /** Why a tree release has no archive (over the cap). A v2 descriptor turns it into "no release". */
   archive_reason?: string;
-  /** The tree holds only project tool modules (`toolsRelease`): a session without repository access may receive it. */
+  /** An `agent:<name>` release (`agentRelease`, `exact` file list): a session without repository access may receive it. */
   tools_only?: true;
 };
 
@@ -177,7 +179,16 @@ export function configReleaseId(configTreeId: string | null, compiledGovernanceE
  */
 export function configArchiveRoute(projectId: string, configTreeId: string, composedFrom?: string, variant?: ConfigReleaseVariant): string {
   const path = `/v1/projects/${projectId}/config-archives/${configTreeId}`;
-  return composedFrom ? `${path}?commit=${composedFrom}${variant?.startsWith('agent:') ? `&agent=${encodeURIComponent(variant.slice(6))}` : ''}` : path;
+  if (!composedFrom) return path;
+  const agent = variant ? variantAgent(variant) : null;
+  const scope = variant?.startsWith('repo-agent:') ? '&scope=repo' : '';
+  return `${path}?commit=${composedFrom}${agent ? `&agent=${encodeURIComponent(agent)}${scope}` : ''}`;
+}
+
+/** The one-agent variant an archive URL's `agent` and `scope` query values name, or null. */
+export function archiveQueryVariant(agent: string | null | undefined, scope: string | null | undefined): ConfigReleaseVariant | null {
+  if (!agent) return null;
+  return scope === 'repo' ? `repo-agent:${agent}` : `agent:${agent}`;
 }
 
 interface CachedRelease {
@@ -252,7 +263,7 @@ async function compileGovernance(
   if (variant === 'project') return resolveCompiledAgentConfigForSession(project, commit);
   if (variant === 'none') return EMPTY_GOVERNANCE;
   if (variant === 'mykortix') return buildMyKortixConfig();
-  return resolveSelectedAgentConfigForSession(project, variant.slice('agent:'.length), commit);
+  return resolveSelectedAgentConfigForSession(project, variantAgent(variant)!, commit);
 }
 
 async function build(
@@ -302,7 +313,7 @@ async function build(
   // project checkout.
   const governanceOnly = configReleaseId(null, etag);
   if (variant === 'mykortix') return { ...withGovernance, release_id: governanceOnly };
-  if (variant !== 'project') return toolsRelease(project, mirror, commit, variant, withGovernance, store, archiveLimit);
+  if (variant !== 'project') return agentRelease(project, mirror, commit, variant, withGovernance, store, archiveLimit);
   let resolved: Awaited<ReturnType<typeof resolveReleaseTreeSource>>;
   try {
     resolved = await resolveReleaseTreeSource(mirror, project, commit);
@@ -395,14 +406,6 @@ async function build(
 }
 
 /**
- * The release of a session without repository access (`agent:<name>`, `none`):
- * the modules of the project tools its agent may call and the files they
- * import by a relative path, and every file of the registered skill folders
- * an agent of the compiled set is granted (`permission.skill`). Nothing else.
- * A session whose agents call no project tool and hold no project skill gets
- * governance only.
- */
-/**
  * May an agent with this compiled `permission` see the skill `name`? The
  * compiler writes `permission.skill` as `allow`, `deny`, or a map of `*` and
  * exact names (`skillsRule`); only a `deny` hides a skill, as on the box.
@@ -421,13 +424,48 @@ export function compiledSkillGranted(permission: unknown, name: string): boolean
 
 /** The folders of the registered skills that any enabled agent of the compiled set is granted. */
 function grantedSkillFolders(compiled: Partial<CompiledAgentSet>): string[] {
-  const agents = Object.values(compiled.agent ?? {}).filter((agent) => agent && !agent.disable);
+  const agents = enabledAgents(compiled);
   return Object.entries(compiled.skills ?? {})
     .filter(([name]) => agents.some((agent) => compiledSkillGranted(agent.permission, name)))
     .map(([, folder]) => folder);
 }
 
-async function toolsRelease(
+/** The enabled agents of a compiled set: the selected agent and the subagents it may start. */
+function enabledAgents(compiled: Partial<CompiledAgentSet>) {
+  return Object.values(compiled.agent ?? {}).filter((agent): agent is NonNullable<typeof agent> => !!agent && !agent.disable);
+}
+
+/** The modules of the project tools any enabled agent of the set may call. */
+function grantedToolModules(compiled: Partial<CompiledAgentSet>): string[] {
+  const agents = enabledAgents(compiled);
+  return Object.entries(compiled.project_tools ?? {})
+    .filter(([name]) => agents.some((agent) => toolAllowed(agent.tools, name)))
+    .map(([, path]) => path);
+}
+
+/** The repository sources of the local pi packages the set enables (`./x` or `x`); an npm package is not a repository file. */
+function localPackageSources(compiled: Partial<CompiledAgentSet>): string[] {
+  return Object.values(compiled.extensions ?? {}).flatMap((extension) => {
+    const source = typeof extension?.pi === 'string' ? extension.pi : extension?.pi?.source;
+    return typeof source === 'string' && source && !source.startsWith('npm:') ? [source] : [];
+  });
+}
+
+/** The root files pi reads from any release: `AGENTS.md`, else `CLAUDE.md` (`harness/pi/config.ts`). */
+const AGENT_ROOT_FILES = ['AGENTS.md', 'CLAUDE.md'];
+
+/**
+ * The release of one agent: `agent:<name>` for a session without repository
+ * access (`exact` file list), `repo-agent:<name>` for a session with it
+ * (`folders` file list, not yet assigned). `agentReleaseFiles` decides the
+ * files from what the compiled set names: the tools and skills any enabled
+ * agent of the set may use, the local pi packages it enables, and the root
+ * `AGENTS.md` / `CLAUDE.md`. `repo-agent` adds the root manifest: the box
+ * reads `sandbox.on_boot` from it (`lib/config/config.ts`). A path the
+ * repository marks `export-ignore` is left out, as in the whole-tree release.
+ * `none` is governance only: a session with no usable agent receives no file.
+ */
+async function agentRelease(
   project: GitBackedProject,
   mirror: string,
   commit: string,
@@ -437,30 +475,31 @@ async function toolsRelease(
   archiveLimit?: number,
 ): Promise<ConfigRelease> {
   const etag = withGovernance.compiled_governance_etag;
+  const repository = variant.startsWith('repo-agent:');
+  const governanceOnly = { ...withGovernance, release_id: configReleaseId(null, etag), reason: repository ? null : REPOSITORY_ACCESS_WITHHELD };
+  if (variant === 'none') return governanceOnly;
   const compiled = JSON.parse(withGovernance.compiled_governance ?? '{}') as Partial<CompiledAgentSet>;
-  const agent = variant.startsWith('agent:') ? compiled.agent?.[variant.slice('agent:'.length)] : undefined;
-  const modules = agent
-    ? Object.entries(compiled.project_tools ?? {}).filter(([name]) => toolAllowed(agent.tools, name)).map(([, path]) => path)
-    : [];
-  const skillFolders = grantedSkillFolders(compiled);
-  const rootTree = modules.length > 0 || skillFolders.length > 0 ? await commitRootTree(mirror, commit) : null;
-  const tooLarge = { ...withGovernance, reason: `the project tool modules and skills exceed the ${archiveLimit ?? MAX_CONFIG_ARCHIVE_BYTES}-byte config archive limit` };
-  let files: ConfigReleaseFile[] = [];
+  const tooLarge = { ...withGovernance, reason: `the files of the agent exceed the ${archiveLimit ?? MAX_CONFIG_ARCHIVE_BYTES}-byte config archive limit` };
+  let files: ConfigReleaseFile[];
   try {
-    if (rootTree) {
-      const byPath = new Map<string, ConfigReleaseFile>();
-      for (const file of await toolModuleFiles(mirror, rootTree, modules)) byPath.set(file[0], file);
-      for (const file of await skillFolderFiles(mirror, rootTree, skillFolders)) byPath.set(file[0], file);
-      files = [...byPath.values()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-    }
+    const resolved = await resolveReleaseTreeSource(mirror, project, commit);
+    if (!('source' in resolved)) return { ...withGovernance, reason: resolved.reason };
+    const ignored = new Set(resolved.source.exportIgnored);
+    files = (
+      await agentReleaseFiles(mirror, resolved.source.rootTree, {
+        toolModules: grantedToolModules(compiled),
+        skillFolders: grantedSkillFolders(compiled),
+        packageSources: localPackageSources(compiled),
+        rootFiles: repository ? [...AGENT_ROOT_FILES, project.manifestPath] : AGENT_ROOT_FILES,
+        scope: repository ? 'folders' : 'exact',
+      })
+    ).filter(([path]) => !ignored.has(path));
   } catch (error) {
     // The modules it parses did not fit the default download bound.
     if (isObjectFetchTooLarge(error)) return tooLarge;
     throw error;
   }
-  if (files.length === 0) {
-    return { ...withGovernance, release_id: configReleaseId(null, etag), reason: REPOSITORY_ACCESS_WITHHELD };
-  }
+  if (files.length === 0) return governanceOnly;
   let read: { treeId: string; archive: Buffer | null };
   try {
     read = await readFileTree(mirror, files, {
@@ -478,7 +517,7 @@ async function toolsRelease(
   }
   return {
     ...withGovernance,
-    tools_only: true,
+    ...(repository ? {} : { tools_only: true as const }),
     release_id: configReleaseId(read.treeId, etag),
     config_tree_id: read.treeId,
     files,
@@ -526,12 +565,13 @@ const COMPILED_GOVERNANCE_FAILED = 'compiled governance failed';
 /**
  * The wire descriptor for a release. The mode is always `follow-base`.
  *
- * A session without repository access receives only a tools-only release
- * (`toolsRelease`): the modules of the project tools its agent may call. It
- * gets no repository URL and no clone (`allowsFullRepository`), and any other
- * archive would disclose files that mode withholds. Without project tools it
- * keeps the compiled governance alone, and its release ID covers the
- * governance alone so a governance change still converges.
+ * A session without repository access receives only an `agent:<name>`
+ * release (`agentRelease`, `exact` file list): the files its agent uses and
+ * nothing beside them. It gets no repository URL and no clone
+ * (`allowsFullRepository`), and any other archive would disclose files that
+ * mode withholds. With no such file it keeps the compiled governance alone,
+ * and its release ID covers the governance alone so a governance change
+ * still converges.
  *
  * A v2 descriptor of a tree over the archive cap is "no release" with the
  * reason: a v2 daemon reads `archive: null` as governance only and would run

@@ -5326,12 +5326,12 @@ when you mount `handler` elsewhere.
 #### Consent and revocation
 
 The first sign-in shows a Kortix consent screen with your app's name and
-scopes. An app that asks for the `kortix` scope also asks which workspace it
-gets. One workspace is the default: the token reaches that workspace only, and
-a request for another one answers `403 credential_fence_refused`. **All my
-workspaces** gives the token the person's whole reach, the same as `kortix
-login`: every workspace they can open, including ones they join later, and it
-can create workspaces. Choose it only for an app the person runs themselves.
+scopes. An app that asks for the `kortix` scope also asks which workspaces it
+gets. **All my workspaces** is the default: the token has the person's whole
+reach, the same as `kortix login`: every workspace they can open, including
+ones they join later, and it can create workspaces. Picking one workspace
+narrows the token to it: a request for another workspace answers
+`403 credential_fence_refused`.
 Kortix remembers the approval per person and app. Later sign-ins
 return straight to your app. A person revokes an app with
 `kortix.accounts.connectedApps.list()` and `.revoke(clientId)`, or on the web

@@ -435,7 +435,7 @@ and writes `bound_workspace_id` on the code; the code exchange and every refresh
 access and refresh tokens (migrations `…153450000`, `…153460000`). `applyOAuthAccessTokenPrincipal`
 runs the fence for a bound token and sets `tokenProjectId`; the preview proxy and Chrome socket
 refuse it outside W. A consent without `workspace_id` stays unbound: the consent screen's All my
-workspaces choice (offered when the app asks for `kortix`, 2026-11-23) and older web. A bound token's
+workspaces choice (the picker's default when the app asks for `kortix`, 2026-11-23) and older web. A bound token's
 fence refusal appends `OAUTH_BOUND_REMEDY` (`middleware/auth-oauth.ts`): reconnect and choose All my
 workspaces. `newWorkspaceCallerDenial` counts an unbound consent token as a person (it creates
 workspaces and lists across accounts); an App viewer token (`oauthAppId` set) never.

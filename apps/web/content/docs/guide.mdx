@@ -1286,7 +1286,7 @@ In the web app, select **Use Kortix in ChatGPT and Claude** in the sidebar, or o
 In Claude, open **Settings** → **Connectors** → **Add custom connector** and paste the URL. ChatGPT needs developer mode and **OAuth** sign-in. In Cursor, select **Add** on the Cursor row of the dialog.
 </Step>
 <Step title="Sign in">
-On the first call, your browser opens the Kortix consent screen. Approve it only when you connected the tool yourself. Pick the workspace the tool reaches. To let the tool work across all your workspaces and create new ones, pick **All my workspaces**. To change it later, revoke the tool and connect it again.
+On the first call, your browser opens the Kortix consent screen. Approve it only when you connected the tool yourself. By default the tool gets **All my workspaces**: it works across every workspace you can open and can create new ones. To limit it to one workspace, pick that workspace instead. To change it later, revoke the tool and connect it again.
 </Step>
 </Steps>
 
@@ -1393,7 +1393,7 @@ Each session runs in its own isolated sandbox. Secrets and connector logins are 
 
 Every session starts its own isolated cloud computer, called a sandbox. The agent works there on its own branch of the workspace's repository. By default, a session can push only to its own branch, and its work reaches the shared repository only when a person merges its change request. See [How agents' work reaches the workspace repository](#how-agents-work-reaches-the-project-repository).
 
-An agent without **Workspace repository access** gets no copy of the repository. Its session cannot read the repository, push to it or merge into it.
+An agent without **Workspace repository access** gets no copy of the repository. Its session cannot read the repository, push to it or merge into it. It receives only the files its agent uses: the root `AGENTS.md`, its skills, its project tools and the files they import, and its local extensions.
 
 #### Agents have their own limits
 

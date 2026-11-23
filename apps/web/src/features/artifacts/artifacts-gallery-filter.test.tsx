@@ -136,5 +136,7 @@ test('a cold server search at the page limit keeps existing previews mounted', a
     await type('beta');
     expect(linkOf('Beta doc')).toBe(previewLink);
     expect(cardLinks()).toHaveLength(100);
+    expect(hiddenWrapperOf('Alpha doc')).not.toBeNull();
+    expect(hiddenWrapperOf('Beta doc')).toBeNull();
   } finally { artifacts.splice(2); }
 });

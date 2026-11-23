@@ -100,7 +100,8 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
   const paged = (all.data?.length ?? 0) >= LIST_PAGE;
   const server = useArtifacts(paged && filtered ? projectId : null, { scope, q: query || undefined, folder_id: folderId ?? undefined });
   // Keep loaded cards while the first server-filtered page is in flight.
-  const list = paged && filtered && (server.data !== undefined || server.isError) ? server : all;
+  const useServer = paged && filtered && (server.data !== undefined || server.isError);
+  const list = useServer ? server : all;
   const cards = list.data ?? [];
   // An artifact sits in its bound space, else its agent's space, else Project-wide.
   // Spaces are Work in progress: with `chat` off every artifact is
@@ -118,7 +119,7 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
     created: tSort('created'),
   };
   const shown = sortArtifacts(
-    (paged ? cards : cards.filter((a) => matches(a, scope, query, viewerId))).filter(
+    (useServer ? cards : cards.filter((a) => matches(a, scope, query, viewerId))).filter(
       (artifact) => space === ALL_SPACES || spaceOf(artifact) === space,
     ),
     sort,
@@ -144,7 +145,7 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 pb-20 md:px-8">
           {folderId ? <nav aria-label={t('folderNavigation')} className="flex min-w-0 items-center gap-2 text-sm">
             <Button variant="ghost" size="sm" onClick={() => setFolderId(null)} aria-current={!folderId ? 'page' : undefined}>{t('title')}</Button>
-            {folderId ? <><span aria-hidden="true">/</span><span className="truncate font-medium" aria-current="page">{currentFolder?.name ?? t('folderUnavailable')}</span>{currentFolder ? <ArtifactFolderActions folder={currentFolder} projectId={projectId} /> : null}</> : null}
+            {folderId ? <><span aria-hidden="true">/</span><span className="truncate font-medium" aria-current="page">{currentFolder?.name ?? (folders.isError ? t('folderLoadFailed') : folders.isSuccess ? t('folderUnavailable') : <Loading className="size-3.5" />)}</span>{currentFolder ? <ArtifactFolderActions folder={currentFolder} projectId={projectId} /> : null}</> : null}
           </nav> : null}
           {!folderId && folders.isError ? <ErrorState title={t('folderLoadFailed')} action={<Button variant="outline" size="sm" onClick={() => folders.refetch()}>{t('retry')}</Button>} /> : null}
           {!folderId && !filtered && folders.data?.length ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{folders.data.map(folder => <ArtifactFolderTile key={folder.folder_id} folder={folder} projectId={projectId} onOpen={() => setFolderId(folder.folder_id)} />)}</div> : null}

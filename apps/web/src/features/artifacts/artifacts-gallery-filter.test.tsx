@@ -138,5 +138,10 @@ test('a cold server search at the page limit keeps existing previews mounted', a
     expect(cardLinks()).toHaveLength(100);
     expect(hiddenWrapperOf('Alpha doc')).not.toBeNull();
     expect(hiddenWrapperOf('Beta doc')).toBeNull();
+    await type('not-on-loaded-page');
+    expect(linkOf('Beta doc')).toBe(previewLink);
+    expect(cardLinks()).toHaveLength(100);
+    expect(hiddenWrapperOf('Beta doc')).not.toBeNull();
+    expect(document.querySelector('#artifact-gallery-panel [role="status"]')).not.toBeNull();
   } finally { artifacts.splice(2); }
 });

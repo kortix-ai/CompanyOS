@@ -86,8 +86,8 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
   const { create } = useArtifactMutations(projectId);
   const newDoc = async () => {
     try {
-    const a = await create.mutateAsync({ folder_id: folderId, files: { 'index.md': { content: `# ${t('untitledDoc')}\n\n` } } });
-    successToast(t('docCreated'), { actions: [{ label: t('open'), onClick: () => router.push(artifactHref(projectId, a.artifact_id)) }] });
+      const a = await create.mutateAsync({ folder_id: folderId, files: { 'index.md': { content: `# ${t('untitledDoc')}\n\n` } } });
+      successToast(t('docCreated'), { actions: [{ label: t('open'), onClick: () => router.push(artifactHref(projectId, a.artifact_id)) }] });
     } catch { errorToast(t('docCreateFailed')); }
   };
   // One list, filtered here: a tab or a search changes what shows, not what is mounted, so no
@@ -145,7 +145,7 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 pb-20 md:px-8">
           {folderId ? <nav aria-label={t('folderNavigation')} className="flex min-w-0 items-center gap-2 text-sm">
             <Button variant="ghost" size="sm" onClick={() => setFolderId(null)} aria-current={!folderId ? 'page' : undefined}>{t('title')}</Button>
-            {folderId ? <><span aria-hidden="true">/</span><span className="truncate font-medium" aria-current="page">{currentFolder?.name ?? (folders.isError ? t('folderLoadFailed') : folders.isSuccess ? t('folderUnavailable') : <Loading className="size-3.5" />)}</span>{currentFolder ? <ArtifactFolderActions folder={currentFolder} projectId={projectId} /> : null}</> : null}
+            {folderId ? <><span aria-hidden="true">/</span><span className="truncate font-medium" aria-current="page">{currentFolder?.name ?? (folders.isError ? t('folderLoadFailed') : folders.isSuccess ? t('folderUnavailable') : <Loading className="size-3.5" aria-label={t('folderNavigation')} />)}</span>{currentFolder ? <ArtifactFolderActions folder={currentFolder} projectId={projectId} /> : null}</> : null}
           </nav> : null}
           {!folderId && folders.isError ? <ErrorState title={t('folderLoadFailed')} action={<Button variant="outline" size="sm" onClick={() => folders.refetch()}>{t('retry')}</Button>} /> : null}
           {!folderId && !filtered && folders.data?.length ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{folders.data.map(folder => <ArtifactFolderTile key={folder.folder_id} folder={folder} projectId={projectId} onOpen={() => setFolderId(folder.folder_id)} />)}</div> : null}
@@ -201,7 +201,10 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
                   <Skeleton key={i} className="aspect-[16/10] w-full rounded-lg" />
                 ))}
               </div>
-            ) : shown.length === 0 && !create.isPending ? (
+            ) : (<>
+              {shown.length === 0 && !create.isPending && paged && filtered && server.isLoading ? (
+                <div role="status" aria-label={t('search')} className="flex justify-center py-12"><Loading className="size-5" /></div>
+              ) : shown.length === 0 && !create.isPending ? (
               <EmptyState
                 title={
                   q || scope !== 'all'
@@ -237,7 +240,7 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
                   )
                 }
               />
-            ) : (
+              ) : null}
               <div ref={grid} className="grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
                 {/* The new doc while the server writes it: the click shows at once, then the page opens. */}
                 {create.isPending ? <CreatingCard /> : null}
@@ -254,7 +257,7 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
                   />
                 ))}
               </div>
-            )}
+            </>)}
             </div>
           </section>
         </div>

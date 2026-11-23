@@ -19,6 +19,7 @@ import {
   useToolOpen,
 } from '../shared/infrastructure';
 import { ToolRegistry } from '../shared/registry';
+import { SolidCheckIcon } from '../../../internal/icons/solid-check-icon';
 import { ToolResultCard } from '../shared/result-card';
 import type { ToolProps } from '../shared/types';
 import { useTranslations } from '../../../i18n';
@@ -31,7 +32,6 @@ import {
   CaretRightIcon,
   ChartBarIcon,
   ChatsCircleIcon,
-  CheckIcon,
   GitPullRequestIcon,
   SunDimIcon,
   HandPointingIcon,
@@ -115,7 +115,7 @@ function StatusMark({ status }: { status: KortixCardStatus }) {
   const glyph =
     status === 'done' ? (
       // Done is a resting state: meta ink, never green (green means running).
-      <CheckIcon aria-hidden className="text-muted-foreground size-3.5 shrink-0" />
+      <SolidCheckIcon aria-hidden className="text-muted-foreground size-3.5 shrink-0" />
     ) : status === 'running' ? (
       // The thing the tool started runs on (a session). No spinner: the call itself is over.
       <StatusDot tone="success" />

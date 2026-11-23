@@ -1,6 +1,7 @@
 'use client';
 
 import { ArrowUpRightIcon, CaretRightIcon } from '@phosphor-icons/react';
+import { SolidCheckIcon } from '../../internal/icons/solid-check-icon';
 import { useContext, useId, useState, type ReactNode } from 'react';
 
 import { useTranslations } from '../../i18n';
@@ -223,8 +224,16 @@ export function AgentStatus({
     const glyphOnly = status === 'done' || status === 'running';
     return (
       <Hint label={time ? `${label} · ${time}` : label} side="left">
-        <span data-agent-status={status} className="text-muted-foreground flex shrink-0 items-center gap-1.5 pl-2 text-xs">
-          {status && <SmallGlyph status={status} label={glyphOnly ? label : undefined} />}
+        <span data-agent-status={status} className="text-muted-foreground flex shrink-0 items-center gap-1.5 pl-1 text-xs">
+          {/* Done is a resting state: a meta-ink check. Green is for an agent that runs now. */}
+          {status === 'done' ? (
+            <>
+              <SolidCheckIcon aria-hidden className="size-3.5 shrink-0" />
+              <span className="sr-only">{label}</span>
+            </>
+          ) : (
+            status && <SmallGlyph status={status} label={glyphOnly ? label : undefined} />
+          )}
           {(!glyphOnly || !status) && <span className="whitespace-nowrap">{label}</span>}
         </span>
       </Hint>

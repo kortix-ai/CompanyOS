@@ -25193,6 +25193,7 @@
     "folderUnavailable": "Cartella non disponibile",
     "folderLoadFailed": "Impossibile caricare le cartelle",
     "moveToFolder": "Sposta nella cartella",
+    "movedToFolder": "Spostato in {name}",
     "emptyUnfiled": "Nessun artefatto senza cartella",
     "folderRoot": "Nessuna cartella",
     "title": "Artefatti",

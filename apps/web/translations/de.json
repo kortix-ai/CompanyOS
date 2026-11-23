@@ -25193,6 +25193,7 @@
     "folderUnavailable": "Ordner nicht verfügbar",
     "folderLoadFailed": "Ordner konnten nicht geladen werden",
     "moveToFolder": "In Ordner verschieben",
+    "movedToFolder": "Verschoben nach {name}",
     "emptyUnfiled": "Keine Artefakte ohne Ordner",
     "folderRoot": "Kein Ordner",
     "title": "Artefakte",

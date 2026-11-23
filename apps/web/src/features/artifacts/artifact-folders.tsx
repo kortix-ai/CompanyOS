@@ -3,7 +3,7 @@
 import { useTranslations } from '@/i18n/use-translations';
 import { suggestSpaceIcon } from '@kortix/shared';
 import type { ArtifactFolder } from '@kortix/sdk';
-import { useArtifactFolderMutations } from '@kortix/sdk/react';
+import { useArtifactFolderMutations, useArtifactMutations } from '@kortix/sdk/react';
 import { Button } from '@kortix/ui/button';
 import { ConfirmDialog } from '@kortix/ui/confirm-dialog';
 import {
@@ -30,7 +30,62 @@ import {
   type ProjectIconValue,
 } from '@kortix/ui/workspace/projects/modal/project-icon-field';
 import { DotsThreeIcon, FolderIcon, PencilSimpleIcon, TrashIcon } from '@phosphor-icons/react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+
+import { isArtifactDrag, readArtifactDrag } from './artifact-card';
+
+/**
+ * A drop target for a dragged artifact card: `folderId` null is the root. It
+ * accepts only a card (not files or text), shows `over` while one hovers, and
+ * moves the artifact on drop unless it already sits there.
+ */
+export function useArtifactDropTarget(projectId: string, folderId: string | null, name: string) {
+  const t = useTranslations('artifacts');
+  const { update } = useArtifactMutations(projectId);
+  const [over, setOver] = useState(false);
+  // dragenter/dragleave fire for every child: count them, so crossing a child does not flicker.
+  const depth = useRef(0);
+  const reset = () => {
+    depth.current = 0;
+    setOver(false);
+  };
+  return {
+    over,
+    pending: update.isPending,
+    props: {
+      onDragEnter: (event: React.DragEvent) => {
+        if (!isArtifactDrag(event)) return;
+        event.preventDefault();
+        depth.current += 1;
+        setOver(true);
+      },
+      onDragOver: (event: React.DragEvent) => {
+        if (!isArtifactDrag(event)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+      },
+      onDragLeave: (event: React.DragEvent) => {
+        if (!isArtifactDrag(event)) return;
+        depth.current = Math.max(0, depth.current - 1);
+        if (depth.current === 0) setOver(false);
+      },
+      onDrop: (event: React.DragEvent) => {
+        if (!isArtifactDrag(event)) return;
+        event.preventDefault();
+        reset();
+        const drag = readArtifactDrag(event);
+        if (!drag || drag.folderId === folderId) return;
+        update.mutate(
+          { artifactId: drag.artifactId, folder_id: folderId },
+          {
+            onSuccess: () => successToast(t('movedToFolder', { name })),
+            onError: () => errorToast(t('moveFailed')),
+          },
+        );
+      },
+    },
+  };
+}
 
 export function ArtifactFolderEditor({
   projectId,
@@ -131,8 +186,14 @@ export function ArtifactFolderTile({
   projectId: string;
   onOpen: () => void;
 }) {
+  const drop = useArtifactDropTarget(projectId, folder.folder_id, folder.name);
   return (
-    <div className="bg-secondary/50 flex min-w-0 items-center gap-2 rounded-md px-3 py-2">
+    <div
+      {...drop.props}
+      data-drop-over={drop.over || undefined}
+      aria-busy={drop.pending || undefined}
+      className="bg-secondary/50 data-[drop-over]:bg-secondary data-[drop-over]:ring-ring flex min-w-0 items-center gap-2 rounded-md px-3 py-2 transition-colors data-[drop-over]:ring-2"
+    >
       <button
         type="button"
         className="focus-visible:outline-ring flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-md text-start focus-visible:outline-2"
@@ -148,9 +209,30 @@ export function ArtifactFolderTile({
         <span className="truncate text-sm font-medium" title={folder.name}>
           {folder.name}
         </span>
+        {drop.pending ? <Loading className="text-muted-foreground ms-auto size-3.5 shrink-0" /> : null}
       </button>
       <ArtifactFolderActions folder={folder} projectId={projectId} />
     </div>
+  );
+}
+
+/** The "Artifacts" crumb inside a folder: it opens the root, and a card dropped on it leaves the folder. */
+export function ArtifactRootCrumb({ projectId, onOpen }: { projectId: string; onOpen: () => void }) {
+  const t = useTranslations('artifacts');
+  const drop = useArtifactDropTarget(projectId, null, t('title'));
+  return (
+    <Button
+      {...drop.props}
+      variant="ghost"
+      size="sm"
+      onClick={onOpen}
+      data-drop-over={drop.over || undefined}
+      aria-busy={drop.pending || undefined}
+      className="data-[drop-over]:bg-secondary data-[drop-over]:ring-ring data-[drop-over]:ring-2"
+    >
+      {drop.pending ? <Loading className="size-3.5" /> : null}
+      {t('title')}
+    </Button>
   );
 }
 

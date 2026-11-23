@@ -8561,6 +8561,7 @@ const catalog = {
     "folderUnavailable": "Folder unavailable",
     "folderLoadFailed": "Could not load folders",
     "moveToFolder": "Move to folder",
+    "movedToFolder": "Moved to {name}",
     "emptyUnfiled": "No unfiled artifacts",
     "folderRoot": "No folder",
     "title": "Artifacts",

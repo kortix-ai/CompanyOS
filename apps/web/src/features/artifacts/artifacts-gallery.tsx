@@ -29,7 +29,7 @@ import { useRef, useState } from 'react';
 import { useAuth } from '@/features/providers/auth-provider';
 import { useTranslations } from '@/i18n/use-translations';
 
-import { ArtifactFolderActions, ArtifactFolderEditor, ArtifactFolderTile } from './artifact-folders';
+import { ArtifactFolderActions, ArtifactFolderEditor, ArtifactFolderTile, ArtifactRootCrumb } from './artifact-folders';
 import { ArtifactCard, CreatingCard, useColumnWidth } from './artifact-card';
 import { artifactHref } from './artifact-meta';
 
@@ -145,7 +145,7 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 pb-20 md:px-8">
           {folderId ? <nav aria-label={t('folderNavigation')} className="flex min-w-0 items-center gap-2 text-sm">
-            <Button variant="ghost" size="sm" onClick={() => setFolderId(null)} aria-current={!folderId ? 'page' : undefined}>{t('title')}</Button>
+            <ArtifactRootCrumb projectId={projectId} onOpen={() => setFolderId(null)} />
             {folderId ? <><span aria-hidden="true">/</span><span className="truncate font-medium" aria-current="page">{currentFolder?.name ?? (folders.isError ? t('folderLoadFailed') : folders.isSuccess ? t('folderUnavailable') : <span role="status" aria-label={tCommon('loading')}><Loading className="size-3.5" /></span>)}</span>{currentFolder ? <ArtifactFolderActions folder={currentFolder} projectId={projectId} /> : null}</> : null}
           </nav> : null}
           {!folderId && folders.isError ? <ErrorState title={t('folderLoadFailed')} action={<Button variant="outline" size="sm" onClick={() => folders.refetch()}>{t('retry')}</Button>} /> : null}

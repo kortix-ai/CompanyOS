@@ -25193,6 +25193,7 @@
     "folderUnavailable": "文件夹不可用",
     "folderLoadFailed": "无法加载文件夹",
     "moveToFolder": "移至文件夹",
+    "movedToFolder": "已移动到 {name}",
     "emptyUnfiled": "没有未归档的产物",
     "folderRoot": "无文件夹",
     "title": "工件",

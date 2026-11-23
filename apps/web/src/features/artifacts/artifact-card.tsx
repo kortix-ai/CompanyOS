@@ -22,12 +22,15 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@kortix/ui/dropdown-menu';
+import { EntityAvatar } from '@kortix/ui/entity-avatar';
 import Hint from '@kortix/ui/hint';
 import Loading from '@kortix/ui/loading';
 import { errorToast, successToast } from '@kortix/ui/toast';
 import {
   ArrowSquareOutIcon,
   DotsThreeIcon,
+  FolderIcon,
+  FolderSimpleDashedIcon,
   PushPinIcon,
   PushPinSlashIcon,
   ShareNetworkIcon,
@@ -47,6 +50,21 @@ import {
   relativeTime,
 } from './artifact-meta';
 import { ShareArtifactDialog } from './share-artifact-dialog';
+
+/** The drag payload of a card: its id and current folder, read by a folder drop target. */
+export const ARTIFACT_DRAG_TYPE = 'application/x-kortix-artifact';
+export type ArtifactDragPayload = { artifactId: string; folderId: string | null };
+
+export function readArtifactDrag(event: React.DragEvent): ArtifactDragPayload | null {
+  try {
+    const raw = event.dataTransfer.getData(ARTIFACT_DRAG_TYPE);
+    return raw ? (JSON.parse(raw) as ArtifactDragPayload) : null;
+  } catch {
+    return null;
+  }
+}
+
+export const isArtifactDrag = (event: React.DragEvent) => event.dataTransfer.types.includes(ARTIFACT_DRAG_TYPE);
 
 /**
  * The grid's column width as `--card-w` on the grid: a card the tab or search
@@ -120,12 +138,25 @@ export const ArtifactCard = memo(function ArtifactCard({
   const mutations = useArtifactMutations(projectId);
   const [sharing, setSharing] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const draggable = artifact.can_manage && !hidden && folders.length > 0;
   const VisIcon = VISIBILITY_ICON[artifact.visibility];
   const href = artifactHref(projectId, artifact.artifact_id);
   const queryClient = useQueryClient();
   const warm = () => void prefetchArtifact(queryClient, projectId, artifact.artifact_id).catch(() => {});
   // Grouping only. A space keeps the owning agent; Project-wide clears both,
   // or the agent's own space would still claim the artifact.
+  const moveToFolder = (next: string | null) => {
+    if (next === (artifact.folder_id ?? null)) return;
+    const name = next ? folders.find((f) => f.folder_id === next)?.name : t('title');
+    mutations.update.mutate(
+      { artifactId: artifact.artifact_id, folder_id: next },
+      {
+        onSuccess: () => successToast(name ? t('movedToFolder', { name }) : t('moved')),
+        onError: () => errorToast(t('moveFailed')),
+      },
+    );
+  };
   const moveTo = (target: string | null) =>
     mutations.update.mutate(
       { artifactId: artifact.artifact_id, space: target, ...(target === null ? { agent: null } : {}) },
@@ -138,9 +169,26 @@ export const ArtifactCard = memo(function ArtifactCard({
     // its frame would lose its layout, and a different width would make showing it again resize
     // the frame; both paint the page half done for a frame.
     <div
-      className={hidden ? `${CARD} pointer-events-none fixed top-0 left-0 -z-10 w-(--card-w) opacity-0` : `${CARD} relative`}
+      className={
+        hidden
+          ? `${CARD} pointer-events-none fixed top-0 left-0 -z-10 w-(--card-w) opacity-0`
+          : `${CARD} relative transition-opacity ${dragging ? 'opacity-40' : ''}`
+      }
       inert={hidden}
       aria-hidden={hidden || undefined}
+      // Drag a card onto a folder (or the Artifacts crumb) to file it there.
+      draggable={draggable}
+      onDragStart={
+        draggable
+          ? (event) => {
+              const payload: ArtifactDragPayload = { artifactId: artifact.artifact_id, folderId: artifact.folder_id ?? null };
+              event.dataTransfer.setData(ARTIFACT_DRAG_TYPE, JSON.stringify(payload));
+              event.dataTransfer.effectAllowed = 'move';
+              setDragging(true);
+            }
+          : undefined
+      }
+      onDragEnd={draggable ? () => setDragging(false) : undefined}
     >
       <div className={CARD_PREVIEW}>
         {artifact.view_url ? (
@@ -158,6 +206,8 @@ export const ArtifactCard = memo(function ArtifactCard({
           {/* The whole card is this link (its ::after covers the card); the actions sit above it. */}
           <Link
             href={href}
+            // The card drags, not the link's URL.
+            draggable={false}
             className="truncate text-sm font-medium outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-ring"
             // Warm the viewer's reads before the click lands.
             onPointerEnter={warm}
@@ -202,11 +252,34 @@ export const ArtifactCard = memo(function ArtifactCard({
                   <ShareNetworkIcon /> {t('share')}
                 </DropdownMenuItem>
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger><StackSimpleIcon />{t('moveToFolder')}</DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto">
-                    <DropdownMenuRadioGroup value={artifact.folder_id ?? 'root'} onValueChange={next => { if (next !== (artifact.folder_id ?? 'root')) mutations.update.mutate({ artifactId: artifact.artifact_id, folder_id: next === 'root' ? null : next }, { onSuccess: () => successToast(t('moved')), onError: () => errorToast(t('moveFailed')) }); }}>
-                      <DropdownMenuRadioItem value="root">{t('folderRoot')}</DropdownMenuRadioItem>
-                      {folders.map(folder => <DropdownMenuRadioItem key={folder.folder_id} value={folder.folder_id}>{folder.name}</DropdownMenuRadioItem>)}
+                  <DropdownMenuSubTrigger>
+                    <FolderIcon /> {t('moveToFolder')}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="max-h-[var(--radix-dropdown-menu-content-available-height)] max-w-64 overflow-y-auto">
+                    <DropdownMenuRadioGroup
+                      value={artifact.folder_id ?? 'root'}
+                      onValueChange={(next) => moveToFolder(next === 'root' ? null : next)}
+                    >
+                      <DropdownMenuRadioItem value="root" textValue={t('folderRoot')}>
+                        <span className="text-muted-foreground flex size-5 shrink-0 items-center justify-center">
+                          <FolderSimpleDashedIcon className="size-4" />
+                        </span>
+                        <span className="truncate">{t('folderRoot')}</span>
+                      </DropdownMenuRadioItem>
+                      {folders.length ? <DropdownMenuSeparator /> : null}
+                      {folders.map((folder) => (
+                        <DropdownMenuRadioItem key={folder.folder_id} value={folder.folder_id} textValue={folder.name}>
+                          <EntityAvatar
+                            emoji={folder.icon}
+                            glyph={folder.icon_glyph}
+                            icon={FolderIcon}
+                            label={folder.name}
+                            size="xs"
+                            className="shrink-0"
+                          />
+                          <span className="truncate" title={folder.name}>{folder.name}</span>
+                        </DropdownMenuRadioItem>
+                      ))}
                     </DropdownMenuRadioGroup>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>

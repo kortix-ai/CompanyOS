@@ -414,7 +414,7 @@ describe('BashTool trigger renders the title the helper answers (W9)', () => {
       '<span class="min-w-0 truncate text-foreground">Install the workspace dependencies</span>',
     );
     // The command is not replaced by the summary, only demoted.
-    expect(html).toContain('font-mono">pnpm install</span>');
+    expect(html).toContain('>pnpm install</span>');
     expect(html).not.toContain('Ran command');
   });
 
@@ -446,7 +446,7 @@ describe('BashTool trigger renders the title the helper answers (W9)', () => {
     expect(html).not.toContain('run the unit suite');
     expect(html).not.toContain('Run the unit suite');
     // The failure's own command still shows, so the row is not just a verdict.
-    expect(html).toContain('font-mono">bun test</span>');
+    expect(html).toContain('>bun test</span>');
   });
 
   test('a RUNNING call is unchanged — the description titles a settled row only', () => {

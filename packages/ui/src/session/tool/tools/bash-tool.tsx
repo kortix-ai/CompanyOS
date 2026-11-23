@@ -12,6 +12,7 @@ import {
   StructuredOutput,
   RecoveredCallsContext,
   ToolRunningContext,
+  ToolSurfaceContext,
   useToolCardFrame,
   useToolCardPad,
   useToolIndent,
@@ -231,6 +232,7 @@ function BashTrigger({
 }) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const open = useToolOpen();
+  const valueFirst = useContext(ToolSurfaceContext) === 'panel' && !open;
 
   if (live) {
     return (
@@ -270,12 +272,15 @@ function BashTrigger({
         {/* `truncate`, not `shrink-0`: a description title is a sentence, and
             on a narrow row a rigid one would be clipped mid-word by the
             trigger's `overflow-hidden` instead of ending in an ellipsis. */}
-        <span className="min-w-0 truncate text-foreground">
+        {/* On the side panel the command is what the reader scans for: the verb
+            is meta ink and the command is the bright text. The chat keeps the
+            verb bright, the command quiet. */}
+        <span className={cn('min-w-0 truncate', valueFirst ? 'text-muted-foreground' : 'text-foreground')}>
           {title}
         </span>
         {!open && (
           <>
-            <span className="text-muted-foreground min-w-0 truncate font-mono">
+            <span className={cn('min-w-0 truncate font-mono', valueFirst ? 'text-foreground' : 'text-muted-foreground')}>
               {commandPreview}
             </span>
             {extraLines > 0 && (

@@ -113,12 +113,6 @@ export const ToolDurationContext = createContext<number | undefined>(undefined);
 export const ToolStartedAtContext = createContext<string | undefined>(undefined);
 
 /**
- * The side panel draws this row flat: no card, a hairline under it, so a run
- * of rows (an agent's messages, its hand-offs) reads as one timeline.
- */
-export const ToolPanelFlatContext = createContext(false);
-
-/**
  * True in a read-only session view (the sub-session modal): a tool card shows
  * what happened and offers no fix (connect a model, reconnect ChatGPT).
  */

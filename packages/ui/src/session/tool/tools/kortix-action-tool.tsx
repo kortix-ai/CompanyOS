@@ -13,7 +13,6 @@ import {
   partRawOutput,
   partStatus,
   ToolOutcomeContext,
-  ToolPanelFlatContext,
   ToolRunningContext,
   ToolSurfaceContext,
   useToolIndent,
@@ -331,19 +330,8 @@ function SettledTrigger({
   );
 }
 
-/**
- * Kortix platform calls (agents, sessions, access, connectors) read as one flat
- * list in the side panel, the same timeline the agent rows draw: no card per call.
- */
+/** Kortix platform calls (agents, sessions, access, connectors). In the side panel they are the same flat rows as every other call. */
 export function KortixActionTool(props: ToolProps) {
-  return (
-    <ToolPanelFlatContext.Provider value>
-      <KortixActionToolBody {...props} />
-    </ToolPanelFlatContext.Provider>
-  );
-}
-
-function KortixActionToolBody(props: ToolProps) {
   const { call, defaultOpen, forceOpen, locked } = props;
   const t = useTranslations('tools.kortixAction');
   const tMulti = useTranslations('multiAgent.tools');

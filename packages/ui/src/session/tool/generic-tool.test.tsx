@@ -83,7 +83,7 @@ describe('GenericTool on the panel surface', () => {
     );
 
     // The task-16 row surface, not a header + always-open body.
-    expect(html).toContain('bg-popover border-border overflow-hidden rounded-md border');
+    expect(html).toContain('border-border border-b last:border-b-0');
     expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain('sticky');
 

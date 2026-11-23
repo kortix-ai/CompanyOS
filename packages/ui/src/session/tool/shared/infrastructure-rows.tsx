@@ -6,7 +6,7 @@ import { CaretRightIcon } from '@phosphor-icons/react';
 import { cn } from '../../../lib/utils';
 import { createContext, useCallback, useContext, useState } from 'react';
 import { ToolSurfaceContext } from './surface';
-import { BoundActivateContext, ToolDurationContext, ToolOpenContext, ToolOutcomeContext, ToolPanelFlatContext, ToolRunningContext } from './infrastructure-contexts';
+import { BoundActivateContext, ToolDurationContext, ToolOpenContext, ToolOutcomeContext, ToolRunningContext } from './infrastructure-contexts';
 import { PanelRowTitle, TOOL_ROW_CLASS, ToolHeaderRow, ToolOutcomeIcon } from './infrastructure-row-header';
 import { isTriggerTitle } from './infrastructure-parts';
 import { type BasicToolProps } from './types';
@@ -23,14 +23,10 @@ import { type TriggerTitle } from '../../../internal/session-types';
  * A row inverts it: the detail opens as a list of one-line summaries, and the
  * reader expands the one they came for.
  *
- * The row is the `bg-popover rounded-md border` surface the design system uses
- * for every panel row, and its disclosure affordance is the same MARK the Easy
- * cards use — a `CaretRightIcon` that points down once the thing is open. Only
- * the mark is shared: `PanelCard` sits on `bg-pane` at a tighter radius and
- * animates its chevron through `motion` with a press scale, while this row is a
- * denser, plainer thing that rotates its chevron in CSS. Same vocabulary, not
- * the same component. No rail, no connector, no per-row header: the gap between
- * rows is the whole rhythm.
+ * The rows are one list, not a stack of cards: a hairline between rows, a
+ * rounded hover fill, and a `CaretRightIcon` that points down once a row is
+ * open. The verb ("Ran command") is meta ink; the value it acted on (the
+ * command, the path, the query) is the bright text.
  *
  * Interaction is gated on having a body — a childless call has nothing to
  * disclose, so it gets no chevron, no `role="button"`, and no cursor change
@@ -66,7 +62,6 @@ function PanelToolRow({
   action?: React.ReactNode;
 }) {
   const hasBody = Boolean(children);
-  const flat = useContext(ToolPanelFlatContext);
   // Same substitution the inline header makes, from the same context — a failed
   // call leads with the verdict on both surfaces or the two disagree about what
   // happened. See {@link ToolOutcomeIcon}.
@@ -75,9 +70,9 @@ function PanelToolRow({
   const row = (
     <div
       className={cn(
-        flat ? 'flex min-h-11 w-full items-center gap-2.5 rounded-md px-2 py-2.5 text-left' : 'flex min-h-11 w-full items-center gap-2.5 px-3 py-2.5 text-left',
-        hasBody && 'transition-colors',
-        hasBody && !locked && 'hover:bg-muted-foreground/[0.04] cursor-pointer',
+        'flex min-h-10 w-full items-center gap-2.5 rounded-md px-2 py-2 text-left',
+        hasBody && 'transition-colors duration-(--duration-fast)',
+        hasBody && !locked && 'hover:bg-hover cursor-pointer',
       )}
     >
       {leading && (
@@ -124,8 +119,8 @@ function PanelToolRow({
     <Disclosure
       open={open}
       onOpenChange={onOpenChange}
-      data-panel-flat={flat || undefined}
-      className={flat ? 'border-border border-b last:border-b-0' : 'bg-popover border-border overflow-hidden rounded-md border'}
+      data-panel-flat
+      className="border-border border-b last:border-b-0"
     >
       {hasBody ? <DisclosureTrigger>{row}</DisclosureTrigger> : row}
       {/* Animated for the same reason the inline row is — see
@@ -134,7 +129,7 @@ function PanelToolRow({
           border on a `height: 0` box draws a hairline across a closed row. */}
       {hasBody && (
         <DisclosureContent>
-          <div className={cn(flat ? 'px-2 pb-3 text-sm' : 'border-border border-t px-3 py-3 text-sm', className)}>
+          <div className={cn('px-2 pb-3 text-sm', className)}>
             {children}
           </div>
         </DisclosureContent>

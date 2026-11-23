@@ -129,9 +129,8 @@ describe('GetMemTool joins the shared BasicTool shell', () => {
     );
 
     expect(html).not.toContain('sticky');
-    expect(html).toContain('bg-popover border-border overflow-hidden rounded-md border');
+    expect(html).toContain('border-border border-b last:border-b-0');
     expect(html).toContain('aria-expanded="true"');
-    expect(html).toContain('text-sm font-medium');
     expect(html).toContain('Recalled');
 
     // Caption and content are the entry — they stay open on the panel too.

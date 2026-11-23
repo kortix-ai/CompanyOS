@@ -10,7 +10,7 @@ import { SessionStatusMark } from '../list/session-status-mark';
 import type { SessionDisplayStatus } from '../actions/session-label';
 import { TextShimmer } from '../../primitives/text-shimmer';
 import { Hint } from '../../primitives/hint';
-import { BoundActivateContext, ToolOutcomeContext, ToolPanelFlatContext, ToolRunningContext, ToolStartedAtContext, useToolOpen } from '../tool/shared/infrastructure-contexts';
+import { BoundActivateContext, ToolOutcomeContext, ToolRunningContext, ToolStartedAtContext, useToolOpen } from '../tool/shared/infrastructure-contexts';
 import { ToolSurfaceContext } from '../tool/shared/surface';
 import { AgentHoverCard, AgentInlineHoverCard, type AgentInlineDetail } from './agent-hover-card';
 
@@ -138,7 +138,8 @@ export function AgentTrigger({
   const clock = panel && startedAt ? new Date(startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null;
   // In the chat a role name ("Bike delivery operations researcher") keeps its words; the
   // subtitle yields first. The narrow panel lets the chip shrink instead.
-  const chip = handle ? <AgentChip handle={handle} name={title} className={panel ? 'shrink' : 'max-w-64'} /> : null;
+  // The panel names the agent by its mark and name, no tinted pill.
+  const chip = handle ? <AgentChip handle={handle} name={title} plain={panel} className={panel ? 'max-w-none shrink' : 'max-w-64'} /> : null;
   const name = chip ? (
     sessionId && PROJECT_SESSION_ID.test(sessionId) ? (
       <AgentHoverCard sessionId={sessionId} name={title} className={panel ? 'shrink' : 'shrink-0'}>
@@ -168,17 +169,18 @@ export function AgentTrigger({
       </span>
     ));
   if (panel) {
-    // A timeline row: when, to whom, then what — the message reads in full up to two lines.
+    // To whom, then what, then when on the right edge. The message reads in
+    // full up to two lines, on the name's edge (past the 14px mark and its gap).
     return (
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex min-w-0 items-center gap-1.5">
-          {clock && <span className="text-muted-foreground w-10 shrink-0 text-xs font-normal tabular-nums">{clock}</span>}
           {leadWord}
           {name}
           {trailWord}
+          {clock && <span className="text-muted-foreground ml-auto shrink-0 pl-2 text-xs font-normal tabular-nums">{clock}</span>}
         </div>
         {subtitle && (
-          <p className={cn('text-muted-foreground line-clamp-2 text-sm font-normal whitespace-normal', clock && 'pl-11.5')} title={subtitle}>
+          <p className={cn('text-muted-foreground line-clamp-2 text-sm font-normal whitespace-normal', chip && 'pl-5')} title={subtitle}>
             {subtitle}
           </p>
         )}
@@ -255,8 +257,8 @@ export function AgentRowBody({ children, className }: { children: ReactNode; cla
   // The side panel's card already frames the body: no rail there.
   const panel = useContext(ToolSurfaceContext) === 'panel';
   return (
-    // In the panel the body starts on the message column, under the time.
-    <div className={cn('flex min-w-0 flex-col gap-2.5 text-sm', panel ? 'py-0.5 pl-11.5' : 'border-border ml-2 border-l py-1 pl-3', className)}>
+    // In the panel the body starts on the message column, under the name.
+    <div className={cn('flex min-w-0 flex-col gap-2.5 text-sm', panel ? 'py-0.5 pl-5' : 'border-border ml-2 border-l py-1 pl-3', className)}>
       {children}
     </div>
   );
@@ -271,8 +273,7 @@ export function AgentRowScope({ children }: { children: ReactNode }) {
   return (
     <BoundActivateContext.Provider value={null}>
       <ToolOutcomeContext.Provider value="ok">
-        {/* In the side panel the agent rows are one flat timeline, not a stack of cards. */}
-        <ToolPanelFlatContext.Provider value>{children}</ToolPanelFlatContext.Provider>
+        {children}
       </ToolOutcomeContext.Provider>
     </BoundActivateContext.Provider>
   );

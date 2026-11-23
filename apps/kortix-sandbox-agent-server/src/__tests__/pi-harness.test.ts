@@ -5028,6 +5028,45 @@ describe('pi model list: neither boot nor an env push waits for it', () => {
     }
     await waitFor(() => rt.selectedModel()?.contextWindow === 200_000)
   })
+
+  test('a Claude subscription turn right after a reconfigure runs in Claude Code, not as a gateway model', async () => {
+    // A stand-in `claude` that only records that Claude Code was started.
+    const bin = mkdtempSync(join(tmpdir(), 'pi-fake-claude-'))
+    const started = join(bin, 'started')
+    const claude = join(bin, 'claude')
+    writeFileSync(claude, `#!/bin/sh\ntouch '${started}'\nexit 1\n`)
+    chmodSync(claude, 0o755)
+    const r = await boot({ script: [{ text: 'answered by the gateway' }], env: { KORTIX_CLAUDE_PATH: claude } })
+    const rt = r.service.runtime()!
+    const secret = 'PI_TEST_RECONFIGURE_SECRET'
+    const previous = process.env[secret]
+    // The refresh a reconfigure starts stays open: the turn comes before it ends, as on a new session.
+    const release = gateway.holdCatalog()
+    try {
+      const before = gateway.requestedModels.length
+      // The push the API sends before a new session's first prompt, with a project secret that changed.
+      const pushed = await envApp(r).request('/kortix/env', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ revision: 'rev-2', env: { [secret]: 'value' }, names: [secret], refreshModels: true }),
+      })
+      expect(pushed.status).toBe(200)
+      const accepted = await r.user(`/session/${rt.rootId}/prompt_async`, {
+        method: 'POST',
+        body: JSON.stringify({ parts: [{ type: 'text', text: 'hi' }], model: { providerID: 'claude-agent', modelID: 'haiku' } }),
+      })
+      expect(accepted.status).toBe(204)
+      await waitFor(() => existsSync(started) || gateway.requestedModels.length > before)
+      await waitFor(() => !rt.busy())
+      expect(gateway.requestedModels.slice(before)).toEqual([])
+      expect(existsSync(started)).toBe(true)
+      expect(rt.selectedModel()).toMatchObject({ providerID: 'claude-agent', modelID: 'haiku' })
+    } finally {
+      release()
+      if (previous === undefined) delete process.env[secret]
+      else process.env[secret] = previous
+    }
+  })
 })
 
 describe('pi prompt images', () => {

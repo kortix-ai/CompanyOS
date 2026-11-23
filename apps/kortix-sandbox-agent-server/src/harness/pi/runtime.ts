@@ -63,7 +63,7 @@ import type { WorkflowControlBody } from '@kortix/api-contract/multi-agent'
 import type { RuntimeCapability } from '@kortix/api-contract/runtime-relay'
 import { PARKED, PermissionBroker, QuestionBroker, compilePermissionPolicy, type AskRelayAnswer, resolvePolicyRule, skillGranted, type PermissionPolicy, type PermissionRule, type SessionPermissionRule } from './interactions'
 import type { CatalogModel, PiModels, SelectedModel } from './model'
-import { IMAGE_RESIZE, KORTIX_PROVIDER_ID, compactionSettings, nativeModelId, promptModelId, selectId } from './model'
+import { IMAGE_RESIZE, KORTIX_PROVIDER_ID, compactionSettings, createPiModels, nativeModelId, promptModelId, selectId } from './model'
 import { claudeSessions } from './claude/provider'
 import { CLAUDE_AGENT_PROVIDER_ID } from '@kortix/api-contract/claude-agent'
 import { TranscriptStore, type RuntimeFrame } from './transcript'
@@ -799,8 +799,7 @@ export class PiRuntime {
       this.bindRoot()
     }
     try {
-      const [{ createPiModels }, { createWorkspaceTools, createQuestionTool }, core, coding, host, { subagents }, { workflow }, { codemodeExtensions }, prebuiltRoot] = await Promise.all([
-        import('./model'),
+      const [{ createWorkspaceTools, createQuestionTool }, core, coding, host, { subagents }, { workflow }, { codemodeExtensions }, prebuiltRoot] = await Promise.all([
         import('./tools'),
         import('@earendil-works/pi-agent-core'),
         import('@earendil-works/pi-coding-agent'),
@@ -819,12 +818,7 @@ export class PiRuntime {
       // A restart keeps the list it has; the first start takes the one fetched since construction.
       const catalog = this.models?.live ? this.models.catalog : await this.prefetchCatalog()
       this.catalogFetch = null
-      this.models = await createPiModels({
-        env: this.env,
-        defaultModelRef: this.env.KORTIX_MODEL ?? this.compiledAgent()?.model ?? this.compiled?.model ?? null,
-        catalog,
-        claude: this.claudeOptions(),
-      })
+      this.models = await this.buildModels(catalog)
       this.selected = this.models.select(nativeModelId(this.env.KORTIX_MODEL) ?? nativeModelId(this.compiledAgent()?.model ?? this.compiled?.model))
       // `KORTIX_PI_CODEMODE` (the API sends the session agent's), else the session agent's compiled
       // `codemode`, else `on`. Extensions load once, so a later agent switch or config push keeps it.
@@ -992,16 +986,11 @@ export class PiRuntime {
   private async applyReconfigure(): Promise<{ changed: boolean }> {
     this.reconfigurePending = false
     if (!this.agent || !this.models) return { changed: false }
-    const { createPiModels } = await import('./model')
     const before = `${this.selected?.modelID}|${this.agentName}|${this.env.KORTIX_COMPILED_AGENT_CONFIG_ETAG ?? ''}`
     this.compiled = parseCompiledAgentConfig(compiledAgentConfigFromEnv(this.env))
     this.sessionAgentName = this.agentName = this.resolveAgentName()
     // The list it has: an env push never waits for the gateway. The refresh below picks up a newly connected provider.
-    this.models = await createPiModels({
-      env: this.env,
-      defaultModelRef: this.env.KORTIX_MODEL ?? this.compiledAgent()?.model ?? this.compiled?.model ?? null,
-      catalog: this.models.live ? this.models.catalog : null,
-    })
+    this.models = await this.buildModels(this.models.live ? this.models.catalog : null)
     this.refreshModelsSoon()
     this.selected = this.models.select(nativeModelId(this.env.KORTIX_MODEL) ?? nativeModelId(this.compiledAgent()?.model ?? this.compiled?.model))
     this.policy = compilePermissionPolicy(this.compiledAgent()?.permission)
@@ -1032,12 +1021,7 @@ export class PiRuntime {
 
   private async reloadModels(): Promise<void> {
     if (!this.agent || !this.models) return
-    const { createPiModels } = await import('./model')
-    this.models = await createPiModels({
-      env: this.env,
-      defaultModelRef: this.env.KORTIX_MODEL ?? this.compiledAgent()?.model ?? this.compiled?.model ?? null,
-      claude: this.claudeOptions(),
-    })
+    this.models = await this.buildModels()
     this.selected = this.models.select(this.selected ? selectId(this.selected.providerID, this.selected.modelID) : null)
     this.agent.state.model = this.selected.model
     // A model whose limits the catalog now reports differently compacts at a different threshold.
@@ -2903,9 +2887,20 @@ export class PiRuntime {
 
   // ── projections ──────────────────────────────────────────────────────────
 
-  /** Where Claude subscription models run: the workspace, with their state beside pi's. */
-  private claudeOptions() {
-    return { stateDir: this.cfg.piStateDir, cwd: this.workspace, env: this.env }
+  /**
+   * The served models: the gateway's and the Claude subscription's. Every path that rebuilds the
+   * list goes through here. A rebuild without the Claude provider sent a `claude-agent/<id>` turn
+   * to the gateway's chat completions, which refuse it (400 `model_not_found`).
+   * `catalog` undefined fetches the live list; null means it did not answer. Claude subscription
+   * models run in the workspace, with their state beside pi's.
+   */
+  private buildModels(catalog?: Record<string, CatalogModel> | null): Promise<PiModels> {
+    return createPiModels({
+      env: this.env,
+      defaultModelRef: this.env.KORTIX_MODEL ?? this.compiledAgent()?.model ?? this.compiled?.model ?? null,
+      catalog,
+      claude: { stateDir: this.cfg.piStateDir, cwd: this.workspace, env: this.env },
+    })
   }
 
   selectedModel(): SelectedModel | null {

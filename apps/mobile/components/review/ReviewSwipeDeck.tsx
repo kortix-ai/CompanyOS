@@ -139,6 +139,9 @@ export function ReviewSwipeDeck({
   React.useEffect(
     () => () => {
       const flying = flyingRef.current;
+      // Consumed here: a fly-off completion queued before the unmount finds
+      // no flight and sends nothing twice.
+      flyingRef.current = null;
       if (flying) onDecideRef.current(flying.item, flying.verdict, flying.text);
       for (const entry of stagedRef.current.values()) {
         clearTimeout(entry.timer);

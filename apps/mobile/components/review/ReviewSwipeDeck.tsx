@@ -172,6 +172,9 @@ export function ReviewSwipeDeck({
     (item: ReviewItem, verdict: ReviewVerdict, text?: string) => {
       flyingRef.current = null;
       progress.value = 0;
+      // One timer per item: a second stage replaces the first, never runs beside it.
+      const previous = stagedRef.current.get(item.id);
+      if (previous) clearTimeout(previous.timer);
       const timer = setTimeout(() => {
         setSending((prev) => new Set(prev).add(item.id));
         unstage(item.id);
@@ -214,14 +217,21 @@ export function ReviewSwipeDeck({
     return true;
   }, []);
 
-  const swiped = React.useCallback(
-    (item: ReviewItem, dir: Direction) => {
-      const sides = reviewSwipeVerdicts(item.kind);
-      const verdict = dir === 'right' ? sides.right : sides.left;
-      if (verdict) stage(item, verdict);
+  /**
+   * Stages the pending flight of `itemId` exactly once. The fly-off's end and
+   * the top-change effect below can both call it; only the first finds the
+   * flight (stage() clears it).
+   */
+  const land = React.useCallback(
+    (itemId: string) => {
+      const flying = flyingRef.current;
+      if (!flying || flying.item.id !== itemId) return;
+      stage(flying.item, flying.verdict, flying.text);
     },
     [stage],
   );
+
+  const swiped = React.useCallback((item: ReviewItem) => land(item.id), [land]);
 
   // The flying card left the top before its fly-off finished (a poll, an
   // Undo of another card): its animation is gone with it, so its verdict
@@ -229,8 +239,8 @@ export function ReviewSwipeDeck({
   const topId = top?.id;
   React.useEffect(() => {
     const flying = flyingRef.current;
-    if (flying && flying.item.id !== topId) stage(flying.item, flying.verdict, flying.text);
-  }, [topId, stage]);
+    if (flying && flying.item.id !== topId) land(flying.item.id);
+  }, [topId, land]);
 
   const skip = React.useCallback(() => {
     if (!top || deck.length < 2 || flyingRef.current) return;
@@ -267,11 +277,11 @@ export function ReviewSwipeDeck({
           canAnswer={allows(top, 'answer')}
           progress={progress}
           onAccepted={(dir) => void accept(top, dir)}
-          onSwiped={(dir) => swiped(top, dir)}
+          onSwiped={() => swiped(top)}
           onAnswer={(text) => {
             if (flyingRef.current) return;
             flyingRef.current = { item: top, verdict: 'answer', text };
-            cardRef.current?.fling('right', () => stage(top, 'answer', text));
+            cardRef.current?.fling('right', () => land(top.id));
           }}
           onOpen={() => {
             haptics.tap();
@@ -299,7 +309,7 @@ export function ReviewSwipeDeck({
                 onSendBack(top);
                 return;
               }
-              if (accept(top, 'left')) cardRef.current?.fling('left', () => swiped(top, 'left'));
+              if (accept(top, 'left')) cardRef.current?.fling('left', () => swiped(top));
             }}>
             {no === 'changes' ? (
               <Icon as={ArrowBendUpLeftIcon} size={26} color={accent.orange} />
@@ -311,7 +321,7 @@ export function ReviewSwipeDeck({
             label={yes ? reviewVerdictLabel(top.kind, yes) : 'Yes'}
             disabled={!yes}
             onPress={() => {
-              if (accept(top, 'right')) cardRef.current?.fling('right', () => swiped(top, 'right'));
+              if (accept(top, 'right')) cardRef.current?.fling('right', () => swiped(top));
             }}>
             <Icon as={CheckIcon} size={26} color={accent.green} />
           </RoundAction>

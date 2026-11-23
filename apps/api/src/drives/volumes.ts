@@ -327,6 +327,8 @@ async function call(volume: DriveVolume | null, path: string, init: RequestInit 
     case 409:
       if (code === 'volume_busy') throw new DriveStorageError(409, 'The drive is attached to a running session', code);
       if (code === 'not_a_directory') throw new DriveStorageError(409, 'That path is a file, not a folder', code);
+      // A version older than storage keeps (or one that never existed): not a name clash.
+      if (code === 'read_point_gone') throw new DriveStorageError(404, 'That version is no longer available', code);
       // A shared volume takes a fixed number of read-write mounts at once (a
       // mount, never a file write): the drive is busy, not a name clash.
       if (code === 'sharedfs_writers_full') {
@@ -571,8 +573,8 @@ export interface DriveVolumeHead {
  * commit (or keeps the one it had before it was converted, which never moves
  * again), so its token is storage's head stamp, which moves on every write.
  * Without one (never written, or storage could not read it), the token is
- * built from what it holds now: the newest change time of any entry, the file
- * count and the bytes. A shared volume too large to count answers a new token
+ * built from its newest version id plus what it holds now: the newest change
+ * time of any entry, the file count and the bytes. A shared volume too large to count answers a new token
  * every time, so the caller re-reads it. Either moves with Kortix's own
  * staging under `/.kortix-uploads` too (storage cannot leave a folder out):
  * that costs a caller one re-read, which skips the staging as every walker does.
@@ -584,8 +586,15 @@ export async function driveVolumeHead(volume: DriveVolume, signal?: AbortSignal)
     return { token: head, commit: head };
   }
   if (typeof info.head_stamp === 'string' && info.head_stamp) return { token: `stamp:${info.head_stamp}`, commit: null };
-  const u = await callJson<SharedVolumeUsage>(volume, `${v(volume)}/usage`, signal ? { signal } : {});
-  const token = u.too_large ? `live:${Date.now()}` : `live:${u.last_change_at ?? '-'}:${u.file_count ?? '-'}:${u.used_bytes ?? '-'}`;
+  // Without a stamp, the newest version id moves on every change, a rename
+  // included (storage checkpoints a changed volume within ~20 s); the usage
+  // figures move sooner on writes but not on a rename, so the token is both.
+  const [u, newest] = await Promise.all([
+    callJson<SharedVolumeUsage>(volume, `${v(volume)}/usage`, signal ? { signal } : {}),
+    callJson<{ commits?: Array<{ id?: string }> }>(volume, `${v(volume)}/commits?limit=1`, signal ? { signal } : {})
+      .then((r) => r.commits?.[0]?.id ?? '-', () => '-'),
+  ]);
+  const token = u.too_large ? `live:${Date.now()}` : `live:${newest}:${u.last_change_at ?? '-'}:${u.file_count ?? '-'}:${u.used_bytes ?? '-'}`;
   return { token, commit: null };
 }
 

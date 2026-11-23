@@ -6,7 +6,7 @@
 import { createHash } from 'node:crypto';
 import { afterEach, expect, mock, test } from 'bun:test';
 
-type Vol = { id: string; type: 'block' | 'sharedfs'; head: string | null; files: Map<string, Uint8Array>; stamp?: string | null; dirs?: Set<string> };
+type Vol = { id: string; type: 'block' | 'sharedfs'; head: string | null; files: Map<string, Uint8Array>; stamp?: string | null; dirs?: Set<string>; ver?: number };
 
 let served = false;
 let vols = new Map<string, Vol>();
@@ -60,6 +60,8 @@ async function fakeStorage(path: string, init: RequestInit = {}): Promise<Respon
     const sizes = [...v.files.values()].reduce((a, b) => a + b.byteLength, 0);
     return json({ used_bytes: sizes, file_count: v.files.size, last_change_at: `t${calls.length}`, too_large: false });
   }
+  if (sub === '/commits' && method === 'GET') return json({ commits: v.type === 'sharedfs' ? [{ id: `sc${v.ver ?? 0}` }] : [] });
+  if (sub === '/files/content' && method === 'GET' && url.searchParams.get('at') === 'gone') return refuse(409, 'read_point_gone');
   if (sub === '/files/usage') return v.type === 'sharedfs' ? refuse(422, 'sharedfs_unsupported') : json({ bytes: 7, complete: true });
   if (sub === '/files/content' && method === 'PUT') {
     if (url.searchParams.get('overwrite') === 'false' && v.files.has(p)) return refuse(409, 'path_exists');
@@ -344,4 +346,27 @@ test('Kortix\'s own bookkeeping at a drive\'s root is known by its path', () => 
   expect(isSharedUploadStaging('/.kortix-uploads/sfs-1/abc')).toBe(true);
   expect(isSharedUploadStaging('/.kortix-uploads')).toBe(true);
   expect(isSharedUploadStaging('/.kortix-folded/d1')).toBe(false);
+});
+
+test('without a stamp, a shared drive\'s token moves with its newest version even when its usage does not (a rename)', async () => {
+  served = true;
+  const shared = fresh();
+  await openDriveVolume(shared, undefined, { preferShared: true });
+  const v = vols.get(shared.name);
+  expect(v?.type).toBe('sharedfs');
+  v!.stamp = null; v!.ver = 1;
+  const before = (await driveVolumeHead(shared)).token;
+  v!.ver = 2; // a rename: same files, same bytes, a new version
+  const after = (await driveVolumeHead(shared)).token;
+  expect(before).toStartWith('live:sc1:');
+  expect(after).toStartWith('live:sc2:');
+});
+
+test('a version storage no longer keeps is not found, not a name clash', async () => {
+  const shared = fresh();
+  await openDriveVolume(shared, undefined, { preferShared: true });
+  const err = await readVolumeFile(shared, '/a.txt', undefined, 'gone').catch((e) => e);
+  expect(err).toBeInstanceOf(DriveStorageError);
+  expect(err.status).toBe(404);
+  expect(err.code).toBe('read_point_gone');
 });

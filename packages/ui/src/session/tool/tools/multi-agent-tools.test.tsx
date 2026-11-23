@@ -5,6 +5,7 @@ import { WorkFoldContext } from '../../turn/turn-work-accordion';
 import './register';
 import { TooltipProvider } from '../../../primitives/tooltip';
 import { ToolRunningContext } from '../shared/infrastructure';
+import { ToolSurfaceContext } from '../shared/infrastructure';
 import { ToolRegistry } from '../shared/registry';
 import type { ToolPart } from '../../../internal/session-types';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -145,6 +146,25 @@ describe('send_message', () => {
     expect(html).not.toContain('text-kortix-red');
     // The agent-facing note repeats a delivery; it shows only when the message did not arrive.
     expect(text).not.toContain('Sent to reviewer.');
+  });
+
+  test('on the side panel a message is a timeline: to whom, what it said, then what became of it', () => {
+    const Component = ToolRegistry.get('send_message')!;
+    const html = render(
+      <ToolSurfaceContext.Provider value="panel">
+        <Component call={done('send_message', SENT)} />
+      </ToolSurfaceContext.Provider>,
+    );
+    const text = textOf(html);
+    expect(html).toContain('<ol');
+    expect(text).toContain('To');
+    expect(text).toContain('reviewer');
+    expect(text).toContain('Migration finished');
+    expect(text).toContain('The schema migration finished. Rebase now.');
+    // The last node says what became of it, after the message.
+    expect(text.indexOf('Delivered')).toBeGreaterThan(text.indexOf('Rebase now.'));
+    // A timeline, not a fold: nothing to open.
+    expect(html).not.toContain('aria-expanded');
   });
 
   test('a note to a colleague of this session that is still working reads Working, then Delivered once it stops', () => {

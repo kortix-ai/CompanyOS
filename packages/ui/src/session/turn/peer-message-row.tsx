@@ -5,7 +5,7 @@ import type { PeerMessagePromptInfo } from '@kortix/shared';
 import { peerHandleLabel } from '@kortix/shared';
 import { useTranslations } from '../../i18n';
 import { UnifiedMarkdown } from '../../markdown/unified-markdown';
-import { AgentFace, AgentRowBody, AgentRowScope, AgentStatus, AgentTrigger } from '../agents/agent-surface';
+import { AgentRowBody, AgentRowScope, AgentStatus, AgentTrigger } from '../agents/agent-surface';
 import { BasicTool } from '../tool/shared/infrastructure';
 import { WorkFoldContext } from './turn-work-accordion';
 import { useContext } from 'react';
@@ -60,8 +60,7 @@ export function PeerMessageRow({ info, actions }: { info: PeerMessagePromptInfo;
     <div data-testid="peer-message-turn" data-peer-kind={info.kind} data-peer-message-id={info.messageId} className="flex min-w-0 flex-col gap-1">
       <AgentRowScope>
         <BasicTool
-          icon={<AgentFace handle={from} />}
-          trigger={<AgentTrigger title={name} subtitle={idle ? preview : info.summary?.trim()} />}
+          trigger={<AgentTrigger handle={from} title={name} subtitle={idle ? preview : info.summary?.trim()} />}
           triggerAction={<AgentStatus status={idle ? 'done' : undefined} label={kindWord} opens={!!body} />}
           defaultOpen={!idle && !inFold}
         >

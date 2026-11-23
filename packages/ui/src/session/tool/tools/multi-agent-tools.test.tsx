@@ -222,10 +222,10 @@ describe('list_agents', () => {
       },
     };
     const text = textOf(drawn('list_agents', done('list_agents', result), { open: true }));
-    expect(text).toContain('@reviewer');
+    expect(text).toContain('reviewer');
     expect(text).toContain('Teammate');
     expect(text).toContain('Needs input');
-    expect(text).toContain('@writer');
+    expect(text).toContain('writer');
     expect(text).toContain('Helper');
     expect(text).toContain('Done');
     expect(text).toContain('Can’t receive messages');
@@ -247,7 +247,7 @@ describe('list_agents', () => {
       },
     };
     const text = textOf(drawn('list_agents', done('list_agents', result), { open: true }));
-    expect(text).toContain('@site');
+    expect(text).toContain('site');
     expect(text).toContain('Build the site · Helper');
     expect(text).not.toContain('subagent)');
     expect(text).not.toContain('Show details');

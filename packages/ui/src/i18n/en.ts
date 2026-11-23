@@ -1739,7 +1739,8 @@ const catalog = {
     "hintSettings": "Press {modifier}, to open settings",
     "hintCompact": "Ask to compact the session when it gets long",
     "myKortixRoutes": "Routes each task to the right agent",
-    "chatInputReset": "Reset"
+    "chatInputReset": "Reset",
+    "queuedDisconnected": "This session lost its connection to Kortix. Start a new session to continue."
   },
   "auth": {
     "haveReferralCode": "Have a referral code?",
@@ -2170,7 +2171,18 @@ const catalog = {
         "completed": "Done",
         "failed": "Didn’t finish",
         "stopped": "Stopped"
-      }
+      },
+      "card": {
+        "session": "Session",
+        "copyId": "Copy session ID",
+        "openNewTab": "Open in new tab",
+        "model": "Model",
+        "runsAs": "Runs as",
+        "inline": "Ran inside this session, so it has no session of its own to open."
+      },
+      "notStarted": "Didn’t start",
+      "notStartedSentence": "Kortix couldn’t start this colleague. Nothing ran.",
+      "policyBlocked": "Blocked by this project’s policy. Ask a project admin to allow it."
     }
   },
   "agentScope": {
@@ -9769,6 +9781,7 @@ const catalog = {
       },
       "workingFor": "working · {elapsed}",
       "runsAs": "runs as {agent}",
+      "stateCount": "{count} {state}",
       "teamRole": "Role for this session only",
       "attention": {
         "question": "Has a question for you",

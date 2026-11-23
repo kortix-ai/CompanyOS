@@ -1790,6 +1790,20 @@ describe('pi extensions', () => {
     expect(child).toContain("Today's date: Tue Mar 10 2026 (")
   })
 
+  test('a name on a subagent in the same session is its label: the call runs, and the result says the name does not address it', async () => {
+    const r = await boot({
+      script: [{ tool: 'agent', args: { description: 'Size demand', prompt: 'size it', subagent_type: 'general', name: 'market-scout', session: 'same' } }, { text: 'child done' }, { text: 'parent done' }],
+    })
+    await promptAndSettle(r, 'delegate it')
+    const page = (await r.bearer(`/kortix/runtime/messages/${r.service.runtime()!.rootId}`).then((res) => res.json())) as WirePage
+    const call = toolParts(page, 'agent')[0]!
+    expect(call.state.status).toBe('completed')
+    expect(JSON.stringify(call.state)).toContain('child done')
+    expect(JSON.stringify(call.state)).toContain('market-scout is a label here')
+    expect(call.state.metadata).toMatchObject({ session: 'same' })
+    expect(call.state.metadata?.name).toBeUndefined()
+  })
+
   test('every agent is told its session ids; a separate subagent its parent session, a subagent inside the session the main conversation', async () => {
     const session = '11111111-1111-4111-8111-111111111111'
     const parent = '22222222-2222-4222-8222-222222222222'

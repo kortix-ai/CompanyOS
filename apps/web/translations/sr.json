@@ -2462,7 +2462,8 @@
     "collapseQueue": "Скупи поруке на чекању",
     "expandQueue": "Прошири поруке на чекању",
     "myKortixRoutes": "Сваки задатак шаље правом агенту",
-    "chatInputReset": "Reset"
+    "chatInputReset": "Reset",
+    "queuedDisconnected": "Ova sesija je izgubila vezu sa Kortixom. Pokreni novu sesiju da nastaviš."
   },
   "billing": {
     "plan": {
@@ -3436,7 +3437,18 @@
         "completed": "Готово",
         "failed": "Није завршио",
         "stopped": "Заустављено"
-      }
+      },
+      "card": {
+        "session": "Sesija",
+        "copyId": "Kopiraj ID sesije",
+        "openNewTab": "Otvori u novoj kartici",
+        "model": "Model",
+        "runsAs": "Radi kao",
+        "inline": "Radio je u ovoj sesiji, pa nema svoju sesiju za otvaranje."
+      },
+      "notStarted": "Nije pokrenut",
+      "notStartedSentence": "Kortix nije mogao da pokrene ovog kolegu. Ništa nije pokrenuto.",
+      "policyBlocked": "Blokirano pravilima ovog projekta. Zamoli administratora projekta da to dozvoli."
     }
   },
   "agentRunLimit": {
@@ -26404,6 +26416,7 @@
       },
       "workingFor": "ради · {elapsed}",
       "runsAs": "ради као {agent}",
+      "stateCount": "{count} {state}",
       "teamRole": "Улога само за ову сесију",
       "attention": {
         "question": "Има питање за тебе",

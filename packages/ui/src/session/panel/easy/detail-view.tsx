@@ -736,6 +736,8 @@ export function ToolParts({
       <div
         className={cn(
           'flex min-w-0 flex-col gap-2',
+          // Flat rows (agent hand-offs, messages) read as one list: their hairlines space them.
+          'has-[[data-panel-flat]]:gap-0',
           fillsPanel && 'h-full',
           // Tool views cap their own scroll height for the inline chat, where
           // they're one item among many. Here the detail IS the tool — a web

@@ -2462,7 +2462,8 @@
     "collapseQueue": "待機中のメッセージを折りたたむ",
     "expandQueue": "待機中のメッセージを展開",
     "myKortixRoutes": "各タスクを適したエージェントへ",
-    "chatInputReset": "Reset"
+    "chatInputReset": "Reset",
+    "queuedDisconnected": "このセッションは Kortix への接続を失いました。続けるには新しいセッションを開始してください。"
   },
   "billing": {
     "plan": {
@@ -3436,7 +3437,18 @@
         "completed": "完了",
         "failed": "完了しませんでした",
         "stopped": "停止"
-      }
+      },
+      "card": {
+        "session": "セッション",
+        "copyId": "セッション ID をコピー",
+        "openNewTab": "新しいタブで開く",
+        "model": "モデル",
+        "runsAs": "実行エージェント",
+        "inline": "このセッション内で実行されたため、開ける専用のセッションはありません。"
+      },
+      "notStarted": "開始されませんでした",
+      "notStartedSentence": "Kortix はこの同僚を開始できませんでした。何も実行されていません。",
+      "policyBlocked": "このプロジェクトのポリシーでブロックされています。プロジェクト管理者に許可を依頼してください。"
     }
   },
   "agentRunLimit": {
@@ -26404,6 +26416,7 @@
       },
       "workingFor": "作業中 · {elapsed}",
       "runsAs": "{agent} として実行",
+      "stateCount": "{count} {state}",
       "teamRole": "このセッション限りの役割",
       "attention": {
         "question": "質問があります",

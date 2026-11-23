@@ -2462,7 +2462,8 @@
     "collapseQueue": "Comprimi i messaggi in attesa",
     "expandQueue": "Espandi i messaggi in attesa",
     "myKortixRoutes": "Affida ogni attività all’agente giusto",
-    "chatInputReset": "Reset"
+    "chatInputReset": "Reset",
+    "queuedDisconnected": "Questa sessione ha perso la connessione a Kortix. Avvia una nuova sessione per continuare."
   },
   "billing": {
     "plan": {
@@ -3436,7 +3437,18 @@
         "completed": "Fatto",
         "failed": "Non ha finito",
         "stopped": "Interrotto"
-      }
+      },
+      "card": {
+        "session": "Sessione",
+        "copyId": "Copia ID sessione",
+        "openNewTab": "Apri in una nuova scheda",
+        "model": "Modello",
+        "runsAs": "Eseguito come",
+        "inline": "Eseguito in questa sessione, quindi non ha una sessione propria da aprire."
+      },
+      "notStarted": "Non avviato",
+      "notStartedSentence": "Kortix non è riuscito ad avviare questo collega. Non è stato eseguito nulla.",
+      "policyBlocked": "Bloccato dalla policy di questo progetto. Chiedi a un amministratore del progetto di consentirlo."
     }
   },
   "agentRunLimit": {
@@ -26404,6 +26416,7 @@
       },
       "workingFor": "al lavoro · {elapsed}",
       "runsAs": "esegue come {agent}",
+      "stateCount": "{count} {state}",
       "teamRole": "Ruolo solo per questa sessione",
       "attention": {
         "question": "Ha una domanda per te",

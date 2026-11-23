@@ -171,7 +171,8 @@ describe('BasicTool panel surface — the disclosure row', () => {
     );
 
     expect(html).toContain('Generating slides');
-    expect(html).toContain('min-w-0 flex-1 truncate text-sm font-medium');
+    // A row: the trigger's parts (a lead word, an agent chip, a subtitle) sit on one line.
+    expect(html).toContain('flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-sm font-medium');
     expect(html).toContain('text-muted-foreground shrink-0 font-mono text-xs');
     expect(html).toContain('4 slides');
     // Still a row, not the old sticky header.

@@ -10,7 +10,8 @@ import { cn } from '../../../lib/utils';
 import { AgentStateMark } from '../../agents/agent-state-mark';
 import { subagentTitle } from '../../agents/agent-model';
 import { agentDisplayName } from '../../../internal/components/agent-mark';
-import { AgentFace, AgentHandle, AgentRowBody, AgentRowScope, AgentStatus, AgentTrigger, SmallGlyph, taskGlyphStatus } from '../../agents/agent-surface';
+import { peerHandleLabel } from '@kortix/shared';
+import { AgentChip, AgentFace, AgentHandle, AgentRowBody, AgentRowScope, AgentStatus, AgentTrigger, SmallGlyph, taskGlyphStatus } from '../../agents/agent-surface';
 import type { SessionDisplayStatus } from '../../actions/session-label';
 import { BasicTool } from '../shared/infrastructure';
 import {
@@ -105,6 +106,13 @@ const ROW_CLASS = 'flex min-w-0 items-center gap-2 rounded-sm px-2 py-1.5 text-x
 /** An agent's face as a tool row's 16px icon: its pixel mark on its own tile. */
 export const AgentAvatarIcon = AgentFace;
 
+/** "To {to}" in any locale, split at the name: the words before it lead the chip, the words after it (Japanese "{to} へ") trail it. */
+const TO_MARK = '\u0000';
+function aroundName(sentence: string): { lead: string; trail: string } {
+  const [lead = '', trail = ''] = sentence.split(TO_MARK);
+  return { lead: lead.trim(), trail: trail.trim() };
+}
+
 /** The state a send ended in, as a session-list glyph: delivered is done, held waits on a person. */
 const PEER_GLYPH: Record<PeerMessageStatus, SessionDisplayStatus> = {
   delivered: 'done',
@@ -150,8 +158,13 @@ export function PeerSendRow({
   return (
     <AgentRowScope>
       <BasicTool
-        icon={send.to ? <AgentFace handle={send.to} /> : undefined}
-        trigger={<AgentTrigger title={send.to ? t('messageToName', { to: send.to }) : t('messageSent')} subtitle={preview} />}
+        trigger={
+          send.to ? (
+            <AgentTrigger {...aroundName(t('messageToName', { to: TO_MARK }))} handle={send.to} title={peerHandleLabel(send.to).replace(/^@/, '')} subtitle={preview} sessionId={receiverId} />
+          ) : (
+            <AgentTrigger title={t('messageSent')} subtitle={preview} />
+          )
+        }
         triggerAction={
           working ? (
             <AgentStatus status="running" label={t('state.working')} opens={hasBody} />
@@ -225,30 +238,34 @@ function AgentLine({ agent }: { agent: ReachableAgentRow }) {
     .filter(Boolean)
     .join(' · ');
   const name = `@${agent.handle}`;
+  const label = peerHandleLabel(agent.handle).replace(/^@/, '');
+  const failed = agent.state === 'failed';
+  // The composer's agents popover row: the agent's chip and its state on one
+  // line, what it works on below. The chip carries the face, so no state glyph.
   return (
-    <li className="group/row hover:bg-hover focus-within:bg-hover flex min-w-0 items-center gap-1 rounded-sm" data-agent-row={agent.sessionId}>
+    <li className="group/row hover:bg-hover focus-within:bg-hover flex min-w-0 items-start rounded-md" data-agent-row={agent.sessionId}>
       <button
         type="button"
         onClick={() => setViewing(true)}
-        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-1.5 pl-2 text-left text-xs outline-none"
+        className="flex min-w-0 flex-1 cursor-pointer flex-col gap-1 py-2 pl-2 text-left outline-none"
       >
-        {agent.state ? <AgentStateMark state={agent.state} /> : <span aria-hidden className="size-3 shrink-0" />}
-        <span className="min-w-0 flex-1">
-          <span className="flex min-w-0 items-baseline gap-2">
-            <span className="text-foreground min-w-0 truncate font-medium">{name}</span>
-            {agent.state && (
-              <span className="text-muted-foreground shrink-0">{t(`state.${STATE_KEY[agent.state]}`)}</span>
-            )}
-          </span>
-          {meta && (
-            <span className="text-muted-foreground block truncate" title={meta}>
-              {meta}
+        <span className="flex min-w-0 items-center gap-2">
+          <AgentChip handle={agent.handle} name={label} className="max-w-none min-w-0 shrink" />
+          <span className="flex-1" />
+          {agent.state && (
+            <span className={cn('shrink-0 text-xs', failed ? 'text-kortix-red' : 'text-muted-foreground')}>
+              {t(`state.${STATE_KEY[agent.state]}`)}
             </span>
           )}
         </span>
+        {meta && (
+          <span className="text-muted-foreground block truncate pl-0.5 text-xs" title={meta}>
+            {meta}
+          </span>
+        )}
       </button>
-      <div className={ROW_ACTIONS}>
-        <Hint label={tStrip('openAgent', { name })} side="top">
+      <div className={cn(ROW_ACTIONS, 'pt-1.5 pl-1')}>
+        <Hint label={tStrip('openAgent', { name: label })} side="top">
           <Button
             type="button"
             variant="ghost"

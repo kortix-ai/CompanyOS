@@ -2462,7 +2462,8 @@
     "collapseQueue": "折叠等待中的消息",
     "expandQueue": "展开等待中的消息",
     "myKortixRoutes": "把每个任务交给合适的智能体",
-    "chatInputReset": "Reset"
+    "chatInputReset": "Reset",
+    "queuedDisconnected": "此会话与 Kortix 的连接已断开。请开始新会话以继续。"
   },
   "billing": {
     "plan": {
@@ -3436,7 +3437,18 @@
         "completed": "已完成",
         "failed": "未完成",
         "stopped": "已停止"
-      }
+      },
+      "card": {
+        "session": "会话",
+        "copyId": "复制会话 ID",
+        "openNewTab": "在新标签页中打开",
+        "model": "模型",
+        "runsAs": "运行身份",
+        "inline": "在此会话内运行，因此没有可打开的独立会话。"
+      },
+      "notStarted": "未启动",
+      "notStartedSentence": "Kortix 无法启动这位同事。没有运行任何内容。",
+      "policyBlocked": "已被此项目的策略阻止。请让项目管理员允许它。"
     }
   },
   "agentRunLimit": {
@@ -26404,6 +26416,7 @@
       },
       "workingFor": "工作中 · {elapsed}",
       "runsAs": "以 {agent} 运行",
+      "stateCount": "{count} {state}",
       "teamRole": "仅限本会话的角色",
       "attention": {
         "question": "有问题要问你",

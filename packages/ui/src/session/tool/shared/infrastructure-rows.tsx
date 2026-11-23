@@ -6,7 +6,7 @@ import { CaretRightIcon } from '@phosphor-icons/react';
 import { cn } from '../../../lib/utils';
 import { createContext, useCallback, useContext, useState } from 'react';
 import { ToolSurfaceContext } from './surface';
-import { BoundActivateContext, ToolDurationContext, ToolOpenContext, ToolOutcomeContext, ToolRunningContext } from './infrastructure-contexts';
+import { BoundActivateContext, ToolDurationContext, ToolOpenContext, ToolOutcomeContext, ToolPanelFlatContext, ToolRunningContext } from './infrastructure-contexts';
 import { PanelRowTitle, TOOL_ROW_CLASS, ToolHeaderRow, ToolOutcomeIcon } from './infrastructure-row-header';
 import { isTriggerTitle } from './infrastructure-parts';
 import { type BasicToolProps } from './types';
@@ -66,6 +66,7 @@ function PanelToolRow({
   action?: React.ReactNode;
 }) {
   const hasBody = Boolean(children);
+  const flat = useContext(ToolPanelFlatContext);
   // Same substitution the inline header makes, from the same context — a failed
   // call leads with the verdict on both surfaces or the two disagree about what
   // happened. See {@link ToolOutcomeIcon}.
@@ -74,7 +75,7 @@ function PanelToolRow({
   const row = (
     <div
       className={cn(
-        'flex min-h-11 w-full items-center gap-2.5 px-3 py-2.5 text-left',
+        flat ? 'flex min-h-11 w-full items-center gap-2.5 rounded-md px-2 py-2.5 text-left' : 'flex min-h-11 w-full items-center gap-2.5 px-3 py-2.5 text-left',
         hasBody && 'transition-colors',
         hasBody && !locked && 'hover:bg-muted-foreground/[0.04] cursor-pointer',
       )}
@@ -87,12 +88,11 @@ function PanelToolRow({
       {isTriggerTitle(trigger) ? (
         <PanelRowTitle trigger={trigger} running={running} onSubtitleClick={onSubtitleClick} />
       ) : (
-        // `truncate` here CLIPS rather than ellipsises — a node trigger's
-        // content is flex children (a label + chip row), and
-        // `text-overflow` only applies to inline text. Clipping is the intent:
-        // the row is one line, and an over-long node has to stop at the badge
-        // rather than push the chevron off the card.
-        <div className="[&>span:first-child>svg]:text-muted-foreground text-foreground min-w-0 flex-1 truncate text-sm font-medium [&>span:first-child>svg]:size-4">
+        // `overflow-hidden` CLIPS an over-long node at the badge rather than
+        // pushing the chevron off the card; the row is one line.
+        // A row, not a block: a node trigger is flex children (a lead word, an
+        // agent chip, a subtitle), and a block stacked them one per line.
+        <div className="[&>span:first-child>svg]:text-muted-foreground text-foreground flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-sm font-medium whitespace-nowrap [&>span:first-child>svg]:size-4">
           {trigger}
         </div>
       )}
@@ -124,7 +124,8 @@ function PanelToolRow({
     <Disclosure
       open={open}
       onOpenChange={onOpenChange}
-      className="bg-popover border-border overflow-hidden rounded-md border"
+      data-panel-flat={flat || undefined}
+      className={flat ? 'border-border border-b last:border-b-0' : 'bg-popover border-border overflow-hidden rounded-md border'}
     >
       {hasBody ? <DisclosureTrigger>{row}</DisclosureTrigger> : row}
       {/* Animated for the same reason the inline row is — see
@@ -133,7 +134,7 @@ function PanelToolRow({
           border on a `height: 0` box draws a hairline across a closed row. */}
       {hasBody && (
         <DisclosureContent>
-          <div className={cn('border-border border-t px-3 py-3 text-sm', className)}>
+          <div className={cn(flat ? 'px-2 pb-3 text-sm' : 'border-border border-t px-3 py-3 text-sm', className)}>
             {children}
           </div>
         </DisclosureContent>

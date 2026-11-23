@@ -114,7 +114,8 @@ function StatusMark({ status }: { status: KortixCardStatus }) {
   const t = useTranslations('tools.kortixAction.status');
   const glyph =
     status === 'done' ? (
-      <CheckIcon aria-hidden className="text-kortix-green size-3.5 shrink-0" />
+      // Done is a resting state: meta ink, never green (green means running).
+      <CheckIcon aria-hidden className="text-muted-foreground size-3.5 shrink-0" />
     ) : status === 'running' ? (
       // The thing the tool started runs on (a session). No spinner: the call itself is over.
       <StatusDot tone="success" />

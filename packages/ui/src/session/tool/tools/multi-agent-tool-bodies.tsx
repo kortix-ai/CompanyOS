@@ -240,17 +240,17 @@ function AgentLine({ agent }: { agent: ReachableAgentRow }) {
   const name = `@${agent.handle}`;
   const label = peerHandleLabel(agent.handle).replace(/^@/, '');
   const failed = agent.state === 'failed';
-  // The composer's agents popover row: the agent's chip and its state on one
-  // line, what it works on below. The chip carries the face, so no state glyph.
+  // The agent's mark and name, its state on the right edge, and what it works
+  // on below, on the name's edge. No tinted pill: the mark is the agent's face.
   return (
     <li className="group/row hover:bg-hover focus-within:bg-hover flex min-w-0 items-start rounded-md" data-agent-row={agent.sessionId}>
       <button
         type="button"
         onClick={() => setViewing(true)}
-        className="flex min-w-0 flex-1 cursor-pointer flex-col gap-1 py-2 pl-2 text-left outline-none"
+        className="flex min-w-0 flex-1 cursor-pointer flex-col gap-0.5 py-2 pl-1 text-left outline-none"
       >
         <span className="flex min-w-0 items-center gap-2">
-          <AgentChip handle={agent.handle} name={label} className="max-w-none min-w-0 shrink" />
+          <AgentChip handle={agent.handle} name={label} plain className="max-w-none min-w-0 shrink" />
           <span className="flex-1" />
           {agent.state && (
             <span className={cn('shrink-0 text-xs', failed ? 'text-kortix-red' : 'text-muted-foreground')}>
@@ -259,7 +259,7 @@ function AgentLine({ agent }: { agent: ReachableAgentRow }) {
           )}
         </span>
         {meta && (
-          <span className="text-muted-foreground block truncate pl-0.5 text-xs" title={meta}>
+          <span className="text-muted-foreground block truncate pl-5 text-xs" title={meta}>
             {meta}
           </span>
         )}
@@ -367,14 +367,13 @@ export function multiAgentBody(tool: MultiAgentTool, result: KortixToolResult): 
     case 'list_agents': {
       const agents = parseReachable(result.data);
       if (!agents || agents.length === 0) return null;
+      // One list under the row, no card around it: each agent is a row of its own.
       return (
-        <ToolResultCard bodyClassName="p-1">
-          <ul>
-            {agents.map((agent) => (
-              <AgentLine key={agent.sessionId} agent={agent} />
-            ))}
-          </ul>
-        </ToolResultCard>
+        <ul className="-mx-1 flex flex-col">
+          {agents.map((agent) => (
+            <AgentLine key={agent.sessionId} agent={agent} />
+          ))}
+        </ul>
       );
     }
     case 'task_create':

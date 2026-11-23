@@ -1894,9 +1894,27 @@ export function SessionChat({
       }));
     return parked.length ? [...livePermissions, ...parked] : livePermissions;
   }, [livePermissions, parkedAsks, sessionId]);
+  // A question the person answered or dismissed stays hidden for this mount,
+  // even while a source still lists it: the live list can keep a replied
+  // question for minutes (until the turn moves on), and the parked-asks poll
+  // lags the answer. A card that came back would show nothing, because the
+  // prompt hides itself once replied, and its collapsed wrapper left an empty
+  // strip above the composer. A reply that fails releases the id, and the card
+  // comes back as a fresh, answerable one (`questionRetries` remounts it).
   const suppressedQuestionIdsRef = useRef<Map<string, number>>(new Map());
-  const suppressQuestionFor = useCallback((requestId: string, ms = 15000) => {
+  // Retries per question: a failed reply remounts only its own card.
+  const [questionRetries, setQuestionRetries] = useState<Record<string, number>>({});
+  // A ref write renders nothing: the tick makes the question lists re-read the
+  // map, so a hidden card leaves at once instead of after the reply lands.
+  const [suppressTick, setSuppressTick] = useState(0);
+  const suppressQuestionFor = useCallback((requestId: string, ms = Number.POSITIVE_INFINITY) => {
     suppressedQuestionIdsRef.current.set(requestId, Date.now() + ms);
+    setSuppressTick((n) => n + 1);
+  }, []);
+  const releaseQuestion = useCallback((requestId: string) => {
+    suppressedQuestionIdsRef.current.delete(requestId);
+    setSuppressTick((n) => n + 1);
+    setQuestionRetries((retries) => ({ ...retries, [requestId]: (retries[requestId] ?? 0) + 1 }));
   }, []);
   const isQuestionSuppressed = useCallback((requestId: string) => {
     const expiresAt = suppressedQuestionIdsRef.current.get(requestId);
@@ -1913,7 +1931,9 @@ export function SessionChat({
         sessionState?.questions ??
         Object.values(allQuestions).filter((q) => q.sessionID === sessionId)
       ).filter((q) => !isQuestionSuppressed(q.id)),
-    [sessionState?.questions, allQuestions, sessionId, isQuestionSuppressed],
+    // `suppressTick` re-reads the suppression map when a card hides or returns.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sessionState?.questions, allQuestions, sessionId, isQuestionSuppressed, suppressTick],
   );
   const pendingQuestions = useMemo(() => {
     const live = new Set(liveQuestions.map((q) => q.id));
@@ -1921,7 +1941,8 @@ export function SessionChat({
       .filter((ask) => ask.kind === 'question' && ask.question && !live.has(ask.request_id) && !isQuestionSuppressed(ask.request_id))
       .map((ask): QuestionRequest => ({ id: ask.request_id, sessionID: sessionId, questions: ask.question!.questions as QuestionRequest['questions'] }));
     return parked.length ? [...liveQuestions, ...parked] : liveQuestions;
-  }, [liveQuestions, parkedAsks, sessionId, isQuestionSuppressed]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveQuestions, parkedAsks, sessionId, isQuestionSuppressed, suppressTick]);
   /**
    * The runtime is parked on an answer only the user can give.
    *
@@ -1997,13 +2018,12 @@ export function SessionChat({
   // stayed open (KRTX-4450). A question in neither list is one just answered,
   // held only for its fade-out: unlocked, so text typed into the fade is a
   // message, never a swallowed answer.
+  // From the filtered list: a question hidden after its answer (still in the
+  // asks cache while the reply lands) must not take the next message.
   const questionLock = useMemo(() => {
     if (!renderedQuestion) return false;
-    return (
-      liveQuestions.some((q) => q.id === renderedQuestion.id) ||
-      parkedAskIdByRequest.has(renderedQuestion.id)
-    );
-  }, [renderedQuestion, liveQuestions, parkedAskIdByRequest]);
+    return pendingQuestions.some((q) => q.id === renderedQuestion.id);
+  }, [renderedQuestion, pendingQuestions]);
   // Transcript-placed waiting entries share the turn renderer. The inbox marks their IDs as
   // pending until delivery; a client-minted wire ID does not place a message.
   // Each is the user message `sessionLogPromptMessage` mints for its prompt.
@@ -2595,13 +2615,20 @@ export function SessionChat({
         sessionState?.questions.find((question) => question.id === requestId) ??
         useRuntimePendingStore.getState().questions[requestId];
 
+      // Hide the card at once; the question leaves the store only once the
+      // answer lands. A failed reply then needs no restore (which could bring
+      // back a question the runtime did answer): releasing the hide is enough.
       suppressQuestionFor(requestId);
-      // Optimistically remove the question so the textarea shows immediately
-      removeQuestion(requestId);
       const parkedAskId = liveQuestions.some((q) => q.id === requestId) ? undefined : parkedAskIdByRequest.get(requestId);
       if (parkedAskId) {
         // Parked: the answer reaches the agent as a message that quotes the question.
-        answerParkedAsk.mutate({ askId: parkedAskId, answer: { answers } });
+        // Awaited per request: a second decision must not replace this one's outcome.
+        try {
+          await answerParkedAsk.mutateAsync({ askId: parkedAskId, answer: { answers } });
+          removeQuestion(requestId);
+        } catch {
+          releaseQuestion(requestId);
+        }
         return;
       }
 
@@ -2609,6 +2636,7 @@ export function SessionChat({
       // block id. This cache survives updates that may overwrite the call
       // before the server includes its answers; the transcript's answered
       // questions read from it as a fallback.
+      let cachedBlockId: string | null = null;
       if (questionReq?.tool?.messageID) {
         const { messageID, callID } = questionReq.tool;
         const message = threadRef.current?.messages.find((m) => m.message_id === messageID);
@@ -2616,6 +2644,7 @@ export function SessionChat({
           (b) => b.type === 'tool_call' && isQuestionTool(b.name) && b.call_id === callID,
         );
         if (match?.type === 'tool_call') {
+          cachedBlockId = match.id;
           optimisticAnswersCache.set(match.id, {
             answers,
             input:
@@ -2629,11 +2658,15 @@ export function SessionChat({
       try {
         if (sessionState) await sessionState.answerQuestion(requestId, answers);
         else await replyToQuestion(requestId, answers);
+        removeQuestion(requestId);
       } catch {
-        // ignore — SSE "question.replied" event will also remove it
+        // The answer did not land: the card comes back, fresh, if the question
+        // is still open. The cached answer goes: the transcript must not show it.
+        if (cachedBlockId) optimisticAnswersCache.delete(cachedBlockId);
+        releaseQuestion(requestId);
       }
     },
-    [sessionState, removeQuestion, suppressQuestionFor, liveQuestions, parkedAskIdByRequest, answerParkedAsk],
+    [sessionState, removeQuestion, suppressQuestionFor, releaseQuestion, liveQuestions, parkedAskIdByRequest, answerParkedAsk],
   );
 
   const handleQuestionReject = useCallback(
@@ -2644,14 +2677,18 @@ export function SessionChat({
       const parkedAskId = liveQuestions.some((q) => q.id === requestId) ? undefined : parkedAskIdByRequest.get(requestId);
       if (parkedAskId) {
         // Dismissing a parked question closes it; nothing runs, so nothing is stopped.
-        answerParkedAsk.mutate({ askId: parkedAskId, answer: { dismiss: true } });
+        try {
+          await answerParkedAsk.mutateAsync({ askId: parkedAskId, answer: { dismiss: true } });
+        } catch {
+          releaseQuestion(requestId);
+        }
         return;
       }
       try {
         if (sessionState) await sessionState.rejectQuestion(requestId);
         else await rejectQuestion(requestId);
       } catch {
-        // ignore — SSE "question.rejected" event will also remove it
+        // ignore — the cancel below ends the turn the question holds
       }
       // Also abort the session so the "The operation was aborted." banner
       // appears. Routed through `issueSessionCancel` (T10) so this
@@ -2663,7 +2700,7 @@ export function SessionChat({
         issueSessionCancel();
       }
     },
-    [sessionState, removeQuestion, abortSession, suppressQuestionFor, issueSessionCancel],
+    [sessionState, removeQuestion, abortSession, suppressQuestionFor, releaseQuestion, liveQuestions, parkedAskIdByRequest, answerParkedAsk, issueSessionCancel],
   );
   // A compaction turn of any state (`turn.compaction`), so a failed attempt's
   // turn suppresses the optimistic "Compacting…" marker instead of leaving it
@@ -4212,7 +4249,7 @@ export function SessionChat({
             )}
           >
             <QuestionPrompt
-              key={renderedQuestion.id}
+              key={`${renderedQuestion.id}:${questionRetries[renderedQuestion.id] ?? 0}`}
               ref={questionPromptRef}
               request={renderedQuestion}
               onReply={handleQuestionReply}
@@ -4231,6 +4268,7 @@ export function SessionChat({
       pendingPermissions,
       handlePermissionReply,
       renderedQuestion,
+      questionRetries,
       questionPromptVisible,
       handleQuestionReply,
       handleQuestionReject,

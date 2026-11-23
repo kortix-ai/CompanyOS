@@ -10,7 +10,8 @@ import { cn } from '../../../lib/utils';
 import { AgentStateMark } from '../../agents/agent-state-mark';
 import { subagentTitle } from '../../agents/agent-model';
 import { agentDisplayName } from '../../../internal/components/agent-mark';
-import { AgentFace, AgentHandle, AgentRowBody, AgentRowScope, AgentStatus, AgentTrigger, SmallGlyph, taskGlyphStatus } from '../../agents/agent-surface';
+import { peerHandleLabel } from '@kortix/shared';
+import { AgentChip, AgentFace, AgentHandle, AgentRowBody, AgentRowScope, AgentStatus, AgentTrigger, SmallGlyph, taskGlyphStatus } from '../../agents/agent-surface';
 import type { SessionDisplayStatus } from '../../actions/session-label';
 import { BasicTool } from '../shared/infrastructure';
 import {
@@ -22,9 +23,13 @@ import {
   UsersThreeIcon,
   type Icon,
 } from '@phosphor-icons/react';
-import { useState, type ReactNode } from 'react';
+import { useContext, useState, type ReactNode } from 'react';
 import type { KortixToolResult, MultiAgentTool } from './kortix-tool-card';
+import { useSessionChildren } from '@kortix/sdk/react';
+import { useSessionIds } from '../../../providers/session-ids';
+import { WorkFoldContext } from '../../turn/turn-work-accordion';
 import {
+  sessionWorkState,
   parsePeerSend,
   parseReachable,
   parseStoppedChild,
@@ -101,6 +106,13 @@ const ROW_CLASS = 'flex min-w-0 items-center gap-2 rounded-sm px-2 py-1.5 text-x
 /** An agent's face as a tool row's 16px icon: its pixel mark on its own tile. */
 export const AgentAvatarIcon = AgentFace;
 
+/** "To {to}" in any locale, split at the name: the words before it lead the chip, the words after it (Japanese "{to} へ") trail it. */
+const TO_MARK = '\u0000';
+function aroundName(sentence: string): { lead: string; trail: string } {
+  const [lead = '', trail = ''] = sentence.split(TO_MARK);
+  return { lead: lead.trim(), trail: trail.trim() };
+}
+
 /** The state a send ended in, as a session-list glyph: delivered is done, held waits on a person. */
 const PEER_GLYPH: Record<PeerMessageStatus, SessionDisplayStatus> = {
   delivered: 'done',
@@ -119,18 +131,47 @@ const PEER_GLYPH: Record<PeerMessageStatus, SessionDisplayStatus> = {
  *          │ why it did not arrive, when it did not
  *
  * The state is a glyph and a muted word: a held message waits on a person, it did not fail.
+ * A delivered note to a colleague this session started reads Working while that colleague
+ * works on it: the note handed it work, and the row is where the person sees that. Only the
+ * note whose turn is still open does: a settled one sits in its turn's fold and keeps its state.
  */
-export function PeerSendRow({ send, defaultOpen, forceOpen, locked }: { send: PeerSendSummary; defaultOpen?: boolean; forceOpen?: boolean; locked?: boolean }) {
+export function PeerSendRow({
+  send,
+  receiverId,
+  defaultOpen,
+  forceOpen,
+  locked,
+}: {
+  send: PeerSendSummary;
+  /** The session the platform delivered the note to (`data.to.session_id`). */
+  receiverId?: string | null;
+  defaultOpen?: boolean;
+  forceOpen?: boolean;
+  locked?: boolean;
+}) {
   const t = useTranslations('multiAgent.tools');
   const delivered = send.status === 'delivered';
+  const settled = useContext(WorkFoldContext);
+  const working = useColleagueWorking(delivered && !settled ? { handle: send.to, sessionId: receiverId ?? null } : null);
   const preview = send.summary || firstLineOf(send.message) || undefined;
   const hasBody = !!send.message || (!delivered && !!send.note);
   return (
     <AgentRowScope>
       <BasicTool
-        icon={send.to ? <AgentFace handle={send.to} /> : undefined}
-        trigger={<AgentTrigger title={send.to ? t('messageToName', { to: send.to }) : t('messageSent')} subtitle={preview} />}
-        triggerAction={<AgentStatus status={PEER_GLYPH[send.status]} label={t(`peerStatus.${send.status}`)} opens={hasBody} />}
+        trigger={
+          send.to ? (
+            <AgentTrigger {...aroundName(t('messageToName', { to: TO_MARK }))} handle={send.to} title={peerHandleLabel(send.to).replace(/^@/, '')} subtitle={preview} sessionId={receiverId} />
+          ) : (
+            <AgentTrigger title={t('messageSent')} subtitle={preview} />
+          )
+        }
+        triggerAction={
+          working ? (
+            <AgentStatus status="running" label={t('state.working')} opens={hasBody} />
+          ) : (
+            <AgentStatus status={PEER_GLYPH[send.status]} label={t(`peerStatus.${send.status}`)} opens={hasBody} />
+          )
+        }
         defaultOpen={defaultOpen}
         forceOpen={forceOpen}
         locked={locked}
@@ -144,6 +185,30 @@ export function PeerSendRow({ send, defaultOpen, forceOpen, locked }: { send: Pe
       </BasicTool>
     </AgentRowScope>
   );
+}
+
+/**
+ * Whether the child of this session a note reached works now: by the session the note was
+ * delivered to, else by its handle (an unnamed child has none). Reads the child list the agents
+ * line under the composer polls (same query key), so the row adds no request of its own.
+ */
+function useColleagueWorking(receiver: { handle: string | null; sessionId: string | null } | null): boolean {
+  const ids = useSessionIds();
+  const ready = !!receiver && (!!receiver.handle || !!receiver.sessionId) && !!ids.projectId && !!ids.sessionId;
+  // The agents line's page size: the query key has no limit, so a smaller page would replace its list.
+  const { sessions } = useSessionChildren(ids.projectId ?? '', ids.sessionId ?? '', { enabled: ready, limit: 50 });
+  if (!ready) return false;
+  return sessions.some(
+    (child) =>
+      (receiver!.sessionId ? child.session_id === receiver!.sessionId : child.agent_handle === receiver!.handle) &&
+      sessionWorkState(child) === 'running',
+  );
+}
+
+/** The session the platform delivered a note to (`data.to.session_id`), or null. */
+export function peerReceiverId(data: unknown): string | null {
+  const id = (data as { to?: { session_id?: unknown } } | null | undefined)?.to?.session_id;
+  return typeof id === 'string' && id ? id : null;
 }
 
 function firstLineOf(text: string | null): string {
@@ -173,30 +238,34 @@ function AgentLine({ agent }: { agent: ReachableAgentRow }) {
     .filter(Boolean)
     .join(' · ');
   const name = `@${agent.handle}`;
+  const label = peerHandleLabel(agent.handle).replace(/^@/, '');
+  const failed = agent.state === 'failed';
+  // The composer's agents popover row: the agent's chip and its state on one
+  // line, what it works on below. The chip carries the face, so no state glyph.
   return (
-    <li className="group/row hover:bg-hover focus-within:bg-hover flex min-w-0 items-center gap-1 rounded-sm" data-agent-row={agent.sessionId}>
+    <li className="group/row hover:bg-hover focus-within:bg-hover flex min-w-0 items-start rounded-md" data-agent-row={agent.sessionId}>
       <button
         type="button"
         onClick={() => setViewing(true)}
-        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-1.5 pl-2 text-left text-xs outline-none"
+        className="flex min-w-0 flex-1 cursor-pointer flex-col gap-1 py-2 pl-2 text-left outline-none"
       >
-        {agent.state ? <AgentStateMark state={agent.state} /> : <span aria-hidden className="size-3 shrink-0" />}
-        <span className="min-w-0 flex-1">
-          <span className="flex min-w-0 items-baseline gap-2">
-            <span className="text-foreground min-w-0 truncate font-medium">{name}</span>
-            {agent.state && (
-              <span className="text-muted-foreground shrink-0">{t(`state.${STATE_KEY[agent.state]}`)}</span>
-            )}
-          </span>
-          {meta && (
-            <span className="text-muted-foreground block truncate" title={meta}>
-              {meta}
+        <span className="flex min-w-0 items-center gap-2">
+          <AgentChip handle={agent.handle} name={label} className="max-w-none min-w-0 shrink" />
+          <span className="flex-1" />
+          {agent.state && (
+            <span className={cn('shrink-0 text-xs', failed ? 'text-kortix-red' : 'text-muted-foreground')}>
+              {t(`state.${STATE_KEY[agent.state]}`)}
             </span>
           )}
         </span>
+        {meta && (
+          <span className="text-muted-foreground block truncate pl-0.5 text-xs" title={meta}>
+            {meta}
+          </span>
+        )}
       </button>
-      <div className={ROW_ACTIONS}>
-        <Hint label={tStrip('openAgent', { name })} side="top">
+      <div className={cn(ROW_ACTIONS, 'pt-1.5 pl-1')}>
+        <Hint label={tStrip('openAgent', { name: label })} side="top">
           <Button
             type="button"
             variant="ghost"
@@ -293,7 +362,7 @@ export function multiAgentBody(tool: MultiAgentTool, result: KortixToolResult): 
   switch (tool) {
     case 'send_message': {
       const send = parsePeerSend(result.data);
-      return send ? <PeerSendRow send={send} /> : null;
+      return send ? <PeerSendRow send={send} receiverId={peerReceiverId(result.data)} /> : null;
     }
     case 'list_agents': {
       const agents = parseReachable(result.data);

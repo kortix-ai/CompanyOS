@@ -290,7 +290,10 @@ export function ArtifactFolderCrumb({
       onClick={onOpen}
       data-drop-over={drop.over || undefined}
       aria-busy={drop.pending || undefined}
-      className="text-muted-foreground hover:text-foreground focus-visible:ring-ring data-[drop-over]:bg-secondary data-[drop-over]:text-foreground data-[drop-over]:ring-ring flex max-w-40 min-w-0 shrink items-center gap-1 rounded-sm px-1 text-sm max-sm:min-h-8 max-sm:min-w-8 max-sm:justify-center outline-none focus-visible:ring-2 data-[drop-over]:ring-2"
+      // No padding: the text lines up with the page title it replaces. The hit
+      // area, focus ring and drop highlight are an ::after around the text,
+      // painted behind it (`isolate` keeps -z inside the button).
+      className="text-muted-foreground hover:text-foreground data-[drop-over]:text-foreground focus-visible:after:ring-ring data-[drop-over]:after:bg-secondary data-[drop-over]:after:ring-ring relative isolate flex max-w-40 min-w-0 shrink items-center gap-1 text-sm outline-none after:absolute after:-inset-x-2 after:-inset-y-2.5 after:-z-10 after:rounded-md after:content-[''] focus-visible:after:ring-2 data-[drop-over]:after:ring-2"
     >
       {drop.pending ? <Loading className="size-3.5 shrink-0" /> : back ? <CaretLeftIcon className="size-4 shrink-0 sm:hidden" aria-hidden /> : null}
       <span className={back ? 'max-sm:sr-only truncate' : 'truncate'} title={name}>{name}</span>

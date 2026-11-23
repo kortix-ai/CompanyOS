@@ -143,13 +143,13 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
         }
         breadcrumb={
           folderId ? (
-            <nav aria-label={t('folderNavigation')} className="flex min-w-0 shrink items-center gap-1">
+            <nav aria-label={t('folderNavigation')} className="me-0.5 flex min-w-0 shrink items-center gap-2">
               {/* A phone shows only the parent crumb: the open folder's name keeps the room. */}
               <span className={`min-w-0 shrink items-center ${ancestors.length ? 'hidden sm:flex' : 'flex'}`}>
                 <ArtifactFolderCrumb projectId={projectId} folderId={null} name={t('title')} onOpen={() => setFolderId(null)} back={!ancestors.length} />
               </span>
               {ancestors.map((folder, index) => (
-                <span key={folder.folder_id} className={`min-w-0 shrink items-center gap-1 ${index === ancestors.length - 1 ? 'flex' : 'hidden sm:flex'}`}>
+                <span key={folder.folder_id} className={`min-w-0 shrink items-center gap-2 ${index === ancestors.length - 1 ? 'flex' : 'hidden sm:flex'}`}>
                   <CaretRightIcon className="text-muted-foreground hidden size-3 shrink-0 sm:block" aria-hidden />
                   <ArtifactFolderCrumb projectId={projectId} folderId={folder.folder_id} name={folder.name} onOpen={() => setFolderId(folder.folder_id)} back={index === ancestors.length - 1} />
                 </span>
@@ -162,7 +162,9 @@ export function ArtifactsGallery({ projectId }: { projectId: string }) {
           folderId && !currentFolder && !folders.isSuccess && !folders.isError ? (
             <span role="status" aria-label={tCommon('loading')}><Loading className="size-3.5" /></span>
           ) : currentFolder ? (
-            <ArtifactFolderActions folder={currentFolder} folders={allFolders} projectId={projectId} />
+            <span className="ms-0.5 flex shrink-0">
+              <ArtifactFolderActions folder={currentFolder} folders={allFolders} projectId={projectId} />
+            </span>
           ) : undefined
         }
       >

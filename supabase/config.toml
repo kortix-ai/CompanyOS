@@ -14,13 +14,16 @@
 
 project_id = "kortix-local"
 
-# ─── API (PostgREST) ─────────────────────────────────────────────────────────
+# ─── API gateway; PostgREST (the Data API) is off ────────────────────────────
+# `enabled = false` turns off only PostgREST. Kong still serves /auth/v1 and
+# /storage/v1 on `port`, and /rest/v1 answers 503. Nothing in Kortix calls the
+# Data API: the API reaches Postgres directly. Hosted dev, staging and prod
+# have it off too, since 2026-11-23 (flow SEC-K checks it). With PostgREST
+# on, `supabase start` also waited its 30 s health timeout on every fresh
+# database, because the exposed `kortix` schema exists only after migrations.
 [api]
-enabled = true
+enabled = false
 port = 54321
-schemas = ["public", "kortix"]
-extra_search_path = ["public", "extensions"]
-max_rows = 1000
 
 # ─── Database ─────────────────────────────────────────────────────────────────
 [db]

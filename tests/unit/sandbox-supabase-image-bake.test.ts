@@ -57,10 +57,11 @@ describe('run_sandbox_dev: the baked Supabase images are loaded, not just carrie
   });
 
   it('keeps the services the API and auth flows actually depend on', () => {
-    // A regression here would silently remove Postgres, auth, REST, storage or
-    // the mail catcher the signup flows read.
+    // A regression here would silently remove Postgres, auth, storage, the
+    // gateway or the mail catcher the signup flows read. PostgREST is not
+    // here: supabase/config.toml turns it off (`[api] enabled = false`).
     const excluded = devLocal.match(/supabase start -x ([a-z0-9,-]+)/)?.[1] ?? '';
-    for (const required of ['postgres', 'gotrue', 'postgrest', 'storage-api', 'kong', 'mailpit']) {
+    for (const required of ['postgres', 'gotrue', 'storage-api', 'kong', 'mailpit']) {
       expect(excluded.split(',')).not.toContain(required);
     }
   });

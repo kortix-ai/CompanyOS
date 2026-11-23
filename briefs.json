@@ -361,6 +361,61 @@
       "slack": {
         "status": "skipped"
       }
+    },
+    "2026-W46": {
+      "week": "2026-W46",
+      "start": "2026-11-09T00:00:00.000Z",
+      "end": "2026-11-16T00:00:00.000Z",
+      "releases": [
+        "v0.15.11",
+        "v0.15.10",
+        "v0.15.9",
+        "v0.15.8",
+        "v0.15.7",
+        "v0.15.6",
+        "v0.15.5",
+        "v0.15.4",
+        "v0.15.3",
+        "v0.15.2"
+      ],
+      "highlights": [
+        {
+          "text": "Workspaces bring people, agents, sessions, connectors, files and billing together with a searchable settings panel.",
+          "tags": [
+            "v0.15.3"
+          ]
+        },
+        {
+          "text": "Send a message while an agent is working to steer its current turn, including its first turn.",
+          "tags": [
+            "v0.15.5"
+          ]
+        },
+        {
+          "text": "Connect apps from chat and manage provider keys and subscription accounts in the model picker and Providers settings.",
+          "tags": [
+            "v0.15.8",
+            "v0.15.9"
+          ]
+        },
+        {
+          "text": "Program agents can run your own code on every turn instead of a model, with a time limit and payload input.",
+          "tags": [
+            "v0.15.11"
+          ]
+        },
+        {
+          "text": "Agents can set their own goals and check-ins, and chats keep them until the work is done.",
+          "tags": [
+            "v0.15.8",
+            "v0.15.11"
+          ]
+        }
+      ],
+      "generated_at": "2026-11-23T06:06:10.288Z",
+      "slack": {
+        "status": "skipped"
+      }
     }
   }
 }

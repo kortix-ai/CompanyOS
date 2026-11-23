@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from '@/i18n/use-translations';
+import { suggestSpaceIcon } from '@kortix/shared';
 import type { ArtifactFolder } from '@kortix/sdk';
 import { useArtifactFolderMutations } from '@kortix/sdk/react';
 import { Button } from '@kortix/ui/button';
@@ -12,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@kortix/ui/dropdown-menu';
 import { EntityAvatar } from '@kortix/ui/entity-avatar';
-import { Input } from '@kortix/ui/input';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@kortix/ui/input-group';
 import { Label } from '@kortix/ui/label';
 import Loading from '@kortix/ui/loading';
 import {
@@ -50,13 +51,14 @@ export function ArtifactFolderEditor({
         ? { emoji: folder.icon }
         : null,
   );
+  const displayedIcon = icon ?? (name.trim() ? suggestSpaceIcon(name) : { glyph: { name: 'Folder', color: 'grey' } });
   const pending = mutations.create.isPending || mutations.update.isPending;
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const input = {
       name: name.trim(),
-      icon: icon && 'emoji' in icon ? icon.emoji : null,
-      icon_glyph: icon && 'glyph' in icon ? icon.glyph : null,
+      icon: 'emoji' in displayedIcon ? displayedIcon.emoji : null,
+      icon_glyph: 'glyph' in displayedIcon ? displayedIcon.glyph : null,
     };
     try {
       if (folder) await mutations.update.mutateAsync({ folderId: folder.folder_id, ...input });
@@ -74,35 +76,36 @@ export function ArtifactFolderEditor({
         if (!open && !pending) onClose();
       }}
     >
-      <ModalContent className="lg:max-w-lg">
+      <ModalContent className="lg:max-w-sm">
         <ModalHeader>
           <ModalTitle>{t(folder ? 'editFolder' : 'newFolder')}</ModalTitle>
         </ModalHeader>
         <form onSubmit={submit}>
           <ModalBody>
-            <div className="flex items-end gap-3">
-              <ProjectIconField
-                ariaLabel={t('folderIcon')}
-                value={icon}
-                onChange={(emoji) => setIcon({ emoji })}
-                onGlyphChange={(glyph) => setIcon({ glyph })}
-                onClear={() => setIcon(null)}
-                disabled={pending}
-                fallbackLabel={name}
-              />
-              <div className="min-w-0 flex-1 space-y-2">
-                <Label htmlFor="artifact-folder-name">{t('folderName')}</Label>
-                <Input
-                  id="artifact-folder-name"
-                  autoFocus
-                  required
-                  maxLength={100}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+            <Label htmlFor="artifact-folder-name" className="sr-only">{t('folderName')}</Label>
+            <InputGroup className="h-12">
+              <InputGroupAddon className="pl-1.5 has-[>button]:ml-0">
+                <ProjectIconField
+                  ariaLabel={t('folderIcon')}
+                  value={displayedIcon}
+                  onChange={(emoji) => setIcon({ emoji })}
+                  onGlyphChange={(glyph) => setIcon({ glyph })}
+                  onClear={icon ? () => setIcon(null) : undefined}
                   disabled={pending}
+                  triggerClassName="size-9 border-0 shadow-none"
                 />
-              </div>
-            </div>
+              </InputGroupAddon>
+              <InputGroupInput
+                id="artifact-folder-name"
+                autoFocus
+                required
+                maxLength={100}
+                placeholder={t('folderName')}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={pending}
+              />
+            </InputGroup>
           </ModalBody>
           <ModalFooter>
             <Button type="button" variant="outline-ghost" onClick={onClose} disabled={pending}>

@@ -97,7 +97,7 @@ const LINE = {
   gone: { transition: { staggerChildren: 0 } },
 };
 const HEADLINE_CLASS =
-  'text-foreground text-4xl font-medium tracking-tight text-balance xl:text-5xl';
+  'text-foreground text-3xl font-medium tracking-tight text-balance xl:text-4xl';
 
 /** One headline. Plain text where the browser cannot split words. */
 function Headline({ text, still }: { text: string; still: boolean }) {

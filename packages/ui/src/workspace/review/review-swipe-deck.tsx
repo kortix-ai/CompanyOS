@@ -207,6 +207,13 @@ export function ReviewSwipeDeck({ items, allows, onDecide, onOpen, paused }: Rev
     [top, leaving, yes, no, fly],
   );
 
+  // A note belongs to its card: a new top card starts with an empty box.
+  const topId = top?.id;
+  useEffect(() => {
+    setAsking(null);
+    setNote('');
+  }, [topId]);
+
   const sendBack = useCallback(() => {
     const text = note.trim();
     if (!top || !text) return;

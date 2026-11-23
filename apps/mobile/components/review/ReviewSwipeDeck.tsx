@@ -223,8 +223,17 @@ export function ReviewSwipeDeck({
     [stage],
   );
 
+  // The flying card left the top before its fly-off finished (a poll, an
+  // Undo of another card): its animation is gone with it, so its verdict
+  // enters the Undo window now instead of waiting for an end that never comes.
+  const topId = top?.id;
+  React.useEffect(() => {
+    const flying = flyingRef.current;
+    if (flying && flying.item.id !== topId) stage(flying.item, flying.verdict, flying.text);
+  }, [topId, stage]);
+
   const skip = React.useCallback(() => {
-    if (!top || deck.length < 2) return;
+    if (!top || deck.length < 2 || flyingRef.current) return;
     haptics.selection();
     setSkipped((prev) => [...prev.filter((id) => id !== top.id), top.id]);
   }, [top, deck.length]);

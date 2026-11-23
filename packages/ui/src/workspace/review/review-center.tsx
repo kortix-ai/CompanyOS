@@ -873,7 +873,11 @@ export function ReviewCenter({
     [items, segment, kindFilter, query, sessionFilter],
   );
   // Reviews first; questions when no review waits, until the viewer picks.
-  const deckTab = deckTabChoice ?? (visible.length === 0 && sessionAsks.length > 0 ? 'questions' : 'reviews');
+  // With no questions there is no switch: the deck is the reviews.
+  const deckTab =
+    sessionAsks.length === 0
+      ? 'reviews'
+      : (deckTabChoice ?? (visible.length === 0 ? 'questions' : 'reviews'));
   // The deck shows one card at a time: as it runs low, read the next page.
   const loadNext = loadMore && !loadMore.isLoading && !loadMore.isError ? loadMore.onLoadMore : null;
   useEffect(() => {
@@ -1097,7 +1101,10 @@ export function ReviewCenter({
       return;
     }
     const before = items;
-    setItems(next);
+    // Functional when it is one item's status: verdicts flushed in the same
+    // tick (the deck's unmount) must not overwrite each other's update.
+    if (optimistic) setItems((current) => setStatus(current, optimistic.id, optimistic.status));
+    else setItems(next);
     const result = server?.();
     const announce = () => (tone === 'info' ? infoToast : successToast)(message);
     if (!isPromiseLike(result)) {
@@ -1685,7 +1692,7 @@ export function ReviewCenter({
       <ReviewSwipeDeck
         items={visible}
         allows={verdictAllowed}
-        paused={!!selected}
+        paused={!!selected || deckTab !== 'reviews'}
         onOpen={(item) => setSelectedId(item.id)}
         onDecide={(item, verdict, feedback) =>
           actions.resolve(
@@ -2030,14 +2037,18 @@ export function ReviewCenter({
               </Tabs>
             </div>
           ) : null}
-          {segment === 'needs_you' && needsYouDeck && (cards ? deckTab === 'questions' : !wide) ? (
+          {segment === 'needs_you' && needsYouDeck && (cards || !wide) ? (
             // `peer`: when the deck draws nothing (its Undo window after the
-            // last card), the list's empty state below shows instead.
-            <div className="peer px-1 pt-1 pb-3 empty:hidden">
-              {needsYouDeck({ paused: !!selected })}
+            // last card), the list's empty state below shows instead. In
+            // cards mode the stack not shown stays mounted, paused: switching
+            // must not send what waits in its Undo window.
+            <div className={cn('peer px-1 pt-1 pb-3 empty:hidden', cards && deckTab !== 'questions' && 'hidden')}>
+              {needsYouDeck({ paused: !!selected || (cards && deckTab !== 'questions') })}
             </div>
           ) : null}
-          {cards && (deckTab === 'reviews' || !needsYouDeck || sessionAsks.length === 0) ? deckBody : null}
+          {cards ? (
+            <div className={cn('flex min-h-0 flex-1 flex-col', deckTab !== 'reviews' && 'hidden')}>{deckBody}</div>
+          ) : null}
           {/* A failed next-page read stops the automatic paging: offer Retry under the deck. */}
           {cards && deckTab === 'reviews' && visible.length > 0 && loadMore?.isError ? (
             <div className="flex shrink-0 justify-center pb-2">{loadMoreButton}</div>

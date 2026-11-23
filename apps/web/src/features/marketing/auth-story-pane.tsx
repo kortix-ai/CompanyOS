@@ -9,6 +9,7 @@ import {
   WORKS_WITH,
 } from '@/features/marketing/landing-sections/works-with-logos';
 import { cn } from '@kortix/ui';
+import { DitherField } from '@/features/marketing/kit/dither-field';
 
 /** The three lines the pane cycles through, in order. Keys under `auth.story`. */
 const LINES = ['outcome', 'repo', 'approve'] as const;
@@ -204,6 +205,14 @@ export function AuthStoryPane({ className }: { className?: string }) {
       className={cn('bg-muted/60 relative flex h-svh flex-col overflow-hidden', className)}
       aria-label={t('label')}
     >
+      {/* The landing footer CTA's dither band: the same field, height and
+          two-layer mask, so it fades out well above the headline. */}
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-81.5 [mask-image:linear-gradient(to_bottom,#000,transparent_150px),radial-gradient(50%_300px_at_50%_0,#000,transparent)]"
+        aria-hidden
+      >
+        <DitherField className="text-kortix-base" />
+      </div>
       {/* Centred on the whole pane, as the strip below is pinned to its foot. */}
       <div className="absolute inset-0 flex items-center justify-center px-12 xl:px-20">
         <div className="relative w-full max-w-[520px] text-center">

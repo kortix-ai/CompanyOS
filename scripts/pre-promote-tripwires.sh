@@ -45,6 +45,8 @@ check "api tripwires" bash -c 'cd apps/api && bash scripts/test.sh \
   src/__tests__/unit-request-primitives-tripwire.test.ts \
   src/__tests__/unit-catch-database-error-echo-guard.test.ts \
   src/__tests__/unit-mock-module-targets.test.ts \
+  src/__tests__/unit-skills-offered.test.ts \
+  src/__tests__/unit-workspace-route-params.test.ts \
   src/shared/sql-correlated-subquery-guard.test.ts'
 check "api lint" pnpm --filter kortix-api lint
 

@@ -68,6 +68,13 @@ export const EMPTY_SESSION_LOG_STATE: SessionLogState = Object.freeze({
   older: {},
 });
 
+/**
+ * The lowest provisional seq of a queued prompt: the box serves the last of n queued prompts at
+ * `Number.MAX_SAFE_INTEGER`, the one before it one lower (kortixd `pi/session-log.ts`, "the
+ * queued seq"). No real seq comes near it.
+ */
+const SESSION_LOG_QUEUED_SEQ_FLOOR = Number.MAX_SAFE_INTEGER - 1_000_000;
+
 type J = Record<string, unknown>;
 const isObj = (v: unknown): v is J => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isRev = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 0;
@@ -178,13 +185,22 @@ export function applySessionLogPage(state: SessionLogState, page: SessionLogPage
     if (oldest && state.older[thread] !== page.has_more) older = { ...older, [thread]: page.has_more };
   }
   // The page is the thread's truth from its first seq (from the start without `has_more`) up to
-  // `beforeSeq`: a held message there that it lacks and that the stream never revised was
-  // deleted, or came from an older copy (the device's saved copy). It leaves.
+  // its own last seq (below `beforeSeq` for an older page): a held message there that it lacks
+  // and that the stream never revised was deleted, or came from an older copy (the device's
+  // saved copy). It leaves. A finished message after the page's last seq is newer than the page:
+  // the API's page lags the box's by the journal's post interval, so it says nothing about the
+  // turns the box page delivered after it, and they stay (a deletion there comes as a
+  // tombstone). Two held records there are provisional and the page still settles them: a
+  // streaming reply (one pi abandoned has no final record) and a queued prompt (its seq is
+  // no position in the log).
   if (thread !== null && held) {
     const from = page.has_more ? (page.messages[0]?.seq ?? Infinity) : -Infinity;
+    const last = page.messages.reduce((max, m) => (m.seq < SESSION_LOG_QUEUED_SEQ_FLOOR ? Math.max(max, m.seq) : max), -Infinity);
     const to = beforeSeq ?? Infinity;
     const kept = new Set(page.messages.map((m) => m.message_id));
-    const settled = held.filter((m) => m.seq < from || m.seq >= to || kept.has(m.message_id) || state.revs[m.message_id] !== undefined);
+    const provisional = (m: SessionLogMessage) => m.status === 'streaming' || m.seq >= SESSION_LOG_QUEUED_SEQ_FLOOR;
+    const vouched = (m: SessionLogMessage) => m.seq >= from && m.seq < to && (m.seq <= last || provisional(m));
+    const settled = held.filter((m) => !vouched(m) || kept.has(m.message_id) || state.revs[m.message_id] !== undefined);
     if (settled.length !== held.length) messages = { ...messages, [thread]: settled };
   }
   for (const message of page.messages) {
@@ -194,6 +210,9 @@ export function applySessionLogPage(state: SessionLogState, page: SessionLogPage
     // put held the reply's partial text forever. Its rev stays, so a late streaming put cannot win.
     const finishesStreaming = message.status !== 'streaming' && heldStreaming(state, message);
     if (state.revs[message.message_id] !== undefined && !finishesStreaming) continue;
+    // A page's streaming copy is older than a finished record held (a lagging page read mid-turn),
+    // as a streaming put is (`applyMessage`).
+    if (message.status === 'streaming' && heldFinished(state, message)) continue;
     messages = put(messages, message);
   }
   const threads = { ...state.threads };

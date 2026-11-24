@@ -88,6 +88,63 @@ describe('applySessionLogPage', () => {
     expect(ids(state)).toEqual(all.map((m) => m.message_id));
   });
 
+  // The reported bug: replies vanish until a hard refresh. The box's page (or the device's
+  // saved copy) delivered the newest turns without revs; the API's page lags the box by the
+  // journal's post interval (longer when a post fails), so it ends turns earlier. Applied
+  // after the box page, it settled away every reply newer than its own last message. The user
+  // messages came back as provisional prompts (`sent`, the v1 optimistic rows); the replies did not.
+  for (const has_more of [false, true]) {
+    test(`a lagging page (has_more: ${has_more}) never removes the newer turns a fresher page delivered`, () => {
+      const all = rootMessages();
+      let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all));
+      // A whole-thread page (has_more: false) starts at the first message; a window starts later.
+      const lagging = { ...page(all.slice(has_more ? 4 : 0, -4)), has_more };
+      state = applySessionLogPage(state, lagging);
+      expect(ids(state)).toEqual(all.map((m) => m.message_id));
+      expect(state.messages[ROOT]!.filter((m) => m.role === 'assistant')).toHaveLength(all.filter((m) => m.role === 'assistant').length);
+    });
+  }
+
+  test('a lagging page still settles a deleted message inside its own span', () => {
+    const all = rootMessages();
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all));
+    const gone = all[6]!;
+    state = applySessionLogPage(state, { ...page(all.slice(4, -4).filter((m) => m !== gone)), has_more: true });
+    expect(ids(state)).toEqual(all.filter((m) => m !== gone).map((m) => m.message_id));
+  });
+
+  test('an empty page removes nothing: a log the API has not stored yet is not a deletion', () => {
+    const all = rootMessages();
+    const state = applySessionLogPage(applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all)), page([]));
+    expect(ids(state)).toEqual(all.map((m) => m.message_id));
+  });
+
+  test('a queued prompt (the box page\'s provisional seq) that a later page lacks still leaves: it was taken back or ran', () => {
+    const all = rootMessages();
+    const queued = { ...all[0]!, message_id: 'msg_queued', seq: Number.MAX_SAFE_INTEGER };
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page([...all, queued]));
+    expect(ids(state)).toContain('msg_queued');
+    state = applySessionLogPage(state, page(all));
+    expect(ids(state)).toEqual(all.map((m) => m.message_id));
+  });
+
+  test('a streaming reply a later page lacks still leaves: pi abandoned it and no final record follows', () => {
+    const all = rootMessages();
+    const streaming = { ...all.at(-1)!, message_id: 'msg_streaming', seq: all.at(-1)!.seq + 1, status: 'streaming' as const };
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page([...all, streaming]));
+    state = applySessionLogPage(state, page(all));
+    expect(ids(state)).toEqual(all.map((m) => m.message_id));
+  });
+
+  test('a lagging page\'s streaming copy of a reply never replaces the finished one a fresher page delivered', () => {
+    const all = rootMessages();
+    const reply = all.at(-1)!;
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all));
+    const partial = { ...reply, status: 'streaming' as const, blocks: [{ type: 'text', id: 'b0', text: 'half' } as TextBlock] };
+    state = applySessionLogPage(state, page([...all.slice(0, -1), partial]));
+    expect(state.messages[ROOT]!.at(-1)).toEqual(reply);
+  });
+
   test('ignores a message that fails validation', () => {
     const messages = rootMessages();
     (messages[1] as Record<string, unknown>).seq = 'x';

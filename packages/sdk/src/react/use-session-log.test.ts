@@ -420,6 +420,9 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     return { promise, resolve };
   }
   const userPage = (): SessionLogPage => ({ ...page(), messages: page().messages.filter((m) => m.role === 'user') });
+  // What a user-only page settles to: every reply inside its span leaves; the reply after its
+  // last seq is newer than the page (the journal had not posted it) and stays.
+  const settledByUserPage = () => [...userPage().messages, page().messages.at(-1)!];
   const latestStream = () => {
     const entry = joined.at(-1);
     if (!entry) throw new Error('stream not joined');
@@ -446,6 +449,34 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     expect(heldMessages()).toEqual(page().messages);
   });
 
+  // Replies vanish until a hard refresh: the box page delivered the newest turns, a box read
+  // then failed, and each re-read (a resync, a reconnect, a visible tab, a turn end) fell back
+  // to the API page, which lags the box by the journal. That page settled every newer reply away.
+  test('a lagging API page read after a failed box read keeps the replies the box page delivered', async () => {
+    const lagging = (): SessionLogPage => ({ ...page(), messages: page().messages.slice(0, -4) });
+    let boxUp = true;
+    let shown: ReturnType<typeof useSessionLogThread> = null;
+    const loader: LoadSessionLogPage = async () => lagging();
+    const livePage = async () => (boxUp ? page() : null);
+    render(() => {
+      useSessionLogSync(PROJECT, SESSION, { enabled: true, loader, livePage, joinStream, schedule });
+      shown = useSessionLogThread({ projectId: PROJECT, sessionId: SESSION });
+      return null;
+    });
+    const replies = () => shown?.messages.filter((m) => m.role === 'assistant').map((m) => m.message_id) ?? [];
+    const all = page().messages.filter((m) => m.role === 'assistant').map((m) => m.message_id);
+    await flush();
+    expect(replies()).toEqual(all);
+    boxUp = false;
+    act(() => latestStream().onRuntimeResync());
+    await flush();
+    act(() => latestStream().onControl(ended('first')));
+    act(() => latestStream().onControl(ended('second')));
+    await flush();
+    await runTimers();
+    expect(replies()).toEqual(all);
+  });
+
   test('KRTX-4973: newer failed read does not discard a successful page during log traffic', async () => {
     let reads = 0;
     const pending = deferredPage();
@@ -465,7 +496,7 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     act(() => stream.onRuntimeEvent({ type: 'log.state', properties: { rev: 100, session: {} } }));
     await act(async () => pending.resolve(userPage()));
     await flush();
-    expect(heldMessages()).toEqual(userPage().messages);
+    expect(heldMessages()).toEqual(settledByUserPage());
   });
 
   test('KRTX-4973: failed and incomplete turn-end reads recover the assistant in the thread hook', async () => {
@@ -599,7 +630,7 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     newest = userPage();
     act(() => latestStream().onRuntimeResync());
     await flush();
-    expect(heldMessages()).toEqual(newest.messages);
+    expect(heldMessages()).toEqual(settledByUserPage());
   });
 
   const failure = (status: number, fields: { code?: string; retryAfter?: string } = {}) =>

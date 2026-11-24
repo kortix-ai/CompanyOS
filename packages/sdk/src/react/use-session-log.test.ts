@@ -420,6 +420,9 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     return { promise, resolve };
   }
   const userPage = (): SessionLogPage => ({ ...page(), messages: page().messages.filter((m) => m.role === 'user') });
+  // What a user-only page settles to: every reply inside its span leaves; the reply after its
+  // last seq is newer than the page (the journal had not posted it) and stays.
+  const settledByUserPage = () => [...userPage().messages, page().messages.at(-1)!];
   const latestStream = () => {
     const entry = joined.at(-1);
     if (!entry) throw new Error('stream not joined');
@@ -446,6 +449,74 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     expect(heldMessages()).toEqual(page().messages);
   });
 
+  // Replies vanish until a hard refresh: the box page delivered the newest turns, a box read
+  // then failed, and each re-read (a resync, a reconnect, a visible tab, a turn end) fell back
+  // to the API page, which lags the box by the journal. That page settled every newer reply away.
+  test('a lagging API page read after a failed box read keeps the replies the box page delivered', async () => {
+    const lagging = (): SessionLogPage => ({ ...page(), messages: page().messages.slice(0, -4) });
+    let boxUp = true;
+    let shown: ReturnType<typeof useSessionLogThread> = null;
+    const loader: LoadSessionLogPage = async () => lagging();
+    const livePage = async () => (boxUp ? page() : null);
+    render(() => {
+      useSessionLogSync(PROJECT, SESSION, { enabled: true, loader, livePage, joinStream, schedule });
+      shown = useSessionLogThread({ projectId: PROJECT, sessionId: SESSION });
+      return null;
+    });
+    const replies = () => shown?.messages.filter((m) => m.role === 'assistant').map((m) => m.message_id) ?? [];
+    const all = page().messages.filter((m) => m.role === 'assistant').map((m) => m.message_id);
+    await flush();
+    expect(replies()).toEqual(all);
+    boxUp = false;
+    act(() => latestStream().onRuntimeResync());
+    await flush();
+    act(() => latestStream().onControl(ended('first')));
+    act(() => latestStream().onControl(ended('second')));
+    await flush();
+    await runTimers();
+    expect(replies()).toEqual(all);
+  });
+
+  test('the box page answers for the tail: a reply the box no longer holds leaves on its next read', async () => {
+    let box = page();
+    const livePage = async () => box;
+    mount({ loader: async () => page(), livePage });
+    await flush();
+    expect(heldMessages()).toEqual(page().messages);
+    box = { ...page(), messages: page().messages.slice(0, -1) };
+    act(() => latestStream().onRuntimeResync());
+    await flush();
+    expect(heldMessages()).toEqual(page().messages.slice(0, -1));
+  });
+
+  test('a stale box page (an older generation) counts as a failed box read: the re-read falls back to the API page', async () => {
+    let apiReads = 0;
+    const loader: LoadSessionLogPage = async () => { apiReads++; return { ...page(), generation: 2 }; };
+    const livePage = async () => ({ ...page(), generation: 1, messages: page().messages.slice(0, -1) });
+    mount({ loader, livePage });
+    await flush();
+    expect(heldMessages()).toEqual(page().messages);
+    const before = apiReads;
+    act(() => latestStream().onRuntimeResync());
+    await flush();
+    expect(apiReads).toBe(before + 1);
+    expect(heldMessages()).toEqual(page().messages);
+  });
+
+  test('a stale API page (an older generation) is not applied and does not replace the saved copy', async () => {
+    const data = new Map<string, string>();
+    const copies = createSavedCopyStore({ storage: { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v), removeItem: (k) => void data.delete(k) }, userId: 'u1' });
+    setSavedCopyStore(copies);
+    let generation = 2;
+    mount({ loader: async () => ({ ...page(), generation, messages: generation === 2 ? page().messages : page().messages.slice(0, -1) }) });
+    await flush();
+    generation = 1;
+    act(() => latestStream().onRuntimeResync());
+    await flush();
+    expect(heldMessages()).toEqual(page().messages);
+    expect((await copies.read(PROJECT, SESSION))?.generation).toBe(2);
+  });
+
   test('KRTX-4973: newer failed read does not discard a successful page during log traffic', async () => {
     let reads = 0;
     const pending = deferredPage();
@@ -465,7 +536,7 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     act(() => stream.onRuntimeEvent({ type: 'log.state', properties: { rev: 100, session: {} } }));
     await act(async () => pending.resolve(userPage()));
     await flush();
-    expect(heldMessages()).toEqual(userPage().messages);
+    expect(heldMessages()).toEqual(settledByUserPage());
   });
 
   test('KRTX-4973: failed and incomplete turn-end reads recover the assistant in the thread hook', async () => {
@@ -591,7 +662,7 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     });
   }
 
-  test('KRTX-4973: current authoritative pages still remove absent unrevisioned messages', async () => {
+  test('KRTX-4973: current authoritative pages still remove absent unrevisioned messages inside their span; a reply after the last seq stays', async () => {
     let newest: SessionLogPage = page();
     const loader: LoadSessionLogPage = async () => newest;
     mount({ loader });
@@ -599,7 +670,7 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     newest = userPage();
     act(() => latestStream().onRuntimeResync());
     await flush();
-    expect(heldMessages()).toEqual(newest.messages);
+    expect(heldMessages()).toEqual(settledByUserPage());
   });
 
   const failure = (status: number, fields: { code?: string; retryAfter?: string } = {}) =>
@@ -1309,6 +1380,14 @@ describe('useSessionLogOlder: older pages of a thread from GET …/log?before_se
     await act(async () => { release({ ...page(), messages: all().slice(0, 4), has_more: false }); await first; });
     expect(calls).toBe(1);
     expect(state.value.isLoadingOlder).toBe(false);
+  });
+
+  test('a stale older page (an older generation) is a failed read: it neither fills the thread nor keeps offering the same cursor', async () => {
+    act(() => useSyncStore.getState().applySessionLogPage(SESSION, newest()));
+    const state = mountOlder(async () => ({ ...page(), generation: 0, messages: all().slice(0, 4), has_more: false }));
+    await act(async () => { await state.value.loadOlder(); });
+    expect(state.value.hasOlder).toBe(false);
+    expect(ids()).toEqual(all().slice(4).map((m) => m.message_id));
   });
 
   test('a failed read stops offering older messages, so a drain loop ends', async () => {

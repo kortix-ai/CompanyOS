@@ -133,6 +133,20 @@ describe('scanAddedLines — what a diff adds, by file and new line number', () 
     ]);
   });
 
+  test('a control character in a quoted path stays escaped: no terminal escape reaches a reply', () => {
+    const patch = [
+      'diff --git "a/x\\033[2Jy.ts" "b/x\\033[2Jy.ts"',
+      '--- /dev/null',
+      '+++ "b/x\\033[2Jy.ts"',
+      '@@ -0,0 +1 @@',
+      `+${TOKENS.github_token}`,
+      '',
+    ].join('\n');
+    const [finding] = scanAddedLines(patch).findings;
+    expect(finding?.file).toBe('x\\x1b[2Jy.ts');
+    expect(finding?.file).not.toContain('\u001b');
+  });
+
   test('findings are capped; the total still counts every one', () => {
     const many = ['diff --git a/k b/k', '--- a/k', '+++ b/k', `@@ -0,0 +1,${MAX_SECRET_FINDINGS + 7} @@`];
     for (let i = 0; i < MAX_SECRET_FINDINGS + 7; i += 1) many.push(`+${TOKENS.github_token}`);

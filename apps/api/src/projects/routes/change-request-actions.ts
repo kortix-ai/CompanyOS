@@ -8,6 +8,7 @@ import { refusesSelfMerge, secretMergeRefusal } from '../change-request-policy';
 // barrel wholesale with `mock.module`.
 import { classifyMerge, type MergeClassification } from '../change-request-governance';
 import { assertNoGrantEscalation } from '../../iam/agent-grant-ceiling';
+import { actorOf } from '../../iam/actor';
 import { auth, boundedIssues, errors, json, lenientBody } from '../../openapi';
 import { kickProjectTemplatePrebuilds } from '../../snapshots/builder';
 import { kickPiPackageBundle } from '../../pi-packages/bundle';
@@ -121,7 +122,6 @@ export function registerChangeRequestActionsRoutes(): void {
 
       const customMessage = normalizeString(body.message);
       const allowSecrets = body.allow_secrets === true;
-      const actorIsSession = isProjectSessionPrincipal(c);
       const projectForGit = await withProjectGitAuth(loaded.row);
 
       // Classify the change before it lands, for every principal. A change to
@@ -166,11 +166,16 @@ export function registerChangeRequestActionsRoutes(): void {
       // is not clean. A person who checked it may merge anyway
       // (`allow_secrets`); an agent session may not. A finding names file,
       // line, commit and rule, never the value.
+      // Only a person's own credential overrides: the dashboard (JWT) or their
+      // CLI token. Never a session, a service account or a workspace key.
+      const credential = allowSecrets ? (await actorOf(c, loaded.row.accountId)).credential : null;
+      const actorIsPerson =
+        !isProjectSessionPrincipal(c) && (credential?.kind === 'jwt' || credential?.kind === 'pat');
       const refusal = secretMergeRefusal({
         crNumber: cr.number,
         baseRef: cr.baseRef,
         scan: change.secrets,
-        actorIsSession,
+        actorIsPerson,
         allowSecrets,
       });
       if (refusal) return c.json(refusal.body, refusal.status);

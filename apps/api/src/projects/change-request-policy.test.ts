@@ -198,6 +198,11 @@ describe('requiredManifestActions — a merge needs what the direct route assert
   test('apps → project.app.write; skills → project.skill.write', () => {
     expect(requiredManifestActions(base, `${base}apps:\n  site:\n    always_on: true\n`)).toEqual(['project.app.write']);
     expect(requiredManifestActions(base, `${base}skills:\n  triage: skills/triage\n`)).toEqual(['project.skill.write']);
+    // Removing a registered skill also asks project.agent.write, as DELETE /skills does.
+    expect(requiredManifestActions(`${base}skills:\n  triage: skills/triage\n`, base)).toEqual([
+      'project.agent.write',
+      'project.skill.write',
+    ]);
     expect(MANIFEST_WRITE_ACTIONS).toEqual(expect.arrayContaining(['project.app.write', 'project.skill.write']));
   });
 
@@ -228,16 +233,16 @@ describe('secretMergeRefusal — a person may override, an agent may not', () =>
     findings: [{ commit: '1a2b3c4d5e6f', file: 'src/config.ts', line: 2, rule: 'github_token', label: 'GitHub token' }],
     total: 1,
   };
-  const input = { crNumber: 7, baseRef: 'main', scan, actorIsSession: false, allowSecrets: false };
+  const input = { crNumber: 7, baseRef: 'main', scan, actorIsPerson: true, allowSecrets: false };
 
   test('nothing found → merges for everyone', () => {
     expect(secretMergeRefusal({ ...input, scan: { findings: [], total: 0 } })).toBeNull();
-    expect(secretMergeRefusal({ ...input, scan: { findings: [], total: 0 }, actorIsSession: true, allowSecrets: true })).toBeNull();
+    expect(secretMergeRefusal({ ...input, scan: { findings: [], total: 0 }, actorIsPerson: false, allowSecrets: true })).toBeNull();
   });
 
   test('found, no override → 409 CR_SECRET_DETECTED naming file, line, commit and the fix', () => {
-    for (const actorIsSession of [false, true]) {
-      const refusal = secretMergeRefusal({ ...input, actorIsSession });
+    for (const actorIsPerson of [true, false]) {
+      const refusal = secretMergeRefusal({ ...input, actorIsPerson });
       expect(refusal?.status).toBe(409);
       expect(refusal?.body.code).toBe('CR_SECRET_DETECTED');
       expect(refusal?.body.findings).toEqual(scan.findings);
@@ -260,13 +265,13 @@ describe('secretMergeRefusal — a person may override, an agent may not', () =>
     expect(refusal?.body.unscanned).toBe('more than 500 commits');
     expect(refusal?.body.remediation).toContain('kortix cr merge 7 --allow-secrets');
     expect(secretMergeRefusal({ ...input, scan: incomplete, allowSecrets: true })).toBeNull();
-    expect(secretMergeRefusal({ ...input, scan: incomplete, actorIsSession: true, allowSecrets: true })?.body.code).toBe(
+    expect(secretMergeRefusal({ ...input, scan: incomplete, actorIsPerson: false, allowSecrets: true })?.body.code).toBe(
       'CR_SECRET_OVERRIDE_REFUSED',
     );
   });
 
-  test('an agent session overrides → 403 CR_SECRET_OVERRIDE_REFUSED', () => {
-    const refusal = secretMergeRefusal({ ...input, actorIsSession: true, allowSecrets: true });
+  test('an agent session, a service account or a workspace key overrides → 403 CR_SECRET_OVERRIDE_REFUSED', () => {
+    const refusal = secretMergeRefusal({ ...input, actorIsPerson: false, allowSecrets: true });
     expect(refusal?.status).toBe(403);
     expect(refusal?.body.code).toBe('CR_SECRET_OVERRIDE_REFUSED');
     expect(refusal?.body.findings).toEqual(scan.findings);

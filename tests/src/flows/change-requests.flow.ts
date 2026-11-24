@@ -603,11 +603,16 @@ flow(
  */
 flow(
   "CR-16",
-  { domain: "change-requests", requires: ["database"], timeoutMs: 300_000, routes: CR_GUARD_ROUTES },
+  {
+    domain: "change-requests",
+    requires: ["database"],
+    timeoutMs: 300_000,
+    routes: [...CR_GUARD_ROUTES, "POST /v1/accounts/:accountId/iam/service-accounts", "POST /v1/accounts/:accountId/iam/assignments"],
+  },
   async (ctx) => {
     if (ctx.env.target !== "local") return; // the manifest is committed straight to the bare repository
     const { mkdir, writeFile } = await import("node:fs/promises");
-    const w = await crGuardWorld(ctx, "CR-16", { connectors: [] });
+    const w = await crGuardWorld(ctx, "CR-16", { enterprise: true, connectors: [] });
     const owner = ctx.client.as(ctx.P.OWNER);
     const token = fakeGithubToken();
     const cli = new CliSandbox("cr16");
@@ -642,6 +647,30 @@ flow(
         r.status(403).body().has("$.code", "CR_SECRET_OVERRIDE_REFUSED");
         noValue(r.text());
         if ((await w.mainFile("src/config.ts")) !== null) throw new Error("a refused override landed src/config.ts");
+      });
+
+      await ctx.step("a service account with the manager role asks to override → 403 CR_SECRET_OVERRIDE_REFUSED: automation is not a person", async () => {
+        const created = await owner.post(
+          "/v1/accounts/:accountId/iam/service-accounts",
+          { name: ctx.fixtures.name("cr16-sa"), description: "CI" },
+          { params: { accountId: w.team.id } },
+        );
+        created.status(201);
+        const sa = ctx.client.withBearer(created.json<{ secret: string }>().secret, "service-account");
+        (await owner.post(
+          "/v1/accounts/:accountId/iam/assignments",
+          { principal_type: "service_account", principal_id: created.json<{ service_account_id: string }>().service_account_id, role_key: "manager", scope_type: "project", scope_id: w.project.id },
+          { params: { accountId: w.team.id } },
+        )).status(201);
+        // IAM verdicts are cached for up to 15 s: the first calls can answer a role 403.
+        const deadline = Date.now() + 30_000;
+        let r = await w.merge(sa, leak.crId, { allow_secrets: true });
+        while (r.json<{ code?: string }>()?.code !== "CR_SECRET_OVERRIDE_REFUSED" && r.statusCode !== 200 && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 2_000));
+          r = await w.merge(sa, leak.crId, { allow_secrets: true });
+        }
+        r.status(403).body().has("$.code", "CR_SECRET_OVERRIDE_REFUSED");
+        if ((await w.mainFile("src/config.ts")) !== null) throw new Error("a service account override landed src/config.ts");
       });
 
       await ctx.step("the real CLI as the agent: `kortix cr merge <n>` exits 1 and names src/config.ts:2 and `kortix secrets request`, never the value", async () => {

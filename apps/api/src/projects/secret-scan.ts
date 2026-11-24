@@ -122,7 +122,11 @@ function unquoteGitPath(raw: string): string {
       i += 1;
     }
   }
-  return Buffer.from(bytes).toString('utf8');
+  // A path goes into API answers that a terminal prints: never hand it a
+  // control character (an escape sequence) that the quoting had neutralized.
+  return Buffer.from(bytes)
+    .toString('utf8')
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, (ch) => `\\x${ch.charCodeAt(0).toString(16).padStart(2, '0')}`);
 }
 
 /**

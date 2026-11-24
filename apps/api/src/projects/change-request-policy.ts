@@ -125,7 +125,8 @@ export const MANIFEST_SECTION_ACTIONS: ReadonlyArray<readonly [section: string, 
   ['approvals', 'project.connector.write'],
   // App create and PATCH (apps/app-manifest.ts, apps/route-access.ts)
   ['apps', 'project.app.write'],
-  // Skill registration (projects/routes/project-skills.ts)
+  // Skill registration (projects/routes/project-skills.ts); removing one also
+  // asks project.agent.write, as its route does (below)
   ['skills', 'project.skill.write'],
   ['commands', 'project.command.write'],
   // POST|PATCH|DELETE /sandbox-templates
@@ -191,6 +192,7 @@ export function requiredManifestActions(baseText: string | null, headText: strin
     required.add(SECTION_ACTION.get(section) ?? UNLISTED_SECTION_ACTION);
   }
   if (policySetsChanged(before.agents, after.agents)) required.add('project.connector.write');
+  if (keysRemoved(before.skills, after.skills)) required.add('project.agent.write');
   const was = triggersByKey(before.triggers);
   const now = triggersByKey(after.triggers);
   for (const [key, value] of now) {
@@ -199,6 +201,17 @@ export function requiredManifestActions(baseText: string | null, headText: strin
   }
   for (const key of was.keys()) if (!now.has(key)) required.add('project.trigger.delete');
   return MANIFEST_WRITE_ACTIONS.filter((action) => required.has(action));
+}
+
+/** Does `after` lack a key `before` has? A `skills` registry is a map (or a list of names). */
+function keysRemoved(before: unknown, after: unknown): boolean {
+  const keysOf = (value: unknown): Set<string> => {
+    if (Array.isArray(value)) return new Set(value.map((item) => canonicalJson(item)));
+    if (value && typeof value === 'object') return new Set(Object.keys(value));
+    return new Set();
+  };
+  const now = keysOf(after);
+  return [...keysOf(before)].some((key) => !now.has(key));
 }
 
 /**
@@ -266,19 +279,21 @@ export interface SecretMergeRefusalBody {
  * `CR_SECRET_DETECTED`. Not everything read (`scan.unscanned`): 409
  * `CR_SECRET_SCAN_INCOMPLETE`, because unread is not clean. A person who
  * checked the change overrides with `allow_secrets` (a test fixture, a public
- * key the rule cannot tell apart, a change too large to scan). An agent
- * session cannot: it is the principal the check exists for, so its override
- * answers 403 `CR_SECRET_OVERRIDE_REFUSED`.
+ * key the rule cannot tell apart, a change too large to scan). Any other
+ * principal cannot — an agent session is the one the check exists for, and a
+ * service account or workspace key is automation — so its override answers
+ * 403 `CR_SECRET_OVERRIDE_REFUSED`.
  */
 export function secretMergeRefusal(input: {
   crNumber: number;
   baseRef: string;
   scan: SecretScan;
-  actorIsSession: boolean;
+  /** A person's own credential (a dashboard JWT or their CLI token), not a session or automation. */
+  actorIsPerson: boolean;
   allowSecrets: boolean;
 }): { status: 403 | 409; body: SecretMergeRefusalBody } | null {
   if (input.scan.total === 0 && !input.scan.unscanned) return null;
-  if (input.allowSecrets && !input.actorIsSession) return null;
+  if (input.allowSecrets && input.actorIsPerson) return null;
   const override = `\`kortix cr merge ${input.crNumber} --allow-secrets\``;
   const found = input.scan.total > 0;
   const what = found

@@ -286,9 +286,41 @@ export async function resolveBrowserLogin(input: {
     return { ok: false, status: 404, code: 'session_not_found', error: 'Session not found in this project.' };
   }
 
-  const rows = await sharedRowsNamed(input.projectId, name);
+  // Every answer below is built only from the rows this session's person or
+  // agent may reach. A login kept to someone else reads exactly like a missing
+  // one: its existence and its sites are that person's business (CWE-200).
+  const allRows = await sharedRowsNamed(input.projectId, name);
+  const rows = await filterSecretRowsByAudience({
+    projectId: input.projectId,
+    accountId: input.accountId,
+    subject: () =>
+      secretAudienceSubject({
+        projectId: input.projectId,
+        accountId: input.accountId,
+        sessionId: input.sessionId,
+        actorUserId: input.actorUserId,
+      }),
+    rows: allRows,
+  });
   const logins = rows.filter((row) => row.consumer === 'browser' && row.active);
   if (logins.length === 0) {
+    const hidden = allRows.find((row) => row.consumer === 'browser' && row.active);
+    if (hidden) {
+      // Audited for the people who manage the workspace; the session learns nothing.
+      await recordAuditEvent({
+        accountId: input.accountId,
+        projectId: input.projectId,
+        sessionId: input.sessionId,
+        actorUserId: input.actorUserId,
+        actorType: 'agent',
+        source: 'browser',
+        action: 'secret.consumer.denied',
+        outcome: 'denied',
+        resourceType: 'project_secret',
+        resourceId: hidden.secretId,
+        metadata: { name, site: urlHost, requested_consumer: 'browser', reason: 'not_in_audience' },
+      });
+    }
     return rows.length > 0
       ? {
           ok: false,
@@ -300,7 +332,9 @@ export async function resolveBrowserLogin(input: {
           ok: false,
           status: 404,
           code: 'login_missing',
-          error: `No website login named ${name}. Ask the person for it: ${requestHint(name, urlHost ?? undefined)}`,
+          error:
+            `No website login named ${name} that this session may use. A login kept to one person works only in ` +
+            `that person's private sessions. Otherwise ask the person for it: ${requestHint(name, urlHost ?? undefined)}`,
         };
   }
   const sitesById = new Map(

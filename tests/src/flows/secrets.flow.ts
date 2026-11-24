@@ -2642,8 +2642,12 @@ flow('SEC-LOGIN-1', {
       .status(403).body().has('$.code', 'login_session_only');
     const memberSession = await sessionCaller(ctx.client.as(member), member.userId!, 'MEMBER');
     (await memberSession.caller.get('/v1/projects/:projectId/browser-logins', { params })).status(200).body().has('$.items', []);
-    (await memberSession.caller.post('/v1/projects/:projectId/browser-logins/resolve', { name: 'CRM_LOGIN', url: 'https://app.example.test/' }, { params }))
-      .status(403).body().has('$.code', 'login_not_shared');
+    // A login kept to the owner reads like a missing one: no existence, no sites.
+    for (const url of ['https://app.example.test/', 'https://evil.test/']) {
+      const refused = await memberSession.caller.post('/v1/projects/:projectId/browser-logins/resolve', { name: 'CRM_LOGIN', url }, { params });
+      refused.status(404).body().has('$.code', 'login_missing');
+      if (refused.text().includes('app.example.test') && !url.includes('app.example.test')) throw new Error('the refusal disclosed the login\'s site');
+    }
   });
 
   await ctx.step('a plain value or a delivery change cannot turn the login into an env var', async () => {
@@ -2677,9 +2681,9 @@ flow('SEC-LOGIN-1', {
       if (!denied.some((row) => row.metadata.reason === 'site_not_allowed' && row.metadata.site === 'evil.test')) {
         throw new Error(`the refusal on another site was not audited: ${JSON.stringify(denied)}`);
       }
-      // The member's session cannot see a login kept to the owner: the consumer
-      // path finds no value it may read and records a miss.
-      if (!rows.some((row) => row.action === 'secret.consumer.missing' && row.metadata.name === 'CRM_LOGIN' && row.metadata.site === 'app.example.test')) {
+      // The member's session cannot see a login kept to the owner: audited for
+      // the workspace's managers, invisible to the session.
+      if (!denied.some((row) => row.metadata.reason === 'not_in_audience' && row.metadata.name === 'CRM_LOGIN' && row.metadata.site === 'app.example.test')) {
         throw new Error(`the member refusal was not audited: ${JSON.stringify(rows)}`);
       }
       if (JSON.stringify(rows).includes(PASSWORD)) throw new Error('an audit row holds the password');

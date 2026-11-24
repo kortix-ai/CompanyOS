@@ -105,6 +105,7 @@ import {
 } from './db-deps-connect';
 import { makeDbGatewayDeps } from './db-deps-gateway';
 import {
+  resolveAccountHolder,
   resolveAdmin,
   resolveConnectionsManager,
   resolvePrincipal,
@@ -112,6 +113,7 @@ import {
   resolveReader,
   resolveSecretBindingAdmin,
   resolveSecretReader,
+  sessionVisibleTo,
 } from './db-deps-principal';
 import { authOf, connectorConnected, type ConnectorRow } from './db-deps-rows';
 import { accountKeyOfWorkspace } from '../workspaces/rows';
@@ -142,6 +144,8 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
   discordAvailable: discordConfigured,
   resolveAdmin,
   resolveConnectionsManager,
+  resolveAccountHolder,
+  sessionVisibleTo,
   resolveReader,
   resolveSecretReader,
   listConnectors,

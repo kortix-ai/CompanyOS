@@ -151,10 +151,12 @@ export function registerSetupLinksRoutes(): void {
   );
 
   // POST /v1/projects/:projectId/connect-requests
-  // Mint a link the human opens to 1-click connect a Pipedream app (Quick
-  // Connect). Requires manage. The link is durable for its TTL; the public page
-  // mints a FRESH Pipedream connect token each time it's opened so it never
-  // hands out a stale (minutes-old) Pipedream token.
+  // Mint a link the human opens to connect an app in one click. `owner: "me"`
+  // (the default) is the caller's own private account: any person who may use
+  // the workspace. `owner: "project"` is the shared account: connector write
+  // and connections manage. The link is durable for its TTL; the public page
+  // mints a FRESH provider token each time it's opened so it never hands out a
+  // stale (minutes-old) one.
   projectsApp.openapi(
     createRoute({
       method: 'post',
@@ -173,17 +175,38 @@ export function registerSetupLinksRoutes(): void {
       },
       responses: {
         200: json(z.any(), 'A connect link'),
-        ...errors(400, 404, 409, 501),
+        ...errors(400, 403, 404, 409, 501),
       },
     }),
     async (c: any) => {
       const projectId = workspaceIdParam(c);
       const body = await readJsonObject(c);
-      // Floor 'read'; project.connector.write is the real gate (minting a Pipedream
-      // Quick Connect link is a connector operation). Was 'manage' → project.write.
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
-      await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE);
+      // WHOSE account the link authorizes is the caller's explicit choice, never
+      // derived from the connector (see projects/lib/connection-access.ts) — the
+      // old `authorizationStrategy==='user'` branch this replaced is what left a
+      // private-only connector with no connect flow anywhere in the product.
+      const owner = parseConnectorConnectOwner(body.owner);
+      if (!owner) return c.json({ error: 'owner must be "me" or "project"' }, 400);
+      if (owner === 'project') {
+        // A link that authorizes the SHARED account is administration: the
+        // gates of `POST …/connectors/:slug/connect` with `owner: "project"`.
+        await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_CONNECTOR_WRITE);
+        const mayManage = await projectCapabilityAllowed(
+          c,
+          loaded.userId,
+          loaded.row.accountId,
+          projectId,
+          PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE,
+        );
+        if (!mayManage) return c.json({ error: 'Forbidden' }, 403);
+      } else if (c.get('authType') === 'service_account') {
+        // `me` authorizes the caller's own private account, which is the rule
+        // of `POST /connections/me`: any person who may use the workspace
+        // (the read floor above). A service account has no account of its own.
+        return c.json({ error: 'A service account has no account of its own to connect' }, 403);
+      }
 
       const slug = normalizeString(body.slug);
       if (!slug) return c.json({ error: 'slug is required' }, 400);
@@ -234,12 +257,6 @@ export function registerSetupLinksRoutes(): void {
         );
       }
       const conn = eligibility;
-      // WHOSE account the link authorizes is the caller's explicit choice, never
-      // derived from the connector (see projects/lib/connection-access.ts) — the
-      // old `authorizationStrategy==='user'` branch this replaced is what left a
-      // private-only connector with no connect flow anywhere in the product.
-      const owner = parseConnectorConnectOwner(body.owner);
-      if (!owner) return c.json({ error: 'owner must be "me" or "project"' }, 400);
       // `me` authorizes the caller themselves and needs no member id beyond the
       // signed-in caller already asserted above (loaded.userId).
       if (owner === 'me' && !loaded.userId) {
@@ -251,20 +268,6 @@ export function registerSetupLinksRoutes(): void {
           409,
         );
       }
-      // Minting a link that authorizes the SHARED account is administration —
-      // the same capability the project-owned connection create (connections.ts) asserts
-      // (PROJECT_CONNECTOR_CONNECTIONS_MANAGE), not just connector.write.
-      if (owner === 'project') {
-        const mayManage = await projectCapabilityAllowed(
-          c,
-          loaded.userId,
-          loaded.row.accountId,
-          projectId,
-          PROJECT_ACTIONS.PROJECT_CONNECTOR_CONNECTIONS_MANAGE,
-        );
-        if (!mayManage) return c.json({ error: 'Forbidden' }, 403);
-      }
-
       // A suggested name for the NEW account ("Dad's Gmail"). The human sees it
       // prefilled in the dialog and may change it; the same rules as any label.
       let label: string | null = null;

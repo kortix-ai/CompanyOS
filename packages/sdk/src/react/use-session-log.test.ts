@@ -541,12 +541,14 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
   });
 
   test('KRTX-4973: failed and incomplete turn-end reads recover the assistant in the thread hook', async () => {
+    // The turn-end read fails once; every read before the journal commits is incomplete.
     let reads = 0;
+    let committed = false;
     let shown: ReturnType<typeof useSessionLogThread> = null;
     const loader: LoadSessionLogPage = async () => {
       reads++;
       if (reads === 2) throw new Error('temporary read failure');
-      return reads < 4 ? userPage() : page();
+      return committed ? page() : userPage();
     };
     render(() => {
       useSessionLogSync(PROJECT, SESSION, { enabled: true, loader, joinStream, schedule });
@@ -561,6 +563,7 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     expect(roles()).not.toContain('assistant');
     await runTimers();
     expect(roles()).not.toContain('assistant');
+    committed = true;
     await runTimers();
     expect(roles()).toContain('assistant');
   });
@@ -985,6 +988,50 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
       expect(liveReads).toBe(2);
       release();
       await flush();
+    });
+    test('a live read with no page this client can read (an unknown record, the network) reads the stored log instead', async () => {
+      let live: 'ok' | 'invalid' | 'error' = 'ok';
+      const queries: SessionLogPageQuery[] = [];
+      mount({
+        boxReady: true,
+        loader: async (_p, _s, query) => {
+          queries.push(query);
+          if (!query.live) return asStore(page());
+          if (live === 'error') throw new Error('network');
+          return live === 'invalid' ? { ...asBox(page()), messages: [{ seq: 'x' }] } : asBox(page());
+        },
+      });
+      await flush();
+      for (const failure of ['invalid', 'error'] as const) {
+        live = failure;
+        const before = queries.length;
+        act(() => latestStream().onRuntimeResync());
+        await flush();
+        expect(queries.slice(before).map((q) => q.live === true)).toEqual([true, false]);
+      }
+      expect(heldMessages()).toEqual(page().messages);
+    });
+
+    test('the box getting ready while a live read is on the wire reads again once that read settles', async () => {
+      let liveReads = 0;
+      const first = deferredPage();
+      const state = mount({
+        boxReady: false,
+        loader: async (_p, _s, query) => {
+          if (!query.live) return asStore(page());
+          liveReads++;
+          return liveReads === 1 ? first.promise : asBox(page());
+        },
+      });
+      await flush();
+      act(() => latestStream().onRuntimeResync());
+      await flush();
+      expect(liveReads).toBe(1);
+      act(() => state.setBoxReady(true));
+      await flush();
+      await act(async () => first.resolve(asStore(page())));
+      await flush();
+      expect(liveReads).toBe(2);
     });
   });
 

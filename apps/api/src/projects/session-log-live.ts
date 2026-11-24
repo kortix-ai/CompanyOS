@@ -6,8 +6,8 @@
  *
  * `readLiveSessionLogPage` answers null when the stored log must answer instead, with the reason:
  *  - the session has no box that can answer (`no_sandbox`, `sandbox_<status>`): no wait;
- *  - the box did not answer a whole page within {@link SESSION_LOG_LIVE_BUDGET_MS} (`timeout`,
- *    `daemon_<status>`, `invalid_page`);
+ *  - the box did not answer a whole page within {@link SESSION_LOG_LIVE_BUDGET_MS}, address
+ *    lookup included (`timeout`, `daemon_<status>`, `too_large`, `invalid_json`, `invalid_page`);
  *  - the box answered another thread (`other_thread`);
  *  - the box's page is of an older generation than the stored log (`stale_generation`): a box
  *    that was replaced, or one whose journal has not started yet.
@@ -20,7 +20,7 @@ import type { SessionLogPage } from '@kortix/api-contract/session-log';
 import { sessionLogs, sessionSandboxes } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 import { db } from '../shared/db';
-import { fetchRuntimeLogPage } from './lib/session-runtime-transport';
+import { fetchRuntimeLogPage, type RuntimeLogPageFetch } from './lib/session-runtime-transport';
 
 /**
  * The longest wait for the box's page. Measured on 2026-11-24 from a client through the prod API
@@ -66,12 +66,21 @@ export async function readLiveSessionLogPage(input: {
   if (!sandbox?.externalId || !RUNNING.has(sandbox.status)) {
     return { page: null, reason: sandbox ? `sandbox_${sandbox.status}` : 'no_sandbox' };
   }
+  // The budget covers the whole box read: resolving the box's address (a provider call on a cold
+  // cache, up to the provider's own timeout) as well as the request to it.
+  const signal = AbortSignal.timeout(input.budgetMs ?? SESSION_LOG_LIVE_BUDGET_MS);
+  const timedOut = new Promise<RuntimeLogPageFetch>((resolve) =>
+    signal.addEventListener('abort', () => resolve({ ok: false, reason: 'timeout', status: null }), { once: true }),
+  );
   const [box, stored] = await Promise.all([
-    fetchRuntimeLogPage(
-      { externalId: sandbox.externalId, ...(input.userId && { userId: input.userId }) },
-      { thread: input.threadId, limit: input.limit },
-      AbortSignal.timeout(input.budgetMs ?? SESSION_LOG_LIVE_BUDGET_MS),
-    ),
+    Promise.race([
+      fetchRuntimeLogPage(
+        { externalId: sandbox.externalId, ...(input.userId && { userId: input.userId }) },
+        { thread: input.threadId, limit: input.limit },
+        signal,
+      ),
+      timedOut,
+    ]),
     db.select({ generation: sessionLogs.generation }).from(sessionLogs).where(eq(sessionLogs.sessionId, input.sessionId)).limit(1),
   ]);
   if (!box.ok) return { page: null, reason: box.reason };

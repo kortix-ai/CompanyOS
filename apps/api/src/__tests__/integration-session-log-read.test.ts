@@ -328,6 +328,18 @@ describe('GET .../log?live=1: the running box answers, else the stored log', () 
     expect(ms).toBeLessThan(3_500);
   });
 
+  // The budget covers the whole box read: resolving the box's address (a provider call on a cold
+  // cache) as well as the request to it.
+  test('a box read that does not settle within the budget, whatever it waits on: the stored log', async () => {
+    boxAnswer = () => new Promise((resolve) => setTimeout(() => resolve({ ok: true, body: boxPage() }), 4_000));
+    const started = Date.now();
+    const { status, body } = await read(`${base(live)}/log?live=1`);
+    const ms = Date.now() - started;
+    expect(status).toBe(200);
+    expect(body.source).toBe('store');
+    expect(ms).toBeLessThan(3_000);
+  });
+
   test('a box page that is not a whole page, or of an older generation than the stored log: the stored log', async () => {
     boxAnswer = async () => ({ ok: true, body: { generation: 0, thread_id: ROOT, messages: [], has_more: false } });
     expect((await read(`${base(live)}/log?live=1`)).body.source).toBe('store');

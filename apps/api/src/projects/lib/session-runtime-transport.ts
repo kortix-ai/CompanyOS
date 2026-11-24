@@ -24,6 +24,7 @@
  * fills, which is the same defect wearing a compression hat.
  */
 
+import { readCapped } from '../../channels/core/download';
 import {
   buildSandboxUpstreamHeaders,
   resolveSandboxIngress,
@@ -164,9 +165,27 @@ export type RuntimeLogPageFetch =
   | { ok: false; reason: string; status: number | null };
 
 /**
+ * The largest box answer `GET …/log?live=1` reads, decompressed. A page of 40 messages measured
+ * 3–260 kB on 12 prod boxes (2026-11-24). The box runs code its session controls, so its answer
+ * is untrusted: past the ceiling the read stops and the stored log answers.
+ */
+export const RUNTIME_LOG_PAGE_MAX_BYTES = 8 * 1024 * 1024;
+
+/** The box's answer as JSON, read up to {@link RUNTIME_LOG_PAGE_MAX_BYTES}. */
+export async function readRuntimeLogPageBody(response: Response): Promise<RuntimeLogPageFetch> {
+  const bytes = await readCapped(response, RUNTIME_LOG_PAGE_MAX_BYTES);
+  if (!bytes) return { ok: false, reason: 'too_large', status: response.status };
+  try {
+    return { ok: true, body: JSON.parse(new TextDecoder().decode(bytes)) };
+  } catch {
+    return { ok: false, reason: 'invalid_json', status: response.status };
+  }
+}
+
+/**
  * Read `GET /kortix/runtime/log` once: the box's newest page of one thread
- * (`runtime.log.v1`). The body is not validated here. `signal` bounds the read;
- * the caller sets the budget.
+ * (`runtime.log.v1`), at most {@link RUNTIME_LOG_PAGE_MAX_BYTES}. The page's shape
+ * is not validated here. `signal` bounds the read; the caller sets the budget.
  */
 export async function fetchRuntimeLogPage(
   target: DaemonCallTarget,
@@ -186,7 +205,7 @@ export async function fetchRuntimeLogPage(
       await response.body?.cancel().catch(() => {});
       return { ok: false, reason: `daemon_${response.status}`, status: response.status };
     }
-    return { ok: true, body: await response.json() };
+    return await readRuntimeLogPageBody(response);
   } catch (error) {
     return { ok: false, reason: reasonOf(error), status: null };
   }

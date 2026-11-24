@@ -118,7 +118,8 @@ function readThread(projectId: string, sessionId: string, threadId: string): voi
  * both paths as {@link useSessionMessages} paces the v1 rows: a transcript reads a streaming turn
  * at most once per window (leading and trailing edge; the last change always lands).
  * On v2 a sub-agent thread the log names but has not read yet loads its newest page
- * (`GET …/log?thread=&live=1`: the box's page while the box answers), once per session and thread; the root thread is `useSession`'s. A
+ * (`GET …/log?thread=&live=1`: the box's page while the box answers, applied as a stored page, which
+ * settles only up to its own last seq), once per session and thread; the root thread is `useSession`'s. A
  * failed read (the journal has not posted the thread yet) retries when the thread's next
  * message arrives, at most every 5 s.
  */
@@ -362,7 +363,12 @@ export function useSessionLogSync(
     let liveRead: Promise<SessionLogRead> | null = null;
     const reload = (): Promise<SessionLogRead> => {
       if (!liveRead) {
-        liveRead = load(true).finally(() => {
+        liveRead = (async () => {
+          const read = await load(true);
+          // No page this client can read (a record it does not know, the network, a 5xx): the
+          // stored log, as a failed box read always fell back to it.
+          return read.answer === null && !stopped ? load(false) : read;
+        })().finally(() => {
           liveRead = null;
         });
       }
@@ -439,10 +445,13 @@ export function useSessionLogSync(
         onRuntimeResync: () => void reload(),
       });
     };
-    // The box got ready after the first read: read the page live now.
+    // The box got ready after the first read: read the page live now. A live read already on the
+    // wire may have asked while the box was not ready: read again once it settles.
     readLiveRef.current = () => {
       if (stopped) return;
-      void (onV2 ? reload() : attempt());
+      if (!onV2) return void attempt();
+      const pending = liveRead;
+      void (pending ? pending.then(() => reload()) : reload());
     };
     const attempt = async (): Promise<void> => {
       if (busy || stopped) return;

@@ -10065,8 +10065,26 @@ export const cliDeviceGrants = kortixSchema.table('cli_device_grants', {
  *               project: every member who may read the project
  *               public:  anyone with the link
  */
+/** Gallery organization only. Folder membership never grants access to an artifact. */
+export const artifactFolders = kortixSchema.table('artifact_folders', {
+  folderId: uuid('folder_id').defaultRandom().primaryKey(),
+  projectId: uuid('project_id').notNull().references(() => projects.projectId, { onDelete: 'cascade' }),
+  /** The folder this one sits in; null at the gallery root. Same project, no cycles (the API checks both). */
+  parentFolderId: uuid('parent_folder_id').references((): AnyPgColumn => artifactFolders.folderId, { onDelete: 'set null' }),
+  name: text('name').notNull(),
+  icon: text('icon'),
+  iconGlyph: jsonb('icon_glyph').$type<{ name: string; color: string }>(),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_artifact_folders_project').on(table.projectId),
+  index('idx_artifact_folders_parent').on(table.parentFolderId).where(sql`${table.parentFolderId} is not null`),
+  check('artifact_folders_name_check', sql`char_length(btrim(${table.name})) between 1 and 100`),
+]).enableRLS();
+
 export const artifacts = kortixSchema.table('artifacts', {
   artifactId: uuid('artifact_id').defaultRandom().primaryKey(),
+  galleryFolderId: uuid('gallery_folder_id').references(() => artifactFolders.folderId, { onDelete: 'set null' }),
   projectId: uuid('project_id').notNull(),
   accountId: uuid('account_id').notNull(),
   driveId: uuid('drive_id').notNull(),
@@ -10090,6 +10108,7 @@ export const artifacts = kortixSchema.table('artifacts', {
 }, (table) => [
   foreignKey({ columns: [table.projectId], foreignColumns: [projects.projectId], name: 'artifacts_project_fk' }).onDelete('cascade'),
   foreignKey({ columns: [table.driveId], foreignColumns: [drives.driveId], name: 'artifacts_drive_fk' }).onDelete('cascade'),
+  index('idx_artifacts_gallery_folder').on(table.galleryFolderId).where(sql`${table.galleryFolderId} is not null`),
   index('idx_artifacts_project_updated').on(table.projectId, table.updatedAt),
   uniqueIndex('idx_artifacts_drive_path').on(table.driveId, table.root, table.entry),
   check('artifacts_type_check', sql`${table.type} in ('doc', 'html')`),

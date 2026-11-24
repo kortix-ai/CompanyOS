@@ -4918,6 +4918,14 @@ Each run creates a new session, and the session appears in the web app with the 
 - A runtime does not serve every session control. Check a control with `runtimeSupports` before you show it: see [Gate on runtime capabilities](/docs/developers#gate-on-runtime-capabilities).
 - Changes per release are in the [CHANGELOG](https://github.com/kortix-ai/CompanyOS/blob/dev/packages/sdk/CHANGELOG.md). Runnable examples are in [packages/sdk/examples](https://github.com/kortix-ai/CompanyOS/tree/dev/packages/sdk/examples) on GitHub. The npm package does not include them.
 
+### Artifact gallery folders
+
+Import `listArtifactFolders`, `createArtifactFolder`, `updateArtifactFolder`, and `deleteArtifactFolder` from `@kortix/sdk`. React consumers use `useArtifactFolders` and `useArtifactFolderMutations` from `@kortix/sdk/react`.
+
+Folders organize the gallery. Pass `folder_id` when creating, sharing, or updating an Artifact. Use `null` to move it to the root. `listArtifacts(projectId, { folder_id: 'root' })` lists unfiled Artifacts. Omit `folder_id` to list across folders. Folders nest: pass `parent_folder_id` to `createArtifactFolder` to create one inside another, or to `updateArtifactFolder` to move it (`null` moves it to the root). A missing parent returns `404`; a move into the folder itself or one of its subfolders returns `409`. Deleting a folder moves its subfolders and Artifacts up one level. File paths, links, and sharing do not change.
+
+Folder names are workspace-visible. Creating requires artifact write permission. Editing or deleting requires artifact write permission plus folder ownership or artifact management permission. Moving an Artifact requires its existing management permission. Folder membership grants no access.
+
 ## SDK authentication
 
 Every SDK request carries one bearer credential. `createKortix` gets it from your

@@ -100,6 +100,7 @@ import { FingerprintIcon as FingerprintGlyph } from 'phosphor-react-native/src/i
 import { FolderIcon as FolderGlyph } from 'phosphor-react-native/src/icons/Folder';
 import { FolderOpenIcon as FolderOpenGlyph } from 'phosphor-react-native/src/icons/FolderOpen';
 import { FolderPlusIcon as FolderPlusGlyph } from 'phosphor-react-native/src/icons/FolderPlus';
+import { FolderSimpleDashedIcon as FolderSimpleDashedGlyph } from 'phosphor-react-native/src/icons/FolderSimpleDashed';
 import { FunnelIcon as FunnelGlyph } from 'phosphor-react-native/src/icons/Funnel';
 import { GearSixIcon as GearSixGlyph } from 'phosphor-react-native/src/icons/GearSix';
 import { GitBranchIcon as GitBranchGlyph } from 'phosphor-react-native/src/icons/GitBranch';
@@ -291,6 +292,7 @@ export const FingerprintIcon = withAppWeight(FingerprintGlyph, 'FingerprintIcon'
 export const FolderIcon = withAppWeight(FolderGlyph, 'FolderIcon');
 export const FolderOpenIcon = withAppWeight(FolderOpenGlyph, 'FolderOpenIcon');
 export const FolderPlusIcon = withAppWeight(FolderPlusGlyph, 'FolderPlusIcon');
+export const FolderSimpleDashedIcon = withAppWeight(FolderSimpleDashedGlyph, 'FolderSimpleDashedIcon');
 // Stacked-folders glyph drawn by hand; Phosphor's Folders is a different shape.
 export { KortixFoldersIcon as FoldersIcon } from './folders';
 export const FunnelIcon = withAppWeight(FunnelGlyph, 'FunnelIcon');

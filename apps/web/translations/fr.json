@@ -1293,10 +1293,6 @@
       "permission": "Vous avez besoin de l’autorisation de paramètres de l’espace de travail pour modifier un indicateur de fonctionnalité.",
       "updateFailed": "Impossible de mettre à jour {key}",
       "flags": {
-        "secrets_egress": {
-          "name": "Secrets protégés par le réseau",
-          "description": "Contrôlez les outils et destinations autorisés à recevoir les secrets de l’espace de travail."
-        },
         "reminders": {
           "name": "Boucles",
           "description": "Permet aux agents et aux personnes de planifier des points de contrôle sur une session, une fois ou de façon récurrente. Chaque déclenchement relance cette session. Ajoute les boucles à la liste des Déclencheurs, l’indicateur de boucles de la session et `kortix loop`."
@@ -18351,7 +18347,6 @@
       "texte59a1d133be1": "Les modifications s’appliqueront à la prochaine connexion. Les jetons déjà émis continueront de fonctionner jusqu’à leur expiration.",
       "texte59eaa3acaf1": "le mur",
       "texte5a4af9b350f": "J’ai créé, activé et testé la connexion SCIM",
-      "texte5a718af362a": "Les deux premières",
       "texte5ab168f1943": "Le brief pré-appel",
       "texte5b104783abd": "Votre agent peut utiliser les outils dont il a besoin, comme sur un ordinateur classique.",
       "texte5bd74e98514": "autre — source uniquement",

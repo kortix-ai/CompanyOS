@@ -228,6 +228,17 @@ describe('useFeatureFlag', () => {
     expect(useFeatureFlag('p', 'agentmail_email').enabled).toBe(true);
   });
 
+  test('secrets_egress graduated: enforced exposure is offered in every project', () => {
+    // 2026-11-23. A stored `secrets_egress: false` from the flag era is inert.
+    withDetail({ secrets_egress: false });
+    expect(useFeatureFlag('p', 'secrets_egress').enabled).toBe(true);
+
+    withDetail(undefined);
+    expect(useFeatureFlag('p', 'secrets_egress').enabled).toBe(true);
+
+    expect(useFeatureFlag(null, 'secrets_egress').enabled).toBe(true);
+  });
+
   test('pooled_provider_secrets graduated: provider keys and key selection are on for every project', () => {
     // 2026-11-12. A stored `pooled_provider_secrets: false` from the flag era is inert.
     withDetail({ pooled_provider_secrets: false });
@@ -306,7 +317,6 @@ describe('useFeatureFlags', () => {
   /** The keys the map carries: FEATURE_FLAG_KEYS plus the graduated keys the API still resolves per project. */
   const SERVED_MAP_KEYS = [
     'reminders',
-    'secrets_egress',
     'us_region',
     'event_triggers',
     'chat',

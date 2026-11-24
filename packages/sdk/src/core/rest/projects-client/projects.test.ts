@@ -1029,7 +1029,6 @@ describe('provisionProjectStream', () => {
 test('FEATURE_FLAG_KEYS lists every flag key exactly once', () => {
   const expected: FeatureFlagKey[] = [
     'reminders',
-    'secrets_egress',
     'us_region',
     'event_triggers',
     'chat',
@@ -1090,6 +1089,17 @@ test('workspace_volume graduated: every Platinum session is stateless, the key s
   expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
   const project = { experimental: {} } as Pick<KortixProject, 'experimental'>;
   const sent: boolean | undefined = project.experimental?.workspace_volume;
+  expect(sent).toBeUndefined();
+});
+
+test('secrets_egress graduated: enforced exposure needs no flag, the key still typechecks', () => {
+  // Network-Enforced Secrets is on for every project since 2026-11-23. The API
+  // sends `experimental.secrets_egress: true` for older clients, but it no
+  // longer lists, resolves, or accepts the key.
+  const graduated: FeatureFlagKey = 'secrets_egress';
+  expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
+  const project = { experimental: {} } as Pick<KortixProject, 'experimental'>;
+  const sent: boolean | undefined = project.experimental?.secrets_egress;
   expect(sent).toBeUndefined();
 });
 

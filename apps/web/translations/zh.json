@@ -1293,10 +1293,6 @@
       "permission": "更改功能开关需要工作区的设置权限。",
       "updateFailed": "无法更新 {key}",
       "flags": {
-        "secrets_egress": {
-          "name": "网络强制保护的机密",
-          "description": "控制哪些工具和目标可以接收工作区机密。"
-        },
         "reminders": {
           "name": "循环",
           "description": "让代理和用户在会话上安排一次性或重复的检查。每次触发都会重新提示该会话。在触发器列表中新增循环，以及会话循环标记和 `kortix loop`。"
@@ -18351,7 +18347,6 @@
       "texte59a1d133be1": "更改将应用于下一次登录。已签发的令牌在过期前仍可使用。",
       "texte59eaa3acaf1": "墙",
       "texte5a4af9b350f": "我已创建、启用并测试 SCIM 连接",
-      "texte5a718af362a": "前两个",
       "texte5ab168f1943": "会前简报",
       "texte5b104783abd": "你的代理可以使用所需工具，就像在普通计算机上一样。",
       "texte5bd74e98514": "其他 — 仅源码",

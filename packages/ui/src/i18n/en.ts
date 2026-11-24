@@ -795,10 +795,6 @@ const catalog = {
       "permission": "You need the workspace's settings permission to change a feature flag.",
       "updateFailed": "Failed to update {key}",
       "flags": {
-        "secrets_egress": {
-          "name": "Network-Enforced Secrets",
-          "description": "Control which tools and destinations can receive workspace secrets."
-        },
         "reminders": {
           "name": "Loops",
           "description": "Let agents and people schedule check-ins on a session, once or on repeat. Each fire re-prompts that session. Adds loops to the Triggers list, the session loop chip, and `kortix loop`."
@@ -5558,7 +5554,6 @@ const catalog = {
       "texte595f45dc6c9": "Europe",
       "texte5974d3936df": "Copy the Bot User OAuth Token and Signing Secret from the installed Slack app.",
       "texte5985e84210e": "Any resource",
-      "texte5a718af362a": "The first two",
       "texte5c253036018": "The name of a saved secret holding the key both sides sign with. Add the secret under Secrets first — the key itself is never stored here.",
       "texte5dbdffb8816": "Save rules",
       "texte5ee1e7e84aa": "Session expired",

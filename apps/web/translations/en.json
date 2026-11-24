@@ -1113,10 +1113,6 @@
       "permission": "You need the workspace's settings permission to change a feature flag.",
       "updateFailed": "Failed to update {key}",
       "flags": {
-        "secrets_egress": {
-          "name": "Network-Enforced Secrets",
-          "description": "Control which tools and destinations can receive workspace secrets."
-        },
         "reminders": {
           "name": "Loops",
           "description": "Let agents and people schedule check-ins on a session, once or on repeat. Each fire re-prompts that session. Adds loops to the Triggers list, the session loop chip, and `kortix loop`."
@@ -18396,7 +18392,6 @@
       "texte59a1d133be1": "Changes apply to the next sign-in. Tokens already issued keep working until they expire.",
       "texte59eaa3acaf1": "the wall",
       "texte5a4af9b350f": "I’ve created, enabled, and tested the SCIM connection",
-      "texte5a718af362a": "The first two",
       "texte5ab168f1943": "The pre-call brief",
       "texte5b104783abd": "Your agent can use the tools it needs, just as it would on a regular computer.",
       "texte5bd74e98514": "other — source only",

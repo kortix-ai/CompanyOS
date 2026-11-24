@@ -73,6 +73,7 @@ export type FeatureFlagKey =
   | 'reminders'
   /** @deprecated Withdrawn — warm sessions were removed; a session boots on its own. The API sends `false` for every project. Removed in the next major. */
   | 'warm_sessions'
+  /** @deprecated Graduated 2026-11-23 — Network-Enforced Secrets: every project can set a secret's exposure to enforced (the sandbox holds a handle; Kortix substitutes the value only on approved hosts). The API sends `true` for every project, so `useFeatureFlag(id, 'secrets_egress')` reports `enabled: true`. Kept permanently. */
   | 'secrets_egress'
   /** @deprecated Withdrawn — the pi worker split left the product; pi runs in the session sandbox. The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'pi_worker'
@@ -148,7 +149,7 @@ export type FeatureFlagKey =
   /** @deprecated Withdrawn — agents messaging people left the product. The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'human_messaging';
 
-/** The keys of {@link FeatureFlagKey} that are no flag: the API never sends them, or (`llm_gateway`, `session_log`, `session_log_restore`, `pi_harness`, `genui`, `meta_agent`, `notification_center`, `pooled_provider_secrets`) sends a constant `true`, or (`volumes`, `drives`, `artifacts`) sends whether the platform stores a Drive, or (`workspace_volume`) sends whether new sessions get a /workspace volume, or (`chrome`) sends whether the platform serves Kortix in Chrome, or (`artifact_comments`) sends a constant `false`. */
+/** The keys of {@link FeatureFlagKey} that are no flag: the API never sends them, or (`llm_gateway`, `session_log`, `session_log_restore`, `pi_harness`, `genui`, `meta_agent`, `notification_center`, `pooled_provider_secrets`, `secrets_egress`) sends a constant `true`, or (`volumes`, `drives`, `artifacts`) sends whether the platform stores a Drive, or (`workspace_volume`) sends whether new sessions get a /workspace volume, or (`chrome`) sends whether the platform serves Kortix in Chrome, or (`artifact_comments`) sends a constant `false`. */
 type GraduatedFeatureFlagKey =
   | 'agent_tunnel'
   | 'marketplace'
@@ -178,6 +179,7 @@ type GraduatedFeatureFlagKey =
   | 'drives'
   | 'notification_center'
   | 'pooled_provider_secrets'
+  | 'secrets_egress'
   | 'artifacts'
   | 'artifact_comments'
   | 'workspace_volume'
@@ -192,7 +194,6 @@ type ServedFeatureFlagKey = Exclude<FeatureFlagKey, GraduatedFeatureFlagKey>;
  */
 export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'reminders',
-  'secrets_egress',
   'us_region',
   'event_triggers',
   'chat',

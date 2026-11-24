@@ -2,6 +2,7 @@ import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { eq, sql } from 'drizzle-orm';
 import { accountMembers, accounts, platformUserRoles, projectMembers, projects } from '@kortix/db';
 import { db } from '../shared/db';
+import { config } from '../config';
 import { app } from '../index';
 import { createAccountToken } from '../repositories/account-tokens';
 import { insertIntoView } from './helpers/compat-views';
@@ -219,15 +220,16 @@ describe('PATCH /v1/projects/:projectId/features', () => {
     }
   });
 
-  test('the graduated apps, llm_gateway, session_log, session_log_restore and workspace_volume keys are unknown: 400, not an operator-only 403, and nothing is stored', async () => {
+  test('the graduated apps, llm_gateway, session_log, session_log_restore, workspace_volume and chrome keys are unknown: 400, not an operator-only 403, and nothing is stored', async () => {
     // Apps went GA (2026-10-14), the LLM gateway became the only model path
     // (2026-10-20) and the session log the only saved history (2026-10-22):
     // the keys left the registry and the contract. A project manager — or
     // anyone with settings.write — PATCHing one gets the ordinary unknown-key
     // 400; the operator-only refusal is unreachable. `session_log_restore` (the
     // boot restore from the session log) graduated on 2026-11-05, and
-    // `workspace_volume` (stateless sandboxes, operator-only until then) on 2026-11-23.
-    for (const feature of ['apps', 'llm_gateway', 'session_log', 'session_log_restore', 'connectors_v2', 'connectors_api_discover', 'workspace_volume']) {
+    // `workspace_volume` (stateless sandboxes, operator-only until then) on 2026-11-23
+    // and `chrome` (Kortix in Chrome) on 2026-11-24.
+    for (const feature of ['apps', 'llm_gateway', 'session_log', 'session_log_restore', 'connectors_v2', 'connectors_api_discover', 'workspace_volume', 'chrome']) {
       for (const enabled of [true, false, null]) {
         const res = await patch(`/v1/projects/${PROJECT}/features`, JSON.stringify({ feature, enabled }));
         expect(res.status).toBe(400);
@@ -261,6 +263,9 @@ describe('PATCH /v1/projects/:projectId/features', () => {
     expect(keys).not.toContain('session_log');
     expect(keys).not.toContain('session_log_restore');
     expect(keys).not.toContain('workspace_volume');
+    expect(keys).not.toContain('chrome');
+    // `chrome` stays on the row for older web, SDK and CLI builds: whether this API serves Kortix in Chrome.
+    expect(body.experimental.chrome).toBe(config.KORTIX_CHROME_ENABLED);
   });
 });
 
@@ -300,6 +305,7 @@ describe('PUT /v1/admin/api/projects/:id/features', () => {
     expect((await put(PROJECT, { feature: 'session_log', enabled: true }, operatorSecret)).status).toBe(400);
     expect((await put(PROJECT, { feature: 'session_log_restore', enabled: true }, operatorSecret)).status).toBe(400);
     expect((await put(PROJECT, { feature: 'workspace_volume', enabled: true }, operatorSecret)).status).toBe(400);
+    expect((await put(PROJECT, { feature: 'chrome', enabled: false }, operatorSecret)).status).toBe(400);
     expect((await put(crypto.randomUUID(), { feature: 'calendar', enabled: true }, operatorSecret)).status).toBe(404);
     expect((await put(ARCHIVED, { feature: 'calendar', enabled: false }, operatorSecret)).status).toBe(404);
     expect(await storedOverrides(ARCHIVED)).toEqual({ apps: true });

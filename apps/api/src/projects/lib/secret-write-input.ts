@@ -5,7 +5,7 @@
  * flag, does no I/O, and returns either the parsed write input or the exact
  * response the route must send. The checks that need the database — the
  * network-boundary destination conflict, the existing-row lookup behind
- * value-required, the secrets_egress gate and the identifier-key conflict —
+ * value-required and the identifier-key conflict —
  * stay in the route handler (routes/secrets.ts), which runs them in the same
  * order after this resolver returns ok.
  *

@@ -233,9 +233,8 @@ export type SecretDeliveryPresentation = {
  * the mode that needs no setup and works the same on every provider. It is
  * warning-toned everywhere it renders — it is the only value whose plaintext
  * lands in a process the agent can read, an honest label, not an alarm.
- * `enforced` sits second and is an EXPERIMENTAL opt-in behind the
- * `secrets_egress` flag (still in testing): the value never enters the sandbox,
- * Kortix substitutes it outside on an approved host. `disabled` closes the list
+ * `enforced` sits second: the value never enters the sandbox, Kortix
+ * substitutes it outside on an approved host. `disabled` closes the list
  * because it is an off switch, not a delivery mode.
  */
 const EXPOSURE_PRESENTATIONS: Record<SecretExposure, SecretDeliveryPresentation> = {
@@ -306,16 +305,8 @@ export type SecretDeliveryLegendEntry = SecretDeliveryPresentation & {
  * The Secrets page renders this as its "What each Access value means" legend.
  * It reads the same tables the picker and each row's badge read, which is the
  * only reason the three can be trusted to agree.
- *
- * `showEnforced` drops the experimental "Enforce at the network" definition
- * when no row uses it and the `secrets_egress` flag is off — the legend must
- * not explain a value the picker never offers, or the page reintroduces exactly
- * the network-boundary confusion the flag hides.
  */
-export function secretDeliveryLegend(
-  showEnforced = true,
-  tI18nComplete?: UiTranslator,
-): SecretDeliveryLegendEntry[] {
+export function secretDeliveryLegend(tI18nComplete?: UiTranslator): SecretDeliveryLegendEntry[] {
   const exposurePresentations = tI18nComplete
     ? localizeUiCatalog(EXPOSURE_PRESENTATIONS, tI18nComplete, PRODUCT_CATALOG_TRANSLATION_KEYS)
     : EXPOSURE_PRESENTATIONS;
@@ -327,13 +318,11 @@ export function secretDeliveryLegend(
       )
     : ASSIGNED_USAGE_PRESENTATIONS;
   return [
-    ...(Object.keys(exposurePresentations) as SecretExposure[])
-      .filter((key) => showEnforced || key !== 'enforced')
-      .map((key) => ({
-        key,
-        kind: 'exposure' as const,
-        ...exposurePresentations[key],
-      })),
+    ...(Object.keys(exposurePresentations) as SecretExposure[]).map((key) => ({
+      key,
+      kind: 'exposure' as const,
+      ...exposurePresentations[key],
+    })),
     ...(Object.keys(assignedUsagePresentations) as Exclude<SecretUsage, 'agent'>[]).map((key) => ({
       key,
       kind: 'usage' as const,
@@ -470,15 +459,14 @@ function providerApiHost(provider: LlmProviderEntry | null): string | null {
  *  2. **A known model key.** `environment`, but the vendor's API host is still
  *     prefilled from the same catalog the LLM providers screen reads (or
  *     `WELL_KNOWN_API_HOSTS` when that provider's SDK hardcodes the URL). The
- *     host waits ready so that a project which has turned ON the experimental
- *     `secrets_egress` flag and switches to enforced does not have to type it.
+ *     host waits ready so that a person who switches to enforced does not
+ *     have to type it.
  *  3. **Everything else.** `environment` with an empty host list.
  *
  * The default is ALWAYS `environment`: the real value loads into the sandbox,
  * the mode that needs no setup and works on every provider. Enforced (network
- * substitution) is an experimental opt-in behind `secrets_egress`; a new secret
- * is never defaulted onto it, so the default never points at an option the
- * picker may not even show.
+ * substitution) is a per-secret choice; a new secret is never defaulted onto
+ * it, because an enforced secret needs its approved hosts first.
  */
 export function classifyNewSecret(input: { key: string; value: string }): SecretClassification {
   const key = input.key.trim().toUpperCase();
@@ -525,27 +513,17 @@ export type SecretExposureOption = SecretDeliveryPresentation & {
 /**
  * The exposures the user may pick.
  *
- * `environment` and `disabled` are always offered. `enforced` (network
- * substitution) is experimental and appears ONLY when `egressAvailable` — the
- * project has turned on the `secrets_egress` flag, or the row being edited is
- * already enforced (so a legacy/enforced secret stays readable and can be moved
- * off enforcement even after the flag is switched back off). The default is
- * always `environment`, so hiding `enforced` never leaves the picker pointing
- * at an option that is not present.
+ * All three are always offered: `environment`, `enforced` (network
+ * substitution) and `disabled`. A new secret defaults to `environment`.
  */
-export function secretExposureOptions(
-  egressAvailable: boolean,
-  tI18nComplete?: UiTranslator,
-): SecretExposureOption[] {
+export function secretExposureOptions(tI18nComplete?: UiTranslator): SecretExposureOption[] {
   const presentations = tI18nComplete
     ? localizeUiCatalog(EXPOSURE_PRESENTATIONS, tI18nComplete, PRODUCT_CATALOG_TRANSLATION_KEYS)
     : EXPOSURE_PRESENTATIONS;
-  return (Object.keys(presentations) as SecretExposure[])
-    .filter((exposure) => egressAvailable || exposure !== 'enforced')
-    .map((exposure) => ({
-      exposure,
-      ...presentations[exposure],
-    }));
+  return (Object.keys(presentations) as SecretExposure[]).map((exposure) => ({
+    exposure,
+    ...presentations[exposure],
+  }));
 }
 
 export type SecretDeliveryBlockedReason = 'no_agent_grant';

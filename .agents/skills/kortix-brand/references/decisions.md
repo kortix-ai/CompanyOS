@@ -10,6 +10,16 @@ Ids: `D1` to `D8` and `D4a` to `D4k` come from the 2026-10-01 brand-kit build. `
 
 ---
 
+## 2026-11-24
+
+### D44 The home hero subhead names the category, then what it does and what you own
+- **Date:** 2026-11-24
+- **Decision:** The home hero subhead is: "The operating system for the AI-native company. Connect every data source, orchestrate agents, and keep their skills, memory and connectors in one git repo you own. Open source, any model, in our cloud or yours." The title stays "The CompanyOS". The README tagline follows: "The open-source CompanyOS: the operating system for the AI-native company.", with the subhead's second sentence as its lead line. The GitHub About reads "Kortix CompanyOS – the open-source operating system for the AI-native company." plus the same sentence and "Any model, in our cloud or yours." The positioning line ("The cloud-native agent harness for companies") leaves the hero and the README and stays the line for the docs index, the Guide and the Developers intros.
+- **Why:** founder, 2026-11-24: "The Operating System For the AI Native Company & then say like – connect all data sources across the company, orchestrate agents", then "store skills, memory connectors, agent, and store everything in one repo or one place … maybe we keep it as a git repo", then "go update the github readme &/or even github page itself description". Draft lines the founder gave and the kit does not allow stay out: the 80/20 agent-to-human split (an unmeasured productivity metric, `claims.md`), "basically free to run" (no price references) and "the most sophisticated system" (the one sanctioned superlative is "the leading open-source alternative").
+- **Where:** `apps/web/src/features/marketing/landing-hero/sand-band-hero.tsx`, `README.md`, the GitHub About of `kortix-ai/CompanyOS`, [positioning.md](verbal/positioning.md) section 1.
+- **Supersedes:** D37 (the subhead sentence). D35's positioning line stands for every surface except the home hero subhead.
+- **Source:** the `hero-subhead` branch.
+
 ## 2026-11-21
 
 ### D43 Wallpapers carry color: ten gradients and a custom one replace the monochrome set

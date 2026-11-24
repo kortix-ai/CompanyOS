@@ -35,7 +35,6 @@ const fakes: Record<string, Record<string, unknown>> = {
   'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
   '@tanstack/react-query': { useQueryClient: () => ({ invalidateQueries() {} }) },
   '@kortix/sdk/react': {
-    useFeatureFlag: () => ({ enabled: false }),
     useCans: (target: unknown, actions: readonly string[]) => {
       probes.push({ target, actions });
       return Object.fromEntries(actions.map((action) => [action, cans[action] ?? can(false, true)]));

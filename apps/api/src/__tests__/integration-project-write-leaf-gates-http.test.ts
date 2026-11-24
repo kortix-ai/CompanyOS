@@ -225,7 +225,7 @@ const CASES: WCase[] = [
     tier: 'manager', denyGrant: [A.PROJECT_TRIGGER_FIRE], allowGrant: [A.PROJECT_CONNECTOR_WRITE],
   },
   {
-    name: 'shared connect-requests (connector.write)',
+    name: 'connect-requests (connector.write)',
     leaf: A.PROJECT_CONNECTOR_WRITE, method: 'POST',
     // `owner: "project"` (the shared account) is the connector.write gate. The
     // default `owner: "me"` is any member's own account (#13036).

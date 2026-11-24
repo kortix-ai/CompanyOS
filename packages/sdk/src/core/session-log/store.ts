@@ -53,7 +53,7 @@ export interface SessionLogState {
   revs: Record<string, number>;
   /** Per thread: the oldest page read said older messages exist (`has_more`). Absent before a page of the thread. */
   older: Record<string, boolean>;
-  /** Per thread: the highest generation of a page applied to it. Absent before a page of the thread. */
+  /** Per thread: the highest generation of a newest page (not an older one) applied to it. Absent before one. */
   pageGenerations: Record<string, number>;
 }
 
@@ -238,8 +238,9 @@ export function applySessionLogPage(state: SessionLogState, page: SessionLogPage
     threads,
     messages,
     older,
+    // Only the newest page answers for the tail; an older page (`beforeSeq`) does not move it.
     pageGenerations:
-      thread === null || (state.pageGenerations[thread] ?? -1) >= page.generation
+      thread === null || beforeSeq !== undefined || (state.pageGenerations[thread] ?? -1) >= page.generation
         ? state.pageGenerations
         : { ...state.pageGenerations, [thread]: page.generation },
   };

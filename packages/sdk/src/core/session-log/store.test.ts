@@ -123,6 +123,14 @@ describe('applySessionLogPage', () => {
     expect(ids(state)).toEqual(all.map((m) => m.message_id));
   });
 
+  test('an older page of the new generation read first does not stop the newest page settling the old tail', () => {
+    const all = rootMessages();
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all, 1));
+    state = applySessionLogPage(state, { ...page(all.slice(0, 4), 2), has_more: false }, all[4]!.seq);
+    state = applySessionLogPage(state, page(all.slice(0, -1), 2));
+    expect(ids(state)).toEqual(all.slice(0, -1).map((m) => m.message_id));
+  });
+
   test('a lagging page still settles a deleted message inside its own span', () => {
     const all = rootMessages();
     let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all));

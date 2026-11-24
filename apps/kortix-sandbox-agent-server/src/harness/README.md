@@ -978,6 +978,27 @@ supervisor restarts it.
 apart, `startRuntimeAtBoot`). After the last failure readiness reports
 `runtime_start_failed` with the message, not `pi_not_ready`.
 
+### How agents write (`HOW_YOU_WRITE`)
+
+Every agent's system prompt, root and subagent, carries a `## How you write`
+section (`HOW_YOU_WRITE`, `pi/runtime.ts`), placed after `## Runtime
+capabilities` and before `## Act before you ask`. Only the watcher prompt
+leaves it out. It asks for direct, concise, warm and professional answers:
+the answer first, plain words, specific numbers, formatting only when it
+helps, and no filler openers, closing offers or common AI tics such as em
+dashes. Its last rule gives way: the agent's own instructions, a loaded skill
+or the person set a different voice, length or format. My Kortix keeps its
+"Your voice" section (brand decision D31). A brand-voice skill keeps its
+rules. Claude subscription models get it too, appended to the Claude Code
+preset (`pi/claude/sessions.ts`).
+
+It also forbids writing the result of a step the agent did not run. An A/B
+run on 2026-11-24 (`deepseek-v4.1-flash`, `glm-5.3-flash`, 8 prompts) showed
+why. Without that rule, "lead with the result" made glm invent a check's
+output in 1 to 2 of 9 answers, against 0 without the section. With the rule,
+each arm had 1 such answer in about 77. The section cut answer length by 25
+to 44 %, em dashes from 45 to 0, 64 to 9 and 45 to 9, and bold by about 70 %.
+
 ### kortix.yaml
 
 The compiled agent set (`KORTIX_COMPILED_AGENT_CONFIG`, `CompiledAgentSet`,

@@ -19,6 +19,7 @@ import { dictationPriceUsd } from '../../billing/services/tiers';
 import {
   assertGatewayBudget,
   GatewayBudgetExceededError,
+  persistGatewayTrace,
   recordGatewayUsage,
 } from '../../llm-gateway/hooks';
 import { releaseBudgetReservation } from '../../llm-gateway/budgets';
@@ -201,7 +202,55 @@ export async function transcribeDictation(
   }
 
   const requestId = crypto.randomUUID();
+  const startedAt = new Date().toISOString();
   const started = performance.now();
+  /**
+   * The request-log row: what project budgets sum (`gateway_request_logs`,
+   * rolled into `gateway_spend_daily`) and what the gateway Logs tab lists.
+   * It carries sizes, seconds and cost: never the audio, never the words.
+   */
+  const trace = (result: {
+    status: number;
+    ok: boolean;
+    errorCode?: string;
+    errorMessage?: string;
+    seconds?: number;
+    upstreamCost?: number;
+    finalCost?: number;
+  }) =>
+    persistGatewayTrace({
+      requestId,
+      startedAt,
+      accountId,
+      actorUserId: userId,
+      projectId,
+      requestedModel: 'dictation',
+      resolvedModel: 'dictation',
+      provider: 'kortix',
+      upstream: { provider: 'platinum', model: DICTATION_MODEL },
+      billingMode: 'credits',
+      streaming: false,
+      status: result.status,
+      ok: result.ok,
+      ...(result.errorCode ? { errorCode: result.errorCode, errorMessage: result.errorMessage } : {}),
+      latencyMs: Math.round(performance.now() - started),
+      attempts: 1,
+      candidatesTried: ['kortix:dictation'],
+      usage: { promptTokens: 0, completionTokens: 0, cachedTokens: 0, cacheWriteTokens: 0 },
+      upstreamCost: result.upstreamCost ?? 0,
+      finalCost: result.finalCost ?? 0,
+      request: { model: 'dictation', container: extension, bytes: audio.size },
+      response: result.seconds === undefined ? null : { seconds: result.seconds },
+      metadata: { surface: 'dictation' },
+    }).catch((error: unknown) =>
+      logger.error('[dictation] request trace was not recorded', {
+        requestId,
+        projectId,
+        finalCost: result.finalCost ?? 0,
+        error: error instanceof Error ? error.message.split('\n')[0] : String(error),
+      }),
+    );
+
   let answer: UpstreamAnswer;
   try {
     answer = await callWhisper(audio, extension, requestId, signal);
@@ -211,11 +260,14 @@ export async function transcribeDictation(
       requestId,
       error: error instanceof Error ? error.message : String(error),
     });
+    await trace({ status: 503, ok: false, errorCode: 'dictation_failed', errorMessage: 'The transcription upstream did not answer.' });
     return refusal(503, 'dictation_failed', 'Transcription failed. Try again.');
   }
   const latencyMs = Math.round(performance.now() - started);
   if (!answer.ok) {
     release();
+    const code = answer.busy ? 'dictation_busy' : 'dictation_failed';
+    await trace({ status: 503, ok: false, errorCode: code, errorMessage: 'The transcription upstream refused the clip.' });
     return answer.busy
       ? refusal(503, 'dictation_busy', 'Transcription is busy right now. Try again in a few seconds.', { retryAfterSeconds: 5 })
       : refusal(503, 'dictation_failed', 'Transcription failed. Try again.');
@@ -223,6 +275,13 @@ export async function transcribeDictation(
 
   // A clip with no words costs nothing: the person got nothing.
   const costUsd = answer.text ? dictationPriceUsd(answer.seconds) : 0;
+  await trace({
+    status: 200,
+    ok: true,
+    seconds: answer.seconds,
+    upstreamCost: answer.upstreamCostUsd,
+    finalCost: costUsd,
+  });
   try {
     await recordGatewayUsage({
       promptTokens: 0,

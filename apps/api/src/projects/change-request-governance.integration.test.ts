@@ -141,6 +141,23 @@ describe('classifyMerge — connectors and what the commits add', () => {
     ]);
   });
 
+  test('a kortix.yaml added beside the base kortix.yml that drops a connector the base added since needs project.connector.write', async () => {
+    // main moves to kortix.yml; the branch starts there.
+    await git(['mv', 'kortix.yaml', 'kortix.yml'], workPath);
+    await git(['commit', '-q', '-m', 'use kortix.yml'], workPath);
+    await git(['push', '-q', 'origin', 'main'], workPath);
+    // The branch adds kortix.yaml, a copy of the manifest at the branch point.
+    await pushBranch('session-shadow', { 'kortix.yaml': MANIFEST });
+    // main then adds a connector to kortix.yml.
+    await writeFile(join(workPath, 'kortix.yml'), WITH_CONNECTOR);
+    await git(['commit', '-q', '-am', 'connectors: add desk'], workPath);
+    await git(['push', '-q', 'origin', 'main'], workPath);
+    // The branch's own diff touches no section; what the merge lands drops desk.
+    const change = await classifyMerge(project, { baseRef: 'main', headRef: 'session-shadow' });
+    expect(change.required).toContain('project.connector.write');
+    expect(change.manifestRef).not.toBe(change.headSha);
+  });
+
   test('a token the branch adds is a finding with file, line, commit and rule, never the value', async () => {
     await pushBranch('session-token', { 'config.ts': `// config\nexport const TOKEN = '${FAKE_GITHUB_TOKEN}';\n` });
     const change = await classifyMerge(project, { baseRef: 'main', headRef: 'session-token' });

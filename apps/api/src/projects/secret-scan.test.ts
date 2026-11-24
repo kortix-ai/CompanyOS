@@ -143,8 +143,13 @@ describe('scanAddedLines — what a diff adds, by file and new line number', () 
       '',
     ].join('\n');
     const [finding] = scanAddedLines(patch).findings;
-    expect(finding?.file).toBe('x\\x1b[2Jy.ts');
+    expect(finding?.file).toBe('x\\u001b[2Jy.ts');
     expect(finding?.file).not.toContain('\u001b');
+  });
+
+  test('a C1 or bidirectional mark in an unquoted path is escaped too', () => {
+    const patch = ['diff --git a/x b/x', '--- /dev/null', '+++ b/a\u202egnp.ts\u0085', '@@ -0,0 +1 @@', `+${TOKENS.github_token}`, ''].join('\n');
+    expect(scanAddedLines(patch).findings[0]?.file).toBe('a\\u202egnp.ts\\u0085');
   });
 
   test('findings are capped; the total still counts every one', () => {

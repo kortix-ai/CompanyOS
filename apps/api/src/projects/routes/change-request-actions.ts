@@ -9,6 +9,7 @@ import { refusesSelfMerge, secretMergeRefusal } from '../change-request-policy';
 import { classifyMerge, type MergeClassification } from '../change-request-governance';
 import { assertNoGrantEscalation } from '../../iam/agent-grant-ceiling';
 import { actorOf } from '../../iam/actor';
+import { actsAsFullIdentity } from '../../iam/person-credential';
 import { auth, boundedIssues, errors, json, lenientBody } from '../../openapi';
 import { kickProjectTemplatePrebuilds } from '../../snapshots/builder';
 import { kickPiPackageBundle } from '../../pi-packages/bundle';
@@ -166,11 +167,13 @@ export function registerChangeRequestActionsRoutes(): void {
       // is not clean. A person who checked it may merge anyway
       // (`allow_secrets`); an agent session may not. A finding names file,
       // line, commit and rule, never the value.
-      // Only a person's own credential overrides: the dashboard (JWT) or their
-      // CLI token. Never a session, a service account or a workspace key.
-      const credential = allowSecrets ? (await actorOf(c, loaded.row.accountId)).credential : null;
+      // Only the person's full identity overrides: a browser session or a
+      // personal key bound to no workspace. Never a session, a service
+      // account, a workspace key or an OAuth token (iam/person-credential.ts).
       const actorIsPerson =
-        !isProjectSessionPrincipal(c) && (credential?.kind === 'jwt' || credential?.kind === 'pat');
+        allowSecrets &&
+        !isProjectSessionPrincipal(c) &&
+        actsAsFullIdentity(c.get('authType') as string | undefined, await actorOf(c, loaded.row.accountId));
       const refusal = secretMergeRefusal({
         crNumber: cr.number,
         baseRef: cr.baseRef,
@@ -214,7 +217,7 @@ export function registerChangeRequestActionsRoutes(): void {
         const found = await readManifestFromRepo(
           projectForGit,
           manifestCandidatePaths(projectForGit.manifestPath),
-          change.headSha,
+          change.manifestRef,
         ).catch((err: unknown) => {
           if (err instanceof ManifestImportError) return { importError: err.message } as const;
           throw err;
@@ -259,6 +262,7 @@ export function registerChangeRequestActionsRoutes(): void {
           authorName: 'Kortix',
           authorEmail: 'noreply@kortix.ai',
           expectedHeadSha: change.headSha,
+          expectedBaseSha: change.baseSha,
         });
       } catch (error) {
         if (error instanceof HeadMovedError) {

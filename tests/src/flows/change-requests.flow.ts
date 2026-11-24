@@ -607,7 +607,12 @@ flow(
     domain: "change-requests",
     requires: ["database"],
     timeoutMs: 300_000,
-    routes: [...CR_GUARD_ROUTES, "POST /v1/accounts/:accountId/iam/service-accounts", "POST /v1/accounts/:accountId/iam/assignments"],
+    routes: [
+      ...CR_GUARD_ROUTES,
+      "POST /v1/accounts/:accountId/iam/service-accounts",
+      "POST /v1/accounts/:accountId/iam/assignments",
+      "POST /v1/workspaces/:workspaceId/tokens",
+    ],
   },
   async (ctx) => {
     if (ctx.env.target !== "local") return; // the manifest is committed straight to the bare repository
@@ -671,6 +676,15 @@ flow(
         }
         r.status(403).body().has("$.code", "CR_SECRET_OVERRIDE_REFUSED");
         if ((await w.mainFile("src/config.ts")) !== null) throw new Error("a service account override landed src/config.ts");
+      });
+
+      await ctx.step("the owner's key bound to this workspace asks to override → 403 CR_SECRET_OVERRIDE_REFUSED: only an unbound personal key or a browser session is the person", async () => {
+        const minted = await owner.post("/v1/workspaces/:workspaceId/tokens", { name: ctx.fixtures.name("cr16-bound") }, { params: { workspaceId: w.project.id } });
+        minted.status(201);
+        const bound = ctx.client.withBearer(minted.json<{ secret_key: string }>().secret_key, "workspace-key");
+        const r = await w.merge(bound, leak.crId, { allow_secrets: true });
+        r.status(403).body().has("$.code", "CR_SECRET_OVERRIDE_REFUSED");
+        if ((await w.mainFile("src/config.ts")) !== null) throw new Error("a workspace-bound key override landed src/config.ts");
       });
 
       await ctx.step("the real CLI as the agent: `kortix cr merge <n>` exits 1 and names src/config.ts:2 and `kortix secrets request`, never the value", async () => {

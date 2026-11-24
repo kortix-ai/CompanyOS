@@ -122,11 +122,20 @@ function unquoteGitPath(raw: string): string {
       i += 1;
     }
   }
-  // A path goes into API answers that a terminal prints: never hand it a
-  // control character (an escape sequence) that the quoting had neutralized.
-  return Buffer.from(bytes)
-    .toString('utf8')
-    .replace(/[\u0000-\u001f\u007f-\u009f]/g, (ch) => `\\x${ch.charCodeAt(0).toString(16).padStart(2, '0')}`);
+  return Buffer.from(bytes).toString('utf8');
+}
+
+/**
+ * A path as it may appear in an answer a terminal or a browser shows: every
+ * control character (C0, DEL, C1) and every bidirectional or invisible
+ * formatting mark is written as `\uXXXX`. A branch names its own files, so a
+ * file name must never move the reader's cursor or reorder what they read.
+ */
+export function printablePath(path: string): string {
+  return path.replace(
+    /[\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g,
+    (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`,
+  );
 }
 
 /**
@@ -180,7 +189,7 @@ export function scanAddedLines(patch: string): SecretScan {
     } else if (line.startsWith('+++ ')) {
       const target = line.slice(4).replace(/\t$/, '');
       const path = unquoteGitPath(target);
-      file = path === '/dev/null' ? null : path.replace(/^b\//, '');
+      file = path === '/dev/null' ? null : printablePath(path.replace(/^b\//, ''));
     } else if (line.startsWith('@@ ')) {
       const hunk = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line);
       if (!hunk) continue;

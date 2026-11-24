@@ -196,6 +196,8 @@ export interface MergeOptions {
    * that moved since the check throws `HeadMovedError`.
    */
   expectedHeadSha?: string;
+  /** The base commit the caller checked; a base that moved throws `HeadMovedError` too. */
+  expectedBaseSha?: string;
 }
 
 export interface MergeResult {

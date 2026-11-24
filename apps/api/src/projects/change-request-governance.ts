@@ -11,8 +11,9 @@ import type { AgentGrant } from '@kortix/db';
 import { grantsOfManifestText } from './agents/grants';
 import { requiredManifestActions } from './change-request-policy';
 import { validateRef } from './git-ref';
-import { ensureDiffBlobs } from './git/commits';
+import { DIFF_BLOB_FETCH_MAX_BYTES, ensureDiffBlobs } from './git/commits';
 import { readManifestFromRepo } from './git/files';
+import { wouldBeMergeCommit } from './git/merge';
 import { ensureCommitTrees, GitOperationError, refreshMirror, runGit, runGitBuffer } from './git/mirror';
 import type { GitBackedProject } from './git/types';
 import { scanAddedLines, type SecretScan } from './secret-scan';
@@ -30,6 +31,10 @@ const SECRET_SCAN_MAX_MERGES = 20;
 export interface MergeClassification {
   /** The head commit every check read. The merge lands exactly this commit. */
   headSha: string;
+  /** The base commit the manifest check compared against. The merge goes onto exactly this commit. */
+  baseSha: string;
+  /** The commit whose manifest the merge makes authoritative: the would-be merge, or the head when it conflicts. */
+  manifestRef: string;
   /** Manifest permissions the change needs; `[]` when it changes none of the governed sections. */
   required: string[];
   /** Every agent's grant before and after, for the non-escalation check (iam/agent-grant-ceiling.ts). */
@@ -65,19 +70,30 @@ export async function classifyMerge(
   // this mirror has never seen it.
   await refreshMirror(project, true, { freshRef: cr.headRef });
   const repoPath = await refreshMirror(project, true, { freshRef: cr.baseRef });
-  const headSha = (await runGit(['rev-parse', '--verify', `refs/heads/${cr.headRef}^{commit}`], repoPath, false)).stdout.trim();
-  const mergeBase = await runGit(['merge-base', `refs/heads/${cr.baseRef}`, headSha], repoPath, false)
-    .then((r) => r.stdout.trim() || null)
-    .catch(() => null);
+  const resolve = async (ref: string) =>
+    (await runGit(['rev-parse', '--verify', `refs/heads/${ref}^{commit}`], repoPath, false)).stdout.trim();
+  const [headSha, baseSha] = [await resolve(cr.headRef), await resolve(cr.baseRef)];
+  // Compare the base tip with what the merge would land, not the change
+  // request's own diff: a merge can also undo what the base changed since the
+  // branch point. A merge that conflicts does not land; its own diff stands in.
+  const landed = await wouldBeMergeCommit(project, repoPath, baseSha, headSha);
+  const mergeBase = landed
+    ? baseSha
+    : await runGit(['merge-base', baseSha, headSha], repoPath, false)
+        .then((r) => r.stdout.trim() || null)
+        .catch(() => null);
+  const manifestRef = landed ?? headSha;
   const [before, after, secrets] = await Promise.all([
-    readManifestFromRepo(project, candidates, mergeBase ?? cr.baseRef, { strictRef: true }),
-    readManifestFromRepo(project, candidates, headSha, { strictRef: true }),
+    readManifestFromRepo(project, candidates, mergeBase ?? baseSha, { strictRef: true }),
+    readManifestFromRepo(project, candidates, manifestRef, { strictRef: true }),
     addedSecrets(repoPath, cr.baseRef, headSha),
   ]);
   const baseText = before?.content ?? null;
   const headText = after?.content ?? null;
   return {
     headSha,
+    baseSha,
+    manifestRef,
     required: requiredManifestActions(baseText, headText),
     grantsBefore: grantsOfManifestText(baseText),
     grantsAfter: grantsOfManifestText(headText),
@@ -123,14 +139,19 @@ async function addedSecrets(repoPath: string, baseRef: string, headSha: string):
   }
   const trees = new Set([...commits.flat(), ...mergeBases.filter((id): id is string => id !== null)]);
   await ensureCommitTrees(repoPath, [...trees]);
-  if (!(await ensureDiffBlobs(repoPath, ['log', '--format=', '--no-merges'], [range]))) {
+  // One byte budget for every prefetch of this scan, so a branch of many
+  // merges cannot pull many times the change-request diff bound.
+  const pairs = merges.flatMap(([merge, first, second], index) => {
+    const base = mergeBases[index];
+    return [[first, merge], ...(base ? [[base, first], [base, second]] : [])];
+  });
+  const perFetchBytes = Math.floor(DIFF_BLOB_FETCH_MAX_BYTES / (1 + pairs.length));
+  if (!(await ensureDiffBlobs(repoPath, ['log', '--format=', '--no-merges'], [range], perFetchBytes))) {
     return unscanned('more file content than one scan reads');
   }
-  for (const [index, [merge, first, second]] of merges.entries()) {
-    const base = mergeBases[index];
-    const pairs = [[first, merge], ...(base ? [[base, first], [base, second]] : [])];
-    for (const pair of pairs) {
-      if (!(await ensureDiffBlobs(repoPath, ['diff'], pair))) return unscanned('more file content than one scan reads');
+  for (const pair of pairs) {
+    if (!(await ensureDiffBlobs(repoPath, ['diff'], pair, perFetchBytes))) {
+      return unscanned('more file content than one scan reads');
     }
   }
   try {

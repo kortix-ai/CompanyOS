@@ -86,7 +86,7 @@ describe('change requests on a partial store', () => {
     expect(await fx.storeHas(setup.bigBlob)).toBe(false);
   });
 
-  test('merge classification reads the manifest and the files the change adds, nothing else', async () => {
+  test('merge classification reads the manifest, the files the change adds and what the merge combines, nothing else', async () => {
     const setup = await repoWithFeature();
     fx = setup.fx;
     await fx.push({ 'kortix.yaml': 'name: lab\ndefault_agent: helper\n' }, 'pick agent', 'feature');
@@ -95,7 +95,8 @@ describe('change requests on a partial store', () => {
     expect(change.required.length).toBeGreaterThan(0);
     expect(change.secrets).toEqual({ findings: [], total: 0 });
     expect(await fx.storeHas(await fx.upstreamBlob('kortix.yaml', 'feature'))).toBe(true);
-    expect(await fx.storeHas(await fx.upstreamBlob('notes.md', 'main'))).toBe(false);
+    // Both sides changed notes.md: the would-be merge (and the merge itself) reads it.
+    expect(await fx.storeHas(await fx.upstreamBlob('notes.md', 'main'))).toBe(true);
     expect(await fx.storeHas(setup.bigBlob)).toBe(false);
   });
 

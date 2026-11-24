@@ -964,8 +964,13 @@ loaded image across surfaces. See the
 `getSessionLogPage(projectId, sessionId, query?)`, or `kortix.session(p, s).log(query?)`,
 reads one page of the stored session log (`SessionLogPage`: the session record,
 every thread head, a thread's newest messages by `seq`, `has_more`). `query` is
-`{ thread?, before_seq?, limit? }` (`SessionLogPageQuery`). It answers while the
+`{ thread?, before_seq?, limit?, live? }` (`SessionLogPageQuery`). It answers while the
 sandbox is stopped, and is `null` when the session has no stored log yet.
+`live: true` asks for the newest page as the session's running sandbox holds it: the
+API reads the sandbox, and answers its stored log when the sandbox is not running or
+does not answer within 2 s. The page's `source` (`'box'` or `'store'`) says which. The
+stored log lags a running sandbox by its journal (5 s during a turn, longer when the
+journal retries). `useSession` reads the session log only this way.
 `findSessionAttachments` reads session-log records as well as v1 messages.
 
 `toToolView`, `getChildSessionId`, `partOutcome`, `contextToolTrigger` and

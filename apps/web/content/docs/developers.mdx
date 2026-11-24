@@ -6895,6 +6895,7 @@ While the session starts, pick the view by this rule:
 Saved history is the copy of the session log that the API stores. A stopped sandbox does not block it.
 
 - The first read holds the newest 40 messages. `loadOlder()` pages back. Without a log in the store, it pages the runtime.
+- While the sandbox runs, `useSession` reads the newest page again with `GET …/log?live=1`: after the first read, after a reconnect, when the tab becomes visible and at each turn end. The API answers the sandbox's own page, which is ahead of the stored copy by the journal (5 s during a turn). When the sandbox does not answer within 2 s, the API answers the stored copy. A stored copy removes no reply that is newer than its own last message. The client never reads the sandbox's log itself.
 - An unknown `savedTranscript` is `'loading'`, never `'none'`.
 - When `GET …/log` fails (a `5xx`, the network, a `404` with no `code`, an invalid page), `useSession` keeps the copy on screen and reads the page again after 2 s, 10 s and 30 s, or after the API's `Retry-After` (at most 60 s).
 - No hook reads `GET …/transcript`.
@@ -9019,7 +9020,7 @@ See [Computers](/docs/guide#computers).
 | Conversation | `compact({ providerID, modelID }?)` | Summarizes the context. Needs the `session.compact` capability. |
 | Conversation | `rewind(messageId)` · `restoreRewind()` | Rewind to a message · undo the rewind. Needs the `session.rewind` capability; pi does not serve it. |
 | Stored reads | `turn()` | The current turn, read on the server. |
-| Stored reads | `log({ thread?, before_seq?, limit? }?)` | One page of the stored session log, or `null` when the session has none. It answers while the sandbox is stopped. |
+| Stored reads | `log({ thread?, before_seq?, limit?, live? }?)` | One page of the stored session log, or `null` when the session has none. It answers while the sandbox is stopped. With `live: true`, the API answers the running sandbox's own newest page (`source: 'box'`), and its stored log (`source: 'store'`) when the sandbox is not running or does not answer within 2 s. |
 | Stored reads | `liveLog({ thread?, before_seq?, limit? }?)` | One page of a thread of the sandbox's own session log, ahead of `log()` while a turn runs. |
 | Stored reads | `messageAuthors()` · `modelUsage()` · `usage()` · `cost()` · `audit(limit?, options?)` | Who wrote each message · which model answered each turn and what Kortix billed · what the session and every session it started cost, in USD (model calls, plus `compute_cost` for its boxes and `billed_cost`, everything Kortix debited) · the session's usage record · the session's audit actions. |
 | Model and agent | `setModel({ providerID, modelID } \| undefined)` · `setAgent(agent)` | The model or agent of every later `send` on this handle. `send(text, { model, agent })` overrides it for one prompt. |

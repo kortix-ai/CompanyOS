@@ -290,7 +290,7 @@ interface SyncState {
 	 * session) calls `applySessionLogEvent`.
 	 */
 	applyEvent: (event: RuntimeEvent) => void;
-	/** Merge one page of the session log (`GET …/log`) into session `sessionId`'s log. `beforeSeq`: the page's `before_seq` (an older page). `options.box`: the box's own page (`GET /kortix/runtime/log`), which answers for the tail. */
+	/** Merge one page of the session log (`GET …/log`) into session `sessionId`'s log. `beforeSeq`: the page's `before_seq` (an older page). `options.box`: the box's own page (`source: 'box'` of `GET …/log?live=1`), which answers for the tail. */
 	applySessionLogPage: (sessionId: string, page: SessionLogPage, beforeSeq?: number, options?: { box?: boolean }) => void;
 	/** Apply one `log.*` frame to session `sessionId`'s log, creating it when absent. */
 	applySessionLogEvent: (sessionId: string, event: SessionLogEventInput) => void;

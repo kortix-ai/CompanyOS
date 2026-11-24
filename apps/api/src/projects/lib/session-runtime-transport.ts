@@ -12,6 +12,8 @@
  *     an SSE body handed back UNREAD so the caller can pump it.
  *   • {@link fetchRuntimePending} — `GET /kortix/runtime/pending`, the thread
  *     statuses and open asks of a box that serves its session log.
+ *   • {@link fetchRuntimeLogPage} — `GET /kortix/runtime/log`, the box's own
+ *     newest page of a thread of its session log (`GET …/log?live=1`).
  *
  * ─── THE STREAM IS NEVER BUFFERED ──────────────────────────────────────────
  * WS-Z1's requirement, and the reason it is stated so plainly: a buffered
@@ -146,6 +148,39 @@ export async function fetchRuntimePending(
     const response = await fetch(`${endpoint.url}${RUNTIME_API}/pending`, {
       headers: { ...endpoint.headers, Accept: 'application/json' },
       signal: signal ?? AbortSignal.timeout(RUNTIME_STATE_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
+      return { ok: false, reason: `daemon_${response.status}`, status: response.status };
+    }
+    return { ok: true, body: await response.json() };
+  } catch (error) {
+    return { ok: false, reason: reasonOf(error), status: null };
+  }
+}
+
+export type RuntimeLogPageFetch =
+  | { ok: true; body: unknown }
+  | { ok: false; reason: string; status: number | null };
+
+/**
+ * Read `GET /kortix/runtime/log` once: the box's newest page of one thread
+ * (`runtime.log.v1`). The body is not validated here. `signal` bounds the read;
+ * the caller sets the budget.
+ */
+export async function fetchRuntimeLogPage(
+  target: DaemonCallTarget,
+  query: { thread: string | null; limit: number },
+  signal: AbortSignal,
+): Promise<RuntimeLogPageFetch> {
+  try {
+    const endpoint = await runtimeDaemonEndpoint(target);
+    if (!endpoint) return { ok: false, reason: 'no_service_key', status: null };
+    const params = new URLSearchParams({ limit: String(query.limit) });
+    if (query.thread) params.set('thread', query.thread);
+    const response = await fetch(`${endpoint.url}${RUNTIME_API}/log?${params.toString()}`, {
+      headers: { ...endpoint.headers, Accept: 'application/json', 'Accept-Encoding': 'gzip' },
+      signal,
     });
     if (!response.ok) {
       await response.body?.cancel().catch(() => {});

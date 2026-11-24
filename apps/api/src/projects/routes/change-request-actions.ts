@@ -335,16 +335,12 @@ export function registerChangeRequestActionsRoutes(): void {
           ? result.merge_commit_sha
           : (cr.headCommitSha ?? result.merge_commit_sha),
         baseCommitSha: result.base_sha_before,
-        ...(secretOverride || secretScanSkipped
-          ? {
-              metadata: {
-                ...(cr.metadata ?? {}),
-                ...(secretOverride ? { secret_override: secretOverride } : {}),
-                ...(secretScanSkipped ? { secret_scan_skipped: secretScanSkipped } : {}),
-              },
-            }
-          : {}),
-      });
+      }, secretOverride || secretScanSkipped
+        ? {
+            ...(secretOverride ? { secret_override: secretOverride } : {}),
+            ...(secretScanSkipped ? { secret_scan_skipped: secretScanSkipped } : {}),
+          }
+        : undefined);
       if (!merged.applied) {
         return c.json({ error: 'Change request is merged' }, 409);
       }

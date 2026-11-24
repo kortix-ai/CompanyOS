@@ -29,7 +29,7 @@ test.skipIf(!process.env.DATABASE_URL)('folder FK validation releases the expans
     const statements: string[] = [];
     buildIndex({ noTransaction() {}, sql(statement: string) { statements.push(statement); } });
     for (const statement of statements) await writer.query(statement.replaceAll('kortix', schema));
-    const validation = readFileSync(join(import.meta.dir, '../migrations/20261124010000000_validate_artifact_folder_membership.sql'), 'utf8');
+    const validation = readFileSync(join(import.meta.dir, '../migrations/20261123230000000_validate_artifact_folder_membership.sql'), 'utf8');
     await writer.query('BEGIN');
     await writer.query(validation.replaceAll('kortix', schema));
     const locks = await writer.query(`SELECT mode FROM pg_locks WHERE pid=pg_backend_pid()

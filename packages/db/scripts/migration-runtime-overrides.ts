@@ -304,7 +304,7 @@ export function materializeMigrationRuntimeDirectory(
     cpSync(sourceDirectory, runtimeDirectory, { recursive: true });
     if (artifactFoldersSource) {
       writeFileSync(join(runtimeDirectory, ARTIFACT_FOLDERS_MIGRATION),
-        artifactFoldersSource.replace(ARTIFACT_FOLDERS_VALIDATE, '-- Runtime correction: validate in 20261124010000000 after the concurrent index.'));
+        artifactFoldersSource.replace(ARTIFACT_FOLDERS_VALIDATE, '-- Runtime correction: validate in 20261123230000000 after the concurrent index.'));
       appliedOverrides.push(`${ARTIFACT_FOLDERS_MIGRATION}: defer gallery FK validation until after the concurrent index (${ARTIFACT_FOLDERS_SHA256})`);
     }
     if (auditSource) {

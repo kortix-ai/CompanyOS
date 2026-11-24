@@ -6455,7 +6455,9 @@ const catalog = {
       "password": "Password",
       "missing": "Enter a username and a password.",
       "savedTitle": "Login saved",
-      "savedDescription": "The agent can sign in now. It sees only the login's name."
+      "savedDescription": "The agent can sign in now. It sees only the login's name.",
+      "modalTitle": "Add a website login",
+      "modalDescription": "Check the site before you type the password."
     },
     "sessionEmbed": {
       "sectionTitle": "Embed",

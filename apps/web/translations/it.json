@@ -21534,7 +21534,9 @@
       "password": "Password",
       "missing": "Inserisci un nome utente e una password.",
       "savedTitle": "Accesso salvato",
-      "savedDescription": "L'agente ora può accedere. Vede solo il nome dell'accesso."
+      "savedDescription": "L'agente ora può accedere. Vede solo il nome dell'accesso.",
+      "modalTitle": "Aggiungi un accesso a un sito web",
+      "modalDescription": "Controlla il sito prima di digitare la password."
     },
     "sessionEmbed": {
       "sectionTitle": "Incorpora",

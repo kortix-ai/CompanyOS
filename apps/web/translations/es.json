@@ -21534,7 +21534,9 @@
       "password": "Contraseña",
       "missing": "Introduce un usuario y una contraseña.",
       "savedTitle": "Inicio de sesión guardado",
-      "savedDescription": "El agente ya puede iniciar sesión. Solo ve el nombre del inicio de sesión."
+      "savedDescription": "El agente ya puede iniciar sesión. Solo ve el nombre del inicio de sesión.",
+      "modalTitle": "Añadir un inicio de sesión web",
+      "modalDescription": "Comprueba el sitio antes de escribir la contraseña."
     },
     "sessionEmbed": {
       "sectionTitle": "Insertar",

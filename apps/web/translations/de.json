@@ -21534,7 +21534,9 @@
       "password": "Passwort",
       "missing": "Gib einen Benutzernamen und ein Passwort ein.",
       "savedTitle": "Login gespeichert",
-      "savedDescription": "Der Agent kann sich jetzt anmelden. Er sieht nur den Namen des Logins."
+      "savedDescription": "Der Agent kann sich jetzt anmelden. Er sieht nur den Namen des Logins.",
+      "modalTitle": "Website-Login hinzufügen",
+      "modalDescription": "Prüfe die Website, bevor du das Passwort eingibst."
     },
     "sessionEmbed": {
       "sectionTitle": "Einbetten",

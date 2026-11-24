@@ -24,7 +24,7 @@ import {
   WarningCircleIcon,
   type Icon,
 } from '@phosphor-icons/react';
-import { Fragment, useEffect, useState, type ReactElement } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactElement } from 'react';
 import {
   classifySetupLinkError,
   describeLinkExpiry,
@@ -109,9 +109,12 @@ export function SecretIntakeForm({
   token,
   onDone,
   compact,
+  onLinkInfo,
 }: {
   token: string;
   onDone?: () => void;
+  /** Called once with what the link asks for, so a host can title its dialog. */
+  onLinkInfo?: (info: SecretSetupLinkInfo) => void;
   /**
    * The host already states the encryption promise (the in-chat modal header),
    * so the footnote keeps only the expiry.
@@ -120,6 +123,8 @@ export function SecretIntakeForm({
 }) {
   const tI18nHardcoded = useTranslations('hardcodedUi');
   const base = setupLinkApiBase();
+  const onLinkInfoRef = useRef(onLinkInfo);
+  onLinkInfoRef.current = onLinkInfo;
   const [phase, setPhase] = useState<Phase>('loading');
   const [info, setInfo] = useState<SecretSetupLinkInfo | null>(null);
   const [expiresIn, setExpiresIn] = useState<string | null>(null);
@@ -142,6 +147,7 @@ export function SecretIntakeForm({
         const body = await getSecretSetupLink(token, { backendUrl: base });
         if (cancelled) return;
         setInfo(body);
+        onLinkInfoRef.current?.(body);
         setOnlyRequester(body.scope === 'browser' && Boolean(body.requester));
         setExpiresIn(describeLinkExpiry(body.expires_at, Date.now()));
         setPhase('ready');

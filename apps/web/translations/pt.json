@@ -21534,7 +21534,9 @@
       "password": "Senha",
       "missing": "Digite um usuário e uma senha.",
       "savedTitle": "Login salvo",
-      "savedDescription": "O agente já pode entrar. Ele vê apenas o nome do login."
+      "savedDescription": "O agente já pode entrar. Ele vê apenas o nome do login.",
+      "modalTitle": "Adicionar login de site",
+      "modalDescription": "Confira o site antes de digitar a senha."
     },
     "sessionEmbed": {
       "sectionTitle": "Incorporar",

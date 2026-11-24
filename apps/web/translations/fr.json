@@ -21534,7 +21534,9 @@
       "password": "Mot de passe",
       "missing": "Saisissez un nom d’utilisateur et un mot de passe.",
       "savedTitle": "Identifiant enregistré",
-      "savedDescription": "L’agent peut maintenant se connecter. Il ne voit que le nom de l’identifiant."
+      "savedDescription": "L’agent peut maintenant se connecter. Il ne voit que le nom de l’identifiant.",
+      "modalTitle": "Ajouter un identifiant de site web",
+      "modalDescription": "Vérifiez le site avant de saisir le mot de passe."
     },
     "sessionEmbed": {
       "sectionTitle": "Intégrer",

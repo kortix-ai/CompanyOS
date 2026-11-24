@@ -21534,7 +21534,9 @@
       "password": "パスワード",
       "missing": "ユーザー名とパスワードを入力してください。",
       "savedTitle": "ログインを保存しました",
-      "savedDescription": "エージェントはサインインできます。エージェントに見えるのはログインの名前だけです。"
+      "savedDescription": "エージェントはサインインできます。エージェントに見えるのはログインの名前だけです。",
+      "modalTitle": "ウェブサイトのログインを追加",
+      "modalDescription": "パスワードを入力する前にサイトを確認してください。"
     },
     "sessionEmbed": {
       "sectionTitle": "埋め込み",

@@ -214,7 +214,8 @@ export function applySessionLogPage(state: SessionLogState, page: SessionLogPage
   // it lags the box's by the journal's post interval (minutes when posts fail), so a message
   // after its last seq is newer than the page and stays, a reply still streaming there too (a
   // deletion there comes as a tombstone, or with the box's next page). A queued prompt's
-  // provisional seq is no position in the log: any page settles it. An API page of a newer
+  // provisional seq is no position in the log: only the box's page settles it (the API never
+  // stores one). An API page of a newer
   // generation (a box restarted from the stored log) settles the whole tail: a reply the old
   // box never journaled is gone with it. The generation compared is the thread's last newest
   // page's, not the state's: the new box's `log.state` frame often arrives before its page.

@@ -217,7 +217,9 @@ export function useSessionLogOlder(
     setLoadingKey(key);
     const promise = fetchSessionLogPage(loader, projectId, sessionId, { thread, before_seq: first, limit: SESSION_LOG_OLDER_PAGE_LIMIT })
       .then((page) => {
-        if (page?.thread_id === thread && useSyncStore.getState().sessionLogs[sessionId]) useSyncStore.getState().applySessionLogPage(sessionId, page, first);
+        const held = useSyncStore.getState().sessionLogs[sessionId];
+        // A page of an older generation than the log's is a failed read: the cursor would not move.
+        if (page?.thread_id === thread && held && !isStaleSessionLogPage(held, page)) useSyncStore.getState().applySessionLogPage(sessionId, page, first);
         else setFailedKey(key);
       })
       .finally(() => {
@@ -338,7 +340,9 @@ export function useSessionLogSync(
       const read = await readSessionLog(loader, projectId, sessionId, { limit: SESSION_LOG_FIRST_PAGE_LIMIT }, controller.signal);
       if (stopped) return { answer: null, retryAfterMs: null };
       const { answer } = read;
-      if (answer && answer !== 'missing' && revision > appliedPageRevision) {
+      const held = store().sessionLogs[sessionId];
+      // A page of an older generation than the log's holds nothing newer: not applied, not saved.
+      if (answer && answer !== 'missing' && revision > appliedPageRevision && !(held && isStaleSessionLogPage(held, answer))) {
         appliedPageRevision = revision;
         store().applySessionLogPage(sessionId, answer);
         void copies?.write(projectId, sessionId, answer);

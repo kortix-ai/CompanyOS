@@ -503,6 +503,20 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     expect(heldMessages()).toEqual(page().messages);
   });
 
+  test('a stale API page (an older generation) is not applied and does not replace the saved copy', async () => {
+    const data = new Map<string, string>();
+    const copies = createSavedCopyStore({ storage: { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v), removeItem: (k) => void data.delete(k) }, userId: 'u1' });
+    setSavedCopyStore(copies);
+    let generation = 2;
+    mount({ loader: async () => ({ ...page(), generation, messages: generation === 2 ? page().messages : page().messages.slice(0, -1) }) });
+    await flush();
+    generation = 1;
+    act(() => latestStream().onRuntimeResync());
+    await flush();
+    expect(heldMessages()).toEqual(page().messages);
+    expect((await copies.read(PROJECT, SESSION))?.generation).toBe(2);
+  });
+
   test('KRTX-4973: newer failed read does not discard a successful page during log traffic', async () => {
     let reads = 0;
     const pending = deferredPage();
@@ -1366,6 +1380,14 @@ describe('useSessionLogOlder: older pages of a thread from GET …/log?before_se
     await act(async () => { release({ ...page(), messages: all().slice(0, 4), has_more: false }); await first; });
     expect(calls).toBe(1);
     expect(state.value.isLoadingOlder).toBe(false);
+  });
+
+  test('a stale older page (an older generation) is a failed read: it neither fills the thread nor keeps offering the same cursor', async () => {
+    act(() => useSyncStore.getState().applySessionLogPage(SESSION, newest()));
+    const state = mountOlder(async () => ({ ...page(), generation: 0, messages: all().slice(0, 4), has_more: false }));
+    await act(async () => { await state.value.loadOlder(); });
+    expect(state.value.hasOlder).toBe(false);
+    expect(ids()).toEqual(all().slice(4).map((m) => m.message_id));
   });
 
   test('a failed read stops offering older messages, so a drain loop ends', async () => {

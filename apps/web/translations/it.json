@@ -1293,10 +1293,6 @@
       "permission": "Ti serve il permesso per le impostazioni del workspace per modificare un feature flag.",
       "updateFailed": "Impossibile aggiornare {key}",
       "flags": {
-        "secrets_egress": {
-          "name": "Segreti protetti dalla rete",
-          "description": "Controlla quali strumenti e destinazioni possono ricevere i segreti del workspace."
-        },
         "reminders": {
           "name": "Cicli",
           "description": "Consente ad agenti e persone di programmare controlli su una sessione, una volta o in modo ricorrente. Ogni attivazione richiama quella sessione. Aggiunge i cicli all’elenco dei Trigger, l’indicatore dei cicli della sessione e `kortix loop`."
@@ -1324,10 +1320,6 @@
         "session_groups": {
           "name": "Spazi",
           "description": "Raggruppa le sessioni in spazi, ognuno con i suoi file e le sue schede. Un nuovo spazio è privato; condividilo con persone o con tutto il workspace. Avvia una sessione in uno spazio dalla sua pagina o dal selettore Spazio sotto il compositore. Ogni sessione di uno spazio sa a cosa serve e monta la sua cartella Files."
-        },
-        "chrome": {
-          "name": "Kortix in Chrome",
-          "description": "Consenti a una sessione di usare il browser Chrome collegato. Puoi riprendere il controllo o interromperla in qualsiasi momento."
         },
         "agent_teams": {
           "name": "Team di agenti",
@@ -18355,7 +18347,6 @@
       "texte59a1d133be1": "Le modifiche si applicano al prossimo accesso. I token già emessi continueranno a funzionare fino alla scadenza.",
       "texte59eaa3acaf1": "il confine",
       "texte5a4af9b350f": "Ho creato, abilitato e testato la connessione SCIM",
-      "texte5a718af362a": "I primi due",
       "texte5ab168f1943": "Il brief pre-call",
       "texte5b104783abd": "Il tuo agente può usare gli strumenti di cui ha bisogno, proprio come farebbe su un normale computer.",
       "texte5bd74e98514": "altro — solo sorgente",

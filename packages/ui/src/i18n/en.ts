@@ -795,10 +795,6 @@ const catalog = {
       "permission": "You need the workspace's settings permission to change a feature flag.",
       "updateFailed": "Failed to update {key}",
       "flags": {
-        "secrets_egress": {
-          "name": "Network-Enforced Secrets",
-          "description": "Control which tools and destinations can receive workspace secrets."
-        },
         "reminders": {
           "name": "Loops",
           "description": "Let agents and people schedule check-ins on a session, once or on repeat. Each fire re-prompts that session. Adds loops to the Triggers list, the session loop chip, and `kortix loop`."
@@ -826,10 +822,6 @@ const catalog = {
         "session_groups": {
           "name": "Spaces",
           "description": "Group sessions into spaces, each with its own files and tabs. A new space is private to you; share it with people or with the whole workspace. Start a session in a space from its page or from the Space picker under the composer. Every session in a space knows what the space is for and mounts its Files folder."
-        },
-        "chrome": {
-          "name": "Kortix in Chrome",
-          "description": "Let a session use your connected Chrome browser. You can take over or stop it at any time."
         },
         "agent_teams": {
           "name": "Agent teams",
@@ -5562,7 +5554,6 @@ const catalog = {
       "texte595f45dc6c9": "Europe",
       "texte5974d3936df": "Copy the Bot User OAuth Token and Signing Secret from the installed Slack app.",
       "texte5985e84210e": "Any resource",
-      "texte5a718af362a": "The first two",
       "texte5c253036018": "The name of a saved secret holding the key both sides sign with. Add the secret under Secrets first — the key itself is never stored here.",
       "texte5dbdffb8816": "Save rules",
       "texte5ee1e7e84aa": "Session expired",

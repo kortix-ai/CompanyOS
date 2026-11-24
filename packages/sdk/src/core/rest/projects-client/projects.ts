@@ -73,6 +73,7 @@ export type FeatureFlagKey =
   | 'reminders'
   /** @deprecated Withdrawn — warm sessions were removed; a session boots on its own. The API sends `false` for every project. Removed in the next major. */
   | 'warm_sessions'
+  /** @deprecated Graduated 2026-11-23 — Network-Enforced Secrets: every project can set a secret's exposure to enforced (the sandbox holds a handle; Kortix substitutes the value only on approved hosts). The API sends `true` for every project, so `useFeatureFlag(id, 'secrets_egress')` reports `enabled: true`. Kept permanently. */
   | 'secrets_egress'
   /** @deprecated Withdrawn — the pi worker split left the product; pi runs in the session sandbox. The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'pi_worker'
@@ -123,7 +124,7 @@ export type FeatureFlagKey =
   | 'email_channel'
   /** Session groups: named folders of the project's sessions that every member shares. Experimental, off by default. */
   | 'session_groups'
-  /** Kortix in Chrome: a session drives its owner's own Chrome through the extension. Experimental; on where the platform offers it. */
+  /** @deprecated Graduated 2026-11-24 — Kortix in Chrome: every project's sessions can drive their owner's own Chrome through the extension, wherever the platform offers it. The API sends whether it serves Kortix in Chrome (`KORTIX_CHROME_ENABLED`; off on a self-hosted server), so `useFeatureFlag(id, 'chrome')` reads that. */
   | 'chrome'
   /** Agent teams: a lead session with named teammates and a shared task list. Experimental, off by default. */
   | 'agent_teams'
@@ -148,7 +149,7 @@ export type FeatureFlagKey =
   /** @deprecated Withdrawn — agents messaging people left the product. The API no longer lists, resolves, or accepts it. Removed in the next major. */
   | 'human_messaging';
 
-/** The keys of {@link FeatureFlagKey} that are no flag: the API never sends them, or (`llm_gateway`, `session_log`, `session_log_restore`, `pi_harness`, `genui`, `meta_agent`, `notification_center`, `pooled_provider_secrets`) sends a constant `true`, or (`volumes`, `drives`, `artifacts`) sends whether the platform stores a Drive, or (`workspace_volume`) sends whether new sessions get a /workspace volume, or (`artifact_comments`) sends a constant `false`. */
+/** The keys of {@link FeatureFlagKey} that are no flag: the API never sends them, or (`llm_gateway`, `session_log`, `session_log_restore`, `pi_harness`, `genui`, `meta_agent`, `notification_center`, `pooled_provider_secrets`, `secrets_egress`) sends a constant `true`, or (`volumes`, `drives`, `artifacts`) sends whether the platform stores a Drive, or (`workspace_volume`) sends whether new sessions get a /workspace volume, or (`chrome`) sends whether the platform serves Kortix in Chrome, or (`artifact_comments`) sends a constant `false`. */
 type GraduatedFeatureFlagKey =
   | 'agent_tunnel'
   | 'marketplace'
@@ -178,9 +179,11 @@ type GraduatedFeatureFlagKey =
   | 'drives'
   | 'notification_center'
   | 'pooled_provider_secrets'
+  | 'secrets_egress'
   | 'artifacts'
   | 'artifact_comments'
-  | 'workspace_volume';
+  | 'workspace_volume'
+  | 'chrome';
 /** The keys `KortixProject.experimental` carries on every response. */
 type ServedFeatureFlagKey = Exclude<FeatureFlagKey, GraduatedFeatureFlagKey>;
 
@@ -191,7 +194,6 @@ type ServedFeatureFlagKey = Exclude<FeatureFlagKey, GraduatedFeatureFlagKey>;
  */
 export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'reminders',
-  'secrets_egress',
   'us_region',
   'event_triggers',
   'chat',
@@ -199,7 +201,6 @@ export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
   'goals',
   'email_channel',
   'session_groups',
-  'chrome',
   'agent_teams',
   'voice_call',
   'chat_input',

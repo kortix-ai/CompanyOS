@@ -156,7 +156,7 @@ export const pillars = {
      pending_approval, 403 denied); developers.mdx rule order.
    secrets: projects/secrets/envelope.ts (AES-256-GCM, HKDF per project);
      guide.mdx "Security" (audience, delivery); feature-flags/registry.ts
-     (secrets_egress experimental); secrets/http-broker.test.ts ([REDACTED]).
+     (secrets_egress graduated 2026-11-23); secrets/http-broker.test.ts ([REDACTED]).
    models: guide.mdx "Models".
    changes: developers.mdx "Git" (own branch; project.gitops.merge;
      CR_SELF_MERGE_REFUSED); guide.mdx "Agents" warning callout. */
@@ -279,7 +279,7 @@ export const secretModes = [
     v: 'The real value. Code in the session can read it.',
     tag: 'default',
   },
-  { k: 'Enforced', v: 'A stand-in. Swapped outside, for listed hosts only.', tag: 'experimental' },
+  { k: 'Enforced', v: 'A stand-in. Swapped outside, for listed hosts only.', tag: '' },
   { k: 'Disabled', v: 'Kept on file. Reaches no session.', tag: '' },
 ] as const;
 

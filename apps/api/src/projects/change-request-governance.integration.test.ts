@@ -161,7 +161,50 @@ describe('classifyMerge — connectors and what the commits add', () => {
     await git(['push', '-q', 'origin', 'session-token-history:refs/heads/session-token-history'], workPath);
     await git(['checkout', '-q', 'main'], workPath);
     const change = await classifyMerge(project, { baseRef: 'main', headRef: 'session-token-history' });
-    expect(change.secrets?.findings.map((f) => `${f.file}:${f.line}:${f.rule}`)).toEqual(['config.ts:1:github_token']);
+    expect(change.secrets.findings.map((f) => `${f.file}:${f.line}:${f.rule}`)).toEqual(['config.ts:1:github_token']);
+  });
+
+  test('a token a merge commit adds in its resolution is found (remerge), not taken from either parent', async () => {
+    await pushBranch('session-evil-merge', { 'notes.md': 'side\n' });
+    await git(['checkout', '-q', 'main'], workPath);
+    await writeFile(join(workPath, 'notes.md'), 'main\n');
+    await git(['add', '-A'], workPath);
+    await git(['commit', '-q', '-m', 'main notes'], workPath);
+    await git(['push', '-q', 'origin', 'main'], workPath);
+    await git(['checkout', '-q', 'session-evil-merge'], workPath);
+    await exec('git', ['merge', '-q', 'main'], { cwd: workPath }).catch(() => undefined); // conflicts on notes.md
+    await writeFile(join(workPath, 'notes.md'), `resolved\nTOKEN=${FAKE_GITHUB_TOKEN}\n`);
+    await git(['add', 'notes.md'], workPath);
+    await git(['commit', '-q', '--no-edit'], workPath);
+    const mergeCommit = (await exec('git', ['rev-parse', 'HEAD'], { cwd: workPath })).stdout.trim();
+    await writeFile(join(workPath, 'notes.md'), 'resolved\n');
+    await git(['commit', '-q', '-am', 'drop the token'], workPath);
+    await git(['push', '-q', 'origin', 'session-evil-merge:refs/heads/session-evil-merge'], workPath);
+    await git(['checkout', '-q', 'main'], workPath);
+    const change = await classifyMerge(project, { baseRef: 'main', headRef: 'session-evil-merge' });
+    expect(change.secrets.findings.map((f) => `${f.commit}:${f.file}:${f.line}:${f.rule}`)).toEqual([
+      `${mergeCommit.slice(0, 12)}:notes.md:2:github_token`,
+    ]);
+  });
+
+  test('a token in a file the branch marks binary (-diff) is read as text and found', async () => {
+    await pushBranch('session-binary', {
+      '.gitattributes': 'blob.dat -diff\n',
+      'blob.dat': `\u0000bin\u0000${FAKE_GITHUB_TOKEN}\n`,
+    });
+    const change = await classifyMerge(project, { baseRef: 'main', headRef: 'session-binary' });
+    expect(change.secrets.findings.map((f) => `${f.file}:${f.rule}`)).toEqual(['blob.dat:github_token']);
+  });
+
+  test('a change the scan cannot read in full (an octopus merge) is unscanned, never clean', async () => {
+    await pushBranch('session-oct-a', { 'a.txt': 'a\n' });
+    await pushBranch('session-oct-b', { 'b.txt': 'b\n' });
+    await git(['checkout', '-q', '-B', 'session-octopus', 'main'], workPath);
+    await git(['merge', '-q', '--no-ff', '--no-edit', 'session-oct-a', 'session-oct-b'], workPath);
+    await git(['push', '-q', 'origin', 'session-octopus:refs/heads/session-octopus'], workPath);
+    await git(['checkout', '-q', 'main'], workPath);
+    const change = await classifyMerge(project, { baseRef: 'main', headRef: 'session-octopus' });
+    expect(change.secrets).toEqual({ findings: [], total: 0, unscanned: 'an octopus merge' });
   });
 
   test('a token already on the base branch is not the change request\'s finding', async () => {

@@ -162,31 +162,26 @@ export function registerChangeRequestActionsRoutes(): void {
       await assertNoGrantEscalation(c, projectId, change.grantsBefore, change.grantsAfter);
 
       // Secret check: a key the change's commits add would reach the base
-      // branch and its history. A person who checked the finding may merge
-      // anyway (`allow_secrets`); an agent session may not. A finding names
-      // file, line, commit and rule, never the value.
-      if (change.secrets === null) {
-        logger.warn('[cr-merge] the change is over the secret-scan bounds; it merges unscanned', {
-          projectId,
-          cr: cr.number,
-        });
-      } else {
-        const refusal = secretMergeRefusal({
-          crNumber: cr.number,
-          baseRef: cr.baseRef,
-          scan: change.secrets,
-          actorIsSession,
-          allowSecrets,
-        });
-        if (refusal) return c.json(refusal.body, refusal.status);
-      }
+      // branch and its history, and a change the scan could not read in full
+      // is not clean. A person who checked it may merge anyway
+      // (`allow_secrets`); an agent session may not. A finding names file,
+      // line, commit and rule, never the value.
+      const refusal = secretMergeRefusal({
+        crNumber: cr.number,
+        baseRef: cr.baseRef,
+        scan: change.secrets,
+        actorIsSession,
+        allowSecrets,
+      });
+      if (refusal) return c.json(refusal.body, refusal.status);
       const secretOverride =
-        change.secrets && change.secrets.total > 0
+        change.secrets.total > 0 || change.secrets.unscanned
           ? {
               by: loaded.userId,
               at: new Date().toISOString(),
               findings: change.secrets.findings.map(({ commit, file, line, rule }) => ({ commit, file, line, rule })),
               findings_total: change.secrets.total,
+              ...(change.secrets.unscanned ? { unscanned: change.secrets.unscanned } : {}),
             }
           : null;
       if (secretOverride) {
@@ -196,6 +191,7 @@ export function registerChangeRequestActionsRoutes(): void {
           userId: loaded.userId,
           rules: [...new Set(secretOverride.findings.map((f) => f.rule))],
           findings: secretOverride.findings_total,
+          unscanned: change.secrets.unscanned ?? null,
         });
       }
 

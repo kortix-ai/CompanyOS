@@ -94,6 +94,11 @@ export interface SecretScan {
   findings: SecretFinding[];
   /** Every finding, including the ones past `MAX_SECRET_FINDINGS`. */
   total: number;
+  /**
+   * Set when the scan could not read the whole change (over its bounds, an
+   * octopus merge). Unread is not clean: the merge treats it as a finding.
+   */
+  unscanned?: string;
 }
 
 /** A C-quoted git path (`"b/a\tb"`) as text; any other path unchanged. */
@@ -124,7 +129,8 @@ function unquoteGitPath(raw: string): string {
  * Scan the lines a unified diff adds: one diff (`git diff -U0 --src-prefix=a/
  * --dst-prefix=b/`) or a log of them (`git log -p -U0 --format='commit %H'`,
  * same prefixes), where each finding also names its commit. Removed lines and
- * context are ignored. Binary files carry no lines and are skipped.
+ * context are ignored. Run git with `--text`: a file git would call binary
+ * prints `Binary files … differ` and no lines.
  *
  * A hunk is read by its line counts, never by the look of a line: an added
  * line whose text starts with `++` prints as `+++…` and must not be read as a

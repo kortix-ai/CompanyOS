@@ -30,8 +30,8 @@ export interface MergeClassification {
   /** Every agent's grant before and after, for the non-escalation check (iam/agent-grant-ceiling.ts). */
   grantsBefore: Map<string, AgentGrant>;
   grantsAfter: Map<string, AgentGrant>;
-  /** What the change adds that looks like a secret; null when the change is too large to scan. */
-  secrets: SecretScan | null;
+  /** What the change's commits add that looks like a secret; `unscanned` when it could not read them all. */
+  secrets: SecretScan;
 }
 
 /**
@@ -45,9 +45,8 @@ export interface MergeClassification {
  *
  * Throws when a side cannot be read. The caller refuses the merge with a
  * retryable 503 (`CR_GOVERNANCE_UNVERIFIED`): it never merges a change it
- * could not classify. The one exception is size: a change over the scan bounds
- * (commits, files, patch bytes) is merged unscanned (`secrets: null`), as the
- * push gate forwards a pack it cannot check.
+ * could not classify. A change over the secret scan's bounds comes back with
+ * `secrets.unscanned` set, and the caller refuses it unless a person overrides.
  */
 export async function classifyMerge(
   project: GitBackedProject,
@@ -85,30 +84,50 @@ export async function classifyMerge(
  * The secrets the commits new to `baseRef` add (`base..head`), commit by
  * commit. The merge carries every one of those commits onto the base branch,
  * so a key added in one commit and deleted in the next still lands in its
- * history: the branch has to be rewritten without it. Merge commits on the
- * branch are skipped (their changes came from the commits they join). Renames
- * are detected, so a file that only moves adds nothing.
+ * history: the branch has to be rewritten without it.
+ *
+ * Nothing the branch controls hides a line: a merge commit is read as what its
+ * resolution adds over an automatic merge of its parents (`remerge`), a file
+ * git would call binary or `-diff` is read as text, and a rename is detected so
+ * a file that only moves adds nothing. What the scan cannot read — more than
+ * `SECRET_SCAN_MAX_COMMITS` commits, more file content than the store fetches
+ * at once, a patch over `SECRET_SCAN_MAX_PATCH_BYTES`, an octopus merge — comes
+ * back as `unscanned`, never as clean.
  */
-async function addedSecrets(repoPath: string, baseRef: string, headSha: string): Promise<SecretScan | null> {
+async function addedSecrets(repoPath: string, baseRef: string, headSha: string): Promise<SecretScan> {
   const range = `refs/heads/${baseRef}..${headSha}`;
-  // A partial store holds commits only (object-store.ts). Each commit's diff
-  // reads its tree and its parent's, then both versions of every file it
-  // changes: fetch the trees, then the files in one request, bounded like the
-  // change-request diff (DIFF_BLOB_FETCH_MAX_BYTES).
-  const listed = await runGit(
-    ['rev-list', '--no-merges', '--parents', `--max-count=${SECRET_SCAN_MAX_COMMITS + 1}`, range],
-    repoPath,
-    false,
-  );
-  const commits = listed.stdout.split('\n').filter(Boolean);
-  if (commits.length > SECRET_SCAN_MAX_COMMITS) return null;
+  const unscanned = (reason: string): SecretScan => ({ findings: [], total: 0, unscanned: reason });
+  const listed = await runGit(['rev-list', '--parents', `--max-count=${SECRET_SCAN_MAX_COMMITS + 1}`, range], repoPath, false);
+  const commits = listed.stdout.split('\n').filter(Boolean).map((line) => line.split(' '));
+  if (commits.length > SECRET_SCAN_MAX_COMMITS) return unscanned(`more than ${SECRET_SCAN_MAX_COMMITS} commits`);
   if (commits.length === 0) return { findings: [], total: 0 };
-  await ensureCommitTrees(repoPath, [...new Set(commits.flatMap((line) => line.split(' ')))]);
-  if (!(await ensureDiffBlobs(repoPath, ['log', '--format=', '--no-merges'], [range]))) return null;
+  if (commits.some((ids) => ids.length > 3)) return unscanned('an octopus merge');
+  // A partial store holds commits only (object-store.ts). Each commit's diff
+  // reads its tree and its parents'; a merge's remerge also reads the merge
+  // base of its parents. Fetch those trees, then both versions of every file
+  // the diffs compare, bounded like the change-request diff (DIFF_BLOB_FETCH_MAX_BYTES).
+  const merges = commits.filter((ids) => ids.length === 3) as Array<[string, string, string]>;
+  const mergeBases = await Promise.all(
+    merges.map(([, first, second]) =>
+      runGit(['merge-base', first, second], repoPath, false).then((r) => r.stdout.trim() || null).catch(() => null),
+    ),
+  );
+  const trees = new Set([...commits.flat(), ...mergeBases.filter((id): id is string => id !== null)]);
+  await ensureCommitTrees(repoPath, [...trees]);
+  if (!(await ensureDiffBlobs(repoPath, ['log', '--format=', '--no-merges'], [range]))) {
+    return unscanned('more file content than one scan reads');
+  }
+  for (const [index, [merge, first, second]] of merges.entries()) {
+    const base = mergeBases[index];
+    const pairs = [[first, merge], ...(base ? [[base, first], [base, second]] : [])];
+    for (const pair of pairs) {
+      if (!(await ensureDiffBlobs(repoPath, ['diff'], pair))) return unscanned('more file content than one scan reads');
+    }
+  }
   try {
     const { stdout } = await runGitBuffer(
-      ['-c', 'core.quotePath=false', 'log', '-p', '--no-merges', '--format=commit %H', '--no-color', '--no-ext-diff',
-        '--no-textconv', '-M', '-U0', '--src-prefix=a/', '--dst-prefix=b/', range],
+      ['-c', 'core.quotePath=false', 'log', '-p', '--diff-merges=remerge', '--text', '--format=commit %H',
+        '--no-color', '--no-ext-diff', '--no-textconv', '-M', '-U0', '--src-prefix=a/', '--dst-prefix=b/', range],
       repoPath,
       false,
       null,
@@ -120,7 +139,9 @@ async function addedSecrets(repoPath: string, baseRef: string, headSha: string):
     );
     return scanAddedLines(stdout.toString('utf8'));
   } catch (error) {
-    if (error instanceof GitOperationError && error.outputTooLarge) return null;
+    if (error instanceof GitOperationError && error.outputTooLarge) {
+      return unscanned(`a patch over ${SECRET_SCAN_MAX_PATCH_BYTES / (1024 * 1024)} MB`);
+    }
     throw error;
   }
 }

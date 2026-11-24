@@ -169,7 +169,29 @@ export async function projectSecretsDeletedSince(
   return rows.map((row) => row.name);
 }
 
-/** Lock a legacy runtime secret to the server-side connector boundary. */
+/**
+ * The identifiers among `identifiers` that name a website login (consumer
+ * `browser`). A connector may never bind one: its value is a person's password
+ * for one site, and a connector would send it to the connector's own host.
+ */
+export async function websiteLoginIdentifiers(projectId: string, identifiers: string[]): Promise<Set<string>> {
+  if (identifiers.length === 0) return new Set();
+  const rows = await db
+    .select({ identifier: projectSecrets.identifier })
+    .from(projectSecrets)
+    .where(
+      and(
+        eq(projectSecrets.projectId, projectId),
+        inArray(projectSecrets.identifier, identifiers),
+        isNull(projectSecrets.ownerUserId),
+        eq(projectSecrets.consumer, 'browser'),
+      ),
+    );
+  return new Set(rows.map((row) => row.identifier));
+}
+
+/** Lock a legacy runtime secret to the server-side connector boundary. A
+ *  website login is never rewritten: it stays the browser's alone. */
 export async function confineSharedProjectSecretToConnector(
   projectId: string,
   identifier: string,
@@ -188,6 +210,7 @@ export async function confineSharedProjectSecretToConnector(
         eq(projectSecrets.projectId, projectId),
         eq(projectSecrets.identifier, identifier),
         isNull(projectSecrets.ownerUserId),
+        notBrowserLogin(),
       ),
     );
 }

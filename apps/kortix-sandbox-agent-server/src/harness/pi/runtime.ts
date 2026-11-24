@@ -56,6 +56,7 @@ import { isWorkflowRunner, WORKFLOW_TOOL, WorkflowRuns, type WorkflowControlAnsw
 import { contextRecord } from './extensions/context-record'
 import { listCheckout } from './extensions/workflow-store'
 import { promptOrigin, TRIGGER_EVENT_TAG, ULTRACODE_SYSTEM_LINE, ultracodeRequested, type PromptOrigin } from './prompt-origin'
+import { modelPromptText, PROMPT_AUTHOR_SECTION, type PromptAuthor } from './prompt-author'
 import { enabledFeatureFlags } from '@/lib/config/feature-flags'
 import { PROGRAM_AGENTS_FLAG, PROGRAM_PROVIDER_ID, programStep, type ProgramRun } from './program'
 import type { WorkflowRunMetadata } from '@kortix/api-contract/kortix-tool-card'
@@ -237,6 +238,13 @@ export interface PromptInput {
    * prompt's context part rides along a real prompt).
    */
   synthetic?: boolean
+  /**
+   * The person who wrote the prompt (`author`, KRTX-5121): the model reads
+   * their name above it (prompt-author.ts). Only the Kortix turn verbs set it
+   * (`turns.ts`): apps/api's proxy rewrites `author` on that route alone, so
+   * the OpenCode-shaped `prompt_async` body never carries one.
+   */
+  author?: PromptAuthor
 }
 
 export class PromptRejected extends Error {}
@@ -1094,7 +1102,8 @@ export class PiRuntime {
         const images = await this.images(input)
         if (slot.retracted) return
         const session = this.pi!.session
-        const message = { role: 'user' as const, content: images.length ? [{ type: 'text' as const, text: input.text }, ...images] : input.text, timestamp: this.now() }
+        const text = modelPromptText(input.text, input)
+        const message = { role: 'user' as const, content: images.length ? [{ type: 'text' as const, text }, ...images] : text, timestamp: this.now() }
         this.nativeIds.set(message, messageId)
         const entryId = session.sessionManager.appendMessage(message)
         this.unreadNoReply.set(messageId, entryId)
@@ -1153,7 +1162,7 @@ export class PiRuntime {
       this.clock.observe(messageId)
       const message: AgentMessage = {
         role: 'user',
-        content: [{ type: 'text', text: input.text || '(attachment)' }, ...images],
+        content: [{ type: 'text', text: modelPromptText(input.text || '(attachment)', input) }, ...images],
         timestamp: this.now(),
       }
       this.steered.push({ messageId, input, message })
@@ -1546,7 +1555,7 @@ export class PiRuntime {
       const images = await this.images(turn.input)
       // A transient model error continues the turn at the settle boundary (`turnExtension`).
       armWatchdog()
-      await this.promptWhenIdle(turn, turn.input.text || '(attachment)', { source: 'rpc', ...(images.length ? { images } : {}) })
+      await this.promptWhenIdle(turn, modelPromptText(turn.input.text || '(attachment)', turn.input), { source: 'rpc', ...(images.length ? { images } : {}) })
       for (const frame of this.adapter!.settleRetry()) this.publish(frame)
       if (timedOut) {
         outcome = 'error'
@@ -2834,6 +2843,8 @@ export class PiRuntime {
       ].join('\n'),
     )
     parts.push(ACT_BEFORE_YOU_ASK)
+    // People write to the root; a subagent's task comes from its parent agent.
+    if (!child) parts.push(PROMPT_AUTHOR_SECTION)
     if (!child && this.subagentContext.frontThread) parts.push(FRONT_WORKER_NOTE)
     return parts.join('\n\n')
   }

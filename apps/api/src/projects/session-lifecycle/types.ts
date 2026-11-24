@@ -193,6 +193,12 @@ export interface ContinueSessionCommand {
    *  route for a non-agent caller; absent keeps the token's identity. */
   bindTurnIdentity?: boolean;
   /**
+   * The person who wrote this prompt (`inboxPromptPersonId`), when one did.
+   * The model reads their name above it (`author` on the runtime prompt body,
+   * KRTX-5121). Absent for a trigger, a channel relay or another session.
+   */
+  authorUserId?: string | null;
+  /**
    * When an automation prompt (no `clientMessageId`) was queued. A user Stop
    * after it wins: the delivery does not wake the box, and the prompt waits
    * parked until the user opens the session again. Inbox prompts are held by

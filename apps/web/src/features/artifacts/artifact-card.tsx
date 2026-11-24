@@ -51,8 +51,8 @@ import { FolderTreeRadioItems, ROOT_FOLDER } from './artifact-folder-tree';
 import { ShareArtifactDialog } from './share-artifact-dialog';
 
 /** The drag payload of a card: its id and current folder, read by a folder drop target. */
-export const ARTIFACT_DRAG_TYPE = 'application/x-kortix-artifact';
-export type ArtifactDragPayload = { artifactId: string; folderId: string | null };
+const ARTIFACT_DRAG_TYPE = 'application/x-kortix-artifact';
+type ArtifactDragPayload = { artifactId: string; folderId: string | null };
 
 export function readArtifactDrag(event: React.DragEvent): ArtifactDragPayload | null {
   try {

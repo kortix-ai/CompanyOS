@@ -57,7 +57,7 @@ function folderDropAllowed(event: React.DragEvent, target: string | null) {
  * the root. It accepts only those two (not files or text), and a folder only
  * where it may go. It shows `over` while one hovers and moves it on drop.
  */
-export function useArtifactDropTarget(projectId: string, folderId: string | null, name: string) {
+function useArtifactDropTarget(projectId: string, folderId: string | null, name: string) {
   const t = useTranslations('artifacts');
   const { update } = useArtifactMutations(projectId);
   const folderMutations = useArtifactFolderMutations(projectId);

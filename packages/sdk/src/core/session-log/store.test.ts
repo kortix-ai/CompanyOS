@@ -6,6 +6,7 @@ import {
   EMPTY_SESSION_LOG_STATE,
   applySessionLogEvent,
   applySessionLogPage,
+  isStaleSessionLogPage,
   selectSessionLog,
   selectSessionLogThread,
   type SessionLogState,
@@ -169,13 +170,28 @@ describe('applySessionLogPage', () => {
     expect(ids(state)).toEqual(all.map((m) => m.message_id));
   });
 
-  test('a queued prompt (the box page\'s provisional seq) that a later page lacks still leaves: it was taken back or ran', () => {
+  test('a queued prompt (the box page\'s provisional seq): the API page never holds one and keeps it; the box page that lacks it settles it', () => {
     const all = rootMessages();
     const queued = { ...all[0]!, message_id: 'msg_queued', seq: Number.MAX_SAFE_INTEGER };
-    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page([...all, queued]));
-    expect(ids(state)).toContain('msg_queued');
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page([...all, queued]), undefined, { box: true });
     state = applySessionLogPage(state, page(all));
+    expect(ids(state)).toContain('msg_queued');
+    state = applySessionLogPage(state, page(all), undefined, { box: true });
     expect(ids(state)).toEqual(all.map((m) => m.message_id));
+  });
+
+  test('an older page of an older generation changes nothing either', () => {
+    const all = rootMessages();
+    const state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all.slice(0, -1), 2));
+    expect(applySessionLogPage(state, { ...page(all, 1), has_more: false }, all.at(-1)!.seq + 1)).toBe(state);
+    expect(isStaleSessionLogPage(state, page(all, 1))).toBe(true);
+    expect(isStaleSessionLogPage(state, page(all, 2))).toBe(false);
+  });
+
+  test('a state held from before pageGenerations existed still takes a page', () => {
+    const { pageGenerations: _p, ...legacy } = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page());
+    const state = applySessionLogPage(legacy as SessionLogState, page(rootMessages().slice(0, -1)));
+    expect(ids(state)).toEqual(rootMessages().map((m) => m.message_id));
   });
 
   test('a reply still streaming after a lagging page\'s tail stays; a page that reaches past it settles it', () => {

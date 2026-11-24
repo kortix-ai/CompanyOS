@@ -489,6 +489,20 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     expect(heldMessages()).toEqual(page().messages.slice(0, -1));
   });
 
+  test('a stale box page (an older generation) counts as a failed box read: the re-read falls back to the API page', async () => {
+    let apiReads = 0;
+    const loader: LoadSessionLogPage = async () => { apiReads++; return { ...page(), generation: 2 }; };
+    const livePage = async () => ({ ...page(), generation: 1, messages: page().messages.slice(0, -1) });
+    mount({ loader, livePage });
+    await flush();
+    expect(heldMessages()).toEqual(page().messages);
+    const before = apiReads;
+    act(() => latestStream().onRuntimeResync());
+    await flush();
+    expect(apiReads).toBe(before + 1);
+    expect(heldMessages()).toEqual(page().messages);
+  });
+
   test('KRTX-4973: newer failed read does not discard a successful page during log traffic', async () => {
     let reads = 0;
     const pending = deferredPage();

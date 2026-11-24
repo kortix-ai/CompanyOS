@@ -21,7 +21,7 @@ import {
   type SessionLogRead,
 } from '../core/session-log/source';
 import { currentSavedCopyStore } from '../core/session-sync/saved-copy-store';
-import { selectSessionLog, selectSessionLogThread } from '../core/session-log/store';
+import { isStaleSessionLogPage, selectSessionLog, selectSessionLogThread } from '../core/session-log/store';
 import type { SessionLog, SessionLogThread } from '../core/session-log/types';
 import { selectSessionRows } from './session-transcript-subscription';
 import { usePacedStoreValue, useSessionMessages, type SessionMessagesOptions, type SessionMessagesSource } from './use-session-messages';
@@ -368,7 +368,9 @@ export function useSessionLogSync(
       if (Date.now() < liveSkipUntil) return false;
       const revision = ++pageRevision;
       const page = await live({ limit: SESSION_LOG_FIRST_PAGE_LIMIT }).catch(() => null);
-      if (stopped || !page) {
+      // A page of an older generation than the log's (a replaced box) holds nothing newer: a failed read.
+      const held = page && store().sessionLogs[sessionId];
+      if (stopped || !page || (held && isStaleSessionLogPage(held, page))) {
         liveFailures += 1;
         if (liveFailures >= SESSION_LOG_LIVE_FAILURES) liveSkipUntil = Date.now() + SESSION_LOG_LIVE_SKIP_MS;
         return false;

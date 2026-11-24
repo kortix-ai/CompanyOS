@@ -1325,10 +1325,6 @@
           "name": "Espacios",
           "description": "Agrupa sesiones en espacios, cada uno con sus archivos y pestañas. Un espacio nuevo es solo tuyo; compártelo con personas o con todo el workspace. Inicia una sesión en un espacio desde su página o desde el selector de espacio bajo el compositor. Cada sesión de un espacio sabe para qué sirve y monta su carpeta de Files."
         },
-        "chrome": {
-          "name": "Kortix en Chrome",
-          "description": "Permite que una sesión use tu navegador Chrome conectado. Puedes tomar el control o detenerla en cualquier momento."
-        },
         "agent_teams": {
           "name": "Equipos de agentes",
           "description": "Una sesión líder inicia compañeros de equipo con nombre que comparten una lista de tareas. Cada compañero toma una tarea, la trabaja en su propia sesión y avisa al líder cuando termina. Ves a cada compañero y sus tareas bajo el cuadro de mensaje del líder. Los mensajes entre sesiones funcionan sin esta opción."

@@ -67,7 +67,6 @@ export const FeatureFlagMapSchema = z.object({
   goals: z.boolean(),
   email_channel: z.boolean(),
   session_groups: z.boolean(),
-  chrome: z.boolean(),
   agent_teams: z.boolean(),
   voice_call: z.boolean(),
   chat_input: z.boolean(),
@@ -230,6 +229,8 @@ export const ProjectSchema = z.object({
     drives: z.boolean().optional(),
     /** Not a flag since 2026-11-23 (stateless sandboxes: every new Platinum session keeps /workspace on its own volume); `true` wherever new sessions get that volume (Platinum, and the deployment did not set `KORTIX_WORKSPACE_VOLUMES=off`), for older SDK, web and CLI clients. */
     workspace_volume: z.boolean().optional(),
+    /** Not a flag since 2026-11-24 (Kortix in Chrome is on for every project); `true` wherever the API serves /v1/chrome (`KORTIX_CHROME_ENABLED`), for older SDK, web and CLI clients. */
+    chrome: z.boolean().optional(),
     /** @deprecated Merged into `chat` (2026-11); equal to `chat`, for released TUI, mobile and CLI builds that show Channels only while it is true. */
     project_channels: z.boolean().optional(),
   }),

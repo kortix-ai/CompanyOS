@@ -5,6 +5,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Changed (Kortix in Chrome needs no flag)
+- The `chrome` project flag ("Kortix in Chrome") graduated (2026-11-24): every project's sessions
+  can drive their owner's own Chrome wherever the platform serves Kortix in Chrome. No project
+  can turn it off; the deployment's `KORTIX_CHROME_ENABLED` is the only switch (off on a
+  self-hosted server). `FeatureFlagKey` keeps `chrome`, marked `@deprecated`;
+  `FEATURE_FLAG_KEYS` no longer lists it. The API still sends `experimental.chrome`: whether it
+  serves Kortix in Chrome. `useFeatureFlag(projectId, 'chrome')` and `useFeatureFlags` read that
+  value. `KortixProject.experimental.chrome` is optional now.
+
 ### Changed (stateless sandboxes need no flag)
 - The `workspace_volume` project flag ("Stateless sandboxes") graduated (2026-11-23): every new
   Platinum session keeps `/workspace` on its own volume, and a box stopped for an hour is

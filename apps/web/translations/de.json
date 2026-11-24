@@ -1325,10 +1325,6 @@
           "name": "Spaces",
           "description": "Fasse Sitzungen in Spaces zusammen, jeder mit eigenen Dateien und Tabs. Ein neuer Space gehört nur dir; teile ihn mit Personen oder dem ganzen Workspace. Starte eine Sitzung in einem Space auf seiner Seite oder über die Space-Auswahl unter dem Eingabefeld. Jede Sitzung in einem Space weiß, wofür er da ist, und bindet seinen Files-Ordner ein."
         },
-        "chrome": {
-          "name": "Kortix in Chrome",
-          "description": "Lass eine Session deinen verbundenen Chrome-Browser nutzen. Du kannst jederzeit übernehmen oder sie stoppen."
-        },
         "agent_teams": {
           "name": "Agenten-Teams",
           "description": "Eine leitende Session startet benannte Teammitglieder mit einer gemeinsamen Aufgabenliste. Jedes Teammitglied übernimmt eine Aufgabe, bearbeitet sie in seiner eigenen Session und meldet der Leitung, wenn sie erledigt ist. Du siehst jedes Teammitglied und seine Aufgaben unter dem Eingabefeld der Leitung. Nachrichten zwischen Sessions funktionieren auch ohne dieses Flag."

@@ -1325,10 +1325,6 @@
           "name": "Espaces",
           "description": "Regroupez les sessions dans des espaces, chacun avec ses fichiers et ses onglets. Un nouvel espace est privé ; partagez-le avec des personnes ou avec tout le workspace. Lancez une session dans un espace depuis sa page ou depuis le sélecteur d'espace sous le compositeur. Chaque session d'un espace sait à quoi il sert et monte son dossier Files."
         },
-        "chrome": {
-          "name": "Kortix dans Chrome",
-          "description": "Autorisez une session à utiliser votre navigateur Chrome connecté. Vous pouvez reprendre le contrôle ou l’arrêter à tout moment."
-        },
         "agent_teams": {
           "name": "Équipes d’agents",
           "description": "Une session principale lance des coéquipiers nommés qui partagent une liste de tâches. Chaque coéquipier prend une tâche, la traite dans sa propre session et prévient la session principale quand elle est terminée. Vous voyez chaque coéquipier et ses tâches sous la zone de saisie de la session principale. Les messages entre sessions fonctionnent sans cette option."

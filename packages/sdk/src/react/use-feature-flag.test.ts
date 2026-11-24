@@ -283,6 +283,12 @@ describe('resolveFeatureFlag', () => {
     expect(resolveFeatureFlag(undefined, 'workspace_volume')).toBe(false);
   });
 
+  test('chrome reads the row: the API sends whether it serves Kortix in Chrome, not a constant', () => {
+    expect(resolveFeatureFlag({ chrome: true }, 'chrome')).toBe(true);
+    expect(resolveFeatureFlag({ chrome: false }, 'chrome')).toBe(false);
+    expect(resolveFeatureFlag(undefined, 'chrome')).toBe(false);
+  });
+
   test('graduated keys are on for every project, even against a contrary row', () => {
     expect(resolveFeatureFlag({ review_center: false }, 'review_center')).toBe(true);
     expect(resolveFeatureFlag({ agent_tunnel: false }, 'agent_tunnel')).toBe(true);
@@ -308,7 +314,6 @@ describe('useFeatureFlags', () => {
     'goals',
     'email_channel',
     'session_groups',
-    'chrome',
     'agent_teams',
     'voice_call',
     'chat_input',
@@ -323,6 +328,7 @@ describe('useFeatureFlags', () => {
     'drives',
     'artifacts',
     'workspace_volume',
+    'chrome',
     'session_log',
   ] as const;
 

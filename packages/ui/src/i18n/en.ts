@@ -827,10 +827,6 @@ const catalog = {
           "name": "Spaces",
           "description": "Group sessions into spaces, each with its own files and tabs. A new space is private to you; share it with people or with the whole workspace. Start a session in a space from its page or from the Space picker under the composer. Every session in a space knows what the space is for and mounts its Files folder."
         },
-        "chrome": {
-          "name": "Kortix in Chrome",
-          "description": "Let a session use your connected Chrome browser. You can take over or stop it at any time."
-        },
         "agent_teams": {
           "name": "Agent teams",
           "description": "A lead session starts named teammates that share one task list. Each teammate takes a task, works on it in its own session and tells the lead when it is done. You see every teammate and its tasks under the lead's composer. Messages between sessions work without this flag."

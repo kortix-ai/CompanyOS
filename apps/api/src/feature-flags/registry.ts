@@ -431,25 +431,15 @@ const FLAGS: readonly FeatureFlagDef[] = [
       'SESSIONS: session create ignores `group_id` while off. On, every session of a space (a child: its parent\'s) gets the "## This space" ' +
       'turn text (projects/lib/session-where.ts: name, description, mounted folder) and mounts /Spaces/<group_id> read-write at /drives/space (drives/service.ts sessionGroupFolder). SHARING: a group is private to its creator by default; sharing it (people or the whole project) shares every session in it and its folder (shared/session-group-access.ts).',
   },
-  {
-    key: 'chrome',
-    name: 'Kortix in Chrome',
-    description:
-      "Let a session drive your own Chrome, with your logins, through the Kortix in Chrome extension: it opens its tabs in a group named after the session, and you can take over or stop it at any time.",
-    stability: 'experimental',
-    // Where the API serves /v1/chrome (KORTIX_CHROME_ENABLED: local, dev, staging, prod).
-    available: () => config.KORTIX_CHROME_ENABLED,
-    // Launched 2026-11-21: the extension is public in the Chrome Web Store, so
-    // every project gets it where the API serves the routes.
-    platformDefault: () => true,
-    enforcement: 'routes',
-    enforcementNote:
-      'ROUTES: POST /v1/chrome/attach answers 403 `feature_disabled` when the calling session\'s project has it ' +
-      'off (chrome/routes.ts); release stays open so a session can always let go. The browsers a person ' +
-      'connected are account-level and gated only by KORTIX_CHROME_ENABLED (404 when off). BOX: off, the ' +
-      'session has no kortix-chrome skill and its CLI hides and refuses `kortix chrome` (KORTIX_FEATURE_FLAGS). ' +
-      'WEB: no Chrome card in Apps and extensions and no Chrome promo card. Settings → Kortix in Chrome is account-level and stays.',
-  },
+  // `chrome` graduated (2026-11-24): Kortix in Chrome is on for every project
+  // wherever the API serves /v1/chrome. The deployment's KORTIX_CHROME_ENABLED
+  // is the only off switch (dev, staging and prod set it; self-host does not).
+  // Each person still decides per browser: the extension, its Access mode and
+  // Stop. A stored `experimental.chrome` override is inert. The box keeps
+  // listing `chrome` in KORTIX_FEATURE_FLAGS where the API serves it
+  // (projects/lib/feature-flag-env.ts): kortixd withholds the kortix-chrome
+  // skill without it, and CLIs built before then hide `kortix chrome`.
+  // The serializer sends `experimental.chrome` = KORTIX_CHROME_ENABLED.
   {
     key: 'agent_teams',
     name: 'Agent teams',

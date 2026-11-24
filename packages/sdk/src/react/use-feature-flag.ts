@@ -50,7 +50,8 @@ export function resolveFeatureFlag(
  * surface can gate on — plus the graduated keys the API still resolves per
  * project: `volumes`, `drives` and `artifacts` each read whether the platform
  * stores Files (Platinum), `workspace_volume` whether new sessions get a
- * /workspace volume, and `session_log` the API sends `true`.
+ * /workspace volume, `chrome` whether the platform serves Kortix in Chrome,
+ * and `session_log` the API sends `true`.
  */
 const SERVED_FLAG_MAP_KEYS: readonly FeatureFlagKey[] = [
   ...FEATURE_FLAG_KEYS,
@@ -58,6 +59,7 @@ const SERVED_FLAG_MAP_KEYS: readonly FeatureFlagKey[] = [
   'drives',
   'artifacts',
   'workspace_volume',
+  'chrome',
   'session_log',
 ];
 

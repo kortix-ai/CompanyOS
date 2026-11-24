@@ -930,7 +930,6 @@ describe('envelopes', () => {
       'goals',
       'email_channel',
       'session_groups',
-      'chrome',
       'agent_teams',
       'voice_call',
       'chat_input',

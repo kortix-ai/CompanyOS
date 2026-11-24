@@ -1037,7 +1037,6 @@ test('FEATURE_FLAG_KEYS lists every flag key exactly once', () => {
     'goals',
     'email_channel',
     'session_groups',
-    'chrome',
     'agent_teams',
     'voice_call',
     'chat_input',
@@ -1069,6 +1068,17 @@ test('a graduated flag key still typechecks but is no longer a served flag', () 
   // actually serves, so it drops the key.
   const graduated: FeatureFlagKey = 'review_center';
   expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
+});
+
+test('chrome graduated: Kortix in Chrome needs no flag, the key still typechecks', () => {
+  // Every project gets Kortix in Chrome since 2026-11-24 wherever the API serves
+  // it. The API sends `experimental.chrome` (whether it serves /v1/chrome) for
+  // older clients, but it no longer lists, resolves, or accepts the key.
+  const graduated: FeatureFlagKey = 'chrome';
+  expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
+  const project = { experimental: {} } as Pick<KortixProject, 'experimental'>;
+  const sent: boolean | undefined = project.experimental?.chrome;
+  expect(sent).toBeUndefined();
 });
 
 test('workspace_volume graduated: every Platinum session is stateless, the key still typechecks', () => {

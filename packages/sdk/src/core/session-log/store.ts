@@ -21,9 +21,12 @@
  *  - `log.state`: an older `generation` (a zombie box) is ignored; the session fields merge.
  *  - A page carries no revs: a page message never replaces a message the stream delivered,
  *    and never revives a tombstoned one. Within its window (from its first `seq`, or from the
- *    start without `has_more`, up to its `before_seq` for an older page) a page drops a held
- *    message it lacks unless the stream revised it: that message was deleted, or came from
- *    an older saved copy.
+ *    start without `has_more`, up to its own last `seq`, below `before_seq` for an older page)
+ *    a page drops a held message it lacks unless the stream revised it: that message was
+ *    deleted, or came from an older saved copy. A message after the page's last `seq` is newer
+ *    than the page (the API's page lags the box's) and stays, except a queued prompt, and except
+ *    under a page of a newer generation than the thread's last page, which settles the whole tail.
+ *    A page's streaming copy never replaces a finished record held.
  *  - `older` keeps each thread's `has_more` from the oldest page read (`useSessionLogOlder`).
  *  - A streaming put (`status: 'streaming'`) is an ordinary put: the deltas that follow
  *    append to its blocks, and the final put (a higher `rev`) replaces it.
@@ -50,6 +53,8 @@ export interface SessionLogState {
   revs: Record<string, number>;
   /** Per thread: the oldest page read said older messages exist (`has_more`). Absent before a page of the thread. */
   older: Record<string, boolean>;
+  /** Per thread: the highest generation of a page applied to it. Absent before a page of the thread. */
+  pageGenerations: Record<string, number>;
 }
 
 /** The `log.*` frame as the store receives it: the runtime event shape, with the wire's own event id. */
@@ -66,6 +71,7 @@ export const EMPTY_SESSION_LOG_STATE: SessionLogState = Object.freeze({
   messages: {},
   revs: {},
   older: {},
+  pageGenerations: {},
 });
 
 /**
@@ -190,20 +196,21 @@ export function applySessionLogPage(state: SessionLogState, page: SessionLogPage
   // saved copy). It leaves. A finished message after the page's last seq is newer than the page:
   // the API's page lags the box's by the journal's post interval, so it says nothing about the
   // turns the box page delivered after it, and they stay (a deletion there comes as a
-  // tombstone). Two held records there are provisional and the page still settles them: a
-  // streaming reply (one pi abandoned has no final record) and a queued prompt (its seq is
-  // no position in the log). A page of a newer generation (a box restarted from the stored
-  // log) settles the whole tail: a reply the old box never journaled is gone with it.
+  // tombstone), and so does a reply still streaming there (a later page that reaches past it
+  // settles it). A queued prompt's provisional seq is no position in the log: the page settles
+  // it wherever it is. A page of a newer generation (a box restarted from the stored
+  // log) settles the whole tail: a reply the old box never journaled is gone with it. The
+  // generation compared is the thread's last page's, not the state's: the new box's
+  // `log.state` frame often arrives before its page.
   if (thread !== null && held) {
     const from = page.has_more ? (page.messages[0]?.seq ?? Infinity) : -Infinity;
     const last =
-      page.generation > state.generation
+      page.generation > (state.pageGenerations[thread] ?? page.generation)
         ? Infinity
         : page.messages.reduce((max, m) => (m.seq < SESSION_LOG_QUEUED_SEQ_FLOOR ? Math.max(max, m.seq) : max), -Infinity);
     const to = beforeSeq ?? Infinity;
     const kept = new Set(page.messages.map((m) => m.message_id));
-    const provisional = (m: SessionLogMessage) => m.status === 'streaming' || m.seq >= SESSION_LOG_QUEUED_SEQ_FLOOR;
-    const vouched = (m: SessionLogMessage) => m.seq >= from && m.seq < to && (m.seq <= last || provisional(m));
+    const vouched = (m: SessionLogMessage) => m.seq >= from && m.seq < to && (m.seq <= last || m.seq >= SESSION_LOG_QUEUED_SEQ_FLOOR);
     const settled = held.filter((m) => !vouched(m) || kept.has(m.message_id) || state.revs[m.message_id] !== undefined);
     if (settled.length !== held.length) messages = { ...messages, [thread]: settled };
   }
@@ -231,6 +238,10 @@ export function applySessionLogPage(state: SessionLogState, page: SessionLogPage
     threads,
     messages,
     older,
+    pageGenerations:
+      thread === null || (state.pageGenerations[thread] ?? -1) >= page.generation
+        ? state.pageGenerations
+        : { ...state.pageGenerations, [thread]: page.generation },
   };
 }
 

@@ -112,6 +112,17 @@ describe('applySessionLogPage', () => {
     expect(ids(state)).toEqual(all.slice(0, -1).map((m) => m.message_id));
   });
 
+  test('the new generation\'s log.state frame before its page: the page still settles the old tail', () => {
+    const all = rootMessages();
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all, 1));
+    state = applySessionLogEvent(state, ev('log.state', { generation: 2, session: {} }));
+    state = applySessionLogPage(state, page(all.slice(0, -1), 2));
+    expect(ids(state)).toEqual(all.slice(0, -1).map((m) => m.message_id));
+    // A lagging page of that same generation is bounded again.
+    state = applySessionLogPage(applySessionLogPage(state, page(all, 2)), page(all.slice(0, -2), 2));
+    expect(ids(state)).toEqual(all.map((m) => m.message_id));
+  });
+
   test('a lagging page still settles a deleted message inside its own span', () => {
     const all = rootMessages();
     let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all));
@@ -135,12 +146,15 @@ describe('applySessionLogPage', () => {
     expect(ids(state)).toEqual(all.map((m) => m.message_id));
   });
 
-  test('a streaming reply a later page lacks still leaves: pi abandoned it and no final record follows', () => {
+  test('a reply still streaming after a lagging page\'s tail stays; a page that reaches past it settles it', () => {
     const all = rootMessages();
     const streaming = { ...all.at(-1)!, message_id: 'msg_streaming', seq: all.at(-1)!.seq + 1, status: 'streaming' as const };
     let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page([...all, streaming]));
     state = applySessionLogPage(state, page(all));
-    expect(ids(state)).toEqual(all.map((m) => m.message_id));
+    expect(ids(state)).toEqual([...all, streaming].map((m) => m.message_id));
+    const later = { ...all[0]!, message_id: 'msg_later', seq: streaming.seq + 1 };
+    state = applySessionLogPage(state, page([...all, later]));
+    expect(ids(state)).toEqual([...all, later].map((m) => m.message_id));
   });
 
   test('a lagging page\'s streaming copy of a reply never replaces the finished one a fresher page delivered', () => {

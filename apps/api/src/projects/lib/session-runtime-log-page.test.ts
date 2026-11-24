@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { readRuntimeLogPageBody, RUNTIME_LOG_PAGE_MAX_BYTES } from './session-runtime-transport';
+import { jsonStructureExceeds, readRuntimeLogPageBody, RUNTIME_LOG_PAGE_MAX_BYTES, RUNTIME_LOG_PAGE_MAX_TOKENS } from './session-runtime-transport';
 
 /** A response whose body streams `bytes` bytes of JSON-ish text in 64 kB chunks, counting what was read. */
 function streamed(bytes: number, headers: Record<string, string> = {}) {
@@ -33,6 +33,24 @@ describe('readRuntimeLogPageBody: the box answer of GET …/log?live=1, read wit
     const { response, read } = streamed(1024, { 'content-length': String(RUNTIME_LOG_PAGE_MAX_BYTES + 1) });
     expect(await readRuntimeLogPageBody(response)).toEqual({ ok: false, reason: 'too_large', status: 200 });
     expect(read()).toBe(0);
+  });
+
+  test('the ceilings: 2 MiB, the stored page budget, and 50,000 structural tokens (real pages: at most 430 kB and 2,436 tokens)', () => {
+    expect(RUNTIME_LOG_PAGE_MAX_BYTES).toBe(2 * 1024 * 1024);
+    expect(RUNTIME_LOG_PAGE_MAX_TOKENS).toBe(50_000);
+  });
+
+  test('a body under the byte ceiling made of many small values is refused before it is parsed', async () => {
+    const tiny = `[${Array.from({ length: 200_000 }, () => '[]').join(',')}]`;
+    expect(tiny.length).toBeLessThan(RUNTIME_LOG_PAGE_MAX_BYTES);
+    expect(await readRuntimeLogPageBody(new Response(tiny))).toEqual({ ok: false, reason: 'too_complex', status: 200 });
+  });
+
+  test('structure inside strings does not count: a page of long texts full of brackets and commas is read', async () => {
+    const text = '[{,}],'.repeat(100_000);
+    const page = { generation: 0, thread_id: 'ses_root', messages: [{ blocks: [{ type: 'text', text: `say "${text}"` }] }], has_more: false };
+    expect((await readRuntimeLogPageBody(Response.json(page))).ok).toBe(true);
+    expect(jsonStructureExceeds(new TextEncoder().encode(JSON.stringify(page)), 10)).toBe(false);
   });
 
   test('a body that is not JSON is refused', async () => {

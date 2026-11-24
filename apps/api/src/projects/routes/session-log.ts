@@ -430,7 +430,8 @@ export function registerSessionLogRoutes(): void {
       if ((query.live === '1' || query.live === 'true') && beforeSeq === null) {
         const started = Date.now();
         const live = await readLiveSessionLogPage({ sessionId, userId: gate.userId, threadId, limit: limit.value });
-        if (live.page) return c.json(live.page, 200);
+        // Serialized once and shared by every caller of the same read.
+        if (live.body !== null) return c.body(live.body, 200, { 'Content-Type': 'application/json' }) as never;
         // A session with no running box is the ordinary case; a box that did not answer is worth a line.
         if (!live.reason.startsWith('sandbox_') && live.reason !== 'no_sandbox') {
           logger.info('[session-log] live read answered the stored log', { sessionId, reason: live.reason, ms: Date.now() - started });

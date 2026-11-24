@@ -14,8 +14,9 @@
  *  - the replica already runs as many live reads as it allows (`busy`, `createLiveReadGate`).
  * The box is never woken: a read is not a reason to run one.
  *
- * The page is passed through as the box built it, with `source: 'box'`. The client validates
- * every record (the SDK's `isSessionLogPage`), as it did when it read the box itself.
+ * The page is passed through as the box built it, with `source: 'box'`, serialized once. The
+ * client validates every record (the SDK's `isSessionLogPage`), as it did when it read the box
+ * itself.
  */
 import type { SessionLogPage } from '@kortix/api-contract/session-log';
 import { sessionLogs, sessionSandboxes } from '@kortix/db';
@@ -32,7 +33,8 @@ export const SESSION_LOG_LIVE_BUDGET_MS = 2_000;
 /** A box row in one of these states runs a box (`session-event-stream.ts` attaches to the same two). */
 const RUNNING = new Set(['active', 'provisioning']);
 
-export type LiveSessionLogRead = { page: SessionLogPage & { source: 'box' } } | { page: null; reason: string };
+/** The box's page as the JSON text the route answers (`source: 'box'`), serialized once for every caller that shares it. */
+export type LiveSessionLogRead = { body: string } | { body: null; reason: string };
 
 type J = Record<string, unknown>;
 const isObj = (v: unknown): v is J => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -52,12 +54,13 @@ function isWholePage(v: unknown): v is SessionLogPage {
 }
 
 /**
- * Bounds the live box reads one replica runs at once. Each read holds up to
- * `RUNTIME_LOG_PAGE_MAX_BYTES` (8 MiB) of a box's answer in memory:
- *  - callers of the same key (session, thread, limit) share one read: a reconnect storm or many
- *    tabs of one session cost one box read;
+ * Bounds the live box reads one replica runs at once. A read holds a box's answer (at most 2 MiB
+ * and 50,000 structural tokens, `readRuntimeLogPageBody`) while it parses it, then only its
+ * serialized text:
+ *  - callers of the same key (session, thread, limit) share one read and one serialized text: a
+ *    reconnect storm or many tabs of one session cost one box read and one `JSON.stringify`;
  *  - at most `maxPerSession` different reads of one session run at once;
- *  - at most `maxInFlight` reads run on the replica (16 × 8 MiB = 128 MiB at worst).
+ *  - at most `maxInFlight` reads run on the replica.
  * A read past a limit answers null at once: the caller answers the stored log.
  */
 export function createLiveReadGate<T>(limits: { maxInFlight: number; maxPerSession: number }) {
@@ -77,8 +80,10 @@ export function createLiveReadGate<T>(limits: { maxInFlight: number; maxPerSessi
   };
 }
 
+export const LIVE_READ_LIMITS = { maxInFlight: 8, maxPerSession: 2 } as const;
+
 /** replica-local: the live reads this API process runs; each replica bounds its own memory. */
-const liveReads = createLiveReadGate<LiveSessionLogRead>({ maxInFlight: 16, maxPerSession: 2 });
+const liveReads = createLiveReadGate<LiveSessionLogRead>(LIVE_READ_LIMITS);
 
 export async function readLiveSessionLogPage(input: {
   sessionId: string;
@@ -90,7 +95,7 @@ export async function readLiveSessionLogPage(input: {
 }): Promise<LiveSessionLogRead> {
   const key = `${input.sessionId}\u0000${input.threadId ?? ''}\u0000${input.limit}`;
   const read = await liveReads.run(key, input.sessionId, () => readBox(input));
-  return read ?? { page: null, reason: 'busy' };
+  return read ?? { body: null, reason: 'busy' };
 }
 
 async function readBox(input: Parameters<typeof readLiveSessionLogPage>[0]): Promise<LiveSessionLogRead> {
@@ -100,7 +105,7 @@ async function readBox(input: Parameters<typeof readLiveSessionLogPage>[0]): Pro
     .where(eq(sessionSandboxes.sessionId, input.sessionId))
     .limit(1);
   if (!sandbox?.externalId || !RUNNING.has(sandbox.status)) {
-    return { page: null, reason: sandbox ? `sandbox_${sandbox.status}` : 'no_sandbox' };
+    return { body: null, reason: sandbox ? `sandbox_${sandbox.status}` : 'no_sandbox' };
   }
   // The budget covers the whole box read: resolving the box's address (a provider call on a cold
   // cache, up to the provider's own timeout) as well as the request to it.
@@ -119,10 +124,10 @@ async function readBox(input: Parameters<typeof readLiveSessionLogPage>[0]): Pro
     ]),
     db.select({ generation: sessionLogs.generation }).from(sessionLogs).where(eq(sessionLogs.sessionId, input.sessionId)).limit(1),
   ]);
-  if (!box.ok) return { page: null, reason: box.reason };
-  if (!isWholePage(box.body)) return { page: null, reason: 'invalid_page' };
-  if (input.threadId !== null && box.body.thread_id !== input.threadId) return { page: null, reason: 'other_thread' };
+  if (!box.ok) return { body: null, reason: box.reason };
+  if (!isWholePage(box.body)) return { body: null, reason: 'invalid_page' };
+  if (input.threadId !== null && box.body.thread_id !== input.threadId) return { body: null, reason: 'other_thread' };
   const storedGeneration = stored[0]?.generation;
-  if (storedGeneration !== undefined && box.body.generation < storedGeneration) return { page: null, reason: 'stale_generation' };
-  return { page: { ...box.body, source: 'box' } };
+  if (storedGeneration !== undefined && box.body.generation < storedGeneration) return { body: null, reason: 'stale_generation' };
+  return { body: JSON.stringify({ ...box.body, source: 'box' }) };
 }

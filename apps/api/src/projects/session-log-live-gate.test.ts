@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createLiveReadGate } from './session-log-live';
+import { createLiveReadGate, LIVE_READ_LIMITS } from './session-log-live';
 
 const deferred = <T>() => {
   let resolve: (value: T) => void = () => {};
@@ -41,6 +41,10 @@ describe('createLiveReadGate: the live box reads one replica runs at once', () =
     box.resolve('page');
     await Promise.all([a, b]);
     expect(await gate.run('s3|root|40', 's3', async () => 'page')).toBe('page');
+  });
+
+  test('one replica runs at most 8 box reads, 2 of one session', () => {
+    expect(LIVE_READ_LIMITS).toEqual({ maxInFlight: 8, maxPerSession: 2 });
   });
 
   test('a read that fails frees its slot too', async () => {

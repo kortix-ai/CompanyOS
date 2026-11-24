@@ -165,16 +165,41 @@ export type RuntimeLogPageFetch =
   | { ok: false; reason: string; status: number | null };
 
 /**
- * The largest box answer `GET …/log?live=1` reads, decompressed. A page of 40 messages measured
- * 3–260 kB on 12 prod boxes (2026-11-24). The box runs code its session controls, so its answer
- * is untrusted: past the ceiling the read stops and the stored log answers.
+ * The ceilings of a box answer `GET …/log?live=1` reads. The box runs code its session controls,
+ * so its answer is untrusted; past a ceiling the stored log answers.
+ *  - Bytes, decompressed: 2 MiB, the stored page's own budget (`SESSION_LOG_PAGE_MAX_BYTES`), so
+ *    a live answer costs a caller no more than a stored one. Real pages of 40 messages measured
+ *    3–430 kB on prod boxes (2026-11-24).
+ *  - Structural tokens (`{`, `[` and `,` outside strings), counted before `JSON.parse`: 50,000.
+ *    The heap a parse builds grows with them, not with the bytes. Real pages: at most 2,436.
  */
-export const RUNTIME_LOG_PAGE_MAX_BYTES = 8 * 1024 * 1024;
+export const RUNTIME_LOG_PAGE_MAX_BYTES = 2 * 1024 * 1024;
+export const RUNTIME_LOG_PAGE_MAX_TOKENS = 50_000;
 
-/** The box's answer as JSON, read up to {@link RUNTIME_LOG_PAGE_MAX_BYTES}. */
+/**
+ * True when a JSON text holds more than `max` structural tokens (`{`, `[` and `,` outside its
+ * strings). One pass over the bytes; a UTF-8 continuation byte is never a quote or a backslash.
+ */
+export function jsonStructureExceeds(bytes: Uint8Array, max: number): boolean {
+  let count = 0;
+  let inString = false;
+  let escaped = false;
+  for (const byte of bytes) {
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (byte === 0x5c) escaped = true;
+      else if (byte === 0x22) inString = false;
+    } else if (byte === 0x22) inString = true;
+    else if ((byte === 0x7b || byte === 0x5b || byte === 0x2c) && ++count > max) return true;
+  }
+  return false;
+}
+
+/** The box's answer as JSON, read up to {@link RUNTIME_LOG_PAGE_MAX_BYTES} and {@link RUNTIME_LOG_PAGE_MAX_TOKENS}. */
 export async function readRuntimeLogPageBody(response: Response): Promise<RuntimeLogPageFetch> {
   const bytes = await readCapped(response, RUNTIME_LOG_PAGE_MAX_BYTES);
   if (!bytes) return { ok: false, reason: 'too_large', status: response.status };
+  if (jsonStructureExceeds(bytes, RUNTIME_LOG_PAGE_MAX_TOKENS)) return { ok: false, reason: 'too_complex', status: response.status };
   try {
     return { ok: true, body: JSON.parse(new TextDecoder().decode(bytes)) };
   } catch {
@@ -184,7 +209,7 @@ export async function readRuntimeLogPageBody(response: Response): Promise<Runtim
 
 /**
  * Read `GET /kortix/runtime/log` once: the box's newest page of one thread
- * (`runtime.log.v1`), at most {@link RUNTIME_LOG_PAGE_MAX_BYTES}. The page's shape
+ * (`runtime.log.v1`), within the ceilings of {@link readRuntimeLogPageBody}. The page's shape
  * is not validated here. `signal` bounds the read; the caller sets the budget.
  */
 export async function fetchRuntimeLogPage(

@@ -76,14 +76,16 @@ export async function mergeRequestingSession(
 }
 
 /**
- * Clear the session waiting on this connection and return it, in one
- * statement: only the caller that clears it notifies, so the finalize poll,
+ * Archive the session for its transcript card, then consume its notification
+ * in one statement: only the caller that clears it notifies, so the finalize poll,
  * the completion watch and the OAuth callback tell the agent once between them.
  */
 export async function takeRequestingSession(connectionId: string): Promise<string | null> {
   const rows = (await db.execute(sql`
     update kortix.connector_connections c
-       set metadata = c.metadata - 'requesting_session_id'
+       set metadata = (c.metadata - 'requesting_session_id') || jsonb_build_object(
+         'connect_session_ids', coalesce(c.metadata->'connect_session_ids', '[]'::jsonb)
+           || jsonb_build_array(old.waiting))
       from (select connection_id, metadata->>'requesting_session_id' as waiting
               from kortix.connector_connections
              where connection_id = ${connectionId}

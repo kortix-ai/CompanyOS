@@ -356,7 +356,8 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
       .where(
         and(
           eq(connectorConnections.projectId, projectId),
-          sql`${connectorConnections.metadata}->>'requesting_session_id' = ${sessionId}`,
+          sql`(${connectorConnections.metadata}->>'requesting_session_id' = ${sessionId}
+            or ${connectorConnections.metadata}->'connect_session_ids' ? ${sessionId})`,
         ),
       );
     const out: SessionConnectRequestRow[] = [];

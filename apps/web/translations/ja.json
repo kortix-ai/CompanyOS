@@ -3451,7 +3451,7 @@
       },
       "notStarted": "開始されませんでした",
       "notStartedSentence": "Kortix はこの同僚を開始できませんでした。何も実行されていません。",
-      "policyBlocked": "このプロジェクトのポリシーでブロックされています。プロジェクト管理者に許可を依頼してください。"
+      "policyBlocked": "このワークスペースのポリシーでブロックされています。ワークスペース管理者に許可を依頼してください。"
     }
   },
   "agentRunLimit": {
@@ -26347,7 +26347,7 @@
   },
   "dictation": {
     "start": "メッセージを音声入力",
-    "price": "1分あたり{credits}クレジット",
+    "price": "1分あたり{credits, plural, other {#クレジット}}",
     "recording": "音声入力",
     "discard": "録音を破棄",
     "finish": "テキストを追加",

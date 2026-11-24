@@ -3451,7 +3451,7 @@
       },
       "notStarted": "Nicht gestartet",
       "notStartedSentence": "Kortix konnte diesen Kollegen nicht starten. Es lief nichts.",
-      "policyBlocked": "Durch die Richtlinie dieses Projekts blockiert. Bitte einen Projekt-Admin, es zu erlauben."
+      "policyBlocked": "Durch die Richtlinie dieses Workspaces blockiert. Bitte einen Workspace-Admin, es zu erlauben."
     }
   },
   "agentRunLimit": {

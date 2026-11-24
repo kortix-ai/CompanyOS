@@ -3451,7 +3451,7 @@
       },
       "notStarted": "Nije pokrenut",
       "notStartedSentence": "Kortix nije mogao da pokrene ovog kolegu. Ništa nije pokrenuto.",
-      "policyBlocked": "Blokirano pravilima ovog projekta. Zamoli administratora projekta da to dozvoli."
+      "policyBlocked": "Блокирано правилима овог радног простора. Замоли администратора радног простора да то дозволи."
     }
   },
   "agentRunLimit": {

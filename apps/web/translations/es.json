@@ -3451,7 +3451,7 @@
       },
       "notStarted": "No se inició",
       "notStartedSentence": "Kortix no pudo iniciar a este colega. No se ejecutó nada.",
-      "policyBlocked": "Bloqueado por la política de este proyecto. Pide a un administrador del proyecto que lo permita."
+      "policyBlocked": "Bloqueado por la política de este espacio de trabajo. Pide a un administrador del espacio de trabajo que lo permita."
     }
   },
   "agentRunLimit": {

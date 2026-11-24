@@ -3451,7 +3451,7 @@
       },
       "notStarted": "未启动",
       "notStartedSentence": "Kortix 无法启动这位同事。没有运行任何内容。",
-      "policyBlocked": "已被此项目的策略阻止。请让项目管理员允许它。"
+      "policyBlocked": "已被此工作区的策略阻止。请让工作区管理员允许它。"
     }
   },
   "agentRunLimit": {
@@ -26347,7 +26347,7 @@
   },
   "dictation": {
     "start": "语音输入消息",
-    "price": "每分钟 {credits} 积分",
+    "price": "每分钟 {credits, plural, other {# 积分}}",
     "recording": "语音输入",
     "discard": "丢弃录音",
     "finish": "添加文字",

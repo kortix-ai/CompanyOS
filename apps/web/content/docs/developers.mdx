@@ -595,7 +595,17 @@ After the merge, running sessions on that base pick up the new config, and Korti
 
 - An agent that declares `kortix_permissions` merges only when the grant includes `project.gitops.merge`. An agent without `kortix_permissions` cannot merge.
 - A session cannot merge a change request it opened unless its grant in `kortix.yaml` includes `project.gitops.merge`. Without it, the merge returns `403` `CR_SELF_MERGE_REFUSED`.
-- A merge that changes `agents`, `default_agent` or `triggers` also needs the permission the direct edit needs: `project.agent.write`, or `project.trigger.create`, `.update` or `.delete`. The merging agent cannot grant any permission it does not hold.
+- A merge that changes `agents`, `default_agent`, `triggers`, `connectors`, `policies` or `policy` also needs the permission the direct edit needs: `project.agent.write`; `project.trigger.create`, `.update` or `.delete`; or `project.connector.write`. The merging agent cannot grant any permission it does not hold. The same rule holds for a person: a custom role with `project.gitops.merge` but without `project.connector.write` cannot merge a change to a connector.
+
+#### Secrets in a change request
+
+The merge reads every commit the change request adds to its base. A line that holds a provider-shaped key stops the merge: a private key, or an Anthropic, OpenAI-style, GitHub, AWS access key, Slack, Google API or Stripe live key. The answer is `409` `CR_SECRET_DETECTED`. Its `findings` name the `file`, `line`, `commit` and `rule` of each key, never the value.
+
+1. Store the value as a secret: `kortix secrets request <NAME>`, or `kortix secrets set <NAME>=-` with the value on stdin.
+2. Read it from the environment in the code.
+3. Remove the key from every commit of the branch, then force-push it. A commit that deletes the key is not enough: the merge carries the earlier commit.
+
+A person who checked a finding, such as a test fixture, merges anyway with `kortix cr merge <cr> --allow-secrets` (REST: `{"allow_secrets": true}`). The change request records who did it and the findings in `metadata.secret_override`. An agent session gets `403` `CR_SECRET_OVERRIDE_REFUSED`. A change with more than 500 commits or a 32 MB patch merges without the check.
 
 A grant that names `project.cr.open` or `project.cr.merge` counts as `project.gitops.push` or `project.gitops.merge`. Write the `gitops` name in new grants.
 
@@ -606,7 +616,7 @@ A grant that names `project.cr.open` or `project.cr.merge` counts as `project.gi
 | List, show, diff, merge preview | Read access to the workspace. |
 | Open | `project.gitops.push` |
 | Edit, close, reopen | Write access to the workspace. An agent also needs `project.gitops.push`. |
-| Merge | `project.gitops.merge`, plus the manifest permissions above for an agent. |
+| Merge | `project.gitops.merge`, plus the manifest permissions above, for a person and for an agent. |
 | Request changes | `project.review.act` |
 
 #### `kortix cr` commands
@@ -620,7 +630,7 @@ A grant that names `project.cr.open` or `project.cr.merge` counts as `project.gi
 | `kortix cr diff <cr>` | Prints the unified diff. |
 | `kortix cr open --head <branch> --title <t> [--base <branch>] [--description <t>]` | Opens a change request. Aliases: `--from`, `--into`, `--body`. |
 | `kortix cr merge-preview <cr>` | Shows whether it can merge, and the conflicts. |
-| `kortix cr merge <cr> [--message <t>]` | Merges it. |
+| `kortix cr merge <cr> [--message <t>] [--allow-secrets]` | Merges it. `--allow-secrets` merges past the secret check; only a person may. |
 | `kortix cr request-changes <cr> --message <t>` | Sends the note to the agent that opened it. |
 | `kortix cr close <cr>` | Closes it without a merge. |
 | `kortix cr reopen <cr>` | Reopens a closed one. |
@@ -640,7 +650,10 @@ Each command takes `--workspace <id>` and `--host <name>`. `ls`, `show`, `diff`,
 | (conflict) | `409` | The merge conflicts. The body lists the files. |
 | (not open) | `409` | The change request is merged or closed. |
 | `CR_SELF_MERGE_REFUSED` | `403` | A session tried to merge its own change request without a merge grant. |
-| `CR_GOVERNANCE_UNVERIFIED` | `503` | Kortix could not read the manifest to check an agent's merge. Nothing merged. Retry. |
+| `CR_SECRET_DETECTED` | `409` | A commit of the change request adds a key. `findings` lists file, line, commit and rule. See [Secrets in a change request](#secrets-in-a-change-request). |
+| `CR_SECRET_OVERRIDE_REFUSED` | `403` | An agent session sent `allow_secrets`. Only a person may. |
+| `CR_HEAD_MOVED` | `409` | The head branch moved after the merge checked it. Nothing merged. Retry. |
+| `CR_GOVERNANCE_UNVERIFIED` | `503` | Kortix could not read the change request to check the merge. Nothing merged. Retry. |
 | (manifest unreadable) | `502` | Kortix could not read the manifest from the head branch. |
 
 ### The Review page
@@ -2776,6 +2789,8 @@ These are the codes clients branch on most. The linked section explains each fix
 | `repository_push_rejected` | `409` | The git host refused a push because of branch protection or repository rules. | [Git](/docs/developers#who-can-clone-and-push) |
 | `CR_HEAD_NOT_AHEAD` | `422` | The change request branch has no commits ahead of its base. | [Git](/docs/developers#change-requests) |
 | `CR_SELF_MERGE_REFUSED` | `403` | A session tried to merge its own change request without a `project.gitops.merge` grant. | [Git](/docs/developers#change-requests) |
+| `CR_SECRET_DETECTED` | `409` | A commit of the change request adds a key. The merge is blocked. `findings` names file, line, commit and rule, never the value. | [Git](/docs/developers#secrets-in-a-change-request) |
+| `CR_SECRET_OVERRIDE_REFUSED` | `403` | An agent session asked to merge past the secret check. Only a person may. | [Git](/docs/developers#secrets-in-a-change-request) |
 | `MANIFEST_INVALID` | `422` | The change request makes `kortix.yaml` invalid. The merge is blocked. `issues` lists the errors. | [kortix.yaml reference](/docs/developers#kortixyaml-reference) |
 | `PERSONAL_SECRET_REQUIRES_PRIVATE_SESSION` | `409` | You tried to share a session that holds a secret shared only with you. | [Security](/docs/guide#security) |
 | `project_secret_write_limit` | `429` | The workspace wrote secrets more than 100 times in one hour. | [Security](/docs/guide#security) |

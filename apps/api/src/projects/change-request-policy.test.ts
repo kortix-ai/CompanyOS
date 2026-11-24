@@ -5,6 +5,7 @@ import {
   requiredManifestActions,
   resolveChangeRequestBase,
   resolveChangeRequestOrigin,
+  secretMergeRefusal,
 } from './change-request-policy';
 
 const SESSION = 'sess-a';
@@ -159,5 +160,64 @@ describe('requiredManifestActions — a merge needs what the direct route assert
 
   test('a side that does not parse needs every manifest-write permission (fail closed)', () => {
     expect(requiredManifestActions(base, 'agents: [unclosed')).toEqual([...MANIFEST_WRITE_ACTIONS]);
+    expect(MANIFEST_WRITE_ACTIONS).toContain('project.connector.write');
+  });
+
+  test('connectors: added, changed or removed → project.connector.write', () => {
+    const desk = '  - slug: desk\n    provider: mcp\n    url: https://desk.example.test/mcp\n';
+    const withDesk = `${base}connectors:\n${desk}`;
+    expect(requiredManifestActions(base, withDesk)).toEqual(['project.connector.write']);
+    expect(requiredManifestActions(withDesk, withDesk.replace('/mcp', '/v2/mcp'))).toEqual(['project.connector.write']);
+    expect(requiredManifestActions(withDesk, base)).toEqual(['project.connector.write']);
+    expect(requiredManifestActions(withDesk, `${withDesk}project:\n  name: renamed\n`)).toEqual([]);
+  });
+
+  test('workspace connector rules (policies, policy) → project.connector.write', () => {
+    expect(requiredManifestActions(base, `${base}policies:\n  - match: send_*\n    action: block\n`)).toEqual([
+      'project.connector.write',
+    ]);
+    expect(requiredManifestActions(base, `${base}policy:\n  default_mode: ask\n`)).toEqual(['project.connector.write']);
+  });
+
+  test('one change touching agents and connectors needs both', () => {
+    const changed = `${base.replace('["project.read"]', 'all')}connectors:\n  - slug: desk\n    provider: mcp\n    url: https://desk.example.test/mcp\n`;
+    expect(requiredManifestActions(base, changed)).toEqual(['project.agent.write', 'project.connector.write']);
+  });
+});
+
+describe('secretMergeRefusal — a person may override, an agent may not', () => {
+  const scan = {
+    findings: [{ commit: '1a2b3c4d5e6f', file: 'src/config.ts', line: 2, rule: 'github_token', label: 'GitHub token' }],
+    total: 1,
+  };
+  const input = { crNumber: 7, baseRef: 'main', scan, actorIsSession: false, allowSecrets: false };
+
+  test('nothing found → merges for everyone', () => {
+    expect(secretMergeRefusal({ ...input, scan: { findings: [], total: 0 } })).toBeNull();
+    expect(secretMergeRefusal({ ...input, scan: { findings: [], total: 0 }, actorIsSession: true, allowSecrets: true })).toBeNull();
+  });
+
+  test('found, no override → 409 CR_SECRET_DETECTED naming file, line, commit and the fix', () => {
+    for (const actorIsSession of [false, true]) {
+      const refusal = secretMergeRefusal({ ...input, actorIsSession });
+      expect(refusal?.status).toBe(409);
+      expect(refusal?.body.code).toBe('CR_SECRET_DETECTED');
+      expect(refusal?.body.findings).toEqual(scan.findings);
+      expect(refusal?.body.error).toContain('src/config.ts:2 (GitHub token, commit 1a2b3c4d5e6f)');
+      expect(refusal?.body.remediation).toContain('kortix secrets request <NAME>');
+      expect(refusal?.body.remediation).toContain('origin/main');
+      expect(refusal?.body.remediation).toContain('kortix cr merge 7 --allow-secrets');
+    }
+  });
+
+  test('a person overrides → merges', () => {
+    expect(secretMergeRefusal({ ...input, allowSecrets: true })).toBeNull();
+  });
+
+  test('an agent session overrides → 403 CR_SECRET_OVERRIDE_REFUSED', () => {
+    const refusal = secretMergeRefusal({ ...input, actorIsSession: true, allowSecrets: true });
+    expect(refusal?.status).toBe(403);
+    expect(refusal?.body.code).toBe('CR_SECRET_OVERRIDE_REFUSED');
+    expect(refusal?.body.findings).toEqual(scan.findings);
   });
 });

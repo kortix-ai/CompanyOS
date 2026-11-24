@@ -191,6 +191,11 @@ export interface MergeOptions {
   authorName?: string;
   authorEmail?: string;
   message?: string;
+  /**
+   * The head commit the caller checked. The merge lands it or nothing: a head
+   * that moved since the check throws `HeadMovedError`.
+   */
+  expectedHeadSha?: string;
 }
 
 export interface MergeResult {

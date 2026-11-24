@@ -10,6 +10,7 @@
  * branch SERVER-side, never passing through the proxy at all.
  */
 import { parseManifestText } from '@kortix/manifest-schema';
+import { describeSecretFindings, type SecretFinding, type SecretScan } from './secret-scan';
 
 /** Which branch does a change request opened from a session target? */
 export type CrBaseDecision =
@@ -96,10 +97,13 @@ export function resolveChangeRequestOrigin(input: {
 /**
  * The permissions that writing these manifest sections takes on the direct
  * routes: agent blocks and the default agent (`PUT /agents/:name/config|scope`,
- * `PUT /default-agent`) and triggers (`POST|PATCH|DELETE /triggers`). A merge
- * that lands such a change needs the same permission, for an agent as for a
- * person. The Manager role lists them, and the role editor adds them to any
- * role that gets `project.gitops.merge` (its catalog `implies`); an agent's
+ * `PUT /default-agent`), triggers (`POST|PATCH|DELETE /triggers`), and
+ * connectors with their rules (`POST|DELETE /connectors`, `PUT
+ * /connectors/:slug/*`, `PUT /policies`: `connectors`, `policies`, `policy`).
+ * A merge that lands such a change needs the same permission, for an agent as
+ * for a person. The Manager role lists them; the web role editor adds them to
+ * a role that gets `project.gitops.merge` (its catalog `implies`), but the API
+ * accepts a custom role without them, so the merge asks. An agent's
  * `kortix_permissions` list is flat, so it must name them (or `all`).
  */
 export const MANIFEST_WRITE_ACTIONS = [
@@ -107,7 +111,11 @@ export const MANIFEST_WRITE_ACTIONS = [
   'project.trigger.create',
   'project.trigger.update',
   'project.trigger.delete',
+  'project.connector.write',
 ] as const;
+
+/** The manifest sections the connector routes write (`connectors/manifest-*.ts`). */
+const CONNECTOR_SECTIONS = ['connectors', 'policies', 'policy'] as const;
 
 /**
  * Which of `MANIFEST_WRITE_ACTIONS` moving the manifest from `baseText` to
@@ -133,6 +141,9 @@ export function requiredManifestActions(baseText: string | null, headText: strin
     canonicalJson(before.default_agent) !== canonicalJson(after.default_agent)
   ) {
     required.add('project.agent.write');
+  }
+  if (CONNECTOR_SECTIONS.some((key) => canonicalJson(before[key]) !== canonicalJson(after[key]))) {
+    required.add('project.connector.write');
   }
   const was = triggersByKey(before.triggers);
   const now = triggersByKey(after.triggers);
@@ -166,4 +177,61 @@ function canonicalJson(value: unknown): string {
     .filter(([, v]) => v !== undefined)
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(',')}}`;
+}
+
+/** The refusal body of a merge the secret check stops. Never carries a value. */
+export interface SecretMergeRefusalBody {
+  error: string;
+  code: 'CR_SECRET_DETECTED' | 'CR_SECRET_OVERRIDE_REFUSED';
+  findings: SecretFinding[];
+  findings_total: number;
+  remediation: string;
+}
+
+/**
+ * May a change whose commits add what looks like a secret merge?
+ *
+ * Nothing found: yes. Found, no override: 409 `CR_SECRET_DETECTED`. A person
+ * who checked the finding overrides with `allow_secrets` (a test fixture, a
+ * public key the rule cannot tell apart). An agent session cannot: it is the
+ * principal the check exists for, so its override answers 403
+ * `CR_SECRET_OVERRIDE_REFUSED`.
+ */
+export function secretMergeRefusal(input: {
+  crNumber: number;
+  baseRef: string;
+  scan: SecretScan;
+  actorIsSession: boolean;
+  allowSecrets: boolean;
+}): { status: 403 | 409; body: SecretMergeRefusalBody } | null {
+  if (input.scan.total === 0) return null;
+  if (input.allowSecrets && !input.actorIsSession) return null;
+  const where = describeSecretFindings(input.scan);
+  const remediation =
+    'Store the value as a Kortix secret (`kortix secrets request <NAME>`) and read it from the environment. ' +
+    `Then remove it from every commit of the branch: \`git reset --soft $(git merge-base origin/${input.baseRef} HEAD)\`, ` +
+    'commit again, `git push --force-with-lease origin HEAD`. ' +
+    `A person who checked the finding may merge anyway: \`kortix cr merge ${input.crNumber} --allow-secrets\`.`;
+  const common = { findings: input.scan.findings, findings_total: input.scan.total, remediation };
+  if (input.allowSecrets) {
+    return {
+      status: 403,
+      body: {
+        error:
+          `Change request #${input.crNumber} adds what looks like a secret: ${where}. ` +
+          'Only a person merges past the secret check: ask one to review the finding and run ' +
+          `\`kortix cr merge ${input.crNumber} --allow-secrets\`. Nothing was merged.`,
+        code: 'CR_SECRET_OVERRIDE_REFUSED',
+        ...common,
+      },
+    };
+  }
+  return {
+    status: 409,
+    body: {
+      error: `Change request #${input.crNumber} adds what looks like a secret: ${where}. Nothing was merged.`,
+      code: 'CR_SECRET_DETECTED',
+      ...common,
+    },
+  };
 }

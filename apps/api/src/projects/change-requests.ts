@@ -181,12 +181,16 @@ export const CHANGE_REQUEST_TRANSITIONS = {
   reopen: { from: ['closed'], to: 'open' },
 } as const satisfies Record<string, { from: readonly ChangeRequestStatus[]; to: ChangeRequestStatus }>;
 
-/** Record a merge that landed. Lost race: another merge recorded it first. */
+/**
+ * Record a merge that landed. Lost race: another merge recorded it first.
+ * `metadata`, when given, replaces the row's metadata (the merge route passes
+ * the row's own metadata plus `secret_override`).
+ */
 export function recordChangeRequestMerge(
   crId: string,
   set: Pick<
     typeof changeRequests.$inferInsert,
-    'mergedAt' | 'mergedBy' | 'mergeCommitSha' | 'headCommitSha' | 'baseCommitSha'
+    'mergedAt' | 'mergedBy' | 'mergeCommitSha' | 'headCommitSha' | 'baseCommitSha' | 'metadata'
   >,
 ): Promise<TransitionResult<ChangeRequestRow>> {
   return transitionStatus(changeRequests, changeRequests.status, CHANGE_REQUEST_TRANSITIONS.merge, {

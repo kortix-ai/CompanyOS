@@ -12,7 +12,7 @@ import { getCommit, getCommitDiff, listCommits } from './commits';
 import { getBranchDiff, mergeBranches, previewMerge } from './merge';
 import { refreshMirror, runGitCapture } from './mirror';
 import { createPartialStoreFixture, type PartialStoreFixture } from './__tests__/partial-store-fixture';
-import { manifestChange } from '../change-request-governance';
+import { classifyMerge } from '../change-request-governance';
 
 const exec = promisify(execFile);
 
@@ -86,13 +86,14 @@ describe('change requests on a partial store', () => {
     expect(await fx.storeHas(setup.bigBlob)).toBe(false);
   });
 
-  test('merge governance reads the manifest at the merge base and the head, nothing else', async () => {
+  test('merge classification reads the manifest and the files the change adds, nothing else', async () => {
     const setup = await repoWithFeature();
     fx = setup.fx;
     await fx.push({ 'kortix.yaml': 'name: lab\ndefault_agent: helper\n' }, 'pick agent', 'feature');
     await fx.push({ 'notes.md': 'main moved\n' }, 'main edit', 'main');
-    const change = await manifestChange(fx.project, { baseRef: 'main', headRef: 'feature' });
+    const change = await classifyMerge(fx.project, { baseRef: 'main', headRef: 'feature' });
     expect(change.required.length).toBeGreaterThan(0);
+    expect(change.secrets).toEqual({ findings: [], total: 0 });
     expect(await fx.storeHas(await fx.upstreamBlob('kortix.yaml', 'feature'))).toBe(true);
     expect(await fx.storeHas(await fx.upstreamBlob('notes.md', 'main'))).toBe(false);
     expect(await fx.storeHas(setup.bigBlob)).toBe(false);

@@ -4,14 +4,17 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { manifestChange } from './change-request-governance';
+import { classifyMerge } from './change-request-governance';
 import { refreshMirror } from './git/mirror';
 import type { GitBackedProject } from './git/types';
 
 const manifestChangeRequiredActions = async (
   project: GitBackedProject,
   cr: { baseRef: string; headRef: string },
-) => (await manifestChange(project, cr)).required;
+) => (await classifyMerge(project, cr)).required;
+
+// Synthetic, assembled at runtime: no literal a secret scanner flags.
+const FAKE_GITHUB_TOKEN = ['ghp', Array.from({ length: 36 }, (_, i) => 'aB3dE5gH7jK9mN2pQ4sT6vW8yZ'[(i * 7) % 26]).join('')].join('_');
 
 // Release gate GH-17 / AGP-10 (v0.13.31): an agent session pushed its branch,
 // opened a change request, and merged it seconds later. The merge landed on an
@@ -95,7 +98,7 @@ afterEach(async () => {
   await rm(testRoot, { recursive: true, force: true });
 });
 
-describe('manifestChange(...).required on a warm mirror', () => {
+describe('classifyMerge(...).required on a warm mirror', () => {
   test('a branch pushed after the mirror warmed, changing only README, needs nothing extra', async () => {
     await pushBranch('session-readme', { 'README.md': '# seed\n\nagent note\n' });
     expect(await manifestChangeRequiredActions(project, { baseRef: 'main', headRef: 'session-readme' })).toEqual([]);
@@ -121,5 +124,53 @@ describe('manifestChange(...).required on a warm mirror', () => {
     await expect(
       manifestChangeRequiredActions(project, { baseRef: 'main', headRef: 'session-never-pushed' }),
     ).rejects.toThrow();
+  });
+});
+
+describe('classifyMerge — connectors and what the commits add', () => {
+  const WITH_CONNECTOR = `${MANIFEST}connectors:\n  - slug: desk\n    provider: mcp\n    url: https://desk.example.test/mcp\n`;
+
+  test('a branch deleting a connector needs project.connector.write', async () => {
+    await pushBranch('session-seed-connector', { 'kortix.yaml': WITH_CONNECTOR });
+    await git(['checkout', '-q', 'main'], workPath);
+    await git(['merge', '-q', '--ff-only', 'session-seed-connector'], workPath);
+    await git(['push', '-q', 'origin', 'main'], workPath);
+    await pushBranch('session-drop-connector', { 'kortix.yaml': MANIFEST });
+    expect(await manifestChangeRequiredActions(project, { baseRef: 'main', headRef: 'session-drop-connector' })).toEqual([
+      'project.connector.write',
+    ]);
+  });
+
+  test('a token the branch adds is a finding with file, line, commit and rule, never the value', async () => {
+    await pushBranch('session-token', { 'config.ts': `// config\nexport const TOKEN = '${FAKE_GITHUB_TOKEN}';\n` });
+    const change = await classifyMerge(project, { baseRef: 'main', headRef: 'session-token' });
+    const head = (await exec('git', ['rev-parse', 'session-token'], { cwd: workPath })).stdout.trim();
+    expect(change.headSha).toBe(head);
+    expect(change.secrets).toEqual({
+      findings: [{ commit: head.slice(0, 12), file: 'config.ts', line: 2, rule: 'github_token', label: 'GitHub token' }],
+      total: 1,
+    });
+    expect(JSON.stringify(change)).not.toContain(FAKE_GITHUB_TOKEN);
+  });
+
+  test('a token added in one commit and deleted in the next is still found: the merge carries both commits', async () => {
+    await pushBranch('session-token-history', { 'config.ts': `export const TOKEN = '${FAKE_GITHUB_TOKEN}';\n` });
+    await git(['checkout', '-q', 'session-token-history'], workPath);
+    await writeFile(join(workPath, 'config.ts'), 'export const TOKEN = process.env.TOKEN;\n');
+    await git(['commit', '-q', '-am', 'read the token from the environment'], workPath);
+    await git(['push', '-q', 'origin', 'session-token-history:refs/heads/session-token-history'], workPath);
+    await git(['checkout', '-q', 'main'], workPath);
+    const change = await classifyMerge(project, { baseRef: 'main', headRef: 'session-token-history' });
+    expect(change.secrets?.findings.map((f) => `${f.file}:${f.line}:${f.rule}`)).toEqual(['config.ts:1:github_token']);
+  });
+
+  test('a token already on the base branch is not the change request\'s finding', async () => {
+    await pushBranch('session-base-token', { 'legacy.ts': `export const OLD = '${FAKE_GITHUB_TOKEN}';\n` });
+    await git(['checkout', '-q', 'main'], workPath);
+    await git(['merge', '-q', '--ff-only', 'session-base-token'], workPath);
+    await git(['push', '-q', 'origin', 'main'], workPath);
+    await pushBranch('session-after-token', { 'README.md': '# seed\n\nanother note\n' });
+    const change = await classifyMerge(project, { baseRef: 'main', headRef: 'session-after-token' });
+    expect(change.secrets).toEqual({ findings: [], total: 0 });
   });
 });

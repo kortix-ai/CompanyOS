@@ -77,9 +77,10 @@ change request (CR) is the only way to the default branch. Do every step:
   (`workspace.gitops.ref.any`): the push skips review.
 - "Committed on my branch" is not persisted. Never ask the user to copy files
   out of the sandbox.
-- A merge that changes `agents` or `default_agent` also needs
-  `workspace.agent.write`; `triggers` needs `workspace.trigger.create|update|delete`.
-  `503 CR_GOVERNANCE_UNVERIFIED`: nothing merged, retry after `Retry-After`.
+- A merge that changes `agents` or `default_agent` also needs `workspace.agent.write`;
+  `triggers` `workspace.trigger.create|update|delete`; `connectors`, `policies`, `policy`
+  `workspace.connector.write`. `503 CR_GOVERNANCE_UNVERIFIED`: retry after `Retry-After`.
+- Never commit a key or token: a merge that adds one gets `409 CR_SECRET_DETECTED` (file:line). Store it (`<credentials>`), rewrite the branch, force-push.
   For people: https://kortix.com/docs/developers#change-requests
 </change-requests>
 <cli>
@@ -121,7 +122,7 @@ state. Use `git` and the file tools for files and commits.
 1. Read `$KORTIX_SECRET_CAPABILITIES` first: a JSON list of the secrets this
    session may use, without values. Each entry's `delivery`:
    - `sandbox`: the named env var holds the real value. Never print, echo or
-     write it to a file.
+     write it to a file, and never copy it into code or `kortix.yaml`.
    - `network`: the env var holds a handle. Use it as the credential: Kortix
      puts in the value outside the sandbox, only on the listed `hosts`, over
      HTTPS. `[REDACTED]` in a response means it worked. Experimental.

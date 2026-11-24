@@ -183,8 +183,14 @@ export function useArtifactMutations(projectId: string) {
 }
 
 /** Workspace-visible gallery folders, separate from Files paths. */
-export function useArtifactFolders(projectId: string) {
-  return useQuery({ queryKey: [...qk.project.artifacts(projectId), 'folders'], queryFn: () => listArtifactFolders(projectId), ...contract('inventory') });
+/** `projectId` null: no request (a host that has not confirmed Artifacts yet fails closed). */
+export function useArtifactFolders(projectId: string | null | undefined) {
+  return useQuery({
+    queryKey: [...qk.project.artifacts(projectId ?? ''), 'folders'],
+    queryFn: () => listArtifactFolders(projectId as string),
+    enabled: !!projectId,
+    ...contract('inventory'),
+  });
 }
 export function useArtifactFolderMutations(projectId: string) {
   const qc = useQueryClient();

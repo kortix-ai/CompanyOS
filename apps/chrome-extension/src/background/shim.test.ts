@@ -388,3 +388,27 @@ describe('interaction target', () => {
     expect(f.log.active.at(-1)).toBeUndefined();
   });
 });
+
+describe('unattached activation cleanup', () => {
+  test('last client disconnect clears a target activated without a debugger session', async () => {
+    f.add('https://a.test');
+    await f.call('1', 'Target.activateTarget', { targetId: 'T1' });
+    expect(f.log.active).toEqual([1]);
+    f.shim.closeClient('1');
+    expect(f.log.active).toHaveLength(2);
+    expect(f.log.active.at(-1)).toBeUndefined();
+  });
+  test('closeAll clears an unattached target with multiple clients', async () => {
+    f.add('https://a.test');
+    f.shim.openClient('2');
+    await f.call('1', 'Target.activateTarget', { targetId: 'T1' });
+    f.shim.closeClient('1');
+    expect(f.log.active).toEqual([1]);
+    f.shim.closeAll();
+    expect(f.log.active).toHaveLength(2);
+    expect(f.log.active.at(-1)).toBeUndefined();
+    f.shim.closeAll();
+    expect(f.log.active).toHaveLength(2);
+    expect(f.log.active.at(-1)).toBeUndefined();
+  });
+});

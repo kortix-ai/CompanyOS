@@ -89,6 +89,7 @@ export class Shim {
     if (!cl) return;
     this.clients.delete(c);
     for (const tabId of cl.sessions.values()) this.unuse(tabId);
+    if (!this.clients.size) void this.interact(undefined);
   }
 
   /** Drop every client and release every tab (Stop, bridge close). */

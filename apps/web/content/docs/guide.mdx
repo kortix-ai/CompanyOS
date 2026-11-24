@@ -790,7 +790,7 @@ Any website or tool that the agent starts on its computer can be opened from out
 
 Sessions of your workspace's agents run on a computer with a desktop. Select **Desktop** in the session header to watch it live. My Kortix runs on a smaller computer without a desktop, so its sessions have no **Desktop** button: it hands browsing to your agents' sessions.
 
-The desktop has one browser, and you share it with the agent. You see each page the agent visits, and the browser on the dock opens that same window with the same tabs and logins. The agent has control by default. Select **Take over** to click and type yourself, for example to sign in to a site for the agent, or to use the terminal or the file manager on the dock. Select **Return control** to hand control back. The desktop resizes to fit the panel. When it is open in more than one window, it fits the window where someone last clicked or typed, and the other windows show it scaled.
+The desktop has one browser, and you share it with the agent. You see each page the agent visits, and the browser on the dock opens that same window with the same tabs and logins. The agent has control by default. Select **Take over** to click and type yourself, for example to enter a one-time code on a site, or to use the terminal or the file manager on the dock. For a username and a password, the agent asks for a [website login](/docs/guide#website-logins) instead, and its browser types it for you. Select **Return control** to hand control back. The desktop resizes to fit the panel. When it is open in more than one window, it fits the window where someone last clicked or typed, and the other windows show it scaled.
 
 You can ask the agent to put an app on its desktop, for example "install QGIS and open it on your desktop", and watch it in the panel. When you say "my desktop", the agent puts files in **My files**, which every session you start opens at `~/Desktop`, and puts programs on the session's desktop. When your own computer is connected to Kortix, the agent first asks which one you mean.
 
@@ -1437,6 +1437,25 @@ To check egress-enforced delivery, run two probes in a session. First, print the
 
 <Callout type="warning">
 A secret delivered as an environment variable is a real value inside the session. For a web API key, use egress-enforced delivery unless code needs the real value.
+</Callout>
+
+<a id="website-logins" />
+
+#### Website logins: the agent signs in, you keep the password
+
+When an agent must sign in to a website that has no connector, it asks for a **website login**. A form opens in the chat. It names the site, and you type the username and the password there. Kortix stores the login as an encrypted secret.
+
+When the agent signs in, the session's browser types the username and the password into the sign-in page. The agent works with the login's name only, so the values are not in its messages, its tool output or the session's history.
+
+- A login works only on the sites the form names. Kortix refuses it on any other address.
+- By default, only you can use it, in your own private sessions. A shared session or a trigger cannot use it.
+- The login stays saved, so the agent signs in again by itself in later sessions.
+- Every use is in the audit log, with the site it was typed on.
+- A login is listed under **Customize → Secrets** as **Website login**. Delete it there to stop its use.
+- For a one-time code, a passkey or a CAPTCHA, the agent asks you to **Take over** the desktop.
+
+<Callout type="warning">
+The password is typed inside the session's computer. A website login keeps it out of the agent's messages and logs. Code that runs in the session while the browser types it could still read it. Give a login only to agents you trust with that account, and use a connector when the app has one.
 </Callout>
 
 <a id="connector-credentials-stay-with-kortix" />

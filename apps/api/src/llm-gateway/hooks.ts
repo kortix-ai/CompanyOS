@@ -477,7 +477,7 @@ const OPERATION_ROUTES = new Map<unknown, string>([
   ['images.edits', '/v1/llm/images/edits'],
   ['audio.transcriptions', '/v1/llm/audio/transcriptions'],
   ['audio.speech', '/v1/llm/audio/speech'],
-  ['audio.dictation', '/v1/projects/{projectId}/dictation'],
+  ['audio.dictation', '/v1/projects/{workspaceId}/dictation'],
 ]);
 
 const routeOf = (event: UsageEvent) => OPERATION_ROUTES.get(event.operation) ?? '/v1/llm/chat/completions';

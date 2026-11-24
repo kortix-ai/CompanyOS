@@ -1716,6 +1716,7 @@
     "structuredSummary",
     "subAgentCalls",
     "submitAccessRequest",
+    "submitBrowserLoginSetupLink",
     "submitConnectorAppForm",
     "submitDemoRequest",
     "submitOAuthConsent",

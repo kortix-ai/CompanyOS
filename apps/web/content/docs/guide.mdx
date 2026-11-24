@@ -591,6 +591,8 @@ An app that is not in the catalog can still connect. Select **New** → **MCP se
 
 When an agent needs an app that nobody has connected yet, the session shows a **Connect** button. It opens the same sign-in and creates a private account by default.
 
+Every member of the workspace can connect their own private account. Ask the agent in a session, for example "connect my Gmail", and select **Connect** on the card it shows. Sharing an account with the whole workspace needs a person who manages its connections: an owner, an admin or a manager.
+
 An agent acts with your rights, no more and no less. If you may share an account with the workspace, your agent may start that sign-in for you (`kortix connectors connect <slug> --owner workspace`). You still sign in. A refusal names the missing permission and who holds it.
 
 The catalog lists apps; it does not decide what may connect. When an agent adds a server that the catalog does not publish and the workspace does not use yet, a person who manages connectors approves that exact address once. The agent gives you a link. It opens **MCP server** with the address filled in, and adding it is the approval.
@@ -1372,6 +1374,8 @@ A session is private to the person who started it. The owner chooses who else ca
 | **Whole workspace** | Every member of the workspace. |
 
 Everyone with access can read the session and continue it. Only the owner can change who has access.
+
+The agent knows who wrote each message. Every message a person sends reaches the agent with that person's name, so the agent answers the person who wrote it, and never takes one person's request for another's.
 
 You can also create a **Public link**. It shows the session, read-only, to anyone with the link, without signing in. You can revoke it at any time.
 

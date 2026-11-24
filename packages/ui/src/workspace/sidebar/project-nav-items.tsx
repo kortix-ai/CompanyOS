@@ -5,6 +5,7 @@ import { ProjectCalendarNavItem } from './footer/project-calendar-nav';
 import { ProjectGoalsNavItem } from './footer/project-goals-nav';
 import { ProjectArtifactsNavItem } from './footer/project-artifacts-nav';
 import { ProjectFilesNavItem } from './footer/project-files-nav';
+import { ProjectReviewNavItem } from './footer/project-review-nav';
 import {
   CustomizeGlyph,
   useCapabilityAccess,
@@ -26,14 +27,19 @@ import { adminPath } from '../../lib/routes';
  * own flag and permission gate and renders nothing when the project does not
  * offer it. Spaces are the channel sidebar under the `chat` flag
  * (project-spaces-nav.tsx).
+ *
+ * `review` is first: it is the one row that counts what waits on you (change
+ * requests, agent questions, approvals), as Review is first in the Spaces
+ * list and a top row of the mobile drawer.
  */
-const NAV_ROWS = ['customize', 'files', 'apps', 'calendar', 'goals', 'artifacts'] as const;
+const NAV_ROWS = ['review', 'customize', 'files', 'apps', 'calendar', 'goals', 'artifacts'] as const;
 type NavRowId = (typeof NAV_ROWS)[number];
 
-export function ProjectNavItems({ projectId }: { projectId: string }) {
+/** `review={false}`: the host shows the Review row elsewhere (`chat` on: first in `ProjectSpacesNav`). */
+export function ProjectNavItems({ projectId, review = true }: { projectId: string; review?: boolean }) {
   return (
     <>
-      {NAV_ROWS.map((id) => (
+      {NAV_ROWS.filter((id) => review || id !== 'review').map((id) => (
         <NavItem key={id} id={id} projectId={projectId} />
       ))}
     </>
@@ -41,12 +47,23 @@ export function ProjectNavItems({ projectId }: { projectId: string }) {
 }
 
 /**
+ * Review, for the people who decide: the caller may read Review and act on
+ * it (approve a change request, answer an agent). The Customize access rule's
+ * `review` tab, the rule the mobile drawer's Review row applies too.
+ */
+function ReviewNavEntry({ projectId }: { projectId: string }) {
+  const access = useCapabilityAccess(projectId);
+  if (!access.settled || !access.tabs.includes('review')) return null;
+  return <ProjectReviewNavItem projectId={projectId} />;
+}
+
+/**
  * Customize, for the people who may configure the project: one link into
  * Workspace settings, on Agents when the caller may read them (Customize is
  * agent-centric). Since 2026-11-08 Customize IS that panel, so there is no
  * disclosure here: the panel's rail lists Agents, Models, Skills and the
- * rest, and Review is part of the Inbox. On hover, the row's right edge
- * holds + (New agent). Absent when the caller may open no capability page.
+ * rest. Review is its own row (`ReviewNavEntry`). On hover, the row's right
+ * edge holds + (New agent). Absent when the caller may open no capability page.
  */
 function CustomizeNavEntry({ projectId }: { projectId: string }) {
   const t = useTranslations('sidebar');
@@ -106,6 +123,8 @@ function CustomizeNavEntry({ projectId }: { projectId: string }) {
 
 function NavItem({ id, projectId }: { id: NavRowId; projectId: string }) {
   switch (id) {
+    case 'review':
+      return <ReviewNavEntry projectId={projectId} />;
     case 'customize':
       return <CustomizeNavEntry projectId={projectId} />;
     case 'apps':

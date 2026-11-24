@@ -45,9 +45,10 @@ audits it. The sandbox carries only `KORTIX_TOKEN`.
    A trigger or automation runs only on that shared account: for one, mint
    the `--owner workspace` link (tool: `for_trigger=true`) and only that one.
    Never post a private link first and a shared one after it.
-   It works when you hold `workspace.connector.connections.manage`: a
-   declared agent through its `kortix_permissions`, My Kortix through its
-   person's role (an owner, admin or manager). A refusal names the missing
+   Every member may connect their own account. A shared one
+   (`--owner workspace`) needs `workspace.connector.connections.manage`: a
+   declared agent holds it through its `kortix_permissions`, My Kortix through
+   its person's role (an owner, admin or manager). A refusal names the missing
    permission and who holds it.
 3. **Pick the account** (see `<accounts>`). With 2 or more accounts, pass
    `--account "<label>"`.

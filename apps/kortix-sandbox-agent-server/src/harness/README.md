@@ -833,12 +833,13 @@ needs through `HarnessBootContext` (`serve` starts the HTTP server).
 
 `POST /kortix/runtime/sessions/:id/prompt` (`routes/kortix/runtime.ts`
 `parseRuntimePromptBody`) takes `{ message_id?, parts, agent?, model:
-"provider/model"?, variant?, directory?, no_reply?, system? }`
+"provider/model"?, variant?, directory?, no_reply?, system?, author? }`
 and answers `400 { error }` for a malformed one.
 
 | Field | What the turn does with it |
 | --- | --- |
 | `system` | A string of 16,000 characters at most (`MAX_TURN_SYSTEM_CHARS`), trimmed; blank is none. Added to this turn's system prompt only: pi sets it through the hidden `kortix-turn` extension (`before_agent_start`). apps/api sends the thread's memory file list here (`chat`): titles and paths of the Drive Memory folders the thread mounts; the agent reads and writes those files with its file tools. For a My Kortix session it sends the session owner's `kortix_memory` index instead, with Files on and `chat` on or off. A prompt without it runs without it; a daemon that predates the field ignores it. `/steer` drops it ("Steering"). |
+| `author` | `{ name }`: the person who wrote the prompt (KRTX-5121). apps/api sets it for a person's prompt and steer, and its proxy drops a client's value. Only the Kortix verbs read it (`harness/pi/turns.ts`); the OpenCode-shaped `prompt_async` route ignores it. The model reads `[From: "<name>"]` above the message (`harness/pi/prompt-author.ts`), and the root's system prompt says what the line means. The wire part keeps the person's words; the session log keeps the line as `model_text`, so a restore replays it. No line for a `synthetic` prompt or a `/` prompt (pi matches a command, a skill or a template at the start of the text). A malformed value is dropped, never a 400. A prompt without it (a trigger, a channel relay, another session) goes as it is; a daemon that predates the field ignores it. `/steer` keeps it. |
 
 ## Steering
 

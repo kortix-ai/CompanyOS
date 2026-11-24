@@ -1454,7 +1454,7 @@ sandbox:
 1. Traffic through the residential address is billed per GB from your credits.
 2. Kortix's own hosts (the API, the model gateway, the storage of boot files) and common package registries connect directly.
 3. UDP is blocked while it is on, so QUIC and WebRTC cannot reveal the sandbox's own address.
-4. A session on the template starts only where the deployment offers a residential IP, and only on the Platinum sandbox provider. Elsewhere it does not start, with the message "This sandbox template asks for a residential IP, which this deployment does not offer". It never falls back to the sandbox's own address. `kortix validate` prints a warning for every template that asks.
+4. A session on the template starts only where the deployment offers a residential IP, and only on the [Platinum](https://www.platinum.dev) sandbox provider. Elsewhere it does not start, with the message "This sandbox template asks for a residential IP, which this deployment does not offer". It never falls back to the sandbox's own address. `kortix validate` prints a warning for every template that asks.
 5. It is a boot setting, not part of the image: changing it rebuilds nothing. A new sandbox uses the current value; a running one keeps its own.
 6. A template created in **Workspace admin** → **Sandbox templates** has the same setting, the **Residential IP** box.
 
@@ -3354,7 +3354,7 @@ A self-hosted instance without billing has none of these limits.
 
 ### Volumes and snapshots
 
-A volume is a Platinum volume, separate from the machine's root disk. A
+A volume is a [Platinum volume](https://www.platinum.dev/docs/volumes), separate from the machine's root disk. A
 `mounts` entry in the release config declares it.
 
 ```yaml

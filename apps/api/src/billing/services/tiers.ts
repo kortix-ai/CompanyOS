@@ -38,6 +38,20 @@ export function llmPriceMarkup(): number {
   return raw;
 }
 
+/**
+ * Dictation (speech-to-text in the composer): 1 credit ($0.01) per minute of
+ * audio, billed per second, on every plan including Free. The price is flat:
+ * it does not follow the upstream's. On 2026-11-24 the managed Whisper cost
+ * Kortix $0.15 per audio hour, so one minute sold at $0.01 covers it 4×.
+ */
+export const DICTATION_CREDITS_PER_MINUTE = 1;
+
+/** What `seconds` of dictated audio costs, in USD (1 credit = $0.01). */
+export function dictationPriceUsd(seconds: number): number {
+  if (!Number.isFinite(seconds) || seconds <= 0) return 0;
+  return Number(((seconds / 60) * DICTATION_CREDITS_PER_MINUTE * 0.01).toFixed(10));
+}
+
 // ─── Credits-only billing ────────────────────────────────────────────────────
 // One credit = $0.01. A paid account picks any monthly amount; every member
 // spends from one shared wallet; plans differ only in credit volume. Free gets

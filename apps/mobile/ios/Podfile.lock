@@ -206,8 +206,6 @@ PODS:
   - ExpoRouter (58.0.29):
     - ExpoModulesCore
     - RNScreens
-  - ExpoSpeechRecognition (57.1.0):
-    - ExpoModulesCore
   - ExpoSplashScreen (58.0.12):
     - ExpoModulesCore
   - ExpoStatusBar (58.0.4):
@@ -2637,7 +2635,6 @@ DEPENDENCIES:
   - "ExpoModulesWorkletsAdapter (from `../../../node_modules/.pnpm/expo-modules-core@58.0.30_react-native-worklets@0.13.0_react-native@0.88.1_react@19.3.0/node_modules/expo-modules-core`)"
   - "ExpoNotifications (from `../../../node_modules/.pnpm/expo-notifications@58.1.7_expo@58.0.22_react-native@0.88.1_react@19.3.0_typescript@6.0.3/node_modules/expo-notifications/ios`)"
   - "ExpoRouter (from `../../../node_modules/.pnpm/expo-router@58.0.29_@expo+log-box@58.0.15_@expo+metro-runtime@58.0.17_@expo+ui@58.0.26_@types_gugl5o2hfjwslndbbi3euowci4/node_modules/expo-router/ios`)"
-  - "ExpoSpeechRecognition (from `../../../node_modules/.pnpm/expo-speech-recognition@57.1.0_expo@58.0.22_react-native@0.88.1_react@19.3.0/node_modules/expo-speech-recognition/ios`)"
   - "ExpoSplashScreen (from `../../../node_modules/.pnpm/expo-splash-screen@58.0.12_expo@58.0.22_typescript@6.0.3/node_modules/expo-splash-screen/ios`)"
   - "ExpoStatusBar (from `../../../node_modules/.pnpm/expo-status-bar@58.0.4_expo@58.0.22_react-native@0.88.1_react@19.3.0/node_modules/expo-status-bar/ios`)"
   - "ExpoSystemUI (from `../../../node_modules/.pnpm/expo-system-ui@58.0.7_expo@58.0.22_react-native-web@0.21.4_react-native@0.88.1/node_modules/expo-system-ui/ios`)"
@@ -2832,8 +2829,6 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/.pnpm/expo-notifications@58.1.7_expo@58.0.22_react-native@0.88.1_react@19.3.0_typescript@6.0.3/node_modules/expo-notifications/ios"
   ExpoRouter:
     :path: "../../../node_modules/.pnpm/expo-router@58.0.29_@expo+log-box@58.0.15_@expo+metro-runtime@58.0.17_@expo+ui@58.0.26_@types_gugl5o2hfjwslndbbi3euowci4/node_modules/expo-router/ios"
-  ExpoSpeechRecognition:
-    :path: "../../../node_modules/.pnpm/expo-speech-recognition@57.1.0_expo@58.0.22_react-native@0.88.1_react@19.3.0/node_modules/expo-speech-recognition/ios"
   ExpoSplashScreen:
     :path: "../../../node_modules/.pnpm/expo-splash-screen@58.0.12_expo@58.0.22_typescript@6.0.3/node_modules/expo-splash-screen/ios"
   ExpoStatusBar:
@@ -3093,7 +3088,6 @@ SPEC CHECKSUMS:
   ExpoModulesWorkletsAdapter: 94ca1a8fc6e26254ab27d5aa197c11403dcbaebd
   ExpoNotifications: 490c89589ecd1df1c014f569d833b650b44deac2
   ExpoRouter: 03899d5c94d2e5c5e4dadae1fd0ba71a50f162d8
-  ExpoSpeechRecognition: fd92a178301c067e3a4919396820a8cd5ce7043f
   ExpoSplashScreen: e60a9120f4e05377f92278b0c94cfb0ef39eb351
   ExpoStatusBar: 56aa9746e1bee4d8adbab12f4d7efc97000ac49f
   ExpoSystemUI: bfbae2409cccd81019ac00a8f57a8724f0534cfd

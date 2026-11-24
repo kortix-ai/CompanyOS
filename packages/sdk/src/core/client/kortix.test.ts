@@ -2032,6 +2032,15 @@ test('session attachments upload before runtime initialization', async () => {
   expect(last().method).toBe('POST');
 });
 
+test('project dictation reads its price and sends a clip to the workspace route', async () => {
+  await kortix.project('PID123').dictation.info();
+  expect(last().url).toContain('/workspaces/PID123/dictation');
+  expect(last().method).toBe('GET');
+  await kortix.project('PID123').dictation.transcribe(new Blob(['x'], { type: 'audio/webm' }), { surface: 'web' });
+  expect(last().url).toContain('/workspaces/PID123/dictation');
+  expect(last().method).toBe('POST');
+});
+
 test('the facade carries the connect owner through to both connect surfaces', async () => {
   // The web host and the CLI both pick the owner in the UI and hand it to the
   // facade; if the facade dropped it, every account would be created under the

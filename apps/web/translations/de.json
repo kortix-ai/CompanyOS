@@ -26332,6 +26332,25 @@
     "turnNote": "In einem Sprachanruf gesagt und von der Stimme beantwortet.",
     "close": "Schließen"
   },
+  "dictation": {
+    "start": "Nachricht diktieren",
+    "price": "{credits, plural, one {# Credit} other {# Credits}} pro Minute",
+    "recording": "Diktat",
+    "discard": "Aufnahme verwerfen",
+    "finish": "Wörter einfügen",
+    "transcribing": "Wird transkribiert…",
+    "nothingHeard": "Keine Sprache erkannt. Sprich näher am Mikrofon und versuche es erneut.",
+    "retry": "Erneut versuchen",
+    "failed": "Die Aufnahme konnte nicht transkribiert werden. Versuche es erneut.",
+    "busy": "Die Aufnahme kann gerade nicht transkribiert werden. Versuche es gleich noch einmal.",
+    "unavailable": "Diktat ist auf diesem Server nicht verfügbar.",
+    "limitReached": "Aufnahme nach {minutes} Minuten beendet",
+    "micDenied": "Das Mikrofon kann nicht verwendet werden. Erlaube es für diese Seite in den Browser-Einstellungen.",
+    "micDeniedDesktop": "Das Mikrofon kann nicht verwendet werden. Erlaube Kortix in den Datenschutzeinstellungen deines Systems.",
+    "micMissing": "Kein Mikrofon gefunden. Schließe eines an und versuche es erneut.",
+    "micBusy": "Das Mikrofon kann nicht verwendet werden. Eine andere App nutzt es.",
+    "micUnsupported": "Das Mikrofon kann in diesem Browser nicht verwendet werden."
+  },
   "agentMounts": {
     "lead": "Ordner aus Dateien, die Sitzungen dieses Agenten einbinden. Änderungen gelten sofort für jede neue Sitzung.",
     "mount": "Mount folder",

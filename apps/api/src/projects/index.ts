@@ -100,6 +100,7 @@ import { registerProjectSearchRoutes } from './routes/project-search';
 import { registerProjectMyMemoryRoutes } from './routes/project-my-memory';
 import { registerChangeRequestsRoutes } from './routes/change-requests';
 import { registerPromptAttachmentsRoutes } from './routes/prompt-attachments';
+import { registerDictationRoutes } from './routes/dictation';
 import { registerChangeRequestActionsRoutes } from './routes/change-request-actions';
 import { registerReviewItemsRoutes } from './routes/review-items';
 import { registerAgentScopeRoutes } from './routes/agent-scope';
@@ -206,6 +207,7 @@ export function registerAllProjectRoutes(): void {
   registerProjectMyMemoryRoutes();
   registerChangeRequestsRoutes();
   registerPromptAttachmentsRoutes();
+  registerDictationRoutes();
   registerChangeRequestActionsRoutes();
   registerReviewItemsRoutes();
   registerAgentScopeRoutes();

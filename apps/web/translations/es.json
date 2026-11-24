@@ -26332,6 +26332,25 @@
     "turnNote": "Dicho en una llamada de voz y respondido por la voz.",
     "close": "Cerrar"
   },
+  "dictation": {
+    "start": "Dictar un mensaje",
+    "price": "{credits, plural, one {# crédito} other {# créditos}} por minuto",
+    "recording": "Dictado",
+    "discard": "Descartar grabación",
+    "finish": "Añadir las palabras",
+    "transcribing": "Transcribiendo…",
+    "nothingHeard": "No se oyó ninguna voz. Inténtalo de nuevo más cerca del micrófono.",
+    "retry": "Reintentar",
+    "failed": "No se pudo transcribir la grabación. Inténtalo de nuevo.",
+    "busy": "No se pudo transcribir la grabación ahora. Inténtalo de nuevo en un momento.",
+    "unavailable": "El dictado no está disponible en este servidor.",
+    "limitReached": "La grabación se detuvo a los {minutes} minutos",
+    "micDenied": "No se pudo usar el micrófono. Permítelo para este sitio en la configuración del navegador.",
+    "micDeniedDesktop": "No se pudo usar el micrófono. Permite Kortix en la configuración de privacidad del sistema.",
+    "micMissing": "No se encontró ningún micrófono. Conecta uno e inténtalo de nuevo.",
+    "micBusy": "No se pudo usar el micrófono. Otra app lo está usando.",
+    "micUnsupported": "No se puede usar el micrófono en este navegador."
+  },
   "agentMounts": {
     "lead": "Carpetas de Archivos que montan las sesiones de este agente. Los cambios se aplican de inmediato a cada nueva sesión.",
     "mount": "Mount folder",

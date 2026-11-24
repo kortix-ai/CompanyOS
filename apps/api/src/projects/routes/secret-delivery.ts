@@ -10,8 +10,6 @@ import { isGatewayManagedEnv } from '../../llm-gateway/sandbox-credentials';
 import { createRoute, z } from '@hono/zod-openapi';
 import { UpdateSecretStrategyInputSchema } from '@kortix/api-contract';
 import { parseEgressPolicy, secretStrategyLockHolds } from '../../secrets/strategy';
-import { featureDisabledBody } from '../../feature-flags/gate';
-import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { networkBoundaryPolicyError } from '../../secrets/network-boundary';
 import { projectSecrets, projectSessionSecretHandles } from '@kortix/db';
 import { and, eq, isNull } from 'drizzle-orm';
@@ -191,17 +189,6 @@ export function registerSecretDeliveryRoutes(): void {
           error: 'An LLM provider key is added in Models → Providers (or with `kortix providers set`), not by moving a secret to the gateway.',
           code: 'provider_key_store',
         }, 409);
-      }
-      // Network-Enforced Secrets (`secrets_egress`) is experimental and off by
-      // default. Moving a secret INTO egress delivery needs the flag; a secret
-      // already on egress can still be edited or moved OFF it, so turning the
-      // flag off never strands one.
-      if (
-        parsed.data.strategy === 'egress' &&
-        existing.strategy !== 'egress' &&
-        !resolveFeatureFlag(loaded.row.metadata, 'secrets_egress')
-      ) {
-        return c.json(featureDisabledBody('secrets_egress'), 403);
       }
       if (secretStrategyLockHolds(existing) && existing.strategy !== parsed.data.strategy) {
         return c.json(

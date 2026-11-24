@@ -1530,6 +1530,7 @@ flow(
       "POST /v1/projects/:projectId/secrets/:identifier/grant",
       "POST /v1/projects/:projectId/secrets/sync",
       "PATCH /v1/projects/:projectId/features",
+      "GET /v1/projects/:projectId",
       "GET /v1/accounts/:accountId/audit",
     ],
   },
@@ -1635,12 +1636,11 @@ flow(
         .has("$.egress_policy", policy);
     });
 
-    // `secrets_egress` is ON by default since 2026-09-03 (Marko) — the OPTION
-    // is available to every project, and a new secret still defaults to an
-    // environment variable, so enforcing at the network stays a per-secret
-    // choice. The gate did not go away; it only inverted, and that is what the
-    // next two steps prove. Egress delivery itself is exercised straight after.
-    await ctx.step("a project that turns secrets_egress OFF cannot enter egress → 403", async () => {
+    // `secrets_egress` graduated on 2026-11-23: every project can enforce a
+    // secret at the network. The flag is no longer listed, resolved or
+    // accepted; the project detail still sends it as `true` for older clients.
+    // Egress delivery itself is exercised straight after, with no flag write.
+    await ctx.step("the retired secrets_egress flag cannot be written → 400, detail reads true", async () => {
       const off = await ctx.client
         .as(ctx.P.OWNER)
         .patch(
@@ -1648,30 +1648,12 @@ flow(
           { feature: "secrets_egress", enabled: false },
           { params: { projectId: p.id } },
         );
-      off.status(200).body().has("$.experimental.secrets_egress", false);
+      off.status(400).body().has("$.error", "Unknown feature flag 'secrets_egress'");
 
-      const r = await ctx.client
+      const detail = await ctx.client
         .as(ctx.P.OWNER)
-        .put(
-          "/v1/projects/:projectId/secrets/:identifier/strategy",
-          {
-            strategy: "egress",
-            egress_policy: { rules: [{ host: "api.example.com" }], on_no_match: "deny" },
-          },
-          { params: { projectId: p.id, identifier: "CONTROL_PLANE_KEY" } },
-        );
-      r.status(403).body().has("$.code", "feature_disabled").has("$.feature", "secrets_egress");
-    });
-
-    await ctx.step("manager turns the secrets_egress flag back on → 200", async () => {
-      const r = await ctx.client
-        .as(ctx.P.OWNER)
-        .patch(
-          "/v1/projects/:projectId/features",
-          { feature: "secrets_egress", enabled: true },
-          { params: { projectId: p.id } },
-        );
-      r.status(200).body().has("$.experimental.secrets_egress", true);
+        .get("/v1/projects/:projectId", { params: { projectId: p.id } });
+      detail.status(200).body().has("$.experimental.secrets_egress", true);
     });
 
     await ctx.step("egress-enforced delivery stores a host-list-only policy", async () => {

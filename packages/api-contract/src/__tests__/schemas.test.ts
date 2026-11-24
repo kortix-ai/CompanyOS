@@ -143,7 +143,7 @@ function projectFixture(overrides: Record<string, unknown> = {}) {
       monitors: false,
       reminders: false,
       warm_sessions: false,
-      secrets_egress: false,
+      secrets_egress: true,
       pooled_provider_secrets: true,
       us_region: false,
       event_triggers: false,
@@ -922,7 +922,6 @@ describe('envelopes', () => {
     // (TypeScript 7) sorts differently from tsc 5; the runtime order is the contract.
     expect(FEATURE_FLAG_KEYS as readonly string[]).toEqual([
       'reminders',
-      'secrets_egress',
       'us_region',
       'event_triggers',
       'chat',

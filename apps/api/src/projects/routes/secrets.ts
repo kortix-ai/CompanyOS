@@ -33,8 +33,6 @@ import { seedProjectDefaultModelOnConnect } from '../../llm-gateway/models/seed-
 import { verifyAndRecordAccountKey } from '../../llm-gateway/provider-verify';
 import { deleteWorkspaceProviderKeys, writeWorkspaceProviderKey } from '../../secrets/llm-credential-move';
 import { createRoute, z } from '@hono/zod-openapi';
-import { featureDisabledBody } from '../../feature-flags/gate';
-import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { projectSecrets } from '@kortix/db';
 import { and, eq, isNull } from 'drizzle-orm';
 import {
@@ -426,18 +424,6 @@ export function registerSecretsRoutes(): void {
     if (existing?.consumer === 'llm_gateway' && explicitConsumer === undefined && explicitStrategy === undefined && value !== null) {
       const redirected = await redirectProviderKey();
       if (redirected) return redirected;
-    }
-    // Network-Enforced Secrets is an experimental feature (`secrets_egress`).
-    // With the flag off a project cannot MOVE a secret into egress delivery — a
-    // new egress secret, or an existing non-egress one switched to it. A secret
-    // that is already egress keeps serving and stays editable, so turning the
-    // flag off never strands one. Runtime/broker/denied are unaffected.
-    if (
-      explicitStrategy === 'egress' &&
-      existing?.strategy !== 'egress' &&
-      !resolveFeatureFlag(loaded.row.metadata, 'secrets_egress')
-    ) {
-      return c.json(featureDisabledBody('secrets_egress'), 403);
     }
     // An identifier is a stable handle to ONE secret — redefining its underlying
     // KEY via upsert would silently retarget every agent grant that references

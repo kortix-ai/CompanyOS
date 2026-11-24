@@ -213,27 +213,13 @@ const FLAGS: readonly FeatureFlagDef[] = [
     // a project with the flag off (trigger-execution-store claimDueScheduleSlots).
     enforcement: 'routes',
   },
-  {
-    key: 'secrets_egress',
-    name: 'Network-Enforced Secrets',
-    description:
-      'Let a secret be enforced at the network instead of loaded into the sandbox: the sandbox holds a handle and Kortix substitutes the real value only on requests to approved hosts. Off ⇒ every secret loads into the sandbox environment and the "Enforce at the network" option is hidden.',
-    stability: 'experimental',
-    available: () => true,
-    // On by default (Marko, 2026-09-03). The OPTION is available; a new secret
-    // still defaults to an environment variable — enforcing at the network is
-    // a per-secret choice. A project that turns the flag off hides the option
-    // and the write routes refuse to move a secret into egress delivery.
-    platformDefault: () => true,
-    enforcement: 'behavioral',
-    enforcementNote:
-      'No dedicated routes. The secret write paths (POST /secrets in ' +
-      'projects/routes/secrets.ts, PUT /secrets/:id/strategy in ' +
-      'projects/routes/secret-delivery.ts) reject a request that ' +
-      'moves a secret INTO egress delivery when the flag is off. A secret that ' +
-      'is already egress keeps serving and stays editable, so turning the flag ' +
-      'off never strands an existing enforced secret.',
-  },
+  // `secrets_egress` graduated (2026-11-23): Network-Enforced Secrets is on for
+  // every project. Any secret's exposure can be set to enforced: the sandbox
+  // holds a handle and Kortix substitutes the value only on the approved hosts.
+  // A new secret still defaults to the environment. On by default since
+  // 2026-09-03; one prod project stored `false`. A stored
+  // `experimental.secrets_egress` override is inert. The project detail still
+  // sends the key as `true` for older SDKs, hosts and CLIs.
   // `pooled_provider_secrets` graduated (2026-11-12, Marko: "remove this as a
   // feature flag … 1 common across the board default"): every project has
   // named provider accounts with sharing, per-session key selection and named

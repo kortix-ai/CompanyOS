@@ -5,6 +5,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Changed (Network-Enforced Secrets need no flag)
+- The `secrets_egress` project flag ("Network-Enforced Secrets") graduated (2026-11-23): every
+  project can set a secret's exposure to enforced. The sandbox holds a handle, and Kortix
+  substitutes the real value only on the secret's approved hosts. `FeatureFlagKey` keeps
+  `secrets_egress`, marked `@deprecated`; `FEATURE_FLAG_KEYS` no longer lists it, and
+  `useFeatureFlag(projectId, 'secrets_egress')` reports `enabled: true`.
+  `KortixProject.experimental.secrets_egress` is optional now.
+
 ### Changed (stateless sandboxes need no flag)
 - The `workspace_volume` project flag ("Stateless sandboxes") graduated (2026-11-23): every new
   Platinum session keeps `/workspace` on its own volume, and a box stopped for an hour is

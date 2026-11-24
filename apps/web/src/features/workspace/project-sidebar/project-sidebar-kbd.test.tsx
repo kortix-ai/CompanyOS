@@ -83,6 +83,17 @@ mock.module('@kortix/sdk/react', () => ({
     data: { notifications: [{ id: 'n1', kind: 'question', read: false }], unread_count: 3 },
     unreadCount: 3,
   }),
+  // Review waits on the viewer: 2 change requests, 1 agent question and 1
+  // connector approval (approvals are already in the summary): the count is 3.
+  useReviewSummary: () => ({ data: { needs_you_total: 2, needs_you_by_session: {} } }),
+  useSessionAsks: () => ({ data: { asks: [{ kind: 'question' }, { kind: 'approval' }] } }),
+}));
+// The Customize access rule: `review` is the caller's to read and act on unless a test says otherwise.
+let reviewAccess: { settled: boolean; tabs: string[] } = { settled: true, tabs: ['review'] };
+const realSettingsNav = await import('@kortix/ui/internal/layout/project-settings-nav');
+mock.module('@kortix/ui/internal/layout/project-settings-nav', () => ({
+  ...realSettingsNav,
+  useCapabilityAccess: () => reviewAccess,
 }));
 mock.module('@kortix/ui/internal/hooks/projects/new-session-guard', () => ({
   useIsCreatingProjectSession: () => false,
@@ -186,6 +197,7 @@ async function mountSidebar(width: number) {
 afterEach(async () => {
   channelsOn = false;
   newSessionCalls = 0;
+  reviewAccess = { settled: true, tabs: ['review'] };
   if (root) {
     const r = root;
     root = undefined;
@@ -295,4 +307,56 @@ test('with chat on, neither the Spaces list nor the opened More group has an Inb
   // The Spaces list still renders (Review is its first row; the test above checks the order).
   expect(html).toContain('href="/workspaces/synthetic-project/review"');
   expectNoInbox(html);
+});
+
+// Review (`/workspaces/<id>/review`: change requests, agent questions,
+// approvals) is a sidebar row in every variant. With chat off it had no row
+// at all after Inbox left the sidebar (KRTX-4949): change requests were
+// reachable only through ⌘K or a typed URL, while the mobile drawer lists
+// Review as a top row.
+const REVIEW_HREF = '/workspaces/synthetic-project/review';
+const reviewLinks = () => [...document.querySelectorAll(`a[href="${REVIEW_HREF}"]`)];
+
+test('the desktop sidebar shows Review first under New session, with what waits on the viewer', async () => {
+  await mountSidebar(1280);
+  const links = reviewLinks();
+  expect(links).toHaveLength(1);
+  // 2 from the review summary + 1 open question; the approval is already in the summary.
+  expect(links[0]!.textContent).toBe('spaces.review3');
+  const html = container!.innerHTML;
+  const review = html.indexOf(`href="${REVIEW_HREF}"`);
+  expect(review).toBeGreaterThan(html.indexOf('newSession'));
+  expect(review).toBeLessThan(html.indexOf('data-testid="session-list"'));
+});
+
+test('the mobile sheet shows the Review row', async () => {
+  await mountSidebar(390);
+  expect(reviewLinks()).toHaveLength(1);
+});
+
+test('a viewer who may not act on Review gets no Review row, the rule of the mobile drawer', async () => {
+  reviewAccess = { settled: true, tabs: [] };
+  await mountSidebar(1280);
+  expect(container!.innerHTML).toContain('newSession');
+  expect(reviewLinks()).toHaveLength(0);
+});
+
+test('no Review row before the access probes settle', async () => {
+  reviewAccess = { settled: false, tabs: [] };
+  await mountSidebar(1280);
+  expect(reviewLinks()).toHaveLength(0);
+});
+
+test('with chat on, Review is one row: first in the Spaces list, not again in the opened More group', async () => {
+  channelsOn = true;
+  await mountSidebar(1280);
+  const more = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'more');
+  expect(more).toBeDefined();
+  await act(async () => {
+    more!.click();
+  });
+  expect(container!.innerHTML).toContain('data-testid="session-list" data-secondary="true"');
+  const links = reviewLinks();
+  expect(links).toHaveLength(1);
+  expect(links[0]!.textContent).toBe('spaces.review3');
 });

@@ -23,10 +23,12 @@
  *    and never revives a tombstoned one. Within its window (from its first `seq`, or from the
  *    start without `has_more`, up to its own last `seq`, below `before_seq` for an older page)
  *    a page drops a held message it lacks unless the stream revised it: that message was
- *    deleted, or came from an older saved copy. A message after the page's last `seq` is newer
- *    than the page (the API's page lags the box's) and stays, except a queued prompt, and except
- *    under a page of a newer generation than the thread's last page, which settles the whole tail.
- *    A page's streaming copy never replaces a finished record held.
+ *    deleted, or came from an older saved copy. The API's newest page answers only up to its own
+ *    last `seq` (it lags the box's): a message after it stays, except a queued prompt, and except
+ *    under a page of a newer generation than the thread's last newest page, which settles the
+ *    whole tail. The box's own page (`{ box: true }`) answers for the whole tail. A newest page of
+ *    an older generation than the thread's last one changes nothing. A page's streaming copy
+ *    never replaces a finished record held.
  *  - `older` keeps each thread's `has_more` from the oldest page read (`useSessionLogOlder`).
  *  - A streaming put (`status: 'streaming'`) is an ordinary put: the deltas that follow
  *    append to its blocks, and the final put (a higher `rev`) replaces it.
@@ -176,11 +178,16 @@ export function applySessionLogEvent(state: SessionLogState, event: SessionLogEv
 /**
  * `beforeSeq`: the page answers `before_seq` (an older page); it then settles only below it.
  * Without it the page is the newest one of its thread.
+ * `options.box`: the page is the box's own (`GET /kortix/runtime/log`), which answers for the
+ * thread's tail; without it the page is the API's stored log, which lags the box.
  */
-export function applySessionLogPage(state: SessionLogState, page: SessionLogPage, beforeSeq?: number): SessionLogState {
+export function applySessionLogPage(state: SessionLogState, page: SessionLogPage, beforeSeq?: number, options?: { box?: boolean }): SessionLogState {
+  const thread = page.thread_id;
+  // A newest page of an older generation than the thread's last one is a box that was replaced
+  // (a zombie) or a stored log the new box has not journaled to yet: it holds nothing newer.
+  if (thread !== null && beforeSeq === undefined && page.generation < (state.pageGenerations[thread] ?? -Infinity)) return state;
   let messages = state.messages;
   let older = state.older;
-  const thread = page.thread_id;
   const held = thread === null ? undefined : messages[thread];
   if (thread !== null) {
     // The page answers for the thread's older messages when it reaches back as far as the
@@ -191,21 +198,20 @@ export function applySessionLogPage(state: SessionLogState, page: SessionLogPage
     if (oldest && state.older[thread] !== page.has_more) older = { ...older, [thread]: page.has_more };
   }
   // The page is the thread's truth from its first seq (from the start without `has_more`) up to
-  // its own last seq (below `beforeSeq` for an older page): a held message there that it lacks
-  // and that the stream never revised was deleted, or came from an older copy (the device's
-  // saved copy). It leaves. A finished message after the page's last seq is newer than the page:
-  // the API's page lags the box's by the journal's post interval, so it says nothing about the
-  // turns the box page delivered after it, and they stay (a deletion there comes as a
-  // tombstone), and so does a reply still streaming there (a later page that reaches past it
-  // settles it). A queued prompt's provisional seq is no position in the log: the page settles
-  // it wherever it is. A page of a newer generation (a box restarted from the stored
-  // log) settles the whole tail: a reply the old box never journaled is gone with it. The
-  // generation compared is the thread's last page's, not the state's: the new box's
-  // `log.state` frame often arrives before its page.
+  // `beforeSeq` (an older page), or to the end (the box's own page): a held message there that
+  // it lacks and that the stream never revised was deleted, or came from an older copy (the
+  // device's saved copy). It leaves. The API's newest page answers only up to its own last seq:
+  // it lags the box's by the journal's post interval (minutes when posts fail), so a message
+  // after its last seq is newer than the page and stays, a reply still streaming there too (a
+  // deletion there comes as a tombstone, or with the box's next page). A queued prompt's
+  // provisional seq is no position in the log: any page settles it. An API page of a newer
+  // generation (a box restarted from the stored log) settles the whole tail: a reply the old
+  // box never journaled is gone with it. The generation compared is the thread's last newest
+  // page's, not the state's: the new box's `log.state` frame often arrives before its page.
   if (thread !== null && held) {
     const from = page.has_more ? (page.messages[0]?.seq ?? Infinity) : -Infinity;
     const last =
-      page.generation > (state.pageGenerations[thread] ?? page.generation)
+      beforeSeq !== undefined || options?.box || page.generation > (state.pageGenerations[thread] ?? page.generation)
         ? Infinity
         : page.messages.reduce((max, m) => (m.seq < SESSION_LOG_QUEUED_SEQ_FLOOR ? Math.max(max, m.seq) : max), -Infinity);
     const to = beforeSeq ?? Infinity;

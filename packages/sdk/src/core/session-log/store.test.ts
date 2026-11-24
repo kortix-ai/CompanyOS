@@ -131,6 +131,30 @@ describe('applySessionLogPage', () => {
     expect(ids(state)).toEqual(all.slice(0, -1).map((m) => m.message_id));
   });
 
+  test('the box\'s own page answers for the tail: a reply it lacks after its last seq leaves', () => {
+    const all = rootMessages();
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all));
+    state = applySessionLogPage(state, page(all.slice(0, -1)), undefined, { box: true });
+    expect(ids(state)).toEqual(all.slice(0, -1).map((m) => m.message_id));
+  });
+
+  test('a late newest page of an older generation changes nothing: a zombie box cannot restore what the new box removed', () => {
+    const all = rootMessages();
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all.slice(0, -1), 2));
+    const late = applySessionLogPage(state, page(all, 1), undefined, { box: true });
+    expect(late).toBe(state);
+    state = applySessionLogPage(state, page(all.slice(0, -1), 2));
+    expect(ids(state)).toEqual(all.slice(0, -1).map((m) => m.message_id));
+  });
+
+  test('an older page settles up to its before_seq: a deleted message just below the cursor leaves', () => {
+    const all = rootMessages();
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all));
+    const gone = all[4]!;
+    state = applySessionLogPage(state, { ...page(all.slice(0, 4)), has_more: false }, all[5]!.seq);
+    expect(ids(state)).toEqual(all.filter((m) => m !== gone).map((m) => m.message_id));
+  });
+
   test('a lagging page still settles a deleted message inside its own span', () => {
     const all = rootMessages();
     let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all));

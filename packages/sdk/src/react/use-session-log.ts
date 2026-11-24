@@ -377,7 +377,7 @@ export function useSessionLogSync(
       liveSkipUntil = 0;
       if (revision > appliedPageRevision) {
         appliedPageRevision = revision;
-        store().applySessionLogPage(sessionId, page);
+        store().applySessionLogPage(sessionId, page, undefined, { box: true });
       }
       return true;
     };

@@ -477,6 +477,18 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     expect(replies()).toEqual(all);
   });
 
+  test('the box page answers for the tail: a reply the box no longer holds leaves on its next read', async () => {
+    let box = page();
+    const livePage = async () => box;
+    mount({ loader: async () => page(), livePage });
+    await flush();
+    expect(heldMessages()).toEqual(page().messages);
+    box = { ...page(), messages: page().messages.slice(0, -1) };
+    act(() => latestStream().onRuntimeResync());
+    await flush();
+    expect(heldMessages()).toEqual(page().messages.slice(0, -1));
+  });
+
   test('KRTX-4973: newer failed read does not discard a successful page during log traffic', async () => {
     let reads = 0;
     const pending = deferredPage();
@@ -622,7 +634,7 @@ describe('useSessionLogSync: negotiation, the first page and the stream', () => 
     });
   }
 
-  test('KRTX-4973: current authoritative pages still remove absent unrevisioned messages', async () => {
+  test('KRTX-4973: current authoritative pages still remove absent unrevisioned messages inside their span; a reply after the last seq stays', async () => {
     let newest: SessionLogPage = page();
     const loader: LoadSessionLogPage = async () => newest;
     mount({ loader });

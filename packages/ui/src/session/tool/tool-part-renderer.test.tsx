@@ -204,7 +204,7 @@ describe('an errored task dispatch renders as a dispatch row, not a dead error c
   test('a policy refusal reads as blocked, with who can unblock it', () => {
     const denied = { ...THROWN, tool: 'workflow', state: { status: 'error', input: {}, error: 'The project policy denies this workflow call.' } } as unknown as ToolPart;
     const html = renderPanel(denied);
-    expect(html).toContain('Blocked by this project’s policy. Ask a project admin to allow it.');
+    expect(html).toContain('Blocked by this workspace’s policy. Ask a workspace admin to allow it.');
     expect(html).not.toContain('failed ·');
   });
 

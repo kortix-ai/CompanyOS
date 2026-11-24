@@ -260,7 +260,7 @@ export async function deliverSteer(row: SessionLifecycleCommandRow, payload: Que
       payload.remintOnDelivery || !payload.wireMessageId
         ? steerWireMessageId(row, payload, target.externalId)
         : payload.wireMessageId!,
-      // Another person may steer this turn: the model reads who wrote the message.
+      // The model reads who wrote a steered message too, as for every person's prompt.
       promptAuthorName(inboxPromptPersonId({ actorUserId: row.actorUserId, payload })),
     ]);
     const delivery = await postPrompt(target.externalId, target.runtimeSessionId, promptText, row.actorUserId!, sessionId,

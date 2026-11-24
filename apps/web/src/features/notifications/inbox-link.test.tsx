@@ -19,6 +19,8 @@ test('the real Inbox link refreshes its return route for distinct callers', asyn
   for (const [pathname, query, hash] of [
     ['/workspaces/demo/goals', 'sort=name', '#active'],
     ['/workspaces/demo/files', 'path=%2Fnotes', ''],
+    ['/de/workspaces/demo/goals', 'sort=name', '#active'],
+    ['/ja/projects/demo/files', 'path=%2Fnotes', '#details'],
   ]) {
     path = pathname;
     search = new URLSearchParams(query);

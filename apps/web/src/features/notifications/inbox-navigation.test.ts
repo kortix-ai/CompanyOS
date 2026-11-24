@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { locales } from '@/i18n/catalog.mjs';
 import { inboxHref, inboxReturnHref } from './inbox-navigation';
 
 test('Inbox returns to each exact originating workspace route', () => {
@@ -25,7 +26,21 @@ test('direct entry and unsafe destinations fall back to workspaces', () => {
     '/en/inbox',
     '/auth',
     '/workspaces/../inbox',
+    '/de/inbox',
+    '/de/workspaces/../inbox',
+    '/xx/workspaces/demo',
+    '/de//outside.test',
   ]) {
     expect(inboxReturnHref(path)).toBe('/workspaces');
+  }
+});
+
+test('supported locale prefixes preserve workspace and legacy project origins', () => {
+  for (const locale of locales) {
+    for (const root of ['workspaces', 'projects']) {
+      const path = `/${locale}/${root}/demo/goals?sort=name#active`;
+      const link = new URL(inboxHref(path), 'https://kortix.test');
+      expect(inboxReturnHref(link.searchParams.get('from'))).toBe(path);
+    }
   }
 });

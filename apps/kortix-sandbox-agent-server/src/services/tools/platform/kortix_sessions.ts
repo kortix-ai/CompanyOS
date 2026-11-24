@@ -71,23 +71,38 @@ async function list(args: Record<string, any>, context: PlatformToolContext) {
   )
 }
 
-/** The newest assistant text anywhere in a `sessions log --json` answer. */
+type LogRecord = Record<string, unknown>
+
+const records = (value: unknown): LogRecord[] =>
+  Array.isArray(value) ? value.filter((item): item is LogRecord => !!item && typeof item === 'object') : []
+
+/** What an assistant message said: its `text` blocks. Reasoning and tool output are not an answer. */
+function messageText(message: LogRecord): string {
+  return records(message.blocks)
+    .flatMap((block) => (block.type === 'text' && typeof block.text === 'string' && block.text.trim() ? [block.text.trim()] : []))
+    .join('\n\n')
+}
+
+/**
+ * The newest assistant answer of the root thread of a `sessions log --json`
+ * answer (`kortix.session/2`). A sub-agent thread's report is not the
+ * session's answer.
+ */
 function lastAnswer(log: unknown): string {
-  let found = ''
-  const visit = (node: unknown) => {
-    if (Array.isArray(node)) return node.forEach(visit)
-    if (!node || typeof node !== 'object') return
-    const record = node as Record<string, unknown>
-    const role = record.role ?? (record.info as Record<string, unknown> | undefined)?.role
-    if (role === 'assistant' && typeof record.text === 'string' && record.text.trim()) found = record.text.trim()
-    for (const value of Object.values(record)) if (value && typeof value === 'object') visit(value)
+  const threads = records((log as LogRecord | null)?.threads)
+  const root = threads.find((thread) => !thread.parent_thread_id) ?? threads[0]
+  const messages = records(root?.messages)
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]!.role !== 'assistant') continue
+    const text = messageText(messages[i]!)
+    if (text) return text
   }
-  visit(log)
-  return found
+  return ''
 }
 
 async function read(id: string, context: PlatformToolContext) {
-  const log = await cliJson(['sessions', 'log', id, '--limit', '6', '--json'], context)
+  // 20, not 6: a working session's newest messages are often tool steps, and the answer is before them.
+  const log = await cliJson(['sessions', 'log', id, '--limit', '20', '--json'], context)
   if ('error' in log) return fail(TOOL, 'read', 'Could not read the session', log.error, context)
   const answer = lastAnswer(log.value)
   return ok(

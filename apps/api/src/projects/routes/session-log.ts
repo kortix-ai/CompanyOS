@@ -176,6 +176,7 @@ async function sessionReadGate(
   const visible = await loadVisibleSession(loaded, sessionId, c.get('sessionId') ?? null, callerKortixSessionId(c), {
     spawnAncestorRead: true,
     triggerReaderRead: true,
+    personRead: true,
   });
   // A deleted session reads nothing (KRTX-2744): its stored log and
   // loss report are content of a session the trash model advertises as gone. The restore

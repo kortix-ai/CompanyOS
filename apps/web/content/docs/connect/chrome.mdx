@@ -5,7 +5,7 @@ description: Add the Kortix extension to Chrome so a session can open pages, rea
 
 Kortix in Chrome is a Chrome extension that connects your own browser to Kortix. You add the extension and sign in once. After that, any of your sessions can drive that browser, including the sites you are already signed in to. This page is for members who connect a browser, decide what agents may reach, and stop an agent that uses it.
 
-Kortix in Chrome is experimental. A workspace can turn it off under **Workspace admin** → **Feature flags**; when it is off, a session cannot attach a browser, and the workspace does not offer **Kortix in Chrome** under **Apps and extensions**.
+Every workspace on kortix.com has Kortix in Chrome. It is not a feature flag. You decide for each of your browsers: you add the extension, you choose **Access** (**Without asking**, **Ask first** or **Off**), and you can stop an agent at any time.
 
 The extension is not a sandbox browser and not [a computer](/docs/guide#computers). Pages open in your real browser, as you. It runs in Chrome 125 or later, and in Edge, Brave and Arc. Safari, Firefox, the Kortix desktop app and phones cannot run it.
 
@@ -124,6 +124,5 @@ Ask the agent in plain words, for example "Use my browser to check the invoices 
 | `chrome_consent_timeout` | Nobody answered the prompt in Chrome within 90 seconds. | Run `kortix chrome use --ask` and answer in Chrome. |
 | `chrome_not_found` | No connected browser has that name. | Run `kortix chrome ls` and pass a listed name. |
 | `chrome_dial_failed` | The extension could not open the connection to the session. | Check that Chrome is open and the extension is signed in, then run `kortix chrome use` again. |
-| `feature_disabled` | The workspace has **Kortix in Chrome** turned off. | Turn it on under **Workspace admin** → **Feature flags**. |
 
 If the dialog does not show the extension as added, finish in the Kortix tab Chrome opened, or reload the Kortix page. If you leave the sign-in page without **Allow**, select **Connect to Kortix** again.

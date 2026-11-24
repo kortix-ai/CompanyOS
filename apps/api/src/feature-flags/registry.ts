@@ -349,9 +349,9 @@ const FLAGS: readonly FeatureFlagDef[] = [
   // serializer keeps sending `true` for older clients.
   {
     key: 'chat',
-    name: 'Channels',
+    name: 'Slack-style Spaces',
     description:
-      "Channels with Kortix, the way Slack works: every message is a thread, Kortix's newest reply shows under it, Kortix can start threads, and you share channels with people. Replaces the session list in the sidebar.",
+      "Use Slack-style channels and direct messages, where every message starts a thread. Switches the sidebar to the chat layout. Separate from Spaces, which groups sessions, files and tabs.",
     stability: 'experimental',
     wip: true,
     available: () => true,
@@ -417,25 +417,15 @@ const FLAGS: readonly FeatureFlagDef[] = [
       'SESSIONS: session create ignores `group_id` while off. On, every session of a space (a child: its parent\'s) gets the "## This space" ' +
       'turn text (projects/lib/session-where.ts: name, description, mounted folder) and mounts /Spaces/<group_id> read-write at /drives/space (drives/service.ts sessionGroupFolder). SHARING: a group is private to its creator by default; sharing it (people or the whole project) shares every session in it and its folder (shared/session-group-access.ts).',
   },
-  {
-    key: 'chrome',
-    name: 'Kortix in Chrome',
-    description:
-      "Let a session drive your own Chrome, with your logins, through the Kortix in Chrome extension: it opens its tabs in a group named after the session, and you can take over or stop it at any time.",
-    stability: 'experimental',
-    // Where the API serves /v1/chrome (KORTIX_CHROME_ENABLED: local, dev, staging, prod).
-    available: () => config.KORTIX_CHROME_ENABLED,
-    // Launched 2026-11-21: the extension is public in the Chrome Web Store, so
-    // every project gets it where the API serves the routes.
-    platformDefault: () => true,
-    enforcement: 'routes',
-    enforcementNote:
-      'ROUTES: POST /v1/chrome/attach answers 403 `feature_disabled` when the calling session\'s project has it ' +
-      'off (chrome/routes.ts); release stays open so a session can always let go. The browsers a person ' +
-      'connected are account-level and gated only by KORTIX_CHROME_ENABLED (404 when off). BOX: off, the ' +
-      'session has no kortix-chrome skill and its CLI hides and refuses `kortix chrome` (KORTIX_FEATURE_FLAGS). ' +
-      'WEB: no Chrome card in Apps and extensions and no Chrome promo card. Settings → Kortix in Chrome is account-level and stays.',
-  },
+  // `chrome` graduated (2026-11-24): Kortix in Chrome is on for every project
+  // wherever the API serves /v1/chrome. The deployment's KORTIX_CHROME_ENABLED
+  // is the only off switch (dev, staging and prod set it; self-host does not).
+  // Each person still decides per browser: the extension, its Access mode and
+  // Stop. A stored `experimental.chrome` override is inert. The box keeps
+  // listing `chrome` in KORTIX_FEATURE_FLAGS where the API serves it
+  // (projects/lib/feature-flag-env.ts): kortixd withholds the kortix-chrome
+  // skill without it, and CLIs built before then hide `kortix chrome`.
+  // The serializer sends `experimental.chrome` = KORTIX_CHROME_ENABLED.
   {
     key: 'agent_teams',
     name: 'Agent teams',
@@ -491,7 +481,7 @@ const FLAGS: readonly FeatureFlagDef[] = [
     key: 'chat_front',
     name: 'Spaces-Router',
     description:
-      'With Spaces on, the agent you chat with in a thread is a router: it does quick work itself (an answer, a short text, a look at the thread files) and hands longer work to the Space\'s agents. It writes back like a person, in short messages. An agent saves its full result as a file in the thread, and the router links that file instead of retyping it. Show work under a message opens the work behind it. Needs My Kortix on in kortix.yaml.',
+      'With Slack-style Spaces on, the agent you chat with in a thread is a router: it does quick work itself (an answer, a short text, a look at the thread files) and hands longer work to the Space\'s agents. It writes back like a person, in short messages. An agent saves its full result as a file in the thread, and the router links that file instead of retyping it. Show work under a message opens the work behind it. Needs My Kortix on in kortix.yaml.',
     stability: 'experimental',
     wip: true,
     available: () => true,
@@ -515,7 +505,7 @@ const FLAGS: readonly FeatureFlagDef[] = [
     key: 'spaces_proactive',
     name: 'Spaces-Proactive',
     description:
-      'With Spaces on, a space can watch itself: turn on Proactive in its details, and an agent reads what happens there (finished threads, questions left open, people who join) and writes in the chat only when it matters: a result worth sharing, a decision you need to make, or something overdue. It can also start a thread that does the work. Optional daily brief at 9:00.',
+      'With Slack-style Spaces on, a space can watch itself: turn on Proactive in its details, and an agent reads what happens there (finished threads, questions left open, people who join) and writes in the chat only when it matters: a result worth sharing, a decision you need to make, or something overdue. It can also start a thread that does the work. Optional daily brief at 9:00.',
     stability: 'experimental',
     wip: true,
     available: () => true,

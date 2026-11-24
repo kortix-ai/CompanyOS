@@ -149,6 +149,16 @@ describe('resolveFeatureFlag — explicit override wins', () => {
     expect(buildFeatureFlagCatalog(metadata).map((flag) => flag.key)).not.toContain('workspace_volume');
   });
 
+  test('chrome graduated: Kortix in Chrome needs no flag and a stored override is inert', () => {
+    // 2026-11-24: every project gets Kortix in Chrome wherever the API serves
+    // /v1/chrome (KORTIX_CHROME_ENABLED, the only off switch). A stored `false`
+    // must not resurface as a key or a catalog row.
+    expect(isFeatureFlagKey('chrome')).toBe(false);
+    const metadata = { experimental: { chrome: false } };
+    expect(Object.keys(resolveFeatureFlags(metadata))).not.toContain('chrome');
+    expect(buildFeatureFlagCatalog(metadata).map((flag) => flag.key)).not.toContain('chrome');
+  });
+
   test('pooled_provider_secrets graduated: provider keys need no flag and a stored override is inert', () => {
     // 2026-11-12: named provider keys, sharing, per-session key selection and
     // named ChatGPT/Claude sign-ins are on for every project. A stored `false`
@@ -371,12 +381,6 @@ describe('catalogHidden', () => {
     // `apps` graduated (2026-10-14), `session_log` (2026-10-22), `session_log_restore` (2026-11-05),
     // `workspace_volume` (2026-11-23) and `meta_agent` was removed (2026-11-02): none is a flag.
     expect([...HIDDEN_KEYS].sort()).toEqual([]);
-  });
-
-  // Launched 2026-11-21: on by default wherever the API serves /v1/chrome, and listed.
-  test('chrome is on by default where KORTIX_CHROME_ENABLED serves it, and listed', () => {
-    expect(resolveFeatureFlag({}, 'chrome')).toBe(config.KORTIX_CHROME_ENABLED);
-    expect(buildFeatureFlagCatalog({}).find((flag) => flag.key === 'chrome')?.default_enabled).toBe(config.KORTIX_CHROME_ENABLED);
   });
 
   for (const key of HIDDEN_KEYS) {

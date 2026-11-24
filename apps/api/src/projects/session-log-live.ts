@@ -10,7 +10,8 @@
  *    lookup included (`timeout`, `daemon_<status>`, `too_large`, `invalid_json`, `invalid_page`);
  *  - the box answered another thread (`other_thread`);
  *  - the box's page is of an older generation than the stored log (`stale_generation`): a box
- *    that was replaced, or one whose journal has not started yet.
+ *    that was replaced, or one whose journal has not started yet;
+ *  - the replica already runs as many live reads as it allows (`busy`, `createLiveReadGate`).
  * The box is never woken: a read is not a reason to run one.
  *
  * The page is passed through as the box built it, with `source: 'box'`. The client validates
@@ -50,6 +51,35 @@ function isWholePage(v: unknown): v is SessionLogPage {
   );
 }
 
+/**
+ * Bounds the live box reads one replica runs at once. Each read holds up to
+ * `RUNTIME_LOG_PAGE_MAX_BYTES` (8 MiB) of a box's answer in memory:
+ *  - callers of the same key (session, thread, limit) share one read: a reconnect storm or many
+ *    tabs of one session cost one box read;
+ *  - at most `maxPerSession` different reads of one session run at once;
+ *  - at most `maxInFlight` reads run on the replica (16 × 8 MiB = 128 MiB at worst).
+ * A read past a limit answers null at once: the caller answers the stored log.
+ */
+export function createLiveReadGate<T>(limits: { maxInFlight: number; maxPerSession: number }) {
+  const running = new Map<string, { sessionId: string; read: Promise<T> }>();
+  return {
+    run(key: string, sessionId: string, read: () => Promise<T>): Promise<T | null> {
+      const shared = running.get(key);
+      if (shared) return shared.read;
+      if (running.size >= limits.maxInFlight) return Promise.resolve(null);
+      let ofSession = 0;
+      for (const entry of running.values()) if (entry.sessionId === sessionId) ofSession++;
+      if (ofSession >= limits.maxPerSession) return Promise.resolve(null);
+      const started = read().finally(() => running.delete(key));
+      running.set(key, { sessionId, read: started });
+      return started;
+    },
+  };
+}
+
+/** replica-local: the live reads this API process runs; each replica bounds its own memory. */
+const liveReads = createLiveReadGate<LiveSessionLogRead>({ maxInFlight: 16, maxPerSession: 2 });
+
 export async function readLiveSessionLogPage(input: {
   sessionId: string;
   /** Signs the user context the box sees; the sandbox service key authorizes the read. */
@@ -58,6 +88,12 @@ export async function readLiveSessionLogPage(input: {
   limit: number;
   budgetMs?: number;
 }): Promise<LiveSessionLogRead> {
+  const key = `${input.sessionId}\u0000${input.threadId ?? ''}\u0000${input.limit}`;
+  const read = await liveReads.run(key, input.sessionId, () => readBox(input));
+  return read ?? { page: null, reason: 'busy' };
+}
+
+async function readBox(input: Parameters<typeof readLiveSessionLogPage>[0]): Promise<LiveSessionLogRead> {
   const [sandbox] = await db
     .select({ externalId: sessionSandboxes.externalId, status: sessionSandboxes.status })
     .from(sessionSandboxes)

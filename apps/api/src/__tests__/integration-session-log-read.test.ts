@@ -340,6 +340,22 @@ describe('GET .../log?live=1: the running box answers, else the stored log', () 
     expect(ms).toBeLessThan(3_000);
   });
 
+  test('a burst of live reads of one session shares one box read', async () => {
+    boxAnswer = () => new Promise((resolve) => setTimeout(() => resolve({ ok: true, body: boxPage() }), 300));
+    const before = boxReads.length;
+    const answers = await Promise.all(Array.from({ length: 20 }, () => read(`${base(live)}/log?live=1`)));
+    expect(answers.map((a) => `${a.status} ${a.body.source}`)).toEqual(Array.from({ length: 20 }, () => '200 box'));
+    expect(boxReads.length - before).toBe(1);
+  });
+
+  test('more than two different live reads of one session at once: the rest answer the stored log', async () => {
+    boxAnswer = () => new Promise((resolve) => setTimeout(() => resolve({ ok: true, body: boxPage() }), 300));
+    const before = boxReads.length;
+    const answers = await Promise.all([40, 30, 20, 10].map((limit) => read(`${base(live)}/log?live=1&limit=${limit}`)));
+    expect(answers.map((a) => a.body.source).sort()).toEqual(['box', 'box', 'store', 'store']);
+    expect(boxReads.length - before).toBe(2);
+  });
+
   test('a box page that is not a whole page, or of an older generation than the stored log: the stored log', async () => {
     boxAnswer = async () => ({ ok: true, body: { generation: 0, thread_id: ROOT, messages: [], has_more: false } });
     expect((await read(`${base(live)}/log?live=1`)).body.source).toBe('store');

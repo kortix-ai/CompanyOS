@@ -36,12 +36,12 @@ function render() {
   act(() => root.render(<QueryClientProvider client={client}><DesktopTabStrip projectId={P} /></QueryClientProvider>));
 }
 function command(action: string) {
-  act(() => win.dispatchEvent(new win.CustomEvent('kortix-desktop-command', { detail: action })));
+  act(() => win.dispatchEvent(Object.assign(new win.Event('kortix-desktop-command'), { detail: action })));
 }
 function click(target: string, modified = false) {
-  const link = document.createElement('a');
+  const link = win.document.createElement('a');
   link.href = target;
-  document.body.append(link);
+  win.document.body.append(link);
   act(() => link.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: modified })));
 }
 beforeEach(() => {

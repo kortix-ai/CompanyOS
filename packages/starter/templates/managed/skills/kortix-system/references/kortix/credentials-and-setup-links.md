@@ -15,6 +15,7 @@ settings page.
 | You need | Mint | The user gets |
 | --- | --- | --- |
 | A key, token or other secret value | A secret link: `kortix secrets request` | A fill-in form |
+| A website's username and password, to sign in with the browser | A login link: `kortix secrets request NAME --login --site HOST` | A sign-in form |
 | An app account (Gmail, GitHub, …) | A connect link: `kortix connectors connect` | A sign-in |
 
 Slack is neither: `kortix channels connect` prints its install link. Never
@@ -39,21 +40,49 @@ printf '%s' "$VALUE" | kortix secrets set BILLING_API_TOKEN=- --scope connector
 ## Mint a secret link
 
 ```sh
-kortix secrets request APOLLO_API_KEY SMARTLEAD_API_KEY --scope runtime   # your code reads them
-kortix secrets request BILLING_API_TOKEN                                  # connector (the default)
+kortix secrets request APOLLO_API_KEY SMARTLEAD_API_KEY --scope runtime     # your code reads them (the default)
+kortix secrets request BILLING_API_TOKEN --scope connector                  # only a connector spends it
 ```
 
-- **`connector` is the default scope of `request`.** The value never reaches
-  the sandbox. Pass `--scope runtime` for a key your code or tools read.
+- **`runtime` (the default) delivers the value to you as an env var.**
+  `connector` keeps it server-side for a connector, never in the sandbox.
 - One link asks for several keys. Ask for everything in one message.
-- A link lasts 7 days (`--expires <minutes>`, at most 30 days). It can only
-  set the names it lists, in this workspace.
+- A link lasts 7 days (`--expires <minutes>`, at most 30 days) and sets only its names.
 - Minting is not idempotent: every call makes a new link. A looping task
   (trigger, retry) records the link and its `expires_at`, checks whether the
   secret is set, and mints again only when the link expired.
   `kortix secrets request <names> --show` prints the saved link.
-- `withheld` in the answer names keys your agent will not receive. Relay the
-  `withheld_fix` it returns.
+- `withheld` names keys your agent will not receive: relay its `withheld_fix`.
+
+## Sign in to a website
+
+A website login is a username and password that the browser types into the
+sign-in page. You see only its name. Use it for a site with no connector.
+
+```sh
+kortix secrets logins                                            # the logins you have, their sites, ready or not
+kortix secrets request CRM_LOGIN --login --site app.example.com  # ask the person for one
+agent-browser auth login crm --credential-provider kortix --item CRM_LOGIN --url https://app.example.com/login
+```
+
+- `--site` is every host of the sign-in flow, exactly (`app.example.com`,
+  not `example.com`). A URL works too; only its host counts. A login works only on its sites: on any other host the
+  sign-in is refused.
+- `auth login` opens `--url`, fills the username and password fields, and
+  submits. A form with unusual fields takes `--username-selector`,
+  `--password-selector` and `--submit-selector`. A form you reached by clicking
+  takes `--no-navigate` with the same `--url`.
+- The login stays saved: in a later session, run `auth login` again. Never ask
+  for it twice.
+- `auth login` failed with "could not resolve credentials"? Run
+  `kortix secrets logins`: it prints the last refusal and its fix (no login of
+  that name, another site, not granted to your agent).
+- Never ask for a password in chat. Never type one with `fill` or `type`.
+  Never read a password field back (`get value`, `eval`), never screenshot it
+  and never print it.
+- A sign-in that asks for the username and the password on two pages, a
+  one-time code, a passkey or a CAPTCHA: open the page and ask the person to
+  take over the Desktop.
 
 ## Mint a connect link
 
@@ -66,6 +95,9 @@ kortix secrets request BILLING_API_TOKEN                                  # conn
      or service account), never their own login.
    - `--owner me` (default): private to this user, used only in their own
      sessions. Use it for a person's own account.
+   - A trigger or automation (a wake-up on a new email, a scheduled run) uses
+     only shared accounts: mint the `--owner project` link for it, once. A
+     private link cannot serve it, so never mint one first.
    - Unclear? Ask. Never put a personal login in the shared slot.
 3. `kortix connectors connect <slug> [--owner project] --label "<name>"`.
    The label names the account ("Support inbox"), never `me` or an id.
@@ -129,8 +161,10 @@ agent's trigger needs, suggest `kortix secrets share <NAME> --agent <agent>`.
 | Goal | Command |
 | --- | --- |
 | Store a value you have | `kortix secrets set <NAME>=- [--scope connector]` |
+| Ask for a website login | `kortix secrets request <NAME> --login --site <host>` |
+| Sign in with a login | `agent-browser auth login <profile> --credential-provider kortix --item <NAME> --url <sign-in URL>` |
 | Ask for a value your code reads | `kortix secrets request <NAME…> --scope runtime` |
-| Ask for a connector's key | `kortix secrets request <NAME…>` |
+| Ask for a connector's key | `kortix secrets request <NAME…> --scope connector` |
 | Connect an app account | `kortix connectors connect <slug> [--owner project] --label "<name>"` |
 | Check a secret arrived | `kortix secrets ls` |
 | Check an app connected | `kortix connectors ls`, `kortix connectors accounts <slug>` |

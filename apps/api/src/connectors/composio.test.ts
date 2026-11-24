@@ -537,6 +537,67 @@ test('executeComposio treats invalid Linear GraphQL as caller error, not provide
   expect(result.data).toMatchObject({ error: 'Cannot query field on Issue | Code: GRAPHQL_VALIDATION_FAILED' });
 });
 
+test('executeComposio treats a Composio 400 for missing required args as a caller error', async () => {
+  // A call without the tool's required argument: Composio refuses the request
+  // itself with a 400 in the execute payload. KRTX-678: this shape reached the
+  // gateway's 502-warn path (70% of one prod warn spike).
+  const message = "Invalid request data provided\n- Following fields are missing: {'query_or_mutation'}";
+  const resumed = session({
+    id: 'persisted-session',
+    toolkit: { slug: 'linear', name: 'Linear', isNoAuth: true },
+    execute: async () => ({ data: { message, status_code: 400 }, error: message, logId: 'log-missing' }),
+  });
+  const result = await executeComposio({
+    projectId: 'project-1', connectorSlug: 'linear', connectionId: 'connection-1',
+    sessionId: 'persisted-session', toolkit: 'linear', toolSlug: 'LINEAR_RUN_QUERY_OR_MUTATION',
+    args: {}, connectedAccountId: null, runtime: fakeRuntime({ resumed }),
+  });
+  expect(result.ok).toBe(false);
+  expect(result.status).toBe(400);
+  expect(result.data).toMatchObject({ error: message });
+});
+
+test('executeComposio treats a provider INVALID_INPUT argument rejection as a caller error', async () => {
+  // Linear rejects a mutation argument that fails validation; Composio wraps
+  // it as `Code: INVALID_INPUT`. KRTX-678: this shape also reached the
+  // 502-warn path (the classifier matched two other codes only).
+  const error =
+    "Message: Argument Validation Error | Code: INVALID_INPUT | Path: commentCreate | " +
+    "Details: issueId must be a valid UUID or issue identifier (e.g., 'LIN-123').";
+  const resumed = session({
+    id: 'persisted-session',
+    toolkit: { slug: 'linear', name: 'Linear', isNoAuth: true },
+    execute: async () => ({ data: { message: error }, error, logId: 'log-invalid-input' }),
+  });
+  const result = await executeComposio({
+    projectId: 'project-1', connectorSlug: 'linear', connectionId: 'connection-1',
+    sessionId: 'persisted-session', toolkit: 'linear', toolSlug: 'LINEAR_RUN_QUERY_OR_MUTATION',
+    args: { query_or_mutation: 'mutation { commentCreate(...) }' }, connectedAccountId: null,
+    runtime: fakeRuntime({ resumed }),
+  });
+  expect(result.ok).toBe(false);
+  expect(result.status).toBe(400);
+});
+
+test('executeComposio treats a Composio 400 payload as a caller error for any toolkit', async () => {
+  // The rejection semantics are the caller's input, not the toolkit's: the
+  // scoping to LINEAR_RUN_QUERY_OR_MUTATION is how the missing-argument shape
+  // leaked into the 502-warn path (KRTX-678).
+  const message = "Invalid request data provided\n- Following fields are missing: {'message'}";
+  const resumed = session({
+    id: 'persisted-session',
+    toolkit: { slug: 'slack', name: 'Slack', isNoAuth: true },
+    execute: async () => ({ data: { message, status_code: 400 }, error: message, logId: 'log-slack' }),
+  });
+  const result = await executeComposio({
+    projectId: 'project-1', connectorSlug: 'slack', connectionId: 'connection-1',
+    sessionId: 'persisted-session', toolkit: 'slack', toolSlug: 'SLACK_SEND_MESSAGE',
+    args: {}, connectedAccountId: null, runtime: fakeRuntime({ resumed }),
+  });
+  expect(result.ok).toBe(false);
+  expect(result.status).toBe(400);
+});
+
 test('executeComposio uploads a URL in a file field and refuses an internal URL by field name', async () => {
   const executed: Array<Record<string, unknown>> = [];
   const resumed = session({
@@ -654,7 +715,78 @@ test('executeComposio turns an HTML error page from Composio\'s edge into a shor
   expect(result).toEqual({
     ok: false,
     status: 502,
+    data: 'composio_upstream_unavailable: Composio answered 502 with an HTML error page (page: Bad gateway)',
+  });
+});
+
+test('executeComposio states only the title of a Cloudflare WAF block page and keeps the legacy text when a page has no title', async () => {
+  const blocked = session({
+    id: 'persisted-session',
+    toolkit: { slug: 'linear', name: 'Linear', isNoAuth: true },
+    execute: async () => {
+      throw Object.assign(
+        new Error(
+          '403 <!DOCTYPE html>\n<!--[if gt IE 8]><!--> <html class="no-js" lang="en-US"> <!--<![endif]-->\n<title>Attention Required! | Cloudflare</title>\n</html>',
+        ),
+        { status: 403 },
+      );
+    },
+  });
+  const blockedResult = await executeComposio({
+    projectId: 'project-1', connectorSlug: 'linear', connectionId: 'connection-1',
+    sessionId: 'persisted-session', toolkit: 'linear', toolSlug: 'LINEAR_UPDATE_LINEAR_COMMENT',
+    args: {}, connectedAccountId: null, runtime: fakeRuntime({ resumed: blocked }),
+  });
+  // KRTX-4722: the edge's 403 refused the request as sent — the tool never
+  // ran, so the result carries the upstream 4xx (a caller-fixes-it status),
+  // not a blanket 502 that reads as transient and invites the same retry.
+  expect(blockedResult).toEqual({
+    ok: false,
+    status: 403,
+    data:
+      'composio_upstream_unavailable: Composio answered 403 with an HTML error page (page: Attention Required! | Cloudflare): the edge refused the call before it reached the provider, so the tool did not run — the same arguments will be refused again.',
+  });
+
+  const untitled = session({
+    id: 'persisted-session',
+    toolkit: { slug: 'linear', name: 'Linear', isNoAuth: true },
+    execute: async () => {
+      throw Object.assign(
+        new Error('502 <html><body>Bad gateway</body></html>'),
+        { status: 502 },
+      );
+    },
+  });
+  const untitledResult = await executeComposio({
+    projectId: 'project-1', connectorSlug: 'linear', connectionId: 'connection-1',
+    sessionId: 'persisted-session', toolkit: 'linear', toolSlug: 'LINEAR_GET_LINEAR_ISSUE',
+    args: {}, connectedAccountId: null, runtime: fakeRuntime({ resumed: untitled }),
+  });
+  expect(untitledResult).toEqual({
+    ok: false,
+    status: 502,
     data: 'composio_upstream_unavailable: Composio answered 502 with an HTML error page',
+  });
+
+  // A provider-side HTML 4xx is not an edge block: its status carries through
+  // (still non-retryable for the SDK hook), but the reason never claims the
+  // call died at the edge — only the 403 class states that (KRTX-4722).
+  const notFound = session({
+    id: 'persisted-session',
+    toolkit: { slug: 'linear', name: 'Linear', isNoAuth: true },
+    execute: async () => {
+      throw Object.assign(new Error('404 <html><body>Not Found</body></html>'), { status: 404 });
+    },
+  });
+  const notFoundResult = await executeComposio({
+    projectId: 'project-1', connectorSlug: 'linear', connectionId: 'connection-1',
+    sessionId: 'persisted-session', toolkit: 'linear', toolSlug: 'LINEAR_GET_LINEAR_ISSUE',
+    args: {}, connectedAccountId: null, runtime: fakeRuntime({ resumed: notFound }),
+  });
+  expect(notFoundResult).toEqual({
+    ok: false,
+    status: 404,
+    data: 'composio_upstream_unavailable: Composio answered 404 with an HTML error page',
   });
 });
 
@@ -1017,6 +1149,82 @@ test('gateway executes Composio with selected-row metadata and never exposes a s
     },
   });
   expect(JSON.stringify(executions)).not.toContain('COMPOSIO_API_KEY');
+});
+
+test('gateway fails closed with needs_auth when it cannot record a started Composio sign-in', async () => {
+  // A started sign-in holds a Composio `session_id` and no account. The DB
+  // contract (composio-unrecorded-sign-in.integration.test.ts) records a
+  // finished one. Here the lookup fails, or there is nothing to look up.
+  const lookups: Array<string | null | undefined> = [];
+  const connectorWith = (metadata: Record<string, unknown>): GatewayConnector => ({
+    connectorId: 'connector-1',
+    connectionId: 'connection-1',
+    connectionIsDefault: false,
+    connectionMetadata: metadata,
+    slug: 'gmail',
+    provider: 'composio',
+    platform: 'gmail',
+    baseUrl: null,
+    auth: { type: 'none', in: 'header', name: null, prefix: null },
+    hasAuth: true,
+    credentialMode: 'shared',
+    enabled: true,
+  });
+  const run = async (connector: GatewayConnector) => {
+    let executed = false;
+    const deps: GatewayDeps = {
+      async loadConnectorBySlug() {
+        return connector;
+      },
+      async loadAction() {
+        return {
+          path: 'gmail.get_profile',
+          relPath: 'get_profile',
+          inputSchema: null,
+          risk: 'read',
+          binding: { kind: 'composio', toolkit: 'gmail', toolSlug: 'GMAIL_GET_PROFILE' },
+        };
+      },
+      async resolveCredential() {
+        throw new Error('Composio must not use connector credentials');
+      },
+      async loadPolicies() {
+        return [];
+      },
+      async recordExecution() {
+        return 'exec-1';
+      },
+      async completeComposioAuthorization({ connector: selected }) {
+        lookups.push(selected.connectionId);
+        throw new Error('Composio is unreachable');
+      },
+      fetchImpl: async () => new Response('{}'),
+      enforcePolicies: false,
+      async executeComposio() {
+        executed = true;
+        throw new Error('an unrecorded account must never execute');
+      },
+    };
+    const result = await handleCall(deps, {
+      projectId: 'project-1',
+      accountId: 'account-1',
+      subject: { userId: 'user-1', groupIds: [] },
+      sessionId: 'kortix-session-1',
+      connectorSlug: 'gmail',
+      actionPath: 'get_profile',
+      args: {},
+    });
+    return { result, executed };
+  };
+
+  const started = await run(connectorWith({ session_id: 'trs_started', toolkit: 'gmail', connected_account_id: null }));
+  expect(started).toEqual({ result: { status: 'denied', reason: 'needs_auth' }, executed: false });
+  expect(lookups).toEqual(['connection-1']);
+
+  // No Composio session: the sign-in never started, so Composio is not asked.
+  const unstarted = await run(connectorWith({ toolkit: 'gmail', connected_account_id: null }));
+  expect(unstarted).toEqual({ result: { status: 'denied', reason: 'needs_auth' }, executed: false });
+  expect(lookups).toEqual(['connection-1']);
 });
 
 test('composioCatalogPage enriches the paged catalogue with the metadata that page omits', async () => {

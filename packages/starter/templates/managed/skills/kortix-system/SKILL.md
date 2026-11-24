@@ -1,6 +1,6 @@
 ---
 name: kortix-system
-description: "How Kortix works and how to change a Kortix workspace from a session: land work through a change request, drive Kortix with the in-sandbox `kortix` CLI, keep files where they last, store or request credentials, schedule work, know the computer a session runs on (its own microVM, its desktop, what lasts) and make an installed package last for every session (a sandbox template), know what the session runtime (pi) can and cannot do, and edit or fix `kortix.yaml`. Load when the user asks what Kortix can do or how it works; asks to create or change an agent, skill, tool, command, extension, permission, model, trigger or loop; asks to save, persist, schedule or ship work; asks what machine you run on, to install software for good, or to put something on \"my desktop\"; you just sent, submitted or started something whose result comes later (a reply, an order, a deploy, a change request, a person's answer); or your system prompt lists `kortix.yaml` issues."
+description: "How Kortix works and how to change a Kortix workspace from a session: land work through a change request, drive Kortix with the in-sandbox `kortix` CLI, keep files where they last, store or request credentials, schedule work, know the computer a session runs on (its own microVM, its desktop, what lasts) and make an installed package last for every session (a sandbox template), know what the session runtime (pi) can and cannot do, and edit or fix `kortix.yaml`. Load when the user asks what Kortix can do or how it works; asks to create or change an agent, skill, tool, command, extension, permission, model, trigger or loop; asks whether an agent got better or worse, or to benchmark, eval or compare agents or models; asks to save, persist, schedule or ship work; asks what machine you run on, to install software for good, or to put something on \"my desktop\"; you just sent, submitted or started something whose result comes later (a reply, an order, a deploy, a change request, a person's answer); or your system prompt lists `kortix.yaml` issues."
 ---
 <skill name="kortix-system">
 <live-skills>
@@ -13,7 +13,7 @@ repository, and update in a running session. Never edit or commit a copy.
 For one your list lacks, or outside a session:
 - `kortix system-skills` lists them; `kortix system-skills get <name>` prints
   one `SKILL.md` and its reference paths; `… file <name> <path>` one reference.
-A flag-gated skill exists only while its flag is on. Optional skills: `kortix marketplace search <query>` (`kortix-marketplace`).
+A flag-gated skill exists only while its flag is on.
 </live-skills>
 <overview>
 ## The model
@@ -25,9 +25,12 @@ A flag-gated skill exists only while its flag is on. Optional skills: `kortix ma
   permission rules, and the things it may use.
 - Every session starts from the default branch. A change reaches other
   sessions only when its change request merges.
-- With `workspace: { project_repository: true }` on your agent, `/workspace`
-  is the repository on your session branch. Without it, the session has no
-  checkout and cannot push.
+- `/workspace` starts empty: Kortix checks out the repository there only when
+  your agent's `workspace.repos` declares a clone (your prompt then names it
+  and its setup progress). Otherwise `kortix workspaces clone` clones the
+  repository onto your session branch. Send the change with `kortix cr`.
+- Only your session branch accepts your push. The push needs
+  `workspace.gitops.read` in your agent's `kortix_permissions`.
 - Asked what Kortix can do: answer as `references/capabilities.md` says.
 </overview>
 <machine>
@@ -42,7 +45,7 @@ Your session runs on its own microVM: a whole Linux computer, root through
 - "My desktop": a file goes to `~/Desktop` (their Drive folder); a program goes on
   your screen, which the user watches in the **Desktop** panel, or on their own
   computer. The `kortix-computer` skill decides which (`<which-desktop>`).
-Keep big files out of Git: every session downloads the whole repository.
+Keep big files out of Git: every clone downloads the whole repository.
 `kortix validate` warns at 10 MiB per file and at 512 MiB in total; above
 512 MiB compressed, running sessions stop picking up config changes. Put
 media and datasets in object storage; add build output to `.gitignore`.
@@ -51,6 +54,7 @@ media and datasets in object storage; add build output to `.gitignore`.
 ## Land work through a change request
 A commit that stays on your session branch reaches no other session. A
 change request (CR) is the only way to the default branch. Do every step:
+0. Work in your clone (`<overview>`): `cd` into it and run every step there.
 1. Sync: `git fetch origin && git rebase origin/main` (`main` or the default
    branch `kortix workspaces info` names). Resolve conflicts now.
 2. Commit small, working commits. Run `kortix validate` after a `kortix.yaml`
@@ -63,9 +67,9 @@ change request (CR) is the only way to the default branch. Do every step:
    `422 CR_HEAD_NOT_AHEAD` means the push did not land: push, then retry.
 5. Check: `kortix cr diff <n>` shows your diff. Empty: push again and check
    the same CR. Never open a second CR for the same work.
-6. Tell the user the CR number and title. The web app shows a **Review**
-   button under your reply. Name `kortix cr merge <n>` only to a CLI or
-   channel user.
+6. Share the CR number, title and URL from `cr open` or `cr show <n> --json`.
+   Copy the URL; never infer it from an API path. The web reply shows **Review**.
+   Name `kortix cr merge <n>` only to a CLI or channel user.
 7. Wait. Merge your own CR only when the user asks. The API refuses a
    self-merge (`403 CR_SELF_MERGE_REFUSED`) unless your agent holds
    `workspace.gitops.merge`.
@@ -73,9 +77,10 @@ change request (CR) is the only way to the default branch. Do every step:
   (`workspace.gitops.ref.any`): the push skips review.
 - "Committed on my branch" is not persisted. Never ask the user to copy files
   out of the sandbox.
-- A merge that changes `agents` or `default_agent` also needs
-  `workspace.agent.write`; `triggers` needs `workspace.trigger.create|update|delete`.
-  `503 CR_GOVERNANCE_UNVERIFIED`: nothing merged, retry after `Retry-After`.
+- A merge also needs the write permission of each `kortix.yaml` section it changes: `agents`
+  `workspace.agent.write`, `connectors` and `policy_sets` `workspace.connector.write`, `triggers`
+  `workspace.trigger.*`, `apps`, `skills`, `sandbox`, `project` theirs. `503 CR_GOVERNANCE_UNVERIFIED`: retry.
+- Never commit a key or token: a merge that adds one gets `409 CR_SECRET_DETECTED` (file:line). Store it (`<credentials>`), rewrite the branch, force-push.
   For people: https://kortix.com/docs/developers#change-requests
 </change-requests>
 <cli>
@@ -107,6 +112,7 @@ state. Use `git` and the file tools for files and commits.
 | Agents and models | `kortix agents ls\|default\|config\|scope`, `kortix models ls\|default <model-id>` |
 | Tools, feature flags | `kortix tools ls\|eject <name>`, `kortix workspaces features [enable <flag>]` |
 | The manifest | `kortix validate [--scopes]`, `kortix schema` |
+| Score an agent on tasks (flag `evals`, `<evals>`) | `kortix evals datasets\|tasks\|run\|jobs\|show\|compare\|rerun\|judge` |
 | Kortix itself is broken, confusing or missing something | `kortix feedback "<what happened, what you expected>" --kind bug\|friction\|idea`: it reaches the Kortix team with this session's id. File it when it happens, once per problem, then continue with a workaround |
 </cli>
 
@@ -116,7 +122,7 @@ state. Use `git` and the file tools for files and commits.
 1. Read `$KORTIX_SECRET_CAPABILITIES` first: a JSON list of the secrets this
    session may use, without values. Each entry's `delivery`:
    - `sandbox`: the named env var holds the real value. Never print, echo or
-     write it to a file.
+     write it to a file, and never copy it into code or `kortix.yaml`.
    - `network`: the env var holds a handle. Use it as the credential: Kortix
      puts in the value outside the sandbox, only on the listed `hosts`, over
      HTTPS. `[REDACTED]` in a response means it worked. Experimental.
@@ -127,8 +133,8 @@ state. Use `git` and the file tools for files and commits.
    value on stdin: `printf '%s' "$VALUE" | kortix secrets set NAME=-`
    (`--scope connector` for a connector's key). `403`: go to step 3.
 3. You lack the value: mint a link, put the URL in your reply, end the turn.
-   A key your code reads: `kortix secrets request NAME --scope runtime`
-   (the default scope, `connector`, never reaches the sandbox). An app account:
+   A key your code reads: `kortix secrets request NAME` (`--scope connector`
+   keeps a connector's key out of the sandbox). An app account:
    `kortix connectors connect <slug> --label "<name>"` (`--owner project` for
    a shared company account). Never ask for a key in chat.
 
@@ -171,13 +177,25 @@ watch), set up this session's wake-up before you end the turn. Nobody asks.
 
 - A loop or a session trigger lives in the database: no CR. Every fire is a
   model turn. `403 feature_disabled`: Loops are off. Tell the user
-  (`kortix workspaces features enable reminders`); use an `at` trigger meanwhile.
+  (`kortix workspaces features enable reminders`). Meanwhile, an `at` trigger
+  starts a fresh session at the time: put the full context in its prompt.
 - `kortix triggers add|rm|enable|disable` edit `kortix.yaml`: a trigger fires
   after its CR merges, or at once with `--apply` (through the API, gated by
   your `kortix_permissions`). Then `kortix triggers fire <slug>` once.
 - Nobody watches a scheduled run: push what matters, stay silent otherwise.
 - Say "scheduled run" or "loop" to people, not "cron job".
 </scheduling>
+
+<evals>
+## Measure an agent before you change it
+A change to an agent's prompt, skills, tools or model is a guess until a score
+says otherwise. With the `evals` flag on, load the `kortix-evals` skill first:
+score a baseline, make one change, score again (`kortix evals compare`). Keep
+the change only when more tasks pass and none gets worse; say the score in the
+CR. Two models or prompts compare the same way. People see jobs in Customize →
+Evals. Flag off: say Evals exists behind it and offer to turn it on; do not
+build a scoring system of your own.
+</evals>
 
 <runtime>
 ## The session runtime: pi
@@ -227,7 +245,6 @@ agents:
     mode: primary                         # primary | subagent | all
     prompt_file: agents/kortix.md         # or prompt: "…"
     permission: { bash: { "git push --force *": ask, "*": allow } }
-    workspace: { project_repository: true }
     tools: "*"                            # "*" is every name; `all` is the same
     skills: "*"                           # omitted = none, Kortix skills too
     subagents: [researcher]
@@ -235,7 +252,7 @@ agents:
     extensions: [audit]
     connectors: "*"
     secrets: [ORDERS_API_KEY]
-    kortix_permissions: [workspace.read, workspace.gitops.push]
+    kortix_permissions: [workspace.read, workspace.gitops.read, workspace.gitops.push]
   researcher:
     mode: subagent
     prompt: Research the question. Cite every source.

@@ -44,6 +44,7 @@ import { isPlatformAdmin } from '../../shared/platform-roles';
 import { deleteManagedProjectRepo, purgeProjectConnectors } from '../lib/project-deletion';
 import { accountRolesForUser } from '../../iam/read-models';
 import { newWorkspaceCallerDenial } from '../new-workspace';
+import { newWorkspaceCallerOf } from '../lib/new-workspace-caller';
 import {
   asWorkspaceId,
   closeWorkspace,
@@ -166,7 +167,7 @@ const patchFeatureFlagHandler = async (c: any) => {
   // Archived projects are read-only: reject BEFORE the write. The old order
   // (update, then 404 on archived) committed the metadata mutation anyway.
   if (loaded.row.status === 'archived') return c.json({ error: 'Not found' }, 404);
-  // An internal-only flag (`workspace_volume`) changes what
+  // An internal-only flag (`catalogHidden`; none today) changes what
   // the platform records, so Kortix decides it: only a platform operator
   // writes it, never a project admin and never an agent session. An operator
   // acting in a customer project through impersonation passes (`userId`
@@ -419,12 +420,7 @@ export function registerProjectSettingsRoutes(): void {
       const record = await getWorkspace(workspaceId);
       const role = record ? (await accountRolesForUser(userId)).get(record.accountId) : undefined;
       if (!record || !role) return c.json({ error: 'Workspace not found', code: 'workspace_not_found' }, 404);
-      const denial = newWorkspaceCallerDenial({
-        userId,
-        email: (c.get('userEmail') as string | undefined) || null,
-        authType: c.get('authType') as string | undefined,
-        scopedCredential: Boolean(c.get('tokenProjectId')) || isProjectSessionPrincipal(c),
-      });
+      const denial = newWorkspaceCallerDenial(newWorkspaceCallerOf(c));
       if (denial) return c.json(denial.body as never, denial.status as 403);
       if (role !== 'owner' && role !== 'admin') return c.json({ error: 'Owner or admin role required' }, 403);
       let target: Awaited<ReturnType<typeof prepareWorkspaceSetup>>;
@@ -626,20 +622,7 @@ export function registerProjectSettingsRoutes(): void {
       // Floor 'read'; project.settings.write is the gate below.
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
-      // A session-bound or agent-grant token may not flip a project-wide
-      // provider pin, whatever its kortix_permissions: it reroutes every new
-      // session in the project, and the agent that wants a different runtime has
-      // the per-request `provider` on session create instead. No grant unlocks
-      // this (agent_session_forbidden); the web UI and a human's PAT pass.
-      if (isProjectSessionPrincipal(c)) {
-        return c.json(
-          {
-            error: 'Agent sessions cannot change the workspace sandbox provider — ask a person to change it in Customize → Settings → Sandbox',
-            code: 'agent_session_forbidden',
-          },
-          403,
-        );
-      }
+      // project.settings.write decides, for a person and an agent session alike.
       await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE);
 
       // Route the change through the durable prepare→verify→activate workflow.
@@ -739,18 +722,7 @@ export function registerProjectSettingsRoutes(): void {
       const body = await readJsonObject(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
-      // Same guard as the sandbox-provider pin: a session-bound or agent-grant
-      // token may not flip a project-wide delivery behavior, whatever its
-      // kortix_permissions. No grant unlocks this (agent_session_forbidden).
-      if (isProjectSessionPrincipal(c)) {
-        return c.json(
-          {
-            error: 'Agent sessions cannot change the workspace default reasoning effort — ask a person to change it in Settings',
-            code: 'agent_session_forbidden',
-          },
-          403,
-        );
-      }
+      // project.settings.write decides, for a person and an agent session alike.
       await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE);
       // Archived projects are read-only: reject BEFORE the write.
       if (loaded.row.status === 'archived') return c.json({ error: 'Not found' }, 404);

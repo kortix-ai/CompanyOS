@@ -25,11 +25,17 @@ export interface ForwardRequest {
   upstreamPort: number;
   sandboxAuthored: boolean;
   promptDelivery: boolean;
+  /** The two turn predicates were computed ONCE in forward-to-sandbox.ts; the
+   *  retry loop's env-sync gate reads that value instead of re-evaluating
+   *  `isTurnStartEnvSync` over the unchanged port/method/path every attempt. */
+  turnStartEnvSync: boolean;
   serviceKey: SandboxRecord['serviceKey'];
   isSseEventStreamRequest: boolean;
   prefetchedIngress: ReturnType<typeof resolveSandboxIngress> | null;
   promptDedupeKey: string | null;
   turnIdentity: SandboxTurnIdentity | null;
+  /** The person who wrote the prompt the API forwards (`postPrompt`), else null. Only the API sets it. */
+  promptAuthor?: string | null;
   turn: TurnLifecycle;
 }
 

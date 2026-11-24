@@ -32,6 +32,30 @@ describe('subscriptionUsageFromHeaders', () => {
     expect(usage?.windows[0]).toEqual({ id: 'five_hour', window_minutes: 300, used_percent: 100, resets_at: null });
   });
 
+  // Characterization (KRTX-4484): the header reader keeps the provider's own
+  // window order — a Codex response names `primary` then `secondary`, and the
+  // gateway relays them in that order even when the secondary window is the
+  // shorter one. Only the readers that shape a body (the provider's usage
+  // endpoint, Claude's nameless headers) sort shortest first (KRTX-4484
+  // rework review, item 1: no wire may reorder).
+  test('the header reader keeps the provider window order a Codex response names', () => {
+    const usage = subscriptionUsageFromHeaders(new Headers({
+      'x-codex-primary-used-percent': '8',
+      'x-codex-primary-window-minutes': '10080',
+      'x-codex-secondary-used-percent': '91',
+      'x-codex-secondary-window-minutes': '300',
+    }), NOW);
+    expect(usage).toEqual({
+      windows: [
+        { id: 'weekly', window_minutes: 10080, used_percent: 8, resets_at: null },
+        { id: 'five_hour', window_minutes: 300, used_percent: 91, resets_at: null },
+      ],
+      limited: false,
+      observed_at: '2026-11-04T14:00:00.000Z',
+      source: 'response',
+    });
+  });
+
   test('a Claude response names its unified windows; utilization is a fraction', () => {
     const usage = subscriptionUsageFromHeaders(new Headers({
       'anthropic-ratelimit-unified-status': 'allowed',
@@ -59,6 +83,17 @@ describe('subscriptionUsageFromHeaders', () => {
     }), NOW);
     expect(usage?.limited).toBe(true);
     expect(usage?.windows[0]?.used_percent).toBe(100);
+  });
+
+  test('a full Opus weekly window in Claude headers stops Opus only: the login is not limited', () => {
+    const usage = subscriptionUsageFromHeaders(new Headers({
+      'anthropic-ratelimit-unified-status': 'allowed',
+      'anthropic-ratelimit-unified-5h-utilization': '0.2',
+      'anthropic-ratelimit-unified-7d-utilization': '0.3',
+      'anthropic-ratelimit-unified-7d_opus-utilization': '1.0',
+    }), NOW);
+    expect(usage?.windows.find((window) => window.id === '7d_opus')?.used_percent).toBe(100);
+    expect(usage?.limited).toBe(false);
   });
 
   test('a response without usage headers yields null', () => {

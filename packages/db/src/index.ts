@@ -7,6 +7,7 @@ export * as schema from './schema';
 export {
   // Schema namespace
   kortixSchema,
+  contactForms,
   salesEventOutbox,
   usedRefreshTokens,
   cliDeviceGrants,
@@ -41,8 +42,10 @@ export {
   auditEvents,
   auditEventsAll,
   auditArchiveChunks,
+  auditArchiveParts,
   auditSessionSequences,
   usageEvents,
+  gatewayIdempotencyReplays,
   gatewayRequestLogs,
   gatewayApiKeys,
   gatewayBudgets,
@@ -67,6 +70,8 @@ export {
   accountSecretResources,
   accountSecretGrants,
   sessionProviderSecretPools,
+  llmCredentialBackfill,
+  legacyCredentialBackfill,
   projectSessionSecretHandles,
   projectSecretHandleStatusEnum,
   projectSecretConsumerEnum,
@@ -78,6 +83,7 @@ export {
   projectTriggerEventPolls,
   projectTriggerSessionAccessGrants,
   projectTriggerExecutions,
+  projectTriggerAdmissions,
   projectMonitorEvents,
   projectMonitorBoxes,
   sessionLifecycleCommands,
@@ -95,12 +101,19 @@ export {
   chatUserIdentities,
   projectSessions,
   projectSessionGroups,
+  projectSessionGroupMembers,
   projectSpaces,
   projectSpaceLinks,
   projectSpaceMembers,
   projectSpaceWatchers,
   projectSpaceEvents,
   projectGoals,
+  evalJobs,
+  evalTrials,
+  evalTrialWorkspaces,
+  calendarItems,
+  calendarItemPeople,
+  calendarComments,
   projectGoalEvents,
   projectSpaceKindEnum,
   projectSpaceVisibilityEnum,
@@ -185,6 +198,7 @@ export {
   sessionPeerMessages,
   sessionTasks,
   // Artifacts: published HTML pages (flag artifacts)
+  artifactFolders,
   artifacts,
   artifactCommentThreads,
   artifactComments,
@@ -222,6 +236,7 @@ export {
   appDeploymentEvents,
   sessionPendingQuestions,
   sessionPendingPermissions,
+  sessionColleagueAccess,
   yoloMemberTokens,
   stripeWebhookEventsProcessed,
   // Tunnel
@@ -355,6 +370,7 @@ export type { AgentGrant, StoredAgentGrant, StoredKeyScopes, ArtifactCommentMent
 export { readStoredAgentGrant } from './schema/kortix';
 export type { AccountBrandingRecord, DriveVolumeMoveRecord } from './schema/kortix';
 export type { MemoryThreadLoadLayer } from './schema/kortix';
+export type { ProjectSpaceTabRecord } from './schema/kortix';
 export type { ProjectGoalCriterion, ProjectGoalSessionRef, ProjectGoalVerification } from './schema/kortix';
 export type { SecretEgressPolicy, SecretEgressRule, SecretInjectionSlot } from './schema/kortix';
 
@@ -366,8 +382,6 @@ export type {
   TunnelPermissionScope,
 } from './schema/kortix';
 
-// Public tables
-export { apiKeys } from './schema/public';
 
 export type {
   Account,
@@ -392,9 +406,7 @@ export type {
   NewSandbox,
   SessionSandbox,
   NewSessionSandbox,
-  ApiKey,
   CreditAccount,
-  NewApiKey,
   SandboxSelect,
   KortixApiKey,
   NewKortixApiKey,

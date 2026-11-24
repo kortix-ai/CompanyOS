@@ -11,6 +11,7 @@ import { OpenAPIHono, z, type RouteConfig } from '@hono/zod-openapi';
 import { ErrorEnvelopeSchema } from '@kortix/api-contract';
 import type { Env } from 'hono';
 import { Scalar } from '@scalar/hono-api-reference';
+import { PUBLIC_OPERATIONS } from '../shared/openapi-public-operations';
 import { computeEtag, etagMatches } from '../shared/http-cache';
 
 /** Permissive error envelope — matches the platform's `{error,message,status}` 404 shape. */
@@ -146,6 +147,25 @@ export function makeOpenApiApp<E extends Env = Env>() {
  * RFC-7644 standard surface IdP admins legitimately introspect.
  */
 export const INTERNAL_SPEC_PREFIXES = ['/v1/admin', '/v1/ops'] as const;
+
+/** Give every listed public operation `security: []`, the OpenAPI "no auth" marker. */
+export function markPublicOperations<T extends { paths?: Record<string, unknown> }>(
+  doc: T,
+  publicOperations: ReadonlySet<string> = PUBLIC_OPERATIONS,
+): T {
+  if (!doc.paths) return doc;
+  const paths: Record<string, unknown> = {};
+  for (const [path, item] of Object.entries(doc.paths)) {
+    const marked: Record<string, unknown> = {};
+    for (const [method, operation] of Object.entries(item as Record<string, unknown>)) {
+      const op = operation as Record<string, unknown>;
+      marked[method] =
+        !op.security && publicOperations.has(`${method} ${path}`) ? { ...op, security: [] } : operation;
+    }
+    paths[path] = marked;
+  }
+  return { ...doc, paths };
+}
 
 /**
  * Drop any path whose key equals an internal prefix or sits under it
@@ -305,7 +325,9 @@ export function mountOpenApiDocs(app: OpenAPIHono<any, any, any>, version: strin
   let cachedSpec: { body: string; etag: string } | undefined;
   app.get('/v1/openapi.json', (c) => {
     if (!cachedSpec) {
-      const body = JSON.stringify(restoreLegacyParamNames(markWorkspaceAliases(filterSpecPaths(buildSpec(version)))));
+      const body = JSON.stringify(
+        markPublicOperations(restoreLegacyParamNames(markWorkspaceAliases(filterSpecPaths(buildSpec(version))))),
+      );
       cachedSpec = { body, etag: computeEtag(body) };
     }
     c.header('ETag', cachedSpec.etag);
@@ -337,7 +359,7 @@ export function mountOpenApiDocs(app: OpenAPIHono<any, any, any>, version: strin
         {
           name: 'workspaces',
           description:
-            'The canonical workspace API. A workspace is one company’s Kortix: its members, roles, billing, secrets, agents and sessions. Its id is `workspace_id` (equal to `project_id`). Canonical paths take the workspace id only; an account id, an unknown id or a workspace you cannot read answers 404 `workspace_not_found`. The legacy `/v1/projects` and `/v1/accounts/{accountId}` names stay served permanently and accept either id.',
+            'The canonical workspace API. A workspace is one company’s Kortix: its members, roles, billing, secrets, agents and sessions. Its id is `workspace_id` (equal to `project_id`). Canonical paths take the workspace id only; an account id or an unknown id answers 404 `workspace_not_found`, and a workspace you cannot read answers 403 `workspace_access_denied` (ask for access with `POST /v1/workspaces/{workspaceId}/access-requests`). The legacy `/v1/projects` and `/v1/accounts/{accountId}` names stay served permanently and accept either id.',
         },
       ],
     });

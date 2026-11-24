@@ -29,7 +29,9 @@ export async function resolveProjectAccount(c: Context<AppEnv>, body?: Record<st
   // A workspace-bound key with no account named acts in its own workspace's
   // account (the fence's `reach: 'credential'`), never the person's first one.
   const bound = c.get('tokenProjectId') ? (c.get('accountId') as string | undefined) : undefined;
-  const scope = await resolveRequestedProjectAccount(userId, requested ?? bound ?? null);
+  // A service account acts in the account its credential belongs to, never another.
+  const serviceAccountOf = c.get('authType') === 'service_account' ? (c.get('accountId') ?? '') : null;
+  const scope = await resolveRequestedProjectAccount(userId, requested ?? bound ?? null, serviceAccountOf);
   c.set('accountId', scope.accountId);
   return scope;
 }
@@ -52,7 +54,7 @@ export async function assertProjectCapability(
   action: string,
   // Optional per-OBJECT narrowing: when supplied, the verdict is additionally
   // intersected with the object grants for this specific agent/skill.
-  resource?: { type: 'agent' | 'skill'; id: string },
+  resource?: { type: 'agent' | 'skill' | 'trigger'; id: string },
 ): Promise<void> {
   if (isRepositoryProjectAction(action)) {
     await assertAgentSessionWorkspaceAllowsRepository(c, accountId, projectId);

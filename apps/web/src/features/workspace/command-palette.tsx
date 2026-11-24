@@ -21,8 +21,8 @@ import {
   CommandItem,
   CommandList,
   CommandShortcut,
+  useCommandState,
 } from '@kortix/ui/command';
-import { useCommandState } from 'cmdk';
 import { EntityAvatar } from '@kortix/ui/entity-avatar';
 import { AgentMark } from '@kortix/ui/internal/components/agent-mark';
 import { FadedScrollArea } from '@kortix/ui/faded-scroll-area';
@@ -110,9 +110,8 @@ import {
   translateMenuItem,
 } from '@/lib/menu-registry';
 import { track } from '@/lib/track';
-import { useProjectFeatureFlags } from '@kortix/ui/internal/lib/use-project-feature-flags';
 import { cn, uiRoutes } from '@kortix/ui';
-import { DEFAULT_WALLPAPER_ID } from '@kortix/ui/theme';
+import { DEFAULT_WALLPAPER_ID, getSelectableWallpaper } from '@kortix/ui/theme';
 import { hubTarget, openAccountPanel } from '@kortix/ui/internal/stores/account-panel-store';
 import { workspaceSettingsPath } from '@kortix/shared/workspace-settings';
 import { useChatSendStore } from '@kortix/ui/internal/stores/chat-send-store';
@@ -156,8 +155,10 @@ import {
   useRuntimeConnectionStore,
   useRuntimeProviders,
   useVisibleAgents,
+  useFeatureFlags,
 } from '@kortix/sdk/react';
-import { capitalizeWords, formatRelativeTime } from '@kortix/shared';
+import { agentDisplayName, capitalizeWords, formatRelativeTime } from '@kortix/shared';
+import { InlineCodeText } from '@kortix/ui/markdown';
 import {
   ArrowDownIcon as ArrowDown,
   ArrowUpIcon as ArrowUp,
@@ -237,8 +238,8 @@ function sanitizeCmdkValue(value: string): string {
  *
  * **This is also the row's cmdk selection identity**, which cmdk requires to
  * be unique — two rows sharing a `value` are both marked `aria-selected` and
- * Enter always fires the first one. cmdk 0.2.1 (the installed version, checked
- * against `node_modules/cmdk/dist/index.d.ts`) has no separate `keywords` prop
+ * Enter always fires the first one. The command core (`@kortix/ui/command`, a
+ * port of cmdk 0.2.1) has no separate `keywords` prop
  * to move the search text onto, and `CommandDialog` in `packages/ui/src/primitives/command`
  * forwards neither `filter` nor `shouldFilter`, so the value is the only lever.
  * Uniqueness therefore rests on the curated text itself, which is safe because
@@ -527,11 +528,11 @@ function FileSearchPage({
                 value={sanitizeCmdkValue(`content ${filePath} ${match.lines} ${match.line_number}`)}
                 onSelect={() => onSelect(filePath, match.line_number)}
               >
-                <Hash className="text-muted-foreground/40 h-3.5 w-3.5 shrink-0" />
+                <Hash className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
                 <span className="text-muted-foreground w-8 shrink-0 text-right text-xs tabular-nums">
                   {match.line_number}
                 </span>
-                <span className="text-muted-foreground/60 flex-1 truncate font-mono text-sm">
+                <span className="text-muted-foreground flex-1 truncate font-mono text-sm">
                   {(match.lines || '').trim()}
                 </span>
               </CommandItem>
@@ -553,7 +554,7 @@ function FileSearchPage({
           <FileText className="text-muted-foreground size-4 shrink-0" />
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
             <span className="shrink-0 text-sm font-medium">{item.name}</span>
-            <span className="text-muted-foreground/35 min-w-0 flex-1 truncate font-mono text-xs">
+            <span className="text-muted-foreground min-w-0 flex-1 truncate font-mono text-xs">
               {item.path}
             </span>
           </div>
@@ -635,7 +636,7 @@ function ChangeRequestsPage({
             #{cr.number}
           </span>
           <span className="flex-1 truncate text-sm">{cr.title}</span>
-          <span className="text-muted-foreground/40 max-w-[140px] shrink-0 truncate font-mono text-xs">
+          <span className="text-muted-foreground max-w-[140px] shrink-0 truncate font-mono text-xs">
             {cr.base_ref}
           </span>
         </CommandItem>
@@ -776,7 +777,7 @@ function FeatureFlagsPage({
             <Flask className="text-muted-foreground size-4 shrink-0" />
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
               <span className="truncate text-sm">{feature.name}</span>
-              <span className="text-muted-foreground/40 truncate font-mono text-xs">
+              <span className="text-muted-foreground truncate font-mono text-xs">
                 {feature.key}
               </span>
             </div>
@@ -786,7 +787,7 @@ function FeatureFlagsPage({
               <span
                 className={cn(
                   'shrink-0 text-xs font-medium tabular-nums',
-                  feature.enabled ? 'text-primary/70' : 'text-muted-foreground/40',
+                  feature.enabled ? 'text-primary/70' : 'text-muted-foreground',
                 )}
               >
                 {feature.enabled ? 'On' : 'Off'}
@@ -868,8 +869,9 @@ export function CommandPalette() {
   } = useInterfaceTheme();
   const { preview: previewInterfaceTheme, commit: commitThemePreview } =
     useInterfaceThemePreview(themeChoice);
+  // A retired stored id renders the default, so the default is the active row.
   const activeWallpaperId = useUserPreferencesStore(
-    (s) => s.preferences.wallpaperId ?? DEFAULT_WALLPAPER_ID,
+    (s) => getSelectableWallpaper(s.preferences.wallpaperId ?? DEFAULT_WALLPAPER_ID).id,
   );
   const panelMode = useUserPreferencesStore((s) => s.preferences.panelMode ?? 'easy');
   const conversationDensity = useUserPreferencesStore(
@@ -894,10 +896,9 @@ export function CommandPalette() {
    * the palette strictly weaker than the mouse: the sidebar switcher
    * (`workspace-menu-section.tsx`) already fans out over every account, so a
    * workspace in a second account was reachable by trackpad and invisible to
-   * ⌘K. There is no single unscoped call that returns everything — `GET
-   * /workspaces` with no `account_id` resolves server-side to ONE default
-   * account (apps/api `resolveProjectAccount`) — so it is one request per
-   * account, exactly as the sidebar does it.
+   * ⌘K. So it is one request per account, exactly as the sidebar does it
+   * (an unscoped `GET /projects` also lists every account, but under a key
+   * the sidebar does not share).
    *
    * Same `qk.projects.list(accountId)` keys and same `contract('inventory')`
    * as the sidebar, so the two controls share cache entries and this costs no
@@ -981,15 +982,15 @@ export function CommandPalette() {
     (session) => session.session_id === currentSessionId,
   );
 
-  // The registry's `requiresFlag` gate. One primitive (`useFeatureFlag`, via
-  // `useProjectFeatureFlags`) decides for every surface, so a palette entry can
-  // never survive a flag its rail item does not. Fail-closed: unresolved detail
-  // ⇒ every flag reads false.
+  // The registry's `requiresFlag` gate. One primitive (`useFeatureFlags`, the
+  // multi-flag half of `useFeatureFlag`) decides for every surface, so a
+  // palette entry can never survive a flag its rail item does not. Fail-closed:
+  // unresolved detail ⇒ every flag reads false.
   // `projectFlags`, not `featureFlags` — the SDK's `featureFlags` is the
   // DEPLOYMENT flag set (build-time capabilities like `enableProjects`), a
   // different concept from the
   // per-project feature flags this gates on.
-  const { flags: projectFlags } = useProjectFeatureFlags(open ? projectId : null);
+  const { flags: projectFlags } = useFeatureFlags(open ? projectId : null);
 
   // Memory pages (`chat`): the server's search, at 2 characters
   // or more. Hits of an older query stay in the hook while the next loads, so
@@ -1265,10 +1266,10 @@ export function CommandPalette() {
       // filters in play read the same text.
       //
       // THIS FILTER DECIDES WHAT IS VISIBLE, not cmdk's. Every CommandGroup in
-      // this file passes `forceMount`, and cmdk 0.2.1 propagates a group's
-      // `forceMount` to its items through the group context
-      // (`g = props.forceMount ?? groupContext.forceMount` in
-      // `cmdk/dist/index.mjs`), so cmdk's own scorer never removes one of
+      // this file passes `forceMount`, and the command core (a port of cmdk
+      // 0.2.1, `packages/ui/src/primitives/command-core.tsx`) propagates a
+      // group's `forceMount` to its items through the group context, so its
+      // own scorer never removes one of
       // these rows — it only RANKS them, by scoring the same `value`. That is
       // why a stale keyword here is a wrong ANSWER rather than a wrong order,
       // and why the two can never disagree about which rows exist.
@@ -1285,8 +1286,8 @@ export function CommandPalette() {
   }, [allPaletteItems, hasQuery, debouncedQuery]);
 
   // No `flags` argument any more: Marketplace, Review and Voice were the only
-  // flag-gated rail rows and all three moved to `/workspaces/<id>/config`, whose
-  // own sub-nav composes them. Nothing left in the rail varies by flag.
+  // flag-gated rail rows and all three left the rail. Nothing left in the rail
+  // varies by flag.
   const chromeOffered = useChromeOffered(open);
   const allSettingsGroups = useMemo(
     () => settingsPaletteGroups({ hasProject: !!projectId, chromeOffered }, (key) => tSettingsRail(key as never)),
@@ -1307,7 +1308,9 @@ export function CommandPalette() {
     const q = query.trim().toLowerCase();
     return agents.filter(
       (a) =>
-        (a.name || '').toLowerCase().includes(q) || (a.description || '').toLowerCase().includes(q),
+        (a.name || '').toLowerCase().includes(q) ||
+        (a.title || '').toLowerCase().includes(q) ||
+        (a.description || '').toLowerCase().includes(q),
     );
   }, [agents, query]);
 
@@ -1583,7 +1586,7 @@ export function CommandPalette() {
   /*
    * Warm the destinations the rows on screen can reach.
    *
-   * A palette row can never be an anchor. cmdk 0.2.1 activates a row on Enter
+   * A palette row can never be an anchor. The command core activates a row on Enter
    * by dispatching its own `cmdk-item-select` event — not a DOM click — and
    * `Command.Item` renders a hard-coded div with no `asChild`, so wrapping the
    * row in a `<Link>` leaves keyboard activation dead. Every navigation below
@@ -1926,7 +1929,7 @@ export function CommandPalette() {
   // `router.push`: nothing else discards the App Router route cache across an
   // identity change.
   const performLogout = useCallback((event: React.MouseEvent) => {
-    // `preventDefault` keeps the confirm dialog UP. Radix closes it on click,
+    // `preventDefault` keeps the confirm dialog UP. The alert dialog closes it on click,
     // which left the palette gone, the dialog gone, and the unchanged app on
     // screen for as long as the sign-out took — up to the full step budget when
     // the network is broken — with nothing saying anything was happening.
@@ -2421,12 +2424,12 @@ export function CommandPalette() {
                                 )}
                                 <span className="flex-1">{displayLabel}</span>
                                 {item.id === 'review-changes' && openChangeRequestCount > 0 && (
-                                  <span className="text-muted-foreground/40 text-xs tabular-nums">
+                                  <span className="text-muted-foreground text-xs tabular-nums">
                                     {openChangeRequestCount}
                                   </span>
                                 )}
                                 {submenuPage === 'density' && (
-                                  <span className="text-muted-foreground/40 text-xs">
+                                  <span className="text-muted-foreground text-xs">
                                     {
                                       densityPageOptions.find(
                                         (option) => option.id === conversationDensity,
@@ -2436,7 +2439,7 @@ export function CommandPalette() {
                                 )}
                                 {item.shortcut && <CommandShortcut>{item.shortcut}</CommandShortcut>}
                                 {submenuPage && (
-                                  <ChevronRight className="text-muted-foreground/30 size-3" />
+                                  <ChevronRight className="text-muted-foreground size-3" />
                                 )}
                               </CommandItem>
                               {index === 2 && suggestedSessionIdCopy ? (
@@ -2486,11 +2489,11 @@ export function CommandPalette() {
                               )}
                             </span>
                             {currentAgent && (
-                              <span className="text-muted-foreground/40 text-xs">
+                              <span className="text-muted-foreground text-xs">
                                 {currentAgent.name}
                               </span>
                             )}
-                            <ChevronRight className="text-muted-foreground/30 size-3" />
+                            <ChevronRight className="text-muted-foreground size-3" />
                           </CommandItem>
                           <CommandItem
                             value="suggestion change model llm switch"
@@ -2503,7 +2506,7 @@ export function CommandPalette() {
                               )}
                             </span>
                             {currentModelKey && (
-                              <span className="text-muted-foreground/40 max-w-[160px] truncate text-xs">
+                              <span className="text-muted-foreground max-w-[160px] truncate text-xs">
                                 {allModels.find(
                                   (m) =>
                                     m.providerID === currentModelKey.providerID &&
@@ -2511,7 +2514,7 @@ export function CommandPalette() {
                                 )?.modelName || currentModelKey.modelID}
                               </span>
                             )}
-                            <ChevronRight className="text-muted-foreground/30 size-3" />
+                            <ChevronRight className="text-muted-foreground size-3" />
                           </CommandItem>
                         </>
                       )}
@@ -2538,7 +2541,7 @@ export function CommandPalette() {
                           <Badge variant="kortix" size="sm">
                             {tHardcodedUi.raw('i18nComplete.text071ca2227754')}
                           </Badge>
-                          <ChevronRight className="text-muted-foreground/40 size-3" />
+                          <ChevronRight className="text-muted-foreground size-3" />
                         </CommandItem>
                       )}
                     </CommandGroup>
@@ -2563,7 +2566,7 @@ export function CommandPalette() {
                             <MessageCircle className="size-4 shrink-0" />
                             <span className="flex-1 truncate">{sessionName(session)}</span>
                             <SessionSharedIcon session={session} />
-                            <span className="text-muted-foreground/30 shrink-0 text-xs tabular-nums">
+                            <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
                               {formatRelativeTime(
                                 new Date(sessionLastActivityAt(session)).getTime(),
                               )}
@@ -2592,7 +2595,7 @@ export function CommandPalette() {
                             onSelect={() => handleSelectWorkspace(row.workspace)}
                             trailing={
                               (row.workspace.last_opened_at || row.workspace.updated_at) && (
-                                <span className="text-muted-foreground/30 shrink-0 text-xs tabular-nums">
+                                <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
                                   {formatRelativeTime(
                                     new Date(
                                       row.workspace.last_opened_at || row.workspace.updated_at,
@@ -2644,7 +2647,7 @@ export function CommandPalette() {
                               <Cpu className="size-4" />
                             )}
                             <span className="flex-1">{item.label}</span>
-                            <ChevronRight className="text-muted-foreground/30 size-3" />
+                            <ChevronRight className="text-muted-foreground size-3" />
                           </CommandItem>
                         ))}
                       </CommandGroup>
@@ -2695,7 +2698,7 @@ export function CommandPalette() {
                               )}
                               <span className="flex-1">{displayLabel}</span>
                               {item.id === 'review-changes' && openChangeRequestCount > 0 && (
-                                <span className="text-muted-foreground/40 text-xs tabular-nums">
+                                <span className="text-muted-foreground text-xs tabular-nums">
                                   {openChangeRequestCount}
                                 </span>
                               )}
@@ -2706,7 +2709,7 @@ export function CommandPalette() {
                                 </span>
                               )}
                               {submenuPage && (
-                                <ChevronRight className="text-muted-foreground/30 size-3" />
+                                <ChevronRight className="text-muted-foreground size-3" />
                               )}
                             </CommandItem>
                           );
@@ -2765,7 +2768,7 @@ export function CommandPalette() {
                             {session.session_id === params?.sessionId && (
                               <Check className="text-primary h-3.5 w-3.5 shrink-0" />
                             )}
-                            <span className="text-muted-foreground/40 shrink-0 text-xs tabular-nums">
+                            <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
                               {formatRelativeTime(
                                 new Date(sessionLastActivityAt(session)).getTime(),
                               )}
@@ -2823,7 +2826,7 @@ export function CommandPalette() {
                             onSelect={() => handleSelectWorkspace(row.workspace)}
                             trailing={
                               (row.workspace.last_opened_at || row.workspace.updated_at) && (
-                                <span className="text-muted-foreground/40 shrink-0 text-xs tabular-nums">
+                                <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
                                   {formatRelativeTime(
                                     new Date(
                                       row.workspace.last_opened_at || row.workspace.updated_at,
@@ -2860,7 +2863,7 @@ export function CommandPalette() {
                           <Badge variant="kortix" size="sm">
                             {tHardcodedUi.raw('i18nComplete.text071ca2227754')}
                           </Badge>
-                          <ChevronRight className="text-muted-foreground/40 size-3" />
+                          <ChevronRight className="text-muted-foreground size-3" />
                         </CommandItem>
                       </CommandGroup>
                     )}
@@ -2920,7 +2923,7 @@ export function CommandPalette() {
                         <CommandItem
                           key={agent.name}
                           value={sanitizeCmdkValue(
-                            `agent ${agent.name} ${agent.description || ''}`,
+                            `agent ${agent.name} ${agent.title || ''} ${agent.description || ''}`,
                           )}
                           onSelect={() => handleSelectAgent(agent.name)}
                         >
@@ -2928,11 +2931,11 @@ export function CommandPalette() {
                           <AgentMark slug={agent.name} size={21} />
                           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
                             <span className="truncate text-sm font-medium">
-                              {capitalizeWords(agent.name)}
+                              {agentDisplayName(agent.name, agent.title)}
                             </span>
                             {agent.description && (
-                              <span className="text-muted-foreground/50 truncate text-xs">
-                                {agent.description}
+                              <span className="text-muted-foreground truncate text-xs">
+                                <InlineCodeText text={agent.description} />
                               </span>
                             )}
                           </div>
@@ -2990,7 +2993,7 @@ export function CommandPalette() {
                                 kebab-case, and it doubled the height of a list
                                 that is scanned by name. */}
                             {modelIdAddsInformation(model.modelName, model.modelID) && (
-                              <span className="text-muted-foreground/40 truncate font-mono text-xs">
+                              <span className="text-muted-foreground truncate font-mono text-xs">
                                 {model.modelID}
                               </span>
                             )}
@@ -3109,7 +3112,7 @@ export function CommandPalette() {
                       >
                         <OptionIcon className="text-muted-foreground size-4 shrink-0" />
                         <span className="shrink-0">{option.label}</span>
-                        <span className="text-muted-foreground/60 flex-1 truncate text-xs">
+                        <span className="text-muted-foreground flex-1 truncate text-xs">
                           {option.description}
                         </span>
                         {option.id === conversationDensity && (

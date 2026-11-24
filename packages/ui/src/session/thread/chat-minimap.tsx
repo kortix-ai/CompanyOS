@@ -21,6 +21,7 @@ import {
   nearestDashRow,
   type MinimapItem,
 } from './chat-minimap-items';
+import { prefersReducedMotion } from '../../internal/hooks/use-reduced-motion';
 
 interface ChatMinimapProps {
   turns: SessionLogTurn[];
@@ -162,7 +163,7 @@ export function ChatMinimap({ turns, scrollRef, contentRef }: ChatMinimapProps) 
         scrollEl.getBoundingClientRect().top +
         scrollEl.scrollTop -
         24;
-      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const reduceMotion = prefersReducedMotion();
       scrollEl.scrollTo({ top: Math.max(0, offset), behavior: reduceMotion ? 'auto' : 'smooth' });
     },
     [contentRef, scrollRef],
@@ -233,7 +234,12 @@ export function ChatMinimap({ turns, scrollRef, contentRef }: ChatMinimapProps) 
               onPointerEnter={() => focusRow(row)}
               onFocus={() => focusRow(row)}
               onBlur={() => focusRow(null)}
-              onClick={() => handleJump(item.id)}
+              // The jump shows the message itself, so its preview closes: a preview left
+              // over the transcript hid the very text the reader jumped to.
+              onClick={() => {
+                handleJump(item.id);
+                focusRow(null);
+              }}
             >
               <span
                 aria-hidden

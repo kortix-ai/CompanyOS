@@ -104,6 +104,16 @@ const FAILED_TASK = {
   },
 } satisfies ToolPart;
 
+describe('a failed show renders nothing on any surface (2026-11-16)', () => {
+  const failedShow = { type: 'tool', tool: 'show', callID: 'call-show', state: { status: 'error', input: { url: 'https://example.test/a', title: 'Catalog' }, error: 'type is required' } } as unknown as ToolPart;
+
+  test('panel and inline draw nothing for it; a failed bash still draws its error card', () => {
+    expect(renderPanel(failedShow)).toBe('');
+    expect(renderToStaticMarkup(withProviders(<ToolPartRenderer call={toolCallBlock(failedShow)} sessionId="s1" />))).toBe('');
+    expect(renderPanel(THROWN)).toContain('This step failed');
+  });
+});
+
 describe('an errored task dispatch renders as a dispatch row, not a dead error card', () => {
   test('the child thread stays openable and the failure reason stays visible', () => {
     const html = renderPanel(FAILED_TASK);
@@ -137,7 +147,7 @@ describe('an errored task dispatch renders as a dispatch row, not a dead error c
     expect(html).toContain('The agent stopped before it finished.');
   });
 
-  test('an errored task without a child id keeps the generic error card', () => {
+  test('an errored task without a child id is an agent row that says why', () => {
     const orphan = {
       ...FAILED_TASK,
       state: {
@@ -148,9 +158,54 @@ describe('an errored task dispatch renders as a dispatch row, not a dead error c
     } satisfies ToolPart;
     const html = renderPanel(orphan);
     expect(html).not.toContain('Open full view');
-    // The generic card's own trigger: humanized tool name + "failed".
-    expect(html).toContain('>Task</span>');
-    expect(html).toContain('title="failed"');
+    // The agent row, never the generic "Task failed" card: the reason is on the row.
+    expect(html).toContain('data-slot="agent-chip"');
+    expect(html).toContain('Didn’t start');
+    expect(html).not.toContain('title="failed"');
+  });
+
+  test('a failed named colleague shows its name, not "Agent failed"', () => {
+    const named = {
+      ...FAILED_TASK,
+      tool: 'agent',
+      state: {
+        ...FAILED_TASK.state,
+        input: { name: 'market-scout', session: 'same', prompt: 'Size the demand.', agent: { instructions: 'x', description: 'Demand researcher' } },
+        metadata: {},
+        error: 'A name makes a subagent addressable in its own session: omit session, or omit name.',
+      },
+    } as unknown as ToolPart;
+    const html = renderPanel(named);
+    expect(html).toContain('market-scout');
+    expect(html).toContain('Didn’t start');
+    // The model-facing error stays out of the closed row; the fold has it under Details.
+    expect(html).not.toContain('A name makes a subagent addressable');
+    expect(html).not.toContain('>Agent</span>');
+    const open = renderPanel(named, { defaultOpen: true });
+    expect(open).toContain('couldn’t start this colleague');
+  });
+
+  test('an inline agent spec is named by its role, never "Inline"', () => {
+    const inline = {
+      ...FAILED_TASK,
+      tool: 'agent',
+      state: {
+        status: 'completed',
+        input: { description: 'Size the demand', prompt: 'Size the demand.', session: 'same', agent: { instructions: 'x', description: 'Demand researcher' } },
+        metadata: {},
+        output: 'done',
+      },
+    } as unknown as ToolPart;
+    const html = renderPanel(inline);
+    expect(html).toContain('Demand researcher');
+    expect(html).not.toContain('>Inline<');
+  });
+
+  test('a policy refusal reads as blocked, with who can unblock it', () => {
+    const denied = { ...THROWN, tool: 'workflow', state: { status: 'error', input: {}, error: 'The project policy denies this workflow call.' } } as unknown as ToolPart;
+    const html = renderPanel(denied);
+    expect(html).toContain('Blocked by this project’s policy. Ask a project admin to allow it.');
+    expect(html).not.toContain('failed ·');
   });
 
   test('an errored bash call keeps the generic error card (no child thread)', () => {
@@ -176,7 +231,8 @@ describe('ToolPartRenderer forwards the open props to every branch', () => {
     // Closed — and a real control, not the dead row a dropped prop produced.
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('role="button"');
-    expect(html).not.toContain('ENOENT: no such file or directory');
+    // The closed row names the reason in one line; the full error is in the fold.
+    expect(html).toContain('failed · ENOENT: no such file or directory');
   });
 
   test('an unregistered (MCP) tool opens with defaultOpen — GenericTool gets the prop', () => {
@@ -375,6 +431,26 @@ describe('agent tools never open in the side panel', () => {
 
   test('a failed agent message opens in place too', () => {
     expect(inChat(failed('send_message', { to: 'reviewer', message: 'hi' }))).toContain('aria-expanded');
+  });
+
+  test('the reported failed kortix_schedules follow_up opens in place, never the side panel', () => {
+    const message = 'Missing `text`: what the woken turn reads. Call again with it, e.g. {"action":"follow_up","in":"4d"}';
+    const result = JSON.stringify({ ok: false, tool: 'kortix_schedules', action: 'follow_up', card: { title: 'What should the follow-up check?', subtitle: message, status: 'error' }, error: { kind: 'invalid', message } });
+    const part = { type: 'tool', tool: 'kortix_schedules', callID: 'c-sched', state: { status: 'error', input: { action: 'follow_up', in: '4d' }, error: result, time: { start: 1, end: 2 } } } as unknown as ToolPart;
+    const html = inChat(part);
+    // One static line: the plain title, nothing to expand, no panel glyph, no click target.
+    expect(html).toContain('The agent left out a required detail');
+    expect(html).not.toContain('-scale-x-100');
+    expect(html).not.toContain('aria-expanded');
+    expect(html).not.toContain('role="button"');
+  });
+
+  test('every My Kortix platform tool opens in place, done or failed', () => {
+    for (const tool of ['kortix_schedules', 'kortix_agents', 'kortix_sessions', 'kortix_connectors', 'kortix_people', 'kortix_access', 'kortix_usage', 'kortix_change_requests', 'kortix_memory']) {
+      const output = JSON.stringify({ ok: true, tool, action: 'list', card: { title: 'Listed', status: 'done', rows: [{ title: 'one' }] } });
+      const part = { type: 'tool', tool, callID: `c-${tool}`, state: { status: 'completed', input: { action: 'list' }, output, time: { start: 1, end: 2 } } } as unknown as ToolPart;
+      expect(inChat(part)).not.toContain('-scale-x-100');
+    }
   });
 
   test('an ordinary tool still opens in the side panel', () => {

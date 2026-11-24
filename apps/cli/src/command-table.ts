@@ -144,11 +144,14 @@ export const TIERS: readonly CommandTier[] = [
       {
         title: 'Author & ship',
         commands: [
+          { name: 'plan', args: '[--json]', blurb: 'Read this repository: stack, env names and classes, integrations, Kortix state (read-only)' },
+          { name: 'onboard', args: '--yes [--json]', blurb: "Make kortix.yaml real: ship, secrets, webhooks, Slack, connectors, images, doctor" },
+          { name: 'templates', args: '<ls|show|add|onboard|doctor>', blurb: 'Add a hand-approved set of agents and triggers to this repository' },
           { name: 'ship', blurb: 'Create the cloud workspace (first run) + push your code' },
           { name: 'validate', blurb: "Statically validate this workspace's kortix.yaml" },
           {
             name: 'doctor',
-            args: '[--no-session]',
+            args: '[--no-session|--loops [--fix]]',
             blurb: 'End-to-end health check: auth, workspace, session, agent reply',
           },
           { name: 'schema', args: '[--url]', blurb: 'Print the canonical kortix.yaml JSON Schema' },
@@ -212,11 +215,6 @@ export const TIERS: readonly CommandTier[] = [
             args: '<subcommand>',
             blurb: 'Deploy Apps (sites and servers) with stable Kortix URLs',
           },
-          {
-            name: 'marketplace',
-            args: '<subcommand>',
-            blurb: 'Search, show, install, and uninstall workspace marketplace skills',
-          },
         ],
       },
       {
@@ -264,6 +262,18 @@ export const TIERS: readonly CommandTier[] = [
             args: '<subcommand>',
             blurb: 'Work a goal through the Goals API until a verifier passes every criterion: transition, progress, verify, verdict, handover, check, ls, status',
             featureFlag: 'goals',
+          },
+          {
+            name: 'evals',
+            args: '<subcommand>',
+            blurb: 'Run agents on Harbor-format tasks and score them: init, suites, tasks, run, jobs, show, compare, rerun, cancel',
+            featureFlag: 'evals',
+          },
+          {
+            name: 'calendar',
+            args: '<subcommand>',
+            blurb: 'The shared calendar: dated items with the people on them and comments; @mention a person to ask them: ls, add, show, edit, done, comment, rm',
+            featureFlag: 'calendar',
           },
           {
             name: 'artifacts',

@@ -69,9 +69,27 @@ export interface KortixGrantor {
 export interface KortixToolError {
   /** `denied`: the person lacks the permission. `not_found`, `invalid`: the input. `failed`: anything else. */
   kind: 'denied' | 'not_found' | 'invalid' | 'failed';
+  /** For the model: what went wrong and how to call again. The card never shows it. */
   message: string;
+  /** One plain line for the person, when there is something they can read or do. The card's subtitle. */
+  note?: string;
   /** For `denied`: the people who can grant it, when the tool could read them. */
   grantors?: KortixGrantor[];
+}
+
+/** The card title of a failed call that left out or garbled an argument: the model retries, the person needs nothing. */
+export const KORTIX_INCOMPLETE_CALL_TITLE = 'The agent left out a required detail';
+
+/**
+ * The person's title of a failed call. A tool's argument check is titled as a
+ * question to the model ("Which agent?", "What should the follow-up check?")
+ * or "Unknown action"; the person reads that it was incomplete instead. Every
+ * other title already says what did not happen.
+ */
+export function kortixFailureTitle(title: string, kind: KortixToolError['kind']): string {
+  if (kind !== 'invalid') return title;
+  const trimmed = title.trim();
+  return trimmed.endsWith('?') || trimmed === 'Unknown action' ? KORTIX_INCOMPLETE_CALL_TITLE : title;
 }
 
 export interface KortixToolResult {
@@ -119,9 +137,19 @@ export interface WorkflowRunAgent {
   structured?: true;
   /** 1 for the first attempt; a stalled agent restarts with the same prompt (Claude: `(retry n)`). */
   attempt?: number;
-  /** Epoch ms. */
+  /** Epoch ms: when the current attempt started (a restart starts a new clock). */
   startedAt?: number;
   endedAt?: number;
+  /** `stopped` by a person (its row's Stop, or the run's Stop): not a failure, and not to run again unless they ask. */
+  stoppedBy?: 'person';
+  /**
+   * While it runs: when its session log last changed (epoch ms), read at most
+   * once a minute. A tool call that runs without writing is quiet; the card
+   * says "Quiet for N min" once that is long.
+   */
+  quietSince?: number;
+  /** The sessions of its earlier attempts (a restart or a stall retry), oldest first: their spend is the run's too. */
+  earlierSessionIds?: string[];
 }
 
 export interface WorkflowRunMetadata {
@@ -154,4 +182,13 @@ export interface WorkflowRunMetadata {
    * `pause`): no new agent starts until `resume`; running agents finish.
    */
   paused?: boolean;
+  /** The approval question is open: no run exists yet, so nothing can be paused or stopped. */
+  awaitingApproval?: true;
+  /**
+   * The person said no at the approval, so no agent started (`status: 'stopped'`):
+   * `cancel` (Cancel) or `chat` (Answer in chat instead).
+   */
+  declined?: 'cancel' | 'chat';
+  /** How long the approval question waited for the person (ms): waiting time, which a turn's "Worked for" leaves out. */
+  approvalWaitMs?: number;
 }

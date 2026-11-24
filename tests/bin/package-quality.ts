@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { rejectFocusedTests } from './reject-focused-tests';
 
 const root = resolve(import.meta.dir, '../..');
 const skipSdkTests = process.env.KORTIX_PACKAGE_SKIP_SDK_TESTS === '1';
@@ -14,8 +15,8 @@ const GROUP_DIRS: Record<string, string> = {
   kortixd: 'apps/kortix-sandbox-agent-server',
 };
 const group = process.env.KORTIX_PACKAGE_GROUP || null;
-if (group !== null && group !== 'rest' && !GROUP_DIRS[group]) {
-  throw new Error(`unknown package group ${group}: use api, cli, kortixd or rest`);
+if (group !== null && group !== 'rest' && group !== 'publish' && !GROUP_DIRS[group]) {
+  throw new Error(`unknown package group ${group}: use api, cli, kortixd, publish or rest`);
 }
 const inGroup = (dir: string) =>
   group === null ||
@@ -25,6 +26,14 @@ const repoChecks = group === null || group === 'rest';
 /** Run `task` only when `dir` is in this group. */
 const when = (dir: string, task: () => Promise<unknown>): Promise<unknown> =>
   inGroup(dir) ? task() : Promise.resolve();
+// `publish` holds the checks of the npm packages (@kortix/sdk, @kortix/ui,
+// @kortix/llm-catalog, @kortix/agent-tunnel): typecheck, lint, build, pack and
+// the install smokes. In the `rest` lane they ran in waves before the
+// workspace tests: 9.4 of its 16.9 min (run 41627896638, 2026-11-03).
+const publishChecks = group === null || group === 'publish';
+/** Run `task` only in the `publish` group. */
+const whenPublish = (task: () => Promise<unknown>): Promise<unknown> =>
+  publishChecks ? task() : Promise.resolve();
 
 /**
  * Runner controls that must survive the hermetic scrub below.
@@ -98,33 +107,6 @@ async function runAll(tasks: Promise<unknown>[]): Promise<void> {
     (result): result is PromiseRejectedResult => result.status === 'rejected',
   );
   if (failure) throw failure.reason;
-}
-
-async function rejectFocusedTests(): Promise<void> {
-  // git grep, never rg: GitHub's runner images ship no ripgrep. It searches
-  // tracked and untracked files minus .gitignore (no node_modules), and exits
-  // 1 on no match, like rg.
-  // A pathspec `*` crosses directories, so `apps/*.test.ts` is recursive.
-  const extensions = ['spec.ts', 'test.ts', 'test.tsx', 'test.mts', 'test.js'];
-  const child = Bun.spawn(
-    [
-      'git',
-      'grep',
-      '--untracked',
-      '-n',
-      '-E',
-      String.raw`(^|[^A-Za-z0-9_$.])(describe|test|it)\.only\(`,
-      '--',
-      ...['apps', 'packages', 'tests'].flatMap((dir) => extensions.map((ext) => `${dir}/*.${ext}`)),
-    ],
-    { cwd: root, stdout: 'pipe', stderr: 'inherit' },
-  );
-  const output = await new Response(child.stdout).text();
-  const code = await child.exited;
-  if (code === 1) return;
-  if (code !== 0) throw new Error(`focused-test scan exited with code ${code}`);
-  process.stderr.write(output);
-  throw new Error('focused test (.only) committed');
 }
 
 async function verifyPublishablePackage(directory: string, build = true): Promise<void> {
@@ -240,7 +222,7 @@ if (repoChecks) {
       './tests/unit/undici-advisory.test.js',
     ]),
   ]);
-  await rejectFocusedTests();
+  await rejectFocusedTests(root);
 }
 // apps/web's download-layout test launches Playwright Chromium. CI installs
 // the browser in the workflow before this lane; a worker sandbox that runs the
@@ -249,11 +231,11 @@ if (repoChecks) {
 // present) and honors PLAYWRIGHT_BROWSERS_PATH, so a CI cache still hits.
 await when('apps/web', () => run(['pnpm', '--dir', 'tests', 'run', 'playwright:install']));
 await runAll([
-  when('packages/sdk', () => run(['pnpm', '--filter', '@kortix/sdk', 'typecheck'])),
-  when('packages/sdk', () => run(['pnpm', '--filter', '@kortix/sdk', 'run', 'smoke:install'])),
-  when('packages/ui', () => run(['pnpm', '--filter', '@kortix/ui', 'typecheck'])),
+  whenPublish(() => run(['pnpm', '--filter', '@kortix/sdk', 'typecheck'])),
+  whenPublish(() => run(['pnpm', '--filter', '@kortix/sdk', 'run', 'smoke:install'])),
+  whenPublish(() => run(['pnpm', '--filter', '@kortix/ui', 'typecheck'])),
   // The apps/web rules (SDK boundary, query keys, icons) over the moved session UI.
-  when('packages/ui', () => run(['pnpm', '--filter', '@kortix/ui', 'lint'])),
+  whenPublish(() => run(['pnpm', '--filter', '@kortix/ui', 'lint'])),
   // Frozen counts (apps/api/eslint.config.mjs): new violations fail, fixed ones must be pruned.
   when('apps/api', () => run(['pnpm', '--filter', 'kortix-api', 'lint'])),
   // The migration file lint (backfill-safe sign-off, CONCURRENTLY, safety header).
@@ -263,16 +245,17 @@ await runAll([
 ]);
 await runAll([
   ...['llm-catalog', 'sdk'].map((directory) =>
-    when(`packages/${directory}`, () => verifyPublishablePackage(directory, false)),
+    whenPublish(() => verifyPublishablePackage(directory, false)),
   ),
-  // @kortix/ui has no earlier build in this lane: build it, stage, dry-pack.
-  when('packages/ui', () => verifyPublishablePackage('ui')),
-  when('packages/agent-tunnel', verifyAgentTunnelCli),
+  whenPublish(verifyAgentTunnelCli),
 ]);
-// @kortix/ui's install smoke stages and packs @kortix/sdk and @kortix/llm-catalog
-// too, so it runs alone: concurrent with the SDK smoke or the stage above, two
-// processes would rewrite and restore the same package.json.
-await when('packages/ui', () => run(['pnpm', '--filter', '@kortix/ui', 'run', 'smoke:install']));
+// @kortix/ui's install smoke builds, stages and packs @kortix/ui itself, so no
+// separate build + dry-pack of @kortix/ui runs before it (that one built
+// @kortix/ui a second time: 1 min 42 s, run 41627896638). It stages and packs
+// @kortix/sdk and @kortix/llm-catalog too, so it runs alone: concurrent with
+// the SDK smoke or the stage above, two processes would rewrite and restore
+// the same package.json.
+await whenPublish(() => run(['pnpm', '--filter', '@kortix/ui', 'run', 'smoke:install']));
 
 // Run two explicit bounded waves. This avoids a generic workspace fan-out while
 // removing idle CPU time between independent load classes. Keep the CLI and

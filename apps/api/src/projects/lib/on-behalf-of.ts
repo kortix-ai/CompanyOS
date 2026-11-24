@@ -27,6 +27,7 @@ import { accountTokens, projectSessions } from '@kortix/db';
 import { config } from '../../config';
 import { db } from '../../shared/db';
 import { membershipExistsSql, membershipRow } from '../../iam/membership-read';
+import { errorMessage } from '../../shared/error-message';
 
 // The request reader `getRequestOnBehalfOf` lives in `middleware/on-behalf-of.ts`.
 // Re-exported here so every importer and mock keeps working.
@@ -124,7 +125,7 @@ export async function resolveSessionOnBehalfOf(input: {
     const metadata = (session.metadata ?? {}) as Record<string, unknown>;
     const parentId = typeof metadata.spawned_by_session === 'string' ? metadata.spawned_by_session : null;
     const [membership, parent] = await Promise.all([
-      membershipRow(input.userId, input.accountId),
+      membershipRow(input.accountId, input.userId),
       parentId
         ? db
             .select({ onBehalfOfUserId: accountTokens.onBehalfOfUserId })
@@ -152,7 +153,7 @@ export async function resolveSessionOnBehalfOf(input: {
   } catch (err) {
     console.warn('[on-behalf-of] mint resolution failed; minting without a human', {
       sessionId: input.sessionId,
-      error: err instanceof Error ? err.message : String(err),
+      error: errorMessage(err),
     });
     return null;
   }

@@ -72,7 +72,7 @@ import { RuntimeIdentityConflictError } from '../../projects/runtime-identity-er
 import { instanceStampMetadata } from '../../projects/instance-scope';
 import { withTimeout, configuredTimeoutMs } from '../../shared/with-timeout';
 import { classifySandboxProvisioningFailure } from './sandbox-provisioning-error';
-import { myKortixAgentGrant } from '../../projects/lib/my-kortix-agent';
+import { myKortixSessionGrant } from '../../projects/surface';
 import { devTunnelStamp } from '../dev-tunnel-stamp';
 import { resolveSessionOnBehalfOf } from '../../projects/lib/on-behalf-of';
 import { agentPrincipalModeFor } from '../../iam/agent-principal';
@@ -202,8 +202,17 @@ export async function mintSessionToken(opts: {
   // The reserved coordinator uses a platform-owned full project grant. It acts
   // as the launching user and never resolves through a project-declared agent
   // or standing service account.
+  // A My Kortix colleague also holds the connectors and secrets a person allowed it.
   const [agentGrant, serviceAccountId] = platformMetaAgent
-    ? [myKortixAgentGrant(), null]
+    ? [
+        await myKortixSessionGrant(opts.sandboxId, {
+          projectId: opts.projectId,
+          repoUrl: opts.gitProject.repoUrl,
+          defaultBranch: opts.gitProject.defaultBranch,
+          manifestPath: opts.gitProject.manifestPath,
+        }),
+        null,
+      ]
     : await Promise.all([
         // Resolve the per-session grant AND the agent's standing-identity
         // service account in parallel. Grant resolution must throw on failure.
@@ -1409,8 +1418,13 @@ async function healMissingSnapshot(
   // and retry once. Capped at one heal per session start.
   if (isSnapshotMissingOnProvider(bgErr) && state.imageInfo && !state.healedStaleSnapshot) {
     state.healedStaleSnapshot = true;
+    // Delete the EXACT snapshot name the session booted — never re-derive it
+    // from the slug (a project template named `default-warm` that disappears
+    // mid-provision would re-resolve to the shared platform default and make
+    // this heal delete the image every tenant's next session boots from;
+    // KRTX-4465, Strix CWE-367).
     await deleteSandboxImage(opts.gitProject, {
-      slug: state.imageInfo.slug,
+      snapshotName: state.imageInfo.snapshotName,
       provider: state.providerName,
     }).catch((err: unknown) =>
       console.warn(

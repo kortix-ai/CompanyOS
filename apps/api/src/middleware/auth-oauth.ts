@@ -6,6 +6,10 @@ import { enforceTokenProjectScope } from './auth-scope';
 import { setSentryUser } from '../lib/sentry';
 import { setContextField } from '../lib/request-context';
 
+/** The fix for a bound OAuth token's fence refusal: a new consent. */
+export const OAUTH_BOUND_REMEDY =
+  'This connection reaches the one workspace chosen when it was connected: reconnect the app and choose All my workspaces to reach every workspace you can open';
+
 /**
  * Sign in with Kortix: resolve a `kortix_oat_` OAuth access token to the user
  * who granted it. Shared by supabaseAuth and combinedAuth so both middlewares
@@ -29,16 +33,27 @@ export async function applyOAuthAccessTokenPrincipal(c: Context, token: string):
   }
   // A token whose consent named a workspace reaches that workspace only: the
   // same fence a workspace key passes (middleware/workspace-binding.ts). An
-  // unbound token (issued before 2026-11-06) acts as the person, as before.
+  // unbound token (the consent chose "All my workspaces", or it was issued
+  // before 2026-11-06) acts as the person, as before.
   if (result.boundWorkspaceId) {
-    await enforceTokenProjectScope(c, result.boundWorkspaceId, { principal: 'oauth-workspace-token' });
+    await enforceTokenProjectScope(c, result.boundWorkspaceId, {
+      principal: 'oauth-workspace-token',
+      remedy: OAUTH_BOUND_REMEDY,
+    });
     c.set('tokenProjectId', result.boundWorkspaceId);
   }
   c.set('userId', result.userId);
   c.set('userEmail', '');
   c.set('authType', 'oauth');
   if (result.accountId) c.set('accountId', result.accountId);
+  // A token minted for a session that passed the second factor (today: an App
+  // viewer token whose cookie a browser session at aal2 opened). `buildActor`
+  // counts it in the token's own account only.
+  if (result.mfaAal === 'aal2' && result.accountId) c.set('oauthMfaAccountId', result.accountId);
   c.set('oauthClientId', result.clientId);
+  // An App viewer token is the App's code acting for its viewer, never the
+  // person acting freely (projects/lib/new-workspace-caller.ts).
+  if (result.appId) c.set('oauthAppId', result.appId);
   // The token's row: an Artifact live socket re-checks it while it is open.
   if (result.tokenId) c.set('oauthTokenId', result.tokenId);
   c.set('oauthScopes', scopes);

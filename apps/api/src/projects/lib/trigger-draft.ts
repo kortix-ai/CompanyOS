@@ -1,3 +1,4 @@
+import { parseTriggerReaders, type TriggerReaders } from '@kortix/manifest-schema';
 import type { TriggerList } from '@kortix/api-contract';
 import { hiddenSpaceIds } from '../../shared/space-access';
 import { apps, connectorConnections, connectors, projectSpaces, projectTriggerRuntime } from '@kortix/db';
@@ -6,6 +7,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { config } from '../../config';
 import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { db } from '../../shared/db';
+import { isPlainObject } from '../../shared/json';
 import * as store from '../trigger-events/store';
 import { EVENT_TRIGGERS_OFF_MESSAGE, eventTriggersOffForProject } from '../trigger-events/flag';
 import { connectionIdentity } from '../trigger-events/subscriptions';
@@ -19,6 +21,7 @@ import { withProjectGitAuth } from './git';
 import { type ProjectRow, deriveKortixApiRoot, normalizeBoolean, normalizeString } from './serializers';
 import { triggersPausedForProject } from './trigger-scheduler-state';
 import { readAccountAutomationPause } from '../../accounts/automation-pause';
+import { setupPauseCode } from './trigger-setup-pause';
 
 // GET /v1/projects
 
@@ -137,6 +140,7 @@ export async function loadTriggersForResponse(
 
   return {
     triggers: specs.map((spec) => ({
+      ...(spec.sessionReaders ?? spec.defaultSessionReaders ? { session_readers: spec.sessionReaders ?? spec.defaultSessionReaders } : {}),
       slug: spec.slug,
       path: spec.path,
       name: spec.name,
@@ -192,6 +196,7 @@ export async function loadTriggersForResponse(
       // A change_request trigger's branch reads back as `filter.base`, as kortix.yaml writes it.
       filter: spec.type === 'change_request' && spec.changeRequest?.base ? { ...spec.filter, base: spec.changeRequest.base } : spec.filter,
       // Run caps (KRTX-1721); null = unset (the hourly default, 60, applies).
+      hard_run_caps: spec.hardRunCaps ?? false,
       max_runs_per_hour: spec.maxRunsPerHour ?? null,
       max_runs_per_day: spec.maxRunsPerDay ?? null,
       // Overlap (KRTX-1721); null = unset (`skip` for cron, `allow` otherwise).
@@ -204,14 +209,18 @@ export async function loadTriggersForResponse(
       last_error: runtimeBySlug.get(spec.slug)?.lastError ?? null,
       last_attempt_at: runtimeBySlug.get(spec.slug)?.lastAttemptAt?.toISOString() ?? null,
       // The slot the scheduler claims next, jitter included (KRTX-1743).
-      next_fire_at: runtimeBySlug.get(spec.slug)?.nextFireAt?.toISOString() ?? null,
-      next_cron_at: spec.cron && !validateTriggerCron(spec.cron, spec.timezone)
+      // Null while auto-paused: the scheduler skips the slot, so no run is next.
+      next_fire_at: runtimeBySlug.get(spec.slug)?.autoPausedAt ? null : runtimeBySlug.get(spec.slug)?.nextFireAt?.toISOString() ?? null,
+      next_cron_at: spec.cron && !runtimeBySlug.get(spec.slug)?.autoPausedAt && !validateTriggerCron(spec.cron, spec.timezone)
         ? nextTriggerScheduleSlot(spec, new Date())?.toISOString() ?? null
         : null,
       // Auto-pause (KRTX-1721): set while the trigger paused itself after a
       // sustained run-limit breach. `PATCH enabled: true` resumes it.
       auto_paused_at: runtimeBySlug.get(spec.slug)?.autoPausedAt?.toISOString() ?? null,
       auto_paused_reason: runtimeBySlug.get(spec.slug)?.autoPausedAt ? (runtimeBySlug.get(spec.slug)?.autoPausedReason ?? null) : null,
+      // A pause that ends by itself (trigger-setup-pause.ts): `billing` or
+      // `no_usable_model`. Null for a pause only Resume ends.
+      auto_paused_code: runtimeBySlug.get(spec.slug)?.autoPausedAt ? setupPauseCode(runtimeBySlug.get(spec.slug)?.autoPausedReason) : null,
       webhook_url: spec.type === 'webhook' ? buildPublicWebhookUrl(projectId, spec.slug) : null,
     })),
     // Server-side activation state for this project's whole trigger set. When
@@ -286,6 +295,7 @@ export function eventStatusFor(row: store.EventSubscriptionRow | undefined, flag
 }
 
 export interface TriggerDraft {
+  sessionReaders?: TriggerReaders;
   slug: string;
   name: string;
   type: GitTriggerType;
@@ -302,7 +312,8 @@ export interface TriggerDraft {
   maxLatenessSeconds?: number;
   /** For type=app only — the silence alert (`expect_event_within`), in whole seconds. */
   expectEventWithinSeconds?: number;
-  /** Any type — the run caps (`max_runs_per_hour`, `max_runs_per_day`, KRTX-1721). Omitted when unset. */
+  /** Include manual fires in atomically reserved run caps. */
+  hardRunCaps?: boolean;
   maxRunsPerHour?: number;
   maxRunsPerDay?: number;
   /** `overlap` (KRTX-1721), every session mode. Omitted when unset: the type's default applies. */
@@ -324,6 +335,8 @@ export interface TriggerDraft {
   sessionKey: string | null;
   /** Payload paths that must match for a delivery to fire. Null when unfiltered. */
   filter: TriggerFilter | null;
+  /** An agent run's static input (`run.payload`), merged under each fire's payload. */
+  runPayload?: Record<string, unknown>;
 }
 
 export function parseTriggerDraft(
@@ -364,9 +377,15 @@ export function parseTriggerDraft(
 
   const parsedTarget = parseTargetField(body, type);
   if ('error' in parsedTarget) return parsedTarget;
-  // An App target receives the payload, not a prompt.
-  const promptTemplate = normalizeString(body.prompt_template ?? body.promptTemplate) ?? (parsedTarget.target ? '' : null);
-  if (promptTemplate === null) return { error: 'prompt_template is required' };
+  // An App target receives the payload, not a prompt; so does a program agent. The route
+  // refuses an empty prompt for any other agent once the trigger is in the manifest.
+  const promptTemplate = normalizeString(body.prompt_template ?? body.promptTemplate) ?? '';
+
+  let runPayload: Record<string, unknown> | undefined;
+  if (body.payload !== undefined && body.payload !== null && !parsedTarget.target) {
+    if (!isPlainObject(body.payload) || JSON.stringify(body.payload).length > 64 * 1024) return { error: 'payload must be an object of at most 64 KiB' };
+    runPayload = body.payload as Record<string, unknown>;
+  }
 
   const agent = normalizeString(body.agent ?? body.agent_name) ?? 'default';
   // null/empty model = "Default" — leave it to the resolution chain at fire time.
@@ -381,7 +400,9 @@ export function parseTriggerDraft(
   if ('error' in parsedFilter) return parsedFilter;
   const { filter } = parsedFilter;
 
-  const common = { slug, name, agent, model, enabled, promptTemplate, sessionMode, pinnedSessionId, sessionKey, filter };
+  const readers = body.session_readers === undefined || body.session_readers === null ? null : parseTriggerReaders(body.session_readers);
+  if (readers && 'error' in readers) return readers;
+  const common = { ...(readers && 'readers' in readers ? { sessionReaders: readers.readers } : {}), slug, name, agent, model, enabled, promptTemplate, sessionMode, pinnedSessionId, sessionKey, filter, ...(runPayload ? { runPayload } : {}) };
   const lateness = parseMaxLateness(body, type);
   if ('error' in lateness) return lateness;
   const silence = parseExpectEventWithin(body, type);
@@ -443,7 +464,7 @@ function parseDraftSession(body: Record<string, unknown>, type: GitTriggerType):
   return { sessionMode, pinnedSessionId, sessionKey };
 }
 
-type DraftCommon = Pick<TriggerDraft, 'slug' | 'name' | 'agent' | 'model' | 'enabled' | 'promptTemplate' | 'sessionMode' | 'pinnedSessionId' | 'sessionKey' | 'filter'>;
+type DraftCommon = Pick<TriggerDraft, 'slug' | 'name' | 'agent' | 'model' | 'enabled' | 'promptTemplate' | 'sessionMode' | 'pinnedSessionId' | 'sessionKey' | 'filter' | 'runPayload' | 'sessionReaders'>;
 
 function parseEventDraft(body: Record<string, unknown>, common: DraftCommon): TriggerDraft | { error: string } {
   const event = parseEventFields(body, 'event_config');
@@ -541,6 +562,7 @@ export function specToBody(spec: GitTriggerSpec): Record<string, unknown> {
   const noCronWiring = spec.type === 'event' || spec.type === 'app';
   return {
     slug: spec.slug,
+    session_readers: spec.sessionReaders ?? null,
     name: spec.name,
     type: spec.type,
     agent: spec.agent,
@@ -561,8 +583,11 @@ export function specToBody(spec: GitTriggerSpec): Record<string, unknown> {
     max_lateness: spec.maxLatenessSeconds ? formatDurationSeconds(spec.maxLatenessSeconds) : null,
     expect_event_within: spec.expectEventWithinSeconds ? formatDurationSeconds(spec.expectEventWithinSeconds) : null,
     // Kept on PATCH, like max_lateness: an edit of any other field keeps the caps.
+    hard_run_caps: spec.hardRunCaps ?? false,
     max_runs_per_hour: spec.maxRunsPerHour ?? null,
     max_runs_per_day: spec.maxRunsPerDay ?? null,
+    // An agent run's static input (`run.payload`); kept on PATCH.
+    payload: spec.runPayload ?? null,
     overlap: spec.overlap ?? null,
     session_mode: spec.sessionMode,
     session_id: spec.pinnedSessionId,
@@ -595,6 +620,7 @@ export function draftToSpec(
 ): GitTriggerSpec {
   return {
     slug: draft.slug,
+    ...(draft.sessionReaders ? { sessionReaders: draft.sessionReaders } : {}),
     // Use the ACTUAL manifest path (`kortix.yml`, a custom path).
     path: `${manifestPath}#triggers.${draft.slug}`,
     name: draft.name,
@@ -603,12 +629,14 @@ export function draftToSpec(
     model: draft.model,
     enabled: draft.enabled,
     promptTemplate: draft.promptTemplate,
+    ...(draft.runPayload ? { runPayload: draft.runPayload } : {}),
     cron: draft.cron,
     runAt: draft.runAt,
     timezone: draft.timezone,
     secretEnv: draft.secretEnv,
     ...(draft.maxLatenessSeconds ? { maxLatenessSeconds: draft.maxLatenessSeconds } : {}),
     ...(draft.expectEventWithinSeconds ? { expectEventWithinSeconds: draft.expectEventWithinSeconds } : {}),
+    ...(draft.hardRunCaps ? { hardRunCaps: true } : {}),
     ...(draft.maxRunsPerHour ? { maxRunsPerHour: draft.maxRunsPerHour } : {}),
     ...(draft.maxRunsPerDay ? { maxRunsPerDay: draft.maxRunsPerDay } : {}),
     ...(draft.overlap ? { overlap: draft.overlap } : {}),

@@ -29,6 +29,7 @@
     "./app-connect": "./src/app-connect.ts",
     "./app-config": "./src/app-config.ts",
     "./app-templates": "./src/app-templates.ts",
+    "./setup-guide": "./src/setup-guide.ts",
     "./code-language": "./src/code-language.ts",
     "./preview-state-page": "./src/preview-state-page.ts",
     "./markdown-math": "./src/markdown-math.ts",
@@ -46,7 +47,12 @@
     "./well-known": "./src/well-known.ts",
     "./workspace-actions": "./src/workspace-actions.ts",
     "./workspace-routes": "./src/workspace-routes.ts",
-    "./workspace-settings": "./src/workspace-settings.ts"
+    "./change-request-links": "./src/change-request-links.ts",
+    "./workspace-settings": "./src/workspace-settings.ts",
+    "./session/attachment-tile": "./src/session/attachment-tile.ts",
+    "./session/tool-row-text": "./src/session/tool-row-text.ts",
+    "./session/session-starter": "./src/session/session-starter.ts",
+    "./session/stop-refusal": "./src/session/stop-refusal.ts"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsgo.tsbuildinfo",

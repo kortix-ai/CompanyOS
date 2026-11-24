@@ -19,7 +19,7 @@ import { ACCOUNT_STATE_FIRE_CODES, markGitTriggerAttemptFailed } from '../lib/tr
 import { takeThrottledRunSlot } from '../lib/trigger-run-caps';
 import { raiseTriggerAlert } from '../lib/trigger-alerts';
 import { recordTriggerRun, triggerRunFromFire } from '../trigger-execution-store';
-import { extractWebhookToken, fireGitTrigger, markGitTriggerFired, renderPromptTemplate, triggerFilterMatches, verifyWebhookSignature, verifyWebhookToken, webhookPayload, webhookTimestampFresh } from '../lib/triggers';
+import { extractWebhookToken, fireGitTrigger, githubNativeDelivery, markGitTriggerFired, renderTriggerInput, triggerFilterMatches, verifyGithubWebhookSignature, verifyWebhookSignature, verifyWebhookToken, webhookPayload, webhookTimestampProblem } from '../lib/triggers';
 import { PROJECT_TRIGGERS_PAUSED_REASON, automaticFirePauseReason } from '../lib/trigger-scheduler-state';
 import {
   validateWebhookSecretConfiguration,
@@ -32,6 +32,38 @@ import { isRuntimeTriggerSlug, runtimeWebhookSpec } from '../lib/runtime-trigger
 import { workspaceIdParam } from '../../shared/route-params';
 import { projectsView } from '../../workspaces/rows';
 
+/**
+ * KRTX-4473 (CWE-770): a trigger payload is a few KB, but the handler read the
+ * whole body before it verified the signature, so any caller presenting some
+ * credential header chose how much this route buffered. Enforced in the handler,
+ * not as app middleware: `webhookWorkspacesApp` (the canonical
+ * `/workspaces/:workspaceId/:slug` name) rewrites paths and re-registers only
+ * the source's routes, so middleware mounted here would not cover it.
+ */
+export const TRIGGER_INGRESS_MAX_BYTES = 1024 * 1024;
+
+/**
+ * The raw request body, or `null` when it exceeds `maxBytes`. KRTX-4473: the
+ * trigger handler must verify an HMAC over the exact bytes, so it cannot let a
+ * parser read them first - but it also must not buffer an unauthenticated
+ * caller's chosen size. Reading stops at the cap and cancels the stream.
+ */
+async function readBodyWithinCap(request: Request, maxBytes: number): Promise<string | null> {
+  const reader = request.body?.getReader();
+  if (!reader) return '';
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (let r = await reader.read(); !r.done; r = await reader.read()) {
+    size += r.value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(r.value);
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks));
+}
+
 export function registerTriggerWebhooksRoutes(): void {
   projectWebhooksApp.use('/projects/:workspaceId/:slug', createProjectWebhookRateLimitMiddleware());
 
@@ -41,7 +73,7 @@ export function registerTriggerWebhooksRoutes(): void {
     tags: ['triggers'],
     summary: 'Fire a webhook trigger',
     description:
-      'Authenticated by the trigger secret, not a bearer token: send `X-Kortix-Signature` / `X-Hub-Signature-256` (HMAC-SHA256 of `<X-Kortix-Timestamp>.<raw body>`) with `X-Kortix-Timestamp` (epoch seconds, within 5 minutes) — a missing or stale timestamp is refused, so a captured signature cannot replay — or the secret as `X-Kortix-Token` or `Authorization: Bearer`. Every pre-authentication miss answers 401. The JSON body is the payload the prompt template renders.',
+      'Authenticated by the trigger secret, not a bearer token: send `X-Kortix-Signature` / `X-Hub-Signature-256` (HMAC-SHA256 of `<X-Kortix-Timestamp>.<raw body>`) with `X-Kortix-Timestamp` (epoch seconds, within 5 minutes) — a missing or stale timestamp is refused, so a captured signature cannot replay — or the secret as `X-Kortix-Token` or `Authorization: Bearer`. A GitHub repository webhook (`X-Hub-Signature-256` over the raw body with `X-GitHub-Event` and `X-GitHub-Delivery`, no Kortix timestamp) verifies on the body; its signature keys the delivery permanently, so it runs once. Every pre-authentication miss answers 401. The JSON body is the payload the prompt template renders.',
     // No body schema: the handler HMACs the raw bytes, so nothing may parse them first.
     request: { params: z.object({ workspaceId: z.string(), slug: z.string() }) },
     responses: {
@@ -49,7 +81,7 @@ export function registerTriggerWebhooksRoutes(): void {
       202: json(TriggerFireResultSchema, 'Queued or fired'),
       // 402: the account has no usable model (no plan-covered managed model, no
       // connected provider key) — the fire gates instead of minting a doomed session.
-      ...errors(400, 401, 402, 500),
+      ...errors(400, 401, 402, 413, 500),
     },
   }), async (c) => {
     const projectId = workspaceIdParam(c);
@@ -68,6 +100,18 @@ export function registerTriggerWebhooksRoutes(): void {
     );
     if (!hasCredentialHeader) {
       return c.json({ error: 'Invalid webhook signature' }, 401);
+    }
+    // KRTX-4473 (CWE-770): bound the body here, before any project or manifest
+    // read, so an oversized delivery costs one bounded read and nothing else.
+    // The declared length refuses without reading when the sender states it; a
+    // chunked delivery declares none, so the read itself stops at the cap.
+    const declaredLength = Number(c.req.header('content-length') ?? 0);
+    if (declaredLength > TRIGGER_INGRESS_MAX_BYTES) {
+      return c.json({ error: 'Payload too large' }, 413);
+    }
+    const rawBody = await readBodyWithinCap(c.req.raw, TRIGGER_INGRESS_MAX_BYTES);
+    if (rawBody === null) {
+      return c.json({ error: 'Payload too large' }, 413);
     }
 
     const [project] = await db
@@ -100,7 +144,6 @@ export function registerTriggerWebhooksRoutes(): void {
         })();
     if (!spec || spec.type !== 'webhook' || !spec.enabled) return reject('trigger_not_found');
 
-    const rawBody = await c.req.text();
     // From here every answer is a run in the trigger's history (KRTX-1743). A
     // delivery refused before its signature verified is kept 7 days, unverified.
     const runPayload = () => ({
@@ -111,7 +154,7 @@ export function registerTriggerWebhooksRoutes(): void {
     // Not awaited: the write must not make a real trigger's 401 slower than a
     // missing one's. recordTriggerRun never throws.
     const rejectRun = (reason: string, extra?: Record<string, unknown>) => {
-      if (consumeProjectWebhookRejectedRunBudget(projectId, slug)) {
+      if (consumeProjectWebhookRejectedRunBudget(projectId, slug, reason)) {
         void recordTriggerRun({ projectId, slug, source: 'webhook', spec, payload: runPayload(), verified: false, status: 'rejected', error: reason, now: new Date() });
       }
       return reject(reason, extra);
@@ -143,12 +186,17 @@ export function registerTriggerWebhooksRoutes(): void {
     const signatureHeader =
       c.req.header('x-kortix-signature') || c.req.header('x-hub-signature-256') || null;
     const timestampHeader = c.req.header('x-kortix-timestamp') ?? null;
-    if (signatureHeader) {
+    // A GitHub repository webhook signs the body alone; its key is the
+    // signature and never frees (lib/webhook-delivery.ts), so it cannot replay.
+    const githubNative = githubNativeDelivery((name) => c.req.header(name));
+    if (signatureHeader && !githubNative) {
       // 401 like every other miss before authentication, so no existence oracle.
-      if (!timestampHeader) return rejectRun('timestamp_missing');
-      if (!webhookTimestampFresh(timestampHeader)) return rejectRun('timestamp_out_of_tolerance');
+      const timestampProblem = webhookTimestampProblem(timestampHeader);
+      if (timestampProblem) return rejectRun(`timestamp_${timestampProblem}`);
     }
-    const authed = signatureHeader
+    const authed = githubNative
+      ? verifyGithubWebhookSignature(rawBody, secret, signatureHeader)
+      : signatureHeader
       ? verifyWebhookSignature(rawBody, timestampHeader, secret, signatureHeader)
       : verifyWebhookToken(
           extractWebhookToken(c.req.header('x-kortix-token'), c.req.header('authorization')),
@@ -169,7 +217,7 @@ export function registerTriggerWebhooksRoutes(): void {
     const firedAt = new Date();
     const recordRun = (run: Omit<Parameters<typeof recordTriggerRun>[0], 'projectId' | 'slug' | 'source' | 'spec' | 'payload' | 'now'>) =>
       recordTriggerRun({ projectId, slug, source: 'webhook', spec, payload, ...run, now: firedAt });
-    const renderedPrompt = renderPromptTemplate(spec.promptTemplate, payload);
+    const renderedPrompt = renderTriggerInput(spec, payload);
     // One delivery runs once: keyed on the event when the sender names one,
     // else on the body inside a replay window (projects/lib/webhook-delivery.ts).
     const delivery = webhookDeliveryKey({
@@ -179,6 +227,7 @@ export function registerTriggerWebhooksRoutes(): void {
       rawBody,
       signatureHeader,
       staticAuthFingerprint: c.req.header('x-kortix-token') ?? c.req.header('authorization') ?? '',
+      githubNative,
     });
     const idempotencyKey = delivery.key;
 
@@ -206,7 +255,7 @@ export function registerTriggerWebhooksRoutes(): void {
     // A key whose earlier run dead-lettered, lost its session, or (body-hash
     // keys) aged out of the replay window answers for nothing: free it so
     // this delivery runs instead of replaying that outcome.
-    await releaseWebhookDeliveryKey(idempotencyKey, { byEvent: delivery.byEvent });
+    if (!delivery.permanent) await releaseWebhookDeliveryKey(idempotencyKey, { byEvent: delivery.byEvent });
     const result = await fireGitTrigger({
       spec,
       project,

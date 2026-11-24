@@ -27,9 +27,11 @@ import {
   CaretDownIcon,
   CheckCircleIcon as CheckCircleSolid,
   CheckIcon,
+  PaletteIcon,
+  ShuffleIcon,
 } from '@phosphor-icons/react';
 import { useTheme } from 'next-themes';
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import {
   CommandEmpty,
@@ -42,6 +44,8 @@ import {
   CommandPopoverTrigger,
   CommandSeparator,
 } from '@kortix/ui/command';
+import { Button } from '@kortix/ui/button';
+import { GradientWallpaperStill } from '@kortix/ui/gradient-wallpaper';
 import { Separator } from '@kortix/ui/separator';
 import { SettingsSubsectionHeader } from '@kortix/ui/settings-subsection-header';
 import { Switch } from '@kortix/ui/switch';
@@ -65,24 +69,42 @@ import {
   type ThemeChoice,
 } from '@/lib/interface-themes';
 import { cn } from '@kortix/ui';
-import { DEFAULT_WALLPAPER_ID, WALLPAPERS, type Wallpaper } from '@kortix/ui/theme';
+import {
+  DEFAULT_CUSTOM_WALLPAPER,
+  DEFAULT_WALLPAPER_OPACITY,
+  DEFAULT_WALLPAPER_ID,
+  WALLPAPERS,
+  customGradientConfig,
+  getSelectableWallpaper,
+  gradientColors,
+  normalizeCustomWallpaper,
+  normalizePresetOverrides,
+  presetWithOverride,
+  randomCustomWallpaper,
+  type CustomWallpaperConfig,
+  type GradientWallpaperId,
+  type PresetOverride,
+  type PresetOverrides,
+  type PickerWallpaperId,
+} from '@kortix/ui/theme';
 import { useUserPreferencesStore, type ConversationDensity } from '@kortix/ui/internal/stores/user-preferences-store';
 import { SettingsTabHeader } from '@kortix/ui/customize/settings/settings-tab-header';
+import { localizedCopy } from './localized-copy';
+import { CustomWallpaperColors, type CustomWallpaperCopy } from './custom-wallpaper-colors';
 
-const DENSITY_OPTIONS: { id: ConversationDensity; label: string; description: string }[] = [
-  {
-    id: 'normal',
-    label: 'Normal',
-    description: 'Steps and thinking stream live while Kortix works.',
-  },
-  {
-    id: 'minimal',
-    label: 'Minimal',
-    description: 'One status line until you expand it.',
-  },
-];
+/** The catalog keys a copy leaf reads when they differ from its own path:
+ *  the theme groups and the search field live under `themes.*`. */
+export const COPY_KEY_ALIASES: Record<string, string> = {
+  'themeGroups.kortix': 'themes.kortix',
+  'themeGroups.lightThemes': 'themes.lightThemes',
+  'themeGroups.darkThemes': 'themes.darkThemes',
+  'themeSearch.placeholder': 'themes.search',
+  'themeSearch.empty': 'themes.noResults',
+};
 
-export interface AppearanceTabCopy {
+const DENSITY_IDS: ConversationDensity[] = ['normal', 'minimal'];
+
+interface AppearanceTabCopy {
   theme: string;
   themeDescription: string;
   conversationDensity: string;
@@ -97,8 +119,10 @@ export interface AppearanceTabCopy {
   themeGroups: { kortix: string; lightThemes: string; darkThemes: string };
   /** The theme picker's search field and its empty state. */
   themeSearch: { placeholder: string; empty: string };
-  densities: Record<ConversationDensity, { label: string; description: string }>;
-  wallpapers: Record<Wallpaper['id'], string>;
+  densities: Record<ConversationDensity, string>;
+  wallpapers: Record<PickerWallpaperId, string>;
+  /** The Custom card's colour popover. */
+  custom: CustomWallpaperCopy;
 }
 
 export const DEFAULT_APPEARANCE_TAB_COPY: AppearanceTabCopy = {
@@ -130,20 +154,38 @@ export const DEFAULT_APPEARANCE_TAB_COPY: AppearanceTabCopy = {
     empty: 'No themes found',
   },
   densities: {
-    normal: {
-      label: 'Normal',
-      description: 'Steps and thinking stream live while Kortix works.',
-    },
-    minimal: { label: 'Minimal', description: 'One status line until you expand it.' },
+    normal: 'Normal',
+    minimal: 'Minimal',
   },
   wallpapers: {
     dither: 'Dither',
-    brandmark: 'Brandmark',
-    nebula: 'Pixel Beams',
-    silk: 'Silk',
-    grain: 'Grain',
-    neuro: 'Neuro',
+    ember: 'Ember',
+    prism: 'Prism',
+    tide: 'Tide',
+    aurora: 'Aurora',
+    dusk: 'Dusk',
+    eclipse: 'Eclipse',
+    lagoon: 'Lagoon',
+    cumulus: 'Cumulus',
+    moss: 'Moss',
+    iris: 'Iris',
+    custom: 'Custom',
     blank: 'Blank',
+  },
+  custom: {
+    editColors: 'Edit colors',
+    shuffle: 'Shuffle',
+    palette: 'Palette',
+    paletteLabel: (count) => `Palette ${count}`,
+    colors: 'Colors',
+    colorLabel: (count) => `Color ${count}`,
+    customColor: 'Custom color',
+    addColor: 'Add color',
+    removeColor: 'Remove color',
+    resetColors: 'Reset',
+    finish: 'Finish',
+    finishes: { dither: 'Dither', grain: 'Grain' },
+    opacity: 'Opacity',
   },
 };
 
@@ -153,7 +195,7 @@ export const DEFAULT_APPEARANCE_TAB_COPY: AppearanceTabCopy = {
  * explanation — 'normal' shows the summary line over an open chain (rows +
  * thinking paragraph), 'minimal' shows the one status line and the quiet that
  * is the point of the mode. Decorative only, so `aria-hidden`; the card's
- * label + description carry the accessible name.
+ * label carries the accessible name.
  */
 function DensityPreview({ density }: { density: ConversationDensity }) {
   if (density === 'minimal') {
@@ -196,7 +238,7 @@ function DensityCard({
   isActive,
   onSelect,
 }: {
-  option: (typeof DENSITY_OPTIONS)[number];
+  option: { id: ConversationDensity; label: string };
   isActive: boolean;
   onSelect: () => void;
 }) {
@@ -229,14 +271,18 @@ function DensityCard({
   );
 }
 
-export interface AppearanceTabViewProps {
+interface AppearanceTabViewProps {
   theme?: InterfaceThemeId;
   onThemeChange?: (value: InterfaceThemeId) => void;
   /** Palettes the System swatch previews — the themes System resolves to. */
   themeChoice?: ThemeChoice;
   wallpaperId?: string;
   isLightTheme?: boolean;
-  onWallpaperSelect?: (id: Wallpaper['id']) => void;
+  onWallpaperSelect?: (id: PickerWallpaperId) => void;
+  customWallpaper?: CustomWallpaperConfig;
+  onCustomWallpaperChange?: (value: CustomWallpaperConfig) => void;
+  presetOverrides?: PresetOverrides;
+  onPresetOverrideChange?: (id: GradientWallpaperId, override: PresetOverride | null) => void;
   conversationDensity?: ConversationDensity;
   onConversationDensityChange?: (density: ConversationDensity) => void;
   genuiEnabled?: boolean;
@@ -378,12 +424,18 @@ export function AppearanceTabView({
   wallpaperId = DEFAULT_WALLPAPER_ID,
   isLightTheme = false,
   onWallpaperSelect = () => {},
+  customWallpaper = DEFAULT_CUSTOM_WALLPAPER,
+  onCustomWallpaperChange = () => {},
+  presetOverrides = {},
+  onPresetOverrideChange = () => {},
   conversationDensity = 'normal',
   onConversationDensityChange = () => {},
   genuiEnabled = true,
   onGenuiEnabledChange = () => {},
   copy = DEFAULT_APPEARANCE_TAB_COPY,
 }: AppearanceTabViewProps) {
+  const customGradient = useMemo(() => customGradientConfig(customWallpaper), [customWallpaper]);
+
   return (
     <div className="mx-auto w-full max-w-2xl space-y-8">
       <SettingsTabHeader tab="appearance" />
@@ -412,12 +464,12 @@ export function AppearanceTabView({
           aria-label={copy.conversationDensity}
           className="grid w-full max-w-xs grid-cols-2 gap-2"
         >
-          {DENSITY_OPTIONS.map((option) => (
+          {DENSITY_IDS.map((id) => (
             <DensityCard
-              key={option.id}
-              option={{ id: option.id, ...copy.densities[option.id] }}
-              isActive={conversationDensity === option.id}
-              onSelect={() => onConversationDensityChange(option.id)}
+              key={id}
+              option={{ id, label: copy.densities[id] }}
+              isActive={conversationDensity === id}
+              onSelect={() => onConversationDensityChange(id)}
             />
           ))}
         </div>
@@ -444,17 +496,110 @@ export function AppearanceTabView({
       {/* Wallpaper */}
       <section className="space-y-3">
         <SettingsSubsectionHeader title={copy.wallpaper} description={copy.wallpaperDescription} />
-        <div className="grid w-full grid-cols-3 gap-2">
-          {WALLPAPERS.map((wp) => (
-            <WallpaperCard
-              key={wp.id}
-              wallpaper={{ ...wp, name: copy.wallpapers[wp.id] }}
-              thumbSrc={wp.thumbs ? (isLightTheme ? wp.thumbs.light : wp.thumbs.dark) : undefined}
-              isActive={wallpaperId === wp.id}
-              onSelect={() => onWallpaperSelect(wp.id)}
-              defaultLabel={copy.defaultWallpaper}
-            />
-          ))}
+        <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3">
+          {WALLPAPERS.map((wp) => {
+            const presetId = wp.type === 'gradient' ? (wp.id as GradientWallpaperId) : null;
+            const gradient =
+              wp.type === 'custom'
+                ? customGradient
+                : wp.gradient &&
+                  presetWithOverride(wp.gradient, presetId ? presetOverrides[presetId] : undefined);
+            const card = (
+              <WallpaperCard
+                wallpaper={{ ...wp, name: copy.wallpapers[wp.id] }}
+                thumbSrc={wp.thumbs ? (isLightTheme ? wp.thumbs.light : wp.thumbs.dark) : undefined}
+                thumb={gradient ? <GradientWallpaperStill config={gradient} /> : undefined}
+                isActive={wallpaperId === wp.id}
+                onSelect={() => onWallpaperSelect(wp.id)}
+                defaultLabel={copy.defaultWallpaper}
+              />
+            );
+            if (presetId && wp.gradient) {
+              const picked = presetOverrides[presetId];
+              const change = (next: PresetOverride) => {
+                onWallpaperSelect(wp.id);
+                onPresetOverrideChange(presetId, { ...picked, ...next });
+              };
+              return (
+                <div key={wp.id} className="group/card relative">
+                  {card}
+                  <CustomWallpaperColors
+                    colors={picked?.colors ?? gradientColors(wp.gradient, !isLightTheme)}
+                    onChange={(colors) => change({ colors })}
+                    finish={picked?.finish ?? wp.gradient.finish}
+                    onFinishChange={(finish) => change({ finish })}
+                    opacity={picked?.opacity ?? DEFAULT_WALLPAPER_OPACITY}
+                    onOpacityChange={(opacity) => change({ opacity })}
+                    onReset={picked ? () => onPresetOverrideChange(presetId, null) : undefined}
+                    copy={copy.custom}
+                  >
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="icon-xs"
+                      aria-label={`${copy.custom.editColors}: ${copy.wallpapers[wp.id]}`}
+                      className={cn(
+                        'duration-moderate absolute top-1.5 right-1.5 transition-opacity focus-visible:opacity-100 group-hover/card:opacity-100 data-[state=open]:opacity-100',
+                        wallpaperId === wp.id || picked ? 'opacity-100' : 'opacity-0',
+                      )}
+                    >
+                      <PaletteIcon className="size-3.5" />
+                    </Button>
+                  </CustomWallpaperColors>
+                </div>
+              );
+            }
+            if (wp.type !== 'custom') return <div key={wp.id}>{card}</div>;
+            // The card is a button, so Shuffle and the colour button sit
+            // beside it in the DOM and over its top corners on screen.
+            return (
+              <div key={wp.id} className="relative">
+                {card}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon-xs"
+                  aria-label={copy.custom.shuffle}
+                  className="absolute top-1.5 left-1.5"
+                  onClick={() => {
+                    onWallpaperSelect('custom');
+                    onCustomWallpaperChange(randomCustomWallpaper(customWallpaper));
+                  }}
+                >
+                  <ShuffleIcon className="size-3.5" />
+                </Button>
+                <CustomWallpaperColors
+                  colors={customWallpaper.colors}
+                  onChange={(colors) => {
+                    onWallpaperSelect('custom');
+                    onCustomWallpaperChange({ ...customWallpaper, colors });
+                  }}
+                  finish={customWallpaper.finish}
+                  onFinishChange={(finish) => {
+                    onWallpaperSelect('custom');
+                    onCustomWallpaperChange({ ...customWallpaper, finish });
+                  }}
+                  opacity={customWallpaper.opacity}
+                  onOpacityChange={(opacity) => {
+                    onWallpaperSelect('custom');
+                    onCustomWallpaperChange({ ...customWallpaper, opacity });
+                  }}
+                  copy={copy.custom}
+                >
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="icon-xs"
+                    aria-label={copy.custom.editColors}
+                    className="absolute top-1.5 right-1.5"
+                    onClick={() => onWallpaperSelect('custom')}
+                  >
+                    <PaletteIcon className="size-3.5" />
+                  </Button>
+                </CustomWallpaperColors>
+              </div>
+            );
+          })}
         </div>
       </section>
     </div>
@@ -468,10 +613,20 @@ export function AppearanceTab() {
   const { resolvedTheme } = useTheme();
   const { selected, select, choice } = useInterfaceTheme();
 
+  // A retired stored id renders the default, so the default is the active card.
   const wallpaperId = useUserPreferencesStore(
-    (s) => s.preferences.wallpaperId ?? DEFAULT_WALLPAPER_ID,
+    (s) => getSelectableWallpaper(s.preferences.wallpaperId ?? DEFAULT_WALLPAPER_ID).id,
   );
   const setWallpaperId = useUserPreferencesStore((s) => s.setWallpaperId);
+  const storedCustomWallpaper = useUserPreferencesStore((s) => s.preferences.customWallpaper);
+  const setCustomWallpaper = useUserPreferencesStore((s) => s.setCustomWallpaper);
+  const storedOverrides = useUserPreferencesStore((s) => s.preferences.wallpaperOverrides);
+  const presetOverrides = useMemo(() => normalizePresetOverrides(storedOverrides), [storedOverrides]);
+  const setWallpaperOverride = useUserPreferencesStore((s) => s.setWallpaperOverride);
+  const customWallpaper = useMemo(
+    () => normalizeCustomWallpaper(storedCustomWallpaper),
+    [storedCustomWallpaper],
+  );
   // `?? 'normal'` — legacy persisted preferences predate this key (same rule
   // as every `panelMode` read site).
   const conversationDensity = useUserPreferencesStore(
@@ -481,67 +636,27 @@ export function AppearanceTab() {
   const genuiEnabled = useGenuiEnabled();
   const setGenuiEnabled = useUserPreferencesStore((s) => s.setGenuiEnabled);
 
-  // Users may have a wallpaper persisted that no longer exists — reset it.
-  useEffect(() => {
-    if (!WALLPAPERS.some((w) => w.id === wallpaperId)) {
-      setWallpaperId(DEFAULT_WALLPAPER_ID);
-    }
-  }, [wallpaperId, setWallpaperId]);
+  const copy = useMemo(
+    () =>
+      localizedCopy(DEFAULT_APPEARANCE_TAB_COPY, (key, values) =>
+        COPY_KEY_ALIASES[key] ? t(COPY_KEY_ALIASES[key], values) : t(key, values),
+      ),
+    [t],
+  );
 
   return (
     <AppearanceTabView
-      copy={{
-        theme: t('theme'),
-        themeDescription: t('themeDescription'),
-        conversationDensity: t('conversationDensity'),
-        conversationDensityDescription: t('conversationDensityDescription'),
-        richAnswers: t('richAnswers'),
-        richAnswersDescription: t('richAnswersDescription'),
-        wallpaper: t('wallpaper'),
-        wallpaperDescription: t('wallpaperDescription'),
-        defaultWallpaper: t('defaultWallpaper'),
-        themes: {
-          system: t('themes.system'),
-          light: t('themes.light'),
-          pureLight: t('themes.pureLight'),
-          dark: t('themes.dark'),
-          pureDark: t('themes.pureDark'),
-        },
-        themeGroups: {
-          kortix: t('themes.kortix'),
-          lightThemes: t('themes.lightThemes'),
-          darkThemes: t('themes.darkThemes'),
-        },
-        themeSearch: {
-          placeholder: t('themes.search'),
-          empty: t('themes.noResults'),
-        },
-        densities: {
-          normal: {
-            label: t('densities.normal.label'),
-            description: t('densities.normal.description'),
-          },
-          minimal: {
-            label: t('densities.minimal.label'),
-            description: t('densities.minimal.description'),
-          },
-        },
-        wallpapers: {
-          dither: t('wallpapers.dither'),
-          brandmark: t('wallpapers.brandmark'),
-          nebula: t('wallpapers.nebula'),
-          silk: t('wallpapers.silk'),
-          grain: t('wallpapers.grain'),
-          neuro: t('wallpapers.neuro'),
-          blank: t('wallpapers.blank'),
-        },
-      }}
+      copy={copy}
       theme={selected}
       onThemeChange={select}
       themeChoice={choice}
       wallpaperId={wallpaperId}
       isLightTheme={resolvedTheme === 'light'}
       onWallpaperSelect={setWallpaperId}
+      customWallpaper={customWallpaper}
+      onCustomWallpaperChange={setCustomWallpaper}
+      presetOverrides={presetOverrides}
+      onPresetOverrideChange={setWallpaperOverride}
       conversationDensity={conversationDensity}
       onConversationDensityChange={setConversationDensity}
       genuiEnabled={genuiEnabled}

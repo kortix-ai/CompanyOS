@@ -45,7 +45,7 @@ beforeEach(() => {
 const opts = { backendUrl: 'http://backend.test/v1', accessToken: 'tok' };
 const input = { account_id: 'acc-1', name: 'My First Project', seed_starter: true };
 
-test('GitHub project creation accepts a marketplace project template', () => {
+test('the deprecated source_item_id still type-checks on a GitHub create (removed in the next major)', () => {
   const createInput: CreateProjectRepoInput = {
     account_id: 'acc-1',
     name: 'support-agent',
@@ -1028,24 +1028,24 @@ describe('provisionProjectStream', () => {
 
 test('FEATURE_FLAG_KEYS lists every flag key exactly once', () => {
   const expected: FeatureFlagKey[] = [
-    'marketplace',
     'reminders',
-    'secrets_egress',
-    'pooled_provider_secrets',
     'us_region',
     'event_triggers',
-    'workspace_volume',
     'chat',
     'shared_drives',
     'goals',
     'email_channel',
     'session_groups',
-    'chrome',
     'agent_teams',
     'voice_call',
     'chat_input',
     'chat_front',
     'spaces_proactive',
+    'program_agents',
+    'evals',
+    'desktop_tabs',
+    'calendar',
+    'review_swipe',
   ];
   expect([...FEATURE_FLAG_KEYS].sort()).toEqual(expected.sort());
   expect(new Set(FEATURE_FLAG_KEYS).size).toBe(FEATURE_FLAG_KEYS.length);
@@ -1067,6 +1067,51 @@ test('a graduated flag key still typechecks but is no longer a served flag', () 
   // actually serves, so it drops the key.
   const graduated: FeatureFlagKey = 'review_center';
   expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
+});
+
+test('chrome graduated: Kortix in Chrome needs no flag, the key still typechecks', () => {
+  // Every project gets Kortix in Chrome since 2026-11-24 wherever the API serves
+  // it. The API sends `experimental.chrome` (whether it serves /v1/chrome) for
+  // older clients, but it no longer lists, resolves, or accepts the key.
+  const graduated: FeatureFlagKey = 'chrome';
+  expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
+  const project = { experimental: {} } as Pick<KortixProject, 'experimental'>;
+  const sent: boolean | undefined = project.experimental?.chrome;
+  expect(sent).toBeUndefined();
+});
+
+test('workspace_volume graduated: every Platinum session is stateless, the key still typechecks', () => {
+  // Stateless sandboxes are the default since 2026-11-23: every new Platinum
+  // session keeps /workspace on its own volume. The API sends
+  // `experimental.workspace_volume` (whether new sessions get a volume) for
+  // older clients, but it no longer lists, resolves, or accepts the key.
+  const graduated: FeatureFlagKey = 'workspace_volume';
+  expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
+  const project = { experimental: {} } as Pick<KortixProject, 'experimental'>;
+  const sent: boolean | undefined = project.experimental?.workspace_volume;
+  expect(sent).toBeUndefined();
+});
+
+test('secrets_egress graduated: enforced exposure needs no flag, the key still typechecks', () => {
+  // Network-Enforced Secrets is on for every project since 2026-11-23. The API
+  // sends `experimental.secrets_egress: true` for older clients, but it no
+  // longer lists, resolves, or accepts the key.
+  const graduated: FeatureFlagKey = 'secrets_egress';
+  expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
+  const project = { experimental: {} } as Pick<KortixProject, 'experimental'>;
+  const sent: boolean | undefined = project.experimental?.secrets_egress;
+  expect(sent).toBeUndefined();
+});
+
+test('pooled_provider_secrets graduated: provider keys need no flag, the key still typechecks', () => {
+  // Named provider keys, sharing and session key selection are on for every
+  // project since 2026-11-12. The API sends `experimental.pooled_provider_secrets:
+  // true` for older clients, but it no longer lists, resolves, or accepts the key.
+  const graduated: FeatureFlagKey = 'pooled_provider_secrets';
+  expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
+  const project = { experimental: {} } as Pick<KortixProject, 'experimental'>;
+  const sent: boolean | undefined = project.experimental?.pooled_provider_secrets;
+  expect(sent).toBeUndefined();
 });
 
 test('notification_center graduated: notifications need no flag, the key still typechecks', () => {
@@ -1093,11 +1138,11 @@ test('agent_principal graduated: every governed agent authorizes as itself, the 
   expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
 });
 
-test('session_transcript_history graduated: saved history is always on, the key still typechecks', () => {
-  // Every session saves its transcript and shows it while its computer is off.
-  // The API no longer serves `session_transcript_history`.
-  const graduated: FeatureFlagKey = 'session_transcript_history';
-  expect(FEATURE_FLAG_KEYS).not.toContain(graduated);
+test('session_transcript_history is no FeatureFlagKey: it left with the v1 transcript (P8.4)', () => {
+  // The flag gated the v1 transcript mirror. The session log is every session's saved history.
+  // @ts-expect-error The key is not in the union any more.
+  const removed: FeatureFlagKey = 'session_transcript_history';
+  expect(FEATURE_FLAG_KEYS).not.toContain(removed);
 });
 
 test('teams graduated: Microsoft Teams needs no flag, the key still typechecks', () => {

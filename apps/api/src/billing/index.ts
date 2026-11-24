@@ -12,6 +12,7 @@ import { paymentsRouter } from './routes/payments';
 import { subscriptionsRouter } from './routes/subscriptions';
 import { webhooksRouter } from './routes/webhooks';
 import { hasInternalServiceKey } from '../shared/internal-service-key';
+import { OpaqueSchema } from './routes/opaque-schema';
 
 const billingApp = makeOpenApiApp<AppEnv>();
 const accountDeletionApp = makeOpenApiApp<AppEnv>();
@@ -77,9 +78,10 @@ billingApp.openapi(
     method: 'post',
     path: '/cron/yearly-rotation',
     tags: ['billing'],
+    security: [{ bearerAuth: [] }],
     summary: 'Run the yearly credit rotation (cron)',
     responses: {
-      200: json(z.record(z.string(), z.any()), 'Rotation result'),
+      200: json(OpaqueSchema, 'Rotation result'),
       ...errors(401),
     },
   }),
@@ -101,9 +103,10 @@ billingApp.openapi(
     method: 'post',
     path: '/cron/free-tier-rotation',
     tags: ['billing'],
+    security: [{ bearerAuth: [] }],
     summary: 'Run the free-tier monthly credit rotation (cron)',
     responses: {
-      200: json(z.record(z.string(), z.any()), 'Rotation result'),
+      200: json(OpaqueSchema, 'Rotation result'),
       ...errors(401),
     },
   }),
@@ -127,9 +130,10 @@ billingApp.openapi(
     method: 'post',
     path: '/cron/trial-expiry',
     tags: ['billing'],
+    security: [{ bearerAuth: [] }],
     summary: 'Sweep Enterprise licenses: end and warn (cron)',
     responses: {
-      200: json(z.record(z.string(), z.any()), 'Sweep result'),
+      200: json(OpaqueSchema, 'Sweep result'),
       ...errors(401),
     },
   }),

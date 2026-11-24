@@ -69,7 +69,7 @@ import { Button } from '@kortix/ui/button';
 import { ConfirmDialog } from '@kortix/ui/confirm-dialog';
 import { EntityAvatar } from '@kortix/ui/entity-avatar';
 import Hint from '@kortix/ui/hint';
-import { InfoBanner } from '@kortix/ui/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription, AlertMedia as BannerAlertMedia } from '@kortix/ui/alert';
 import { InlineMeta } from '@kortix/ui/inline-meta';
 import { Input } from '@kortix/ui/input';
 import {
@@ -87,6 +87,7 @@ import { UserAvatar } from '@kortix/ui/user-avatar';
 import { BillingTab } from '@/features/accounts/settings/billing-tab';
 import { BrandingTab } from '@/features/accounts/settings/branding-tab';
 import { TransactionsTab } from '@/features/accounts/settings/transactions-tab';
+import { ALL_PROJECTS } from '@/features/billing/cost-explorer/cost-explorer';
 import { GlobalUpgradeModal } from '@/features/billing/global-upgrade-modal';
 import { useBrandingScope } from '@kortix/ui/internal/branding/branding-provider';
 import { Close } from '@kortix/ui/icons';
@@ -183,10 +184,13 @@ export function AccountHubContent({
 } = {}) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const tSettings = useTranslations('workspaces.settings');
+  const tCosts = useTranslations('billing.costs');
   // `?accountId=` and the hub's own params, both off the URL the modal writes
   // onto the page it floats over. See `account-hub-location.tsx`.
   const accountId = useAccountPanelId();
   const searchParams = useHubSearchParams();
+  // The cost explorer keeps its level in the page's own `project` param.
+  const explorerProject = useUiSearchParams()?.get('project') ?? null;
   const queryClient = useQueryClient();
   const { user, isLoading: authLoading } = useAuth();
 
@@ -314,6 +318,25 @@ export function AccountHubContent({
           ? { title: tSettings('sections.roles'), description: tSettings('rolesDescription') }
           : activeSection === 'tokens'
             ? { title: tSettings('sections.apiKeys'), description: tSettings('apiKeysDescription') }
+          : activeSection === 'transactions'
+            ? {
+                title: localizedAccountPaneMeta(tI18nComplete).transactions?.title ?? '',
+                // Session costs follow the open workspace; credits are one
+                // wallet for all workspaces, so the copy says which is which.
+                // The explorer's own level: its raw `project` page param (not
+                // the hub's aliased `accountProject`) wins, else the open
+                // workspace (`parseExplorerState`'s default).
+                description: (
+                  explorerProject ? explorerProject !== ALL_PROJECTS : !!workspaceId
+                )
+                  ? tCosts('usageDescriptionWorkspace')
+                  : tCosts('usageDescriptionAll'),
+              }
+          : activeSection === 'billing'
+            ? {
+                title: localizedAccountPaneMeta(tI18nComplete).billing?.title ?? '',
+                description: tCosts('planDescriptionAll'),
+              }
           : localizedAccountPaneMeta(tI18nComplete)[activeSection];
   // `project` / `group` / `member` carry the open detail entity onto the URL
   // (`?tab=groups&group=<id>`) — omit one (or pass null) to drop the param,
@@ -444,7 +467,7 @@ export function AccountHubContent({
 
           {activeSection === 'transactions' && sectionVisible.transactions ? (
             <BillingAccountProvider accountId={account.account_id}>
-              <TransactionsTab />
+              <TransactionsTab workspaceId={workspaceId} />
             </BillingAccountProvider>
           ) : null}
 
@@ -644,11 +667,11 @@ export function AccountHubContent({
             </div>
           ) : null}
 
-          {/* Branding — Enterprise. The pane exists for anyone with
-              account.write (rail rule); the entitlement decides whether it
-              is the editor or the upsell, mirroring the server's 402 on the
-              write routes. */}
-          {activeSection === 'branding' && canWriteAccount ? (
+          {/* Branding — Enterprise, self-host only. The pane exists for
+              anyone with account.write off the Kortix cloud (rail rule); the
+              entitlement decides whether it is the editor or the upsell,
+              mirroring the server's 402 on the write routes. */}
+          {activeSection === 'branding' && sectionVisible.branding ? (
             entitlementsLoading ? (
               <Skeleton className="h-64 w-full rounded-md" />
             ) : brandingEnabled ? (
@@ -782,9 +805,9 @@ function GitHubConnectionCard({
           <Skeleton className="h-[58px] w-full rounded-md" />
         </div>
       ) : installationsQuery.isError ? (
-        <InfoBanner tone="warning" icon={Github} title={tI18nComplete.raw('textd3a118da5b46')}>
+        <BannerAlert variant="warning" ><BannerAlertMedia><Github /></BannerAlertMedia><BannerAlertTitle>{tI18nComplete.raw('textd3a118da5b46')}</BannerAlertTitle><BannerAlertDescription>
           {(installationsQuery.error as Error).message}
-        </InfoBanner>
+        </BannerAlertDescription></BannerAlert>
       ) : installations.length === 0 ? (
         // Quiet contained empty state — the toolbar above already carries the
         // single "Connect GitHub" CTA.

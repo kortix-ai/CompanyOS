@@ -1,15 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  ADMIN_MANAGED_TABS,
   CAPABILITY_TABS,
   PRIMARY_TABS,
   activeCapabilityTab,
   agentHref,
   capabilityTabHref,
   channelsHref,
-  customizeNavTabs,
   reviewHref,
+  triggerHref,
 } from './capability-tab-routes';
+import { adminResourceRowOpen } from '../layout/project-settings-nav';
 
 describe('CAPABILITY_TABS', () => {
   test('lists agent, skills, connectors, triggers, models, secrets, files, review, config in that order', () => {
@@ -66,33 +66,6 @@ describe('CAPABILITY_TABS', () => {
   });
 });
 
-describe('customizeNavTabs', () => {
-  // Agent-centric Customize (Marko, 2026-10-24): the libraries moved to
-  // `/admin` and Repo moved into Settings, so the nav keeps Agents, Review
-  // (its own standalone row) and Settings. The pages still resolve by URL —
-  // the gate reads the full access set — so the keys stay in CAPABILITY_TABS
-  // and only the nav drops them.
-  test('drops the admin-managed libraries and the settings-managed tabs', () => {
-    const all = CAPABILITY_TABS.map((t) => t.key);
-    expect(customizeNavTabs(all)).toEqual(['agent', 'review', 'config']);
-  });
-
-  test('the admin-managed set is exactly the six libraries', () => {
-    expect([...ADMIN_MANAGED_TABS]).toEqual([
-      'skills',
-      'connectors',
-      'triggers',
-      'reminders',
-      'models',
-      'secrets',
-    ]);
-  });
-
-  test('is a no-op when no admin-managed tab is present', () => {
-    expect(customizeNavTabs(['agent', 'config'])).toEqual(['agent', 'config']);
-  });
-});
-
 describe('the Settings tab', () => {
   test('keys on `config`, never on `settings`', () => {
     // `/workspaces/<id>/settings` is the settings OVERLAY's deep-link route. Two
@@ -107,13 +80,13 @@ describe('the Settings tab', () => {
 describe('capabilityTabHref', () => {
   test('builds a project-scoped path', () => {
     expect(capabilityTabHref('p1', 'skills')).toBe('/workspaces/p1/admin/skills');
-    expect(capabilityTabHref('p1', 'agent')).toBe('/workspaces/p1/customize/agents');
+    expect(capabilityTabHref('p1', 'agent')).toBe('/workspaces/p1/admin/agents');
     expect(capabilityTabHref('p1', 'triggers')).toBe('/workspaces/p1/admin/triggers');
   });
 });
 
 describe('reviewHref', () => {
-  test('Review is its own page, outside Customize', () => {
+  test('Review is a tab of the Inbox', () => {
     // Since 2026-11-04 Review is a top-level page; `/customize/review` redirects to it.
     expect(reviewHref('p1')).toBe('/workspaces/p1/review');
     expect(capabilityTabHref('p1', 'review')).toBe('/workspaces/p1/review');
@@ -122,10 +95,29 @@ describe('reviewHref', () => {
   });
 });
 
+describe('triggerHref', () => {
+  test('opens one trigger on the Triggers section, never through the /customize redirect that drops ?id', () => {
+    expect(triggerHref('p1', 'nightly')).toBe('/workspaces/p1/admin/triggers?id=nightly');
+    expect(triggerHref('p1', 'reminder.0123456789ab')).toBe('/workspaces/p1/admin/triggers?id=reminder.0123456789ab');
+  });
+});
+
+describe('adminResourceRowOpen: the rule the settings page and its links share', () => {
+  const triggers = { capability: 'triggers' as const };
+  test('Triggers needs Settings access and the Triggers capability', () => {
+    expect(adminResourceRowOpen(triggers, true, new Set(['triggers']))).toBe(true);
+    expect(adminResourceRowOpen(triggers, false, new Set(['triggers']))).toBe(false);
+    expect(adminResourceRowOpen(triggers, true, new Set())).toBe(false);
+  });
+  test('a member-open row needs only its capability', () => {
+    expect(adminResourceRowOpen({ capability: 'agent', memberOpen: true }, false, new Set(['agent']))).toBe(true);
+  });
+});
+
 describe('agentHref', () => {
   test('nests one agent under the Agents tab and encodes the manifest key', () => {
-    expect(agentHref('p1', 'churn')).toBe('/workspaces/p1/customize/agents/churn');
-    expect(agentHref('p1', 'a b/c')).toBe('/workspaces/p1/customize/agents/a%20b%2Fc');
+    expect(agentHref('p1', 'churn')).toBe('/workspaces/p1/admin/agents/churn');
+    expect(agentHref('p1', 'a b/c')).toBe('/workspaces/p1/admin/agents/a%20b%2Fc');
   });
 });
 
@@ -153,7 +145,7 @@ describe('activeCapabilityTab', () => {
     expect(activeCapabilityTab('/workspaces/p1/admin/skills/a/b')).toBeNull();
   });
   test('matches the tab segment', () => {
-    expect(activeCapabilityTab('/workspaces/p1/customize/agents')).toBe('agent');
+    expect(activeCapabilityTab('/workspaces/p1/admin/agents')).toBe('agent');
     expect(activeCapabilityTab('/workspaces/p1/admin/connectors')).toBe('connectors');
     expect(activeCapabilityTab('/workspaces/p1/admin/skills')).toBe('skills');
     expect(activeCapabilityTab('/workspaces/p1/admin/triggers')).toBe('triggers');

@@ -29,7 +29,8 @@ import { clip, INBOX_BODY_MAX_CHARS } from '../../notifications/inbox-store';
 import { deliver, liveNotifierDeps, type NotifierDeps } from '../../notifications/notifier';
 import { db } from '../../shared/db';
 import { resolveTriggerWatchers } from './trigger-watchers';
-import { projectsView } from '../../workspaces/rows';
+import { accountKeyOfWorkspace } from '../../workspaces/rows';
+import { errorMessage } from '../../shared/error-message';
 
 /**
  * 'fire' and 'run' as below; 'silence': an app trigger heard no App event
@@ -78,7 +79,7 @@ function runtimeRow(input: TriggerAlertInput) {
 }
 
 function reason(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  return errorMessage(err);
 }
 
 /** Start a failure streak and alert the watchers. True when this call started it. */
@@ -266,10 +267,5 @@ export function commandTriggerSlug(row: { commandType: string; source: string; p
 }
 
 async function accountOf(projectId: string): Promise<string | null> {
-  const [row] = await db
-    .select({ accountId: projectsView.accountId })
-    .from(projectsView)
-    .where(eq(projectsView.projectId, projectId))
-    .limit(1);
-  return row?.accountId ?? null;
+  return accountKeyOfWorkspace(projectId);
 }

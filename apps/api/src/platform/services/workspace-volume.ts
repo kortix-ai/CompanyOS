@@ -1,20 +1,21 @@
 /**
- * /workspace on a Platinum volume: the project's `workspace_volume` flag, the
- * storage half of stateless sandboxes.
+ * /workspace on a Platinum volume: the storage half of stateless sandboxes,
+ * the default for every new Platinum session since 2026-11-23 (the
+ * `workspace_volume` project flag graduated; a stored override is inert).
  *
  * One volume per session, `kws-<session_id>`, mounted at /workspace when the box
- * is created, so the mount exists before kortixd starts. kortixd fills the empty
- * volume on the first boot with its usual Git or S3 transports and adopts the
- * checkout on every later boot (KORTIX_WORKSPACE_VOLUME=1,
- * services/workspace-provider). The box is disposable: one stopped for
+ * is created, so the mount exists before kortixd starts. kortixd never fills it
+ * from the repository: it holds what the agent writes, including a checkout the
+ * agent made with `kortix workspaces clone` (KORTIX_WORKSPACE_VOLUME=1). The box is disposable: one stopped for
  * KORTIX_SANDBOX_IDLE_DELETE_MINUTES is removed (reaping/idle-volume-retire.ts)
  * and the next open boots a fresh box on the same volume. The conversation
  * comes back from the session log (projects/lib/session-sandbox-env-build.ts).
  *
- * The flag is read once, at POST /sessions (`startWorkspaceVolume`). The
+ * The decision is made once, at POST /sessions (`startWorkspaceVolume`). The
  * session row is inserted with the record `metadata.workspace_volume`, and from
  * then on only the record decides: every box of the session mounts the volume,
- * whatever the flag or the kill switch say later.
+ * whatever the kill switch says later. My Kortix sessions get no volume
+ * (projects/lib/session-create.ts).
  *
  * Platinum volumes belong to the control plane that created them: a us-east
  * volume is invisible to the global origin, which answers 404 for it, and 204
@@ -31,7 +32,6 @@ import { projectSessions } from '@kortix/db';
 import { eq } from 'drizzle-orm';
 
 import { config } from '../../config';
-import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { logger } from '../../lib/logger';
 import { db } from '../../shared/db';
 import { platinumJson, platinumRateLimitWaitMs, platinumRegionControlPlane } from '../../shared/platinum';
@@ -54,13 +54,19 @@ const REGION_KEY = /^[a-z]{2,8}-[a-z]{2,12}$/;
 /** An open that POST /sessions started and no session row recorded by then is deleted. */
 const UNRECORDED_OPEN_TTL_MS = 120_000;
 
-export function workspaceVolumeName(sessionId: string): string {
-  return `kws-${sessionId}`;
+/**
+ * Whether a new session gets a /workspace volume: Platinum is configured and
+ * the deployment did not turn the kill switch on. KORTIX_WORKSPACE_VOLUMES
+ * `off` (or 0/false/no) gives no new session a volume; unset, `on` or anything
+ * else gives every new Platinum session one.
+ */
+export function workspaceVolumesEnabled(): boolean {
+  if (!config.PLATINUM_API_KEY) return false;
+  return !/^(0|off|false|no)$/.test((config.KORTIX_WORKSPACE_VOLUMES ?? '').trim().toLowerCase());
 }
 
-/** Operator switch: KORTIX_WORKSPACE_VOLUMES=off gives no new session a volume. */
-function workspaceVolumesKillSwitchOff(): boolean {
-  return /^(0|off|false|no)$/.test((config.KORTIX_WORKSPACE_VOLUMES ?? '').trim().toLowerCase());
+export function workspaceVolumeName(sessionId: string): string {
+  return `kws-${sessionId}`;
 }
 
 /** The session's recorded volume, when the record names its own volume and a valid region. */
@@ -89,21 +95,18 @@ function volumeOrigin(volume: WorkspaceVolume): string | undefined {
 const earlyOpens = new Map<string, Promise<void>>();
 
 /**
- * The create-time decision, the only read of the flag: the volume a new
- * session gets, or null. It also starts opening the volume, so the open runs
- * alongside the rest of POST /sessions instead of before the box create. The
- * caller records the result in the session row it inserts.
+ * The create-time decision: the volume a new session gets, or null. It also
+ * starts opening the volume, so the open runs alongside the rest of POST
+ * /sessions instead of before the box create. The caller records the result
+ * in the session row it inserts.
  */
 export function startWorkspaceVolume(input: {
   sessionId: string;
-  projectMetadata: unknown;
   /** Where the session's boxes run (the project's `us_region`); undefined = home. */
   location: string | undefined;
 }): WorkspaceVolume | null {
   const { sessionId } = input;
-  if (!config.PLATINUM_API_KEY || workspaceVolumesKillSwitchOff() || !resolveFeatureFlag(input.projectMetadata, 'workspace_volume')) {
-    return null;
-  }
+  if (!workspaceVolumesEnabled()) return null;
   const volume: WorkspaceVolume = { name: workspaceVolumeName(sessionId), location: input.location ?? null };
   const open = openWorkspaceVolume(sessionId, volume);
   open.catch(() => {});

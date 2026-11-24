@@ -104,7 +104,7 @@ export function previewBaseDomain(): string | null {
  * links from before a domain move working. URLs are only ever built on the
  * primary.
  */
-export function previewServedBaseDomains(): string[] {
+function previewServedBaseDomains(): string[] {
   const primary = primaryPreviewBaseDomain();
   const aliases = [
     ...aliasFormsOf(primary),
@@ -191,6 +191,18 @@ export function isAllowedPreviewOrigin(origin: string): boolean {
     return candidate === new URL(frontend).origin || aliasFrontendOrigins().includes(candidate);
   } catch {
     return false;
+  }
+}
+
+/** The web-app origins that may frame a preview and hear its location
+ *  (preview-bridge.ts): the same set `isAllowedPreviewOrigin` accepts. */
+export function previewParentOrigins(): string[] {
+  const frontend = (config.FRONTEND_URL || '').trim();
+  if (!frontend) return [];
+  try {
+    return [...new Set([new URL(frontend).origin, ...aliasFrontendOrigins()])];
+  } catch {
+    return [];
   }
 }
 

@@ -1,4 +1,4 @@
-import type { ResolvedManifest, TriggerFilter } from '@kortix/manifest-schema';
+import type { TriggerReaders, ResolvedManifest, TriggerFilter } from '@kortix/manifest-schema';
 
 /**
  * The source of a trigger (a kortix.yaml trigger or a loop). `change_request` fires
@@ -24,6 +24,10 @@ export interface GitTriggerEventFields {
 }
 
 export interface GitTriggerSpec {
+  /** Explicit per-trigger override. Absent: inherit the shared default. */
+  sessionReaders?: TriggerReaders;
+  /** Resolved shared default; never serialized as an explicit override. */
+  defaultSessionReaders?: TriggerReaders;
   /** URL-safe slug — unique per project. */
   slug: string;
   /**
@@ -45,8 +49,17 @@ export interface GitTriggerSpec {
   model: string | null;
   /** When false, the scheduler / webhook receiver skip this entry. */
   enabled: boolean;
-  /** Mustache-style prompt template — the body sent to the agent on each fire. */
+  /**
+   * Mustache-style prompt template — the body sent to the agent on each fire.
+   * Empty for a program agent's trigger that omits `prompt`: the input is then
+   * the payload itself, as JSON (lib/trigger-payload.ts `renderTriggerInput`).
+   */
   promptTemplate: string;
+  /**
+   * An agent run's static `run.payload`: merged under each fire's payload, so
+   * the prompt template and a program agent's stdin carry it. Omitted when unset.
+   */
+  runPayload?: Record<string, unknown>;
   /** For type=cron only. 6-field croner expression. Null for one-off (`runAt`) schedules. */
   cron: string | null;
   /**
@@ -75,6 +88,8 @@ export interface GitTriggerSpec {
    * when unset: the platform default (60) applies.
    */
   maxRunsPerHour?: number;
+  /** Include manual fires in atomically reserved run caps. */
+  hardRunCaps?: boolean;
   /** Any trigger type (`max_runs_per_day`): runs started in a UTC day. Omitted when unset: no daily cap. */
   maxRunsPerDay?: number;
   /**

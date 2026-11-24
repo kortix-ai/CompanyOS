@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 
+import { featureOffMessage } from '../feature-flags.ts';
 import { stripAnsi } from '../style.ts';
 import { chromeLabel, formatChromeError, formatChromeList, formatUsed, runChrome } from './chrome.ts';
 
@@ -117,5 +118,16 @@ describe('runChrome against a daemon', () => {
     const r = await capture(['use']);
     expect(r.code).toBe(1);
     expect(r.err).toContain('https://kortix.com/settings/chrome');
+  });
+});
+
+describe('feature-off line', () => {
+  // `chrome` graduated on 2026-11-24: no workspace turns it on, the server offers it or not.
+  test('chrome names the server, not a workspace toggle', () => {
+    const line = featureOffMessage('`kortix chrome`', 'chrome', new Set());
+    expect(line).toBe('`kortix chrome` is not available: this Kortix server does not offer Kortix in Chrome.');
+  });
+  test('a workspace flag still names the command that turns it on', () => {
+    expect(featureOffMessage('`kortix calendar`', 'calendar', new Set())).toContain('kortix workspaces features enable calendar');
   });
 });

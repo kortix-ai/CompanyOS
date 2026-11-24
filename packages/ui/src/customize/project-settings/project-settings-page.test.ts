@@ -116,7 +116,7 @@ describe('projectSettingsNavTarget', () => {
 describe('projectCapabilityNavTarget', () => {
   test('legacy review navigation reaches the Review page', () => {
     expect(projectCapabilityNavTarget('review')).toBe('review');
-    // Review is its own page since 2026-11-04; `/customize/review` redirects to it.
+    // Review is the Inbox's review view since #12120; `/customize/review` redirects to it.
     expect(projectCapabilityNavHref('p1', 'review', 'review')).toBe('/workspaces/p1/review');
   });
 

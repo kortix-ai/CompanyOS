@@ -325,6 +325,7 @@ export function ProjectHome({
     : composerChip({
         connectModel: modelUnavailable,
         agentName,
+        agentTitle: projectAgents?.find((a) => a.name === agentName)?.title,
         agentsLoading: !projectAgents,
         modelName: activeModel ? pickerModelName(activeModel) : null,
       });
@@ -576,6 +577,7 @@ function HomeComposer({
       )}
       <Composer
         {...composer}
+        projectId={projectId}
         value={draft}
         onChangeText={handleChangeText}
         onSelectionChange={pasted.onSelectionChange}

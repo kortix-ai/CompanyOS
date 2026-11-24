@@ -23,6 +23,11 @@ export const DAEMON_TURN_STREAM_KINDS = [
    * boundary. apps/api closes that message's inbox row as delivered.
    */
   'steer_read',
+  /**
+   * A stopped turn dropped a steered message (`turn_message_id`) it never read.
+   * apps/api puts that message's inbox row back on the queue for the next turn.
+   */
+  'steer_dropped',
 ] as const;
 export type DaemonTurnStreamKind = (typeof DAEMON_TURN_STREAM_KINDS)[number];
 
@@ -162,6 +167,105 @@ export const RuntimeAuditBatchSchema = z.object({
   events: z.array(RuntimeAuditEventSchema),
 });
 export type RuntimeAuditBatch = z.infer<typeof RuntimeAuditBatchSchema>;
+
+/**
+ * The summary allowlist both ends of the audit boundary enforce on the
+ * `input_summary` / `output_summary` of `RuntimeAuditEventSchema`: the key
+ * set, the credential-shaped-value regex, the structural-wrapper keys and the
+ * recursive safe-summary validator. Before KRTX-4621 apps/api's ingestion
+ * guard and kortixd's relay sanitizer each kept a hand copy of these, and the
+ * copies drifted: the relay admitted a `custom` summary key the guard failed
+ * the whole event on. The key set here is the union (the relay's documented
+ * contract; `custom` is a named key, not arbitrary payload). Plain
+ * Sets/RegExp — this file stays import-free beyond zod.
+ */
+
+/** Credential-shaped values: bearer tokens, provider keys, Kortix tokens, `token=`/`password=` pairs. */
+export const RUNTIME_AUDIT_SECRET_VALUE_RE =
+  /(?:bearer\s+[a-z0-9._~+/=-]+|sk-[a-z0-9_-]{12,}|gh[opusr]_[a-z0-9_]{12,}|kortix_(?:pat|sbx)_[a-z0-9_-]+|(?:token|secret|password|api[_-]?key)=\S+)/i;
+
+export const RUNTIME_AUDIT_SUMMARY_KEYS = new Set([
+  'id',
+  'sessionID',
+  'sessionId',
+  'session_id',
+  'parentID',
+  'parentId',
+  'messageID',
+  'messageId',
+  'partID',
+  'partId',
+  'callID',
+  'callId',
+  'toolCallID',
+  'toolCallId',
+  'executionID',
+  'executionId',
+  'tool',
+  'name',
+  'status',
+  'role',
+  'type',
+  'path',
+  'filename',
+  'mime',
+  'size',
+  'bytes',
+  'duration',
+  'durationMs',
+  'agent',
+  'agentID',
+  'agentId',
+  'agentName',
+  'depth',
+  'multiple',
+  'custom',
+  'count',
+  // The wire wraps the safe identity and lifecycle fields below in these
+  // objects. Raw prompt, input, output, error text, and arbitrary metadata are
+  // still excluded by the recursive allowlist.
+  'session',
+  'message',
+  'part',
+  'info',
+  'error',
+  'state',
+  'time',
+  'start',
+  'end',
+  'created',
+  'completed',
+  'updated',
+  'compacting',
+  'archived',
+  'providerID',
+  'modelID',
+  'mode',
+  'delivery',
+]);
+
+// These keys are structural wrappers in the runtime event contract. A
+// compromised sandbox can otherwise put a prompt or provider response in a
+// primitive `message`, `error`, or `part` value and pass the general string
+// allowlist. Keep only their recursively allowlisted object shape.
+export const RUNTIME_AUDIT_STRUCTURAL_WRAPPER_KEYS = new Set(['session', 'message', 'part', 'info', 'error', 'state']);
+
+export function isSafeRuntimeAuditSummary(value: unknown, depth = 0): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || depth > 4) return false;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (!RUNTIME_AUDIT_SUMMARY_KEYS.has(key)) return false;
+    if (RUNTIME_AUDIT_STRUCTURAL_WRAPPER_KEYS.has(key)) {
+      if (!isSafeRuntimeAuditSummary(child, depth + 1)) return false;
+      continue;
+    }
+    if (child === null || typeof child === 'boolean') continue;
+    if (typeof child === 'number' && Number.isFinite(child)) continue;
+    if (typeof child === 'string' && child.length <= 512 && !RUNTIME_AUDIT_SECRET_VALUE_RE.test(child)) continue;
+    if (isSafeRuntimeAuditSummary(child, depth + 1)) continue;
+    return false;
+  }
+  return true;
+}
 
 /** One boot milestone: a label and the ms since the daemon booted (`main.ts` `bootTime`). */
 export const BootMarkSchema = z.object({ label: z.string(), atMs: z.number() });
@@ -467,6 +571,10 @@ export interface CompiledAgent {
   extensions?: string[];
   /** kortix.yaml v3: pi's codemode tool. Omitted: `on` for the session agent, none for a subagent. */
   codemode?: 'on' | 'only' | 'off';
+  /** kortix.yaml v3: a program agent. The shell command each turn runs in place of a model step (flag `program_agents`). */
+  run?: string;
+  /** kortix.yaml v3: a program agent's run limit in seconds (`timeout`, default 1800). A run still going is stopped and the turn fails. */
+  timeout?: number;
 }
 
 /** A kortix.yaml v3 slash command. */
@@ -557,6 +665,8 @@ export const AGENT_SETTING_HARNESSES = {
   prompt: ['pi'],
   extensions: ['pi'],
   codemode: ['pi'],
+  run: ['pi'],
+  timeout: ['pi'],
 } as const satisfies Record<keyof CompiledAgent, readonly 'pi'[]>;
 export type AgentSetting = keyof typeof AGENT_SETTING_HARNESSES;
 

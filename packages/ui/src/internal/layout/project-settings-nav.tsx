@@ -66,7 +66,7 @@ const TAB_ICONS: Record<CapabilityTab['key'], Icon> = {
  * ProjectCustomizeNavItem, top of the panel under New session, navigating to
  * the capability pages (Agents, Repo, Review, Settings — the libraries Skills /
  * Connectors / Triggers / Reminders / Models / Secrets moved to `/admin`,
- * `ADMIN_MANAGED_TABS`). Gated, because those pages can 403.
+ * `ADMIN_SECTION`). Gated, because those pages can 403.
  *
  * The bottom-of-footer "Settings" row that used to sit beside it is gone
  * (Jay, 2026-08-17): it opened the same User Settings overlay a click on the
@@ -231,6 +231,35 @@ export function capabilityAccess(
       (!tab.manage || tab.manage.some(allowed)),
   ).map((tab) => tab.key);
   return { settled, tabs };
+}
+
+/**
+ * The Workspace settings rule for one resource row (`/admin/<section>`): the
+ * caller holds Settings access (`project.settings.write`), unless the row is
+ * member-open, and the row's capability tab. The settings page and every link
+ * into a section read this, so a link never shows to a caller the page sends
+ * back to General.
+ */
+export function adminResourceRowOpen(
+  resource: { capability: CapabilityTab['key'] | null; memberOpen?: true },
+  projectRowsOpen: boolean,
+  allowedTabs: ReadonlySet<string>,
+): boolean {
+  if (!projectRowsOpen && !resource.memberOpen) return false;
+  return !resource.capability || allowedTabs.has(resource.capability);
+}
+
+/**
+ * True once the caller may open the Triggers section of Workspace settings
+ * (`admin/triggers`, kortix.yaml and runtime triggers, loops included). False
+ * while the probes load.
+ */
+export function useTriggersPageOpen(projectId: string | undefined): boolean {
+  const caps = useProjectPageCans(projectId);
+  // The flags only gate tabs the settings page does not gate (see `project-admin-dashboard.tsx`).
+  const access = capabilityAccess(caps, { drives: true, reminders: true });
+  const projectRowsOpen = caps[PROJECT_ACTIONS.PROJECT_SETTINGS_WRITE]?.allowed === true;
+  return access.settled && adminResourceRowOpen({ capability: 'triggers' }, projectRowsOpen, new Set(access.tabs));
 }
 
 export function useCapabilityAccess(projectId: string | undefined): CapabilityAccess {

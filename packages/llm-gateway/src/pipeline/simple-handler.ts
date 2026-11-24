@@ -35,7 +35,7 @@ import {
   withUpstreamHeadersTimeout,
 } from './dispatch';
 import { breakerKey, tripsBreaker, upstreamBreakers } from './circuit-breaker';
-import { clampRetryAfterSeconds, gatewayErrorResponse, providerClientErrorBody, requestTooLarge } from './error-response';
+import { clampRetryAfterSeconds, gatewayErrorResponse, providerClientErrorBody, providerFailureCode, requestTooLarge } from './error-response';
 import { parseUpstreamErrorBody } from '../http/parse-upstream-error';
 import { DEFAULT_IMAGE_WINDOW, type ImageWindowOptions, applyImageWindow } from './image-window';
 import { conversationError, requestFieldError } from './request-fields';
@@ -164,6 +164,34 @@ function hasImage(body: Record<string, unknown>): boolean {
 // verdict the gate can return: those mean "the caller may not run this", this
 // one means "we could not find out".
 const ADMISSION_UNAVAILABLE = 'admission_unavailable';
+
+/**
+ * The answer to a wallet admission that failed (`assertBillingActive` or the
+ * batched `admit` billing). A refusal carries its 402 code as `reason`. An
+ * error without one is no verdict: the check timed out or the control plane
+ * was unreachable. That is a retryable 503, never "no subscription" (prod
+ * 2026-11-12: a 25 s control-plane stall answered funded accounts
+ * `402 subscription_required "attempt 3 exceeded 5000ms"`, and their agents
+ * reported "Out of credits").
+ */
+export function billingRefusal(error: unknown): { status: 402 | 503; code: string; message: string; suggestion: string; retryAfter?: number } {
+  const reason = (error as { reason?: unknown })?.reason;
+  if (typeof reason === 'string') {
+    return {
+      status: 402,
+      code: reason,
+      message: error instanceof Error ? error.message : 'Billing inactive',
+      suggestion: 'Check your subscription or add credits, then retry.',
+    };
+  }
+  return {
+    status: 503,
+    code: ADMISSION_UNAVAILABLE,
+    message: 'Gateway admission control is unavailable',
+    suggestion: 'Retry the request.',
+    retryAfter: 5,
+  };
+}
 
 export async function authorize(hooks: GatewayHooks, token: string): Promise<AuthorizeResult> {
   if (hooks.authorize) return hooks.authorize(token);
@@ -632,25 +660,28 @@ export async function handleChatCompletions(
     const admitted = await admitCharge();
     if (!admitted.ok) {
       const { error } = admitted;
-      const reason = (error as { reason?: unknown })?.reason;
+      const refusal = billingRefusal(error);
+      const detail = error instanceof Error ? error.message : String(error);
+      if (refusal.status === 503) logger.error(`[gateway] ${id}: billing check unavailable — ${detail}`);
       emit({
         ...identity(principal),
         requestedModel,
         resolvedModel: shownModel(descriptor, routedModel),
         provider: shownProvider(descriptor),
-        status: 402,
+        status: refusal.status,
         ok: false,
-        errorCode: typeof reason === 'string' ? reason : 'subscription_required',
-        errorMessage: error instanceof Error ? error.message : 'Billing inactive',
+        errorCode: refusal.code,
+        errorMessage: error instanceof Error ? error.message : refusal.message,
       });
-      return gatewayErrorResponse(402, {
-        message: error instanceof Error ? error.message : 'Billing inactive',
-        code: typeof reason === 'string' ? reason : 'subscription_required',
+      return gatewayErrorResponse(refusal.status, {
+        message: refusal.message,
+        code: refusal.code,
         provider: shownProvider(descriptor),
         requestedModel,
         resolvedModel: shownModel(descriptor, routedModel),
         requestId: id,
-        suggestion: 'Check your subscription or add credits, then retry.',
+        suggestion: refusal.suggestion,
+        ...(refusal.retryAfter !== undefined ? { retryAfterSeconds: refusal.retryAfter } : {}),
       });
     }
     emit.mark('billed');
@@ -876,7 +907,7 @@ export async function handleChatCompletions(
     const providerFailure =
       !publicError && error instanceof UpstreamHttpError && error.status < 500 && error.status !== 429
         ? (requestTooLarge(error.status, error.body, sentRequestBytes) ?? {
-            code: 'upstream_error',
+            code: providerFailureCode(error.status) ?? 'upstream_error',
             message: parseUpstreamErrorBody(error.body, error.message).message.slice(0, 500),
           })
         : null;
@@ -1106,20 +1137,27 @@ export async function handleChatCompletions(
     });
   }
 
-  if (!upstream.ok && upstream.status < 500 && upstream.status !== 429) {
+  if (!upstream.ok) {
     const upstreamText = await upstream.text().catch(() => '');
-    // The trace records the refusal the client receives, with the provider's own text.
+    // The trace records the refusal the client receives, with the provider's
+    // own text. A 429 or 5xx reaches the client unchanged, as before; it is
+    // read here so its trace row names the failure (it was blank before).
+    const clientError = upstream.status < 500 && upstream.status !== 429;
     publicFailure = {
       status: upstream.status,
-      ...(requestTooLarge(upstream.status, upstreamText, sentRequestBytes) ?? {
-        code: 'upstream_error',
-        message: parseUpstreamErrorBody(upstreamText).message.slice(0, 500),
+      ...((clientError ? requestTooLarge(upstream.status, upstreamText, sentRequestBytes) : null) ?? {
+        code: providerFailureCode(upstream.status) ??
+          (upstream.status === 429 ? 'upstream_rate_limited' : upstream.status >= 500 ? 'upstream_unavailable' : 'upstream_error'),
+        message: parseUpstreamErrorBody(upstreamText, `upstream HTTP ${upstream.status}`).message.slice(0, 500),
       }),
     };
     await settle(null);
     const headers = passthroughHeaders(upstream.headers);
-    headers.set('content-type', 'application/json');
-    return new Response(providerClientErrorBody(upstream.status, upstreamText, sentRequestBytes), { status: upstream.status, headers });
+    if (clientError) headers.set('content-type', 'application/json');
+    return new Response(
+      clientError ? providerClientErrorBody(upstream.status, upstreamText, sentRequestBytes, served.provider) : upstreamText,
+      { status: upstream.status, headers },
+    );
   }
 
   // KRTX-3369: an answer names the model the client asked for and the model

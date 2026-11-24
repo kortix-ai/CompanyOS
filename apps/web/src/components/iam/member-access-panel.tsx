@@ -52,7 +52,7 @@ import {
   DropdownMenuTrigger,
 } from '@kortix/ui/dropdown-menu';
 import { EntityAvatar } from '@kortix/ui/entity-avatar';
-import { InfoBanner } from '@kortix/ui/info-banner';
+import { Alert as BannerAlert, AlertDescription as BannerAlertDescription} from '@kortix/ui/alert';
 import { InlineMeta } from '@kortix/ui/inline-meta';
 import {
   Modal,
@@ -66,6 +66,8 @@ import { Skeleton } from '@kortix/ui/skeleton';
 import { errorToast, successToast } from '@kortix/ui/toast';
 import { UserAvatar } from '@kortix/ui/user-avatar';
 import { EmptyState } from '@kortix/ui/empty-state';
+import { HubLink } from '@kortix/ui/internal/account-hub/account-hub-location';
+import { hubTarget } from '@kortix/ui/internal/stores/account-panel-store';
 import { ErrorState } from '@kortix/ui/error-state';
 import {
   AccessDetailShell,
@@ -91,8 +93,8 @@ import {
 } from '@/lib/iam-client';
 import { usePermission, usePermissionsFor } from '@kortix/ui/workspace';
 import { cn } from '@kortix/ui';
+import { useAccountMembers } from '@kortix/ui/internal/account-hub/use-account-members';
 import {
-  listAccountMembers,
   listProjectResourceGrants,
   removeAccountMember,
   type IamPolicy,
@@ -195,11 +197,7 @@ export function MemberAccessPanel({
   const [editOpen, setEditOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
 
-  const membersQuery = useQuery({
-    queryKey: ['account-members', accountId],
-    queryFn: () => listAccountMembers(accountId),
-    ...contract('directory'),
-  });
+  const membersQuery = useAccountMembers(accountId);
 
   // Server-side derivation of this member's group memberships. Drives the
   // "Groups" section so admins can see at a glance which policies the user
@@ -468,7 +466,7 @@ export function MemberAccessPanel({
       ) : null}
 
       {!membersQuery.isLoading && !member ? (
-        <InfoBanner tone="neutral">{tI18nComplete.raw('textf75481058771')}</InfoBanner>
+        <BannerAlert variant="default" ><BannerAlertDescription>{tI18nComplete.raw('textf75481058771')}</BannerAlertDescription></BannerAlert>
       ) : null}
 
       {member ? (
@@ -484,6 +482,8 @@ export function MemberAccessPanel({
 
       {member ? (
         <MemberGroupsSection
+          accountId={accountId}
+          rbacEnabled={rbacEnabled}
           memberGroups={memberGroupsQuery.data ?? []}
           isLoading={memberGroupsQuery.isLoading}
           onOpenGroup={onOpenGroup}
@@ -679,9 +679,9 @@ function MemberProjectAccessSection({
           title={tI18nComplete.raw('text5b9616df2058')}
           description={
             isAdminLike
-              ? tI18nComplete('textdfad83e7eb69', {
-                  value0: accountRole === 'owner' ? 'Owners' : 'Admins',
-                })
+              ? accountRole === 'owner'
+                ? tI18nComplete.raw('textcf42cb2f1ca3')
+                : tI18nComplete.raw('textd7e2d4bc4c80')
               : tI18nComplete.raw('text25cc3dcfa2a5')
           }
         />
@@ -804,17 +804,26 @@ function MemberProjectAccessSection({
 // ─── Groups ───────────────────────────────────────────────────────────────
 // Which account groups this member belongs to. Same row as everywhere else,
 // and clicking one stays in the hub — it opens the Groups pane's own panel.
+// With no group, the empty state links to the Groups pane: where a person is
+// added to a group, or, without the `rbac` entitlement, where Groups is
+// offered as part of Enterprise. It never asks for an action it cannot take.
 
-function MemberGroupsSection({
+export function MemberGroupsSection({
+  accountId,
+  rbacEnabled,
   memberGroups,
   isLoading,
   onOpenGroup,
 }: {
+  accountId: string;
+  /** The account's tier carries `rbac`: groups can be created and joined. */
+  rbacEnabled: boolean;
   memberGroups: MemberGroupSummary[];
   isLoading: boolean;
   onOpenGroup: (groupId: string) => void;
 }) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
+  const tSettings = useTranslations('workspaces.settings');
   if (isLoading) return <Skeleton className="h-[58px] w-full rounded-md" />;
   if (memberGroups.length === 0) {
     return (
@@ -822,7 +831,14 @@ function MemberGroupsSection({
         icon={Users}
         size="sm"
         title={tI18nComplete.raw('text9a70da1bb740')}
-        description={tI18nComplete.raw('text5c101a14dc57')}
+        description={
+          rbacEnabled ? tI18nComplete.raw('text5c101a14dc57') : tSettings('memberGroupsEnterprise')
+        }
+        action={
+          <Button asChild variant="outline" size="sm">
+            <HubLink to={hubTarget(accountId, { tab: 'groups' })}>{tSettings('openGroups')}</HubLink>
+          </Button>
+        }
       />
     );
   }

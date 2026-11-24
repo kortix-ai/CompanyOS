@@ -369,6 +369,28 @@ describe('deriveContext', () => {
     expect(tools.some((t) => t.label === 'Terminal')).toBe(true);
   });
 
+  it('a list of agents that found no other agent is not context', () => {
+    const agent = (handle: string, relation: string) => ({
+      handle, session_id: `ses-${handle}`, short_id: 'ses00001', project_id: 'p-1', agent_name: 'reviewer',
+      title: `${handle} at work`, relation, state: 'working', inbound: 'accept', can_receive: true,
+    });
+    const listed = (agents: unknown[]) =>
+      JSON.stringify({ ok: true, tool: 'list_agents', action: 'list', card: { title: 'Agents', status: 'done' }, data: { self: agent('lead', 'self'), agents } });
+    const empty = deriveContext([part('list_agents', {}, { output: listed([agent('lead', 'self')]) })]);
+    expect(empty.tools).toEqual([]);
+    const found = deriveContext([part('list_agents', {}, { output: listed([agent('lead', 'self'), agent('writer', 'child')]) })]);
+    expect(found.tools).toHaveLength(1);
+  });
+
+  it('a question the agent asked the user is not context', () => {
+    const { tools } = deriveContext([
+      part('question', { questions: [{ question: 'Which price should we test?' }] }),
+      part('ask', { question: 'Ship it?' }),
+      part('bash', { command: 'ls' }),
+    ]);
+    expect(tools.map((t) => t.label)).toEqual(['Terminal']);
+  });
+
   // ─── BUG 1 — anything that produced an Output must never also appear in
   // Context's "Tools used" bucket. `edit` already gets this right (see the
   // test above); `create` (image_gen/video_gen/presentation_gen/show) did
@@ -412,6 +434,50 @@ describe('deriveContext', () => {
     ]);
     expect(web).toHaveLength(1);
     expect(web[0].label).toBe('Acme Corp Pricing');
+  });
+
+  // scrape_webpage takes `urls`, a comma-separated string — the shape the
+  // runtime log recorded for a real call ({"urls":"https://example.com"}).
+  it('lists the page a scrape_webpage call read from its `urls` input', () => {
+    const { web } = deriveContext([
+      part(
+        'scrape_webpage',
+        { urls: 'https://example.com' },
+        { output: JSON.stringify({ url: 'https://example.com', success: true, title: 'Example Domain' }) },
+      ),
+    ]);
+    expect(web).toHaveLength(1);
+    expect(web[0].url).toBe('https://example.com');
+    expect(web[0].label).toBe('Example Domain');
+  });
+
+  it('adds one web source per URL of a multi-URL scrape_webpage call', () => {
+    const { web } = deriveContext([
+      part(
+        'scrape_webpage',
+        { urls: 'https://acme.example.com/a, https://globex.example.com/b' },
+        {
+          output: JSON.stringify({
+            total: 2,
+            successful: 2,
+            failed: 0,
+            results: [
+              { url: 'https://acme.example.com/a', success: true, title: 'Acme A' },
+              { url: 'https://globex.example.com/b', success: true, title: '' },
+            ],
+          }),
+        },
+      ),
+    ]);
+    expect(web.map((w) => [w.url, w.label])).toEqual([
+      ['https://acme.example.com/a', 'Acme A'],
+      ['https://globex.example.com/b', 'globex.example.com'],
+    ]);
+  });
+
+  it('accepts `urls` as an array (an ejected tool copy may change the schema)', () => {
+    const { web } = deriveContext([part('scrape_webpage', { urls: ['https://a.example.com', 'https://b.example.com'] })]);
+    expect(web.map((w) => w.label)).toEqual(['a.example.com', 'b.example.com']);
   });
 
   it('dedups two fetches of the same URL that only differ by protocol/www/trailing-slash', () => {

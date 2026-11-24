@@ -21,6 +21,8 @@ import { db } from '../../shared/db';
 import { qualifiedColumn } from '../../shared/sql-qualified-column';
 import { generateSessionTitleFromFirstPrompt } from '../session-title-generate';
 import { resolveProjectAutomationActor } from './actor';
+import { sessionIsTombstoned } from '../lib/session-visibility';
+import { promptAuthorName } from '../lib/prompt-author';
 import { awakeDeliveryTarget, deliverAfterWake, undoDeliveryWake, type SendOutcome } from './deliver';
 import { sandboxRuntimeEndpoint } from '../runtime-session-mapping';
 import { sessionTransitionLeaves, transitionSession } from './status-transitions';
@@ -86,7 +88,7 @@ export async function continueSession(
   // follow-up (Slack reply, scheduled trigger, etc.) would revive a session
   // the user explicitly deleted.
   const sessionMeta = (session.metadata ?? {}) as Record<string, unknown>;
-  if (typeof sessionMeta.deletedAt === 'string') return 'no-session';
+  if (sessionIsTombstoned(session)) return 'no-session';
   if (command.projectId && command.projectId !== session.projectId) {
     console.warn('[session-lifecycle] command project does not own the session; refusing delivery', {
       sessionId,
@@ -101,7 +103,9 @@ export async function continueSession(
   const stale = await staleDevTunnelBox(sessionId);
   if (stale) {
     logger.warn('[session-lifecycle] refusing delivery to a box of an earlier dev tunnel', { sessionId, reason: stale });
-    return 'no-session';
+    // A web send still belongs to this session. Name its failed callback path;
+    // channels use no-session to start a fresh conversation on a reachable box.
+    return command.source === 'ui' ? 'stale-runtime' : 'no-session';
   }
   const userId = command.userId ?? (await resolveProjectAutomationActor(session.accountId));
   if (!userId) {
@@ -137,6 +141,9 @@ export async function continueSession(
   // Observed here so a delivery that never reaches `sendPrompt` leaves no
   // unhandled rejection; `sendPrompt` awaits the original and throws.
   turnIdentity.catch(() => undefined);
+  // The name the model reads above a person's prompt (KRTX-5121), read
+  // alongside the wake. Never throws: no name sends the prompt without one.
+  const author = promptAuthorName(command.authorUserId ?? null);
   // The project's default reasoning effort, clamped to the model this prompt
   // runs on. Injected only when the prompt carries no variant of its own (the
   // composer's "Auto", a Slack message, a trigger fire): an explicit session
@@ -178,6 +185,7 @@ export async function continueSession(
         wireMessageId: command.wireMessageId,
         materializationKey: command.materializationKey,
         noReply: command.noReply,
+        author: await author,
         source: command.source,
         accountId: session.accountId,
         projectId: session.projectId,

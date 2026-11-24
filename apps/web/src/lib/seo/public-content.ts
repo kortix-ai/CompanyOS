@@ -81,14 +81,6 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
   },
   {
     kind: 'marketing',
-    slug: 'marketplace',
-    title: 'Marketplace: agents, skills and workspace templates',
-    description:
-      'Browse skills, agents, and commands from every source. Add them to a Kortix workspace in one click.',
-    htmlPath: '/marketplace',
-  },
-  {
-    kind: 'marketing',
     slug: 'developers',
     title: 'Developers: CLI, SDK and API for AI agents',
     description:
@@ -101,7 +93,7 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
     slug: 'careers',
     title: 'Careers',
     description:
-      'Open positions at Kortix — FDE, GTM and MTS. Belgrade, Serbia and San Francisco. We hire for prolonged ownership.',
+      'Open positions at Kortix — FDE, GTM and MTS. Belgrade, Serbia and the US. We hire for prolonged ownership.',
     htmlPath: '/careers',
   },
   {
@@ -177,7 +169,7 @@ const MARKETING_RECORDS: PublicContentRecord[] = [
     slug: 'case-studies',
     title: 'Case studies',
     description:
-      'What runs on CompanyOS: a science agent at City University of Hong Kong, and agents that evaluate every deal, write software, analyze credit and match invoices.',
+      'What runs on CompanyOS: a science agent at City University of Hong Kong, and agents that write software, research candidates, match invoices and evaluate every deal.',
     htmlPath: '/case-studies',
   },
   {

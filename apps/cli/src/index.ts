@@ -28,15 +28,15 @@ import { runHosts } from './commands/hosts.ts';
 import { runInit } from './commands/init.ts';
 import { runLogin } from './commands/login.ts';
 import { runLogout } from './commands/logout.ts';
-import { runMarketplace } from './commands/marketplace.ts';
 import { runMembers } from './commands/members.ts';
 import { runModels } from './commands/models.ts';
 import { runPermissions } from './commands/permissions.ts';
 import { runProjects } from './commands/projects.ts';
 import { runProviders } from './commands/providers.ts';
-import { runRegistry } from './commands/registry.ts';
 import { runReminders } from './commands/reminders.ts';
 import { runGoals } from './commands/goals.ts';
+import { runEvals } from './commands/evals.ts';
+import { runCalendar } from './commands/calendar.ts';
 import { runSpaces } from './commands/spaces.ts';
 import { runTasks } from './commands/tasks.ts';
 import { runArtifacts } from './commands/artifacts.ts';
@@ -44,11 +44,14 @@ import { runReview } from './commands/review.ts';
 import { runRoles } from './commands/roles.ts';
 import { runSandboxes } from './commands/sandboxes.ts';
 import { runSchema } from './commands/schema.ts';
+import { runTemplates } from './commands/templates.ts';
 import { runSecrets } from './commands/secrets.ts';
 import { runSelfHost } from './commands/self-host.ts';
 import { runSessionsChat } from './commands/sessions-chat.ts';
 import { runSessions } from './commands/sessions.ts';
 import { runShip } from './commands/ship.ts';
+import { runPlan } from './commands/plan.ts';
+import { runOnboard } from './commands/onboard.ts';
 import { runSystemSkills } from './commands/system-skills.ts';
 import { runTokens } from './commands/tokens.ts';
 import { runKeys } from './commands/keys.ts';
@@ -71,11 +74,13 @@ import {
   resolveUpdateStatus,
   snoozeUpdate,
 } from './update-check.ts';
+import { resolveCliVersion } from './cli-version.ts';
 
 // CI bakes the real version via --define process.env.KORTIX_CLI_VERSION (the
-// unified X.Y.Z on release, X.Y.Z-dev.<sha> on dev). This fallback only applies
-// to a bare `bun run src/index.ts` during local dev.
-const VERSION = process.env.KORTIX_CLI_VERSION ?? 'dev';
+// unified X.Y.Z on release, X.Y.Z-dev.<sha> on dev). The `dev` fallback only
+// applies to a bare `bun run src/index.ts` during local dev. In a session, the
+// release the API serves replaces a staging stamp of the same commit.
+const VERSION = resolveCliVersion(process.env.KORTIX_CLI_VERSION ?? 'dev', process.env);
 
 /** A faded, labeled divider that bands a tier above its (bold) section titles. */
 function tierBand(label: string): string {
@@ -211,8 +216,7 @@ async function offerInteractiveUpdate(): Promise<boolean> {
  * argv[0] → handler for every routed command. Aliases point at the same
  * handler (`deploy`→ship, `t`→tui, `perms`→permissions,
  * `session`→sessions, `workspace`/`projects`/`project`→workspaces); the token-only, remind and
- * skills adapters keep their extra arguments; `registry` keeps its stderr
- * warning. `help`, `version`, `git-credential` and bare `kortix` stay
+ * skills adapters keep their extra arguments. `help`, `version`, `git-credential` and bare `kortix` stay
  * special-cased in main() — they are landing-screen or protocol verbs, not
  * subcommand dispatch.
  *
@@ -229,6 +233,9 @@ const COMMAND_HANDLERS: Record<string, RootCommandHandler> = {
   deploy: (rest) => runShip(rest),
   validate: (rest) => runValidate(rest),
   schema: (rest) => runSchema(rest),
+  templates: (rest) => runTemplates(rest),
+  plan: (rest) => runPlan(rest),
+  onboard: (rest) => runOnboard(rest),
   'self-host': (rest) => runSelfHost(rest),
   login: (rest) => runLogin(rest),
   logout: (rest) => runLogout(rest),
@@ -263,6 +270,8 @@ const COMMAND_HANDLERS: Record<string, RootCommandHandler> = {
   reminders: (rest) => runReminders(rest),
   chrome: (rest) => runChrome(rest),
   goals: (rest) => runGoals(rest),
+  evals: (rest) => runEvals(rest),
+  calendar: (rest) => runCalendar(rest),
   artifacts: (rest) => runArtifacts(rest),
   capture: (rest) => runCapture(rest),
   spaces: (rest) => runSpaces(rest),
@@ -276,15 +285,8 @@ const COMMAND_HANDLERS: Record<string, RootCommandHandler> = {
   apps: (rest) => runApps(rest),
   channels: (rest) => runChannels(rest),
   sandboxes: (rest) => runSandboxes(rest),
-  marketplace: (rest) => runMarketplace(rest),
   'system-skills': (rest, invoked) => runSystemSkills(rest, invoked),
   skills: (rest, invoked) => runSystemSkills(rest, invoked),
-  registry: (rest) => {
-    process.stderr.write(
-      `${C.yellow}developer command:${C.reset} registry is an internal marketplace authoring format; use ${C.cyan}kortix marketplace${C.reset} for normal install/search.\n`,
-    );
-    return runRegistry(rest);
-  },
   agents: (rest) => runAgents(rest),
   tools: (rest) => runTools(rest),
   models: (rest) => runModels(rest),

@@ -25,7 +25,7 @@ import { join } from 'node:path';
  * from apps/api/.env so secrets never go through the shell).
  */
 import { runner } from 'node-pg-migrate';
-import { ledgerExists } from '../src/ledger-exists';
+import { LEDGER_TABLE, ledgerExists } from './migration-ledger';
 import { requiresTls } from '../src/tls';
 import { withClient } from '../src/with-client';
 import { repairLocalAuditV2Ledger } from './local-audit-v2-ledger-repair';
@@ -114,7 +114,7 @@ async function autoBaselineIfNeeded(base: Record<string, unknown>, databaseUrl: 
 
     if (await ledgerExists(client)) {
       const { rows: [{ n }] } = await client.query<{ n: number }>(
-        'select count(*)::int as n from kortix_migrations.pgmigrations',
+        `select count(*)::int as n from ${LEDGER_TABLE}`,
       );
       if (n > 0) return; // already tracked (baseline recorded) → normal `up`
     }
@@ -133,8 +133,12 @@ async function autoBaselineIfNeeded(base: Record<string, unknown>, databaseUrl: 
  * `relation "basejump.account_user" does not exist`.
  *
  * Deployed cloud/dev databases already have these objects (provided by the
- * platform / historical migrations now archived), so this is gated on basejump
- * being ABSENT — it is a no-op on every provisioned DB and idempotent on re-run.
+ * platform / historical migrations now archived), so this is gated on a FRESH
+ * database: basejump ABSENT and the managed schema (`kortix.accounts`) ABSENT.
+ * It is a no-op on every provisioned DB and idempotent on re-run. The second
+ * check matters since the legacy schemas are dropped
+ * (20261112124223964_drop_legacy_suna_schemas): a migrated database without
+ * basejump must not get the bootstrap again.
  *
  * Sequencing: the bootstrap installs a trigger ON auth.users (welcome email),
  * so it must run AFTER Supabase Auth (GoTrue) has created the auth schema. We
@@ -155,11 +159,11 @@ async function selfHostBootstrapIfFresh(databaseUrl: string): Promise<void> {
       await new Promise((res) => setTimeout(res, 2000));
     }
 
-    const { rows: [bj] } = await client.query<{ ok: boolean }>(
-      "select to_regclass('basejump.account_user') is not null as ok",
+    const { rows: [present] } = await client.query<{ basejump: boolean; managed: boolean }>(
+      "select to_regclass('basejump.account_user') is not null as basejump, to_regclass('kortix.accounts') is not null as managed",
     );
-    if (bj?.ok) {
-      console.log('[migrate] basejump prerequisites already present — skipping bootstrap.');
+    if (present?.basejump || present?.managed) {
+      console.log('[migrate] prerequisites already present (basejump stub or managed schema) — skipping bootstrap.');
       return;
     }
 

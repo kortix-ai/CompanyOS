@@ -2,7 +2,7 @@
  * ModelPickerSheet — the agent and model sheet behind the composer's model
  * pill, on the project home and in a thread.
  *
- * One sheet, two tabs, the project/account switcher's UX (Jay, 2026-09-23):
+ * One sheet, two tabs (Jay, 2026-09-23), full screen so the tab bar shows:
  * an Agent · Model tab bar pinned at the bottom (`PickerSheet tabs`). It
  * opens on Model. Picking an agent applies it and moves to Model, the way
  * picking an account moves to Projects. The header's agent pill is gone.
@@ -33,10 +33,12 @@ import Reanimated, {
 } from 'react-native-reanimated';
 
 import type { SheetRef } from '@/components/kortix/sheet';
+import { useControlFill } from '@/components/kortix/surface-context';
 import type { FloatingTabItem } from '@/components/navigation/FloatingTabBar';
 import { PickerSheet } from '@/components/session/PickerSheet';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
+import { cn } from '@/lib/utils/utils';
 import { isSelectableAgent } from '@kortix/sdk';
 import { Text } from '@/components/ui/text';
 import { haptics } from '@/lib/haptics';
@@ -107,7 +109,7 @@ export const ModelPickerSheet = React.memo(React.forwardRef<SheetRef, ModelPicke
     const [tab, setTab] = React.useState(MODEL_TAB);
 
     const agentOptions = React.useMemo<PickerOption[]>(
-      () => (agent?.agents ?? []).filter(isSelectableAgent).map((a) => ({ key: a.name, label: agentDisplayName(a.name) })),
+      () => (agent?.agents ?? []).filter(isSelectableAgent).map((a) => ({ key: a.name, label: agentDisplayName(a.name, a.title) })),
       [agent?.agents],
     );
     const hasAgentTab = !!agent && (agentOptions.length >= 2 || !!agent.onCreate);
@@ -285,6 +287,8 @@ function ThinkingControl({ levels, selected, onSelect }: ModelThinking) {
     return Gesture.Exclusive(pan, tap);
   }, [travel, count, reducedMotion, offset, dragStart, hoverIndex, hover, commit]);
 
+  // `bg-secondary`, or the glass fill on the iOS 26 sheet (no grey patch on the glass).
+  const trackFill = useControlFill();
   const thumbStyle = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
   // Full-width fill, slid left so its right edge ends at the thumb's right edge.
   const fillStyle = useAnimatedStyle(() => ({
@@ -308,7 +312,7 @@ function ThinkingControl({ levels, selected, onSelect }: ModelThinking) {
       <GestureDetector gesture={gesture}>
         <View
           onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
-          className="justify-center overflow-hidden rounded-full bg-secondary"
+          className={cn('justify-center overflow-hidden rounded-full', trackFill)}
           style={{ height: TRACK_HEIGHT }}
           accessible
           accessibilityRole="adjustable"

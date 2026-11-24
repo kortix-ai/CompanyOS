@@ -72,7 +72,7 @@ export function SessionDetailPanel() {
           </div>
         </DetailLayer>
 
-        {/* vaul unmounts `DrawerContent` on close, so the shell reconnects on
+        {/* The drawer unmounts `DrawerContent` on close, so the shell reconnects on
             every open — the tradeoff mobile has always accepted; there is no
             room for a persistent absolutely positioned layer inside a bottom
             sheet. */}
@@ -111,6 +111,14 @@ export function SessionDetailPanel() {
         {/* Only while nothing covers the home: one wake status mounted at a time. */}
         {booting && !detail && !terminalOpen ? (
           <SessionBootStatus projectId={projectId} sessionId={projectSessionId} />
+        ) : // Open with nothing on it — every path that opens the panel gives it
+        // a detail or the terminal in the same update, but a click whose
+        // content has not landed yet can sit in between. Name the state;
+        // never draw a blank panel.
+        !detail && !terminalOpen ? (
+          <div className="text-muted-foreground flex h-full items-center justify-center p-8 text-center text-sm">
+            {tI18nComplete.raw('text49abaf804ab3')}
+          </div>
         ) : null}
       </DetailLayer>
     </div>

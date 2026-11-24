@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Env } from "../core/env";
-import type { CreatedProject } from "../core/types";
+import type { CreatedProject, FlowContext } from "../core/types";
+import { lockProjectFirst } from './token-binding-lock';
 
 interface ProjectDb {
   query(text: string, values?: unknown[]): Promise<unknown>;
@@ -215,6 +216,27 @@ export async function setDatabaseProjectFeature(
         [projectId, feature, enabled],
       );
   
+  });
+}
+
+/**
+ * Record a provider check result on one saved provider key, as
+ * `POST /v1/accounts/:accountId/secret-resources/:secretId/verify` does after
+ * the provider answers. The local profile has no provider to ask.
+ */
+export async function setDatabaseKeyVerification(
+  env: Env,
+  secretId: string,
+  status: "verified" | "invalid" | "unknown",
+  open: OpenProjectDb = openProjectDb,
+): Promise<void> {
+  return withProjectDb(env, "record a key check for", open, async (client) => {
+    await client.query(
+      `UPDATE kortix.account_secret_resources
+       SET verify_status = $2, verify_message = 'set by the test', verified_at = now()
+       WHERE secret_id = $1::uuid`,
+      [secretId, status],
+    );
   });
 }
 
@@ -532,9 +554,9 @@ export async function bindDatabaseSessionCredential(
         [input.sessionId, input.accountId, input.projectId],
       );
       await client.query(
-        `UPDATE kortix.account_tokens
+        lockProjectFirst(`UPDATE kortix.account_tokens
          SET session_id = $2
-         WHERE token_id = $1::uuid`,
+         WHERE token_id = $1::uuid`),
         [input.tokenId, input.sessionId],
       );
       await client.query(
@@ -568,4 +590,18 @@ export async function deleteDatabaseProject(
       );
   
   });
+}
+
+/** A project-scoped PAT for a fresh project, as a client: mints through the owner and tracks the token. */
+export async function createProjectPat(ctx: FlowContext, label: string) {
+  const project = await ctx.fixtures.project();
+  const response = await ctx.client.as(ctx.P.OWNER).post(
+    '/v1/workspaces/:projectId/cli-token',
+    { name: ctx.fixtures.name(label) },
+    { params: { projectId: project.id } },
+  );
+  response.status(201).body().exists('$.secret_key').exists('$.token_id');
+  const body = response.json<{ secret_key: string; token_id: string }>();
+  ctx.track('token', body.token_id);
+  return ctx.client.withBearer(body.secret_key, 'PAT_PROJ');
 }

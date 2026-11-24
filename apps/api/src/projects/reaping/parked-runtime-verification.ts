@@ -35,20 +35,24 @@
  */
 
 import { sessionSandboxes } from '@kortix/db';
-import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 
 import { endComputeSession } from '../../billing/services/compute-metering';
 import { type SandboxProviderName, config } from '../../config';
 import { type InPlaceRecoveryStatus, getProvider } from '../../platform/providers';
 import { db } from '../../shared/db';
 import {
+  MAX_IN_PLACE_RECOVERY_ATTEMPTS,
   claimInPlaceRuntimeRecovery,
+  inPlaceRecoveryAttempts,
   isKortixInitiatedRemoval,
   markInPlaceRuntimeRecoveryAccepted,
   preserveEstablishedRuntime,
 } from '../runtime-identity';
 import { runtimeWakeInProgress } from '../session-lifecycle/runtime-wake-fence';
+import { patchedSandboxMetadata } from '../session-lifecycle/status-transitions';
 import { logger } from '../../lib/logger';
+import { mergeMetadata } from './sandbox-state-sync';
 
 /** How many parked rows one pass may examine. */
 const PARKED_VERIFY_BATCH = 60;
@@ -124,18 +128,50 @@ export type ParkedRemovalOutcome = 'recovered' | 'preserve-lost' | 'recovery-in-
  * historical one: preserve the identity. When another caller already owns a
  * recovery for the row (`claim` false), the sweep leaves it alone rather than
  * racing a restore that is in progress. Only an explicit `unavailable` from the
- * provider authorizes the loss.
+ * provider authorizes the loss. A THROWN probe is a failed round-trip, not a
+ * provider statement — Platinum's `/start` can refuse for a passing reason
+ * (the org write rate limit, a 5xx, network) that has nothing to do with
+ * whether the data exists — so it leaves the row for the next pass instead.
+ *
+ * The other loss authority is `priorAttempts`: the provider accepted
+ * `MAX_IN_PLACE_RECOVERY_ATTEMPTS` recoveries of this identity and the box
+ * never booted (`RUNTIME_RECOVERY_ATTEMPTS_KEY`). The claim comes first, so a
+ * recovery another caller still runs is never condemned under it.
  */
 export async function decideRemovedParkedOutcome(input: {
   externalId: string;
   recoverInPlace?: (externalId: string) => Promise<InPlaceRecoveryStatus>;
   claim: () => Promise<boolean>;
   markRecovered: (recovery: 'running' | 'recovering') => Promise<boolean>;
+  priorAttempts?: number;
 }): Promise<ParkedRemovalOutcome> {
   if (!input.recoverInPlace) return 'preserve-lost';
   const claimed = await input.claim();
   if (!claimed) return 'recovery-in-flight';
-  const recovery = await input.recoverInPlace(input.externalId).catch(() => 'unavailable' as const);
+  const priorAttempts = input.priorAttempts ?? 0;
+  if (priorAttempts >= MAX_IN_PLACE_RECOVERY_ATTEMPTS) {
+    logger.warn('[recovery-gate] in-place recovery attempts exhausted; preserving the identity as lost', {
+      event: 'runtime.recovery_exhausted',
+      externalId: input.externalId,
+      attempts: priorAttempts,
+    });
+    return 'preserve-lost';
+  }
+  // A throw says "this probe could not run", never "the box is gone": the
+  // gate's explicit `unavailable` is the only loss authority (doc above).
+  // The warn keeps the round-trip failure diagnosable in prod — the same
+  // breadcrumb the pre-gate open path used to write before it duplicated this
+  // decision (KRTX-4570).
+  const recovery = await input
+    .recoverInPlace(input.externalId)
+    .catch((error: unknown) => {
+      logger.warn('[recovery-gate] in-place recovery probe failed', {
+        externalId: input.externalId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return 'recovery-in-flight' as const;
+    });
+  if (recovery === 'recovery-in-flight') return 'recovery-in-flight';
   if (recovery === 'running' || recovery === 'recovering') {
     // The mark is the write that ends the recovery. If another writer beat us to
     // the row the provider still recovered, but this sweep no longer owns the
@@ -148,13 +184,19 @@ export async function decideRemovedParkedOutcome(input: {
 /**
  * Run the removed-parked decision for one row against its REAL provider: claim
  * the recovery lease, ask the in-place recovery gate, persist an accepted
- * recovery. Shared by the parked sweep and the wake-maintenance reconcile, so
- * one `removed` observation carries the same weight on every background path.
+ * recovery. Shared by the parked sweep, the wake-maintenance reconcile, the
+ * stuck-provisioning convergence and the `/start` open path, so one `removed`
+ * observation carries the same weight — and a thrown probe the same
+ * indeterminate answer — on every surface (the 2026-10-03 learning).
  * Runs the already-lost skip first: a condemned identity is not recoverable
  * here (the sweep's `decideParkedRuntime` skips it before this helper), so the
  * callers' loss handling stands for it. Returns the row the decision ended on:
  * a claimed recovery transitions the row, so the caller that preserves a loss
- * must write the row the claim returned, not its own older snapshot.
+ * must write the row the claim returned, not its own older snapshot, and the
+ * caller that serves a user must read the marked row after an accepted
+ * recovery. `recovery` carries the provider's accepted answer so the
+ * user-facing reasons (`recovered_in_place` vs `restoring_in_place`) survive
+ * the shared gate.
  */
 export async function recoverRemovedParkedRuntime(
   row: typeof sessionSandboxes.$inferSelect,
@@ -163,6 +205,7 @@ export async function recoverRemovedParkedRuntime(
 ): Promise<{
   outcome: ParkedRemovalOutcome;
   row: typeof sessionSandboxes.$inferSelect;
+  recovery?: 'running' | 'recovering';
 }> {
   const metadata = (row.metadata ?? {}) as Record<string, unknown>;
   // Intentional teardown must never be undone by background recovery.
@@ -176,25 +219,32 @@ export async function recoverRemovedParkedRuntime(
   const provider = getProvider(row.provider as SandboxProviderName);
   let claim: Awaited<ReturnType<typeof claimInPlaceRuntimeRecovery>> = null;
   let current = row;
+  let accepted: typeof sessionSandboxes.$inferSelect | null = null;
+  let recovery: 'running' | 'recovering' | undefined;
   const outcome = await decideRemovedParkedOutcome({
     externalId,
+    priorAttempts: inPlaceRecoveryAttempts(metadata),
     recoverInPlace: provider.recoverInPlace?.bind(provider),
     claim: async () => {
       claim = await claimInPlaceRuntimeRecovery(row, now);
       if (claim) current = claim.row;
       return claim !== null;
     },
-    markRecovered: async (recovery) => {
+    markRecovered: async (which) => {
       if (!claim) return false;
-      return (await markInPlaceRuntimeRecoveryAccepted(claim, recovery, now)) !== null;
+      const marked = await markInPlaceRuntimeRecoveryAccepted(claim, which, now);
+      if (!marked) return false;
+      accepted = marked;
+      recovery = which;
+      return true;
     },
   });
-  return { outcome, row: current };
+  return { outcome, row: accepted ?? current, recovery };
 }
 
-/** Clear the loss flags from a row whose runtime is provably back. */
-function healMetadataPatch(): Record<string, unknown> {
-  return { runtimeRestoredAt: new Date().toISOString() };
+/** Verified and stop/settle write the same patch: drop the pending-stop flag, stamp this pass. */
+function stopPendingStamp(now: Date): SQL {
+  return patchedSandboxMetadata({ strip: ['providerStopPendingAt'], merge: { parkedVerifiedAt: now.toISOString() } });
 }
 
 export async function verifyParkedRuntimes(now = new Date()): Promise<{
@@ -266,15 +316,16 @@ export async function verifyParkedRuntimes(now = new Date()): Promise<{
       }
 
       if (action === 'heal-restored') {
+        // Clear the loss flags from a row whose runtime is provably back. Both
+        // stamps ride the pass clock, so a restore observed during this pass
+        // reports the pass's own instant.
         await db
           .update(sessionSandboxes)
           .set({
-            metadata: sql`(
-              coalesce(${sessionSandboxes.metadata}, '{}'::jsonb)
-                - 'runtimeIdentityState'
-                - 'runtimeUnavailableReason'
-                - 'runtimeUnavailableAt'
-              ) || ${JSON.stringify({ ...healMetadataPatch(), parkedVerifiedAt: now.toISOString() })}::jsonb`,
+            metadata: patchedSandboxMetadata({
+              strip: ['runtimeIdentityState', 'runtimeUnavailableReason', 'runtimeUnavailableAt'],
+              merge: { runtimeRestoredAt: now.toISOString(), parkedVerifiedAt: now.toISOString() },
+            }),
             updatedAt: now,
           })
           .where(eq(sessionSandboxes.sandboxId, row.sandboxId));
@@ -314,13 +365,7 @@ export async function verifyParkedRuntimes(now = new Date()): Promise<{
           await endComputeSession(row.sandboxId);
           await tx
             .update(sessionSandboxes)
-            .set({
-              metadata: sql`(
-                coalesce(${sessionSandboxes.metadata}, '{}'::jsonb)
-                  - 'providerStopPendingAt'
-                ) || ${JSON.stringify({ parkedVerifiedAt: now.toISOString() })}::jsonb`,
-              updatedAt: now,
-            })
+            .set({ metadata: stopPendingStamp(now), updatedAt: now })
             .where(eq(sessionSandboxes.sandboxId, row.sandboxId));
         });
         continue;
@@ -331,12 +376,7 @@ export async function verifyParkedRuntimes(now = new Date()): Promise<{
         // nothing interesting was found.
         await db
           .update(sessionSandboxes)
-          .set({
-            metadata: sql`(
-              coalesce(${sessionSandboxes.metadata}, '{}'::jsonb)
-                - 'providerStopPendingAt'
-              ) || ${JSON.stringify({ parkedVerifiedAt: now.toISOString() })}::jsonb`,
-          })
+          .set({ metadata: stopPendingStamp(now) })
           .where(eq(sessionSandboxes.sandboxId, row.sandboxId));
       }
     } catch (error) {
@@ -356,11 +396,7 @@ export async function verifyParkedRuntimes(now = new Date()): Promise<{
   if (rows.length > 0) {
     await db
       .update(sessionSandboxes)
-      .set({
-        metadata: sql`coalesce(${sessionSandboxes.metadata}, '{}'::jsonb) || ${JSON.stringify({
-          parkedVerifiedAt: now.toISOString(),
-        })}::jsonb`,
-      })
+      .set({ metadata: mergeMetadata({ parkedVerifiedAt: now.toISOString() }) })
       .where(and(inArray(sessionSandboxes.sandboxId, rows.map((row) => row.sandboxId)), eq(sessionSandboxes.status, 'stopped')))
       .catch((error) =>
         logger.warn('[parked-verify] batch stamp failed', { error: error instanceof Error ? error.message : String(error) }),

@@ -21,7 +21,6 @@ const sdk = await import('@kortix/sdk');
 mock.module('@kortix/sdk', () => ({
   ...sdk,
   SANDBOX_PORTS: {},
-  getPublicSessionShare: async () => ({ session: { title: 'Synthetic preview' } }),
   getPublicShareByToken: async () => {
     reads++;
     if (failRefresh && reads === 2) throw new Error('Share refresh failed');
@@ -32,7 +31,9 @@ mock.module('@kortix/sdk', () => ({
     if (!failRefresh && calls === 1) throw new Error(emptyMessage ? '' : 'Session start failed');
   },
 }));
-mock.module('@/lib/auth-token', () => ({ getAuthToken: async () => 'synthetic-token' }));
+mock.module('@/lib/auth-token', () => ({
+  getSupabaseAccessToken: async () => 'synthetic-token',
+}));
 mock.module('@/lib/env-config', () => ({
   getEnv: () => ({ BACKEND_URL: 'http://localhost:13008/v1' }),
 }));

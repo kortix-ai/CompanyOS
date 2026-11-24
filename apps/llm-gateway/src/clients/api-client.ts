@@ -1,4 +1,7 @@
-import { TimeoutError, withRetry } from '@kortix/llm-gateway';
+import { TimeoutError } from '@kortix/llm-gateway';
+import { ApiUnavailableError, createControlPlaneTransport, type ApiClientOptions, type ApiPingResult } from './control-plane-transport';
+export { ApiUnavailableError, type ApiClientOptions, type ApiPingResult, type FetchLike } from './control-plane-transport';
+import type { ReplayedResponse } from '../idempotency';
 import {
   GatewayResolutionError,
   type AdmitResult,
@@ -17,41 +20,6 @@ import {
   type UsageEvent,
 } from '@kortix/llm-gateway';
 
-export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
-
-export interface ApiClientOptions {
-  baseUrl: string;
-  /**
-   * The API inside the VPC (KORTIX_API_INTERNAL_URL), tried before `baseUrl`.
-   * A call it does not answer marks it down for a minute; `baseUrl` serves.
-   */
-  internalBaseUrl?: string;
-  token: string;
-  /** Proof for `/internal/*` at the public API edge (KORTIX_INTERNAL_EDGE_KEY). */
-  edgeKey?: string;
-  fetchImpl?: FetchLike;
-  timeoutMs?: number;
-  /** One /admit attempt: it runs four steps, so it gets more than `timeoutMs`. */
-  admitTimeoutMs?: number;
-}
-
-export class ApiUnavailableError extends Error {
-  constructor(
-    readonly path: string,
-    readonly status?: number,
-  ) {
-    super(`kortix api ${path} unavailable${status ? ` (${status})` : ''}`);
-    this.name = 'ApiUnavailableError';
-  }
-}
-
-export interface ApiPingResult {
-  ok: boolean;
-  latencyMs: number;
-  status?: number;
-  error?: string;
-}
-
 export interface ApiClient {
   authenticate: (token: string) => Promise<AuthedPrincipal | null>;
   authorize: (token: string) => Promise<AuthorizeResult>;
@@ -69,6 +37,9 @@ export interface ApiClient {
   assertBillingActive: (accountId: string) => Promise<{ holdUsd?: number } | void>;
   assertBudget: (principal: AuthedPrincipal) => Promise<void>;
   recordUsage: (event: UsageEvent) => Promise<void>;
+  /** The Idempotency-Key replay shared by every gateway replica (KRTX-4612). */
+  getReplay: (key: string) => Promise<ReplayedResponse | null>;
+  putReplay: (key: string, answer: ReplayedResponse) => Promise<void>;
   recordTrace: (trace: GatewayTrace) => Promise<void>;
   listModels: (principal: AuthedPrincipal, opts?: ListModelsOptions) => Promise<ModelCatalog>;
   ping: () => Promise<ApiPingResult>;
@@ -80,11 +51,18 @@ const RETRY_SLOW = { retryOnTimeout: true } as const;
 /** How long an API that answered 404 for `/admit` is not asked again. */
 const ADMIT_MISSING_MS = 60_000;
 
-/** How long a private URL that did not answer is skipped for the public one. */
-const INTERNAL_DOWN_MS = 60_000;
-
-/** The ping's private attempt: a VPC hop that has not answered /health in 1 s is down. */
-const PRIVATE_PING_MS = 1_000;
+/** How long a model's typed resolution refusal is remembered. Re-asking per request re-ran the API's resolution for the
+ * same answer: a box's voice call resolves its TTS model once per spoken line, so one session against a deployment that
+ * cannot serve the model re-failed every line (KRTX-4665: 27 warns in 8 h, one per line, one session). A refusal
+ * without a retry hint is a persistent state (a lineup without the model, a plan gate, a disconnected provider, a
+ * usage-limit rest); one with a retryAfterSeconds is transient and never memoized. The TTL picks a changed state up
+ * without a gateway restart. */
+const REFUSAL_MEMO_MS = 5 * 60 * 1000;
+/** The refusal memo holds one entry per (account, project, caller, session, key, model id): bounded, oldest evicted. */
+const REFUSAL_MEMO_MAX = 1_000;
+/** A plausible model id: past this length the id is never remembered (the refusal message embeds it verbatim, so a memo
+ * entry must stay bytes-small) and the memo key is lossy — two longer ids share one key. */
+const MEMOIZABLE_MODEL_MAX = 200;
 
 interface ResolutionErrorBody {
   code: NoUpstreamReasonCode;
@@ -116,107 +94,14 @@ function billingResult(result: BillingBody): { holdUsd?: number } | Error {
 }
 
 export function createApiClient(opts: ApiClientOptions): ApiClient {
-  const baseUrl = opts.baseUrl.replace(/\/+$/, '');
-  const internalBaseUrl = opts.internalBaseUrl?.replace(/\/+$/, '') || undefined;
-  const rawFetch: FetchLike = opts.fetchImpl ?? ((input, init) => fetch(input, init));
-  // ponytail: one per-process switch; a broken private path costs one failed attempt per minute.
-  let internalDownUntil = 0;
-  const privateUp = () => !!internalBaseUrl && Date.now() >= internalDownUntil;
-  // A thrown fetch (refused, reset, DNS, timeout) on the private URL sends the
-  // next minute of calls to the public one. A response, even a 5xx, is the
-  // API answering, so it keeps the private URL.
-  const fetchImpl = async (path: string, init: RequestInit): Promise<Response> => {
-    if (!internalBaseUrl || !privateUp()) return rawFetch(`${baseUrl}${path}`, init);
-    try {
-      return await rawFetch(`${internalBaseUrl}${path}`, init);
-    } catch (err) {
-      internalDownUntil = Date.now() + INTERNAL_DOWN_MS;
-      throw err;
-    }
-  };
-  const timeoutMs = opts.timeoutMs ?? 5_000;
-  const admitTimeoutMs = opts.admitTimeoutMs ?? 10_000;
-
-  /**
-   * One control-plane call, with bounded retries.
-   *
-   * `retryOnTimeout` says whether a SLOW attempt (one that produced no response
-   * inside `timeoutMs`) may be repeated. It is a per-call decision because the
-   * two kinds of call differ in what a repeat costs:
-   *
-   * - Admission and resolution calls are what the caller is waiting on. A
-   *   repeat that succeeds turns a hard error into a served request. The
-   *   admission hold is the one nuance: `/authorize` may already have taken a
-   *   1-cent atomic hold the timed-out attempt never learned about, and that
-   *   hold is orphaned — but it is orphaned by the timeout itself, not by the
-   *   retry, and NOT retrying leaves the same orphan plus a failed request. Only
-   *   a full control-plane outage (every attempt times out) can orphan more than
-   *   one, and nothing is being served then anyway.
-   * - `recordUsage` / `recordTrace` are settlement WRITES with nobody waiting.
-   *   A timed-out attempt that the API actually committed would be charged
-   *   twice by a repeat, so they keep the narrow policy: retry a refused or
-   *   5xx-answered attempt, never a silent one.
-   * - `/admit` is never repeated (`once`): see `admit` below.
-   */
-  const post = async <T>(
-    path: string,
-    payload: unknown,
-    { retryOnTimeout = false, once = false }: { retryOnTimeout?: boolean; once?: boolean } = {},
-  ): Promise<T> => {
-    return withRetry(
-      async (signal) => {
-        let response: Response;
-        try {
-          response = await fetchImpl(path, {
-            method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              authorization: `Bearer ${opts.token}`,
-              // Edge proof for /internal/* on the public API host (api-router worker).
-              ...(opts.edgeKey ? { 'x-kortix-internal-edge-key': opts.edgeKey } : {}),
-            },
-            body: JSON.stringify(payload),
-            signal,
-          });
-        } catch {
-          throw new ApiUnavailableError(path);
-        }
-        if (!response.ok) {
-          throw new ApiUnavailableError(path, response.status);
-        }
-        return (await response.json()) as T;
-      },
-      {
-        maxAttempts: once ? 1 : 3,
-        baseDelayMs: 100,
-        maxDelayMs: 1_000,
-        timeoutMs: once ? admitTimeoutMs : timeoutMs,
-        // `timeoutMs` is a PER-ATTEMPT budget, and withRetry settles an attempt
-        // that overruns it with a `TimeoutError` — not with whatever `fn` would
-        // eventually have thrown once the abort landed. Accepting only
-        // `ApiUnavailableError` here therefore made `maxAttempts: 3` dead code
-        // for the single failure mode these retries exist for: a SLOW control
-        // plane. The un-retried `TimeoutError` escaped `authorize()` in
-        // simple-handler.ts and reached the client as an opaque
-        // `503 gateway_error "Gateway unavailable"`.
-        //
-        // Measured on staging 2026-09-16: 2 of 30 identical
-        // `POST /v1/llm/chat/completions` calls answered that 503 at 5.14 s and
-        // 5.15 s (exactly this 5 s budget); the other 28 answered
-        // `400 provider_disabled` in 2.0-3.2 s. That is the GW-ACCESS-1
-        // release-gate flake (runs 35012251397, 35036053187).
-        //
-        // Worst case stays bounded by `maxAttempts`: 3 x 5 s plus ~0.3 s of
-        // backoff before the caller is told the API is unreachable.
-        isRetryable: (err) =>
-          err instanceof ApiUnavailableError ||
-          (retryOnTimeout && err instanceof TimeoutError),
-      },
-    );
-  };
-
+  const { post, ping } = createControlPlaneTransport(opts);
   // ponytail: per-process memo; a mixed fleet mid-rollout can flip it once per minute.
   let admitMissingUntil = 0;
+
+  // ponytail: per-process memo, like admitMissingUntil; each gateway task learns a refusal on its own first failure
+  // (shared state only if that cost is measured). The key caps the model at the same 200 a model field is capped at
+  // elsewhere (/claude-credentials), so an absurd id cannot pin its bytes in the process.
+  const refusalMemo = new Map<string, { error: GatewayResolutionError; until: number }>();
 
   return {
     authenticate: async (token) => {
@@ -279,6 +164,22 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
       return result.route ?? null;
     },
     resolveUpstream: async (principal, model) => {
+      // A remembered refusal answers the same typed error the API would, without the round trip — and without re-arming
+      // the API's per-replica warn gate for a deployment state that has not changed. A served answer is never remembered:
+      // candidates change with plan and billing state. The key carries the caller (Strix review of this PR): resolution
+      // is not project-grained alone — the personal connection (personalUserId: absent = the token user, null = none),
+      // the session's provider pool (sessionId) and a project gateway key (keyId) all change the answer, and a refusal
+      // can name the caller's own connection — one member's refusal never answers another member's request.
+      const caller = principal.personalUserId === undefined ? principal.userId : principal.personalUserId;
+      const key = `${principal.accountId}\u0000${principal.projectId ?? ''}\u0000${caller ?? ''}\u0000${principal.sessionId ?? ''}\u0000${principal.keyId ?? ''}\u0000${model.slice(0, MEMOIZABLE_MODEL_MAX)}`;
+      // An oversized id is never answered from the memo either: a longer id that 200-prefix-matches a remembered one
+      // shares its key, and the entry's message names the shorter id.
+      const memoizable = model.length <= MEMOIZABLE_MODEL_MAX;
+      const remembered = memoizable && refusalMemo.get(key);
+      if (remembered) {
+        if (Date.now() >= remembered.until) refusalMemo.delete(key);
+        else throw remembered.error;
+      }
       const result = await post<{
         candidates?: UpstreamDescriptor[];
         resolutionError?: ResolutionErrorBody;
@@ -291,7 +192,28 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
       // resolveCandidates) — a thrown GatewayResolutionError it can surface as
       // a clean 400 with the actionable suggestion, rather than a generic
       // ApiUnavailableError 5xx.
-      if (result.resolutionError) throw resolutionError(result.resolutionError);
+      if (result.resolutionError) {
+        const error = resolutionError(result.resolutionError);
+        // A refusal carrying retryAfterSeconds is TRANSIENT — a client-facing
+        // retry hint that states when the refusal clears (a provider-pool
+        // cooldown): never memoized, so the stated recovery is honored and no
+        // stale retry-after is served past it. restSeconds is NOT a hint (the
+        // client never receives it; a usage limit rests for days, outliving
+        // this TTL): a restSeconds-only refusal stays memoized, the 5-min
+        // re-ask being this fix's bound on per-line resolution. The memo keeps
+        // the persistent codes (a lineup without the model, a plan gate, a
+        // disconnected provider) the issue's signal needs.
+        const transient = error.retryAfterSeconds !== undefined;
+        if (!transient && memoizable) {
+          // Map iteration is insertion order: the first key is the oldest entry (route-memory's bound).
+          if (refusalMemo.size >= REFUSAL_MEMO_MAX) {
+            const oldest = refusalMemo.keys().next().value;
+            if (oldest !== undefined) refusalMemo.delete(oldest);
+          }
+          refusalMemo.set(key, { error, until: Date.now() + REFUSAL_MEMO_MS });
+        }
+        throw error;
+      }
       return result.candidates ?? [];
     },
     notePoolRateLimit: async (principal, secretId, seconds) => {
@@ -340,6 +262,13 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
     recordUsage: async (event) => {
       await post<{ ok: boolean }>('/internal/gateway/usage', { event });
     },
+    getReplay: async (key) => {
+      const result = await post<{ answer: ReplayedResponse | null }>('/internal/gateway/idempotency/get', { key }, { once: true });
+      return result.answer;
+    },
+    putReplay: async (key, answer) => {
+      await post<{ ok: boolean }>('/internal/gateway/idempotency/put', { key, answer }, { once: true });
+    },
     recordTrace: async (trace) => {
       await post<{ ok: boolean }>('/internal/gateway/trace', { trace });
     },
@@ -355,30 +284,6 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
       );
       return result.models ?? {};
     },
-    // The ping owns both attempts, each on its own signal: a private path that
-    // hangs costs PRIVATE_PING_MS, trips the switch, and the public URL answers.
-    ping: async () => {
-      const started = Date.now();
-      const health = (base: string, ms: number) =>
-        rawFetch(`${base}/health`, { method: 'GET', signal: AbortSignal.timeout(ms) });
-      try {
-        let res: Response | undefined;
-        if (internalBaseUrl && privateUp()) {
-          try {
-            res = await health(internalBaseUrl, PRIVATE_PING_MS);
-          } catch {
-            internalDownUntil = Date.now() + INTERNAL_DOWN_MS;
-          }
-        }
-        res ??= await health(baseUrl, 3_000);
-        return { ok: res.ok, latencyMs: Date.now() - started, status: res.status };
-      } catch (err) {
-        return {
-          ok: false,
-          latencyMs: Date.now() - started,
-          error: err instanceof Error ? err.message : String(err),
-        };
-      }
-    },
+    ping,
   };
 }

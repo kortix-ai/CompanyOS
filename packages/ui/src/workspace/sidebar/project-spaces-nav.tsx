@@ -1,22 +1,20 @@
 'use client';
 
 import type { ProjectSpace } from '@kortix/sdk';
-import { useProjectSessions, useProjectSpaces, useSessionAsks } from '@kortix/sdk/react';
-import { useReviewSessionSummary } from '../../internal/hooks/use-review-session-summary';
+import { useProjectSessions, useProjectSpaces } from '@kortix/sdk/react';
 import { MY_KORTIX_AGENT_NAME } from '@kortix/shared';
-import { CheckIcon, LockSimpleIcon, PlusIcon } from '@phosphor-icons/react';
+import { LockSimpleIcon, PlusIcon } from '@phosphor-icons/react';
 import { type KeyboardEvent, useMemo, useState } from 'react';
 
 import { useTranslations } from '../../i18n';
 import { HoverPrefetchLink } from '../../internal/components/hover-prefetch-link';
 import { useIsMobile } from '../../internal/hooks';
-import { reviewHref } from '../../internal/lib/capability-tab-routes';
 import { uiRoutes } from '../../lib/routes';
 import { Button } from '../../primitives/button';
-import { CountBadge } from '../../primitives/count-badge';
 import { FadedScrollArea } from '../../primitives/faded-scroll-area';
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '../../primitives/sidebar';
 import { useUiPathname } from '../../providers/ui-provider';
+import { ProjectReviewNavItem } from './footer/project-review-nav';
 import { CreateChannelDialog } from '../spaces/create-channel-dialog';
 import { PrivateChannelsNotInRow } from '../spaces/private-channels-not-in';
 import {
@@ -40,20 +38,10 @@ function moveFocus(event: KeyboardEvent<HTMLUListElement>) {
   rows[Math.max(0, Math.min(rows.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))]?.focus();
 }
 
-/** `href`, or a page under it. */
+/** `href`, or a page under it. A query (`/inbox?view=review`) is not part of the match. */
 function isAt(pathname: string | null, href: string): boolean {
-  return !!pathname && (pathname === href || pathname.startsWith(`${href}/`));
-}
-
-/**
- * What waits on the person across the project, the Customize nav's number:
- * the review summary's "needs you", plus the agents' questions and permission
- * asks (`useSessionAsks`). Connector approvals are already in the summary.
- */
-function useReviewBadgeCount(projectId: string): number {
-  const reviewNeedsYou = useReviewSessionSummary(projectId, { enabled: true }).totalNeedsYou;
-  const asks = useSessionAsks(projectId).data?.asks;
-  return reviewNeedsYou + (asks?.filter((ask) => ask.kind !== 'approval').length ?? 0);
+  const path = href.split('?')[0]!;
+  return !!pathname && (pathname === path || pathname.startsWith(`${path}/`));
 }
 
 /**
@@ -75,9 +63,6 @@ export function ProjectSpacesNav({ projectId }: { projectId: string }) {
   const [createOpen, setCreateOpen] = useState(false);
   const { personal, others } = useMemo(() => orderSpaces(spaces.data ?? []), [spaces.data]);
   const chatHref = `${uiRoutes().project(projectId)}/chat`;
-  // The Review page on its own route (`reviewHref`), beside this sidebar.
-  const review = reviewHref(projectId);
-  const openAsks = useReviewBadgeCount(projectId);
 
   const hrefOf = (space: ProjectSpace) =>
     space.kind === 'dm' ? uiRoutes().dm(projectId, space.dm_agent_name ?? '') : uiRoutes().channel(projectId, space.slug ?? '');
@@ -85,18 +70,9 @@ export function ProjectSpacesNav({ projectId }: { projectId: string }) {
   return (
     <FadedScrollArea fadeColor="from-background" className="h-full min-h-0">
       <SidebarMenu className="gap-px" onKeyDown={moveFocus}>
-        {review ? (
-          // Spacing, not a rule, sets Review apart from the spaces.
-          <SidebarMenuItem className="mb-2">
-            <SidebarMenuButton asChild isActive={isAt(pathname, review)} className="text-sidebar-foreground">
-              <HoverPrefetchLink href={review}>
-                <CheckIcon />
-                <span className="min-w-0 flex-1 truncate">{t('spaces.review')}</span>
-                {openAsks > 0 ? <CountBadge count={openAsks} tone="waiting" /> : null}
-              </HoverPrefetchLink>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        ) : null}
+        {/* The Review page, the same row the default sidebar shows first.
+            Spacing, not a rule, sets Review apart from the spaces. */}
+        <ProjectReviewNavItem projectId={projectId} itemClassName="mb-2" />
         <SpaceRow
           projectId={projectId}
           space={personal}

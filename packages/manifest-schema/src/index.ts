@@ -21,6 +21,8 @@
  */
 
 import { Cron } from 'croner';
+import { parseTriggerReaders } from './trigger-readers';
+export { parseTriggerReaders, type TriggerReaders } from './trigger-readers';
 import { normalizeTriggerList } from './trigger-shape';
 import { Document, isMap, LineCounter, parseDocument } from 'yaml';
 import { type AppliedFix, applyDeprecations, DEPRECATIONS } from './deprecations';
@@ -33,6 +35,7 @@ import { appDisplayIssues, appReleaseConfigIssues, resolveAppReleaseConfig } fro
 import { appReleaseInputFromBlock } from './app-config';
 import { parseChangeRequestFilter, parseTriggerFilter } from './trigger-filter';
 import { validateManifestBody } from './index.v3';
+export { normalizeEvalConfig, readEvalSuites, validateEvals, type EvalConfigIssue, type EvalSuiteDeclaration } from './evals';
 import { validateAgentPolicySetRefs, validateConnectorPolicySets } from './policy-sets';
 import {
   CHANNEL_PLATFORMS,
@@ -43,6 +46,7 @@ import {
   type ConnectorProvider,
   ENV_NAME_RE,
   GRANTABLE_KORTIX_PERMISSIONS,
+  SECRET_NAME_RE,
   isGrantableKortixPermission,
   isHumanOnlyKortixPermission,
   LEGACY_SANDBOX_KEYS,
@@ -271,7 +275,6 @@ export {
   TRIGGER_TYPES,
   MONITOR_REMOVED_MESSAGE,
   V2_RUNTIME_VALUES,
-  WORKSPACE_MODES_V2,
   CODEMODE_VALUES,
   CONTEXT_VALUES,
   EXTENSION_HARNESSES,
@@ -284,6 +287,9 @@ export {
 
 export {
   AGENT_BLOCK_KEYS_V3,
+  AGENT_TITLE_MAX_LENGTH,
+  AGENT_RUN_TIMEOUT_DEFAULT_SECONDS,
+  AGENT_RUN_TIMEOUT_MAX_SECONDS,
   type AgentBlockV3,
   type AgentToolsV3,
   type CodemodeV3,
@@ -310,9 +316,6 @@ export {
 // cycle that `constants.ts` had to break.
 export {
   type AgentModeV2,
-  type AgentWorkspaceV2,
-  type ProjectRepositoryResult,
-  resolveProjectRepository,
   type RuntimeV2,
   type PermissionActionV2,
   type PermissionRuleV2,
@@ -1393,7 +1396,18 @@ function validateOnRunShape(entry: Record<string, unknown>, where: string, issue
   if (entry.type !== undefined) push('type', 'is implied by `on`; remove it.');
 }
 
-export function validateTriggers(rawNode: unknown, path: string, issues: ManifestIssue[]): void {
+/** What the trigger checks need from the agents: who runs code instead of a model. */
+export interface TriggerAgentContext {
+  /** Agents with `run`: their trigger needs no prompt. */
+  programAgents: ReadonlySet<string>;
+  /** `default_agent`: the agent of a trigger that names none. */
+  defaultAgent?: string;
+}
+
+/** The longest static `run.payload` of an agent run, as JSON. Same cap as an App target's payload. */
+const TRIGGER_RUN_PAYLOAD_MAX_BYTES = 64 * 1024;
+
+export function validateTriggers(rawNode: unknown, path: string, issues: ManifestIssue[], agents?: TriggerAgentContext): void {
   if (rawNode == null) return;
   if (Array.isArray(rawNode)) rawNode.forEach((entry, i) => { if (isTable(entry)) validateOnRunShape(entry, `${path}[${i}]`, issues); });
   // One set of rules for both shapes: an `on:` / `run:` entry is checked as the flat fields it means.
@@ -1452,13 +1466,29 @@ export function validateTriggers(rawNode: unknown, path: string, issues: Manifes
         : typeof entry.prompt_template === 'string'
           ? entry.prompt_template
           : '';
-    // An App target receives the payload, not a prompt.
-    if (!promptRaw.trim() && entry.target === undefined) {
+    // An App target receives the payload, not a prompt; so does a program agent (its stdin is the payload).
+    const agentName = typeof entry.agent === 'string' && entry.agent.trim() ? entry.agent.trim() : agents?.defaultAgent;
+    const programTarget = !!agentName && !!agents?.programAgents.has(agentName);
+    if (entry.payload !== undefined && entry.target === undefined) {
+      if (!isTable(entry.payload)) {
+        issues.push({ path: `${where}.payload`, message: 'must be a table: static input merged under each fire\'s payload.', severity: 'error' });
+      } else if (JSON.stringify(entry.payload).length > TRIGGER_RUN_PAYLOAD_MAX_BYTES) {
+        issues.push({ path: `${where}.payload`, message: 'must be at most 64 KiB as JSON.', severity: 'error' });
+      }
+    }
+    if (!promptRaw.trim() && entry.target === undefined && !programTarget) {
       issues.push({
         path: `${where}.prompt`,
         message: 'prompt is required and may not be empty.',
         severity: 'error',
       });
+    }
+    if (entry.hard_run_caps !== undefined && typeof entry.hard_run_caps !== 'boolean') {
+      issues.push({ path: `${where}.hard_run_caps`, message: 'hard_run_caps must be a boolean.', severity: 'error' });
+    }
+    if (entry.session_readers !== undefined) {
+      const parsed = parseTriggerReaders(entry.session_readers);
+      if ('error' in parsed) issues.push({ path: `${where}.session_readers`, message: parsed.error, severity: 'error' });
     }
     // Run caps (KRTX-1721): any trigger type, a whole number of at least 1.
     for (const field of ['max_runs_per_hour', 'max_runs_per_day'] as const) {
@@ -1876,11 +1906,13 @@ export function validateConnectors(node: unknown, path: string, issues: Manifest
             severity: 'error',
           });
         }
-        if (auth.secret !== undefined) {
+        // The platform's secret binding writes the NAME of a project secret
+        // here; its value lives in Secrets, never in this file. Same rule as
+        // the runtime parser.
+        if (auth.secret !== undefined && !(typeof auth.secret === 'string' && SECRET_NAME_RE.test(auth.secret))) {
           issues.push({
             path: `${where}.auth.secret`,
-            message:
-              'auth.secret is no longer supported; set connector credentials in the platform.',
+            message: 'auth.secret must be the name of a project secret (^[A-Z_][A-Z0-9_]{0,63}$); its value lives in Secrets.',
             severity: 'error',
           });
         }

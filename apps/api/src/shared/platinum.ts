@@ -160,17 +160,27 @@ export function platinumOriginForRegion(region: string): string {
   return regionalOriginFor(region) ?? new URL(platinumBase()).origin;
 }
 
+/** The configured origin (`PLATINUM_API_URL`): the home control plane. */
+export function platinumHomeOrigin(): string {
+  return new URL(platinumBase()).origin;
+}
+
 /**
  * The control plane of one region, for a call that must reach that region
- * itself (a `regions=local` listing): learned from a box there, else
+ * itself (a `regions=local` listing, a volume): learned from a box there, else
  * Platinum's regional name `https://<region>.<PLATINUM_API_URL host>`
- * (us-east.api.platinum.dev). Null when the key may not go there.
+ * (us-east.api.platinum.dev). A deployment whose `PLATINUM_API_URL` already is
+ * that region's control plane gets the configured origin: the regional name
+ * of us-east.api.platinum.dev is us-east.us-east.api.platinum.dev, which does
+ * not resolve. Null when the key may not go there.
  */
 export function platinumRegionControlPlane(region: string): string | null {
   const learned = regionOrigins.get(region);
   if (learned) return learned;
   if (!/^[a-z]{2,8}-[a-z]{2,12}$/.test(region)) return null;
-  return acceptedPlatinumOrigin(`https://${region}.${new URL(platinumBase()).hostname}`);
+  const base = new URL(platinumBase());
+  if (base.hostname.startsWith(`${region}.`)) return base.origin;
+  return acceptedPlatinumOrigin(`https://${region}.${base.hostname}`);
 }
 
 // The calls that name their region in the body and act in it: a create, both

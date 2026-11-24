@@ -8,13 +8,13 @@ import createNextIntlPlugin from 'next-intl/plugin';
 import path from 'path';
 import { buildBlumeDocs, getBlumeDocsOutputPaths } from './scripts/blume-docs.mjs';
 import { BLOG_ORIGIN } from './src/config/blog-origin';
+import { resolveTurbopackFileSystemCacheForBuild } from './src/config/turbopack-build-cache';
 import { locales } from './src/i18n/catalog.mjs';
-import { workspaceDesktopRewrites, workspaceRedirects } from './src/lib/workspace-redirects';
+import { DESKTOP_SHELL_HEADER, workspaceRedirects } from './src/lib/workspace-redirects';
 import { SHIPPED_ICON_WEIGHTS } from '@kortix/ui/lib/icon-config';
 import {
   embedContentSecurityPolicy,
   enforcedContentSecurityPolicy,
-  reportOnlyContentSecurityPolicy,
 } from './src/lib/security/content-security-policy';
 import { refreshContentTimestamps } from './scripts/build-content-timestamps.mjs';
 import { copyEmojibaseData, getEmojibaseDataOutputPaths } from './scripts/emojibase-data.mjs';
@@ -296,6 +296,10 @@ const nextConfig = (): NextConfig => ({
   // file. Disable standalone on Vercel, where the platform does not use it.
   // See https://github.com/vercel/next.js/issues/96646.
   output: IS_PREVIEW_BUILD || process.env.VERCEL ? undefined : 'standalone',
+  // Skew Protection on Vercel. The deploy builds on a GitHub runner
+  // (infra/scripts/vercel-deploy-prebuilt.sh), where Vercel does not supply a
+  // deployment ID, so the script sets a unique one. Unset everywhere else.
+  deploymentId: process.env.KORTIX_VERCEL_DEPLOYMENT_ID || undefined,
   // Inline the resolved version so NEXT_PUBLIC_KORTIX_VERSION is available in
   // both the server (runtime-config) and client bundles, even on Vercel.
   env: {
@@ -322,11 +326,13 @@ const nextConfig = (): NextConfig => ({
 
   // --- Next.js 16.3 posture ------------------------------------------------
   // Recording WHY each 16.3 knob is set or left alone, so nobody "adds the
-  // missing config" later or wonders whether we missed the release. The only
-  // knobs we set are turbopackMemoryEviction and turbopackFileSystemCacheForDev
+  // missing config" later or wonders whether we missed the release. The knobs
+  // we set are turbopackMemoryEviction and turbopackFileSystemCacheForDev
   // (both below) — and both only as escape hatches that default to upstream's
   // value when their env var is unset. 16.4 adds turbopackGc (below), which we
-  // turn on: upstream defaults it off.
+  // turn on: upstream defaults it off. turbopackFileSystemCacheForBuild (also
+  // below) defaults to upstream's on, except on machines that cannot hold its
+  // memory: it OOM-killed the build on an 11 GB sandbox (KRTX-4741).
   //
   // Already default-ON in 16.3 — restating them here would be dead config that
   // silently diverges the day upstream changes a default:
@@ -417,6 +423,12 @@ const nextConfig = (): NextConfig => ({
 
   // Performance optimizations
   experimental: {
+    // Next 16.4 stops `next dev` under a coding agent (it reads the agent's
+    // environment) to print an upgrade notice, and lets it start only on a
+    // retry within 5 minutes. `pnpm dev` and `pnpm worktree start` take longer
+    // than that to reach the web server, so every agent session's stack died
+    // at the notice. Next.js upgrades arrive through Dependabot and PRs.
+    agentUpgrade: false,
     // Next 16 gives a dynamic page segment a client-cache TTL of 0, so every
     // navigation to a route under `workspaces/[id]/layout.tsx` (which awaits
     // cookies(), making the whole subtree dynamic) discards the segment and
@@ -460,6 +472,12 @@ const nextConfig = (): NextConfig => ({
     // aborts the dev server and takes the whole browser shard with it — the
     // full rationale is on resolveTurbopackFileSystemCacheForDev above.
     turbopackFileSystemCacheForDev: resolveTurbopackFileSystemCacheForDev(),
+    // One-shot sandbox builds (11 GB RAM, no swap) cannot hold the persistent
+    // build cache in memory: it pushed the build to 9.5 GB RSS and the kernel
+    // OOM killer SIGKILLed it (exit 137, KRTX-4741). Small machines default the
+    // build cache off; 16 GB CI runners keep it (and its warm 36.3 s -> 1.9 s
+    // compile). KORTIX_TURBOPACK_BUILD_CACHE=on|off overrides.
+    turbopackFileSystemCacheForBuild: resolveTurbopackFileSystemCacheForBuild(),
     // Without GC (the default, and the only mode before 16.4) the persistent
     // cache keeps every task it ever computed. Each `git merge origin/dev`
     // adds a new set, so a busy worktree's .next/dev/cache/turbopack reached
@@ -473,7 +491,6 @@ const nextConfig = (): NextConfig => ({
       'recharts',
       'date-fns',
       '@tanstack/react-query',
-      'cmdk',
       'next-intl',
     ],
   },
@@ -957,11 +974,31 @@ const nextConfig = (): NextConfig => ({
         { source: `/markdown${page}.md`, destination: '/markdown/index.md', permanent: true },
         { source: `/markdown${page}/:path*`, destination: '/markdown/index.md', permanent: true },
       ]),
+      // The marketplace was removed on 2026-11-20. Its pages are indexed public
+      // URLs, so each one (any item path, any locale) lands on the use-case
+      // library with a 308. The desktop shell is excluded: installed shells
+      // list /marketplace as an app path, and a redirect to /use-cases would
+      // open the browser and leave the window empty. The middleware sends the
+      // shell to its landing page instead.
+      ...['/marketplace', '/marketplace/:path*'].flatMap((source) => [
+        { source, destination: '/use-cases', permanent: true, missing: [DESKTOP_SHELL_HEADER] },
+        {
+          source: `/:locale(${locales.join('|')})${source}`,
+          destination: '/:locale/use-cases',
+          permanent: true,
+          missing: [DESKTOP_SHELL_HEADER],
+        },
+      ]),
       // /cli was removed on 2026-10-29; the CLI is documented in the docs
       // tree. Exact path only: /cli/authorize is the CLI sign-in flow.
       { source: '/cli', destination: '/docs/developers#cli', permanent: true },
       { source: `/:locale(${locales.join('|')})/cli`, destination: '/docs/developers#cli', permanent: true },
       { source: '/markdown/cli.md', destination: '/markdown/index.md', permanent: true },
+      // The old /app path served the 404 page: it is neither a public nor a
+      // protected app route, so the middleware rewrote it onto the localized
+      // catch-all (KRTX-4462). It lands on the download page. Exact path only,
+      // query string kept (the destination has none, so Next forwards it).
+      { source: '/app', destination: '/download', permanent: true },
       // Removed pages that may live on in old links and search indexes.
       // /credits-explained became the credits guide in the docs tree; the
       // /compare section was retired with no direct replacement.
@@ -1012,9 +1049,6 @@ const nextConfig = (): NextConfig => ({
       { type: 'header' as const, key: 'accept', value: '(?:.*,)?\\s*text/markdown.*' },
     ];
     const beforeFiles = [
-      // An installed desktop shell keeps /projects and /new, served in place
-      // (src/lib/workspace-redirects.ts).
-      ...workspaceDesktopRewrites(),
       {
         source: '/docs',
         has: acceptsMarkdown,
@@ -1068,7 +1102,9 @@ const nextConfig = (): NextConfig => ({
       },
       {
         source: '/ingest/:path*',
-        destination: 'https://eu.i.posthog.com/:path*',
+        // POSTHOG_INGEST_ORIGIN points a local run at a capture sink
+        // (product-analytics skill, "Verify an event"). Production leaves it unset.
+        destination: `${process.env.POSTHOG_INGEST_ORIGIN || 'https://eu.i.posthog.com'}/:path*`,
       },
       // /docs is a Blume static build in public/docs/. Astro writes clean URLs as
       // directories, and Next's static handler does not resolve a directory index,
@@ -1115,16 +1151,11 @@ const nextConfig = (): NextConfig => ({
       {
         source: '/:path*',
         headers: [
-          // Enforced: framing, plugins and <base>. The script allowlist is
-          // report-only until its reports are clean; see
-          // src/lib/security/content-security-policy.ts.
+          // Enforced: framing, plugins, <base> and the script allowlist, with
+          // a report-uri; see src/lib/security/content-security-policy.ts.
           {
             key: 'Content-Security-Policy',
             value: enforcedContentSecurityPolicy(),
-          },
-          {
-            key: 'Content-Security-Policy-Report-Only',
-            value: reportOnlyContentSecurityPolicy(),
           },
           // No X-Frame-Options: it cannot allowlist the Kortix extension's side panel.
           // CSP frame-ancestors above is the framing gate.
@@ -1219,13 +1250,6 @@ const nextConfig = (): NextConfig => ({
         source: '/.well-known/apple-app-site-association',
         headers: [{ key: 'Content-Type', value: 'application/json' }],
       },
-      // Kortix in Chrome is not launched: its docs page is reachable by link from the app on
-      // dev, and no search engine indexes it (content/docs/connect/chrome.mdx `noindex`).
-      // Remove with the page's `noindex` at launch.
-      ...['/docs/connect/chrome', '/docs/connect/chrome.md', '/docs/connect/chrome.mdx'].map((source) => ({
-        source,
-        headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }],
-      })),
       {
         source: '/fonts/:path*',
         headers: [

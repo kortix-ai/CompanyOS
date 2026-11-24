@@ -5,7 +5,7 @@ import { type ApiClient, ApiError } from './api/client.ts';
 import type { AccountMembership, MeResponse, ProjectSummary } from './api/types.ts';
 import { loadLocalManifest } from './manifest.ts';
 import { type ProjectGitTarget, projectIsManaged } from './project-git.ts';
-import { loadLink } from './project-link.ts';
+import { LINK_LOCATION, loadLink } from './project-link.ts';
 import { confirm } from './prompts.ts';
 import { NO_WORKSPACE_LINE } from './api/no-workspace.ts';
 import { C, status } from './style.ts';
@@ -116,6 +116,16 @@ export function manifestProjectName(): string | undefined {
   }
 }
 
+/** Whether two URLs name the same GitHub repository (https, ssh or scp form, `.git` or not). */
+export function sameGitHubRepository(a: string | null | undefined, b: string | null | undefined): boolean {
+  const name = (url: string | null | undefined) => {
+    const match = url?.trim().match(/github\.com[/:]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i);
+    return match ? `${match[1]}/${match[2]}`.toLowerCase() : null;
+  };
+  const left = name(a);
+  return left !== null && left === name(b);
+}
+
 export function detectOrigin(): string | null {
   const r = run(['remote', 'get-url', 'origin']);
   const url = r.stdout.trim();
@@ -206,6 +216,69 @@ function managedShipRecovery(projectId: string): void {
   );
 }
 
+/**
+ * Paths the fetched branch would create or change that this folder keeps on
+ * disk OUTSIDE the index — the ignored files (`.env`, `node_modules/`, …) git
+ * overwrites silently during a merge: git refuses an untracked collision only
+ * for non-ignored paths. A workspace commit carrying a tracked file at such a
+ * path would clobber the folder's local secrets (and, once tracked, push them
+ * back on the next ship) or plant files in ignored directories. Empty when the
+ * merge cannot clobber anything the folder keeps locally.
+ */
+function filesTheMergeWouldOverwrite(): string[] {
+  const incoming = run(['diff', '--name-only', 'HEAD', 'FETCH_HEAD']);
+  if (!incoming.ok) return [];
+  const ignoredHere = new Set(
+    run(['ls-files', '--others', '--ignored', '--exclude-standard'])
+      .stdout.split('\n')
+      .map((path) => path.trim())
+      .filter(Boolean),
+  );
+  return incoming.stdout
+    .split('\n')
+    .map((path) => path.trim())
+    .filter((path) => path.length > 0 && ignoredHere.has(path));
+}
+
+/**
+ * Reconcile the fetched remote branch with this folder's history so the push is
+ * a fast-forward. A product-created workspace is seeded with scaffold commits
+ * before the first ship, while `kortix init` starts from its own unrelated
+ * commit — the customer's first ship must merge that history in and push, not
+ * fail on a rejection they cannot answer. Content conflicts keep the local
+ * tree: the folder is what the customer shipped. Returns false only when the
+ * merge itself is refused, so the caller falls back to the manual recovery
+ * guidance.
+ */
+function reconcileWithFetchedRemote(branch: string): boolean {
+  // A merge writes the fetched tree into this folder. Paths the folder keeps
+  // locally (`.env`, `node_modules/`, …) are untracked, so git treats a
+  // collision there as safe to overwrite — refuse instead of clobbering them.
+  const overwritten = filesTheMergeWouldOverwrite();
+  if (overwritten.length > 0) {
+    process.stderr.write(
+      `${status.err('The workspace has files this folder keeps locally. Nothing was merged or pushed.')}\n` +
+        overwritten.map((path) => `    ${C.cyan}${path}${C.reset}\n`).join('') +
+        `  ${C.dim}Move them aside and re-run, or copy them into a fresh ${C.reset}${C.cyan}kortix workspaces clone${C.reset}${C.dim} of the workspace.${C.reset}\n`,
+    );
+    return false;
+  }
+  if (run(['merge-base', '--is-ancestor', 'FETCH_HEAD', 'HEAD']).ok) return true;
+  if (run(['merge-base', '--is-ancestor', 'HEAD', 'FETCH_HEAD']).ok) {
+    // The remote moved past this folder (a session or teammate pushed): catch
+    // the folder up instead of rejecting the push.
+    return run(['merge', '--ff-only', 'FETCH_HEAD']).ok;
+  }
+  const merged = run([
+    'merge', '--allow-unrelated-histories', '-X', 'ours',
+    '-m', `Merge remote ${branch} history (kortix ship)`, 'FETCH_HEAD',
+  ]);
+  if (!merged.ok) {
+    process.stderr.write(`${merged.stderr.trim()}\n`);
+  }
+  return merged.ok;
+}
+
 function pushCurrentBranch(
   repoUrl: string,
   pushToken: string | null,
@@ -219,15 +292,16 @@ function pushCurrentBranch(
     );
     return null;
   }
-  // Refuse divergent histories before trying either push transport. A web-created
-  // project already contains work; a fresh local init must not overwrite it.
+  // Fetch the remote branch and reconcile with it before either push transport.
+  // A product-created (seeded) workspace always contains history this folder
+  // lacks; a fresh local init must never overwrite it — ship merges it in.
   if (opts.managedProjectId) {
     const env = pushToken ? authGitEnv(repoUrl, pushToken, gitUsername) : undefined;
     const shallow = run(['rev-parse', '--is-shallow-repository']).stdout.trim() === 'true';
     const fetched = run([
       'fetch', '--no-tags', ...(shallow ? ['--unshallow'] : []), 'origin', `refs/heads/${branch}`,
     ], { env });
-    if (fetched.ok && !run(['merge-base', '--is-ancestor', 'FETCH_HEAD', 'HEAD']).ok) {
+    if (fetched.ok && !reconcileWithFetchedRemote(branch)) {
       managedShipRecovery(opts.managedProjectId);
       return false;
     }
@@ -391,7 +465,7 @@ export function explainLinkedProjectError(
       `\n${status.err("This folder is linked to a workspace you can't access.")}\n` +
         `  ${C.dim}linked workspace ${C.reset}${projectId}${linkedAccount}\n` +
         `  ${C.dim}logged in as     ${C.reset}account ${auth.account_id.slice(0, 8)} ${C.faded}(host "${host}")${C.reset}, no access to it\n\n` +
-        `  ${C.dim}The link lives in ${C.reset}.kortix/link.json${C.dim}. Fix it one way:${C.reset}\n` +
+        `  ${C.dim}The link lives in ${C.reset}${LINK_LOCATION}${C.dim}. Fix it one way:${C.reset}\n` +
         `    ${C.dim}• Log in as a person who has access:${C.reset}  ${C.cyan}kortix logout && kortix login${C.reset}\n` +
         `    ${C.dim}• Or get invited to that workspace, then retry.${C.reset}\n` +
         `    ${C.dim}• Or ship this folder as a new workspace:${C.reset}  ${C.cyan}kortix workspaces unlink${C.reset}${C.dim} then ${C.reset}${C.cyan}kortix ship${C.reset}\n\n`,

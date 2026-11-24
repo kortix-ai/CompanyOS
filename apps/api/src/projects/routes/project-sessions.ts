@@ -46,7 +46,6 @@ import { createSession, deleteSession, restoreSession } from '../session-lifecyc
 import { sessionRestoreUntil } from '../session-log-purge';
 import { readSessionConversationModels } from '../session-log-read';
 import { validateProviderSecretPool } from './provider-secret-pools';
-import { requireFeatureFlag } from '../../feature-flags/gate';
 import { resolveFeatureFlag } from '../../feature-flags/registry';
 import { spaceAccessFor } from '../../shared/space-access';
 import { findForkSourceSpace, findSessionSpace } from '../lib/project-spaces';
@@ -54,6 +53,7 @@ import { accountMayUseManagedModels } from '../../billing/services/entitlements'
 import { DEFAULT_AGENT_SENTINEL } from '../agents';
 import { admitSessionSharingChange } from '../lib/session-model-keys';
 import { callerKortixSessionId } from '../../middleware/caller-session';
+import { loadLifecycleSession } from './lib/route-bindings';
 import { getImpersonationContext } from '../../shared/impersonation';
 import { peekSessionListPollEtag, storeSessionListPollEtag } from '../lib/session-list-poll-memo';
 import type { ProjectSessionListScope } from '../lib/session-inventory';
@@ -103,6 +103,8 @@ async function sessionReadResponse(c: Context<AppEnv>, projectId: string, sessio
   // A read: a subagent finds the session that spawned it (`kortix sessions log <parent>`).
   const visible = await loadVisibleSession(loaded, sessionId, c.get('sessionId') ?? null, callerKortixSessionId(c), {
     spawnAncestorRead: true,
+    triggerReaderRead: true,
+    personRead: true,
   });
   if (!visible) return c.json({ error: 'Not found' }, 404);
   // A soft-deleted session is gone for a read-by-id, exactly as it is for the
@@ -334,8 +336,6 @@ export function registerProjectSessionsRoutes(): void {
       body.agent_name = agentAccess.agentName;
     }
     if (body.provider_secret_pools !== undefined) {
-      const gate = requireFeatureFlag(c, loaded.row.metadata, 'pooled_provider_secrets');
-      if (gate) return gate;
       for (const [providerId, ids] of Object.entries(body.provider_secret_pools as Record<string, string[]>)) {
         const invalid = await validateProviderSecretPool({
           accountId: loaded.row.accountId, projectId, repoUrl: loaded.row.repoUrl,
@@ -475,7 +475,7 @@ export function registerProjectSessionsRoutes(): void {
             // `root` = top-level sessions only (each row carries `child_count`);
             // a session id = that session's children. Absent = the flat list.
             parent: z.string().min(1).max(128).optional(),
-            started_by: z.enum(['me', 'others', 'automated']).optional(),
+            started_by: z.enum(['me', 'others', 'automated', 'humans']).optional(),
             // Server-side search over every session the viewer may see.
             q: z.string().trim().min(1).max(200).regex(/^[^\u0000]*$/, 'Search must not contain NUL characters').optional(),
             // Repeatable; a session must carry every given label. Exact match.
@@ -505,6 +505,10 @@ export function registerProjectSessionsRoutes(): void {
             updated_after: z.string().datetime({ offset: true }).optional(),
             // Only the teammates of this lead session (`metadata.team_lead`).
             team_lead: z.string().min(1).max(128).optional(),
+            // Only the sessions at work now: a live turn on their box
+            // (`working.state` is `working`). Workflow runners, their agents
+            // and colleagues included. A workspace Running view reads it.
+            working: z.literal('only').optional(),
           }),
         },
       responses: {
@@ -590,6 +594,7 @@ export function registerProjectSessionsRoutes(): void {
       return c.json({ error: 'group must be a group id or none' }, 400);
     }
     const inventory = await loadProjectSessionInventory({
+      actor: loaded.actor,
       projectId,
       accountId: loaded.row.accountId,
       userId: loaded.userId,
@@ -611,6 +616,7 @@ export function registerProjectSessionsRoutes(): void {
         agent: query.agent ?? null,
         updatedAfter: query.updated_after ? new Date(query.updated_after) : null,
         teamLead: query.team_lead ?? null,
+        working: query.working === 'only',
       },
       boundCredentialSessionId: callerKortixSessionId(c),
       agentPrincipal: loaded.actor ? isAgentPrincipalActor(loaded.actor) : false,
@@ -639,7 +645,13 @@ export function registerProjectSessionsRoutes(): void {
       spaceId ? readActiveChildAgents(accessibleIds) : Promise.resolve(null),
     ]);
     const boards = await readSessionBoards(inventory.items.filter((item) => item.canAccess).map((item) => item.row), working);
-    const body = inventory.items.map((item) => {
+    // `working=only`: the SQL read every session with a live turn on its box; a
+    // turn the runtime already reported ended is not working, and a row the
+    // caller cannot open carries no work state.
+    const listed = query.working === 'only'
+      ? inventory.items.filter((item) => item.canAccess && working.get(item.row.sessionId)?.state === 'working')
+      : inventory.items;
+    const body = listed.map((item) => {
       const row = item.row;
       const owner = row.createdBy ? inventory.ownerIdentities.get(row.createdBy) : null;
       const serialized = { ...serializeSession(row, {
@@ -837,10 +849,7 @@ export function registerProjectSessionsRoutes(): void {
         freeModelsOnly: !(await accountMayUseManagedModels(loaded.row.accountId)),
         model: typeof metadata.model === 'string' ? metadata.model : null,
         visibility: next.visibility,
-        mayPool:
-          resolveFeatureFlag(loaded.row.metadata, 'pooled_provider_secrets') &&
-          !visible.ownerIsMachine &&
-          Boolean(visible.row.createdBy),
+        mayPool: !visible.ownerIsMachine && Boolean(visible.row.createdBy),
         callerMaySelect: async (providerId, secretIds) =>
           !(await validateProviderSecretPool({
             accountId: loaded.row.accountId,
@@ -1090,14 +1099,15 @@ export function registerProjectSessionsRoutes(): void {
     assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_STOP);
 
     // Stopping a session is reserved for its owner or a project manager.
-    const visible = await loadVisibleSession(loaded, sessionId, c.get('sessionId') ?? null, callerKortixSessionId(c));
-    if (!visible) return c.json({ error: 'Not found' }, 404);
-    if (!visible.canManageLifecycle) {
-        return c.json(
-          { error: 'Only the session owner or a workspace manager can stop this session' },
-          403,
-        );
-    }
+    const gate = await loadLifecycleSession(
+      c,
+      loaded,
+      sessionId,
+      'Only the session owner or a workspace manager can stop this session',
+      { rejectTombstoned: false },
+    );
+    if (gate.kind === 'error') return gate.response;
+    const { visible } = gate;
     // A repeated delete (the SDK retries one whose response was lost) answers
     // with the first stamp: the restore window never moves.
     const restoreUntil = sessionIsTombstoned(visible.row) ? sessionRestoreUntil(visible.row.metadata?.deletedAt) : null;
@@ -1144,14 +1154,14 @@ export function registerProjectSessionsRoutes(): void {
     if (!loaded) return c.json({ error: 'Not found' }, 404);
     assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_STOP);
 
-    const visible = await loadVisibleSession(loaded, sessionId, c.get('sessionId') ?? null, callerKortixSessionId(c));
-    if (!visible) return c.json({ error: 'Not found' }, 404);
-    if (!visible.canManageLifecycle) {
-        return c.json(
-          { error: 'Only the session owner or a workspace manager can restore this session' },
-          403,
-        );
-    }
+    const gate = await loadLifecycleSession(
+      c,
+      loaded,
+      sessionId,
+      'Only the session owner or a workspace manager can restore this session',
+      { rejectTombstoned: false },
+    );
+    if (gate.kind === 'error') return gate.response;
 
     const result = await restoreSession({ projectId, sessionId, accountId: loaded.row.accountId });
     if ('error' in result) return c.json({ error: result.error, code: result.code }, result.status);

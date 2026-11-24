@@ -18,6 +18,7 @@ import { takeFlags } from '../command-argv.ts';
 import { takeFlagBool, takeFlagValue } from '../command-helpers.ts';
 import { appendGitExcludeEntries } from '../git-exclude.ts';
 import { runGit } from '../git-run.ts';
+import { loadLocalManifest } from '../manifest.ts';
 import { confirm, prompt } from '../prompts.ts';
 import { applyScaffold } from '../scaffold.ts';
 import { C, help, status } from '../style.ts';
@@ -67,9 +68,6 @@ Options:
   --no-git             Don't run \`git init\` in the new workspace directory.
   -y, --yes            Skip prompts (requires a project-name).
   -h, --help           Show this help.
-
-Adding more marketplace items later is an agent import, not part of init:
-start a session and ask the agent to bring one in.
 `;
 
 interface InitFlags {
@@ -268,7 +266,7 @@ async function initNewProject(flags: InitFlags): Promise<number> {
   // ── Detect existing Kortix files ─────────────────────────────────────
   let overwrite = flags.overwrite;
   if (
-    ['kortix.yaml', 'kortix.yml', '.kortix'].some((path) => existsSync(resolve(cwd, path))) &&
+    ['kortix.yaml', 'kortix.yml'].some((path) => existsSync(resolve(cwd, path))) &&
     !overwrite &&
     !flags.yes
   ) {
@@ -326,7 +324,11 @@ function initExistingProject(flags: InitFlags): number {
 
   // ── Wire the chosen coding agents, keeping the repo clean ────────────
   // Link the canonical skill source into each local tool's discovery path.
-  const agentInstall = wireCodingAgents({ repoRoot: cwd, agents: chosenAgents, overwrite: true });
+  const registered = loadLocalManifest(cwd)?.data.skills;
+  const skills = registered && typeof registered === 'object' && !Array.isArray(registered)
+    ? Object.fromEntries(Object.entries(registered).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
+    : {};
+  const agentInstall = wireCodingAgents({ repoRoot: cwd, agents: chosenAgents, overwrite: true, skills, keepAgentsMd: true });
   excludeLocalAgentWiring(cwd);
 
   return wireAndReport({

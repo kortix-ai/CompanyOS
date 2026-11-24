@@ -30,7 +30,7 @@ import { authCookieOptions, hasPanelMarker, panelAuthUrl } from '@/lib/supabase/
 import { redirectPreservingCookies } from '@/lib/supabase/redirect-preserving-session';
 import { createServerClient } from '@supabase/ssr';
 import type { NextRequest } from 'next/server';
-import { desktopShellPath, isDesktopShell } from './lib/workspace-redirects';
+import { desktopShellPath, isDesktopShell, workspacePathOfDesktopLegacy } from './lib/workspace-redirects';
 import { NextResponse } from 'next/server';
 
 type Locale = (typeof locales)[number];
@@ -50,10 +50,10 @@ const MARKETING_ROUTES = [
   '/contact',
   '/design-system',
   '/developers',
+  '/loopmaxxing',
   '/download',
   '/enterprise',
   '/legal',
-  '/marketplace',
   '/pricing',
   '/security',
   '/self-hosted',
@@ -90,7 +90,7 @@ function isExactMarketingPath(pathname: string): boolean {
 // Pure marketing/promo routes that a self-host with the landing page disabled
 // (KORTIX_PUBLIC_DISABLE_LANDING_PAGE) should NOT serve — they bounce to the
 // app. Functional public routes (/auth, /docs, /legal,
-// /marketplace, /share, /download, /maintenance, …) stay reachable; only the
+// /share, /download, /maintenance, …) stay reachable; only the
 // marketing site itself is deactivated.
 const SELF_HOST_MARKETING_ONLY = [
   '/about',
@@ -100,6 +100,7 @@ const SELF_HOST_MARKETING_ONLY = [
   '/changelog',
   '/contact',
   '/developers',
+  '/loopmaxxing',
   '/enterprise',
   '/pricing',
   '/services',
@@ -149,8 +150,8 @@ const PROTECTED_APP_PREFIXES = [
   '/panel',
   '/presentations',
   '/workspaces',
-  // An installed desktop shell keeps the pre-Workspaces app paths; next.config
-  // serves them from /workspaces (src/lib/workspace-redirects.ts).
+  // An installed desktop shell keeps the pre-Workspaces app paths; the locale
+  // rewrite below serves them from /workspaces (src/lib/workspace-redirects.ts).
   '/projects',
   '/new',
   '/rauch',
@@ -176,7 +177,6 @@ const PUBLIC_ROUTES = [
   '/legal',
   '/api/auth',
   '/share', // Shared content should be public
-  '/marketplace', // Public read-only marketplace directory; installs still require auth
   '/secret-intake', // Agent-minted secret setup links — token-gated, MUST be openable with no login (e.g. from a Slack link)
   '/connect', // Agent-minted Pipedream Quick Connect links — token-gated, MUST be openable with no login (distinct from authed /connectors)
   '/master-login', // Master password admin login
@@ -201,6 +201,7 @@ const PUBLIC_ROUTES = [
   '/rauch', // Rauch-style particle rendering of the Kortix symbol — public, unauthenticated
   '/contact', // Request-a-demo / contact page should be public
   '/developers', // Developer walkthrough landing page should be public
+  '/loopmaxxing', // The developer landing loopmaxxing.sh serves at its root
   '/countryerror', // Country restriction error page should be public
   '/enterprise', // Enterprise page should be public
   '/services', // Services (AI Transformation) sales page should be public
@@ -281,7 +282,6 @@ const DESKTOP_ALLOWED_ROUTES = [
   '/capture',
   '/github',
   '/cli',
-  '/marketplace',
   '/maintenance',
   '/countryerror',
   '/debug',
@@ -297,7 +297,41 @@ function isDecodablePath(pathname: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
+  // Every flow below (auth, cookies marked Secure) assumes the secure origin:
+  // move a plain-HTTP visitor there before any content or auth decision.
+  const httpsRedirect = httpsRedirectTarget(request);
+  if (httpsRedirect) return NextResponse.redirect(httpsRedirect, 308);
+
   let { pathname } = request.nextUrl;
+  // loopmaxxing.sh is the developer landing. Its root shows /loopmaxxing; the
+  // setup guide, the installer and the loop guides are served under its own
+  // name, because the copied prompt names them there; every other path is
+  // kortix.com's.
+  if (LOOPMAXXING_HOSTS.has(visitorHostname(request))) {
+    // Before the launch the host shows nothing of its own.
+    if (!loopmaxxingEnabled()) return NextResponse.redirect('https://kortix.com/', 307);
+    if (pathname === '/') {
+      const landing = request.nextUrl.clone();
+      landing.pathname = `/${defaultLocale}/loopmaxxing`;
+      return NextResponse.rewrite(landing);
+    }
+    if (pathname === '/loopmaxxing') return NextResponse.redirect(`https://${visitorHostname(request)}/`, 308);
+    // Its own sitemap and llms.txt; robots.txt answers per host in its route.
+    const own = LOOPMAXXING_SITE_FILES[pathname];
+    if (own) {
+      const file = request.nextUrl.clone();
+      file.pathname = own;
+      return NextResponse.rewrite(file);
+    }
+    if (!LOOPMAXXING_SERVED.test(pathname)) {
+      return NextResponse.redirect(`https://kortix.com${pathname}${request.nextUrl.search}`, 307);
+    }
+  }
+  // On kortix.com the page has one address, loopmaxxing.sh: a permanent
+  // redirect gives search engines one URL to rank instead of a copy per locale.
+  if (KORTIX_SITE_HOSTS.has(visitorHostname(request)) && LOOPMAXXING_PAGE.test(pathname) && loopmaxxingEnabled()) {
+    return NextResponse.redirect(`https://loopmaxxing.sh/${request.nextUrl.search}`, 308);
+  }
   // These are probes for server files, not product routes. A plain response also
   // avoids rendering the translated application shell for sensitive-file probes.
   if (/^\/(?:\.env(?:[./]|$)|\.git(?:\/|$)|package\.json$|etc\/passwd$)/i.test(pathname)) {
@@ -624,6 +658,15 @@ export async function middleware(request: NextRequest) {
     return finalizeEnvironmentAccess(response);
   }
 
+  // The page an installed desktop shell gets for its legacy paths (/projects…,
+  // /new): the same page under /workspaces, served in place. The mapping must
+  // happen here. A next.config rewrite runs after this middleware and sees only
+  // the locale path (/en/projects/start), so it never matched: every signed-in
+  // shell launch hit a 404. See src/lib/workspace-redirects.ts.
+  const pagePathname =
+    (isDesktopShell(request.headers.get('user-agent')) && workspacePathOfDesktopLegacy(pathname)) ||
+    pathname;
+
   // Every unprefixed page URL is rewritten onto app/[locale] (see the
   // cookieLocale definition above for where the locale comes from).
   const rewriteToLocale = (locale: Locale, base?: NextResponse) => {
@@ -632,7 +675,7 @@ export async function middleware(request: NextRequest) {
     requestHeaders.set('x-locale', locale);
     requestHeaders.set(NEXT_INTL_LOCALE_HEADER, locale);
     const target = request.nextUrl.clone();
-    target.pathname = localizedPathname(locale, pathname);
+    target.pathname = localizedPathname(locale, pagePathname);
     const response = NextResponse.rewrite(target, { request: { headers: requestHeaders } });
     if (base) {
       // Carry refreshed/cleared Supabase cookies and headers set on the base.
@@ -655,7 +698,7 @@ export async function middleware(request: NextRequest) {
   // marketing surface is deactivated: the homepage and every marketing route
   // bounce straight to the app — authenticated users to /workspaces, everyone
   // else to /auth. Functional public routes (/docs, /legal,
-  // /marketplace, /share, …) are unaffected. Read via process.env directly —
+  // /share, …) are unaffected. Read via process.env directly —
   // NEXT_PUBLIC_ vars are inlined at build time, so in Docker containers they'd
   // carry the image's placeholder value; the runtime container env
   // (KORTIX_PUBLIC_/NEXT_PUBLIC_ set at `docker run`) is what must win here,
@@ -941,6 +984,89 @@ export async function middleware(request: NextRequest) {
     console.error('Middleware error:', error);
     return finalizeEnvironmentAccess(rewriteToLocale(signedInLocale(), supabaseResponse));
   }
+}
+
+/**
+ * The https URL to move a plain-HTTP visitor to, or null when the request
+ * already arrived over https (KRTX-3380, pentest http.contract). The edge
+ * (Cloudflare -> ALB) forwards the visitor's scheme in `x-forwarded-proto`
+ * — comma list, client hop leftmost — and, when it strips that header, in
+ * its own `cf-visitor` JSON; checking both covers either proxy behavior.
+ * `/api/health` is exempt: the target group probes it inside the VPC, and a
+ * 308 there would flip healthy targets out of rotation. Defined below
+ * `middleware` on purpose: middleware-desktop-routes.test.ts scrapes the
+ * source between DESKTOP_ALLOWED_ROUTES and the middleware export for
+ * route literals, and this helper's health path is not a desktop route.
+ */
+/** The hosts of the developer landing. */
+const LOOPMAXXING_HOSTS = new Set(['loopmaxxing.sh', 'www.loopmaxxing.sh']);
+/**
+ * What those hosts serve themselves, beside the landing at their root. The
+ * page's own API calls stay on the host: a redirect to kortix.com is
+ * cross-origin, and the response carries no CORS header.
+ */
+const LOOPMAXXING_SERVED = /^\/(?:setup\.md|factory\.md|install(?:\.sh)?|loops\/[^/]+|api\/github-stars|robots\.txt)$/;
+/** The host's own crawler files, rewritten to `app/loopmaxxing-site/`. */
+const LOOPMAXXING_SITE_FILES: Record<string, string> = {
+  '/sitemap.xml': '/loopmaxxing-site/sitemap.xml',
+  '/llms.txt': '/loopmaxxing-site/llms.txt',
+  '/llms-full.txt': '/loopmaxxing-site/llms.txt',
+};
+/** The production marketing hosts, where /loopmaxxing moves to its own domain. */
+const KORTIX_SITE_HOSTS = new Set(['kortix.com', 'www.kortix.com']);
+/** /loopmaxxing and every locale copy of it, such as /de/loopmaxxing. */
+const LOOPMAXXING_PAGE = new RegExp(`^/(?:(?:${locales.join('|')})/)?loopmaxxing/?$`);
+
+/** Read at request time (dynamic key), so one image serves dev with it and prod without. */
+function loopmaxxingEnabled(): boolean {
+  const flag =
+    (Reflect.get(process.env, 'KORTIX_PUBLIC_LOOPMAXXING_ENABLED') as string | undefined) ||
+    (Reflect.get(process.env, 'NEXT_PUBLIC_LOOPMAXXING_ENABLED') as string | undefined);
+  return flag === 'true' || process.env.NODE_ENV === 'development';
+}
+
+/** The host the visitor typed: the forwarded one behind a proxy, else the request's. */
+function visitorHostname(request: NextRequest): string {
+  return hostnameOf(request.headers.get('x-forwarded-host')?.split(',')[0].trim() || request.headers.get('host') || request.nextUrl.host);
+}
+
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]', '0.0.0.0']);
+
+function httpsRedirectTarget(request: NextRequest): URL | null {
+  if (request.nextUrl.pathname === '/api/health') return null;
+  // Local dev serves plain HTTP and Next dev stamps `x-forwarded-proto: http`
+  // on every request, so without this every local page 308s to an https
+  // origin nothing listens on. The `Host` header decides, not `nextUrl`: the
+  // standalone server builds `nextUrl` from its bind address (`0.0.0.0`), so
+  // a container's own health probe of `http://localhost:3000/` was sent to
+  // `https://0.0.0.0:3000/` and every self-host frontend update rolled back
+  // (2026-11-11, v0.15.5).
+  const host = hostnameOf(
+    request.headers.get('x-forwarded-host')?.split(',')[0].trim() || request.headers.get('host') || request.nextUrl.host,
+  );
+  if (LOCAL_HOSTNAMES.has(host)) return null;
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0].trim();
+  if (forwardedProto !== 'http') {
+    let cfScheme: string | undefined;
+    try {
+      cfScheme = JSON.parse(request.headers.get('cf-visitor') ?? '')?.scheme;
+    } catch {
+      cfScheme = undefined;
+    }
+    if (cfScheme !== 'http') return null;
+  }
+  const url = request.nextUrl.clone();
+  url.protocol = 'https:';
+  // The visitor's host, on the default https port: never the bind address.
+  url.host = host;
+  url.port = '';
+  return url;
+}
+
+/** `localhost:3000` → `localhost`, `[::1]:3000` → `[::1]`. */
+function hostnameOf(host: string): string {
+  if (host.startsWith('[')) return host.slice(0, host.indexOf(']') + 1);
+  return host.split(':')[0];
 }
 
 export const config = {

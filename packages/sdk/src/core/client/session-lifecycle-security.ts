@@ -25,28 +25,12 @@ export function bindSessionLifecycleSecurity(ctx: SessionBindingContext) {
           signal,
         ),
     },
-    /**
-     * Compact server-side transcript read (text + tool calls, no tool inputs/outputs) — callable with project-scoped session tokens.
-     *
-     * @deprecated Reads the v1 transcript. Use `log(query)`. Removed in the next major.
-     */
-    transcript: (options?: Parameters<typeof P.getSessionTranscript>[2]) =>
-      P.getSessionTranscript(ctx.projectId, ctx.sessionId, options),
     /** Who wrote each message: a member, or another session's agent. */
     messageAuthors: () => P.getSessionMessageAuthors(ctx.projectId, ctx.sessionId),
     /** Which model answered each turn, and what Kortix billed for it. */
     modelUsage: () => P.getSessionModelUsage(ctx.projectId, ctx.sessionId),
     /** What the session and every session it started cost, in USD. */
     usage: () => P.getSessionUsage(ctx.projectId, ctx.sessionId),
-    /** The DURABLE server-side transcript mirror, in sync-store shape
-     *  (OpenCode message envelopes verbatim, attachment bytes and tool
-     *  inputs/outputs stripped). This is the read that answers while the
-     *  sandbox is stopped or still waking.
-     *
-     * @deprecated Reads the v1 transcript. Use `log(query)`. Removed in the next major.
-     */
-    transcriptSync: (options?: Parameters<typeof P.getSessionTranscriptSync>[2]) =>
-      P.getSessionTranscriptSync(ctx.projectId, ctx.sessionId, options),
     /** One page of one thread of the stored session log (`kortix.session/2`), read from the
      *  API's Postgres, so it answers while the sandbox is stopped. Null when the session has
      *  no stored log yet, or no such thread. Older pages: `before_seq` = the first `seq`. */
@@ -68,10 +52,10 @@ export function bindSessionLifecycleSecurity(ctx: SessionBindingContext) {
       /** Replace a waiting prompt's text in place; sends nothing. */
       edit: (promptId: string, text: string) =>
         P.editSessionPrompt(ctx.projectId, ctx.sessionId, promptId, text),
-      /** "Stop and send": a waiting prompt becomes Quick Queue. */
+      /** "Send now": a waiting prompt goes next; the turn is not stopped. */
       interrupt: (promptId: string) =>
         P.interruptSessionPrompt(ctx.projectId, ctx.sessionId, promptId),
-      /** Hold (or release) the whole queue — what the Stop button writes. */
+      /** Stop (`true`): ends the turn; the waiting prompts then go out as the next turn. */
       hold: (held: boolean) => P.holdSessionPrompts(ctx.projectId, ctx.sessionId, held),
     },
     /**

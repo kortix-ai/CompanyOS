@@ -14,12 +14,14 @@
  */
 
 import { sessionSandboxes } from '@kortix/db';
-import { and, eq, isNotNull, sql } from 'drizzle-orm';
+import { type SQL, and, eq, isNotNull, sql } from 'drizzle-orm';
 
 import { type SandboxProviderName, config } from '../../config';
 import { getProvider } from '../../platform/providers';
+import { removeProviderBox } from '../../platform/providers/remove-box';
 import { db } from '../../shared/db';
-import { stripMetadataKeys } from '../session-lifecycle/sandbox-metadata-sql';
+import { patchedSandboxMetadata } from '../session-lifecycle/status-transitions';
+import { mergeMetadata } from './sandbox-state-sync';
 
 export const PROVIDER_REMOVAL_PENDING_KEY = 'providerRemovalPendingAt';
 /** Set only when the provider confirmed the archived row's box is gone. */
@@ -45,6 +47,9 @@ export const DELETED_SESSION_CLEARED_KEYS = [
   'activeTurns',
 ] as const;
 
+/** The predicate that names a row whose removal intent is still stamped. */
+const removalPending = sql`${sessionSandboxes.metadata} ? ${sql.raw(`'${PROVIDER_REMOVAL_PENDING_KEY}'`)}`;
+
 const REMOVAL_BATCH = 50;
 const BASE_BACKOFF_MS = 60_000;
 const MAX_BACKOFF_MS = 6 * 60 * 60_000;
@@ -69,24 +74,35 @@ function isAllowedProvider(provider: string): boolean {
   return (config.ALLOWED_SANDBOX_PROVIDERS as readonly string[]).includes(provider);
 }
 
-async function markRemoved(sandboxId: string, now: Date): Promise<void> {
+/** Write `metadata` on the archived row; `pendingOnly` also requires the removal stamp to be present. */
+async function patchArchivedRow(
+  sandboxId: string,
+  metadata: SQL,
+  now: Date,
+  { pendingOnly }: { pendingOnly: boolean },
+): Promise<void> {
   await db
     .update(sessionSandboxes)
-    .set({
-      metadata: sql`(${stripMetadataKeys([
-        PROVIDER_REMOVAL_PENDING_KEY,
-        'providerRemovalAttempts',
-        'providerRemovalRetryAfterAt',
-        'providerRemovalError',
-      ])}) || ${JSON.stringify({ [PROVIDER_REMOVED_KEY]: now.toISOString() })}::jsonb`,
-      updatedAt: now,
-    })
+    .set({ metadata, updatedAt: now })
     .where(
       and(
         eq(sessionSandboxes.sandboxId, sandboxId),
         eq(sessionSandboxes.status, 'archived'),
+        ...(pendingOnly ? [removalPending] : []),
       ),
     );
+}
+
+async function markRemoved(sandboxId: string, now: Date): Promise<void> {
+  await patchArchivedRow(
+    sandboxId,
+    patchedSandboxMetadata({
+      strip: [PROVIDER_REMOVAL_PENDING_KEY, 'providerRemovalAttempts', 'providerRemovalRetryAfterAt', 'providerRemovalError'],
+      merge: { [PROVIDER_REMOVED_KEY]: now.toISOString() },
+    }),
+    now,
+    { pendingOnly: false },
+  );
 }
 
 async function markRemovalFailed(
@@ -100,19 +116,7 @@ async function markRemovalFailed(
     providerRemovalRetryAfterAt: new Date(now.getTime() + removalBackoffMs(attempts)).toISOString(),
     providerRemovalError: (error instanceof Error ? error.message : String(error)).slice(0, 300),
   };
-  await db
-    .update(sessionSandboxes)
-    .set({
-      metadata: sql`coalesce(${sessionSandboxes.metadata}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
-      updatedAt: now,
-    })
-    .where(
-      and(
-        eq(sessionSandboxes.sandboxId, sandboxId),
-        eq(sessionSandboxes.status, 'archived'),
-        sql`${sessionSandboxes.metadata} ? ${sql.raw(`'${PROVIDER_REMOVAL_PENDING_KEY}'`)}`,
-      ),
-    );
+  await patchArchivedRow(sandboxId, mergeMetadata(patch), now, { pendingOnly: true });
 }
 
 /**
@@ -135,24 +139,35 @@ export async function attemptArchivedBoxRemoval(
     await markRemovalFailed(row.sandboxId, attempts + 1, error, now).catch(() => undefined);
     return 'failed';
   }
-  try {
-    await provider.remove(row.externalId);
-    await markRemoved(row.sandboxId, now);
-    return 'removed';
-  } catch (removeError) {
-    // A remove that fails because the box is already gone is a success.
-    const status = await provider.getStatus(row.externalId).catch(() => 'unknown' as const);
-    if (status === 'removed') {
+  // A remove that fails because the box is already gone is a success.
+  const result = await removeProviderBox(provider, row.externalId);
+  let removeError: unknown;
+  if ('error' in result) {
+    if (result.removed) {
       await markRemoved(row.sandboxId, now);
       return 'removed';
     }
-    await markRemovalFailed(row.sandboxId, attempts + 1, removeError, now).catch(() => undefined);
-    console.warn(
-      `[archived-box-removal] remove failed for ${row.externalId} (attempt ${attempts + 1}):`,
-      removeError instanceof Error ? removeError.message : removeError,
-    );
-    return 'failed';
+    removeError = result.error;
+  } else {
+    try {
+      await markRemoved(row.sandboxId, now);
+      return 'removed';
+    } catch (stampError) {
+      // A failed stamp is a failed attempt: re-check the box, else record the failure and retry later.
+      removeError = stampError;
+      const status = await provider.getStatus(row.externalId).catch(() => 'unknown' as const);
+      if (status === 'removed') {
+        await markRemoved(row.sandboxId, now);
+        return 'removed';
+      }
+    }
   }
+  await markRemovalFailed(row.sandboxId, attempts + 1, removeError, now).catch(() => undefined);
+  console.warn(
+    `[archived-box-removal] remove failed for ${row.externalId} (attempt ${attempts + 1}):`,
+    removeError instanceof Error ? removeError.message : removeError,
+  );
+  return 'failed';
 }
 
 /** The maintenance lane: retry every archived row whose removal is unconfirmed. */
@@ -173,7 +188,7 @@ export async function removeArchivedProviderBoxes(now = new Date()): Promise<{
       and(
         eq(sessionSandboxes.status, 'archived'),
         isNotNull(sessionSandboxes.externalId),
-        sql`${sessionSandboxes.metadata} ? ${sql.raw(`'${PROVIDER_REMOVAL_PENDING_KEY}'`)}`,
+        removalPending,
       ),
     )
     .orderBy(sql`${sessionSandboxes.metadata}->>'providerRemovalRetryAfterAt' asc nulls first`)

@@ -5,7 +5,7 @@ date: "2026-10-21"
 canonical: "https://kortix.com/blog/chatgpt-work-enterprise-controls-recheck"
 author: "team"
 tags: ["Field notes"]
-updated: "2026-10-21"
+updated: "2026-11-10"
 slug: "/chatgpt-work-enterprise-controls-recheck"
 ---
 If someone hands you a ChatGPT Work control list to sign off, ask for the sentence behind each cell and the page it came from. [OpenAI's ChatGPT Work overview](https://learn.chatgpt.com/docs/enterprise/chatgpt-work-overview) documents ten controls for Work, and every one can be tied to a sentence the page writes itself. The record holds all ten, each with its quote and its URL. Kortix is the open-source CompanyOS, and on 2026-10-21 all ten of those sentences were still there.
@@ -68,7 +68,7 @@ rows:
     source: overview
     quote: >-
       Compliance Logs Platform records: Remain available in the platform for 30 days.
-    kortix: 0 to 90 days live, 90 to 365 in a locked archive
+    kortix: 0 to 14 days live, 14 to 365 in a locked archive (export reads it)
     kortix_docs: https://kortix.com/docs/accounts#retention-and-export
 
   - control: Data residency
@@ -179,7 +179,7 @@ What gets recorded, and who can read it, are two different answers. Kortix write
 
 ## Where the agent runs, and what our docs leave out
 
-Sessions run on Platinum sandboxes. On a self-hosted install the instance runs the platform, API and database included. It has to be reachable from the internet so those sandboxes can call back ([self-hosting](https://kortix.com/docs/host)). One isolated sandbox per session. Each session has its own isolated machine and branch.
+Sessions run on [Platinum](https://www.platinum.dev) sandboxes. On a self-hosted install the instance runs the platform, API and database included. It has to be reachable from the internet so those sandboxes can call back ([self-hosting](https://kortix.com/docs/host)). One isolated sandbox per session. Each session has its own isolated machine and branch.
 
 What the docs leave unsaid matters as much as what they state. No outbound allowlist is documented for a sandbox's own traffic. The network rule that does exist is narrower. Connector calls refuse private and internal addresses, and a self-hosted instance can allow internal hosts by listing them in `KORTIX_CONNECTOR_EGRESS_ALLOW_HOSTS`.
 

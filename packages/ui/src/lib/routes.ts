@@ -28,6 +28,8 @@ export interface UiRoutes {
   goals: (projectId: string) => string | null;
   /** The project's artifacts (flag `artifacts`); one is `<artifacts>/<artifact_id>`. */
   artifacts: (projectId: string) => string | null;
+  /** The workspace calendar (flag `calendar`); `?item=<id>` opens one item. Absent: the host has no calendar route. */
+  calendar?: (projectId: string) => string | null;
   /** One space: a channel and its tabs (`?tab=` opens one). */
   space: (projectId: string, slug: string) => string | null;
   members: (projectId: string) => string | null;
@@ -52,19 +54,26 @@ export interface UiRoutes {
   /** The project's Company memory (`chat` flag); a page is `?page=<page_id>`. */
   memory: (projectId: string) => string | null;
   /**
-   * Review: everything that waits on a person (asks, approvals, changes), as
-   * its own page beside the app sidebar. Absent: the host serves Review only
-   * inside its `customize` route.
+   * Review: the workspace's Review queue, beside the app sidebar. Since
+   * KRTX-4799 it lives at the workspace Inbox address; the person's
+   * notifications are not a view of it (they span every workspace). Absent:
+   * the host serves Review only inside its `customize` route.
    */
   review?: (projectId: string) => string | null;
   /**
-   * The Inbox: the signed-in person's notifications from every project, as a
-   * page beside the project sidebar (KRTX-1742). Absent or null: the host
-   * serves no Inbox page and the sidebar has no Inbox row. It is new
-   * (2026-11-06), so a host that maps any route (its own router) gets no
-   * Inbox row until it routes `inbox` too: no host gets a link it does not serve.
+   * The person's notification Inbox (`/inbox` on apps/web). It spans every
+   * workspace, so it takes no project. The workspace sidebar links it. A host
+   * that maps any route with `setUiRoutes` links it only when it maps `inbox`
+   * too, so it never links a page it does not serve.
    */
-  inbox?: (projectId: string) => string | null;
+  inbox?: () => string | null;
+  /**
+   * The workspace's Spaces (session groups, flag `session_groups`), and one
+   * space's page. apps/web pages: a host that maps any route links them only
+   * when it maps them too.
+   */
+  sessionSpaces?: (projectId: string) => string | null;
+  sessionSpace?: (projectId: string, groupId: string) => string | null;
 }
 
 const DEFAULT_ROUTES = {
@@ -76,6 +85,7 @@ const DEFAULT_ROUTES = {
   apps: (p: string) => `/workspaces/${p}/apps`,
   goals: (p: string) => `/workspaces/${p}/goals`,
   artifacts: (p: string) => `/workspaces/${p}/artifacts`,
+  calendar: (p: string) => `/workspaces/${p}/calendar`,
   space: (p: string, slug: string) => `/workspaces/${p}/spaces/${encodeURIComponent(slug)}`,
   members: (p: string) => `/workspaces/${p}/members`,
   sandboxSettings: (p: string) => `/workspaces/${p}/admin/sandbox`,
@@ -84,8 +94,11 @@ const DEFAULT_ROUTES = {
   channel: (p: string, slug: string) => `/workspaces/${p}/c/${slug}`,
   dm: (p: string, agentName: string) => `/workspaces/${p}/dm/${encodeURIComponent(agentName)}`,
   memory: (p: string) => `/workspaces/${p}/memory`,
+  // The workspace Review queue has its own page.
   review: (p: string) => `/workspaces/${p}/review`,
-  inbox: (p: string) => `/workspaces/${p}/inbox`,
+  inbox: () => '/inbox',
+  sessionSpaces: (p: string) => `/workspaces/${p}/spaces`,
+  sessionSpace: (p: string, groupId: string) => `/workspaces/${p}/space/${encodeURIComponent(groupId)}`,
 };
 
 export const defaultUiRoutes: UiRoutes = DEFAULT_ROUTES;
@@ -102,9 +115,12 @@ export function setUiRoutes(overrides: Partial<UiRoutes>): void {
   const admin = overrides.admin ?? overrides.customize;
   // A host that routes its own customize pages serves Review there unless it also routes `review`.
   const review = overrides.review ?? (overrides.customize ? undefined : DEFAULT_ROUTES.review);
-  // The Inbox page is new: only the default router (no override) serves it unasked.
+  // Inbox is apps/web's page: a host that maps any route links it only when it maps `inbox`.
   const inbox = overrides.inbox ?? (Object.keys(overrides).length === 0 ? DEFAULT_ROUTES.inbox : undefined);
-  routes = { ...DEFAULT_ROUTES, ...overrides, ...(admin ? { admin } : {}), review, inbox };
+  const ownsAll = Object.keys(overrides).length === 0;
+  const sessionSpaces = overrides.sessionSpaces ?? (ownsAll ? DEFAULT_ROUTES.sessionSpaces : undefined);
+  const sessionSpace = overrides.sessionSpace ?? (ownsAll ? DEFAULT_ROUTES.sessionSpace : undefined);
+  routes = { ...DEFAULT_ROUTES, ...overrides, ...(admin ? { admin } : {}), review, inbox, sessionSpaces, sessionSpace };
 }
 
 export function uiRoutes(): UiRoutes {

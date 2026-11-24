@@ -32,11 +32,14 @@ export const WorkFoldContext = createContext(false);
 export const WorkTouchContext = createContext<(() => void) | null>(null);
 
 export function TurnWorkAccordion({
+  label,
   durationMs,
   open,
   onToggle,
   contentId,
 }: {
+  /** The row's words in place of "Worked for …": an agent run's (`sessionLogAgentRunLabel`). */
+  label?: string;
   /** `sessionTurnDurationMs(turn)`; `null` reads "Worked". */
   durationMs: number | null;
   open: boolean;
@@ -52,15 +55,15 @@ export function TurnWorkAccordion({
         aria-controls={open ? contentId : undefined}
         onClick={onToggle}
         className={cn(
-          'group/work text-muted-foreground/70 hover:text-muted-foreground flex min-w-0 cursor-pointer items-center gap-2',
+          'group/work text-muted-foreground hover:text-foreground flex min-w-0 cursor-pointer items-center gap-2',
           'focus-visible:ring-ring/50 rounded-sm text-left text-sm transition-colors select-none focus-visible:ring-2 focus-visible:outline-none',
         )}
       >
-        <span className="min-w-0 truncate tabular-nums">{workedForLabel(durationMs)}</span>
+        <span className="min-w-0 truncate tabular-nums">{label ?? workedForLabel(durationMs)}</span>
         <CaretRightIcon
           aria-hidden
           className={cn(
-            'text-muted-foreground/40 group-hover/work:text-muted-foreground/70 size-3.5 flex-none transition-[transform,color]',
+            'text-muted-foreground group-hover/work:text-foreground size-3.5 flex-none transition-[transform,color]',
             open && 'rotate-90',
           )}
         />

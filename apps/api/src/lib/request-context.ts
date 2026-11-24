@@ -41,6 +41,8 @@ export interface RequestContext {
   userEmail?: string;
   /** Kortix project ID (set by route middleware/handlers when known) */
   projectId?: string;
+  /** Session bound by authentication; never a route-target session. */
+  authSessionId?: string;
   /** Kortix project session ID (set by route middleware/handlers when known) */
   sessionId?: string;
   /** Sandbox ID (set by route handlers that operate on a sandbox) */
@@ -254,6 +256,13 @@ const CLOUDWATCH_SAFE_FIELDS = [
   // makes the herd shape (many concurrent reads to one box, KRTX-471) one
   // query instead of a hand rebuild from completion timestamps.
   'sandbox_inflight',
+  // What the box said about itself on a proxied turn-verb answer
+  // (forward/daemon-timing.ts): the daemon's own handler wall and the peak
+  // event-loop slip it sampled. Aggregate-only. They split a slow upstream
+  // wait into 'the box answered slowly' vs 'the ingress hop took the time'
+  // (KRTX-4459) from the raw log line, not a post-hoc reconstruction.
+  'sandbox_daemon_ms',
+  'sandbox_loop_lag_ms',
   'config_pending_stages',
   'config_project_access_ms',
   'config_session_access_ms',

@@ -15,7 +15,9 @@ import {
   connectorsV2Surfaces,
   v2AppKey,
   kortixOAuthClients,
+  kortixClientIdentity,
   mcpAppForUrl,
+  withCurrentKortixClientSecret,
 } from './mcp-apps';
 import { createStoredDelegatedCredential, resolveStoredDelegatedCredential } from './oauth2-delegated';
 import { buildOAuth2AuthorizationRequest, exchangeOAuth2AuthorizationCode } from './oauth2-lifecycle';
@@ -59,6 +61,16 @@ describe('the Kortix MCP app catalogue', () => {
     expect([...clients.keys()]).toEqual(['google']);
   });
 
+  test("a stored Google sign-in refreshes with the deployment's current secret and names its account by email", () => {
+    const stored = { issuer: 'https://accounts.google.com', client_id: 'kortix-google', client_secret: 'rotated-away' };
+    expect(withCurrentKortixClientSecret(stored, GOOGLE).client_secret).toBe('kortix-google-secret');
+    // Another client of the same issuer is not Kortix's: it keeps its own secret.
+    const other = { ...stored, client_id: 'someone-else' };
+    expect(withCurrentKortixClientSecret(other, GOOGLE)).toBe(other);
+    expect(kortixClientIdentity(stored, GOOGLE)).toEqual({ url: 'https://openidconnect.googleapis.com/v1/userinfo', field: 'email' });
+    expect(kortixClientIdentity(other, GOOGLE)).toBeNull();
+  });
+
   test('an endpoint matches exactly: case and a trailing slash do not matter, a query or another path does', () => {
     expect(mcpAppForUrl('https://MCP.linear.app/mcp/')?.slug).toBe('linear');
     expect(mcpAppForUrl('https://mcp.linear.app/mcp?x=1')).toBeNull();
@@ -67,7 +79,7 @@ describe('the Kortix MCP app catalogue', () => {
   });
 
   test("Kortix's client is used only for a catalogue URL, with the catalogue's endpoints", () => {
-    const application = kortixClientApplication('https://gmailmcp.googleapis.com/mcp/v1', GOOGLE);
+    const application = kortixClientApplication('https://google.mcp.kortix.com/gmail', GOOGLE);
     expect(application).toMatchObject({
       client_id: 'kortix-google',
       client_secret: 'kortix-google-secret',
@@ -75,10 +87,10 @@ describe('the Kortix MCP app catalogue', () => {
       token_url: 'https://oauth2.googleapis.com/token',
       authorization_params: { access_type: 'offline', prompt: 'consent' },
     });
-    expect(application?.scopes).toContain('https://www.googleapis.com/auth/gmail.compose');
+    expect(application?.scopes).toContain('https://www.googleapis.com/auth/gmail.modify');
     expect(kortixClientApplication('https://evil.example/mcp', GOOGLE)).toBeNull();
     expect(kortixClientApplication('https://mcp.linear.app/mcp', GOOGLE)).toBeNull();
-    expect(kortixClientApplication('https://gmailmcp.googleapis.com/mcp/v1', new Map())).toBeNull();
+    expect(kortixClientApplication('https://google.mcp.kortix.com/gmail', new Map())).toBeNull();
   });
 
   test('the catalogue serves Discover: list, sections and detail with the MCP surface', async () => {
@@ -173,6 +185,30 @@ describe('the ways to connect one app (catalogue detail)', () => {
     expect(items.find((item) => item.kind === 'composio')?.domain).toBe('bitbucket.org');
     expect(v2AppKey('Stripe REST API')).toBe('stripe');
     expect(v2AppKey('API')).toBe('');
+  });
+
+  test('Wispr Flow is one app: a record named after its domain joins Composio\'s "Wispr Flow MCP", and its own one-click server leads', async () => {
+    const items = () =>
+      connectorsV2Items({
+        apps: () => [],
+        index: async () => [record('discovered/wisprflow-ai-mcp', 'mcp', 'wisprflow.ai', 'wisprflow.ai', { feeds: ['discovered'], mcpUrl: 'https://api.wisprflow.ai/connect/mcp', oneClick: true })],
+        toolkits: async () => [toolkit('wispr_flow_mcp', 'Wispr Flow MCP')],
+      });
+    expect((await items()).find((entry) => entry.kind === 'composio')?.domain).toBe('wisprflow.ai');
+    const ways = await connectorsV2Surfaces('wisprflow.ai', {
+      items,
+      surfaces: async () => [
+        {
+          id: 'wispr-flow-mcp-server', kind: 'mcp', name: 'Wispr Flow MCP server', url: 'https://api.wisprflow.ai/connect/mcp', docs: null, description: null,
+          transports: ['streamable-http'], requiresAuth: true, command: null,
+          connector: { provider: 'mcp', url: 'https://api.wisprflow.ai/connect/mcp', transport: 'http' },
+        },
+      ],
+    });
+    expect(ways.map((way) => [way.id, way.kind, way.recommended === true])).toEqual([
+      ['wispr-flow-mcp-server', 'mcp', true],
+      ['composio:wispr_flow_mcp', 'composio', false],
+    ]);
   });
 
   test('YouTube is one app: the toolkit whose name matches no record joins the registry\'s <slug>.com', async () => {
@@ -301,7 +337,7 @@ describe('sign-in for an app on a Kortix client', () => {
     (config as { KORTIX_OAUTH_CLIENTS: string }).KORTIX_OAUTH_CLIENTS = JSON.stringify({ google: { client_id: 'kortix-google', client_secret: 's' } });
     try {
       const discovery = await discoverProtectedResourceOAuth2(
-        { resourceUrl: 'https://calendarmcp.googleapis.com/mcp/v1', provider: 'mcp' },
+        { resourceUrl: 'https://google.mcp.kortix.com/calendar', provider: 'mcp' },
         { fetchImpl: async () => { throw new Error('the server must not be probed'); } },
       );
       expect(discovery).toMatchObject({ requires_authorization: true, kortix_client: true, authorization_server: 'https://accounts.google.com' });

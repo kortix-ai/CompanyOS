@@ -5,19 +5,18 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from '@/i18n/test-source';
 import { join, resolve } from 'node:path';
 import { menuRegistry } from './menu-registry';
-import { uiSourcePath } from '@/test-utils/read-source';
 
 /**
  * `requiresFlag` is only a gate if EVERY consumer honours it. Before this, the
  * command palette filtered on it and the legacy right rail did not — so the first
  * flagged item to gain `showIn: ['rightSidebar']` would have leaked a disabled
  * feature into the nav. The rail is deleted (KRTX-1012); these tests pin the
- * declaration, the one surviving consumer, and the flag map that resolves an
- * arbitrary key.
+ * declaration, the one surviving consumer, and the palette's own filter line.
+ * The flag MAP that resolves an arbitrary key is pinned behaviorally, key by
+ * key, in `packages/sdk/src/react/use-feature-flag.test.ts` (`useFeatureFlags`).
  */
 const root = resolve(import.meta.dir, '..');
 const registrySource = readFileSync(join(root, 'lib/menu-registry.ts'), 'utf8');
-const flagMapSource = readFileSync(uiSourcePath('internal/lib/use-project-feature-flags.ts'), 'utf8');
 const paletteSource = readFileSync(join(root, 'features/workspace/command-palette.tsx'), 'utf8');
 
 describe('menu registry feature-flag gating', () => {
@@ -66,8 +65,8 @@ describe('menu registry feature-flag gating', () => {
 
   test('the palette honours requiresFlag for the entries that still declare one', () => {
     // `proj-artifacts` (`artifacts`, #10842: Artifacts availability since it
-    // graduated on 2026-11-06) and `proj-goals` (`goals`, KRTX-4222) are the
-    // flagged palette entries (Apps and Drive graduated off the flag system in
+    // graduated on 2026-11-06), `proj-goals` (`goals`, KRTX-4222), `proj-calendar`
+    // (`calendar`) and `proj-evals` (`evals`) are the flagged palette entries (Apps and Drive graduated off the flag system in
     // 2026-10 and 2026-11). The filter
     // line is the whole gate, so it is pinned literally — a rename or a fail-OPEN
     // rewrite of it would otherwise pass every other test here.
@@ -77,24 +76,11 @@ describe('menu registry feature-flag gating', () => {
     expect(flagged.map((item) => [item.id, item.requiresFlag])).toEqual([
       ['proj-artifacts', 'artifacts'],
       ['proj-goals', 'goals'],
+      ['proj-calendar', 'calendar'],
+      ['proj-evals', 'evals'],
     ]);
     expect(paletteSource).toContain(
       'if (item.requiresFlag && !projectFlags[item.requiresFlag]) continue;',
     );
-  });
-});
-
-describe('useProjectFeatureFlags', () => {
-  test('covers EVERY feature flag key, so a new flag is gateable on day one', () => {
-    for (const key of FEATURE_FLAG_KEYS) {
-      expect(flagMapSource).toContain(`useFeatureFlag(projectId, '${key}')`);
-      expect(flagMapSource).toContain(`${key}: `);
-    }
-  });
-
-  test('is composed from the ONE primitive, not a second hand-rolled read', () => {
-    expect(flagMapSource).toContain("import { useFeatureFlag } from '@kortix/sdk/react';");
-    expect(flagMapSource).not.toContain('useQuery');
-    expect(flagMapSource).not.toContain('experimental');
   });
 });

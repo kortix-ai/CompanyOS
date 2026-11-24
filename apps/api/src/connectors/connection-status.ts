@@ -8,8 +8,10 @@
  * Composio finalize. Each transition is a compare-and-set
  * (`shared/status-transition.ts`):
  *
- *   - `connect`: a person (re)connects the account at request time. It is the
- *     only transition that leaves `revoked` unconditionally.
+ *   - `connect`: a reconnect. Only a `reconnect` (Activate, a pasted
+ *     credential, a paired machine) leaves `revoked` unconditionally; a
+ *     `start` (an authorization just begun, by a person or an agent session)
+ *     never does: the completion below decides.
  *   - `complete`: an in-flight completion. It leaves `revoked` only when the
  *     revoke (`metadata.revokedAt`) is older than the flow (`startedAt`): a
  *     sign-in a person started on a revoked account still reconnects it.
@@ -29,18 +31,26 @@ type ConnectionRow = typeof connectorConnections.$inferSelect;
 type ConnectionSet = PgUpdateSetSource<typeof connectorConnections>;
 type ConnectionStatus = ConnectionRow['status'];
 
-export const CONNECTION_TRANSITIONS = {
+const CONNECTION_TRANSITIONS = {
   connect: { from: ['active', 'error', 'revoked'], to: 'active' },
   complete: { from: ['active', 'error', 'revoked'], to: 'active' },
   fail: { from: ['active', 'error'], to: 'error' },
   revoke: { from: ['active', 'error', 'revoked'], to: 'revoked' },
 } as const satisfies Record<string, { from: readonly ConnectionStatus[]; to: ConnectionStatus }>;
 
-/** `revoked` only when the revoke predates `startedAt` (ISO strings sort by time). */
+/**
+ * `revoked` only when a recorded revoke predates `startedAt` (ISO strings sort
+ * by time). A revoked row with no `revokedAt` (the 2026-09-17 migration stamped
+ * only `updated_at`) cannot prove it predates the flow, so it stays revoked: a
+ * missing stamp is not the epoch.
+ */
 function revokedBefore(startedAt: Date): SQL {
   return or(
     sql`${connectorConnections.status} <> 'revoked'`,
-    sql`coalesce(${connectorConnections.metadata}->>'revokedAt', '') < ${startedAt.toISOString()}`,
+    sql`(
+      ${connectorConnections.metadata}->>'revokedAt' IS NOT NULL
+      AND ${connectorConnections.metadata}->>'revokedAt' < ${startedAt.toISOString()}
+    )`,
   )!;
 }
 
@@ -69,11 +79,26 @@ export async function completeConnection(
   return moved.applied;
 }
 
-/** A person connects the account now: active from any status. */
+/**
+ * WHAT moves the account: `reconnect` is a deliberate turn-on (Activate, a
+ * pasted credential, a paired machine); `start` is an authorization just
+ * begun, whose sign-in has not happened yet. The kind of operation decides,
+ * never who calls: a person and an agent session acting for one are the same.
+ */
+export type ConnectAuthority = 'reconnect' | 'start';
+
+/**
+ * An account connects from any status. Only a `reconnect` leaves `revoked`
+ * here: a `start` on a revoked account waits for its completion
+ * (`completeConnection`), so a sign-in tab opened before the revoke cannot
+ * undo it. The guard makes that part of the UPDATE, so a concurrent revoke
+ * still wins.
+ */
 export async function connectConnection(
   connectionId: string,
   set: ConnectionSet = {},
   exec: StatusExecutor = db,
+  authority: ConnectAuthority = 'start',
 ): Promise<ConnectionRow | null> {
   const moved = await transitionStatus(
     connectorConnections,
@@ -82,10 +107,28 @@ export async function connectConnection(
     {
       where: eq(connectorConnections.connectionId, connectionId),
       set: { ...set, metadata: set.metadata ?? sql`${connectorConnections.metadata} - 'revokedAt'`, updatedAt: new Date() },
+      ...(authority === 'reconnect' ? {} : { guard: sql`${connectorConnections.status} <> 'revoked'` }),
     },
     exec,
   );
+  if (!moved.applied && authority === 'start') await expirePendingOAuthSessions(connectionId, exec);
   return moved.applied ? moved.row : null;
+}
+
+/**
+ * A start that found the account revoked expires the sessions waiting
+ * on it: a revoke expires the sessions of a row it moved, but a start on a row
+ * that is ALREADY revoked never moved it, so its poll would otherwise find a
+ * pending session and store a token on an account a person turned off.
+ */
+async function expirePendingOAuthSessions(
+  connectionId: string,
+  exec: Pick<typeof db, 'update'>,
+): Promise<void> {
+  await exec
+    .update(connectionOAuthSessions)
+    .set({ status: 'expired', updatedAt: new Date() })
+    .where(and(eq(connectionOAuthSessions.connectionId, connectionId), eq(connectionOAuthSessions.status, 'pending')));
 }
 
 /** An authorization failed: `error`, unless the account is revoked. */

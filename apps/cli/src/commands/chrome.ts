@@ -22,8 +22,7 @@ import { C, help, status } from '../style.ts';
 const HELP = help`Usage: kortix chrome <subcommand> [options]
 
 Control the user's own Chrome (their logins, their real session) from this
-session. The user installs the Kortix extension once; see
-https://kortix.com/settings/chrome.
+session. The user installs the Kortix extension once.
 
 Subcommands:
   ls                    List the user's connected browsers.
@@ -141,22 +140,25 @@ export async function runChrome(argv: string[]): Promise<number> {
   let json: boolean;
   let ask: boolean;
   let host: string | undefined;
+  let workspace: string | undefined;
   try {
     json = takeFlagBool(rest, ['--json']);
     ask = takeFlagBool(rest, ['--ask']);
     host = takeFlagValue(rest, ['--host']);
+    workspace = takeFlagValue(rest, ['--project', '--workspace']);
   } catch (err) {
     return fail((err as Error).message);
   }
   const sub = rest.shift();
 
   if (sub === 'ls' || sub === 'list') {
-    const ctx = await resolveProjectContext({ hostArg: host });
+    const ctx = await resolveProjectContext({ hostArg: host, projectArg: workspace });
     if (!ctx) return 1;
     try {
       const list = await ctx.client.get<ChromeInfo[]>('/chrome/connections');
+      const connectUrl = `${webBase(ctx.client.apiBase)}/settings/chrome`;
       if (json) emitJson(list);
-      else process.stdout.write(`${formatChromeList(list, `${webBase(ctx.client.apiBase)}/settings/chrome`)}\n`);
+      else process.stdout.write(`${formatChromeList(list, connectUrl)}\n`);
       return 0;
     } catch (err) {
       return surfaceApiError(err);

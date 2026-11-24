@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1752,
-  "aliases": 674,
+  "count": 1826,
+  "aliases": 713,
   "routes": [
     {
       "method": "GET",
@@ -62,6 +62,14 @@
     {
       "method": "POST",
       "path": "/internal/gateway/claude-refused"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/gateway/idempotency/get"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/gateway/idempotency/put"
     },
     {
       "method": "POST",
@@ -973,6 +981,11 @@
       "aliasOf": "/v1/workspaces/:workspaceId/secret-resources/:secretId/value"
     },
     {
+      "method": "POST",
+      "path": "/v1/accounts/:workspaceId/secret-resources/:secretId/verify",
+      "aliasOf": "/v1/workspaces/:workspaceId/secret-resources/:secretId/verify"
+    },
+    {
       "method": "GET",
       "path": "/v1/accounts/:workspaceId/subscription-connections",
       "aliasOf": "/v1/workspaces/:workspaceId/subscription-connections"
@@ -1026,6 +1039,11 @@
       "method": "DELETE",
       "path": "/v1/accounts/me/tokens/:tokenId",
       "aliasOf": "/v1/me/tokens/:tokenId"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/accounts/me/tokens/self",
+      "aliasOf": "/v1/me/tokens/self"
     },
     {
       "method": "GET",
@@ -1190,6 +1208,10 @@
     {
       "method": "POST",
       "path": "/v1/admin/api/sandboxes/:sessionId/migrate"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/agent-marks/:file"
     },
     {
       "method": "GET",
@@ -1574,6 +1596,10 @@
     {
       "method": "POST",
       "path": "/v1/cli/device/start"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/cli/setup-events"
     },
     {
       "method": "GET",
@@ -2085,10 +2111,6 @@
       "path": "/v1/generation"
     },
     {
-      "method": "GET",
-      "path": "/v1/git/:project/fast-boot-bundle"
-    },
-    {
       "method": "POST",
       "path": "/v1/git/:project/git-receive-pack"
     },
@@ -2141,36 +2163,12 @@
       "path": "/v1/llm/*"
     },
     {
-      "method": "GET",
-      "path": "/v1/marketplace/items"
+      "method": "ALL",
+      "path": "/v1/marketplace"
     },
     {
-      "method": "GET",
-      "path": "/v1/marketplace/items/:id"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/marketplace/items/:id/file"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/marketplace/marketplaces"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/marketplace/marketplaces/featured"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/marketplace/sources"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/marketplace/sources"
-    },
-    {
-      "method": "DELETE",
-      "path": "/v1/marketplace/sources/:id"
+      "method": "ALL",
+      "path": "/v1/marketplace/*"
     },
     {
       "method": "DELETE",
@@ -2203,6 +2201,10 @@
     {
       "method": "DELETE",
       "path": "/v1/me/tokens/:tokenId"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/me/tokens/self"
     },
     {
       "method": "GET",
@@ -2311,10 +2313,6 @@
     {
       "method": "GET",
       "path": "/v1/p/public-share/:token"
-    },
-    {
-      "method": "ALL",
-      "path": "/v1/p/public-share/:token/:port"
     },
     {
       "method": "ALL",
@@ -2874,6 +2872,26 @@
       "aliasOf": "/v1/workspaces/:workspaceId/artifacts/:artifactId/versions"
     },
     {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/artifacts/folders",
+      "aliasOf": "/v1/workspaces/:workspaceId/artifacts/folders"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/artifacts/folders",
+      "aliasOf": "/v1/workspaces/:workspaceId/artifacts/folders"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/projects/:workspaceId/artifacts/folders/:folderId",
+      "aliasOf": "/v1/workspaces/:workspaceId/artifacts/folders/:folderId"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/projects/:workspaceId/artifacts/folders/:folderId",
+      "aliasOf": "/v1/workspaces/:workspaceId/artifacts/folders/:folderId"
+    },
+    {
       "method": "POST",
       "path": "/v1/projects/:workspaceId/artifacts/share",
       "aliasOf": "/v1/workspaces/:workspaceId/artifacts/share"
@@ -2922,6 +2940,51 @@
       "method": "GET",
       "path": "/v1/projects/:workspaceId/branches",
       "aliasOf": "/v1/workspaces/:workspaceId/branches"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/browser-logins",
+      "aliasOf": "/v1/workspaces/:workspaceId/browser-logins"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/browser-logins/resolve",
+      "aliasOf": "/v1/workspaces/:workspaceId/browser-logins/resolve"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/calendar",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/calendar",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/projects/:workspaceId/calendar/:itemId",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar/:itemId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/calendar/:itemId",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar/:itemId"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/projects/:workspaceId/calendar/:itemId",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar/:itemId"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/calendar/:itemId/comments",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar/:itemId/comments"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/calendar/people",
+      "aliasOf": "/v1/workspaces/:workspaceId/calendar/people"
     },
     {
       "method": "GET",
@@ -3127,6 +3190,11 @@
       "method": "GET",
       "path": "/v1/projects/:workspaceId/channels/slack/installation",
       "aliasOf": "/v1/workspaces/:workspaceId/channels/slack/installation"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/channels/slack/join",
+      "aliasOf": "/v1/workspaces/:workspaceId/channels/slack/join"
     },
     {
       "method": "GET",
@@ -3474,6 +3542,106 @@
       "aliasOf": "/v1/workspaces/:workspaceId/detail"
     },
     {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/dictation",
+      "aliasOf": "/v1/workspaces/:workspaceId/dictation"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/dictation",
+      "aliasOf": "/v1/workspaces/:workspaceId/dictation"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/compare",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/compare"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/datasets",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/datasets"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/jobs",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/evals/jobs",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/projects/:workspaceId/evals/jobs/:jobId",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs/:jobId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/jobs/:jobId",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs/:jobId"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/evals/jobs/:jobId/cancel",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/cancel"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/evals/jobs/:jobId/rerun",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/rerun"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/jobs/:jobId/trials",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/trials"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/jobs/:jobId/trials/:trialId",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/trials/:trialId"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/evals/jobs/:jobId/trials/:trialId/cancel",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/trials/:trialId/cancel"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/jobs/:jobId/trials/:trialId/file",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/trials/:trialId/file"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/evals/jobs/:jobId/trials/:trialId/retry",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/trials/:trialId/retry"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/tasks",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/tasks"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/tasks/:taskId",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/tasks/:taskId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/tasks/:taskId/file",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/tasks/:taskId/file"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/evals/tasks/:taskId/results",
+      "aliasOf": "/v1/workspaces/:workspaceId/evals/tasks/:taskId/results"
+    },
+    {
       "method": "PATCH",
       "path": "/v1/projects/:workspaceId/experimental",
       "aliasOf": "/v1/workspaces/:workspaceId/experimental"
@@ -3622,6 +3790,11 @@
       "method": "GET",
       "path": "/v1/projects/:workspaceId/gateway/sources",
       "aliasOf": "/v1/workspaces/:workspaceId/gateway/sources"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/:workspaceId/gateway/usage",
+      "aliasOf": "/v1/workspaces/:workspaceId/gateway/usage"
     },
     {
       "method": "PUT",
@@ -4019,6 +4192,11 @@
       "aliasOf": "/v1/workspaces/:workspaceId/sandbox-templates/:templateId/build"
     },
     {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/sandbox-templates/reconcile",
+      "aliasOf": "/v1/workspaces/:workspaceId/sandbox-templates/reconcile"
+    },
+    {
       "method": "GET",
       "path": "/v1/projects/:workspaceId/sandboxes",
       "aliasOf": "/v1/workspaces/:workspaceId/sandboxes"
@@ -4102,6 +4280,16 @@
       "method": "PATCH",
       "path": "/v1/projects/:workspaceId/session-groups/:groupId",
       "aliasOf": "/v1/workspaces/:workspaceId/session-groups/:groupId"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/projects/:workspaceId/session-groups/:groupId/sharing",
+      "aliasOf": "/v1/workspaces/:workspaceId/session-groups/:groupId/sharing"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/projects/:workspaceId/session-groups/:groupId/tabs",
+      "aliasOf": "/v1/workspaces/:workspaceId/session-groups/:groupId/tabs"
     },
     {
       "method": "PUT",
@@ -4527,11 +4715,6 @@
       "method": "PATCH",
       "path": "/v1/projects/:workspaceId/sessions/:sessionId/tasks/:seq",
       "aliasOf": "/v1/workspaces/:workspaceId/sessions/:sessionId/tasks/:seq"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/projects/:workspaceId/sessions/:sessionId/transcript",
-      "aliasOf": "/v1/workspaces/:workspaceId/sessions/:sessionId/transcript"
     },
     {
       "method": "GET",
@@ -5554,6 +5737,22 @@
       "path": "/v1/workspaces/:workspaceId/artifacts/:artifactId/versions"
     },
     {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/artifacts/folders"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/artifacts/folders"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/workspaces/:workspaceId/artifacts/folders/:folderId"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/workspaces/:workspaceId/artifacts/folders/:folderId"
+    },
+    {
       "method": "POST",
       "path": "/v1/workspaces/:workspaceId/artifacts/share"
     },
@@ -5660,6 +5859,42 @@
     {
       "method": "POST",
       "path": "/v1/workspaces/:workspaceId/branding/assets/:kind"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/browser-logins"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/browser-logins/resolve"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/calendar"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/calendar"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/workspaces/:workspaceId/calendar/:itemId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/calendar/:itemId"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/workspaces/:workspaceId/calendar/:itemId"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/calendar/:itemId/comments"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/calendar/people"
     },
     {
       "method": "GET",
@@ -5916,6 +6151,10 @@
     {
       "method": "GET",
       "path": "/v1/workspaces/:workspaceId/channels/slack/installation"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/channels/slack/join"
     },
     {
       "method": "GET",
@@ -6194,6 +6433,86 @@
       "path": "/v1/workspaces/:workspaceId/detail"
     },
     {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/dictation"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/dictation"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/compare"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/datasets"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs/:jobId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs/:jobId"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/cancel"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/rerun"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/trials"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/trials/:trialId"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/trials/:trialId/cancel"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/trials/:trialId/file"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/evals/jobs/:jobId/trials/:trialId/retry"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/tasks"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/tasks/:taskId"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/tasks/:taskId/file"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/evals/tasks/:taskId/results"
+    },
+    {
       "method": "PATCH",
       "path": "/v1/workspaces/:workspaceId/experimental"
     },
@@ -6312,6 +6631,10 @@
     {
       "method": "GET",
       "path": "/v1/workspaces/:workspaceId/gateway/sources"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/gateway/usage"
     },
     {
       "method": "PUT",
@@ -6946,6 +7269,10 @@
       "path": "/v1/workspaces/:workspaceId/sandbox-templates/:templateId/build"
     },
     {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/sandbox-templates/reconcile"
+    },
+    {
       "method": "GET",
       "path": "/v1/workspaces/:workspaceId/sandboxes"
     },
@@ -6992,6 +7319,10 @@
     {
       "method": "PUT",
       "path": "/v1/workspaces/:workspaceId/secret-resources/:secretId/value"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/secret-resources/:secretId/verify"
     },
     {
       "method": "GET",
@@ -7048,6 +7379,14 @@
     {
       "method": "PATCH",
       "path": "/v1/workspaces/:workspaceId/session-groups/:groupId"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/workspaces/:workspaceId/session-groups/:groupId/sharing"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/workspaces/:workspaceId/session-groups/:groupId/tabs"
     },
     {
       "method": "PUT",
@@ -7388,10 +7727,6 @@
     {
       "method": "PATCH",
       "path": "/v1/workspaces/:workspaceId/sessions/:sessionId/tasks/:seq"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/workspaces/:workspaceId/sessions/:sessionId/transcript"
     },
     {
       "method": "GET",

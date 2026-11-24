@@ -5,7 +5,6 @@ import { ApiError } from '../../core/http/api/errors';
 import {
   SessionSyncController,
   type SessionSyncPage,
-  type SessionSyncReason,
   type SessionSyncTelemetryEvent,
   loadCompleteSessionHistory,
 } from '../../core/session-sync/session-sync-controller';
@@ -15,7 +14,7 @@ import { getSessionLogPage } from '../../core/rest/projects-client/sessions';
 import { EMPTY_SESSION_LOG_STATE, applySessionLogPage, type SessionLogState } from '../../core/session-log/store';
 import { loadSessionLogPage, readSessionLogAnswer } from '../../core/session-log/source';
 import { sessionLogRowsFor, sessionLogThreadIdOf } from '../../core/session-log/v1-view';
-import { parseKortixSessionScope } from './server-transcript-mirror';
+import { parseKortixSessionScope } from './session-scope';
 
 interface MessagesResponse {
   data?: Array<{ info: Message; parts: Part[] }>;
@@ -391,14 +390,6 @@ export function retainSessionSyncController(sessionId: string, runtimeScope?: st
   };
 }
 
-export function reconcileSessionTail(
-  sessionId: string,
-  reason: SessionSyncReason,
-  runtimeScope?: string,
-): Promise<void> {
-  return getSessionSyncController(sessionId, undefined, runtimeScope).reconcile(reason);
-}
-
 /**
  * One authoritative read of a session's runtime status. `null` when the
  * runtime exposes no status endpoint — the caller decides what silence means.
@@ -428,8 +419,8 @@ export async function loadSessionRuntimeStatus(
   return result.data[sessionId] ?? ({ type: 'idle' } as SessionStatus);
 }
 
-/** @deprecated Reads the runtime's v1 messages. Use `loadSessionExportMessages` (the session log first) or `getSessionLogPage`. Removed in the next major. */
-export function loadSessionTranscriptMessages(
+/** Every message the runtime holds for `sessionId`, oldest first: the export's read while the computer runs. */
+function loadRuntimeHistory(
   sessionId: string,
 ): Promise<SessionSyncPage['messages']> {
   return loadCompleteSessionHistory((request) =>
@@ -485,7 +476,7 @@ export async function loadSessionExportMessages(
   let log = saved ? useSyncStore.getState().sessionLogs[saved.sessionId] : undefined;
   // The API serves the log and the session has none yet: only the runtime can hold messages.
   let missing = false;
-  if (saved && !log && loadSessionLogPage) {
+  if (saved && !log) {
     const page = await readSessionLogAnswer(loadSessionLogPage, saved.projectId, saved.sessionId, { limit: SESSION_LOG_EXPORT_PAGE_LIMIT });
     if (page === 'missing') missing = true;
     else if (page) log = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page);
@@ -493,7 +484,7 @@ export async function loadSessionExportMessages(
   if (saved && log) return loadSessionLogExportRows(saved.projectId, saved.sessionId, sessionId, log);
   let live: SessionSyncPage['messages'] = [];
   try {
-    live = await loadSessionTranscriptMessages(sessionId);
+    live = await loadRuntimeHistory(sessionId);
   } catch (error) {
     if (!saved) throw error;
   }

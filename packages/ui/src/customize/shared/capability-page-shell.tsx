@@ -5,13 +5,18 @@ import { useInCustomizeFrame } from './customize-tab-bar';
 import { cn } from '../../internal/lib/utils';
 import { createContext, type ReactNode, useContext } from 'react';
 
-import { SettingsSectionHeader } from '../../primitives/settings-section-header';
+import {
+  SETTINGS_PAGE_COLUMN_CLASS,
+  SettingsPageHeader,
+  SettingsSectionHeader,
+  useSettingsPageTitle,
+} from '../../primitives/settings-section-header';
 import { CapabilityScrollRootProvider, useCapabilityScrollRootRef } from './capability-scroll-root';
 
 interface CapabilityPageShellProps {
   title: string;
-  /** One line. Longer explanations go in `titleAddon` (an info hover card). */
-  description: string;
+  /** One line, or none. Longer explanations go in `titleAddon` (an info hover card). */
+  description?: string;
   /** Rendered inline after the title, e.g. an info button. */
   titleAddon?: ReactNode;
   /** Page-level action(s) — a single button, or a cluster of them. Rendered
@@ -84,6 +89,7 @@ export function CapabilityPageShell({
   const scrollRef = useCapabilityScrollRootRef();
   const embed = useCapabilityShellEmbed();
   const framed = useInCustomizeFrame();
+  const settingsTitle = useSettingsPageTitle();
   if (embed?.titled) {
     // Beside the agent page's rail: the view's title left (no sentence under
     // it, the Settings dialect), its grant control (`filters`) right; search
@@ -114,7 +120,7 @@ export function CapabilityPageShell({
           {embed.lead}
           <header className={cn('flex flex-col gap-3', !stacked && 'md:flex-row md:items-center md:justify-between')}>
             <h2 className="sr-only">{title}</h2>
-            <p className="text-muted-foreground min-w-0 text-sm text-pretty md:max-w-xl">{description}</p>
+            {description ? <p className="text-muted-foreground min-w-0 text-sm text-pretty md:max-w-xl">{description}</p> : null}
             {search || action ? (
               <div className={cn('flex w-full shrink-0 items-center gap-2', !stacked && 'md:w-auto')}>
                 {search ? <div className={cn('min-w-0 flex-1', !stacked && 'md:w-64 md:flex-none')}>{search}</div> : null}
@@ -124,6 +130,35 @@ export function CapabilityPageShell({
           </header>
           {filters ? <div className="flex flex-wrap items-center justify-between gap-2">{filters}</div> : null}
           <CapabilityScrollRootProvider scrollRef={scrollRef}>{children}</CapabilityScrollRootProvider>
+        </div>
+      </div>
+    );
+  }
+  if (settingsTitle !== null) {
+    // A Workspace settings section: the settings page header and the centered
+    // column, so the title has the rung and the name of every other section.
+    // The frame's title bar holds the sidebar opener.
+    const controls =
+      search || action ? (
+        <div className={cn('flex w-full items-center gap-2', !stacked && 'sm:w-auto')}>
+          {search ? <div className={cn('min-w-0 flex-1', !stacked && 'sm:w-64 sm:flex-none')}>{search}</div> : null}
+          {action}
+        </div>
+      ) : null;
+    return (
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+        <div className={SETTINGS_PAGE_COLUMN_CLASS}>
+          <div className={cn('w-full space-y-5', wide ? 'max-w-7xl' : 'max-w-5xl')}>
+            <SettingsPageHeader
+              title={title}
+              titleAccessory={titleAddon}
+              description={description}
+              action={stacked ? undefined : controls}
+            />
+            {stacked ? controls : null}
+            {filters ? <div className="flex flex-wrap items-center justify-between gap-2">{filters}</div> : null}
+            <CapabilityScrollRootProvider scrollRef={scrollRef}>{children}</CapabilityScrollRootProvider>
+          </div>
         </div>
       </div>
     );
@@ -156,7 +191,7 @@ export function CapabilityPageShell({
               <h1 className="text-foreground text-xl font-medium text-balance">{title}</h1>
               {titleAddon}
             </div>
-            <p className="text-muted-foreground text-sm text-balance">{description}</p>
+            {description ? <p className="text-muted-foreground text-sm text-balance">{description}</p> : null}
           </div>
           {/* Search and action are ONE right-hand group, search first. As three
               loose children of a `justify-between` row, `action` was pushed to
@@ -165,7 +200,8 @@ export function CapabilityPageShell({
           {search || action ? (
             <div className={cn('flex w-full shrink-0 items-center gap-2', !stacked && 'sm:w-auto')}>
               {search ? (
-                <div className={cn('min-w-0 flex-1', !stacked && 'sm:w-64 sm:flex-none')}>
+                // Content ends on the right: a collapsed search icon sits beside the action.
+                <div className={cn('flex min-w-0 flex-1 justify-end', !stacked && 'sm:w-64 sm:flex-none')}>
                   {search}
                 </div>
               ) : null}

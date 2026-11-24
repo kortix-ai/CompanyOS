@@ -2,6 +2,8 @@ import { config } from '../../config';
 import { publicGatewayBaseUrl } from '../../llm-gateway/public-url';
 import {
   calculateCost,
+  GatewayResolutionError,
+  UpstreamHttpError,
   callUpstream,
   publicPayload,
   publicUpstreamError,
@@ -17,6 +19,8 @@ import { auth, errors, json } from '../../openapi';
 import { PROJECT_ACTIONS } from '../../iam/actions';
 import { assertProjectCapability, loadProjectForUser } from '../lib/access';
 import { projectsApp } from '../lib/app';
+import { isDatabaseError } from '../../shared/database-errors';
+import { logger } from '../../lib/logger';
 import {
   assertGatewayBudget,
   GatewayBudgetExceededError,
@@ -24,6 +28,32 @@ import {
   recordGatewayUsage,
 } from '../../llm-gateway/hooks';
 import { workspaceIdParam } from '../../shared/route-params';
+
+/**
+ * The per-model error text POST /{projectId}/gateway/playground returns for
+ * one of the requested models. `err.message` is safe to echo for a typed
+ * failure (`resolveCandidates`/`callUpstream` throw with a caller-meaningful
+ * reason), but `recordGatewayUsage`/`persistGatewayTrace` can reject with a
+ * `DrizzleQueryError`/`PostgresError` whose message is the whole generated
+ * SQL statement plus its bound parameters (KRTX-3422's catch-echo guard).
+ * This catch sits inside `Promise.all`, outside the route's own try/catch, so
+ * nothing here reached the global handler (`shared/http-errors.ts`) that
+ * already answers an uncaught database error with a generic 500 — an
+ * authenticated caller could turn a crafted `model` value that made the
+ * write fail into an oracle for the usage/trace tables (KRTX-4400). Never
+ * echo a database error's message; log it instead and answer generically,
+ * same shape as every other guarded catch-all in this codebase.
+ */
+export function playgroundModelError(err: unknown, model: string): string {
+  if (isDatabaseError(err)) {
+    logger.error('[gateway-playground] model run failed with a database error', {
+      model,
+      error: err instanceof Error ? err.message.split('\n')[0] : String(err),
+    });
+    return 'Request failed';
+  }
+  return err instanceof Error ? err.message : 'Request failed';
+}
 
 export function registerGatewayPlaygroundRoutes(): void {
   projectsApp.openapi(
@@ -125,7 +155,10 @@ export function registerGatewayPlaygroundRoutes(): void {
             }
             const descriptor = candidates[0]!;
             const start = Date.now();
-            const res = await callUpstream(request, descriptor).catch(() => null);
+            // A provider's refusal (a rejected key, a quota) is the answer the
+            // person tests for: kept as a response, so its message and trace stay.
+            const res = await callUpstream(request, descriptor).catch((err) =>
+              err instanceof UpstreamHttpError ? new Response(err.body, { status: err.status }) : null);
             const tried = [shownProvider(descriptor)];
             if (!res) throw new Error('Request failed');
             const latencyMs = Date.now() - start;
@@ -225,7 +258,23 @@ export function registerGatewayPlaygroundRoutes(): void {
               provider: shownProvider(descriptor),
             };
           } catch (err) {
-            return { model, ok: false, error: err instanceof Error ? err.message : 'Request failed' };
+            // A refusal before any provider call (no usable key, a disabled
+            // model) is logged like the gateway logs one: the Logs tab shows
+            // why the test failed.
+            if (err instanceof GatewayResolutionError) {
+              await persistGatewayTrace({
+                requestId, startedAt: new Date().toISOString(), accountId: principal.accountId,
+                actorUserId: principal.userId, projectId, requestedModel: model, resolvedModel: model,
+                provider: '', billingMode: 'none', streaming: false, status: 400, ok: false,
+                errorCode: err.code, errorMessage: err.message, latencyMs: 0, attempts: 0, candidatesTried: [],
+                usage: { promptTokens: 0, completionTokens: 0, cachedTokens: 0, cacheWriteTokens: 0 },
+                upstreamCost: 0, finalCost: 0, request, response: null,
+                metadata: { surface: 'gateway_playground' },
+              }).catch((traceErr) => logger.warn('[gateway-playground] could not log a refused model', {
+                model, error: traceErr instanceof Error ? traceErr.message.split('\n')[0] : String(traceErr),
+              }));
+            }
+            return { model, ok: false, error: playgroundModelError(err, model) };
           }
         }),
       );

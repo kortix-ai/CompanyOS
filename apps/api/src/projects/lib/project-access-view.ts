@@ -1,5 +1,5 @@
 import { accountMemberJoinRows } from '../../iam/membership-read';
-import { accountGroupNames, groupMemberRows } from '../../iam/group-read';
+import { groupMemberRows, groupRows } from '../../iam/group-read';
 import { isAccountManager, type AccountRole, type ProjectRole } from '../access';
 import { authorize } from '../../iam/authorize';
 import { workspaceFactsOf } from '../../iam/workspace-facts';
@@ -207,7 +207,7 @@ async function loadProjectAccessRows(loaded: AwaitedProjectAccessLoad) {
       // All groups on this account, for name resolution below. Custom-role
       // bindings and object grants can target a group that never got a project
       // role grant, so this is the superset lookup.
-      accountGroupNames(loaded.row.accountId),
+      groupRows({ accountId: loaded.row.accountId }),
     ]);
   return { identityRows, accountRoles, grantRows, groupGrantRows, customPolicyRows, objectGrants, accountGroupRows };
 }
@@ -431,6 +431,10 @@ async function buildMemberRows(input: {
       return {
         user_id: member.userId,
         email: identities.get(member.userId)?.email ?? null,
+        /** The auth profile's display name; null when it has none. */
+        name: identities.get(member.userId)?.displayName ?? null,
+        /** The auth profile's picture; null when it has none. */
+        avatar_url: identities.get(member.userId)?.avatarUrl ?? null,
         account_role: accountRole,
         project_role: projectRole,
         effective_project_role: fold.effective_project_role,

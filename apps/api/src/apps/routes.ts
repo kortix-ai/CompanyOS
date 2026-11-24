@@ -53,7 +53,7 @@ import {
   serializeAppAccessPolicy,
   validateAppAccessPrincipals,
 } from './access';
-import { authorizedProject, capabilityRefusal, visibleApp } from './route-access';
+import { secretMappingRefusal, authorizedProject, capabilityRefusal, visibleApp } from './route-access';
 import { AppObject, appJson, appsJson } from './serialize';
 import { accessibleApps } from './space-apps';
 import { commitAppFields, commitAppRemoval, manifestFieldsOf } from './app-manifest';
@@ -248,6 +248,9 @@ function serializeDeployment(row: typeof appDeployments.$inferSelect) {
     ready_at: row.readyAt?.toISOString() ?? null,
     failed_at: row.failedAt?.toISOString() ?? null,
     created_by: row.createdBy,
+    source_commit: row.sourceCommit,
+    source_ref: row.sourceRef,
+    source_force: row.sourceForce,
     source_session_id: row.sourceSessionId,
     actor_type: row.actorType,
     created_at: row.createdAt.toISOString(),
@@ -474,7 +477,11 @@ export function registerAppsRoutes(): void {
       // now carries who you are, while the bare URL underneath stays shareable
       // with someone who has no Kortix account at all. The gate does not GATE a
       // public App either way; this only decides whether it can greet you.
-      const session = appAccessSessionUrl(appPublicUrl(row), row, loaded.userId);
+      // Only a browser session at aal2 marks the link. A PAT or an agent
+      // session token skips the MFA gate without a second factor, so the
+      // viewer token it leads to must not count as one.
+      const aal = c.get('authType') === 'supabase' && c.get('mfaAal') === 'aal2' ? 'aal2' : undefined;
+      const session = appAccessSessionUrl(appPublicUrl(row), row, loaded.userId, new Date(), aal);
       return c.json({ url: session.url, expires_at: session.expiresAt.toISOString() });
     },
   );
@@ -850,12 +857,16 @@ export function registerAppsRoutes(): void {
         'config (processes, http_service, services, mounts, vm, deploy; the shorthands port, ' +
         'command, readiness_path, always_on and resources map onto it). Without it the release runs one `app` ' +
         'process group on the source port, sized like the App. An invalid config answers 400 `app_config_invalid` ' +
-        'with `issues: [{path, message}]`; a mount on a provider without volumes answers 400 `app_volumes_unsupported`.',
+        'with `issues: [{path, message}]`; a mount on a provider without volumes answers 400 `app_volumes_unsupported`. ' +
+        '`secrets` also needs project.secret.read, and an agent session maps only the secrets its grant gives it (403).',
       request: {
         params: z.object({ workspaceId: z.string().uuid(), appId: z.string().uuid() }),
         body: { content: { 'application/json': { schema: z.object({
           artifact_id: z.string().uuid().optional(),
           source: SourceSchema,
+          source_commit: z.string().regex(/^[0-9a-f]{40}$|^[0-9a-f]{64}$/).optional(),
+          source_ref: z.string().min(1).max(1024).regex(/^[^\p{Cc}\p{Cf}]+$/u).nullable().optional(),
+          source_force: z.boolean().optional(),
           provider: z.enum(['platinum', 'daytona']).optional(),
           environment: EnvironmentSchema.optional(),
           secrets: SecretMappingsSchema.optional(),
@@ -880,6 +891,8 @@ export function registerAppsRoutes(): void {
         return c.json({ error: DEPRECATED_PROVIDER_ERROR, code: DEPRECATED_PROVIDER_CODE }, 400);
       }
       if (!body.artifact_id) return c.json({ error: 'artifact_id is required' }, 400);
+      const secretRefusal = await secretMappingRefusal(c, loaded, projectId, body.secrets);
+      if (secretRefusal) return secretRefusal;
       const [artifact] = await db.select().from(appArtifacts).where(and(
         eq(appArtifacts.artifactId, body.artifact_id), eq(appArtifacts.projectId, projectId),
       )).limit(1);
@@ -922,6 +935,9 @@ export function registerAppsRoutes(): void {
           sourceKind: source.kind, hostingProvider,
           createdBy: loaded.userId,
           sourceSessionId: callerKortixSessionId(c),
+          sourceCommit: body.source_commit,
+          sourceRef: body.source_ref,
+          sourceForce: body.source_force ?? false,
           actorType: appDeploymentActorType(c),
           runtimeVersion: APP_RUNTIME_VERSION,
           buildSpec: {
@@ -1255,6 +1271,9 @@ export function registerAppsRoutes(): void {
           sourceSessionId: callerKortixSessionId(c),
           actorType: appDeploymentActorType(c),
           runtimeVersion: APP_RUNTIME_VERSION,
+          sourceCommit: target.sourceCommit,
+          sourceRef: target.sourceRef,
+          sourceForce: target.sourceForce,
           buildSpec: target.buildSpec,
           runtimeSpec: {},
           config: target.config,

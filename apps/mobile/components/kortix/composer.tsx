@@ -19,9 +19,10 @@
  * 40pt read oversized): `icon-md` icon buttons with 18pt glyphs. Text is 16pt Roobert Regular
  * (design.md §3 Inputs).
  *
- * Dictation: a ghost mic button before Send. While listening the
- * control row crossfades into Cancel · waveform · Done, and the recogniser
- * writes the words into the text field live (`useDictation`).
+ * Dictation: a ghost mic button before Send, shown when the server serves
+ * dictation for `projectId`. While recording the control row crossfades into
+ * Cancel · waveform · Done; Done uploads the clip and Kortix's transcription
+ * lands after what was typed (`useDictation`).
  */
 import * as React from 'react';
 import {
@@ -68,17 +69,14 @@ import { useDictation } from '@/hooks/useDictation';
  */
 export const COMPOSER_CONTROL_HIT_SLOP = 4;
 
+// The card's surface lives in `./composer-card` beside the popover and status
+// pill that draw it, so the floating surfaces never drift from the composer.
+export { COMPOSER_CARD_CLASS } from './composer-card';
+
 /** The composer's 36pt round icon controls: `icon-md`, round, 44pt touch target. */
 function ControlButton(props: React.ComponentProps<typeof Button>) {
   return <Button size="icon-md" className="rounded-full" hitSlop={COMPOSER_CONTROL_HIT_SLOP} {...props} />;
 }
-
-/**
- * The composer card's surface: corners, hairline border, page colour, inset.
- * A view that takes the composer's slot (the session failure card) uses it so
- * the two never drift.
- */
-export const COMPOSER_CARD_CLASS = 'rounded-3xl border border-border bg-background p-2';
 
 // The frosted card (web `backdrop-blur-sm`): a blur of what scrolls under the
 // floating composer, under a page-colour tint that keeps the text legible.
@@ -125,6 +123,8 @@ const MAX_INPUT_HEIGHT = 160;
 
 interface ComposerProps {
   value: string;
+  /** The workspace dictation is billed to. Without it the composer has no mic. */
+  projectId?: string;
   onChangeText: (t: string) => void;
   onSubmit: () => void;
   placeholder?: string;
@@ -174,6 +174,7 @@ interface ComposerProps {
 
 export function Composer({
   value,
+  projectId,
   onChangeText,
   onSubmit,
   placeholder = 'Ask anything',
@@ -204,7 +205,7 @@ export function Composer({
   const isDark = colorScheme === 'dark';
   const colors = THEME[isDark ? 'dark' : 'light'];
   const canSend = !disabled && (allowEmptySend || value.trim().length > 0 || attachments.length > 0 || pastes.length > 0);
-  const dictation = useDictation({ value, onChangeText });
+  const dictation = useDictation({ value, onChangeText, projectId });
   const showMic = dictation.available;
   // A send or a lock ends dictation, keeping the words.
   const { active: dictating, finish: finishDictation } = dictation;
@@ -258,7 +259,7 @@ export function Composer({
           placeholder={placeholder}
           placeholderTextColor={colors.mutedForeground}
           multiline
-          // Words stream in while listening; typing would fight them.
+          // The words land when Done finishes; typing meanwhile would be overwritten.
           editable={!disabled && !dictation.active}
           autoFocus={autoFocus}
           accessibilityLabel={placeholder}

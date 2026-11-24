@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@kortix/ui/button';
-import { InfoBanner } from '@kortix/ui/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertDescription as BannerAlertDescription, AlertMedia as BannerAlertMedia } from '@kortix/ui/alert';
 import { Label } from '@kortix/ui/label';
 import Loading from '@kortix/ui/loading';
 import { AuthFrame } from '@kortix/ui/internal/auth/auth-card-shell';
@@ -23,6 +23,10 @@ import { getEnv } from '@/lib/env-config';
 import { createClient } from '@/lib/supabase/client';
 import { getOAuthConsentRequest, listWorkspaces, submitOAuthConsent, type WorkspaceSummary } from '@kortix/sdk';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@kortix/ui/select';
+
+/** The picker value for "All my workspaces": the consent names no workspace,
+ *  so the token acts as the person in every workspace (design.md §3.2 C4a). */
+const ALL_WORKSPACES = 'all';
 
 /** Scope → its `oauthConsent.scopes.<key>` description. An unknown scope shows as itself. */
 const SCOPE_MESSAGE_KEYS: Record<string, 'profile' | 'email' | 'kortix' | 'machinesRead'> = {
@@ -49,6 +53,9 @@ type ConsentRequestView = {
   redirectTo: string;
   /** The consent names the workspace the app gets; the token reaches it only. */
   asksWorkspace: boolean;
+  /** The app asks to act as the person (`kortix` scope): the picker also offers
+   *  All my workspaces. Without that scope the token reaches no workspace data. */
+  offersAllWorkspaces: boolean;
   /** The workspaces the person can give the app, most recently opened first. */
   workspaces: Pick<WorkspaceSummary, 'workspace_id' | 'name'>[];
 };
@@ -93,20 +100,24 @@ async function loadAndMaybeApprove(
     selfRegistered: data.self_registered === true,
     redirectTo: typeof data.redirect_to === 'string' ? data.redirect_to : '',
     asksWorkspace: data.asks_workspace === true,
+    offersAllWorkspaces: false,
     workspaces: [],
   };
+  request.offersAllWorkspaces = request.asksWorkspace && request.scopes.includes('kortix');
   if (request.asksWorkspace) {
-    // A failed list leaves the picker empty: the person can still deny, and
-    // an approval without a workspace is refused by nothing but its reach.
+    // A failed list leaves only All my workspaces (the default) to pick, or
+    // nothing when the app does not ask for `kortix`.
     request.workspaces = (await listWorkspaces().catch(() => [])).map((w) => ({
       workspace_id: w.workspace_id,
       name: w.name,
     }));
   }
-  // A remembered consent approves straight away, unless there is a workspace
-  // to choose: with more than one, the person picks it every time.
+  // A remembered consent approves straight away, unless there is a reach to
+  // choose: with more than one choice (All my workspaces counts as one), the
+  // person picks it every time.
   const autoWorkspace = request.asksWorkspace ? request.workspaces[0]?.workspace_id : undefined;
-  if (!request.remembered || (request.asksWorkspace && request.workspaces.length !== 1)) {
+  const choices = request.workspaces.length + (request.offersAllWorkspaces ? 1 : 0);
+  if (!request.remembered || (request.asksWorkspace && choices !== 1)) {
     return { kind: 'consent', request: { ...request, remembered: false } };
   }
 
@@ -196,7 +207,14 @@ function OAuthConsent() {
       }
       setError(null);
       setConsentRequest(result.request);
-      setWorkspaceId((current) => current || result.request.workspaces[0]?.workspace_id || '');
+      // All my workspaces is the default when the app asks to act as the
+      // person; a single workspace is the narrower pick.
+      setWorkspaceId(
+        (current) =>
+          current
+          || (result.request.offersAllWorkspaces ? ALL_WORKSPACES : result.request.workspaces[0]?.workspace_id)
+          || '',
+      );
     });
     return () => {
       cancelled = true;
@@ -223,8 +241,11 @@ function OAuthConsent() {
         {
           requestId,
           approved,
-          // The token reaches this workspace only (design.md §3.2 C4a).
-          ...(approved && consentRequest?.asksWorkspace && workspaceId ? { workspaceId } : {}),
+          // The token reaches this workspace only (design.md §3.2 C4a). All my
+          // workspaces names none: the token acts as the person everywhere.
+          ...(approved && consentRequest?.asksWorkspace && workspaceId && workspaceId !== ALL_WORKSPACES
+            ? { workspaceId }
+            : {}),
         },
         {
           backendUrl,
@@ -289,13 +310,13 @@ function OAuthConsent() {
 
         <div className="space-y-5">
           {consentRequest.selfRegistered ? (
-            <InfoBanner tone="warning" icon={ShieldWarningIcon} title={t('unverifiedTitle')}>
+            <BannerAlert variant="warning" ><BannerAlertMedia><ShieldWarningIcon /></BannerAlertMedia><BannerAlertTitle>{t('unverifiedTitle')}</BannerAlertTitle><BannerAlertDescription>
               {t('unverifiedBody', { client: clientName })}
-            </InfoBanner>
+            </BannerAlertDescription></BannerAlert>
           ) : null}
           {scopes.length > 0 ? (
             <div className="space-y-3">
-              <p className="text-muted-foreground text-sm font-medium">
+              <p className="text-foreground text-sm font-medium">
                 {tI18nComplete.raw('text5b8d75f66840')}
               </p>
               <ul className="border-border divide-border/60 divide-y rounded-md border">
@@ -309,7 +330,7 @@ function OAuthConsent() {
             </div>
           ) : null}
 
-          {consentRequest.asksWorkspace && consentRequest.workspaces.length > 0 ? (
+          {consentRequest.asksWorkspace && (consentRequest.workspaces.length > 0 || consentRequest.offersAllWorkspaces) ? (
             <div className="space-y-1.5">
               <Label htmlFor="oauth-consent-workspace">{t('workspaceLabel')}</Label>
               <Select value={workspaceId} onValueChange={setWorkspaceId} disabled={submitting}>
@@ -317,6 +338,9 @@ function OAuthConsent() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  {consentRequest.offersAllWorkspaces ? (
+                    <SelectItem value={ALL_WORKSPACES}>{t('workspaceAll')}</SelectItem>
+                  ) : null}
                   {consentRequest.workspaces.map((w) => (
                     <SelectItem key={w.workspace_id} value={w.workspace_id}>
                       {w.name}
@@ -324,7 +348,11 @@ function OAuthConsent() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-muted-foreground text-xs">{t('workspaceHint', { client: clientName })}</p>
+              {workspaceId === ALL_WORKSPACES ? (
+                <p className="text-foreground text-xs">{t('workspaceAllHint', { client: clientName })}</p>
+              ) : workspaceId ? (
+                <p className="text-muted-foreground text-xs">{t('workspaceHint', { client: clientName })}</p>
+              ) : null}
             </div>
           ) : null}
 
@@ -340,7 +368,12 @@ function OAuthConsent() {
               size="lg"
               className="w-full"
               onClick={() => handleConsent(true)}
-              disabled={submitting || (consentRequest.asksWorkspace && consentRequest.workspaces.length > 0 && !workspaceId)}
+              disabled={
+                submitting
+                || (consentRequest.asksWorkspace
+                  && (consentRequest.workspaces.length > 0 || consentRequest.offersAllWorkspaces)
+                  && !workspaceId)
+              }
             >
               {decision === 'allow' ? <Loading className="size-4 shrink-0" /> : null}
               {tI18nComplete.raw('texte213c161d5ce')}

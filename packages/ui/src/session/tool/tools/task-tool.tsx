@@ -9,12 +9,12 @@ import { useTranslations } from '../../../i18n';
 import { getChildSessionId } from '../../../internal/session-types';
 import { useContext, useMemo, useState } from 'react';
 import type { ProjectSession, SessionLogThread } from '@kortix/sdk';
-import { useProjectSession, useSessionStateStore } from '@kortix/sdk/react';
+import { useProjectSession, useSessionAsks, useSessionStateStore } from '@kortix/sdk/react';
 import { agentDisplayName } from '../../../internal/components/agent-mark';
 import { useSessionIds } from '../../../providers/session-ids';
 import type { SessionDisplayStatus } from '../../actions/session-label';
 import { agentRowOf, type AgentRowState } from '../../agents/agent-model';
-import { AgentFace, AgentFailure, AgentRowBody, AgentRowScope, AgentStatus, AgentTrigger, OpenAgentButton } from '../../agents/agent-surface';
+import { AgentFailure, AgentRowBody, AgentRowScope, AgentStatus, AgentTrigger, OpenAgentButton } from '../../agents/agent-surface';
 
 /**
  * Whether a background hand-off's child still works. The child's status is
@@ -44,10 +44,30 @@ export function TaskTool({ call, defaultOpen, forceOpen, locked }: ToolProps) {
   const input = partInput(call);
   const status = partStatus(call);
 
-  const subagentType = (input.subagent_type as string) || (input.agent as string) || 'general';
+  // Tool input is the model's JSON: every field is `unknown` at runtime, and a
+  // truthy non-string used to crash the render tree (`e.replace is not a
+  // function`, KRTX-4511). Read each field by type, never by cast — an empty
+  // or junk value falls through to the same fallback as an absent one.
+  // pi's `agent` field is an object by schema: an inline agent spec
+  // (`{ instructions, model?, tools?, description? }`). Its child runs as the
+  // `inline` agent (`INLINE_AGENT` in the pi subagents extension), so the row
+  // names it that way, never as `general`.
+  const subagentType =
+    (typeof input.subagent_type === 'string' && input.subagent_type) ||
+    (typeof input.agent === 'string' && input.agent) ||
+    (typeof input.agent === 'object' && input.agent !== null ? INLINE_AGENT : '') ||
+    'general';
+  const name = typeof input.name === 'string' ? input.name.trim().replace(/^@/, '') : '';
+  // An inline spec names the role it plays (`agent.description`, "Neighborhood
+  // demand researcher"). It reads better than the word "Inline", which says
+  // how the child runs, not who it is.
+  const inlineRole =
+    typeof input.agent === 'object' && input.agent !== null && typeof (input.agent as { description?: unknown }).description === 'string'
+      ? (input.agent as { description: string }).description.trim()
+      : '';
   const description = useMemo(
     () =>
-      (input.description as string) ||
+      (typeof input.description === 'string' && input.description) ||
       firstMeaningfulLine(input.prompt) ||
       // Codex `spawn_agent`.
       firstMeaningfulLine(input.message) ||
@@ -72,12 +92,25 @@ export function TaskTool({ call, defaultOpen, forceOpen, locked }: ToolProps) {
   const ids = useSessionIds();
   const childRow = useProjectSession(ids.projectId, childSessionId, { enabled: !!ids.projectId && !!childSessionId });
   const child = childRow.data ? agentRowOf(childRow.data as ProjectSession) : null;
+  // A colleague whose access waits for the person (pi `awaitingApproval`): no session exists yet.
+  // "Needs you" while its ask is open; once decided, the call is over and a new call starts the colleague.
+  const askId = !childSessionId && partMetadata(call).awaitingApproval === true ? partMetadata(call).askId : undefined;
+  const openAsks = useSessionAsks(ids.projectId ?? '', { enabled: !!ids.projectId && typeof askId === 'string' });
+  const awaitingApproval = typeof askId === 'string' && !!openAsks.data?.asks.some((ask) => ask.id === askId);
   const state: AgentRowState = errorText
     ? 'failed'
-    : (child?.state ?? (isRunning || (background && backgroundWorking) ? 'working' : status === 'completed' ? 'completed' : 'idle'));
+    : awaitingApproval
+      ? 'needs_input'
+      : (child?.state ?? (isRunning || (background && backgroundWorking) ? 'working' : status === 'completed' ? 'completed' : 'idle'));
   // The name its parent gave it (`agent({ name })`) reads best; else the kind of agent.
-  const handle = (input.name as string) || (child?.named ? child.handle : '') || subagentType;
-  const title = (input.name as string) || (child?.named ? child.handle : '') || agentDisplayName(subagentType);
+  const handle = name || (child?.named ? child.handle : '') || inlineRole || subagentType;
+  const title = name || (child?.named ? child.handle : '') || inlineRole || agentDisplayName(subagentType);
+  // A call that failed before its agent existed: "Didn't start", never "Didn't finish".
+  const failedBeforeStart = !!errorText && !childSessionId;
+  const subtitle = description;
+  const stateLabel = failedBeforeStart ? t('notStarted') : t(`state.${state}`);
+  const metaModel = partMetadata(call).model as { modelID?: unknown } | undefined;
+  const callModel = typeof metaModel?.modelID === 'string' ? metaModel.modelID : null;
 
   // A row with a session opens it: beside the chat in the side panel, or as the agent
   // dialog where there is no panel. Its prompt, steps and answer are that session's
@@ -90,9 +123,8 @@ export function TaskTool({ call, defaultOpen, forceOpen, locked }: ToolProps) {
   return (
     <AgentRowScope>
       <BasicTool
-        icon={<AgentFace handle={handle} />}
-        trigger={<AgentTrigger title={title} subtitle={description} />}
-        triggerAction={<AgentStatus status={STATE_GLYPH[state]} label={t(`state.${state}`)} opens={opensAgent || hasBody} />}
+        trigger={<AgentTrigger handle={handle} title={title} subtitle={subtitle} sessionId={childSessionId} detail={{ state: stateLabel, task: description, model: callModel, note: failedBeforeStart ? t('notStartedSentence') : t('card.inline') }} />}
+        triggerAction={<AgentStatus status={STATE_GLYPH[state]} label={stateLabel} opens={opensAgent || hasBody} />}
         onClick={opensAgent ? () => setModalOpen(true) : undefined}
         defaultOpen={defaultOpen}
         forceOpen={forceOpen}
@@ -103,7 +135,9 @@ export function TaskTool({ call, defaultOpen, forceOpen, locked }: ToolProps) {
             {prompt && prompt !== description && (
               <p className="text-muted-foreground line-clamp-4 whitespace-pre-wrap wrap-break-word">{prompt}</p>
             )}
-            {errorText && <AgentFailure sentence={tNotice('failedSentence')} raw={errorText} />}
+            {/* The error is written for the model ("omit session, or omit name"): the row
+                says what happened in the reader's words, the raw text sits under Details. */}
+            {errorText && <AgentFailure sentence={failedBeforeStart ? t('notStartedSentence') : tNotice('failedSentence')} raw={errorText} />}
             {childSessionId && <OpenAgentButton label={t('openAgent', { name: description || title })} onClick={() => setModalOpen(true)} />}
           </AgentRowBody>
         ) : undefined}
@@ -115,6 +149,9 @@ export function TaskTool({ call, defaultOpen, forceOpen, locked }: ToolProps) {
     </AgentRowScope>
   );
 }
+
+/** The agent name an inline agent spec's child runs under (pi `INLINE_AGENT`). */
+const INLINE_AGENT = 'inline';
 
 /** The session-list glyph an agent's state draws. */
 const STATE_GLYPH: Record<AgentRowState, SessionDisplayStatus> = {

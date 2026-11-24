@@ -1,9 +1,10 @@
 'use client';
 
 /**
- * The Inbox (KRTX-1742): the person's notifications from every project, as a
- * page. The project sidebar's Inbox row opens it inside the project shell
- * (`uiRoutes().inbox`); `AccountTopBar` opens it on the account-level pages.
+ * The Inbox (KRTX-1742): the person's notifications from every workspace, as
+ * a page. Notifications span every workspace, so the page is person-level:
+ * the workspace menu's Inbox row and `AccountTopBar` open it (KRTX-4799
+ * moved it out of the workspace Inbox page, which holds only Review).
  *
  * A row opens its subject (its session, its Artifact, or the Loops or
  * Triggers page for an alert) and marks itself read. The tabs split what
@@ -23,7 +24,7 @@ import { EmptyArt } from '../../primitives/empty-art';
 import { EmptyState } from '../../primitives/empty-state';
 import { ErrorState } from '../../primitives/error-state';
 import Hint from '../../primitives/hint';
-import { InfoBanner } from '../../primitives/info-banner';
+import { Alert as BannerAlert, AlertTitle as BannerAlertTitle, AlertActions as BannerAlertActions, AlertMedia as BannerAlertMedia } from '../../primitives/alert';
 import { Skeleton } from '../../primitives/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '../../primitives/tabs';
 import { SolidCheckIcon } from '../icons/solid-check-icon';
@@ -37,6 +38,7 @@ import { useWebNotificationStore } from '../stores/web-notification-store';
 import type { InboxNotification, InboxNotificationKind } from '@kortix/sdk';
 import { useNotificationInbox } from '@kortix/sdk/react';
 import {
+  AtIcon,
   BellIcon,
   ChecksIcon,
   GearSixIcon,
@@ -74,6 +76,7 @@ const KIND_MARK: Record<LiveKind, { icon: KindIcon; className: string }> = {
   automation_recovered: { icon: SolidCheckIcon, className: 'text-kortix-green' },
   capture_device_down: { icon: solid(WarningIcon), className: 'text-kortix-red' },
   capture_device_recovered: { icon: SolidCheckIcon, className: 'text-kortix-green' },
+  mention: { icon: solid(AtIcon), className: 'text-muted-foreground' },
 };
 
 /** Where "Notification settings" goes: a page (outside a project) or the Settings overlay (inside one). */
@@ -87,8 +90,8 @@ export interface NotificationInboxViewProps {
   prompt: string | null;
   settings: InboxSettingsTarget;
   /**
-   * The row above the page outside a project (the account pages' top bar).
-   * Then the title is the column's heading. Absent: the project page header.
+   * The row above the page (the account pages' top bar). Then the title is
+   * the column's heading. Absent: the project page header.
    */
   header?: ReactNode;
   onOpenRow: (row: InboxNotification) => void;
@@ -130,10 +133,7 @@ export function NotificationInboxView({
     </>
   );
 
-  return (
-    // `h-svh`: nothing above this box has a definite height (as the Review page).
-    <div className="flex h-svh min-h-0 flex-col overflow-hidden">
-      {header ?? <ProjectPageHeader title={t('inbox.title')} />}
+  const list = (
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 py-6 pb-20 md:px-8">
           <div className="flex flex-col gap-1.5">
@@ -142,16 +142,17 @@ export function NotificationInboxView({
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Tabs value={tab} onValueChange={(value) => setTab(value as NotificationTab)}>
-              <TabsList>
-                <TabsTrigger value="all" className="gap-1.5">
+              {/* Flat chips, the Review list's own: never the segmented control. */}
+              <TabsList variant="secondary" size="sm">
+                <TabsTrigger value="all" className="w-fit flex-none gap-1.5 px-2.5">
                   {t('inbox.tabAll')}
                   {unreadCount > 0 ? <CountBadge count={unreadCount} /> : null}
                 </TabsTrigger>
-                <TabsTrigger value="needs" className="gap-1.5">
+                <TabsTrigger value="needs" className="w-fit flex-none gap-1.5 px-2.5">
                   {t('inbox.tabNeedsYou')}
                   {needsCount > 0 ? <CountBadge count={needsCount} tone="waiting" /> : null}
                 </TabsTrigger>
-                <TabsTrigger value="done" className="gap-1.5">
+                <TabsTrigger value="done" className="w-fit flex-none gap-1.5 px-2.5">
                   {t('inbox.tabDone')}
                   {doneCount > 0 ? <CountBadge count={doneCount} /> : null}
                 </TabsTrigger>
@@ -165,11 +166,7 @@ export function NotificationInboxView({
             ) : null}
           </div>
           {prompt ? (
-            <InfoBanner
-              icon={BellIcon}
-              title={prompt}
-              action={
-                <ButtonGroup>
+            <BannerAlert variant="default" ><BannerAlertMedia><BellIcon /></BannerAlertMedia><BannerAlertTitle>{prompt}</BannerAlertTitle><BannerAlertActions>{<ButtonGroup>
                   <Button variant="secondary" size="xs" onClick={onTurnOn}>
                     {t('inbox.turnOn')}
                   </Button>
@@ -178,9 +175,7 @@ export function NotificationInboxView({
                       <XIcon className="size-3.5 shrink-0" />
                     </Button>
                   </Hint>
-                </ButtonGroup>
-              }
-            />
+                </ButtonGroup>}</BannerAlertActions></BannerAlert>
           ) : null}
           {state === 'loading' ? (
             <div className="space-y-0.5">
@@ -230,6 +225,12 @@ export function NotificationInboxView({
           </div>
         </div>
       </div>
+  );
+  return (
+    // `h-svh`: nothing above this box has a definite height (as the Review page).
+    <div className="flex h-svh min-h-0 flex-col overflow-hidden">
+      {header ?? <ProjectPageHeader title={t('inbox.title')} />}
+      {list}
     </div>
   );
 }
@@ -290,7 +291,13 @@ function InboxRow({ row, onOpen }: { row: InboxNotification; onOpen: () => void 
  * without it, "Notification settings" opens the project's Settings overlay.
  * `header` sits above the page (the account pages' top bar).
  */
-export function NotificationInbox({ settingsHref, header }: { settingsHref?: string; header?: ReactNode }) {
+export function NotificationInbox({
+  settingsHref,
+  header,
+}: {
+  settingsHref?: string;
+  header?: ReactNode;
+}) {
   const t = useTranslations('notifications');
   const viewerId = useUiViewerId();
   const inbox = useNotificationInbox({ userId: viewerId });

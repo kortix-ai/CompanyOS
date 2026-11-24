@@ -5,6 +5,8 @@ import { ProjectShell } from '@/features/workspace/project-layout/project-shell'
 
 interface ProjectLayoutProps {
   children: React.ReactNode;
+  /** `@modal`: a route drawn over the page, same URL (`(.)setup`). Empty elsewhere. */
+  modal: React.ReactNode;
   params: Promise<{ id: string }>;
 }
 
@@ -33,14 +35,21 @@ interface ProjectLayoutProps {
  * subtree dynamically rendered; removing it changes rendering semantics well
  * beyond the scope of this change.
  */
-export default async function ProjectLayout({ children, params }: ProjectLayoutProps) {
+export default async function ProjectLayout({ children, modal, params }: ProjectLayoutProps) {
   void (await cookies());
 
   const { id: projectId } = await params;
 
   return (
     <ProjectAccessBoundary projectId={projectId}>
-      <ProjectShell projectId={projectId}>{children}</ProjectShell>
+      <ProjectShell projectId={projectId}>
+        {children}
+        {/* `hidden`: the slot draws only overlays, and they portal out. Next.js
+            makes `[id]/loading.tsx` (a `flex-1` pending screen) the fallback of
+            every slot of this layout. While `(.)setup` loads, that fallback
+            would sit beside the page in the shell's flex column and halve it. */}
+        <div hidden>{modal}</div>
+      </ProjectShell>
     </ProjectAccessBoundary>
   );
 }

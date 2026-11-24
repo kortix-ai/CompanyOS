@@ -26,8 +26,9 @@ import { db } from '../../shared/db';
 import { decryptProjectSecret, encryptProjectSecret } from '../../projects/secrets/envelope';
 import { decryptAccountSecret } from '../../secrets/account-resource';
 import { recordAuditEvent } from '../../shared/audit';
-import { isPermanentRefreshRejection, refreshErrorCode } from './codex-core';
+import { DeviceAuthUnavailableError, isPermanentRefreshRejection, refreshErrorCode } from './codex-core';
 import { writeRotatedAccountLogin } from './rotating-login-write';
+import { legacySecretNotMoved } from '../../secrets/llm-credential-ledger';
 
 const CONSOLE = 'https://opencode.ai/console';
 const CLIENT_ID = 'opencode-cli';
@@ -63,6 +64,7 @@ async function post(fetchImpl: FetchImpl, path: string, body: Record<string, str
 
 export async function startOpencodeDeviceAuth(fetchImpl: FetchImpl = defaultFetch) {
   const res = await post(fetchImpl, '/auth/device/code', { client_id: CLIENT_ID });
+  if (res.status >= 500) throw new DeviceAuthUnavailableError('OpenCode');
   if (!res.ok) throw new Error(`Failed to start OpenCode authorization (${res.status})`);
   const data = await res.json() as { device_code?: string; user_code?: string; verification_uri_complete?: string; interval?: number };
   if (!data.device_code || !data.user_code || !data.verification_uri_complete) {
@@ -253,7 +255,12 @@ async function loadOpencodeLoginRow(input: { accountId: string; projectId: strin
   }
   const [secret] = await db.select({ valueEnc: projectSecrets.valueEnc })
     .from(projectSecrets)
-    .where(and(eq(projectSecrets.projectId, input.projectId), eq(projectSecrets.secretId, input.secretId))).limit(1);
+    // A legacy login that moved to the named store is refreshed only there:
+    // refreshing both copies would revoke one copy's rotated refresh token.
+    .where(and(
+      eq(projectSecrets.projectId, input.projectId), eq(projectSecrets.secretId, input.secretId),
+      eq(projectSecrets.consumer, 'llm_gateway'), legacySecretNotMoved(projectSecrets.secretId),
+    )).limit(1);
   if (!secret) return null;
   try {
     return { ...base, storage: 'project', value: decryptProjectSecret(input.projectId, secret.valueEnc) };

@@ -31,10 +31,12 @@ import { recordPendingQuestion } from '../pending-questions';
 import type { ProjectRow } from '../serializers';
 import { postIntoSpace, type StartThreadSpec } from '../space-posts';
 import { resolveUserIdentities } from '../user-identity';
+import { sessionTitleFromMetadata } from '../session-title-placeholder';
 import { WATCHER_POST_METADATA_KEY } from './keys';
 import { askOf, eventLine, parseWatcherDecision, type WatcherDecision } from './policy';
 import { claimDecision, proactiveOn, readWatcher, recordSpaceEvent, watcherOfSession, type WatcherRow } from './store';
 import { projectsView } from '../../../workspaces/rows';
+import { errorMessage } from '../../../shared/error-message';
 
 /** A thread title from a post: its first line, at most 60 characters. */
 function postTitle(text: string): string {
@@ -52,7 +54,7 @@ export async function onSpaceSessionTurnEnded(sessionId: string): Promise<void> 
     }
     await recordThreadTurn(sessionId);
   } catch (error) {
-    logger.warn('[space-watch] turn-end work failed', { session_id: sessionId, error: error instanceof Error ? error.message : String(error) });
+    logger.warn('[space-watch] turn-end work failed', { session_id: sessionId, error: errorMessage(error) });
   }
 }
 
@@ -68,8 +70,7 @@ async function recordThreadTurn(sessionId: string): Promise<void> {
   if (!watch?.enabled) return;
   const answer = await lastTurnAnswer(sessionId);
   if (!answer?.text.trim()) return;
-  const meta = (row.metadata ?? {}) as Record<string, unknown>;
-  const title = [meta.custom_name, meta.name].find((v): v is string => typeof v === 'string' && !!v.trim()) ?? null;
+  const title = sessionTitleFromMetadata(row.metadata);
   await recordSpaceEvent({
     spaceId: row.spaceId,
     kind: 'turn_finished',
@@ -197,7 +198,7 @@ export async function recordMembersJoined(spaceId: string, userIds: readonly str
       dedupeKey: `members:${[...userIds].sort().join(',')}:${now.toISOString().slice(0, 16)}`,
     });
   } catch (error) {
-    logger.warn('[space-watch] the join was not recorded', { space_id: spaceId, error: error instanceof Error ? error.message : String(error) });
+    logger.warn('[space-watch] the join was not recorded', { space_id: spaceId, error: errorMessage(error) });
   }
 }
 
@@ -214,7 +215,7 @@ export async function recordAgentsJoined(spaceId: string, before: readonly strin
       dedupeKey: `agents:${added.join(',')}:${now.toISOString().slice(0, 16)}`,
     });
   } catch (error) {
-    logger.warn('[space-watch] the agent change was not recorded', { space_id: spaceId, error: error instanceof Error ? error.message : String(error) });
+    logger.warn('[space-watch] the agent change was not recorded', { space_id: spaceId, error: errorMessage(error) });
   }
 }
 

@@ -10,6 +10,7 @@ import {
   workspaceFenceVerdict,
   type AccountWorkspace,
 } from './workspace-binding';
+import { markCredentialFenceDenial } from '../shared/dead-credential-log';
 
 const PREVIEW_SESSION_COOKIE = '__preview_session';
 // ─── Internal helpers ────────────────────────────────────────────────────────
@@ -48,7 +49,7 @@ export function extractPreviewSandboxId(path: string): string | null {
 export async function enforceTokenProjectScope(
   c: Context,
   tokenProjectId: string,
-  opts: { sessionBound?: boolean; principal?: string } = {},
+  opts: { sessionBound?: boolean; principal?: string; remedy?: string } = {},
 ): Promise<void> {
   const path = c.req.path;
   const method = c.req.method;
@@ -66,20 +67,28 @@ export async function enforceTokenProjectScope(
   // reason made every denial indistinguishable in Better Stack: 2,338 identical
   // `POST /v1/platform/boot-timeline -> 403` lines over 7 days (2026-09-09)
   // named neither the credential nor the branch that rejected it.
+  // A remedy names the fix a reconnect gives. A platform route or an unlisted
+  // route stays refused to every credential of the person, so it gets none.
+  const remedy = opts.remedy && verdict.check !== 'platform-route' && verdict.check !== 'default-deny' ? `. ${opts.remedy}` : '';
   const message =
-    `${verdict.reason} ` +
+    `${verdict.reason}${remedy} ` +
     `[check=token-project-scope:${verdict.check} ` +
     `principal=${opts.principal ?? (opts.sessionBound ? 'session-scoped-pat' : 'project-scoped-pat')} ` +
     `project=${workspaceId} path=${path}]`;
   // A typed body: the CLI picks its remedy from `code`, and no kortix.yaml
   // grant can lift a fence refusal, so it must never read as a grant miss.
-  throw new HTTPException(403, {
+  const err = new HTTPException(403, {
     message,
     res: new Response(
       JSON.stringify({ error: true, message, status: 403, code: CREDENTIAL_FENCE_REFUSED_CODE, check: verdict.check }),
       { status: 403, headers: { 'content-type': 'application/json' } },
     ),
   });
+  // The refusal is designed (the fence, fail closed) and the body above
+  // already names the remedy, so the LINE goes through the shared refusal
+  // throttle (KRTX-4731); the response ships untouched every time.
+  markCredentialFenceDenial(err);
+  throw err;
 }
 
 /** `account → workspace` for the fence: the one live workspace, `ambiguous`, or null. */

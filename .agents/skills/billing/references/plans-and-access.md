@@ -18,7 +18,10 @@ account buys, and which features it may use.
 1. **Money and features are separate.** Every account buys usage the same way:
    a billing plan (Free or Credits) plus top-ups. Enterprise never changes that.
 2. **Enterprise is a feature entitlement**, nothing else: SSO, SCIM, advanced
-   roles, audit export, branding. No credits come with it.
+   roles, audit export, branding. No credits come with it. Branding is
+   self-host only: with billing on (the Kortix cloud) `brandingEntitled`
+   in `apps/api/src/accounts/branding.ts` is always false, nothing stored is
+   served, and the writes answer `403 branding_unavailable`.
 3. **Three Enterprise states, no clocks.** Off, Demo (self-serve) and Licensed
    (a contract). There are no trials.
 4. **Exceptions are per-key overrides** in `entitlement_overrides`, each with an
@@ -49,6 +52,13 @@ it is not a fleet-wide quota and does not retry failed money operations.
 
 No plan caps workspaces. A workspace holds one project; a person may create
 any number of workspaces on Free, and only the first gets the free credits.
+
+Dictation (composer speech-to-text, `POST /v1/workspaces/:id/dictation`) is
+on every plan, Free included, although it runs a Kortix-managed Whisper: it
+is an input method, not a model choice (decision 2026-11-24). It costs
+`DICTATION_CREDITS_PER_MINUTE` (1 credit a minute, billed per second) from
+the wallet, a silent clip included, and it passes the same wallet gate
+and project budgets as model usage. Its ledger rows read "Dictation".
 
 `credit_accounts.tier` is the billing plan: `free` or `credits` (legacy keys
 resolve to `credits`). Stripe owns it. `tier='enterprise'` no longer exists.
@@ -83,6 +93,12 @@ the first workspace a person creates (Workspaces, 2026-11-05).
   only when the caller is a member of it. The Plan card, the billing pane and
   the billing modal print the line; the modal opens on the top-up for a Free
   workspace below the run floor (`billingModalNeedsTopUp`).
+- The modal's TRIGGER follows the same rule (KRTX-4713): opening a workspace
+  never auto-opens the Out-of-credits modal while the person's free credits
+  are unspent elsewhere (`freeGrantUnspentElsewhere` — the claimed
+  workspace's wallet still covers a run; unknown until its state loads).
+  The modal opens on an actual blocked turn (the send gate, a 402) or at a
+  true zero balance (the claimed wallet dry).
 - Code: `billing/services/free-credit-claims.ts`, called by
   `createOwnedAccount` (`accounts/core/create-account.ts`);
   `billing/services/free-grant.ts` (the claimed workspace).
@@ -404,6 +420,16 @@ that date beside remaining plan credits. The ledger shows each grant's own
 `expires_at` when recorded, never a current account schedule substituted for
 a historical grant. New free welcome grants record their scheduled reset date.
 
+### Account state without `billing.read`
+
+A caller without `billing.read` (a custom role without it, or a workspace key
+or session token of a `split_pending` legacy account) gets the gating view
+(`gatingView` in `billing/routes/account-state.ts`): plan, `billing_state`,
+`credits.can_run` and entitlements. `credits.total`, `daily`, `monthly` and
+`extra` are absent, never `0` (flow BILL-21 asserts the absence). `credits.hidden
+{ reason, message }` names the verdict reason and the remedy. The CLI's
+`billing status` prints `credits hidden — <message>`.
+
 ## Wallet admission and model access
 
 `credits.can_run` and `billing_state` describe wallet admission, not model
@@ -413,3 +439,24 @@ readiness. A funded Free account can pay for compute while it uses BYOK.
 The project/principal-scoped `/model-picker` catalog is the source of truth
 for executable models. A gateway trigger with no enabled model returns
 `402 no_usable_model`; credits alone never unlock managed inference.
+
+### Identity without a workspace
+
+An unscoped Supabase-authenticated person with no membership can read account-state
+without creating or choosing a workspace. The response contains `billing_state`,
+`has_active_subscription`, `subscription.status`, and `can_manage_billing: false`.
+It checks the legacy personal account key (`account_id = user_id`), its wallet
+subscription references, every page of subscriptions of its mapped Stripe
+customers, and every page of a Stripe search for subscriptions whose
+`metadata.account_id` names the person (an unmapped legacy purchase). A
+subscription the wallet already proves is reported without a provider read;
+absence always needs Stripe, so a deployment without a Stripe key answers an
+error, never absence. Ended Stripe subscriptions (`canceled`, `incomplete_expired`) do not
+count. Unknown statuses fail closed as active. A cancelled store (RevenueCat)
+subscription stays active until its recorded expiry has passed. A database or provider error is
+an error response, never a no-subscription fallback. No database means the read
+cannot be authoritative. When the personal key names an existing workspace the
+person does not serve, the read refuses with 409 `no_workspace` and reads nothing.
+Named workspace requests retain membership authorization.
+This read performs no billing writes and never grants credits. Deployment does
+not unhold production dogfood: its prerequisite must be validated separately.

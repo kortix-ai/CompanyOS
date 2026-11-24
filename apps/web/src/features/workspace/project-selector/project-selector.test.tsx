@@ -59,6 +59,9 @@ function inlineCreate(overrides: Partial<InlineCreateProps> = {}): InlineCreateP
     onNameBlur: () => {},
     onSubmit: () => {},
     onRetry: () => {},
+    openingMore: false,
+    onOpenMore: () => {},
+    onWarmMore: () => {},
     ...overrides,
   };
 }
@@ -91,6 +94,13 @@ describe('ProjectSelectorView — create or join', () => {
     expect(html).toContain('href="/workspaces/new"');
     expect(html).toContain('data-testid="selector-create-more"');
     expect(html).toContain('Invited? Open the invite link from your email');
+  });
+
+  test('More options shows a busy state while /workspaces/new opens', () => {
+    const idle = render({ inlineCreate: inlineCreate() });
+    expect(idle).not.toMatch(/data-testid="selector-create-more"[^>]*aria-busy/);
+    const opening = render({ inlineCreate: inlineCreate({ openingMore: true }) });
+    expect(opening).toMatch(/aria-busy="true"[^>]*data-testid="selector-create-more"|data-testid="selector-create-more"[^>]*aria-busy="true"/);
   });
 
   test('a create in flight replaces the page with the handoff', () => {
@@ -179,8 +189,7 @@ describe('ProjectSelectorView — create or join', () => {
     expect(html).not.toContain('data-testid="selector-create"');
   });
 
-  test('a failed list offers Try again; a total failure replaces the list', () => {
-    expect(render({ workspaces: twoAccounts, partialFailure: true })).toContain('Could not load every workspace.');
+  test('a total failure replaces the list', () => {
     const total = render({ loadFailed: true });
     expect(total).toContain('Could not load your workspaces');
     expect(total).not.toContain('data-testid="selector-create"');

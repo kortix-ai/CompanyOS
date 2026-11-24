@@ -14,6 +14,8 @@ import { normalizeString } from '../../projects/lib/serializers';
 import { chooseEffectiveAgent } from '../../llm-gateway/resolution/effective';
 import { EVENT_DEDUPE_TTL_MS } from './app';
 import { buildAgentUnavailablePickerBlocks, loadScopedChannelAgents } from './agent-picker';
+import { claimExpiringKey } from './dedup';
+import { slackChannelIsDm } from './util';
 import { currentChannelSelection } from './selection';
 import { startErrorMessage } from './start-error';
 import {
@@ -182,9 +184,12 @@ export async function createOrJoinThreadSession(input: {
     return;
   }
 
+  // The create runs inline, so it ends `created` or `failed`. `queued` and
+  // `pending` come only from an earlier delivery of this same message, whose
+  // create still runs or waits for a retry under the same idempotency key.
   if (result.status === 'queued' || result.status === 'pending') {
     if (handle) {
-      await finalizeTurn(handle, { answer: queuedMessage() });
+      await finalizeTurn(handle, { answer: CREATE_IN_FLIGHT_MESSAGE });
     }
     return;
   }
@@ -257,7 +262,6 @@ async function launchSlackSession(
       // Slack markup with them: `<@U0…>` reads `@Sam`, as Slack shows it.
       title_source: event.text ? slackPlainText(labels.text) : null,
     },
-    queuePolicy: 'on_backpressure',
     // Per-message key allows retry after a failed first start; claim serializes races.
     idempotencyKey: teamId && threadId && event.ts ? `slack:create:${teamId}:${threadId}:${event.ts}` : claimKey,
     postCreate: teamId && threadId
@@ -290,7 +294,7 @@ async function planSlackLaunch(
 ) {
   const projectId = project.projectId;
   const selection = event.channel
-    ? await currentChannelSelection({ teamId, channelId: event.channel })
+    ? await currentChannelSelection({ teamId, channelId: event.channel, projectId })
     : null;
   const conversationPolicy = normalizeConversationPolicy(selection?.conversationPolicy);
 
@@ -377,23 +381,15 @@ async function joinExistingThread(
   return claimKey;
 }
 
-function queuedMessage(): string {
-  return "I've queued your task behind the sessions already starting up in this Kortix workspace, and I'll reply right here the moment it begins.";
-}
+const CREATE_IN_FLIGHT_MESSAGE =
+  'Kortix is still starting a session for this message. The agent replies here when it is ready.';
 
 // Fail open on DB errors rather than dropping a message.
-async function claimThreadCreate(key: string): Promise<boolean> {
-  try {
-    const inserted = await db
-      .insert(chatEventDedup)
-      .values({ eventId: key, expiresAt: new Date(Date.now() + EVENT_DEDUPE_TTL_MS) })
-      .onConflictDoNothing({ target: chatEventDedup.eventId })
-      .returning({ eventId: chatEventDedup.eventId });
-    return inserted.length > 0;
-  } catch (err) {
-    console.warn('[slack-webhook] thread-create claim failed (fail-open)', err);
-    return true;
-  }
+export async function claimThreadCreate(key: string): Promise<boolean> {
+  return claimExpiringKey(key, EVENT_DEDUPE_TTL_MS, {
+    onDbError: true,
+    log: 'thread-create claim failed (fail-open)',
+  });
 }
 
 async function releaseThreadCreate(key: string): Promise<void> {
@@ -465,8 +461,9 @@ export const TURN_INSTRUCTIONS = [
   '  divider, context, image, actions). Plain text via `slack send "..."` is fine',
   '  for one-liners, but prefer blocks when there\'s real structure to convey.',
   '- One `slack send` per turn. It finalizes the live stream and can\'t be undone.',
-  '- In a channel thread only a message that @mentions you reaches you. When you ask an',
-  '  open-ended question with `slack send`, ask the person to @mention you in the reply.',
+  '- In a channel thread, the person who started it reaches you with a plain reply;',
+  '  anyone else @mentions you. When you ask someone else an open-ended question with',
+  '  `slack send`, ask them to @mention you in the reply.',
   '  (Button questions are unaffected: clicks arrive through interactivity.)',
 ].join('\n');
 
@@ -522,7 +519,7 @@ export function renderFollowUpPrompt(
     'This session may serve several threads. Reply to THIS message in its originating channel and thread:',
     slackReplyCommand(event.channel ?? 'unknown', event.thread_ts ?? event.ts ?? 'unknown'),
     'The live slack step stream follows this message automatically. Do not use the session\'s original Slack thread for this reply.',
-    ...(event.channel_type !== 'im' && !event.channel?.startsWith('D') ? [readThreadInstruction(event)] : []),
+    ...(event.channel_type !== 'im' && !(event.channel && slackChannelIsDm(event.channel)) ? [readThreadInstruction(event)] : []),
     '',
     text,
     renderFileInfo(event),

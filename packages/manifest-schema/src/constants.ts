@@ -57,6 +57,9 @@ export const SPACE_HEADER_ITEMS = ['agents', 'members', 'needs_you', 'new_sessio
 /** Regex matching every legal env-var name. */
 export const ENV_NAME_RE = /^[A-Z_][A-Z0-9_]*$/;
 
+/** A project secret's name (`connectors[].auth.secret`): an env name of at most 64 characters. */
+export const SECRET_NAME_RE = /^[A-Z_][A-Z0-9_]{0,63}$/;
+
 /**
  * Env-var names the runtime owns, which a manifest may therefore not set.
  *
@@ -332,8 +335,8 @@ export const DEPRECATED_KORTIX_PERMISSION_ALIASES: Readonly<Record<string, reado
  */
 export const RETIRED_KORTIX_PERMISSIONS: readonly string[] = ['project.room.read', 'project.room.write', 'project.artifact.comment', 'workspace.artifact.comment'];
 
-/** Kortix skills retired with their feature. An agent that still grants one validates with a warning. `kortix-rooms`: Rooms, removed 2026-11. */
-export const RETIRED_KORTIX_SKILL_NAMES: readonly string[] = ['kortix-rooms'];
+/** Kortix skills retired with their feature. An agent that still grants one validates with a warning. `kortix-rooms`: Rooms, removed 2026-11. `kortix-marketplace`: the marketplace, removed 2026-11-20. */
+export const RETIRED_KORTIX_SKILL_NAMES: readonly string[] = ['kortix-rooms', 'kortix-marketplace'];
 
 export const LEGACY_TOLERATED_KORTIX_PERMISSIONS: readonly string[] = [
   'project.session.exec',
@@ -371,7 +374,6 @@ export const LEGACY_SANDBOX_KEYS = [
 
 export const V2_RUNTIME_VALUES = ['opencode', 'pi'] as const;
 export const AGENT_MODES_V2 = ['primary', 'subagent', 'all'] as const;
-export const WORKSPACE_MODES_V2 = ['runtime', 'read', 'branch'] as const;
 export const PERMISSION_ACTIONS_V2 = ['ask', 'allow', 'deny'] as const;
 /** Keys that only ever take a bare action (no glob-map form) — mirrors upstream. */
 export const PERMISSION_ACTION_ONLY_KEYS_V2 = [
@@ -503,18 +505,20 @@ export const KORTIX_SKILL_NAMES = [
   'kortix-cli',
   'kortix-apps',
   'kortix-artifacts',
+  'kortix-calendar',
   'kortix-channel-memory',
   'kortix-chrome',
   'kortix-computer',
   'kortix-connectors',
   'kortix-design',
   'kortix-drives',
+  'kortix-evals',
   'kortix-genui',
   'kortix-goals',
   'kortix-harness-refinement',
-  'kortix-marketplace',
   'kortix-memory',
   'kortix-onboarding',
+  'kortix-program-agents',
   'kortix-slack',
   'kortix-system',
   'kortix-teams',
@@ -534,3 +538,6 @@ export const EXTENSION_HARNESSES = ['opencode', 'pi'] as const;
  * @deprecated OpenCode only: OpenCode is deleted (2026-10-30). See apps/kortix-sandbox-agent-server/src/harness/README.md "OpenCode is deleted".
  */
 export const RUNTIME_BUILTIN_AGENTS = ['build', 'plan', 'general', 'explore'] as const;
+
+/** The longest `agents.<name>.title`. */
+export const AGENT_TITLE_MAX_LENGTH = 80;

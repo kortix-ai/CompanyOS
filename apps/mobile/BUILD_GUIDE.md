@@ -30,6 +30,7 @@ the build number (EAS keeps it remotely).
 | Profile | Backend | EAS environment | Update channel | Artifact |
 |---|---|---|---|---|
 | `prod-store` | `api.kortix.com` | `production` | `production` | App Store / Play (AAB) |
+| `prod-testflight` | `api.kortix.com` | `production` | `testflight-production` | iOS TestFlight only |
 | `prod-apk` | `api.kortix.com` | `production` | `production` | installable APK |
 | `dev-store` | `dev-api.kortix.com` | `preview` | `dev` | TestFlight / Play internal (AAB) |
 | `dev-apk` | `dev-api.kortix.com` | `preview` | `dev` | installable APK |
@@ -39,26 +40,89 @@ the build number (EAS keeps it remotely).
 OTA updates alike: `eas env:list production`. Change them there, never in
 `eas.json`, or a build and an update of the same release disagree.
 
+## TestFlight with the production API
+
+`Mobile TestFlight` runs automatically after mobile changes merge into `dev`.
+Changes to the TestFlight workflow also trigger it. SDK or shared-package
+changes that affect mobile must include the required mobile version bump,
+which triggers this workflow. The repo-wide lockfile alone does not trigger it.
+Markdown-only and test-only changes do not trigger a build. A running build
+continues. New pushes replace the pending build with the newest commit.
+To retry manually: Actions → Mobile TestFlight → Run workflow → select `dev`.
+Each run consumes EAS iOS build quota and keeps a GitHub runner active while
+waiting. The workflow timeout is 180 minutes.
+
+The workflow builds iOS with `prod-testflight`, then uploads that exact build
+to TestFlight with EAS Submit. It checks that the production EAS environment
+points at `https://api.kortix.com/v1` and that the API answers `/health`.
+The `testflight-production` update channel separates these builds from public
+production OTA updates. The public store workflow selects only `prod-store`
+builds, so it does not reuse a TestFlight candidate from this profile.
+
+This workflow does not submit App Review, release an App Store version, upload
+Android, promote the backend, or publish an OTA. After Apple processes the
+upload, internal testers can install it through their existing TestFlight group.
+If the build is not visible, assign it to that group in App Store Connect.
+External testers can require Apple's separate Beta App Review.
+After Apple approves version X, its upload train closes. Further uploads for X
+fail; run `node apps/mobile/scripts/set-version.mjs --next` before a new build.
+
+Read-only preflight from the repo root:
+
+```sh
+node apps/mobile/scripts/testflight-publish.mjs --dry-run
+```
+
+To build and upload manually from a clean committed checkout with EAS login
+or `EXPO_TOKEN`, omit `--dry-run`. Use the dedicated command; `store-release.mjs`
+also performs public store release operations.
+
 ## Release a store version
 
-The version changes once per store release. The build number changes on every
-build. `runtimeVersion` equals the version, so an OTA update only reaches
-binaries built from the same release.
+Agents bump the version once per mobile task, including code, assets,
+dependencies, and native configuration. Documentation-only work needs no bump.
+The build number changes on every build. `runtimeVersion` equals the version,
+so an OTA update only reaches binaries built from the same release.
 
-To release a store version, bump it on `dev` and let the release carry it:
+In the task's worktree, run this from the repo root and commit every changed
+version file. Let the normal release carry the version:
 
 ```bash
-cd apps/mobile
-node scripts/set-version.mjs 1.5.6          # writes all 6 copies (app.json, ios/, android/)
+node apps/mobile/scripts/set-version.mjs --next
 ```
+
+The command keeps major and minor unchanged. A single-digit patch starts a
+two-digit sequence. Examples: `1.6.2` → `1.6.21`, `1.5.6` → `1.5.61`, or
+`1.0.0` → `1.0.10`. Later calls increment the patch numerically:
+`1.5.61` → `1.5.62` → `1.5.63`, `1.6.29` → `1.6.30`.
+Run once per task, not once per edit. Before the final push, fetch `origin/dev`.
+If its version differs from the task's base version, sync first. Resolve the
+version conflicts to `origin/dev`'s version while keeping other native changes.
+If needed, synchronize the six fields with the explicit version command below,
+then run `--next` once. Compare version components as integers, never as text.
+
+```sh
+node apps/mobile/scripts/set-version.mjs <version>
+```
+
+Use the explicit argument only for that synchronization or a release version
+the user requests.
+
+Every bump also changes the runtime and requires a new binary. The bumped
+bundle cannot reach an older runtime through OTA. Once the bump reaches `prod`,
+the existing `mobile-store.yml` builds on EAS, submits Android to Play production,
+and submits iOS for App Review. JS-only changes also wait for that new binary.
+A mobile task does not authorize a production promotion or a manual submission.
 
 `scripts/set-version.test.ts` fails when the copies disagree. A native change
 (new native module, permission, Expo SDK, anything under `ios/` or `android/`)
 needs a new version and a store build: OTA cannot ship it.
 
 After every successful `Deploy Prod`, `.github/workflows/mobile-store.yml` runs
-`scripts/store-release.mjs` on the deployed commit. Per platform it does each
-step only when it is missing:
+`scripts/store-release.mjs` on the deployed commit. A `Deploy Prod` that failed
+only in its Kortix Capture or desktop installer builds counts as successful
+(`.github/workflows/deploy-prod-gate.yml`); any other failed job stops the
+mobile release. Per platform it does each step only when it is missing:
 
 1. **Build:** no finished `prod-store` store build of this version exists, so
    it builds one on EAS.
@@ -120,7 +184,7 @@ Unset `MOBILE_MIN_VERSION` to lift it.
 
 | Event | Channel | Reaches |
 |---|---|---|
-| `Deploy Prod` succeeded (each production release) | `production` | `prod-store`, `prod-apk` builds |
+| `Deploy Prod` succeeded, or failed only in its Kortix Capture or desktop builds (each production release) | `production` | `prod-store`, `prod-apk` builds |
 | Actions → Mobile OTA → Run workflow, channel `dev` | `dev` | `dev-store`, `dev-apk` builds |
 | Actions → Mobile OTA → Run workflow, channel `production` | `production` | a re-run of the released `prod` branch, whichever branch the button runs from (`dry_run` publishes nothing) |
 

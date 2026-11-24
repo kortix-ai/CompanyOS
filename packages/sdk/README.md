@@ -34,6 +34,15 @@ const kortix = createKortix({
 await kortix.workspaces.list();
 ```
 
+Inside a Kortix sandbox (a session, or a program agent's turn), call
+`createKortix()` with no options. It reads the sandbox's own `KORTIX_API_URL`
+and `KORTIX_TOKEN`, so every call acts as the session's agent:
+
+```ts
+const kortix = createKortix();
+await kortix.project(process.env.KORTIX_PROJECT_ID!).sessions.list();
+```
+
 ### Call external systems through Connectors
 
 Use one data plane for every Connector provider. A user token binds
@@ -286,7 +295,7 @@ no build step required:
 ## Entry points
 
 `@kortix/sdk` is the canonical entry — everything framework-free lives there.
-Eight others are stable, each for a reason that fits in one sentence:
+Nine others are stable, each for a reason that fits in one sentence:
 
 | Entry                           | Why it is separate                                         |
 | ------------------------------- | ---------------------------------------------------------- |
@@ -296,6 +305,7 @@ Eight others are stable, each for a reason that fits in one sentence:
 | `@kortix/sdk/genui`             | needs the optional peers `zod` and `@openuidev/lang-core`  |
 | `@kortix/sdk/genui/react`       | React and the Generative UI peers                          |
 | `@kortix/sdk/wire-message-id`   | the message-id mint alone, one file with no imports (also at root) |
+| `@kortix/sdk/wire-values`       | the session wire value sets alone, one file with no imports (also at root) |
 | `@kortix/sdk/workspace-search`  | the workspace search client; the root does not export it   |
 | `@kortix/sdk/capture-rules`     | the Kortix Capture constants alone                         |
 | `@kortix/sdk/internal/*`        | unsupported, outside semver                                |
@@ -406,6 +416,8 @@ await apps.access.update(app.app_id, {
 const browserSession = await apps.access.session(app.app_id);
 ```
 
+Deployment inputs accept optional `source_commit`, `source_ref`, and `source_force` provenance. Deployment reads return these fields. `kortix apps deploy` records the checkout HEAD and branch, warns for dirty files, and refuses before upload when HEAD does not contain the live commit. Merge the live commit first, or use `--force` (recorded on the deployment). Legacy releases, non-git sources, and commits still unknown after fetching skip this CLI check. This is a client-side ancestry check, not server-side serialization of concurrent deploys.
+
 Access modes are `private`, `project`, `restricted`, `public`, and `password`. An access session exchanges a five-minute URL for an eight-hour, host-only cookie. A stopped or idle App resumes on the same public request. Transient machine requests receive `202 app_starting` and `Retry-After: 3`.
 
 Branch on `app.capabilities` (`machines`, `scale`, `exec`, `volumes`, `snapshots`, `static`, …). A call for a capability the App lacks answers `409 app_capability_unsupported`. A backend (database, Convex) is an ordinary server App with a volume; there is no backend type.
@@ -446,6 +458,23 @@ returns `{ attachment_id, filename, mime, size, url }`. Use `url` in a file part
 the prompt inbox. The API copies those bytes into the sandbox after startup. Uploads and `session.attachments.read(attachment_id)` do not start a
 sandbox. Reads return a `Blob` and require access to the session. Retries of the same `File`
 reuse the successful upload; an explicit `attachmentId` supports caller-managed retries.
+
+### Dictation (speech-to-text)
+
+`kortix.project(id).dictation.transcribe(audio, { surface })` turns one recorded clip into
+text for a composer. `audio` is a `Blob` (WebM, Ogg, MP4/M4A, MP3, WAV or FLAC) or, on
+React Native, a device file `{ uri, name, type }`. It returns `{ text, seconds, credits }`.
+The workspace pays 1 credit per minute of audio, billed per second, on every plan, speech
+or not; a clip with no speech returns `text: ''`. `dictation.info()` returns
+`{ available, credits_per_minute, max_seconds, max_bytes }`: hide the microphone when
+`available` is false (a self-hosted server without managed models). Neither the audio nor
+the text is stored. A refusal throws `ApiError` with `code` `insufficient_credits` or
+`budget_exceeded` (402), `rate_limit_exceeded` (429), or `dictation_unavailable`,
+`dictation_busy` or `dictation_failed` (503).
+
+```ts
+const { text } = await kortix.project(projectId).dictation.transcribe(clip, { surface: 'web' });
+```
 
 ### Session labels and metadata
 
@@ -492,9 +521,10 @@ In React, `useSessionMessageAuthors(projectId, sessionId, messageCount)` reads t
 
 ### Share one response
 
-The web session's **Share response** button publishes one finished response.
-The prompt stays private unless the person selects **Prompt and response**.
-The SDK exposes the same operations as named exports:
+Response sharing is available through the SDK and API. The transcript no longer
+offers a Share response button or dialog. Existing public links remain active.
+Use `unshareTurn` to revoke an existing link. The prompt stays private unless
+`include_prompt` is true. The SDK exposes these operations as named exports:
 
 ```ts
 import { getTurnShare, shareTurn, unshareTurn, getPublicResponse } from '@kortix/sdk';
@@ -553,13 +583,35 @@ await s.workflows.control(runId, { action: 'pause' }) // 'resume' | 'stop' | 're
 `send` answers `{ status, message, to, note }`: `delivered`, `held` (the receiver's person
 approves it), `refused`, or `dropped` (a duplicate). A `to` that names several sessions is a
 `409` with the candidates. A session row carries `board_state` (`working`, `needs_input`,
-`idle`, `completed`, `failed`, `stopped`), `attention`, `last_activity_at`, `result_excerpt`,
+`idle`, `completed`, `failed`, `stopped`), `work_state`, `attention`, `last_activity_at`, `result_excerpt`,
 `agent_handle`, `team_lead_session_id` and `inbound`; `listWorkspaceSessionsPage(projectId,
 { teamLead })` lists a lead's teammates. In React: `useReachableAgents(pid, sid, scope?)`,
 `usePeerMessages(pid, sid, direction?)` (with `approve` and `deny`), `useTeamTasks(pid, lead)`,
 `useTeammates(pid, lead)` and `useSessionWorkflows(pid, sid)` (with `control`). Each polls
 every 5 s while the page is visible, a running workflow every 2 s. A workflow poll never
-starts a stopped session.
+starts a stopped session. A workflow read whose runs all ended stops polling, unless
+`live: true` says the session works and can start a new run.
+
+#### Is the work done?
+
+A session row has three state fields. Wait on `work_state`, never on `status`.
+
+| Field | Values | Meaning |
+| --- | --- | --- |
+| `work_state` | `running`, `completed`, `failed`, `stopped`, `idle` | Is the work done. `running` while a turn runs or the session waits for its person (`board_state` `working` or `needs_input`). |
+| `status` | `running`, `stopped`, `failed`, … | The stored row lifecycle: `running` from the start until the computer stops. |
+| `runtime_status` | `provisioning`, `active`, … | The computer. An idle computer stays `active` for up to ~10 minutes after the turn ends. |
+
+A child that finished and answered reads `work_state: 'completed'` at once and still reads
+`status: 'running'` until its computer stops. `sessionWorkState(row)` returns `work_state`,
+or derives it from `board_state` (then `working`) on an older API:
+
+```ts
+import { listWorkspaceSessionsPage, sessionWorkState } from '@kortix/sdk';
+
+const { items } = await listWorkspaceSessionsPage(projectId, { parent: leadId });
+const done = items.every((row) => sessionWorkState(row) !== 'running');
+```
 
 ### React runtime
 
@@ -584,8 +636,8 @@ A live read that returns no messages keeps the saved messages on screen: it mean
 lost its state, not that the conversation is empty. The first live read with messages reconciles them.
 Missing or rejected history falls back to the existing runtime path.
 An open reads the session log (`GET …/log`), on every host, with no project flag:
-`useSession`, `readSavedSessionCopy` (returned as `log`), `useSessionSync` with no `mirror` or
-with `savedChild`, and `loadSessionExportMessages`. The host applies a page it reads itself to
+`useSession`, `readSavedSessionCopy` (returned as `log`), `useSessionSync` without
+`mirror: null` or with `savedChild`, and `loadSessionExportMessages`. The host applies a page it reads itself to
 the session store and renders `useSessionLogThread`. No hook and no SDK read sends
 `GET …/transcript`, whatever the log answers. A new session's 404 with
 `code: 'session_log_missing'` keeps the session on the log with nothing in it: the runtime's rows
@@ -594,9 +646,9 @@ the copy already on screen and reads the page again after 2 s, 10 s and 30 s, or
 `Retry-After` (at most 60 s). Either is read again at the next turn end and after a stream
 reconnect. Without a log in the store, `useSession().loadOlder` pages the runtime. An export
 with no page reads the runtime, and fails when the runtime has nothing. The session-open
-snapshot (`GET …/snapshot`) asks for no v1 window (`?transcript=0`). The v1 reads
-(`getSessionTranscript`, `getSessionTranscriptSync`, `transcript`, `transcriptSync`) are
-deprecated.
+snapshot (`GET …/snapshot`) asks for no v1 window (`?transcript=0`): its `transcript` leg is
+the pointer only. The v1 transcript reads were removed in the session-log major (see
+`CHANGELOG.md`); read the log with `getSessionLogPage` (`kortix.session(p, s).log(query)`).
 
 `useSession().savedTranscript` says whether that saved conversation can show before the
 computer wakes: `loading` while a saved copy may still arrive, `shown` once messages are in
@@ -613,7 +665,8 @@ phase, once ready, and against an API that does not send it.
 
 A host that registers a saved-copy store (`setSavedCopyStore(createSavedCopyStore({ storage,
 userId }))`) gets the kept copy painted before the first frame; the server's copy reconciles
-into it by message ID. `createPersistedQueryCache` does the same for accounts, projects and
+into it by message ID. The store keeps the newest session-log page of each session
+(`SessionLogPage`, under `<namespace>.log`) and deletes the v1 copies an older SDK kept. `createPersistedQueryCache` does the same for accounts, projects and
 the paged session list. Both are per user and bounded; clear both on sign-out. Session
 states have one set of words for every host: `sessionListStatus`, `SESSION_LIST_STATUS`,
 `sessionConnectionLabel`, `SESSION_NOTICE`, and `turnRetryLabel`.
@@ -704,9 +757,9 @@ exhaustive — see `API-MAP.md` for the full per-domain surface:
 | `kortix.workspaces` | `list` (every workspace the caller can open, across accounts, one request) · `get` (role + state + settings) · `update` · `create` · `delete` · `restore`. See [Workspaces](#workspaces) |
 | `kortix.workspace(id)` | everything on `kortix.project(id)`, except that `get` / `update` read and change the `Workspace` and `tokens` manages workspace keys (the project CLI tokens are `cliTokens`), plus `delete` · `restore` · `setup` · `accountId` · `members.{list,invite,updateRole,remove,invites,cancelInvite,resendInvite}` · `leave` · `billing.state` · `iam.{assignments.{list,create,revoke},roles,groups,can,canBatch}` |
 | `kortix.projects` | project-named calls, kept permanently: list · get · detail · create · provision · createWorkspace · update · archive · llmCatalog · modelPicker · sandboxTemplates · sessions (+ more: `listForAccount`, `sandboxHealth`, `createSession`) |
-| `kortix.accounts` | list · get · create · members · invites · `secretResources.{list,create,rotate,retry,remove,grant,revoke,setAccess}` · `subscriptions.{list,usage}` (project-authorized usage for named and legacy ChatGPT logins; reads credentials in place) · `tokens.{list,create,revoke}` (account-scoped CLI PATs, `kortix_pat_…`) · `audit.{log,export,activity,webhooks.*}` (filterable project/session reconstruction log; `activity` = who was active and how often, per UTC day) · `branding.{get,update,uploadAsset,removeAsset,reset}` (Enterprise organization branding: logo / icon / favicon, light + dark, product name) (+ more: `updateName`, `leave`, `invite`, `removeMember`, `updateMemberRole`) |
+| `kortix.accounts` | list · get · create · members · invites · `secretResources.{list,create,rotate,retry,verify,remove,grant,revoke,setAccess}` (a provider API key is checked against its provider on create and rotate; `verify` checks it again; the result is `verification`) · `subscriptions.{list,usage}` (project-authorized usage for named and legacy ChatGPT logins; reads credentials in place) · `tokens.{list,create,revoke}` (account-scoped CLI PATs, `kortix_pat_…`) · `audit.{log,export,activity,webhooks.*}` (filterable project/session reconstruction log; `activity` = who was active and how often, per UTC day) · `branding.{get,update,uploadAsset,removeAsset,reset}` (Enterprise organization branding: logo / icon / favicon, light + dark, product name) (+ more: `updateName`, `leave`, `invite`, `removeMember`, `updateMemberRole`) |
 | `kortix.billing` | entitlement/usage reads: `accountState` · `accountStateMinimal` · `transactions` · `transactionsSummary` · `creditBreakdown` · `usageHistory` · `usageRollup` · `sessionCosts.{list,get}` · `tierConfigurations` (with `min_monthly_usd` / `max_monthly_usd`) — plus a curated mutation surface: `setPlan` (subscribe to or change the credits plan; `useSetBillingPlan()` in `@kortix/sdk/react`) · `subscription.{createPortalSession,cancel,reactivate}` · `credits.{purchase,redeem,autoTopupSettings,configureAutoTopup}` (`redeem({ code, accountId })` adds a credit code's amount to the non-expiring credits, once per account). `checkout.{createSession,confirmSession}`, `subscription.{scheduleDowngrade,cancelScheduledChange,prorationPreview}`, `createPerSeatCheckout` and `claimPerSeatBilling` are deprecated: they reject with `ENDPOINT_RETIRED` |
-| `kortix.marketplace` | public marketplace catalog browse + sources (not project-scoped): `items` · `item` · `itemFile` · `marketplaces` · `featured` · `sources.{list,add,remove}`. A project installs an item through `createMarketplaceInstallSession(projectId, itemId)`, which starts a session whose agent merges the item into the project and opens a change request; it resolves `{ session_id }` |
+| `kortix.marketplace` | **Deprecated.** The marketplace was removed (2026-11-20); every call rejects with `410 ENDPOINT_RETIRED`. Removed in the next major. |
 | `kortix.github` | account-scoped GitHub App installs and repo linking: `getInstallation` · `listInstallations` · `listLinkableInstallations` (each entry carries `linked_to_other_accounts`, a count and never a tenant name) · `listRepositories` · `listRepositoryBranches` · `linkInstallation` · `saveInstallation` · `deleteInstallation` · `linkRepository` (`source: 'managed'` imports a repository the instance backend holds — self-host operator only, and mutually exclusive with `installation_id`) · `replaceProjectRepository` (changes an existing project's repository with an expected old URL; accepts a repository-scoped PAT or a temporary GitHub user proof for a repository-scoped App grant; can atomically copy selected shared runtime secrets from another project in the same account) |
 | `kortix.gitBackend` | the instance git backend ("Kortix managed", one per deployment, never an account connection): `get()` → `{configured, kind: 'app'|'pat'|null, owner}` (any authenticated user) · `repositories({search?, limit?})` (self-host operator only; 403 otherwise) |
 | `kortix.notifications` | native push for a person's devices: `registerDeviceToken` · `unregisterDeviceToken` (Expo push tokens) · `releaseDeviceToken(token, { backendUrl?, signal? })` (**no token needed**: a signed-out app removes its device token from a backend, `POST /v1/notifications/device-token/release`; resolves `{ ok: true }`, a non-2xx answer throws `ApiError` with `status`). A session push reaches the phone of the person who created the session |
@@ -716,6 +769,8 @@ exhaustive — see `API-MAP.md` for the full per-domain surface:
 | `kortix.project(id)` | id-bound handle: `.apps` (stable App URLs, access, artifacts, deployments, logs, rollback, start/stop, machines (`machines.list/start/stop/restart/destroy`, `scale`, `exec`), volumes (`volumes.list/create/update/destroy/snapshots/snapshot/restore/fork`), and `token`) · `.secrets` · `.access` · `.connectors` (data plane + configuration + Connections) · `.policies` · `.triggers` (cron / webhook / app; `.fire(slug, { payload, dryRun })`; run history `.runs(slug)` / `.projectRuns({ status })`; `.replay(slug, runId)`) · `.files` · `.git` · `.changeRequests` (incl. `requestChanges`) · `.sessions` · `.tokens` (project-scoped CLI PATs — the `KORTIX_TOKEN` shape) · `.setupLinks.{requestSecret,requestConnector}` (agent-minted secret-entry / connector links) · `.validateManifest` · `.gitToken` · `.setDefaultAgent(name)` · `.session(sid)` (+ more namespaces: `.skills`, `.review`, `.approvals`, `.gateway` (incl. `.routing` and `.playground`), `.channels`, `.modelDefaults`, `.sandbox`) |
 | `kortix.session(pid, sid)` | id-bound handle: lifecycle (`get`/`update`/`delete`/`restore`/`start`/`restart`/`stop`/`reloadConfig`/`reloadConfigStream`/`setSharing`/`participants`/`setPinned`/`setArchived`/`presence`/`previews`/`commit`/`publicShares`/`ensureReady`) · finalized `cost()` · `send`/`abort`/`rewind`/`restoreRewind` (needs `session.rewind`)/`setModel`/`setAgent` · `transcript()` · `.files` · runtime URL helpers (`health`/`previewUrl`/`proxyUrl`) · the session verbs (`messages`/`pending`/`answerPermission`/`answerQuestion`/`compact`) · `stream()` · the deprecated `.runtime` |
 | `kortix.runtime()` | the runtime REST compatibility client of the process-wide active sandbox. It throws on a scoped client. Use the session verbs on `kortix.session(pid, sid)` instead |
+
+Artifact metadata reads accept `getArtifact(projectId, artifactId, { showErrors: false })` to suppress host error notifications. The promise still rejects on access or network errors.
 
 Runnable, self-contained scripts for the highest-value flows live in
 [`examples/`](./examples): list projects with a PAT, send + stream, the
@@ -734,16 +789,19 @@ await kortix.project(projectId).sessions.create({
 });
 ```
 
-Do not put credentials in this map. For a white-label/backend wrapper, create an
-operator-managed connection, store its credential through the dedicated
-credential endpoint, and pass only the non-secret connection id at session create:
+Do not put credentials in this map. For a white-label/backend wrapper, give each
+end user their own project: a project-owned connection is reachable by every
+session in its project, so the project is the isolation boundary. Create the
+connection in that user's project, store its credential through the dedicated
+credential endpoint, and pass only the non-secret connection id at session
+create:
 
 ```ts
-const project = kortix.project(projectId);
+// One project per end user: never put two end users' credentials in one project.
+const project = kortix.project(projectIdOfThisEndUser);
 const connection = await project.connectors.connections.reconcile({
   connector_alias: "customer-data",
-  owner_type: "external",
-  owner_id: wrapperUserId,
+  owner_type: "project",
   label: "Customer data",
   metadata: { tenant_ref: wrapperTenantReference },
 });
@@ -786,7 +844,13 @@ await project.sessions.create({
 Member connections are owner-only even for project managers, and sessions using
 one must remain private. A service account — an agent or a trigger — never
 reaches a member connection, only the shared project one. Project defaults
-remain shared; external/agent/subject connections remain operator-managed. Every connection is project/connector scoped
+remain shared. A project-owned connection is reachable by every session in the
+project, and any of them may bind it by id, so it must never hold one end user's
+credential in a project other end users' sessions run in: give each end user their
+own project instead. The owner types `external`, `agent` and `subject`
+are retired: the API refuses to create them (`409
+CONNECTOR_CONNECTION_OWNER_NOT_REACHABLE`) and no session reaches an existing one.
+They stay in the `ConnectionOwnerType` union so existing code compiles. Every connection is project/connector scoped
 and resolved on every Connector request, so revocation takes effect without a
 restart. Credentials are encrypted server-side and are never returned, placed
 in `KORTIX_SESSION_CONTEXT`, or injected into the sandbox environment. Raw env
@@ -900,8 +964,13 @@ loaded image across surfaces. See the
 `getSessionLogPage(projectId, sessionId, query?)`, or `kortix.session(p, s).log(query?)`,
 reads one page of the stored session log (`SessionLogPage`: the session record,
 every thread head, a thread's newest messages by `seq`, `has_more`). `query` is
-`{ thread?, before_seq?, limit? }` (`SessionLogPageQuery`). It answers while the
+`{ thread?, before_seq?, limit?, live? }` (`SessionLogPageQuery`). It answers while the
 sandbox is stopped, and is `null` when the session has no stored log yet.
+`live: true` asks for the newest page as the session's running sandbox holds it: the
+API reads the sandbox, and answers its stored log when the sandbox is not running or
+does not answer within 2 s. The page's `source` (`'box'` or `'store'`) says which. The
+stored log lags a running sandbox by its journal (5 s during a turn, longer when the
+journal retries). `useSession` reads the session log only this way.
 `findSessionAttachments` reads session-log records as well as v1 messages.
 
 `toToolView`, `getChildSessionId`, `partOutcome`, `contextToolTrigger` and
@@ -1106,7 +1175,7 @@ the root import — offers the same agents and models and sends the same pick.
 | Function | Input → output |
 |---|---|
 | `projectConfigAgentsToRuntimeAgents(config)` | `/workspaces/:id/detail` config → agent roster, project default first |
-| `composerSelectableAgents(agents, { enableProjects?, includeSubagents? })` | roster → picker list (no hidden agents, no subagents, `project-manager` only with `enableProjects`) |
+| `composerSelectableAgents(agents, { enableProjects?, includeSubagents? })` | roster → picker list (no hidden agents, no subagents, no cron-only starter reflectors, `project-manager` only with `enableProjects`) |
 | `resolveComposerAgent({ agents, boundAgent, defaultAgent, selectedAgent })` | → the agent to send, and `disabled` when none is accessible |
 | `pickerProviderList({ modelPicker })` | `/model-picker` catalog → provider list (the single `kortix` provider). `gatewayEnabled`, `runtimeProviders`, `llmCatalogProviders` and `secretNames` are deprecated and ignored |
 | `flattenModels(providers)` | provider list → `ModelOption[]` (a `FlatModel` plus `id`, the ref a pick stores). Only the `kortix` provider flattens; the `providerMode` option is deprecated and ignored |
@@ -1232,7 +1301,7 @@ These project names have no identical twin:
 
 | Legacy name | Use instead | Why |
 |---|---|---|
-| `listProjects()` | `listWorkspaces()` | Lists one account's projects; `listWorkspaces` lists every workspace of the caller |
+| `listProjects()` | `listWorkspaces()` | Lists the projects of every account of a person, or of the one account a credential is bound to; `listWorkspaces` lists every workspace of the caller |
 | `useProjects(accountId?)`, `UseProjectsOptions`, `projectsQueryOptions`, `ProjectsKey`, `ProjectsListKey` | `useWorkspaces()`, `UseWorkspacesOptions` | The same difference, in React |
 | `getProject(id)` | `getWorkspace(id)` | `getWorkspace` adds the role, the state and the settings block |
 | `updateProject(id, input)` | `updateWorkspace(id, input)` | `updateWorkspace` refuses a settings key with `workspace_setting_read_only` |
@@ -1255,14 +1324,15 @@ reason.
 
 | Code | Status | Meaning | Predicate / constant |
 |---|---|---|---|
-| `workspace_not_found` | 404 | No such workspace, an account id on a canonical path, or no access | `WORKSPACE_NOT_FOUND_CODE` |
+| `workspace_not_found` | 404 | No such workspace, an account id on a canonical path, or a workspace being deleted | `WORKSPACE_NOT_FOUND_CODE` |
+| `workspace_access_denied` | 403 | The workspace exists and the caller cannot read it; `requestProjectAccess` asks its managers | — |
 | `workspace_setup_required` | 409 | The workspace has no repository yet: `setupWorkspace` | `WORKSPACE_SETUP_REQUIRED_CODE` |
 | `workspace_deleting` | 409 | The workspace is being deleted: an owner restores it first | `WORKSPACE_DELETING_CODE` |
 | `workspace_has_project` | 409 | The account already holds its workspace's project; the body names it (`workspace_id`). Create another workspace instead | `WORKSPACE_HAS_PROJECT_CODE` · `isWorkspaceHasProjectError` |
 | `workspace_setting_read_only` | 400 | `updateWorkspace` named a setting; `field` and `writer` (the route that writes it) are in the body | `WORKSPACE_SETTING_READ_ONLY_CODE` |
 | `workspace_ambiguous` | 409 | A legacy account key names several workspaces (not split yet): name the workspace id | — |
 | `no_workspace` | 409 | The caller belongs to no workspace | `NO_WORKSPACE_CODE` · `isNoWorkspaceError` |
-| `new_workspace_requires_person` | 403 | Only a person creates a workspace (not an API key, a service account or a workspace key) | — |
+| `new_workspace_requires_person` | 403 | Only a person creates a workspace (not an API key, a service account, a workspace key, an OAuth token bound to one workspace or an App viewer token) | — |
 | `account_creation_restricted` | 403 | The deployment lets only its admin create workspaces | — |
 | `project_limit_reached` | 403 | Deprecated: an older API's plan cap. Current APIs answer `workspace_has_project` | — |
 
@@ -1289,8 +1359,9 @@ const ws = await createWorkspace(
 ```
 
 Codes: `403 account_creation_restricted` (the deployment restricts account
-creation), `403 new_workspace_requires_person` (an API key, a service account
-or a workspace key), `403 impersonation_invalid`, `409 provision_in_flight`
+creation), `403 new_workspace_requires_person` (an API key, a service account,
+a workspace key, an OAuth token bound to one workspace or an App viewer token),
+`403 impersonation_invalid`, `409 provision_in_flight`
 (retry with the same key).
 
 The canonical server-side wrapper shape — catch a 402 and pass the payload
@@ -1383,6 +1454,7 @@ learn it once.
 | `@kortix/sdk/server` | `runWithKortix`, `createScopedKortix`, `getScopedConfig` — per-request config isolation in a Node/Bun backend | imports `node:async_hooks`. Never let it into a browser bundle |
 | `@kortix/sdk/genui/fence`, `@kortix/sdk/genui`, `@kortix/sdk/genui/react` | Generative UI: split `openui` blocks out of text, parse them, render them (see **Generative UI** below) | `genui` and `genui/react` need the optional peers `zod` and `@openuidev/lang-core`; `genui/fence` loads neither |
 | `@kortix/sdk/wire-message-id` | `mintWireMessageId` and `WIRE_MESSAGE_ID`: mint and validate a Kortix message id. Its clock helpers (`wireIdClockDelta`, `mintWireMessageIdAbove`, …) place ids on the 48-bit clock | not a dependency split: the root exports the same names. A server that mints ids loads this one import-free module instead of the whole barrel |
+| `@kortix/sdk/wire-values` | the session wire value sets (`THREAD_STATUSES`, `RUNTIME_CAPABILITIES`, the control-frame types, the prompt reasons, the decision functions). `@kortix/api-contract/wire-values` re-exports it | the root exports the same names; this module loads alone (zero imports) so a server bundles the contract without zod or the barrel |
 | `@kortix/sdk/workspace-search` | `createWorkspaceSearchClient` and its ranking helpers | isolated from the root on purpose |
 | `@kortix/sdk/capture-rules` | the Kortix Capture constants (`CAPTURE_LAYERS`, `CAPTURE_DEVICE_DEFAULTS`, …) | the root exports the same names; this module loads alone |
 | `@kortix/sdk/internal/*` | nothing, in host code | apps/web's zustand stores. Browser-only, **outside semver**, and not on the `window.Kortix` global. Implementation detail that is regrettably visible |
@@ -1522,7 +1594,7 @@ permanently:
 
 | Canonical | Legacy (permanent) | Note |
 |---|---|---|
-| `GET /v1/workspaces` | `GET /v1/projects` | Not an alias: canonical lists every workspace of the caller in one request; legacy lists one account's projects (`?account_id=`) |
+| `GET /v1/workspaces` | `GET /v1/projects` | Not an alias: canonical lists every workspace of the caller in one request; legacy lists the projects of every account of a person, or one account's with `?account_id=` |
 | `POST /v1/workspaces` | `POST /v1/projects/provision` with `new_workspace: true` | Not an alias: `POST /v1/projects` imports a GitHub repository into an account |
 | `GET`/`PATCH /v1/workspaces/:id` | `GET`/`PATCH /v1/projects/:id` | Not an alias: canonical adds `role`, `state` and the settings block, and refuses a settings key |
 | `/v1/workspaces/:id/<sub-path>` | `/v1/projects/:id/<sub-path>` | Same handler |
@@ -1536,9 +1608,9 @@ permanently:
 | `GET`/`POST /v1/workspaces` · `GET`/`PATCH /v1/workspaces/:id` · `/v1/workspaces/:id/tokens` | `/v1/accounts` · `/v1/accounts/:accountId` · `/v1/accounts/tokens` | Not aliases: deprecated in the OpenAPI spec (`x-kortix-replaced-by`) |
 
 **Ids.** A canonical path takes the workspace id only. An account id, an
-unknown id or a workspace the caller cannot read answers `404
-workspace_not_found` on every sub-path, so a caller cannot probe which ids
-exist. A legacy path accepts either id forever. Ids are case-insensitive. An
+unknown id answers `404 workspace_not_found` on every sub-path. A workspace
+the caller cannot read answers `403 workspace_access_denied`, so a person
+holding a link can ask for access. A legacy path accepts either id forever. Ids are case-insensitive. An
 `Account*` function that holds an account id calls the legacy name.
 
 An API older than the workspace routes answers a canonical name with its
@@ -1660,13 +1732,10 @@ for per-release changes.
 
 ### Agent repository access
 
-Agent configuration accepts `repository_access?: boolean`.
-The API stores it in `kortix.yaml` as `agents.<name>.workspace.project_repository` and always writes the value.
-An omitted value is `false`. `GET` returns the resolved value.
-Set `false` to run new sessions without the project repository or repository API access.
-Git, secret, connector, and tool permissions remain separate. Existing sessions retain their saved policy.
-`AgentConfigBlock.workspace` is deprecated. The SDK maps legacy `branch`/`runtime` to the boolean field.
-A legacy `read` write requires an explicit `repository_access` choice; it does not enable read-only repository access.
+A session never checks out the project repository at boot: `/workspace` starts empty.
+An agent that needs the files runs `kortix workspaces clone` in its sandbox.
+`AgentConfigBlock.repository_access` and `AgentConfigBlock.workspace` are deprecated and ignored.
+The SDK neither sends nor returns them, and the API drops them from `kortix.yaml` on the next write.
 
 
 ### Project provider and model access
@@ -1711,39 +1780,27 @@ subscription messages. This also corrects historical runtime costs. Token
 counts remain available. Mixed sessions retain paid API costs; OpenAI API
 models remain billable. Subscription coverage does not include sandbox compute.
 
-### Durable prompt placement
+### Prompt delivery: one mode, steer
 
-`createSessionPrompt` and `useSessionPrompts().enqueue` accept an optional
-`placement: 'transcript' | 'composer'`. `transcript` (Quick Queue) runs before
-every `composer` (Queue List) entry and ends the active response after its
-current tool call. `composer` waits for the active response to finish. Each
-placement keeps submission order. A row without placement keeps its submission
-order ahead of `composer` entries and is presented as `composer`.
+A prompt sent while a turn runs steers that turn: the running turn reads it at
+its next step, after its current tool call, and does not stop. A prompt sent
+while no turn runs starts one. The server decides this for every row;
+`createSessionPrompt`, `enqueue` and `send` deliver the same way.
 
-### Prompt delivery: steer, queue, interrupt
+`delivery: 'steer' | 'queue' | 'interrupt'` and `placement: 'transcript' |
+'composer'` are still accepted. `delivery` changes nothing and every row reads
+`delivery: 'steer'`. `placement` only says where a host draws a waiting row:
+`transcript` as a bubble, `composer` in the list above the composer.
 
-`createSessionPrompt` and `enqueue` also accept `delivery: 'steer' | 'queue' |
-'interrupt'`. It decides how a prompt reaches a running turn:
-
-- `steer`: the running turn reads the prompt at its next step boundary. The
-  turn does not stop.
-- `queue` (Queue List): the prompt waits for the turn to end.
-- `interrupt` (Quick Queue): the turn ends after its running tool, then the
-  prompt runs.
-
-With no turn running, every mode starts a turn. When only `delivery` is given,
-the SDK also sends the placement it implies (`interrupt` → `transcript`, the
-others → `composer`), so an API built before steering treats a steer prompt as
-a Queue List entry.
-
-A steer prompt falls back to `queue` when the runtime cannot take messages
-mid-turn, when another member's turn is running, or when the turn ended first.
-The row then reads `delivery: 'queue'` and `steer_fallback: 'unsupported' |
-'not_prompter' | 'turn_ended'`.
+Anyone who may send to the session steers its running turn. Rows reach the
+agent one at a time, in send order. A row that cannot reach the running turn
+starts the next turn and carries `steer_fallback: 'unsupported' | 'turn_ended'`.
+(`not_prompter` is no longer written; old rows may carry it.)
 
 `interruptSessionPrompt` (`session.prompts.interrupt`,
-`useSessionPrompts().interrupt`) is "Stop and send": it turns a row still
-waiting in the queue into Quick Queue. A row already on the wire answers `409`.
+`useSessionPrompts().interrupt`) is "Send now": a row still waiting goes next,
+ahead of older waiting rows. It does not stop the turn. A row already on the
+wire answers `409`.
 
 `SessionPrompt.full_text` preserves complete text for rendering after reload;
 `text` remains the bounded preview. List responses expose attachment names and
@@ -1761,10 +1818,10 @@ after admission succeeds. A confirmed active turn clears the pending presentatio
 even if the previous inbox snapshot still lists that prompt. Runtime activity
 preserves the active turn's message ID during this handoff.
 
-Web sends Enter while a turn runs as **steer**, Command/Ctrl+Enter as **Queue
-List**, and "Stop and send" on a queued row as **Quick Queue**. Enter on an idle
-session starts a turn. Queued entries advance automatically; Quick Queue entries run first. Queue List entries stay editable
-until delivery begins. Stop pauses pending entries; Resume releases that hold.
+Web sends Enter and Command/Ctrl+Enter the same way: a steer while a turn
+runs, a new turn while idle. Waiting entries stay editable until delivery
+begins. Stop ends the turn; the entries that waited go out together as the
+next turn.
 
 Pass the inbox IDs, in queue order, as `pendingMessageIds` to
 `groupMessagesIntoTurns(messages, { pendingMessageIds })`. Client-minted wire
@@ -1781,6 +1838,13 @@ a different turn ID or timestamp.
 client). Every write of an inbox row arrives as a `kortix.control.queue` frame,
 whichever API replica served the write. The `GET .../prompts` poll runs only
 while that stream is not connected, and a reconnect reads the list once.
+
+A prompt enqueued while the browser is offline waits for the network: the POST
+goes out once, on reconnect. Until then `useSessionUnsentPrompts(sessionId)`
+lists its wire message id, and the hook files no "working" claim, so a host
+draws "Not sent yet" instead of a running turn. `useNetworkOnline()` is the
+browser's online signal. A held prompt lives in the page only: closing the tab
+before the network returns loses it.
 
 
 ### Why a turn ended
@@ -1892,3 +1956,19 @@ CLI: `kortix sessions model get [session-id]`, `set [session-id] <model>`,
 and `switch [session-id] <model> --prompt "Continue verification" --idempotency-key verification-model-1`.
 The new verbs default to `KORTIX_SESSION_ID`. The existing `sessions model <session-id> <model>` remains supported.
 Never send a peer message to yourself to continue a model switch.
+
+### Artifact gallery folders
+
+`listArtifactFolders`, `createArtifactFolder`, `updateArtifactFolder`, and
+`deleteArtifactFolder` organize a workspace's artifact gallery. Folder names
+are workspace-visible. Only the creator or a caller with artifact management
+permission can edit or delete a folder. Folder membership grants no access.
+
+Pass `folder_id` when publishing, sharing, or updating an artifact. Pass `null`
+to move it to the root. `listArtifacts(projectId, { folder_id: 'root' })` lists
+unfiled artifacts; omit the filter to search all folders. Folders nest: pass
+`parent_folder_id` to create a folder inside another or to move it (`null`:
+the root); a move into its own subtree returns `409`. Deleting a folder moves
+its subfolders and artifacts up one level. Artifact IDs, Files paths, and links stay
+unchanged. React consumers use `useArtifactFolders` and
+`useArtifactFolderMutations` from `@kortix/sdk/react`.

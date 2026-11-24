@@ -59,36 +59,24 @@ flow(
   "SNAP-2",
   {
     domain: "sandboxes",
-    // This deletes the content-addressed default image shared by other projects.
-    global: true,
     requires: ["sandbox"],
     routes: ["POST /v1/workspaces/:projectId/snapshots/rebuild"],
   },
   async (ctx) => {
     const p = await ctx.fixtures.project();
     await ctx.step(
-      "OWNER rebuild → 202 started, or 409 SNAPSHOT_IN_USE while running sandboxes use the image",
+      "OWNER rebuilding the shared platform default → 403 TEMPLATE_SHARED",
       async () => {
         const r = await ctx.client
           .as(ctx.P.OWNER)
           .post("/v1/workspaces/:projectId/snapshots/rebuild", {}, { params: { projectId: p.id } });
-        // 202: every enabled provider dropped the image and a rebuild started.
-        // 409 SNAPSHOT_IN_USE: the provider refuses to delete an image that
-        // running sandboxes still use. Platinum does this (`template_in_use`);
-        // the legacy Daytona provider does not. The shared default image is in use whenever
-        // another flow's session is alive, so both answers are the product
-        // contract. A generic 503/502 is a provider failure and fails here.
-        // Never wait on the build.
-        r.status([202, 409]);
-        if (r.statusCode === 202) {
-          r.body().has("$.status", "started");
-          const providers = r.json<{ providers?: unknown[] }>()?.providers ?? [];
-          if (providers.length === 0) throw new Error(`202 without a started provider: ${r.text()}`);
-        } else {
-          r.body().has("$.code", "SNAPSHOT_IN_USE");
-          const inUse = r.json<{ in_use?: number }>()?.in_use ?? 0;
-          if (!(inUse > 0)) throw new Error(`409 without an in_use count: ${r.text()}`);
-        }
+        // The omitted slug resolves to the shared, project-independent platform
+        // image every tenant's sessions boot from. A project-scoped caller —
+        // even the account owner — is refused, and the answer never carries the
+        // provider's cross-tenant in-use count (KRTX-4465). Only a platform
+        // admin may rebuild the shared image (202 started / 409 SNAPSHOT_IN_USE).
+        r.status(403);
+        r.body().has("$.code", "TEMPLATE_SHARED");
       },
     );
     await ctx.step("NONMEMBER cannot rebuild → 403/404", async () => {
@@ -382,6 +370,40 @@ flow(
       const r = await ctx.client
         .as(ctx.P.ANON)
         .get("/v1/workspaces/:projectId/sandboxes", { params: { projectId: p.id } });
+      r.status(401);
+    });
+  },
+);
+
+// ─── SBX-7: reconcile the manifest's templates (kortix ship) ──────────────
+// `kortix ship` calls it after its push. A local profile has no template
+// provider (503); a provider-backed target reads kortix.yaml at the fetched
+// tip and names each project template (200). Never waits on a build.
+flow(
+  "SBX-7",
+  {
+    domain: "sandboxes",
+    routes: ["POST /v1/workspaces/:projectId/sandbox-templates/reconcile"],
+  },
+  async (ctx) => {
+    const p = await ctx.fixtures.project();
+    await ctx.step("OWNER reconciles → 200 with a templates list, or 503 with no provider", async () => {
+      const r = await ctx.client
+        .as(ctx.P.OWNER)
+        .post("/v1/workspaces/:projectId/sandbox-templates/reconcile", {}, { params: { projectId: p.id } });
+      r.status([200, 503]);
+      if (r.statusCode === 200) r.body().exists("$.templates").exists("$.started");
+    });
+    await ctx.step("NONMEMBER → 403/404", async () => {
+      const r = await ctx.client
+        .as(ctx.P.NONMEMBER)
+        .post("/v1/workspaces/:projectId/sandbox-templates/reconcile", {}, { params: { projectId: p.id } });
+      r.status([403, 404]);
+    });
+    await ctx.step("ANON → 401", async () => {
+      const r = await ctx.client
+        .as(ctx.P.ANON)
+        .post("/v1/workspaces/:projectId/sandbox-templates/reconcile", {}, { params: { projectId: p.id } });
       r.status(401);
     });
   },

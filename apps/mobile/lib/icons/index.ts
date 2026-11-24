@@ -11,6 +11,7 @@
  */
 import { AlarmIcon as AlarmGlyph } from 'phosphor-react-native/src/icons/Alarm';
 import { ArchiveIcon as ArchiveGlyph } from 'phosphor-react-native/src/icons/Archive';
+import { ArrowBendUpLeftIcon as ArrowBendUpLeftGlyph } from 'phosphor-react-native/src/icons/ArrowBendUpLeft';
 import { ArrowClockwiseIcon as ArrowClockwiseGlyph } from 'phosphor-react-native/src/icons/ArrowClockwise';
 import { ArrowCounterClockwiseIcon as ArrowCounterClockwiseGlyph } from 'phosphor-react-native/src/icons/ArrowCounterClockwise';
 import { ArrowDownIcon as ArrowDownGlyph } from 'phosphor-react-native/src/icons/ArrowDown';
@@ -20,16 +21,17 @@ import { ArrowRightIcon as ArrowRightGlyph } from 'phosphor-react-native/src/ico
 import { ArrowSquareOutIcon as ArrowSquareOutGlyph } from 'phosphor-react-native/src/icons/ArrowSquareOut';
 import { ArrowUpIcon as ArrowUpGlyph } from 'phosphor-react-native/src/icons/ArrowUp';
 import { ArrowUpRightIcon as ArrowUpRightGlyph } from 'phosphor-react-native/src/icons/ArrowUpRight';
-import { ArrowsDownUpIcon as ArrowsDownUpGlyph } from 'phosphor-react-native/src/icons/ArrowsDownUp';
 import { ArrowsInSimpleIcon as ArrowsInSimpleGlyph } from 'phosphor-react-native/src/icons/ArrowsInSimple';
 import { ArrowsOutSimpleIcon as ArrowsOutSimpleGlyph } from 'phosphor-react-native/src/icons/ArrowsOutSimple';
 import { BellIcon as BellGlyph } from 'phosphor-react-native/src/icons/Bell';
 import { BookOpenIcon as BookOpenGlyph } from 'phosphor-react-native/src/icons/BookOpen';
 import { BrainIcon as BrainGlyph } from 'phosphor-react-native/src/icons/Brain';
+import { BrowserIcon as BrowserGlyph } from 'phosphor-react-native/src/icons/Browser';
 import { BuildingsIcon as BuildingsGlyph } from 'phosphor-react-native/src/icons/Buildings';
 import { CalendarDotsIcon as CalendarDotsGlyph } from 'phosphor-react-native/src/icons/CalendarDots';
 import { CalendarIcon as CalendarGlyph } from 'phosphor-react-native/src/icons/Calendar';
 import { CameraIcon as CameraGlyph } from 'phosphor-react-native/src/icons/Camera';
+import { CardsThreeIcon as CardsThreeGlyph } from 'phosphor-react-native/src/icons/CardsThree';
 import { CaretDownIcon as CaretDownGlyph } from 'phosphor-react-native/src/icons/CaretDown';
 import { CaretLeftIcon as CaretLeftGlyph } from 'phosphor-react-native/src/icons/CaretLeft';
 import { CaretRightIcon as CaretRightGlyph } from 'phosphor-react-native/src/icons/CaretRight';
@@ -98,6 +100,7 @@ import { FingerprintIcon as FingerprintGlyph } from 'phosphor-react-native/src/i
 import { FolderIcon as FolderGlyph } from 'phosphor-react-native/src/icons/Folder';
 import { FolderOpenIcon as FolderOpenGlyph } from 'phosphor-react-native/src/icons/FolderOpen';
 import { FolderPlusIcon as FolderPlusGlyph } from 'phosphor-react-native/src/icons/FolderPlus';
+import { FolderSimpleDashedIcon as FolderSimpleDashedGlyph } from 'phosphor-react-native/src/icons/FolderSimpleDashed';
 import { FunnelIcon as FunnelGlyph } from 'phosphor-react-native/src/icons/Funnel';
 import { GearSixIcon as GearSixGlyph } from 'phosphor-react-native/src/icons/GearSix';
 import { GitBranchIcon as GitBranchGlyph } from 'phosphor-react-native/src/icons/GitBranch';
@@ -196,6 +199,7 @@ import { withAppWeight, withFixedWeight } from './bind';
 
 export const AlarmIcon = withAppWeight(AlarmGlyph, 'AlarmIcon');
 export const ArchiveIcon = withAppWeight(ArchiveGlyph, 'ArchiveIcon');
+export const ArrowBendUpLeftIcon = withAppWeight(ArrowBendUpLeftGlyph, 'ArrowBendUpLeftIcon');
 export const ArrowClockwiseIcon = withAppWeight(ArrowClockwiseGlyph, 'ArrowClockwiseIcon');
 export const ArrowCounterClockwiseIcon = withAppWeight(ArrowCounterClockwiseGlyph, 'ArrowCounterClockwiseIcon');
 export const ArrowDownIcon = withAppWeight(ArrowDownGlyph, 'ArrowDownIcon');
@@ -205,16 +209,17 @@ export const ArrowRightIcon = withAppWeight(ArrowRightGlyph, 'ArrowRightIcon');
 export const ArrowSquareOutIcon = withAppWeight(ArrowSquareOutGlyph, 'ArrowSquareOutIcon');
 export const ArrowUpIcon = withAppWeight(ArrowUpGlyph, 'ArrowUpIcon');
 export const ArrowUpRightIcon = withAppWeight(ArrowUpRightGlyph, 'ArrowUpRightIcon');
-export const ArrowsDownUpIcon = withAppWeight(ArrowsDownUpGlyph, 'ArrowsDownUpIcon');
 export const ArrowsInSimpleIcon = withAppWeight(ArrowsInSimpleGlyph, 'ArrowsInSimpleIcon');
 export const ArrowsOutSimpleIcon = withAppWeight(ArrowsOutSimpleGlyph, 'ArrowsOutSimpleIcon');
 export const BellIcon = withAppWeight(BellGlyph, 'BellIcon');
 export const BookOpenIcon = withAppWeight(BookOpenGlyph, 'BookOpenIcon');
 export const BrainIcon = withAppWeight(BrainGlyph, 'BrainIcon');
+export const BrowserIcon = withAppWeight(BrowserGlyph, 'BrowserIcon');
 export const BuildingsIcon = withAppWeight(BuildingsGlyph, 'BuildingsIcon');
 export const CalendarDotsIcon = withAppWeight(CalendarDotsGlyph, 'CalendarDotsIcon');
 export const CalendarIcon = withAppWeight(CalendarGlyph, 'CalendarIcon');
 export const CameraIcon = withAppWeight(CameraGlyph, 'CameraIcon');
+export const CardsThreeIcon = withAppWeight(CardsThreeGlyph, 'CardsThreeIcon');
 export const CaretDownIcon = withAppWeight(CaretDownGlyph, 'CaretDownIcon');
 export const CaretLeftIcon = withAppWeight(CaretLeftGlyph, 'CaretLeftIcon');
 export const CaretRightIcon = withAppWeight(CaretRightGlyph, 'CaretRightIcon');
@@ -287,6 +292,7 @@ export const FingerprintIcon = withAppWeight(FingerprintGlyph, 'FingerprintIcon'
 export const FolderIcon = withAppWeight(FolderGlyph, 'FolderIcon');
 export const FolderOpenIcon = withAppWeight(FolderOpenGlyph, 'FolderOpenIcon');
 export const FolderPlusIcon = withAppWeight(FolderPlusGlyph, 'FolderPlusIcon');
+export const FolderSimpleDashedIcon = withAppWeight(FolderSimpleDashedGlyph, 'FolderSimpleDashedIcon');
 // Stacked-folders glyph drawn by hand; Phosphor's Folders is a different shape.
 export { KortixFoldersIcon as FoldersIcon } from './folders';
 export const FunnelIcon = withAppWeight(FunnelGlyph, 'FunnelIcon');

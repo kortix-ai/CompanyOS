@@ -37,6 +37,7 @@ import {
 } from '../sandbox-turn-lifecycle';
 import { drainSessionLifecycleQueue } from '../session-lifecycle';
 import { confirmInboxPromptConsumed, steerTargetAtTurnEnd } from '../session-lifecycle/consumption';
+import { requeueDroppedSteer } from '../session-lifecycle/redelivery';
 import { reconcileForwardedTurnsAtEnd } from '../session-lifecycle/forwarded-strand-reconcile';
 import { promoteNextInboxRow } from '../session-lifecycle/store';
 import { generateSessionTitleFromFirstPrompt } from '../session-title-generate';
@@ -494,7 +495,10 @@ async function publishTurnEnd(
       activeTurnCount: turnCompletion.activeTurnCount,
     });
   }
-  const ok = relayEnd ? await relayTurnEnd(sessionId, status, errorInfo) : false;
+  // The turn's last assistant text (kortixd sends it on `end`): the reply a
+  // chat thread gets when the agent ran no `slack send` of its own.
+  const finalText = status === 'idle' && typeof body.text === 'string' ? body.text : undefined;
+  const ok = relayEnd ? await relayTurnEnd(sessionId, status, errorInfo, finalText) : false;
   // A Telegram chat has no live turn that shows the error. Tell it when no Slack
   // or Teams turn carried the end. The gate is the push's own (turnEndPushType):
   // an end that closed a root turn in THIS call with a non-abort error, so once
@@ -554,17 +558,21 @@ export async function settleTurnEnd(
       }),
     );
   }
-  // Started beside the promotion, awaited before the acknowledgement.
-  const sessionList = refreshSessionListAtTurnEnd(ctx);
+  // Started beside the promotion so the box read overlaps the promote's DB
+  // work. Drain-tracked, never awaited: the ack must not wait on a box (KRTX-4682).
+  trackDetached(refreshSessionListAtTurnEnd(ctx));
   const promotedPromptId = await promoteAfterTurnEnd(ctx, body, settled);
   const response = await publishTurnEnd(c, ctx, body, settled, promotedPromptId);
-  await sessionList;
   // THE TURN ENDED, SO A BACKGROUND SUBAGENT'S PARENT HEARS IT (subagent-notice.ts).
   // After the promotion: a prompt queued for this child starts its next turn
   // first, so the child is not finished yet. Tracked, never awaited.
   // A teammate (agent teams: `team_lead`) always tells its lead.
+  // Also for `already_closed` while no turn runs, as below: the parent's agents
+  // line polls its children, and that session-list read closes the child's turn
+  // just before this frame. The notice key carries the turn id, so a re-sent end
+  // writes nothing.
   if (
-    settled.turnCompletion.outcome === 'closed' &&
+    turnEndWorkDue(settled.turnCompletion) &&
     ctx.childSession &&
     (ctx.turnStreamMetadata[SUBAGENT_NOTIFY_PARENT_KEY] === true || typeof ctx.turnStreamMetadata[TEAM_LEAD_KEY] === 'string')
   ) {
@@ -595,10 +603,13 @@ export async function settleTurnEnd(
 /**
  * THE TURN ENDED, SO ITS SUBAGENT CHILDREN EXIST — store the box's state
  * document, which writes the session's list of runtime conversations
- * (`writeRuntimeSessionList`). Awaited before the turn end is acknowledged:
- * the daemon re-sends an unacknowledged turn end, so an API that stops
- * mid-write (a deploy) gets the turn end again and writes the list then
- * (R7.4). Never throws.
+ * (`writeRuntimeSessionList`). Drain-tracked, never awaited by the
+ * acknowledgement: the read crosses the sandbox ingress and the daemon
+ * (`/kortix/runtime/state`, 8 s budget), and a slow box held every turn end
+ * until the 25 s request deadline 503'd it (KRTX-4682). The write is
+ * idempotent and self-healing: a lost ACK gets the turn end re-sent (R7.4),
+ * and a write lost to an API restart is rewritten by the next pull-through
+ * read or the session's next turn end. Never throws.
  */
 async function refreshSessionListAtTurnEnd(ctx: TurnEndContext): Promise<void> {
   const userId = ctx.turnStreamSession.createdBy;
@@ -651,6 +662,29 @@ export async function readSteer(
   const messageId = body.turn_message_id?.trim();
   if (!messageId) return c.json({ error: 'turn_message_id is required' }, 400);
   const outcome = await confirmInboxPromptConsumed(sessionId, messageId);
+  return c.json({ ok: outcome !== 'no_prompt', outcome });
+}
+
+// A stopped turn DROPPED a steered message it never read (pi): its inbox row
+// goes back on the queue and starts the next turn (`requeueDroppedSteer`). A
+// row still mid-delivery answers 503, so the daemon retries once the POST has
+// come back. Sandbox credential only, like `steer_read`.
+export async function dropSteer(
+  c: RelayResponder,
+  body: TurnStreamBody,
+  sessionId: string,
+  authenticatedSandboxId: string | null,
+): Promise<Response | null> {
+  if (!authenticatedSandboxId) {
+    return requireSandboxCredential(c, authenticatedSandboxId, 'steer_dropped');
+  }
+  const messageId = body.turn_message_id?.trim();
+  if (!messageId) return c.json({ error: 'turn_message_id is required' }, 400);
+  const outcome = await requeueDroppedSteer(sessionId, messageId);
+  if (outcome === 'pending_delivery') return c.json({ ok: false, outcome }, 503);
+  if (outcome === 'requeued' || outcome === 'exhausted') {
+    logger.info('[turn-stream] a stopped turn dropped a steered prompt', { session_id: sessionId, message_id: messageId, outcome });
+  }
   return c.json({ ok: outcome !== 'no_prompt', outcome });
 }
 

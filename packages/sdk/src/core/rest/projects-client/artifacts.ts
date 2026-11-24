@@ -9,8 +9,8 @@
 
 import { ApiError, backendApi } from '../../http/api-client';
 import { authenticatedFetch } from '../../http/auth';
+import { appendQuery, platformApiBase } from '../../http/url';
 import { platformConfig } from '../../http/config';
-import { stripTrailingSlashes } from '../../../platform/strings';
 import type { SessionParticipants } from './sessions';
 import { unwrap } from './shared';
 
@@ -28,6 +28,8 @@ export interface ArtifactPerson {
 
 export interface Artifact {
   artifact_id: string;
+  /** Gallery folder only; does not change Files paths or access. */
+  folder_id?: string | null;
   project_id: string;
   title: string;
   description: string | null;
@@ -62,6 +64,7 @@ export interface Artifact {
 
 /** Where an artifact is grouped. Grouping only: it grants nothing. Null clears a field. */
 export interface ArtifactBindingInput {
+  folder_id?: string | null;
   /** A space slug. */
   space?: string | null;
   /** An agent name. Default on publish/share from a session: that session's agent. */
@@ -69,6 +72,8 @@ export interface ArtifactBindingInput {
 }
 
 export interface ListArtifactsOptions {
+  /** Omit for all folders; use root for unfiled artifacts. */
+  folder_id?: string;
   scope?: ArtifactListScope;
   type?: ArtifactType;
   q?: string;
@@ -158,20 +163,18 @@ export interface UpdateArtifactInput extends ArtifactBindingInput {
 
 const base = (projectId: string) => `/workspaces/${projectId}/artifacts`;
 
-function query(params: Record<string, string | number | undefined>): string {
-  const search = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== '') search.set(key, String(value));
-  const text = search.toString();
-  return text ? `?${text}` : '';
-}
-
 export async function listArtifactTypes(projectId: string) {
   return unwrap(await backendApi.get<{ types: ArtifactTypeInfo[] }>(`${base(projectId)}/types`)).types;
 }
 
 export async function listArtifacts(projectId: string, options: ListArtifactsOptions = {}) {
   const { agents, unbound, ...rest } = options;
-  const search = new URLSearchParams(query(rest).slice(1));
+  // The one URLSearchParams build left in the unit: repeated `agent` keys,
+  // appendQuery cannot encode those and the rest keeps the options record's order.
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(rest)) {
+    if (value !== undefined && value !== '') search.set(key, String(value));
+  }
   for (const agent of agents ?? []) search.append('agent', agent);
   if (unbound) search.set('unbound', '1');
   const text = search.toString();
@@ -197,8 +200,9 @@ export async function getLinkPreview(projectId: string, url: string) {
   return unwrap(await backendApi.get<LinkPreview>(`/workspaces/${projectId}/link-preview?url=${encodeURIComponent(url)}`));
 }
 
-export async function getArtifact(projectId: string, artifactId: string, options: { version?: string } = {}) {
-  return unwrap(await backendApi.get<ArtifactDetail>(`${base(projectId)}/${artifactId}${query(options)}`));
+export async function getArtifact(projectId: string, artifactId: string, options: { version?: string; showErrors?: boolean } = {}) {
+  const { showErrors, ...query } = options;
+  return unwrap(await backendApi.get<ArtifactDetail>(`${base(projectId)}/${artifactId}${appendQuery(query)}`, { showErrors }));
 }
 
 export async function createArtifact(projectId: string, input: PublishArtifactInput) {
@@ -245,7 +249,7 @@ export async function readArtifactFile(
   artifactId: string,
   options: { path?: string; version?: string; signal?: AbortSignal } = {},
 ): Promise<Blob> {
-  const url = `${stripTrailingSlashes(platformConfig().backendUrl)}${base(projectId)}/${artifactId}/content${query({ path: options.path, version: options.version })}`;
+  const url = `${platformApiBase(platformConfig().backendUrl)}${base(projectId)}/${artifactId}/content${appendQuery({ path: options.path, version: options.version })}`;
   const response = await authenticatedFetch(url, { signal: options.signal });
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { error?: string; message?: string } | null;
@@ -278,4 +282,38 @@ export function parseArtifactUrl(url: string): { projectId: string | null; artif
   if (inProject) return { projectId: inProject[1]!.toLowerCase(), artifactId: inProject[2]!.toLowerCase() };
   const shared = ARTIFACT_PUBLIC.exec(path);
   return shared ? { projectId: null, artifactId: shared[1]!.toLowerCase() } : null;
+}
+
+/** A workspace-visible gallery folder. Membership never grants artifact access. */
+export interface ArtifactFolder {
+  folder_id: string;
+  project_id: string;
+  /** The folder this one sits in; null at the gallery root. */
+  parent_folder_id: string | null;
+  name: string;
+  icon: string | null;
+  icon_glyph: { name: string; color: string } | null;
+  can_manage: boolean;
+}
+
+export interface ArtifactFolderInput {
+  name: string;
+  /** Create inside, or move into, this folder; null moves it to the gallery root. */
+  parent_folder_id?: string | null;
+  icon?: string | null;
+  icon_glyph?: { name: string; color: string } | null;
+}
+
+export async function listArtifactFolders(projectId: string): Promise<ArtifactFolder[]> {
+  return unwrap(await backendApi.get<{ folders: ArtifactFolder[] }>(`${base(projectId)}/folders`)).folders;
+}
+export async function createArtifactFolder(projectId: string, input: ArtifactFolderInput): Promise<ArtifactFolder> {
+  return unwrap(await backendApi.post<ArtifactFolder>(`${base(projectId)}/folders`, input));
+}
+export async function updateArtifactFolder(projectId: string, folderId: string, input: Partial<ArtifactFolderInput>): Promise<ArtifactFolder> {
+  return unwrap(await backendApi.patch<ArtifactFolder>(`${base(projectId)}/folders/${encodeURIComponent(folderId)}`, input));
+}
+/** Removes the folder; its subfolders and artifacts move up one level. */
+export async function deleteArtifactFolder(projectId: string, folderId: string): Promise<void> {
+  unwrap(await backendApi.delete(`${base(projectId)}/folders/${encodeURIComponent(folderId)}`));
 }

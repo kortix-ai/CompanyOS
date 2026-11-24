@@ -1353,6 +1353,40 @@ test('listSessionConnectRequests reads the connectors this session is waiting on
   expect(result).toEqual([{ slug: 'gmail', app: 'gmail', provider: 'composio', connected: false }]);
 });
 
+test('listSessionConnectRequests: a viewer who may not connect accounts (403) gets the error, not the global error toast', async () => {
+  // A member opening a session someone shared with them (a Space) reads this
+  // in the background; the card stays hidden, so a toast is noise.
+  const errors: unknown[] = [];
+  configureKortix({ backendUrl: 'http://test.local', getToken: async () => 'tok', onError: (e) => errors.push(e) });
+  try {
+    nextResponse = { status: 403, body: { error: 'forbidden (workspace.connector.write)' } };
+    await expect(listSessionConnectRequests('P1', 'S1')).rejects.toBeTruthy();
+    expect(errors).toHaveLength(0);
+  } finally {
+    configureKortix({ backendUrl: 'http://test.local', getToken: async () => 'tok' });
+  }
+});
+
+test('listSessionConnectRequests types the account each request lands on', async () => {
+  const row = {
+    slug: 'gmail',
+    name: 'Gmail',
+    app: 'gmail',
+    provider: 'composio',
+    connected: true,
+    connection_id: 'C1',
+    owner_type: 'project',
+    label: 'person@example.test',
+    connected_as: 'person@example.test',
+  };
+  nextResponse = { status: 200, body: { connectors: [row] } };
+  const [request] = await listSessionConnectRequests('P1', 'S1');
+  // The fields a host needs to finish the sign-in and show who it is.
+  const typed: { name?: string; connection_id?: string; owner_type?: string; label?: string; connected_as?: string | null } =
+    request!;
+  expect(typed).toEqual(row);
+});
+
 test('listSessionConnectRequests returns an empty list when the API omits the field', async () => {
   nextResponse = { status: 200, body: {} };
   expect(await listSessionConnectRequests('P1', 'S1')).toEqual([]);

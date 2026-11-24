@@ -1,11 +1,18 @@
 'use client';
 
-import * as TabsPrimitive from '@radix-ui/react-tabs';
+import { Tabs as TabsPrimitive } from '@base-ui/react/tabs';
 import { cva } from 'class-variance-authority';
 import * as React from 'react';
 
-import { SlidingTabIndicator } from './sliding-tab-indicator';
+import {
+  asChildRender,
+  composeRefs,
+  controlRender,
+  stateRender,
+  useNativeButton,
+} from '../lib/base-ui-compat';
 import { cn } from '../lib/utils';
+import { SlidingTabIndicator } from './sliding-tab-indicator';
 
 const tabsTriggerPaddingVariants = cva('', {
   variants: {
@@ -59,7 +66,7 @@ type TabsSize = TabsTriggerSize | 'lg';
  * `default` is the filled pill; `outline` is a bordered active chip;
  * `segmented` is the raised surface chip of a segmented control.
  */
-type TabsTriggerVariant = 'default' | 'outline' | 'segmented';
+type TabsTriggerVariant = 'default' | 'outline' | 'secondary' | 'segmented';
 
 const tabsListHeightClasses: Record<TabsSize, string> = {
   default: 'h-9',
@@ -89,7 +96,7 @@ const tabsListUnderlineBaseClasses =
  * name. `underline` is the flat rule. A vertical list (a settings rail) is
  * never segmented.
  */
-type TabsListType = 'default' | 'underline' | 'segmented';
+type TabsListType = 'default' | 'underline' | 'secondary' | 'segmented';
 
 /**
  * Segmented track + chip. Radii are concentric: the track is `rounded-md` (8px)
@@ -122,48 +129,87 @@ const TabsSizeContext = React.createContext<TabsSize>('default');
 /** Lets `TabsTrigger` adapt to a vertical `TabsList` without every caller re-passing orientation. */
 const TabsOrientationContext = React.createContext<'horizontal' | 'vertical'>('horizontal');
 
+/** Radix: `automatic` selects a tab when it gets focus, `manual` on press only. */
+const TabsActivationContext = React.createContext<'automatic' | 'manual'>('automatic');
+const TabsRootOrientationContext = React.createContext<'horizontal' | 'vertical'>('horizontal');
+/** Radix's ids: `<base>-trigger-<value>` and `<base>-content-<value>`, so SSR markup links tab and panel. */
+const TabsBaseIdContext = React.createContext('');
+/** Selects a tab. Radix selects on primary-button mousedown, before the click. */
+const TabsSelectContext = React.createContext<(value: string) => void>(() => {});
+
+const tabId = (base: string, value: string) => `${base}-trigger-${value}`;
+const panelId = (base: string, value: string) => `${base}-content-${value}`;
+
+const activeState = (s: { active?: boolean; hidden?: boolean; disabled?: boolean }) =>
+  s.active === false || s.hidden ? 'inactive' : 'active';
+
+type TabsProps = Omit<React.ComponentProps<'div'>, 'defaultValue' | 'dir'> & {
+  value?: string;
+  defaultValue?: string;
+  onValueChange?: (value: string) => void;
+  orientation?: 'horizontal' | 'vertical';
+  activationMode?: 'automatic' | 'manual';
+  dir?: 'ltr' | 'rtl';
+};
+
 function Tabs({
   className,
   value,
   defaultValue,
   onValueChange,
+  activationMode = 'automatic',
+  orientation = 'horizontal',
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.Root>) {
+}: TabsProps) {
   const [uncontrolledValue, setUncontrolledValue] = React.useState(defaultValue ?? '');
   const activeValue = value !== undefined ? value : uncontrolledValue;
 
+  const baseId = React.useId();
   const handleValueChange = React.useCallback(
     (next: string) => {
+      if (next === activeValue) return;
       if (value === undefined) {
         setUncontrolledValue(next);
       }
       onValueChange?.(next);
     },
-    [onValueChange, value],
+    [activeValue, onValueChange, value],
   );
 
   return (
     <TabsActiveValueContext.Provider value={activeValue}>
-      <TabsPrimitive.Root
-        data-slot="tabs"
-        className={cn('flex flex-col gap-2', className)}
-        value={value}
-        defaultValue={defaultValue}
-        onValueChange={handleValueChange}
-        {...props}
-      />
+      <TabsActivationContext.Provider value={activationMode}>
+        <TabsRootOrientationContext.Provider value={orientation}>
+          <TabsBaseIdContext.Provider value={baseId}>
+            <TabsSelectContext.Provider value={handleValueChange}>
+              <TabsPrimitive.Root
+                data-slot="tabs"
+                data-orientation={orientation}
+                className={cn('flex flex-col gap-2', className)}
+                orientation={orientation}
+                {...(props as Omit<typeof props, 'ref'>)}
+                // Always controlled: Base UI selects its first tab when it owns an empty value; Radix selects none.
+                value={activeValue}
+                onValueChange={(next) => handleValueChange(String(next))}
+              />
+            </TabsSelectContext.Provider>
+          </TabsBaseIdContext.Provider>
+        </TabsRootOrientationContext.Provider>
+      </TabsActivationContext.Provider>
     </TabsActiveValueContext.Provider>
   );
 }
 
-interface TabsListProps extends React.ComponentProps<typeof TabsPrimitive.List> {
+interface TabsListProps extends React.ComponentProps<'div'> {
+  /** Radix `loop`: arrow keys wrap from the last tab to the first. Default `true`. */
+  loop?: boolean;
   type?: TabsListType;
   /**
    * `segmented` renders the segmented control (recessed track + raised chip):
    * `<TabsList variant="segmented">`. Same as `type="segmented"`; `variant`
    * wins when both are set.
    */
-  variant?: 'default' | 'segmented';
+  variant?: 'default' | 'secondary' | 'segmented';
   size?: TabsSize;
   /** Active underline stroke. Only applies when `type="underline"`. Default `sm`. */
   underlineSize?: TabsUnderlineSize;
@@ -171,8 +217,8 @@ interface TabsListProps extends React.ComponentProps<typeof TabsPrimitive.List> 
   /**
    * `vertical` stacks triggers full-width in a column (e.g. a settings
    * rail) instead of laying them out inline. This is a styling switch only —
-   * `aria-orientation` still comes from `orientation` on the `Tabs` root, per
-   * Radix. Default `horizontal`.
+   * `aria-orientation` still comes from `orientation` on the `Tabs` root.
+   * Default `horizontal`.
    */
   orientation?: 'horizontal' | 'vertical';
 }
@@ -182,39 +228,58 @@ function TabsList(props: TabsListProps) {
 }
 
 function TabsListRenderer({
-  className, type: typeProp = 'default', variant, size = 'default',
-  underlineSize = 'sm', animate = 'none', orientation, compact = false,
-  children, ...props
-}: TabsListProps & { compact?: boolean }) {
+  className,
+  type: typeProp = 'default',
+  variant,
+  size = 'default',
+  underlineSize = 'sm',
+  animate = 'none',
+  orientation,
+  children,
+  loop = true,
+  ...props
+}: TabsListProps) {
   const activeValue = React.useContext(TabsActiveValueContext);
-  const isVertical = !compact && orientation === 'vertical';
-  const requested: TabsListType = variant === 'segmented' ? 'segmented' : typeProp;
+  const activationMode = React.useContext(TabsActivationContext);
+  const rootOrientation = React.useContext(TabsRootOrientationContext);
+  const isVertical = orientation === 'vertical';
+  const requested: TabsListType =
+    variant === 'secondary' ? 'secondary' : variant === 'segmented' ? 'segmented' : typeProp;
   // Every horizontal list that is not `underline` is the segmented control.
   // Triggers read the resolved type from context, so a vertical rail keeps its
   // own row styling.
   const type: TabsListType =
-    requested === 'underline' ? 'underline' : isVertical ? 'default' : 'segmented';
+    requested === 'underline' || requested === 'secondary'
+      ? requested
+      : isVertical
+        ? 'default'
+        : 'segmented';
   const isSegmented = type === 'segmented';
   const useSlidingIndicator = isSegmented && animate === 'fluid';
   const trackClassName = cn(
-    compact
-      ? 'text-muted-foreground inline-flex h-7 w-fit items-center justify-center'
-      : 'text-muted-foreground inline-flex w-fit items-center justify-center',
-    !compact && tabsListHeightClasses[size], tabsSegmentedTrackClasses, className,
+    'text-muted-foreground inline-flex w-fit items-center justify-center',
+    tabsListHeightClasses[size],
+    tabsSegmentedTrackClasses,
+    className,
   );
   const list = (
     <TabsPrimitive.List
       data-slot="tabs-list"
       className={cn(
+        type === 'secondary' &&
+          cn('inline-flex w-fit items-center gap-0.5', tabsListHeightClasses[size]),
         isSegmented && 'relative z-10 flex h-full w-full items-stretch justify-center gap-0.5',
         !isVertical && type === 'underline' && tabsListUnderlineBaseClasses,
-        compact && type === 'underline' && 'h-7',
         !isVertical && type === 'underline' && tabsUnderlineBorderClasses[underlineSize],
-        !compact && !isVertical && type === 'underline' && tabsListHeightClasses[size],
-        isVertical && 'flex h-auto w-full flex-col items-stretch gap-0.5 rounded-none bg-transparent p-0',
-        (!compact || type === 'underline') && className,
+        !isVertical && type === 'underline' && tabsListHeightClasses[size],
+        isVertical &&
+          'flex h-auto w-full flex-col items-stretch gap-0.5 rounded-none bg-transparent p-0',
+        className,
       )}
-      {...props}
+      {...(props as Omit<typeof props, 'ref'>)}
+      aria-orientation={rootOrientation}
+      activateOnFocus={activationMode === 'automatic'}
+      loopFocus={loop}
     >
       {children}
     </TabsPrimitive.List>
@@ -222,19 +287,29 @@ function TabsListRenderer({
   // The sliding pill indicator only measures the x-axis (see
   // SlidingTabIndicator) — in a column it would collapse to a
   // zero-width bar, so vertical lists render without it.
-  const content = isVertical || type === 'underline' ? list : useSlidingIndicator ? (
-    <SlidingTabIndicator activeId={activeValue} className={trackClassName}
-      indicatorClassName={tabsSegmentedChipClasses}>{list}</SlidingTabIndicator>
-  ) : <div className={trackClassName}>{list}</div>;
+  const content =
+    isVertical || type === 'underline' || type === 'secondary' ? (
+      list
+    ) : useSlidingIndicator ? (
+      <SlidingTabIndicator
+        activeId={activeValue}
+        className={trackClassName}
+        indicatorClassName={tabsSegmentedChipClasses}
+      >
+        {list}
+      </SlidingTabIndicator>
+    ) : (
+      <div className={trackClassName}>{list}</div>
+    );
   return (
     <TabsListTypeContext.Provider value={type}>
       <TabsAnimateContext.Provider value={animate}>
         <TabsSizeContext.Provider value={size}>
-          {compact ? content : (
+          {
             <TabsOrientationContext.Provider value={orientation ?? 'horizontal'}>
               {content}
             </TabsOrientationContext.Provider>
-          )}
+          }
         </TabsSizeContext.Provider>
       </TabsAnimateContext.Provider>
     </TabsListTypeContext.Provider>
@@ -246,11 +321,31 @@ function TabsTrigger({
   size: sizeProp,
   variant = 'default',
   value,
+  asChild,
+  children,
+  onMouseDown,
+  disabled,
+  ref,
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.Trigger> & {
+}: Omit<React.ComponentProps<'button'>, 'value'> & {
+  value: string;
+  asChild?: boolean;
   size?: TabsTriggerSize;
   variant?: TabsTriggerVariant;
 }) {
+  const slot = asChildRender(asChild, children);
+  const baseId = React.useContext(TabsBaseIdContext);
+  const select = React.useContext(TabsSelectContext);
+  // Radix sets the native `disabled` attribute on a disabled trigger. Base UI
+  // clears it (in a layout effect and its ref) to keep the tab focusable; this
+  // effect runs after both, because a child's layout effects run first.
+  const buttonRef = React.useRef<HTMLElement | null>(null);
+  const native = useNativeButton(asChild, children);
+  const mergedRef = React.useMemo(() => composeRefs(ref, buttonRef, native.ref), [ref, native.ref]);
+  React.useLayoutEffect(() => {
+    const node = buttonRef.current;
+    if (node?.tagName === 'BUTTON') (node as HTMLButtonElement).disabled = Boolean(disabled);
+  }, [disabled]);
   const listType = React.useContext(TabsListTypeContext);
   const animate = React.useContext(TabsAnimateContext);
   const listSize = React.useContext(TabsSizeContext);
@@ -262,24 +357,27 @@ function TabsTrigger({
   // `variant="segmented"` (it paints its own chip — there is no track to slide in).
   const isSegmentedList = listType === 'segmented';
   // An explicit `variant="outline"` keeps its bordered chip even in a segmented list.
-  const isOutline = !isUnderlineList && variant === 'outline';
-  const isSegmented = !isUnderlineList && !isOutline && (isSegmentedList || variant === 'segmented');
+  const isSecondary = !isUnderlineList && (variant === 'secondary' || listType === 'secondary');
+  const isOutline = !isUnderlineList && !isSecondary && variant === 'outline';
+  const isSegmented =
+    !isUnderlineList && !isOutline && !isSecondary && (isSegmentedList || variant === 'segmented');
   // Outline paints its own border; the sliding pill fill would fight it.
   const useSlidingIndicator =
     !isUnderlineList &&
+    !isSecondary &&
     !isOutline &&
     (!isSegmented || isSegmentedList) &&
     animate === 'fluid';
   const isVertical = listOrientation === 'vertical';
 
   return (
-    <TabsPrimitive.Trigger
+    <TabsPrimitive.Tab
       data-slot="tabs-trigger"
       data-sliding-tab={useSlidingIndicator ? value : undefined}
       data-variant={variant}
       value={value}
       className={cn(
-        "focus-visible:ring-kortix-blue duration-normal ease-default inline-flex flex-1 cursor-pointer items-center justify-center rounded-[calc(var(--radius)-2.5px)] border border-transparent whitespace-nowrap transition-[color,background-color,border-color,box-shadow] focus-visible:ring-[0.6px] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "focus-visible:ring-kortix-blue duration-normal ease-default inline-flex flex-1 cursor-pointer items-center justify-center rounded-[calc(var(--radius)-2.5px)] border border-transparent whitespace-nowrap transition-[color,background-color,border-color,box-shadow] focus-visible:ring-[0.6px] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 data-disabled:pointer-events-none data-disabled:opacity-50 motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         tabsTriggerTextVariants({ size }),
         tabsTriggerPaddingVariants({ size }),
         isUnderlineList || isSegmentedList ? 'h-full' : tabsTriggerHeightVariants({ size }),
@@ -301,6 +399,7 @@ function TabsTrigger({
         !isUnderlineList &&
           !isOutline &&
           !isSegmented &&
+          !isSecondary &&
           (useSlidingIndicator
             ? 'data-[state=active]:bg-transparent'
             : 'data-[state=active]:bg-input'),
@@ -308,83 +407,62 @@ function TabsTrigger({
         // Outline: bordered active chip — matches Button `outline` (border + transparent fill).
         isOutline &&
           'data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:data-[state=inactive]:bg-foreground/5 hover:data-[state=inactive]:text-foreground data-[state=active]:border-border relative z-10 bg-transparent data-[state=active]:bg-transparent data-[state=inactive]:bg-transparent',
+        isSecondary &&
+          'data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:data-[state=inactive]:bg-hover rounded-sm data-[state=inactive]:bg-transparent',
         isVertical && 'w-full justify-start text-left',
         className,
       )}
-      {...props}
-    />
+      ref={mergedRef}
+      id={tabId(baseId, value)}
+      aria-controls={panelId(baseId, value)}
+      disabled={disabled}
+      {...(props as Omit<typeof props, 'ref'>)}
+      onMouseDown={(event: React.MouseEvent<HTMLButtonElement>) => {
+        onMouseDown?.(event);
+        // Radix: primary button without Ctrl selects on mousedown.
+        if (!disabled && event.button === 0 && !event.ctrlKey && !event.defaultPrevented) {
+          select(value);
+        }
+      }}
+      nativeButton={native.nativeButton}
+      render={
+        slot.render ? stateRender('button', activeState, slot.render) : controlRender(activeState)
+      }
+    >
+      {slot.children}
+    </TabsPrimitive.Tab>
   );
 }
 
-function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Content>) {
-  return (
-    <TabsPrimitive.Content
-      data-slot="tabs-content"
-      className={cn('flex-1 outline-none', className)}
-      {...props}
-    />
-  );
-}
-
-/** Compact Radix TabsList — use inside <Tabs> root for smaller contexts. */
-interface TabsListCompactProps extends React.ComponentProps<typeof TabsPrimitive.List> {
-  type?: Exclude<TabsListType, 'segmented'>;
-  /** Active underline stroke. Only applies when `type="underline"`. Default `sm`. */
-  underlineSize?: TabsUnderlineSize;
-  animate?: 'fluid' | 'none';
-}
-
-function TabsListCompact(props: TabsListCompactProps) {
-  // Same rule as `TabsList`: anything that is not `underline` is segmented.
-  return <TabsListRenderer {...props} size="xs" compact />;
-}
-
-/** Compact Radix TabsTrigger — use inside <Tabs> root for smaller contexts. */
-function TabsTriggerCompact({
+function TabsContent({
   className,
-  variant = 'default',
-  value,
+  forceMount,
+  asChild,
+  children,
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.Trigger> & {
-  variant?: Exclude<TabsTriggerVariant, 'segmented'>;
+}: Omit<React.ComponentProps<'div'>, 'value'> & {
+  value: string;
+  /** Keep the panel's content mounted while inactive (hidden). */
+  forceMount?: true;
+  asChild?: boolean;
 }) {
-  const listType = React.useContext(TabsListTypeContext);
-  const animate = React.useContext(TabsAnimateContext);
-  const isUnderlineList = listType === 'underline';
-  const isOutline = !isUnderlineList && variant === 'outline';
-  const isSegmented = !isUnderlineList && !isOutline;
-  const useSlidingIndicator = isSegmented && animate === 'fluid';
-
+  const slot = asChildRender(asChild, children);
+  const baseId = React.useContext(TabsBaseIdContext);
+  const active = React.useContext(TabsActiveValueContext) === props.value;
+  // Radix renders every panel element (inactive ones empty and `hidden`) and
+  // mounts the content only while active or with `forceMount`.
   return (
-    <TabsPrimitive.Trigger
-      data-slot="tabs-trigger"
-      data-sliding-tab={useSlidingIndicator ? value : undefined}
-      data-variant={variant}
-      value={value}
-      className={cn(
-        'focus-visible:ring-kortix-blue relative z-10 inline-flex flex-1 cursor-pointer items-center justify-center border border-transparent text-xs font-medium whitespace-nowrap focus-visible:ring-[0.6px] focus-visible:outline-none',
-        tabsTriggerPaddingVariants({ size: 'xs' }),
-        isUnderlineList || isSegmented
-          ? 'h-full'
-          : tabsTriggerHeightVariants({ size: 'xs' }),
-        isUnderlineList && 'rounded-none',
-        isUnderlineList &&
-          'duration-normal ease-default data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:data-[state=inactive]:text-foreground rounded-none bg-transparent shadow-none transition-[color,background-color,border-color,box-shadow] data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=inactive]:bg-transparent motion-reduce:transition-none',
-        // Segmented (the default) — see TabsTrigger: the sliding chip paints the
-        // active state, or the trigger paints it when there is no slide.
-        isSegmented &&
-          'data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:data-[state=inactive]:text-foreground rounded-sm bg-transparent transition-colors duration-normal',
-        isSegmented &&
-          !useSlidingIndicator &&
-          'data-[state=active]:bg-popover data-[state=active]:ring-border data-[state=active]:shadow-xs data-[state=active]:ring-1',
-        isOutline &&
-          'data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:data-[state=inactive]:bg-foreground/5 hover:data-[state=inactive]:text-foreground data-[state=active]:border-border rounded-[calc(var(--radius)-3px)] bg-transparent transition-[color,background-color,border-color] duration-normal data-[state=active]:bg-transparent data-[state=inactive]:bg-transparent',
-        'disabled:pointer-events-none disabled:opacity-50',
-        "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
-        className,
-      )}
-      {...props}
-    />
+    <TabsPrimitive.Panel
+      data-slot="tabs-content"
+      id={panelId(baseId, props.value)}
+      aria-labelledby={tabId(baseId, props.value)}
+      className={cn('flex-1 outline-none', className)}
+      {...(props as Omit<typeof props, 'ref'>)}
+      keepMounted
+      render={stateRender('div', activeState, slot.render)}
+    >
+      {active || forceMount ? slot.children : null}
+    </TabsPrimitive.Panel>
   );
 }
 
@@ -411,8 +489,8 @@ function FilterBarItem({ className, ...props }: React.ComponentProps<'button'>) 
       role="tab"
       type="button"
       className={cn(
-        'inline-flex h-[calc(100%-4px)] flex-1 cursor-pointer items-center justify-center gap-1.5 border border-transparent px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors duration-normal',
-        'text-muted-foreground/60 hover:text-foreground/80',
+        'duration-normal inline-flex h-[calc(100%-4px)] flex-1 cursor-pointer items-center justify-center gap-1.5 border border-transparent px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors',
+        'text-muted-foreground hover:text-foreground/80',
         'data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:ring-foreground/6 data-[state=active]:shadow-sm data-[state=active]:ring-1',
         'disabled:pointer-events-none disabled:opacity-50',
         "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
@@ -424,19 +502,25 @@ function FilterBarItem({ className, ...props }: React.ComponentProps<'button'>) 
 }
 
 export {
-  tabsSegmentedChipClasses,
-  tabsSegmentedTrackClasses,
   FilterBar,
   FilterBarItem,
   Tabs,
   TabsContent,
   TabsList,
-  TabsListCompact,
+  tabsSegmentedChipClasses,
+  tabsSegmentedTrackClasses,
   TabsTrigger,
-  TabsTriggerCompact,
   tabsTriggerHeightVariants,
   tabsTriggerPaddingVariants,
   tabsTriggerTextVariants,
 };
 
-export type { TabsListType, TabsSize, TabsTriggerSize, TabsTriggerVariant, TabsUnderlineSize };
+export type {
+  TabsListProps,
+  TabsListType,
+  TabsProps,
+  TabsSize,
+  TabsTriggerSize,
+  TabsTriggerVariant,
+  TabsUnderlineSize,
+};

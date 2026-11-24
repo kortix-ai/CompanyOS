@@ -72,7 +72,7 @@ import { useReviewItems } from '@/lib/review/use-review';
 import type { ProjectSession } from '@/lib/projects/projects-client';
 import { haptics } from '@/lib/haptics';
 import { playSound } from '@/lib/sounds';
-import { ReviewDetailSheet } from '@/components/review/ReviewDetailSheet';
+import { ReviewDetailSheet, type ReviewDetailSheetRef } from '@/components/review/ReviewDetailSheet';
 import { requestPushPermissionOnce } from '@/lib/notifications/registration';
 import { Icon } from '@/components/ui/icon';
 import { MOTION, THEME, withAlpha } from '@/lib/utils/theme';
@@ -147,6 +147,7 @@ import {
   anchorSpan,
   chevronVisible,
   distanceFromEnd,
+  extentShortfall,
   isAtEnd,
   momentumFollows,
   nextFollow,
@@ -158,7 +159,16 @@ import {
 } from '@/lib/session/auto-scroll';
 import { mintWireMessageId } from '@/lib/session/wire-message-id';
 import { recordTimeMs } from '@/lib/session/turn-meta';
-import { failedSendMessages, sendIdsFor, useFailedSendStore, useFailedSends, type SendIds } from '@/lib/session/failed-sends';
+import {
+  sendIdsFor,
+  serverHeldSendIds,
+  threadWithFailedSends,
+  unsentFailedSends,
+  useFailedSendStore,
+  useFailedSends,
+  type SendIds,
+  type ServerHeldSendIds,
+} from '@/lib/session/failed-sends';
 import { optimisticUserParts } from '@/lib/session/optimistic-parts';
 import { draftKey } from '@/lib/session/composer-draft';
 import {
@@ -180,7 +190,7 @@ import { useToast } from '@/components/kortix/toast-provider';
 import { pinnedPermission } from '@/lib/session/permission-prompt';
 import { useTabStore } from '@/stores/tab-store';
 import { useMessageQueueStore } from '@/stores/message-queue-store';
-import { queueHeaderLabel, queueRowCaption, queueRowText } from '@/lib/session/queue-undo';
+import { queueHeaderLabel, queueRowCaption, queueRowSendLabel, queueRowText } from '@/lib/session/queue-undo';
 import { useSessionPromptRequestStore } from '@/stores/session-prompt-request-store';
 import { useSandboxContext } from '@/contexts/SandboxContext';
 import { useAuthContext } from '@/contexts/AuthContext';
@@ -201,6 +211,7 @@ import { useLiveUpdates } from '@/hooks/useLiveUpdates';
 import { OLDER_HOLD_POSITION_MS, olderHistoryControl } from '@/lib/session/older-history';
 import { useRouter } from 'expo-router';
 import { SessionTurn } from './SessionTurn';
+import { useAgentRunLayout } from '@/lib/session/agent-runs';
 import { SessionBusyIndicator } from './session-busy-indicator';
 import { CompactionMarker } from './turn/compaction-divider';
 import { QuestionPrompt } from './QuestionPrompt';
@@ -268,6 +279,8 @@ const EMPTY_COMMANDS = frozenEmpty<Command>();
 const EMPTY_IDS = frozenEmpty<string>();
 const EMPTY_PROJECT_SESSIONS = frozenEmpty<ProjectSession>();
 const EMPTY_PROMPTS = frozenEmpty<SessionPrompt>();
+/** No failed send to check: nothing to look up. */
+const NOTHING_HELD: ServerHeldSendIds = { messageIds: new Set(), clientMessageIds: new Set() };
 /** No runtime session: `useSessionMessages` reads nothing and never re-renders. */
 const DETACHED_ROWS = { projectId: '', sessionId: '', runtimeSessionId: null };
 
@@ -520,18 +533,6 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
   const storeThread = useSessionLogThread(threadSource, isSubThread ? sessionId : undefined, {
     throttleMs: TRANSCRIPT_RENDER_INTERVAL_MS,
   });
-  // A failed send is not in the transcript (the server never had it): it
-  // stays in the thread from its own store, with "Not sent · Try again".
-  const failedSends = useFailedSends(sessionId);
-  const thread = useMemo(() => {
-    const failed = failedSendMessages(storeThread?.thread_id ?? sessionId, failedSends);
-    if (failed.length === 0) return storeThread;
-    const base = storeThread ?? emptyThread(sessionId);
-    return { ...base, messages: [...base.messages, ...failed] };
-  }, [sessionId, storeThread, failedSends]);
-  // Handlers read the thread at call time (an edit's rewind).
-  const threadRef = useRef(thread);
-  threadRef.current = thread;
   const sessionStatus = useSessionStatus(sessionId);
   const pendingQuestions = usePendingQuestions(sessionId);
   const pendingPermissions = usePendingPermissions(sessionId);
@@ -615,6 +616,35 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
   useEffect(() => {
     void refreshQueue();
   }, [refreshQueue]);
+
+  // A failed send is not in the transcript (the server never had it): it
+  // stays in the thread from its own store, with "Not sent · Try again",
+  // where the user sent it (`threadWithFailedSends`). A send the server holds
+  // is not failed: its request arrived and only the answer was lost (a
+  // timeout, a dropped connection). Its log message, inbox row or `sent` entry
+  // proves it, and the copy leaves the store.
+  const storedFailedSends = useFailedSends(sessionId);
+  const serverHeld = useMemo(
+    () =>
+      Object.keys(storedFailedSends).length === 0
+        ? NOTHING_HELD
+        : serverHeldSendIds({ messages: storeThread?.messages, prompts: queuedMessages, sent: sdkQueue.sent }),
+    [storedFailedSends, storeThread, queuedMessages, sdkQueue.sent],
+  );
+  const failedSends = useMemo(() => unsentFailedSends(storedFailedSends, serverHeld), [storedFailedSends, serverHeld]);
+  useEffect(() => {
+    if (failedSends === storedFailedSends) return;
+    for (const messageId of Object.keys(storedFailedSends)) {
+      if (!(messageId in failedSends)) useFailedSendStore.getState().take(sessionId, messageId);
+    }
+  }, [sessionId, storedFailedSends, failedSends]);
+  const thread = useMemo(() => {
+    if (Object.keys(failedSends).length === 0) return storeThread;
+    return threadWithFailedSends(storeThread ?? emptyThread(sessionId), failedSends);
+  }, [sessionId, storeThread, failedSends]);
+  // Handlers read the thread at call time (an edit's rewind).
+  const threadRef = useRef(thread);
+  threadRef.current = thread;
 
   // The composer calls this while a turn runs: the running turn reads the
   // message at its next step (`steer`, D9.1). A prompt request from another
@@ -1003,7 +1033,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
     const request = store.take(sessionId) ?? (projectSessionId ? store.take(projectSessionId) : null);
     if (!request) return;
     if (isBusy || hasQuestion) {
-      void handleEnqueue(request.text, {}, undefined, 'queue').catch(() => {});
+      void handleEnqueue(request.text, {}, undefined, 'steer').catch(() => {});
       return;
     }
     const { agent, modelKey, variant } = resolvedRef.current;
@@ -1113,6 +1143,8 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
     () => reuseStableTurns(prevTurnsRef.current, thread ? sessionLogTurns(thread, { busy: isBusy }) : EMPTY_TURNS),
     [thread, isBusy],
   );
+  // A person's agents report back as one unit: the turns of a run fold into the turn that answers it.
+  const agentRunLayout = useAgentRunLayout(turns);
   useEffect(() => {
     prevTurnsRef.current = turns;
   }, [turns]);
@@ -1146,13 +1178,15 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
       : [];
     return anchorChangeRequests(sessionChanges, starts);
   }, [sessionChanges, turnStartsKey]);
-  const changeSheetRef = useRef<SheetRef>(null);
+  const changeSheetRef = useRef<ReviewDetailSheetRef>(null);
   const [selectedChangeId, setSelectedChangeId] = useState<string | null>(null);
   // Read from the live list, so a merge made elsewhere updates the open sheet.
   const selectedChange = useMemo(
     () => sessionChanges.find((item) => item.id === selectedChangeId) ?? null,
     [sessionChanges, selectedChangeId],
   );
+  // A run's anchor draws its members' change requests too (KRTX-4732).
+  const changeRequestsOf = useCallback((turnId: string) => changesByTurn.get(turnId), [changesByTurn]);
   const openChangeRequest = useCallback((id: string) => {
     setSelectedChangeId(id);
     changeSheetRef.current?.open();
@@ -1317,6 +1351,14 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
   const [room, setRoom] = useState(0);
   const roomRef = useRef(0);
   const renderedRoomRef = useRef(0);
+  // iOS (KRTX-4899): the native scroll extent (scroll events' `contentSize`)
+  // can end short of the laid-out content (`onContentSizeChange`). The list
+  // then rests with the newest answer's tail under the composer, and a swipe
+  // to it springs back. The gap pads the list's native bottom inset until the
+  // native extent catches up.
+  const [extentInset, setExtentInset] = useState(0);
+  const extentInsetRef = useRef(0);
+  const extentContentInset = useMemo(() => ({ bottom: extentInset }), [extentInset]);
   // The last room handed to `setRoom`. While the keyboard moves, the list's
   // height changes every frame (the page's `keyboardInset` padding), and a
   // room per frame is a page render per frame. A room that shrinks is blank
@@ -1503,6 +1545,26 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
       settleRef.current();
     });
   }, []);
+
+  /** Compare the native extent of a scroll event with the layout (iOS). */
+  const checkExtent = useCallback((nativeHeight: number) => {
+    if (Platform.OS !== 'ios') return;
+    const next = extentShortfall({ laidOutHeight: contentHeightRef.current, nativeHeight });
+    if (next === extentInsetRef.current) return;
+    extentInsetRef.current = next;
+    setExtentInset(next);
+    if (next > 0) {
+      log.error('[SessionPage] native scroll extent short of layout', {
+        laidOutHeight: contentHeightRef.current,
+        nativeHeight,
+        shortfall: next,
+      });
+    }
+  }, []);
+  // Once the inset is on screen, a following list moves to the laid-out end.
+  useEffect(() => {
+    if (extentInset > 0) scheduleSettle();
+  }, [extentInset, scheduleSettle]);
 
   // A taller or shorter composer moves the end padding: settle once, like any layout change.
   const handleComposerAreaLayout = useCallback(
@@ -1752,9 +1814,10 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
       const offset = Math.max(0, contentOffset.y || 0);
       currentOffsetRef.current = offset;
+      checkExtent(contentSize.height);
       const distance = distanceFromEnd({
         offset,
-        contentHeight: contentSize.height,
+        contentHeight: contentSize.height + extentInsetRef.current,
         viewportHeight: layoutMeasurement.height,
       });
       if (!isOwnScroll()) settledAtEndRef.current = isAtEnd(distance);
@@ -1763,7 +1826,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
       updateScrollButton(distance);
       persistScrollOffset(sessionId, offset);
     },
-    [sessionId, persistScrollOffset, isOwnScroll, setFollow, updateScrollButton],
+    [sessionId, persistScrollOffset, isOwnScroll, setFollow, updateScrollButton, checkExtent],
   );
 
   const handleScrollEndDrag = useCallback(
@@ -1827,11 +1890,16 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
       const geometryChanged =
         contentSize.height !== last.contentHeight || layoutMeasurement.height !== last.viewportHeight;
       scrollGeometryRef.current = { contentHeight: contentSize.height, viewportHeight: layoutMeasurement.height };
-      const distance = distanceFromEnd({
+      // At the native end with no finger down: is that the laid-out end too?
+      const nativeDistance = distanceFromEnd({
         offset,
         contentHeight: contentSize.height,
         viewportHeight: layoutMeasurement.height,
       });
+      if (!draggingRef.current && (extentInsetRef.current > 0 || isAtEnd(nativeDistance))) {
+        checkExtent(contentSize.height);
+      }
+      const distance = nativeDistance + extentInsetRef.current;
 
       const wasFollowing = followRef.current;
       const next = nextFollow(wasFollowing, {
@@ -1862,7 +1930,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
         }
       }
     },
-    [isOwnScroll, setFollow, updateScrollButton, endGlide],
+    [isOwnScroll, setFollow, updateScrollButton, endGlide, checkExtent],
   );
 
   const handleContentSizeChange = useCallback(
@@ -2022,14 +2090,17 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
         });
       // The turn list is read through the ref: depending on `turns` would
       // re-render every row on each stream delta.
-      const gap = suppressed ? 0 : turnGapAt(layoutInputsRef.current.turns, index);
+      // An agent run's other turns draw nothing: the run's anchor folds them (KRTX-4732).
+      const absorbed = agentRunLayout.absorbed.has(id);
+      const gap = suppressed || absorbed ? 0 : turnGapAt(layoutInputsRef.current.turns, index);
       return (
         <View
           style={gap > 0 ? { marginTop: gap } : undefined}
           onLayout={(e) => handleTurnLayout(id, e.nativeEvent.layout.height)}>
-          {suppressed ? null : (
+          {suppressed || absorbed ? null : (
           <SessionTurn
             turn={item}
+            {...agentRunLayout.propsOf(id)}
             sessionStatus={isWorkingTurn ? sessionStatus : undefined}
             suppressBusyIndicator={isWorkingTurn && suppressWorkingBusy}
             sessionId={sessionId}
@@ -2053,13 +2124,14 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
             stoppedBy={stoppedByOf(id)}
             onScreen={isWorkingTurn ? workingTurnOnScreen : true}
             changeRequests={changesByTurn.get(id)}
+            changeRequestsOf={agentRunLayout.propsOf(id).runTurns ? changeRequestsOf : undefined}
             onOpenChangeRequest={openChangeRequest}
           />
           )}
         </View>
       );
     },
-    [lastCompactionTurnIndex, suppressWorkingBusy, turnGapAt, handleTurnLayout, sessionStatus, sessionId, pendingPermissions, pendingQuestions, handlePermissionReply, agentNames, handleFileMention, handleSessionMention, commands, rewindTarget, editPending, handleEditStart, handleEditCancel, handleEditSend, rewindDisabled, interruptedIds, failedSends, handleRetrySend, senderOf, workingTurnOnScreen, changesByTurn, openChangeRequest, sessionAuthorOf, stoppedByOf],
+    [agentRunLayout, lastCompactionTurnIndex, suppressWorkingBusy, turnGapAt, handleTurnLayout, sessionStatus, sessionId, pendingPermissions, pendingQuestions, handlePermissionReply, agentNames, handleFileMention, handleSessionMention, commands, rewindTarget, editPending, handleEditStart, handleEditCancel, handleEditSend, rewindDisabled, interruptedIds, failedSends, handleRetrySend, senderOf, workingTurnOnScreen, changesByTurn, changeRequestsOf, openChangeRequest, sessionAuthorOf, stoppedByOf],
   );
 
   const keyExtractor = useCallback((item: SessionLogTurn) => item.id, []);
@@ -2262,6 +2334,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
         <FlatList
           ref={flatListRef}
           style={LIST_DRAWS_UNDER_KEYBOARD}
+          contentInset={extentContentInset}
           data={turns}
           renderItem={renderTurn}
           keyExtractor={keyExtractor}
@@ -2316,7 +2389,7 @@ function SessionPageImpl({ sessionId, projectId, projectSessionId, onBack, onOpe
                   />
                 ) : null}
                 {/* Web `HeldMessageList` above the composer: messages another agent sent that wait on the person. */}
-                {projectId && projectSessionId ? <HeldMessages projectId={projectId} sessionId={projectSessionId} /> : null}
+                {projectId && projectSessionId ? <HeldMessages projectId={projectId} sessionId={projectSessionId} live={isBusy} /> : null}
               </View>
               {/* The room (FACT 1): lets the newest turn pin near the top. */}
               <View onLayout={handleSpacerLayout} style={{ height: room }} />
@@ -2582,8 +2655,9 @@ function FreshSessionHero({
 
 // ---------------------------------------------------------------------------
 // QueuePanel — the messages waiting to send, above the text input. Header
-// "Up next · N" toggles the list. Each row: the message, a "Send now" pill,
-// and a 44pt remove. Remove acts at once; the caller shows a toast with Undo.
+// "Up next · N" toggles the list. Each row: the message, a "Send now" pill
+// ("Not sent · <reason>" and "Try again" on a row the server failed), and a
+// 44pt remove. Remove acts at once; the caller shows a toast with Undo.
 // No Clear-all (Jay, 2026-09-25): the per-row X is enough.
 // ---------------------------------------------------------------------------
 
@@ -2690,10 +2764,10 @@ function QueuePanel({
                     size="sm"
                     className="rounded-full"
                     onPress={() => onSendNow(qm.prompt_id)}
-                    accessibilityLabel="Send now"
-                    accessibilityHint={busy ? 'Stops the current reply and sends this message' : undefined}
+                    accessibilityLabel={qm.state === 'failed' ? 'Message not sent. Try again' : 'Send now'}
+                    accessibilityHint={busy && qm.state !== 'failed' ? 'Stops the current reply and sends this message' : undefined}
                   >
-                    <Text>Send now</Text>
+                    <Text>{queueRowSendLabel(qm)}</Text>
                   </Button>
                 )}
                 {/* 40pt box + the Button's default 2pt hit slop = 44pt target. */}

@@ -1,11 +1,11 @@
 'use client';
 
 import { readAccountParam } from '@kortix/ui/workspace/new/account-param';
-import { readCloneParam } from '@kortix/ui/workspace/new/clone-param';
 import { readSourceParam } from '@kortix/ui/workspace/new/source-param';
 import { useTranslations } from '@/i18n/use-translations';
 import { useSignedOutRedirect } from '@/lib/auth/use-signed-out-redirect';
-import { AnimatePresence, m, useReducedMotion } from 'motion/react';
+import { AnimatePresence, m } from 'motion/react';
+import { useReducedMotion } from '@kortix/ui/internal/hooks/use-reduced-motion';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -25,9 +25,10 @@ import {
 import { useCreateWorkspace } from '@kortix/ui/workspace/new/use-create-workspace';
 import { WorkspaceHandoff } from '@kortix/ui/workspace/new/workspace-handoff';
 import {
-  WORKSPACE_NAME_MAX_LENGTH,
+  readNameParam,
   suggestWorkspaceName,
   validateWorkspaceName,
+  workspaceNameMessage,
 } from '@kortix/ui/workspace/new/workspace-name';
 import { useWorkspaceDirectory } from '@kortix/ui/workspace/sidebar/use-workspace-directory';
 import { canCreateWorkspace } from '@kortix/ui/workspace/project-selector/project-selector-model';
@@ -108,7 +109,6 @@ export function NewWorkspacePage() {
   const tWorkspaces = useTranslations('workspaces.create');
   const { user, isLoading: authLoading } = useAuth();
   const searchParams = useSearchParams();
-  const cloneItemId = readCloneParam(new URLSearchParams(searchParams?.toString() ?? ''));
   const router = useRouter();
   const connectComputer = searchParams?.get('connect') === 'computer';
   // `?returnUrl=` sends the person back where a workspace was missing (the
@@ -130,9 +130,14 @@ export function NewWorkspacePage() {
   // below (`effectiveAccountId`).
   const returnedAccountId = readAccountParam(new URLSearchParams(searchParams?.toString() ?? ''));
 
+  // `?name=` is the name the chooser's inline form showed when the user
+  // clicked "More options" (`withNameParam`). The URL is the same on the
+  // server and the client, so it is safe in the initializer.
+  const handedName = readNameParam(new URLSearchParams(searchParams?.toString() ?? ''));
+
   const [state, setState] = useState<NewWorkspaceFormState>(() => ({
     ...INITIAL_FORM_STATE,
-    templateId: cloneItemId,
+    ...(handedName ? { name: handedName } : {}),
     ...(initialSource ? { source: initialSource } : {}),
   }));
   const [touched, setTouched] = useState(false);
@@ -165,23 +170,17 @@ export function NewWorkspacePage() {
   });
   const submitting = status === 'creating';
 
-  // The too-long message fires LIVE, before the field is ever left: the input
-  // no longer truncates typed or pasted names at the limit (there is no
-  // `maxLength` — the browser used to clip silently at 120, which made this
-  // message and the submit gate both unreachable for typing). The remaining
-  // name errors wait for the field to be left once: validating on the first
-  // keystroke would tell the user "Name is required" while they are still
-  // typing the name.
-  const nameError = useMemo(() => {
-    const result = validateWorkspaceName(state.name);
-    if (!result.ok && result.error.startsWith('Name must be')) {
-      return t('validation.nameTooLong', { max: WORKSPACE_NAME_MAX_LENGTH });
-    }
-    if (!touched) return null;
-    if (result.ok) return null;
-    if (result.error === 'Name is required') return t('validation.nameRequired');
-    return t('validation.nameCharacters');
-  }, [state.name, t, touched]);
+  // Every name error the form model refuses live reports itself live
+  // (`workspaceNameMessage`): the too-long and illegal-character errors
+  // disable Create the moment they exist, so the message must be there when
+  // the button goes dark. Only "required" waits for the field to be left
+  // once: it is also true before the first keystroke, and validating it on
+  // the first keystroke would tell the user "Name is required" while they
+  // are still typing the name.
+  const nameError = useMemo(
+    () => workspaceNameMessage(validateWorkspaceName(state.name), touched, t),
+    [state.name, t, touched],
+  );
 
   // The account whose GitHub connection the GitHub sources use, if any
   // (`AdvancedFields`). The managed source names no account.
@@ -217,16 +216,25 @@ export function NewWorkspacePage() {
       <AccountTopBar
         email={user?.email ?? null}
         name={user?.user_metadata?.name}
+        avatarUrl={user?.user_metadata?.avatar_url}
         signingOut={signingOut}
         onLogOut={() => {
           setSigningOut(true);
           void performSignOut();
         }}
-        back={{ href: '/workspaces', label: t('actions.back') }}
+        // While the create is in flight both escapes are withheld (KRTX-4551):
+        // a customer who leaves mid-create lands on a list without the
+        // workspace and can resubmit, and the handoff below is the only thing
+        // to look at while the wait runs. The pill returns the moment the
+        // create resolves or fails; Log out stays reachable in the account
+        // menu either way — the page must never be fully trapped.
+        back={submitting ? undefined : { href: '/workspaces', label: t('actions.back') }}
         // Desktop only. The shell has no browser toolbar, so without this the
         // account menu was the only way off this page there. `replace`, not
         // `push`: `/workspaces/new` is where the user left, not somewhere to return to.
-        trailing={<DesktopCloseButton onClose={() => router.replace('/workspaces')} />}
+        trailing={
+          submitting ? null : <DesktopCloseButton onClose={() => router.replace('/workspaces')} />
+        }
       />
 
       {/* TWO states, one swap — see the `SWAP_IN`/`SWAP_OUT` doc comment above.
@@ -281,10 +289,6 @@ export function NewWorkspacePage() {
                 void create(effectiveState);
               }}
             >
-              {state.templateId && (
-                <p className="text-muted-foreground text-center text-xs">{t('templateSeed')}</p>
-              )}
-
               {/* No card. A single question does not need a bordered surface
                     to group it — the border was drawing a box around one field
                     on an otherwise empty page, which reads as chrome rather than
@@ -413,6 +417,7 @@ export function NewWorkspacePage() {
                   connectComputer={connectComputer}
                   state={state}
                   accountId={effectiveAccountId}
+                  noGitHubSourceAccount={!directory.loading && !directory.githubSourceAccount}
                   onChange={setState}
                 />
               </div>

@@ -3,12 +3,11 @@ import { sessionProviderSecretPools } from '@kortix/db';
 import { and, eq } from 'drizzle-orm';
 import { auth, errors, json } from '../../openapi';
 import { db } from '../../shared/db';
-import { requireFeatureFlag } from '../../feature-flags/gate';
 import { PROJECT_ACTIONS } from '../../iam';
 import { agentMayUseEnv } from '../../iam/agent-scope';
 import { memberMayReadProject } from '../../secrets/account-resource';
 import { MAX_KEYS_PER_PROVIDER, mayUseProviderKeys, providerEnvVarOf } from '../../secrets/provider-key-selection';
-import { loadProjectForUser, loadVisibleSession, assertProjectCapability } from '../lib/access';
+import { loadProjectForUser, loadVisibleSession, assertProjectCapability, projectCapabilityAllowed } from '../lib/access';
 import { mayChangeSessionModel } from '../lib/session-model-change';
 import { resolveSessionAgentGrant } from '../lib/secret-grant';
 import { DEFAULT_AGENT_SENTINEL } from '../agents';
@@ -112,8 +111,6 @@ export function registerProviderSecretPoolsRoutes(): void {
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SESSION_READ);
     const visible = await loadVisibleSession(loaded, sessionId, callerKortixSessionId(c), callerKortixSessionId(c));
     if (!visible) return c.json({ error: 'Not found' }, 404);
-    const gate = requireFeatureFlag(c, loaded.row.metadata, 'pooled_provider_secrets');
-    if (gate) return gate;
     const ownerId = visible.ownerIsMachine ? null : visible.row.createdBy;
     const [rows, personalUserId] = await Promise.all([
       db.select({ provider_id: sessionProviderSecretPools.providerId, secret_ids: sessionProviderSecretPools.secretIds })
@@ -122,9 +119,12 @@ export function registerProviderSecretPoolsRoutes(): void {
         ? resolveSessionPersonalOwner({ projectId, accountId: loaded.row.accountId, sessionId, legacyUserId: ownerId }).catch(() => null)
         : Promise.resolve(null),
     ]);
+    const canEdit = mayChangeSessionModel(visible) && !visible.ownerIsMachine
+      && (ownerId === loaded.userId
+        || await projectCapabilityAllowed(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SECRET_READ));
     return c.json({
       pools: rows.map(({ provider_id, secret_ids }) => ({ provider_id, secret_ids, configured: true })),
-      can_edit: mayChangeSessionModel(visible) && !visible.ownerIsMachine,
+      can_edit: canEdit,
       personal_user_id: personalUserId,
       personal_keys_reason: personalUserId ? null : personalKeysReason(visible.row),
     });
@@ -142,8 +142,6 @@ export function registerProviderSecretPoolsRoutes(): void {
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SESSION_READ);
     const visible = await loadVisibleSession(loaded, sessionId, callerKortixSessionId(c), callerKortixSessionId(c));
     if (!visible) return c.json({ error: 'Not found' }, 404);
-    const gate = requireFeatureFlag(c, loaded.row.metadata, 'pooled_provider_secrets');
-    if (gate) return gate;
     const [pool] = await db.select({ ids: sessionProviderSecretPools.secretIds }).from(sessionProviderSecretPools)
       .where(and(eq(sessionProviderSecretPools.sessionId, sessionId), eq(sessionProviderSecretPools.providerId, providerId))).limit(1);
     return c.json({ provider_id: providerId, configured: Boolean(pool), secret_ids: pool?.ids ?? [] });
@@ -162,9 +160,17 @@ export function registerProviderSecretPoolsRoutes(): void {
     await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SESSION_STOP);
     const visible = await loadVisibleSession(loaded, sessionId, callerKortixSessionId(c), callerKortixSessionId(c));
     if (!visible) return c.json({ error: 'Not found' }, 404);
+    // Session control and secret visibility are separate leaves. The session's
+    // own person chooses among the keys they may use (validateProviderSecretPool
+    // checks each id as the caller): a member picks their own ChatGPT or Claude account (SEC-POOL-2,
+    // SEC-POOL-6). Anyone else who manages the session also needs
+    // project.secret.read. After the session read, so a session the caller
+    // cannot see stays a 404.
+    const ownsSession = !visible.ownerIsMachine && visible.row.createdBy === loaded.userId;
+    if (!ownsSession) {
+      await assertProjectCapability(c, loaded.userId, loaded.row.accountId, projectId, PROJECT_ACTIONS.PROJECT_SECRET_READ);
+    }
     if (!mayChangeSessionModel(visible)) return c.json({ error: 'Only the session owner or a workspace manager can select provider secrets' }, 403);
-    const gate = requireFeatureFlag(c, loaded.row.metadata, 'pooled_provider_secrets');
-    if (gate) return gate;
     const parsed = Input.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid secret ids' }, 400);
     const ids = parsed.data.secret_ids;

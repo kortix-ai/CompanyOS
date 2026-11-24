@@ -17,19 +17,7 @@ import { isKe2eRetryableError } from '../core/client';
 import { waitFor } from '../core/poll';
 import { markSessionReadinessTimeoutRetryable } from '../core/session-runtime-retry';
 import type { CreatedProject, FlowContext } from '../core/types';
-
-async function createProjectPat(ctx: FlowContext, label: string) {
-  const project = await ctx.fixtures.project();
-  const response = await ctx.client.as(ctx.P.OWNER).post(
-    '/v1/workspaces/:projectId/cli-token',
-    { name: ctx.fixtures.name(label) },
-    { params: { projectId: project.id } },
-  );
-  response.status(201).body().exists('$.secret_key').exists('$.token_id');
-  const body = response.json<{ secret_key: string; token_id: string }>();
-  ctx.track('token', body.token_id);
-  return ctx.client.withBearer(body.secret_key, 'PAT_PROJ');
-}
+import { createProjectPat } from '../fixtures/database-project';
 
 const SHA256 = /^[0-9a-f]{64}$/;
 
@@ -816,7 +804,7 @@ flow(
     // reasoning that ~90 MB of each is the same embedded Bun runtime. That is
     // true of two binaries compiled by the SAME Bun and false of what we ship:
     // `apps/api/Dockerfile` builds the daemon on `SANDBOX_AGENT_BUN_VERSION`
-    // (1.3.11, a deliberate pin) and the CLI on `BUN_VERSION` (1.4.3), so they
+    // (1.3.11, a deliberate pin) and the CLI on `BUN_VERSION` (1.4.4), so they
     // embed different runtimes. Measured on a deployed preview: 0 of 111 chunks
     // shared, first MiB already different. Requiring overlap would have pinned a
     // build coincidence rather than a contract — and would go red on a green

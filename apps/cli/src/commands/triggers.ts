@@ -210,7 +210,10 @@ Run limits (any type; add, add --apply, and set):
                            is a skipped run, "throttled: …".
   --max-runs-per-day <n>   Runs it may start in a UTC day (default: no cap).
                            On \`set\`, \`none\` removes either cap.
-A manual \`fire\` is never held, but it counts.
+A manual \`fire\` bypasses soft limits, but counts.
+  --hard-run-caps true|false
+                           Atomically cap every fire, including manual.
+                           Failed attempts count; no implicit override.
   --expect-event-within <dur>
                            App triggers: no App event for this long (5m or
                            more, e.g. 30m) tells the trigger's watchers once;
@@ -292,6 +295,7 @@ export async function runTriggers(argv: string[]): Promise<number> {
     tf.runAt = takeFlagValue(rest, ['--run-at']);
     tf.model = takeFlagValue(rest, ['--model']);
     tf.sessionMode = takeFlagValue(rest, ['--session-mode']);
+    tf.hardRunCaps = takeFlagValue(rest, ['--hard-run-caps']);
     tf.maxRunsPerHour = takeFlagValue(rest, ['--max-runs-per-hour']);
     tf.maxRunsPerDay = takeFlagValue(rest, ['--max-runs-per-day']);
     tf.overlap = takeFlagValue(rest, ['--overlap']);
@@ -779,6 +783,7 @@ async function triggersInfo(
     ['type', t.type],
     ['enabled', t.enabled ? `${C.green}true${C.reset}` : `${C.faded}false${C.reset}`],
     ['agent', t.agent],
+    ['model', t.model ?? 'default (the workspace default model)'],
   ];
   if (t.type === 'cron') {
     rows.push(['cron', t.cron ?? '—'], ['timezone', t.timezone]);
@@ -817,7 +822,12 @@ async function triggersInfo(
   rows.push(['overlap', t.overlap ?? `${t.type === 'cron' ? 'skip' : 'allow'} (default)`]);
   if (t.auto_paused_at) {
     rows.push(['auto_paused', `${C.yellow}${t.auto_paused_at}${C.reset} — ${t.auto_paused_reason ?? 'auto-paused'}`]);
-    rows.push(['resume', `kortix triggers enable ${t.slug} --apply`]);
+    rows.push([
+      'resume',
+      t.auto_paused_code
+        ? `by itself, once the account can run it (${t.auto_paused_code === 'billing' ? 'a top-up' : 'a shared model key'}); or kortix triggers enable ${t.slug} --apply`
+        : `kortix triggers enable ${t.slug} --apply`,
+    ]);
   }
   rows.push(['last_fired', t.last_fired_at ?? 'never']);
   if (t.last_status)

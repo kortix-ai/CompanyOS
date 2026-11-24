@@ -11,6 +11,7 @@ import { normalizeDefaultReasoningEffort } from './effort-default';
 import { type accountGithubInstallations, type projectGitConnections, type projectGitCredentials, projectSecrets, type projectSessions } from '@kortix/db';
 import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { sessionInitiatorLabel } from './session-initiator';
+import { projectSecretRowNotMoved } from '../../secrets/llm-credential-ledger';
 import { sessionRestoreUntil } from '../session-log-purge';
 import { type SandboxProviderName, config } from '../../config';
 import { mayManageSessionSharing, type SecretGrant, visibilityToIntent } from '../../connectors/share';
@@ -37,8 +38,10 @@ import { isPlaceholderSessionTitle, runtimeRootTitleFromSnapshot } from './sessi
 import { normalizeProjectGlyph } from './project-glyph';
 import { normalizeProjectIcon } from './project-icon';
 import { probeProjectSecret } from '../secrets/envelope';
+import { secretStrategyLockHolds } from '../../secrets/strategy';
 import { isDeprecatedProvider } from '../../platform/providers/deprecated';
 import { isPlatinumConfigured } from '../../shared/platinum';
+import { workspaceVolumesEnabled } from '../../platform/services/workspace-volume';
 import { projectsView } from '../../workspaces/rows';
 
 export const CODEX_AUTH_JSON_SECRET_NAME = 'CODEX_AUTH_JSON';
@@ -188,12 +191,13 @@ export function serializeSession(
   // auto title so list reads resolve the SAME string the session header shows
   // live, but never a user rename.
   const runtimeTitle = runtimeRootTitleFromSnapshot(runtimeSessions, row.runtimeSessionId);
+  const pinnedModel = typeof row.metadata?.model === 'string' ? row.metadata.model.trim() || null : null;
+  // A saved pick applies to the next turn, before the conversation log catches up.
+  const selectedModel = row.metadata?.model_source === 'explicit'
+    ? pinnedModel ?? ctx?.conversationModel ?? null
+    : ctx?.conversationModel ?? pinnedModel;
   return {
-    model: canAccess
-      ? (ctx?.conversationModel ?? (typeof row.metadata?.model === 'string'
-        ? row.metadata.model.trim() || null
-        : null))
-      : null,
+    model: canAccess ? selectedModel : null,
     session_id: row.sessionId,
     account_id: row.accountId,
     project_id: row.projectId,
@@ -364,6 +368,14 @@ export function serializeProject(
     // released TUI, mobile and CLI builds show Channels only while they read true.
     // `notification_center` graduated on 2026-11-06 and stays `true`: older web, SDK
     // and mobile builds show the bell, Web Push and session follow only while they read true.
+    // `pooled_provider_secrets` graduated on 2026-11-12 and stays `true`: older web, SDK,
+    // CLI and terminal UI builds show named keys and session key selection only while they read true.
+    // `secrets_egress` (Network-Enforced Secrets) graduated on 2026-11-23 and stays `true`:
+    // older web, SDK and CLI builds offer the enforced exposure only while they read true.
+    // `workspace_volume` (stateless sandboxes) graduated on 2026-11-23 and stays, equal to
+    // whether new sessions get a /workspace volume, for older web, SDK and CLI builds.
+    // `chrome` (Kortix in Chrome) graduated on 2026-11-24 and stays, equal to whether the API
+    // serves /v1/chrome: older web, SDK and CLI builds show its surfaces only while they read true.
     experimental: {
       ...resolveFeatureFlags(row.metadata),
       apps: true,
@@ -376,11 +388,15 @@ export function serializeProject(
       connectors_api_discover: true,
       meta_agent: true,
       notification_center: true,
+      pooled_provider_secrets: true,
+      secrets_egress: true,
       warm_sessions: false,
       volumes: isPlatinumConfigured(),
       drives: isPlatinumConfigured(),
       artifacts: isPlatinumConfigured(),
       artifact_comments: false,
+      workspace_volume: workspaceVolumesEnabled(),
+      chrome: config.KORTIX_CHROME_ENABLED,
       project_channels: resolveFeatureFlag(row.metadata, 'chat'),
     },
     experimental_features: buildFeatureFlagCatalog(row.metadata),
@@ -668,7 +684,7 @@ export function buildSecretView(input: {
     // field reads as "unknown" to them, a `false` would falsely disable the UI.
     network_boundary_available: true,
     egress_policy: deliveryRow?.egressPolicy ?? null,
-    strategy_locked: deliveryRow?.strategyLocked ?? false,
+    strategy_locked: deliveryRow ? secretStrategyLockHolds(deliveryRow) : false,
     last_rotated_at: deliveryRow?.rotatedAt?.toISOString() ?? null,
     requires_rotation: requiresRotation,
     // One decrypt of the SHARED value, the one a shared write replaces; the
@@ -705,6 +721,9 @@ export async function loadSecretViewsForUser(input: {
         userId
           ? or(isNull(projectSecrets.ownerUserId), eq(projectSecrets.ownerUserId, userId))
           : isNull(projectSecrets.ownerUserId),
+        // A provider key that moved to the named store is listed there
+        // (Models → Providers), not here.
+        projectSecretRowNotMoved(),
       ),
     )
     .orderBy(desc(projectSecrets.updatedAt));

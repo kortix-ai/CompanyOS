@@ -1,4 +1,5 @@
 import { ApiError } from '../api/client.ts';
+import { splitHelp } from '../command-argv.ts';
 import {
   describeConfigStatus,
   describeReloadOutcome,
@@ -13,6 +14,7 @@ import {
   expandSessionIdPrefix,
   locateSessionAnywhere,
   resolveProjectContext,
+  sessionIdArgs,
   surfaceApiError,
   takeFlagBool,
   takeFlagValue,
@@ -42,6 +44,8 @@ import type { ProjectSession, ProjectSummary } from '../api/types.ts';
 import { runGit } from '../git-run.ts';
 import { type SessionStartPayload, startPollIntervalMs, startProgressTracker } from '../session-boot.ts';
 import { C, help, pad, status } from '../style.ts';
+import { agentChoiceHintFor } from './session-agent-choice.ts';
+import { machineErrors } from '../token-denial.ts';
 import { sessionWebUrl } from '../web-url.ts';
 import { openInBrowser } from '../browser.ts';
 import { runSessionsDigest } from './sessions-digest.ts';
@@ -63,6 +67,7 @@ import {
   runSessionsStop,
 } from './sessions-lifecycle.ts';
 import { runSessionsQueue, wireMessageId } from './sessions-queue.ts';
+import { runSessionsUsage } from './sessions-usage.ts';
 import { runSessionsAttachments } from './sessions-attachments.ts';
 import { sessionListQuery, startedByLabel, takeSessionListFlags, type SessionListFlags } from './sessions-list.ts';
 import { runSessionsListState } from './sessions-pin.ts';
@@ -85,13 +90,14 @@ Subcommands:
      [--children <session-id>]      --shared = another member did,
      [--label <label>]...           --automated = a trigger, channel or API
      [--pinned|--archived|--deleted] key did; each lists top-level sessions
-                                    with their child count. --search <q>
+     [--space <space-id>]           with their child count. --search <q>
                                     matches every session you can see.
                                     --children <id> lists one session's
                                     children. --label <l> (repeatable)
                                     lists sessions carrying every given
-                                    label. The list leaves out the sessions
-                                    you archived: --archived lists only
+                                    label. --space <id> lists the sessions
+                                    of one space. The list leaves out the
+                                    sessions you archived: --archived lists only
                                     them, --pinned only your pinned ones.
                                     --deleted lists the deleted sessions
                                     you can still restore, with their full
@@ -109,6 +115,7 @@ Subcommands:
                                     session to that agent (default: My
                                     Kortix; default_agent when My Kortix is
                                     off, or when My Kortix starts it).
+                                    --space <id> files it in that space.
                                     --model <id> overrides the model. A
                                     model on an API key or a ChatGPT
                                     subscription runs on every key you may
@@ -226,6 +233,9 @@ Subcommands:
   files <session-id> <sub>          The sandbox's LIVE workspace: ls, status,
                                     find, write, touch, mkdir, mv, rm. --json.
   info <session-id>                 Show one session. --json.
+  usage <session-id>                What the session and the sessions it started
+                                    cost and consumed: paid wallet, BYOK
+                                    provider and total, tokens and cache. --json.
   scope <session-id>                Read or replace the session's secret and
                                     connector access. Changes apply to the next
                                     prompt. --secret, --no-secrets,
@@ -402,6 +412,9 @@ export async function runSessions(argv: string[]): Promise<number> {
   if (sub === 'model') {
     return runSessionsModel(argv.slice(1));
   }
+  if (sub === 'usage' || sub === 'cost') {
+    return runSessionsUsage(argv.slice(1));
+  }
   if (sub === 'compact' || sub === 'summarize') {
     return runSessionsCompact(argv.slice(1));
   }
@@ -414,10 +427,8 @@ export async function runSessions(argv: string[]): Promise<number> {
   // this a bare `--help` falls through as an ordinary positional arg — e.g.
   // `sessions info --help` would try to look up a session literally named
   // "--help" instead of showing usage.
-  if (rest.includes('-h') || rest.includes('--help')) {
-    process.stdout.write(HELP);
-    return 0;
-  }
+  const helped = splitHelp(argv, HELP);
+  if (helped !== null) return helped;
   const json = takeFlagBool(rest, ['--json']);
   const wait = takeFlagBool(rest, ['--wait']);
   const listPreviews = takeFlagBool(rest, ['--list']);
@@ -502,6 +513,8 @@ export type SessionOverrides = {
   runtimeContext?: Record<string, string>;
   labels?: string[];
   metadata?: Record<string, string>;
+  /** The space (session group id) the new session is filed in. */
+  space?: string;
 };
 
 
@@ -544,6 +557,8 @@ export function parseSessionOverrides(argv: string[]): SessionOverrides {
   }
   const labels = takeFlagValues(argv, ['--label']);
   if (labels.length) out.labels = labels;
+  const space = takeFlagValue(argv, ['--space'])?.trim();
+  if (space) out.space = space;
   for (const pair of takeFlagValues(argv, ['--meta'])) {
     const [key, value] = parseMetaPair(pair);
     (out.metadata ??= {})[key] = value;
@@ -709,6 +724,7 @@ async function sessionsNew(
   if (overrides.connectors !== undefined) body.connector_bindings = overrides.connectors;
   if (overrides.runtimeContext) body.runtime_context = overrides.runtimeContext;
   if (overrides.labels) body.labels = overrides.labels;
+  if (overrides.space) body.group_id = overrides.space;
   if (overrides.metadata) body.metadata = overrides.metadata;
 
   const prepared = await prepareClientCreatedBranch(ctx, body);
@@ -718,7 +734,11 @@ async function sessionsNew(
   try {
     created = await ctx.client.post<ProjectSession>(`/workspaces/${ctx.projectId}/sessions`, body);
   } catch (err) {
-    return surfaceApiError(err);
+    const code = surfaceApiError(err);
+    // My Kortix names its agent: say which flag fixes it (session-agent-choice.ts).
+    const hint = agentChoiceHintFor(err);
+    if (hint && !machineErrors()) process.stderr.write(`  ${hint}\n`);
+    return code;
   }
 
   // Drive the same canonical /start lifecycle endpoint the dashboard polls.
@@ -1286,7 +1306,7 @@ async function sessionsRm(
   opts: CtxOpts,
   json = false,
 ): Promise<number> {
-  const ids = sessionIds.filter((a) => !a.startsWith('-'));
+  const ids = sessionIdArgs(sessionIds);
   if (ids.length === 0) {
     process.stderr.write(`${status.err('Pass a session id.')}\n`);
     return 2;

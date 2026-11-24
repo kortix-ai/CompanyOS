@@ -34,7 +34,6 @@ export const PUBLIC_METADATA_TRANSLATION_KEYS: Readonly<Record<string, string>> 
   'Kortix Changelog': 'text1e2baba1cb9b',
   'Kortix Channels': 'text681d1d8cf3d9',
   'Kortix Enterprise': 'text6e3a9a94ccd7',
-  'Kortix Marketplace': 'text5aa2ff9bc46f',
   'Kortix Security': 'text8eab22952758',
   'Kortix Solutions by role': 'textce08e2abb642',
   'Kortix Use Cases': 'text5f513e5b2937',
@@ -46,7 +45,7 @@ export const PUBLIC_METADATA_TRANSLATION_KEYS: Readonly<Record<string, string>> 
   'Kortix terms of service and privacy policy.': 'text460a8b327e17',
   'One platform, eight teams with completely different work. What sales, marketing, product, engineering, finance, people, IT and data science can each hand off — and what comes back.':
     'text1327d65dc73c',
-  'Open positions at Kortix — FDE, GTM and MTS. Belgrade, Serbia and San Francisco. We hire for prolonged ownership.':
+  'Open positions at Kortix — FDE, GTM and MTS. Belgrade, Serbia and the US. We hire for prolonged ownership.':
     'text0f4827ef74ea',
   'Reach Kortix support by email or Discord, read the answers to the questions people ask most, and find the account deletion steps.':
     'text5b4afe177d99',
@@ -66,7 +65,6 @@ export const PUBLIC_METADATA_TRANSLATION_KEYS: Readonly<Record<string, string>> 
   "Contact sales and book a demo": 'text228359b08506',
   "About": 'text4efca0d10c5f',
   "Legal": 'text4787eaf7c938',
-  "Marketplace: agents, skills and workspace templates": 'text9d2ac301f9b3',
   "Developers: CLI, SDK and API for AI agents": 'text9673e23783ee',
   "Careers": 'text7e658675b5ca',
   "Changelog": 'textead07c84baac',

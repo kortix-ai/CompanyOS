@@ -16,6 +16,7 @@ import { invalidateIamCacheForUser, registerPrincipalScopedMemo } from '../../ia
 import { buildDenialError, denialReasonMessage } from '../../iam/denial-message';
 import { projectRoleForUser } from '../../iam/read-models';
 import { db } from '../../shared/db';
+import { captureProductEvent } from '../../shared/product-analytics';
 import { IMPERSONATION_INVALID_CODE, impersonatedAccountFor } from '../../shared/impersonation';
 import { accountKeyForWorkspaceId, resolveAccountId } from '../../shared/resolve-account';
 import { isUuid } from '../../shared/validate';
@@ -122,14 +123,17 @@ export function parseExpiresAtBody(
 export async function ensureOrgMembership(
   accountId: string,
   userId: string,
+  via: 'project_invite' | 'access_request',
 ): Promise<AccountRole> {
   const existing = await getAccountMembership(userId, accountId);
   if (existing) return existing.accountRole as AccountRole;
   // THE membership write (iam/workspace-members.ts). `SYSTEM_ACTOR`: the two
-  // callers (accepting a project invite, approving an access request) were
-  // authorized by their own route, and the person being added is not the writer.
+  // callers (adding an existing user to a project, approving an access request)
+  // were authorized by their own route, and the person being added is not the writer.
   await addWorkspaceMember(accountId, userId, 'member', [], { writer: SYSTEM_ACTOR, source: 'system' });
   invalidateIamCacheForUser(userId);
+  // Only a new membership is a join; an existing member gains a project, not a workspace.
+  captureProductEvent({ userId, accountId, event: 'member_joined', properties: { via, role: 'member' } });
   return 'member';
 }
 
@@ -138,8 +142,17 @@ export async function ensureOrgMembership(
  * `account_id`, already normalized) when the caller is a member of it, else
  * the caller's own account. Throws the 400/403 the request answers with. The
  * HTTP reader is `resolveProjectAccount` (`http-project-access.ts`).
+ *
+ * `serviceAccountOf` is set for a service-account request: the account its
+ * credential belongs to ('' when none). A service account has no membership
+ * row, so it acts in that account only, and every gate after this one asks the
+ * engine about its own grants.
  */
-export async function resolveRequestedProjectAccount(userId: string, requested: string | null) {
+export async function resolveRequestedProjectAccount(
+  userId: string,
+  requested: string | null,
+  serviceAccountOf: string | null,
+) {
   // A malformed account_id is caller input, not a lookup miss: past this point
   // it reaches the account-membership query, whose account_id comparison is a
   // uuid column, and Postgres answers SQLSTATE 22P02 — a 500. Refuse the shape
@@ -157,6 +170,20 @@ export async function resolveRequestedProjectAccount(userId: string, requested: 
         { status: 400, headers: { 'content-type': 'application/json' } },
       ),
     });
+  }
+  if (serviceAccountOf !== null) {
+    if (
+      !serviceAccountOf ||
+      (requested &&
+        requested !== serviceAccountOf &&
+        (await accountKeyForWorkspaceId(requested)) !== serviceAccountOf)
+    ) {
+      throw new HTTPException(403, { message: 'You do not have access to this workspace' });
+    }
+    setContextField('accountId', serviceAccountOf);
+    // No membership, so no account role: `member` is the label of least reach.
+    const accountRole: AccountRole = 'member';
+    return { userId, accountId: serviceAccountOf, accountRole };
   }
   // ACT-AS: the grant, not the query string, decides the account. Defense in
   // depth — under impersonation `/v1/accounts` returns only the target, so a

@@ -42,15 +42,16 @@ load_local_env() {
   # endpoint back to localhost and mark the process as local-dev so cloud
   # provision pollers do not sweep shared remote rows.
   # apps/api/.env and apps/web/.env are dotenvx-ENCRYPTED and committed to git.
-  # Decrypt them with the dotenvx private keys — apps/{api,web}/.env.keys locally,
-  # or Dotenv Armor (`dotenvx-armor login`) — and export into the shell so the
-  # API (Bun) and web (Next) children inherit the plaintext values.
+  # Decrypt them with the repo's dotenvx (2.x), which finds the private key in
+  # DOTENV_PRIVATE_KEY, apps/{api,web}/.env.keys, or the Dotenv Armor login
+  # (`dotenvx armor login`, token in the OS keychain), and export into the shell
+  # so the API (Bun) and web (Next) children inherit the plaintext values.
   local DOTENVX="$ROOT_DIR/node_modules/.bin/dotenvx" _f _env
   if [[ -x "$DOTENVX" ]]; then
     for _f in apps/api/.env apps/web/.env; do
       _env="$("$DOTENVX" get --format eval -f "$ROOT_DIR/$_f" 2>/dev/null || true)"
       if [[ -z "$_env" || "$_env" == *'="encrypted:'* ]]; then
-        echo "[dev] ⚠️  could not decrypt $_f — run 'dotenvx-armor login' (or restore its .env.keys)" >&2
+        echo "[dev] ⚠️  could not decrypt $_f — run 'dotenvx armor login' (dotenvx 2.7.1+), or restore its .env.keys" >&2
       else
         set -a; eval "$_env"; set +a
       fi
@@ -110,6 +111,9 @@ load_local_env() {
 ensure_dev_tunnel() {
   local api_port="${PORT:-8008}"
   local api_origin="http://localhost:${api_port}"
+  # OAuth providers (Google) accept only registered redirect URIs: keep the
+  # sign-in callback on localhost while KORTIX_URL becomes the tunnel.
+  export KORTIX_OAUTH_CALLBACK_ORIGIN="${KORTIX_OAUTH_CALLBACK_ORIGIN:-$api_origin}"
   local default_provider="${ALLOWED_SANDBOX_PROVIDERS%%,*}"
 
   # Callers below (the watchdog and the supervised API loop) read
@@ -551,7 +555,8 @@ run_sandbox_dev() {
     fi
   fi
 
-  # Local Supabase (Postgres + auth + REST + storage). Stop first for a clean
+  # Local Supabase (Postgres + auth + storage; no PostgREST, see
+  # supabase/config.toml). Stop first for a clean
   # slate — a partial/leftover start holds ports (e.g. 54324) and makes the
   # next `supabase start` fail with "address already in use".
   #
@@ -562,7 +567,7 @@ run_sandbox_dev() {
   if ! (cd "$SUPABASE_DIR" && supabase status >/dev/null 2>&1); then
     echo "[dev] supabase start…"
     (cd "$SUPABASE_DIR" && supabase stop --no-backup >/dev/null 2>&1 || true)
-    (cd "$SUPABASE_DIR" && supabase start -x studio,imgproxy)
+    (cd "$SUPABASE_DIR" && supabase start -x studio,imgproxy,postgrest)
   fi
   # Deterministic local dev credentials from the running stack.
   eval "$(cd "$SUPABASE_DIR" && supabase status -o env 2>/dev/null | sed 's/^/export SB_/')"
@@ -744,7 +749,7 @@ if [[ "$SUPABASE_IS_LOCAL" == "1" || "$DB_IS_LOCAL" == "1" ]]; then
     # stack is throwaway; this one is the developer's real database.
     echo "[dev] Local Supabase is down or half-up — clearing stale containers…"
     (cd "$SUPABASE_DIR" && supabase stop >/dev/null 2>&1 || true)
-    (cd "$SUPABASE_DIR" && supabase start)
+    (cd "$SUPABASE_DIR" && supabase start -x postgrest)
   fi
   # GitHub App manifest-state flows sign with the same JWT secret used by the
   # local Supabase instance. Export it only for the local data plane.

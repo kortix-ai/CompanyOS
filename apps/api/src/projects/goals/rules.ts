@@ -3,10 +3,11 @@
  * legal, what a complete verdict is, which evidence path is acceptable, and
  * the wake cap. `service.ts` applies them inside one row lock per write.
  */
-import { GOAL_LIMITS, GOAL_OPEN_STATES, type GoalCapabilities, type GoalState } from '@kortix/api-contract';
+import { GOAL_LIMITS, GOAL_OPEN_STATES, type GoalCapabilities } from '@kortix/api-contract';
 import type { ProjectGoalCriterion } from '@kortix/db';
 import { parseDurationSeconds } from '@kortix/manifest-schema';
 import type { GoalRow } from './store';
+import { isUuid } from '../../shared/validate';
 
 /**
  * Who calls. The route derives it from the credential, never from a body:
@@ -19,14 +20,37 @@ export type GoalActor =
   | { kind: 'session'; sessionId: string; userId: string }
   | { kind: 'platform' };
 
-export function actorKindOf(actor: GoalActor): 'user' | 'session' | 'platform' {
-  return actor.kind;
-}
-
 export function actorIdOf(actor: GoalActor): string | null {
   if (actor.kind === 'user') return actor.userId;
   if (actor.kind === 'session') return actor.sessionId;
   return null;
+}
+
+/**
+ * Goal mode: a goal its chat created with `here` and owns itself
+ * (`setup.bound`). It needs no `goals` flag and has no handover. The chat
+ * stays a chat: its person's messages always run, and it stops its own goal
+ * when its person says so.
+ */
+export function isBoundGoal(goal: { setup: Record<string, unknown> }): boolean {
+  return goal.setup?.bound === true;
+}
+
+/** The marker every prompt the goal engine writes starts with (`goalWakePrompt`). */
+const wakeMarker = (boxFolder: string): string => `Goal wake: ${boxFolder}.`;
+const NAMED_GOAL = /\bgoal ([0-9a-f-]{36})\b/g;
+
+/**
+ * A prompt the goal engine queued, not a person, and the goal it names: one
+ * from the goal queue (`system:goal`: an answer, a resume, a restart, a
+ * verifier's first prompt), or a fire of a goal's heartbeat reminder (its
+ * text carries the wake marker). Null for any other prompt. A stop deletes
+ * the heartbeat, so a fire queued before it is known by its text.
+ */
+export function goalEnginePrompt(prompt: { source: string; text: string }): { goalId: string | null } | null {
+  const goalId = [...prompt.text.matchAll(NAMED_GOAL)].map((m) => m[1]!).find(isUuid) ?? null;
+  if (prompt.source === 'system:goal') return { goalId };
+  return prompt.source === 'trigger:reminder' && goalId && prompt.text.includes('Goal wake: ') ? { goalId } : null;
 }
 
 export function isOpenState(state: string): boolean {
@@ -225,7 +249,7 @@ export function goalAgentCandidates(
 
 /** The heartbeat prompt. The marker `Goal wake: <box folder>.` is what `kortix goals` and older boxes look for. */
 export function goalWakePrompt(boxFolder: string, goalId: string): string {
-  return `Goal wake: ${boxFolder}. Load the kortix-goals skill and run one wake (goal ${goalId}).`;
+  return `${wakeMarker(boxFolder)} Load the kortix-goals skill and run one wake (goal ${goalId}).`;
 }
 
 export function chaseBounds(now: Date): { min: Date; max: Date } {
@@ -234,5 +258,3 @@ export function chaseBounds(now: Date): { min: Date; max: Date } {
     max: new Date(now.getTime() + GOAL_LIMITS.chase_max_days * 86_400_000),
   };
 }
-
-export const GOAL_STATES: readonly GoalState[] = ['draft', 'active', 'waiting_on_user', 'verifying', 'done', 'stopped'];

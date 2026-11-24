@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { accounts, appArtifacts, appDeployments, appLinks, appRuntimes, appVolumes, apps, projects } from '@kortix/db';
 import { resolveAppReleaseConfig, type AppReleaseConfig } from '@kortix/shared/app-config';
 import { and, asc, eq, inArray, notInArray } from 'drizzle-orm';
+import type { AppdStatus, AppRuntimeHandle, StartAppRuntimeInput } from './hosting';
 
 process.env.KORTIX_APPS_WORKER_ENABLED = 'false';
 
@@ -17,24 +18,41 @@ process.env.KORTIX_APPS_WORKER_ENABLED = 'false';
 const calls: string[] = [];
 let createdBoxes = 0;
 let failReadyFor = new Set<string>();
+/** One-shot 40P01 victims the metering fake throws (a deadlock after the row insert committed). */
+let meterFailures = 0;
+let createFails = false;
+let execFails = false;
+const runtimeInputs: StartAppRuntimeInput[] = [];
 
 const realHosting = await import('./hosting');
 mock.module('./hosting', () => ({
   ...realHosting,
-  AppHostingProvider: class {
-    async createRuntime(input: { runtimeId: string; volumes?: Record<string, { volume: string }> }) {
+  // Extends the real class: machines.ts's destroy and create-failure paths roll a
+  // runtime back through hosting.remove (machines.ts:230, :568), and a hand-rolled
+  // stub without it masked the real pg error with `hosting.remove is not a function`.
+  // The inherited methods resolve providers through the mocked getProvider below.
+  AppHostingProvider: class extends realHosting.AppHostingProvider {
+    override async createRuntime(input: StartAppRuntimeInput): Promise<AppRuntimeHandle> {
+      runtimeInputs.push(input);
+      if (createFails) throw new Error('provider create failed');
       createdBoxes += 1;
       const externalId = `box-${createdBoxes}`;
       const mounts = Object.entries(input.volumes ?? {}).map(([path, spec]) => `${path}=${spec.volume}`);
       calls.push(`create ${externalId}${mounts.length ? ` mount ${mounts.join(',')}` : ''}`);
-      return { externalId, controlTokenHash: `hash-${input.runtimeId}`, metadata: {} };
+      return { externalId, baseUrl: '', metadata: { providerMarker: 'handle' }, provider: input.provider, runtimeId: input.runtimeId, controlTokenHash: `hash-${input.runtimeId}` };
     }
-    async waitUntilReady(_provider: string, externalId: string) {
+    override async waitUntilReady(_provider: string, externalId: string): Promise<AppdStatus> {
       calls.push(`ready? ${externalId}`);
       if (failReadyFor.has(externalId)) throw new Error('kortix-appd failed: exit 1');
+      return { status: 'running', ready: true };
     }
-    async stop(_provider: string, externalId: string) { calls.push(`stop ${externalId}`); }
-    async start(_provider: string, externalId: string) { calls.push(`start ${externalId}`); }
+    override async exec(_provider: StartAppRuntimeInput['provider'], externalId: string, command: string[], timeoutMs: number) {
+      calls.push(`exec ${externalId} ${command.join(' ')} timeout=${timeoutMs}`);
+      if (execFails) throw new Error('release exec failed');
+      return { exitCode: 7, stdout: 'out', stderr: 'err' };
+    }
+    override async stop(_provider: string, externalId: string) { calls.push(`stop ${externalId}`); }
+    override async start(_provider: string, externalId: string) { calls.push(`start ${externalId}`); }
   },
 }));
 const realProviders = await import('../platform/providers');
@@ -63,7 +81,12 @@ mock.module('../projects/secrets', () => ({ ...realSecrets, listResolvedProjectS
 const realMetering = await import('../billing/services/compute-metering');
 mock.module('../billing/services/compute-metering', () => ({
   ...realMetering,
-  startComputeSession: async () => {},
+  startComputeSession: async () => {
+    if (meterFailures > 0) {
+      meterFailures -= 1;
+      throw Object.assign(new Error('deadlock detected'), { name: 'PostgresError', code: '40P01' });
+    }
+  },
   pauseComputeSession: async () => {},
 }));
 
@@ -88,6 +111,10 @@ const USER_ID = '00000000-0000-4000-a000-00000000f105';
 const PROVIDER = 'platinum';
 
 async function cleanup(): Promise<void> {
+  // A setAppScale leaves a background reconcile running (fire-and-forget by
+  // design). Settle it before the cascade below, or the reconcile's in-flight
+  // app_runtimes insert deadlocks against this delete (40P01, release gate).
+  await machines.settleAppReconciles(APP_ID);
   await db.update(apps).set({ activeDeploymentId: null }).where(eq(apps.projectId, PROJECT_ID));
   await db.delete(apps).where(eq(apps.projectId, PROJECT_ID));
   await db.delete(appArtifacts).where(eq(appArtifacts.projectId, PROJECT_ID));
@@ -149,6 +176,10 @@ withDb('machines and volumes — real PostgreSQL', () => {
     calls.length = 0;
     createdBoxes = 0;
     failReadyFor = new Set();
+    meterFailures = 0;
+    createFails = false;
+    execFails = false;
+    runtimeInputs.length = 0;
     await cleanup();
   });
   afterEach(cleanup);
@@ -233,6 +264,136 @@ withDb('machines and volumes — real PostgreSQL', () => {
     expect(after!.attachedRuntimeId).toBe(restored!.runtimeId);
   });
 
+  test('a failed-deploy cleanup still lands when the restore machine never gets healthy: the abandon resolves, the failed release still goes', async () => {
+    await seedApp();
+    const v1 = await deploy(stateful, 1);
+    // v2's machine AND the cleanup's restore machine both never answer ready.
+    // Prod 2026-11-12 (KRTX-4811): a readiness failure on either machine made
+    // the failed deploy's cleanup step log '[apps] failed-deploy cleanup step
+    // failed' even though its essential work had landed.
+    failReadyFor = new Set(['box-2', 'box-3']);
+
+    const app = await appRow();
+    const v2 = await release(2, stateful);
+    await expect(machines.rollOutRelease({
+      hosting: new AppHostingProvider(), app, deployment: v2, config: stateful,
+      env: await machines.releaseEnvironment(app, v2), activate: async () => {},
+    })).rejects.toThrow('kortix-appd failed');
+    await db.update(appDeployments).set({ status: 'failed' }).where(eq(appDeployments.deploymentId, v2.deploymentId));
+    calls.length = 0;
+
+    // The essential cleanup (the failed release's machine is gone, traffic stays
+    // on v1) must land; the restore's readiness failure must not fail the step.
+    await machines.abandonRelease(APP_ID, v2.deploymentId, new AppHostingProvider());
+
+    expect(await liveInstances(v2.deploymentId)).toEqual([]);
+    expect((await appRow()).activeDeploymentId).toBe(v1.deploymentId);
+    expect(calls).toContain('remove box-2');
+    expect(calls.some((call) => call.startsWith('ready? box-3'))).toBe(true);
+  });
+
+  test('a failed runtime insert surfaces as itself and removes the box it just created', async () => {
+    await seedApp();
+    const v1 = await deploy(stateless, 1);
+    const [live] = await liveInstances(v1.deploymentId);
+    const app = await appRow();
+    calls.length = 0;
+    // A second live row for the same machine violates app_runtimes_one_live_per_machine:
+    // the rollback removes the box and rethrows the real error, never a masking TypeError.
+    await expect(machines.createInstance({
+      hosting: new AppHostingProvider(), app, deployment: v1, config: stateless,
+      env: await machines.releaseEnvironment(app, v1),
+      group: 'app', machineId: live!.machineId!,
+    })).rejects.toThrow(/insert into "kortix"\."app_runtimes"/);
+    expect(calls).toContain('remove box-2');
+  });
+
+  test('release-command insert failure removes its box and preserves the database error', async () => {
+    await seedApp();
+    const app = await appRow();
+    const deployment = await release(1, stateless);
+    // An absent deployment violates the real FK only after the provider created the box.
+    await db.delete(appDeployments).where(eq(appDeployments.deploymentId, deployment.deploymentId));
+    await expect(machines.runReleaseCommand({
+      hosting: new AppHostingProvider(), app, deployment, config: stateless,
+      env: { env: {}, secretIdentifiers: [], environmentKeys: [] }, command: 'exit 7',
+    })).rejects.toThrow(/insert into "kortix"\."app_runtimes"/);
+    expect(calls).toEqual(['create box-1', 'remove box-1']);
+    expect(await liveInstances(deployment.deploymentId)).toEqual([]);
+  });
+
+  test('release command keeps its running identity and metadata distinct, then tears down after exec', async () => {
+    await seedApp();
+    const app = await appRow();
+    const deployment = await release(1, stateless);
+    const result = await machines.runReleaseCommand({
+      hosting: new AppHostingProvider(), app, deployment, config: stateless,
+      env: { env: { RELEASE_VALUE: 'different' }, secretIdentifiers: ['SECRET'], environmentKeys: ['RELEASE_VALUE'] },
+      command: 'exit 7', timeoutMs: 4321,
+    });
+    expect(result).toEqual({ exitCode: 7, output: 'out\nerr' });
+    const [row] = await db.select().from(appRuntimes).where(eq(appRuntimes.deploymentId, deployment.deploymentId));
+    expect(row).toMatchObject({ machineId: row?.runtimeId, processGroup: '_release', volumeId: null, idleDeadlineAt: null });
+    expect(row?.metadata).toEqual({ providerMarker: 'handle', machine: { cpuCores: 1, memoryGb: 2, diskGb: 10 }, role: 'release_command' });
+    expect(runtimeInputs[0]).toMatchObject({ envVars: { RELEASE_VALUE: 'different' } });
+    expect(runtimeInputs[0]?.volumes).toBeUndefined();
+    expect(calls).toContain('exec box-1 sh -c exit 7 timeout=4321');
+    expect(calls).toContain('remove box-1');
+  });
+
+  for (const failure of ['exec', 'meter'] as const) {
+    test(`release-command ${failure} failure tears down its inserted runtime`, async () => {
+      await seedApp();
+      const app = await appRow();
+      const deployment = await release(1, stateless);
+      execFails = failure === 'exec';
+      meterFailures = failure === 'meter' ? 1 : 0;
+      await expect(machines.runReleaseCommand({
+        hosting: new AppHostingProvider(), app, deployment, config: stateless,
+        env: { env: {}, secretIdentifiers: [], environmentKeys: [] }, command: 'false',
+      })).rejects.toThrow(failure === 'exec' ? 'release exec failed' : 'deadlock detected');
+      expect(calls).toContain('remove box-1');
+      expect(await liveInstances(deployment.deploymentId)).toEqual([]);
+    });
+  }
+
+  test('normal creation retains a starting row when post-insert metering fails', async () => {
+    await seedApp();
+    const app = await appRow();
+    const deployment = await release(1, stateful);
+    meterFailures = 1;
+    const machineId = '00000000-0000-4000-a000-00000000f106';
+    await expect(machines.createInstance({
+      hosting: new AppHostingProvider(), app, deployment, config: stateful,
+      env: { env: { NORMAL_VALUE: 'normal' }, secretIdentifiers: ['SECRET'], environmentKeys: ['NORMAL_VALUE'] },
+      group: 'app', machineId,
+    })).rejects.toThrow('deadlock detected');
+    const [row] = await liveInstances(deployment.deploymentId);
+    expect(row).toMatchObject({ status: 'starting', machineId, processGroup: 'app' });
+    expect(row?.volumeId).toBeString();
+    expect(row?.idleDeadlineAt).toBeInstanceOf(Date);
+    expect(row?.metadata).toEqual({ providerMarker: 'handle', machine: { cpuCores: 1, memoryGb: 2, diskGb: 10 }, secretIdentifiers: ['SECRET'], environmentKeys: ['NORMAL_VALUE'] });
+    expect(runtimeInputs[0]).toMatchObject({ envVars: { NORMAL_VALUE: 'normal', KORTIX_MACHINE_ID: machineId, KORTIX_PROCESS_GROUP: 'app' } });
+    expect(calls).not.toContain('remove box-1');
+    const [volume] = await db.select().from(appVolumes).where(eq(appVolumes.appId, APP_ID));
+    expect(volume?.attachedRuntimeId).toBe(row?.runtimeId);
+  });
+
+  test('normal provider creation failure releases the acquired volume without inserting a row', async () => {
+    await seedApp();
+    const app = await appRow();
+    const deployment = await release(1, stateful);
+    createFails = true;
+    await expect(machines.createInstance({
+      hosting: new AppHostingProvider(), app, deployment, config: stateful,
+      env: { env: {}, secretIdentifiers: [], environmentKeys: [] }, group: 'app',
+      machineId: '00000000-0000-4000-a000-00000000f107',
+    })).rejects.toThrow('provider create failed');
+    expect(await liveInstances(deployment.deploymentId)).toEqual([]);
+    const [volume] = await db.select().from(appVolumes).where(eq(appVolumes.appId, APP_ID));
+    expect(volume?.attachedRuntimeId).toBeNull();
+  });
+
   test('scale reconcile: up creates machines (a mounted group gets one new volume each), down destroys the newest and keeps their volumes', async () => {
     await seedApp();
     const v1 = await deploy(stateful, 1);
@@ -247,6 +408,18 @@ withDb('machines and volumes — real PostgreSQL', () => {
     const kept = await db.select().from(appVolumes).where(eq(appVolumes.appId, APP_ID));
     expect(kept).toHaveLength(3);
     expect(kept.filter((row) => row.attachedRuntimeId)).toHaveLength(1);
+  });
+
+  test('scale reconcile: a 40P01 victim after the row insert — the retry meters and readies the committed starting machine', async () => {
+    await seedApp({ app: 1 });
+    const v1 = await deploy(stateless, 1);
+    await db.update(apps).set({ scale: { app: 2 } }).where(eq(apps.appId, APP_ID));
+    // The victim hits the metering call AFTER createInstance's insert committed:
+    // the retry re-reads, sees the 'starting' row count toward target, and must
+    // finish its meter and readiness — not skip it and strand it in starting.
+    meterFailures = 1;
+    expect(await machines.reconcileAppMachines(APP_ID, { hosting: new AppHostingProvider() })).toEqual({ created: 1, destroyed: 0 });
+    expect((await liveInstances(v1.deploymentId)).map((instance) => instance.status)).toEqual(['running', 'running']);
   });
 
   test('a machine gets KORTIX_USES_URL_<SLUG> for every live App its App uses (a server reaches a backend without the browser binding)', async () => {

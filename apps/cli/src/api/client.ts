@@ -50,7 +50,8 @@ export interface ClientOptions {
   /** When set (non-empty), every request is scoped to this account via a
    *  `?account_id=` query param. The API honors it in resolveProjectAccount
    *  (and validates membership); project-id routes ignore it. Without it the
-   *  server falls back to the caller's earliest-joined account. */
+   *  server falls back to the caller's earliest-joined account, except the
+   *  project list, which then lists every account of a person. */
   accountId?: string;
   signal?: AbortSignal;
 }
@@ -201,7 +202,7 @@ function isManifestCasConflict(err: unknown): boolean {
 }
 
 const ACCOUNT_FAMILY_PATH = new RegExp(
-  `^(/v1)?/workspaces/([^/?#]+)/(${WORKSPACE_ACCOUNT_FAMILIES.map((f) => f.replace(/[-]/g, '\\-')).join('|')})(?=[/?#]|$)`,
+  `^(/v1)?/workspaces/([^/?#]+)/(${WORKSPACE_ACCOUNT_FAMILIES.map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?=[/?#]|$)`,
 );
 
 /**

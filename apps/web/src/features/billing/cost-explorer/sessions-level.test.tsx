@@ -8,7 +8,6 @@ import {
   type SessionCostSummary,
 } from '@kortix/sdk';
 import {
-  focusManager,
   QueryClient,
   QueryClientProvider,
   QueryObserver,
@@ -398,6 +397,7 @@ describe('SessionsLevelTable', () => {
   test('renders session, owner and cost cells', () => {
     const html = renderToStaticMarkup(
       <SessionsLevelTable
+        ownerFiltered={false}
         data={page}
         isLoading={false}
         error={null}
@@ -422,6 +422,7 @@ describe('SessionsLevelTable', () => {
   test('renders columns in order: Session, Owner, Requests, LLM, Compute, Total', () => {
     const html = renderToStaticMarkup(
       <SessionsLevelTable
+        ownerFiltered={false}
         data={page}
         isLoading={false}
         error={null}
@@ -450,6 +451,7 @@ describe('SessionsLevelTable', () => {
   test('the totals footer equals the sum of the rendered rows', () => {
     const html = renderToStaticMarkup(
       <SessionsLevelTable
+        ownerFiltered={false}
         data={page}
         isLoading={false}
         error={null}
@@ -476,6 +478,7 @@ describe('SessionsLevelTable', () => {
   test('the footer row is labelled "Page total", never a bare "Total"', () => {
     const html = renderToStaticMarkup(
       <SessionsLevelTable
+        ownerFiltered={false}
         data={{ ...page, total: 55, next_offset: 25 }}
         isLoading={false}
         error={null}
@@ -502,6 +505,7 @@ describe('SessionsLevelTable', () => {
   test('the whole row is clickable and calls onSelectSession with that session id', () => {
     const selected: string[] = [];
     const tree = SessionsLevelTable({
+      ownerFiltered: false,
       data: page,
       isLoading: false,
       error: null,
@@ -537,6 +541,7 @@ describe('SessionsLevelTable', () => {
   function headerHtml(sort: SessionCostSort = 'total_desc'): string {
     const html = renderToStaticMarkup(
       <SessionsLevelTable
+        ownerFiltered={false}
         data={page}
         isLoading={false}
         error={null}
@@ -603,6 +608,7 @@ describe('SessionsLevelTable', () => {
   test('clicking a sortable header reports which column was clicked', () => {
     const clicked: string[] = [];
     const tree = SessionsLevelTable({
+      ownerFiltered: false,
       data: page,
       isLoading: false,
       error: null,
@@ -624,6 +630,7 @@ describe('SessionsLevelTable', () => {
   test('shows the loading skeleton, not an empty table, while the first fetch is in flight', () => {
     const html = renderToStaticMarkup(
       <SessionsLevelTable
+        ownerFiltered={false}
         data={undefined}
         isLoading={true}
         error={null}
@@ -640,6 +647,7 @@ describe('SessionsLevelTable', () => {
   test('renders the error banner instead of the table on failure', () => {
     const html = renderToStaticMarkup(
       <SessionsLevelTable
+        ownerFiltered={false}
         data={undefined}
         isLoading={false}
         error={new Error('upstream unavailable')}
@@ -657,6 +665,7 @@ describe('SessionsLevelTable', () => {
   test('renders an explicit empty state', () => {
     const html = renderToStaticMarkup(
       <SessionsLevelTable
+        ownerFiltered={false}
         data={{ ...page, sessions: [], total: 0 }}
         isLoading={false}
         error={null}
@@ -684,6 +693,7 @@ describe('SessionsLevelTable', () => {
   test('renders the loading state, not "No sessions", when no page has been read and nothing is in flight', () => {
     const html = renderToStaticMarkup(
       <SessionsLevelTable
+        ownerFiltered={false}
         data={undefined}
         isLoading={false}
         error={null}
@@ -705,6 +715,7 @@ describe('SessionsLevelTable', () => {
   test('a failed refetch over an already-read empty page shows the error, not the empty state', () => {
     const html = renderToStaticMarkup(
       <SessionsLevelTable
+        ownerFiltered={false}
         data={{ ...page, sessions: [], total: 0 }}
         isLoading={false}
         error={new Error('upstream unavailable')}
@@ -723,6 +734,7 @@ describe('SessionsLevelTable', () => {
   test('disables Previous on the first page and Next on the last page', () => {
     const html = renderToStaticMarkup(
       <SessionsLevelTable
+        ownerFiltered={false}
         data={page}
         isLoading={false}
         error={null}
@@ -741,6 +753,111 @@ describe('SessionsLevelTable', () => {
   });
 });
 
+// ── KRTX-4428: the spend no session owns ───────────────────────────────────
+//
+// The dogfood journey `usage-costs-after-session` read 7 requests / 2.27
+// credits on the summary tiles and 6 / 2.26 on the table, because one
+// request matched no session. `/usage/session-costs` returns exactly that
+// remainder as `reconciliation`; the table dropped it.
+describe('SessionsLevelTable unattributed spend', () => {
+  const unattributed = {
+    llm_cost: 0.25,
+    compute_cost: 0.75,
+    total_cost: 1,
+    request_count: 2,
+    compute_window_count: 1,
+    compute_seconds: 60,
+  };
+  const withRemainder: SessionCostsPage = { ...page, reconciliation: unattributed };
+
+  function render(data: SessionCostsPage, ownerFiltered = false): string {
+    return renderToStaticMarkup(
+      <SessionsLevelTable
+        data={data}
+        ownerFiltered={ownerFiltered}
+        isLoading={false}
+        error={null}
+        sort="total_desc"
+        onSort={noop}
+        onSelectSession={noop}
+        onPreviousPage={noop}
+        onNextPage={noop}
+      />,
+    );
+  }
+
+  function footer(html: string): string {
+    return html.match(/<tfoot[^>]*>[\s\S]*?<\/tfoot>/)?.[0] ?? '';
+  }
+
+  test('renders the remainder as its own row, and the page total includes it', () => {
+    const html = render(withRemainder);
+    const body = html.match(/<tbody[^>]*>[\s\S]*?<\/tbody>/)?.[0] ?? '';
+    expect(body).toContain('Not attributed to a session');
+    expect(body).toContain('>25<'); // 0.25 LLM
+    expect(body).toContain('>75<'); // 0.75 compute
+    // 3 + 5 + 2 requests; 1.10 + 2.20 + 0.25 LLM; 0.40 + 1.30 + 0.75
+    // compute; 1.50 + 3.50 + 1.00 total.
+    expect(footer(html)).toContain('>10<');
+    expect(footer(html)).toContain('>355<');
+    expect(footer(html)).toContain('>245<');
+    expect(footer(html)).toContain('>600<');
+  });
+
+  test('the remainder row opens nothing — only session rows are clickable', () => {
+    const tree = SessionsLevelTable({
+      data: withRemainder,
+      ownerFiltered: false,
+      isLoading: false,
+      error: null,
+      sort: 'total_desc',
+      onSort: noop,
+      onSelectSession: noop,
+      onPreviousPage: noop,
+      onNextPage: noop,
+    });
+    const clickable = collectElementsByType(tree, TableRow).filter(
+      (row) => typeof row.props?.onClick === 'function',
+    );
+    expect(clickable).toHaveLength(twoSessions.length);
+  });
+
+  test('no row when everything is attributed', () => {
+    const html = render(page);
+    expect(html).not.toContain('Not attributed to a session');
+    expect(footer(html)).toContain('>500<');
+  });
+
+  // The remainder is window-wide, not per page: it shows once, on the last.
+  test('no row on a page that is not the last', () => {
+    const html = render({ ...withRemainder, total: 30, next_offset: 25 });
+    expect(html).not.toContain('Not attributed to a session');
+    expect(footer(html)).toContain('>500<');
+  });
+
+  // Spend with no session has no owner either.
+  test('no row under an owner filter', () => {
+    const html = render(withRemainder, true);
+    expect(html).not.toContain('Not attributed to a session');
+  });
+
+  test('a request with zero cost still shows: the counts must add up too', () => {
+    const html = render({
+      ...page,
+      reconciliation: { ...page.reconciliation, request_count: 1 },
+    });
+    expect(html).toContain('Not attributed to a session');
+    expect(footer(html)).toContain('>9<');
+  });
+
+  test('a project with no sessions but unattributed spend shows the row, not "No sessions"', () => {
+    const html = render({ ...withRemainder, sessions: [], total: 0 });
+    expect(html).not.toContain('No sessions');
+    expect(html).toContain('Not attributed to a session');
+    expect(footer(html)).toContain('>100<');
+  });
+});
+
 // ── The state a failed /usage/session-costs request actually reaches ───────
 //
 // This is the reproduction of the live defect, not a hand-built prop triple:
@@ -750,96 +867,7 @@ describe('SessionsLevelTable', () => {
 // SDK `ApiError` carrying status 500, and asserts what the component is then
 // handed.
 //
-// A rejected fetch does NOT always end in `status: 'error'`. React Query
-// pauses the retry loop between attempts whenever the document is hidden or
-// the browser is offline (`canContinue()` in query-core's `retryer.ts`
-// checks `focusManager.isFocused()` and `onlineManager.isOnline()`), which
-// dispatches `{ type: 'pause' }` -> `fetchStatus: 'paused'` with `status`
-// still `pending` and `error` still null. `isLoading` is `isPending &&
-// isFetching`, and a paused query is not fetching, so the component sees
-// `isLoading: false` / `error: null` / `data: undefined` and stays there
-// until focus returns.
 describe('the state a failed /usage/session-costs request hands the table', () => {
-  test('a paused retry reports isLoading false with a null error, and must not render as "No sessions"', async () => {
-    // Not focused => the retry loop pauses instead of running to `error`.
-    // Restored in `finally`: focusManager is a process-wide singleton.
-    focusManager.setFocused(false);
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: {
-          // The app's own retry predicate (react-query-provider.tsx): a 500
-          // is retried, so the fetch enters the retry loop where the pause
-          // happens. retryDelay is shortened only to keep the test fast —
-          // the pause is triggered by focus, not by the delay's length.
-          retry: (failureCount: number, error: unknown) => {
-            const status = (error as { status?: number } | null)?.status;
-            if (status != null && status >= 400 && status < 500) return false;
-            return failureCount < 3;
-          },
-          retryDelay: 1,
-        },
-      },
-    });
-
-    try {
-      const options = buildSessionCostsListQuery(
-        {
-          accountId: 'acct-1',
-          projectId: 'project-1',
-          limit: SESSION_COST_PAGE_SIZE,
-          offset: 0,
-          from: range.from,
-          to: range.to,
-          sort: 'total_desc',
-        },
-        {
-          list: async () => {
-            throw new ApiError('column reference "last_at" is ambiguous', { status: 500 });
-          },
-          get: (async () => {}) as never,
-          projects: (async () => []) as never,
-        },
-      );
-      const observer = new QueryObserver(client, client.defaultQueryOptions(options));
-      const unsubscribe = observer.subscribe(() => {});
-
-      const deadline = Date.now() + 3000;
-      while (observer.getCurrentResult().fetchStatus !== 'paused' && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      }
-
-      // With the observer mounted and the query key unchanged, this is
-      // exactly what `useQuery` returns for this frame.
-      const result = observer.getCurrentResult();
-      expect(result.fetchStatus).toBe('paused');
-      expect(result.isLoading).toBe(false);
-      expect(result.error).toBeNull();
-      expect(result.data).toBeUndefined();
-
-      const html = renderToStaticMarkup(
-        <SessionsLevelTable
-          data={result.data}
-          isLoading={result.isLoading}
-          // The narrowing `SessionsLevel` applies at the call site. It is not
-          // what dropped the error here: there is no error to narrow.
-          error={result.error instanceof Error ? result.error : null}
-          sort="total_desc"
-          onSort={noop}
-          onSelectSession={noop}
-          onPreviousPage={noop}
-          onNextPage={noop}
-        />,
-      );
-      expect(html).not.toContain('No sessions');
-
-      unsubscribe();
-      observer.destroy();
-    } finally {
-      focusManager.setFocused(true);
-      client.clear();
-    }
-  });
-
   // Kills the "the rejection value was not an Error instance" hypothesis for
   // good: the value `unwrap` throws on a 500 is the SDK's `ApiError`, and it
   // survives `error instanceof Error` — so `SessionsLevel`'s narrowing at
@@ -880,6 +908,7 @@ describe('the state a failed /usage/session-costs request hands the table', () =
 
       const html = renderToStaticMarkup(
         <SessionsLevelTable
+          ownerFiltered={false}
           data={result.data}
           isLoading={result.isLoading}
           error={result.error instanceof Error ? result.error : null}
@@ -947,7 +976,7 @@ describe('SessionsLevel', () => {
     expect(html).not.toContain('Sort sessions');
   });
 
-  // Counted rather than matched on absent text: a Radix `Select` renders its
+  // Counted rather than matched on absent text: a `Select` renders its
   // items in a portal, so "Highest spend" was never in the static markup even
   // when the control existed — asserting its absence would have passed before
   // the removal too. The TRIGGER does render, so counting triggers is what

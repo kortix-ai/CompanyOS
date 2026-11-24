@@ -6,6 +6,7 @@ import {
   EMPTY_SESSION_LOG_STATE,
   applySessionLogEvent,
   applySessionLogPage,
+  isStaleSessionLogPage,
   selectSessionLog,
   selectSessionLogThread,
   type SessionLogState,
@@ -86,6 +87,131 @@ describe('applySessionLogPage', () => {
     // The API has not stored the newest message yet: its page ends one message earlier.
     state = applySessionLogPage(state, page(all.slice(0, -1)));
     expect(ids(state)).toEqual(all.map((m) => m.message_id));
+  });
+
+  // The reported bug: replies vanish until a hard refresh. The box's page (or the device's
+  // saved copy) delivered the newest turns without revs; the API's page lags the box by the
+  // journal's post interval (longer when a post fails), so it ends turns earlier. Applied
+  // after the box page, it settled away every reply newer than its own last message. The user
+  // messages came back as provisional prompts (`sent`, the v1 optimistic rows); the replies did not.
+  for (const has_more of [false, true]) {
+    test(`a lagging page (has_more: ${has_more}) never removes the newer turns a fresher page delivered`, () => {
+      const all = rootMessages();
+      let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all));
+      // A whole-thread page (has_more: false) starts at the first message; a window starts later.
+      const lagging = { ...page(all.slice(has_more ? 4 : 0, -4)), has_more };
+      state = applySessionLogPage(state, lagging);
+      expect(ids(state)).toEqual(all.map((m) => m.message_id));
+      expect(state.messages[ROOT]!.filter((m) => m.role === 'assistant')).toHaveLength(all.filter((m) => m.role === 'assistant').length);
+    });
+  }
+
+  test('a page of a newer generation settles the whole tail: the restarted box never journaled the old box\'s last reply', () => {
+    const all = rootMessages();
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all, 1));
+    state = applySessionLogPage(state, page(all.slice(0, -1), 2));
+    expect(ids(state)).toEqual(all.slice(0, -1).map((m) => m.message_id));
+  });
+
+  test('the new generation\'s log.state frame before its page: the page still settles the old tail', () => {
+    const all = rootMessages();
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all, 1));
+    state = applySessionLogEvent(state, ev('log.state', { generation: 2, session: {} }));
+    state = applySessionLogPage(state, page(all.slice(0, -1), 2));
+    expect(ids(state)).toEqual(all.slice(0, -1).map((m) => m.message_id));
+    // A lagging page of that same generation is bounded again.
+    state = applySessionLogPage(applySessionLogPage(state, page(all, 2)), page(all.slice(0, -2), 2));
+    expect(ids(state)).toEqual(all.map((m) => m.message_id));
+  });
+
+  test('an older page of the new generation read first does not stop the newest page settling the old tail', () => {
+    const all = rootMessages();
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all, 1));
+    state = applySessionLogPage(state, { ...page(all.slice(0, 4), 2), has_more: false }, all[4]!.seq);
+    state = applySessionLogPage(state, page(all.slice(0, -1), 2));
+    expect(ids(state)).toEqual(all.slice(0, -1).map((m) => m.message_id));
+  });
+
+  test('the box\'s own page answers for the tail: a reply it lacks after its last seq leaves', () => {
+    const all = rootMessages();
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all));
+    state = applySessionLogPage(state, page(all.slice(0, -1)), undefined, { box: true });
+    expect(ids(state)).toEqual(all.slice(0, -1).map((m) => m.message_id));
+  });
+
+  test('a late newest page of an older generation changes nothing: a zombie box cannot restore what the new box removed', () => {
+    const all = rootMessages();
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all.slice(0, -1), 2));
+    const late = applySessionLogPage(state, page(all, 1), undefined, { box: true });
+    expect(late).toBe(state);
+    state = applySessionLogPage(state, page(all.slice(0, -1), 2));
+    expect(ids(state)).toEqual(all.slice(0, -1).map((m) => m.message_id));
+  });
+
+  test('an older page settles up to its before_seq: a deleted message just below the cursor leaves', () => {
+    const all = rootMessages();
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all));
+    const gone = all[4]!;
+    state = applySessionLogPage(state, { ...page(all.slice(0, 4)), has_more: false }, all[5]!.seq);
+    expect(ids(state)).toEqual(all.filter((m) => m !== gone).map((m) => m.message_id));
+  });
+
+  test('a lagging page still settles a deleted message inside its own span', () => {
+    const all = rootMessages();
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all));
+    const gone = all[6]!;
+    state = applySessionLogPage(state, { ...page(all.slice(4, -4).filter((m) => m !== gone)), has_more: true });
+    expect(ids(state)).toEqual(all.filter((m) => m !== gone).map((m) => m.message_id));
+  });
+
+  test('an empty page removes nothing: a log the API has not stored yet is not a deletion', () => {
+    const all = rootMessages();
+    const state = applySessionLogPage(applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all)), page([]));
+    expect(ids(state)).toEqual(all.map((m) => m.message_id));
+  });
+
+  test('a queued prompt (the box page\'s provisional seq): the API page never holds one and keeps it; the box page that lacks it settles it', () => {
+    const all = rootMessages();
+    const queued = { ...all[0]!, message_id: 'msg_queued', seq: Number.MAX_SAFE_INTEGER };
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page([...all, queued]), undefined, { box: true });
+    state = applySessionLogPage(state, page(all));
+    expect(ids(state)).toContain('msg_queued');
+    state = applySessionLogPage(state, page(all), undefined, { box: true });
+    expect(ids(state)).toEqual(all.map((m) => m.message_id));
+  });
+
+  test('an older page of an older generation changes nothing either', () => {
+    const all = rootMessages();
+    const state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all.slice(0, -1), 2));
+    expect(applySessionLogPage(state, { ...page(all, 1), has_more: false }, all.at(-1)!.seq + 1)).toBe(state);
+    expect(isStaleSessionLogPage(state, page(all, 1))).toBe(true);
+    expect(isStaleSessionLogPage(state, page(all, 2))).toBe(false);
+  });
+
+  test('a state held from before pageGenerations existed still takes a page', () => {
+    const { pageGenerations: _p, ...legacy } = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page());
+    const state = applySessionLogPage(legacy as SessionLogState, page(rootMessages().slice(0, -1)));
+    expect(ids(state)).toEqual(rootMessages().map((m) => m.message_id));
+  });
+
+  test('a reply still streaming after a lagging page\'s tail stays; a page that reaches past it settles it', () => {
+    const all = rootMessages();
+    const streaming = { ...all.at(-1)!, message_id: 'msg_streaming', seq: all.at(-1)!.seq + 1, status: 'streaming' as const };
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page([...all, streaming]));
+    state = applySessionLogPage(state, page(all));
+    expect(ids(state)).toEqual([...all, streaming].map((m) => m.message_id));
+    const later = { ...all[0]!, message_id: 'msg_later', seq: streaming.seq + 1 };
+    state = applySessionLogPage(state, page([...all, later]));
+    expect(ids(state)).toEqual([...all, later].map((m) => m.message_id));
+  });
+
+  test('a lagging page\'s streaming copy of a reply never replaces the finished one a fresher page delivered', () => {
+    const all = rootMessages();
+    const reply = all.at(-1)!;
+    let state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(all));
+    const partial = { ...reply, status: 'streaming' as const, blocks: [{ type: 'text', id: 'b0', text: 'half' } as TextBlock] };
+    state = applySessionLogPage(state, page([...all.slice(0, -1), partial]));
+    expect(state.messages[ROOT]!.at(-1)).toEqual(reply);
   });
 
   test('ignores a message that fails validation', () => {
@@ -194,7 +320,14 @@ describe('applySessionLogEvent', () => {
   });
 
   test('log.block.delta appends to a text or reasoning block by block id, nothing else', () => {
-    const state = loaded();
+    // kortixd puts a streaming record before the first delta of a message: the text and reasoning
+    // targets stream. A finished record takes no delta (F-012).
+    const streamed = rootMessages();
+    for (const kind of ['text', 'reasoning'] as const) {
+      const m = streamed.find((x) => x.blocks.some((b) => b.type === kind));
+      if (m) m.status = 'streaming';
+    }
+    const state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page(streamed));
     const messages = state.messages[ROOT]!;
     const target = messages.find((m) => m.blocks.some((b) => b.type === 'text'))!;
     const block = target.blocks.find((b) => b.type === 'text') as TextBlock;
@@ -237,6 +370,44 @@ describe('applySessionLogEvent', () => {
     expect(state.messages[ROOT]!.find((m) => m.message_id === reply!.message_id)).toEqual(reply!);
     // A late delta for a block the final record no longer has changes nothing.
     expect(applySessionLogEvent(state, ev('log.block.delta', { thread_id: ROOT, message_id: reply!.message_id, block_id: 'b_gone', delta: 'x' }))).toBe(state);
+  });
+
+  test('F-012: a streaming record whose final put was lost yields to the finished record of a page read at the turn end', () => {
+    const [user, reply] = rootMessages();
+    const streaming: SessionLogMessage = {
+      ...reply!, status: 'streaming', completed_at: null, finish: null,
+      blocks: [{ type: 'text', id: 'b0', text: 'partial' } as TextBlock],
+    };
+    let state = applySessionLogEvent(EMPTY_SESSION_LOG_STATE, ev('log.message', { rev: 1, message: user }));
+    state = applySessionLogEvent(state, ev('log.message', { rev: 2, message: streaming }));
+    // A page read mid-turn that still holds the streaming record changes nothing the stream holds.
+    state = applySessionLogPage(state, page([user!, { ...streaming, blocks: [{ type: 'text', id: 'b0', text: 'part' } as TextBlock] }]));
+    expect((state.messages[ROOT]!.find((m) => m.message_id === reply!.message_id)!.blocks[0] as TextBlock).text).toBe('partial');
+    // The final put never arrives; the page read at the turn end holds the finished reply.
+    state = applySessionLogPage(state, page([user!, reply!]));
+    expect(state.messages[ROOT]!.find((m) => m.message_id === reply!.message_id)).toEqual(reply!);
+    // Its rev stays: an older streaming put that arrives late cannot revive the partial text.
+    expect(applySessionLogEvent(state, ev('log.message', { rev: 2, message: streaming }))).toBe(state);
+    // A finished message never streams again (pi streams a message once): a delayed streaming put,
+    // even at a higher rev, changes nothing.
+    expect(applySessionLogEvent(state, ev('log.message', { rev: 3, message: streaming }))).toBe(state);
+    // A delta sent before the turn end can land after the page (runtime frames are coalesced,
+    // control frames are not): the finished record already holds its text.
+    expect(applySessionLogEvent(state, ev('log.block.delta', { thread_id: ROOT, message_id: reply!.message_id, block_id: (reply!.blocks[0] as TextBlock).id, delta: 'e' }))).toBe(state);
+    // A finished correction and a tombstone still apply.
+    const corrected = { ...reply!, blocks: [{ type: 'text', id: 'b1', text: 'corrected' } as TextBlock] };
+    const after = applySessionLogEvent(state, ev('log.message', { rev: 4, message: corrected }));
+    expect((after.messages[ROOT]!.find((m) => m.message_id === reply!.message_id)!.blocks[0] as TextBlock).text).toBe('corrected');
+    expect(ids(applySessionLogEvent(after, ev('log.message', { message_id: reply!.message_id, rev: 5 })))).not.toContain(reply!.message_id);
+  });
+
+  test('F-012: the streaming put was missed too: the finished page record takes no late delta', () => {
+    const [user, reply] = rootMessages();
+    const block = reply!.blocks.find((b) => b.type === 'text') as TextBlock;
+    // Every frame of the reply was missed, then the turn-end page holds it finished, with no rev.
+    const state = applySessionLogPage(EMPTY_SESSION_LOG_STATE, page([user!, reply!]));
+    // A delta queued before the turn end and applied after the page changes nothing.
+    expect(applySessionLogEvent(state, ev('log.block.delta', { thread_id: ROOT, message_id: reply!.message_id, block_id: block.id, delta: 'e' }))).toBe(state);
   });
 
   test('a delta for a message the store does not hold builds no placeholder', () => {

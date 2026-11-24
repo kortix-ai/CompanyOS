@@ -10,6 +10,7 @@ import {
   commitIfNeeded,
   currentBranch,
   detectOrigin,
+  sameGitHubRepository,
   ensureOrigin,
   explainLinkedProjectError,
   isGitHubUrl,
@@ -25,13 +26,15 @@ import { type EnvSpec, type LocalManifest, formatIssueLine, loadLocalManifest, v
 import {
   type ProjectGitTarget,
   configureProjectGitAuth,
+  projectIsManaged,
   resolveProjectGitTarget,
 } from '../project-git.ts';
-import { isKortixProject, loadLink, saveLink } from '../project-link.ts';
+import { isKortixProject, LINK_LOCATION, loadLink, migrateLegacyLink, saveLink } from '../project-link.ts';
 import { promptSecret } from '../prompts.ts';
 import { C, help, status } from '../style.ts';
 import { projectWebUrl } from '../web-url.ts';
 import { ensureConnectorsConnected, reconcileShippedManifest } from './ship-connectors.ts';
+import { declaredTemplateSlugs, reconcileTemplates, writeReconcileLines } from './sandboxes-build.ts';
 
 const HELP = help`Usage: kortix ship [options]
 
@@ -44,16 +47,19 @@ Every run:
   2. git add -A + commit                      (skipped if nothing changed)
   3. offer to set any env secret not yet set (prompts you; skip with --no-env)
   4. push the branch you're on → the same-named branch on the workspace's repo
-  5. connect any declared connector that still needs auth   (skip with --no-connect)
+  5. start the cloud build of every sandbox template in kortix.yaml
+     (\`sandbox.templates\`) whose image is missing, and name each one
+  6. connect any declared connector that still needs auth   (skip with --no-connect)
 
 First ship vs. after:
   * First ship   uses the saved host default workspace when this folder is unlinked.
                  Without a default, creates a cloud workspace + git repo, links
-                 this folder (.kortix/link.json), then pushes.
+                 this checkout (git config kortix.workspace), then pushes.
+                 The link stays in .git/config and is never committed.
   * Every ship   after that sees the link, skips setup, and just commits +
                  pushes. Continuous by design — re-run as often as you like.
-                 The link travels in .kortix/link.json, so a teammate who
-                 clones a linked repo can \`kortix ship\` from it too.
+                 A teammate runs \`kortix workspaces clone\`, which links the
+                 clone the same way.
                  Ship uses --host, the link's host, or the configured active
                  host's saved login. Workspace order: --workspace, folder link,
                  saved host default. Injected session auth/project is ignored.
@@ -76,7 +82,12 @@ Where it backs the workspace (origin is inferred, never asked):
 Workspaces:
   A managed first ship creates a new workspace. A GitHub origin, or
   --account, adds the workspace to an account you belong to: with more than
-  one, you're asked which (skip with --account or -y). No snapshot builds.
+  one, you're asked which (skip with --account or -y).
+
+Sandbox templates:
+  A template in \`sandbox.templates\` builds on the server after the push. Ship
+  starts the build and returns; \`kortix sandboxes build <slug> --wait\` waits
+  until the image is ready. Sessions boot the platform default until then.
 
 Options:
   --name <workspace>   Display name for a new workspace (default: folder name).
@@ -86,6 +97,7 @@ Options:
                          <github-url> link + push to this GitHub repo
   --github-token <pat> Link a GitHub origin with this token instead of the
                        GitHub App (App-free import; needs repo Contents R/W).
+                       \`-\` reads it from stdin: gh auth token | kortix ship --github-token -
   -m, --message <msg>  Commit message for the sync (default: "kortix: ship").
   --no-commit          Don't commit. Fail if the working tree is dirty.
   --no-verify          Skip the kortix validate checks.
@@ -145,7 +157,7 @@ export async function runShip(argv: string[]): Promise<number> {
   // ── Guards ───────────────────────────────────────────────────────────────
   if (!isKortixProject()) {
     process.stderr.write(
-      `${status.err(`Not a Kortix workspace — no .kortix/ or kortix.yaml in ${process.cwd()}.`)}\n` +
+      `${status.err(`Not a Kortix workspace — no kortix.yaml in ${process.cwd()}.`)}\n` +
         `  ${C.dim}Run ${C.reset}${C.cyan}kortix init${C.reset}${C.dim} here first.${C.reset}\n`,
     );
     return 1;
@@ -156,6 +168,12 @@ export async function runShip(argv: string[]): Promise<number> {
         `  ${C.dim}Run ${C.reset}${C.cyan}kortix init${C.reset}${C.dim} (it runs git init for you).${C.reset}\n`,
     );
     return 1;
+  }
+
+  // An older CLI wrote the link into .kortix/link.json and committed it. Move it
+  // into the git config before the commit below, so the commit deletes the file.
+  if (!flags.dryRun && migrateLegacyLink()) {
+    process.stdout.write(`  ${C.dim}moved the workspace link from .kortix/link.json to ${LINK_LOCATION}${C.reset}\n`);
   }
 
   // Ship binds this workspace, not the session that happens to run the CLI.
@@ -234,8 +252,8 @@ function prepareManifest(flags: ShipFlags): { ok: boolean; env: EnvSpec } {
     return { ok: false, env: empty };
   }
 
-  // NO MANIFEST AT ALL. This used to pass as "a `.kortix/`-only project —
-  // nothing to verify", and it is the client half of the same defect as the
+  // NO MANIFEST AT ALL. This used to pass as "a project with only a config
+  // folder — nothing to verify", and it is the client half of the same defect as the
   // server's opt-in seeding: it let `kortix ship` push a project that has no
   // kortix.yaml, so the project came out with no declared agents and no skills.
   //
@@ -414,7 +432,7 @@ async function shipFirstTime(
     );
     if (flags.dryRun) {
       process.stdout.write(
-        `  ${C.dim}[dry-run] would: link ${byoUrl} via GitHub App${flags.githubToken ? ' token' : ' (1-click install if needed)'} + push${C.reset}\n\n`,
+        `  ${C.dim}[dry-run] would: link ${byoUrl} ${flags.githubToken ? 'with the GitHub token from stdin' : 'via the Kortix GitHub App (1-click install if needed)'} + push${C.reset}\n\n`,
       );
       return 0;
     }
@@ -423,7 +441,8 @@ async function shipFirstTime(
       repoUrl: byoUrl,
       name,
       accountId: accountId!,
-      githubToken: flags.githubToken,
+      // `-` reads the token from stdin, so it never sits in the process list.
+      githubToken: flags.githubToken === '-' ? (await Bun.stdin.text()).trim() || undefined : flags.githubToken,
       yes: flags.yes,
     }).catch(explainCreationRefusal);
     await bindShippedFolder(client, project, hostName, auth);
@@ -498,7 +517,13 @@ async function shipExisting(
     if (handled !== null) return handled;
     throw err;
   }
-  const target = resolveProjectGitTarget(project);
+  // A workspace linked to the person's own GitHub repository keeps their
+  // `origin`: when it already names that repository, push there with their
+  // own git credentials. Kortix reads the repository from GitHub either way,
+  // and a developer's remote must never be rewritten to a Kortix proxy.
+  const origin = detectOrigin();
+  const ownGitHubOrigin = !projectIsManaged(project) && origin !== null && sameGitHubRepository(origin, project.repo_url);
+  const target = ownGitHubOrigin ? { repoUrl: origin, credentialMode: 'none' as const } : resolveProjectGitTarget(project);
   const mintsProviderToken = target.credentialMode === 'managed-git-token';
   const kortixOwnsOrigin = target.credentialMode !== 'none';
   const repoUrl = target.repoUrl;
@@ -564,13 +589,48 @@ async function finishShip(
   if (!pushed) return 1;
 
   await reconcileShippedManifest(client, projectId);
+  await buildShippedTemplates(client, projectId);
   await ensureConnectorsConnected(client, projectId, flags);
 
   reportShipped(auth, project, target.repoUrl);
   return 0;
 }
 
-/** Write `.kortix/link.json` so this folder is bound to the cloud project.
+/**
+ * Start the cloud build of each sandbox template kortix.yaml declares. A push
+ * straight to a linked GitHub repository reaches no other build trigger, so
+ * without this a new template stayed unbuilt and sessions booted the platform
+ * default image. A failure here never fails the completed push.
+ */
+async function buildShippedTemplates(client: ApiClient, projectId: string): Promise<void> {
+  let declared: string[] = [];
+  try {
+    declared = declaredTemplateSlugs(loadLocalManifest()?.data);
+  } catch {
+    // An unparseable manifest was already reported (or waived with --no-verify).
+  }
+  if (declared.length === 0) return;
+  try {
+    const templates = await reconcileTemplates(client, `/workspaces/${projectId}`);
+    if (templates === null) {
+      process.stdout.write(
+        `  ${status.warn(`this Kortix host does not build sandbox templates on ship`)} ${C.dim}— run ${C.reset}${C.cyan}kortix sandboxes build ${declared[0]} --wait${C.reset}\n`,
+      );
+      return;
+    }
+    writeReconcileLines(templates.filter((t) => declared.includes(t.slug)));
+    for (const slug of declared.filter((slug) => !templates.some((t) => t.slug === slug))) {
+      process.stdout.write(`  ${status.warn(`sandbox ${slug} is not in the pushed kortix.yaml yet; run kortix sandboxes build ${slug} --wait`)}\n`);
+    }
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : (err as Error).message;
+    process.stdout.write(
+      `  ${status.warn(`sandbox build not started: ${msg}`)} ${C.dim}— run ${C.reset}${C.cyan}kortix sandboxes build ${declared[0]} --wait${C.reset}\n`,
+    );
+  }
+}
+
+/** Link this checkout to the cloud project (git config `kortix.workspace`).
  *  Called the moment the project exists — see the note at its first-ship call
  *  site for why ordering matters. */
 async function bindShippedFolder(

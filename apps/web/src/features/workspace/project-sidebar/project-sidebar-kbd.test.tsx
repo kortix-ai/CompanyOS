@@ -22,7 +22,7 @@ globals.location = win.location;
 globals.history = win.history;
 globals.requestAnimationFrame = (cb: () => void) => setTimeout(cb, 0);
 globals.cancelAnimationFrame = (id: number) => clearTimeout(id);
-// The mobile sheet is a Radix dialog: its focus guards and dismissable layer
+// The mobile sheet is a dialog: its focus guards and dismiss layer
 // read DOM constructor globals at mount. Bun ships its own `Event` family, so
 // `key in globals` alone would leave happy-dom's document rejecting bun-realm
 // event objects. Mirror the happy-dom window OVER bun's DOM classes, except
@@ -83,6 +83,17 @@ mock.module('@kortix/sdk/react', () => ({
     data: { notifications: [{ id: 'n1', kind: 'question', read: false }], unread_count: 3 },
     unreadCount: 3,
   }),
+  // Review waits on the viewer: 2 change requests, 1 agent question and 1
+  // connector approval (approvals are already in the summary): the count is 3.
+  useReviewSummary: () => ({ data: { needs_you_total: 2, needs_you_by_session: {} } }),
+  useSessionAsks: () => ({ data: { asks: [{ kind: 'question' }, { kind: 'approval' }] } }),
+}));
+// The Customize access rule: `review` is the caller's to read and act on unless a test says otherwise.
+let reviewAccess: { settled: boolean; tabs: string[] } = { settled: true, tabs: ['review'] };
+const realSettingsNav = await import('@kortix/ui/internal/layout/project-settings-nav');
+mock.module('@kortix/ui/internal/layout/project-settings-nav', () => ({
+  ...realSettingsNav,
+  useCapabilityAccess: () => reviewAccess,
 }));
 mock.module('@kortix/ui/internal/hooks/projects/new-session-guard', () => ({
   useIsCreatingProjectSession: () => false,
@@ -105,11 +116,8 @@ mock.module('@kortix/ui/internal/tunnel/computer-connect', () => ({
 mock.module('@kortix/ui/internal/layout/connect-mcp-modal', () => ({
   ConnectMcpModal: () => null,
 }));
-mock.module('@kortix/ui/workspace/sidebar/footer/project-mcp-nav', () => ({
-  ProjectMcpNavItem: () => null,
-}));
-mock.module('@kortix/ui/workspace/sidebar/footer/project-computer-nav', () => ({
-  ProjectComputerNavItem: () => null,
+mock.module('@kortix/ui/workspace/sidebar/footer/project-promo-cards', () => ({
+  ProjectPromoCards: () => null,
 }));
 mock.module('@kortix/ui/workspace/sidebar/footer/project-manifest-issues-alert', () => ({
   ProjectManifestIssuesAlert: () => null,
@@ -126,8 +134,11 @@ mock.module('@kortix/ui/workspace/sidebar/footer/project-upgrade-button', () => 
 mock.module('@kortix/ui/workspace/repository-disconnected', () => ({
   ProjectRepositoryDisconnectedAlert: () => null,
 }));
-mock.module('@kortix/ui/workspace/sidebar/project-nav-items', () => ({
-  ProjectNavItems: () => null,
+// A signed-in viewer: the nav rows render as for a real person.
+const realUiProvider = await import('@kortix/ui/providers/ui-provider');
+mock.module('@kortix/ui/providers/ui-provider', () => ({
+  ...realUiProvider,
+  useUiViewerId: () => 'synthetic-viewer',
 }));
 mock.module('@kortix/ui/internal/layout/open-command-palette', () => ({
   openCommandPalette: () => undefined,
@@ -186,6 +197,7 @@ async function mountSidebar(width: number) {
 afterEach(async () => {
   channelsOn = false;
   newSessionCalls = 0;
+  reviewAccess = { settled: true, tabs: ['review'] };
   if (root) {
     const r = root;
     root = undefined;
@@ -203,7 +215,7 @@ test('the desktop rail keeps the Ctrl/Cmd+J shortcut hint on the New-session row
 
 test('the mobile sheet renders no keyboard shortcut hint (KRTX-2005)', async () => {
   await mountSidebar(390);
-  // The mobile sheet is a Radix portal: its content mounts into document.body,
+  // The mobile sheet renders through a portal: its content mounts into document.body,
   // not into the test container the provider renders into.
   expect(document.body.innerHTML).toContain('newSession');
   expect(document.body.innerHTML).not.toContain('data-slot="kbd-group"');
@@ -260,17 +272,91 @@ test('with chat off, the sidebar keeps New session, the session list and Cmd+J',
   expect(newSessionCalls).toBe(1);
 });
 
-const INBOX_HREF = 'href="/workspaces/synthetic-project/inbox"';
+// Inbox (`/inbox`, the person's notifications) is not a sidebar nav row in any
+// variant (KRTX-4949): it opens from the workspace menu (`workspace-switcher.tsx`),
+// ⌘K and the notification toast. A Needs-you notification waits (the inbox mock
+// above), so a row would also carry its count badge.
+const INBOX = ['href="/inbox"', 'inbox.title'];
 
-// The Inbox is a row in the workspace menu (`workspace-switcher.tsx`), not a
-// sidebar nav row, with Spaces off or on.
-test('the sidebar has no Inbox row (KRTX-1742)', async () => {
+function expectNoInbox(html: string) {
+  for (const needle of INBOX) expect(html).not.toContain(needle);
+}
+
+test('the desktop sidebar has no Inbox row (KRTX-4949)', async () => {
   await mountSidebar(1280);
-  expect(container!.innerHTML).not.toContain(INBOX_HREF);
+  expect(document.body.innerHTML).toContain('newSession');
+  expectNoInbox(document.body.innerHTML);
 });
 
-test('with chat on, the sidebar has no Inbox row either', async () => {
+test('the mobile sheet has no Inbox row (KRTX-4949)', async () => {
+  await mountSidebar(390);
+  expect(document.body.innerHTML).toContain('newSession');
+  expectNoInbox(document.body.innerHTML);
+});
+
+test('with chat on, neither the Spaces list nor the opened More group has an Inbox row (KRTX-4949)', async () => {
   channelsOn = true;
   await mountSidebar(1280);
-  expect(container!.innerHTML).not.toContain(INBOX_HREF);
+  expectNoInbox(document.body.innerHTML);
+  const more = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'more');
+  expect(more).toBeDefined();
+  await act(async () => {
+    more?.click();
+  });
+  const html = document.body.innerHTML;
+  // The Spaces list still renders (Review is its first row; the test above checks the order).
+  expect(html).toContain('href="/workspaces/synthetic-project/review"');
+  expectNoInbox(html);
+});
+
+// Review (`/workspaces/<id>/review`: change requests, agent questions,
+// approvals) is a sidebar row in every variant. With chat off it had no row
+// at all after Inbox left the sidebar (KRTX-4949): change requests were
+// reachable only through ⌘K or a typed URL, while the mobile drawer lists
+// Review as a top row.
+const REVIEW_HREF = '/workspaces/synthetic-project/review';
+const reviewLinks = () => [...document.querySelectorAll(`a[href="${REVIEW_HREF}"]`)];
+
+test('the desktop sidebar shows Review first under New session, with what waits on the viewer', async () => {
+  await mountSidebar(1280);
+  const links = reviewLinks();
+  expect(links).toHaveLength(1);
+  // 2 from the review summary + 1 open question; the approval is already in the summary.
+  expect(links[0]!.textContent).toBe('spaces.review3');
+  const html = container!.innerHTML;
+  const review = html.indexOf(`href="${REVIEW_HREF}"`);
+  expect(review).toBeGreaterThan(html.indexOf('newSession'));
+  expect(review).toBeLessThan(html.indexOf('data-testid="session-list"'));
+});
+
+test('the mobile sheet shows the Review row', async () => {
+  await mountSidebar(390);
+  expect(reviewLinks()).toHaveLength(1);
+});
+
+test('a viewer who may not act on Review gets no Review row, the rule of the mobile drawer', async () => {
+  reviewAccess = { settled: true, tabs: [] };
+  await mountSidebar(1280);
+  expect(container!.innerHTML).toContain('newSession');
+  expect(reviewLinks()).toHaveLength(0);
+});
+
+test('no Review row before the access probes settle', async () => {
+  reviewAccess = { settled: false, tabs: [] };
+  await mountSidebar(1280);
+  expect(reviewLinks()).toHaveLength(0);
+});
+
+test('with chat on, Review is one row: first in the Spaces list, not again in the opened More group', async () => {
+  channelsOn = true;
+  await mountSidebar(1280);
+  const more = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'more');
+  expect(more).toBeDefined();
+  await act(async () => {
+    more!.click();
+  });
+  expect(container!.innerHTML).toContain('data-testid="session-list" data-secondary="true"');
+  const links = reviewLinks();
+  expect(links).toHaveLength(1);
+  expect(links[0]!.textContent).toBe('spaces.review3');
 });

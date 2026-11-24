@@ -80,15 +80,6 @@ test('review and reminders links follow the host customize route', () => {
   expect(reviewHref('p')).toBe('/w/p/setup/review');
 });
 
-test('the Inbox is its own page by default; a host with its own router serves it only when it routes it', () => {
-  expect(uiRoutes().inbox?.('p')).toBe('/workspaces/p/inbox');
-  // A host that maps other routes predates the Inbox page: no row links to a page it does not serve.
-  setUiRoutes({ drive: () => null });
-  expect(uiRoutes().inbox?.('p') ?? null).toBeNull();
-  setUiRoutes({ drive: () => null, inbox: (p) => `/w/${p}/inbox` });
-  expect(uiRoutes().inbox?.('p')).toBe('/w/p/inbox');
-});
-
 test('the open session and project are read through the host routes', () => {
   expect(sessionIdFromPath('/workspaces/p/sessions/s1', 'p')).toBe('s1');
   expect(sessionIdFromPath('/workspaces/p/sessions/s1/files', 'p')).toBe('s1');
@@ -100,4 +91,26 @@ test('the open session and project are read through the host routes', () => {
   expect(sessionIdFromPath('/workspaces/p/sessions/s1', 'p')).toBeNull();
   expect(isProjectPath('/w/p/chat/s1', 'p')).toBe(true);
   expect(isProjectPath('/workspaces/p', 'p')).toBe(false);
+});
+
+test('the Inbox route is apps/web\'s /inbox; a host that maps routes links it only when it maps inbox', () => {
+  expect(uiRoutes().inbox?.()).toBe('/inbox');
+  setUiRoutes({ files: () => null });
+  expect(uiRoutes().inbox).toBeUndefined();
+  setUiRoutes({ files: () => null, inbox: () => '/notifications' });
+  expect(uiRoutes().inbox?.()).toBe('/notifications');
+  setUiRoutes({});
+  expect(uiRoutes().inbox?.()).toBe('/inbox');
+});
+
+test('the Spaces routes are apps/web pages; a host that maps routes links them only when it maps them', () => {
+  expect(uiRoutes().sessionSpaces?.('p')).toBe('/workspaces/p/spaces');
+  expect(uiRoutes().sessionSpace?.('p', 'g1')).toBe('/workspaces/p/space/g1');
+  setUiRoutes({ files: () => null });
+  expect(uiRoutes().sessionSpaces).toBeUndefined();
+  expect(uiRoutes().sessionSpace).toBeUndefined();
+  setUiRoutes({ sessionSpaces: (p) => `/w/${p}/spaces`, sessionSpace: (p, g) => `/w/${p}/spaces/${g}` });
+  expect(uiRoutes().sessionSpace?.('p', 'g1')).toBe('/w/p/spaces/g1');
+  setUiRoutes({});
+  expect(uiRoutes().sessionSpaces?.('p')).toBe('/workspaces/p/spaces');
 });

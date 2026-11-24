@@ -51,6 +51,7 @@ import {
 import { readProvisionStream } from './provision-stream';
 import { type AccountRole, type ProjectRole, unwrap } from './shared';
 import type { AccountToken, CreateAccountTokenInput, CreatedAccountToken, ListAccountTokensOptions, WorkspaceKeyScopes } from './tokens';
+import { appendQuery } from '../../http/url';
 
 /**
  * The caller's role in a workspace. `owner` and `admin` administer it
@@ -227,7 +228,7 @@ export type SetupWorkspaceInput = Omit<ProvisionProjectInput, 'account_id' | 'na
 
 /** 409: the account already holds its workspace's project. The body names it (`workspace_id`). */
 export const WORKSPACE_HAS_PROJECT_CODE = 'workspace_has_project' as const;
-/** 404: no such workspace, an account id on a canonical path, or no access. */
+/** 404: no such workspace, an account id on a canonical path, or a workspace being deleted. A live workspace the caller cannot read answers 403 `workspace_access_denied`. */
 export const WORKSPACE_NOT_FOUND_CODE = 'workspace_not_found' as const;
 /** 409: the workspace has no repository yet: {@link setupWorkspace}. */
 export const WORKSPACE_SETUP_REQUIRED_CODE = 'workspace_setup_required' as const;
@@ -484,7 +485,8 @@ function createdFromProject(project: KortixProject): Workspace {
  * Rejects with an `ApiError`. Codes a host handles: `account_creation_restricted`
  * (403: this deployment lets only its admin create workspaces; ask for an
  * invite), `new_workspace_requires_person` (403: an API key, a service
- * account or a workspace key), `impersonation_invalid` (403),
+ * account, a workspace key, an OAuth token bound to one workspace or an App
+ * viewer token), `impersonation_invalid` (403),
  * `provision_in_flight` (409: retry with the same key).
  */
 export async function createWorkspace(
@@ -636,7 +638,7 @@ export async function resendWorkspaceInvite(
 
 /** The workspace's personal access tokens (`kortix_pat_…`). `mine` narrows to the caller's own. */
 export async function listWorkspaceTokens(workspaceId: string, options?: ListAccountTokensOptions) {
-  const qs = options?.mine ? '?mine=true' : '';
+  const qs = appendQuery({ mine: options?.mine ? 'true' : undefined });
   return unwrap(await backendApi.get<AccountToken[]>(`/workspaces/${workspaceId}/tokens${qs}`));
 }
 
@@ -661,7 +663,7 @@ export async function revokeWorkspaceToken(
   tokenId: string,
   options?: { deleteRevoked?: boolean },
 ) {
-  const qs = options?.deleteRevoked ? '?delete_revoked=true' : '';
+  const qs = appendQuery({ delete_revoked: options?.deleteRevoked ? 'true' : undefined });
   return unwrap(
     await backendApi.delete<{ ok: boolean; deleted?: boolean }>(
       `/workspaces/${workspaceId}/tokens/${encodeURIComponent(tokenId)}${qs}`,
@@ -763,7 +765,7 @@ export async function revokeWorkspaceKey(
   keyId: string,
   options?: { deleteRevoked?: boolean },
 ) {
-  const qs = options?.deleteRevoked ? '?delete_revoked=true' : '';
+  const qs = appendQuery({ delete_revoked: options?.deleteRevoked ? 'true' : undefined });
   return unwrap(
     await backendApi.delete<{ ok: boolean; deleted?: boolean }>(
       `/workspaces/${workspaceId}/keys/${encodeURIComponent(keyId)}${qs}`,

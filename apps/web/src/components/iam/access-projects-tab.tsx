@@ -1,6 +1,7 @@
 'use client';
 
 import { useLocale, useTranslations } from '@/i18n/use-translations';
+import type { UiTranslator } from '@/i18n/translator';
 /**
  * `AccessProjectsTab` — the account-level "Projects" tab inside Account
  * Settings' Access section. The single place to see and manage every
@@ -337,8 +338,10 @@ export function accessVia(
 }
 
 /** "Agents: all" when nothing narrows them, else "Agents: 3 of 5" (or just
- *  "Agents: 3" when the project's agent roster is not readable here). */
+ *  "Agents: 3" when the project's agent roster is not readable here). Each
+ *  clause is one catalog key, so a locale translates the whole sentence. */
 export function agentsMetaPart(
+  t: UiTranslator,
   granted: number,
   projectAgentCount: number | undefined,
   /** Whether the row holds the manager tier (project admin, or an account
@@ -346,9 +349,9 @@ export function agentsMetaPart(
    *  agent" for that tier and "no agent" for a member. */
   managerTier = true,
 ): string {
-  if (granted === 0) return managerTier ? 'Agents: all' : 'Agents: none';
-  if (projectAgentCount == null) return `Agents: ${granted}`;
-  return `Agents: ${granted} of ${projectAgentCount}`;
+  if (granted === 0) return managerTier ? t.raw('textb9215e029e76') : t.raw('textd6acddc499aa');
+  if (projectAgentCount == null) return t('textd526776b77df', { value0: granted });
+  return t('text1edf7747d0b8', { value0: granted, value1: projectAgentCount });
 }
 
 function ExpiryMeta({ expiresAt }: { expiresAt: string | null | undefined }) {
@@ -371,13 +374,14 @@ function ExpiryMeta({ expiresAt }: { expiresAt: string | null | undefined }) {
  * nothing.
  */
 function oneFact(
+  t: UiTranslator,
   via: string | null,
   agentCount: number,
   projectAgentCount: number | undefined,
   expiresAt: string | null | undefined,
 ): ReactNode[] {
   if (via) return [via];
-  if (agentCount > 0) return [agentsMetaPart(agentCount, projectAgentCount)];
+  if (agentCount > 0) return [agentsMetaPart(t, agentCount, projectAgentCount)];
   if (expiresAt) return [<ExpiryMeta key="expires" expiresAt={expiresAt} />];
   return [];
 }
@@ -459,9 +463,8 @@ function ProjectPicker({
   return (
     <div className="space-y-4">
       <div className="space-y-0.5">
-        <h1 className="text-foreground text-2xl font-medium tracking-tight text-balance">
-          {tI18nComplete.raw('text04e2a9728af7')}
-        </h1>
+        {/* A section of Members, under the page's own h1. */}
+        <h2 className="text-foreground text-sm font-medium">{tI18nComplete.raw('text04e2a9728af7')}</h2>
         <p className="text-muted-foreground text-xs">{tI18nComplete.raw('text9949095feb15')}</p>
       </div>
 
@@ -571,13 +574,13 @@ function ProjectListRow({ project, onSelect }: { project: KortixProject; onSelec
     queryKey: qk.project.access(project.project_id),
     queryFn: () => listProjectAccess(project.project_id),
     staleTime: 30_000,
-    retry: false,
+    // The app's retry policy: a 403 is final, a 429 waits out the rate limit
+    // and tries again, so a burst does not leave the count blank.
   });
   const requestsQuery = useQuery({
     queryKey: qk.project.accessRequests(project.project_id),
     queryFn: () => listProjectAccessRequests(project.project_id),
     staleTime: 30_000,
-    retry: false,
     enabled: canSeePendingRequests,
   });
 
@@ -1535,7 +1538,7 @@ function MemberAccessRow({
   const fact =
     displayRole.kind === 'none'
       ? []
-      : oneFact(via, agentGrants.length, projectAgentCount, expiresAt);
+      : oneFact(tI18nComplete, via, agentGrants.length, projectAgentCount, expiresAt);
   const hint =
     !editable && canManageMembers && (member.has_implicit_access || inheritedOnly)
       ? member.has_implicit_access
@@ -1634,7 +1637,7 @@ function GroupAccessRowView({
       ]
     : [];
 
-  const fact = oneFact(null, agentGrants.length, projectAgentCount, expiresAt);
+  const fact = oneFact(tI18nComplete, null, agentGrants.length, projectAgentCount, expiresAt);
 
   return (
     // Kind reads from the avatar (the group glyph) and the email column.

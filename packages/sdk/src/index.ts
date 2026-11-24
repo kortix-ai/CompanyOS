@@ -336,11 +336,6 @@ export type {
   ProjectSession, WorkspaceSession,
   SessionPublicShare,
   SessionAudit,
-  SessionTranscript,
-  SessionTranscriptMessage,
-  SessionTranscriptSource,
-  SessionTranscriptSyncEnvelope,
-  SessionTranscriptSyncMessage,
   // Change requests / git
   ChangeRequest,
   ChangeRequestDiffResponse,
@@ -540,7 +535,6 @@ export {
   type SavedSessionCopy,
   isEmptyConversation,
   readSavedSessionCopy,
-  savedCopyEmptyRoot,
 } from './core/session-sync/saved-transcript';
 export * from './core/session/url';
 /** The authenticated `/p/{externalId}/{port}` proxy URL of a session's sandbox port. */
@@ -608,7 +602,7 @@ export {
   type ComposerAgentResolution,
 } from './core/agents/composer-agents';
 export { flattenModels, isOfferedModel, type FlatModel, type ModelOption } from './core/models/model-flatten';
-export { modelRefToKey, type ModelKey } from './core/models/model-key';
+export { modelRefToKey, modelKeyToWire, type ModelKey } from './core/models/model-key';
 export {
   createModelVisibility,
   modelInDefaultView,
@@ -678,6 +672,7 @@ export {
   emptyWorkspaceConnectionSlot, emptyProjectConnectionSlot,
   grantConnectionAccess,
   listedConnectorAccounts,
+  connectorAccountSignInStarted,
   newConnectorAccountAudienceFor,
   newConnectorAccountGrantees,
   newConnectorAccountLabelTaken,
@@ -704,6 +699,8 @@ export {
   type ConnectLinkPollOptions,
   type ProjectConnectRoute, type WorkspaceConnectRoute,
   type ProjectConnectionConnectDeps, type WorkspaceConnectionConnectDeps,
+  connectionSignInSteps, connectionSignInRestDeps,
+  type ConnectionSignInDeps,
 } from './core/connectors/connect-link';
 export {
   buildOAuth2ClientRegistrationInput,

@@ -155,12 +155,13 @@ flow(
       "POST /v1/mcp",
       "GET /v1/mcp",
       "DELETE /v1/mcp",
-      "GET /v1/accounts",
       "GET /v1/workspaces",
+      "GET /v1/workspaces/:workspaceId",
       "GET /v1/me",
       "GET /v1/accounts/:accountId/audit",
       "GET /v1/skills",
       "GET /v1/skills/:name",
+      "PATCH /v1/workspaces/:workspaceId/features",
       "GET /v1/workspaces/:projectId/files",
       "GET /v1/workspaces/:projectId/files/content",
       "GET /v1/workspaces/:projectId/sessions",
@@ -168,7 +169,7 @@ flow(
       "PATCH /v1/workspaces/:projectId/sessions/:sessionId",
       "GET /v1/workspaces/:projectId/sessions/:sessionId/turn",
       "GET /v1/workspaces/:projectId/sessions/:sessionId/prompts",
-      "GET /v1/workspaces/:projectId/sessions/:sessionId/transcript",
+      "GET /v1/workspaces/:projectId/sessions/:sessionId/log",
     ],
   },
   async (ctx) => {
@@ -249,10 +250,12 @@ flow(
       }
     });
     let code = "";
-    await ctx.step("consent shows the kortix scope, self_registered, and the loopback target; approve → code", async () => {
+    await ctx.step("consent shows the kortix scope, self_registered, the loopback target and asks for a workspace; approve for the project's workspace, as the consent page does → code", async () => {
       const meta = await ctx.client.as(ctx.P.OWNER).get("/v1/oauth/authorize/consent/:requestId", { params: { requestId } });
-      meta.status(200).body().has("$.scopes[0]", "kortix").has("$.self_registered", true).has("$.redirect_to", "127.0.0.1:33419").has("$.client_type", "public");
-      const ok = await ctx.client.as(ctx.P.OWNER).post("/v1/oauth/authorize/consent", { request_id: requestId, approved: true });
+      meta.status(200).body().has("$.scopes[0]", "kortix").has("$.self_registered", true).has("$.redirect_to", "127.0.0.1:33419").has("$.client_type", "public").has("$.asks_workspace", true);
+      // The consent page never approves without a workspace when it asks for
+      // one: the token is bound to it, the shape every MCP client gets.
+      const ok = await ctx.client.as(ctx.P.OWNER).post("/v1/oauth/authorize/consent", { request_id: requestId, approved: true, workspace_id: p.id });
       ok.status(200);
       code = new URL(ok.json<any>().redirect_uri).searchParams.get("code") ?? "";
       if (!code) throw new Error("no code");
@@ -322,6 +325,18 @@ flow(
       const noProject = await mcp(rpc(31, "tools/call", { name: "call_api", arguments: { method: "GET", path: "/v1/projects/{projectId}" } }));
       noProject.status(200).body().has("$.result.isError", true);
     });
+    await ctx.step("the workspace-bound token stays in its workspace: list_projects lists only it; call_api on another workspace of the same person → 403 credential_fence_refused", async () => {
+      const other = await ctx.fixtures.project();
+      const projects = JSON.parse(await toolText(32, "list_projects", {})) as Array<{ project_id: string }>;
+      if (JSON.stringify(projects.map((x) => x.project_id)) !== JSON.stringify([p.id])) {
+        throw new Error(`a bound token listed more than its workspace: ${JSON.stringify(projects)}`);
+      }
+      const foreign = await mcp(rpc(33, "tools/call", { name: "call_api", arguments: { method: "GET", path: "/v1/workspaces/{workspaceId}", project_id: other.id } }));
+      const text: string = foreign.json<any>().result.content[0].text;
+      if (!text.startsWith(`GET /v1/workspaces/${other.id} → HTTP 403`) || !text.includes("credential_fence_refused")) {
+        throw new Error(`another workspace: ${JSON.stringify(text.slice(0, 400))}`);
+      }
+    });
     await ctx.step("call_api refuses /v1/oauth and MCP paths; a missing session is an isError 404", async () => {
       const oauth = await mcp(rpc(7, "tools/call", { name: "call_api", arguments: { method: "POST", path: "/v1/oauth/register" } }));
       oauth.status(200).body().has("$.result.isError", true);
@@ -335,6 +350,30 @@ flow(
       if (!list.includes("kortix-system — ")) throw new Error(`skills: ${list.slice(0, 300)}`);
       const guide = await toolText(12, "read_skill", { name: "kortix-system" });
       if (!guide.includes("kortix.yaml") || guide.startsWith("{")) throw new Error(`guide: ${guide.slice(0, 300)}`);
+    });
+    await ctx.step("read_skill withholds a flagged guide (kortix-calendar, flag `calendar`): not listed and not readable without a project or with the flag off; listed and readable with it on", async () => {
+      const listed = (list: string) => list.split("\n").some((line) => line.startsWith("kortix-calendar — "));
+      if (listed(await toolText(70, "read_skill", {}))) throw new Error("kortix-calendar listed without a project");
+      if (listed(await toolText(71, "read_skill", { project_id: p.id }))) throw new Error("kortix-calendar listed with the flag off");
+      const refused = async (id: number, args: Record<string, unknown>) => {
+        const result = (await mcp(rpc(id, "tools/call", { name: "read_skill", arguments: args }))).status(200).json<any>().result;
+        if (!result.isError || !String(result.content[0].text).includes("behind the `calendar` feature flag")) throw new Error(`read_skill ${JSON.stringify(args)}: ${JSON.stringify(result).slice(0, 300)}`);
+      };
+      await refused(72, { name: "kortix-calendar" });
+      await refused(73, { name: "kortix-calendar", project_id: p.id });
+      // A managed guide the project detail lists has no file in the repository: with project_id it reads as the guide.
+      const system = await toolText(76, "read_skill", { name: "kortix-system", project_id: p.id });
+      if (!system.includes("kortix.yaml")) throw new Error(`kortix-system with project_id: ${system.slice(0, 300)}`);
+      const features = (enabled: boolean | null) =>
+        ctx.client.as(ctx.P.OWNER).patch("/v1/workspaces/:workspaceId/features", { feature: "calendar", enabled }, { params: { workspaceId: p.id } });
+      (await features(true)).status(200);
+      try {
+        if (!listed(await toolText(74, "read_skill", { project_id: p.id }))) throw new Error("kortix-calendar not listed with the flag on");
+        const body = await toolText(75, "read_skill", { name: "kortix-calendar", project_id: p.id });
+        if (!body.includes("kortix calendar show")) throw new Error(`kortix-calendar: ${body.slice(0, 300)}`);
+      } finally {
+        (await features(null)).status(200);
+      }
     });
     // Files the seeded repository lacks: a binary and a unicode name. The local
     // profile's repository is a bare directory, so a clone + push adds them.
@@ -929,12 +968,21 @@ flow(
       if (secrets.out?.exit_code !== 0 || !secrets.out.stdout.includes("ls")) throw new Error(secrets.text.slice(0, 300));
     });
     await ctx.step("[\"whoami\",\"--json\"] answers as the token's user through this API", async () => {
-      const r = await cli(5, ["whoami", "--json"]);
+      // A user of its own, in exactly one workspace. `whoami --json` lists every
+      // membership, and the shared OWNER joins one team per flow: by the middle
+      // of a full run its list passed the tool's 45 000-character stdout cap,
+      // so the reply was a cut string (release run 42709749119). The cut is the
+      // tool's documented contract (`truncated`), not what this step checks.
+      const member = await team.addMember("member");
+      const minted = await ctx.client.as(member).post("/v1/accounts/tokens", { name: "MCP-6 whoami" });
+      minted.status(201);
+      const memberPat = minted.json<{ secret_key: string }>().secret_key;
+      const r = await cli(5, ["whoami", "--json"], {}, memberPat);
       if (r.isError || r.out?.exit_code !== 0) throw new Error(r.text.slice(0, 500));
-      // `--json` output arrives as a JSON value (`json`), never as a cut string, even for a user with many accounts.
+      // `--json` output arrives as one whole JSON value (`json`), never as a string.
       if (r.out.json === undefined || r.out.truncated) throw new Error(`whoami --json is not whole JSON: ${r.text.slice(0, 300)}`);
       const who = r.out.json;
-      const me = JSON.parse((await call(6, "call_api", { method: "GET", path: "/v1/accounts/me" })).text.split("\n").slice(1).join("\n"));
+      const me = JSON.parse((await call(6, "call_api", { method: "GET", path: "/v1/accounts/me" }, memberPat)).text.split("\n").slice(1).join("\n"));
       const id = who.user_id ?? who.user?.user_id ?? who.user?.id;
       if (!id || ![me.user_id, me.id, me.user?.id, me.user?.user_id].includes(id)) throw new Error(`whoami ${JSON.stringify(who).slice(0, 300)} vs me ${JSON.stringify(me).slice(0, 300)}`);
     });

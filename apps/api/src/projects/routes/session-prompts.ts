@@ -26,6 +26,7 @@ import { annotateAuditEvent } from '../../shared/audit-scope';
 import { autoWatchSession } from '../../notifications/watchers';
 import { logger } from '../../lib/logger';
 import { personUserId } from './session-watch';
+import { loadRunnableSession } from './lib/route-bindings';
 import { collectMessageLinksInBackground } from '../lib/project-space-links';
 import {
   deleteInboxPrompt,
@@ -47,7 +48,6 @@ import {
   NOT_TURN_PROMPTER_MESSAGE,
   mayStopRunningTurn,
 } from '../session-lifecycle/turn-stop-authority';
-import { disarmAllQuickQueueInterrupt, disarmQuickQueueInterrupt } from '../session-lifecycle/runtime-client';
 import { cancelForwardedPrompt, findInboxRowIdByMessageId } from '../session-lifecycle/cancel-forwarded';
 import {
   flattenPromptText,
@@ -157,7 +157,7 @@ export function registerSessionPromptsRoutes(): void {
             message_id: z.string().optional().openapi({ description: 'Wire message id (starts with msg_). Omit it and the server mints one and places it in order on delivery.' }),
             parts: z.array(z.object({ type: z.enum(['text', 'file', 'agent']).optional(), text: z.string().optional(), mime: z.string().optional(), url: z.string().optional(), filename: z.string().optional(), attachment_id: z.string().optional() }).passthrough()).openapi({ description: '1 or more parts. Text prompt: [{"type":"text","text":"..."}].' }),
             placement: z.enum(['transcript', 'composer']).optional().openapi({ description: 'transcript sends now; composer stages it as a draft.' }),
-            delivery: SessionPromptDeliverySchema.optional().openapi({ description: 'How the prompt reaches a running turn: steer (read at its next step), queue (after it ends), interrupt (ends it after the running tool; only for the member who prompted that turn, the session owner or a project manager, else 403 not_turn_prompter). Sets placement.' }),
+            delivery: SessionPromptDeliverySchema.optional().openapi({ description: 'Accepted for older clients and ignored for delivery: a prompt sent while a turn runs always steers it (read at its next step; the turn does not stop). steer, queue and interrupt are all served as steer.' }),
             overrides: z.object({ agent: z.string().optional(), model: z.object({ providerID: z.string(), modelID: z.string() }).optional(), variant: z.string().optional(), directory: z.string().optional() }).passthrough().optional().optional().openapi({ description: 'Per-prompt agent or model override.' }),
             remint_on_delivery: z.boolean().optional().openapi({ description: 'Assign a fresh wire id when the prompt is delivered.' }),
             client_sent_at_ms: z.number().optional().openapi({ description: 'Client send time, epoch milliseconds.' }),
@@ -260,7 +260,9 @@ export function registerSessionPromptsRoutes(): void {
       const deliveryInput = SessionPromptDeliverySchema.optional().safeParse(body.delivery);
       if (!deliveryInput.success) return c.json({ error: 'delivery must be steer, queue or interrupt' }, 400);
       const delivery = deliveryInput.data;
-      // `delivery` decides the placement; a request with only `placement` keeps its old meaning.
+      // `delivery` no longer changes how a prompt is delivered (always steer).
+      // It still picks where an older client draws the row: `interrupt` was a
+      // transcript bubble, `steer`/`queue` a row above the composer.
       const placement = delivery ? (delivery === 'interrupt' ? 'transcript' : 'composer') : body.placement;
       const rawParts = Array.isArray(body.parts) ? body.parts : [];
       if (!clientMessageId || clientMessageId.length > 128) {
@@ -301,17 +303,6 @@ export function registerSessionPromptsRoutes(): void {
       // agent and every one after it as any other agent in the manifest. Falls
       // back to the session's own agent when the prompt names none.
       await resolveAndAuthorizeAgent(c, loaded, projectId, overrides.agent, visible.row.agentName, undefined, visible.row.spaceId);
-
-      // "Stop and send" ends the running turn, so it asks what Stop asks
-      // (`turn-stop-authority.ts`). With no running turn it is a plain send.
-      if (delivery === 'interrupt') {
-        const verdict = await mayStopRunningTurn({
-          sessionId,
-          callerUserId: isProjectSessionPrincipal(c) ? null : loaded.userId,
-          canManageLifecycle: visible.canManageLifecycle,
-        });
-        if (!verdict.allowed) return c.json(NOT_TURN_PROMPTER_BODY, 403);
-      }
 
       // NO connector pre-flight here. A prompt used to be refused 409
       // `CONNECTOR_CONNECTION_REQUIRED` when a connector the session declared had
@@ -386,7 +377,9 @@ export function registerSessionPromptsRoutes(): void {
         clientMessageId,
         wireMessageId: messageId,
         ...(placement ? { placement } : {}),
-        ...(delivery ? { delivery } : {}),
+        // One mode (2026-11-04): every prompt steers a running turn or starts
+        // the next one. `delivery` from an older client only picks `placement`.
+        delivery: 'steer' as const,
         // OPT-IN, and only one producer sets it: the localStorage migration,
         // whose id is minted at page load — against a transcript this tab has
         // not read yet — for a message the user typed before their last reload.
@@ -411,10 +404,6 @@ export function registerSessionPromptsRoutes(): void {
         parts,
         overrides,
         authorSessionId,
-        // The sender may stop ANY running turn of this session (owner or
-        // manager when they sent it). Admission reads it before a Quick Queue
-        // row ends a turn another member prompted.
-        ...(visible.canManageLifecycle ? { mayStopAnyTurn: true } : {}),
       };
       const enqueued = await enqueueReleasingHold(
         sessionId,
@@ -581,18 +570,9 @@ export function registerSessionPromptsRoutes(): void {
 
       // Floor 'session' — see the POST /prompts gate comment. Un-queuing your own
       // pending message is running the session, not editing the project.
-      const loaded = await loadProjectForUser(c, projectId, 'session');
-      if (!loaded) return c.json({ error: 'Not found' }, 404);
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
-      await assertProjectCapability(
-        c,
-        loaded.userId,
-        loaded.row.accountId,
-        projectId,
-        PROJECT_ACTIONS.PROJECT_SESSION_START,
-      );
-      const visible = await loadVisibleSession(loaded, sessionId, callerKortixSessionId(c), callerKortixSessionId(c));
-      if (!visible || sessionIsTombstoned(visible.row)) return c.json({ error: 'Not found' }, 404);
+      const gate = await loadRunnableSession(c, projectId, sessionId);
+      if (gate.kind === 'error') return gate.response;
+      const { loaded, visible } = gate;
 
       // The session AND inbox scopes are in the DELETE's own predicate, so
       // neither a prompt id from another session nor an automation's
@@ -618,7 +598,6 @@ export function registerSessionPromptsRoutes(): void {
           resourceId: effectivePromptId,
           metadata: { prompt_author_user_id: row.actorUserId ?? null },
         });
-        await disarmQuickQueueInterrupt(sessionId, loaded.userId, effectivePromptId);
         return c.json({ removed: serializeRemovedPrompt(row) }, 200);
       };
       const outcome = await deleteInboxPrompt(sessionId, effectivePromptId, actor);
@@ -667,7 +646,7 @@ export function registerSessionPromptsRoutes(): void {
       tags: ['sessions'],
       summary: 'Edit a queued prompt',
       description:
-        'Replace the text of a prompt still waiting in the queue. The prompt keeps its place, its files and any hold, and is not sent. `delivery: interrupt` turns it into a Quick Queue prompt that ends the running turn after its current tool ("Stop and send"). While a turn runs, only the member who prompted it, the session owner or a project manager may do that; anyone else gets `403` with `code: "not_turn_prompter"`.',
+        'Replace the text of a prompt still waiting to be delivered. The prompt keeps its place, its files and any hold, and is not sent. `delivery: interrupt` sends it next, ahead of older waiting prompts: it steers the running turn, which reads it after its current tool call, or starts a turn when none runs. The running turn is not stopped.',
       ...auth,
       request: {
         params: z.object({
@@ -677,7 +656,7 @@ export function registerSessionPromptsRoutes(): void {
         }),
         body: { content: { 'application/json': { schema: lenientBody({
             text: z.string().optional().openapi({ description: 'The new text of the prompt.' }),
-            delivery: z.literal('interrupt').optional().openapi({ description: 'interrupt: send it next, ending the running turn after its current tool. Only for a prompt that is not sent yet.' }),
+            delivery: z.literal('interrupt').optional().openapi({ description: 'interrupt: send it next, ahead of older waiting prompts. It steers the running turn; the turn is not stopped. Only for a prompt that is not sent yet.' }),
           }) } }, required: true },
       },
       responses: {
@@ -694,18 +673,9 @@ export function registerSessionPromptsRoutes(): void {
 
       // Floor 'session' — see the POST /prompts gate comment. Editing your own
       // queued message is running the session, not editing the project.
-      const loaded = await loadProjectForUser(c, projectId, 'session');
-      if (!loaded) return c.json({ error: 'Not found' }, 404);
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
-      await assertProjectCapability(
-        c,
-        loaded.userId,
-        loaded.row.accountId,
-        projectId,
-        PROJECT_ACTIONS.PROJECT_SESSION_START,
-      );
-      const visible = await loadVisibleSession(loaded, sessionId, callerKortixSessionId(c), callerKortixSessionId(c));
-      if (!visible || sessionIsTombstoned(visible.row)) return c.json({ error: 'Not found' }, 404);
+      const gate = await loadRunnableSession(c, projectId, sessionId);
+      if (gate.kind === 'error') return gate.response;
+      const { loaded, visible } = gate;
 
       const body = await readJsonObject(c);
       if (body.delivery !== undefined && body.delivery !== 'interrupt') {
@@ -713,16 +683,6 @@ export function registerSessionPromptsRoutes(): void {
       }
       if (body.text === undefined && body.delivery === undefined) {
         return c.json({ error: 'text or delivery is required' }, 400);
-      }
-      // "Stop and send" ends the running turn: refused before any write, edit
-      // included, for a member who may not stop it (`turn-stop-authority.ts`).
-      if (body.delivery === 'interrupt') {
-        const verdict = await mayStopRunningTurn({
-          sessionId,
-          callerUserId: isProjectSessionPrincipal(c) ? null : loaded.userId,
-          canManageLifecycle: visible.canManageLifecycle,
-        });
-        if (!verdict.allowed) return c.json(NOT_TURN_PROMPTER_BODY, 403);
       }
       let outcome: Awaited<ReturnType<typeof editInboxPrompt>> | null = null;
       if (body.text !== undefined) {
@@ -737,7 +697,7 @@ export function registerSessionPromptsRoutes(): void {
       }
       if (body.delivery === 'interrupt' && (!outcome || outcome.outcome === 'edited')) {
         outcome = await interruptInboxPrompt(sessionId, promptId, { userId: loaded.userId });
-        // "Stop and send" sends: the row is due now and the drain arms the interrupt.
+        // "Send now": the row is due now and the drain steers it.
         if (outcome.outcome === 'edited' && outcome.row.idempotencyKey) {
           void drainSessionLifecycleQueue({ idempotencyKey: outcome.row.idempotencyKey }).catch(() => undefined);
         }
@@ -779,18 +739,9 @@ export function registerSessionPromptsRoutes(): void {
 
       // Floor 'session' — see the POST /prompts gate comment. "Retry"/"send now"
       // on your own queued message is running the session, not editing the project.
-      const loaded = await loadProjectForUser(c, projectId, 'session');
-      if (!loaded) return c.json({ error: 'Not found' }, 404);
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
-      await assertProjectCapability(
-        c,
-        loaded.userId,
-        loaded.row.accountId,
-        projectId,
-        PROJECT_ACTIONS.PROJECT_SESSION_START,
-      );
-      const visible = await loadVisibleSession(loaded, sessionId, callerKortixSessionId(c), callerKortixSessionId(c));
-      if (!visible || sessionIsTombstoned(visible.row)) return c.json({ error: 'Not found' }, 404);
+      const gate = await loadRunnableSession(c, projectId, sessionId);
+      if (gate.kind === 'error') return gate.response;
+      const { loaded, visible } = gate;
 
       // ONE primitive for "retry" and for "send now": both are the user pointing
       // at a row and asking for THAT message. `retryInboxPrompt` promotes it past
@@ -816,7 +767,7 @@ export function registerSessionPromptsRoutes(): void {
       tags: ['sessions'],
       summary: 'Hold or release the prompt queue of a session',
       description:
-        'A hold is the Stop button: it also stops the running turn. Only the member who prompted that turn, the session owner or a project manager may hold while a turn runs; anyone else gets `403` with `code: "not_turn_prompter"`. With no running turn, anyone who may send may hold. Releasing is always open.',
+        'A hold is the Stop button: it also stops the running turn. Only the member who prompted that turn, the session owner or a project manager may hold while a turn runs; anyone else gets `403` with `code: "not_turn_prompter"`. The hold lasts until the stop settles: then the API releases it, and the prompts that waited go out together as the next turn. Releasing is always open.',
       ...auth,
       request: {
         params: z.object({ workspaceId: z.string(), sessionId: z.string() }),
@@ -834,13 +785,13 @@ export function registerSessionPromptsRoutes(): void {
     }),
     // STOP HAS TO REACH THE QUEUE.
     //
-    // "Stopping means stop doing things, and that includes the queue" was a
-    // browser-local pause while the queue was browser-local. The queue is in
-    // Postgres now, so the pause has to be too: pausing a client drain leaves the
-    // admission gate free to deliver, roughly one scheduler tick after the abort
-    // clears turn authority — exactly the message the user pressed Stop to get
-    // ahead of. A hold is released by an action (any new send, or "send now" on a
-    // row), never by a timer.
+    // The hold keeps every waiting prompt out of the turn the Stop is ending:
+    // without it the admission gate steers them into that turn, one scheduler
+    // tick before the abort lands. Once the settle has retracted what the
+    // stopped turn never read, the hold is released and those prompts go out
+    // together as the next turn (2026-11-04). The release can still come before
+    // the client's abort lands: admission does not steer into a turn this
+    // stamp marks (`inbox-admission.ts`), so they wait for the turn's end.
     async (c) => {
       const projectId = workspaceIdParam(c);
       const sessionId = c.req.param('sessionId');
@@ -848,18 +799,9 @@ export function registerSessionPromptsRoutes(): void {
 
       // Floor 'session' — see the POST /prompts gate comment. Stop/hold is the
       // counterpart of send; a member who can send must be able to hold.
-      const loaded = await loadProjectForUser(c, projectId, 'session');
-      if (!loaded) return c.json({ error: 'Not found' }, 404);
-      assertAgentScope(c, PROJECT_ACTIONS.PROJECT_SESSION_START);
-      await assertProjectCapability(
-        c,
-        loaded.userId,
-        loaded.row.accountId,
-        projectId,
-        PROJECT_ACTIONS.PROJECT_SESSION_START,
-      );
-      const visible = await loadVisibleSession(loaded, sessionId, callerKortixSessionId(c), callerKortixSessionId(c));
-      if (!visible || sessionIsTombstoned(visible.row)) return c.json({ error: 'Not found' }, 404);
+      const gate = await loadRunnableSession(c, projectId, sessionId);
+      if (gate.kind === 'error') return gate.response;
+      const { loaded, visible } = gate;
 
       const body = await readJsonObject(c);
       if (typeof body.held !== 'boolean') {
@@ -898,7 +840,6 @@ export function registerSessionPromptsRoutes(): void {
         );
       }
       await holdInboxPrompts(sessionId, body.held);
-      if (body.held) await disarmAllQuickQueueInterrupt(sessionId, loaded.userId);
       // After the write, before the read-back — either instant orders this
       // snapshot correctly against the hold it just applied (JAY-728).
       const observedAt = new Date().toISOString();
@@ -906,8 +847,12 @@ export function registerSessionPromptsRoutes(): void {
       if (body.held) {
         // The instant marking above is what the client waits for; what a Stop
         // means for prompts already on the wire needs the box and happens behind
-        // this response — see inbox-hold-settle.ts.
-        settleInboxHoldAfterStopInBackground(sessionId);
+        // this response — see inbox-hold-settle.ts. Then the hold is released:
+        // a Stop ends the turn, and what waited goes out as the next turn.
+        settleInboxHoldAfterStopInBackground(sessionId, async () => {
+          await holdInboxPrompts(sessionId, false);
+          await drainSessionLifecycleQueue({ limit: 1 });
+        });
       } else {
         void drainSessionLifecycleQueue({ limit: 1 }).catch(() => undefined);
       }

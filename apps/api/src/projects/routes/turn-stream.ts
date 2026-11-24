@@ -20,11 +20,13 @@ import {
   claimInitialTurn,
   pinRuntimeSession,
   readSteer,
+  dropSteer,
   relayContent,
   settleTurnEnd,
 } from './turn-stream-handlers';
 import { TurnStreamRelayBodySchema } from '@kortix/api-contract/runtime-relay';
 import { turnStreamKindField, turnStreamKindNeedsConnectorWrite } from './turn-stream-kind';
+import { requireSandboxCredential } from './turn-stream-handlers';
 import { workspaceIdParam } from '../../shared/route-params';
 
 export function registerTurnStreamRoutes(): void {
@@ -216,8 +218,16 @@ export function registerTurnStreamRoutes(): void {
           return beginTurn(c, body, authenticatedSandboxId);
         case 'steer_read':
           return readSteer(c, body, sessionId, authenticatedSandboxId);
+        case 'steer_dropped':
+          return dropSteer(c, body, sessionId, authenticatedSandboxId);
         case 'end':
-        case 'turn_end':
+        case 'turn_end': {
+          // Every daemon-reported kind walls on the session-bound credential (KRTX-1607 did
+          // runtime_session; the Strix review of KRTX-4682 flagged the forged-end gap here):
+          // a project member's PAT can READ a session but must not settle its turn. The
+          // dashboard's stop is `POST /sessions/:id/stop`, which carries its own authority.
+          const denial = requireSandboxCredential(c, authenticatedSandboxId, 'turn_end');
+          if (denial) return denial;
           return settleTurnEnd(c, body, {
             projectId,
             sessionId,
@@ -229,6 +239,7 @@ export function registerTurnStreamRoutes(): void {
               origin: turnStreamSession.origin ?? null,
             },
           });
+        }
         case 'runtime_session':
           return pinRuntimeSession(c, body, authenticatedSandboxId, projectId, sessionId);
         default:

@@ -57,6 +57,8 @@ export interface ResolvedTemplate {
   provider: string;
   image: string | null;
   dockerfilePath: string | null;
+  /** A Dockerfile's text (an eval task's image from outside the repository). Absent: none. */
+  dockerfileInline?: string | null;
   entrypoint: string | null;
   cpu: number;
   memoryGb: number;
@@ -262,6 +264,8 @@ export interface CreateTemplateInput {
   name?: string;
   image?: string;
   dockerfilePath?: string;
+  /** A Dockerfile's text, built without a build context. Only the eval runner sets it. */
+  dockerfile?: string;
   entrypoint?: string;
   cpu?: number;
   memoryGb?: number;
@@ -285,6 +289,7 @@ export async function createTemplate(input: CreateTemplateInput): Promise<DbSand
       provider: config.getDefaultProvider(),
       image: input.image ?? null,
       dockerfilePath: input.dockerfilePath ?? null,
+      dockerfileInline: input.dockerfile ?? null,
       entrypoint: input.entrypoint ?? null,
       cpu: clamp(input.cpu, SANDBOX_SPEC_LIMITS.cpu),
       memoryGb: clamp(input.memoryGb, SANDBOX_SPEC_LIMITS.memory),
@@ -391,7 +396,8 @@ export async function refreshTemplateState(
 /**
  * Resolve a template's snapshot identity: derive the content-addressed
  * snapshot name from (Dockerfile bytes or FROM image, runtime fingerprint,
- * spec). Used by builder.ts to know what to ask the provider for.
+ * spec, the owning tenant and the template entrypoint for project templates).
+ * Used by builder.ts to know what to ask the provider for.
  */
 /**
  * The region a project's own image is built in: the region its sessions boot
@@ -422,7 +428,11 @@ export async function projectImageRegion(projectId: string): Promise<string | un
 export async function computeTemplateIdentity(
   project: GitBackedProject,
   template: ResolvedTemplate,
-  deps: { imageRegion?: (projectId: string) => Promise<string | undefined> } = {},
+  deps: {
+    imageRegion?: (projectId: string) => Promise<string | undefined>;
+    /** Read-only views may use the request's bounded stale mirror policy. */
+    freshness?: false | 'tip-proof';
+  } = {},
 ): Promise<{
   snapshotName: string;
   contentHash: string;
@@ -442,8 +452,18 @@ export async function computeTemplateIdentity(
    */
   swapKey: string;
 }> {
+  // Trust boundary (KRTX-4469): the snapshot namespace is shared by every
+  // account, so an identity computed here names the image the CALLING project
+  // may delete or re-bake. The caller must have resolved this row for its own
+  // project; a row that names another project must never reach the provider
+  // under this project's identity of it.
+  if (!template.isShared && template.projectId && template.projectId !== project.projectId) {
+    throw new Error(
+      `Sandbox template "${template.slug}" belongs to a different project; refusing to compute its snapshot identity.`,
+    );
+  }
   const runtimeFingerprint = await currentRuntimeArtifactFingerprint();
-  const { dockerfile: userDockerfile, commit } = await resolveUserDockerfile(project, template);
+  const { dockerfile: userDockerfile, commit } = await resolveUserDockerfile(project, template, deps.freshness);
   const region = template.isShared
     ? undefined
     : await (deps.imageRegion ?? projectImageRegion)(project.projectId);
@@ -455,6 +475,18 @@ export async function computeTemplateIdentity(
     // In swapKey too: an agent swap patches its predecessor in the
     // predecessor's region, so a region change must rebuild instead.
     region,
+    // Tenant-scoped (KRTX-4469, CWE-639: one provider namespace serves every
+    // account): a project template's identity carries its projectId, so two
+    // projects that declare identical template content can never derive the
+    // same `kortix-tpl-<hash>` name and a project-scoped rebuild can never
+    // delete or re-bake a name another project derives. The shared default
+    // stays project-independent (one image serves every project).
+    projectId: template.isShared ? undefined : template.projectId ?? project.projectId,
+    // The builder bakes `template.entrypoint` at build time (builder.ts), so
+    // it must move the identity: an entrypoint change re-bakes under a new
+    // name instead of overwriting live image content. It moves swapKey too —
+    // an entrypoint change is not agent drift.
+    entrypoint: template.isShared ? undefined : template.entrypoint ?? undefined,
   };
   const hash = computeSnapshotHash({ ...hashInputs, runtimeFingerprint });
   // swapKey identifies EVERYTHING the agent-swap does NOT touch: the user image,
@@ -482,6 +514,7 @@ export async function computeTemplateIdentity(
 export async function resolveUserDockerfile(
   project: GitBackedProject,
   template: ResolvedTemplate,
+  freshness: false | 'tip-proof' = 'tip-proof',
 ): Promise<{ dockerfile: string; commit: string | null }> {
   if (template.isShared) return { dockerfile: PLATFORM_DEFAULT_USER_DOCKERFILE, commit: null };
   if (template.dockerfilePath) {
@@ -491,13 +524,16 @@ export async function resolveUserDockerfile(
     // as one. So a project with its own Dockerfile paid a full fetch on nearly
     // every new session, in front of the provider create. One branch at most
     // now, and the proof the env build shares makes it none.
-    const commitSha = await resolveCommitSha(project, project.defaultBranch, 'tip-proof');
+    const commitSha = await resolveCommitSha(project, project.defaultBranch, freshness);
     const bytes = await readRepoFile(project, template.dockerfilePath, commitSha);
     const normalized = normalizeUserDockerfileForSnapshot(bytes);
     if (!normalized.trim()) {
       throw new Error(`Sandbox template "${template.slug}": Dockerfile ${template.dockerfilePath} is empty`);
     }
     return { dockerfile: normalized, commit: commitSha };
+  }
+  if (template.dockerfileInline?.trim()) {
+    return { dockerfile: normalizeUserDockerfileForSnapshot(template.dockerfileInline), commit: null };
   }
   if (template.image) {
     return { dockerfile: `FROM ${template.image}\n`, commit: null };
@@ -634,17 +670,7 @@ async function reapPredecessorSnapshot(
     if (!config.KORTIX_SNAPSHOT_REAP_PREDECESSOR) return;
     if (!isReapableTemplatePredecessor(snapshotName)) return;
     // Still referenced by a DIFFERENT template row? Leave it shared.
-    const stillUsed = await db
-      .select({ id: sandboxTemplates.templateId })
-      .from(sandboxTemplates)
-      .where(
-        and(
-          eq(sandboxTemplates.providerSnapshotName, snapshotName),
-          ne(sandboxTemplates.templateId, templateId),
-        ),
-      )
-      .limit(1);
-    if (stillUsed.length > 0) return;
+    if (await templateSnapshotReferencedByAnotherRow(snapshotName, templateId)) return;
     await getSandboxProvider(provider).deleteSnapshot(snapshotName);
     console.log(`[snapshots] reaped superseded snapshot ${snapshotName} (provider=${provider})`);
   } catch (err) {
@@ -671,6 +697,32 @@ export async function recordTemplateFailed(
     .catch(() => {});
 }
 
+/**
+ * Is the snapshot name still referenced by a template row other than
+ * `exceptTemplateId`? Pre-fix identities were content-addressed once per
+ * provider namespace, so a legacy `kortix-tpl-<hash>` name can be the CURRENT
+ * name of rows in several projects. The name's latest provider image is the
+ * `contentHash`/snapshotName every such row still matches
+ * (KRTX-4469): deletion that skips this check deletes another tenant's
+ * image.
+ */
+export async function templateSnapshotReferencedByAnotherRow(
+  snapshotName: string,
+  exceptTemplateId: string | null = null,
+): Promise<boolean> {
+  const stillUsed = await db
+    .select({ id: sandboxTemplates.templateId })
+    .from(sandboxTemplates)
+    .where(
+      and(
+        eq(sandboxTemplates.providerSnapshotName, snapshotName),
+        exceptTemplateId ? ne(sandboxTemplates.templateId, exceptTemplateId) : sql`true`,
+      ),
+    )
+    .limit(1);
+  return stillUsed.length > 0;
+}
+
 // ─── Internals ────────────────────────────────────────────────────────────
 
 function synthesizedDefault(): ResolvedTemplate {
@@ -685,6 +737,7 @@ function synthesizedDefault(): ResolvedTemplate {
     provider: config.getDefaultProvider(),
     image: null,
     dockerfilePath: null,
+    dockerfileInline: null,
     entrypoint: null,
     cpu: DEFAULT_CPU,
     memoryGb: DEFAULT_MEMORY_GB,
@@ -711,6 +764,7 @@ function rowToResolved(row: DbSandboxTemplate): ResolvedTemplate {
     provider: row.provider ?? 'daytona',
     image: row.image,
     dockerfilePath: row.dockerfilePath,
+    dockerfileInline: row.dockerfileInline ?? null,
     entrypoint: row.entrypoint,
     cpu: row.cpu ?? DEFAULT_CPU,
     memoryGb: row.memoryGb ?? DEFAULT_MEMORY_GB,
@@ -824,13 +878,9 @@ function clamp(
   return n;
 }
 
-function validateTemplateMutation(args: { image?: unknown; dockerfilePath?: unknown }): void {
-  const image = typeof args.image === 'string' && args.image.trim() ? args.image.trim() : null;
-  const dockerfilePath =
-    typeof args.dockerfilePath === 'string' && args.dockerfilePath.trim()
-      ? args.dockerfilePath.trim()
-      : null;
-  if (image && dockerfilePath) {
+function validateTemplateMutation(args: { image?: unknown; dockerfilePath?: unknown; dockerfile?: unknown }): void {
+  const set = (value: unknown) => typeof value === 'string' && value.trim() !== '';
+  if ([args.image, args.dockerfilePath, args.dockerfile].filter(set).length > 1) {
     throw new Error('Set exactly one of `image` or `dockerfile_path` (not both).');
   }
 }

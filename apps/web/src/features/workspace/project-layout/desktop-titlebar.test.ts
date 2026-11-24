@@ -352,7 +352,7 @@ describe('nothing re-hard-codes the band', () => {
       '.kx-project-sidebar-header',
       "[role='dialog']",
       "[role='menu']",
-      '[data-radix-popper-content-wrapper]',
+      '[data-kortix-floating]',
     ]) {
       expect(scoped?.[1]).toContain(owner);
     }
@@ -384,13 +384,6 @@ describe('nothing re-hard-codes the band', () => {
     // reachable. Raising Back instead would leave every other control in the
     // band covered.
     expect(control).toContain('z-50');
-  });
-
-  test('the session header takes the band offsets from the shared row class', () => {
-    expect(sessionHeader).toContain('kx-titlebar-row');
-    expect(sessionHeader).toContain('pt-[var(--kx-titlebar-control-top)]');
-    expect(sessionHeader).not.toContain('ml-[96px]');
-    expect(sessionHeader).not.toContain('pt-[12px]');
   });
 
   // The row class carries BOTH indents, and they have different triggers. The

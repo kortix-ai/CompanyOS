@@ -3,12 +3,13 @@
 import { type ApiClientOptions, ApiError, backendApi } from '../../http/api-client';
 import { retiredEndpointError } from '../../http/api/errors';
 import { markSessionFresh } from '../../http/fresh-sessions';
+import { querySuffix } from '../../http/url';
 import { currentSavedCopyStore } from '../../session-sync/saved-copy-store';
 import { noteSessionDeleted, noteSessionStopped } from '../../http/session-stopped';
 import { isSessionLogPage } from '../../session-log/guard';
 import { loadSessionLogPage, type SessionLogPage, type SessionLogPageQuery } from '../../session-log/source';
 import type { AuditEvent } from './audit';
-import type { SessionAttention, SessionBoardState, SessionInbound } from './multi-agent';
+import type { SessionAttention, SessionBoardState, SessionInbound, SessionWorkState } from './multi-agent';
 import { type ConnectorSharing, unwrap } from './shared';
 
 // ---------------------------------------------------------------------------
@@ -208,6 +209,13 @@ export interface ProjectSession {
   archived_at?: string | null;
   /** Where the session sits on the agent board. Absent on an API before multi-agent. */
   board_state?: SessionBoardState;
+  /**
+   * Is the work done: `running`, `completed`, `failed`, `stopped` or `idle`.
+   * Read this (or `sessionWorkState(row)`) to wait for a session, never
+   * `status` (the row lifecycle) or `runtime_status` (the computer). Absent on
+   * an older API; `sessionWorkState` derives it there.
+   */
+  work_state?: SessionWorkState;
   /** What the session waits for from its person, or null. Absent on an API before multi-agent. */
   attention?: SessionAttention;
   /** The newest turn activity (ISO 8601), or null. Absent on an API before multi-agent. */
@@ -226,6 +234,35 @@ export interface ProjectSession {
 
 /** The workspace name of {@link ProjectSession}: the same type. */
 export type WorkspaceSession = ProjectSession;
+
+const WORK_STATE_OF_BOARD: Record<SessionBoardState, SessionWorkState> = {
+  working: 'running',
+  needs_input: 'running',
+  completed: 'completed',
+  failed: 'failed',
+  stopped: 'stopped',
+  idle: 'idle',
+};
+
+/**
+ * Is this session's work done? The server's `work_state`, else derived from
+ * `board_state`, else from `working` on an API older than both.
+ *
+ * Three fields look like an answer and only this one is: `status` is the
+ * stored row lifecycle and `runtime_status` the computer. A child that
+ * finished and answered keeps `status: 'running'` and
+ * `runtime_status: 'active'` until its idle computer stops (~10 min).
+ *
+ * `running` includes a session that waits for its person (`attention`).
+ */
+export function sessionWorkState(
+  session: Pick<ProjectSession, 'work_state' | 'board_state' | 'working' | 'status'>,
+): SessionWorkState {
+  if (session.work_state) return session.work_state;
+  if (session.board_state) return WORK_STATE_OF_BOARD[session.board_state] ?? 'idle';
+  if (session.working?.state === 'working') return 'running';
+  return session.status === 'failed' ? 'failed' : 'idle';
+}
 
 /**
  * The session that spawned `session`, or `null` when it is a root session.
@@ -306,6 +343,13 @@ export interface CreateProjectSessionInput {
    * no space, as with the flag off (the regular new-session composer).
    */
   space_id?: string | null;
+  /**
+   * The space (session group, `listWorkspaceSessionGroups`) to file the
+   * session in. Needs the project's `session_groups` flag. Omitted: a fork
+   * keeps its source's group, anything else is in none. An unknown id rejects
+   * with 404 `group_not_found`.
+   */
+  group_id?: string | null;
   base_ref?: string;
   agent_name?: string;
   /** Slug of the sandbox template to boot from. Defaults to "default". */
@@ -463,8 +507,9 @@ export interface ListProjectSessionsOptions {
   /** `'root'` = top-level sessions only (each row carries `child_count`); a
    *  session id = that session's children. Omit for the legacy flat list. */
   parent?: 'root' | string;
-  /** Filter by who started the run, relative to the viewer. */
-  startedBy?: 'me' | 'others' | 'automated';
+  /** Filter by who started the run, relative to the viewer. `humans` = every
+   *  person-started session (the viewer's and other members'), no machine run. */
+  startedBy?: 'me' | 'others' | 'automated' | 'humans';
   /** Server-side search over every session the viewer may see (1..200 chars). */
   q?: string;
   /** Only sessions that carry EVERY one of these labels (exact match). */
@@ -490,6 +535,13 @@ export interface ListProjectSessionsOptions {
   updatedAfter?: string;
   /** Only the teammates of this lead session (metadata `team_lead`). Sent as `team_lead`. */
   teamLead?: string;
+  /**
+   * Only the sessions with a live turn now (`working.state === 'working'`):
+   * workflow runners, their agents, colleagues and any other session at work.
+   * Sent as `working=only`. A server without the filter ignores it and
+   * answers the plain list, so read `working` on each row.
+   */
+  working?: boolean;
 }
 
 /** The workspace name of {@link ListProjectSessionsOptions}: the same type. */
@@ -526,7 +578,8 @@ function projectSessionListQuery(options?: ListProjectSessionsOptions): string {
   if (options?.agent) params.set('agent', options.agent);
   if (options?.updatedAfter) params.set('updated_after', options.updatedAfter);
   if (options?.teamLead) params.set('team_lead', options.teamLead);
-  return params.size > 0 ? `?${params}` : '';
+  if (options?.working) params.set('working', 'only');
+  return querySuffix(params);
 }
 
 /**
@@ -779,30 +832,6 @@ export function resolvePublicShareUrl(
     }
   }
   return raw;
-}
-
-/**
- * The live transcript share among a session's shares (newest first), or null.
- * Live means not revoked and not expired at `now`. Pure: pass the `shares`
- * from `listSessionPublicShares`.
- *
- * Public transcript sharing was removed (KRTX-2358): servers that ship the
- * removal never mint transcript shares, so this returns null there. It still
- * reports a legacy row a server older than the removal hands out.
- *
- * @deprecated Removed in the next major.
- */
-export function findActiveTranscriptShare(
-  shares: readonly SessionPublicShare[],
-  now: Date = new Date(),
-): SessionPublicShare | null {
-  let found: SessionPublicShare | null = null;
-  for (const share of shares) {
-    if (share.resource_type !== 'transcript' || share.revoked_at) continue;
-    if (share.expires_at && Date.parse(share.expires_at) <= now.getTime()) continue;
-    if (!found || Date.parse(share.created_at) > Date.parse(found.created_at)) found = share;
-  }
-  return found;
 }
 
 export async function getSessionPreviewCandidates(projectId: string, sessionId: string) {
@@ -1070,172 +1099,13 @@ export async function getSessionAudit(
   );
 }
 
-/** @deprecated The v1 transcript. Read the session log instead: `getSessionLogPage` (`kortix.session(p, s).log(query)`, `GET …/log`). Removed in the next major. */
-export interface SessionTranscriptToolCall {
-  tool: string;
-  status: string | null;
-}
-
-/** @deprecated The v1 transcript. Read the session log instead: `getSessionLogPage` (`kortix.session(p, s).log(query)`, `GET …/log`). Removed in the next major. */
-export interface SessionTranscriptMessage {
-  role: string;
-  created: string | null;
-  completed: string | null;
-  text: string;
-  tools: SessionTranscriptToolCall[];
-  files: Array<{ filename: string | null; mime: string | null }>;
-  reasoning_omitted: boolean;
-  error: { name?: string; message?: string } | null;
-}
-
-/**
- * Which source answered a transcript read.
- *
- * `live` is the sandbox's own runtime endpoint. `mirror` is the durable
- * server-side copy the control plane writes at turn end, which is what lets a
- * STOPPED or waking session answer at all. `none` is the honest "nothing could
- * answer" and is the only value that accompanies `available: false`. The two
- * sources are never merged — this field says which one you got.
- *
- * @deprecated The v1 transcript. Read the session log instead: `getSessionLogPage` (`kortix.session(p, s).log(query)`, `GET …/log`). Removed in the next major.
- */
-export type SessionTranscriptSource = 'live' | 'mirror' | 'none';
-
-/** Compact server-side transcript read — text + tool calls, stripped of tool
- *  inputs/outputs, for project automation (callable with project-scoped
- *  session tokens, unlike the raw sandbox proxy).
- *
- * @deprecated The v1 transcript. Read the session log instead: `getSessionLogPage` (`kortix.session(p, s).log(query)`, `GET …/log`). Removed in the next major.
- */
-export interface SessionTranscript {
-  available: boolean;
-  reason: string | null;
-  source: SessionTranscriptSource;
-  /** The response contains the session's FIRST message. False means "this is a
-   *  tail", never "something is broken". */
-  complete: boolean;
-  /** When the mirror was last written; null for a live read. */
-  captured_at: string | null;
-  /** The runtime session this belongs to. Served by APIs since W4. */
-  runtime_session_id?: string | null;
-  message_count: number;
-  messages: SessionTranscriptMessage[];
-}
-
-/** One mirrored message in the shape the session sync store hydrates from:
- *  the runtime's own envelope, with the parts array stripped of tool
- *  inputs/outputs and file urls.
- *
- * @deprecated The v1 transcript. Read the session log instead: `getSessionLogPage` (`kortix.session(p, s).log(query)`, `GET …/log`). Removed in the next major.
- */
-export interface SessionTranscriptSyncMessage {
-  info: Record<string, unknown>;
-  parts: Array<Record<string, unknown>>;
-}
-
-/**
- * The durable transcript mirror, in sync-store shape.
- *
- * `source` is `mirror` or `none` — never `live`. A client whose sandbox is up
- * reads the runtime directly, so this endpoint deliberately does not re-proxy
- * it.
- *
- * @deprecated The v1 transcript. Read the session log instead: `getSessionLogPage` (`kortix.session(p, s).log(query)`, `GET …/log`). Removed in the next major.
- */
-export interface SessionTranscriptSyncEnvelope {
-  available: boolean;
-  reason: string | null;
-  source: SessionTranscriptSource;
-  complete: boolean;
-  captured_at: string | null;
-  /** The runtime session this belongs to. Served by APIs since W4. */
-  runtime_session_id?: string | null;
-  /** How many messages are in THIS window of the transcript. */
-  message_count: number;
-  /**
-   * Messages the mirror holds for this session, across every window.
-   * `complete === false` says a window is partial; this says by how much.
-   *
-   * Optional because an older API does not send it — a self-hosted or staging
-   * backend behind this client answers without these two fields, and reading
-   * them as required would make a correct response look malformed.
-   */
-  total?: number;
-  /** Pass as `before` to read the window OLDER than this one. Null when this
-   *  window already reaches the oldest message the mirror holds. */
-  next_cursor?: string | null;
-  messages: SessionTranscriptSyncMessage[];
-}
-
-/** @deprecated Reads the v1 transcript (`GET …/transcript`). Read the session log instead: `getSessionLogPage` (`kortix.session(p, s).log(query)`, `GET …/log`). Removed in the next major. */
-export async function getSessionTranscript(
-  projectId: string,
-  sessionId: string,
-  options?: { limit?: number; chars?: number },
-) {
-  const search = new URLSearchParams();
-  if (options?.limit != null) search.set('limit', String(options.limit));
-  if (options?.chars != null) search.set('chars', String(options.chars));
-  const qs = search.toString();
-  return unwrap(
-    await backendApi.get<SessionTranscript>(
-      `/workspaces/${projectId}/sessions/${sessionId}/transcript${qs ? `?${qs}` : ''}`,
-    ),
-  );
-}
-
-/**
- * Read the durable server-side transcript mirror for a session.
- *
- * This is the ONE read that answers while the sandbox is down. It exists so a
- * hibernated session can paint its history immediately instead of showing a
- * full-screen loader for the length of the wake (measured 5-240 s).
- *
- * Messages carry the runtime's real ids, so a client hydrates them provisionally
- * (`hydrate(..., { source: 'cache' })`) and the live runtime read SETTLES them
- * by id rather than duplicating them.
- *
- * @deprecated Reads the v1 transcript (`GET …/transcript?shape=sync`). Read the session log instead: `getSessionLogPage` (`kortix.session(p, s).log(query)`, `GET …/log`). Removed in the next major.
- */
-export async function getSessionTranscriptSync(
-  projectId: string,
-  sessionId: string,
-  options?: {
-    limit?: number;
-    signal?: AbortSignal;
-    history?: boolean;
-    /**
-     * A previous window's `next_cursor`. Returns the window of messages
-     * strictly OLDER than it, so a client can walk back through a history the
-     * mirror retains in full. A cursor naming no mirrored message answers 400
-     * rather than silently returning the newest window again.
-     */
-    before?: string | null;
-    /**
-     * A sub-agent's runtime session inside this session (`ses_…`, the id a
-     * sub-agent row opens). Returns that sub-agent's own saved transcript
-     * instead of the conversation; `available: false` when nothing was saved.
-     */
-    child?: string | null;
-  },
-) {
-  const search = new URLSearchParams({ shape: 'sync' });
-  if (options?.limit != null) search.set('limit', String(options.limit));
-  if (options?.history) search.set('history', 'true');
-  if (options?.before) search.set('before', options.before);
-  if (options?.child) search.set('child', options.child);
-  return unwrap(
-    await backendApi.get<SessionTranscriptSyncEnvelope>(
-      `/workspaces/${projectId}/sessions/${sessionId}/transcript?${search.toString()}`,
-      { showErrors: false, signal: options?.signal },
-    ),
-  );
-}
-
 /**
  * One page of one thread of the session's stored log (`kortix.session/2`): the session record,
  * every thread head, and the thread's newest `limit` messages (default 40, max 500) with
- * `seq < before_seq`, ascending. `thread` defaults to the root thread. Read from Postgres, so it
+ * `seq < before_seq`, ascending. `thread` defaults to the root thread. A page carries whole
+ * messages up to `SESSION_LOG_PAGE_MAX_BYTES` of stored payload (default 2 MiB): an over-budget
+ * window answers fewer than `limit` with `has_more: true`, the newest message however large it is.
+ * Read from Postgres, so it
  * answers while the sandbox is stopped; the daemon journals each turn at its end.
  * Null on a 404: the session has no stored log yet, or no such thread.
  */
@@ -1347,8 +1217,8 @@ export async function getSessionTurn(
 // ── The session-open bundle ─────────────────────────────────────────────────
 //
 // ONE round trip for everything a session view needs to PAINT and ARM: the
-// session row, the running turns, the prompt queue, the durable transcript
-// mirror, the composer's control-plane essentials, the model defaults, and
+// session row, the running turns, the prompt queue, the transcript pointer,
+// the composer's control-plane essentials, the model defaults, and
 // the pending-approvals audit projection. It replaces 7 serial reads (6 plus
 // `/audit`) on the open path and introduces NO new truth —
 // every leg is byte-identical to the endpoint that already served it, so a
@@ -1375,12 +1245,10 @@ export type SessionOpenBundleQueue =
   | { known: true; prompts: SessionPrompt[]; held: boolean }
   | SessionOpenBundleUnknown;
 
-/** = `GET .../transcript?shape=sync`. `requested: false` answers a
- *  `transcript: 0` read: the caller asked for the pointer only, which is NOT
- *  the same as the transcript being unknown. */
+/** The transcript pointer: `requested: false`, the only answer since the v1 transcript was
+ *  removed. The saved history is the session log (`getSessionLogPage`, `GET …/log`). */
 export type SessionOpenBundleTranscript =
   | { known: true; requested: false }
-  | ({ known: true; requested: true } & SessionTranscriptSyncEnvelope)
   | SessionOpenBundleUnknown;
 
 /** Composer essentials that need no sandbox. Deliberately NOT the `/config`
@@ -1474,26 +1342,21 @@ export interface SessionOpenBundle {
 /**
  * Read the session-open bundle.
  *
- * `transcript` is the mirrored-message window: the default matches the SDK's
- * own first-paint span, and `0` asks for the pointer only — what a client whose
- * store is already warm wants, because it needs the identity and the count to
- * TRUST what it holds, not the bytes it already has.
+ * The transcript leg is the pointer only (`transcript=0`): an API older than the
+ * v1 transcript removal would otherwise answer a v1 window nothing reads.
  */
 export async function getSessionOpenBundle(
   projectId: string,
   sessionId: string,
-  options?: { transcript?: number; signal?: AbortSignal },
+  options?: { signal?: AbortSignal },
 ): Promise<SessionOpenBundle> {
-  const search = new URLSearchParams();
-  if (options?.transcript != null) search.set('transcript', String(options.transcript));
-  const qs = search.toString();
   return unwrap(
     await backendApi.get<SessionOpenBundle>(
       // `/snapshot` is the canonical path; #6987 renamed the route while this
       // client kept requesting `/open-bundle`, so every session open 404'd the
       // bundle and silently fell back to 6-8 serial reads. (The API keeps an
       // `/open-bundle` alias for SDKs published before the rename.)
-      `/workspaces/${projectId}/sessions/${sessionId}/snapshot${qs ? `?${qs}` : ''}`,
+      `/workspaces/${projectId}/sessions/${sessionId}/snapshot?transcript=0`,
       // A 404 here is an EXPECTED race: the session exists but the control
       // plane has not marked it visible yet. `openSessionBundle` already
       // resolves `null` and every consumer falls back to its direct read
@@ -1551,21 +1414,22 @@ export interface SessionPromptOverrides {
 export type SessionPromptState = 'queued' | 'delivering' | 'waiting' | 'failed';
 
 /**
- * How a prompt reaches a session whose turn is running.
- * - `steer`: the running turn reads it at its next step boundary. The turn
- *   does not stop.
- * - `queue` (Queue List): waits for the turn to end, then runs as its own turn.
- * - `interrupt` (Quick Queue, "Stop and send"): ends the turn after the
- *   running tool, then runs as its own turn.
- * With no turn running, all three start a turn.
+ * How a prompt reaches a session whose turn is running. There is one mode,
+ * `steer`: the running turn reads it at its next step, after its current tool
+ * call, and does not stop. With no turn running, it starts a turn. The server
+ * delivers every prompt this way and serves `steer` for every row.
+ *
+ * `queue` and `interrupt` are still accepted and change nothing.
+ * @deprecated values `'queue'` and `'interrupt'`; removed in the next major.
  */
 export type SessionPromptDelivery = 'steer' | 'queue' | 'interrupt';
 
 /**
- * Why a `steer` prompt was delivered as `queue` instead:
+ * Why a prompt did not reach the running turn and starts the next one:
  * - `unsupported`: the session's runtime cannot take a message mid-turn.
- * - `not_prompter`: the running turn belongs to another member.
  * - `turn_ended`: the turn ended before the message reached it.
+ * - `not_prompter`: no longer written (anyone who may send steers); old rows
+ *   may carry it.
  */
 export type SessionPromptSteerFallback = 'unsupported' | 'not_prompter' | 'turn_ended';
 
@@ -1813,9 +1677,9 @@ export async function editSessionPrompt(
 }
 
 /**
- * "Stop and send": turn a prompt still waiting in the queue into Quick Queue
- * (`delivery: 'interrupt'`). The running turn ends after its running tool,
- * then this prompt runs. A row already on the wire answers `409`.
+ * "Send now": a prompt still waiting goes next, ahead of older waiting
+ * prompts. It steers the running turn, which is not stopped, or starts one.
+ * A row already on the wire answers `409`.
  */
 export async function interruptSessionPrompt(
   projectId: string,
@@ -2660,6 +2524,10 @@ export interface SessionUsageTotals {
   output_tokens: number;
   cached_tokens: number;
   cache_write_tokens: number;
+  /** What the session's boxes cost while they were up, in USD. Absent from a server before 2026-11-15. */
+  compute_cost?: number;
+  /** Everything Kortix debited, in USD: `kortix_cost + compute_cost`. Own-key spend is not in it. Absent from a server before 2026-11-15. */
+  billed_cost?: number;
 }
 
 /** One session of a `SessionUsage` tree. */

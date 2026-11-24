@@ -38,6 +38,7 @@ import { bindWorkspaceCore, bindWorkspaces } from './facade-workspaces';
 import { getClient } from '../runtime/client';
 
 import { type KortixPlatformConfig, configureKortix } from '../http/config';
+import { safeEnv } from '../http/env';
 import * as P from '../rest/projects-client';
 import { getMobileClientPolicy } from '../rest/platform-client/client-policy';
 
@@ -65,7 +66,24 @@ function noteGlobalClient(config: KortixPlatformConfig): void {
   );
 }
 
-export function createKortix(config: KortixPlatformConfig, opts?: { global?: boolean }) {
+/**
+ * The config of a Kortix sandbox: its own API base (`KORTIX_API_URL`, ending in
+ * `/v1`) and token (`KORTIX_TOKEN`). Every session box and every program-agent
+ * turn has both. Throws when `KORTIX_API_URL` is not set.
+ */
+function sandboxConfig(): KortixPlatformConfig {
+  const backendUrl = safeEnv('KORTIX_API_URL')?.trim().replace(/\/+$/, '');
+  if (!backendUrl) {
+    throw new Error('createKortix() needs { backendUrl, getToken }, or KORTIX_API_URL and KORTIX_TOKEN in the environment (a Kortix sandbox sets both).');
+  }
+  return { backendUrl, getToken: async () => safeEnv('KORTIX_TOKEN')?.trim() || null };
+}
+
+/**
+ * With no `config`, the client uses the sandbox it runs in: `KORTIX_API_URL`
+ * and `KORTIX_TOKEN` (see `sandboxConfig`).
+ */
+export function createKortix(config: KortixPlatformConfig = sandboxConfig(), opts?: { global?: boolean }) {
   // Wire the platform seam once. All wrapped functions read it.
   //
   // `opts.global === false` (used by `@kortix/sdk/server`'s `createScopedKortix`)
@@ -154,7 +172,7 @@ export function createKortix(config: KortixPlatformConfig, opts?: { global?: boo
     sandboxShares,
     /** Deployment-wide Pipedream/easy-connect availability flag (not project-scoped). */
     connectStatus,
-    /** Public marketplace catalog browse + sources (`/v1/marketplace/*`, not project-scoped). */
+    /** @deprecated The marketplace was removed (2026-11-20); every call rejects with `410 ENDPOINT_RETIRED`. Removed in the next major. */
     marketplace,
     /** Kortix Capture: `account(id)` (the tenant), the device sign-in approval, and `me` (the agent tool's reads). */
     capture: captureClient,

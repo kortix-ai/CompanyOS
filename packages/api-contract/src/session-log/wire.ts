@@ -123,7 +123,13 @@ export const SessionLogManifestSchema = z.object({
  * - `thread_id`: the paged thread, `thread` or else the root thread (null: no thread stored).
  * - `messages`: that thread's newest `limit` messages (default 40, at most 500) with
  *   `seq < before_seq`, ascending by `seq`. A tombstoned message is left out; its seq is a gap.
+ *   A page carries whole messages up to `SESSION_LOG_PAGE_MAX_BYTES` of stored payload
+ *   (default 2 MiB): an over-budget window answers fewer than `limit` with `has_more: true`,
+ *   the newest message served however large it is.
  * - `has_more`: an older message exists. Read it with `before_seq` = the first message's `seq`.
+ * - `source`: who answered `GET …/log`. `'box'`: the session's running box (`?live=1`, its
+ *   `GET /kortix/runtime/log`), every message up to now. `'store'`: the stored log, which lags a
+ *   running box by its journal. Absent from an API that predates it, and from the box's own read.
  */
 export const SessionLogPageSchema = z.object({
   session: SessionLogSessionPatchSchema,
@@ -132,6 +138,7 @@ export const SessionLogPageSchema = z.object({
   thread_id: z.string().nullable(),
   messages: z.array(SessionLogMessageSchema),
   has_more: z.boolean(),
+  source: z.enum(['box', 'store']).optional(),
 });
 
 /** A text the API stored by reference (F3): `ref` names its object in the session's own folder. */

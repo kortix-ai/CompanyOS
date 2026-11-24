@@ -15,7 +15,7 @@
  */
 import * as React from 'react';
 import { View, useWindowDimensions } from 'react-native';
-import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { SheetScrollView } from '@/components/kortix/sheet-parts';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SettingsGroup, SettingsRow } from '@/components/kortix/settings-list';
@@ -52,7 +52,7 @@ export const LogoPaletteSheet = React.forwardRef<SheetRef>((_props, ref) => {
       maxDynamicContentSize={Math.floor(height * 0.5)}
       enablePanDownToClose
       backdropComponent={PreviewBackdrop}>
-      <BottomSheetScrollView
+      <SheetScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           // `PickerSheet`'s layout: 16pt sides, 16pt between groups.
@@ -82,7 +82,7 @@ export const LogoPaletteSheet = React.forwardRef<SheetRef>((_props, ref) => {
               leading={
                 <Swatch
                   colors={
-                    logoPaletteSwatch(palette.accent ? THEME.accent[palette.accent] : null, tone) ?? {
+                    logoPaletteSwatch(palette.accent ? THEME.accent[tone][palette.accent] : null, tone) ?? {
                       // The default metal: the page's foreground over its border tone.
                       highlight: THEME[tone].foreground,
                       body: THEME[tone].border,
@@ -100,7 +100,7 @@ export const LogoPaletteSheet = React.forwardRef<SheetRef>((_props, ref) => {
             />
           ))}
         </SettingsGroup>
-      </BottomSheetScrollView>
+      </SheetScrollView>
     </KortixBottomSheetModal>
   );
 });

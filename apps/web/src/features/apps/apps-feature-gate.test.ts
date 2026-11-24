@@ -29,6 +29,10 @@ const appsSource = () =>
 // probes are substituted; inventory and flag reads use real SDK hooks/cache data.
 const win = new Window();
 Object.assign(globalThis, { window: win, document: win.document, navigator: win.navigator });
+// Base UI's floating layers read DOM classes from globals.
+for (const name of ['Element', 'HTMLElement', 'Node', 'ShadowRoot', 'DocumentFragment', 'customElements']) {
+  Object.assign(globalThis, { [name]: Reflect.get(win, name) });
+}
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
 const projectId = 'project-apps-ga';
 mock.module('next/navigation', () => ({
@@ -160,8 +164,7 @@ test('the Apps header is the capability tab bar, not a settings masthead', () =>
     uiSourcePath('internal/layout/project-page-header.tsx'),
     'utf8',
   );
-  const BAR = 'relative flex shrink-0 items-center gap-1 border-b px-2';
-  expect(header).toContain(`kx-titlebar-row kx-capability-titlebar ${BAR}`);
+  expect(header).toContain('export const PROJECT_PAGE_HEADER_CLASS');
   expect(view).toContain('<ProjectPageHeader');
 
   // `CustomizeSectionWrapper` is the settings-section shell: an 80px centred

@@ -41,34 +41,23 @@ import { openExternalRoute } from '@kortix/ui/internal/lib/desktop';
 import { isInterfaceThemeId } from '@/lib/interface-themes';
 import { useSettingsPanelStore } from '@kortix/ui/internal/stores/settings-panel-store';
 import {
-  ArticleIcon,
   BookOpenIcon,
   LifebuoyIcon,
   Moon,
   PaintBrushIcon,
-  PaperPlaneTiltIcon,
   QuestionIcon,
   ScrollIcon,
   ShieldCheckIcon,
-  StorefrontIcon,
   Sun,
 } from '@phosphor-icons/react';
-import Link from 'next/link';
 import * as React from 'react';
 import { useState } from 'react';
 import { INTERFACE_THEME_OPTIONS, ThemeSwatch, useInterfaceTheme } from './interface-theme';
 
-export type MenuLink = {
+type MenuLink = {
   label: string;
   href: string;
   Icon: React.ComponentType<{ className?: string }>;
-  /**
-   * Navigate in place instead of opening a new tab. Only Marketplace: it is
-   * somewhere you go and act — browse, install — so it belongs in the session
-   * you are already in. Everything else under Help is something you read, and
-   * losing your workspace to go read it is the wrong trade.
-   */
-  internal?: boolean;
 };
 
 /**
@@ -79,13 +68,10 @@ export type MenuLink = {
  * the sidebar and the header, so this render path is not rare.
  */
 export const HELP_LINKS: MenuLink[] = [
-  // One support row, not two. The /help and /support pages are gone; support
-  // requests go to the contact page.
-  { label: 'Support', href: '/contact', Icon: LifebuoyIcon },
+  // Things a person opens to get unstuck. Contact was a second row to the
+  // same /contact page as Support, and Blog is marketing, not help.
   { label: 'Docs', href: '/docs', Icon: BookOpenIcon },
-  { label: 'Blog', href: '/blog', Icon: ArticleIcon },
-  { label: 'Marketplace', href: '/marketplace', Icon: StorefrontIcon, internal: true },
-  { label: 'Contact', href: '/contact', Icon: PaperPlaneTiltIcon },
+  { label: 'Support', href: '/contact', Icon: LifebuoyIcon },
 ];
 
 /** Kept separate so a divider can hold the legal pages apart from the rest. */
@@ -171,7 +157,7 @@ export function ThemeSubmenu() {
  * Every reference and legal page collapsed into one submenu, so the top level
  * only carries things you act on rather than eight links.
  *
- * External rows render a real `<a target="_blank" rel="noopener noreferrer">` rather than calling
+ * Every row renders a real `<a target="_blank" rel="noopener noreferrer">` rather than calling
  * `window.open` from a handler. Three reasons: the browser opens the tab inside
  * the click's own user-gesture window, so no popup blocker can eat it — a
  * deferred close is exactly the kind of gap that trips one; cmd-click and
@@ -186,34 +172,22 @@ export function HelpSubmenu({ onClose }: { onClose: () => void }) {
   const tI18nComplete = useTranslations('hardcodedUi.i18nComplete');
   const helpLinks = useLocalizedUiCatalog(HELP_LINKS);
   const legalLinks = useLocalizedUiCatalog(LEGAL_LINKS);
-  const renderMenuLink = ({ label, href, Icon, internal }: MenuLink) =>
-    internal ? (
-      // An anchor, exactly like the external branch below. `router.push` from a
-      // menu row runs the RSC fetch cold at click time, and that fetch degrades
-      // into a full document load whenever it answers wrong — a build-id skew
-      // mid-deploy, a maintenance redirect, a network blip.
-      <DropdownMenuItem key={href} asChild onClick={onClose}>
-        <Link href={href} prefetch>
-          <Icon />
-          {label}
-        </Link>
-      </DropdownMenuItem>
-    ) : (
-      <DropdownMenuItem key={href} asChild>
-        <a
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(event) => {
-            if (openExternalRoute(href)) event.preventDefault();
-            onClose();
-          }}
-        >
-          <Icon />
-          {label}
-        </a>
-      </DropdownMenuItem>
-    );
+  const renderMenuLink = ({ label, href, Icon }: MenuLink) => (
+    <DropdownMenuItem key={href} asChild>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(event) => {
+          if (openExternalRoute(href)) event.preventDefault();
+          onClose();
+        }}
+      >
+        <Icon />
+        {label}
+      </a>
+    </DropdownMenuItem>
+  );
 
   return (
     <DropdownMenuSub>
@@ -238,7 +212,7 @@ export function HelpSubmenu({ onClose }: { onClose: () => void }) {
  * Log out, behind a confirmation.
  *
  * Returns the dialog as an element rather than rendering it inline, because it
- * MUST mount as a sibling of the dropdown, never inside its content: Radix
+ * MUST mount as a sibling of the dropdown, never inside its content: the menu
  * unmounts `DropdownMenuContent` on close, so a dialog living in there would be
  * torn down the instant the menu closed — which is the exact moment you click
  * "Log out".
@@ -257,7 +231,7 @@ export function useLogoutFlow(deferAfterClose: (fn: () => void) => void) {
   // change. There is nothing to prefetch: a document load does not read the
   // segment cache.
   //
-  // `preventDefault` keeps the dialog UP. Radix closes it on click, which used
+  // `preventDefault` keeps the dialog UP. The alert dialog closes it on click, which used
   // to leave the user staring at the unchanged app for as long as the sign-out
   // took — up to the full step budget on a broken network — with nothing on
   // screen saying anything was happening. The predictable response is a second

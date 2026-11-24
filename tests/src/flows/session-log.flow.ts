@@ -28,6 +28,7 @@ import { flow } from "../core/flow";
 import { CliSandbox, throwIfCliInfraFailure } from "../fixtures/cli";
 import { createDatabaseSession } from "../fixtures/database-project";
 import { seedSessionTranscript } from "../fixtures/session-transcript";
+import { lockProjectFirst } from '../fixtures/token-binding-lock';
 
 const JOURNAL = "/v1/workspaces/:projectId/sessions/:sessionId/log/journal";
 const MANIFEST = "/v1/workspaces/:projectId/sessions/:sessionId/log/manifest";
@@ -54,7 +55,7 @@ async function sandboxCredential(ctx: FlowContext, projectId: string, sessionId:
   const credential = minted.json<{ token_id: string; secret_key: string }>();
   const db = new Client({ connectionString: ctx.env.databaseUrl!, ssl: /localhost|127\.0\.0\.1/.test(ctx.env.databaseUrl!) ? false : { rejectUnauthorized: false } });
   await db.connect();
-  await db.query("UPDATE kortix.account_tokens SET project_id = $2, session_id = $3 WHERE token_id = $1", [credential.token_id, projectId, sessionId]);
+  await db.query(lockProjectFirst("UPDATE kortix.account_tokens SET project_id = $2, session_id = $3 WHERE token_id = $1"), [credential.token_id, projectId, sessionId]);
   await db.query("INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')", [sessionId, ctx.P.OWNER.accountId, projectId]);
   return {
     secret: credential.secret_key,
@@ -186,7 +187,6 @@ function syntheticConversation(root: string, child: string, turns: number) {
   return rows;
 }
 
-const TRANSCRIPT = "/v1/workspaces/:projectId/sessions/:sessionId/transcript";
 const BUNDLE = "/v1/workspaces/:projectId/sessions/:sessionId/open-bundle";
 const LOG = "/v1/workspaces/:projectId/sessions/:sessionId/log";
 
@@ -196,7 +196,7 @@ flow(
     domain: "sessions",
     requires: ["database"],
     routes: [
-      "POST /v1/accounts/tokens", `POST ${JOURNAL}`, `GET ${TRANSCRIPT}`, `GET ${BUNDLE}`, `GET ${LOG}`,
+      "POST /v1/accounts/tokens", `POST ${JOURNAL}`, `GET ${BUNDLE}`, `GET ${LOG}`,
       // `kortix sessions log` logs in and locates the session before it reads the log.
       "GET /v1/me", "GET /v1/workspaces/:projectId/sessions/:sessionId",
     ],
@@ -216,28 +216,6 @@ flow(
     const params = { projectId: project.id, sessionId };
     const { box, secret, close } = await sandboxCredential(ctx, project.id, sessionId);
 
-    /** Every v1 read with `captured_at` set aside: the sync pages of 4 to the end, the child, compact, the bundle's transcript leg. */
-    const v1Reads = async () => {
-      const bodies: unknown[] = [];
-      const strip = (b: Record<string, unknown>) => {
-        const { captured_at: _c, ...rest } = b;
-        return rest;
-      };
-      let before: string | null = null;
-      do {
-        const r = await owner.get(TRANSCRIPT, { params, query: { shape: "sync", limit: 4, ...(before && { before }) } });
-        r.status(200);
-        const body = r.json<Record<string, unknown>>();
-        bodies.push(strip(body));
-        before = body.next_cursor as string | null;
-      } while (before);
-      bodies.push(strip((await owner.get(TRANSCRIPT, { params, query: { shape: "sync", child } })).status(200).json()));
-      bodies.push(strip((await owner.get(TRANSCRIPT, { params, query: { limit: 50, detail: "full" } })).status(200).json()));
-      const bundle = (await owner.get(BUNDLE, { params })).status(200).json<Record<string, Record<string, unknown>>>();
-      bodies.push(strip(bundle.transcript!));
-      return { bodies, log: bundle.log };
-    };
-
     try {
       await ctx.step("the session daemon journals fromV1 of its rows under producer opencode → 200, every message acknowledged", async () => {
         const rows = messages.map((m) => ({ runtime_session_id: (m.info.sessionID as string) ?? root, info: m.info, parts: m.parts })) as unknown as V1Row[];
@@ -250,11 +228,11 @@ flow(
           .status(200).body().has("$.acked.length", puts.length);
       });
 
-      await ctx.step("every v1 read answers from the log, and the open bundle's log leg holds the root thread", async () => {
-        const reads = await v1Reads();
-        if (reads.bodies.length < 6) throw new Error(`expected at least 3 sync pages, got ${reads.bodies.length - 3}`);
-        const leg = reads.log as { known: boolean; page: { thread_id: string; messages: unknown[]; has_more: boolean } | null };
+      await ctx.step("the open bundle's log leg holds the root thread, and its transcript part is the pointer only (no v1 window, P8.3)", async () => {
+        const bundle = (await owner.get(BUNDLE, { params })).status(200).json<Record<string, unknown>>();
+        const leg = bundle.log as { known: boolean; page: { thread_id: string; messages: unknown[]; has_more: boolean } | null };
         if (!leg?.known || leg.page?.thread_id !== root || leg.page.messages.length === 0) throw new Error(`log leg: ${JSON.stringify(leg)?.slice(0, 300)}`);
+        if (JSON.stringify(bundle.transcript) !== JSON.stringify({ known: true, requested: false })) throw new Error(`transcript part: ${JSON.stringify(bundle.transcript)}`);
       });
 
       await ctx.step("GET …/log pages the root thread backwards by seq and reads the child thread by thread=", async () => {
@@ -504,8 +482,8 @@ flow(
         }
       });
 
-      await ctx.step("a user with no membership in the project's account → 404 workspace_not_found, no report", async () => {
-        (await preflight("pi", ctx.client.as(ctx.P.NONMEMBER))).status(404).body().has("$.code", "workspace_not_found");
+      await ctx.step("a user with no membership in the project's account → 403 workspace_access_denied, no report", async () => {
+        (await preflight("pi", ctx.client.as(ctx.P.NONMEMBER))).status(403).body().has("$.code", "workspace_access_denied");
       });
     } finally {
       await close();

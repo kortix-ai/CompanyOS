@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import { narrationToolName, normalizeActivityToolName } from '@kortix/sdk';
 import { useClearFocusedToolCall, useFocusedAgent, useFocusedToolCallId, useKortixComputerStore } from '../../../internal/stores/kortix-computer-store';
 import { SubagentPanel } from '../../agents/subagent-view';
-import { DetailSidebarToggle } from '../easy/detail-view';
+import { DetailSidebarToggle, ToolParts } from '../easy/detail-view';
 import { useSessionBrowserStore } from '../../../internal/stores/session-browser-store';
-import { pathOutput, shouldAutoExpandOutputs, shouldAutoOpenPayoff, stepForCallId } from '../easy/easy-panel-logic';
+import { pathOutput, shouldAutoOpenPayoff, stepForCallId } from '../easy/easy-panel-logic';
 import { StepDetailBody } from '../easy/step-detail-body';
 import { StepIcon } from '../easy/step-icon';
 import { selectPrimaryDeliverable } from './output-priority';
@@ -13,27 +14,12 @@ import type { usePanelDerivations } from './use-panel-derivations';
 type Handoffs = Pick<SessionPanelValue,
   'sessionId' | 'projectId' | 'projectSessionId' | 'detail' | 'handleOpenOutput' |
   'openDetail' | 'closeDetail' | 'openTerminal' | 'openAudit' | 'openReminders' | 'openDesktop' | 'openBrowser' | 'openFiles'
-> & Pick<ReturnType<typeof usePanelDerivations>, 'isRunning' | 'outcome' | 'apps' | 'files' | 'steps'>;
+> & Pick<ReturnType<typeof usePanelDerivations>, 'isRunning' | 'outcome' | 'apps' | 'files' | 'steps' | 'calls'>;
 
 export function usePanelHandoffs({
-  sessionId, projectId, projectSessionId, isRunning, outcome, apps, files, steps,
+  sessionId, projectId, projectSessionId, isRunning, outcome, apps, files, steps, calls,
   detail, handleOpenOutput, openDetail, closeDetail, openTerminal, openAudit, openReminders, openDesktop, openBrowser, openFiles,
 }: Handoffs) {
-  // Auto-expand Outputs the moment a run finishes with something to show —
-  // never on every render of an already-finished (or still-running) run, and
-  // never on a failed one: a pile of half-written files is not a celebration.
-  const wasRunningRef = useRef(isRunning);
-  const [outputsDefaultOpen, setOutputsDefaultOpen] = useState(false);
-  useEffect(() => {
-    if (
-      outcome === 'succeeded' &&
-      shouldAutoExpandOutputs(wasRunningRef.current, isRunning, files.length)
-    ) {
-      setOutputsDefaultOpen(true);
-    }
-    wasRunningRef.current = isRunning;
-  }, [isRunning, files.length, outcome]);
-
   // Payoff (W2): present the primary deliverable exactly once, at the finish,
   // and only when the user hasn't taken the wheel themselves this run.
   //
@@ -128,10 +114,28 @@ export function usePanelHandoffs({
    */
   const focusedToolCallId = useFocusedToolCallId();
   const clearFocusedToolCall = useClearFocusedToolCall();
+  // The detail a `show` call opened, by key and call id. A detail holds its calls as
+  // they were when it opened, so a show opened while running and then failed would
+  // keep showing it; once the call leaves `calls` (a failed show presents nothing),
+  // its detail closes.
+  const openedShowRef = useRef<{ key: string; callId: string } | null>(null);
+  useEffect(() => {
+    const opened = openedShowRef.current;
+    if (!opened || detail?.key !== opened.key) return;
+    if (calls.some((c) => c.call_id === opened.callId)) return;
+    openedShowRef.current = null;
+    closeDetail();
+  }, [calls, detail, closeDetail]);
   useEffect(() => {
     if (!focusedToolCallId) return;
+    const focused = calls.find((c) => c.call_id === focusedToolCallId);
+    const focusedName = normalizeActivityToolName(focused?.name);
+    const rememberShow = (key: string) => {
+      openedShowRef.current = focusedName === 'show' || focusedName === 'show_user' ? { key, callId: focusedToolCallId } : null;
+    };
     const step = stepForCallId(steps, focusedToolCallId);
     if (step) {
+      rememberShow(`step:${step.id}:${focusedToolCallId}`);
       openDetail({
         // The call id is part of the key on purpose: a step is a GROUP, and
         // two clicks on different commands inside it produce the same
@@ -149,9 +153,27 @@ export function usePanelHandoffs({
           />
         ),
       });
+      clearFocusedToolCall();
+      return;
     }
+    // The chat renders a tool row the steps do not hold: a call whose step
+    // `groupSteps` drops (context-engine bookkeeping a GenericTool row still
+    // draws) — and, for one render, every call a still-streaming thread has
+    // not derived yet. The panel is already open (`focusToolCall` flipped it
+    // before this effect ran), so open the call ITSELF instead of leaving a
+    // blank panel. The focus stays armed until a detail exists, so a lagging
+    // derivation lands on it rather than eating the click.
+    const call = focused;
+    if (!call) return;
+    rememberShow(`tool:${focusedToolCallId}`);
+    openDetail({
+      key: `tool:${focusedToolCallId}`,
+      title: narrationToolName(call.name),
+      padded: false,
+      body: <ToolParts calls={[call]} sessionId={sessionId} />,
+    });
     clearFocusedToolCall();
-  }, [focusedToolCallId, steps, clearFocusedToolCall, sessionId, openDetail]);
+  }, [focusedToolCallId, steps, calls, clearFocusedToolCall, sessionId, openDetail]);
 
   // An agent clicked in the CHAT (its row, its finish notice, a workflow agent,
   // the agents line) opens that agent's session here, beside the chat: its face,
@@ -217,5 +239,5 @@ export function usePanelHandoffs({
     openFiles,
   ]);
 
-  return { outputsDefaultOpen, pendingQuickView };
+  return { pendingQuickView };
 }

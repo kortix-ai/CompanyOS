@@ -12,7 +12,7 @@ export const PLATINUM_CI_TEMPLATE_VERSION = 'v15';
 const PLATINUM_CI_BASE_TEMPLATE_VERSION = 'v13';
 export const PLATINUM_CI_NODE_IMAGE =
   'node:22.22.2-bookworm@sha256:62e4daa6819762bbd3072af77cc282ab72c631c4aed30dd7980192babaf385b3';
-export const PLATINUM_CI_BUN_VERSION = '1.4.3';
+export const PLATINUM_CI_BUN_VERSION = '1.4.4';
 export const PLATINUM_CI_PNPM_VERSION = '8.11.0';
 export const CI_DOCKER_COMPOSE_VERSION = 'v2.40.3';
 export const CI_DOCKER_COMPOSE_AMD64_SHA256 =
@@ -218,7 +218,7 @@ function platinumWarmEntrypoint(): string {
     'dockerd --host=unix:///var/run/docker.sock >/workspace/kortix-template-dockerd.log 2>&1 &',
     "timeout 180 sh -c 'until docker info >/dev/null 2>&1; do sleep 1; done'",
     'docker info >/dev/null',
-    "timeout 2400 sh -c 'until pnpm exec supabase start --ignore-health-check; do sleep 30; done'",
+    "timeout 2400 sh -c 'until pnpm exec supabase start --ignore-health-check -x postgrest; do sleep 30; done'",
     'docker image ls -q | sort -u | wc -l > /workspace/.kortix-ci-warm-ready',
     "grep -Eq '^[1-9][0-9]*$' /workspace/.kortix-ci-warm-ready",
     'docker image ls --digests',

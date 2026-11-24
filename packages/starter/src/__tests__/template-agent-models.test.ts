@@ -24,30 +24,29 @@ function agentPromptFiles(): string[] {
     .sort();
 }
 
-/** Every agent block the templates ship: the base kortix.yaml and each marketplace template. */
+/** Every agent block the templates ship: the base kortix.yaml and each template's `<id>/<id>.yaml`. */
 function agentBlocks(): Array<{ where: string; block: { model?: unknown } }> {
-  const base = parseManifestText(readFileSync(join(TEMPLATES_ROOT, 'base', 'kortix.yaml'), 'utf8')) as {
-    agents?: AgentBlocks;
-  };
-  const registry = JSON.parse(readFileSync(join(TEMPLATES_ROOT, 'marketplace', 'kortix.registry.json'), 'utf8')) as {
-    items: Array<{ name: string; meta?: { template?: { agents?: AgentBlocks } } }>;
-  };
-  return [
-    ...Object.entries(base.agents ?? {}).map(([name, block]) => ({ where: `base/kortix.yaml agents.${name}`, block })),
-    ...registry.items.flatMap((item) =>
-      Object.entries(item.meta?.template?.agents ?? {}).map(([name, block]) => ({ where: `${item.name} agents.${name}`, block })),
-    ),
+  const manifests = [
+    'base/kortix.yaml',
+    ...readdirSync(TEMPLATES_ROOT)
+      .map((id) => `${id}/${id}.yaml`)
+      .filter((path) => statSync(join(TEMPLATES_ROOT, path), { throwIfNoEntry: false })?.isFile()),
   ];
+  return manifests.flatMap((path) => {
+    const manifest = parseManifestText(readFileSync(join(TEMPLATES_ROOT, path), 'utf8')) as { agents?: AgentBlocks };
+    return Object.entries(manifest.agents ?? {}).map(([name, block]) => ({ where: `${path} agents.${name}`, block }));
+  });
 }
 
 describe('starter template agents', () => {
   test('finds the prompt files and agent blocks it guards', () => {
     const files = agentPromptFiles();
 
-    expect(files.length).toBeGreaterThan(50);
+    expect(files.length).toBeGreaterThanOrEqual(6);
     expect(files.some((f) => f.endsWith('templates/base/agents/worker.md'))).toBe(true);
-    expect(files.some((f) => f.endsWith('templates/marketplace/runtime/agents/flaky-test-triage.md'))).toBe(true);
-    expect(agentBlocks().length).toBeGreaterThan(50);
+    expect(files.some((f) => f.endsWith('templates/software-factory/agents/engineer.md'))).toBe(true);
+    expect(agentBlocks().some(({ where }) => where.startsWith('software-factory/software-factory.yaml'))).toBe(true);
+    expect(agentBlocks().length).toBeGreaterThanOrEqual(6);
   });
 
   test('every agent prompt file is the prompt alone: the agent block holds its behavior', () => {

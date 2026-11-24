@@ -14,9 +14,9 @@
  * through the previous hour pauses itself (`project_trigger_runtime.
  * auto_paused_at`) until someone resumes it (`PATCH enabled: true`).
  */
-import { projectTriggerExecutions, projectTriggerRuntime } from '@kortix/db';
+import { projectTriggerAdmissions, projectTriggerExecutions, projectTriggerRuntime } from '@kortix/db';
 import { DEFAULT_TRIGGER_MAX_RUNS_PER_HOUR } from '@kortix/manifest-schema';
-import { and, eq, gt, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, eq, gt, gte, lt, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db } from '../../shared/db';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -37,6 +37,9 @@ export interface TriggerRunCapVerdict {
    */
   sustained: boolean;
 }
+
+/** "1 run", "3 runs": the count a run-cap reason names. */
+const runCount = (n: number) => `${n} run${n === 1 ? '' : 's'}`;
 
 /** Why this fire may not start a run, or null when it may. */
 export async function triggerRunCapVerdict(input: {
@@ -74,11 +77,11 @@ export async function triggerRunCapVerdict(input: {
   const day = counts?.day ?? 0;
   if (hour >= perHour) {
     return {
-      reason: `throttled: ${hour} runs in the last hour (max_runs_per_hour ${perHour})`,
+      reason: `throttled: ${runCount(hour)} in the last hour (max_runs_per_hour ${perHour})`,
       sustained: (counts?.previousHour ?? 0) >= perHour && !(input.resumedAt && input.resumedAt > twoHoursAgo),
     };
   }
-  if (perDay !== null && day >= perDay) return { reason: `throttled: ${day} runs today, UTC (max_runs_per_day ${perDay})`, sustained: false };
+  if (perDay !== null && day >= perDay) return { reason: `throttled: ${runCount(day)} today, UTC (max_runs_per_day ${perDay})`, sustained: false };
   return null;
 }
 
@@ -147,4 +150,32 @@ export function takeThrottledRunSlot(projectId: string, slug: string, now: Date 
   if (throttledRunWrittenAt.size >= 10_000) throttledRunWrittenAt.clear();
   throttledRunWrittenAt.set(key, now.getTime());
   return true;
+}
+
+/** Reserve before any session work. Reservations survive a crash and fail closed. */
+export async function reserveTriggerRun(input: {
+  projectId: string;
+  slug: string;
+  caps: TriggerRunCaps;
+  now: Date;
+}): Promise<{ admitted: true } | { admitted: false; reason: string }> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`trigger-cap:${input.projectId}:${input.slug}`}, 0))`);
+    const hourAgo = new Date(input.now.getTime() - HOUR_MS);
+    const dayStart = new Date(Date.UTC(input.now.getUTCFullYear(), input.now.getUTCMonth(), input.now.getUTCDate()));
+    const t = projectTriggerAdmissions;
+    const [counts] = await tx.select({
+      hour: sql<number>`count(*) filter (where ${t.admittedAt} > ${hourAgo.toISOString()}::timestamptz)::int`,
+      day: sql<number>`count(*) filter (where ${t.admittedAt} >= ${dayStart.toISOString()}::timestamptz)::int`,
+    }).from(t).where(and(eq(t.projectId, input.projectId), eq(t.slug, input.slug), gte(t.admittedAt, dayStart < hourAgo ? dayStart : hourAgo)));
+    const hourly = input.caps.maxRunsPerHour ?? DEFAULT_TRIGGER_MAX_RUNS_PER_HOUR;
+    if ((counts?.hour ?? 0) >= hourly) return { admitted: false, reason: `throttled: hard max_runs_per_hour ${hourly}` };
+    if (input.caps.maxRunsPerDay !== undefined && (counts?.day ?? 0) >= input.caps.maxRunsPerDay) {
+      return { admitted: false, reason: `throttled: hard max_runs_per_day ${input.caps.maxRunsPerDay}` };
+    }
+    // Only this trigger's expired reservations; the indexed predicate keeps cleanup bounded by its history.
+    await tx.delete(t).where(and(eq(t.projectId, input.projectId), eq(t.slug, input.slug), lt(t.admittedAt, dayStart < hourAgo ? dayStart : hourAgo)));
+    await tx.insert(t).values({ projectId: input.projectId, slug: input.slug, admittedAt: input.now });
+    return { admitted: true };
+  });
 }

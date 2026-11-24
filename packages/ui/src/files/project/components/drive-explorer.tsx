@@ -11,7 +11,7 @@ import {
   AlertDialogTitle,
 } from '../../../primitives/alert-dialog';
 import { Button } from '../../../primitives/button';
-import { ButtonGroup } from '../../../primitives/button-group';
+import { ActionBar, ActionBarDock } from '../../../primitives/action-bar';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -20,7 +20,6 @@ import {
   ContextMenuTrigger,
 } from '../../../primitives/context-menu';
 import Loading from '../../../primitives/loading';
-import { Skeleton } from '../../../primitives/skeleton';
 import { errorToast, successToast } from '../../../primitives/toast';
 import { DRAG_MIME } from '../../tree/components/file-tree-item';
 import { useFilesStore, useFilesStoreApi } from '../../../internal/stores/files-store';
@@ -32,7 +31,6 @@ import { isSandboxNotReadyError } from '@kortix/sdk';
 import {
   ClipboardIcon as Clipboard,
   FolderPlusIcon as FolderPlus,
-  ClipboardTextIcon,
   MoonIcon,
   XIcon,
   UploadSimpleIcon,
@@ -58,6 +56,7 @@ import { useFileExplorerSource } from '../explorer-source';
 import { buildGitStatusMap } from '../hooks';
 import {
   forEachLimit,
+  inFlightPaths,
   MAX_UPLOAD_BYTES,
   partitionUploadBatch,
   resolveUploadTarget,
@@ -66,6 +65,7 @@ import {
 import {
   droppedEntries,
   type DroppedEntry,
+  folderMaker,
   hasFolder,
   readDroppedTree,
   type TreeFile,
@@ -99,9 +99,7 @@ import { FileHistoryPopoverContent } from './file-history-popover';
 import { ExplorerFilePreview } from './file-preview-modal';
 import { FileSearch } from './file-search';
 import { isPartialListing, LoadMoreRow } from './load-more-row';
-
-/** System directories always pinned at the top of the listing. */
-const ELEVATED_DIRS = new Set(['.kortix']);
+import { ListingSkeleton, useSortedListing } from './explorer-listing';
 
 /**
  * Google Drive-style file explorer — the ONE explorer implementation, shared
@@ -217,8 +215,6 @@ export function DriveExplorer({
   const currentPath = useFilesStore((s) => s.currentPath);
   const navigateToPath = useFilesStore((s) => s.navigateToPath);
   const viewMode = useFilesStore((s) => s.viewMode);
-  const sortBy = useFilesStore((s) => s.sortBy);
-  const sortOrder = useFilesStore((s) => s.sortOrder);
   const isSearchOpen = useFilesStore((s) => s.isSearchOpen);
   const toggleSearch = useFilesStore((s) => s.toggleSearch);
   const closeSearch = useFilesStore((s) => s.closeSearch);
@@ -295,16 +291,9 @@ export function DriveExplorer({
   // Project-wide, so a batch keeps going (and its tray keeps reporting) after
   // this folder view unmounts. The tray itself is in the project shell.
   const uploads = useDriveUploads((s) => s.uploads);
-  // Cards and rows still on their way up show a spinner until the server has them.
-  const uploadingPaths = useMemo(
-    () =>
-      new Set(
-        uploads
-          .filter((u) => u.status === 'queued' || u.status === 'uploading')
-          .map((u) => (u.targetPath ? `${u.targetPath.replace(/\/+$/, '')}/${u.file.name}` : u.file.name)),
-      ),
-    [uploads],
-  );
+  // Cards and rows still on their way up (an upload, or a New file not yet
+  // created) show a spinner and defer their preview until the server has them.
+  const uploadingPaths = useMemo(() => inFlightPaths(uploads, pending), [uploads, pending]);
   const dragPageCounter = useRef(0);
 
   const [createKind, setCreateKind] = useState<DriveCreateKind | null>(null);
@@ -365,47 +354,7 @@ export function DriveExplorer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [searchEnabled, toggleSearch, closeSearch, isSearchOpen]);
 
-  // Sort and separate dirs and files
-  const { elevatedDirs, dirs, fileItems } = useMemo(() => {
-    if (!files)
-      return {
-        elevatedDirs: [] as FileNode[],
-        dirs: [] as FileNode[],
-        fileItems: [] as FileNode[],
-      };
-
-    const sortFn = (a: FileNode, b: FileNode) => {
-      let cmp = 0;
-      switch (sortBy) {
-        case 'name':
-          cmp = a.name.localeCompare(b.name);
-          break;
-        case 'type': {
-          const extA = a.name.includes('.') ? a.name.split('.').pop() || '' : '';
-          const extB = b.name.includes('.') ? b.name.split('.').pop() || '' : '';
-          cmp = extA.localeCompare(extB);
-          if (cmp === 0) cmp = a.name.localeCompare(b.name);
-          break;
-        }
-        case 'modified':
-        case 'size':
-          cmp = a.name.localeCompare(b.name);
-          break;
-      }
-      return sortOrder === 'desc' ? -cmp : cmp;
-    };
-
-    // A partial folder keeps the server's name order: a sorted subset would
-    // put a later page's rows above the ones shown (KRTX-1723).
-    const sorted = (nodes: FileNode[]) => (partial ? nodes : nodes.sort(sortFn));
-    const allDirs = files.filter((f) => f.type === 'directory');
-    const elevatedDirs = allDirs
-      .filter((f) => ELEVATED_DIRS.has(f.name))
-      .sort((a, b) => a.name.localeCompare(b.name));
-    const dirs = sorted(allDirs.filter((f) => !ELEVATED_DIRS.has(f.name)));
-    const fileItems = sorted(files.filter((f) => f.type === 'file'));
-    return { elevatedDirs, dirs, fileItems };
-  }, [files, sortBy, sortOrder, partial]);
+  const { dirs, fileItems } = useSortedListing(files, partial);
 
   // ── Handlers ──────────────────────────────────────────────────
 
@@ -604,20 +553,27 @@ export function DriveExplorer({
   }, []);
 
   /**
-   * Send one file and track it in the tray. The mutation settles after its
-   * listing refetch, so the pending row hands over to the real one in place.
+   * Send one file and track it in the tray. `before` makes the file's folder
+   * first (a folder upload); a failure there fails the row like a failed send,
+   * and Retry runs it again. The mutation settles after its listing refetch,
+   * so the pending row hands over to the real one in place.
    */
   const uploadAsync = uploadMutation.mutateAsync;
   const runUpload = useCallback(
-    async (upload: DriveUpload, shownIn: string | null) => {
+    async (upload: DriveUpload, shownIn: string | null, before?: () => Promise<void>) => {
       const patch = (next: Partial<DriveUpload>) => useDriveUploads.getState().patch(upload.id, next);
       patch({ status: 'uploading', sent: 0, error: undefined });
       let ok = false;
       try {
+        await before?.();
         await uploadAsync({
           file: upload.file,
           targetPath: upload.targetPath,
-          onProgress: (sent) => patch({ sent }),
+          // The SDK resends a busy-server failure from byte 0: the bar holds its high mark.
+          onProgress: (sent) => {
+            const prev = useDriveUploads.getState().uploads.find((u) => u.id === upload.id)?.sent ?? 0;
+            if (sent > prev) patch({ sent });
+          },
         });
         ok = true;
         patch({ status: 'done', sent: upload.file.size });
@@ -649,27 +605,36 @@ export function DriveExplorer({
 
   /**
    * Put files in the tray with their previews, then send them, 4 at a time.
+   * Each item names the folder view its pending row is in (`shownIn`, or
+   * `null` for none) and, for a folder upload, the folder to make first.
    * `landedIn` is the folder the batch lands in, for the toast's "Open folder".
    */
   const startBatch = useCallback(
     async (
-      items: { file: File; targetPath?: string }[],
-      shownIn: string | null,
+      items: {
+        file: File;
+        targetPath?: string;
+        shownIn: string | null;
+        before?: () => Promise<void>;
+        /** Run before a Retry: lets a folder that failed be made again. */
+        reset?: () => void;
+      }[],
       landedIn: string,
     ) => {
-      const batch: DriveUpload[] = items.map(({ file, targetPath }) => {
+      const batch = items.map(({ file, targetPath, shownIn, before, reset }) => {
         const upload: DriveUpload = { id: crypto.randomUUID(), file, targetPath, status: 'queued' };
         upload.retry = () => {
+          reset?.();
           previewUpload?.(file, targetPath);
-          void runUpload(upload, null);
+          void runUpload(upload, null, before);
         };
-        return upload;
+        return { upload, shownIn, before };
       });
-      useDriveUploads.getState().add(batch);
-      for (const u of batch) previewUpload?.(u.file, u.targetPath);
+      useDriveUploads.getState().add(batch.map((b) => b.upload));
+      for (const { upload } of batch) previewUpload?.(upload.file, upload.targetPath);
       let failed = 0;
-      await forEachLimit(batch, UPLOAD_CONCURRENCY, async (u) => {
-        if (!(await runUpload(u, shownIn))) failed++;
+      await forEachLimit(batch, UPLOAD_CONCURRENCY, async ({ upload, shownIn, before }) => {
+        if (!(await runUpload(upload, shownIn, before))) failed++;
       });
       // One toast for the whole batch; a failure stays in the tray with Retry.
       if (failed === 0) {
@@ -711,8 +676,7 @@ export function DriveExplorer({
         ]);
       }
       await startBatch(
-        accepted.map((file) => ({ file, targetPath })),
-        shownIn,
+        accepted.map((file) => ({ file, targetPath, shownIn })),
         targetDirPath ?? currentPath,
       );
     },
@@ -720,9 +684,12 @@ export function DriveExplorer({
   );
 
   /**
-   * Upload a tree (a picked or dropped folder) into `base`: its folders are
-   * made first, one depth at a time (a level in parallel), then its files go
-   * up into them. Top folders landing in the folder in view show at once.
+   * Upload a tree (a picked or dropped folder, or several) into `base`. Every
+   * file enters the tray at once, so progress shows from the first click; each
+   * file then makes its own folder chain on demand (`folderMaker`: each folder
+   * once, parents first) and goes up. A folder that fails to make fails only
+   * the files inside it, each with Retry. Top folders landing in the folder in
+   * view show at once.
    */
   const uploadTree = useCallback(
     async (tree: TreeFile[], base: string) => {
@@ -734,45 +701,47 @@ export function DriveExplorer({
 
       const root = base === '/' ? '' : base.replace(/\/+$/, '');
       const at = (rel: string) => (root && rel ? `${root}/${rel}` : root || rel);
-      const levels = treeLevels(items);
-      const tops = levels[0] ?? [];
+      const tops = treeLevels(items)[0] ?? [];
 
       const dir = currentPath;
       const inView = root === normalizedCurrentPath;
+      const unsettled = new Set(inView ? tops : []);
       if (inView) {
         setPending((prev) => [...prev, ...tops.map((top) => ({ dir, node: pendingNode(top, 'directory') }))]);
       }
-      let ok = true;
-      try {
-        for (const level of levels) {
-          await Promise.all(
-            level.map((d) =>
-              mkdirMutation.mutateAsync({ dirPath: at(d) }).catch((err: unknown) => {
-                // Already there (an earlier upload of the same folder): reuse it.
-                if ((err as { status?: number } | null)?.status !== 409) throw err;
-              }),
-            ),
-          );
+      const ensure = folderMaker(async (rel) => {
+        const settle = () => {
+          // A top folder's pending row hands over once the server has it.
+          if (unsettled.delete(rel)) settlePending(dir, rel, true);
+        };
+        try {
+          await mkdirMutation.mutateAsync({ dirPath: at(rel) });
+          settle();
+        } catch (err) {
+          // Already there (an earlier upload of the same folder): reuse it.
+          if ((err as { status?: number } | null)?.status === 409) settle();
+          throw err;
         }
-      } catch (err) {
-        ok = false;
-        errorToast(
-          tHardcodedUi('i18nComplete.text5334297c9387', {
-            value0: err instanceof Error ? err.message : tHardcodedUi.raw('i18nComplete.text27c2ccd962c2'),
-          }),
+      });
+      try {
+        await startBatch(
+          items.map(({ file, dir: rel }) => ({
+            file,
+            targetPath: at(rel) || undefined,
+            // Loose files dropped beside the folders land in the view.
+            shownIn: inView && !rel ? currentPath : null,
+            before: rel ? () => ensure(rel) : undefined,
+            reset: rel ? () => ensure.forget(rel) : undefined,
+          })),
+          tops.length === 1 ? at(tops[0]!) : root || '/',
         );
       } finally {
-        if (inView) for (const top of tops) settlePending(dir, top, ok);
+        // A top folder that never got made drops its pending row.
+        for (const top of unsettled) settlePending(dir, top, false);
+        unsettled.clear();
       }
-      if (!ok) return;
-      await startBatch(
-        items.map(({ file, dir: rel }) => ({ file, targetPath: at(rel) || undefined })),
-        // Loose files dropped beside the folders land in the view.
-        inView ? currentPath : null,
-        tops.length === 1 ? at(tops[0]!) : root || '/',
-      );
     },
-    [currentPath, normalizedCurrentPath, pendingNode, settlePending, mkdirMutation, startBatch, tHardcodedUi, uploadLimit, describeRejection],
+    [currentPath, normalizedCurrentPath, pendingNode, settlePending, mkdirMutation, startBatch, uploadLimit, describeRejection],
   );
 
   /** The folder picker (`webkitRelativePath` is `Picked/sub/file.png`). The browser already asked. */
@@ -1048,7 +1017,7 @@ export function DriveExplorer({
   const [selectionStore] = useState(createSelectionStore);
   useEffect(() => selectionStore.clear(), [currentPath, selectionStore]);
   const selectMode = useSyncExternalStore(selectionStore.subscribe, selectionStore.mode, () => false);
-  const ordered = useMemo(() => [...elevatedDirs, ...dirs, ...fileItems], [elevatedDirs, dirs, fileItems]);
+  const ordered = useMemo(() => [...dirs, ...fileItems], [dirs, fileItems]);
   // Read by the stable callbacks below at the moment they run.
   const orderedRef = useRef(ordered);
   useEffect(() => {
@@ -1320,7 +1289,6 @@ export function DriveExplorer({
     !error &&
     Boolean(files) &&
     !listing.hasNextPage &&
-    elevatedDirs.length === 0 &&
     dirs.length === 0 &&
     fileItems.length === 0;
 
@@ -1334,9 +1302,12 @@ export function DriveExplorer({
       onDragOver={handlePageDragOver}
       onDrop={handlePageDrop}
     >
+      {/* An empty folder's empty state carries Upload and New folder itself, so the
+          New and view menus would only repeat it: the row keeps just what the host adds. */}
+      {isEmpty && !parked && !leading && !trailing ? null : (
       <DriveActionRow
         leading={leading}
-        actions={(() => {
+        actions={isEmpty && !parked ? trailing : (() => {
           const newMenu = (
             <DriveNewMenu
               compact={embedded}
@@ -1376,6 +1347,7 @@ export function DriveExplorer({
           );
         })()}
       />
+      )}
 
       <DrivePathBar as="row" rootLabel={rootLabel} rootIcon={rootIcon} base={pathBase} />
 
@@ -1423,46 +1395,7 @@ export function DriveExplorer({
                 aria-hidden
                 className="border-kortix-base bg-kortix-base/15 pointer-events-none absolute top-0 left-0 z-20 hidden rounded-sm border"
               />
-              {isLoading && showSkeleton && (
-                <div className="animate-in fade-in-0 p-4 duration-(--duration-moderate) motion-reduce:animate-none">
-                  {viewMode === 'grid' ? (
-                    <div className="space-y-6">
-                      <div>
-                        <Skeleton className="mb-3 h-4 w-16" />
-                        <div
-                          className="grid gap-2"
-                          style={{
-                            gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-                          }}
-                        >
-                          {Array.from({ length: 6 }).map((_, i) => (
-                            <Skeleton key={`f${i}`} className="h-10 rounded-lg" />
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <Skeleton className="mb-3 h-4 w-12" />
-                        <div
-                          className="grid gap-2.5"
-                          style={{
-                            gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
-                          }}
-                        >
-                          {Array.from({ length: 8 }).map((_, i) => (
-                            <Skeleton key={`fi${i}`} className="h-[138px] rounded-lg" />
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      {Array.from({ length: 10 }).map((_, i) => (
-                        <Skeleton key={i} className="h-10 w-full rounded-sm" />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+              {isLoading && showSkeleton && <ListingSkeleton viewMode={viewMode} />}
 
               {!!error &&
                 !isLoading &&
@@ -1546,7 +1479,6 @@ export function DriveExplorer({
                 <>
                   {viewMode === 'grid' ? (
                     <DriveGridView
-                      elevatedDirs={elevatedDirs}
                       dirs={dirs}
                       files={fileItems}
                       onNavigateToDir={handleNavigateToDir}
@@ -1571,7 +1503,6 @@ export function DriveExplorer({
                     />
                   ) : (
                     <DriveListView
-                      elevatedDirs={elevatedDirs}
                       dirs={dirs}
                       files={fileItems}
                       sortDisabled={partial}
@@ -1653,73 +1584,57 @@ export function DriveExplorer({
         </div>
       )}
 
-      {/* Clipboard bar: floats at the bottom centre of the listing, inside its
-          edges, like the Triggers page's selection bar (\`schedule-view.tsx\`). */}
+      {/* The select-mode bar and the clipboard bar share one ActionBarDock:
+          bottom centre of the listing, inside its edges. */}
       {selectMode ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center px-4">
-          <div className="pointer-events-auto w-full max-w-xl">
-            <DriveSelectionBar
-              store={selectionStore}
-              total={ordered.length}
-              zipping={zipping}
-              canWrite={canWrite}
-              onSelectAll={selectAll}
-              onClearSelection={() => selectionStore.set(new Set())}
-              onDownload={() => void bulkDownload(selectedNodes())}
-              onCopy={() => bulkClipboard(selectedNodes(), 'copy')}
-              onMove={() => bulkClipboard(selectedNodes(), 'cut')}
-              onDelete={() => bulkDelete(selectedNodes())}
-              onExit={exitSelect}
-            />
-          </div>
-        </div>
+        <ActionBarDock>
+          <DriveSelectionBar
+            store={selectionStore}
+            total={ordered.length}
+            zipping={zipping}
+            canWrite={canWrite}
+            onSelectAll={selectAll}
+            onClearSelection={() => selectionStore.set(new Set())}
+            onDownload={() => void bulkDownload(selectedNodes())}
+            onCopy={() => bulkClipboard(selectedNodes(), 'copy')}
+            onMove={() => bulkClipboard(selectedNodes(), 'cut')}
+            onDelete={() => bulkDelete(selectedNodes())}
+            onExit={exitSelect}
+          />
+        </ActionBarDock>
       ) : null}
 
       {canWrite && clipboard && !selectMode && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center px-4">
-          <div className="bg-popover text-popover-foreground border-border pointer-events-auto flex w-full max-w-xl items-center gap-3 rounded-lg border p-2 pl-3.5 shadow-md">
-            <Clipboard className="text-muted-foreground size-4 shrink-0" />
-            <span className="min-w-0 flex-1 truncate text-sm" aria-live="polite">
-              {clipboardItems.length > 1
+        <ActionBarDock>
+          <ActionBar
+            leading={<Clipboard />}
+            title={
+              clipboardItems.length > 1
                 ? tDrives(clipboard.operation === 'cut' ? 'clipboardMovingMany' : 'clipboardCopyingMany', {
                     count: clipboardItems.length,
                   })
                 : tDrives(clipboard.operation === 'cut' ? 'clipboardMoving' : 'clipboardCopying', {
                     name: clipboard.name,
-                  })}
-            </span>
-            <ButtonGroup className="shrink-0">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="gap-1.5 active:scale-[0.96]"
-                onClick={handlePaste}
-                disabled={pasting}
-              >
-                {pasting ? (
-                  <Loading className="size-3.5 shrink-0" />
-                ) : (
-                  <ClipboardTextIcon className="size-3.5 shrink-0" />
-                )}
-                {tHardcodedUi.raw('featuresFilesComponentsFileExplorerPage.line771JsxTextPasteHere')}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="gap-1.5 active:scale-[0.96]"
-                onClick={clearClipboard}
+                  })
+            }
+            actions={[
+              {
+                id: 'paste',
+                label: tHardcodedUi.raw('featuresFilesComponentsFileExplorerPage.line771JsxTextPasteHere'),
+                loading: pasting,
+                onSelect: handlePaste,
+              },
+              {
+                id: 'cancel',
+                label: tHardcodedUi.raw('i18nComplete.text19766ed6ccb2'),
                 // A paste already sent cannot be taken back; Cancel would only
                 // hide the bar while it finishes.
-                disabled={pasting}
-              >
-                <XIcon className="size-3.5 shrink-0" />
-                {tHardcodedUi.raw('i18nComplete.text19766ed6ccb2')}
-              </Button>
-            </ButtonGroup>
-          </div>
-        </div>
+                disabled: pasting,
+                onSelect: clearClipboard,
+              },
+            ]}
+          />
+        </ActionBarDock>
       )}
 
       <DriveCreateDialog

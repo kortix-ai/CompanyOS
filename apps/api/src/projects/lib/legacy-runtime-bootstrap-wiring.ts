@@ -5,6 +5,7 @@
  */
 import { sessionSandboxes } from '@kortix/db';
 import { and, eq } from 'drizzle-orm';
+import { logger } from '../../lib/logger';
 import { getProvider, type ProviderName } from '../../platform/providers';
 import { SANDBOX_SERVICE_PORT } from './sandbox-env-transport';
 import { readFileSync } from 'node:fs';
@@ -20,6 +21,9 @@ import { mergeMetadata } from '../reaping/sandbox-state-sync';
 import {
   bootstrapLegacyRuntime,
   bootstrapWouldSkip,
+  decideDeadDaemonOnEdgeRefusal,
+  DEAD_DAEMON_REPAIR_REQUESTED_KEY,
+  LEGACY_CHECK_METADATA_KEY,
   updatesItself,
   classifyDaemonHealth,
   describeLegacyBootstrapRetry,
@@ -45,7 +49,7 @@ export interface LegacyBootstrapRow {
 }
 
 /** Kill switch + scope, read per call so a `kubectl set env` takes effect without a rebuild. */
-export function legacyRuntimeBootstrapEnabled(): boolean {
+function legacyRuntimeBootstrapEnabled(): boolean {
   const raw = (process.env.LEGACY_RUNTIME_BOOTSTRAP ?? 'on').trim().toLowerCase();
   return !['0', 'false', 'off', 'no'].includes(raw);
 }
@@ -385,7 +389,18 @@ export function scheduleLegacyRuntimeBootstrap(
 ): boolean {
   if (!legacyRuntimeBootstrapEnabled()) return false;
   if (!row.externalId) return false;
-  if (inFlight.has(row.sandboxId) || inFlight.size >= MAX_IN_FLIGHT) return false;
+  if (inFlight.has(row.sandboxId) || inFlight.size >= MAX_IN_FLIGHT) {
+    // A refused repair is exactly the "requested a relaunch, nothing happened"
+    // case; say why or the box is unexplainable from logs (KRTX-4754). The
+    // callers' own request gates (a 4-minute dead-daemon budget, the edge
+    // refusal's metadata window) bound this line's rate.
+    logger.info(
+      `[legacy-bootstrap] repair refused for ${row.sandboxId}: ${
+        inFlight.has(row.sandboxId) ? 'a repair is already in flight' : `${MAX_IN_FLIGHT} repairs in flight on this replica`
+      }`,
+    );
+    return false;
+  }
   inFlight.add(row.sandboxId);
   void runner(row, reason)
     .catch((err) =>
@@ -398,9 +413,59 @@ export function scheduleLegacyRuntimeBootstrap(
   return true;
 }
 
-export type OpenRuntimeGuaranteeAction = 'proceed' | 'defer_turn_running' | 'repairing' | 'exhausted' | 'blocked';
+/**
+ * The provider edge refused a daemon-port request on a running box: ask for the
+ * dead-daemon relaunch now instead of at the next `/start` or reaper tick.
+ * Fire-and-forget for the proxy (it never waits on a repair); returns whether
+ * a relaunch was scheduled. `scheduleRepair` is overridable for tests only.
+ */
+export async function repairDeadDaemonOnEdgeRefusal(
+  sandboxId: string,
+  scheduleRepair: typeof scheduleLegacyRuntimeBootstrap = scheduleLegacyRuntimeBootstrap,
+): Promise<boolean> {
+  const [row] = await db
+    .select({
+      sandboxId: sessionSandboxes.sandboxId,
+      sessionId: sessionSandboxes.sessionId,
+      accountId: sessionSandboxes.accountId,
+      projectId: sessionSandboxes.projectId,
+      provider: sessionSandboxes.provider,
+      externalId: sessionSandboxes.externalId,
+      metadata: sessionSandboxes.metadata,
+      status: sessionSandboxes.status,
+    })
+    .from(sessionSandboxes)
+    .where(eq(sessionSandboxes.sandboxId, sandboxId))
+    .limit(1);
+  if (!row?.externalId || row.status !== 'active') return false;
+  const metadata = (row.metadata ?? null) as Record<string, unknown> | null;
+  if (decideDeadDaemonOnEdgeRefusal({ provider: row.provider, metadata, nowMs: Date.now() }) === 'skip') return false;
+  // A `current` verdict from hours ago says nothing about a daemon the edge just
+  // found refusing; with it the repair's 6 h recent-check gate skips this box.
+  const { [LEGACY_CHECK_METADATA_KEY]: _staleCheck, ...freshMetadata } = metadata ?? {};
+  const scheduled = scheduleRepair(
+    { ...row, externalId: row.externalId, metadata: freshMetadata },
+    'proxy-edge-refused-daemon',
+  );
+  if (!scheduled) return false;
+  await db
+    .update(sessionSandboxes)
+    .set({
+      metadata: sql`coalesce(${sessionSandboxes.metadata}, '{}'::jsonb) || ${JSON.stringify({
+        [DEAD_DAEMON_REPAIR_REQUESTED_KEY]: new Date().toISOString(),
+      })}::jsonb`,
+    })
+    .where(eq(sessionSandboxes.sandboxId, sandboxId));
+  logger.warn('[proxy] daemon port refused on a running box; relaunching', {
+    sandbox_id: sandboxId,
+    external_id: row.externalId,
+  });
+  return true;
+}
 
-export interface OpenRuntimeGuaranteeOutcome {
+type OpenRuntimeGuaranteeAction = 'proceed' | 'defer_turn_running' | 'repairing' | 'exhausted' | 'blocked';
+
+interface OpenRuntimeGuaranteeOutcome {
   action: OpenRuntimeGuaranteeAction;
   /** Null only when the guarantee is disabled or the health probe itself failed (fail-open — see `guaranteeCurrentRuntimeOnOpen`). */
   classification: RuntimeClassification | null;

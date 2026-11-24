@@ -53,15 +53,15 @@ process.env.ALLOWED_SANDBOX_PROVIDERS = 'platinum,daytona';
 const { config } = await import('../config');
 
 // Committed manifest text served by the git mock; null = a blank project.
-// A declared agent only gets the project checkout with `workspace: { project_repository: true }`
-// (KRTX-165), so a test that names a non-default agent declares it here. The mocked
+// A declared agent gets repository access from `kortix_permissions` (project.gitops.read),
+// so a test that names a non-default agent declares it here. The mocked
 // `readManifestFromRepo` returns the text as is, so it is in the current format.
 let manifestYaml: string | null = null;
 const REVIEWER_MANIFEST = [
   'default_agent: kortix',
   'agents:',
-  '  kortix: { tools: all, connectors: all, secrets: all, kortix_permissions: all, skills: all, workspace: { project_repository: true } }',
-  '  reviewer: { tools: all, connectors: all, secrets: all, kortix_permissions: all, skills: all, workspace: { project_repository: true } }',
+  '  kortix: { tools: all, connectors: all, secrets: all, kortix_permissions: all, skills: all }',
+  '  reviewer: { tools: all, connectors: all, secrets: all, kortix_permissions: all, skills: all }',
   '',
 ].join('\n');
 let sandboxProvisionCalls = 0;
@@ -296,17 +296,6 @@ mock.module('../middleware/auth', () => ({
     c.set('sessionId', '00000000-0000-4000-a000-00000000auth');
     await next();
   },
-}));
-
-// The fresh-session fast-boot hint is ALWAYS resolved at session create
-// (2026-08-27): against this fixture's fake repo URL the mirror clone fails
-// slowly (~0.4 s), which let fire-and-forget provisions from earlier tests
-// land inside a later test's counter window. Resolve it instantly here; the
-// hint itself is covered by fast-boot-git-hint.test.ts and the REST flows.
-const realFastBootGitHint = await import('../projects/lib/fast-boot-git-hint');
-mock.module('../projects/lib/fast-boot-git-hint', () => ({
-  ...realFastBootGitHint,
-  resolveFastBootGitHintWithCache: async () => undefined,
 }));
 
 // The desired-release base check (`sharedBaseTip`) asks the upstream through a
@@ -694,6 +683,13 @@ const realDefaultModelResolution = await import('../llm-gateway/resolution/defau
 mock.module('../llm-gateway/resolution/default-model', () => ({
   ...realDefaultModelResolution,
   isModelServableForAccount: async () => true,
+}));
+
+// A Free-tier fixture has no default model; a non-empty catalog lets pi pick one.
+const realServableCatalog = await import('../llm-gateway/models/servable-catalog');
+mock.module('../llm-gateway/models/servable-catalog', () => ({
+  ...realServableCatalog,
+  servableProjectCatalog: async () => ({ models: { 'stub/model': {} } }),
 }));
 
 mock.module('../shared/supabase', () => ({
@@ -1276,7 +1272,7 @@ describe('project session runtime guards', () => {
   beforeEach(() => resetState());
 
   test('creates an omitted-agent session with the meta REST runtime when kortix.yaml turns My Kortix on', async () => {
-    manifestYaml = 'builtin_agents:\n  my_kortix: true\nagents:\n  worker: { tools: all, workspace: { project_repository: true } }\n';
+    manifestYaml = 'builtin_agents:\n  my_kortix: true\nagents:\n  worker: { tools: all, kortix_permissions: all }\n';
     const app = createApp();
     const response = await app.request(`/v1/projects/${PROJECT_ID}/sessions`, {
       method: 'POST',
@@ -1406,6 +1402,60 @@ describe('project session runtime guards', () => {
     expect(created.agent_name).toBe('worker');
     expect(created.metadata?.sandbox_slug).not.toBe('mykortix');
     expect(created.metadata?.spawned_by_session).toBe(SESSION_ID);
+  });
+
+  // A project whose default agent is My Kortix, with a restrictive agent that sorts first.
+  const MY_KORTIX_DEFAULT_MANIFEST = [
+    'default_agent: mykortix',
+    'builtin_agents:',
+    '  my_kortix: true',
+    'agents:',
+    '  code-auditor: { mode: subagent, tools: all }',
+    '  compliance-officer: { tools: all }',
+    '  kortix: { tools: all }',
+    '',
+  ].join('\n');
+  const spawnAsMyKortix = (body: Record<string, unknown>) => {
+    sessionRow = { ...sessionRow!, agentName: 'mykortix' };
+    return createApp().request(`/v1/projects/${PROJECT_ID}/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SESSION_BOUND_PAT}` },
+      body: JSON.stringify({ provider: 'platinum', base_ref: 'main', ...body }),
+    });
+  };
+
+  test('My Kortix naming no agent, where My Kortix is the default: 400 AGENT_REQUIRED with the agents to name, never a guessed agent', async () => {
+    manifestYaml = MY_KORTIX_DEFAULT_MANIFEST;
+    const response = await spawnAsMyKortix({});
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body).toMatchObject({ code: 'AGENT_REQUIRED', agents: ['compliance-officer', 'kortix'] });
+    // The message names the exact fix: the field, the CLI flag and the agents.
+    expect(body.error).toContain('`agent_name` (CLI: `--agent <name>`) to one of: compliance-officer, kortix.');
+    expect(sandboxProvisionCalls).toBe(0);
+  });
+
+  test('My Kortix starting an inline colleague (kortix.agent.instructions): the child runs as My Kortix, on its sandbox, linked to the caller', async () => {
+    manifestYaml = MY_KORTIX_DEFAULT_MANIFEST;
+    const response = await spawnAsMyKortix({
+      agent_name: 'mykortix',
+      runtime_context: { 'kortix.subagent.depth': 1, 'kortix.agent.instructions': 'You are a product designer and prototyper.' },
+    });
+    expect(response.status).toBe(201);
+    const created = await response.json();
+    expect(created.agent_name).toBe('mykortix');
+    expect(created.metadata?.sandbox_slug).toBe('mykortix');
+    expect(created.metadata?.spawned_by_session).toBe(SESSION_ID);
+  });
+
+  test('My Kortix naming My Kortix without instructions is still META_AGENT_RECURSION', async () => {
+    manifestYaml = MY_KORTIX_DEFAULT_MANIFEST;
+    const response = await spawnAsMyKortix({ agent_name: 'mykortix' });
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body).toMatchObject({ code: 'META_AGENT_RECURSION', agents: ['compliance-officer', 'kortix'] });
+    expect(body.error).toContain('`--agent <name>`) to one of: compliance-officer, kortix.');
+    expect(sandboxProvisionCalls).toBe(0);
   });
 
   test('a session-bound spawn inherits the SPAWNING session sharing, not the private default', async () => {

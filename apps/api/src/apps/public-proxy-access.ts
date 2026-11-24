@@ -284,6 +284,29 @@ export function resolveAppViewerUserId(
   url: URL,
   app: Pick<AppAccessRow, 'appId' | 'accessMode' | 'accessRevision'>,
 ): string | null {
+  return resolveAppViewerSession(request, url, app)?.userId ?? null;
+}
+
+/**
+ * The second factor the gate's cookie records for `userId`: `'aal2'` only when
+ * the cookie names that viewer and `access-session` was asked by a browser
+ * session at aal2. A viewer named by a bearer credential gets none.
+ */
+export function appViewerSessionAal(
+  request: Request,
+  url: URL,
+  app: Pick<AppAccessRow, 'appId' | 'accessMode' | 'accessRevision'>,
+  userId: string,
+): 'aal2' | undefined {
+  const session = resolveAppViewerSession(request, url, app);
+  return session && session.userId === userId ? session.aal : undefined;
+}
+
+function resolveAppViewerSession(
+  request: Request,
+  url: URL,
+  app: Pick<AppAccessRow, 'appId' | 'accessMode' | 'accessRevision'>,
+): { userId: string; aal?: 'aal2' } | null {
   // A PUBLIC App still recognises whoever the gate signed in.
   //
   // This used to bail here for `public`, so the cookie was never even read and
@@ -304,8 +327,25 @@ export function resolveAppViewerUserId(
   const raw = cookieValue(request, appAccessCookieName(localHttp));
   if (!raw) return null;
   const payload = verifyAppAccessToken(raw, app.appId, appAccessSecret());
-  if (!payload || payload.kind !== 'kortix' || payload.revision !== app.accessRevision) return null;
-  return payload.userId ?? null;
+  if (!payload || payload.kind !== 'kortix' || payload.revision !== app.accessRevision || !payload.userId) return null;
+  return { userId: payload.userId, ...(payload.aal === 'aal2' ? { aal: 'aal2' as const } : {}) };
+}
+
+/**
+ * The cookie's viewer, for a path that mints or forwards a credential as them.
+ * A gated App re-checks the cookie on every request (`authorizeAppRequest`). A
+ * public App is not gated, so a member removed after redeeming a link kept a
+ * valid cookie for its 8 h and kept getting tokens: re-check their access here.
+ */
+export async function liveAppViewerUserId(
+  request: Request,
+  url: URL,
+  app: AppAccessRow,
+  verifyUserAccess: AppUserAccessVerifier = appAccessibleToUser,
+): Promise<string | null> {
+  const userId = resolveAppViewerUserId(request, url, app);
+  if (!userId || app.accessMode !== 'public') return userId;
+  return (await verifyUserAccess(app, userId)) ? userId : null;
 }
 
 export interface AppViewerHeaders {
@@ -336,15 +376,18 @@ export async function appViewerContextHeader(
   const [identity, minted] = await Promise.all([
     resolveAppViewerIdentity(userId, app.accountId),
     scope === 'api'
-      ? mintAppViewerToken(
+      ? liveAppViewerUserId(request, url, app).then((liveUserId) => liveUserId
+        ? mintAppViewerToken(
           {
             appId: app.appId,
             accountId: app.accountId,
             name: app.name ?? 'Kortix App',
             viewerTokenScope: scope,
           },
-          userId,
-        ).catch((error) => {
+          liveUserId,
+          { aal: appViewerSessionAal(request, url, app, liveUserId) },
+        )
+        : null).catch((error) => {
           // An App must not go dark because a token could not be minted: the
           // identity header still lands and the App can still authorize its own
           // data. `/_kortix/viewer` surfaces the failure when it is asked.
@@ -383,9 +426,10 @@ async function resolveEndpointViewer(
   request: Request,
   url: URL,
   app: AppAccessRow,
+  verifyUserAccess: AppUserAccessVerifier = appAccessibleToUser,
 ): Promise<{ userId: string; agentViewer: boolean } | Response> {
   const noStore = { 'cache-control': 'no-store' };
-  let userId = resolveAppViewerUserId(request, url, app);
+  let userId = await liveAppViewerUserId(request, url, app, verifyUserAccess);
   let agentViewer = false;
   if (!userId && app.accessMode !== 'password') {
     // A server-side caller inside the App can present its own Kortix credential
@@ -393,7 +437,7 @@ async function resolveEndpointViewer(
     const principal = await kortixCredentialUser(request, app);
     if (
       principal &&
-      (await credentialMayOpenApp(app, principal, appAccessibleToUser, appAccessibleToAgentSession))
+      (await credentialMayOpenApp(app, principal, verifyUserAccess, appAccessibleToAgentSession))
     ) {
       userId = principal.userId;
       // An agent session is admitted as the AGENT. Minting an `api` viewer
@@ -466,22 +510,13 @@ export async function appTokenResponse(
     if (!linked) return appNotLinkedResponse(audience);
   }
   const audienceAppId = linked?.appId ?? app.appId;
-  const viewer = await resolveEndpointViewer(request, url, app);
+  const viewer = await resolveEndpointViewer(request, url, app, verifyUserAccess);
   if (viewer instanceof Response) return viewer;
   if (viewer.agentViewer) {
     // As on /_kortix/viewer: an agent session must not act as the human who launched it.
     return Response.json(
       { error: 'agent_viewer', error_description: 'An agent session mints a token naming the agent: POST /v1/projects/{projectId}/apps/{appId}/token.' },
       { status: 403, headers: noStore },
-    );
-  }
-  // A public App lets every request through, so nothing re-checked the gate
-  // cookie: a member removed after redeeming a link kept minting tokens for
-  // the cookie's 8 h. A token is a credential, so re-check access.
-  if (app.accessMode === 'public' && !(await verifyUserAccess(app, viewer.userId))) {
-    return Response.json(
-      { error: 'no_viewer_identity', error_description: 'The signed-in viewer no longer has access to this App.', access_mode: app.accessMode },
-      { status: 401, headers: noStore },
     );
   }
   const { mintAppToken } = await import('./tokens');
@@ -528,6 +563,10 @@ export function renewedAppAccessCookie(
       appId: app.appId,
       kind: 'kortix',
       userId,
+      // No `aal`: a renewal drops the second factor. The level then lasts at
+      // most the 8 h of the cookie the access link was redeemed into, never
+      // past the browser session that proved it (Strix, 2026-11-11). Reopening
+      // the App from Kortix at aal2 marks a new cookie.
       revision: app.accessRevision,
       expiresAt: new Date(now.getTime() + APP_SESSION_SECONDS * 1000),
     },
@@ -541,6 +580,7 @@ export async function appViewerEndpointResponse(
   request: Request,
   url: URL,
   app: AppAccessRow & { accountId: string; name: string; viewerTokenScope?: string | null },
+  verifyUserAccess: AppUserAccessVerifier = appAccessibleToUser,
 ): Promise<Response> {
   const noStore = { 'cache-control': 'no-store' };
   const scope = normalizeViewerTokenScope(app.viewerTokenScope);
@@ -550,7 +590,7 @@ export async function appViewerEndpointResponse(
       { status: 404, headers: noStore },
     );
   }
-  const viewer = await resolveEndpointViewer(request, url, app);
+  const viewer = await resolveEndpointViewer(request, url, app, verifyUserAccess);
   if (viewer instanceof Response) return viewer;
   const { userId, agentViewer } = viewer;
   const [identity, minted] = await Promise.all([
@@ -560,6 +600,7 @@ export async function appViewerEndpointResponse(
       : mintAppViewerToken(
           { appId: app.appId, accountId: app.accountId, name: app.name, viewerTokenScope: scope },
           userId,
+          { aal: appViewerSessionAal(request, url, app, userId) },
         ),
   ]);
   return Response.json(
@@ -705,6 +746,7 @@ export async function authorizeAppRequest(
         appId: app.appId,
         kind: verified!.kind,
         userId: verified!.userId,
+        aal: verified!.aal,
         revision: app.accessRevision,
         expiresAt: new Date(Date.now() + 8 * 60 * 60_000),
       }, secret);

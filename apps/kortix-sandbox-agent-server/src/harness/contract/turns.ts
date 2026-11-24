@@ -35,6 +35,12 @@ export interface RuntimePromptInput {
    * router routes only to them (harness/pi/front-space.ts).
    */
   spaceAgents?: unknown
+  /**
+   * The person who wrote this prompt (`author`, KRTX-5121): the API sets it,
+   * its proxy drops a client's value. The model reads the name above the
+   * message (harness/pi/prompt-author.ts). Absent when no person wrote it.
+   */
+  author?: unknown
 }
 
 /** The HTTP answer a verb produced; the route sends it as it is. */
@@ -88,8 +94,10 @@ export interface HarnessTurnService {
    * 200 `{ thread_id, messages, has_more }`: one page of a thread of the box's own
    * session log, oldest first. `threadId` null: the root. `afterSeq` reads forward
    * from a seq; otherwise the page is the newest one before `beforeSeq`.
+   * The system prompt (`kind: 'context'`) is left out unless `includeContext`:
+   * no viewer renders it, and it was most of every page.
    */
-  readLog(query: { threadId: string | null; afterSeq: number | null; beforeSeq: number | null; limit: number }): Promise<HarnessTurnResponse>
+  readLog(query: { threadId: string | null; afterSeq: number | null; beforeSeq: number | null; limit: number; includeContext?: boolean }): Promise<HarnessTurnResponse>
   /** 200 the `SessionLogMessage`; 404 when no thread holds it. */
   readLogMessage(messageId: string): Promise<HarnessTurnResponse>
   /** The bytes of an attachment the session log names by `sha256`, or null. */

@@ -35,12 +35,21 @@ audits it. The sandbox carries only `KORTIX_TOKEN`.
 2. **Add an app the workspace lacks**, then hand the human the link:
    ```sh
    kortix connectors catalog <name>          # `installed as <slug>` = it is already here
-   kortix connectors catalog install <id>    # e.g. kortix:linear, composio:gmail; live at once
+   kortix connectors catalog install <id>    # e.g. kortix:linear, kortix:gmail; live at once
    kortix connectors connect <slug>          # prints the sign-in link for the human
    ```
    Install prints the next step. `Ready` means no sign-in is needed: call it.
    Exit 3 means the app is already installed: use that slug. When the human
    finishes signing in, Kortix tells you; do not mint a second link.
+   For an account the whole workspace uses, `connect <slug> --owner workspace`.
+   A trigger or automation runs only on that shared account: for one, mint
+   the `--owner workspace` link (tool: `for_trigger=true`) and only that one.
+   Never post a private link first and a shared one after it.
+   Every member may connect their own account. A shared one
+   (`--owner workspace`) needs `workspace.connector.connections.manage`: a
+   declared agent holds it through its `kortix_permissions`, My Kortix through
+   its person's role (an owner, admin or manager). A refusal names the missing
+   permission and who holds it.
 3. **Pick the account** (see `<accounts>`). With 2 or more accounts, pass
    `--account "<label>"`.
 4. **Read the action before calling it.** `kortix connectors show <slug>.<action>`
@@ -131,7 +140,7 @@ Search the catalog first:
 kortix connectors catalog gmail                     # one row per app
 kortix connectors catalog crm --kind mcp,composio   # kortix, mcp, composio, openapi, graphql
 kortix connectors catalog notes --one-click         # apps the human connects by signing in
-kortix connectors catalog show composio:gmail       # every way to connect it + its tools
+kortix connectors catalog show kortix:gmail         # every way to connect it + its tools
 ```
 
 Ways to connect, best first (the first is marked `recommended`):
@@ -143,14 +152,17 @@ Ways to connect, best first (the first is marked `recommended`):
    pages, Computer
    with `npx --yes @kortix/agent-tunnel@latest connect` on that machine or
    the desktop app;
-1. a one-click MCP server: the vendor's own; the human only signs in;
+1. a one-click MCP server: the vendor's own, or Kortix's own for Gmail,
+   Google Calendar, Drive, Docs and Sheets (`kortix:gmail`,
+   `kortix:google_calendar`, …: Composio's tool names and arguments, so a
+   Composio skill or rule works unchanged); the human only signs in;
 2. Composio: a third-party partner that runs the sign-in (one click);
 3. an MCP server that needs the human's own OAuth app or key, then the REST
    (OpenAPI) and GraphQL APIs: they need a key or token after install.
 
 ```sh
 kortix connectors catalog install kortix:linear
-kortix connectors catalog install composio:gmail --name "Support inbox"
+kortix connectors catalog install kortix:gmail --name "Support inbox"
 kortix connectors catalog install <id> --way <way-id>
 ```
 
@@ -159,6 +171,11 @@ it already has. `--new-profile` makes a second profile; use it only for a
 human who asks for one. Another way of connecting (Stripe over MCP and over
 REST) is its own profile: different tools, different sign-in.
 
+The catalog is an index, not a list of what may be connected. Prefer the
+vendor's own MCP server over Composio whenever it exists. A way marked
+`catalogue has no URL` installs with the server URL: get it from the human or
+the vendor's docs, then
+`kortix connectors catalog install <id> --way <way-id> --url <url>`.
 The catalog is large, not complete. When it lacks the app, search the web for
 the vendor's MCP server (its developer docs, registry.modelcontextprotocol.io)
 or OpenAPI spec, then add it:
@@ -168,9 +185,12 @@ kortix connectors add acme --provider mcp --url https://mcp.acme.com/mcp --trans
 kortix connectors add acme --provider openapi --spec https://acme.com/openapi.json --apply
 ```
 
-Without `--apply`, `add` edits only this session branch's `kortix.yaml`. In a
-governed agent, a URL that is not in the catalog returns
-`custom_connector_needs_human` with a `setup_url`: hand it to the human.
+Without `--apply`, `add` edits the `kortix.yaml` of the clone you are in
+(`kortix workspaces clone`; `/workspace` has none at boot), landed through a change request. A
+server URL that neither the catalog publishes nor the workspace already has
+needs a one-time approval of that exact URL: the answer is
+`custom_connector_needs_human` with a `setup_url`. Hand the human the link;
+it opens the server prefilled, and adding it is the approval. Do not retry.
 
 Credentials:
 - an API key the human gave you: `kortix secrets set NAME=- --scope connector`,
@@ -197,8 +217,8 @@ agent's set.
 ```yaml
 connectors:
   - slug: gmail
-    provider: composio
-    app: gmail
+    provider: mcp
+    url: https://google.mcp.kortix.com/gmail
     policy_sets:
       read_only:
         description: Read and search, never send
@@ -302,6 +322,16 @@ Build the rest while you wait. Recipes: `references/sdk.md`.
 - Use the CLI for one-off actions; `@kortix/sdk` for durable workflows and
   for App, backend and program code. Never use raw provider tokens.
 - Confirm irreversible work before a destructive call.
+- `rm --apply`, `add --apply`, `catalog install` and the `policy` and
+  `policy-sets` commands change `kortix.yaml` on the default branch at once,
+  with no change request. Run them only for what the human asked. To propose
+  a change for review, edit `kortix.yaml` in your clone and open a change
+  request; merging one that changes `connectors`, `policies` or `policy`
+  needs `workspace.connector.write`.
+- Never write a key, token or password into a file: code, `kortix.yaml`
+  (`headers:` included) or `.env`. Store it with `kortix secrets set` or
+  `kortix secrets request` (Credentials above). A change request whose commits
+  add one does not merge (`409 CR_SECRET_DETECTED`).
 </rules>
 
 </skill>

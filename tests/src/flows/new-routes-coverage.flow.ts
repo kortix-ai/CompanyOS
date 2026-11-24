@@ -36,10 +36,6 @@ flow(
   },
 );
 
-// The warm-snapshot-config admin flow was removed with its deleted routes.
-// were deleted in #4095 ("remove the dead warm-fork sessions toggle") without
-// retiring this flow, leaving stale manifest drift.
-
 flow(
   'CONN-20',
   {
@@ -85,6 +81,7 @@ flow(
       'GET /v1/workspaces/:projectId/gateway/sessions',
       'GET /v1/workspaces/:projectId/gateway/sources',
       'GET /v1/workspaces/:projectId/gateway/breakdown',
+      'GET /v1/workspaces/:projectId/gateway/usage',
       'GET /v1/workspaces/:projectId/gateway/errors',
       'GET /v1/workspaces/:projectId/gateway/logs',
       'GET /v1/workspaces/:projectId/gateway/logs/:logId',
@@ -186,6 +183,21 @@ flow(
       if (!Array.isArray(body.sources)) throw new Error('sources is not an array');
       if (typeof body.total?.cost !== 'number') throw new Error('total.cost is not a number');
     });
+    await ctx.step('gateway usage query: a bad group_by, window or cursor → 400; a grouped window → 200 with paid wallet, BYOK provider and total kept separate', async () => {
+      const usage = (query: Record<string, string>) => owner.get('/v1/workspaces/:projectId/gateway/usage', { params, query });
+      for (const query of [{ group_by: 'model,trigger' }, { days: '7', since: '2026-11-01T00:00:00Z' }, { cursor: 'not a cursor' }] as Record<string, string>[]) {
+        (await usage(query)).status(400);
+      }
+      const r = await usage({ group_by: 'source,model', days: '7', limit: '10' });
+      r.status(200);
+      const body = r.json<{ group_by: string[]; groups: unknown[]; window: { since: string | null; until: string | null }; totals: Record<string, unknown>; next_cursor: string | null }>();
+      if (body.group_by.join(',') !== 'source,model') throw new Error(`group_by ${body.group_by.join(',')}`);
+      if (!Array.isArray(body.groups)) throw new Error('groups is not an array');
+      if (!body.window.since || !body.window.until) throw new Error('a rolling window must come back as absolute bounds');
+      for (const key of ['kortix_cost', 'provider_cost', 'total_cost', 'input_tokens', 'output_tokens', 'cached_tokens', 'cache_write_tokens', 'groups']) {
+        if (typeof body.totals[key] !== 'number') throw new Error(`totals.${key} is not a number`);
+      }
+    });
     await ctx.step('gateway log detail unknown id returns boundary response', async () => {
       const r = await owner.get('/v1/workspaces/:projectId/gateway/logs/:logId', {
         params: { ...params, logId: ZERO_UUID },
@@ -269,7 +281,7 @@ flow(
     domain: 'sessions',
     requires: ['sandbox'],
     routes: [
-      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/log',
       'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
       'GET /v1/workspaces/:projectId/sessions/:sessionId/snapshot',
       'GET /v1/workspaces/:projectId/sessions/:sessionId/open-bundle',
@@ -278,10 +290,10 @@ flow(
   },
   async (ctx) => {
     const project = await ctx.fixtures.project();
-    await ctx.step('Session transcript returns 404 for an unknown session', async () => {
+    await ctx.step('Session log returns 404 for an unknown session', async () => {
       const response = await ctx.client
         .as(ctx.P.OWNER)
-        .get('/v1/workspaces/:projectId/sessions/:sessionId/transcript', {
+        .get('/v1/workspaces/:projectId/sessions/:sessionId/log', {
           params: { projectId: project.id, sessionId: ZERO_UUID },
         });
       response.status(404);
@@ -319,7 +331,7 @@ flow(
 
     await ctx.step('Session snapshot answers every leg in ONE round trip', async () => {
       // The bundle is what a session view opens with: one call replacing the
-      // session row + /turn + /prompts + /transcript + /model-defaults. Two
+      // session row + /turn + /prompts + /log + /model-defaults. Two
       // claims are asserted here because both are contract, not detail:
       // (1) every sub-object is TRI-STATE (`known`), so a degraded leg reads
       // as unknown and never as an empty queue or an idle turn; and
@@ -566,6 +578,8 @@ flow(
       'POST /internal/gateway/budget-check',
       'POST /internal/gateway/claude-credentials',
       'POST /internal/gateway/claude-refused',
+      'POST /internal/gateway/idempotency/get',
+      'POST /internal/gateway/idempotency/put',
       'POST /internal/gateway/models',
       'POST /internal/gateway/pool-rate-limit',
       'POST /internal/gateway/pool-usage',
@@ -583,6 +597,8 @@ flow(
       '/internal/gateway/budget-check',
       '/internal/gateway/claude-credentials',
       '/internal/gateway/claude-refused',
+      '/internal/gateway/idempotency/get',
+      '/internal/gateway/idempotency/put',
       '/internal/gateway/models',
       '/internal/gateway/pool-rate-limit',
       '/internal/gateway/pool-usage',

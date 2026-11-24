@@ -17,7 +17,7 @@
  * `[[agents]].connectors` grant (iam/agent-scope.ts). This file keeps the
  * generic pure helpers + session DB helpers only.
  */
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import {
   projectSessionGrants,
   projectSessions,
@@ -427,7 +427,7 @@ export async function loadSessionGrants(sessionIds: string[]): Promise<Map<strin
 /** Persist a session's sharing: set visibility + replace its grants. */
 export async function setSessionSharing(sessionId: string, intent: SharingIntent): Promise<void> {
   const { visibility, grants } = sessionIntentToVisibility(intent);
-  await db.update(projectSessions).set({ visibility, updatedAt: new Date() }).where(eq(projectSessions.sessionId, sessionId));
+  await db.update(projectSessions).set({ visibility, metadata: sql`${projectSessions.metadata} - 'trigger_session_readers'`, updatedAt: new Date() }).where(eq(projectSessions.sessionId, sessionId));
   await db.delete(projectSessionGrants).where(eq(projectSessionGrants.sessionId, sessionId));
   if (grants.length > 0) {
     await db.insert(projectSessionGrants).values(
@@ -515,8 +515,9 @@ export function isHumanCaller(input: { credentialKind: string | undefined; bound
   return input.boundSessionId === null && (input.credentialKind === 'jwt' || input.credentialKind === 'pat');
 }
 
-export const TURN_SHARE_AGENT_ERROR = 'An agent cannot share a response publicly';
-export const TURN_SHARE_AGENT_REVOKE_ERROR = 'An agent cannot turn off a public response link';
+/** A hand-off, not a refusal of the agent: putting text on the public web is the person's call (founder decision, 2026-10-23). */
+export const TURN_SHARE_AGENT_ERROR =
+  'Publishing a response to the public web is the person\'s decision: the session owner or a project manager publishes it with Share on the response.';
 export const TURN_SHARE_OWNER_OR_MANAGER_ERROR =
   'Only the session owner or a project manager can share a response publicly';
 

@@ -32,8 +32,9 @@ import { logger } from '../lib/logger';
 import { db } from '../shared/db';
 import { qualifiedColumn } from '../shared/sql-qualified-column';
 import { resolveAppRuntimeEnvironment } from './environment';
-import { AppHostingProvider, type AppMachineSpec } from './hosting';
+import { AppHostingProvider, type AppMachineSpec, type StartAppRuntimeInput } from './hosting';
 import { teardownAppRuntimes } from './images';
+import { retryOnDeadlock } from '../shared/error-cause';
 import { groupAlwaysOn, groupScale, releaseConfigOf } from './release-config';
 import { appRuntimeIdentityEnv } from './viewer';
 import { appServiceUrl } from './hostnames';
@@ -167,6 +168,47 @@ export async function releaseInstances(deploymentId: string): Promise<InstanceRo
     .orderBy(asc(appRuntimes.createdAt));
 }
 
+/** Open (or reuse) a box's compute meter. Idempotent: an open meter for the runtime is reused. */
+async function meterInstance(
+  app: AppRow,
+  deployment: DeploymentRow,
+  config: AppReleaseConfig,
+  group: string,
+  instance: Pick<InstanceRow, 'runtimeId' | 'accountId' | 'provider' | 'machineId'>,
+): Promise<void> {
+  const provider = instance.provider as SandboxProviderName;
+  await startComputeSession({
+    sandboxId: instance.runtimeId,
+    accountId: instance.accountId,
+    actorUserId: deployment.createdBy,
+    provider,
+    spec: { ...machineSize(app, config, group, provider), gpuCount: 0 },
+    workloadType: 'app',
+    appRuntimeId: instance.runtimeId,
+    metadata: { deploymentId: deployment.deploymentId, appId: app.appId, machineId: instance.machineId, processGroup: group },
+  });
+}
+
+/** Create a provider box and register its identity; an insert failure removes only that new box. */
+async function registerRuntime(
+  hosting: AppHostingProvider,
+  input: StartAppRuntimeInput,
+  registration: () => Omit<typeof appRuntimes.$inferInsert, 'runtimeId' | 'accountId' | 'provider' | 'externalId' | 'controlTokenHash' | 'metadata'> & { metadata: Record<string, unknown> },
+): Promise<InstanceRow> {
+  const handle = await hosting.createRuntime(input);
+  const values = registration();
+  const [row] = await db.insert(appRuntimes).values({
+    ...values,
+    runtimeId: input.runtimeId, accountId: input.accountId, provider: input.provider,
+    externalId: handle.externalId, controlTokenHash: handle.controlTokenHash,
+    metadata: { ...handle.metadata, machine: input.machine, ...values.metadata },
+  }).returning().catch(async (error) => {
+    await hosting.remove(input.provider, handle.externalId).catch(() => {});
+    throw error;
+  });
+  return row!;
+}
+
 /** Create one instance of a release for a machine: its volume (locked first), its box, its row and its meter. */
 export async function createInstance(input: {
   hosting: AppHostingProvider;
@@ -188,9 +230,9 @@ export async function createInstance(input: {
   if (volume) await acquireVolume(volume.volumeId, runtimeId);
   const machine = machineSize(app, config, group, provider);
   const spec = machineAppSpec(config, group, deployment.runtimeSpec as Record<string, unknown>);
-  let handle;
+  let row: InstanceRow;
   try {
-    handle = await hosting.createRuntime({
+    row = await registerRuntime(hosting, {
       provider,
       runtimeId,
       accountId: app.accountId,
@@ -206,43 +248,26 @@ export async function createInstance(input: {
         ...(spec ? { KORTIX_APP_SPEC: JSON.stringify(spec) } : {}),
       },
       ...(volume && mount ? { volumes: { [mount.destination]: { volume: volume.externalId } } } : {}),
+    }, () => {
+      const now = new Date();
+      return {
+        deploymentId: deployment.deploymentId,
+        status: 'starting',
+        machineId,
+        processGroup: group,
+        volumeId: volume?.volumeId ?? null,
+        idleDeadlineAt: new Date(now.getTime() + app.idleTimeoutSeconds * 1000),
+        startedAt: now,
+        metadata: { secretIdentifiers: env.secretIdentifiers, environmentKeys: env.environmentKeys },
+      };
     });
   } catch (error) {
     if (volume) await releaseVolume(volume.volumeId, runtimeId);
     throw error;
   }
-  const now = new Date();
-  const [row] = await db.insert(appRuntimes).values({
-    runtimeId,
-    deploymentId: deployment.deploymentId,
-    accountId: app.accountId,
-    provider,
-    externalId: handle.externalId,
-    status: 'starting',
-    controlTokenHash: handle.controlTokenHash,
-    machineId,
-    processGroup: group,
-    volumeId: volume?.volumeId ?? null,
-    idleDeadlineAt: new Date(now.getTime() + app.idleTimeoutSeconds * 1000),
-    startedAt: now,
-    metadata: { ...handle.metadata, machine, secretIdentifiers: env.secretIdentifiers, environmentKeys: env.environmentKeys },
-  }).returning().catch(async (error) => {
-    await hosting.remove(provider, handle.externalId).catch(() => {});
-    if (volume) await releaseVolume(volume.volumeId, runtimeId);
-    throw error;
-  });
-  await startComputeSession({
-    sandboxId: runtimeId,
-    accountId: app.accountId,
-    actorUserId: deployment.createdBy,
-    provider,
-    spec: { ...machine, gpuCount: 0 },
-    workloadType: 'app',
-    appRuntimeId: runtimeId,
-    metadata: { deploymentId: deployment.deploymentId, appId: app.appId, machineId, processGroup: group },
-  });
+  await meterInstance(app, deployment, config, group, { runtimeId, accountId: app.accountId, provider, machineId });
   await event(deployment.deploymentId, 'runtime_created', `Machine ${machineId.slice(0, 8)} (${group}) created`, {
-    provider, externalId: handle.externalId, machineId, processGroup: group, volumeId: volume?.volumeId ?? null,
+    provider, externalId: row.externalId, machineId, processGroup: group, volumeId: volume?.volumeId ?? null,
   }, runtimeId);
   return row!;
 }
@@ -438,13 +463,32 @@ export async function abandonRelease(appId: string, deploymentId: string, hostin
   await teardownAppRuntimes(await releaseInstances(deploymentId));
   const [app] = await db.select({ active: apps.activeDeploymentId }).from(apps).where(eq(apps.appId, appId)).limit(1);
   if (app?.active !== deploymentId) {
-    if (app?.active) await reconcileAppMachines(appId, { hosting, exceptDeploymentId: deploymentId });
+    if (app?.active) await restoreReleaseMachines(appId, deploymentId, hosting);
     return;
   }
   const previousId = await previousReleaseId(appId, deploymentId);
   await pointTraffic(appId, previousId, deploymentId);
   await event(deploymentId, 'traffic_reverted', 'Traffic returned to the previous release', { previousDeploymentId: previousId }, undefined, 'warn');
-  if (previousId) await reconcileAppMachines(appId, { hosting, exceptDeploymentId: deploymentId });
+  if (previousId) await restoreReleaseMachines(appId, deploymentId, hosting);
+}
+
+/**
+ * Give the active release back the machine the failed release took. The
+ * abandon's essential work (teardown, traffic) is already done, so a restore
+ * failure must not fail the cleanup step — but the App runs under-scaled until
+ * the next deploy or scale re-runs the reconcile, so it stays visible.
+ * ponytail: no restore retry here; the next deploy or scale re-runs the reconcile.
+ */
+async function restoreReleaseMachines(appId: string, deploymentId: string, hosting: AppHostingProvider): Promise<void> {
+  try {
+    await reconcileAppMachines(appId, { hosting, exceptDeploymentId: deploymentId });
+  } catch (error) {
+    logger.error('[apps] failed-deploy machine restore failed', {
+      appId,
+      deploymentId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 /** Machine ids of a group's volumes whose machine has no live instance: a new machine takes these first. */
@@ -470,6 +514,20 @@ async function orphanedMachineIds(appId: string, group: string): Promise<string[
  * release rolls out (it plans machines itself) and for a stopped App.
  */
 export async function reconcileAppMachines(
+  appId: string,
+  options: { hosting?: AppHostingProvider; exceptDeploymentId?: string } = {},
+): Promise<{ created: number; destroyed: number; skipped?: string }> {
+  // The reconcile is idempotent: it re-reads state, the provider calls it
+  // re-runs are remove-safe (the create's insert-catch cleans a rolled-back
+  // box), the per-write transactions commit separately, and a pass that died
+  // mid-instance leaves its committed 'starting' row to the next pass's
+  // resume below. A 40P01 deadlock victim (two reconcile passes deleting the
+  // same release's app_runtimes — release run 42716922285, the db-suites
+  // lane) therefore just re-runs.
+  return retryOnDeadlock(() => reconcileAppMachinesOnce(appId, options));
+}
+
+async function reconcileAppMachinesOnce(
   appId: string,
   options: { hosting?: AppHostingProvider; exceptDeploymentId?: string } = {},
 ): Promise<{ created: number; destroyed: number; skipped?: string }> {
@@ -500,6 +558,18 @@ export async function reconcileAppMachines(
     const own = instances.filter((instance) => instance.processGroup === group);
     const target = groupScale(app.scale, group);
     for (const extra of own.slice(target).reverse()) await destroy(extra);
+    // A pass that died mid-instance (a 40P01 victim after the insert, a
+    // crash) left committed 'starting' rows: the box exists and counts toward
+    // target, but its meter and readiness never ran. Finish them — resuming
+    // the meter is idempotent — or the retry's own skip below strands the box
+    // in 'starting' forever. A row under a wake lease belongs to a wake in
+    // flight; its wakeReady finishes it.
+    for (const instance of own.slice(0, target)) {
+      if (instance.status !== 'starting' || instance.wakeLeaseOwner) continue;
+      await meterInstance(app, deployment, config, group, instance);
+      await waitInstanceReady(hosting, instance);
+      created += 1;
+    }
     if (own.length >= target || app.desiredState !== 'running') continue;
     env ??= await releaseEnvironment(app, deployment);
     const reuse = appMountFor(config, group) ? await orphanedMachineIds(appId, group) : [];
@@ -516,6 +586,37 @@ export async function reconcileAppMachines(
     await event(deployment.deploymentId, 'machines_reconciled', `Scaled: ${created} created, ${destroyed} destroyed`, { created, destroyed });
   }
   return { created, destroyed };
+}
+
+/**
+ * The background reconciles still running per app. A same-app write that
+ * cascades (today only the machines test's cleanup) settles them first, so its
+ * FK cascade never deadlocks against an in-flight reconcile's insert; the same
+ * settle is the first building block for an App's delete later.
+ *
+ * replica-local: the map only remembers reconciles THIS replica dispatched
+ * (the setAppScale call site). Settling is always safe and only ever waits; a
+ * delete that lands on another replica sees none of these and keeps today's
+ * behavior, so a replica-local copy is correct rather than merely tolerated.
+ */
+const backgroundReconciles = new Map<string, Set<Promise<unknown>>>();
+
+/** Register a fire-and-forget reconcile so `settleAppReconciles` can await it. */
+export function trackBackgroundReconcile(appId: string, run: Promise<unknown>): void {
+  const set = backgroundReconciles.get(appId) ?? new Set<Promise<unknown>>();
+  backgroundReconciles.set(appId, set);
+  set.add(run);
+  const clean = (): void => {
+    set.delete(run);
+    // Prune the (empty) set and its key; only ours, never a newer one.
+    if (set.size === 0 && backgroundReconciles.get(appId) === set) backgroundReconciles.delete(appId);
+  };
+  void run.then(clean, clean);
+}
+
+/** Resolve when every background reconcile of the app has settled (ok or failed). */
+export async function settleAppReconciles(appId: string): Promise<void> {
+  await Promise.allSettled([...(backgroundReconciles.get(appId) ?? [])]);
 }
 
 /**
@@ -542,7 +643,7 @@ export async function runReleaseCommand(input: {
   const machine = machineSize(app, config, group, provider);
   // The supervisor runs a sleep, not the App: the temporary machine serves nothing.
   const spec = { ...runtimeSpec, command: ['sleep', 'infinity'], target_port: 0, mounts: [], checks: [] };
-  const handle = await hosting.createRuntime({
+  const row = await registerRuntime(hosting, {
     provider,
     runtimeId,
     accountId: app.accountId,
@@ -551,23 +652,14 @@ export async function runReleaseCommand(input: {
     snapshotName: deployment.providerBuildId!,
     machine,
     envVars: { ...env.env, KORTIX_APP_SPEC: JSON.stringify(spec) },
-  });
-  const [row] = await db.insert(appRuntimes).values({
-    runtimeId,
+  }, () => ({
     deploymentId: deployment.deploymentId,
-    accountId: app.accountId,
-    provider,
-    externalId: handle.externalId,
     status: 'running',
-    controlTokenHash: handle.controlTokenHash,
     machineId: runtimeId,
     processGroup: RELEASE_COMMAND_GROUP,
     startedAt: new Date(),
-    metadata: { ...handle.metadata, machine, role: 'release_command' },
-  }).returning().catch(async (error) => {
-    await hosting.remove(provider, handle.externalId).catch(() => {});
-    throw error;
-  });
+    metadata: { role: 'release_command' },
+  }));
   try {
     await startComputeSession({
       sandboxId: runtimeId, accountId: app.accountId, actorUserId: deployment.createdBy, provider,
@@ -577,7 +669,7 @@ export async function runReleaseCommand(input: {
     });
     const workdir = typeof runtimeSpec.workdir === 'string' ? runtimeSpec.workdir : null;
     const quoted = workdir ? `cd '${workdir.replace(/'/g, `'\\''`)}' && ` : '';
-    const result = await hosting.exec(provider, handle.externalId, ['sh', '-c', `${quoted}${input.command}`], input.timeoutMs ?? 300_000);
+    const result = await hosting.exec(provider, row.externalId, ['sh', '-c', `${quoted}${input.command}`], input.timeoutMs ?? 300_000);
     return { exitCode: result.exitCode, output: `${result.stdout}${result.stderr ? `\n${result.stderr}` : ''}`.trim() };
   } finally {
     await teardownAppRuntimes([row!]).catch((error) => {

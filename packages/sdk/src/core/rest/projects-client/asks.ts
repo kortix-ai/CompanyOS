@@ -1,12 +1,14 @@
 import { backendApi } from '../../http/api-client';
+import { querySuffix } from '../../http/url';
 import { unwrap } from './shared';
 
 /** What an ask waits on a person for. */
-export type SessionAskKind = 'question' | 'permission' | 'approval';
+export type SessionAskKind = 'question' | 'permission' | 'approval' | 'access';
 
 /**
  * One open ask: an agent question, a tool call the permission policy sent to a
- * person, or a connector call that waits for approval. An ask never holds its
+ * person, a connector call that waits for approval, or the connectors and
+ * secrets My Kortix asks to hand a colleague (`access`). An ask never holds its
  * session: the agent goes on, and the decision reaches the session that asked
  * (`session_id`) as a new message.
  */
@@ -38,6 +40,13 @@ export interface SessionAsk {
   };
   permission?: { tool: string; permission: string; patterns: string[]; args: unknown };
   approval?: { action: string };
+  /**
+   * `kind: 'access'`: My Kortix asks to start a colleague with these
+   * connectors (slugs) and project secrets (identifiers). Decided with
+   * `{ decision: 'allow' | 'deny' }`. A member allows only what a workspace
+   * agent already has; anything else needs a workspace manager (403).
+   */
+  access?: { colleague: string; connectors: string[]; secrets: string[] };
 }
 
 export interface SessionAsksResponse {
@@ -47,13 +56,15 @@ export interface SessionAsksResponse {
 
 /**
  * A decision on one ask: answers for a question (one list of labels or free
- * text per question), a dismissal, or a reply to a permission ask. A connector
- * approval is decided with `resolveApproval`.
+ * text per question), a dismissal, a reply to a permission ask, or a decision
+ * on a colleague access ask. A connector approval is decided with
+ * `resolveApproval`.
  */
 export type SessionAskAnswer =
   | { answers: string[][] }
   | { dismiss: true }
-  | { reply: 'once' | 'always' | 'reject' };
+  | { reply: 'once' | 'always' | 'reject' }
+  | { decision: 'allow' | 'deny' };
 
 export interface SessionAskAnswerResult {
   ok: boolean;
@@ -69,11 +80,10 @@ export async function listSessionAsks(
   const query = new URLSearchParams();
   if (options.surfaceSessionId) query.set('surface_session_id', options.surfaceSessionId);
   if (options.limit) query.set('limit', String(options.limit));
-  const suffix = query.size ? `?${query.toString()}` : '';
-  return unwrap(await backendApi.get<SessionAsksResponse>(`/workspaces/${projectId}/asks${suffix}`));
+  return unwrap(await backendApi.get<SessionAsksResponse>(`/workspaces/${projectId}/asks${querySuffix(query)}`));
 }
 
-/** Answer a question or decide a permission ask. Throws on a refusal, including an ask already decided (409). */
+/** Answer a question, or decide a permission or colleague access ask. Throws on a refusal, including an ask already decided (409). */
 export async function answerSessionAsk(
   projectId: string,
   askId: string,

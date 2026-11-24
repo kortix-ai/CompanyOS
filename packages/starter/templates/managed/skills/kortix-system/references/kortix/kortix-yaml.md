@@ -53,8 +53,8 @@ defaults keep today's behavior, so a valid file stays valid.
 alias, so `tools: *` does not parse and `kortix validate` prints the quoted
 line. `all` is the accepted alias, and a list that holds `"*"` is every name
 too.
-| `workspace` | `{ project_repository: true }` checks out the repository in `/workspace`. Default `false`. |
 | `sandbox` | A template slug, or `default`. |
+| `workspace` | What the agent's sessions get to work in: `sandbox` (same as above), `repos` (clones onto the session branch: `path` under `/workspace`, optional `sparse` folders; needs `workspace.gitops.read`) and `setup` (steps after the clones: a command, or `{ run, cwd }`; each its own shell, in the first clone's folder unless `cwd` says otherwise). Both run in the background after start; progress in `/tmp/kortix/workspace-setup.json`. |
 | `space` | Work in progress: the space the agent works in. Grouping only, never a grant. |
 | `network_egress` | Only `{ version: 1, default: deny, rules: [] }`. Declared, not enforced. |
 
@@ -227,10 +227,12 @@ triggers:
   queued, `200` skipped (paused or capped), `401` for every miss before
   authentication (no such enabled webhook trigger, bad signature, missing or
   stale timestamp), `402` no usable model.
-- `kortix triggers pause` stops every trigger of the workspace; `resume`
-  starts them again. `enabled: false` stops one.
+- Stop one trigger, or all: `../scheduling.md` → Stop a trigger.
 
-Prompt variables, `{{ dotted.path }}` (a missing value renders empty):
+Prompt variables, `{{ dotted.path }}` (a missing value renders empty; an object
+or list renders as JSON; `{{ payload }}` is the whole payload). `run.payload`
+adds fixed values under the fire's own keys; `kortix triggers fire <slug>
+--dry-run --payload '<json>'` prints the rendered prompt and starts nothing:
 
 | Fire | Variables |
 | --- | --- |
@@ -239,6 +241,7 @@ Prompt variables, `{{ dotted.path }}` (a missing value renders empty):
 | Webhook | `fired_at`, `body.*`, `headers.content_type`, `headers.user_agent`, `headers.forwarded_for` |
 | App event | `event.name`, `event.data.*`, `event.id`, `event.emitted_at`, `app.slug` |
 | Change request merged | `fired_at`, `change_request.cr_id`, `.number`, `.title`, `.base_ref`, `.head_ref`, `.merge_commit_sha` |
+| Manual fire (`kortix triggers fire`) | `source`, `actor`, `message`; `--payload` deep-merges over them |
 
 ## Problems
 

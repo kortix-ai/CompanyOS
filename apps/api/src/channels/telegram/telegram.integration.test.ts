@@ -59,7 +59,8 @@ import { sessionWebUrl } from '../slack/util';
 import { deleteTelegramInstall, loadTelegramInstall, recordTelegramAccessRequest, saveTelegramInstall, setTelegramAllowedUserIds } from './installs';
 import { registerChannelTelegramRoutes } from '../../projects/routes/channel-telegram';
 import { serializeProject } from '../../projects/lib/serializers';
-import { handleTelegramEvent, handleTelegramPress, telegramMessageEvent, telegramPressEvent, type TelegramMessage } from './session';
+import { handleTelegramEvent, handleTelegramPress } from './session';
+import { telegramMessageEvent, telegramPressEvent, type TelegramMessage } from './events';
 import { channelWebhookRoutes } from '../inbound/webhook-routes';
 import { telegramInbound } from './inbound';
 import { runJobBatch } from '../../shared/job-queue';
@@ -416,7 +417,6 @@ describe('Telegram channel connector — migrated PostgreSQL', () => {
       source: 'telegram',
       visibility: 'project',
       userId: ACTOR,
-      queuePolicy: 'on_backpressure',
       idempotencyKey: `telegram:create:${BOT_ID}:${event.id}`,
       body: { agent_name: 'default', title_source: 'summarize the release' },
       metadata: { source: 'telegram', telegram: { bot_id: BOT_ID, chat_id: 777 } },
@@ -432,6 +432,8 @@ describe('Telegram channel connector — migrated PostgreSQL', () => {
       ],
     });
     expect(created[0]!.body).not.toHaveProperty('initial_prompt');
+    // A chat message creates inline; only trigger fires queue on backpressure.
+    expect(created[0]).not.toHaveProperty('queuePolicy');
     expect(created[0]!.postCreate[1].text).toContain('kortix_telegram.send_message');
     expect((await threadRow(777))?.sessionId).toBe(createdSessions[0]);
     // The create bound the chat, so its claim is spent: the next session start never waits on it.

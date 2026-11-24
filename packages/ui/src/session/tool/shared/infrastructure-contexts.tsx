@@ -109,6 +109,9 @@ export const InTranscriptTurnContext = createContext(false);
 
 export const ToolDurationContext = createContext<number | undefined>(undefined);
 
+/** When the call started (ISO), for rows that show a time. */
+export const ToolStartedAtContext = createContext<string | undefined>(undefined);
+
 /**
  * True in a read-only session view (the sub-session modal): a tool card shows
  * what happened and offers no fix (connect a model, reconnect ChatGPT).
@@ -132,6 +135,14 @@ const MEMORY_LOOKUP_TOOL_NAMES = new Set([
   'oc-mem_search',
   'oc-mem-search',
 ]);
+
+/**
+ * A failed `show` presented nothing, so no surface draws it (2026-11-16). Of failed
+ * calls, `isInvisibleActivityPart` names only that one: every other failure stays.
+ */
+export function isUnpresentedFailure(call: ToolCallBlock): boolean {
+  return call.status === 'error' && isInvisibleActivityPart(call);
+}
 
 export function shouldShowToolPartInActionsPanel(call: ToolCallBlock): boolean {
   if (MEMORY_LOOKUP_TOOL_NAMES.has(call.name)) return false;

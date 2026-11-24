@@ -5,14 +5,14 @@
  * their OpenAPI schemas; this file holds what they do.
  *
  * The legacy names keep their own handlers and meaning: `GET /v1/projects`
- * lists ONE account's projects, `POST /v1/projects/provision` takes
+ * lists the bare project records (every account of a person, one account
+ * with `?account_id=`), `POST /v1/projects/provision` takes
  * `new_workspace`, `GET /v1/projects/:id` is the bare project record.
  */
 import type { Context } from 'hono';
-import { HTTPException } from 'hono/http-exception';
 
 import { autoClaimPendingInvites } from '../../accounts/core/app';
-import { ACCOUNT_ACTIONS, authorize, workspaceRoleFor, type WorkspaceRole } from '../../iam';
+import { ACCOUNT_ACTIONS, PROJECT_ACTIONS, authorize, workspaceRoleFor, type WorkspaceRole } from '../../iam';
 import { actorOf } from '../../iam/actor';
 import { projectRoleGrants } from '../../iam/read-models';
 import {
@@ -21,6 +21,7 @@ import {
   canonicalWorkspaceDecision,
   workspaceNotFound,
 } from '../../middleware/workspace-account';
+import { isRevokedSession } from '../../middleware/session-gate';
 import { readJsonObject } from '../../shared/http-body';
 import { impersonatedAccountFor } from '../../shared/impersonation';
 import { workspaceIdParam } from '../../shared/route-params';
@@ -42,7 +43,8 @@ import type { ProjectRole } from '../access';
 import { serializeProject } from '../lib/serializers';
 import { compareWorkspaceRows, projectRowOfRecord } from '../lib/workspace-list';
 import { patchProjectRecord, readProjectRecord } from './project-detail';
-import { newWorkspaceCallerOf, provisionStreamResponse } from './projects';
+import { provisionStreamResponse } from './projects';
+import { newWorkspaceCallerOf } from '../lib/new-workspace-caller';
 
 export type { WorkspaceRole, WorkspaceState };
 
@@ -50,11 +52,6 @@ function stateOf(ws: CanonicalWorkspace | undefined): WorkspaceState {
   if (ws?.lifecycle === 'closing') return 'deleting';
   if (ws?.lifecycle === 'dormant') return 'setup_required';
   return 'active';
-}
-
-function isRevokedSession(error: unknown): boolean {
-  if (error instanceof HTTPException) return error.status === 401;
-  return (error as { code?: unknown } | null)?.code === 'session_token_revoked';
 }
 
 /** The candidates of a caller that is not a person signed in as themselves: one account, its live rows. */
@@ -217,6 +214,18 @@ async function readWorkspaceWithoutLiveProject(c: Context<AppEnv>, gated: Canoni
   });
 }
 
+/**
+ * The role ladder (`workspaceRoleFor`) names people. A workspace agent's
+ * session authorizes as the agent's service account, which holds no rung, yet
+ * the engine lets it read its own workspace. It reads the record as `member`,
+ * the lowest rung: `kortix workspaces clone` probes this record from every
+ * session, so without it no workspace agent could get the code.
+ */
+async function readerWithoutRung(actor: Awaited<ReturnType<typeof actorOf>>, workspaceId: string): Promise<WorkspaceRole | null> {
+  const verdict = await authorize(actor, PROJECT_ACTIONS.PROJECT_READ, { type: 'project', id: workspaceId });
+  return verdict.allowed ? 'member' : null;
+}
+
 /** `GET /v1/workspaces/:id`: the Workspace. `404 workspace_not_found` for every id it does not serve. */
 export async function readWorkspace(c: Context<AppEnv>): Promise<Response> {
   const id = recordId(c);
@@ -230,7 +239,8 @@ export async function readWorkspace(c: Context<AppEnv>): Promise<Response> {
   const userId = c.get('userId') as string | undefined;
   const settings = await readWorkspaceSettings(id, userId ?? null);
   const ws = c.get(CANONICAL_WORKSPACE_VAR as never) as CanonicalWorkspace | undefined;
-  const role = await workspaceRoleFor(await actorOf(c, record.loaded.row.accountId), id);
+  const actor = await actorOf(c, record.loaded.row.accountId);
+  const role = (await workspaceRoleFor(actor, id)) ?? (await readerWithoutRung(actor, id));
   if (!role) return workspaceNotFound(c);
   return c.json(workspaceBody(record, settings, ws, role, await workspaceSplitNotice(record.loaded.row.accountId)));
 }
@@ -240,7 +250,7 @@ export async function readWorkspace(c: Context<AppEnv>): Promise<Response> {
  * that `PATCH /v1/workspaces/:id` refuses, each with the route that writes it.
  * `null`: derived, nothing writes it directly.
  */
-export const WORKSPACE_READ_ONLY_FIELDS: Readonly<Record<string, string | null>> = {
+const WORKSPACE_READ_ONLY_FIELDS: Readonly<Record<string, string | null>> = {
   mfa_required: 'PATCH /v1/workspaces/:workspaceId/iam/mfa-required',
   session_max_lifetime_minutes: 'PATCH /v1/workspaces/:workspaceId/iam/session-policy',
   session_idle_timeout_minutes: 'PATCH /v1/workspaces/:workspaceId/iam/session-policy',
@@ -264,8 +274,8 @@ export const WORKSPACE_READ_ONLY_FIELDS: Readonly<Record<string, string | null>>
   project_id: null,
 };
 
-/** The first read-only key in a PATCH body, or null. Pure: exported for tests. */
-export function readOnlyWorkspaceField(body: Record<string, unknown>): string | null {
+/** The first read-only key in a PATCH body, or null. Pure. */
+function readOnlyWorkspaceField(body: Record<string, unknown>): string | null {
   return Object.keys(body).find((key) => Object.prototype.hasOwnProperty.call(WORKSPACE_READ_ONLY_FIELDS, key)) ?? null;
 }
 

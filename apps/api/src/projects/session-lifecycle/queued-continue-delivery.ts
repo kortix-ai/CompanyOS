@@ -19,6 +19,7 @@ import { MAX_LIVE_PLACEMENT_REPAIRS, hasLaterForwardedSibling, recordRepairedFor
 import { MAX_RUNTIME_UNREACHABLE_RETRIES, markCommandFailed, parkPromptForUnreachableRuntime, markCommandForwarded, requeueForAdmission, requeueUnlandedPrompt, markCommandSucceeded, type SessionLifecycleCommandRow, type QueuedContinueSessionPayload } from './store';
 import type { PromptOverridesWire, PromptPartWire } from './prompt-payload';
 import { DELIVERY_FAILURE_COPY, type SessionDeliveryOutcome, type SessionInvocationSource } from './types';
+import { inboxPromptPersonId, promptAuthorName } from '../lib/prompt-author';
 
 
 const NOT_LANDED_RETRY_DELAY_MS = 2_000;
@@ -29,7 +30,7 @@ async function settleDelivery(row: SessionLifecycleCommandRow, delivery: Exclude
     const parked = await parkPromptForUnreachableRuntime(row, DELIVERY_FAILURE_COPY[delivery], { sessionId: row.sessionId });
     if (parked.parked) return 'queued';
     await markCommandFailed(row, `${DELIVERY_FAILURE_COPY.unreachable} after ${MAX_RUNTIME_UNREACHABLE_RETRIES} attempts`,
-      { retryable: false, attempts: row.attempts, sessionId: row.sessionId });
+      { retryable: false, attempts: row.attempts, sessionId: row.sessionId, runtimeUnreachable: true });
     return 'failed';
   }
   if (delivery === 'not-landed') {
@@ -159,13 +160,15 @@ export async function deliverQueuedContinue(row: SessionLifecycleCommandRow, pay
         materializationKey: row.commandId,
         ...(noReply ? { noReply } : {}),
         ...(payload.bindTurnIdentity ? { bindTurnIdentity: true } : {}),
+        authorUserId: inboxPromptPersonId({ actorUserId: row.actorUserId, payload }),
         ...(payload.clientMessageId ? {} : { queuedAt: row.createdAt }),
       }, attempt > 0 ? `${row.commandId}:r${attempt}` : row.commandId, tl,
       async () => {
         // Nothing runs in a session that works a goal while a person has paused or closed
         // that goal, or the project's goals flag is off, whoever queued the prompt (the
         // engine, a heartbeat, or the session itself). A non-goal session is unaffected.
-        const refusal = await goalPromptRefusal(row.sessionId!);
+        // In a chat that owns its goal only the goal's own prompts are refused.
+        const refusal = await goalPromptRefusal(row.sessionId!, { source: row.source, text });
         if (refusal) throw new PromptDeliveryRefused(409, 'goal_not_running', refusal);
         if (payload.clientMessageId) await assertInboxDeliveryActive(row);
       });
@@ -224,7 +227,8 @@ async function steerWireMessageId(row: SessionLifecycleCommandRow, payload: Queu
  *   it, so a read-back right after the POST reports it missing.
  * - No placement repair: a steer sits below the running step's assistant
  *   until the next step reads it. That is the strand shape the repair removes.
- * - No turn-identity bind: admission proved the sender is the turn's prompter.
+ * - No turn-identity bind: anyone allowed to send to the session steers its
+ *   live turn (2026-11-04); the steered message carries its own author.
  *
  * It keeps one step of placement: a row marked `remintOnDelivery` gets a new
  * id above the live transcript before the POST. That id is either minted
@@ -237,8 +241,9 @@ async function steerWireMessageId(row: SessionLifecycleCommandRow, payload: Queu
  * (`keepsWireIdOnStableRuntime`): the web's order by user message id is the
  * only reason left to re-mint.
  *
- * `turn_ended` (409 `no_active_turn`) and `unsupported` (501) fall back to
- * `queue` and requeue the row due now, with the claim's attempt given back.
+ * `turn_ended` (409 `no_active_turn`) and `unsupported` (501) requeue the row
+ * due now, with the claim's attempt given back. `turn_ended` records the
+ * refused turn, so the row starts the next turn instead of re-steering.
  */
 export async function deliverSteer(row: SessionLifecycleCommandRow, payload: QueuedContinueSessionPayload,
   text: string, steerInto: string, tl: ProvisionTimeline): Promise<Status> {
@@ -249,12 +254,19 @@ export async function deliverSteer(row: SessionLifecycleCommandRow, payload: Que
     if (payload.clientMessageId) await assertInboxDeliveryActive(row);
     const target = await awakeDeliveryTarget(sessionId);
     if (!target?.externalId || !target.runtimeSessionId) throw new SteerNotTaken('turn_ended');
-    const wireMessageId = payload.remintOnDelivery
-      ? await steerWireMessageId(row, payload, target.externalId)
-      : payload.wireMessageId!;
+    // A producer that minted no wire id (a trigger, a first prompt) gets one
+    // above the live transcript, like a `remintOnDelivery` row.
+    const [wireMessageId, author] = await Promise.all([
+      payload.remintOnDelivery || !payload.wireMessageId
+        ? steerWireMessageId(row, payload, target.externalId)
+        : payload.wireMessageId!,
+      // The model reads who wrote a steered message too, as for every person's prompt.
+      promptAuthorName(inboxPromptPersonId({ actorUserId: row.actorUserId, payload })),
+    ]);
     const delivery = await postPrompt(target.externalId, target.runtimeSessionId, promptText, row.actorUserId!, sessionId,
       `${attempt > 0 ? `${row.commandId}:r${attempt}` : row.commandId}:steer`, {
         ...(payload.parts?.length ? { parts: payload.parts } : {}),
+        ...(author ? { author } : {}),
         wireMessageId, materializationKey: row.commandId,
         accountId: row.accountId, projectId: row.projectId, sandboxRecord: target.record, steer: true,
       });
@@ -270,7 +282,7 @@ export async function deliverSteer(row: SessionLifecycleCommandRow, payload: Que
       logger.info('[session-lifecycle] steer not taken — sending it as a queued prompt', {
         session_id: sessionId, command_id: row.commandId, reason: e.reason,
       });
-      await recordSteerFallback(row, e.reason);
+      await recordSteerFallback(row, e.reason, e.reason === 'turn_ended' ? steerInto : undefined);
       await requeueForAdmission(row, 'turn_active', new Date());
       return 'queued';
     }

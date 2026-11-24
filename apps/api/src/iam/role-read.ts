@@ -1,11 +1,12 @@
 // Read model of roles: `kortix.roles` and `kortix.role_permissions`. Every role
 // read outside iam/ goes through here.
 //
-// Each function returns the query its caller ran inline, unexecuted and
-// verbatim (see membership-read.ts): same statements, same order.
+// One reader per table and projection family (KRTX-4587): a caller that
+// needs one field reads it off the full row, it does not add a new export.
 import { iamRoleActions, iamRoles } from '@kortix/db';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import { db } from '../shared/db';
+import { storedAction } from './workspace-scope';
 
 /** `{ roleAccountId }` of a role the account may bind: a system role or its own. */
 export function bindableRoleRow(roleId: string, accountId: string) {
@@ -45,7 +46,8 @@ export function systemRoleDescriptionRows() {
     .where(isNull(iamRoles.accountId));
 }
 
-/** The actions a role grants. */
-export function roleActionRows(roleId: string) {
-  return db.select({ action: iamRoleActions.action }).from(iamRoleActions).where(eq(iamRoleActions.roleId, roleId));
+/** The actions a role grants, by their legacy names (a renamed `workspace.*` row reads as its legacy name). */
+export async function roleActionRows(roleId: string): Promise<Array<{ action: string }>> {
+  const rows = await db.select({ action: iamRoleActions.action }).from(iamRoleActions).where(eq(iamRoleActions.roleId, roleId));
+  return rows.map((r) => ({ action: storedAction(r.action) }));
 }

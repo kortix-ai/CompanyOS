@@ -3,7 +3,7 @@
 import { localizedCopy } from './localized-copy';
 
 import { Button } from '@kortix/ui/button';
-import { InfoBanner } from '@kortix/ui/info-banner';
+import { Alert as BannerAlert, AlertDescription as BannerAlertDescription} from '@kortix/ui/alert';
 import Loading from '@kortix/ui/loading';
 import { SettingsRow, SettingsRowGroup } from '@kortix/ui/settings-row';
 import { Skeleton } from '@kortix/ui/skeleton';
@@ -20,9 +20,9 @@ import { useRouter } from 'next/navigation';
 import { SettingsTabHeader } from '@kortix/ui/customize/settings/settings-tab-header';
 import { useSettingsAccountId } from '../use-settings-account-id';
 
-export type ProviderRowStatus = 'loading' | 'connected' | 'disconnected' | 'error' | 'unavailable';
+type ProviderRowStatus = 'loading' | 'connected' | 'disconnected' | 'error' | 'unavailable';
 
-export interface ConnectedAccountsTabViewProps {
+interface ConnectedAccountsTabViewProps {
   canManageAccount?: boolean;
 
   githubStatus?: ProviderRowStatus;
@@ -38,7 +38,7 @@ export interface ConnectedAccountsTabViewProps {
   copy?: ConnectedAccountsTabCopy;
 }
 
-export interface ConnectedAccountsTabCopy {
+interface ConnectedAccountsTabCopy {
   checking: string;
   connectedAs: (name: string) => string;
   unavailable: string;
@@ -134,7 +134,7 @@ export function ConnectedAccountsTabView({
             </SettingsRow>
           </SettingsRowGroup>
           {githubStatus === 'error' && githubError ? (
-            <InfoBanner tone="warning">{githubError}</InfoBanner>
+            <BannerAlert variant="warning" ><BannerAlertDescription>{githubError}</BannerAlertDescription></BannerAlert>
           ) : null}
           {githubStatus === 'connected' &&
           githubOtherInstallationsCount > 0 &&
@@ -152,7 +152,7 @@ export function ConnectedAccountsTabView({
            only provider on this pane, and installing it writes the account. An
            empty `SettingsRowGroup` would draw a bordered box around nothing, so
            the pane says why it is empty instead. */
-        <InfoBanner tone="info">{copy.adminOnly}</InfoBanner>
+        <BannerAlert variant="default" ><BannerAlertDescription>{copy.adminOnly}</BannerAlertDescription></BannerAlert>
       )}
     </div>
   );

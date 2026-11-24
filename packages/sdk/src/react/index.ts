@@ -15,6 +15,10 @@ export {
 // One connector action's output as a cached query, with typed connector errors.
 export { useConnectorQuery, type ConnectorQueryOptions } from './use-connector-query';
 
+// The host-neutral React clock: elapsed labels and relative times tick on one
+// interval instead of each surface hand-rolling its own.
+export { useNow } from './use-now';
+
 // The one call a host makes on every identity change (sign-out, a different
 // user signing in) to drop the SDK's per-user in-memory session state.
 export { resetIdentityState } from './reset-identity-state';
@@ -146,7 +150,7 @@ export {
   type UseWorkspaceOptions,
 } from './use-workspaces';
 export { useWorkspaceSecrets, useProjectSecrets, workspaceSecretsKey, projectSecretsKey } from './use-project-secrets';
-export { useAccountSecretResources, useSessionProviderSecretPools, useSubscriptionUsage, useSubscriptionConnections } from './use-provider-secrets';
+export { useAccountSecretResources, useSessionProviderSecretPools, useSubscriptionUsage, useSubscriptionUsages, useSubscriptionConnections } from './use-provider-secrets';
 export {
   useWorkspaceTriggers, useProjectTriggers,
   workspaceTriggersKey, projectTriggersKey,
@@ -172,9 +176,31 @@ export {
   useSessionGoal,
   type ProjectGoalControlInput, type WorkspaceGoalControlInput,
 } from './use-goals';
+export {
+  useWorkspaceEvalActions,
+  useWorkspaceEvalCompare,
+  useWorkspaceEvalDatasets,
+  useWorkspaceEvalJob,
+  useWorkspaceEvalJobs,
+  useWorkspaceEvalSuites,
+  useWorkspaceEvalTask,
+  useWorkspaceEvalTaskCatalog,
+  useWorkspaceEvalTaskFile,
+  useWorkspaceEvalTaskResults,
+  useWorkspaceEvalTasks,
+  type WorkspaceEvalTaskSource,
+  useWorkspaceEvalTrial,
+  useWorkspaceEvalTrialFile,
+} from './use-evals';
+export {
+  useWorkspaceCalendarActions,
+  useWorkspaceCalendarItem,
+  useWorkspaceCalendarItems,
+  useWorkspaceCalendarPeople,
+} from './use-calendar';
 export { useRoom, useRoomConversations, useRoomMessages, useRoomThread, useRooms, useSpaceRoom } from './use-rooms';
 export { usePeerMessages, useReachableAgents, useSessionWorkflows, useTeamTasks, useTeammates } from './use-multi-agent';
-export { prefetchArtifact, useArtifact, useArtifactMutations, useArtifactText, useArtifactTypes, useArtifactVersions, useArtifacts } from './use-artifacts';
+export { useArtifactFolders, useArtifactFolderMutations, prefetchArtifact, useArtifact, useArtifactMutations, useArtifactText, useArtifactTypes, useArtifactVersions, useArtifacts } from './use-artifacts';
 export {
   useApproveCaptureDevice,
   useApproveCaptureEnrollment,
@@ -203,6 +229,7 @@ export {
 export { useSessionMessageAuthors } from './use-session-message-authors';
 export { useSessionModelUsage } from './use-session-model-usage';
 export { useSessionUsage } from './use-session-usage';
+export { RUNNING_SESSIONS_LIMIT, useRunningSessions } from './use-running-sessions';
 export { useChangeRequests, changeRequestsKey } from './use-change-requests';
 export { useGatewayRoutingPolicy, gatewayRoutingPolicyKey } from './use-gateway-routing-policy';
 export {
@@ -301,6 +328,9 @@ export {
   useDeleteWorkspaceSessionGroup, useDeleteProjectSessionGroup,
   useWorkspaceSessionGroups, useProjectSessionGroups,
   useRenameWorkspaceSessionGroup, useRenameProjectSessionGroup,
+  useUpdateWorkspaceSessionGroup,
+  useSetWorkspaceSessionGroupSharing,
+  useSetWorkspaceSessionGroupTabs,
   useReorderWorkspaceSessionGroups, useReorderProjectSessionGroups,
   useSetWorkspaceSessionGroup, useSetProjectSessionGroup,
 } from './use-session-groups';
@@ -312,6 +342,7 @@ export * from './use-review-summary';
 export * from './use-notifications';
 export * from './use-session-list-state';
 export * from './session-cache-write';
+export * from './use-cached-workspace-sessions';
 export * from './invalidate-project';
 export * from './use-feature-flag';
 export * from './use-project-memory';

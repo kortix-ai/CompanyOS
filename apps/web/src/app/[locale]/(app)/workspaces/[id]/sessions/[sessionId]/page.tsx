@@ -28,6 +28,7 @@ import { errorToast, successToast } from '@kortix/ui/toast';
 import { ErrorState } from '@kortix/ui/error-state';
 import { useOpenSessionRead } from '@/features/notifications/use-open-session-read';
 import { useAuth } from '@/features/providers/auth-provider';
+import { markScreenReady } from '@/lib/analytics/screen-timing';
 import { MissingSessionBoundary } from '@/features/session/missing-session-boundary';
 import {
   SessionImageBanner,
@@ -48,6 +49,7 @@ import {
 import {
   pendingSessionPromptForRecovery,
   provisioningFailurePresentation,
+  inboxPromptToRequeue,
   recoveryPromptToSendOnRetry,
 } from '@kortix/ui/session/status/provisioning-failure';
 import { isFirstPromptRow } from '@kortix/ui/session/composer/queue-projection';
@@ -96,7 +98,7 @@ import {
   shouldPaintFatalCard,
   shouldPaintTerminalCard,
 } from '@kortix/ui/terminal';
-import { useAccountState } from '@kortix/ui/internal/billing/index';
+import { useAccountState, useFreeGrantUnspent } from '@kortix/ui/internal/billing/index';
 import { ReconnectGitHubButton, useRepositoryDisconnect } from '@kortix/ui/workspace/repository-disconnected';
 import { useSandboxConnection } from '@/hooks/platform/use-sandbox-connection';
 import {
@@ -125,6 +127,7 @@ import {
   getProject,
   isRepositoryDisconnectedError,
   isSessionFresh,
+  listSessionPrompts,
   sessionStartKey,
   setActiveInstanceCookie,
   updateProjectSession,
@@ -176,6 +179,8 @@ export default function ProjectSessionPage() {
       key={`${projectId}/${sessionId}`}
       projectId={projectId}
       sessionId={sessionId}
+      // The bare frame: the skeleton's header mounts its own session readers.
+      pending={<HeaderlessSessionSurface>{null}</HeaderlessSessionSurface>}
       fallback={
         <InlineSessionError
           title={tSessionPage('missing.title')}
@@ -242,6 +247,11 @@ function ProjectSessionView({ projectId, sessionId }: { projectId: string; sessi
   const { data: accountState } = useAccountState({
     accountId: projectAccountId,
   });
+  // KRTX-4713: the person's free credits may sit unspent in their first
+  // workspace while THIS one holds none by design — then opening the session
+  // is not a paywall moment; the send gate owns the modal on an actual
+  // blocked turn.
+  const freeGrantUnspent = useFreeGrantUnspent(accountState);
   const openUpgradeDialog = useUpgradeDialogStore((s) => s.openUpgradeDialog);
   const accountLoaded = !!accountState;
   // ONE resolver for "what is this account's billing situation" (see
@@ -265,11 +275,23 @@ function ProjectSessionView({ projectId, sessionId }: { projectId: string; sessi
     enabled: !!user && !!projectId,
   });
   const initialRuntimeSessionId = findInitialSessionPin(currentProjectSession);
+  // The server inbox holds a new session's first prompt: the create stores it
+  // as a durable row and strips the text from `metadata.pending_prompt`. When
+  // the box never boots, that row is the only copy, so the failure card reads
+  // it. Same query key as the chat's own read, so a mounted chat shares it.
+  const recoveryInbox = useSessionPrompts(projectId, sessionId, { enabled: !!user });
   const pendingPrompt = pendingSessionPromptForRecovery(
     sessionId,
     currentProjectSession?.metadata,
     initialRuntimeSessionId,
+    recoveryInbox.prompts,
   );
+  // A dead-lettered first prompt is never claimed again on its own. Retry arms
+  // the row here, and the effect below checks its state ONCE, after the
+  // restarted box answers: a row still queued at the click can dead-letter
+  // while the box restarts, and re-queued earlier, the drain spends its
+  // attempts on a box that is still provisioning.
+  const armedInboxRetryId = useRef<string | null>(null);
 
   // ONE hook owns the runtime: POST /start (idempotent provision/resume + the
   // server-resolved runtime session pin), the sandbox switch, the SSE stream, readiness
@@ -366,6 +388,7 @@ function ProjectSessionView({ projectId, sessionId }: { projectId: string; sessi
     // durable row since the create transaction, and the restart alone re-arms
     // delivery. An `initial_prompt` (agent, trigger, channel sessions) is
     // re-delivered by the restart itself, so it is shown but never sent here.
+    armedInboxRetryId.current = pendingPrompt?.inboxPrompt?.promptId ?? null;
     const promptToSend = recoveryPromptToSendOnRetry(pendingPrompt);
     if (promptToSend) {
       void startSessionWithPrompt(projectId, sessionId, {
@@ -426,6 +449,35 @@ function ProjectSessionView({ projectId, sessionId }: { projectId: string; sessi
   const runtimeConnectionStatus = useRuntimeConnectionStore((s) => s.status);
   const runtimeVersion = useRuntimeConnectionStore((s) => s.harnessVersion);
   const runtimeProbeError = useRuntimeConnectionStore((s) => s.runtimeError);
+  const retryInboxPrompt = recoveryInbox.retry;
+  const inboxRetryCheckRunning = useRef(false);
+  useEffect(() => {
+    const armedId = armedInboxRetryId.current;
+    if (!armedId || inboxRetryCheckRunning.current) return;
+    if (session.stage !== 'ready' || !runtimeProbed || !runtimeHealthy) return;
+    // Read the inbox now, not the cached poll: a cached `queued` from before the
+    // row dead-lettered would skip the re-queue. The arm is cleared only after a
+    // read succeeds; a failed read leaves it for the next readiness change.
+    inboxRetryCheckRunning.current = true;
+    void listSessionPrompts(projectId, sessionId)
+      .then(({ prompts }) => {
+        if (armedInboxRetryId.current !== armedId) return;
+        armedInboxRetryId.current = null;
+        const promptId = inboxPromptToRequeue(armedId, prompts);
+        if (!promptId) return;
+        // Re-queueing a row that is already queued only promotes it: the server
+        // keeps one row per prompt, so a second click cannot duplicate it.
+        return retryInboxPrompt(promptId).then(() => undefined);
+      })
+      .catch((error: unknown) => {
+        errorToast(
+          error instanceof Error ? error.message : tI18nHardcoded.raw('i18nComplete.text4778a1377329'),
+        );
+      })
+      .finally(() => {
+        inboxRetryCheckRunning.current = false;
+      });
+  }, [session.stage, runtimeProbed, runtimeHealthy, retryInboxPrompt, projectId, sessionId, tI18nHardcoded]);
   // Only an ESTABLISHED runtime is woken. A session whose first sandbox is
   // still being built (`external_id` null, "Sandbox build running…") is not
   // stuck — it is doing minutes of legitimate work with no client-visible
@@ -533,6 +585,9 @@ function ProjectSessionView({ projectId, sessionId }: { projectId: string; sessi
   const billingGatedRef = useRef(false);
   useEffect(() => {
     if (!billingBlocked || billingGatedRef.current) return;
+    // Free credits unspent elsewhere (or the claimed workspace's state has not
+    // loaded): hold the modal until an actual blocked turn asks for it.
+    if (freeGrantUnspent !== false) return;
     billingGatedRef.current = true;
     openUpgradeDialog(
       billingDialogArgs(billingState, accountState, projectAccountId, tI18nComplete),
@@ -541,6 +596,7 @@ function ProjectSessionView({ projectId, sessionId }: { projectId: string; sessi
     billingBlocked,
     billingState,
     accountState,
+    freeGrantUnspent,
     openUpgradeDialog,
     projectAccountId,
     tI18nComplete,
@@ -634,6 +690,11 @@ function ProjectSessionView({ projectId, sessionId }: { projectId: string; sessi
   // box is still waking and without the chat having mounted. Latched: the store only ever grows for a live session,
   // but a transient empty read must never resurrect the shell.
   const hasTranscript = useTranscriptPresence(session.savedTranscript);
+  // `screen_ready` for this screen: its saved conversation is on screen. A
+  // new session has none and reports nothing (lib/analytics/screen-timing.ts).
+  useEffect(() => {
+    if (hasTranscript) markScreenReady();
+  }, [hasTranscript]);
   const repositoryDisconnect = useRepositoryDisconnect(projectId);
   // A session whose clone predates a repository replacement still has its
   // transcript. Do not replace a readable conversation with a failure card.

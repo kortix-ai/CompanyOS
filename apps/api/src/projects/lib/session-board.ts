@@ -18,6 +18,12 @@
  *   the newest turn died (failed, runtime gone)   failed
  *   the newest turn completed with an answer      completed
  *   anything else                                 idle
+ *
+ * `work_state` is the same verdict in the words a script waits on: is the
+ * work done. `working` and `needs_input` are `running`; the others keep
+ * their name. `status` stays the stored row lifecycle and `runtime_status`
+ * the computer: a child that answered keeps `status: running` and
+ * `runtime_status: active` until its idle computer stops.
  */
 import {
   AGENT_HANDLE_KEY,
@@ -27,11 +33,13 @@ import {
   type SessionAttention,
   type SessionBoardState,
   type SessionInbound,
+  type SessionWorkState,
 } from '@kortix/api-contract/multi-agent';
 import type { SessionWorking } from '@kortix/api-contract';
-import { connectorCalls, sessionPendingPermissions, sessionPendingQuestions, sessionTurns } from '@kortix/db';
-import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
+import { connectorCalls, sessionColleagueAccess, sessionPendingPermissions, sessionPendingQuestions, sessionTurns } from '@kortix/db';
+import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { approvalNotExpired } from '../../connectors/approval-expiry';
+import { pendingAskNotExpired } from './session-asks';
 import { db } from '../../shared/db';
 import { isUuid } from '../../shared/validate';
 import { isRequestedStopName } from '../session-turn-ledger';
@@ -54,6 +62,7 @@ export const RESULT_EXCERPT_MAX_CHARS = 280;
 
 export interface SessionBoardFields {
   board_state: SessionBoardState;
+  work_state: SessionWorkState;
   attention: SessionAttention;
   last_activity_at: string | null;
   result_excerpt: string | null;
@@ -62,11 +71,16 @@ export interface SessionBoardFields {
   inbound: SessionInbound;
 }
 
+/** `work_state` of a board state. */
+export function workStateOfBoard(state: SessionBoardState): SessionWorkState {
+  return state === 'working' || state === 'needs_input' ? 'running' : state;
+}
+
 type BoardRow = Pick<ProjectSessionRow, 'sessionId' | 'status' | 'metadata'>;
 
 type LastEnded = { endReason: string | null; errorName: string | null; endedAt: Date | null };
 
-function metaString(metadata: unknown, key: string): string | null {
+export function metaString(metadata: unknown, key: string): string | null {
   const value = ((metadata ?? {}) as Record<string, unknown>)[key];
   return typeof value === 'string' && value.trim() ? value : null;
 }
@@ -114,6 +128,7 @@ export function deriveSessionBoard(input: {
     : null;
   return {
     board_state: state,
+    work_state: workStateOfBoard(state),
     attention,
     last_activity_at: lastActivity,
     result_excerpt: excerpt ? excerpt.slice(0, RESULT_EXCERPT_MAX_CHARS) : null,
@@ -121,6 +136,21 @@ export function deriveSessionBoard(input: {
     team_lead_session_id: sessionTeamLead(row.metadata),
     inbound: sessionInbound(row.metadata),
   };
+}
+
+/** The open, unexpired asks of an ask table on these sessions, as the asker or the surface. */
+function openAskRows(
+  table: typeof sessionPendingQuestions | typeof sessionPendingPermissions | typeof sessionColleagueAccess,
+  decided: typeof sessionPendingQuestions.answeredAt | typeof sessionPendingPermissions.decidedAt | typeof sessionColleagueAccess.decidedAt,
+  sessionIds: string[],
+) {
+  return db.select({ sessionId: table.sessionId, surfaceSessionId: table.surfaceSessionId })
+    .from(table)
+    .where(and(
+      or(inArray(table.sessionId, sessionIds), inArray(table.surfaceSessionId, sessionIds)),
+      isNull(decided),
+      pendingAskNotExpired(table.expiresAt),
+    ));
 }
 
 /**
@@ -132,22 +162,9 @@ export function deriveSessionBoard(input: {
 async function readAttention(sessionIds: string[]): Promise<Map<string, SessionAttention>> {
   const out = new Map<string, SessionAttention>();
   const uuids = sessionIds.filter(isUuid);
-  const askOpen = (expiresAt: typeof sessionPendingQuestions.expiresAt | typeof sessionPendingPermissions.expiresAt) => or(isNull(expiresAt), gt(expiresAt, sql`NOW()`));
-  const [questions, permissions, approvals] = await Promise.all([
-    db.select({ sessionId: sessionPendingQuestions.sessionId, surfaceSessionId: sessionPendingQuestions.surfaceSessionId })
-      .from(sessionPendingQuestions)
-      .where(and(
-        or(inArray(sessionPendingQuestions.sessionId, sessionIds), inArray(sessionPendingQuestions.surfaceSessionId, sessionIds)),
-        isNull(sessionPendingQuestions.answeredAt),
-        askOpen(sessionPendingQuestions.expiresAt),
-      )),
-    db.select({ sessionId: sessionPendingPermissions.sessionId, surfaceSessionId: sessionPendingPermissions.surfaceSessionId })
-      .from(sessionPendingPermissions)
-      .where(and(
-        or(inArray(sessionPendingPermissions.sessionId, sessionIds), inArray(sessionPendingPermissions.surfaceSessionId, sessionIds)),
-        isNull(sessionPendingPermissions.decidedAt),
-        askOpen(sessionPendingPermissions.expiresAt),
-      )),
+  const [questions, permissions, approvals, colleagueAccess] = await Promise.all([
+    openAskRows(sessionPendingQuestions, sessionPendingQuestions.answeredAt, sessionIds),
+    openAskRows(sessionPendingPermissions, sessionPendingPermissions.decidedAt, sessionIds),
     uuids.length === 0
       ? Promise.resolve([] as { sessionId: string | null }[])
       : db.selectDistinct({ sessionId: connectorCalls.sessionId })
@@ -159,12 +176,14 @@ async function readAttention(sessionIds: string[]): Promise<Map<string, SessionA
           isNull(connectorCalls.resolvedAt),
           approvalNotExpired,
         )),
+    openAskRows(sessionColleagueAccess, sessionColleagueAccess.decidedAt, sessionIds),
   ]);
   const mark = (ids: Array<string | null>, kind: SessionAttention) => {
     for (const id of ids) if (id && (kind === 'question' || !out.has(id))) out.set(id, kind);
   };
   for (const row of approvals) mark([row.sessionId ? String(row.sessionId) : null], 'approval');
   for (const row of permissions) mark([row.sessionId, row.surfaceSessionId], 'approval');
+  for (const row of colleagueAccess) mark([row.sessionId, row.surfaceSessionId], 'approval');
   for (const row of questions) mark([row.sessionId, row.surfaceSessionId], 'question');
   return out;
 }
@@ -208,6 +227,7 @@ export async function readSessionBoards(
 /** The board fields of a row the caller may not open: nothing from its metadata. */
 export const HIDDEN_SESSION_BOARD: SessionBoardFields = {
   board_state: 'idle',
+  work_state: 'idle',
   attention: null,
   last_activity_at: null,
   result_excerpt: null,

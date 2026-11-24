@@ -192,10 +192,14 @@ export function applySessionLogPage(state: SessionLogState, page: SessionLogPage
   // turns the box page delivered after it, and they stay (a deletion there comes as a
   // tombstone). Two held records there are provisional and the page still settles them: a
   // streaming reply (one pi abandoned has no final record) and a queued prompt (its seq is
-  // no position in the log).
+  // no position in the log). A page of a newer generation (a box restarted from the stored
+  // log) settles the whole tail: a reply the old box never journaled is gone with it.
   if (thread !== null && held) {
     const from = page.has_more ? (page.messages[0]?.seq ?? Infinity) : -Infinity;
-    const last = page.messages.reduce((max, m) => (m.seq < SESSION_LOG_QUEUED_SEQ_FLOOR ? Math.max(max, m.seq) : max), -Infinity);
+    const last =
+      page.generation > state.generation
+        ? Infinity
+        : page.messages.reduce((max, m) => (m.seq < SESSION_LOG_QUEUED_SEQ_FLOOR ? Math.max(max, m.seq) : max), -Infinity);
     const to = beforeSeq ?? Infinity;
     const kept = new Set(page.messages.map((m) => m.message_id));
     const provisional = (m: SessionLogMessage) => m.status === 'streaming' || m.seq >= SESSION_LOG_QUEUED_SEQ_FLOOR;

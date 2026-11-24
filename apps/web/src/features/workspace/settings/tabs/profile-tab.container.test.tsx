@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, jest, mock, test } from 'bun:test';
 import { createElement, type ReactNode } from 'react';
+import { configureKortix, type PersonDeletionPlan } from '@kortix/sdk';
 import type { ReactTestInstance } from 'react-test-renderer';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { notifyManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, create } from 'react-test-renderer';
 import * as realModal from '@kortix/ui/modal';
 import { ConfirmDialog } from '@kortix/ui/confirm-dialog';
@@ -103,7 +104,11 @@ mock.module('@kortix/ui/radio-group', uiRadioGroupMock);
 const translate = (key: string) => key.split('.').pop() || key;
 mock.module('@/i18n/use-translations', () => ({
   useLocale: () => 'en',
-  useTranslations: () => Object.assign((key: string) => translate(key), { raw: translate }),
+  useTranslations: () => Object.assign(
+    (key: string, values?: Record<string, string | number>) =>
+      key.endsWith('members') ? `${values?.count} members` : translate(key),
+    { raw: translate },
+  ),
 }));
 
 const { ProfileTab } = await import('./profile-tab');
@@ -484,4 +489,83 @@ describe('ProfileTab — scheduled deletion cancellation', () => {
       }
     });
   }
+});
+
+describe('ProfileTab — live deletion-plan responses', () => {
+  let mounted: Awaited<ReturnType<typeof mountTab>> | undefined;
+  let requests: string[] = [];
+
+  afterEach(async () => {
+    if (mounted) await act(async () => mounted?.renderer.unmount());
+    mounted?.client.clear();
+    mounted = undefined;
+    requests = [];
+    notifyManager.setScheduler((callback) => setTimeout(callback, 0));
+    configureKortix({ backendUrl: '', getToken: async () => null, fetch: globalThis.fetch });
+  });
+
+  async function openWithPlan(answer: () => Response) {
+    notifyManager.setScheduler(queueMicrotask);
+    configureKortix({
+      backendUrl: 'https://api.example.test',
+      getToken: async () => 'synthetic-token',
+      fetch: Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith('/account/deletion-plan')) {
+          requests.push(`${init?.method ?? 'GET'} ${String(input)}`);
+          return answer();
+        }
+        return Response.json([]);
+      }, { preconnect: globalThis.fetch.preconnect }),
+    });
+    mounted = await mountTab();
+    const root = mounted.renderer.root;
+    expect(requests).toHaveLength(0);
+    const trigger = root.findAll((n) => n.props.onClick && n.props.children === 'deleteAccount')[0];
+    await act(async () => trigger.props.onClick());
+    expect(requests).toContain('GET https://api.example.test/account/deletion-plan');
+    return root;
+  }
+
+  const text = (root: ReactTestInstance) => root.findAllByType('li')
+    .map((node) => node.children.filter((child) => typeof child === 'string').join(''));
+  const confirm = (root: ReactTestInstance) => root.findAll(
+    (node) => node.props.variant === 'destructive' && node.props.onClick,
+  )[0];
+
+  test('maps served deleted/left names and blocker member counts, disabling confirmation', async () => {
+    const plan: PersonDeletionPlan = {
+      delete_workspaces: ['synthetic-delete'],
+      leave_workspaces: ['synthetic-leave'],
+      workspace_names: { 'synthetic-delete': 'Deleted workshop', 'synthetic-leave': 'Left workshop' },
+      blockers: [{ workspace_id: 'synthetic-blocker', name: 'Shared workshop', member_count: 7 }],
+    };
+    const root = await openWithPlan(() => Response.json(plan));
+    expect(text(root)).toContain('Deleted workshop');
+    expect(text(root)).toContain('Left workshop');
+    expect(text(root).some((line) => line.includes('Shared workshop') && line.includes('7'))).toBe(true);
+    await act(async () => confirmInput(root).props.onChange({ target: { value: 'delete' } }));
+    expect(confirm(root).props.disabled).toBe(true);
+  });
+
+  test('an older plan without served names falls back to workspace ids and permits confirmation', async () => {
+    const plan: PersonDeletionPlan = {
+      delete_workspaces: ['synthetic-delete-id'], leave_workspaces: ['synthetic-leave-id'], blockers: [],
+    };
+    const root = await openWithPlan(() => Response.json(plan));
+    expect(text(root)).toContain('synthetic-delete-id');
+    expect(text(root)).toContain('synthetic-leave-id');
+    await act(async () => confirmInput(root).props.onChange({ target: { value: 'delete' } }));
+    expect(confirm(root).props.disabled).toBe(false);
+  });
+
+  test('a rejected plan keeps generic consequences and the confirmation-word gate', async () => {
+    const root = await openWithPlan(() => Response.json({ message: 'synthetic unavailable' }, { status: 503 }));
+    expect(root.findAll((node) => node.props['data-testid'] === 'deletion-plan')).toHaveLength(0);
+    expect(text(root)).toContain('agentsDeleted');
+    expect(text(root)).toContain('threadsDeleted');
+    expect(text(root)).toContain('billingRecordsKept');
+    expect(confirm(root).props.disabled).toBe(true);
+    await act(async () => confirmInput(root).props.onChange({ target: { value: 'delete' } }));
+    expect(confirm(root).props.disabled).toBe(false);
+  });
 });

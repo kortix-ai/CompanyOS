@@ -21536,7 +21536,8 @@
       "savedTitle": "Accesso salvato",
       "savedDescription": "L'agente ora può accedere. Vede solo il nome dell'accesso.",
       "modalTitle": "Aggiungi un accesso a un sito web",
-      "modalDescription": "Controlla il sito prima di digitare la password."
+      "modalDescription": "Controlla il sito prima di digitare la password.",
+      "pageDescription": "Controlla il sito prima di digitare la password. L'accesso è cifrato a riposo."
     },
     "sessionEmbed": {
       "sectionTitle": "Incorpora",

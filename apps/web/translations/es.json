@@ -21536,7 +21536,8 @@
       "savedTitle": "Inicio de sesión guardado",
       "savedDescription": "El agente ya puede iniciar sesión. Solo ve el nombre del inicio de sesión.",
       "modalTitle": "Añadir un inicio de sesión web",
-      "modalDescription": "Comprueba el sitio antes de escribir la contraseña."
+      "modalDescription": "Comprueba el sitio antes de escribir la contraseña.",
+      "pageDescription": "Comprueba el sitio antes de escribir la contraseña. El inicio de sesión se guarda cifrado."
     },
     "sessionEmbed": {
       "sectionTitle": "Insertar",

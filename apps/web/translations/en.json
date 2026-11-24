@@ -21581,7 +21581,8 @@
       "savedTitle": "Login saved",
       "savedDescription": "The agent can sign in now. It sees only the login's name.",
       "modalTitle": "Add a website login",
-      "modalDescription": "Check the site before you type the password."
+      "modalDescription": "Check the site before you type the password.",
+      "pageDescription": "Check the site before you type the password. The login is encrypted at rest."
     },
     "sessionEmbed": {
       "sectionTitle": "Embed",

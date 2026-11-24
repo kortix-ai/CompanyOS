@@ -21536,7 +21536,8 @@
       "savedTitle": "Login salvo",
       "savedDescription": "O agente já pode entrar. Ele vê apenas o nome do login.",
       "modalTitle": "Adicionar login de site",
-      "modalDescription": "Confira o site antes de digitar a senha."
+      "modalDescription": "Confira o site antes de digitar a senha.",
+      "pageDescription": "Confira o site antes de digitar a senha. O login é armazenado criptografado."
     },
     "sessionEmbed": {
       "sectionTitle": "Incorporar",

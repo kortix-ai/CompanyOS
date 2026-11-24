@@ -21536,7 +21536,8 @@
       "savedTitle": "ログインを保存しました",
       "savedDescription": "エージェントはサインインできます。エージェントに見えるのはログインの名前だけです。",
       "modalTitle": "ウェブサイトのログインを追加",
-      "modalDescription": "パスワードを入力する前にサイトを確認してください。"
+      "modalDescription": "パスワードを入力する前にサイトを確認してください。",
+      "pageDescription": "パスワードを入力する前にサイトを確認してください。ログインは暗号化して保存されます。"
     },
     "sessionEmbed": {
       "sectionTitle": "埋め込み",

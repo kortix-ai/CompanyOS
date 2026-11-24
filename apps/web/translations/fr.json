@@ -21536,7 +21536,8 @@
       "savedTitle": "Identifiant enregistré",
       "savedDescription": "L’agent peut maintenant se connecter. Il ne voit que le nom de l’identifiant.",
       "modalTitle": "Ajouter un identifiant de site web",
-      "modalDescription": "Vérifiez le site avant de saisir le mot de passe."
+      "modalDescription": "Vérifiez le site avant de saisir le mot de passe.",
+      "pageDescription": "Vérifiez le site avant de saisir le mot de passe. L’identifiant est chiffré au repos."
     },
     "sessionEmbed": {
       "sectionTitle": "Intégrer",

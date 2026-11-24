@@ -21536,7 +21536,8 @@
       "savedTitle": "Login gespeichert",
       "savedDescription": "Der Agent kann sich jetzt anmelden. Er sieht nur den Namen des Logins.",
       "modalTitle": "Website-Login hinzufügen",
-      "modalDescription": "Prüfe die Website, bevor du das Passwort eingibst."
+      "modalDescription": "Prüfe die Website, bevor du das Passwort eingibst.",
+      "pageDescription": "Prüfe die Website, bevor du das Passwort eingibst. Der Login wird verschlüsselt gespeichert."
     },
     "sessionEmbed": {
       "sectionTitle": "Einbetten",

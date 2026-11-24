@@ -21536,7 +21536,8 @@
       "savedTitle": "登录信息已保存",
       "savedDescription": "智能体现在可以登录了。它只能看到登录信息的名称。",
       "modalTitle": "添加网站登录信息",
-      "modalDescription": "输入密码前请先核对网站。"
+      "modalDescription": "输入密码前请先核对网站。",
+      "pageDescription": "输入密码前请先核对网站。登录信息加密存储。"
     },
     "sessionEmbed": {
       "sectionTitle": "嵌入",

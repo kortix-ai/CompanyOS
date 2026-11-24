@@ -583,7 +583,7 @@ export function SessionChat({
     canAct: boolean;
   }>({ label: null, canAct: true });
   const handleQuestionActionChange = useCallback((action: QuestionAction, canAct: boolean) => {
-    const label = action === 'next' ? 'Next' : action === 'submit' ? 'Submit' : null;
+    const label = action === 'next' ? 'Next question' : action === 'submit' ? 'Submit answers' : null;
     setQuestionAction({ label, canAct });
   }, []);
 
@@ -2615,28 +2615,27 @@ export function SessionChat({
         sessionState?.questions.find((question) => question.id === requestId) ??
         useRuntimePendingStore.getState().questions[requestId];
 
-      // Hide the card at once; the question leaves the store only once the
-      // answer lands. A failed reply then needs no restore (which could bring
-      // back a question the runtime did answer): releasing the hide is enough.
-      suppressQuestionFor(requestId);
-      const parkedAskId = liveQuestions.some((q) => q.id === requestId) ? undefined : parkedAskIdByRequest.get(requestId);
+      // Keep the question and its draft until the server accepts the answer.
+      const parkedAskId = liveQuestions.some((q) => q.id === requestId)
+        ? undefined
+        : parkedAskIdByRequest.get(requestId);
       if (parkedAskId) {
-        // Parked: the answer reaches the agent as a message that quotes the question.
-        // Awaited per request: a second decision must not replace this one's outcome.
-        try {
-          await answerParkedAsk.mutateAsync({ askId: parkedAskId, answer: { answers } });
-          removeQuestion(requestId);
-        } catch {
-          releaseQuestion(requestId);
-        }
-        return;
+        await answerParkedAsk.mutateAsync({
+          askId: parkedAskId,
+          answer: { answers },
+        });
+      } else if (sessionState) {
+        await sessionState.answerQuestion(requestId, answers);
+      } else {
+        await replyToQuestion(requestId, answers);
       }
+      suppressQuestionFor(requestId);
+      removeQuestion(requestId);
 
       // Save the answers in the optimistic cache keyed by the question call's
       // block id. This cache survives updates that may overwrite the call
       // before the server includes its answers; the transcript's answered
       // questions read from it as a fallback.
-      let cachedBlockId: string | null = null;
       if (questionReq?.tool?.messageID) {
         const { messageID, callID } = questionReq.tool;
         const message = threadRef.current?.messages.find((m) => m.message_id === messageID);
@@ -2644,7 +2643,6 @@ export function SessionChat({
           (b) => b.type === 'tool_call' && isQuestionTool(b.name) && b.call_id === callID,
         );
         if (match?.type === 'tool_call') {
-          cachedBlockId = match.id;
           optimisticAnswersCache.set(match.id, {
             answers,
             input:
@@ -2654,19 +2652,15 @@ export function SessionChat({
           });
         }
       }
-
-      try {
-        if (sessionState) await sessionState.answerQuestion(requestId, answers);
-        else await replyToQuestion(requestId, answers);
-        removeQuestion(requestId);
-      } catch {
-        // The answer did not land: the card comes back, fresh, if the question
-        // is still open. The cached answer goes: the transcript must not show it.
-        if (cachedBlockId) optimisticAnswersCache.delete(cachedBlockId);
-        releaseQuestion(requestId);
-      }
     },
-    [sessionState, removeQuestion, suppressQuestionFor, releaseQuestion, liveQuestions, parkedAskIdByRequest, answerParkedAsk],
+    [
+      sessionState,
+      removeQuestion,
+      suppressQuestionFor,
+      liveQuestions,
+      parkedAskIdByRequest,
+      answerParkedAsk,
+    ],
   );
 
   const handleQuestionReject = useCallback(
@@ -4253,6 +4247,7 @@ export function SessionChat({
               ref={questionPromptRef}
               request={renderedQuestion}
               onReply={handleQuestionReply}
+              onDiscuss={(text) => handleSend(text, undefined, undefined, undefined, { delivery: 'steer' })}
               onReject={handleQuestionReject}
               onActionChange={handleQuestionActionChange}
             />
@@ -4271,6 +4266,7 @@ export function SessionChat({
       questionRetries,
       questionPromptVisible,
       handleQuestionReply,
+      handleSend,
       handleQuestionReject,
       handleQuestionActionChange,
     ],

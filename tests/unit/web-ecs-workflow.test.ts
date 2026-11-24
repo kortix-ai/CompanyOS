@@ -82,15 +82,17 @@ describe('web ECS migration', () => {
     expect(terraform).not.toContain('dev-fe-ecs');
   });
 
-  it('runs staging on the same capacity type and egress topology as prod', () => {
+  it('runs staging on the same capacity type as prod; only prod keeps a NAT per AZ', () => {
     // Spot reclaims killed in-flight requests and agent turns during the
     // v0.13.57 release gate. Staging is the release candidate: no Spot.
     const api = read('infra/terraform/environments/staging-eu-west-2/main.tf');
     const prodApi = read('infra/terraform/environments/prod/main.tf');
     for (const root of [api, prodApi]) {
       expect(root).not.toMatch(/use_fargate_spot\s*=\s*true/);
-      expect(root).toMatch(/single_nat_gateway\s*=\s*false/);
     }
+    // 2026-11 (#13052): staging egresses through one NAT; it needs no AZ redundancy.
+    expect(prodApi).toMatch(/single_nat_gateway\s*=\s*false/);
+    expect(api).toMatch(/single_nat_gateway\s*=\s*true/);
     expect(api.match(/use_fargate_spot\s*=\s*false/g)).toHaveLength(2); // API + gateway
   });
 

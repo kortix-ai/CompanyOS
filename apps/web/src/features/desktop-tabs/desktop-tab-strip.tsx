@@ -392,4 +392,3 @@ function Keys({ keys }: { keys: string[] }) {
     </KbdGroup>
   );
 }
-

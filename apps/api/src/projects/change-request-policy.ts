@@ -96,10 +96,14 @@ export function resolveChangeRequestOrigin(input: {
 
 /**
  * A merge needs what the direct write of each section it changes needs, for an
- * agent as for a person. One row per manifest section that a route writes
- * under its own permission; `agents.<name>.policy_sets` is the one field whose
- * writer asks more than its section (`agent-config.ts`, `agent-scope.ts`).
- * Triggers ask create, update or delete by what changed (below).
+ * agent as for a person. One row per top-level `kortix.yaml` key, with the
+ * permission its direct writer asserts; a key with no dedicated route gets the
+ * permission of what it configures. `agents.<name>.policy_sets` is the one
+ * field whose writer asks more than its section (`agent-config.ts`,
+ * `agent-scope.ts`); triggers ask create, update or delete by what changed. A
+ * key this table does not name (a key added to the schema later) needs
+ * `UNLISTED_SECTION_ACTION`, and `change-request-policy.test.ts` fails until
+ * the schema's every key has a row.
  *
  * The Manager role holds every one of these; the web role editor adds them to a
  * role that gets `project.gitops.merge` (its catalog `implies`), but the API
@@ -107,18 +111,39 @@ export function resolveChangeRequestOrigin(input: {
  * `kortix_permissions` list is flat, so it must name them (or `all`).
  */
 export const MANIFEST_SECTION_ACTIONS: ReadonlyArray<readonly [section: string, action: string]> = [
-  // PUT /agents/:name/config|scope, PUT /default-agent
+  // PUT /agents/:name/config|scope, PUT /default-agent; what every agent loads
   ['agents', 'project.agent.write'],
   ['default_agent', 'project.agent.write'],
+  ['builtin_agents', 'project.agent.write'],
+  ['tools', 'project.agent.write'],
+  ['extensions', 'project.agent.write'],
+  ['evals', 'project.agent.write'],
   // POST|DELETE /connectors, PUT /connectors/:slug/*, PUT /policies (connectors/manifest-*.ts)
   ['connectors', 'project.connector.write'],
   ['policies', 'project.connector.write'],
   ['policy', 'project.connector.write'],
+  ['approvals', 'project.connector.write'],
   // App create and PATCH (apps/app-manifest.ts, apps/route-access.ts)
   ['apps', 'project.app.write'],
   // Skill registration (projects/routes/project-skills.ts)
   ['skills', 'project.skill.write'],
+  ['commands', 'project.command.write'],
+  // POST|PATCH|DELETE /sandbox-templates
+  ['sandbox', 'project.sandbox.write'],
+  ['sandboxes', 'project.sandbox.write'], // deprecated spelling of sandbox.templates
+  // The secret names sessions receive
+  ['env', 'project.secret.write'],
+  ['trigger_session_readers', 'project.trigger.update'],
+  // PATCH /projects/:id (manifest-project-name.ts) and the file's own shape
+  ['project', 'project.settings.write'],
+  ['spaces', 'project.settings.write'],
+  ['runtime', 'project.settings.write'],
+  ['imports', 'project.settings.write'],
+  ['kortix_version', 'project.settings.write'],
 ];
+
+/** What a change to a top-level key with no row in `MANIFEST_SECTION_ACTIONS` needs. */
+export const UNLISTED_SECTION_ACTION = 'project.settings.write';
 
 /**
  * Every permission `requiredManifestActions` can ask. A session's push straight
@@ -133,7 +158,13 @@ export const MANIFEST_WRITE_ACTIONS = [
   'project.connector.write',
   'project.app.write',
   'project.skill.write',
+  'project.command.write',
+  'project.sandbox.write',
+  'project.secret.write',
+  'project.settings.write',
 ] as const;
+
+const SECTION_ACTION = new Map(MANIFEST_SECTION_ACTIONS);
 
 /**
  * Which of `MANIFEST_WRITE_ACTIONS` moving the manifest from `baseText` to
@@ -154,8 +185,10 @@ export function requiredManifestActions(baseText: string | null, headText: strin
   const after = read(headText);
   if (before === null || after === null) return [...MANIFEST_WRITE_ACTIONS];
   const required = new Set<string>();
-  for (const [section, action] of MANIFEST_SECTION_ACTIONS) {
-    if (canonicalJson(before[section]) !== canonicalJson(after[section])) required.add(action);
+  for (const section of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    if (section === 'triggers') continue;
+    if (canonicalJson(before[section]) === canonicalJson(after[section])) continue;
+    required.add(SECTION_ACTION.get(section) ?? UNLISTED_SECTION_ACTION);
   }
   if (policySetsChanged(before.agents, after.agents)) required.add('project.connector.write');
   const was = triggersByKey(before.triggers);

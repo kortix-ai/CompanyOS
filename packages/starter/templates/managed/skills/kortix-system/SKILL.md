@@ -77,9 +77,9 @@ change request (CR) is the only way to the default branch. Do every step:
   (`workspace.gitops.ref.any`): the push skips review.
 - "Committed on my branch" is not persisted. Never ask the user to copy files
   out of the sandbox.
-- A merge that changes `agents` or `default_agent` also needs `workspace.agent.write`;
-  `triggers` `workspace.trigger.create|update|delete`; `connectors`, `policies`, `policy`, `policy_sets`
-  `workspace.connector.write`; `apps` `workspace.app.write`; `skills` `workspace.skill.write`. `503 CR_GOVERNANCE_UNVERIFIED`: retry.
+- A merge also needs the write permission of each `kortix.yaml` section it changes: `agents`
+  `workspace.agent.write`, `connectors` and `policy_sets` `workspace.connector.write`, `triggers`
+  `workspace.trigger.*`, `apps`, `skills`, `sandbox`, `project` theirs. `503 CR_GOVERNANCE_UNVERIFIED`: retry.
 - Never commit a key or token: a merge that adds one gets `409 CR_SECRET_DETECTED` (file:line). Store it (`<credentials>`), rewrite the branch, force-push.
   For people: https://kortix.com/docs/developers#change-requests
 </change-requests>

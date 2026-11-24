@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import { KORTIX_JSON_SCHEMA } from '@kortix/manifest-schema';
 import {
+  MANIFEST_SECTION_ACTIONS,
   MANIFEST_WRITE_ACTIONS,
+  UNLISTED_SECTION_ACTION,
   refusesSelfMerge,
   requiredManifestActions,
   resolveChangeRequestBase,
@@ -127,8 +130,8 @@ describe('requiredManifestActions — a merge needs what the direct route assert
   const base = 'default_agent: a\nagents:\n  a:\n    kortix_permissions: ["project.read"]\n';
   const withTrigger = `${base}triggers:\n  - slug: hourly\n    type: cron\n    cron: "0 * * * *"\n    prompt: tidy\n    agent: a\n`;
 
-  test('no governed section changed → nothing extra', () => {
-    expect(requiredManifestActions(base, `${base}project:\n  name: renamed\n`)).toEqual([]);
+  test('no section changed → nothing extra', () => {
+    expect(requiredManifestActions(base, `# a comment\n${base}`)).toEqual([]);
     expect(requiredManifestActions(base, base)).toEqual([]);
     expect(requiredManifestActions(null, null)).toEqual([]);
   });
@@ -169,7 +172,7 @@ describe('requiredManifestActions — a merge needs what the direct route assert
     expect(requiredManifestActions(base, withDesk)).toEqual(['project.connector.write']);
     expect(requiredManifestActions(withDesk, withDesk.replace('/mcp', '/v2/mcp'))).toEqual(['project.connector.write']);
     expect(requiredManifestActions(withDesk, base)).toEqual(['project.connector.write']);
-    expect(requiredManifestActions(withDesk, `${withDesk}project:\n  name: renamed\n`)).toEqual([]);
+    expect(requiredManifestActions(withDesk, `# a comment\n${withDesk}`)).toEqual([]);
   });
 
   test('workspace connector rules (policies, policy) → project.connector.write', () => {
@@ -196,6 +199,22 @@ describe('requiredManifestActions — a merge needs what the direct route assert
     expect(requiredManifestActions(base, `${base}apps:\n  site:\n    always_on: true\n`)).toEqual(['project.app.write']);
     expect(requiredManifestActions(base, `${base}skills:\n  triage: skills/triage\n`)).toEqual(['project.skill.write']);
     expect(MANIFEST_WRITE_ACTIONS).toEqual(expect.arrayContaining(['project.app.write', 'project.skill.write']));
+  });
+
+  test('sandbox → sandbox.write; tools and extensions → agent.write; project → settings.write; env → secret.write', () => {
+    expect(requiredManifestActions(base, `${base}sandbox:\n  default: big\n`)).toEqual(['project.sandbox.write']);
+    expect(requiredManifestActions(base, `${base}tools:\n  lookup: tools/lookup.ts\n`)).toEqual(['project.agent.write']);
+    expect(requiredManifestActions(base, `${base}project:\n  name: renamed\n`)).toEqual(['project.settings.write']);
+    expect(requiredManifestActions(base, `${base}env:\n  optional: [ORDERS_API_KEY]\n`)).toEqual(['project.secret.write']);
+  });
+
+  test('every top-level kortix.yaml key has a row; a key without one needs project.settings.write', () => {
+    const rows = new Set(MANIFEST_SECTION_ACTIONS.map(([section]) => section));
+    const keys = Object.keys((KORTIX_JSON_SCHEMA as { properties: Record<string, unknown> }).properties);
+    expect(keys.length).toBeGreaterThan(10);
+    expect(keys.filter((key) => key !== 'triggers' && !rows.has(key))).toEqual([]);
+    expect(requiredManifestActions(base, `${base}some_future_key: 1\n`)).toEqual([UNLISTED_SECTION_ACTION]);
+    for (const [, action] of MANIFEST_SECTION_ACTIONS) expect(MANIFEST_WRITE_ACTIONS as readonly string[]).toContain(action);
   });
 
   test('one change touching agents and connectors needs both', () => {

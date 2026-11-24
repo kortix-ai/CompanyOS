@@ -595,7 +595,21 @@ After the merge, running sessions on that base pick up the new config, and Korti
 
 - An agent that declares `kortix_permissions` merges only when the grant includes `project.gitops.merge`. An agent without `kortix_permissions` cannot merge.
 - A session cannot merge a change request it opened unless its grant in `kortix.yaml` includes `project.gitops.merge`. Without it, the merge returns `403` `CR_SELF_MERGE_REFUSED`.
-- A merge also needs the permission the direct edit of each changed section needs: `agents` and `default_agent` need `project.agent.write`; `triggers` need `project.trigger.create`, `.update` or `.delete`; `connectors`, `policies`, `policy` and an agent's `policy_sets` need `project.connector.write`; `apps` need `project.app.write`; `skills` need `project.skill.write`. The merging agent cannot grant any permission it does not hold. The same rule holds for a person: a custom role with `project.gitops.merge` but without `project.connector.write` cannot merge a change to a connector.
+- A merge also needs the permission that edits each `kortix.yaml` section it changes (table below). The merging agent cannot grant any permission it does not hold. The same rule holds for a person: a custom role with `project.gitops.merge` but without `project.connector.write` cannot merge a change to a connector.
+
+| Section the change request changes | The merge also needs |
+| --- | --- |
+| `agents`, `default_agent`, `builtin_agents`, `tools`, `extensions`, `evals` | `project.agent.write` |
+| `connectors`, `policies`, `policy`, `approvals`, an agent's `policy_sets` | `project.connector.write` |
+| `triggers` | `project.trigger.create`, `.update` or `.delete`; `trigger_session_readers`: `.update` |
+| `apps` | `project.app.write` |
+| `skills` | `project.skill.write` |
+| `commands` | `project.command.write` |
+| `sandbox` | `project.sandbox.write` |
+| `env` | `project.secret.write` |
+| `project`, `spaces`, `imports`, any other key | `project.settings.write` |
+
+The Manager, Admin and Owner roles hold all of them. An agent session that pushes the default branch directly needs all of them too.
 
 #### Secrets in a change request
 
@@ -605,7 +619,7 @@ The merge reads every commit the change request adds to its base: a merge commit
 2. Read it from the environment in the code.
 3. Remove the key from every commit of the branch, then force-push it. A commit that deletes the key is not enough: the merge carries the earlier commit.
 
-A change the check cannot read in full is not clean: more than 500 commits, a patch over 32 MB, or an octopus merge answers `409` `CR_SECRET_SCAN_INCOMPLETE`. Split it into smaller change requests.
+A change the check cannot read in full is not clean: more than 500 commits or 20 merge commits, a patch over 32 MB, or an octopus merge answers `409` `CR_SECRET_SCAN_INCOMPLETE`. Split it into smaller change requests.
 
 A person who checked a finding or an unread change, such as a test fixture, merges anyway with `kortix cr merge <cr> --allow-secrets` (REST: `{"allow_secrets": true}`). The change request records who did it and the findings in `metadata.secret_override`. An agent session gets `403` `CR_SECRET_OVERRIDE_REFUSED`.
 

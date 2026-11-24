@@ -21,6 +21,11 @@ import { scanAddedLines, type SecretScan } from './secret-scan';
 const SECRET_SCAN_MAX_PATCH_BYTES = 32 * 1024 * 1024;
 /** The most commits the secret scan reads. A longer branch is not scanned. */
 const SECRET_SCAN_MAX_COMMITS = 500;
+/**
+ * The most merge commits it reads. Each costs a merge base and up to three
+ * blob prefetches, so this bounds the git processes one merge request spends.
+ */
+const SECRET_SCAN_MAX_MERGES = 20;
 
 export interface MergeClassification {
   /** The head commit every check read. The merge lands exactly this commit. */
@@ -90,9 +95,10 @@ export async function classifyMerge(
  * resolution adds over an automatic merge of its parents (`remerge`), a file
  * git would call binary or `-diff` is read as text, and a rename is detected so
  * a file that only moves adds nothing. What the scan cannot read — more than
- * `SECRET_SCAN_MAX_COMMITS` commits, more file content than the store fetches
- * at once, a patch over `SECRET_SCAN_MAX_PATCH_BYTES`, an octopus merge — comes
- * back as `unscanned`, never as clean.
+ * `SECRET_SCAN_MAX_COMMITS` commits or `SECRET_SCAN_MAX_MERGES` merges, more
+ * file content than the store fetches at once, a patch over
+ * `SECRET_SCAN_MAX_PATCH_BYTES`, an octopus merge — comes back as `unscanned`,
+ * never as clean.
  */
 async function addedSecrets(repoPath: string, baseRef: string, headSha: string): Promise<SecretScan> {
   const range = `refs/heads/${baseRef}..${headSha}`;
@@ -102,16 +108,19 @@ async function addedSecrets(repoPath: string, baseRef: string, headSha: string):
   if (commits.length > SECRET_SCAN_MAX_COMMITS) return unscanned(`more than ${SECRET_SCAN_MAX_COMMITS} commits`);
   if (commits.length === 0) return { findings: [], total: 0 };
   if (commits.some((ids) => ids.length > 3)) return unscanned('an octopus merge');
+  const merges = commits.filter((ids) => ids.length === 3) as Array<[string, string, string]>;
+  if (merges.length > SECRET_SCAN_MAX_MERGES) return unscanned(`more than ${SECRET_SCAN_MAX_MERGES} merge commits`);
   // A partial store holds commits only (object-store.ts). Each commit's diff
   // reads its tree and its parents'; a merge's remerge also reads the merge
   // base of its parents. Fetch those trees, then both versions of every file
   // the diffs compare, bounded like the change-request diff (DIFF_BLOB_FETCH_MAX_BYTES).
-  const merges = commits.filter((ids) => ids.length === 3) as Array<[string, string, string]>;
-  const mergeBases = await Promise.all(
-    merges.map(([, first, second]) =>
-      runGit(['merge-base', first, second], repoPath, false).then((r) => r.stdout.trim() || null).catch(() => null),
-    ),
-  );
+  // One git process at a time: the scan's cost stays proportional to its bounds.
+  const mergeBases: Array<string | null> = [];
+  for (const [, first, second] of merges) {
+    mergeBases.push(
+      await runGit(['merge-base', first, second], repoPath, false).then((r) => r.stdout.trim() || null).catch(() => null),
+    );
+  }
   const trees = new Set([...commits.flat(), ...mergeBases.filter((id): id is string => id !== null)]);
   await ensureCommitTrees(repoPath, [...trees]);
   if (!(await ensureDiffBlobs(repoPath, ['log', '--format=', '--no-merges'], [range]))) {

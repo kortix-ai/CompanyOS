@@ -9655,6 +9655,25 @@ const catalog = {
     "turnNote": "Said in a voice call and answered by the voice.",
     "close": "Close"
   },
+  "dictation": {
+    "start": "Dictate a message",
+    "price": "{credits, plural, one {# credit} other {# credits}} per minute",
+    "recording": "Dictation",
+    "discard": "Discard recording",
+    "finish": "Add the words",
+    "transcribing": "Transcribing…",
+    "nothingHeard": "No speech heard. Try again closer to the microphone.",
+    "retry": "Try again",
+    "failed": "Could not transcribe the recording. Try again.",
+    "busy": "Could not transcribe the recording now. Try again in a moment.",
+    "unavailable": "Dictation is not available on this server.",
+    "limitReached": "Recording stopped at {minutes} minutes",
+    "micDenied": "Could not use the microphone. Allow it for this site in your browser settings.",
+    "micDeniedDesktop": "Could not use the microphone. Allow Kortix in your system privacy settings.",
+    "micMissing": "Could not find a microphone. Connect one and try again.",
+    "micBusy": "Could not use the microphone. Another app is using it.",
+    "micUnsupported": "Could not use the microphone in this browser."
+  },
   "agentCapabilities": {
     "skillsTitle": "Skills",
     "skillsDescription": "Each skill this agent may load. Built-in skills come with Kortix.",

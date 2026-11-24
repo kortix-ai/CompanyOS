@@ -26332,6 +26332,25 @@
     "turnNote": "Dit pendant un appel vocal, et la voix a répondu.",
     "close": "Fermer"
   },
+  "dictation": {
+    "start": "Dicter un message",
+    "price": "{credits, plural, one {# crédit} other {# crédits}} par minute",
+    "recording": "Dictée",
+    "discard": "Supprimer l'enregistrement",
+    "finish": "Ajouter les mots",
+    "transcribing": "Transcription…",
+    "nothingHeard": "Aucune parole détectée. Réessayez plus près du micro.",
+    "retry": "Réessayer",
+    "failed": "Impossible de transcrire l'enregistrement. Réessayez.",
+    "busy": "Impossible de transcrire l'enregistrement pour le moment. Réessayez dans un instant.",
+    "unavailable": "La dictée n'est pas disponible sur ce serveur.",
+    "limitReached": "Enregistrement arrêté à {minutes} minutes",
+    "micDenied": "Impossible d'utiliser le micro. Autorisez-le pour ce site dans les réglages du navigateur.",
+    "micDeniedDesktop": "Impossible d'utiliser le micro. Autorisez Kortix dans les réglages de confidentialité du système.",
+    "micMissing": "Aucun micro trouvé. Branchez-en un et réessayez.",
+    "micBusy": "Impossible d'utiliser le micro. Une autre app l'utilise.",
+    "micUnsupported": "Impossible d'utiliser le micro dans ce navigateur."
+  },
   "agentMounts": {
     "lead": "Dossiers de Fichiers montés par les sessions de cet agent. Une modification s’applique aussitôt à chaque nouvelle session.",
     "mount": "Mount folder",

@@ -27,8 +27,9 @@ export function SandBandHero() {
             The CompanyOS
           </h1>
           <p className="text-muted-foreground max-w-2xl text-base text-pretty sm:text-lg md:text-xl">
-            The cloud-native agent harness for companies. Hand it an outcome and agents run it 24/7
-            on your tools and context. Open source, in our cloud or yours.
+            The operating system for the AI-native company. Connect every data source, orchestrate
+            agents, and keep their skills, memory and connectors in one git repo you own. Open
+            source, any model, in our cloud or yours.
           </p>
         </div>
 

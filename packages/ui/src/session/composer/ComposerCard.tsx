@@ -23,6 +23,8 @@ import { ModelConnectionLayoutContext } from '../models/model-connection-layout'
 import { ImagesUnsupportedBar, ModelConnectionBar } from '../models/model-connection-gate';
 import { AnimatedComposerPlaceholder } from './animated-placeholder';
 import { AttachmentTiles } from './attachment-tiles';
+import { DictationControl } from './dictation/dictation-control';
+import { useComposerDictation } from './dictation/use-composer-dictation';
 import {
   EMPTY_AGENTS,
   EMPTY_COMMANDS,
@@ -262,6 +264,7 @@ export function ComposerCard({
     drawing itself (`ChatInputOverridesProvider`). Off, nothing here changes.
   */
   const chatInputEnabled = useFeatureFlag(projectId ?? null, 'chat_input').enabled;
+  const dictation = useComposerDictation({ projectId, editorRef });
   // Inside a space the `@` menu is its people and agents (`menus/space-mentions.ts`).
   const spaceMentions = useContext(SpaceMentionContext);
   const chatInputOpen = agentMenuOpen || modelMenuOpen || reasoningMenuOpen;
@@ -582,6 +585,8 @@ export function ComposerCard({
             modelUnavailable={modelUnavailable}
             agentUnavailable={agentUnavailable}
             call={call}
+            dictation={dictation ? <DictationControl dictation={dictation} disabled={disabled} /> : undefined}
+            dictationActive={!!dictation && dictation.phase !== 'idle' && dictation.phase !== 'starting'}
             onSubmit={() => handleSubmit()}
           />
         </div>

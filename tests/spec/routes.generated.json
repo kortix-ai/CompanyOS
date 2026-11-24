@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1818,
-  "aliases": 709,
+  "count": 1822,
+  "aliases": 711,
   "routes": [
     {
       "method": "GET",
@@ -3533,6 +3533,16 @@
     },
     {
       "method": "GET",
+      "path": "/v1/projects/:workspaceId/dictation",
+      "aliasOf": "/v1/workspaces/:workspaceId/dictation"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/dictation",
+      "aliasOf": "/v1/workspaces/:workspaceId/dictation"
+    },
+    {
+      "method": "GET",
       "path": "/v1/projects/:workspaceId/evals",
       "aliasOf": "/v1/workspaces/:workspaceId/evals"
     },
@@ -6403,6 +6413,14 @@
     {
       "method": "GET",
       "path": "/v1/workspaces/:workspaceId/detail"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/dictation"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/dictation"
     },
     {
       "method": "GET",

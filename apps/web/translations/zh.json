@@ -26332,6 +26332,25 @@
     "turnNote": "在语音通话中说出，并由语音回答。",
     "close": "关闭"
   },
+  "dictation": {
+    "start": "语音输入消息",
+    "price": "每分钟 {credits} 积分",
+    "recording": "语音输入",
+    "discard": "丢弃录音",
+    "finish": "添加文字",
+    "transcribing": "正在转写…",
+    "nothingHeard": "没有听到语音。请靠近麦克风后重试。",
+    "retry": "重试",
+    "failed": "无法转写录音。请重试。",
+    "busy": "暂时无法转写录音。请稍后重试。",
+    "unavailable": "此服务器不提供语音输入。",
+    "limitReached": "录音已在 {minutes} 分钟时停止",
+    "micDenied": "无法使用麦克风。请在浏览器设置中允许此网站使用麦克风。",
+    "micDeniedDesktop": "无法使用麦克风。请在系统隐私设置中允许 Kortix。",
+    "micMissing": "未找到麦克风。请连接麦克风后重试。",
+    "micBusy": "无法使用麦克风。另一个应用正在使用它。",
+    "micUnsupported": "此浏览器无法使用麦克风。"
+  },
   "agentMounts": {
     "lead": "此智能体的会话从“文件”中挂载的文件夹。更改立即生效，并适用于所有新会话。",
     "mount": "Mount folder",

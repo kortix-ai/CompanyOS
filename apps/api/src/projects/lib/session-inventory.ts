@@ -130,6 +130,8 @@ export function selectSessionRowsForViewer(input: {
   myKortixTriggerRuns?: boolean;
   /** The `created_by` values of the rows that are service accounts of the account. */
   machineOwnerIds?: ReadonlySet<string>;
+  /** Other members' DM spaces (`foreignDmSpaceIds`): never listed through `myKortixTriggerRuns`. */
+  myKortixForeignDms?: ReadonlySet<string>;
 }): { authorized: boolean; items: SessionInventoryItem[] } {
   if (input.scope === 'project' && !input.canManageProject) {
     return { authorized: false, items: [] };
@@ -171,7 +173,8 @@ export function selectSessionRowsForViewer(input: {
       spaceVisibleFor(input.hiddenSpaceIds, row.spaceId) &&
       isSessionTargetVisibleToCaller({ origin: row.origin, sessionId: row.sessionId, callerSessionId: input.callerSessionId, boundCredentialSessionId: input.boundCredentialSessionId }) &&
       isTriggerRunSession(row) &&
-      (row.createdBy === null || input.machineOwnerIds?.has(row.createdBy) === true);
+      (row.createdBy === null || input.machineOwnerIds?.has(row.createdBy) === true) &&
+      (!row.spaceId || input.myKortixForeignDms?.has(row.spaceId) === false);
     const access = input.agentPrincipal
       ? spaceVisibleFor(input.hiddenSpaceIds, row.spaceId) &&
         (reader || agentSessionStanding(input.boundCredentialSessionId, row, canAccess).visible)

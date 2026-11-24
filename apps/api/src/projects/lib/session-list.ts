@@ -52,7 +52,7 @@ import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, notInArray, o
 import { alias } from 'drizzle-orm/pg-core';
 import type { SessionStartedByFilter } from './session-initiator';
 import { hiddenSpaceIds } from '../../shared/space-access';
-import { myKortixPersonId } from './my-kortix-person';
+import { foreignDmSpaceIds, myKortixPersonId } from './my-kortix-person';
 import { resolveSessionOwnerIdentities, viewerManagerStanding } from './access';
 import { SESSION_DELETE_ROWS_DAYS } from '../session-log-purge';
 import { RUNNING_SANDBOX_STATUSES } from '../session-turn-ledger';
@@ -293,7 +293,7 @@ export interface SessionListViewer {
   /**
    * A My Kortix token whose person has manager standing
    * (`my-kortix-person.ts`): it lists the trigger runs its person lists, when
-   * no person owns them. Absent: false.
+   * no person owns them and they are not in another member's DM. Absent: false.
    */
   myKortixTriggerRuns?: boolean;
   /** Recently deleted: `SessionListFilter.deleted`. */
@@ -391,7 +391,10 @@ export function sessionListViewerSql(viewer: SessionListViewer): SQL {
               : undefined,
             // My Kortix lists them with its person's standing, when no person owns them.
             bound !== null && viewer.myKortixTriggerRuns
-              ? sql`((${t.initiatorType} = 'trigger' or ${triggerCreatedSql}) and ${machineOwnedSql})`
+              ? sql`((${t.initiatorType} = 'trigger' or ${triggerCreatedSql}) and ${machineOwnedSql}
+                  and not exists (select 1 from ${projectSpaces} as mk_dm
+                     where mk_dm.space_id = ${qualifiedColumn(t.spaceId)} and mk_dm.kind = 'dm'
+                       and mk_dm.dm_user_id is distinct from ${viewer.viewerId}::uuid))`
               : undefined,
             byRules,
           ),
@@ -506,6 +509,7 @@ async function foldSessionRows(
     readerPrincipal: TriggerReaderPrincipal;
     sharedGroupIds: ReadonlySet<string>;
     myKortixTriggerRuns: boolean;
+    myKortixForeignDms: ReadonlySet<string>;
   },
 ) {
   const { input, canManageProject, subject, accountSessionOversight, grantsBySession, ownerIdentities, runtimeStatusBySession, userStates } = ctx;
@@ -569,6 +573,7 @@ async function foldSessionRows(
     sharedGroupIds: ctx.sharedGroupIds,
     parentGroupIds,
     myKortixTriggerRuns: ctx.myKortixTriggerRuns,
+    myKortixForeignDms: ctx.myKortixForeignDms,
     machineOwnerIds: new Set([...rowOwners].flatMap(([ownerId, owner]) => (owner.type === 'service_account' ? [ownerId] : []))),
   });
 }
@@ -809,11 +814,15 @@ export async function loadProjectSessionInventory(input: {
   hiddenRead.catch(() => undefined);
   // A My Kortix token lists the trigger runs its person lists (`my-kortix-person.ts`):
   // the same manager probe, evaluated as the person. Every other bound token: false.
-  const myKortixTriggerRunsRead =
-    input.boundCredentialSessionId !== null && myKortixPersonId(input.actor) === input.userId
-      ? input.probeManageCapability()
-      : Promise.resolve(false);
+  const myKortixTriggerRunsRead = (input.boundCredentialSessionId !== null
+    ? myKortixPersonId(input.actor, input.boundCredentialSessionId)
+    : Promise.resolve(null)
+  ).then((person) => (person === input.userId ? input.probeManageCapability() : false));
   myKortixTriggerRunsRead.catch(() => undefined);
+  const myKortixForeignDmsRead = myKortixTriggerRunsRead.then((on) =>
+    on ? foreignDmSpaceIds(input.projectId, input.userId) : new Set<string>(),
+  );
+  myKortixForeignDmsRead.catch(() => undefined);
   // The Spaces this viewer sees: the page WHERE and the fold both list their sessions. An agent principal never widens.
   const sharedRead = input.agentPrincipal === true ? Promise.resolve(new Set<string>()) : sharedGroupIdsWhileOn(input.projectId, input.userId);
   sharedRead.catch(() => undefined);
@@ -868,6 +877,7 @@ export async function loadProjectSessionInventory(input: {
   const accountSessionOversight = await oversightRead;
   const hidden = await hiddenRead;
   const myKortixTriggerRuns = await myKortixTriggerRunsRead;
+  const myKortixForeignDms = await myKortixForeignDmsRead;
   const pageSql = viewerSql(canManageProject, accountSessionOversight, hidden, myKortixTriggerRuns);
 
   const items: SessionInventoryItem[] = [];
@@ -898,6 +908,7 @@ export async function loadProjectSessionInventory(input: {
       readerPrincipal,
       sharedGroupIds,
       myKortixTriggerRuns,
+      myKortixForeignDms,
     });
 
   for (let pass = 0; pass < MAX_CHUNKS && items.length < limit; pass += 1) {

@@ -16,7 +16,7 @@
  *     member (or nobody) prompted.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { accountMembers, accounts, auditEvents, projectSessions, projects, serviceAccounts, type AgentGrant } from '@kortix/db';
+import { accountMembers, accounts, auditEvents, projectSessions, projectSpaces, projects, serviceAccounts, type AgentGrant } from '@kortix/db';
 import { and, eq, sql } from 'drizzle-orm';
 
 import type { Actor } from '../iam/actor';
@@ -49,7 +49,11 @@ const ids = {
   adminMyKortix: crypto.randomUUID(),
   memberMyKortix: crypto.randomUUID(),
   adminGoverned: crypto.randomUUID(), // an engineering session the admin started
+  otherDmRun: crypto.randomUUID(), // a cron run filed in another member's DM
+  adminDmRun: crypto.randomUUID(), // a cron run filed in the admin's own DM
 };
+const OTHER_DM = crypto.randomUUID();
+const ADMIN_DM = crypto.randomUUID();
 const TRIGGER_META = { source: 'trigger:cron', trigger_kind: 'git', trigger_slug: 'intake' };
 const MY_KORTIX_GRANT: AgentGrant = { agent: 'mykortix', permissions: 'all', connectors: 'all', env: 'all' };
 const MY_KORTIX_OFF: AgentGrant = { agent: 'mykortix', permissions: [], connectors: [], env: [] };
@@ -57,14 +61,16 @@ const MY_KORTIX_OFF: AgentGrant = { agent: 'mykortix', permissions: [], connecto
 let project: SeededProject;
 let projectRow: ProjectRow;
 
-/** A real session token, classified by the same `tokenCredential` the auth middleware uses. */
+/** A session token's actor, as the auth middleware builds it: `tokenCredential` classifies the token row. */
+type SessionActor = { actor: Actor; bound: string };
+
 async function sessionActor(input: {
   userId: string;
   sessionId: string;
-  serviceAccountId: string;
+  serviceAccountId: string | null;
   grant: AgentGrant;
   onBehalfOf: string | null;
-}): Promise<Actor> {
+}): Promise<SessionActor> {
   const token = await createAccountToken({
     accountId: project.account_id,
     userId: input.userId,
@@ -76,20 +82,31 @@ async function sessionActor(input: {
     onBehalfOfUserId: input.onBehalfOf,
   });
   const credential = await tokenCredential(token.tokenId, project.account_id, input.sessionId);
-  if (credential.kind !== 'agent_session') throw new Error(`expected an agent_session credential, got ${credential.kind}`);
   return {
-    userId: input.userId,
-    accountId: project.account_id,
-    credential: { ...credential, onBehalfOfUserId: input.onBehalfOf },
-    ctx: {},
-  } as Actor;
+    actor: {
+      userId: input.userId,
+      accountId: project.account_id,
+      credential: credential.kind === 'agent_session' ? { ...credential, onBehalfOfUserId: input.onBehalfOf } : credential,
+      ctx: {},
+    } as Actor,
+    bound: input.sessionId,
+  };
 }
 
-const myKortix = (userId: string, sessionId: string, opts: { grant?: AgentGrant; onBehalfOf?: string | null } = {}) =>
+/**
+ * A My Kortix token exactly as `mintSessionToken` mints it: the My Kortix grant
+ * and no service account. `serviceAccount: true` is the other shape: a session
+ * started with another agent, then prompted with My Kortix.
+ */
+const myKortix = (
+  userId: string,
+  sessionId: string,
+  opts: { grant?: AgentGrant; onBehalfOf?: string | null; serviceAccount?: boolean } = {},
+) =>
   sessionActor({
     userId,
     sessionId,
-    serviceAccountId: MY_KORTIX_SA,
+    serviceAccountId: opts.serviceAccount ? MY_KORTIX_SA : null,
     grant: opts.grant ?? MY_KORTIX_GRANT,
     onBehalfOf: opts.onBehalfOf === undefined ? userId : opts.onBehalfOf,
   });
@@ -98,8 +115,8 @@ const human = (userId: string): Actor =>
   ({ userId, accountId: project.account_id, credential: { kind: 'jwt' }, ctx: {} }) as Actor;
 
 /** A read route (`personRead`), as `GET …/sessions/:id` and `GET …/log` call it. */
-const read = (actor: Actor, target: string, personRead = true) => {
-  const bound = actor.credential.kind === 'agent_session' ? actor.credential.sessionId : null;
+const read = (caller: Actor | SessionActor, target: string, personRead = true) => {
+  const { actor, bound } = 'bound' in caller ? caller : { actor: caller, bound: null };
   return loadVisibleSession({ row: projectRow, userId: actor.userId, actor }, target, bound, bound, {
     spawnAncestorRead: true,
     triggerReaderRead: true,
@@ -134,6 +151,10 @@ beforeAll(async () => {
     publicPrefix: `kortix_sa_${serviceAccountId.slice(0, 6)}`,
   });
   await db.insert(serviceAccounts).values([sa(ENGINEERING_SA, 'engineering'), sa(MY_KORTIX_SA, 'mykortix'), sa(GOVERNED_SA, 'engineering-gov')]);
+  await db.insert(projectSpaces).values([
+    { spaceId: OTHER_DM, projectId: project.project_id, accountId: project.account_id, kind: 'dm', name: 'DM', dmUserId: OTHER, dmAgentName: 'engineering', createdBy: OTHER },
+    { spaceId: ADMIN_DM, projectId: project.project_id, accountId: project.account_id, kind: 'dm', name: 'DM', dmUserId: ADMIN, dmAgentName: 'engineering', createdBy: ADMIN },
+  ]);
   const base = { accountId: project.account_id, projectId: project.project_id, visibility: 'private' as const };
   await db.insert(projectSessions).values([
     { ...base, sessionId: ids.run, branchName: ids.run, createdBy: ENGINEERING_SA, origin: 'schedule', agentName: 'engineering', metadata: TRIGGER_META },
@@ -143,6 +164,8 @@ beforeAll(async () => {
     { ...base, sessionId: ids.adminMyKortix, branchName: ids.adminMyKortix, createdBy: ADMIN, origin: 'user', agentName: 'mykortix', metadata: { source: 'ui' } },
     { ...base, sessionId: ids.memberMyKortix, branchName: ids.memberMyKortix, createdBy: MEMBER, origin: 'user', agentName: 'mykortix', metadata: { source: 'ui' } },
     { ...base, sessionId: ids.adminGoverned, branchName: ids.adminGoverned, createdBy: ADMIN, origin: 'user', agentName: 'engineering', metadata: { source: 'ui' } },
+    { ...base, sessionId: ids.otherDmRun, branchName: ids.otherDmRun, createdBy: ENGINEERING_SA, origin: 'schedule', agentName: 'engineering', spaceId: OTHER_DM, metadata: TRIGGER_META },
+    { ...base, sessionId: ids.adminDmRun, branchName: ids.adminDmRun, createdBy: ENGINEERING_SA, origin: 'schedule', agentName: 'engineering', spaceId: ADMIN_DM, metadata: TRIGGER_META },
   ]);
   await setOversight(false);
 }, 30_000);
@@ -158,12 +181,27 @@ describe('My Kortix reads a trigger run with its person`s standing', () => {
     expect((await read(human(ADMIN), ids.run))?.row.sessionId).toBe(ids.run);
   });
 
+  test('a My Kortix token names no service account, so the auth layer sees a `pat`', async () => {
+    expect((await myKortix(ADMIN, ids.adminMyKortix)).actor.credential.kind).toBe('pat');
+  });
+
   test('the admin`s My Kortix reads it too: a read, not ownership, not lifecycle', async () => {
     const access = await read(await myKortix(ADMIN, ids.adminMyKortix), ids.run);
     expect(access?.row.sessionId).toBe(ids.run);
     expect(access?.isOwner).toBe(false);
     expect(access?.canManageProject).toBe(false);
     expect(access?.canManageLifecycle).toBe(false);
+  });
+
+  test('a session started with another agent, then prompted with My Kortix (an agent_session token), reads it too', async () => {
+    const caller = await myKortix(ADMIN, ids.adminMyKortix, { serviceAccount: true });
+    expect(caller.actor.credential.kind).toBe('agent_session');
+    expect((await read(caller, ids.run))?.row.sessionId).toBe(ids.run);
+  });
+
+  test('a token of another session does not borrow this one`s binding', async () => {
+    const caller = await myKortix(ADMIN, ids.adminMyKortix);
+    expect(await read({ actor: caller.actor, bound: ids.memberMyKortix }, ids.run)).toBeNull();
   });
 
   test('a route that changes the session (no personRead) still refuses it', async () => {
@@ -173,13 +211,19 @@ describe('My Kortix reads a trigger run with its person`s standing', () => {
   test('`kortix triggers runs` lists the run for the admin`s My Kortix', async () => {
     const runId = await recordTriggerRun({ projectId: project.project_id, slug: 'intake', source: 'manual', spec: {}, payload: {}, status: 'succeeded', sessionId: ids.run, now: new Date() });
     if (!runId) throw new Error('Run persistence failed');
-    const actor = await myKortix(ADMIN, ids.adminMyKortix);
+    const { actor } = await myKortix(ADMIN, ids.adminMyKortix);
     const runs = await listVisibleTriggerRuns({ loaded: { row: projectRow, userId: ADMIN, actor }, binding: ids.adminMyKortix, slug: 'intake', limit: 20, cursor: null });
     expect(runs.runs.map((run) => run.run_id)).toContain(runId);
   });
 
   test('a backend-origin run stays closed: the sibling gate is not lifted', async () => {
     expect(await read(await myKortix(ADMIN, ids.adminMyKortix), ids.backendRun)).toBeNull();
+  });
+
+  test('a run filed in another member`s DM stays closed; one in the person`s own DM opens', async () => {
+    const caller = await myKortix(ADMIN, ids.adminMyKortix);
+    expect(await read(caller, ids.otherDmRun)).toBeNull();
+    expect((await read(caller, ids.adminDmRun))?.row.sessionId).toBe(ids.adminDmRun);
   });
 
   test('a member without manager standing gets nothing, as in the dashboard', async () => {
@@ -202,15 +246,15 @@ describe('the credential must be My Kortix acting for its person', () => {
   });
 
   test('a governed agent the admin started keeps its own narrow reach', async () => {
-    const actor = await sessionActor({
+    const governed = await sessionActor({
       userId: ADMIN,
       sessionId: ids.adminGoverned,
       serviceAccountId: GOVERNED_SA,
       grant: { agent: 'engineering-gov', permissions: 'all', connectors: 'all', env: 'all' },
       onBehalfOf: ADMIN,
     });
-    expect(actor.credential.kind === 'agent_session' && actor.credential.agentPrincipal).toBe(true);
-    expect(await read(actor, ids.run)).toBeNull();
+    expect(governed.actor.credential.kind === 'agent_session' && governed.actor.credential.agentPrincipal).toBe(true);
+    expect(await read(governed, ids.run)).toBeNull();
   });
 });
 
@@ -240,8 +284,7 @@ describe('account oversight: sessions no person owns, never a member`s private c
 });
 
 describe('`kortix sessions ls` lists what My Kortix may now read', () => {
-  const list = async (actor: Actor, manager: boolean) => {
-    const bound = actor.credential.kind === 'agent_session' ? actor.credential.sessionId : null;
+  const list = async ({ actor, bound }: SessionActor, manager: boolean) => {
     const inventory = await loadProjectSessionInventory({
       actor,
       projectId: project.project_id,
@@ -256,13 +299,15 @@ describe('`kortix sessions ls` lists what My Kortix may now read', () => {
     return inventory.items.map((item) => item.row.sessionId);
   };
 
-  test('the admin`s My Kortix lists the cron run, not the backend run or a member`s chat', async () => {
+  test('the admin`s My Kortix lists the cron run, not the backend run, a member`s chat or a member`s DM run', async () => {
     await setOversight(true);
     const listed = await list(await myKortix(ADMIN, ids.adminMyKortix), true);
     expect(listed).toContain(ids.run);
     expect(listed).toContain(ids.adminMyKortix);
+    expect(listed).toContain(ids.adminDmRun);
     expect(listed).not.toContain(ids.backendRun);
     expect(listed).not.toContain(ids.memberChat);
+    expect(listed).not.toContain(ids.otherDmRun);
     // Oversight widens only the manager inventory, for the person too.
     expect(listed).not.toContain(ids.agentPrivate);
   });

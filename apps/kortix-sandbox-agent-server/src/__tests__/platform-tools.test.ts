@@ -245,6 +245,32 @@ describe('kortix_schedules', () => {
     expect(argvs()).toEqual(['loops rm reminder.aaaaaaaaaaaa', 'triggers run automation.bbbbbbbbbbbb', 'triggers rm automation.bbbbbbbbbbbb'])
   })
 
+  test('read: the latest answer is the newest text block of the root thread (kortix.session/2)', async () => {
+    const log = {
+      schema: 'kortix.session/2',
+      source: 'log',
+      session_id: 'ses_2',
+      threads: [
+        {
+          thread_id: 'root',
+          messages: [
+            { role: 'user', blocks: [{ type: 'text', text: 'how is intake doing?' }] },
+            { role: 'assistant', blocks: [{ type: 'reasoning', text: 'thinking about it' }, { type: 'text', text: 'Intake ran 4 passes.' }] },
+            { role: 'assistant', blocks: [{ type: 'reasoning', text: 'checking' }, { type: 'tool_call', name: 'bash', result: { content: [{ type: 'text', text: 'tool output' }] } }] },
+            { role: 'assistant', blocks: [{ type: 'text', text: 'Intake is healthy.' }] },
+            { role: 'assistant', blocks: [{ type: 'tool_call', name: 'bash', result: { content: [{ type: 'text', text: 'later tool output' }] } }] },
+          ],
+        },
+        { thread_id: 'sub', parent_thread_id: 'root', messages: [{ role: 'assistant', blocks: [{ type: 'text', text: 'a subagent report' }] }] },
+      ],
+    }
+    fakeKortix(`'sessions log ses_2 --limit 20 --json') echo '${JSON.stringify(log)}' ;;`)
+    const result = await run('kortix_sessions', { action: 'read', session_id: 'ses_2' })
+    expect(result.ok).toBe(true)
+    expect(result.card.title).toBe('Latest answer')
+    expect((result.data as { answer: string }).answer).toBe('Intake is healthy.')
+  })
+
   test('message text that starts with "-" goes as --prompt=<text>, never as an option', async () => {
     fakeKortix(`'sessions chat ses_2 --prompt=- first point --queue') echo 'queued' ;;`)
     const sent = await run('kortix_sessions', { action: 'message', session_id: 'ses_2', text: '- first point' })

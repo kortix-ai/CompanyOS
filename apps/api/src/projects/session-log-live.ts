@@ -60,27 +60,34 @@ function isWholePage(v: unknown): v is SessionLogPage {
  *  - callers of the same key (session, thread, limit) share one read and one serialized text: a
  *    reconnect storm or many tabs of one session cost one box read and one `JSON.stringify`;
  *  - at most `maxPerSession` different reads of one session run at once;
+ *  - at most `maxPerCaller` reads start for one caller: one member's stalled boxes (2 s each at
+ *    worst) cannot take every slot from the other callers on the replica;
  *  - at most `maxInFlight` reads run on the replica.
  * A read past a limit answers null at once: the caller answers the stored log.
  */
-export function createLiveReadGate<T>(limits: { maxInFlight: number; maxPerSession: number }) {
-  const running = new Map<string, { sessionId: string; read: Promise<T> }>();
+export function createLiveReadGate<T>(limits: { maxInFlight: number; maxPerSession: number; maxPerCaller: number }) {
+  const running = new Map<string, { sessionId: string; callerId: string; read: Promise<T> }>();
   return {
-    run(key: string, sessionId: string, read: () => Promise<T>): Promise<T | null> {
+    run(key: string, sessionId: string, callerId: string, read: () => Promise<T>): Promise<T | null> {
+      // Joining a running read costs no slot.
       const shared = running.get(key);
       if (shared) return shared.read;
       if (running.size >= limits.maxInFlight) return Promise.resolve(null);
       let ofSession = 0;
-      for (const entry of running.values()) if (entry.sessionId === sessionId) ofSession++;
-      if (ofSession >= limits.maxPerSession) return Promise.resolve(null);
+      let ofCaller = 0;
+      for (const entry of running.values()) {
+        if (entry.sessionId === sessionId) ofSession++;
+        if (entry.callerId === callerId) ofCaller++;
+      }
+      if (ofSession >= limits.maxPerSession || ofCaller >= limits.maxPerCaller) return Promise.resolve(null);
       const started = read().finally(() => running.delete(key));
-      running.set(key, { sessionId, read: started });
+      running.set(key, { sessionId, callerId, read: started });
       return started;
     },
   };
 }
 
-export const LIVE_READ_LIMITS = { maxInFlight: 8, maxPerSession: 2 } as const;
+export const LIVE_READ_LIMITS = { maxInFlight: 8, maxPerSession: 2, maxPerCaller: 3 } as const;
 
 /** replica-local: the live reads this API process runs; each replica bounds its own memory. */
 const liveReads = createLiveReadGate<LiveSessionLogRead>(LIVE_READ_LIMITS);
@@ -94,7 +101,7 @@ export async function readLiveSessionLogPage(input: {
   budgetMs?: number;
 }): Promise<LiveSessionLogRead> {
   const key = `${input.sessionId}\u0000${input.threadId ?? ''}\u0000${input.limit}`;
-  const read = await liveReads.run(key, input.sessionId, () => readBox(input));
+  const read = await liveReads.run(key, input.sessionId, input.userId ?? `session:${input.sessionId}`, () => readBox(input));
   return read ?? { body: null, reason: 'busy' };
 }
 

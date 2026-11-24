@@ -1,6 +1,6 @@
 import { connectors, projectSecrets, projectSecretTombstones } from '@kortix/db';
 import type { Database } from '@kortix/db';
-import { and, desc, eq, gt, inArray, isNull, lt, or } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, lt, ne, or } from 'drizzle-orm';
 import { isGatewayManagedEnv } from '../llm-gateway/sandbox-credentials';
 import {
   type SecretConsumer,
@@ -85,9 +85,20 @@ export async function writeSharedProjectSecret(input: {
         rotatedAt: now,
         updatedAt: now,
       },
+      // A website login keeps its `{ username, password }` shape: a plain
+      // value never overwrites it (`browser-logins.ts`). The intake refuses
+      // that case with a 409 before it gets here.
+      setWhere: notBrowserLogin(),
     })
     .returning({ secretId: projectSecrets.secretId });
-  return row!.secretId;
+  if (!row) throw new Error(`${identifier} is a website login; a plain value cannot replace it`);
+  return row.secretId;
+}
+
+/** Rows that are not website logins. A login's value is JSON with a password
+ *  in it: only the browser consumer reads it, never a generic secret map. */
+function notBrowserLogin() {
+  return or(isNull(projectSecrets.consumer), ne(projectSecrets.consumer, 'browser'));
 }
 
 /** A deletion older than the longest setup-link TTL (MAX_TTL_MINUTES in
@@ -208,7 +219,7 @@ export async function listProjectSecrets(projectId: string): Promise<Record<stri
         updatedAt: projectSecrets.updatedAt,
       })
       .from(projectSecrets)
-      .where(and(eq(projectSecrets.projectId, projectId), isNull(projectSecrets.ownerUserId)))
+      .where(and(eq(projectSecrets.projectId, projectId), isNull(projectSecrets.ownerUserId), notBrowserLogin()))
       .orderBy(desc(projectSecrets.updatedAt)),
   });
 
@@ -288,6 +299,8 @@ export async function listResolvedProjectSecrets(
       and(
         eq(projectSecrets.projectId, projectId),
         eq(projectSecrets.scope, 'runtime'),
+        // A website login never enters an env, an App or a capability list.
+        notBrowserLogin(),
         userId
           ? or(isNull(projectSecrets.ownerUserId), eq(projectSecrets.ownerUserId, userId))
           : isNull(projectSecrets.ownerUserId),

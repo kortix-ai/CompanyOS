@@ -2716,6 +2716,9 @@ export const SecretConsumerSchema = z.enum([
   'git_proxy',
   'http_broker',
   'network',
+  // A website login: `{ username, password }` that the sandbox browser fills
+  // through `POST /projects/:id/browser-logins/resolve`. Never in the env.
+  'browser',
 ]);
 export type SecretConsumer = z.infer<typeof SecretConsumerSchema>;
 

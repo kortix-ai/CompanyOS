@@ -181,6 +181,18 @@ export function registerSecretDeliveryRoutes(): void {
         )
         .limit(1);
       if (!existing) return c.json({ error: 'Not found' }, 404);
+      // A website login is typed only by the sandbox browser
+      // (projects/lib/browser-logins.ts). Any other delivery would hand its
+      // `{ username, password }` to the env, a handle or a server.
+      if (existing.consumer === 'browser') {
+        return c.json(
+          {
+            error: `${identifier} is a website login. Only the sandbox browser uses it; its delivery cannot change.`,
+            code: 'browser_login_delivery',
+          },
+          409,
+        );
+      }
       // Provider keys live in one store, the named accounts of Models →
       // Providers (secrets/llm-credential-move.ts). A secret is never moved
       // into the legacy gateway delivery.

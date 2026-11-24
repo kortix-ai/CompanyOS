@@ -421,6 +421,16 @@ export function registerSecretsRoutes(): void {
     if (!existing && value === null) {
       return c.json({ error: 'value is required' }, 400);
     }
+    // A website login holds `{ username, password }` for the sandbox browser
+    // (projects/lib/browser-logins.ts). A plain value or a delivery change here
+    // would break it or move it into the env: a person enters it again
+    // through a login link instead.
+    if (existing?.consumer === 'browser') {
+      return c.json({
+        error: `${identifier} is a website login. Enter it again through a login link: kortix secrets request ${identifier} --login --site <host>`,
+        code: 'browser_login_read_only',
+      }, 409);
+    }
     if (existing?.consumer === 'llm_gateway' && explicitConsumer === undefined && explicitStrategy === undefined && value !== null) {
       const redirected = await redirectProviderKey();
       if (redirected) return redirected;

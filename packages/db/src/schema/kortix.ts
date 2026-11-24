@@ -113,6 +113,8 @@ export const projectSecretConsumerEnum = kortixSchema.enum('project_secret_consu
   'git_proxy',
   'http_broker',
   'network',
+  // Website login for the sandbox browser (append only: the order is stored).
+  'browser',
 ]);
 
 export const projectSessionStatusEnum = kortixSchema.enum('project_session_status', [

@@ -35,6 +35,7 @@ import { registerRepositoryReplacementRoutes } from './routes/repository-replace
 import { registerSecretBrokerRoutes } from './routes/secret-broker';
 import { registerSecretRelayRoutes } from './routes/secret-relay';
 import { registerSetupLinksRoutes } from './routes/setup-links';
+import { registerBrowserLoginsRoutes } from './routes/browser-logins';
 import { registerConnectionsRoutes } from './routes/connections';
 import { registerConnectionActionsRoutes } from './routes/connection-actions';
 import { registerComputersRoutes } from './routes/computers';
@@ -143,6 +144,7 @@ export function registerAllProjectRoutes(): void {
   registerSecretBrokerRoutes();
   registerSecretRelayRoutes();
   registerSetupLinksRoutes();
+  registerBrowserLoginsRoutes();
   registerConnectionsRoutes();
   registerConnectionActionsRoutes();
   registerComputersRoutes();

@@ -109,6 +109,7 @@ export { approvalTargetSession, expireDueApprovals } from './lib/connector-appro
 export { projectsApp } from './lib/app';
 export { decryptProjectSecret, encryptProjectSecret } from './secrets/envelope';
 export { listProjectSecretNamesForConsumer, listResolvedProjectSecrets, resolveProjectSecretForConsumer } from './secrets';
+export { browserLoginSavedPrompt, saveBrowserLoginsFromLink } from './lib/browser-logins';
 // App events (`type: app` triggers): apps/event-routes.ts appends through these.
 export {
   APP_EVENT_LOG_STATUSES,

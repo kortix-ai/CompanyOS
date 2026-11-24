@@ -118,3 +118,50 @@ test('clarification is discussion and leaves the answer available', async () => 
   expect(text(tree)).toContain('Custom answer');
   await act(async () => { tree.unmount(); });
 });
+
+test('an enabled answer submits while clarification is pending without duplicate delivery', async () => {
+  const replies: string[][][] = [];
+  const discussions: string[] = [];
+  let finishDiscussion = () => {};
+  let finishReply = () => {};
+  const trees: ReactTestRenderer[] = [];
+  await act(async () => {
+    trees.push(create(<QuestionPrompt request={request} onReject={() => undefined}
+      onReply={(_id, answers) => {
+        replies.push(answers);
+        return new Promise<void>((resolve) => { finishReply = resolve; });
+      }}
+      onDiscuss={(value) => {
+        discussions.push(value);
+        return new Promise<void>((resolve) => { finishDiscussion = resolve; });
+      }} />));
+  });
+  const tree = trees[0];
+  await act(async () => {
+    tree.root.findAllByType('button').find((b) => b.children.includes('Ask for clarification'))?.props.onClick();
+  });
+  await act(async () => {
+    tree.root.findAllByType('textarea').find((input) => input.props.id.endsWith('-discussion'))?.props.onChange({ target: { value: 'Does this include tables?' } });
+  });
+  let pending: Promise<void> = Promise.resolve();
+  await act(async () => {
+    const form = tree.root.findAllByType('form')[1];
+    pending = form.props.onSubmit({ preventDefault() {} });
+    void form.props.onSubmit({ preventDefault() {} });
+  });
+  expect(discussions).toHaveLength(1);
+  await act(async () => {
+    const option = tree.root.findAllByType('button').find((b) => b.props['aria-pressed'] !== undefined);
+    expect(option).toBeDefined();
+    expect(option?.props.disabled).not.toBe(true);
+    option?.props.onClick();
+    option?.props.onClick();
+  });
+  expect(replies).toEqual([[['Text']]]);
+  await act(async () => { finishDiscussion(); await pending; });
+  expect(replies).toEqual([[['Text']]]);
+  expect(text(tree)).toContain('Submitting');
+  await act(async () => { finishReply(); });
+  expect(text(tree)).toContain('Answers submitted');
+  await act(async () => { tree.unmount(); });
+});

@@ -115,6 +115,7 @@ export const QuestionPrompt = React.forwardRef<QuestionPromptHandle, QuestionPro
     const [custom, setCustom] = useState('');
     const [discussion, setDiscussion] = useState<string | null>(null);
     const [discussing, setDiscussing] = useState(false);
+    const discussingRef = useRef(false);
     const [answered, setAnswered] = useState(false);
     const reply = useCallback(
       async (values: QuestionAnswer[]) => {
@@ -560,8 +561,8 @@ export const QuestionPrompt = React.forwardRef<QuestionPromptHandle, QuestionPro
                     className="space-y-2"
                     onSubmit={async (event) => {
                       event.preventDefault();
-                      if (!discussion.trim() || submitting.current) return;
-                      submitting.current = true;
+                      if (!discussion.trim() || discussingRef.current) return;
+                      discussingRef.current = true;
                       setDiscussing(true);
                       setError(null);
                       try {
@@ -572,7 +573,7 @@ export const QuestionPrompt = React.forwardRef<QuestionPromptHandle, QuestionPro
                       } catch {
                         setError('Could not send clarification. Try again.');
                       } finally {
-                        submitting.current = false;
+                        discussingRef.current = false;
                         setDiscussing(false);
                       }
                     }}

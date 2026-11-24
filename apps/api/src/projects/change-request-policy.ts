@@ -275,27 +275,31 @@ export interface SecretMergeRefusalBody {
 /**
  * May a change whose commits add what looks like a secret merge?
  *
- * Nothing found and everything read: yes. Found, no override: 409
- * `CR_SECRET_DETECTED`. Not everything read (`scan.unscanned`): 409
- * `CR_SECRET_SCAN_INCOMPLETE`, because unread is not clean. A person who
- * checked the change overrides with `allow_secrets` (a test fixture, a public
- * key the rule cannot tell apart, a change too large to scan). Any other
- * principal cannot — an agent session is the one the check exists for, and a
- * service account or workspace key is automation — so its override answers
- * 403 `CR_SECRET_OVERRIDE_REFUSED`.
+ * - Nothing found and everything read: yes.
+ * - Found: 409 `CR_SECRET_DETECTED`. A person who checked the finding (a test
+ *   fixture, a public key the rule cannot tell apart) overrides with
+ *   `allow_secrets`.
+ * - Nothing found, but the scan could not read it all (`scan.unscanned`: a
+ *   long-lived trunk merged into main is over the bounds): a person merges it
+ *   as is, and the route records the skipped check. Any other principal gets
+ *   409 `CR_SECRET_SCAN_INCOMPLETE`: unread is not clean for automation.
+ *
+ * An override from anything but a person — an agent session, the principal
+ * the check exists for, or a service account, workspace key or OAuth token —
+ * answers 403 `CR_SECRET_OVERRIDE_REFUSED`.
  */
 export function secretMergeRefusal(input: {
   crNumber: number;
   baseRef: string;
   scan: SecretScan;
-  /** A person's own credential (a dashboard JWT or their CLI token), not a session or automation. */
+  /** The person's full identity (iam/person-credential.ts), not a session or automation. */
   actorIsPerson: boolean;
   allowSecrets: boolean;
 }): { status: 403 | 409; body: SecretMergeRefusalBody } | null {
-  if (input.scan.total === 0 && !input.scan.unscanned) return null;
-  if (input.allowSecrets && input.actorIsPerson) return null;
-  const override = `\`kortix cr merge ${input.crNumber} --allow-secrets\``;
   const found = input.scan.total > 0;
+  if (!found && !input.scan.unscanned) return null;
+  if (input.actorIsPerson && (input.allowSecrets || !found)) return null;
+  const override = `\`kortix cr merge ${input.crNumber} --allow-secrets\``;
   const what = found
     ? `adds what looks like a secret: ${describeSecretFindings(input.scan)}`
     : `is too large to check for secrets (${input.scan.unscanned})`;
@@ -304,7 +308,7 @@ export function secretMergeRefusal(input: {
       `Then remove it from every commit of the branch: \`git reset --soft $(git merge-base origin/${input.baseRef} HEAD)\`, ` +
       'commit again, `git push --force-with-lease origin HEAD`. ' +
       `A person who checked the finding may merge anyway: ${override}.`
-    : `Split it into smaller change requests, or ask a person to review it and merge it with ${override}.`;
+    : 'Split it into smaller change requests, or ask a person to merge it: their merge records the skipped check.';
   const common = {
     findings: input.scan.findings,
     findings_total: input.scan.total,
@@ -317,7 +321,10 @@ export function secretMergeRefusal(input: {
       body: {
         error:
           `Change request #${input.crNumber} ${what}. ` +
-          `Only a person merges past the secret check: ask one to review it and run ${override}. Nothing was merged.`,
+          (found
+            ? `Only a person merges past the secret check: ask one to review it and run ${override}.`
+            : 'Only a person merges a change the secret check could not read: ask one to merge it.') +
+          ' Nothing was merged.',
         code: 'CR_SECRET_OVERRIDE_REFUSED',
         ...common,
       },

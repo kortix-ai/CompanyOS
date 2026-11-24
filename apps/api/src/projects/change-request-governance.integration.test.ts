@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { classifyMerge } from './change-request-governance';
+import { classifyMerge, setSecretScanBudgetMsForTests } from './change-request-governance';
 import { refreshMirror } from './git/mirror';
 import type { GitBackedProject } from './git/types';
 
@@ -245,6 +245,18 @@ describe('classifyMerge — connectors and what the commits add', () => {
     await git(['checkout', '-q', 'main'], workPath);
     const change = await classifyMerge(project, { baseRef: 'main', headRef: 'session-keeps-key' });
     expect(change.secrets.findings.map((f) => `${f.file}:${f.rule}`)).toContain('legacy.ts:github_token');
+  });
+
+  test('a scan that runs past its wall-time budget is unscanned, never a timeout', async () => {
+    await pushBranch('session-slow', { 'config.ts': 'export const x = 1;\n' });
+    const restore = setSecretScanBudgetMsForTests(1);
+    try {
+      const change = await classifyMerge(project, { baseRef: 'main', headRef: 'session-slow' });
+      expect(change.secrets.total).toBe(0);
+      expect(change.secrets.unscanned).toMatch(/took longer than/);
+    } finally {
+      restore();
+    }
   });
 
   test('a token already on the base branch is not the change request\'s finding', async () => {

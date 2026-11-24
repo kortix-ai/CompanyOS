@@ -57,7 +57,7 @@ export function registerChangeRequestActionsRoutes(): void {
             message: z.string().optional().openapi({ description: 'Merge commit message. Optional; the body itself is optional.' }),
             allow_secrets: z.boolean().optional().openapi({
               description:
-                'Merge although the secret check flags what the change adds (409 `CR_SECRET_DETECTED`). A person only: an agent session gets 403 `CR_SECRET_OVERRIDE_REFUSED`.',
+                'Merge although the secret check flags what the change adds (409 `CR_SECRET_DETECTED`). A person only: any other credential gets 403 `CR_SECRET_OVERRIDE_REFUSED`. A change the check could not read in full needs no override from a person; it is recorded in `metadata.secret_scan_skipped`.',
             }),
           }) } } },
       },
@@ -174,7 +174,6 @@ export function registerChangeRequestActionsRoutes(): void {
       // personal key bound to no workspace. Never a session, a service
       // account, a workspace key or an OAuth token (iam/person-credential.ts).
       const actorIsPerson =
-        allowSecrets &&
         !isProjectSessionPrincipal(c) &&
         actsAsFullIdentity(c.get('authType') as string | undefined, await actorOf(c, loaded.row.accountId));
       const refusal = secretMergeRefusal({
@@ -185,16 +184,22 @@ export function registerChangeRequestActionsRoutes(): void {
         allowSecrets,
       });
       if (refusal) return c.json(refusal.body, refusal.status);
+      // What lets a person's merge through is recorded on the request and
+      // logged: a finding they overrode, or a check that could not read it all.
+      // Never a value.
+      const at = new Date().toISOString();
       const secretOverride =
-        change.secrets.total > 0 || change.secrets.unscanned
+        change.secrets.total > 0
           ? {
               by: loaded.userId,
-              at: new Date().toISOString(),
+              at,
               findings: change.secrets.findings.map(({ commit, file, line, rule }) => ({ commit, file, line, rule })),
               findings_total: change.secrets.total,
               ...(change.secrets.unscanned ? { unscanned: change.secrets.unscanned } : {}),
             }
           : null;
+      const secretScanSkipped =
+        !secretOverride && change.secrets.unscanned ? { reason: change.secrets.unscanned, by: loaded.userId, at } : null;
       if (secretOverride) {
         logger.warn('[cr-merge] a person merged past the secret check', {
           projectId,
@@ -203,6 +208,14 @@ export function registerChangeRequestActionsRoutes(): void {
           rules: [...new Set(secretOverride.findings.map((f) => f.rule))],
           findings: secretOverride.findings_total,
           unscanned: change.secrets.unscanned ?? null,
+        });
+      }
+      if (secretScanSkipped) {
+        logger.warn('[cr-merge] a person merged a change the secret check could not read', {
+          projectId,
+          cr: cr.number,
+          userId: loaded.userId,
+          reason: secretScanSkipped.reason,
         });
       }
 
@@ -322,7 +335,15 @@ export function registerChangeRequestActionsRoutes(): void {
           ? result.merge_commit_sha
           : (cr.headCommitSha ?? result.merge_commit_sha),
         baseCommitSha: result.base_sha_before,
-        ...(secretOverride ? { metadata: { ...(cr.metadata ?? {}), secret_override: secretOverride } } : {}),
+        ...(secretOverride || secretScanSkipped
+          ? {
+              metadata: {
+                ...(cr.metadata ?? {}),
+                ...(secretOverride ? { secret_override: secretOverride } : {}),
+                ...(secretScanSkipped ? { secret_scan_skipped: secretScanSkipped } : {}),
+              },
+            }
+          : {}),
       });
       if (!merged.applied) {
         return c.json({ error: 'Change request is merged' }, 409);

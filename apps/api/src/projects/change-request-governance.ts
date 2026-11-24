@@ -11,10 +11,11 @@ import type { AgentGrant } from '@kortix/db';
 import { grantsOfManifestText } from './agents/grants';
 import { requiredManifestActions } from './change-request-policy';
 import { validateRef } from './git-ref';
-import { DIFF_BLOB_FETCH_MAX_BYTES, ensureDiffBlobs } from './git/commits';
+import { blobIdsOfChanges, DIFF_BLOB_FETCH_MAX_BYTES, parseRawDiff, type RawChange } from './git/commits';
 import { readManifestFromRepo } from './git/files';
 import { wouldBeMergeCommit } from './git/merge';
-import { ensureCommitTrees, GitOperationError, refreshMirror, runGit, runGitBuffer } from './git/mirror';
+import { ensureCommitTrees, ensureStoreObjects, GitOperationError, refreshMirror, runGit, runGitBuffer } from './git/mirror';
+import { isObjectFetchTooLargeError } from './git/object-store';
 import type { GitBackedProject } from './git/types';
 import { MAX_SECRET_FINDINGS, scanAddedLines, type SecretScan } from './secret-scan';
 
@@ -24,9 +25,25 @@ const SECRET_SCAN_MAX_PATCH_BYTES = 32 * 1024 * 1024;
 const SECRET_SCAN_MAX_COMMITS = 500;
 /**
  * The most merge commits it reads. Each costs a merge base and up to three
- * blob prefetches, so this bounds the git processes one merge request spends.
+ * local diff listings, so this bounds the git processes one merge request spends.
  */
 const SECRET_SCAN_MAX_MERGES = 20;
+/**
+ * The wall time the secret scan may spend. The merge route answers inside the
+ * API's 25 s request deadline (middleware/request-deadline.ts), and the
+ * refreshes, the manifest reads and the merge itself need the rest. Past it
+ * the change comes back `unscanned`, never as a timeout.
+ */
+let SECRET_SCAN_BUDGET_MS = 10_000;
+
+/** Tests set a small budget instead of waiting out the real one. */
+export function setSecretScanBudgetMsForTests(ms: number): () => void {
+  const previous = SECRET_SCAN_BUDGET_MS;
+  SECRET_SCAN_BUDGET_MS = ms;
+  return () => {
+    SECRET_SCAN_BUDGET_MS = previous;
+  };
+}
 
 export interface MergeClassification {
   /** The head commit every check read. The merge lands exactly this commit. */
@@ -83,13 +100,11 @@ export async function classifyMerge(
         .then((r) => r.stdout.trim() || null)
         .catch(() => null);
   const manifestRef = landed ?? headSha;
-  const [before, after, history, landing] = await Promise.all([
+  const [before, after, secrets] = await Promise.all([
     readManifestFromRepo(project, candidates, mergeBase ?? baseSha, { strictRef: true }),
     readManifestFromRepo(project, candidates, manifestRef, { strictRef: true }),
-    addedSecrets(repoPath, cr.baseRef, headSha),
-    landed ? landedSecrets(repoPath, baseSha, landed) : Promise.resolve(null),
+    scanSecrets(repoPath, { baseRef: cr.baseRef, baseSha, headSha, landed }),
   ]);
-  const secrets = landing ? combineScans(history, landing) : history;
   const baseText = before?.content ?? null;
   const headText = after?.content ?? null;
   return {
@@ -104,34 +119,42 @@ export async function classifyMerge(
 }
 
 /**
- * The secrets the commits new to `baseRef` add (`base..head`), commit by
- * commit. The merge carries every one of those commits onto the base branch,
- * so a key added in one commit and deleted in the next still lands in its
- * history: the branch has to be rewritten without it.
+ * What looks like a secret in what the merge lands, read two ways:
  *
- * Nothing the branch controls hides a line: a merge commit is read as what its
- * resolution adds over an automatic merge of its parents (`remerge`), a file
- * git would call binary or `-diff` is read as text, and a rename is detected so
- * a file that only moves adds nothing. What the scan cannot read — more than
- * `SECRET_SCAN_MAX_COMMITS` commits or `SECRET_SCAN_MAX_MERGES` merges, more
- * file content than the store fetches at once, a patch over
- * `SECRET_SCAN_MAX_PATCH_BYTES`, an octopus merge — comes back as `unscanned`,
- * never as clean.
+ *  - commit by commit, every commit new to `baseRef` (`base..head`): the merge
+ *    carries each of them onto the base branch, so a key added in one commit
+ *    and deleted in the next still lands in its history. A merge commit is read
+ *    by what its resolution adds over an automatic merge of its parents
+ *    (`remerge`);
+ *  - the merge itself (`git diff base landed`): a key the base deleted that a
+ *    conflict resolution on the branch kept comes back.
+ *
+ * A file git would call binary or `-diff` is read as text; a rename is
+ * detected, so a file that only moves adds nothing. The store fetches what the
+ * scan reads in two requests, the trees, then every file version. What the
+ * scan cannot read — more than `SECRET_SCAN_MAX_COMMITS` commits or
+ * `SECRET_SCAN_MAX_MERGES` merges, more file content than one fetch takes, a
+ * patch over `SECRET_SCAN_MAX_PATCH_BYTES`, an octopus merge, more than
+ * `SECRET_SCAN_BUDGET_MS` of wall time — comes back as `unscanned`, never as clean.
  */
-async function addedSecrets(repoPath: string, baseRef: string, headSha: string): Promise<SecretScan> {
-  const range = `refs/heads/${baseRef}..${headSha}`;
+async function scanSecrets(
+  repoPath: string,
+  input: { baseRef: string; baseSha: string; headSha: string; landed: string | null },
+): Promise<SecretScan> {
+  const deadline = Date.now() + SECRET_SCAN_BUDGET_MS;
   const unscanned = (reason: string): SecretScan => ({ findings: [], total: 0, unscanned: reason });
+  const overBudget = () => unscanned(`it took longer than ${SECRET_SCAN_BUDGET_MS / 1000} s`);
+  const left = () => deadline - Date.now();
+  const range = `refs/heads/${input.baseRef}..${input.headSha}`;
+
   const listed = await runGit(['rev-list', '--parents', `--max-count=${SECRET_SCAN_MAX_COMMITS + 1}`, range], repoPath, false);
   const commits = listed.stdout.split('\n').filter(Boolean).map((line) => line.split(' '));
   if (commits.length > SECRET_SCAN_MAX_COMMITS) return unscanned(`more than ${SECRET_SCAN_MAX_COMMITS} commits`);
-  if (commits.length === 0) return { findings: [], total: 0 };
+  if (commits.length === 0 && !input.landed) return { findings: [], total: 0 };
   if (commits.some((ids) => ids.length > 3)) return unscanned('an octopus merge');
   const merges = commits.filter((ids) => ids.length === 3) as Array<[string, string, string]>;
   if (merges.length > SECRET_SCAN_MAX_MERGES) return unscanned(`more than ${SECRET_SCAN_MAX_MERGES} merge commits`);
-  // A partial store holds commits only (object-store.ts). Each commit's diff
-  // reads its tree and its parents'; a merge's remerge also reads the merge
-  // base of its parents. Fetch those trees, then both versions of every file
-  // the diffs compare, bounded like the change-request diff (DIFF_BLOB_FETCH_MAX_BYTES).
+
   // One git process at a time: the scan's cost stays proportional to its bounds.
   const mergeBases: Array<string | null> = [];
   for (const [, first, second] of merges) {
@@ -139,75 +162,66 @@ async function addedSecrets(repoPath: string, baseRef: string, headSha: string):
       await runGit(['merge-base', first, second], repoPath, false).then((r) => r.stdout.trim() || null).catch(() => null),
     );
   }
-  const trees = new Set([...commits.flat(), ...mergeBases.filter((id): id is string => id !== null)]);
+  // A partial store holds commits only (object-store.ts). Fetch every tree the
+  // diffs read in one request, then list every file version they compare (local
+  // reads) and fetch those in one more, bounded like the change-request diff.
+  const landing = input.landed ? [[input.baseSha, input.landed]] : [];
+  const pairs = [
+    ...merges.flatMap(([merge, first, second], index) => {
+      const base = mergeBases[index];
+      return [[first, merge], ...(base ? [[base, first], [base, second]] : [])];
+    }),
+    ...landing,
+  ];
+  const trees = new Set([...commits.flat(), ...mergeBases.filter((id): id is string => id !== null), ...landing.flat()]);
   await ensureCommitTrees(repoPath, [...trees]);
-  // One byte budget for every prefetch of this scan, so a branch of many
-  // merges cannot pull many times the change-request diff bound.
-  const pairs = merges.flatMap(([merge, first, second], index) => {
-    const base = mergeBases[index];
-    return [[first, merge], ...(base ? [[base, first], [base, second]] : [])];
-  });
-  const perFetchBytes = Math.floor(DIFF_BLOB_FETCH_MAX_BYTES / (1 + pairs.length));
-  if (!(await ensureDiffBlobs(repoPath, ['log', '--format=', '--no-merges'], [range], perFetchBytes))) {
-    return unscanned('more file content than one scan reads');
-  }
-  for (const pair of pairs) {
-    if (!(await ensureDiffBlobs(repoPath, ['diff'], pair, perFetchBytes))) {
-      return unscanned('more file content than one scan reads');
-    }
-  }
+  if (left() <= 0) return overBudget();
+  const changes: RawChange[] = [];
+  const listChanges = async (args: string[]) => {
+    const raw = await runGit([...args, '--raw', '-z', '--no-renames', '--no-abbrev'], repoPath, false);
+    changes.push(...parseRawDiff(raw.stdout));
+  };
+  if (commits.length > 0) await listChanges(['log', '--format=', '--no-merges', range]);
+  for (const pair of pairs) await listChanges(['diff', ...pair]);
   try {
-    const { stdout } = await runGitBuffer(
-      ['-c', 'core.quotePath=false', 'log', '-p', '--diff-merges=remerge', '--text', '--format=commit %H',
-        '--no-color', '--no-ext-diff', '--no-textconv', '-M', '-U0', '--src-prefix=a/', '--dst-prefix=b/', range],
-      repoPath,
-      false,
-      null,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      SECRET_SCAN_MAX_PATCH_BYTES,
-    );
-    return scanAddedLines(stdout.toString('utf8'));
+    await ensureStoreObjects(repoPath, blobIdsOfChanges(changes), { maxBytes: DIFF_BLOB_FETCH_MAX_BYTES, timeoutMs: left() });
   } catch (error) {
-    if (error instanceof GitOperationError && error.outputTooLarge) {
-      return unscanned(`a patch over ${SECRET_SCAN_MAX_PATCH_BYTES / (1024 * 1024)} MB`);
-    }
+    if (isObjectFetchTooLargeError(error)) return unscanned('more file content than one scan reads');
+    if (left() <= 0) return overBudget();
     throw error;
   }
-}
+  if (left() <= 0) return overBudget();
 
-/**
- * The secrets the merge itself adds to the base tip (`git diff base landed`).
- * The commit scan reads what the branch's commits add; this reads what the
- * merge puts back, such as a key the base deleted that a conflict resolution
- * on the branch kept.
- */
-async function landedSecrets(repoPath: string, baseSha: string, landed: string): Promise<SecretScan> {
-  if (!(await ensureDiffBlobs(repoPath, ['diff'], [baseSha, landed]))) {
-    return { findings: [], total: 0, unscanned: 'more file content than one scan reads' };
-  }
-  try {
-    const { stdout } = await runGitBuffer(
-      ['-c', 'core.quotePath=false', 'diff', '--text', '--no-color', '--no-ext-diff', '--no-textconv', '-M', '-U0',
-        '--src-prefix=a/', '--dst-prefix=b/', baseSha, landed],
-      repoPath,
-      false,
-      null,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      SECRET_SCAN_MAX_PATCH_BYTES,
-    );
-    return scanAddedLines(stdout.toString('utf8'));
-  } catch (error) {
-    if (error instanceof GitOperationError && error.outputTooLarge) {
-      return { findings: [], total: 0, unscanned: `a patch over ${SECRET_SCAN_MAX_PATCH_BYTES / (1024 * 1024)} MB` };
+  const patchOf = async (args: string[]): Promise<SecretScan | null> => {
+    try {
+      const { stdout } = await runGitBuffer(
+        ['-c', 'core.quotePath=false', ...args],
+        repoPath,
+        false,
+        null,
+        undefined,
+        undefined,
+        Math.max(left(), 1),
+        undefined,
+        SECRET_SCAN_MAX_PATCH_BYTES,
+      );
+      return scanAddedLines(stdout.toString('utf8'));
+    } catch (error) {
+      if (error instanceof GitOperationError && error.outputTooLarge) {
+        return unscanned(`a patch over ${SECRET_SCAN_MAX_PATCH_BYTES / (1024 * 1024)} MB`);
+      }
+      if (error instanceof GitOperationError && error.kind === 'timeout') return overBudget();
+      throw error;
     }
-    throw error;
-  }
+  };
+  const flags = ['--text', '--no-color', '--no-ext-diff', '--no-textconv', '-M', '-U0', '--src-prefix=a/', '--dst-prefix=b/'];
+  const history = commits.length > 0
+    ? await patchOf(['log', '-p', '--diff-merges=remerge', '--format=commit %H', ...flags, range])
+    : { findings: [], total: 0 };
+  if (!history || history.unscanned) return history ?? overBudget();
+  if (!input.landed) return history;
+  const merged = await patchOf(['diff', ...flags, input.baseSha, input.landed]);
+  return merged ? combineScans(history, merged) : history;
 }
 
 /** Both scans; a landing finding a commit finding already names (same file and rule) is not counted twice. */

@@ -257,17 +257,23 @@ describe('secretMergeRefusal — a person may override, an agent may not', () =>
     expect(secretMergeRefusal({ ...input, allowSecrets: true })).toBeNull();
   });
 
-  test('unread is not clean: an incomplete scan → 409 CR_SECRET_SCAN_INCOMPLETE; a person may override, an agent may not', () => {
+  test('nothing found but not read in full: a person merges as is; any other principal gets 409 CR_SECRET_SCAN_INCOMPLETE', () => {
     const incomplete = { findings: [], total: 0, unscanned: 'more than 500 commits' };
-    const refusal = secretMergeRefusal({ ...input, scan: incomplete });
+    expect(secretMergeRefusal({ ...input, scan: incomplete })).toBeNull();
+    const refusal = secretMergeRefusal({ ...input, scan: incomplete, actorIsPerson: false });
     expect(refusal?.status).toBe(409);
     expect(refusal?.body.code).toBe('CR_SECRET_SCAN_INCOMPLETE');
     expect(refusal?.body.unscanned).toBe('more than 500 commits');
-    expect(refusal?.body.remediation).toContain('kortix cr merge 7 --allow-secrets');
-    expect(secretMergeRefusal({ ...input, scan: incomplete, allowSecrets: true })).toBeNull();
+    expect(refusal?.body.remediation).toContain('ask a person to merge it');
     expect(secretMergeRefusal({ ...input, scan: incomplete, actorIsPerson: false, allowSecrets: true })?.body.code).toBe(
       'CR_SECRET_OVERRIDE_REFUSED',
     );
+  });
+
+  test('found and not read in full: a person still needs allow_secrets', () => {
+    const both = { ...scan, unscanned: 'a patch over 32 MB' };
+    expect(secretMergeRefusal({ ...input, scan: both })?.body.code).toBe('CR_SECRET_DETECTED');
+    expect(secretMergeRefusal({ ...input, scan: both, allowSecrets: true })).toBeNull();
   });
 
   test('an agent session, a service account or a workspace key overrides → 403 CR_SECRET_OVERRIDE_REFUSED', () => {

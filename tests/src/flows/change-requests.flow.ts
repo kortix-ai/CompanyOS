@@ -723,6 +723,39 @@ flow(
         const cr = await w.openCr("Clean note");
         (await w.merge(w.builder.client, cr.crId)).status(200).body().has("$.change_request.status", "merged");
       });
+
+      let unread = { crId: "", number: 0 };
+      await ctx.step("a change request the check cannot read in full (an octopus merge, no key) → `builder` gets 409 CR_SECRET_SCAN_INCOMPLETE, and 403 with allow_secrets", async () => {
+        await w.fromMain();
+        for (const side of ["side-a", "side-b"]) {
+          await w.agentGit(["checkout", "-q", "-b", side, "origin/main"]);
+          await writeFile(w.path(`${side}.md`), `${side}\n`);
+          await w.agentGit(["add", "-A"]);
+          await w.agentGit(["-c", "user.name=builder", "-c", "user.email=builder@example.test", "commit", "-q", "-m", side]);
+        }
+        await w.agentGit(["checkout", "-q", "-B", "octopus", "origin/main"]);
+        await w.agentGit(["-c", "user.name=builder", "-c", "user.email=builder@example.test", "merge", "-q", "--no-ff", "--no-edit", "side-a", "side-b"]);
+        await w.agentGit(["push", "-q", "-f", "origin", `HEAD:refs/heads/${w.builder.sessionId}`]);
+        unread = await w.openCr("Octopus");
+        (await w.merge(w.builder.client, unread.crId))
+          .status(409)
+          .body()
+          .has("$.code", "CR_SECRET_SCAN_INCOMPLETE")
+          .has("$.unscanned", "an octopus merge")
+          .has("$.findings_total", 0);
+        (await w.merge(w.builder.client, unread.crId, { allow_secrets: true })).status(403).body().has("$.code", "CR_SECRET_OVERRIDE_REFUSED");
+        if ((await w.mainFile("side-a.md")) !== null) throw new Error("a refused merge landed side-a.md");
+      });
+
+      await ctx.step("the owner merges it without allow_secrets → 200; the change request records metadata.secret_scan_skipped with the reason and who", async () => {
+        (await w.merge(owner, unread.crId)).status(200).body().has("$.change_request.status", "merged");
+        (await w.readCr(unread.crId))
+          .status(200)
+          .body()
+          .has("$.change_request.metadata.secret_scan_skipped.reason", "an octopus merge")
+          .has("$.change_request.metadata.secret_scan_skipped.by", ctx.P.OWNER.userId);
+        if ((await w.mainFile("side-a.md")) === null) throw new Error("main lacks the merged octopus change");
+      });
     } finally {
       cli.dispose();
       await w.close();

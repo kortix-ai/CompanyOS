@@ -619,9 +619,9 @@ The merge reads every commit the change request adds to its base: a merge commit
 2. Read it from the environment in the code.
 3. Remove the key from every commit of the branch, then force-push it. A commit that deletes the key is not enough: the merge carries the earlier commit.
 
-A change the check cannot read in full is not clean: more than 500 commits or 20 merge commits, a patch over 32 MB, or an octopus merge answers `409` `CR_SECRET_SCAN_INCOMPLETE`. Split it into smaller change requests.
+A change the check cannot read in full has more than 500 commits or 20 merge commits, a patch over 32 MB or an octopus merge, or takes more than 10 seconds to check. A long-lived branch merged into `main` is often one. A person merges it without an override, and the change request records the reason, who and when in `metadata.secret_scan_skipped`. An agent session, a service account, a key bound to a workspace or an OAuth token gets `409` `CR_SECRET_SCAN_INCOMPLETE`: split the change or ask a person to merge it.
 
-A person who checked a finding or an unread change, such as a test fixture, merges anyway with `kortix cr merge <cr> --allow-secrets` (REST: `{"allow_secrets": true}`). The change request records who did it and the findings in `metadata.secret_override`. Only a person's browser sign-in or a personal key bound to no workspace may override: an agent session, a service account, a key bound to a workspace or an OAuth token gets `403` `CR_SECRET_OVERRIDE_REFUSED`.
+A person who checked a finding, such as a test fixture, merges anyway with `kortix cr merge <cr> --allow-secrets` (REST: `{"allow_secrets": true}`). The change request records who did it and the findings in `metadata.secret_override`. Only a person's browser sign-in or a personal key bound to no workspace may override: an agent session, a service account, a key bound to a workspace or an OAuth token gets `403` `CR_SECRET_OVERRIDE_REFUSED`.
 
 A grant that names `project.cr.open` or `project.cr.merge` counts as `project.gitops.push` or `project.gitops.merge`. Write the `gitops` name in new grants.
 
@@ -667,7 +667,7 @@ Each command takes `--workspace <id>` and `--host <name>`. `ls`, `show`, `diff`,
 | (not open) | `409` | The change request is merged or closed. |
 | `CR_SELF_MERGE_REFUSED` | `403` | A session tried to merge its own change request without a merge grant. |
 | `CR_SECRET_DETECTED` | `409` | A commit of the change request adds a key. `findings` lists file, line, commit and rule. See [Secrets in a change request](#secrets-in-a-change-request). |
-| `CR_SECRET_SCAN_INCOMPLETE` | `409` | The change is too large for the secret check to read in full. `unscanned` says why. Split it, or a person merges with `allow_secrets`. |
+| `CR_SECRET_SCAN_INCOMPLETE` | `409` | The secret check could not read the change in full and the caller is not a person. `unscanned` says why. Split it, or a person merges it. |
 | `CR_SECRET_OVERRIDE_REFUSED` | `403` | An agent session, a service account, a workspace-bound key or an OAuth token sent `allow_secrets`. Only a person may. |
 | `CR_HEAD_MOVED` | `409` | The head or the base branch moved after the merge checked it. Nothing merged. Retry. |
 | `CR_GOVERNANCE_UNVERIFIED` | `503` | Kortix could not read the change request to check the merge. Nothing merged. Retry. |
@@ -2807,7 +2807,7 @@ These are the codes clients branch on most. The linked section explains each fix
 | `CR_HEAD_NOT_AHEAD` | `422` | The change request branch has no commits ahead of its base. | [Git](/docs/developers#change-requests) |
 | `CR_SELF_MERGE_REFUSED` | `403` | A session tried to merge its own change request without a `project.gitops.merge` grant. | [Git](/docs/developers#change-requests) |
 | `CR_SECRET_DETECTED` | `409` | A commit of the change request adds a key. The merge is blocked. `findings` names file, line, commit and rule, never the value. | [Git](/docs/developers#secrets-in-a-change-request) |
-| `CR_SECRET_SCAN_INCOMPLETE` | `409` | The change request is too large for the secret check to read in full. The merge is blocked. | [Git](/docs/developers#secrets-in-a-change-request) |
+| `CR_SECRET_SCAN_INCOMPLETE` | `409` | The secret check could not read the change request in full, and only a person merges it. | [Git](/docs/developers#secrets-in-a-change-request) |
 | `CR_SECRET_OVERRIDE_REFUSED` | `403` | An agent session asked to merge past the secret check. Only a person may. | [Git](/docs/developers#secrets-in-a-change-request) |
 | `MANIFEST_INVALID` | `422` | The change request makes `kortix.yaml` invalid. The merge is blocked. `issues` lists the errors. | [kortix.yaml reference](/docs/developers#kortixyaml-reference) |
 | `PERSONAL_SECRET_REQUIRES_PRIVATE_SESSION` | `409` | You tried to share a session that holds a secret shared only with you. | [Security](/docs/guide#security) |

@@ -10470,6 +10470,7 @@
       "authEmailRateLimit": "No se pudo enviar el correo. Vuelve a intentarlo en aproximadamente una hora.",
       "authRequestRateLimit": "Demasiadas solicitudes. Vuelve a intentarlo en unos minutos.",
       "text03217276a5f1": "Saldo {value0} créditos",
+      "text041fb4e77d8e": "Inicio de sesión web",
       "text0b6a47661327": "Propietario desconocido",
       "text1a9030082a20": "Crear habilidad",
       "text25ab55af92b1": "Carga del archivo adjunto iniciada",
@@ -10834,6 +10835,7 @@
       "text0b2e0f1bf47e": "Cada llamada que hizo y quién la permitió",
       "text0b2ecc210632": "El único canal en directo. Haz la pregunta en el hilo donde surgió; la respuesta, el gráfico y la consulta vuelven al mismo hilo.",
       "text0b348466332c": "Aún no ha cambiado nada",
+      "text93d50ea93ca0": "Lo escribe el navegador de la sesión solo en sus sitios. Nunca entra en el entorno.",
       "textf83916135509": "en uso",
       "texta251c18205f1": "En caché",
       "text64cd989efc14": "Espacio libre",
@@ -21525,6 +21527,14 @@
       "title": "Guardado, pero {agent} aún no puede leerlo",
       "grant": "{names} no {count, plural, one {está} other {están}} entre los secretos del agente {agent}. Abre Personalizar → Agentes → {agent} → Secretos y {count, plural, one {actívalo} other {actívalos}}.",
       "allowlist": "{names} {count, plural, one {está} other {están}} fuera de los secretos de esta sesión. Inicia una nueva sesión para {count, plural, one {usarlo} other {usarlos}}."
+    },
+    "secretIntakeLogin": {
+      "delivery": "Un inicio de sesión web para {sites}. El navegador de esta sesión lo escribe solo en estos sitios. El agente solo ve su nombre.",
+      "username": "Usuario o correo electrónico",
+      "password": "Contraseña",
+      "missing": "Introduce un usuario y una contraseña.",
+      "savedTitle": "Inicio de sesión guardado",
+      "savedDescription": "El agente ya puede iniciar sesión. Solo ve el nombre del inicio de sesión."
     },
     "sessionEmbed": {
       "sectionTitle": "Insertar",

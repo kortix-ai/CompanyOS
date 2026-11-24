@@ -10470,6 +10470,7 @@
       "authEmailRateLimit": "Impossibile inviare l’email. Riprova tra circa un’ora.",
       "authRequestRateLimit": "Troppe richieste. Riprova tra qualche minuto.",
       "text03217276a5f1": "Saldo {value0} crediti",
+      "text041fb4e77d8e": "Accesso al sito web",
       "text0b6a47661327": "Proprietario sconosciuto",
       "text1a9030082a20": "Crea competenza",
       "text25ab55af92b1": "Caricamento allegato avviato",
@@ -10834,6 +10835,7 @@
       "text0b2e0f1bf47e": "Ogni chiamata effettuata e chi l'ha autorizzata",
       "text0b2ecc210632": "L'unico canale live. Fai la domanda nel thread in cui è nata; risposta, grafico e query tornano nello stesso thread.",
       "text0b348466332c": "Non è ancora cambiato nulla",
+      "text93d50ea93ca0": "Digitato dal browser della sessione solo sui suoi siti. Non entra mai nell'ambiente.",
       "textf83916135509": "in uso",
       "texta251c18205f1": "In cache",
       "text64cd989efc14": "Spazio libero",
@@ -21525,6 +21527,14 @@
       "title": "Salvato, ma {agent} non può ancora leggerlo",
       "grant": "{names} non {count, plural, one {è} other {sono}} tra i segreti dell'agente {agent}. Apri Personalizza → Agenti → {agent} → Segreti e {count, plural, one {abilitalo} other {abilitali}}.",
       "allowlist": "{names} {count, plural, one {è} other {sono}} fuori dai segreti di questa sessione. Avvia una nuova sessione per {count, plural, one {usarlo} other {usarli}}."
+    },
+    "secretIntakeLogin": {
+      "delivery": "Un accesso a un sito web per {sites}. Il browser di questa sessione lo digita solo su questi siti. L'agente vede solo il suo nome.",
+      "username": "Nome utente o email",
+      "password": "Password",
+      "missing": "Inserisci un nome utente e una password.",
+      "savedTitle": "Accesso salvato",
+      "savedDescription": "L'agente ora può accedere. Vede solo il nome dell'accesso."
     },
     "sessionEmbed": {
       "sectionTitle": "Incorpora",

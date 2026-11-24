@@ -10470,6 +10470,7 @@
       "authEmailRateLimit": "Impossible d’envoyer l’e-mail. Réessaie dans environ une heure.",
       "authRequestRateLimit": "Trop de demandes. Réessaie dans quelques minutes.",
       "text03217276a5f1": "Solde {value0} crédits",
+      "text041fb4e77d8e": "Identifiant de site web",
       "text0b6a47661327": "Propriétaire inconnu",
       "text1a9030082a20": "Créer la compétence",
       "text25ab55af92b1": "Téléversement de la pièce jointe démarré",
@@ -10834,6 +10835,7 @@
       "text0b2e0f1bf47e": "Chaque appel effectué, et la personne qui l’a autorisé",
       "text0b2ecc210632": "Le seul canal en direct. Posez la question dans le fil où elle est apparue ; la réponse, le graphique et la requête reviennent dans ce même fil.",
       "text0b348466332c": "Aucune modification pour le moment",
+      "text93d50ea93ca0": "Saisi par le navigateur de la session uniquement sur ses sites. N’entre jamais dans l’environnement.",
       "textf83916135509": "utilisé",
       "texta251c18205f1": "En cache",
       "text64cd989efc14": "Espace libre",
@@ -21525,6 +21527,14 @@
       "title": "Enregistré, mais {agent} ne peut pas encore le lire",
       "grant": "{names} {count, plural, one {ne fait pas} other {ne font pas}} partie des secrets de l'agent {agent}. Ouvrez Personnaliser → Agents → {agent} → Secrets et {count, plural, one {activez-le} other {activez-les}}.",
       "allowlist": "{names} {count, plural, one {est} other {sont}} hors des secrets de cette session. Démarrez une nouvelle session pour {count, plural, one {l'utiliser} other {les utiliser}}."
+    },
+    "secretIntakeLogin": {
+      "delivery": "Un identifiant de site web pour {sites}. Le navigateur de cette session le saisit uniquement sur ces sites. L’agent ne voit que son nom.",
+      "username": "Nom d’utilisateur ou e-mail",
+      "password": "Mot de passe",
+      "missing": "Saisissez un nom d’utilisateur et un mot de passe.",
+      "savedTitle": "Identifiant enregistré",
+      "savedDescription": "L’agent peut maintenant se connecter. Il ne voit que le nom de l’identifiant."
     },
     "sessionEmbed": {
       "sectionTitle": "Intégrer",

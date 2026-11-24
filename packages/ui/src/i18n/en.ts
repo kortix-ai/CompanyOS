@@ -2796,6 +2796,7 @@ const catalog = {
       "noModelAddProviderKey": "Add provider key",
       "noModelUpgradePlan": "Upgrade plan",
       "text03217276a5f1": "Balance {value0} credits",
+      "text041fb4e77d8e": "Website login",
       "text0b6a47661327": "Unknown owner",
       "text1a9030082a20": "Create skill",
       "text38e64d6a8162": "Commits a SKILL.md to the workspace's default branch. No model or chat needed.",
@@ -2916,6 +2917,7 @@ const catalog = {
       "text0af465ef42c0": "On failure",
       "text0b1bdec38bf0": "Default template",
       "text0b348466332c": "Nothing changed yet",
+      "text93d50ea93ca0": "Typed by the session browser on its sites only. It never enters the environment.",
       "textf83916135509": "used",
       "texta251c18205f1": "Cached",
       "text64cd989efc14": "Free space",
@@ -6446,6 +6448,14 @@ const catalog = {
       "title": "Saved, but {agent} can't read it yet",
       "grant": "{names} {count, plural, one {is} other {are}} not in the {agent} agent's secrets. Open Customize → Agents → {agent} → Secrets and enable {count, plural, one {it} other {them}}.",
       "allowlist": "{names} {count, plural, one {is} other {are}} outside this session's secrets. Start a new session to use {count, plural, one {it} other {them}}."
+    },
+    "secretIntakeLogin": {
+      "delivery": "A website login for {sites}. The browser in this session types it on these sites only. The agent sees only its name.",
+      "username": "Username or email",
+      "password": "Password",
+      "missing": "Enter a username and a password.",
+      "savedTitle": "Login saved",
+      "savedDescription": "The agent can sign in now. It sees only the login's name."
     },
     "sessionEmbed": {
       "sectionTitle": "Embed",

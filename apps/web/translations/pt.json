@@ -10470,6 +10470,7 @@
       "authEmailRateLimit": "Não foi possível enviar o e-mail. Tente novamente em cerca de uma hora.",
       "authRequestRateLimit": "Muitas solicitações. Tente novamente em alguns minutos.",
       "text03217276a5f1": "Saldo {value0} créditos",
+      "text041fb4e77d8e": "Login de site",
       "text0b6a47661327": "Proprietário desconhecido",
       "text1a9030082a20": "Criar habilidade",
       "text25ab55af92b1": "Envio do anexo iniciado",
@@ -10834,6 +10835,7 @@
       "text0b2e0f1bf47e": "Cada chamada feita e quem a liberou",
       "text0b2ecc210632": "O único canal ao vivo. Faça a pergunta na thread onde ela surgiu; a resposta, o gráfico e a consulta retornam à mesma thread.",
       "text0b348466332c": "Nada mudou ainda",
+      "text93d50ea93ca0": "Digitado pelo navegador da sessão apenas nos sites dele. Nunca entra no ambiente.",
       "textf83916135509": "em uso",
       "texta251c18205f1": "Em cache",
       "text64cd989efc14": "Espaço livre",
@@ -21525,6 +21527,14 @@
       "title": "Salvo, mas {agent} ainda não consegue lê-lo",
       "grant": "{names} não {count, plural, one {está} other {estão}} nos segredos do agente {agent}. Abra Personalizar → Agentes → {agent} → Segredos e {count, plural, one {ative-o} other {ative-os}}.",
       "allowlist": "{names} {count, plural, one {está} other {estão}} fora dos segredos desta sessão. Inicie uma nova sessão para {count, plural, one {usá-lo} other {usá-los}}."
+    },
+    "secretIntakeLogin": {
+      "delivery": "Um login de site para {sites}. O navegador desta sessão o digita apenas nesses sites. O agente vê apenas o nome dele.",
+      "username": "Usuário ou e-mail",
+      "password": "Senha",
+      "missing": "Digite um usuário e uma senha.",
+      "savedTitle": "Login salvo",
+      "savedDescription": "O agente já pode entrar. Ele vê apenas o nome do login."
     },
     "sessionEmbed": {
       "sectionTitle": "Incorporar",

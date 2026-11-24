@@ -10470,6 +10470,7 @@
       "authEmailRateLimit": "无法发送邮件。请在大约一小时后重试。",
       "authRequestRateLimit": "请求过多。请在几分钟后重试。",
       "text03217276a5f1": "余额 {value0} 积分",
+      "text041fb4e77d8e": "网站登录信息",
       "text0b6a47661327": "未知所有者",
       "text1a9030082a20": "创建技能",
       "text25ab55af92b1": "已开始上传附件",
@@ -10834,6 +10835,7 @@
       "text0b2e0f1bf47e": "它执行过的每次调用，以及批准者",
       "text0b2ecc210632": "唯一的实时渠道。在问题出现的线程中提问，答案、图表和查询都会回到同一线程。",
       "text0b348466332c": "尚未有任何更改",
+      "text93d50ea93ca0": "仅由会话浏览器在其网站上输入。不会进入环境变量。",
       "textf83916135509": "已用",
       "texta251c18205f1": "已缓存",
       "text64cd989efc14": "剩余空间",
@@ -21525,6 +21527,14 @@
       "title": "已保存，但 {agent} 暂时无法读取",
       "grant": "{count, plural, other {# 个密钥}}（{names}）不在智能体 {agent} 的密钥中。请打开 自定义 → Agents → {agent} → 密钥 并启用{count, plural, other {它们}}。",
       "allowlist": "{count, plural, other {# 个密钥}}（{names}）不在此会话的密钥范围内。请启动新会话以使用{count, plural, other {它们}}。"
+    },
+    "secretIntakeLogin": {
+      "delivery": "{sites} 的网站登录信息。此会话的浏览器只在这些网站上输入它。智能体只能看到它的名称。",
+      "username": "用户名或邮箱",
+      "password": "密码",
+      "missing": "请输入用户名和密码。",
+      "savedTitle": "登录信息已保存",
+      "savedDescription": "智能体现在可以登录了。它只能看到登录信息的名称。"
     },
     "sessionEmbed": {
       "sectionTitle": "嵌入",

@@ -138,9 +138,12 @@ export function registerChangeRequestActionsRoutes(): void {
       try {
         change = await classifyMerge(projectForGit, cr);
       } catch (err) {
+        // The error's name and code only: a manifest parse error quotes the
+        // line it failed on, and that line can hold a key.
         logger.warn('[cr-merge] could not read the change to classify the merge; refusing it', {
           cr: cr.number,
-          error: err instanceof Error ? err.message : String(err),
+          error: err instanceof Error ? err.name : typeof err,
+          code: (err as { code?: unknown } | null)?.code ?? null,
         });
         // Header inline, never `c.header(...)` first — same race as the
         // journal 429 (KRTX-2737): the deadline may have answered already.

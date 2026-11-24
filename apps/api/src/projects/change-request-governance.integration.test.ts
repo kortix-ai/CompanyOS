@@ -224,6 +224,29 @@ describe('classifyMerge — connectors and what the commits add', () => {
     expect(change.secrets).toEqual({ findings: [], total: 0, unscanned: 'an octopus merge' });
   });
 
+  test('a key the base deleted, kept by a conflict resolution on the branch, is found: the merge would put it back', async () => {
+    // main holds the key; the branch starts there and edits the same file.
+    await pushBranch('session-seed-key', { 'legacy.ts': `export const OLD = '${FAKE_GITHUB_TOKEN}';\n` });
+    await git(['checkout', '-q', 'main'], workPath);
+    await git(['merge', '-q', '--ff-only', 'session-seed-key'], workPath);
+    await git(['push', '-q', 'origin', 'main'], workPath);
+    await pushBranch('session-keeps-key', { 'legacy.ts': `export const OLD = '${FAKE_GITHUB_TOKEN}';\nexport const MORE = 1;\n` });
+    // main deletes the key.
+    await writeFile(join(workPath, 'legacy.ts'), 'export const OLD = process.env.OLD;\n');
+    await git(['commit', '-q', '-am', 'drop the key'], workPath);
+    await git(['push', '-q', 'origin', 'main'], workPath);
+    // The branch merges main and resolves by keeping its own file.
+    await git(['checkout', '-q', 'session-keeps-key'], workPath);
+    await exec('git', ['merge', '-q', 'main'], { cwd: workPath }).catch(() => undefined);
+    await exec('git', ['checkout', '--ours', 'legacy.ts'], { cwd: workPath });
+    await git(['add', 'legacy.ts'], workPath);
+    await git(['commit', '-q', '--no-edit'], workPath);
+    await git(['push', '-q', 'origin', 'session-keeps-key:refs/heads/session-keeps-key'], workPath);
+    await git(['checkout', '-q', 'main'], workPath);
+    const change = await classifyMerge(project, { baseRef: 'main', headRef: 'session-keeps-key' });
+    expect(change.secrets.findings.map((f) => `${f.file}:${f.rule}`)).toContain('legacy.ts:github_token');
+  });
+
   test('a token already on the base branch is not the change request\'s finding', async () => {
     await pushBranch('session-base-token', { 'legacy.ts': `export const OLD = '${FAKE_GITHUB_TOKEN}';\n` });
     await git(['checkout', '-q', 'main'], workPath);

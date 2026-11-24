@@ -16,7 +16,7 @@ import { readManifestFromRepo } from './git/files';
 import { wouldBeMergeCommit } from './git/merge';
 import { ensureCommitTrees, GitOperationError, refreshMirror, runGit, runGitBuffer } from './git/mirror';
 import type { GitBackedProject } from './git/types';
-import { scanAddedLines, type SecretScan } from './secret-scan';
+import { MAX_SECRET_FINDINGS, scanAddedLines, type SecretScan } from './secret-scan';
 
 /** The largest patch the secret scan reads. Above it the change is not scanned. */
 const SECRET_SCAN_MAX_PATCH_BYTES = 32 * 1024 * 1024;
@@ -83,11 +83,13 @@ export async function classifyMerge(
         .then((r) => r.stdout.trim() || null)
         .catch(() => null);
   const manifestRef = landed ?? headSha;
-  const [before, after, secrets] = await Promise.all([
+  const [before, after, history, landing] = await Promise.all([
     readManifestFromRepo(project, candidates, mergeBase ?? baseSha, { strictRef: true }),
     readManifestFromRepo(project, candidates, manifestRef, { strictRef: true }),
     addedSecrets(repoPath, cr.baseRef, headSha),
+    landed ? landedSecrets(repoPath, baseSha, landed) : Promise.resolve(null),
   ]);
+  const secrets = landing ? combineScans(history, landing) : history;
   const baseText = before?.content ?? null;
   const headText = after?.content ?? null;
   return {
@@ -174,4 +176,48 @@ async function addedSecrets(repoPath: string, baseRef: string, headSha: string):
     }
     throw error;
   }
+}
+
+/**
+ * The secrets the merge itself adds to the base tip (`git diff base landed`).
+ * The commit scan reads what the branch's commits add; this reads what the
+ * merge puts back, such as a key the base deleted that a conflict resolution
+ * on the branch kept.
+ */
+async function landedSecrets(repoPath: string, baseSha: string, landed: string): Promise<SecretScan> {
+  if (!(await ensureDiffBlobs(repoPath, ['diff'], [baseSha, landed]))) {
+    return { findings: [], total: 0, unscanned: 'more file content than one scan reads' };
+  }
+  try {
+    const { stdout } = await runGitBuffer(
+      ['-c', 'core.quotePath=false', 'diff', '--text', '--no-color', '--no-ext-diff', '--no-textconv', '-M', '-U0',
+        '--src-prefix=a/', '--dst-prefix=b/', baseSha, landed],
+      repoPath,
+      false,
+      null,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      SECRET_SCAN_MAX_PATCH_BYTES,
+    );
+    return scanAddedLines(stdout.toString('utf8'));
+  } catch (error) {
+    if (error instanceof GitOperationError && error.outputTooLarge) {
+      return { findings: [], total: 0, unscanned: `a patch over ${SECRET_SCAN_MAX_PATCH_BYTES / (1024 * 1024)} MB` };
+    }
+    throw error;
+  }
+}
+
+/** Both scans; a landing finding a commit finding already names (same file and rule) is not counted twice. */
+function combineScans(history: SecretScan, landing: SecretScan): SecretScan {
+  const named = new Set(history.findings.map((f) => `${f.file}\0${f.rule}`));
+  const extra = landing.findings.filter((f) => !named.has(`${f.file}\0${f.rule}`));
+  const unscanned = history.unscanned ?? landing.unscanned;
+  return {
+    findings: [...history.findings, ...extra].slice(0, MAX_SECRET_FINDINGS),
+    total: history.total + extra.length,
+    ...(unscanned ? { unscanned } : {}),
+  };
 }

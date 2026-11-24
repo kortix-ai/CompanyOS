@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1822,
-  "aliases": 711,
+  "count": 1826,
+  "aliases": 713,
   "routes": [
     {
       "method": "GET",
@@ -2943,6 +2943,16 @@
     },
     {
       "method": "GET",
+      "path": "/v1/projects/:workspaceId/browser-logins",
+      "aliasOf": "/v1/workspaces/:workspaceId/browser-logins"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/browser-logins/resolve",
+      "aliasOf": "/v1/workspaces/:workspaceId/browser-logins/resolve"
+    },
+    {
+      "method": "GET",
       "path": "/v1/projects/:workspaceId/calendar",
       "aliasOf": "/v1/workspaces/:workspaceId/calendar"
     },
@@ -5849,6 +5859,14 @@
     {
       "method": "POST",
       "path": "/v1/workspaces/:workspaceId/branding/assets/:kind"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/browser-logins"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/browser-logins/resolve"
     },
     {
       "method": "GET",

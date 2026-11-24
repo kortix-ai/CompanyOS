@@ -21,6 +21,7 @@
 import { randomUUID } from 'node:crypto';
 import { projectSecrets, projectSessions } from '@kortix/db';
 import { and, eq, gt, isNull } from 'drizzle-orm';
+import { recordAuditEvent } from '../../shared/audit';
 import { db } from '../../shared/db';
 import { encryptProjectSecret } from '../secrets/envelope';
 import { resolveProjectSecretForConsumer } from '../secrets/consumer-resolution';
@@ -307,6 +308,21 @@ export async function resolveBrowserLogin(input: {
   );
   if (input.url && !logins.some((row) => loginSiteAdmits(sitesById.get(row.secretId) ?? [], input.url!))) {
     const allowed = [...new Set([...sitesById.values()].flat())].join(', ');
+    // A login asked for on another site is the one refusal that can mean a
+    // page tried to phish it: audit it like every consumer decision.
+    await recordAuditEvent({
+      accountId: input.accountId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      actorUserId: input.actorUserId,
+      actorType: 'agent',
+      source: 'browser',
+      action: 'secret.consumer.denied',
+      outcome: 'denied',
+      resourceType: 'project_secret',
+      resourceId: logins[0]!.secretId,
+      metadata: { name, site: urlHost, requested_consumer: 'browser', reason: 'site_not_allowed' },
+    });
     return {
       ok: false,
       status: 403,

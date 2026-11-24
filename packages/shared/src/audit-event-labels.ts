@@ -19,6 +19,7 @@
  */
 // biome-ignore format: one action per line, so a diff names exactly the action that changed
 export const AUDIT_EVENT_LABELS: Readonly<Record<string, string>> = {
+  'project.settings.write': 'Updated workspace settings',
   'api.rate_limit.exceeded': 'Hit API rate limit',
   'project.artifact.doc.edit': 'Edited a live artifact doc',
   'drive.folder.admin_access': "Admin opened a person's own folder",

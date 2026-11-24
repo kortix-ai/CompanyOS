@@ -225,9 +225,9 @@ const CASES: WCase[] = [
     tier: 'manager', denyGrant: [A.PROJECT_TRIGGER_FIRE], allowGrant: [A.PROJECT_CONNECTOR_WRITE],
   },
   {
-    name: 'connect-requests (connector.write)',
+    name: 'shared connect-requests (connector.write)',
     leaf: A.PROJECT_CONNECTOR_WRITE, method: 'POST',
-    path: () => `/v1/projects/${PROJECT}/connect-requests`, body: {},
+    path: () => `/v1/projects/${PROJECT}/connect-requests`, body: { owner: 'project' },
     tier: 'manager', denyGrant: [A.PROJECT_TRIGGER_FIRE], allowGrant: [A.PROJECT_CONNECTOR_WRITE],
   },
   // ── Connectors (read) ────────────────────────────────────────────────────

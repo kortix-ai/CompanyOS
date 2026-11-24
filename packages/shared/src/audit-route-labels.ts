@@ -26,6 +26,15 @@ import type { AuditRouteLabel } from './audit-labels';
 
 // biome-ignore format: one route per line, so a diff names exactly the route that changed
 export const AUDIT_ROUTE_LABELS: Readonly<Record<string, AuditRouteLabel | string>> = {
+  'GET /v1/projects/:workspaceId/artifacts/folders': { action: 'project.artifact.folder.list', title: 'Listed artifact folders' },
+  'POST /v1/projects/:workspaceId/artifacts/folders': { action: 'project.artifact.folder.create', title: 'Created artifact folder' },
+  'PATCH /v1/projects/:workspaceId/artifacts/folders/:folderId': { action: 'project.artifact.folder.update', title: 'Updated artifact folder' },
+  'DELETE /v1/projects/:workspaceId/artifacts/folders/:folderId': { action: 'project.artifact.folder.delete', title: 'Deleted artifact folder' },
+  'GET /v1/projects/:workspaceId/browser-logins': { action: 'project.browser_login.list', title: 'Listed available browser logins' },
+  'POST /v1/projects/:workspaceId/browser-logins/resolve': { action: 'project.browser_login.resolve', title: 'Resolved a browser login' },
+  'GET /v1/projects/:workspaceId/dictation': { action: 'project.dictation.read', title: 'Viewed dictation availability' },
+  'POST /v1/projects/:workspaceId/dictation': { action: 'project.dictation.transcribe', title: 'Transcribed dictated audio' },
+
   'GET /.well-known/oauth-authorization-server': { action: 'oauth.server_metadata.read', title: 'Read OAuth server metadata' },
   'GET /.well-known/oauth-protected-resource': { action: 'mcp.resource_metadata.read', title: 'Read MCP resource metadata' },
   'GET /.well-known/oauth-protected-resource/v1/mcp': { action: 'mcp.server_metadata.read', title: 'Read MCP server metadata' },

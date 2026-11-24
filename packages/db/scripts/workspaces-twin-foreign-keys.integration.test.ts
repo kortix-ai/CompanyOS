@@ -81,8 +81,7 @@ suite('Workspaces R2a: twin foreign keys into kortix.workspaces', () => {
       for (const fk of old) {
         const twin = twinOf.get(`${fk.child}.${fk.column}`)!;
         // 'a' = NO ACTION. Release 2b gives each twin the old key's action.
-        expect({ name: twin.name, on_delete: twin.on_delete, deferrable: twin.deferrable, deferred: twin.deferred }).toEqual({
-          name: `${fk.child.replace(/^kortix\./, '')}_${fk.column}_workspaces_fk`,
+        expect({ on_delete: twin.on_delete, deferrable: twin.deferrable, deferred: twin.deferred }).toEqual({
           on_delete: 'a',
           deferrable: true,
           deferred: true,

@@ -968,7 +968,7 @@ harnessFlow(
       'GET /v1/workspaces/:projectId/sessions/:sessionId/prompts',
       'POST /v1/workspaces/:projectId/sessions/:sessionId/prompts/hold',
       'GET /v1/workspaces/:projectId/sessions/:sessionId/turn',
-      'GET /v1/workspaces/:projectId/sessions/:sessionId/transcript',
+      'GET /v1/workspaces/:projectId/sessions/:sessionId/log',
     ],
   },
   async (ctx, harness) => {

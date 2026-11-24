@@ -2185,7 +2185,7 @@ const catalog = {
       },
       "notStarted": "Didn’t start",
       "notStartedSentence": "Kortix couldn’t start this colleague. Nothing ran.",
-      "policyBlocked": "Blocked by this project’s policy. Ask a project admin to allow it."
+      "policyBlocked": "Blocked by this workspace’s policy. Ask a workspace admin to allow it."
     }
   },
   "agentScope": {

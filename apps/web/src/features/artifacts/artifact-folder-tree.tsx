@@ -10,6 +10,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuRadioGroup,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
 } from '@kortix/ui/dropdown-menu';
@@ -17,7 +20,7 @@ import { glyphFace } from '@kortix/ui/glyph-face';
 import { glyphForeground, glyphStyle } from '@kortix/ui/glyph-tint';
 import { CaretRightIcon, DotsThreeIcon, FolderIcon, FolderSimpleDashedIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
-import { Fragment, createElement } from 'react';
+import { Fragment, createElement, type ReactNode } from 'react';
 
 import { useTranslations } from '@/i18n/use-translations';
 
@@ -80,24 +83,26 @@ export function folderSubtree(folders: ArtifactFolder[], id: string): Set<string
   return subtree;
 }
 
-/** Every folder in tree order (a parent, then its children), with its depth. */
-function folderRows(folders: ArtifactFolder[], exclude: Set<string>) {
-  const rows: { folder: ArtifactFolder; depth: number }[] = [];
-  const visit = (parentId: string | null, depth: number) => {
-    for (const folder of folderChildren(folders, parentId)) {
-      if (exclude.has(folder.folder_id)) continue;
-      rows.push({ folder, depth });
-      visit(folder.folder_id, depth + 1);
-    }
-  };
-  visit(null, 0);
-  return rows;
+const SUB_CONTENT = 'max-h-[var(--radix-dropdown-menu-content-available-height)] max-w-64 overflow-y-auto';
+
+function FolderRow({ folder }: { folder: ArtifactFolder }) {
+  return (
+    <>
+      <FolderMenuIcon folder={folder} />
+      <span className="truncate" title={folder.name}>
+        {folder.name}
+      </span>
+    </>
+  );
 }
 
 /**
- * The radio rows of a "Move to folder" submenu: No folder, then every folder
- * as a tree (indented by depth) with its own icon. `exclude` hides folders a
- * folder cannot move into (itself and its subfolders).
+ * The rows of a "Move to folder" submenu: No folder, then the root folders.
+ * A folder with subfolders opens its own submenu: the folder itself first
+ * (pick it to move there), then its subfolders, the same way down. One radio
+ * group spans every level, so the current folder carries the check wherever
+ * it sits. `exclude` hides folders a folder cannot move into (itself and its
+ * subfolders).
  */
 export function FolderTreeRadioItems({
   folders,
@@ -112,7 +117,30 @@ export function FolderTreeRadioItems({
   exclude?: Set<string>;
 }) {
   const t = useTranslations('artifacts');
-  const rows = folderRows(folders, exclude);
+  const childrenOf = (parentId: string | null) =>
+    folderChildren(folders, parentId).filter((folder) => !exclude.has(folder.folder_id));
+  const level = (parentId: string | null): ReactNode =>
+    childrenOf(parentId).map((folder) =>
+      childrenOf(folder.folder_id).length ? (
+        <DropdownMenuSub key={folder.folder_id}>
+          <DropdownMenuSubTrigger>
+            <FolderRow folder={folder} />
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className={SUB_CONTENT}>
+            <DropdownMenuRadioItem value={folder.folder_id} textValue={folder.name}>
+              <FolderRow folder={folder} />
+            </DropdownMenuRadioItem>
+            <DropdownMenuSeparator />
+            {level(folder.folder_id)}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+      ) : (
+        <DropdownMenuRadioItem key={folder.folder_id} value={folder.folder_id} textValue={folder.name}>
+          <FolderRow folder={folder} />
+        </DropdownMenuRadioItem>
+      ),
+    );
+  const roots = childrenOf(null);
   return (
     <DropdownMenuRadioGroup
       value={value}
@@ -124,17 +152,8 @@ export function FolderTreeRadioItems({
         <FolderSimpleDashedIcon aria-hidden className="text-muted-foreground size-4 shrink-0" />
         <span className="truncate">{t('folderRoot')}</span>
       </DropdownMenuRadioItem>
-      {rows.length ? <DropdownMenuSeparator /> : null}
-      {rows.map(({ folder, depth }) => (
-        <DropdownMenuRadioItem key={folder.folder_id} value={folder.folder_id} textValue={folder.name}>
-          {/* One step per level: the tree reads without connector lines. */}
-          {depth ? <span aria-hidden className="shrink-0" style={{ width: `${depth}rem` }} /> : null}
-          <FolderMenuIcon folder={folder} />
-          <span className="truncate" title={folder.name}>
-            {folder.name}
-          </span>
-        </DropdownMenuRadioItem>
-      ))}
+      {roots.length ? <DropdownMenuSeparator /> : null}
+      {level(null)}
     </DropdownMenuRadioGroup>
   );
 }

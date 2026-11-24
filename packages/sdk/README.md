@@ -464,8 +464,8 @@ reuse the successful upload; an explicit `attachmentId` supports caller-managed 
 `kortix.project(id).dictation.transcribe(audio, { surface })` turns one recorded clip into
 text for a composer. `audio` is a `Blob` (WebM, Ogg, MP4/M4A, MP3, WAV or FLAC) or, on
 React Native, a device file `{ uri, name, type }`. It returns `{ text, seconds, credits }`.
-The workspace pays 1 credit per minute of audio, billed per second, on every plan; a clip
-with no speech returns `text: ''` and costs nothing. `dictation.info()` returns
+The workspace pays 1 credit per minute of audio, billed per second, on every plan, speech
+or not; a clip with no speech returns `text: ''`. `dictation.info()` returns
 `{ available, credits_per_minute, max_seconds, max_bytes }`: hide the microphone when
 `available` is false (a self-hosted server without managed models). Neither the audio nor
 the text is stored. A refusal throws `ApiError` with `code` `insufficient_credits` or

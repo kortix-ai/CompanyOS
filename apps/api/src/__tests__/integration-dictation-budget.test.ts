@@ -28,12 +28,16 @@ const saved = {
 const realFetch = globalThis.fetch;
 let upstreamCalls = 0;
 let project: SeededProject;
+let quiet: SeededProject;
 
 // A WebM header: the clip check reads the container from these bytes.
 const clip = () => new File([new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81])], 'clip.webm');
+// The same header, one byte longer: the stub answers it as 60 s of silence.
+const silence = () => new File([new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 0])], 'silence.webm');
 
 beforeAll(async () => {
   project = await seedProject('dictation-budget');
+  quiet = await seedProject('dictation-silence');
   Object.assign(config, {
     KORTIX_MANAGED_PROVIDER_ENABLED: true,
     PLATINUM_INFERENCE_API_KEY: 'test-key',
@@ -44,6 +48,8 @@ beforeAll(async () => {
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     if (String(input) === `${UPSTREAM}/audio/transcriptions`) {
       upstreamCalls++;
+      const file = (init?.body as FormData).get('file') as File;
+      if (file.size === 9) return Response.json({ text: '', usage: { type: 'duration', seconds: 60, cost: 0.0025 } });
       // 30 s of audio: $0.005 at 1 credit per minute.
       return Response.json({ text: TRANSCRIPT, usage: { type: 'duration', seconds: 30, cost: 0.00125 } });
     }
@@ -69,8 +75,10 @@ afterAll(async () => {
     PLATINUM_INFERENCE_URL: saved.url,
     KORTIX_BILLING_INTERNAL_ENABLED: saved.billing,
   });
-  await db.delete(gatewayRequestLogs).where(eq(gatewayRequestLogs.projectId, project.project_id));
-  await removeSeeded([project]);
+  for (const seeded of [project, quiet]) {
+    await db.delete(gatewayRequestLogs).where(eq(gatewayRequestLogs.projectId, seeded.project_id));
+  }
+  await removeSeeded([project, quiet]);
 });
 
 test('a block budget refuses dictation once the clips it already charged reach the limit', async () => {
@@ -98,4 +106,15 @@ test('the trace a dictation writes holds its cost and no transcript', async () =
     expect(Number(row.finalCost)).toBeCloseTo(0.005, 6);
     expect(JSON.stringify(row)).not.toContain(TRANSCRIPT);
   }
+});
+
+test('a clip with no speech is charged by its length like any other', async () => {
+  const result = await transcribeDictation(
+    { accountId: quiet.account_id, projectId: quiet.project_id, userId: USER },
+    silence(),
+  );
+  expect(result).toMatchObject({ ok: true, text: '', seconds: 60 });
+  expect(result.ok && result.costUsd).toBeCloseTo(0.01, 6);
+  const [row] = await db.select().from(gatewayRequestLogs).where(eq(gatewayRequestLogs.projectId, quiet.project_id));
+  expect(Number(row?.finalCost)).toBeCloseTo(0.01, 6);
 });

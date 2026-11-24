@@ -15,7 +15,7 @@ export interface DictationInfo {
 
 /** The text of one dictated clip and what it cost. */
 export interface DictationTranscript {
-  /** The words heard, trimmed. Empty when the clip held no speech; then `credits` is 0. */
+  /** The words heard, trimmed. Empty when the clip held no speech (still charged by its length). */
   text: string;
   /** The billed audio duration. */
   seconds: number;

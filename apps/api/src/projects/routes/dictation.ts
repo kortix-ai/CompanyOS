@@ -27,7 +27,7 @@ const infoSchema = z.object({
 });
 
 const resultSchema = z.object({
-  text: z.string().openapi({ description: 'The words heard, trimmed. Empty when the clip held no speech (no charge).' }),
+  text: z.string().openapi({ description: 'The words heard, trimmed. Empty when the clip held no speech.' }),
   seconds: z.number().openapi({ description: 'The billed audio duration.' }),
   credits: z.number().openapi({ description: 'Credits charged for this clip (1 credit = $0.01).' }),
 });
@@ -76,7 +76,7 @@ export function registerDictationRoutes(): void {
       summary: 'Transcribe a dictated clip into text',
       description:
         'Speech-to-text for the composer. Send one recorded clip (WebM, Ogg, MP4/M4A, MP3, WAV or FLAC, up to 25 MB); the answer is its text. ' +
-        'Charged from the workspace credits at `credits_per_minute` (GET this path), billed per second, on every plan. A clip with no speech is free. ' +
+        'Charged from the workspace credits at `credits_per_minute` (GET this path), billed per second, on every plan, whether or not the clip holds speech. ' +
         'Neither the audio nor the text is stored. Needs permission to start sessions in the project. ' +
         '`402` codes: `insufficient_credits` (with `billing_state`), `budget_exceeded`. `503` codes: `dictation_unavailable`, `dictation_busy`, `dictation_failed`.',
       ...auth,

@@ -1345,11 +1345,12 @@ if (!gotLock) {
     }
 
     applyUserAgent();
-    // The microphone (dictation) for the app's own page only: see media-permission.js.
+    // Browser permissions: the app's own page gets what it uses, the microphone
+    // included; previews and popups only harmless ones. See media-permission.js.
     installMediaPermissionPolicy(session.defaultSession, {
       appWebContents: () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null),
       appUrl: () => instanceStore.appUrl(),
-      onDenied: (url, types) => console.warn('[permissions] refused media', { url, types }),
+      onDenied: (url, permission) => console.warn('[permissions] refused', { url, permission }),
     });
     computerShell = setupComputer({
       channel: CHANNEL,

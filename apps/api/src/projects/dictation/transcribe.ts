@@ -273,8 +273,9 @@ export async function transcribeDictation(
       : refusal(503, 'dictation_failed', 'Transcription failed. Try again.');
   }
 
-  // A clip with no words costs nothing: the person got nothing.
-  const costUsd = answer.text ? dictationPriceUsd(answer.seconds) : 0;
+  // Every clip is charged by its seconds, words or not: Kortix pays the
+  // upstream for silence too, and a free silent clip has no length cap.
+  const costUsd = dictationPriceUsd(answer.seconds);
   await trace({
     status: 200,
     ok: true,

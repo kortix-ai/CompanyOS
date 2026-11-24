@@ -57,7 +57,7 @@ Dictation (composer speech-to-text, `POST /v1/workspaces/:id/dictation`) is
 on every plan, Free included, although it runs a Kortix-managed Whisper: it
 is an input method, not a model choice (decision 2026-11-24). It costs
 `DICTATION_CREDITS_PER_MINUTE` (1 credit a minute, billed per second) from
-the wallet, a clip with no speech is free, and it passes the same wallet gate
+the wallet, a silent clip included, and it passes the same wallet gate
 and project budgets as model usage. Its ledger rows read "Dictation".
 
 `credit_accounts.tier` is the billing plan: `free` or `credits` (legacy keys

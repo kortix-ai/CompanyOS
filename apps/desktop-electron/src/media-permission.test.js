@@ -36,12 +36,39 @@ describe('installMediaPermissionPolicy', () => {
     return { handlers, denied };
   }
 
-  test('keeps every other permission granted, as Electron did without a handler', () => {
+  test("grants the app's own page what it uses, and denies it the rest", () => {
     const { handlers } = install();
-    let answer;
-    handlers.request(popup, 'notifications', (ok) => (answer = ok), { requestingUrl: 'https://x.test' });
-    expect(answer).toBe(true);
-    expect(handlers.check(popup, 'clipboard-sanitized-write', 'https://x.test', {})).toBe(true);
+    const app = { requestingUrl: `${APP}/w`, isMainFrame: true };
+    const ask = (wc, permission, details) => {
+      let answer;
+      handlers.request(wc, permission, (ok) => (answer = ok), details);
+      return answer;
+    };
+    for (const permission of ['notifications', 'clipboard-sanitized-write', 'fullscreen', 'display-capture', 'openExternal']) {
+      expect(ask(main, permission, app)).toBe(true);
+    }
+    for (const permission of ['clipboard-read', 'geolocation', 'midi', 'midiSysex', 'idle-detection']) {
+      expect(ask(main, permission, app)).toBe(false);
+    }
+  });
+
+  test('gives a preview, popup or other origin only harmless permissions', () => {
+    const { handlers } = install();
+    const preview = { requestingUrl: 'https://abc.kortix.cloud/', isMainFrame: true };
+    const ask = (wc, permission, details) => {
+      let answer;
+      handlers.request(wc, permission, (ok) => (answer = ok), details);
+      return answer;
+    };
+    for (const permission of ['clipboard-read', 'geolocation', 'notifications', 'midi', 'display-capture']) {
+      expect(ask(popup, permission, preview)).toBe(false);
+      // An iframe of another origin inside the main window is not the app either.
+      expect(ask(main, permission, { ...preview, isMainFrame: false })).toBe(false);
+      expect(handlers.check(popup, permission, 'https://abc.kortix.cloud', preview)).toBe(false);
+    }
+    for (const permission of ['clipboard-sanitized-write', 'fullscreen', 'pointerLock', 'openExternal']) {
+      expect(ask(popup, permission, preview)).toBe(true);
+    }
   });
 
   test('answers a microphone request and check by the rule, and reports a refusal', () => {

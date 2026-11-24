@@ -1622,10 +1622,10 @@ html[data-desktop-platform='macos'] .kx-settings-mobile-titlebar .kx-settings-mo
   }
 }
 
-/* The app never bounces or pull-refreshes like a document: the root scroller
-   eats the overscroll (the installed PWA especially), and taps keep no
-   materialize flash (inherited, so one rule covers every surface). */
+/* Suppress vertical bounce and pull-to-refresh, but leave horizontal
+   overscroll native so macOS swipe-between-pages can navigate history.
+   Taps keep no materialize flash across surfaces. */
 html {
-  overscroll-behavior: none;
+  overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
 }

@@ -59,7 +59,6 @@ export type OkResponse = z.infer<typeof OkResponseSchema>;
  */
 export const FeatureFlagMapSchema = z.object({
   reminders: z.boolean(),
-  secrets_egress: z.boolean(),
   us_region: z.boolean(),
   event_triggers: z.boolean(),
   chat: z.boolean(),
@@ -217,6 +216,8 @@ export const ProjectSchema = z.object({
     notification_center: z.literal(true).optional(),
     /** Not a flag since 2026-11-12 (named provider keys, sharing and session key selection are on for every project); always `true` for older SDK, web, CLI and terminal UI clients. */
     pooled_provider_secrets: z.literal(true).optional(),
+    /** Not a flag since 2026-11-23 (every project can set a secret's exposure to enforced: a handle in the sandbox, the value substituted only on approved hosts); always `true` for older SDK, web and CLI clients. */
+    secrets_egress: z.literal(true).optional(),
     /** Not a flag since 2026-11-03 (warm sessions were removed); always `false` for older SDK, web and mobile clients, which pre-create a session only while it is true. */
     warm_sessions: z.literal(false).optional(),
     /** Not a flag since 2026-11-02 (every project has a Drive); `true` wherever the platform stores a Drive (Platinum), for older SDK, CLI and hosts. */

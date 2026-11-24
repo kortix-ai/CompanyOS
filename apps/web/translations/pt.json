@@ -1293,10 +1293,6 @@
       "permission": "Você precisa da permissão de configurações do espaço de trabalho para alterar um sinalizador de recurso.",
       "updateFailed": "Não foi possível atualizar {key}",
       "flags": {
-        "secrets_egress": {
-          "name": "Segredos protegidos pela rede",
-          "description": "Controle quais ferramentas e destinos podem receber os segredos do espaço de trabalho."
-        },
         "reminders": {
           "name": "Ciclos",
           "description": "Permite que agentes e pessoas agendem verificações em uma sessão, uma vez ou de forma recorrente. Cada disparo aciona essa sessão novamente. Adiciona os ciclos à lista de Gatilhos, o indicador de ciclos da sessão e `kortix loop`."
@@ -18351,7 +18347,6 @@
       "texte59a1d133be1": "As alterações se aplicam ao próximo login. Os tokens já emitidos continuarão funcionando até expirarem.",
       "texte59eaa3acaf1": "a barreira",
       "texte5a4af9b350f": "Criei, ativei e testei a conexão SCIM",
-      "texte5a718af362a": "Os dois primeiros",
       "texte5ab168f1943": "O briefing pré-reunião",
       "texte5b104783abd": "Seu agente pode usar as ferramentas de que precisa, como faria em um computador comum.",
       "texte5bd74e98514": "outro — somente código-fonte",

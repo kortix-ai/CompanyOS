@@ -39,17 +39,14 @@ Each secret has one EXPOSURE — can agent code read the value?
                for a credential the code must COMPUTE with (AWS SigV4, HMAC
                webhook signing, JWT assertions, SSH/PEM keys) and for anything
                that is not HTTPS.
-  enforced     EXPERIMENTAL — requires the workspace's \`secrets_egress\` feature
-               flag (Settings → Feature flags), on by default. The env var
-               holds a HANDLE, not the value. Kortix substitutes the real value
-               outside the sandbox, only on the approved hosts, and rewrites any
-               echo of it to [REDACTED].
+  enforced     The env var holds a HANDLE, not the value. Kortix substitutes
+               the real value outside the sandbox, only on the approved hosts,
+               and rewrites any echo of it to [REDACTED].
   none         No sandbox presence. A Kortix service spends the value (LLM
                gateway, connector, Git), or the secret is stored and disabled.
 
-Enforcement (enforced exposure) is EXPERIMENTAL and gated behind the
-\`secrets_egress\` feature flag. When it is enabled it is ONE mechanism on every
-sandbox provider, not a menu. Agent code sends the handle with its ordinary HTTP
+Enforcement (enforced exposure) is ONE mechanism on every sandbox provider,
+not a menu. Agent code sends the handle with its ordinary HTTP
 client. \`kortix secrets call\` is the explicit door to the same hosts and the
 same policy, for a request that cannot be intercepted in the sandbox.
 
@@ -99,9 +96,7 @@ Subcommands:
                                     is set via the intake link, updated, or
                                     newly granted to the agent mid-session.
   delivery IDENTIFIER EXPOSURE      Set environment (default), enforced, or
-                                    none. \`enforced\` is EXPERIMENTAL and needs
-                                    the workspace's \`secrets_egress\` feature flag
-                                    (Settings → Feature flags). The stored names
+                                    none. The stored names
                                     runtime|egress|broker|denied are accepted as
                                     aliases.
     --allow-host <host>              Approved host for enforced exposure.
@@ -127,8 +122,7 @@ Subcommands:
                                     [REDACTED] on an echoed value. The explicit
                                     fallback for a request the sandbox cannot
                                     intercept, not a second way to configure a
-                                    secret. Applies to enforced exposure, which
-                                    is EXPERIMENTAL (\`secrets_egress\` flag).
+                                    secret. Applies to enforced exposure.
     --method <method>                Default: GET.
     --header <name:value>            Request header. Repeat as needed.
     --data <value>                   Inline request body.

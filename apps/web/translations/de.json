@@ -1293,10 +1293,6 @@
       "permission": "Sie benötigen die Einstellungsberechtigung des Workspace, um ein Feature-Flag zu ändern.",
       "updateFailed": "{key} konnte nicht aktualisiert werden",
       "flags": {
-        "secrets_egress": {
-          "name": "Netzwerkerzwungene Geheimnisse",
-          "description": "Steuern Sie, welche Werkzeuge und Ziele Workspace-Geheimnisse empfangen dürfen."
-        },
         "reminders": {
           "name": "Schleifen",
           "description": "Agenten und Personen können Check-ins für eine Sitzung planen, einmalig oder wiederkehrend. Jede Auslösung spricht diese Sitzung erneut an. Fügt Schleifen zur Trigger-Liste, den Schleifen-Chip der Sitzung und `kortix loop` hinzu."
@@ -18351,7 +18347,6 @@
       "texte59a1d133be1": "Änderungen gelten für die nächste Anmeldung. Bereits ausgegebene Tokens funktionieren weiter, bis sie ablaufen.",
       "texte59eaa3acaf1": "die Grenze",
       "texte5a4af9b350f": "Ich habe die SCIM-Verbindung erstellt, aktiviert und getestet",
-      "texte5a718af362a": "Die ersten beiden",
       "texte5ab168f1943": "Das Gesprächsbriefing",
       "texte5b104783abd": "Ihr Agent kann die benötigten Tools verwenden, genau wie auf einem normalen Computer.",
       "texte5bd74e98514": "Sonstiges – nur Quelltext",

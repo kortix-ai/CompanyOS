@@ -1293,10 +1293,6 @@
       "permission": "Necesitas el permiso de configuración del espacio de trabajo para cambiar un indicador de función.",
       "updateFailed": "No se pudo actualizar {key}",
       "flags": {
-        "secrets_egress": {
-          "name": "Secretos protegidos por la red",
-          "description": "Controla qué herramientas y destinos pueden recibir los secretos del espacio de trabajo."
-        },
         "reminders": {
           "name": "Bucles",
           "description": "Permite que agentes y personas programen revisiones en una sesión, una vez o de forma recurrente. Cada activación vuelve a avisar a esa sesión. Añade los bucles a la lista de Activadores, el indicador de bucles de la sesión y `kortix loop`."
@@ -18351,7 +18347,6 @@
       "texte59a1d133be1": "Los cambios se aplican al próximo inicio de sesión. Los tokens ya emitidos seguirán funcionando hasta que caduquen.",
       "texte59eaa3acaf1": "el muro",
       "texte5a4af9b350f": "He creado, habilitado y probado la conexión SCIM",
-      "texte5a718af362a": "Los dos primeros",
       "texte5ab168f1943": "El informe previo a la llamada",
       "texte5b104783abd": "Tu agente puede usar las herramientas que necesita, igual que en una computadora normal.",
       "texte5bd74e98514": "otro — solo código fuente",

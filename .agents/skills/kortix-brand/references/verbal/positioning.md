@@ -16,7 +16,7 @@ Rule format: **Rule.** — *Why:* — *Where:* — *When silent:*.
 | Manifesto line | A company is going to be a git repository | The deep thesis. Manifesto, founder voice, vision talks. Never a page title. |
 | Mission | Take a company from human to AGI, and let it keep every byte of itself on the way there. | Founder voice, about, hiring. Never a category. |
 | Promise | Hand it an outcome, AI agents run it 24/7 | What Kortix does for a company, beside what it is (D18, D29). The Outcomes section header, pitches. Not the home hero subhead since D35. Never a page title. |
-| Positioning line | The cloud-native agent harness for companies | What Kortix is underneath (D35). Home hero subhead, README tagline, docs index, Guide and Developers intros. The name stays CompanyOS; this line defines it. |
+| Positioning line | The cloud-native agent harness for companies | What Kortix is underneath (D35). Docs index, Guide and Developers intros. The name stays CompanyOS; this line defines it. |
 
 **Rule.** Use "CompanyOS" as the category and "The open-source CompanyOS" as the tagline. — *Why:* D28 (2026-10-29, founder) renames the category from "AI Operating System" to CompanyOS; D10 (2026-10-04) set the operating-system idea. An operating system is the layer everything else runs on: agents, skills, memory, connectors, computers, channels and triggers. The phrase names that layer, and it scales from one person to a company. — *Where:* app | marketing | mobile | deck | email | CLI | GitHub. — *When silent:* use the tagline in titles and the category noun in sentences.
 
@@ -50,10 +50,11 @@ Kortix is the open-source CompanyOS: your agents, their skills, your company mem
 | --- | --- | --- |
 | Page `<title>` and `og:title` (home) | Tagline: "Kortix CompanyOS – the open-source operating system for your company" | Brand name once. |
 | Page `<title>` (subpage) | "Pricing" (the template adds "| Kortix") | Do not repeat "Kortix" in the page's own title. Today titles read "Kortix pricing \| Kortix". |
+| Home hero subhead (under the title "The CompanyOS") | "The operating system for the AI-native company. Connect every data source, orchestrate agents, and keep their skills, memory and connectors in one git repo you own. Open source, any model, in our cloud or yours." | Word for word (D44). |
 | Meta description (home, manifest, Slack app short text) | Short | 128 characters. |
 | Meta description (subpage) | One sentence: the mechanism or the offer. 155 characters or fewer. | Not "Current plans and included features." |
 | PWA manifest `name` | "Kortix" | `description` = Short. |
-| README, GitHub About | Tagline (README) and Short (About) | Already correct. |
+| README, GitHub About | The D44 lines: "The open-source CompanyOS: the operating system for the AI-native company." (README), the D44 About text (GitHub) | Set 2026-11-24. |
 | CLI banner and `--help` | Tagline | Already correct. |
 | Auth screen subtitle | None | The heading "Welcome to Kortix CompanyOS" stands alone (D30). A branded self-host instance shows its own product name there. |
 | Transactional email footer | "Kortix CompanyOS – the open-source operating system for your company" | Shipped since 2026-10-01 (`BRAND_FOOTER`). |

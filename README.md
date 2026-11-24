@@ -7,13 +7,14 @@
 
 # Kortix CompanyOS
 
-**The open-source CompanyOS: the cloud-native agent harness for companies.**
+**The open-source CompanyOS: the operating system for the AI-native company.**
 
 Open Source &nbsp;·&nbsp; Extensible &nbsp;·&nbsp; Multiplayer &nbsp;·&nbsp; Sovereign
 
-Always-on agents that start on events, run in parallel and share one memory of your company.
+Connect every data source, orchestrate agents, and keep their skills, memory and connectors in one
+git repo you own.
 
-Build custom agents on pi and ship them from one git repo. Schedules, webhooks, your tools' events
+Build custom agents on pi and ship them from that repo. Schedules, webhooks, your tools' events
 and your team's messages start them. My Kortix routes the work, and swarms of agents run it in
 parallel, each on its own cloud computer with state that persists.
 

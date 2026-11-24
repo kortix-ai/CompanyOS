@@ -19,12 +19,14 @@ describe('normalizeLoginSite', () => {
     expect(normalizeLoginSite('accounts.google.com.')).toBe('accounts.google.com');
     expect(normalizeLoginSite('localhost')).toBe('localhost');
     expect(normalizeLoginSite('127.0.0.1')).toBe('127.0.0.1');
+    // Matching is by host, so a port names the same site.
+    expect(normalizeLoginSite('http://localhost:8765')).toBe('localhost');
+    expect(normalizeLoginSite('app.example.com:8443')).toBe('app.example.com');
   });
 
-  test('wildcards, ports, credentials, IPv6 and other schemes are refused', () => {
+  test('wildcards, credentials, IPv6 and other schemes are refused', () => {
     for (const bad of [
       '*.example.com',
-      'app.example.com:8443',
       'https://user:pw@app.example.com',
       '[::1]',
       'ftp://example.com',

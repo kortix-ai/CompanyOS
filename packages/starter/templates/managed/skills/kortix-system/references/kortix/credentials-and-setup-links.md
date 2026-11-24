@@ -66,7 +66,7 @@ agent-browser auth login crm --credential-provider kortix --item CRM_LOGIN --url
 ```
 
 - `--site` is every host of the sign-in flow, exactly (`app.example.com`,
-  not `example.com`). A login works only on its sites: on any other host the
+  not `example.com`). A URL works too; only its host counts. A login works only on its sites: on any other host the
   sign-in is refused.
 - `auth login` opens `--url`, fills the username and password fields, and
   submits. A form with unusual fields takes `--username-selector`,

@@ -21,8 +21,9 @@ export interface BrowserLoginValue {
 /**
  * One site as the host a login may be typed on: `app.example.com`. Accepts a
  * bare host or a URL (`https://app.example.com/login` → `app.example.com`).
- * Exact hosts only: no wildcard, no port, no IPv6 literal. `localhost` and an
- * IPv4 address are accepted so a login can be tested against a local page.
+ * Exact hosts only: no wildcard, no IPv6 literal. A port is dropped: a login is
+ * matched by host (`loginSiteAdmits`), as a browser scopes cookies. `localhost`
+ * and an IPv4 address are accepted so a login can be tested against a local page.
  * Null when the input names no usable host.
  */
 export function normalizeLoginSite(raw: unknown): string | null {
@@ -36,7 +37,7 @@ export function normalizeLoginSite(raw: unknown): string | null {
     return null;
   }
   if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
-  if (url.username || url.password || url.port) return null;
+  if (url.username || url.password) return null;
   const host = url.hostname.replace(/\.$/, '');
   if (!host || host.length > 253 || host.startsWith('[')) return null;
   if (!host.split('.').every((label) => HOST_LABEL.test(label))) return null;
@@ -57,7 +58,7 @@ export function normalizeLoginSites(
     if (!site) {
       return {
         ok: false,
-        error: `"${String(entry)}" is not a site. Pass a host such as app.example.com (no wildcard, no port).`,
+        error: `"${String(entry)}" is not a site. Pass a host such as app.example.com (no wildcard).`,
       };
     }
     if (!sites.includes(site)) sites.push(site);

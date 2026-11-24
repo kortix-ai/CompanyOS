@@ -2585,12 +2585,12 @@ flow('SEC-LOGIN-1', {
 
   let token = '';
   await ctx.step('the agent asks for a login on one site; a login without a usable site is refused', async () => {
-    for (const bad of [{}, { sites: [] }, { sites: ['*.example.test'] }, { sites: ['app.example.test:8443'] }]) {
+    for (const bad of [{}, { sites: [] }, { sites: ['*.example.test'] }, { sites: ['https://user:pw@app.example.test'] }]) {
       (await ownerSession.caller.post('/v1/projects/:projectId/secret-requests', { names: ['CRM_LOGIN'], scope: 'browser', ...bad }, { params })).status(400);
     }
     (await owner.post('/v1/projects/:projectId/secret-requests', { names: ['API_KEY'], sites: ['app.example.test'] }, { params })).status(400);
     const minted = await ownerSession.caller.post('/v1/projects/:projectId/secret-requests', {
-      names: ['crm_login'], scope: 'browser', sites: ['https://App.Example.test/login'],
+      names: ['crm_login'], scope: 'browser', sites: ['https://App.Example.test:8443/login'],
     }, { params });
     minted.status(200).body().has('$.scope', 'browser').has('$.names', ['CRM_LOGIN']).has('$.sites', ['app.example.test']);
     token = decodeURIComponent(String(minted.json<{ url: string }>().url).split('/secret-intake/')[1]!);

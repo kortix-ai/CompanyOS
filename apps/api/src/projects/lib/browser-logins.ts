@@ -505,12 +505,12 @@ export async function saveBrowserLoginsFromLink(input: {
  */
 export function browserLoginSavedPrompt(saved: string[], reach?: SessionWithheldSecrets | null): string {
   const one = saved.length === 1;
+  // The chat shows this message, so it stays short; the rules for handling a
+  // login are in the agent's credentials guide.
   const text =
-    `The website ${one ? 'login' : 'logins'} ${saved.join(', ')} ${one ? 'was' : 'were'} just saved by the person. ` +
-    'Sign in now: `agent-browser auth login <profile> --credential-provider kortix --item ' +
-    `${one ? saved[0] : '<NAME>'} --url <sign-in page URL>\`. The browser types the username and password; ` +
-    'you never see them, and you must never print, read back or screenshot the password field. ' +
-    'Do not ask for the login again and do not mint a new link.';
+    `The website ${one ? 'login' : 'logins'} ${saved.join(', ')} ${one ? 'was' : 'were'} saved. ` +
+    'Sign in with `agent-browser auth login <profile> --credential-provider kortix --item ' +
+    `${one ? saved[0] : '<NAME>'} --url <sign-in page URL>\`. Do not ask for it again.`;
   if (!reach || reach.withheld.length === 0) return text;
   return `${text} ${withheldSecretsFix(reach.agent, reach.withheld)} Tell the person this exact fix.`;
 }

@@ -403,7 +403,7 @@ async function resolveSelectedRows(
       await recordSecretConsumerAudit(input, accountId, {
         outcome: 'denied',
         action: 'secret.consumer.missing',
-        metadata: { name: normalizedName, consumer: input.consumer },
+        metadata: { ...input.auditMetadata, name: normalizedName, consumer: input.consumer },
       });
     }
     return [];

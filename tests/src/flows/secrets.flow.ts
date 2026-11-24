@@ -2543,10 +2543,11 @@ flow('SEC-LOGIN-1', {
     'POST /v1/projects/:projectId/secrets',
     'PUT /v1/projects/:projectId/secrets/:identifier/strategy',
   ],
-}, async (ctx) => {
+}, deletingSandboxRows(async (ctx, track) => {
   const { Client: PgClient } = await import('pg');
   const { waitFor } = await import('../core/poll');
   const team = await ctx.fixtures.team();
+  track(team.id);
   const project = await team.project({ seed: true, allowAllSecrets: true });
   const member = await team.addMember('member');
   await team.grantProjectRole(project.id, member.userId!, 'member');
@@ -2571,6 +2572,8 @@ flow('SEC-LOGIN-1', {
     const db = await openDb();
     try {
       await db.query("UPDATE kortix.project_sessions SET agent_name = 'worker' WHERE session_id = $1", [sessionId]);
+      // A session token is live only while its session has an active sandbox.
+      await db.query("INSERT INTO kortix.session_sandboxes (sandbox_id, session_id, account_id, project_id, status) VALUES ($1::uuid, $1, $2, $3, 'active')", [sessionId, team.id, project.id]);
       await db.query(lockProjectFirst('UPDATE kortix.account_tokens SET project_id = $2, session_id = $3, agent_grant = $4::jsonb, account_id = $5 WHERE token_id = $1'), [
         credential.token_id, project.id, sessionId,
         JSON.stringify({ agent: 'worker', permissions: 'all', connectors: 'all', env: 'all' }), team.id,
@@ -2674,10 +2677,12 @@ flow('SEC-LOGIN-1', {
       if (!denied.some((row) => row.metadata.reason === 'site_not_allowed' && row.metadata.site === 'evil.test')) {
         throw new Error(`the refusal on another site was not audited: ${JSON.stringify(denied)}`);
       }
-      if (!denied.some((row) => row.metadata.reason === undefined && row.metadata.name === 'CRM_LOGIN')) {
-        throw new Error(`the member refusal was not audited: ${JSON.stringify(denied)}`);
+      // The member's session cannot see a login kept to the owner: the consumer
+      // path finds no value it may read and records a miss.
+      if (!rows.some((row) => row.action === 'secret.consumer.missing' && row.metadata.name === 'CRM_LOGIN' && row.metadata.site === 'app.example.test')) {
+        throw new Error(`the member refusal was not audited: ${JSON.stringify(rows)}`);
       }
       if (JSON.stringify(rows).includes(PASSWORD)) throw new Error('an audit row holds the password');
     } finally { await db.end(); }
   });
-});
+}));

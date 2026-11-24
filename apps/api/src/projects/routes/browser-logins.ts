@@ -15,6 +15,7 @@ import { enforceRateLimit } from '../../middleware/rate-limit';
 import { RATE_LIMIT_EXCEEDED_ACTION } from '../../shared/rate-limit-audit';
 import { readJsonObject } from '../../shared/http-body';
 import { workspaceIdParam } from '../../shared/route-params';
+import { isProjectSessionPrincipal } from '../../middleware/agent-scope';
 import { loadProjectForUser } from '../lib/access';
 import { projectsApp } from '../lib/app';
 import { listBrowserLogins, resolveBrowserLogin } from '../lib/browser-logins';
@@ -34,6 +35,16 @@ const LoginListingSchema = z.object({
     }),
   ),
 });
+
+/**
+ * The Kortix session a request acts for, or null. A person's Supabase JWT also
+ * sets `sessionId`, to its AUTH session id: only a project session principal
+ * (a session-bound token) names a Kortix session.
+ */
+function kortixSessionOf(c: Parameters<typeof isProjectSessionPrincipal>[0]): string | null {
+  if (!isProjectSessionPrincipal(c)) return null;
+  return (c.get('sessionId') as string | undefined) ?? null;
+}
 
 const ResolvedLoginSchema = z.object({
   name: z.string(),
@@ -62,7 +73,7 @@ export function registerBrowserLoginsRoutes(): void {
       const items = await listBrowserLogins({
         projectId,
         accountId: loaded.row.accountId,
-        sessionId: (c.get('sessionId') as string | undefined) ?? null,
+        sessionId: kortixSessionOf(c),
         actorUserId: loaded.userId ?? null,
       });
       return c.json({ items });
@@ -100,7 +111,7 @@ export function registerBrowserLoginsRoutes(): void {
       const projectId = workspaceIdParam(c);
       const loaded = await loadProjectForUser(c, projectId, 'read');
       if (!loaded) return c.json({ error: 'Not found' }, 404);
-      const sessionId = (c.get('sessionId') as string | undefined) ?? null;
+      const sessionId = kortixSessionOf(c);
       if (!sessionId) {
         return c.json(
           {

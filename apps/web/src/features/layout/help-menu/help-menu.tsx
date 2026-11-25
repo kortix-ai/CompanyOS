@@ -38,6 +38,7 @@ import {
   DropdownMenuTrigger,
 } from '@kortix/ui/dropdown-menu';
 import Hint from '@kortix/ui/hint';
+import { SidebarContext } from '@kortix/ui/sidebar';
 import { useLocalizedUiCatalog } from '@kortix/ui/i18n';
 import { openExternalRoute } from '@kortix/ui/internal/lib/desktop';
 import { cn, useIsMobile } from '@kortix/ui';
@@ -45,6 +46,7 @@ import { useSettingsPanelStore } from '@kortix/ui/internal/stores/settings-panel
 import { type SettingsTab } from '@kortix/ui/customize/settings/settings-tabs';
 
 import { HELP_LINKS } from '@/features/layout/user-menu-shared';
+import { getEnv } from '@/lib/env-config';
 import { settingsShortcutLabel } from '@/features/workspace/settings/settings-shortcut';
 import { useTranslations } from '@/i18n/use-translations';
 
@@ -146,24 +148,39 @@ export function HelpMenu({ onOpenDownloadApp }: { onOpenDownloadApp?: () => void
   const t = useTranslations('helpMenu');
   const [open, setOpen] = useState(false);
   const [requested, setRequested] = useState(false);
-  const helpLinks = useLocalizedUiCatalog(HELP_LINKS);
-  const whatsNew = useWhatsNew(requested);
+  // A self-host with the landing page off bounces /contact and /changelog to
+  // the app, and status.kortix.com is not its status: those rows go.
+  const [cloud] = useState(() => !getEnv().DISABLE_LANDING_PAGE);
+  const helpLinks = useLocalizedUiCatalog(HELP_LINKS).filter(
+    (link) => cloud || !link.href.startsWith('/contact'),
+  );
+  const whatsNew = useWhatsNew(cloud && requested);
   // A phone has no keyboard: no shortcuts row and no keycap (KRTX-2005).
   const isMobile = useIsMobile();
+  const sidebar = React.useContext(SidebarContext);
+
+  // The collapsed sidebar's hover flyout would retract when the pointer
+  // enters this portaled menu. Pin it while the menu is open.
+  React.useEffect(() => {
+    if (!open) return;
+    sidebar?.holdPeek(true);
+    return () => sidebar?.holdPeek(false);
+  }, [open, sidebar]);
 
   const close = () => setOpen(false);
   // Open a dialog after the menu has closed, so focus returns to the page
-  // before the dialog takes it.
+  // before the dialog takes it. On a phone the sidebar sheet closes first,
+  // or closing the dialog would reveal it again.
   const afterClose = (fn: () => void) => {
     close();
+    if (isMobile) sidebar?.setOpenMobile(false);
     requestAnimationFrame(() => fn());
   };
   const openSettings = (tab?: SettingsTab) =>
     afterClose(() => useSettingsPanelStore.getState().openSettings(tab));
 
-  // The changelog rows, then "Full changelog" as the line's last stop. Off
-  // entirely when the deployment serves no changelog.
-  const showChangelog = whatsNew.data ? whatsNew.data.enabled : true;
+  // The changelog rows, then "Full changelog" as the line's last stop.
+  const showChangelog = cloud && whatsNew.data?.enabled !== false;
   const weeks = whatsNew.data?.weeks ?? [];
   const stops = weeks.length + 1;
 
@@ -205,10 +222,12 @@ export function HelpMenu({ onOpenDownloadApp }: { onOpenDownloadApp?: () => void
               {t('shortcuts')}
             </DropdownMenuItem>
           )}
-          <LinkRow href={STATUS_URL} onNavigate={close}>
-            <PulseIcon />
-            {t('status')}
-          </LinkRow>
+          {cloud ? (
+            <LinkRow href={STATUS_URL} onNavigate={close}>
+              <PulseIcon />
+              {t('status')}
+            </LinkRow>
+          ) : null}
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />

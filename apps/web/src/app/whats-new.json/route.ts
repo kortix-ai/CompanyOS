@@ -19,7 +19,12 @@ export async function GET() {
   const enabled = !getServerPublicEnv().DISABLE_LANDING_PAGE;
   const body: WhatsNew = { enabled, weeks: [] };
   if (enabled) {
-    const { weeks } = await getWeeklyChangelog();
+    // `getWeeklyChangelog` rethrows a GitHub failure on a deployment that
+    // bakes its config at build. The menu then lists no weeks.
+    const weeks = await getWeeklyChangelog().then(
+      (changelog) => changelog.weeks,
+      () => [],
+    );
     body.weeks = weeks.slice(0, WEEK_COUNT).map((week) => ({
       slug: week.slug,
       title: week.headline,

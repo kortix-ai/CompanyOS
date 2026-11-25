@@ -28,10 +28,16 @@ export async function GET() {
     body.weeks = weeks.slice(0, WEEK_COUNT).map((week) => ({
       slug: week.slug,
       title: week.headline,
+      date: week.start,
       href: `/changelog/${week.slug}`,
     }));
   }
+  // An empty list is a failed read: never cache it.
+  const cacheControl =
+    enabled && body.weeks.length === 0
+      ? 'no-store'
+      : 'public, max-age=300, stale-while-revalidate=3600';
   return Response.json(body, {
-    headers: { 'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600' },
+    headers: { 'Cache-Control': cacheControl },
   });
 }

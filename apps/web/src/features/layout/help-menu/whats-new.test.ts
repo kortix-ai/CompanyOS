@@ -2,7 +2,12 @@ import { describe, expect, test } from 'bun:test';
 
 import { parseWhatsNew } from './whats-new';
 
-const week = { slug: '2026-11-16', title: 'Shared drives', href: '/changelog/2026-11-16' };
+const week = {
+  slug: '2026-11-16',
+  title: 'Shared drives',
+  date: '2026-11-16T00:00:00.000Z',
+  href: '/changelog/2026-11-16',
+};
 
 describe('parseWhatsNew', () => {
   test('keeps a well-formed body', () => {
@@ -20,7 +25,14 @@ describe('parseWhatsNew', () => {
     expect(parseWhatsNew({ enabled: true, weeks: [outside, script, week] }).weeks).toEqual([week]);
   });
 
-  test('drops a week with a missing field', () => {
-    expect(parseWhatsNew({ enabled: true, weeks: [{ slug: 'x', href: '/changelog/x' }] }).weeks).toEqual([]);
+  test('keeps a week without a date', () => {
+    const { date: _date, ...undated } = week;
+    expect(parseWhatsNew({ enabled: true, weeks: [undated] }).weeks).toEqual([undated]);
+  });
+
+  test('drops a week with a missing field or an unreadable date', () => {
+    const { title: _title, ...untitled } = week;
+    const misdated = { ...week, date: 'soon' };
+    expect(parseWhatsNew({ enabled: true, weeks: [untitled, misdated] }).weeks).toEqual([]);
   });
 });

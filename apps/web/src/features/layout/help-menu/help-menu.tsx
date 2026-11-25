@@ -48,7 +48,7 @@ import { type SettingsTab } from '@kortix/ui/customize/settings/settings-tabs';
 import { HELP_LINKS } from '@/features/layout/user-menu-shared';
 import { getEnv } from '@/lib/env-config';
 import { settingsShortcutLabel } from '@/features/workspace/settings/settings-shortcut';
-import { useTranslations } from '@/i18n/use-translations';
+import { useLocale, useTranslations } from '@/i18n/use-translations';
 
 import { CHANGELOG_PATH, WHATS_NEW_PATH, parseWhatsNew, type WhatsNew } from './whats-new';
 
@@ -65,8 +65,10 @@ async function fetchWhatsNew(): Promise<WhatsNew> {
 }
 
 /**
- * Read on first open, not on mount: the sidebar renders on every page, and
- * most visits never open this menu.
+ * Read on mount, not on open: the menu opens upward, so rows that arrived
+ * after it opened would push Docs and Support away from the pointer. The
+ * route is served from the cached changelog, and this query is shared for
+ * the tab's lifetime.
  */
 function useWhatsNew(enabled: boolean) {
   return useQuery({
@@ -147,14 +149,14 @@ function timelinePosition(index: number, count: number) {
 export function HelpMenu({ onOpenDownloadApp }: { onOpenDownloadApp?: () => void }) {
   const t = useTranslations('helpMenu');
   const [open, setOpen] = useState(false);
-  const [requested, setRequested] = useState(false);
   // A self-host with the landing page off bounces /contact and /changelog to
   // the app, and status.kortix.com is not its status: those rows go.
   const [cloud] = useState(() => !getEnv().DISABLE_LANDING_PAGE);
   const helpLinks = useLocalizedUiCatalog(HELP_LINKS).filter(
     (link) => cloud || !link.href.startsWith('/contact'),
   );
-  const whatsNew = useWhatsNew(cloud && requested);
+  const whatsNew = useWhatsNew(cloud);
+  const locale = useLocale();
   // A phone has no keyboard: no shortcuts row and no keycap (KRTX-2005).
   const isMobile = useIsMobile();
   const sidebar = React.useContext(SidebarContext);
@@ -183,14 +185,17 @@ export function HelpMenu({ onOpenDownloadApp }: { onOpenDownloadApp?: () => void
   const showChangelog = cloud && whatsNew.data?.enabled !== false;
   const weeks = whatsNew.data?.weeks ?? [];
   const stops = weeks.length + 1;
+  // A week is named by its Monday; UTC, as the changelog groups weeks.
+  const weekDate = new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
 
   return (
     <DropdownMenu
       open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (next) setRequested(true);
-      }}
+      onOpenChange={setOpen}
     >
       <Hint side="top" label={t('trigger')}>
         <DropdownMenuTrigger asChild>
@@ -199,9 +204,6 @@ export function HelpMenu({ onOpenDownloadApp }: { onOpenDownloadApp?: () => void
             variant="ghost"
             size="icon"
             aria-label={t('trigger')}
-            // Warm the list on intent, so it is there when the menu opens.
-            onPointerEnter={() => setRequested(true)}
-            onFocus={() => setRequested(true)}
             className="text-muted-foreground hover:text-foreground data-[state=open]:text-foreground shrink-0"
           >
             <QuestionIcon className="size-4" />
@@ -257,10 +259,22 @@ export function HelpMenu({ onOpenDownloadApp }: { onOpenDownloadApp?: () => void
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuLabel>{t('whatsNew')}</DropdownMenuLabel>
+              {/* Until the first read lands, hold the three rows' height so
+                  the menu does not grow under the pointer. */}
+              {whatsNew.isPending
+                ? [0, 1, 2].map((slot) => <div key={slot} aria-hidden className="min-h-8" />)
+                : null}
               {weeks.map((week, index) => (
                 <LinkRow key={week.slug} href={week.href} onNavigate={close}>
                   <TimelineMark position={timelinePosition(index, stops)} />
-                  <span className="min-w-0 flex-1 truncate">{week.title}</span>
+                  <span className="min-w-0 flex-1 truncate" title={week.title}>
+                    {week.title}
+                  </span>
+                  {week.date ? (
+                    <span className="text-muted-foreground ml-auto shrink-0 text-xs tabular-nums">
+                      {weekDate.format(new Date(week.date))}
+                    </span>
+                  ) : null}
                 </LinkRow>
               ))}
               <LinkRow href={CHANGELOG_PATH} onNavigate={close}>

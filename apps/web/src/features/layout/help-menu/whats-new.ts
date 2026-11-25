@@ -4,6 +4,8 @@ export interface WhatsNewWeek {
   slug: string;
   /** The headline of the week's lead release. */
   title: string;
+  /** The week's Monday, 00:00Z, ISO. Absent in a body cached before it was added. */
+  date?: string;
   /** `/changelog/<slug>`. */
   href: string;
 }
@@ -32,6 +34,8 @@ export function parseWhatsNew(value: unknown): WhatsNew {
             !!week &&
             typeof week.slug === 'string' &&
             typeof week.title === 'string' &&
+            (week.date === undefined ||
+              (typeof week.date === 'string' && !Number.isNaN(Date.parse(week.date)))) &&
             typeof week.href === 'string' &&
             week.href.startsWith(`${CHANGELOG_PATH}/`),
         )

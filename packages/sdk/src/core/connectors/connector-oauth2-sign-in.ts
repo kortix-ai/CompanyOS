@@ -72,7 +72,7 @@ export function oauth2AutoConnectPlan(
   }
   const label = resourceLabel(discovery);
   if (discovery.kortix_client) return { kind: 'register', label, scopes: discovery.scopes };
-  if (!discovery.registration_endpoint) {
+  if (!discovery.registration_endpoint && !discovery.client_id_metadata_document_supported) {
     return { kind: 'client_id_required', label, scopes: discovery.scopes };
   }
   return {
@@ -86,11 +86,12 @@ export function oauth2AutoConnectPlan(
 export function buildOAuth2ClientRegistrationInput(
   discovery: OAuth2ResourceDiscovery,
 ): OAuth2ClientRegistrationInput {
-  if (!discovery.registration_endpoint && !discovery.kortix_client) {
+  if (!discovery.registration_endpoint && !discovery.client_id_metadata_document_supported && !discovery.kortix_client) {
     throw new Error('This authorization server does not support dynamic client registration');
   }
   const metadata = discovery.metadata ?? {};
   return {
+    ...(discovery.client_id_metadata_document_supported ? { client_id_metadata_document_supported: true } : {}),
     // Without it the API signs in with Kortix's own client for this server.
     ...(discovery.registration_endpoint
       ? { registration_endpoint: discovery.registration_endpoint }

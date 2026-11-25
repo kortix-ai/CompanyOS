@@ -319,6 +319,17 @@ async function kortixClientApplicationForConnection(
   return typeof url === 'string' ? kortixClientApplication(url) : null;
 }
 
+function endpointsShareOneOrigin(application: Partial<OAuth2ApplicationInput>): boolean {
+  if (!application.authorization_url || !application.token_url) return false;
+  const origins = [
+    application.authorization_url,
+    application.token_url,
+    application.device_authorization_url,
+    application.revocation_url,
+  ].flatMap((url) => (url ? [new URL(url).origin] : []));
+  return new Set(origins).size === 1;
+}
+
 /**
  * Register Kortix as an OAuth2 client (RFC 7591) at the discovered
  * registration endpoint and save the issued client as the connection's
@@ -334,7 +345,16 @@ export async function registerConnectionOAuth2Client(
   runtime: OAuth2LifecycleRuntime = {},
 ): Promise<OAuth2ApplicationInput> {
   const { registration } = input;
-  if (!registration.registration_endpoint) {
+  // Every CIMD server accepts Kortix's one hosted client_id, so nothing ties
+  // the code to the server whose metadata was read. Use it only when the
+  // authorize and token endpoints share one origin: a server's metadata must
+  // never pair a real provider's authorize page with its own token endpoint,
+  // which would receive the user's code and PKCE verifier. Split endpoints
+  // register a per-server client, or fall to the catalogue below.
+  const hostedClient =
+    registration.client_id_metadata_document_supported === true &&
+    endpointsShareOneOrigin(registration);
+  if (!registration.registration_endpoint && !hostedClient) {
     // No dynamic registration: only a catalogue app signs in, with Kortix's own
     // client and the catalogue's endpoints. Nothing from the request is used.
     const application = await kortixClientApplicationForConnection(input.identity.connectionId);
@@ -349,6 +369,7 @@ export async function registerConnectionOAuth2Client(
   const issued = await registerOAuth2Client(
     {
       registrationEndpoint: registration.registration_endpoint,
+      clientIdMetadataDocumentSupported: hostedClient,
       redirectUri: input.callbackUrl,
       scopes: registration.scopes,
       tokenEndpointAuthMethodsSupported: registration.token_endpoint_auth_methods_supported,
@@ -426,6 +447,7 @@ export async function startConnectionSignIn(input: {
   await registerConnectionOAuth2Client({
     identity: input.identity,
     registration: {
+      ...(discovery.client_id_metadata_document_supported ? { client_id_metadata_document_supported: true } : {}),
       ...(discovery.registration_endpoint ? { registration_endpoint: discovery.registration_endpoint } : {}),
       ...(discovery.authorization_server ? { issuer: discovery.authorization_server } : {}),
       ...(metadata.discovery_url ? { discovery_url: metadata.discovery_url } : {}),

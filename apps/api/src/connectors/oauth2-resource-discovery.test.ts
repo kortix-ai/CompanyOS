@@ -271,3 +271,20 @@ describe('mcpSignInCheck: can Kortix sign in to an MCP server in one click', () 
     });
   });
 });
+
+test('a CIMD-only server is one-click capable without a registration endpoint', async () => {
+  const metadata = { ...AS_METADATA, registration_endpoint: undefined };
+  const { fetchImpl } = mockFetch({
+    'https://api.example.com/mcp': () => unauthorized(),
+    'https://api.example.com/.well-known/oauth-protected-resource/mcp': () => Response.json(PRM),
+    'https://authn.example.com/.well-known/oauth-authorization-server': () =>
+      Response.json({ ...metadata, client_id_metadata_document_supported: true }),
+  });
+  const discovery = await discoverProtectedResourceOAuth2(
+    { resourceUrl: 'https://api.example.com/mcp', provider: 'mcp' }, { fetchImpl },
+  );
+  expect(discovery.client_id_metadata_document_supported).toBe(true);
+  expect(discovery.registration_endpoint).toBeUndefined();
+  expect(discovery.warnings).toEqual([]);
+  expect(mcpSignInCheck(discovery).one_click).toBe(true);
+});

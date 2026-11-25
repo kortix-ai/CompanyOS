@@ -204,3 +204,81 @@ test('X: start, callback, stored credential and refresh with Kortix’s X client
     .where(eq(connectorConnections.connectionId, x.connectionId));
   expect((waiting?.metadata as Record<string, unknown>).requesting_session_id).toBeUndefined();
 });
+
+test('CIMD saves a public client and starts hosted PKCE without DCR', async () => {
+  const target = await connection('cimd', 'https://mcp.cimd.example/mcp');
+  await registerConnectionOAuth2Client({
+    identity: target,
+    registration: {
+      client_id_metadata_document_supported: true,
+      registration_endpoint: 'https://auth.cimd.example/register',
+      authorization_url: 'https://auth.cimd.example/authorize',
+      token_url: 'https://auth.cimd.example/token',
+    },
+    callbackUrl: CALLBACK,
+    createdBy: USER,
+  }, { fetchImpl: async () => { throw new Error('CIMD must not call DCR'); } });
+  const saved = await loadOAuth2Application(target.connectionId);
+  const clientId = 'https://api.kortix.test/.well-known/oauth-client.json';
+  expect(saved?.application.client_id).toBe(clientId);
+  expect(saved?.application.token_endpoint_auth_method).toBe('none');
+  const started = await createAuthorizationCodeSession({ connectionId: target.connectionId, initiatedBy: USER, callbackUrl: CALLBACK });
+  const url = new URL(started.authorizationUrl);
+  expect(url.searchParams.get('client_id')).toBe(clientId);
+  expect(url.searchParams.get('redirect_uri')).toBe(CALLBACK);
+  expect(url.searchParams.get('code_challenge_method')).toBe('S256');
+});
+
+test('CIMD is never used when the authorize and token endpoints are on different origins', async () => {
+  // Every CIMD server accepts Kortix's one client_id, so a server's metadata
+  // could pair a real provider's authorize endpoint with its own token
+  // endpoint and receive the code + PKCE verifier. Split endpoints register
+  // a per-server client (DCR) instead, or get no client outside the catalogue.
+  const split = {
+    client_id_metadata_document_supported: true,
+    authorization_url: 'https://real-provider.example/oauth/authorize',
+    token_url: 'https://attacker.example/token',
+  };
+  const withDcr = await connection('cimd-split-dcr', 'https://mcp.split.example/mcp');
+  const registered: string[] = [];
+  await registerConnectionOAuth2Client({
+    identity: withDcr,
+    registration: { ...split, registration_endpoint: 'https://attacker.example/register' },
+    callbackUrl: CALLBACK,
+    createdBy: USER,
+  }, { fetchImpl: async (url) => {
+    registered.push(String(url));
+    return Response.json({ client_id: 'per-server-client', token_endpoint_auth_method: 'none' }, { status: 201 });
+  } });
+  expect(registered).toEqual(['https://attacker.example/register']);
+  expect((await loadOAuth2Application(withDcr.connectionId))?.application.client_id).toBe('per-server-client');
+
+  const withoutDcr = await connection('cimd-split', 'https://mcp.split-only.example/mcp');
+  await expect(registerConnectionOAuth2Client({
+    identity: withoutDcr,
+    registration: split,
+    callbackUrl: CALLBACK,
+    createdBy: USER,
+  }, { fetchImpl: async () => { throw new Error('must not register'); } })).rejects.toThrow('Kortix has no OAuth client for this server');
+  expect(await loadOAuth2Application(withoutDcr.connectionId)).toBeNull();
+});
+
+test('DCR cannot issue the hosted metadata client for split authorization endpoints', async () => {
+  const target = await connection('hostile-dcr', 'https://mcp.hostile.example/mcp');
+  await expect(registerConnectionOAuth2Client({
+    identity: target,
+    registration: {
+      client_id_metadata_document_supported: true,
+      registration_endpoint: 'https://attacker.example/register',
+      authorization_url: 'https://real-provider.example/authorize',
+      token_url: 'https://attacker.example/token',
+      token_endpoint_auth_methods_supported: ['none'],
+    },
+    callbackUrl: CALLBACK,
+    createdBy: USER,
+  }, { fetchImpl: async () => Response.json({
+    client_id: 'https://api.kortix.test/.well-known/oauth-client.json',
+    token_endpoint_auth_method: 'none',
+  }, { status: 201 }) })).rejects.toThrow('reserved hosted client');
+  expect(await loadOAuth2Application(target.connectionId)).toBeNull();
+});

@@ -40,6 +40,7 @@ export interface ProtectedResourceOAuth2Discovery {
   metadata?: Partial<OAuth2ApplicationInput>;
   /** RFC 7591 endpoint when the server supports dynamic client registration. */
   registration_endpoint?: string;
+  client_id_metadata_document_supported?: boolean;
   /** Kortix signs in with its own OAuth client (a catalogue app with no
    *  dynamic registration); register without `registration_endpoint`. */
   kortix_client?: boolean;
@@ -278,7 +279,7 @@ export async function discoverProtectedResourceOAuth2(
   for (const key of Object.keys(metadata) as (keyof OAuth2ApplicationInput)[]) {
     if (metadata[key] === undefined) delete metadata[key];
   }
-  if (!authorizationServer.registration_endpoint) {
+  if (!authorizationServer.registration_endpoint && !authorizationServer.client_id_metadata_document_supported) {
     warnings.push(
       'The authorization server does not advertise dynamic client registration (RFC 7591); a pre-registered client_id is required.',
     );
@@ -292,6 +293,8 @@ export async function discoverProtectedResourceOAuth2(
     ...(prm ? { protected_resource_metadata_url: prm.url } : {}),
     ...(issuer ? { authorization_server: issuer } : {}),
     metadata,
+    ...(authorizationServer.client_id_metadata_document_supported
+      ? { client_id_metadata_document_supported: true } : {}),
     ...(authorizationServer.registration_endpoint
       ? { registration_endpoint: authorizationServer.registration_endpoint }
       : {}),
@@ -351,6 +354,6 @@ export function mcpSignInCheck(discovery: ProtectedResourceOAuth2Discovery): {
     one_click:
       discovery.requires_authorization &&
       endpoints &&
-      (!!discovery.registration_endpoint || discovery.kortix_client === true),
+      (!!discovery.registration_endpoint || discovery.client_id_metadata_document_supported === true || discovery.kortix_client === true),
   };
 }

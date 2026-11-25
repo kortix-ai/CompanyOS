@@ -1,3 +1,4 @@
+import { HTTPException } from 'hono/http-exception';
 import { createRoute, z } from '@hono/zod-openapi';
 import {
   OAuth2ApplicationInputSchema,
@@ -287,6 +288,7 @@ export function registerOauth2ConnectorsRoutes(): void {
       });
       return c.json({ application: redactOAuth2Application(application) });
     } catch (error) {
+      if (error instanceof HTTPException) throw error;
       rethrowDatabaseError(error);
       return c.json({ error: (error as Error).message }, 400);
     }

@@ -280,6 +280,7 @@
     "./internal/hooks/use-reduced-motion": "./src/internal/hooks/use-reduced-motion.ts",
     "./internal/hooks/use-review-session-summary": "./src/internal/hooks/use-review-session-summary.ts",
     "./internal/hooks/use-slash-focus": "./src/internal/hooks/use-slash-focus.ts",
+    "./internal/icons/apple-cursor": "./src/internal/icons/apple-cursor.tsx",
     "./internal/icons/claude": "./src/internal/icons/claude.tsx",
     "./internal/icons/codex": "./src/internal/icons/codex.tsx",
     "./internal/icons/cursor": "./src/internal/icons/cursor.tsx",
@@ -1603,6 +1604,10 @@
       "./internal/hooks/use-slash-focus": {
         "types": "./dist/internal/hooks/use-slash-focus.d.ts",
         "import": "./dist/internal/hooks/use-slash-focus.js"
+      },
+      "./internal/icons/apple-cursor": {
+        "types": "./dist/internal/icons/apple-cursor.d.ts",
+        "import": "./dist/internal/icons/apple-cursor.js"
       },
       "./internal/icons/claude": {
         "types": "./dist/internal/icons/claude.d.ts",

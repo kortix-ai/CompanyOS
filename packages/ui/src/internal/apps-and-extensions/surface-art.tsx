@@ -16,7 +16,7 @@
  */
 
 import { chalkColorsForHue } from '@kortix/shared';
-import { CursorIcon, LaptopIcon, PlugsConnectedIcon } from '@phosphor-icons/react';
+import { BagIcon, CheckCircleIcon, CoffeeIcon, HeadphonesIcon, LaptopIcon, TShirtIcon } from '@phosphor-icons/react';
 import { useReducedMotion } from 'motion/react';
 import { createContext, useContext, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 
@@ -25,6 +25,11 @@ import { lazyClient } from '../../lib/lazy-client';
 import { ShaderSafe, supportsWebGL2 } from '../../primitives/shader-safe';
 import { UiImage } from '../../providers/ui-provider';
 import { ChromeOnlineDot } from '../chrome/chrome-connect';
+import { AppleCursor } from '../icons/apple-cursor';
+import { Claude } from '../icons/claude';
+import { Codex } from '../icons/codex';
+import { Cursor } from '../icons/cursor';
+import { Kortix } from '../icons/kortix';
 import { cn } from '../lib/utils';
 
 export type SurfaceId = 'desktop' | 'mobile' | 'chrome' | 'computer' | 'terminal' | 'mcp';
@@ -45,9 +50,6 @@ const PHONE_SHOTS = ['/images/mobile-app/start-dark.webp', '/images/mobile-app/r
 
 /** The page the Chrome mock works on: a made-up shop, never a real one. */
 const MOCK_URL = 'shop.example.com/orders';
-
-/** The MCP clients the card's description names. Product names: never translated. */
-const MCP_CLIENTS = ['Claude', 'Cursor', 'Codex'];
 
 /** Whether the pointer is over the card that holds the pane. */
 export const SurfaceHoverContext = createContext(false);
@@ -168,11 +170,6 @@ function BleedWindow({
   );
 }
 
-/** A grey line standing in for text the picture is not about. */
-function Line({ className }: { className?: string }) {
-  return <span className={cn('bg-muted-foreground/25 block h-1.5 rounded-full', className)} />;
-}
-
 /** The desktop app: a real session page, running off the pane's right and bottom edges. */
 export function DesktopArt() {
   return (
@@ -213,25 +210,31 @@ export function MobileArt() {
   );
 }
 
+/** Two orders on the made-up shop's page. Synthetic data, never a real shop. */
+const ORDERS = [
+  { name: 'Wireless headphones', meta: 'Order #8294 · Delivered Jan 28', price: '$79.99', Glyph: HeadphonesIcon },
+  { name: 'Linen overshirt', meta: 'Order #8231 · Delivered Jan 12', price: '$48.00', Glyph: TShirtIcon },
+  { name: 'Ceramic mug set', meta: 'Order #8190 · Delivered Dec 30', price: '$32.00', Glyph: CoffeeIcon },
+] as const;
+
 /**
- * Kortix at work in the visitor's own Chrome: its tab group, the page, the
- * agent's cursor on the button it is about to press, and the bar that hands
- * control back.
+ * Kortix at work in the visitor's own Chrome: its tab group, a shop's orders
+ * page, the agent's hand on "Start return", and the bar that hands control
+ * back. Every word is one a real page would show.
  */
 export function ChromeArt() {
   const t = useTranslations('appsModal.mock');
   return (
-    <SurfaceArt surface="chrome" className="min-h-72">
+    <SurfaceArt surface="chrome" className="min-h-80">
       <BleedWindow>
-        {/* Tab strip: the Kortix tab group, then the tab it works in. */}
         <div className="bg-muted/40 flex items-end gap-2 border-b px-3 pt-2">
           <span className="bg-kortix-base/15 text-foreground mb-1.5 flex min-w-0 items-center gap-1.5 rounded-sm px-2 py-0.5 text-xs">
             <span className="bg-kortix-base size-1.5 shrink-0 rounded-full" />
             <span className="truncate">{t('group')}</span>
           </span>
-          <span className="bg-card -mb-px flex w-28 items-center gap-1.5 rounded-t-sm border border-b-0 px-2.5 py-1.5">
-            <span className="bg-muted-foreground/40 size-2.5 shrink-0 rounded-full" />
-            <Line className="flex-1" />
+          <span className="bg-card -mb-px flex items-center gap-1.5 rounded-t-sm border border-b-0 px-2.5 py-1.5 text-xs">
+            <BagIcon weight="fill" className="text-muted-foreground size-3 shrink-0" />
+            Orders
           </span>
         </div>
         <div className="border-b px-3 py-2">
@@ -239,31 +242,34 @@ export function ChromeArt() {
             {MOCK_URL}
           </span>
         </div>
-        <div className="space-y-3 p-4">
-          <Line className="w-24" />
-          <div className="flex items-center gap-3 rounded-md border p-3">
-            <span className="bg-muted size-9 shrink-0 rounded-sm" />
-            <span className="min-w-0 flex-1 space-y-2">
-              <Line className="w-3/5" />
-              <Line className="w-2/5" />
-            </span>
-            <span className="relative shrink-0">
-              <span className="ring-kortix-base bg-card block rounded-sm border px-2.5 py-1 text-xs ring-2">
-                {t('button')}
+        <div className="space-y-2.5 p-4">
+          <p className="text-sm font-medium">Your orders</p>
+          {ORDERS.map((order, index) => (
+            <div key={order.name} className="bg-muted/40 flex items-center gap-3 rounded-md px-3 py-2.5">
+              <span className="bg-muted flex size-10 shrink-0 items-center justify-center rounded-sm">
+                <order.Glyph weight="fill" className="text-muted-foreground size-5" />
               </span>
-              <span className="absolute top-full right-1 flex items-start">
-                <CursorIcon weight="fill" className="text-kortix-base size-4 -translate-y-1" />
-                <span className="bg-kortix-base mt-2 rounded-sm px-1.5 py-0.5 text-xs text-foreground">Kortix</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-medium">{order.name}</span>
+                <span className="text-muted-foreground block truncate text-xs">{order.meta}</span>
               </span>
-            </span>
-          </div>
-          <div className="flex items-center gap-3 rounded-md border p-3 opacity-60">
-            <span className="bg-muted size-9 shrink-0 rounded-sm" />
-            <span className="min-w-0 flex-1 space-y-2">
-              <Line className="w-1/2" />
-              <Line className="w-1/3" />
-            </span>
-          </div>
+              <span className="text-muted-foreground shrink-0 text-xs tabular-nums">{order.price}</span>
+              {index === 0 ? (
+                <span className="relative shrink-0">
+                  <span className="ring-kortix-base bg-card block rounded-sm px-2.5 py-1 text-xs ring-2">
+                    {t('button')}
+                  </span>
+                  {/* The agent's hand, named, as every Kortix film draws it. */}
+                  <span className="absolute top-4 left-14 flex items-end">
+                    <AppleCursor className="size-8" />
+                    <span className="bg-kortix-base text-foreground -ml-2 rounded-sm px-1.5 py-0.5 text-xs">Kortix</span>
+                  </span>
+                </span>
+              ) : (
+                <span className="text-muted-foreground shrink-0 rounded-sm border px-2.5 py-1 text-xs">Buy again</span>
+              )}
+            </div>
+          ))}
         </div>
       </BleedWindow>
       {/* The hand-back bar floats over the page, as the extension draws it. */}
@@ -283,7 +289,7 @@ export function ChromeArt() {
 export function ComputerArt() {
   const t = useTranslations('appsModal.computer');
   return (
-    <SurfaceArt surface="computer" className="flex min-h-56 items-center justify-center px-5">
+    <SurfaceArt surface="computer" className="flex min-h-60 items-center justify-center px-5">
       <div className="bg-card flex items-center gap-3 rounded-md border px-3 py-2.5">
         <LaptopIcon className="size-5 shrink-0" />
         <span className="text-sm whitespace-nowrap">{t('thisComputer')}</span>
@@ -296,34 +302,41 @@ export function ComputerArt() {
   );
 }
 
+/** One prompt, told by the terminal and the MCP card alike. Synthetic data. */
+const PROMPT = 'Draft the Q4 launch plan';
+const SESSION = { short: '8f2c41a0', branch: 'kortix/q4-launch-plan' };
+const MCP_REQUEST = 'Ask Kortix to draft the Q4 launch plan';
+
 /**
- * A terminal session: sign in, start a session, the session running. The
- * commands are the CLI's own; its output is English, as the CLI prints it.
+ * `kortix sessions new`, with the output the CLI prints
+ * (`apps/cli/src/commands/sessions.ts`): the green check, then the dim
+ * field names. The CLI speaks English, so the art does too.
  */
 export function TerminalArt() {
   return (
-    <SurfaceArt surface="terminal" className="min-h-56">
+    <SurfaceArt surface="terminal" className="min-h-60">
       <BleedWindow className="top-5 bottom-10 left-5">
         <TitleBar>
-          <span className="text-muted-foreground ml-2 font-mono text-xs">kortix</span>
+          <span className="text-muted-foreground ml-2 font-mono text-xs">~/acme</span>
         </TitleBar>
         <div className="space-y-1 px-3 py-3 font-mono text-xs whitespace-nowrap">
           <p>
-            <span className="text-muted-foreground">~ $ </span>kortix login
+            <span className="text-muted-foreground">$ </span>
+            kortix sessions new --prompt <span className="text-kortix-green">&quot;{PROMPT}&quot;</span>
           </p>
-          <p className="text-muted-foreground">
-            <span className="text-kortix-green">✓</span> Signed in
+          <p className="pt-1">
+            <span className="text-kortix-green">✓</span> Session started{' '}
+            <span className="font-medium">{SESSION.short}</span>
           </p>
           <p>
-            <span className="text-muted-foreground">~ $ </span>kortix sessions new
+            <span className="text-muted-foreground">status{'     '}</span>running
           </p>
-          <p className="flex items-center gap-1.5">
-            <span className="bg-kortix-base size-1.5 rounded-full" />
-            <span className="text-muted-foreground">Session running</span>
+          <p>
+            <span className="text-muted-foreground">branch{'     '}</span>
+            {SESSION.branch}
           </p>
-          <p className="flex items-center gap-1">
-            <span className="text-muted-foreground">~ $</span>
-            <span className="bg-foreground/70 h-3.5 w-1.5" />
+          <p className="text-muted-foreground pt-1">
+            Chat: <span className="text-kortix-base">kortix sessions chat {SESSION.short}</span>
           </p>
         </div>
       </BleedWindow>
@@ -331,40 +344,48 @@ export function TerminalArt() {
   );
 }
 
+/** The clients the card's description names, each with its official mark. */
+const MCP_CLIENTS = [
+  { name: 'Claude', Mark: Claude },
+  { name: 'Cursor', Mark: Cursor },
+  { name: 'Codex', Mark: Codex },
+] as const;
+
 /**
- * An MCP client calling Kortix: the clients as tabs, then two tool calls,
- * the second the one that matters.
+ * An MCP client handing the same prompt to Kortix: the client tabs with their
+ * marks, the request, and the `start_session` call with its result.
  */
 export function McpArt() {
   return (
-    <SurfaceArt surface="mcp" className="min-h-56">
+    <SurfaceArt surface="mcp" className="min-h-60">
       <BleedWindow className="top-5 bottom-10 left-5">
         <div className="flex items-center gap-1 border-b px-2 py-1.5 text-xs">
           {MCP_CLIENTS.map((client, index) => (
             <span
-              key={client}
+              key={client.name}
               className={cn(
-                'rounded-sm px-2 py-0.5',
+                'flex items-center gap-1.5 rounded-sm px-2 py-0.5',
                 index === 0 ? 'bg-muted text-foreground' : 'text-muted-foreground',
               )}
             >
-              {client}
+              <client.Mark className="size-3.5" />
+              {client.name}
             </span>
           ))}
         </div>
-        <div className="space-y-2 p-3 font-mono text-xs">
-          <p className="text-muted-foreground flex items-center gap-2">
-            <PlugsConnectedIcon className="size-3.5 shrink-0" />
-            kortix.list_projects
-            <span className="text-kortix-green">✓</span>
+        <div className="space-y-2.5 p-3 text-xs">
+          <p className="bg-muted ml-auto w-fit max-w-[80%] rounded-md px-2.5 py-1.5">
+            {MCP_REQUEST}
           </p>
-          <div className="bg-muted/50 rounded-sm border px-2.5 py-2">
-            <p className="flex items-center gap-2">
-              <PlugsConnectedIcon className="size-3.5 shrink-0" />
-              kortix.start_session
-              <span className="text-kortix-green">✓</span>
+          <div className="rounded-md border">
+            <p className="flex items-center gap-2 border-b px-2.5 py-1.5">
+              <Kortix className="size-3.5 shrink-0" />
+              <span className="font-mono">start_session</span>
+              <CheckCircleIcon weight="fill" className="text-kortix-green ml-auto size-3.5" />
             </p>
-            <Line className="mt-2 w-32" />
+            <p className="text-muted-foreground px-2.5 py-1.5 font-mono">
+              Session started <span className="text-foreground">{SESSION.short}</span>
+            </p>
           </div>
         </div>
       </BleedWindow>

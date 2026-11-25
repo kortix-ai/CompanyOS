@@ -132,6 +132,7 @@
     "./internal/hooks/use-reduced-motion",
     "./internal/hooks/use-review-session-summary",
     "./internal/hooks/use-slash-focus",
+    "./internal/icons/apple-cursor",
     "./internal/icons/claude",
     "./internal/icons/codex",
     "./internal/icons/cursor",

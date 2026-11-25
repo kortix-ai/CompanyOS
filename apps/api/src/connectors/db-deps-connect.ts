@@ -40,6 +40,23 @@ export function composioConnectionMetadata(input: {
   };
 }
 
+/** Keep transcript references from the live row when provider IO used an older snapshot. */
+export function composioMetadataWrite(metadata: Record<string, unknown>, completed = false, completing = false) {
+  const waiting = readRequestingSessionId(metadata);
+  return sql`(${JSON.stringify(metadata)}::jsonb
+    || jsonb_build_object('requesting_session_id', ${completing
+      ? sql`coalesce(${connectorConnections.metadata}->'requesting_session_id', 'null'::jsonb)`
+      : sql`coalesce(to_jsonb(${waiting}::text), ${connectorConnections.metadata}->'requesting_session_id', 'null'::jsonb)`}))
+    || jsonb_build_object('connect_session_ids', (
+      select coalesce(jsonb_agg(distinct value), '[]'::jsonb)
+      from jsonb_array_elements(
+        coalesce(${connectorConnections.metadata}->'connect_session_ids', '[]'::jsonb)
+        || ${JSON.stringify(metadata.connect_session_ids ?? [])}::jsonb
+        || ${JSON.stringify(completed && waiting ? [waiting] : [])}::jsonb
+      ) entries(value)
+    ))`;
+}
+
 /**
  * The Kortix session whose agent asked for this connector, as stored on the
  * connection row. Provider-neutral on purpose: Composio writes it inside
@@ -276,7 +293,7 @@ export async function recordFinishedComposioAuthorization(input: {
     previous: metadata,
     connectedAs,
   });
-  if (!(await completeConnection(input.connectionId, null, { metadata: next }))) return null;
+  if (!(await completeConnection(input.connectionId, null, { metadata: composioMetadataWrite(next, true, true) }))) return null;
   if (connectedAs) await relabelToIdentity({ connectionId: input.connectionId, identity: connectedAs });
   return next;
 }

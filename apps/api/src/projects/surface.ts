@@ -282,3 +282,6 @@ export { sessionSharedThroughSpace } from './lib/session-group-viewer';
 
 export { type ConnectorPolicyAction, type ConnectorPolicySpec, extractConnectors } from './connectors';
 export { type DefaultMode, type ProjectPolicySpec, extractProjectPolicies, projectPoliciesToManifestEntries, projectPolicySettingsToManifest } from './policies';
+
+// One QualiLoop test turn against the real agent (consumed by ../qualiloop).
+export { runQualiloopTurn, QualiloopTurnError } from './qualiloop/turn';

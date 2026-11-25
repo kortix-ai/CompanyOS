@@ -5093,6 +5093,10 @@
     },
     {
       "method": "POST",
+      "path": "/v1/qualiloop/chat"
+    },
+    {
+      "method": "POST",
       "path": "/v1/router/chat/completions"
     },
     {

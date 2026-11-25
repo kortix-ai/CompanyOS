@@ -18,7 +18,7 @@
  */
 
 import { useChromeConnections } from '@kortix/sdk/react';
-import { useState, type ComponentType, type ReactNode } from 'react';
+import { useRef, useState, type ComponentType, type ReactNode } from 'react';
 
 import { useTranslations } from '../../i18n';
 import { Button } from '../../primitives/button';
@@ -39,6 +39,7 @@ import { useDeploymentCliInstallCommand } from '../lib/use-deployment-cli-instal
 import { useSettingsPanelStore } from '../stores/settings-panel-store';
 import { useOwnsPairedComputer } from '../tunnel/computer-connect';
 import { AppleMark } from '../icons/apple';
+import { YouCursor } from './chrome-demo';
 import { PlayStoreMark } from '../icons/playstore';
 import {
   ChromeArt,
@@ -128,22 +129,27 @@ function SurfaceCard({
   children,
   art,
   wide = false,
+  presence = false,
 }: {
   name: string;
   description: ReactNode;
   children: ReactNode;
   art: ReactNode;
   wide?: boolean;
+  /** Draws the visitor's pointer as a "You" hand over the card. */
+  presence?: boolean;
 }) {
+  const card = useRef<HTMLElement>(null);
   // The art pane wakes its dither field while the pointer is over the card.
   const [hovered, setHovered] = useState(false);
   return (
     <section
+      ref={card}
       aria-label={name}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
       className={cn(
-        'bg-popover flex min-w-0 flex-col overflow-hidden rounded-lg border',
+        'bg-popover relative flex min-w-0 flex-col overflow-hidden rounded-lg border',
         wide && 'lg:grid lg:grid-cols-2',
       )}
     >
@@ -160,6 +166,7 @@ function SurfaceCard({
       <div className={cn('flex flex-1 flex-col border-t [&>*]:flex-1', wide && 'lg:border-t-0 lg:border-l')}>
         <SurfaceHoverContext.Provider value={hovered}>{art}</SurfaceHoverContext.Provider>
       </div>
+      {presence ? <YouCursor area={card} /> : null}
     </section>
   );
 }
@@ -261,7 +268,7 @@ function ChromePublicCard() {
   const t = useTranslations('appsModal.chrome');
   const tChrome = useTranslations('chrome');
   return (
-    <SurfaceCard name={t('name')} description={t('description')} art={<ChromeArt />}>
+    <SurfaceCard presence name={t('name')} description={t('description')} art={<ChromeArt />}>
       <Button asChild size="sm">
         <a href={KORTIX_EXTENSION_STORE_URL} target="_blank" rel="noopener noreferrer">
           {tChrome('addToChrome')}
@@ -300,7 +307,7 @@ function ChromeLiveCard({ onClose }: { onClose: () => void }) {
 
   if (cardState === 'connected' && connected) {
     return (
-      <SurfaceCard name={t('name')} description={t('description')} art={<ChromeArt />}>
+      <SurfaceCard presence name={t('name')} description={t('description')} art={<ChromeArt />}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           {manage}
           <span className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs">
@@ -314,6 +321,7 @@ function ChromeLiveCard({ onClose }: { onClose: () => void }) {
   }
   return (
     <SurfaceCard
+      presence
       name={t('name')}
       description={cardState === 'unsupported' ? t('unsupported') : t('description')}
       art={<ChromeArt />}

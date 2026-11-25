@@ -16,7 +16,7 @@
  */
 
 import { chalkColorsForHue } from '@kortix/shared';
-import { BagIcon, CheckCircleIcon, CoffeeIcon, HeadphonesIcon, LaptopIcon, TShirtIcon } from '@phosphor-icons/react';
+import { CheckCircleIcon, LaptopIcon } from '@phosphor-icons/react';
 import { useReducedMotion } from 'motion/react';
 import { createContext, useContext, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 
@@ -25,12 +25,12 @@ import { lazyClient } from '../../lib/lazy-client';
 import { ShaderSafe, supportsWebGL2 } from '../../primitives/shader-safe';
 import { UiImage } from '../../providers/ui-provider';
 import { ChromeOnlineDot } from '../chrome/chrome-connect';
-import { AppleCursor } from '../icons/apple-cursor';
 import { Claude } from '../icons/claude';
 import { Codex } from '../icons/codex';
 import { Cursor } from '../icons/cursor';
 import { Kortix } from '../icons/kortix';
 import { cn } from '../lib/utils';
+import { ChromeDemo } from './chrome-demo';
 
 export type SurfaceId = 'desktop' | 'mobile' | 'chrome' | 'computer' | 'terminal' | 'mcp';
 
@@ -47,9 +47,6 @@ const SURFACE_HUES: Record<SurfaceId, number> = {
 /** Shots the web host serves from `apps/web/public/images`. */
 const DESKTOP_SHOT = '/images/desktop-app/session-top-dark.webp';
 const PHONE_SHOTS = ['/images/mobile-app/start-dark.webp', '/images/mobile-app/review-dark.webp'];
-
-/** The page the Chrome mock works on: a made-up shop, never a real one. */
-const MOCK_URL = 'shop.example.com/orders';
 
 /** Whether the pointer is over the card that holds the pane. */
 export const SurfaceHoverContext = createContext(false);
@@ -198,71 +195,19 @@ export function MobileArt() {
   );
 }
 
-/** Two orders on the made-up shop's page. Synthetic data, never a real shop. */
-const ORDERS = [
-  { name: 'Wireless headphones', meta: 'Order #8294 · Delivered Jan 28', price: '$79.99', Glyph: HeadphonesIcon },
-  { name: 'Linen overshirt', meta: 'Order #8231 · Delivered Jan 12', price: '$48.00', Glyph: TShirtIcon },
-  { name: 'Ceramic mug set', meta: 'Order #8190 · Delivered Dec 30', price: '$32.00', Glyph: CoffeeIcon },
-] as const;
-
 /**
- * Kortix at work in the visitor's own Chrome: its tab group, a shop's orders
- * page, the agent's hand on "Start return", and the bar that hands control
- * back. Every word is one a real page would show.
+ * Kortix at work in the visitor's own Chrome (`ChromeDemo`): a return, played
+ * step by step, and the bar that hands control back.
  */
 export function ChromeArt() {
   const t = useTranslations('appsModal.mock');
   return (
     <SurfaceArt surface="chrome" className="min-h-80">
       <BleedWindow>
-        <div className="bg-muted/40 flex items-end gap-2 border-b px-3 pt-2">
-          <span className="bg-kortix-base/15 text-foreground mb-1.5 flex min-w-0 items-center gap-1.5 rounded-sm px-2 py-0.5 text-xs">
-            <span className="bg-kortix-base size-1.5 shrink-0 rounded-full" />
-            <span className="truncate">{t('group')}</span>
-          </span>
-          <span className="bg-card -mb-px flex items-center gap-1.5 rounded-t-sm border border-b-0 px-2.5 py-1.5 text-xs">
-            <BagIcon weight="fill" className="text-muted-foreground size-3 shrink-0" />
-            Orders
-          </span>
-        </div>
-        <div className="border-b px-3 py-2">
-          <span className="bg-muted text-muted-foreground block w-fit max-w-full truncate rounded-full px-3 py-1 font-mono text-xs">
-            {MOCK_URL}
-          </span>
-        </div>
-        <div className="space-y-2.5 p-4">
-          <p className="text-sm font-medium">Your orders</p>
-          {ORDERS.map((order, index) => (
-            <div key={order.name} className="bg-muted/40 flex items-center gap-3 rounded-md px-3 py-2.5">
-              <span className="bg-muted flex size-10 shrink-0 items-center justify-center rounded-sm">
-                <order.Glyph weight="fill" className="text-muted-foreground size-5" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs font-medium">{order.name}</span>
-                <span className="text-muted-foreground block truncate text-xs">{order.meta}</span>
-              </span>
-              <span className="text-muted-foreground shrink-0 text-xs tabular-nums">{order.price}</span>
-              {index === 0 ? (
-                <span className="relative shrink-0">
-                  <span className="ring-kortix-base bg-card block rounded-sm px-2.5 py-1 text-xs ring-2">
-                    {t('button')}
-                  </span>
-                  {/* The agent's hand, named, as every Kortix film draws it. */}
-                  {/* The name sits left of the hand, so it never leaves the window. */}
-                  <span className="absolute top-4 right-3 flex items-end gap-0.5">
-                    <span className="bg-kortix-base text-foreground rounded-sm px-1.5 py-0.5 text-xs">Kortix</span>
-                    <AppleCursor className="size-8" />
-                  </span>
-                </span>
-              ) : (
-                <span className="text-muted-foreground shrink-0 rounded-sm border px-2.5 py-1 text-xs">Buy again</span>
-              )}
-            </div>
-          ))}
-        </div>
+        <ChromeDemo />
       </BleedWindow>
       {/* The hand-back bar floats over the page, as the extension draws it. */}
-      <div className="bg-popover absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-full border px-3 py-1.5 text-xs whitespace-nowrap shadow-md">
+      <div className="bg-popover absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3 rounded-full border px-3 py-1.5 text-xs whitespace-nowrap shadow-md">
         <span className="flex items-center gap-1.5">
           <span className="bg-kortix-base size-1.5 rounded-full" />
           {t('working')}

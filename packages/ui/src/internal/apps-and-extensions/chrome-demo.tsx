@@ -312,7 +312,9 @@ export function ChromeDemo() {
             />
             <AppleCursor className={cn('size-8 transition-transform duration-(--duration-fast) ease-out', pressing && 'scale-90')} />
           </span>
-          <span className="bg-kortix-base text-foreground rounded-sm px-1.5 py-0.5 text-xs">Kortix</span>
+          <span className="bg-kortix-base rounded-sm px-1.5 py-0.5 text-xs" style={{ color: AVATAR_INK }}>
+            Kortix
+          </span>
         </span>
       ) : null}
     </div>

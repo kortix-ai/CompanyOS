@@ -1,12 +1,12 @@
 'use client';
 
 /**
- * The art module of "Apps and extensions": one dark pane per surface, lit
+ * The art module of "Apps and extensions": one pane per surface, lit
  * from below by that surface's chalk hue, holding a still of the surface at
  * work. Raw colour lives here and nowhere else in the feature.
  *
- * Every pane is dark in both themes (`className="dark"` scopes the dark
- * tokens to it). Each mock is one window or device, running off the pane's
+ * Every pane follows the page's theme: its tokens, its screenshots and its
+ * chalk light all have a light and a dark form. Each mock is one window or device, running off the pane's
  * right or bottom edge, with real words only on what the picture is about.
  *
  * Hovering a card wakes a dither field in the pane, in the card's chalk hue
@@ -24,6 +24,7 @@ import { useTranslations } from '../../i18n';
 import { lazyClient } from '../../lib/lazy-client';
 import { ShaderSafe, supportsWebGL2 } from '../../primitives/shader-safe';
 import { UiImage } from '../../providers/ui-provider';
+import { useIsDark } from '../../hooks/use-is-dark';
 import { ChromeOnlineDot } from '../chrome/chrome-connect';
 import { Claude } from '../icons/claude';
 import { Codex } from '../icons/codex';
@@ -45,8 +46,11 @@ const SURFACE_HUES: Record<SurfaceId, number> = {
 };
 
 /** Shots the web host serves from `apps/web/public/images`. */
-const DESKTOP_SHOT = '/images/desktop-app/session-top-dark.webp';
-const PHONE_SHOTS = ['/images/mobile-app/start-dark.webp', '/images/mobile-app/review-dark.webp'];
+const DESKTOP_SHOT = { light: '/images/desktop-app/session-top-light.webp', dark: '/images/desktop-app/session-top-dark.webp' };
+const PHONE_SHOTS = [
+  { light: '/images/mobile-app/start-light.webp', dark: '/images/mobile-app/start-dark.webp' },
+  { light: '/images/mobile-app/review-light.webp', dark: '/images/mobile-app/review-dark.webp' },
+];
 
 /** Whether the pointer is over the card that holds the pane. */
 export const SurfaceHoverContext = createContext(false);
@@ -73,7 +77,7 @@ const DITHER_OPACITY = 0.2;
 const LIGHT_SHAPE = '120% 90% at 50% 120%';
 
 /**
- * The pane: dark, with the surface's chalk light rising from its foot, and
+ * The pane: a quiet tint with the surface's chalk light rising from its foot, and
  * the dither field over the light while the card is hovered.
  */
 export function SurfaceArt({
@@ -87,7 +91,11 @@ export function SurfaceArt({
 }) {
   const hovered = useContext(SurfaceHoverContext);
   const reduceMotion = useReducedMotion() ?? false;
-  const { dark } = chalkColorsForHue(SURFACE_HUES[surface]);
+  const isDark = useIsDark();
+  const { light, dark } = chalkColorsForHue(SURFACE_HUES[surface]);
+  // The light's hue in this theme: the dark form's bright ink on a dark
+  // pane, the light form's deep ink on a light one.
+  const lightInk = isDark ? dark.foreground : light.foreground;
   // Armed on the first hover and never disarmed: the shader mounts once and
   // stays mounted so its fade-out can run. Set during render, the React way
   // to follow a prop, so no effect runs on cards nobody hovers.
@@ -95,17 +103,17 @@ export function SurfaceArt({
   if (hovered && !armed) setArmed(true);
   // Only after a hover, so only in a browser.
   const ink = useMemo(
-    () => (armed && supportsWebGL2() ? toRgb(dark.foreground) : null),
-    [armed, dark.foreground],
+    () => (armed && supportsWebGL2() ? toRgb(lightInk) : null),
+    [armed, lightInk],
   );
 
   const glow: CSSProperties = {
-    backgroundImage: `radial-gradient(${LIGHT_SHAPE}, ${dark.foreground.replace(')', ' / 0.4)')}, transparent 72%)`,
+    backgroundImage: `radial-gradient(${LIGHT_SHAPE}, ${lightInk.replace(')', isDark ? ' / 0.4)' : ' / 0.26)')}, transparent 72%)`,
   };
   const mask = `radial-gradient(${LIGHT_SHAPE}, #000 25%, transparent 75%)`;
 
   return (
-    <div aria-hidden="true" style={glow} className="dark bg-background text-foreground relative flex flex-col overflow-hidden">
+    <div aria-hidden="true" style={glow} className="bg-muted/40 text-foreground relative flex flex-col overflow-hidden">
       {ink ? (
         <div
           className="pointer-events-none absolute inset-0 transition-opacity duration-(--duration-moderate) ease-in-out"
@@ -162,12 +170,20 @@ export function DesktopArt() {
       <BleedWindow className="top-8 left-8">
         <TitleBar />
         <UiImage
-          src={DESKTOP_SHOT}
+          src={DESKTOP_SHOT.light}
           alt=""
           width={1440}
           height={900}
           sizes="(min-width: 1024px) 720px, 150vw"
-          className="h-auto w-[150%] max-w-none"
+          className="h-auto w-[150%] max-w-none dark:hidden"
+        />
+        <UiImage
+          src={DESKTOP_SHOT.dark}
+          alt=""
+          width={1440}
+          height={900}
+          sizes="(min-width: 1024px) 720px, 150vw"
+          className="hidden h-auto w-[150%] max-w-none dark:block"
         />
       </BleedWindow>
     </SurfaceArt>
@@ -179,15 +195,16 @@ export function MobileArt() {
   return (
     <SurfaceArt surface="mobile" className="min-h-80">
       <div className="absolute inset-x-0 top-8 flex justify-center gap-5">
-        {PHONE_SHOTS.map((src, index) => (
+        {PHONE_SHOTS.map((shot, index) => (
           <div
-            key={src}
+            key={shot.light}
             className={cn(
               'bg-card relative aspect-[640/1385] w-40 shrink-0 overflow-hidden rounded-xl border',
               index === 1 && 'translate-y-10',
             )}
           >
-            <UiImage src={src} alt="" fill sizes="160px" className="object-cover" />
+            <UiImage src={shot.light} alt="" fill sizes="160px" className="object-cover dark:hidden" />
+            <UiImage src={shot.dark} alt="" fill sizes="160px" className="hidden object-cover dark:block" />
           </div>
         ))}
       </div>

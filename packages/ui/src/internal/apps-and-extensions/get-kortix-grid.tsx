@@ -18,14 +18,9 @@
  */
 
 import { useChromeConnections } from '@kortix/sdk/react';
-import {
-  AppleLogoIcon,
-  GooglePlayLogoIcon,
-  LinuxLogoIcon,
-  WindowsLogoIcon,
-  type Icon,
-} from '@phosphor-icons/react';
-import type { ReactNode } from 'react';
+// The SSR entry reads no IconContext, so the explicit fill weight always wins.
+import { LinuxLogoIcon, WindowsLogoIcon } from '@phosphor-icons/react/dist/ssr';
+import { useState, type ComponentType, type ReactNode } from 'react';
 
 import { useTranslations } from '../../i18n';
 import { Button } from '../../primitives/button';
@@ -45,7 +40,22 @@ import { SolidCheckIcon } from '../icons/solid-check-icon';
 import { useDeploymentCliInstallCommand } from '../lib/use-deployment-cli-install-command';
 import { useSettingsPanelStore } from '../stores/settings-panel-store';
 import { useOwnsPairedComputer } from '../tunnel/computer-connect';
-import { ChromeArt, ComputerArt, DesktopArt, McpArt, MobileArt, TerminalArt } from './surface-art';
+import { AppleMark } from '../icons/apple';
+import { PlayStoreMark } from '../icons/playstore';
+import {
+  ChromeArt,
+  ComputerArt,
+  DesktopArt,
+  McpArt,
+  MobileArt,
+  SurfaceHoverContext,
+  TerminalArt,
+} from './surface-art';
+
+type Mark = ComponentType<{ className?: string }>;
+
+const WindowsMark: Mark = ({ className }) => <WindowsLogoIcon weight="fill" className={className} />;
+const LinuxMark: Mark = ({ className }) => <LinuxLogoIcon weight="fill" className={className} />;
 
 /** Operating system and device names are product names: never translated. */
 /**
@@ -53,8 +63,8 @@ import { ChromeArt, ComputerArt, DesktopArt, McpArt, MobileArt, TerminalArt } fr
  * ships x86_64 only, so an ARM visitor reads that before downloading a binary
  * that will not run.
  */
-const DESKTOP_ROWS: Record<DesktopOs, { name: string; meta: string; Mark: Icon }> = {
-  macos: { name: 'macOS', meta: 'Universal', Mark: AppleLogoIcon },
+const DESKTOP_ROWS: Record<DesktopOs, { name: string; meta: string; Mark: Mark }> = {
+  macos: { name: 'macOS', meta: 'Universal', Mark: AppleMark },
   windows: { name: 'Windows', meta: '64-bit', Mark: WindowsLogoIcon },
   linux: { name: 'Linux', meta: 'AppImage · x86_64', Mark: LinuxLogoIcon },
 };
@@ -86,13 +96,13 @@ export function GetKortixGrid({
 }) {
   const showChrome = inApp ? inApp.chrome : true;
   return (
-    <div className={cn('flex flex-col gap-4', className)}>
+    <div className={cn('flex flex-col gap-6', className)}>
       <DesktopCard platform={platform} inApp={Boolean(inApp)} />
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2">
         <MobileCard platform={platform} />
         {showChrome ? inApp ? <ChromeLiveCard onClose={inApp.onClose} /> : <ChromePublicCard /> : null}
       </div>
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-3">
         {inApp ? <ComputerLiveCard onOpen={inApp.onOpenComputer} /> : <ComputerPublicCard />}
         <TerminalCard />
         <McpCard onOpen={inApp?.onOpenMcp} />
@@ -119,9 +129,13 @@ function SurfaceCard({
   art: ReactNode;
   wide?: boolean;
 }) {
+  // The art pane wakes its dither field while the pointer is over the card.
+  const [hovered, setHovered] = useState(false);
   return (
     <section
       aria-label={name}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
       className={cn(
         'bg-popover flex min-w-0 flex-col overflow-hidden rounded-lg border',
         wide && 'lg:grid lg:grid-cols-2',
@@ -138,7 +152,7 @@ function SurfaceCard({
       {/* The art takes the height the grid row leaves over, so a short card in
           a tall row grows its picture, never a gap above its button. */}
       <div className={cn('flex flex-1 flex-col border-t [&>*]:flex-1', wide && 'lg:border-t-0 lg:border-l')}>
-        {art}
+        <SurfaceHoverContext.Provider value={hovered}>{art}</SurfaceHoverContext.Provider>
       </div>
     </section>
   );
@@ -151,14 +165,16 @@ function ActionRow({
   meta,
   children,
 }: {
-  Mark: Icon;
+  Mark: Mark;
   name: string;
   meta?: string;
   children: ReactNode;
 }) {
   return (
     <li className="flex min-h-12 items-center gap-3 py-2">
-      <Mark weight="fill" className="text-foreground size-5 shrink-0" />
+      <span className="flex size-5 shrink-0 items-center justify-center">
+        <Mark className="text-foreground size-5" />
+      </span>
       <span className="min-w-0 flex-1">
         <span className="text-foreground block truncate text-sm">{name}</span>
         {meta ? <span className="text-muted-foreground block truncate text-xs">{meta}</span> : null}
@@ -206,8 +222,8 @@ function MobileCard({ platform }: { platform: Platform }) {
   const t = useTranslations('appsModal.mobile');
   const tStore = useTranslations('mobileAppPromo');
   const stores = [
-    { id: 'ios', device: 'iPhone', Mark: AppleLogoIcon, label: tStore('appStore'), href: APP_STORE_URL },
-    { id: 'android', device: 'Android', Mark: GooglePlayLogoIcon, label: tStore('googlePlay'), href: GOOGLE_PLAY_URL },
+    { id: 'ios', device: 'iPhone', Mark: AppleMark, label: tStore('appStore'), href: APP_STORE_URL },
+    { id: 'android', device: 'Android', Mark: PlayStoreMark, label: tStore('googlePlay'), href: GOOGLE_PLAY_URL },
   ] as const;
   const onPhone = isMobilePlatform(platform);
   return (
@@ -352,7 +368,7 @@ function ComputerLiveCard({ onOpen }: { onOpen: () => void }) {
 }
 
 /**
- * The install command for THIS deployment, in full, above its Copy button.
+ * The install command for THIS deployment, behind one Copy command button.
  */
 function TerminalCard() {
   const t = useTranslations('appsModal.developers');
@@ -363,9 +379,6 @@ function TerminalCard() {
   };
   return (
     <SurfaceCard name={t('cli')} description={t('cliDescription')} art={<TerminalArt />}>
-      {/* The whole command, wrapped and selectable: the visitor reads every
-          character before piping it into a shell. */}
-      <code className="text-foreground w-full font-mono text-xs break-all select-all">{command}</code>
       <Button size="sm" variant="secondary" className="gap-1.5" onClick={copyCommand}>
         {copied ? <SolidCheckIcon className="size-3.5" /> : null}
         {copied ? t('copied') : t('copy')}

@@ -512,13 +512,14 @@ test('analyzeCostExport analyzes both projects and sessions exports as fetched',
     ['sessions', '3', false],
     ['sessions', 'not-a-number', false],
   ] as const) {
-    globalThis.fetch = mock(
+    globalThis.fetch = Object.assign(
       async () =>
         new Response('id,total_cost\r\na,1.00\r\nb,2.00', {
           status: 200,
           headers: { 'x-kortix-row-cap': rowCapHeader },
         }),
-    ) as unknown as typeof fetch;
+      { preconnect: globalThis.fetch.preconnect },
+    );
     const result = kind === 'projects' ? await fetchCostExportCsv(kind) : await fetchCostExportCsv(kind);
     const analysis = await analyzeCostExport(result);
     expect(analysis.blob).toBe(result.blob);

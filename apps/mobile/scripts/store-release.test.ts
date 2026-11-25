@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { compareVersions, fetchWithRetry, iosStep, pickBuild, shippedBuildIds } from './store-release.mjs';
+import { compareVersions, main, releaseIos, fetchWithRetry, iosStep, pickBuild, shippedBuildIds } from './store-release.mjs';
 
 const build = (id: string) => ({ id, appBuildVersion: id });
 
@@ -118,5 +118,102 @@ describe('store API calls survive one dropped connection', () => {
     const fetchFn = async () => { calls += 1; throw new TypeError('fetch failed'); };
     await expect(fetchWithRetry('https://example.test', {}, { fetchFn, wait: noWait, attempts: 3 })).rejects.toThrow('fetch failed');
     expect(calls).toBe(3);
+  });
+});
+
+// Exercise the Apple adapter, not a duplicated state classifier.
+describe('App Store delivery gates', () => {
+  const version = '1.0.10';
+  const options = { projectId: 'synthetic-project', appId: 'synthetic-app', version, buildNumber: '10', dryRun: false };
+  const apple = (state: string, v = version) => async (method: string) => {
+    if (method !== 'GET') throw new Error(`manual gate was mutated: ${method}`);
+    return { data: [{ id: 'synthetic-version', attributes: { versionString: v, appVersionState: state } }] };
+  };
+
+  test('a rejected iOS submission fails rather than silently succeeding', async () => {
+    await expect(releaseIos(options, async () => apple('REJECTED'))).rejects.toThrow('REJECTED');
+  });
+
+  test('a higher Apple version identifies incomplete iOS delivery', async () => {
+    await expect(releaseIos(options, async () => apple('PREPARE_FOR_SUBMISSION', '1.0.11'))).rejects.toThrow('higher version');
+  });
+
+  test('pending Apple review is explicit and is not a completed rollout', async () => {
+    await expect(releaseIos(options, async () => apple('IN_REVIEW'))).resolves.toBeUndefined();
+  });
+
+  test('an editable version attaches its processed build and requests review, not rollout', async () => {
+    const calls: string[] = [];
+    const asc = async (method: string, path: string) => {
+      calls.push(`${method} ${path.split('?')[0]}`);
+      if (path.startsWith('/v1/apps/')) return { data: [{ id: 'version', attributes: { versionString: version, appVersionState: 'PREPARE_FOR_SUBMISSION' } }] };
+      if (path.startsWith('/v1/builds?')) return { data: [{ id: 'build', attributes: { processingState: 'VALID' } }] };
+      if (method === 'GET') return { data: [] };
+      if (path === '/v1/reviewSubmissions' && method === 'POST') return { data: { id: 'review' } };
+      return { data: {} };
+    };
+    await releaseIos(options, async () => asc);
+    expect(calls).toContain('PATCH /v1/appStoreVersions/version/relationships/build');
+    expect(calls).toContain('POST /v1/reviewSubmissionItems');
+    expect(calls.at(-1)).toBe('PATCH /v1/reviewSubmissions/review');
+    expect(calls.some((call) => call.includes('ReleaseRequests'))).toBe(false);
+  });
+
+  for (const existing of ['target', 'draft', 'new']) {
+    for (const releaseType of ['MANUAL', 'SCHEDULED', 'AFTER_APPROVAL']) {
+      test(`${existing} version preserves ${releaseType} policy through review submission`, async () => {
+        const attributes = {
+          versionString: existing === 'draft' ? '1.0.9' : version,
+          appVersionState: 'PREPARE_FOR_SUBMISSION',
+          releaseType,
+          earliestReleaseDate: '2030-01-01T00:00:00Z',
+        };
+        const writes: { method: string; path: string; body: { data: { attributes?: Record<string, unknown> } } }[] = [];
+        const asc = async (method: string, path: string, body: { data: { attributes?: Record<string, unknown> } }) => {
+          if (method !== 'GET') writes.push({ method, path, body });
+          if (path.startsWith('/v1/apps/')) return { data: existing === 'new' ? [] : [{ id: 'version', attributes }] };
+          if (path.startsWith('/v1/builds?')) return { data: [{ id: 'build', attributes: { processingState: 'VALID' } }] };
+          if (method === 'GET') return { data: [] };
+          if (path === '/v1/appStoreVersions' || path === '/v1/appStoreVersions/version') {
+            Object.assign(attributes, body.data.attributes);
+            return { data: { id: 'version', attributes } };
+          }
+          if (path === '/v1/reviewSubmissions') return { data: { id: 'review' } };
+          return { data: {} };
+        };
+        await releaseIos(options, async () => asc);
+        expect(attributes.releaseType).toBe(existing === 'new' ? 'AFTER_APPROVAL' : releaseType);
+        expect(attributes.earliestReleaseDate).toBe('2030-01-01T00:00:00Z');
+        const versionWrites = writes.filter(({ path }) => path === '/v1/appStoreVersions/version');
+        expect(versionWrites.map(({ body }) => body.data.attributes)).toEqual(existing === 'draft' ? [{ versionString: version }] : []);
+        expect(writes.at(-1)?.body.data.attributes).toEqual({ submitted: true });
+      });
+    }
+  }
+
+  test('an approved manual release is preserved, not released by automation', async () => {
+    await expect(releaseIos(options, async () => apple('PENDING_DEVELOPER_RELEASE'))).rejects.toThrow('manual release');
+  });
+});
+
+
+describe('both-platform orchestration', () => {
+  test('Android still submits after iOS fails, and the run fails', async () => {
+    const previous = process.env.EXPO_TOKEN;
+    process.env.EXPO_TOKEN = 'synthetic-token';
+    const reached: string[] = [];
+    try {
+      await expect(main({
+        release: async ({ platform }: { platform: string }) => {
+          reached.push(platform);
+          if (platform === 'ios') throw new Error('synthetic iOS submission failed');
+        },
+        notify: async () => {},
+      })).rejects.toThrow('delivery incomplete');
+      expect(reached).toEqual(['ios', 'android']);
+    } finally {
+      if (previous === undefined) delete process.env.EXPO_TOKEN;
+      else process.env.EXPO_TOKEN = previous;
+    }
   });
 });

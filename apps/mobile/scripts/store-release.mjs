@@ -9,7 +9,7 @@
 //   2. submit: the newest store build has no finished EAS submission
 //      (Android: Play production track; iOS: App Store Connect);
 //   3. iOS review: the App Store version carries that build and goes to App
-//      Review, released automatically after approval.
+//      Review, preserving existing release policies (new versions: automatic).
 // A run with nothing to do changes nothing. runtimeVersion equals the version,
 // so native code that changed after the version's store build needs a version
 // bump; the run says so instead of building.
@@ -243,13 +243,13 @@ async function processedBuild(asc, appId, version, buildNumber, dryRun) {
   }
 }
 
-async function releaseIos({ projectId, appId, version, buildNumber, dryRun }) {
-  const asc = await ascClient(projectId);
+export async function releaseIos({ projectId, appId, version, buildNumber, dryRun }, getClient = ascClient) {
+  const asc = await getClient(projectId);
   const versions = (await asc('GET', `/v1/apps/${appId}/appStoreVersions?filter[platform]=IOS&limit=50`)).data;
   const stateOf = (v) => v.attributes.appVersionState ?? v.attributes.appStoreState;
   const newer = versions.find((v) => compareVersions(v.attributes.versionString, version) > 0);
   if (newer) {
-    return note('warning', `iOS ${version}: App Store Connect has the higher version ${newer.attributes.versionString} (${stateOf(newer)}). `
+    throw new Error(`iOS ${version}: App Store Connect has the higher version ${newer.attributes.versionString} (${stateOf(newer)}). `
       + 'Nothing is submitted until apps/mobile/app.json carries a version above it.');
   }
 
@@ -261,14 +261,8 @@ async function releaseIos({ projectId, appId, version, buildNumber, dryRun }) {
   const label = `iOS ${version} (${buildNumber})`;
   if (step === 'live') return note('notice', `${label} is live on the App Store.`);
   if (step === 'wait') return note('notice', `${label} is with Apple: ${stateOf(target)}.`);
-  if (step === 'blocked') return note('warning', `${label} needs a person in App Store Connect: ${stateOf(target)}.`);
-  if (step === 'release') {
-    if (dryRun) return note('notice', `${label} is approved; would release it now (dry run).`);
-    await asc('POST', '/v1/appStoreVersionReleaseRequests', {
-      data: { type: 'appStoreVersionReleaseRequests', relationships: { appStoreVersion: { data: { type: 'appStoreVersions', id: target.id } } } },
-    });
-    return note('notice', `${label} was approved and is now released to the App Store.`, true);
-  }
+  if (step === 'blocked') throw new Error(`${label} needs a person in App Store Connect: ${stateOf(target)}.`);
+  if (step === 'release') throw new Error(`${label} awaits manual release in App Store Connect; the explicit release gate is preserved.`);
 
   const build = await processedBuild(asc, appId, version, buildNumber, dryRun);
   if (dryRun) {
@@ -276,15 +270,11 @@ async function releaseIos({ projectId, appId, version, buildNumber, dryRun }) {
     return note('notice', `${label}: would submit for App Review (${how}; build ${build ? 'processed' : 'not processed yet'}) (dry run).`);
   }
 
-  if (target) {
-    await asc('PATCH', `/v1/appStoreVersions/${target.id}`, {
-      data: { type: 'appStoreVersions', id: target.id, attributes: { releaseType: 'AFTER_APPROVAL' } },
-    });
-  } else if (draft) {
+  if (!target && draft) {
     target = (await asc('PATCH', `/v1/appStoreVersions/${draft.id}`, {
-      data: { type: 'appStoreVersions', id: draft.id, attributes: { versionString: version, releaseType: 'AFTER_APPROVAL' } },
+      data: { type: 'appStoreVersions', id: draft.id, attributes: { versionString: version } },
     })).data;
-  } else {
+  } else if (!target) {
     target = (await asc('POST', '/v1/appStoreVersions', {
       data: {
         type: 'appStoreVersions',
@@ -320,7 +310,7 @@ async function releaseIos({ projectId, appId, version, buildNumber, dryRun }) {
   await asc('PATCH', `/v1/reviewSubmissions/${submission.id}`, {
     data: { type: 'reviewSubmissions', id: submission.id, attributes: { submitted: true } },
   });
-  note('notice', `${label} submitted for App Review; it releases automatically after approval.`, true);
+  note('notice', `${label} submitted for App Review; release policy: ${target.attributes.releaseType}.`, true);
 }
 
 async function releasePlatform({ platform, expo, easConfig, dryRun }) {
@@ -387,7 +377,7 @@ async function postToSlack() {
   if (!body.ok) console.log(`::warning::Slack post failed: ${body.error ?? res.status}`);
 }
 
-async function main() {
+export async function main({ release = releasePlatform, notify = postToSlack } = {}) {
   const dryRun = process.argv.includes('--dry-run');
   if (!process.env.EXPO_TOKEN) throw new Error('EXPO_TOKEN is not set');
   const expo = JSON.parse(readFileSync(join(MOBILE, 'app.json'), 'utf8')).expo;
@@ -396,14 +386,14 @@ async function main() {
   // iOS first: Apple's review is the longest wait.
   for (const platform of ['ios', 'android']) {
     try {
-      await releasePlatform({ platform, expo, easConfig, dryRun });
+      await release({ platform, expo, easConfig, dryRun });
     } catch (error) {
       failed = true;
       note('error', `${platform} ${expo.version}: ${error.message}`);
     }
   }
-  if (!dryRun) await postToSlack();
-  if (failed) process.exit(1);
+  if (!dryRun) await notify();
+  if (failed) throw new Error('Mobile store delivery incomplete; see the platform errors above.');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

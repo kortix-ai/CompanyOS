@@ -18,14 +18,12 @@
  */
 
 import { useChromeConnections } from '@kortix/sdk/react';
-// The SSR entry reads no IconContext, so the explicit fill weight always wins.
-import { LinuxLogoIcon, WindowsLogoIcon } from '@phosphor-icons/react/dist/ssr';
 import { useState, type ComponentType, type ReactNode } from 'react';
 
 import { useTranslations } from '../../i18n';
 import { Button } from '../../primitives/button';
 import { errorToast } from '../../primitives/toast';
-import { UiLink as Link, useUiHostConfig } from '../../providers/ui-provider';
+import { UiImage, UiLink as Link, useUiHostConfig } from '../../providers/ui-provider';
 import { ChromeCopyLink, ChromeInstallActions, ChromeOnlineDot, useChromeConnect } from '../chrome/chrome-connect';
 import { chromeCardState } from '../chrome/chrome-card-state';
 import { chromeCounts } from '../chrome/chrome-names';
@@ -54,8 +52,16 @@ import {
 
 type Mark = ComponentType<{ className?: string }>;
 
-const WindowsMark: Mark = ({ className }) => <WindowsLogoIcon weight="fill" className={className} />;
-const LinuxMark: Mark = ({ className }) => <LinuxLogoIcon weight="fill" className={className} />;
+/**
+ * The official Windows and Linux (Tux) marks, in their own colours: static
+ * files the web host serves from `apps/web/public/images/platforms`.
+ */
+const platformMark = (src: string): Mark =>
+  function PlatformMark({ className }) {
+    return <UiImage src={src} alt="" width={20} height={20} unoptimized className={cn('object-contain', className)} />;
+  };
+const WindowsMark = platformMark('/images/platforms/windows.svg');
+const LinuxMark = platformMark('/images/platforms/linux.svg');
 
 /** Operating system and device names are product names: never translated. */
 /**
@@ -65,8 +71,8 @@ const LinuxMark: Mark = ({ className }) => <LinuxLogoIcon weight="fill" classNam
  */
 const DESKTOP_ROWS: Record<DesktopOs, { name: string; meta: string; Mark: Mark }> = {
   macos: { name: 'macOS', meta: 'Universal', Mark: AppleMark },
-  windows: { name: 'Windows', meta: '64-bit', Mark: WindowsLogoIcon },
-  linux: { name: 'Linux', meta: 'AppImage · x86_64', Mark: LinuxLogoIcon },
+  windows: { name: 'Windows', meta: '64-bit', Mark: WindowsMark },
+  linux: { name: 'Linux', meta: 'AppImage · x86_64', Mark: LinuxMark },
 };
 
 /** The MCP setup guide, for a visitor who is not signed in. */

@@ -263,9 +263,10 @@ export function ChromeArt() {
                     {t('button')}
                   </span>
                   {/* The agent's hand, named, as every Kortix film draws it. */}
-                  <span className="absolute top-4 left-14 flex items-end">
+                  {/* The name sits left of the hand, so it never leaves the window. */}
+                  <span className="absolute top-4 right-3 flex items-end gap-0.5">
+                    <span className="bg-kortix-base text-foreground rounded-sm px-1.5 py-0.5 text-xs">Kortix</span>
                     <AppleCursor className="size-8" />
-                    <span className="bg-kortix-base text-foreground -ml-2 rounded-sm px-1.5 py-0.5 text-xs">Kortix</span>
                   </span>
                 </span>
               ) : (

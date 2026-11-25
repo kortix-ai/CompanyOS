@@ -1,7 +1,7 @@
 /**
  * Structured logger with queryable format for easy filtering and parsing
  * 
- * Format: [KTX] [USER:abc123] [LEVEL:info] [COMPONENT:RC] message
+ * Format: [KTX] [USER:abc123] [LEVEL:info] message
  * 
  * Usage:
  *   import { log, setLoggerUserId } from '@/lib/logger';
@@ -21,9 +21,6 @@
  * 
  *   # Filter by level
  *   idevicesyslog | grep "\[LEVEL:error\]"
- * 
- *   # Filter by component
- *   idevicesyslog | grep "\[COMPONENT:RC\]"
  * 
  *   # Filter by user AND level
  *   idevicesyslog | grep "\[USER:abc12345\]" | grep "\[LEVEL:error\]"

@@ -208,7 +208,7 @@ export function HelpMenu({ onOpenDownloadApp }: { onOpenDownloadApp?: () => void
           </Button>
         </DropdownMenuTrigger>
       </Hint>
-      <DropdownMenuContent side="top" align="start" sideOffset={6} className="w-[300px]">
+      <DropdownMenuContent side="top" align="start" sideOffset={6} className="max-h-(--available-height) w-[300px] overflow-y-auto">
         <DropdownMenuGroup>
           {helpLinks.map(({ label, href, Icon }) => (
             <LinkRow key={href} href={href} onNavigate={close}>

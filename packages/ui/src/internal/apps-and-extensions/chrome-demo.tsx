@@ -270,7 +270,7 @@ export function ChromeDemo() {
       </div>
 
       {/* The hand-back bar, as the extension draws it over the page. */}
-      <div className="bg-popover absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3 rounded-full border px-3 py-1.5 text-xs whitespace-nowrap shadow-md">
+      <div className="bg-popover absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3 rounded-md border px-3 py-1.5 text-xs whitespace-nowrap shadow-xs">
         <span className="flex items-center gap-1.5">
           <span className="bg-kortix-base size-1.5 rounded-full" />
           {t('working')}

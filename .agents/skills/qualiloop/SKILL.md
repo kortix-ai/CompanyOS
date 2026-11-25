@@ -15,7 +15,7 @@ QualiLoop project **#1 "Kortix AI Corp"**.
 | Piece | Where |
 |---|---|
 | Endpoint | `POST /v1/qualiloop/chat` (`apps/api/src/qualiloop/index.ts`): `{prompt, metadata.session_id, metadata.turn_index}` in, `{"reply"}` out, `X-Agent-Secret` checked in constant time |
-| Turn | `apps/api/src/projects/qualiloop/turn.ts`: one QualiLoop conversation = one Kortix session (id = a hash of the conversation id), started or continued through the normal session lifecycle as the project's owner, source `system:qualiloop` |
+| Turn | `apps/api/src/projects/qualiloop/turn.ts`: one QualiLoop conversation = one Kortix session (id = a hash of the conversation id), started or continued through the normal session lifecycle as the project's owner, source `qualiloop` (origin `user`: the owner's own private chat, with Drive and memory) |
 | Trace | `apps/api/src/projects/qualiloop/spans.ts`: after the turn, the session log becomes one OTLP/JSON trace (turn span, a `chat` span per model call with the system prompt and tokens, an `execute_tool` span per tool call), sent before the reply returns |
 | Keep-alive | the route answers `200` at once and sends a space every 15 s until the JSON: Cloudflare cuts a response whose first byte takes over 100 s, and a turn with a sandbox boot can take minutes |
 

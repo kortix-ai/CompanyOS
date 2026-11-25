@@ -43,6 +43,18 @@ Manager blob `kortix-dev-env` (us-east-2), mirrored in `apps/api/.env.dev`:
 
 Staging and prod stay unconfigured: leave the secret unset there.
 
+- ECS reads `kortix-dev-env` when a task starts. After you change it, roll the
+  API service (`aws ecs update-service --cluster kortix-dev-use2 --service
+  kortix-dev-use2 --force-new-deployment`, region us-east-2, `kortix-mfa`
+  profile) and wait until the route answers `401` without the secret.
+- The test account is on the Credits plan with granted credits (admin routes
+  `POST /v1/admin/api/accounts/{id}/tier` and `/credits`). On the Free plan
+  every turn ends `{"error":"No model: upgrade to the Credits plan or add your
+  own provider key."}`. A low balance does the same: grant more.
+- QualiLoop saves the target with `max_parallel_conversations` 4 (each
+  conversation is one sandbox) and `reply_timeout_seconds` 600. The route
+  gives up on a turn after 570 s, so QualiLoop always gets an answer first.
+
 ## Run tests
 
 `npx qualiloop ...` from any folder, signed in with `npx qualiloop login`

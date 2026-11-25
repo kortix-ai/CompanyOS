@@ -9,7 +9,7 @@
 //   2. submit: the newest store build has no finished EAS submission
 //      (Android: Play production track; iOS: App Store Connect);
 //   3. iOS review: the App Store version carries that build and goes to App
-//      Review, released automatically after approval.
+//      Review, preserving existing release policies (new versions: automatic).
 // A run with nothing to do changes nothing. runtimeVersion equals the version,
 // so native code that changed after the version's store build needs a version
 // bump; the run says so instead of building.
@@ -270,15 +270,11 @@ export async function releaseIos({ projectId, appId, version, buildNumber, dryRu
     return note('notice', `${label}: would submit for App Review (${how}; build ${build ? 'processed' : 'not processed yet'}) (dry run).`);
   }
 
-  if (target) {
-    await asc('PATCH', `/v1/appStoreVersions/${target.id}`, {
-      data: { type: 'appStoreVersions', id: target.id, attributes: { releaseType: 'AFTER_APPROVAL' } },
-    });
-  } else if (draft) {
+  if (!target && draft) {
     target = (await asc('PATCH', `/v1/appStoreVersions/${draft.id}`, {
-      data: { type: 'appStoreVersions', id: draft.id, attributes: { versionString: version, releaseType: 'AFTER_APPROVAL' } },
+      data: { type: 'appStoreVersions', id: draft.id, attributes: { versionString: version } },
     })).data;
-  } else {
+  } else if (!target) {
     target = (await asc('POST', '/v1/appStoreVersions', {
       data: {
         type: 'appStoreVersions',
@@ -314,7 +310,7 @@ export async function releaseIos({ projectId, appId, version, buildNumber, dryRu
   await asc('PATCH', `/v1/reviewSubmissions/${submission.id}`, {
     data: { type: 'reviewSubmissions', id: submission.id, attributes: { submitted: true } },
   });
-  note('notice', `${label} submitted for App Review; it releases automatically after approval.`, true);
+  note('notice', `${label} submitted for App Review; release policy: ${target.attributes.releaseType}.`, true);
 }
 
 async function releasePlatform({ platform, expo, easConfig, dryRun }) {

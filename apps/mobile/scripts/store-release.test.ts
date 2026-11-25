@@ -159,6 +159,38 @@ describe('App Store delivery gates', () => {
     expect(calls.some((call) => call.includes('ReleaseRequests'))).toBe(false);
   });
 
+  for (const existing of ['target', 'draft', 'new']) {
+    for (const releaseType of ['MANUAL', 'SCHEDULED', 'AFTER_APPROVAL']) {
+      test(`${existing} version preserves ${releaseType} policy through review submission`, async () => {
+        const attributes = {
+          versionString: existing === 'draft' ? '1.0.9' : version,
+          appVersionState: 'PREPARE_FOR_SUBMISSION',
+          releaseType,
+          earliestReleaseDate: '2030-01-01T00:00:00Z',
+        };
+        const writes: { method: string; path: string; body: { data: { attributes?: Record<string, unknown> } } }[] = [];
+        const asc = async (method: string, path: string, body: { data: { attributes?: Record<string, unknown> } }) => {
+          if (method !== 'GET') writes.push({ method, path, body });
+          if (path.startsWith('/v1/apps/')) return { data: existing === 'new' ? [] : [{ id: 'version', attributes }] };
+          if (path.startsWith('/v1/builds?')) return { data: [{ id: 'build', attributes: { processingState: 'VALID' } }] };
+          if (method === 'GET') return { data: [] };
+          if (path === '/v1/appStoreVersions' || path === '/v1/appStoreVersions/version') {
+            Object.assign(attributes, body.data.attributes);
+            return { data: { id: 'version', attributes } };
+          }
+          if (path === '/v1/reviewSubmissions') return { data: { id: 'review' } };
+          return { data: {} };
+        };
+        await releaseIos(options, async () => asc);
+        expect(attributes.releaseType).toBe(existing === 'new' ? 'AFTER_APPROVAL' : releaseType);
+        expect(attributes.earliestReleaseDate).toBe('2030-01-01T00:00:00Z');
+        const versionWrites = writes.filter(({ path }) => path === '/v1/appStoreVersions/version');
+        expect(versionWrites.map(({ body }) => body.data.attributes)).toEqual(existing === 'draft' ? [{ versionString: version }] : []);
+        expect(writes.at(-1)?.body.data.attributes).toEqual({ submitted: true });
+      });
+    }
+  }
+
   test('an approved manual release is preserved, not released by automation', async () => {
     await expect(releaseIos(options, async () => apple('PENDING_DEVELOPER_RELEASE'))).rejects.toThrow('manual release');
   });

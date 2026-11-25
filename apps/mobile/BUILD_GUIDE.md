@@ -131,7 +131,9 @@ mobile release. Per platform it does each step only when it is missing:
    user). iOS goes to App Store Connect.
 3. **iOS review:** it creates the App Store version (or renames an unsubmitted
    draft), attaches the build, fills an empty "What's New", and submits it for
-   App Review with "release automatically after approval". An approved version
+   App Review. New versions use "release automatically after approval"; existing
+   versions and renamed drafts retain their manual or scheduled release settings.
+   The submission notice reports the release policy. An approved version
    held for a manual release stays held until a person releases it in App Store Connect.
    The run fails and identifies this incomplete platform; it never overrides that gate.
 

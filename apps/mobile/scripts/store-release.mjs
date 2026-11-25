@@ -118,6 +118,26 @@ const eas = (args) =>
 const easJson = (args) => JSON.parse(eas([...args, '--json', '--non-interactive']));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * fetch that survives a dropped connection. A network error ("fetch failed"),
+ * a 429 or a 5xx is tried again with backoff (2 s, 4 s, 8 s); any other
+ * response returns at once. One dropped App Store Connect call used to end
+ * the whole iOS release after the build was uploaded (1.6.49, 1.6.56).
+ * A retried POST that the server already applied answers 409; the caller
+ * fails loud and a rerun of the idempotent release picks up from there.
+ */
+export async function fetchWithRetry(url, init, { attempts = 4, fetchFn = fetch, wait = sleep } = {}) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      const res = await fetchFn(url, init);
+      if ((res.status !== 429 && res.status < 500) || attempt >= attempts) return res;
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+    }
+    await wait(2_000 * 2 ** (attempt - 1));
+  }
+}
+
 const report = [];
 /** `changed`: the run changed something a person should hear about. */
 function note(level, text, changed = false) {
@@ -128,7 +148,7 @@ function note(level, text, changed = false) {
 }
 
 async function expoApi(query, variables) {
-  const res = await fetch('https://api.expo.dev/graphql', {
+  const res = await fetchWithRetry('https://api.expo.dev/graphql', {
     //codeql[js/file-access-to-http] Non-exploit: internal release tooling run in CI — posts local build metadata as the query/variables to the fixed https://api.expo.dev host; nothing data-derived chooses the request.
     method: 'POST',
     headers: { authorization: `Bearer ${process.env.EXPO_TOKEN}`, 'content-type': 'application/json' },
@@ -187,7 +207,7 @@ async function ascClient(projectId) {
       })}`;
       token = `${unsigned}.${sign('sha256', Buffer.from(unsigned), { key: key.keyP8, dsaEncoding: 'ieee-p1363' }).toString('base64url')}`;
     }
-    const res = await fetch(`https://api.appstoreconnect.apple.com${path}`, {
+    const res = await fetchWithRetry(`https://api.appstoreconnect.apple.com${path}`, {
       method,
       headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json' } : {}) },
       body: body ? JSON.stringify(body) : undefined,

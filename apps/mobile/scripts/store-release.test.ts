@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { compareVersions, iosStep, pickBuild, shippedBuildIds } from './store-release.mjs';
+import { compareVersions, fetchWithRetry, iosStep, pickBuild, shippedBuildIds } from './store-release.mjs';
 
 const build = (id: string) => ({ id, appBuildVersion: id });
 
@@ -78,5 +78,45 @@ describe('only released code ships', () => {
     });
     expect(picked.build?.id).toBe('released');
     expect(picked.ship).toBe(true);
+  });
+});
+
+describe('store API calls survive one dropped connection', () => {
+  const noWait = async () => {};
+
+  test('retries a network error and returns the next response', async () => {
+    let calls = 0;
+    const fetchFn = async () => {
+      calls += 1;
+      if (calls === 1) throw new TypeError('fetch failed');
+      return new Response('{}', { status: 200 });
+    };
+    const res = await fetchWithRetry('https://example.test', {}, { fetchFn, wait: noWait });
+    expect(res.status).toBe(200);
+    expect(calls).toBe(2);
+  });
+
+  test('retries 429 and 5xx, never another 4xx', async () => {
+    const statuses = [503, 429, 200];
+    const res = await fetchWithRetry('https://example.test', {}, {
+      fetchFn: async () => new Response('', { status: statuses.shift() }),
+      wait: noWait,
+    });
+    expect(res.status).toBe(200);
+
+    let calls = 0;
+    const conflict = await fetchWithRetry('https://example.test', {}, {
+      fetchFn: async () => { calls += 1; return new Response('', { status: 409 }); },
+      wait: noWait,
+    });
+    expect(conflict.status).toBe(409);
+    expect(calls).toBe(1);
+  });
+
+  test('throws the last network error after the final attempt', async () => {
+    let calls = 0;
+    const fetchFn = async () => { calls += 1; throw new TypeError('fetch failed'); };
+    await expect(fetchWithRetry('https://example.test', {}, { fetchFn, wait: noWait, attempts: 3 })).rejects.toThrow('fetch failed');
+    expect(calls).toBe(3);
   });
 });

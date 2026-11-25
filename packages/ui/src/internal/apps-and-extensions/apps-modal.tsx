@@ -2,7 +2,7 @@
 
 /**
  * "Apps and extensions": every way to use Kortix outside this tab, as a
- * full-window page over the app. Its cards are the `/download` page's
+ * full-window page over the app. Its columns are the `/download` page's
  * (`GetKortixGrid`), plus the signed-in state: Chrome, This computer and MCP
  * open the dialogs that already own those flows. Every "Download app" entry
  * opens this page too.
@@ -48,7 +48,7 @@ export function AppsModal({
   onOpenComputer,
   onOpenMcp,
 }: {
-  /** The project's `chrome` flag: the Kortix in Chrome card shows only with it on. */
+  /** The project's `chrome` flag: the Kortix in Chrome row shows only with it on. */
   chrome: boolean;
   onOpenComputer: () => void;
   onOpenMcp: () => void;
@@ -66,7 +66,7 @@ export function AppsModal({
 
   return (
     <Modal open={open} onOpenChange={setOpen}>
-      {/* A page, not a box: six cards with their art need the window's width.
+      {/* A page, not a box: three columns with their art need the window's width.
           It fades only; a zoom on a surface the size of the viewport reads as
           the whole app lurching. */}
       <ModalContent
@@ -96,13 +96,15 @@ export function AppsModal({
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-6xl px-5 py-10 lg:py-14">
-            <ModalDescription className="text-foreground mb-8 text-center text-2xl font-medium text-balance lg:mb-10">
-              {t('subtitle')}
-            </ModalDescription>
             {/* Rendered only while open, so `navigator` is never read on the server. */}
             {open ? (
               <GetKortixGrid
                 platform={detectPlatform(navigator.userAgent)}
+                header={
+                  <ModalDescription className="text-foreground text-2xl font-medium text-balance">
+                    {t('subtitle')}
+                  </ModalDescription>
+                }
                 inApp={{
                   chrome,
                   onOpenComputer: hand(onOpenComputer),

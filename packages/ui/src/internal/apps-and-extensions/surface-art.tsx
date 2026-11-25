@@ -6,43 +6,32 @@
  * work. Raw colour lives here and nowhere else in the feature.
  *
  * Every pane follows the page's theme: its tokens, its screenshots and its
- * chalk light all have a light and a dark form. Each mock is one window or device, running off the pane's
- * right or bottom edge, with real words only on what the picture is about.
+ * chalk light all have a light and a dark form. Each mock is one window or
+ * device, running off the pane's right or bottom edge.
  *
- * Hovering a card wakes a dither field in the pane, in the card's chalk hue
- * and masked to its glow. The shader mounts on the first hover only (most
- * visits never hover every card), fades with the hover, and holds still under
+ * Hovering a column wakes a dither field in its pane, in the column's chalk
+ * hue and masked to its glow. The shader mounts on the first hover only (most
+ * visits never hover every column), fades with the hover, and holds still under
  * reduced motion. Panes are decoration: `aria-hidden`, no controls.
  */
 
 import { chalkColorsForHue } from '@kortix/shared';
-import { CheckCircleIcon, LaptopIcon } from '@phosphor-icons/react';
 import { useReducedMotion } from 'motion/react';
 import { createContext, useContext, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 
-import { useTranslations } from '../../i18n';
 import { lazyClient } from '../../lib/lazy-client';
 import { ShaderSafe, supportsWebGL2 } from '../../primitives/shader-safe';
 import { UiImage } from '../../providers/ui-provider';
 import { useIsDark } from '../../hooks/use-is-dark';
-import { ChromeOnlineDot } from '../chrome/chrome-connect';
-import { Claude } from '../icons/claude';
-import { Codex } from '../icons/codex';
-import { Cursor } from '../icons/cursor';
-import { Kortix } from '../icons/kortix';
 import { cn } from '../lib/utils';
-import { ChromeDemo } from './chrome-demo';
 
-export type SurfaceId = 'desktop' | 'mobile' | 'chrome' | 'computer' | 'terminal' | 'mcp';
+export type SurfaceId = 'desktop' | 'mobile' | 'terminal';
 
-/** Six hues spread round the wheel, so no two cards share a light. */
+/** Three hues a third of the wheel apart, so no two columns share a light. */
 const SURFACE_HUES: Record<SurfaceId, number> = {
   desktop: 215,
   mobile: 150,
-  chrome: 38,
-  computer: 268,
   terminal: 350,
-  mcp: 188,
 };
 
 /** Shots the web host serves from `apps/web/public/images`. */
@@ -53,7 +42,7 @@ const PHONE_SHOTS = [
 ];
 
 /**
- * A surface's chalk edge in this theme, for its card: a 1px border and a
+ * A surface's chalk edge in this theme, for its pane: a 1px border and a
  * 3px ring at 15%, the input's focus look in the surface's own hue.
  */
 export function useSurfaceChalk(surface: SurfaceId) {
@@ -63,7 +52,7 @@ export function useSurfaceChalk(surface: SurfaceId) {
   return { border: ink.replace(')', ' / 0.6)'), ring: ink.replace(')', ' / 0.15)') };
 }
 
-/** Whether the pointer is over the card that holds the pane. */
+/** Whether the pointer is over the column that holds the pane. */
 export const SurfaceHoverContext = createContext(false);
 
 const Dithering = lazyClient(() => import('@paper-design/shaders-react').then((m) => m.Dithering));
@@ -89,7 +78,7 @@ const LIGHT_SHAPE = '120% 90% at 50% 120%';
 
 /**
  * The pane: a quiet tint with the surface's chalk light rising from its foot, and
- * the dither field over the light while the card is hovered.
+ * the dither field over the light while the column is hovered.
  */
 export function SurfaceArt({
   surface,
@@ -177,7 +166,7 @@ function BleedWindow({ children, className }: { children: ReactNode; className?:
 /** The desktop app: a real session page, running off the pane's right and bottom edges. */
 export function DesktopArt() {
   return (
-    <SurfaceArt surface="desktop" className="min-h-64 lg:min-h-0">
+    <SurfaceArt surface="desktop">
       <BleedWindow className="top-8 left-8">
         <TitleBar />
         <UiImage
@@ -201,21 +190,21 @@ export function DesktopArt() {
   );
 }
 
-/** Two phones at a readable size, the second lower, both cut by the pane's foot. */
+/** Two phones, the second lower, both cut by the pane's foot. Sized to the pane, so a narrow column still fits both. */
 export function MobileArt() {
   return (
-    <SurfaceArt surface="mobile" className="min-h-80">
-      <div className="absolute inset-x-0 top-8 flex justify-center gap-5">
+    <SurfaceArt surface="mobile">
+      <div className="absolute inset-x-0 top-8 flex justify-center gap-4">
         {PHONE_SHOTS.map((shot, index) => (
           <div
             key={shot.light}
             className={cn(
-              'bg-card relative aspect-[640/1385] w-40 shrink-0 overflow-hidden rounded-xl border',
+              'bg-card relative aspect-[640/1385] w-[38%] max-w-40 shrink-0 overflow-hidden rounded-xl border',
               index === 1 && 'translate-y-10',
             )}
           >
-            <UiImage src={shot.light} alt="" fill sizes="160px" className="object-cover dark:hidden" />
-            <UiImage src={shot.dark} alt="" fill sizes="160px" className="hidden object-cover dark:block" />
+            <UiImage src={shot.light} alt="" fill sizes="(min-width: 768px) 160px, 38vw" className="object-cover dark:hidden" />
+            <UiImage src={shot.dark} alt="" fill sizes="(min-width: 768px) 160px, 38vw" className="hidden object-cover dark:block" />
           </div>
         ))}
       </div>
@@ -223,38 +212,9 @@ export function MobileArt() {
   );
 }
 
-/** Kortix at work in the visitor's own Chrome (`ChromeDemo`): an expense, filed. */
-export function ChromeArt() {
-  return (
-    <SurfaceArt surface="chrome" className="min-h-96">
-      <BleedWindow>
-        <ChromeDemo />
-      </BleedWindow>
-    </SurfaceArt>
-  );
-}
-
-/** One paired machine, online: the state the card leads to. */
-export function ComputerArt() {
-  const t = useTranslations('appsModal.computer');
-  return (
-    <SurfaceArt surface="computer" className="flex min-h-60 items-center justify-center px-5">
-      <div className="bg-card flex items-center gap-3 rounded-md border px-3 py-2.5">
-        <LaptopIcon className="size-5 shrink-0" />
-        <span className="text-sm whitespace-nowrap">{t('thisComputer')}</span>
-        <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
-          <ChromeOnlineDot online />
-          {t('connected')}
-        </span>
-      </div>
-    </SurfaceArt>
-  );
-}
-
-/** One prompt, told by the terminal and the MCP card alike. Synthetic data. */
+/** One prompt, synthetic data. */
 const PROMPT = 'Draft the Q4 launch plan';
 const SESSION = { short: '8f2c41a0', branch: 'kortix/q4-launch-plan' };
-const MCP_REQUEST = 'Ask Kortix to draft the Q4 launch plan';
 
 /**
  * `kortix sessions new`, with the output the CLI prints
@@ -263,7 +223,7 @@ const MCP_REQUEST = 'Ask Kortix to draft the Q4 launch plan';
  */
 export function TerminalArt() {
   return (
-    <SurfaceArt surface="terminal" className="min-h-60">
+    <SurfaceArt surface="terminal">
       <BleedWindow className="top-5 left-5">
         <TitleBar>
           <span className="text-muted-foreground ml-2 font-mono text-xs">~/acme</span>
@@ -287,55 +247,6 @@ export function TerminalArt() {
           <p className="text-muted-foreground pt-1">
             Chat: <span className="text-kortix-base">kortix sessions chat {SESSION.short}</span>
           </p>
-        </div>
-      </BleedWindow>
-    </SurfaceArt>
-  );
-}
-
-/** The clients the card's description names, each with its official mark. */
-const MCP_CLIENTS = [
-  { name: 'Claude', Mark: Claude },
-  { name: 'Cursor', Mark: Cursor },
-  { name: 'Codex', Mark: Codex },
-] as const;
-
-/**
- * An MCP client handing the same prompt to Kortix: the client tabs with their
- * marks, the request, and the `start_session` call with its result.
- */
-export function McpArt() {
-  return (
-    <SurfaceArt surface="mcp" className="min-h-60">
-      <BleedWindow className="top-5 left-5">
-        <div className="flex items-center gap-1 border-b px-2 py-1.5 text-xs">
-          {MCP_CLIENTS.map((client, index) => (
-            <span
-              key={client.name}
-              className={cn(
-                'flex items-center gap-1.5 rounded-sm px-2 py-0.5',
-                index === 0 ? 'bg-muted text-foreground' : 'text-muted-foreground',
-              )}
-            >
-              <client.Mark className="size-3.5" />
-              {client.name}
-            </span>
-          ))}
-        </div>
-        <div className="space-y-2.5 p-3 text-xs">
-          <p className="bg-muted ml-auto w-fit max-w-[80%] rounded-md px-2.5 py-1.5">
-            {MCP_REQUEST}
-          </p>
-          <div className="rounded-md border">
-            <p className="flex items-center gap-2 border-b px-2.5 py-1.5">
-              <Kortix className="size-3.5 shrink-0" />
-              <span className="font-mono">start_session</span>
-              <CheckCircleIcon weight="fill" className="text-kortix-green ml-auto size-3.5" />
-            </p>
-            <p className="text-muted-foreground px-2.5 py-1.5 font-mono">
-              Session started <span className="text-foreground">{SESSION.short}</span>
-            </p>
-          </div>
         </div>
       </BleedWindow>
     </SurfaceArt>

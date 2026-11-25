@@ -5,7 +5,7 @@ import { GetKortixGrid, MCP_GUIDE_HREF } from '@kortix/ui/internal/apps-and-exte
 
 for (const platform of ['macos', 'android'] as const) {
   test(`${platform} visitors reach every installer, computer pairing and the MCP guide`, () => {
-    const html = renderToStaticMarkup(<GetKortixGrid platform={platform} />);
+    const html = renderToStaticMarkup(<GetKortixGrid platform={platform} header={null} />);
     for (const href of ['/download/macos', '/download/windows', '/download/linux', '/settings/computer', MCP_GUIDE_HREF]) {
       expect(html).toContain(`href="${href}"`);
     }

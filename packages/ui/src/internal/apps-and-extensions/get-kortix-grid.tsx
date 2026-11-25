@@ -1,81 +1,58 @@
 'use client';
 
 /**
- * Every way to use Kortix outside this tab: Desktop app, Mobile app, Kortix
- * in Chrome, This computer, Terminal (CLI) and MCP. The public `/download`
- * page and the in-app "Apps and extensions" page both render THIS, so the two
- * surfaces are one design.
+ * Every way to use Kortix outside this tab, in three columns: Desktop app,
+ * Mobile app and Developers. The public `/download` page and the in-app "Apps
+ * and extensions" page both render THIS, so the two surfaces are one design.
  *
- * The desktop app leads, in one wide card. Mobile and Chrome follow as a
- * pair, then the computer and the two developer surfaces as a row of three.
- * Each card is text and actions over (or beside) its art pane
- * (`surface-art.tsx`), which holds the only colour on the page.
+ * Each column is a square art pane (`surface-art.tsx`, the only colour on the
+ * page), a name and a list of text links. The page has one solid button: the
+ * download for the visitor's own system, beside the page's heading.
  *
  * Without `inApp` every action is public: an installer, a store, a link. With
- * it, Chrome, This computer and MCP show their live state and open the flows
- * that already own them: Settings → Kortix in Chrome, the computer dialog,
- * the MCP dialog. Nothing here pairs or connects by itself.
+ * it, Kortix in Chrome, This computer and MCP show their live state and open
+ * the flows that already own them: Settings → Kortix in Chrome, the computer
+ * dialog, the MCP dialog. Nothing here pairs or connects by itself.
  */
 
 import { useChromeConnections } from '@kortix/sdk/react';
-import { useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { useState, type ComponentPropsWithoutRef, type ReactNode } from 'react';
 
 import { useTranslations } from '../../i18n';
 import { Button } from '../../primitives/button';
 import { errorToast } from '../../primitives/toast';
-import { UiImage, UiLink as Link, useUiHostConfig } from '../../providers/ui-provider';
-import { ChromeCopyLink, ChromeInstallActions, ChromeOnlineDot, useChromeConnect } from '../chrome/chrome-connect';
-import { chromeCardState } from '../chrome/chrome-card-state';
+import { UiLink as Link, useUiHostConfig } from '../../providers/ui-provider';
+import { ChromeOnlineDot } from '../chrome/chrome-connect';
 import { chromeCounts } from '../chrome/chrome-names';
 import { KORTIX_EXTENSION_STORE_URL } from '../chrome/extension';
-import { MobileStoreQr } from '../components/mobile-store-qr';
+import { useCopy } from '../hooks/use-copy';
+import { AppleMark } from '../icons/apple';
+import { PlayStoreMark } from '../icons/playstore';
 import { DESKTOP_ORDER, isMobilePlatform, type DesktopOs, type Platform } from '../lib/detect-os';
 import { desktopDownloadUrl, isDesktop } from '../lib/desktop';
-import { cn } from '../lib/utils';
 import { APP_STORE_URL, GOOGLE_PLAY_URL } from '../lib/mobile-store-urls';
-import { useCopy } from '../hooks/use-copy';
-import { SolidCheckIcon } from '../icons/solid-check-icon';
 import { useDeploymentCliInstallCommand } from '../lib/use-deployment-cli-install-command';
+import { cn } from '../lib/utils';
 import { useSettingsPanelStore } from '../stores/settings-panel-store';
 import { useOwnsPairedComputer } from '../tunnel/computer-connect';
-import { AppleMark } from '../icons/apple';
-import { YouCursor } from './chrome-demo';
-import { PlayStoreMark } from '../icons/playstore';
 import {
-  type SurfaceId,
-  useSurfaceChalk,
-  ChromeArt,
-  ComputerArt,
   DesktopArt,
-  McpArt,
   MobileArt,
   SurfaceHoverContext,
   TerminalArt,
+  useSurfaceChalk,
+  type SurfaceId,
 } from './surface-art';
 
-type Mark = ComponentType<{ className?: string }>;
-
 /**
- * The official Windows and Linux (Tux) marks, in their own colours: static
- * files the web host serves from `apps/web/public/images/platforms`.
+ * Operating system and device names are product names: never translated.
+ * `meta` says what the installer is. Linux ships x86_64 only, so an ARM
+ * visitor reads that before downloading a binary that will not run.
  */
-const platformMark = (src: string): Mark =>
-  function PlatformMark({ className }) {
-    return <UiImage src={src} alt="" width={20} height={20} unoptimized className={cn('object-contain', className)} />;
-  };
-const WindowsMark = platformMark('/images/platforms/windows.svg');
-const LinuxMark = platformMark('/images/platforms/linux.svg');
-
-/** Operating system and device names are product names: never translated. */
-/**
- * `meta` says what the installer is. macOS ships one universal build; Linux
- * ships x86_64 only, so an ARM visitor reads that before downloading a binary
- * that will not run.
- */
-const DESKTOP_ROWS: Record<DesktopOs, { name: string; meta: string; Mark: Mark }> = {
-  macos: { name: 'macOS', meta: 'Universal', Mark: AppleMark },
-  windows: { name: 'Windows', meta: '64-bit', Mark: WindowsMark },
-  linux: { name: 'Linux', meta: 'AppImage · x86_64', Mark: LinuxMark },
+const DESKTOP_ROWS: Record<DesktopOs, { name: string; meta: string }> = {
+  macos: { name: 'macOS', meta: 'Universal' },
+  windows: { name: 'Windows', meta: '64-bit' },
+  linux: { name: 'Linux', meta: 'AppImage · x86_64' },
 };
 
 /** The MCP setup guide, for a visitor who is not signed in. */
@@ -85,7 +62,7 @@ export const MCP_GUIDE_HREF = '/docs/guide#other-ai-tools-mcp';
 const COMPUTER_SETTINGS_HREF = '/settings/computer';
 
 export interface GetKortixInApp {
-  /** The project's `chrome` flag: the Chrome card shows only with it on. */
+  /** The project's `chrome` flag: the Kortix in Chrome row shows only with it on. */
   chrome: boolean;
   onOpenComputer: () => void;
   onOpenMcp: () => void;
@@ -96,333 +73,287 @@ export interface GetKortixInApp {
 export function GetKortixGrid({
   platform,
   inApp,
+  header,
   className,
 }: {
   /** The visitor's platform: picks the one solid download button. */
   platform: Platform;
   inApp?: GetKortixInApp;
+  /** The page's heading, set beside the download button. */
+  header: ReactNode;
   className?: string;
 }) {
+  const t = useTranslations('appsModal');
+  // In the desktop app itself there is nothing to download.
+  const inDesktopApp = Boolean(inApp) && typeof window !== 'undefined' && isDesktop();
   const showChrome = inApp ? inApp.chrome : true;
   return (
-    <div className={cn('flex flex-col gap-6', className)}>
-      <DesktopCard platform={platform} inApp={Boolean(inApp)} />
-      <div className="grid gap-6 md:grid-cols-2">
-        <MobileCard platform={platform} />
-        {showChrome ? inApp ? <ChromeLiveCard onClose={inApp.onClose} /> : <ChromePublicCard /> : null}
+    <div className={cn('flex flex-col gap-10 lg:gap-12', className)}>
+      <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">{header}</div>
+        {inDesktopApp ? null : <PrimaryDownload platform={platform} />}
       </div>
-      <div className="grid gap-6 md:grid-cols-3">
-        {inApp ? <ComputerLiveCard onOpen={inApp.onOpenComputer} /> : <ComputerPublicCard />}
-        <TerminalCard />
-        <McpCard onOpen={inApp?.onOpenMcp} />
+      <div className="grid gap-x-6 gap-y-12 md:grid-cols-3">
+        <Column surface="desktop" name={t('computer.desktop')} art={<DesktopArt />}>
+          {inDesktopApp ? (
+            <li className="text-muted-foreground text-sm">{t('computer.desktopRunning')}</li>
+          ) : (
+            <DesktopLinks />
+          )}
+        </Column>
+        <Column surface="mobile" name={t('mobile.name')} art={<MobileArt />}>
+          <MobileLinks />
+        </Column>
+        <Column surface="terminal" name={t('developers.title')} art={<TerminalArt />}>
+          <TerminalLink />
+          {inApp ? <McpLiveLink onOpen={inApp.onOpenMcp} /> : <McpPublicLink />}
+          {showChrome ? inApp ? <ChromeLiveLink onClose={inApp.onClose} /> : <ChromePublicLink /> : null}
+          {inApp ? <ComputerLiveLink onOpen={inApp.onOpenComputer} /> : <ComputerPublicLink />}
+        </Column>
       </div>
     </div>
   );
 }
 
 /**
- * One card. In flow, so a hairline and no shadow. `overflow-hidden` clips the
- * art pane to the card's corners, so the pane rounds nothing itself. `wide`
- * puts the art beside the text from `lg`, under it below that.
+ * The page's one solid button: the installer for the visitor's own desktop
+ * system, or the store for their phone.
  */
-function SurfaceCard({
-  surface,
-  name,
-  description,
-  children,
-  art,
-  wide = false,
-  presence = false,
-}: {
-  surface: SurfaceId;
-  name: string;
-  description: ReactNode;
-  children: ReactNode;
-  art: ReactNode;
-  wide?: boolean;
-  /** Draws the visitor's pointer as a "You" hand over the card. */
-  presence?: boolean;
-}) {
-  const card = useRef<HTMLElement>(null);
-  const chalk = useSurfaceChalk(surface);
-  // The art pane wakes its dither field while the pointer is over the card.
-  const [hovered, setHovered] = useState(false);
-  return (
-    <section
-      ref={card}
-      aria-label={name}
-      onPointerEnter={() => setHovered(true)}
-      onPointerLeave={() => setHovered(false)}
-      // The input's focus look, in the surface's own chalk hue, at all times.
-      style={{ borderColor: chalk.border, boxShadow: `0 0 0 3px ${chalk.ring}` }}
-      className={cn(
-        'bg-popover relative flex min-w-0 flex-col overflow-hidden rounded-lg border',
-        wide && 'lg:grid lg:grid-cols-2',
-      )}
-    >
-      <div className="flex flex-col gap-5 p-5 lg:p-6">
-        <div className="space-y-1.5">
-          <h3 className="text-foreground text-base font-medium">{name}</h3>
-          <div className="text-muted-foreground text-sm text-pretty">{description}</div>
-        </div>
-        {/* Actions size to their label: a link button never stretches. */}
-        <div className="flex flex-wrap items-center gap-2 [&>ul]:w-full">{children}</div>
-      </div>
-      {/* The art takes the height the grid row leaves over, so a short card in
-          a tall row grows its picture, never a gap above its button. */}
-      <div className={cn('flex flex-1 flex-col border-t [&>*]:flex-1', wide && 'lg:border-t-0 lg:border-l')}>
-        <SurfaceHoverContext.Provider value={hovered}>{art}</SurfaceHoverContext.Provider>
-      </div>
-      {presence ? <YouCursor area={card} /> : null}
-    </section>
-  );
-}
-
-/** A named row with its mark and one action, divided by hairlines. */
-function ActionRow({
-  Mark,
-  name,
-  meta,
-  children,
-}: {
-  Mark: Mark;
-  name: string;
-  meta?: string;
-  children: ReactNode;
-}) {
-  return (
-    <li className="flex min-h-12 items-center gap-3 py-2">
-      <span className="flex size-5 shrink-0 items-center justify-center">
-        <Mark className="text-foreground size-5" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="text-foreground block truncate text-sm">{name}</span>
-        {meta ? <span className="text-muted-foreground block truncate text-xs">{meta}</span> : null}
-      </span>
-      {children}
-    </li>
-  );
-}
-
-function DesktopCard({ platform, inApp }: { platform: Platform; inApp: boolean }) {
-  const t = useTranslations('appsModal');
-  const name = t('computer.desktop');
-  const description = t('computer.desktopDescription');
-  // In the desktop app itself there is nothing to download.
-  if (inApp && typeof window !== 'undefined' && isDesktop()) {
-    return (
-      <SurfaceCard surface="desktop" wide name={name} description={description} art={<DesktopArt />}>
-        <p className="text-muted-foreground text-sm">{t('computer.desktopRunning')}</p>
-      </SurfaceCard>
-    );
-  }
-  // A desktop visitor's own system gets the one solid button.
-  const own = isMobilePlatform(platform) ? null : platform;
-  return (
-    <SurfaceCard surface="desktop" wide name={name} description={description} art={<DesktopArt />}>
-      <ul className="divide-border divide-y">
-        {DESKTOP_ORDER.map((os) => (
-          <ActionRow key={os} Mark={DESKTOP_ROWS[os].Mark} name={DESKTOP_ROWS[os].name} meta={DESKTOP_ROWS[os].meta}>
-            <Button asChild size="sm" variant={os === own ? 'default' : 'secondary'}>
-              <a
-                href={desktopDownloadUrl(os)}
-                aria-label={t('desktop.downloadFor', { os: DESKTOP_ROWS[os].name })}
-              >
-                {t('computer.download')}
-              </a>
-            </Button>
-          </ActionRow>
-        ))}
-      </ul>
-    </SurfaceCard>
-  );
-}
-
-function MobileCard({ platform }: { platform: Platform }) {
-  const t = useTranslations('appsModal.mobile');
+function PrimaryDownload({ platform }: { platform: Platform }) {
+  const t = useTranslations('appsModal.desktop');
   const tStore = useTranslations('mobileAppPromo');
-  const stores = [
-    { id: 'ios', device: 'iPhone', Mark: AppleMark, label: tStore('appStore'), href: APP_STORE_URL },
-    { id: 'android', device: 'Android', Mark: PlayStoreMark, label: tStore('googlePlay'), href: GOOGLE_PLAY_URL },
-  ] as const;
-  const onPhone = isMobilePlatform(platform);
-  return (
-    <SurfaceCard surface="mobile" name={t('name')} description={t('description')} art={<MobileArt />}>
-      {/* A desktop visitor is not on the phone a store link is for: the QR
-          code carries the link to it. */}
-      {onPhone ? null : (
-        <div className="flex w-full items-center gap-3">
-          <MobileStoreQr className="size-16 p-1.5" />
-          <p className="text-muted-foreground text-xs text-pretty">{tStore('scanDescription')}</p>
-        </div>
-      )}
-      <ul className="divide-border divide-y">
-        {stores.map((store) => (
-          <ActionRow key={store.id} Mark={store.Mark} name={store.device}>
-            <Button asChild size="sm" variant={store.id === platform ? 'default' : 'secondary'}>
-              <a href={store.href} target="_blank" rel="noopener noreferrer">
-                {store.label}
-              </a>
-            </Button>
-          </ActionRow>
-        ))}
-      </ul>
-    </SurfaceCard>
-  );
-}
-
-function ChromePublicCard() {
-  const t = useTranslations('appsModal.chrome');
-  const tChrome = useTranslations('chrome');
-  return (
-    <SurfaceCard surface="chrome" presence name={t('name')} description={t('description')} art={<ChromeArt />}>
-      <Button asChild size="sm">
-        <a href={KORTIX_EXTENSION_STORE_URL} target="_blank" rel="noopener noreferrer">
-          {tChrome('addToChrome')}
+  if (isMobilePlatform(platform)) {
+    const ios = platform === 'ios';
+    const Mark = ios ? AppleMark : PlayStoreMark;
+    return (
+      <Button asChild className="shrink-0 self-start sm:self-auto">
+        <a href={ios ? APP_STORE_URL : GOOGLE_PLAY_URL} target="_blank" rel="noopener noreferrer">
+          <Mark className="size-4" />
+          {tStore(ios ? 'appStore' : 'googlePlay')}
         </a>
       </Button>
-    </SurfaceCard>
-  );
-}
-
-/** This browser decides the card. Other browsers are one count plus Manage. */
-function ChromeLiveCard({ onClose }: { onClose: () => void }) {
-  const t = useTranslations('appsModal.chrome');
-  const state = useChromeConnect();
-  const { environment, checking, installed, signedIn, connected } = state;
-  const connections = useChromeConnections();
-  const { count, online } = chromeCounts(connections.data ?? []);
-  const cardState = chromeCardState({
-    thisBrowserConnected: Boolean(connected),
-    environment,
-    checking,
-    installed: installed || signedIn,
-  });
-  const manage = (
-    <Button
-      size="sm"
-      variant="secondary"
-      aria-label={t('manageLabel')}
-      onClick={() => {
-        onClose();
-        useSettingsPanelStore.getState().openSettings('chrome');
-      }}
-    >
-      {t('manage')}
-    </Button>
-  );
-
-  if (cardState === 'connected' && connected) {
-    return (
-      <SurfaceCard surface="chrome" presence name={t('name')} description={t('description')} art={<ChromeArt />}>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          {manage}
-          <span className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs">
-            <ChromeOnlineDot online={connected.online} />
-            <span className="truncate">{connected.name}</span>
-            {count > 1 ? <span className="shrink-0">· {t('summary', { count, online })}</span> : null}
-          </span>
-        </div>
-      </SurfaceCard>
     );
   }
   return (
-    <SurfaceCard
-      surface="chrome"
-      presence
-      name={t('name')}
-      description={cardState === 'unsupported' ? t('unsupported') : t('description')}
-      art={<ChromeArt />}
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        {cardState === 'unsupported' ? <ChromeCopyLink /> : <ChromeInstallActions state={state} />}
-        {count > 0 ? (
-          <>
-            {manage}
-            <span className="text-muted-foreground text-xs">{t('summary', { count, online })}</span>
-          </>
-        ) : null}
-      </div>
-    </SurfaceCard>
-  );
-}
-
-function ComputerPublicCard() {
-  const t = useTranslations('appsModal.computer');
-  return (
-    <SurfaceCard surface="computer" name={t('thisComputer')} description={t('thisComputerDescription')} art={<ComputerArt />}>
-      <Button asChild size="sm" variant="secondary">
-        <Link href={COMPUTER_SETTINGS_HREF}>{t('connect')}</Link>
-      </Button>
-    </SurfaceCard>
-  );
-}
-
-function ComputerLiveCard({ onOpen }: { onOpen: () => void }) {
-  const t = useTranslations('appsModal.computer');
-  const { owned } = useOwnsPairedComputer();
-  const live = owned.some((machine) => machine.isLive);
-  return (
-    <SurfaceCard
-      surface="computer"
-      name={t('thisComputer')}
-      description={
-        live ? (
-          <span className="flex items-center gap-1.5">
-            <ChromeOnlineDot online />
-            {t('connected')}
-          </span>
-        ) : (
-          t('thisComputerDescription')
-        )
-      }
-      art={<ComputerArt />}
-    >
-      <Button
-        size="sm"
-        variant="secondary"
-        aria-label={t(live ? 'manageLabel' : 'connectLabel')}
-        onClick={onOpen}
-      >
-        {live ? t('manage') : t('connect')}
-      </Button>
-    </SurfaceCard>
+    <Button asChild className="shrink-0 self-start sm:self-auto">
+      <a href={desktopDownloadUrl(platform)}>
+        {platform === 'macos' ? <AppleMark className="size-4" /> : null}
+        {t('downloadFor', { os: DESKTOP_ROWS[platform].name })}
+      </a>
+    </Button>
   );
 }
 
 /**
- * The install command for THIS deployment, behind one Copy command button.
+ * One column: the art pane, square, edged in the surface's chalk hue at all
+ * times; then the name and the links. The pane's dither wakes while the
+ * pointer is anywhere over the column.
  */
-function TerminalCard() {
-  const t = useTranslations('appsModal.developers');
-  const command = useDeploymentCliInstallCommand(useUiHostConfig().deploymentVersion);
-  const { copy, copied } = useCopy({ toast: false });
-  const copyCommand = async () => {
-    if (!(await copy(command))) errorToast(t('copyFailed'));
-  };
+function Column({
+  surface,
+  name,
+  art,
+  children,
+}: {
+  surface: SurfaceId;
+  name: string;
+  art: ReactNode;
+  children: ReactNode;
+}) {
+  const chalk = useSurfaceChalk(surface);
+  const [hovered, setHovered] = useState(false);
   return (
-    <SurfaceCard surface="terminal" name={t('cli')} description={t('cliDescription')} art={<TerminalArt />}>
-      <Button size="sm" variant="secondary" className="gap-1.5" onClick={copyCommand}>
-        {copied ? <SolidCheckIcon className="size-3.5" /> : null}
-        {copied ? t('copied') : t('copy')}
-      </Button>
-    </SurfaceCard>
+    <section
+      aria-label={name}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      className="flex min-w-0 flex-col"
+    >
+      <div
+        style={{ borderColor: chalk.border, boxShadow: `0 0 0 3px ${chalk.ring}` }}
+        className="flex aspect-square flex-col overflow-hidden rounded-lg border [&>*]:flex-1"
+      >
+        <SurfaceHoverContext.Provider value={hovered}>{art}</SurfaceHoverContext.Provider>
+      </div>
+      <h3 className="text-foreground mt-6 text-xl font-medium">{name}</h3>
+      <ul className="mt-4 flex flex-col items-start gap-2.5">{children}</ul>
+    </section>
   );
 }
 
-function McpCard({ onOpen }: { onOpen?: () => void }) {
-  const t = useTranslations('appsModal.developers');
+/** The underlined name, then what the row is or does, quiet. */
+function RowLabel({ name, meta }: { name: string; meta?: ReactNode }) {
   return (
-    <SurfaceCard surface="mcp" name={t('mcp')} description={t('mcpDescription')} art={<McpArt />}>
-      {onOpen ? (
-        <Button size="sm" variant="secondary" aria-label={t('connectLabel')} onClick={onOpen}>
-          {t('connect')}
-        </Button>
-      ) : (
-        <Button asChild size="sm" variant="secondary">
-          <Link href={MCP_GUIDE_HREF}>{t('guide')}</Link>
-        </Button>
-      )}
-    </SurfaceCard>
+    <>
+      <span className="text-foreground decoration-border group-hover:decoration-foreground underline underline-offset-4 transition-colors">
+        {name}
+      </span>
+      {meta ? <span className="text-muted-foreground flex items-center gap-1.5">{meta}</span> : null}
+    </>
+  );
+}
+
+const ROW =
+  'group focus-visible:ring-ring inline-flex items-center gap-2 rounded-sm text-left text-sm focus-visible:ring-2 focus-visible:outline-none';
+
+type RowProps = { name: string; meta?: ReactNode };
+
+function RowAnchor({ name, meta, ...props }: RowProps & ComponentPropsWithoutRef<'a'>) {
+  return (
+    <li>
+      <a className={ROW} {...props}>
+        <RowLabel name={name} meta={meta} />
+      </a>
+    </li>
+  );
+}
+
+function RowButton({ name, meta, ...props }: RowProps & ComponentPropsWithoutRef<'button'>) {
+  return (
+    <li>
+      <button type="button" className={ROW} {...props}>
+        <RowLabel name={name} meta={meta} />
+      </button>
+    </li>
+  );
+}
+
+function RowRoute({ name, meta, href }: RowProps & { href: string }) {
+  return (
+    <li>
+      <Link href={href} className={ROW}>
+        <RowLabel name={name} meta={meta} />
+      </Link>
+    </li>
+  );
+}
+
+function DesktopLinks() {
+  const t = useTranslations('appsModal.desktop');
+  return DESKTOP_ORDER.map((os) => (
+    <RowAnchor
+      key={os}
+      href={desktopDownloadUrl(os)}
+      aria-label={t('downloadFor', { os: DESKTOP_ROWS[os].name })}
+      name={DESKTOP_ROWS[os].name}
+      meta={DESKTOP_ROWS[os].meta}
+    />
+  ));
+}
+
+function MobileLinks() {
+  const tStore = useTranslations('mobileAppPromo');
+  return (
+    <>
+      <RowAnchor
+        href={APP_STORE_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        name="iPhone"
+        meta={tStore('appStore')}
+      />
+      <RowAnchor
+        href={GOOGLE_PLAY_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        name="Android"
+        meta={tStore('googlePlay')}
+      />
+    </>
+  );
+}
+
+/** Copies the install command for THIS deployment. */
+function TerminalLink() {
+  const t = useTranslations('appsModal.developers');
+  const command = useDeploymentCliInstallCommand(useUiHostConfig().deploymentVersion);
+  const { copy, copied } = useCopy({ toast: false });
+  return (
+    <RowButton
+      name={t('cli')}
+      meta={copied ? t('copied') : t('copy')}
+      onClick={async () => {
+        if (!(await copy(command))) errorToast(t('copyFailed'));
+      }}
+    />
+  );
+}
+
+function McpPublicLink() {
+  const t = useTranslations('appsModal.developers');
+  return <RowRoute href={MCP_GUIDE_HREF} name={t('mcp')} meta={t('guide')} />;
+}
+
+function McpLiveLink({ onOpen }: { onOpen: () => void }) {
+  const t = useTranslations('appsModal.developers');
+  return <RowButton name={t('mcp')} meta={t('connect')} aria-label={t('connectLabel')} onClick={onOpen} />;
+}
+
+function ChromePublicLink() {
+  const t = useTranslations('appsModal.chrome');
+  const tChrome = useTranslations('chrome');
+  return (
+    <RowAnchor
+      href={KORTIX_EXTENSION_STORE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      name={t('name')}
+      meta={tChrome('addToChrome')}
+    />
+  );
+}
+
+/** Settings → Kortix in Chrome owns install, connect and every browser. */
+function ChromeLiveLink({ onClose }: { onClose: () => void }) {
+  const t = useTranslations('appsModal.chrome');
+  const connections = useChromeConnections();
+  const { count, online } = chromeCounts(connections.data ?? []);
+  return (
+    <RowButton
+      name={t('name')}
+      aria-label={count > 0 ? t('manageLabel') : undefined}
+      meta={
+        count > 0 ? (
+          <>
+            <ChromeOnlineDot online={online > 0} />
+            {t('summary', { count, online })}
+          </>
+        ) : (
+          t('connect')
+        )
+      }
+      onClick={() => {
+        onClose();
+        useSettingsPanelStore.getState().openSettings('chrome');
+      }}
+    />
+  );
+}
+
+function ComputerPublicLink() {
+  const t = useTranslations('appsModal.computer');
+  return <RowRoute href={COMPUTER_SETTINGS_HREF} name={t('thisComputer')} meta={t('connect')} />;
+}
+
+function ComputerLiveLink({ onOpen }: { onOpen: () => void }) {
+  const t = useTranslations('appsModal.computer');
+  const { owned } = useOwnsPairedComputer();
+  const live = owned.some((machine) => machine.isLive);
+  return (
+    <RowButton
+      name={t('thisComputer')}
+      aria-label={t(live ? 'manageLabel' : 'connectLabel')}
+      meta={
+        live ? (
+          <>
+            <ChromeOnlineDot online />
+            {t('connected')}
+          </>
+        ) : (
+          t('connect')
+        )
+      }
+      onClick={onOpen}
+    />
   );
 }

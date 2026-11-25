@@ -8,9 +8,6 @@
  *   log.info('Something happened');
  *   // Output: [KTX] [USER:abc12345] [LEVEL:info] Something happened
  * 
- *   log.rc('SDK initialized');
- *   // Output: [KTX] [USER:abc12345] [LEVEL:info] [COMPONENT:RC] SDK initialized
- * 
  *   log.error('Failed!', error);
  *   // Output: [KTX] [USER:abc12345] [LEVEL:error] Failed! <error>
  * 
@@ -137,14 +134,6 @@ export const log = {
   warn: make('warn', 'warn'),
   /** Error level */
   error: make('error', 'error'),
-  /** RevenueCat-specific logs (level: info) */
-  rc: make('log', 'info', 'RC'),
-  /** RevenueCat debug */
-  rcDebug: make('debug', 'debug', 'RC'),
-  /** RevenueCat warning */
-  rcWarn: make('warn', 'warn', 'RC'),
-  /** RevenueCat error */
-  rcError: make('error', 'error', 'RC'),
 };
 
 export default log;

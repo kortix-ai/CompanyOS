@@ -146,11 +146,11 @@ sourceAccountId, newAccountId})` after each move
   marker clears.
 - `applyStripeSync` never writes a non-paid tier over an active comp, and
   `comp_plan_until` is admin-owned (operator path only).
-- Store purchases name the workspace: the mobile app sets the RevenueCat
-  subscriber attribute `kortix_workspace_id` before `purchasePackage` and the
-  paywall (empty = deleted); `resolveRevenueCatAccountId` credits that
-  workspace when the buyer is a member, else the buyer's default account. A
-  renewal follows the account that holds the store subscription.
+- Store purchases: the mobile app has no in-app purchase and no RevenueCat
+  SDK (removed in 1.6.58). Existing RevenueCat subscriptions still reach the
+  webhook; `resolveRevenueCatAccountId` credits the `kortix_workspace_id`
+  attribute's workspace when the buyer is a member, else the buyer's default
+  account. A renewal follows the account that holds the store subscription.
 - Cost views across a move: a project-scope read takes a row billed to another
   account only through one of the project's own sessions (marked billed
   elsewhere); account money views stay by `account_id`.

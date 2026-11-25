@@ -239,6 +239,19 @@ describe('page scrape fallback (KRTX-5162)', () => {
     expect(fetched).toEqual(['page.example']);
   });
 
+  test('a page that answers an HTTP error is a failed scrape, not a successful source', async () => {
+    for (const status of [404, 500]) {
+      network(PLAN_LIMIT, SERPER_OK, { status, body: '<html><title>Not found</title><p>Not found</p></html>', type: 'text/html' });
+
+      const response = await call('firecrawl', '/v2/scrape', { url: 'https://page.example/missing' });
+      const body = (await response.json()) as { success: boolean; error?: string };
+
+      expect(response.status).toBe(424);
+      expect(response.headers.get('x-kortix-backend')).toBe('fetch');
+      expect(body).toEqual({ success: false, error: `The page answered HTTP ${status}` });
+    }
+  });
+
   test("a PDF is not read by the fallback: the provider's 503 stays", async () => {
     network(PLAN_LIMIT, SERPER_OK, { status: 200, body: '%PDF-1.7', type: 'application/pdf' });
 

@@ -63,7 +63,7 @@ async function search(request: Record<string, unknown>): Promise<Response | null
   });
 }
 
-/** The page's readable text in Firecrawl's scrape shape, or null for a non-text page or one over 2 MB. */
+/** The page's readable text in Firecrawl's scrape shape (a failure for an HTTP error page), or null for a non-text page or one over 2 MB. */
 async function scrape(request: Record<string, unknown>): Promise<Response | null> {
   const url = String(request.url ?? '');
   if (!url) return null;
@@ -72,6 +72,12 @@ async function scrape(request: Record<string, unknown>): Promise<Response | null
     headers: { 'User-Agent': USER_AGENT, Accept: 'text/html,text/plain;q=0.9,*/*;q=0.5' },
     signal: AbortSignal.timeout(PAGE_TIMEOUT_MS),
   });
+  if (!page.ok) {
+    await page.body?.cancel().catch(() => {});
+    // An error page is no source: Firecrawl's failure shape, which scrape_webpage reports as a failed URL.
+    // 424, not 5xx: the page failed, not Kortix, so it stays out of the API's 5xx error counts.
+    return Response.json({ success: false, error: `The page answered HTTP ${page.status}` }, { status: 424 });
+  }
   const contentType = page.headers.get('content-type') ?? '';
   if (contentType && !/^text\/|json|xml/i.test(contentType)) {
     await page.body?.cancel().catch(() => {});

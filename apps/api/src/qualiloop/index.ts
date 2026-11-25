@@ -44,24 +44,36 @@ export function registerQualiloopRoutes(): void {
     if (!parsed.success) return c.json({ error: 'Expected {prompt, metadata: {session_id}}' }, 400);
     const { prompt, metadata } = parsed.data;
 
+    // The turn runs outside the stream: Bun sends nothing a stream enqueues
+    // while its async `start()` is still pending (measured through Cloudflare:
+    // the 15 s spaces arrived with the reply, and a 100 s+ turn got a 524).
     const encoder = new TextEncoder();
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    let open = true;
+    const send = (text: string) => {
+      if (open) controller.enqueue(encoder.encode(text));
+    };
     const body = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        const keepalive = setInterval(() => controller.enqueue(encoder.encode(' ')), KEEPALIVE_MS);
-        let result: Record<string, string>;
-        try {
-          result = { reply: await runQualiloopTurn({ conversationId: metadata.session_id, turnIndex: metadata.turn_index ?? 0, prompt }) };
-        } catch (error) {
-          const message = error instanceof QualiloopTurnError ? error.message : 'The turn failed inside Kortix.';
-          if (!(error instanceof QualiloopTurnError)) logger.error('[qualiloop] turn failed', { error: String(error) });
-          result = { error: message };
-        } finally {
-          clearInterval(keepalive);
-        }
-        controller.enqueue(encoder.encode(JSON.stringify(result)));
-        controller.close();
+      start(c) {
+        controller = c;
+      },
+      cancel() {
+        open = false; // QualiLoop hung up: the turn finishes, nothing more is sent.
       },
     });
+    send(' ');
+    const keepalive = setInterval(() => send(' '), KEEPALIVE_MS);
+    void runQualiloopTurn({ conversationId: metadata.session_id, turnIndex: metadata.turn_index ?? 0, prompt })
+      .then((reply) => ({ reply }))
+      .catch((error: unknown) => {
+        if (!(error instanceof QualiloopTurnError)) logger.error('[qualiloop] turn failed', { error: String(error) });
+        return { error: error instanceof QualiloopTurnError ? error.message : 'The turn failed inside Kortix.' };
+      })
+      .then((result) => {
+        clearInterval(keepalive);
+        send(JSON.stringify(result));
+        if (open) controller.close();
+      });
     return new Response(body, { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
   });
 }

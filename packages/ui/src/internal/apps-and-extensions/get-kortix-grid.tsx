@@ -42,6 +42,8 @@ import { AppleMark } from '../icons/apple';
 import { YouCursor } from './chrome-demo';
 import { PlayStoreMark } from '../icons/playstore';
 import {
+  type SurfaceId,
+  useSurfaceChalk,
   ChromeArt,
   ComputerArt,
   DesktopArt,
@@ -124,6 +126,7 @@ export function GetKortixGrid({
  * puts the art beside the text from `lg`, under it below that.
  */
 function SurfaceCard({
+  surface,
   name,
   description,
   children,
@@ -131,6 +134,7 @@ function SurfaceCard({
   wide = false,
   presence = false,
 }: {
+  surface: SurfaceId;
   name: string;
   description: ReactNode;
   children: ReactNode;
@@ -140,6 +144,7 @@ function SurfaceCard({
   presence?: boolean;
 }) {
   const card = useRef<HTMLElement>(null);
+  const chalk = useSurfaceChalk(surface);
   // The art pane wakes its dither field while the pointer is over the card.
   const [hovered, setHovered] = useState(false);
   return (
@@ -148,8 +153,10 @@ function SurfaceCard({
       aria-label={name}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
+      // Hover takes the input's focus look in the surface's own chalk hue.
+      style={hovered ? { borderColor: chalk.border, boxShadow: `0 0 0 3px ${chalk.ring}` } : undefined}
       className={cn(
-        'bg-popover relative flex min-w-0 flex-col overflow-hidden rounded-lg border',
+        'bg-popover relative flex min-w-0 flex-col overflow-hidden rounded-lg border transition-[border-color,box-shadow] duration-(--duration-moderate) ease-out',
         wide && 'lg:grid lg:grid-cols-2',
       )}
     >
@@ -204,7 +211,7 @@ function DesktopCard({ platform, inApp }: { platform: Platform; inApp: boolean }
   // In the desktop app itself there is nothing to download.
   if (inApp && typeof window !== 'undefined' && isDesktop()) {
     return (
-      <SurfaceCard wide name={name} description={description} art={<DesktopArt />}>
+      <SurfaceCard surface="desktop" wide name={name} description={description} art={<DesktopArt />}>
         <p className="text-muted-foreground text-sm">{t('computer.desktopRunning')}</p>
       </SurfaceCard>
     );
@@ -212,7 +219,7 @@ function DesktopCard({ platform, inApp }: { platform: Platform; inApp: boolean }
   // A desktop visitor's own system gets the one solid button.
   const own = isMobilePlatform(platform) ? null : platform;
   return (
-    <SurfaceCard wide name={name} description={description} art={<DesktopArt />}>
+    <SurfaceCard surface="desktop" wide name={name} description={description} art={<DesktopArt />}>
       <ul className="divide-border divide-y">
         {DESKTOP_ORDER.map((os) => (
           <ActionRow key={os} Mark={DESKTOP_ROWS[os].Mark} name={DESKTOP_ROWS[os].name} meta={DESKTOP_ROWS[os].meta}>
@@ -240,7 +247,7 @@ function MobileCard({ platform }: { platform: Platform }) {
   ] as const;
   const onPhone = isMobilePlatform(platform);
   return (
-    <SurfaceCard name={t('name')} description={t('description')} art={<MobileArt />}>
+    <SurfaceCard surface="mobile" name={t('name')} description={t('description')} art={<MobileArt />}>
       {/* A desktop visitor is not on the phone a store link is for: the QR
           code carries the link to it. */}
       {onPhone ? null : (
@@ -268,7 +275,7 @@ function ChromePublicCard() {
   const t = useTranslations('appsModal.chrome');
   const tChrome = useTranslations('chrome');
   return (
-    <SurfaceCard presence name={t('name')} description={t('description')} art={<ChromeArt />}>
+    <SurfaceCard surface="chrome" presence name={t('name')} description={t('description')} art={<ChromeArt />}>
       <Button asChild size="sm">
         <a href={KORTIX_EXTENSION_STORE_URL} target="_blank" rel="noopener noreferrer">
           {tChrome('addToChrome')}
@@ -307,7 +314,7 @@ function ChromeLiveCard({ onClose }: { onClose: () => void }) {
 
   if (cardState === 'connected' && connected) {
     return (
-      <SurfaceCard presence name={t('name')} description={t('description')} art={<ChromeArt />}>
+      <SurfaceCard surface="chrome" presence name={t('name')} description={t('description')} art={<ChromeArt />}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           {manage}
           <span className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs">
@@ -321,6 +328,7 @@ function ChromeLiveCard({ onClose }: { onClose: () => void }) {
   }
   return (
     <SurfaceCard
+      surface="chrome"
       presence
       name={t('name')}
       description={cardState === 'unsupported' ? t('unsupported') : t('description')}
@@ -342,7 +350,7 @@ function ChromeLiveCard({ onClose }: { onClose: () => void }) {
 function ComputerPublicCard() {
   const t = useTranslations('appsModal.computer');
   return (
-    <SurfaceCard name={t('thisComputer')} description={t('thisComputerDescription')} art={<ComputerArt />}>
+    <SurfaceCard surface="computer" name={t('thisComputer')} description={t('thisComputerDescription')} art={<ComputerArt />}>
       <Button asChild size="sm" variant="secondary">
         <Link href={COMPUTER_SETTINGS_HREF}>{t('connect')}</Link>
       </Button>
@@ -356,6 +364,7 @@ function ComputerLiveCard({ onOpen }: { onOpen: () => void }) {
   const live = owned.some((machine) => machine.isLive);
   return (
     <SurfaceCard
+      surface="computer"
       name={t('thisComputer')}
       description={
         live ? (
@@ -392,7 +401,7 @@ function TerminalCard() {
     if (!(await copy(command))) errorToast(t('copyFailed'));
   };
   return (
-    <SurfaceCard name={t('cli')} description={t('cliDescription')} art={<TerminalArt />}>
+    <SurfaceCard surface="terminal" name={t('cli')} description={t('cliDescription')} art={<TerminalArt />}>
       <Button size="sm" variant="secondary" className="gap-1.5" onClick={copyCommand}>
         {copied ? <SolidCheckIcon className="size-3.5" /> : null}
         {copied ? t('copied') : t('copy')}
@@ -404,7 +413,7 @@ function TerminalCard() {
 function McpCard({ onOpen }: { onOpen?: () => void }) {
   const t = useTranslations('appsModal.developers');
   return (
-    <SurfaceCard name={t('mcp')} description={t('mcpDescription')} art={<McpArt />}>
+    <SurfaceCard surface="mcp" name={t('mcp')} description={t('mcpDescription')} art={<McpArt />}>
       {onOpen ? (
         <Button size="sm" variant="secondary" aria-label={t('connectLabel')} onClick={onOpen}>
           {t('connect')}

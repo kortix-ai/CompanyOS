@@ -52,6 +52,17 @@ const PHONE_SHOTS = [
   { light: '/images/mobile-app/review-light.webp', dark: '/images/mobile-app/review-dark.webp' },
 ];
 
+/**
+ * A surface's chalk edge in this theme, for its card's hover: a 1px border
+ * and a 3px ring at 15%, the input's focus look in the surface's own hue.
+ */
+export function useSurfaceChalk(surface: SurfaceId) {
+  const isDark = useIsDark();
+  const { light, dark } = chalkColorsForHue(SURFACE_HUES[surface]);
+  const ink = isDark ? dark.foreground : light.foreground;
+  return { border: ink.replace(')', ' / 0.6)'), ring: ink.replace(')', ' / 0.15)') };
+}
+
 /** Whether the pointer is over the card that holds the pane. */
 export const SurfaceHoverContext = createContext(false);
 
@@ -212,26 +223,13 @@ export function MobileArt() {
   );
 }
 
-/**
- * Kortix at work in the visitor's own Chrome (`ChromeDemo`): a return, played
- * step by step, and the bar that hands control back.
- */
+/** Kortix at work in the visitor's own Chrome (`ChromeDemo`): an expense, filed. */
 export function ChromeArt() {
-  const t = useTranslations('appsModal.mock');
   return (
-    <SurfaceArt surface="chrome" className="min-h-80">
+    <SurfaceArt surface="chrome" className="min-h-96">
       <BleedWindow>
         <ChromeDemo />
       </BleedWindow>
-      {/* The hand-back bar floats over the page, as the extension draws it. */}
-      <div className="bg-popover absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3 rounded-full border px-3 py-1.5 text-xs whitespace-nowrap shadow-md">
-        <span className="flex items-center gap-1.5">
-          <span className="bg-kortix-base size-1.5 rounded-full" />
-          {t('working')}
-        </span>
-        <span className="text-muted-foreground">{t('takeOver')}</span>
-        <span className="text-muted-foreground">{t('stop')}</span>
-      </div>
     </SurfaceArt>
   );
 }

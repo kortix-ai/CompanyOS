@@ -17,7 +17,8 @@
  * A 429 rests that account and the request moves to the next one; a 401 marks
  * the account for reconnection and moves on; a 403 (Anthropic forbids the
  * account, for example when its organization turned Claude Code off) stores
- * Anthropic's reason on the account and moves on. When the last account was
+ * Anthropic's reason on the account and moves on; a 403 that is not Anthropic's
+ * error JSON (a proxy or firewall page) is relayed as received. When the last account was
  * forbidden, the host is asked again: it now skips the forbidden accounts and
  * answers why none is left, naming them. Every other response's plan usage
  * headers go to `notePoolUsage`. Nothing here translates the
@@ -140,17 +141,23 @@ function hostError(error: Extract<ClaudeCodeCredentials, { error: unknown }>['er
 /** The longest reason stored for a forbidden account (`verify_message` holds 500). */
 const MAX_FORBIDDEN_MESSAGE = 300;
 
-/** Anthropic's words in a 403 body (`{"error":{"message":…}}`), on one line. */
-export function forbiddenMessage(body: string): string {
-  let message = '';
-  try {
-    const parsed = JSON.parse(body) as { error?: { message?: unknown } };
-    if (typeof parsed.error?.message === 'string') message = parsed.error.message;
-  } catch {
-    message = body;
-  }
-  message = message.replace(/\s+/g, ' ').trim();
-  if (!message) return 'Anthropic answered 403 Forbidden.';
+/**
+ * Anthropic's words in its own 403 error body (`{"type":"error","error":{"message":…}}`),
+ * on one line and capped, or null when the body is not Anthropic's error JSON. A
+ * proxy or firewall page in front of Anthropic is not a refusal of the account.
+ */
+export function forbiddenMessage(body: string): string | null {
+  type AnthropicError = { type?: unknown; error?: { message?: unknown } } | null;
+  const parsed = ((): AnthropicError => {
+    try {
+      return JSON.parse(body) as AnthropicError;
+    } catch {
+      return null;
+    }
+  })();
+  if (parsed?.type !== 'error' || typeof parsed.error?.message !== 'string') return null;
+  const message = parsed.error.message.replace(/\s+/g, ' ').trim();
+  if (!message) return null;
   return message.length > MAX_FORBIDDEN_MESSAGE ? `${message.slice(0, MAX_FORBIDDEN_MESSAGE - 1)}…` : message;
 }
 
@@ -245,10 +252,14 @@ export function createClaudeCodePassthrough(hooks: ClaudeCodeHooks, deps: Claude
         // A forbidden account reports no plan usage: the host reads a usage
         // report as a served call and clears the account's 403 reason with it.
         const body = await boundedText(response).catch(() => '');
-        await hooks.claudeForbidden?.(principal, credential.secretId, sha256(credential.apiKey), forbiddenMessage(body)).catch((err) => {
+        const answer = new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+        const reason = forbiddenMessage(body);
+        // Not Anthropic's refusal of this account (a proxy or firewall page): relayed as received.
+        if (!reason) return relay(answer);
+        await hooks.claudeForbidden?.(principal, credential.secretId, sha256(credential.apiKey), reason).catch((err) => {
           logger.warn('[claude-code] could not mark a forbidden Claude account', { secretId: credential.secretId, error: String(err) });
         });
-        last = new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+        last = answer;
         if (!more) break;
         continue;
       }

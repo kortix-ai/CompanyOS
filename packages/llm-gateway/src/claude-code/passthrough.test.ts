@@ -220,6 +220,18 @@ describe('Claude Code passthrough', () => {
     expect(await res.text()).toBe(ORG_OFF);
   });
 
+  test('a 403 that is not Anthropic\'s error JSON (a proxy page) is relayed as received: no mark, no next account', async () => {
+    const { handle, seen, calls } = harness({
+      upstream: () => new Response('<html><body>403 Forbidden</body></html>', { status: 403, headers: { 'content-type': 'text/html' } }),
+    });
+    const res = await handle(request());
+    expect(res.status).toBe(403);
+    expect(await res.text()).toBe('<html><body>403 Forbidden</body></html>');
+    expect(seen).toHaveLength(1);
+    expect(calls.forbidden).toEqual([]);
+    expect(calls.credentials).toHaveLength(1);
+  });
+
   test('a 403 body is read only up to 64 KiB: a huge body is cut, never buffered whole', async () => {
     let pulled = 0;
     const huge = new ReadableStream<Uint8Array>({
@@ -229,20 +241,24 @@ describe('Claude Code passthrough', () => {
         controller.enqueue(new Uint8Array(16 * 1024).fill(120));
       },
     });
-    const { handle, calls } = harness({
-      upstream: (attempt) => attempt === 1 ? new Response(huge, { status: 403 }) : new Response('{}'),
-    });
-    expect((await handle(request())).status).toBe(200);
+    const { handle, calls } = harness({ upstream: () => new Response(huge, { status: 403 }) });
+    const res = await handle(request());
+    expect(res.status).toBe(403);
+    expect((await res.arrayBuffer()).byteLength).toBe(64 * 1024);
     // 64 KiB is 4 chunks of 16 KiB; the stream would have produced 1000.
     expect(pulled).toBeLessThan(10);
-    expect(calls.forbidden[0]![2]).toHaveLength(300);
+    expect(calls.forbidden).toEqual([]);
   });
 
-  test('a forbidden account\'s reason is Anthropic\'s message on one line, capped, or a plain fallback', () => {
+  test('a forbidden account\'s reason is Anthropic\'s message on one line and capped, or none for any other body', () => {
     expect(forbiddenMessage(ORG_OFF)).toBe('Your organization has disabled Claude subscription access for Claude Code.');
-    expect(forbiddenMessage('<html>\n  Forbidden\n</html>')).toBe('<html> Forbidden </html>');
-    expect(forbiddenMessage('')).toBe('Anthropic answered 403 Forbidden.');
-    expect(forbiddenMessage(JSON.stringify({ error: { message: 'x'.repeat(400) } }))).toHaveLength(300);
+    expect(forbiddenMessage(JSON.stringify({ type: 'error', error: { message: '  two\n  lines ' } }))).toBe('two lines');
+    expect(forbiddenMessage(JSON.stringify({ type: 'error', error: { message: 'x'.repeat(400) } }))).toHaveLength(300);
+    // Not Anthropic's error JSON: no reason, so the account is not marked.
+    expect(forbiddenMessage('<html>\n  Forbidden\n</html>')).toBeNull();
+    expect(forbiddenMessage('')).toBeNull();
+    expect(forbiddenMessage('{"message":"blocked"}')).toBeNull();
+    expect(forbiddenMessage('{"type":"error","error":{"message":"  "}}')).toBeNull();
   });
 
   test('no account: the host reason in the Anthropic error shape, nothing sent upstream', async () => {

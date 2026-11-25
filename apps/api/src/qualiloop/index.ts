@@ -74,11 +74,12 @@ export function registerQualiloopRoutes(): void {
         send(JSON.stringify(result));
         if (open) controller.close();
       });
-    // `no-transform` + `X-Accel-Buffering: no`, as the session event stream sends: without them the
-    // Cloudflare path buffered the whole body (it arrived with a content-length after the turn).
-    return new Response(body, {
-      status: 200,
-      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, no-transform', 'X-Accel-Buffering': 'no' },
-    });
+    // `no-transform` keeps the compression middleware from holding the body (its 1 KB peek would wait for
+    // the answer). Set through c.header, not on a new Response: behind the edge the rate-limit middleware
+    // sets `Cache-Control: no-store` first, and Hono copies it over the headers of a Response a route builds.
+    c.header('Content-Type', 'application/json');
+    c.header('Cache-Control', 'no-store, no-transform');
+    c.header('X-Accel-Buffering', 'no');
+    return c.body(body, 200);
   });
 }

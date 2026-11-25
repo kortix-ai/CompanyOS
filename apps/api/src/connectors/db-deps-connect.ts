@@ -58,18 +58,11 @@ export async function mergeRequestingSession(
   requestingSessionId: string | null | undefined,
 ): Promise<void> {
   if (!requestingSessionId) return;
-  const [row] = await db
-    .select({ metadata: connectorConnections.metadata })
-    .from(connectorConnections)
-    .where(eq(connectorConnections.connectionId, connectionId))
-    .limit(1);
   await db
     .update(connectorConnections)
     .set({
-      metadata: {
-        ...((row?.metadata ?? {}) as Record<string, unknown>),
-        requesting_session_id: requestingSessionId,
-      },
+      metadata: sql`coalesce(${connectorConnections.metadata}, '{}'::jsonb)
+        || jsonb_build_object('requesting_session_id', ${requestingSessionId}::text)`,
       updatedAt: sql`now()`,
     })
     .where(eq(connectorConnections.connectionId, connectionId));

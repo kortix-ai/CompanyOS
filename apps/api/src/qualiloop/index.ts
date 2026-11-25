@@ -74,6 +74,11 @@ export function registerQualiloopRoutes(): void {
         send(JSON.stringify(result));
         if (open) controller.close();
       });
-    return new Response(body, { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+    // `no-transform` + `X-Accel-Buffering: no`, as the session event stream sends: without them the
+    // Cloudflare path buffered the whole body (it arrived with a content-length after the turn).
+    return new Response(body, {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, no-transform', 'X-Accel-Buffering': 'no' },
+    });
   });
 }

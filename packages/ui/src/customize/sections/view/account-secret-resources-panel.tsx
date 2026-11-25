@@ -413,7 +413,7 @@ export function AccountSecretResourcesPanel({ accountId, projectId, providerId, 
           // window under it; the sheet's summary sits above this list.
           const usageShown = Boolean(oauth) && isSubscriptionLogin(secret) && !undecryptable;
           // A login the provider forbids shows the reason, not its last usage: that usage is stale.
-          const forbidden = Boolean(oauth) && secret.verification?.status === 'invalid';
+          const forbidden = claude && secret.verification?.status === 'invalid';
           return (
             <li key={secret.secret_id} className={usageShown ? 'border-border flex min-w-0 items-start gap-3 rounded-md border px-3 py-2' : 'border-border flex min-w-0 items-center gap-3 rounded-md border px-3 py-1.5'}>
               <span className="text-foreground min-w-0 flex-1 text-sm font-medium">

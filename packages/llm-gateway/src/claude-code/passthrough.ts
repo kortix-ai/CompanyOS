@@ -156,6 +156,29 @@ export function forbiddenMessage(body: string): string {
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
+/** The most of a 403 body the gateway reads: Anthropic's error JSON is under 1 KiB. */
+const MAX_FORBIDDEN_BODY_BYTES = 64 * 1024;
+
+/** A 403 body, at most `MAX_FORBIDDEN_BODY_BYTES`; the rest is cancelled, never buffered. */
+async function boundedText(response: Response): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) return '';
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (size < MAX_FORBIDDEN_BODY_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const room = MAX_FORBIDDEN_BODY_BYTES - size;
+      chunks.push(value.byteLength > room ? value.subarray(0, room) : value);
+      size += Math.min(value.byteLength, room);
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks));
+}
+
 function sessionToken(headers: Headers): string | null {
   const bearer = headers.get('authorization')?.match(/^Bearer\s+(\S.*)$/i)?.[1]?.trim();
   if (bearer) return bearer;
@@ -221,7 +244,7 @@ export function createClaudeCodePassthrough(hooks: ClaudeCodeHooks, deps: Claude
       if (response.status === 403) {
         // A forbidden account reports no plan usage: the host reads a usage
         // report as a served call and clears the account's 403 reason with it.
-        const body = await response.text().catch(() => '');
+        const body = await boundedText(response).catch(() => '');
         await hooks.claudeForbidden?.(principal, credential.secretId, sha256(credential.apiKey), forbiddenMessage(body)).catch((err) => {
           logger.warn('[claude-code] could not mark a forbidden Claude account', { secretId: credential.secretId, error: String(err) });
         });

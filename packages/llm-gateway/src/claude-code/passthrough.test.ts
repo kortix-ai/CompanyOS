@@ -220,6 +220,24 @@ describe('Claude Code passthrough', () => {
     expect(await res.text()).toBe(ORG_OFF);
   });
 
+  test('a 403 body is read only up to 64 KiB: a huge body is cut, never buffered whole', async () => {
+    let pulled = 0;
+    const huge = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        if (pulled > 1000) return controller.close();
+        controller.enqueue(new Uint8Array(16 * 1024).fill(120));
+      },
+    });
+    const { handle, calls } = harness({
+      upstream: (attempt) => attempt === 1 ? new Response(huge, { status: 403 }) : new Response('{}'),
+    });
+    expect((await handle(request())).status).toBe(200);
+    // 64 KiB is 4 chunks of 16 KiB; the stream would have produced 1000.
+    expect(pulled).toBeLessThan(10);
+    expect(calls.forbidden[0]![2]).toHaveLength(300);
+  });
+
   test('a forbidden account\'s reason is Anthropic\'s message on one line, capped, or a plain fallback', () => {
     expect(forbiddenMessage(ORG_OFF)).toBe('Your organization has disabled Claude subscription access for Claude Code.');
     expect(forbiddenMessage('<html>\n  Forbidden\n</html>')).toBe('<html> Forbidden </html>');

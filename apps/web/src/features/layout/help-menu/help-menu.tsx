@@ -113,6 +113,14 @@ function LinkRow({
 }
 
 /**
+ * A "What's new" row. A headline wraps to two lines, so the row aligns to
+ * its first line: every part is one `h-5` line (1.15rem) and the padding is
+ * (min-h-8 1.84rem - 1.15rem) / 2 = 0.345rem (`py-1.5`), so a one-line row is still
+ * centred and every dot sits 0.92rem (`top-4`) below the row's top.
+ */
+const TIMELINE_ROW = 'items-start py-1.5';
+
+/**
  * One stop on the "What's new" line. The line runs through the centre of the
  * icon slot (`left-4` = the row's `px-2` + half the `size-4` slot), from the
  * row's top to its bottom, so adjacent rows join into one line. The first row
@@ -126,13 +134,13 @@ function TimelineMark({ position }: { position: 'first' | 'middle' | 'last' | 'o
           aria-hidden
           className={cn(
             'bg-border pointer-events-none absolute left-4 w-px -translate-x-1/2',
-            position === 'first' && 'top-1/2 bottom-0',
+            position === 'first' && 'top-4 bottom-0',
             position === 'middle' && 'inset-y-0',
-            position === 'last' && 'top-0 bottom-1/2',
+            position === 'last' && 'top-0 h-4',
           )}
         />
       )}
-      <span aria-hidden className="relative flex size-4 shrink-0 items-center justify-center">
+      <span aria-hidden className="relative flex h-5 w-4 shrink-0 items-center justify-center">
         <span className="bg-muted-foreground size-1.5 rounded-full" />
       </span>
     </>
@@ -193,10 +201,7 @@ export function HelpMenu({ onOpenDownloadApp }: { onOpenDownloadApp?: () => void
   });
 
   return (
-    <DropdownMenu
-      open={open}
-      onOpenChange={setOpen}
-    >
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <Hint side="top" label={t('trigger')}>
         <DropdownMenuTrigger asChild>
           <Button
@@ -260,26 +265,31 @@ export function HelpMenu({ onOpenDownloadApp }: { onOpenDownloadApp?: () => void
             <DropdownMenuGroup>
               <DropdownMenuLabel>{t('whatsNew')}</DropdownMenuLabel>
               {/* Until the first read lands, hold the three rows' height so
-                  the menu does not grow under the pointer. */}
+                  the menu does not grow under the pointer. A headline usually
+                  takes two lines: 2 × h-5 + 2 × py-1.5 = h-13. */}
               {whatsNew.isPending
-                ? [0, 1, 2].map((slot) => <div key={slot} aria-hidden className="min-h-8" />)
+                ? [0, 1, 2].map((slot) => <div key={slot} aria-hidden className="h-13" />)
                 : null}
               {weeks.map((week, index) => (
-                <LinkRow key={week.slug} href={week.href} onNavigate={close}>
+                <LinkRow
+                  key={week.slug}
+                  href={week.href}
+                  onNavigate={close}
+                  className={TIMELINE_ROW}
+                >
                   <TimelineMark position={timelinePosition(index, stops)} />
-                  <span className="min-w-0 flex-1 truncate" title={week.title}>
-                    {week.title}
-                  </span>
+                  <span className="line-clamp-2 min-w-0 flex-1 leading-5">{week.title}</span>
                   {week.date ? (
-                    <span className="text-muted-foreground ml-auto shrink-0 text-xs tabular-nums">
+                    // Fixed width, so every headline ends on one edge.
+                    <span className="text-muted-foreground min-w-12 shrink-0 text-right text-xs leading-5 tabular-nums">
                       {weekDate.format(new Date(week.date))}
                     </span>
                   ) : null}
                 </LinkRow>
               ))}
-              <LinkRow href={CHANGELOG_PATH} onNavigate={close}>
+              <LinkRow href={CHANGELOG_PATH} onNavigate={close} className={TIMELINE_ROW}>
                 <TimelineMark position={timelinePosition(stops - 1, stops)} />
-                {t('fullChangelog')}
+                <span className="leading-5">{t('fullChangelog')}</span>
               </LinkRow>
             </DropdownMenuGroup>
           </>

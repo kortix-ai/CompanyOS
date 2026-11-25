@@ -8,8 +8,8 @@ import type { WhatsNew } from '@/features/layout/help-menu/whats-new';
  * Dynamic so a self-host's runtime env wins over the build: with the landing
  * page disabled, `/changelog` bounces to the app, so the list is off.
  * `getWeeklyChangelog` is already cached for an hour (`unstable_cache`), so a
- * request costs no GitHub call. A GitHub outage returns no weeks, and the
- * menu still links the full changelog.
+ * request costs no GitHub call. A GitHub outage answers 503, and the menu
+ * still links the full changelog.
  */
 export const dynamic = 'force-dynamic';
 
@@ -32,12 +32,12 @@ export async function GET() {
       href: `/changelog/${week.slug}`,
     }));
   }
-  // An empty list is a failed read: never cache it.
-  const cacheControl =
-    enabled && body.weeks.length === 0
-      ? 'no-store'
-      : 'public, max-age=300, stale-while-revalidate=3600';
+  // No weeks from an enabled changelog is a failed read: answer 503, never
+  // cached, so the client keeps no empty list and reads again next mount.
+  if (enabled && body.weeks.length === 0) {
+    return Response.json(body, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+  }
   return Response.json(body, {
-    headers: { 'Cache-Control': cacheControl },
+    headers: { 'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600' },
   });
 }

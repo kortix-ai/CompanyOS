@@ -75,6 +75,10 @@ check "kortixd boundaries" bash -c 'cd apps/kortix-sandbox-agent-server && bun t
 # Repository-wide.
 check "learnings index" bash .agents/skills/learnings/scripts/index.sh --check
 check "GHSA advisories (root lockfile)" node scripts/ghsa-audit.mjs
+# The release gate's gitleaks check scans every commit since prod. A reviewed
+# false positive gets a fingerprint in .gitleaksignore (fix-forward-traps.md).
+check "gitleaks (prod..HEAD)" bash -c 'command -v gitleaks >/dev/null || { echo "install gitleaks (brew install gitleaks)"; exit 1; }
+  git fetch -q origin prod && gitleaks git --log-opts="origin/prod..HEAD" --redact --no-banner'
 
 echo
 if ((${#failed[@]})); then

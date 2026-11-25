@@ -538,8 +538,7 @@ const FIELD_ROW_TALL = 'grid gap-2 py-2 sm:grid-cols-[12rem_minmax(0,1fr)] sm:it
   Switch row and an Input row are one height. Sections are `space-y-10` apart.
 - One control height per form: `Input size="md"`, `SelectTrigger size="md"`
   and `Button size="lg"` (all `h-10`, 37px). Values in one control column
-  start on one x: `Input` pads `px-3` and `SelectTrigger size="md"` pads
-  `px-3.5`, so the trigger takes `className="px-3"`. A `Switch` sits at the start of the
+  start on one x: `Input` and `SelectTrigger` both pad `px-3`. A `Switch` sits at the start of the
   control column (`justify-self-start`), with any explanation beside it in
   `text-sm text-muted-foreground`. A label is one line of at most 24
   characters; a label never wraps. Every field keeps the label column,
@@ -1270,12 +1269,49 @@ Match the customize views — consistent sizes and variants:
 | Docs / secondary link         | `Button asChild variant="ghost" size="sm" className="gap-1.5"`                                                                                |
 | Row secondary action          | `Button variant="ghost" size="sm"`                                                                                                            |
 | Row primary action            | `Button size="sm"` (default variant)                                                                                                          |
-| Icon-only with tooltip        | `Hint` → `Button variant="outline" size="icon"` inside `ButtonGroup`                                                                          |
+| Icon-only with tooltip        | `Hint` → `Button variant="outline" size="icon-sm"` inside `ButtonGroup`                                                                       |
 | Inline text link              | `Button variant="transparent" size="sm" asChild`                                                                                              |
 | Modal cancel                  | `Button variant="outline-ghost"`                                                                                                              |
 | Pending / in-flight state     | `<Loading className="size-4 shrink-0" />` in buttons; `<Loading />` or `className="size-4 shrink-0"` in headers — **never** `CircleNotchIcon` |
 
 Icons in buttons: `size-3.5 shrink-0` (dense) or `size-4` (header). Always `shrink-0` on icons. **Exception:** loading uses `Loading`, not an icon import.
+
+### Control sizes: one height ladder
+
+Every control's height is a whole number of spacing units (`--spacing`, 3.68px). Controls that share a row share a step. Find the step first, then take the size name each control uses for it.
+
+| Units | Height | `Button` text | `Button` icon | `Tabs` | `Input` / `SelectTrigger` | Menu row |
+| --- | --- | --- | --- | --- | --- | --- |
+| 6 | 22px | none | `icon-xs` | `xs` list | none | none |
+| 7 | 26px | `xs`, `toolbar` | `icon-sm` | `xs` trigger | none | none |
+| 8 | 29px | `sm` | `icon-base` | `sm`, `default` trigger | `Input` `xs` | `sm` (default) |
+| 9 | 33px | `default` | `icon-md` | `default` list | `Input` `sm` (default), `SelectTrigger` `sm` (default), `InputGroup` | `md` |
+| 10 | 37px | `lg` | `icon-lg` | `md`, `lg` | `md` | `lg` |
+| 11 | 40px | none | none | none | `lg` | none |
+| 12 | 44px | `xl` | none | none | `Input` `xl` | none |
+
+The names do not line up across controls: a `sm` text button (8 units) pairs with `icon-base`, not `icon-sm`. Read the row, not the name.
+
+- **Height is padding, never a fixed height.** A text button is its label's line (`leading-5.5`, 5.5 units) plus `py-*`, which lands on a whole unit count. Never give a text button `h-*`, and never pass `h-*`, `py-*` or `px-*` in a `className` to resize a control: pick the size on the ladder.
+- **Square icon buttons keep `size-*`:** an icon has no line to pad. A text size that holds only an icon still reads one line tall (`[&>svg:only-child]:h-lh`).
+- **One step per row.** Never mix steps in one row.
+- **Which step where:**
+
+| Surface | Step | Sizes |
+| --- | --- | --- |
+| Page headers, title bars and panel headers (thread, details, profile, sidebar header rows) | 8 units, 29px | `Button` `sm`, `icon-base`, `Tabs` `sm` |
+| Dense toolbars and button groups (file viewer, browser chrome) | 7 units, 26px | `Button` `xs` or `toolbar`, `icon-sm` |
+| Actions inside a list row or a chip, shown on hover | 6 units, 22px | `icon-xs` |
+| The sidebar rail | 8 units | `icon-base` |
+| Fields, and the button beside a field | 9 units, 33px | `Input`, `SelectTrigger`, `InputGroup`, `Button` `default` |
+| Settings forms (see Settings form) | 10 units, 37px | `Input` `md`, `SelectTrigger` `md`, `Button` `lg` |
+| Marketing pages | 10 or 12 units | `Button` `lg`, `xl` |
+
+- **Fields share one inset.** `Input`, `Textarea`, `InputGroup` and `SelectTrigger` all pad `px-3`, so their text starts on one x. A button inside a field is an `InputGroupButton` (`xs` / `icon-xs` 6 units, `sm` / `icon-sm` 8 units).
+- **Menus.** Rows are `px-2`, `gap-2`, with a `size-4` icon slot; the panel is `p-1`. The recipe is `packages/ui/src/primitives/menu-recipe.ts`: never restyle a row.
+- `icon` is the old name of `icon-sm`, and `base` the old name of `xs`: write `icon-sm` and `xs`.
+
+The sources are `packages/ui/src/primitives/button.tsx`, `tabs.tsx`, `input.tsx`, `trigger-variants.ts` and `menu-recipe.ts`.
 
 ### Button groups — the default for buttons in a row
 
@@ -1552,7 +1588,64 @@ Destructive confirms → `ConfirmDialog`, not a red-styled `Modal` trigger.
 - **Default `TabsList`:** the segmented control (recessed track, raised `shadow-xs` chip). A vertical list (a settings rail) is never segmented (`packages/ui/src/primitives/tabs.tsx`).
 - **Primary section tabs:** `TabsList type="underline"` + `TabsTrigger className="w-fit flex-none"` (`channels-view.tsx`)
 - **Filter / status tabs:** `TabsList size="xs"` + `TabsTrigger` (`project-sessions-view.tsx`, `secrets-view.tsx`)
+- **Tabs in a side panel or a modal:** `TabsList type="underline" size="sm"` with `border-b border-border px-5 justify-start gap-4`, and `Tabs className="gap-0"` so the content meets the rule.
+- **A two-way switch in a sidebar header (Chat / Sessions):** `TabsList variant="secondary" size="sm"`.
 - Tab badge count: `<CountBadge count={n} />` inside trigger
+
+## Side panels, chat rows and overlays
+
+These rules keep the chat surfaces parallel. Every one came from a defect a person saw on screen.
+
+### A side panel: thread, details, profile
+
+A side panel opens on the right of the surface it describes, in the same `ResizablePanelGroup`. One panel is open at a time.
+
+- **Settings open in the panel, never in a `Sheet` over the chat.** A gear in the header opens the details panel. The settings are tabs in that panel (`bot-settings-tabs.tsx`).
+- **Header row:** `kx-titlebar-row` with `border-b border-border`, a `h-12` title slot, the title in `text-sm font-medium`.
+- **Header actions:** one cluster at the right, `flex items-center gap-px`, every member `Button variant="ghost" size="icon-base"` in a `Hint side="bottom"`. The close `X` is last.
+- **Body:** the identity block (tile, name, one line of description), then `TabsList type="underline" size="sm"` with `border-b border-border px-5 justify-start gap-4`. Each `TabsTrigger` takes `w-fit flex-none`.
+- **A long list of sections is not a panel body.** Group the sections into tabs (Members, Routines). Put rare settings behind the gear, not in a text button at the end of the list.
+- **No hint footer.** A panel does not end with a line that says what a person can ask in chat.
+
+Reference: `packages/ui/src/workspace/spaces/space-details-panel.tsx`.
+
+### One left edge per panel
+
+| Content | Padding | Text starts at |
+| --- | --- | --- |
+| Header title, tab list, forms, prose | `px-5` | 20 × 0.92 = 18.4px |
+| A list of rows (hover fill on the row) | container `px-3`, row `px-2` | the same 18.4px |
+
+Never give one row its own `ml-*` or `pl-*` to line it up. Change the container.
+
+### Parallel rows
+
+- **Same row, same step.** Every control in a row sits on one step of the ladder ("Control sizes"). A 22px button beside a 33px button is a defect.
+- **An avatar meets the top of the text beside it.** In `MessageRow` the avatar column takes `pt-0.5`: the time's 16px line box starts about 2px down the name's line. Measure the two top edges in DevTools. Do not estimate from font metrics.
+- **Name and time share a baseline:** `flex items-baseline gap-2`, the time in `text-xs text-muted-foreground tabular-nums`.
+- **A settings row:** `flex min-h-8 items-center justify-between gap-3`, the label in `text-muted-foreground` at the left, the control at the right. No second line of help under the label.
+
+### A list of switches (apps, permissions)
+
+One row per item: the logo (`ConnectorLogo size="sm"`), the name (`truncate text-sm`), then a `Switch`. The row is a `<label>`, so a click anywhere on it toggles. The switch saves at once and shows the new state before the server answers. The row opens no detail view. A search field (`InputGroup`) sits above the list when the list can pass 8 rows.
+
+Reference: `BotApps` in `packages/ui/src/workspace/spaces/bot-settings-tabs.tsx`.
+
+### Message rows
+
+- Hover is `bg-hover/60`. Selected is `bg-active/60`. A row is a line of chat, not a button: never the full `bg-hover` or `bg-active`.
+- Row actions float at the top-right in `RowToolbar` and show on hover and on focus.
+- The full date of a time is a `Hint`, never the browser `title`.
+
+### Hover cards
+
+- A person or agent card opens above the name: `side="top" align="start" animated={false} collisionPadding={8}`.
+- When the card's first or last child is a filled band (a role banner), the content takes `overflow-hidden p-0` and the body pads itself. Without `overflow-hidden` the band's square corners cover the card's rounded corners.
+- A card holds one identity, at most 3 facts, and one or two actions.
+
+### Stacking
+
+Never write a raw `z-*` value for an overlay. Take the layer from `@kortix/ui/lib/z-stack` (`dialogOverlayZ`, `dialogContentZ`, `floatingZ`, `useDialogDepth`): a menu inside a dialog then stacks above that dialog. A tooltip is above every other layer.
 
 ## Loading pattern (canonical)
 
@@ -1629,6 +1722,10 @@ Standard content block (`agents-page.tsx` pattern):
 - ✅ One name, one info icon with a hover card. ❌ title over description over sub-title over sub-description; ❌ an intro paragraph that repeats the heading.
 - ✅ A list draws loading, empty, error and loaded with `Skeleton`, `EmptyState`, `ErrorState` and rows. ❌ a spinner for a list, ❌ a page skeleton the route cannot draw.
 - ✅ An action keeps its label through pending and done; the glyph swaps. ❌ an inline "Saved" line, ❌ a label that widens the button.
+- ✅ Controls in one row share one step of the size ladder. ❌ `icon-xs` beside `icon-md`, ❌ `h-*` / `py-*` / `px-*` in a `className` to resize a control.
+- ✅ Settings for the thing on screen open in its side panel, as underline tabs. ❌ a `Sheet` over the chat, ❌ one long list of sections.
+- ✅ Overlay layers come from `@kortix/ui/lib/z-stack`. ❌ a raw `z-*` on a menu, popover or dialog.
+- ✅ A filled band at a card's edge → `overflow-hidden` on the card. ❌ square corners over a rounded card.
 - ✅ Hover changes color only. ❌ a lift, a translate or a shadow on hover in app chrome.
 - ✅ A glyph nudge on one primary or marketing link, `duration-fast`, reduced-motion branch. ❌ translate on a row, a menu item or a cell.
 

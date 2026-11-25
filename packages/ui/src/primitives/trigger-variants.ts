@@ -47,9 +47,11 @@ export const triggerVariants = cva(
         transparent: 'bg-transparent hover:bg-foreground/5 motion-safe:active:scale-[0.98]',
       },
       size: {
-        sm: 'h-8 px-2.5 text-sm',
-        md: 'h-10 px-3.5 text-sm',
-        lg: 'h-11 px-4 text-base',
+        // The heights and the `px-3` of `Input` (`sm` 9 units, `md` 10, `lg` 11): a
+        // Select beside a text field is the same box.
+        sm: 'h-9 px-3 text-sm',
+        md: 'h-10 px-3 text-sm',
+        lg: 'h-11 px-3 text-base',
       },
     },
     defaultVariants: {

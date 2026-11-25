@@ -1366,6 +1366,14 @@
         "review_swipe": {
           "name": "Kartice za pregled",
           "description": "„Čeka tebe“ na stranici Pregled otvara se kao špil kartica: jedna stavka po kartici. Prevuci desno da odobriš ili spojiš, levo da je vratiš agentu sa onim što treba promeniti."
+        },
+        "kortix_bot": {
+          "name": "Kortix bot",
+          "description": "A person messages each of the workspace's agents as a bot, in one chat per person. The bot answers in plain text, starts work as tasks, and posts each result as a reply under the message that asked for it."
+        },
+        "sidebar_rail": {
+          "name": "Sidebar rail",
+          "description": "On desktop, a fixed icon rail sits beside the sidebar: Home, Search and More at the top, Help and the panel toggle at the bottom. More lists every other page. With the panel collapsed, hovering Home or More shows the panel on that section."
         }
       },
       "channelsSwitch": {
@@ -1922,8 +1930,9 @@
     "searchArtifacts": "Pretraži artefakte",
     "appsNoMatches": "Nema rezultata",
     "spaces": {
-      "channels": "Простори",
-      "addChannel": "Нови простор",
+      "channels": "Канали",
+      "chat": "Ћаскање",
+      "addChannel": "Нови канал",
       "loadError": "Учитавање простора није успело.",
       "newAgent": "Нови агент",
       "review": "Преглед",
@@ -1931,7 +1940,8 @@
       "personalNamed": "Простор корисника {name}",
       "private": "Приватно",
       "noMessages": "Још нема порука",
-      "more": "Још"
+      "more": "Још",
+      "title": "Канали"
     },
     "calendar": "Kalendar",
     "running": "У току",
@@ -1941,7 +1951,21 @@
     "runningFailed": "Није могуће прочитати шта је у току.",
     "runningRetry": "Покушај поново",
     "runningIn": "у {title}",
-    "runningFirst": "Приказано је првих {count}."
+    "runningFirst": "Приказано је првих {count}.",
+    "bots": {
+      "title": "Агенти",
+      "paused": "Paused",
+      "off": "Off",
+      "noMessages": "No messages yet",
+      "newBot": "Нови агент",
+      "newBotPrompt": "Желим новог агента. Питај ме за шта треба да буде задужен и како ћемо знати да је готов. Затим га предложи, а кад кажем да, додај га у kortix.yaml као агента са свим апликацијама радног простора (connectors: all)."
+    },
+    "home": "Home",
+    "more": "More",
+    "rail": "Workspace navigation",
+    "pinTab": "Show tab",
+    "unpinTab": "Hide tab",
+    "bot": "Ботови"
   },
   "dashboard": {
     "title": "Контролна табла",
@@ -2234,8 +2258,6 @@
     "turn": {
       "autoRetried": "Kortix је аутоматски поново покушао са моделом {count, plural, one {једном} other {# пута}} пре ове грешке.",
       "typing": "{name} kuca…",
-      "showWork": "Prikaži rad",
-      "hideWork": "Sakrij rad",
       "starting": "Покреће се…",
       "workingFor": "Ради · {time}",
       "agentWorking": "ради",
@@ -2259,6 +2281,30 @@
       "finishedCount": "{count} завршено",
       "running": "У току",
       "resizePane": "Промени величину окна"
+    },
+    "changeRequest": {
+      "merge": "Споји",
+      "merging": "Спајање…",
+      "moreActions": "Још радњи",
+      "close": "Затвори захтев за измену",
+      "openInReview": "Отвори у Прегледу",
+      "resolveConflict": "Реши конфликт",
+      "open": "Отворен",
+      "merged": "Спојен",
+      "closed": "Затворен",
+      "conflicts": "{count, plural, one {# конфликт} few {# конфликта} other {# конфликата}}",
+      "mergedToast": "Захтев за измену #{number} је спојен",
+      "closedToast": "Захтев за измену #{number} је затворен",
+      "mergeFailed": "Спајање захтева за измену није успело.",
+      "closeFailed": "Затварање захтева за измену није успело.",
+      "files": "{count, plural, one {# датотека} few {# датотеке} other {# датотека}}",
+      "into": "у {branch}",
+      "number": "Захтев за измену #{number}",
+      "openedAgo": "Отворен {time}",
+      "mergeInto": "Споји у {branch}",
+      "readyToMerge": "спреман за спајање",
+      "mergedInto": "Спојен у {branch}",
+      "closedNote": "Затворен без спајања"
     }
   },
   "agents": {
@@ -25941,7 +25987,34 @@
           "description": "Обрисан је или преименован, или није подељен са вама."
         }
       },
-      "spaceDetails": "Детаљи: {name}"
+      "spaceDetails": "Детаљи: {name}",
+      "moreActions": "Још радњи",
+      "copyMessage": "Копирај поруку",
+      "copyMarkdown": "Копирај као Markdown",
+      "deleteMessage": "Обриши поруку",
+      "messageCopied": "Порука је копирана",
+      "memberJoined": "се придружио",
+      "jump": {
+        "label": "{day}, иди на датум",
+        "title": "Иди на",
+        "today": "Данас",
+        "yesterday": "Јуче",
+        "week": "Пре недељу дана",
+        "month": "Пре месец дана",
+        "first": "Прва порука",
+        "pick": "Изабери датум…"
+      },
+      "findInThread": "Пронађи у нити",
+      "findPlaceholder": "Пронађи",
+      "findCount": "{index} од {count}",
+      "findNone": "Нема поклапања",
+      "findPrevious": "Претходно поклапање",
+      "findNext": "Следеће поклапање",
+      "closeFind": "Затвори претрагу",
+      "openInNewWindow": "Отвори у новом прозору",
+      "copyThreadText": "Копирај нит као текст",
+      "copyJson": "Копирај као JSON",
+      "threadCopied": "Копирано"
     },
     "details": {
       "about": "О каналу",
@@ -26188,8 +26261,6 @@
       "people": "Људи",
       "addPeople": "Додај људе",
       "you": "Ти",
-      "tabs": "Картице",
-      "addTab": "Додај картицу",
       "routines": "Рутине",
       "addRoutine": "Додај рутину",
       "routinesPrivate": "Приватни простор још не прима рутине.",
@@ -26200,8 +26271,8 @@
       "proactiveBriefHint": "Kratak pregled u 9:00 danima kada ima novosti.",
       "proactiveFailed": "Podešavanje nije sačuvano. Pokušajte ponovo.",
       "allSettings": "Сва подешавања",
-      "askHint": "Можеш и да питаш у ћаскању: „додај агента овде“, „закачи документ за лансирање као картицу“.",
-      "noAgentsToAdd": "Сви агенти радног простора су већ у овом простору."
+      "noAgentsToAdd": "Сви агенти радног простора су већ у овом простору.",
+      "members": "Чланови"
     },
     "profile": {
       "viewProfile": "Прикажи профил: {name}",
@@ -26229,7 +26300,14 @@
       "addFailed": "Агент није могао да се дода. Покушај поново.",
       "spacesIn": "Простори у којима је",
       "spacesInNone": "Још ни у једном простору",
-      "default": "Подразумевани"
+      "default": "Подразумевани",
+      "paused": "Паузиран",
+      "off": "Искључен",
+      "copyLink": "Копирај линк",
+      "linkCopied": "Линк је копиран",
+      "roleOwner": "Власник радног простора",
+      "roleAdmin": "Администратор радног простора",
+      "roleMember": "Члан радног простора"
     },
     "mentions": {
       "people": "Људи",
@@ -26242,6 +26320,37 @@
       "askNotNow": "Не сада",
       "askAdmin": "{agent} није у {space}. Затражи од администратора простора да га дода.",
       "dismiss": "Затвори"
+    },
+    "bot": {
+      "pausedBar": "{name} is paused. Schedules and events don't start it until you resume.",
+      "resume": "Resume",
+      "resumeFailed": "Could not resume {name}.",
+      "settings": {
+        "settingsButton": "Подешавања агента",
+        "status": "Status",
+        "active": "Active",
+        "paused": "Paused",
+        "off": "Off",
+        "pauseFailed": "Није могуће променити статус агента.",
+        "description": "Description",
+        "save": "Save",
+        "saveFailed": "Could not save the description.",
+        "model": "Model",
+        "allSettings": "All agent settings",
+        "general": "Опште",
+        "appsTab": "Апликације",
+        "routines": "Рутине",
+        "workspaceDefault": "Подразумевано за радни простор",
+        "modelDefault": "Подразумевано за радни простор",
+        "modelDefaultNamed": "Подразумевано за радни простор ({model})",
+        "cancel": "Откажи",
+        "searchApps": "Претражи апликације",
+        "noApps": "Овај радни простор још нема конекторе.",
+        "noAppsMatch": "Ниједна апликација не одговара „{query}“.",
+        "appsUnavailable": "Апликације овог агента подешавају се на његовој страници агента.",
+        "appsFailed": "Није могуће променити апликације агента.",
+        "role": "Улога"
+      }
     }
   },
   "imageGen": {
@@ -26855,7 +26964,6 @@
         "evals": "Евалуације",
         "people": "Људи",
         "billing": "Наплата",
-        "support": "Подршка",
         "advanced": "Напредно",
         "danger": "Опасна зона"
       },
@@ -26871,7 +26979,6 @@
         "roles": "Улоге",
         "identity": "Идентитет",
         "audit": "Дневник ревизије",
-        "help": "Помоћ",
         "plan": "План",
         "usage": "Потрошња",
         "agents": "Агенти",
@@ -27613,5 +27720,9 @@
     "community": "Discord zajednica",
     "whatsNew": "Šta je novo",
     "fullChangelog": "Ceo dnevnik izmena"
+  },
+  "botPage": {
+    "title": "Ботови",
+    "description": "Бот ради у позадини и доноси вам резултат. Ботови још нису направљени."
   }
 }

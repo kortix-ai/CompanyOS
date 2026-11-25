@@ -342,11 +342,6 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     keywords: 'cost per session spend explorer',
     find: null,
   },
-
-  // Help
-  { id: 'help-roles', section: 'help', label: 'Workspace roles', keywords: 'owner admin member permissions' },
-  { id: 'help-custom-roles', section: 'help', label: 'Custom roles', keywords: 'permissions roles' },
-  { id: 'help-override', section: 'help', label: 'Override rule', keywords: 'deny allow precedence permissions' },
 ];
 
 /** A section the caller may open: its key, label and where its row links. */

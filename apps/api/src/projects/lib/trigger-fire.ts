@@ -1,4 +1,5 @@
 import { checkBillingAdmission } from '../../billing/services/billing-gate';
+import { botPauseReason } from './bots';
 import { toSessionModelRef } from '../../llm-gateway/resolution/effective';
 import type { PromptOverridesWire } from '../session-lifecycle/store';
 import { projectSessions, projectTriggerRuntime } from '@kortix/db';
@@ -429,6 +430,9 @@ async function fireGitTriggerOnce(input: {
   // Run caps (KRTX-1721) bound what automation starts, before any session or
   // prompt work. A person's fire bypasses soft caps, not hard reservations.
   if (!input.deliberate) {
+    // A paused bot (flag `kortix_bot`, lib/bots.ts): its agent starts no automatic run.
+    const botPaused = botPauseReason(project.metadata, spec.agent);
+    if (botPaused) return { status: 'skipped', reason: botPaused };
     const now = new Date();
     const { pausedReason, resumedAt } = await readTriggerAutoPause(project.projectId, spec.slug);
     if (pausedReason) return { status: 'skipped', reason: pausedReason };

@@ -100,7 +100,7 @@ function useNoRefresh(_filePath: string | null): FileRefreshResult {
   return NO_REFRESH;
 }
 const NO_REFRESH: FileRefreshResult = {
-  refresh: () => {},
+  refresh: () => { },
   refreshing: false,
   reloadKey: 0,
 };
@@ -386,7 +386,7 @@ export function FilePreviewModal({
           >
             <Button
               variant="ghost"
-              size="icon"
+              size="icon-sm"
               aria-label={
                 markdownPreview
                   ? tI18nHardcoded.raw("i18nComplete.text6ee818aa2de3")
@@ -502,7 +502,7 @@ export function FilePreviewModal({
           >
             <Button
               variant="ghost"
-              size="icon"
+              size="icon-sm"
               aria-label={
                 expanded
                   ? tI18nHardcoded.raw("i18nComplete.textde12e3c7c7a8")
@@ -580,7 +580,7 @@ export function FilePreviewModal({
       <div
         ref={toolbarRef}
         data-file-toolbar=""
-        className="border-border bg-background/95 flex h-12 shrink-0 items-center gap-2 border-b px-3 backdrop-blur-sm"
+        className="border-border bg-background/95 flex py-2 shrink-0 items-center gap-2 border-b px-2 backdrop-blur-sm"
       >
         {toolbar}
       </div>

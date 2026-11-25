@@ -5,6 +5,7 @@
 export * from './accounts';
 export * from './workspaces';
 export * from './spaces';
+export * from './bots';
 export * from './projects';
 export * from './skills';
 export * from './github';

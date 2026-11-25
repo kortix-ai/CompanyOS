@@ -396,6 +396,21 @@ await s.answerQuestion(questions[0].id, [["Yes"]]); // null dismisses it
 await s.compact(); // only when health() lists `session.compact`
 ```
 
+### Bots
+
+Experimental, behind the workspace flag `kortix_bot` (and `chat`). A bot is an agent from `kortix.yaml` that a person messages in their own chat. It is not a new record. Every agent except `mode: subagent` ones is a bot, and My Kortix is one when the workspace runs it. A bot's chat is the person's DM space with the agent.
+
+```ts
+const bots = kortix.workspace(workspaceId).bots;
+const list = await bots.list(); // [{ name, display_name, model, status, is_default, builtin, chat_space_id }]
+const chat = await kortix.workspace(workspaceId).spaces.dm(list[0].name); // the person's chat, created on first call
+const { bot, stopped_sessions } = await bots.setPaused('marketing', true);
+```
+
+`status` is `active`, `paused` or `off` (kortix.yaml disables the agent). A paused bot still gets messages. No schedule, webhook, event or monitor starts it, and pausing stops its running tasks for every person. A person firing a trigger by hand still runs it. Pausing needs the trigger-update permission. Both calls reject with 403 `feature_disabled` while `kortix_bot` is off.
+
+React: `useWorkspaceBots(workspaceId, { enabled })` and `useSetWorkspaceBotPaused(workspaceId)`. Opening a chat with `useOpenWorkspaceDm` refreshes the list's `chat_space_id`.
+
 ### Apps
 
 `kortix.project(projectId).apps` deploys immutable App releases behind one stable URL: releases, machines per process group, persistent volumes. New Apps use `private` access. Apps is generally available: every project can create and deploy them.

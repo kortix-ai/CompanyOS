@@ -1366,6 +1366,14 @@
         "review_swipe": {
           "name": "Tarjetas de revisión",
           "description": "«Te necesita» en la página de revisión se abre como un mazo de tarjetas: un elemento por tarjeta. Desliza a la derecha para aprobar o fusionar, a la izquierda para devolverlo al agente con lo que debe cambiar."
+        },
+        "kortix_bot": {
+          "name": "Kortix bot",
+          "description": "A person messages each of the workspace's agents as a bot, in one chat per person. The bot answers in plain text, starts work as tasks, and posts each result as a reply under the message that asked for it."
+        },
+        "sidebar_rail": {
+          "name": "Sidebar rail",
+          "description": "On desktop, a fixed icon rail sits beside the sidebar: Home, Search and More at the top, Help and the panel toggle at the bottom. More lists every other page. With the panel collapsed, hovering Home or More shows the panel on that section."
         }
       },
       "channelsSwitch": {
@@ -1922,8 +1930,9 @@
     "searchArtifacts": "Buscar artefactos",
     "appsNoMatches": "Sin resultados",
     "spaces": {
-      "channels": "Espacios",
-      "addChannel": "Nuevo espacio",
+      "channels": "Canales",
+      "chat": "Chat",
+      "addChannel": "Nuevo canal",
       "loadError": "No se pudieron cargar los espacios.",
       "newAgent": "Nuevo agente",
       "review": "Revisar",
@@ -1931,7 +1940,8 @@
       "personalNamed": "Espacio de {name}",
       "private": "Privado",
       "noMessages": "Aún no hay mensajes",
-      "more": "Más"
+      "more": "Más",
+      "title": "Canales"
     },
     "calendar": "Calendario",
     "running": "En curso",
@@ -1941,7 +1951,21 @@
     "runningFailed": "No se pudo leer lo que está en curso.",
     "runningRetry": "Reintentar",
     "runningIn": "en {title}",
-    "runningFirst": "Se muestran las primeras {count}."
+    "runningFirst": "Se muestran las primeras {count}.",
+    "bots": {
+      "title": "Agentes",
+      "paused": "Paused",
+      "off": "Off",
+      "noMessages": "No messages yet",
+      "newBot": "Nuevo agente",
+      "newBotPrompt": "Quiero un nuevo agente. Pregúntame de qué debe encargarse y cómo sabremos que ha terminado. Luego propónmelo y, cuando diga que sí, añádelo a kortix.yaml como agente con todas las apps del espacio de trabajo (connectors: all)."
+    },
+    "home": "Home",
+    "more": "More",
+    "rail": "Workspace navigation",
+    "pinTab": "Show tab",
+    "unpinTab": "Hide tab",
+    "bot": "Bots"
   },
   "dashboard": {
     "title": "Panel",
@@ -2234,8 +2258,6 @@
     "turn": {
       "autoRetried": "Kortix reintentó el modelo automáticamente {count, plural, one {una vez} other {# veces}} antes de este fallo.",
       "typing": "{name} está escribiendo…",
-      "showWork": "Ver trabajo",
-      "hideWork": "Ocultar trabajo",
       "starting": "Iniciando…",
       "workingFor": "Trabajando · {time}",
       "agentWorking": "está trabajando",
@@ -2259,6 +2281,30 @@
       "finishedCount": "{count} terminadas",
       "running": "En curso",
       "resizePane": "Cambiar el tamaño del panel"
+    },
+    "changeRequest": {
+      "merge": "Fusionar",
+      "merging": "Fusionando…",
+      "moreActions": "Más acciones",
+      "close": "Cerrar solicitud de cambio",
+      "openInReview": "Abrir en Revisión",
+      "resolveConflict": "Resolver conflicto",
+      "open": "Abierta",
+      "merged": "Fusionada",
+      "closed": "Cerrada",
+      "conflicts": "{count, plural, one {# conflicto} other {# conflictos}}",
+      "mergedToast": "Solicitud de cambio #{number} fusionada",
+      "closedToast": "Solicitud de cambio #{number} cerrada",
+      "mergeFailed": "No se pudo fusionar la solicitud de cambio.",
+      "closeFailed": "No se pudo cerrar la solicitud de cambio.",
+      "files": "{count, plural, one {# archivo} other {# archivos}}",
+      "into": "en {branch}",
+      "number": "Solicitud de cambio #{number}",
+      "openedAgo": "Abierta {time}",
+      "mergeInto": "Fusionar en {branch}",
+      "readyToMerge": "lista para fusionar",
+      "mergedInto": "Fusionada en {branch}",
+      "closedNote": "Cerrada sin fusionar"
     }
   },
   "agents": {
@@ -25941,7 +25987,34 @@
           "description": "Se eliminó o cambió de nombre, o no está compartido contigo."
         }
       },
-      "spaceDetails": "Detalles de {name}"
+      "spaceDetails": "Detalles de {name}",
+      "moreActions": "Más acciones",
+      "copyMessage": "Copiar mensaje",
+      "copyMarkdown": "Copiar como Markdown",
+      "deleteMessage": "Eliminar mensaje",
+      "messageCopied": "Mensaje copiado",
+      "memberJoined": "se unió",
+      "jump": {
+        "label": "{day}, saltar a una fecha",
+        "title": "Ir a",
+        "today": "Hoy",
+        "yesterday": "Ayer",
+        "week": "Hace una semana",
+        "month": "Hace un mes",
+        "first": "Primer mensaje",
+        "pick": "Elegir una fecha…"
+      },
+      "findInThread": "Buscar en el hilo",
+      "findPlaceholder": "Buscar",
+      "findCount": "{index} de {count}",
+      "findNone": "Sin resultados",
+      "findPrevious": "Resultado anterior",
+      "findNext": "Siguiente resultado",
+      "closeFind": "Cerrar búsqueda",
+      "openInNewWindow": "Abrir en una ventana nueva",
+      "copyThreadText": "Copiar hilo como texto",
+      "copyJson": "Copiar como JSON",
+      "threadCopied": "Copiado"
     },
     "details": {
       "about": "Información",
@@ -26188,8 +26261,6 @@
       "people": "Personas",
       "addPeople": "Añadir personas",
       "you": "Tú",
-      "tabs": "Pestañas",
-      "addTab": "Añadir pestaña",
       "routines": "Rutinas",
       "addRoutine": "Añadir rutina",
       "routinesPrivate": "Un espacio privado aún no admite rutinas.",
@@ -26200,8 +26271,8 @@
       "proactiveBriefHint": "Un resumen breve a las 9:00 los días con novedades.",
       "proactiveFailed": "No se guardó el ajuste. Inténtalo de nuevo.",
       "allSettings": "Todos los ajustes",
-      "askHint": "También puedes pedirlo en el chat: «añade un agente aquí», «fija el documento del lanzamiento como pestaña».",
-      "noAgentsToAdd": "Todos los agentes del espacio de trabajo ya están en este espacio."
+      "noAgentsToAdd": "Todos los agentes del espacio de trabajo ya están en este espacio.",
+      "members": "Miembros"
     },
     "profile": {
       "viewProfile": "Ver el perfil de {name}",
@@ -26229,7 +26300,14 @@
       "addFailed": "No se pudo añadir el agente. Inténtalo de nuevo.",
       "spacesIn": "Espacios en los que está",
       "spacesInNone": "Aún en ningún espacio",
-      "default": "Predeterminado"
+      "default": "Predeterminado",
+      "paused": "En pausa",
+      "off": "Desactivado",
+      "copyLink": "Copiar enlace",
+      "linkCopied": "Enlace copiado",
+      "roleOwner": "Propietario del workspace",
+      "roleAdmin": "Administrador del workspace",
+      "roleMember": "Miembro del workspace"
     },
     "mentions": {
       "people": "Personas",
@@ -26242,6 +26320,37 @@
       "askNotNow": "Ahora no",
       "askAdmin": "{agent} no está en {space}. Pide a un admin del espacio que lo añada.",
       "dismiss": "Cerrar"
+    },
+    "bot": {
+      "pausedBar": "{name} is paused. Schedules and events don't start it until you resume.",
+      "resume": "Resume",
+      "resumeFailed": "Could not resume {name}.",
+      "settings": {
+        "settingsButton": "Ajustes del agente",
+        "status": "Status",
+        "active": "Active",
+        "paused": "Paused",
+        "off": "Off",
+        "pauseFailed": "No se pudo cambiar el estado del agente.",
+        "description": "Description",
+        "save": "Save",
+        "saveFailed": "Could not save the description.",
+        "model": "Model",
+        "allSettings": "All agent settings",
+        "general": "General",
+        "appsTab": "Apps",
+        "routines": "Rutinas",
+        "workspaceDefault": "Predeterminado del espacio de trabajo",
+        "modelDefault": "Predeterminado del espacio de trabajo",
+        "modelDefaultNamed": "Predeterminado del espacio de trabajo ({model})",
+        "cancel": "Cancelar",
+        "searchApps": "Buscar apps",
+        "noApps": "Este espacio de trabajo aún no tiene conectores.",
+        "noAppsMatch": "Ninguna app coincide con «{query}».",
+        "appsUnavailable": "Las apps de este agente se configuran en su página de agente.",
+        "appsFailed": "No se pudieron cambiar las apps del agente.",
+        "role": "Rol"
+      }
     }
   },
   "imageGen": {
@@ -26855,7 +26964,6 @@
         "evals": "Evals",
         "people": "Personas",
         "billing": "Facturación",
-        "support": "Soporte",
         "advanced": "Avanzado",
         "danger": "Zona de peligro"
       },
@@ -26871,7 +26979,6 @@
         "roles": "Roles",
         "identity": "Identidad",
         "audit": "Registro de auditoría",
-        "help": "Ayuda",
         "plan": "Plan",
         "usage": "Uso",
         "agents": "Agentes",
@@ -27613,5 +27720,9 @@
     "community": "Comunidad de Discord",
     "whatsNew": "Novedades",
     "fullChangelog": "Registro de cambios completo"
+  },
+  "botPage": {
+    "title": "Bots",
+    "description": "Un bot trabaja en segundo plano y te trae el resultado. Los bots aún no están disponibles."
   }
 }

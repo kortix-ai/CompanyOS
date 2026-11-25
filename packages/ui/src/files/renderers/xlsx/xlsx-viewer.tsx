@@ -26,6 +26,7 @@ import {
 } from '@phosphor-icons/react';
 import * as React from 'react';
 import { createPortal } from 'react-dom';
+import { floatingZ, useDialogDepth } from '../../../lib/z-stack';
 
 import { downloadBlob } from '../../../internal/lib/utils/download';
 import { Button } from '../../../primitives/button';
@@ -74,7 +75,6 @@ if (typeof window !== 'undefined') {
 }
 
 const XLSX_LOADING_INDICATOR_DELAY_MS = 300;
-const XLSX_DROPDOWN_Z_INDEX_CLASS = 'z-40';
 const XLSX_SEARCH_BATCH_ROW_COUNT = 500;
 const XLSX_GRID_HEADER_HEIGHT = 24;
 const XLSX_GRID_ROW_HEADER_WIDTH = 40;
@@ -505,7 +505,7 @@ function WorkbookFileActionsMenu({
           <Ellipsis className="size-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className={cn('w-52', XLSX_DROPDOWN_Z_INDEX_CLASS)}>
+      <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuItem onClick={onUploadClick}>
           <Upload className="size-4" />
           {tI18nComplete.raw('text865e89de78d9')}
@@ -539,7 +539,7 @@ export function WorkbookTableHeaderMenu({
           {triggerIcon ? triggerIcon : <Ellipsis className="size-3.5" />}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className={cn('w-40', XLSX_DROPDOWN_Z_INDEX_CLASS)}>
+      <DropdownMenuContent align="end" className="w-40">
         <DropdownMenuRadioGroup
           value={direction ?? ''}
           onValueChange={(value) => {
@@ -795,7 +795,6 @@ function WorkbookToolbar({
               <SelectContent
                 align="end"
                 alignItemWithTrigger={false}
-                className={XLSX_DROPDOWN_Z_INDEX_CLASS}
               >
                 {ZOOM_OPTIONS.map((value) => (
                   <SelectItem key={value} value={value.toString()}>
@@ -911,6 +910,9 @@ const WorkbookSheetTabsInner = React.memo(function WorkbookSheetTabsInner({
   sheets,
   workbookIdentity,
 }: WorkbookSheetTabsInnerProps) {
+  // The hover preview is portaled to <body>: on the floating scale, so it shows
+  // above the file preview dialog this viewer often sits in (a fixed z-40 drew under it).
+  const floatingDepth = useDialogDepth();
   const [visiblePreviewIndex, setVisiblePreviewIndex] = React.useState<number | null>(null);
   const [previewPosition, setPreviewPosition] = React.useState({
     left: 0,
@@ -1113,11 +1115,12 @@ const WorkbookSheetTabsInner = React.memo(function WorkbookSheetTabsInner({
       {typeof document !== 'undefined' && previewSheet && visiblePreviewIndex !== null && previewUrl
         ? createPortal(
             <div
-              className="bg-background/95 duration-fast pointer-events-none fixed z-40 translate-y-0 overflow-hidden rounded-lg border opacity-100 shadow-md backdrop-blur-md transition-[opacity,transform]"
+              className="bg-background/95 duration-fast pointer-events-none fixed translate-y-0 overflow-hidden rounded-lg border opacity-100 shadow-md backdrop-blur-md transition-[opacity,transform]"
               style={{
                 left: previewPosition.left,
                 top: previewPosition.top,
                 width: previewWidth,
+                zIndex: floatingZ(floatingDepth),
               }}
             >
               <div className="bg-muted/60 relative aspect-[11/7] w-full overflow-hidden">

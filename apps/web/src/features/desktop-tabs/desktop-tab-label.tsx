@@ -15,7 +15,7 @@ import { sessionDisplayStatus, sessionSource, type SessionDisplayStatus } from '
 import { SessionStatusMark } from '@kortix/ui/session/list/session-status-mark';
 import { SpaceIconBare } from '@kortix/ui/workspace/session-spaces/space-icon';
 import { SessionBriefContent } from '@kortix/ui/workspace/sidebar/session-brief-hover-card';
-import { AppWindowIcon, BookOpenTextIcon, BrainIcon, BrowserIcon, CalendarBlankIcon, CardsThreeIcon, ChartBarIcon, ChatsCircleIcon, CheckCircleIcon, ClockCounterClockwiseIcon, CpuIcon, CreditCardIcon, CubeIcon, FileTextIcon, FoldersIcon, GearSixIcon, GitBranchIcon, GitDiffIcon, HardDrivesIcon, HashIcon, IdentificationBadgeIcon, KeyIcon, ListBulletsIcon, NavigationArrowIcon, PaletteIcon, PlugsConnectedIcon, QuestionIcon, RepeatIcon, ShieldCheckIcon, SquaresFourIcon, StackIcon, TargetIcon, TimerIcon, TrayIcon, UsersIcon, UsersThreeIcon, type Icon } from '@phosphor-icons/react';
+import { AppWindowIcon, BookOpenTextIcon, BrainIcon, BrowserIcon, CalendarBlankIcon, CardsThreeIcon, ChartBarIcon, ChatsCircleIcon, CheckCircleIcon, ClockCounterClockwiseIcon, CpuIcon, CreditCardIcon, CubeIcon, FileTextIcon, FoldersIcon, GearSixIcon, GitBranchIcon, GitPullRequestIcon, HardDrivesIcon, HashIcon, IdentificationBadgeIcon, KeyIcon, ListBulletsIcon, NavigationArrowIcon, PaletteIcon, PlugsConnectedIcon, QuestionIcon, RepeatIcon, ShieldCheckIcon, SquaresFourIcon, StackIcon, TargetIcon, TimerIcon, TrayIcon, UsersIcon, UsersThreeIcon, type Icon } from '@phosphor-icons/react';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { createContext, useContext, type ReactNode } from 'react';
 import { useTranslations } from '@/i18n/use-translations';
@@ -469,7 +469,7 @@ const ADMIN_ICONS: Record<string, Icon> = {
   triggers: TimerIcon,
   models: CpuIcon,
   repo: FoldersIcon,
-  review: GitDiffIcon,
+  review: GitPullRequestIcon,
   reminders: RepeatIcon,
   members: UsersIcon,
   general: GearSixIcon,
@@ -556,7 +556,7 @@ function staticLabel(
         inbox: TrayIcon,
         memory: BrainIcon,
         members: UsersIcon,
-        review: GitDiffIcon,
+        review: GitPullRequestIcon,
         setup: CheckCircleIcon,
       };
       return { icon: icons[route.page], title: t(`pages.${route.page}`) };

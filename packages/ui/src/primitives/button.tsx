@@ -5,7 +5,7 @@ import * as React from 'react';
 import { cn } from '../lib/utils';
 
 const buttonVariants = cva(
-  "flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[color,background-color,border-color,box-shadow,opacity,scale,translate] disabled:pointer-events-none disabled:opacity-50  [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none  aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive text-center shadow-none data-[state=open]:ring-0 focus-visible:outline-none focus-visible:ring-kortix-base focus-visible:ring-[0.6px]",
+  "flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm leading-5.5 font-medium transition-[color,background-color,border-color,box-shadow,opacity,scale,translate] disabled:pointer-events-none disabled:opacity-50  [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&>svg:only-child]:h-lh shrink-0 [&_svg]:shrink-0 outline-none  aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive text-center shadow-none data-[state=open]:ring-0 focus-visible:outline-none focus-visible:ring-kortix-base focus-visible:ring-[0.6px]",
 
   {
     variants: {
@@ -53,23 +53,36 @@ const buttonVariants = cva(
         warning: 'bg-kortix-orange/80 text-background hover:bg-kortix-orange/85',
         popover: 'bg-popover text-foreground',
       },
+      // ONE height ladder, in spacing units (`--spacing`, 3.68px). A text size and the icon size
+      // on the same step are the same height to the pixel:
+      //
+      //   units   6         7          8           9          10        12
+      //   text              xs         sm          default    lg        xl
+      //   icon    icon-xs   icon-sm    icon-base   icon-md    icon-lg
+      //   py                0.75       1.25        1.75       2.25      3.25
+      //
+      // A text size takes its height from the label's line plus `py-*`, never a fixed `h-*`. The
+      // line is `leading-5.5` (5.5 units), so line + 2 × py is a whole number of units.
+      // Square icon sizes keep a fixed `size-*`: an icon has no line to pad.
       size: {
-        default: 'h-9 px-4 py-2 has-[>svg]:px-3',
-        // In a group, the radius of its icon neighbours (`icon-sm`, `icon`), so the group's outer corners match.
-        xs: 'h-7  gap-1.5 px-2.5 rounded-sm in-data-[slot=button-group]:rounded-md has-[>svg]:px-2',
-        base: "h-7 gap-1 px-2.5   in-data-[slot=button-group]:rounded-2xl has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
-        sm: 'h-8  gap-1.5 px-3 has-[>svg]:px-2.5',
-        lg: 'h-10  px-6 has-[>svg]:px-4',
-        xl: 'h-12  px-8 has-[>svg]:px-6',
-        icon: 'size-7 ',
+        default: 'py-1.75 px-4 has-[>svg]:px-3',
+        // In a group, the radius of its icon neighbours (`icon-sm`), so the group's outer corners match.
+        xs: 'py-0.75 gap-1.5 px-2.5 rounded-sm in-data-[slot=button-group]:rounded-md has-[>svg]:px-2',
+        sm: 'py-1.25 gap-1.5 px-3 has-[>svg]:px-2.5',
+        /** @deprecated The height of `xs` with a 14px icon: write `xs`. */
+        base: "py-0.75 gap-1 px-2.5 in-data-[slot=button-group]:rounded-2xl has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
+        lg: 'py-2.25 px-6 has-[>svg]:px-4',
+        xl: 'py-3.25 px-8 has-[>svg]:px-6',
         'icon-xs': 'size-6 rounded-sm',
         'icon-sm': 'size-7',
-        'icon-base': 'size-8 rounded-md',
+        /** @deprecated The same as `icon-sm`: write `icon-sm`. */
+        icon: 'size-7',
+        'icon-base': 'size-8',
         'icon-md': 'size-9',
-        'icon-lg': 'size-10 rounded-md',
-        'magic-sm': 'h-9 px-4 py-2 has-[>svg]:px-3  sm:h-8 sm:gap-1.5 sm:px-3 sm:has-[>svg]:px-2.5',
-
-        toolbar: "h-7 gap-1.5 px-2.5 text-xs [&_svg:not([class*='size-'])]:size-3.5",
+        'icon-lg': 'size-10',
+        'magic-sm': 'px-4 py-1.75 has-[>svg]:px-3 sm:gap-1.5 sm:px-3 sm:py-1.25 sm:has-[>svg]:px-2.5',
+        // `xs` height with a `text-xs` label.
+        toolbar: "py-0.75 gap-1.5 px-2.5 text-xs leading-5.5 [&_svg:not([class*='size-'])]:size-3.5",
       },
     },
     defaultVariants: {

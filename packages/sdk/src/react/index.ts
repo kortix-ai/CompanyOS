@@ -322,6 +322,8 @@ export {
   useWorkspaceSpaceProactive, useProjectSpaceProactive,
   useSetWorkspaceSpaceProactive, useSetProjectSpaceProactive,
 } from './use-project-spaces';
+// Bots (`kortix_bot`): the workspace's agents a person can message.
+export { useSetWorkspaceBotPaused, useWorkspaceBots } from './use-workspace-bots';
 // Session groups (`session_groups`): the project's shared folders of sessions.
 export {
   useCreateWorkspaceSessionGroup, useCreateProjectSessionGroup,

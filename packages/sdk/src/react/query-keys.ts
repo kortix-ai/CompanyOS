@@ -641,6 +641,8 @@ export const qk = {
     unifiedTriggers: (id: string) => [...qk.project.scope(id), 'unified-triggers'] as const,
     /** `listProjectSpaces` — the project's channels and the caller's DMs. */
     spaces: (id: string) => [...qk.project.scope(id), 'spaces'] as const,
+    /** `listWorkspaceBots` — the bots the caller can message. Under `spaces`, so opening a DM refreshes each bot's `chat_space_id`. */
+    bots: (id: string) => [...qk.project.spaces(id), 'bots'] as const,
     /** `listProjectSessionGroups` — the project's session groups, in order. */
     sessionGroups: (id: string) => [...qk.project.scope(id), 'session-groups'] as const,
     /** `listProjectSpaceApps` — one channel's Apps. Under `apps`, so every App mutation's invalidation refetches it. */

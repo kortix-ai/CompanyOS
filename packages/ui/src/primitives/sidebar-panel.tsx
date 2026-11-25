@@ -34,6 +34,7 @@ function Sidebar({
   side = 'left',
   variant = 'sidebar',
   collapsible = 'offcanvas',
+  rail,
   className,
   children,
   ...props
@@ -41,10 +42,26 @@ function Sidebar({
   side?: 'left' | 'right';
   variant?: 'sidebar' | 'floating' | 'inset';
   collapsible?: 'offcanvas' | 'icon' | 'none';
+  /**
+   * Desktop only, left side only: a narrow icon column fixed at the window's
+   * left edge, beside the panel. It stays on screen when the panel collapses:
+   * the toggle hides the panel, never the rail. The page gap and the panel
+   * both move right by `--sidebar-rail-width`. Its hover summons the
+   * collapsed panel (the rail calls `peekEnter` / `peekLeave`), so the edge
+   * strip is not needed with a rail.
+   */
+  rail?: React.ReactNode;
 }) {
-  const { isMobile, state, openMobile, setOpenMobile, peek, peekEnter, peekLeave, instantToggle } =
+  const { isMobile, state, openMobile, setOpenMobile, peek, peekEnter, peekLeave, instantToggle, setRail } =
     useSidebar();
   const slides = collapsible === 'offcanvas' && side === 'left';
+  const railed = !!rail && slides && !isMobile;
+  // Tell the page-level openers a rail (with its own toggle) is on screen.
+  React.useEffect(() => {
+    if (!railed || !setRail) return;
+    setRail(true);
+    return () => setRail(false);
+  }, [railed, setRail]);
   const peekable = slides && state === 'collapsed';
   const peeking = peekable && peek;
 
@@ -120,6 +137,8 @@ function Sidebar({
   return (
     <div
       className="group peer text-sidebar-foreground hidden md:block"
+      data-rail={railed ? '' : undefined}
+      style={railed ? ({ '--sidebar-rail-width': '3rem' } as React.CSSProperties) : undefined}
       data-state={state}
       data-collapsible={state === 'collapsed' ? collapsible : ''}
       data-variant={variant}
@@ -132,11 +151,20 @@ function Sidebar({
           animating its width reflows the entire page subtree (resizable panel
           group, virtualized message list) on every frame for the whole
           duration. Docking is a one-frame layout change instead. */}
+      {railed ? (
+        // Fixed at the window's left edge, above the panel (z-50 over its z-40)
+        // so the panel slides out underneath it.
+        <div data-slot="sidebar-rail-column" className="bg-background border-border fixed inset-y-0 left-0 z-50 hidden w-(--sidebar-rail-width) border-r md:flex">
+          {rail}
+        </div>
+      ) : null}
       <div
         data-slot="sidebar-gap"
         className={cn(
-          'relative w-(--sidebar-width) bg-transparent',
-          'group-data-[collapsible=offcanvas]:w-0',
+          'relative bg-transparent',
+          railed
+            ? 'w-[calc(var(--sidebar-rail-width)+var(--sidebar-width))] group-data-[collapsible=offcanvas]:w-(--sidebar-rail-width)'
+            : 'w-(--sidebar-width) group-data-[collapsible=offcanvas]:w-0',
           'group-data-[side=right]:rotate-180',
           variant === 'floating' || variant === 'inset'
             ? 'group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]'
@@ -207,7 +235,12 @@ function Sidebar({
                 // past the arc. Matching the radius clips that paint to the
                 // same shape. No `overflow-hidden` — that would eat the card's
                 // `shadow-md`.
-                flyout ? 'top-13 bottom-2 left-2 h-auto rounded-lg' : 'inset-y-0 left-0 h-svh',
+                railed
+                  ? // With a rail the peek is flush beside it, full height, the docked box: no floating card.
+                    'inset-y-0 left-(--sidebar-rail-width) h-svh'
+                  : flyout
+                    ? 'top-13 bottom-2 left-2 h-auto rounded-lg'
+                    : 'inset-y-0 left-0 h-svh',
                 state === 'expanded'
                   ? 'translate-x-0'
                   : cn(
@@ -215,7 +248,7 @@ function Sidebar({
                       offscreen
                         ? cn(
                             // The extra 2rem parks the card's shadow off-screen too.
-                            '-translate-x-[calc(100%+2rem)]',
+                            railed ? '-translate-x-[calc(100%+2rem+var(--sidebar-rail-width))]' : '-translate-x-[calc(100%+2rem)]',
                             undocking ? 'duration-[240ms]' : 'duration-[200ms]',
                           )
                         : 'translate-x-0 duration-[260ms]',
@@ -251,7 +284,8 @@ function Sidebar({
             //
             // No transition on the radius/shadow — same corollary as above,
             // they only ever change while the panel is off-screen.
-            flyout && 'border-border overflow-hidden rounded-lg border shadow-md',
+            // With a rail the peek is flush: a hairline on its right edge, no card.
+            railed ? flyout && 'border-border border-r' : flyout && 'border-border overflow-hidden rounded-lg border shadow-md',
           )}
         >
           {children}
@@ -443,7 +477,12 @@ function SidebarInset({ className, ...props }: React.ComponentProps<'main'>) {
     <main
       data-slot="sidebar-inset"
       className={cn(
-        'bg-background relative flex w-full flex-1 flex-col overflow-hidden',
+        // `isolate`: the page's own z-indexes (the composer, the session
+        // header and in-page menus are z-50) stay inside the page, so the
+        // sidebar panel (z-10 docked, z-40 collapsed or peeking) and the rail
+        // (z-50) always paint above it. Dialogs, sheets, popovers and
+        // tooltips portal to <body> on their own scale (`lib/z-stack`), above all three.
+        'bg-background relative isolate flex w-full flex-1 flex-col overflow-hidden',
         'md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2',
         className,
       )}

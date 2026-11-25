@@ -45,7 +45,7 @@ describe('paletteRowPermitted', () => {
     const accountRows = menuRegistry.filter((e) => e.kind === 'account' && e.accountTab);
     expect(accountRows.length).toBeGreaterThan(0);
     const offered = accountRows.filter((e) => paletteRowPermitted(e, member)).map((e) => e.accountTab);
-    expect(offered.sort()).toEqual(['access-projects', 'help', 'members', 'transactions']);
+    expect(offered.sort()).toEqual(['access-projects', 'members', 'transactions']);
   });
 
   test('project rows follow the sidebar verdicts, and ungated rows stay', () => {

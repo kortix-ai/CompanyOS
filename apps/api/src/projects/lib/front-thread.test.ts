@@ -15,8 +15,8 @@ const base = {
 };
 
 describe('startsFrontThread', () => {
-  test('a top-level My Kortix thread in a space, with chat and chat_front on, is a front', () => {
-    expect(startsFrontThread(base)).toBe(true);
+  test('chat_front is withdrawn (2026-11-25): even with chat and chat_front stored on, no thread is a front', () => {
+    expect(startsFrontThread(base)).toBe(false);
   });
 
   test('either flag off: never a front', () => {

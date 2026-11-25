@@ -76,6 +76,8 @@ export const FeatureFlagMapSchema = z.object({
   desktop_tabs: z.boolean(),
   calendar: z.boolean(),
   review_swipe: z.boolean(),
+  kortix_bot: z.boolean(),
+  sidebar_rail: z.boolean(),
 });
 export type FeatureFlagMap = z.infer<typeof FeatureFlagMapSchema>;
 
@@ -1606,6 +1608,41 @@ export type SpaceUpdateInput = z.infer<typeof SpaceUpdateInputSchema>;
 
 export const SpaceDmInputSchema = z.object({ agent_name: z.string().trim().min(1).max(200) }).strict();
 export type SpaceDmInput = z.infer<typeof SpaceDmInputSchema>;
+
+/**
+ * A bot (flag `kortix_bot`): an agent of the project a person can message.
+ * A bot is an agent from kortix.yaml, not a new record. `chat_space_id` is the
+ * caller's own chat with it (their DM space), null until they first open it
+ * (`POST /spaces/dm`).
+ */
+export const BotSchema = z
+  .object({
+    /** The agent name in kortix.yaml. */
+    name: z.string(),
+    /** The name a person reads. My Kortix for the built-in agent, else the agent name. */
+    display_name: z.string(),
+    /** The agent's model (`provider/model`), or null for the project default. */
+    model: z.string().nullable(),
+    /** `active`: it answers. `paused`: messages reach it, but no schedule or event starts it. `off`: kortix.yaml disables it or its block has an error. */
+    status: z.enum(['active', 'paused', 'off']),
+    /** The project's `default_agent`. */
+    is_default: z.boolean(),
+    /** My Kortix, the built-in agent. */
+    builtin: z.boolean(),
+    chat_space_id: z.string().nullable(),
+  })
+  .strict();
+export type Bot = z.infer<typeof BotSchema>;
+
+export const BotListSchema = z.object({ bots: z.array(BotSchema) }).strict();
+
+export const BotPauseInputSchema = z.object({ paused: z.boolean() }).strict();
+export type BotPauseInput = z.infer<typeof BotPauseInputSchema>;
+
+/** The bot after a pause or resume, and how many of its running tasks the pause stopped (0 on resume). */
+export const BotPauseResultSchema = z.object({ bot: BotSchema, stopped_sessions: z.number().int().nonnegative() }).strict();
+export type BotPauseResult = z.infer<typeof BotPauseResultSchema>;
+export type BotList = z.infer<typeof BotListSchema>;
 
 /** A link pinned to a channel: `/projects/:id/spaces/:spaceId/links`. */
 export const SpaceLinkSchema = z

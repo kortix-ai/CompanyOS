@@ -1366,6 +1366,14 @@
         "review_swipe": {
           "name": "レビューカード",
           "description": "レビューページの「対応待ち」をカードの山で表示します。1 枚に 1 件。右にスワイプで承認またはマージ、左にスワイプで変更点を添えてエージェントに差し戻します。"
+        },
+        "kortix_bot": {
+          "name": "Kortix bot",
+          "description": "A person messages each of the workspace's agents as a bot, in one chat per person. The bot answers in plain text, starts work as tasks, and posts each result as a reply under the message that asked for it."
+        },
+        "sidebar_rail": {
+          "name": "Sidebar rail",
+          "description": "On desktop, a fixed icon rail sits beside the sidebar: Home, Search and More at the top, Help and the panel toggle at the bottom. More lists every other page. With the panel collapsed, hovering Home or More shows the panel on that section."
         }
       },
       "channelsSwitch": {
@@ -1922,8 +1930,9 @@
     "searchArtifacts": "アーティファクトを検索",
     "appsNoMatches": "一致するものはありません",
     "spaces": {
-      "channels": "スペース",
-      "addChannel": "新しいスペース",
+      "channels": "チャンネル",
+      "chat": "チャット",
+      "addChannel": "新しいチャンネル",
       "loadError": "スペースを読み込めませんでした。",
       "newAgent": "新しいエージェント",
       "review": "レビュー",
@@ -1931,7 +1940,8 @@
       "personalNamed": "{name} のスペース",
       "private": "非公開",
       "noMessages": "まだメッセージはありません",
-      "more": "その他"
+      "more": "その他",
+      "title": "チャンネル"
     },
     "calendar": "カレンダー",
     "running": "実行中",
@@ -1941,7 +1951,21 @@
     "runningFailed": "実行中のものを読み込めませんでした。",
     "runningRetry": "再試行",
     "runningIn": "{title} 内",
-    "runningFirst": "最初の {count} 件を表示しています。"
+    "runningFirst": "最初の {count} 件を表示しています。",
+    "bots": {
+      "title": "エージェント",
+      "paused": "Paused",
+      "off": "Off",
+      "noMessages": "No messages yet",
+      "newBot": "新しいエージェント",
+      "newBotPrompt": "新しいエージェントがほしいです。何を担当させるか、どうなれば完了と判断するかを私に聞いてください。それから提案し、私が承認したら、ワークスペースのすべてのアプリ（connectors: all）を持つエージェントとして kortix.yaml に追加してください。"
+    },
+    "home": "Home",
+    "more": "More",
+    "rail": "Workspace navigation",
+    "pinTab": "Show tab",
+    "unpinTab": "Hide tab",
+    "bot": "ボット"
   },
   "dashboard": {
     "title": "ダッシュボード",
@@ -2234,8 +2258,6 @@
     "turn": {
       "autoRetried": "Kortix はこの失敗の前にモデルを自動で {count, plural, other {# 回}}再試行しました。",
       "typing": "{name} が入力中…",
-      "showWork": "作業を表示",
-      "hideWork": "作業を隠す",
       "starting": "起動中…",
       "workingFor": "作業中 · {time}",
       "agentWorking": "が作業中",
@@ -2259,6 +2281,30 @@
       "finishedCount": "{count} 件完了",
       "running": "実行中",
       "resizePane": "ペインのサイズを変更"
+    },
+    "changeRequest": {
+      "merge": "マージ",
+      "merging": "マージ中…",
+      "moreActions": "その他の操作",
+      "close": "変更リクエストを閉じる",
+      "openInReview": "レビューで開く",
+      "resolveConflict": "競合を解決",
+      "open": "オープン",
+      "merged": "マージ済み",
+      "closed": "クローズ済み",
+      "conflicts": "{count, plural, other {# 件の競合}}",
+      "mergedToast": "変更リクエスト #{number} をマージしました",
+      "closedToast": "変更リクエスト #{number} を閉じました",
+      "mergeFailed": "変更リクエストをマージできませんでした。",
+      "closeFailed": "変更リクエストを閉じられませんでした。",
+      "files": "{count, plural, other {# ファイル}}",
+      "into": "{branch} へ",
+      "number": "変更リクエスト #{number}",
+      "openedAgo": "{time}に作成",
+      "mergeInto": "{branch} にマージ",
+      "readyToMerge": "マージ可能",
+      "mergedInto": "{branch} にマージ済み",
+      "closedNote": "マージせずにクローズ"
     }
   },
   "agents": {
@@ -25941,7 +25987,34 @@
           "description": "削除または名前変更されたか、あなたに共有されていません。"
         }
       },
-      "spaceDetails": "{name} の詳細"
+      "spaceDetails": "{name} の詳細",
+      "moreActions": "その他の操作",
+      "copyMessage": "メッセージをコピー",
+      "copyMarkdown": "Markdown としてコピー",
+      "deleteMessage": "メッセージを削除",
+      "messageCopied": "メッセージをコピーしました",
+      "memberJoined": "が参加しました",
+      "jump": {
+        "label": "{day}、日付へ移動",
+        "title": "移動先",
+        "today": "今日",
+        "yesterday": "昨日",
+        "week": "1 週間前",
+        "month": "1 か月前",
+        "first": "最初のメッセージ",
+        "pick": "日付を選択…"
+      },
+      "findInThread": "スレッド内を検索",
+      "findPlaceholder": "検索",
+      "findCount": "{count} 件中 {index} 件目",
+      "findNone": "一致なし",
+      "findPrevious": "前の一致",
+      "findNext": "次の一致",
+      "closeFind": "検索を閉じる",
+      "openInNewWindow": "新しいウィンドウで開く",
+      "copyThreadText": "スレッドをテキストでコピー",
+      "copyJson": "JSON としてコピー",
+      "threadCopied": "コピーしました"
     },
     "details": {
       "about": "概要",
@@ -26188,8 +26261,6 @@
       "people": "メンバー",
       "addPeople": "メンバーを追加",
       "you": "あなた",
-      "tabs": "タブ",
-      "addTab": "タブを追加",
       "routines": "ルーティン",
       "addRoutine": "ルーティンを追加",
       "routinesPrivate": "非公開スペースではまだルーティンを使えません。",
@@ -26200,8 +26271,8 @@
       "proactiveBriefHint": "新しい動きがあった日の 9:00 に短いまとめを送ります。",
       "proactiveFailed": "設定を保存できませんでした。もう一度お試しください。",
       "allSettings": "すべての設定",
-      "askHint": "チャットで頼むこともできます:「ここにエージェントを追加して」「ローンチ資料をタブに固定して」。",
-      "noAgentsToAdd": "ワークスペースのすべてのエージェントがこのスペースにいます。"
+      "noAgentsToAdd": "ワークスペースのすべてのエージェントがこのスペースにいます。",
+      "members": "メンバー"
     },
     "profile": {
       "viewProfile": "{name} のプロフィールを表示",
@@ -26229,7 +26300,14 @@
       "addFailed": "エージェントを追加できませんでした。もう一度お試しください。",
       "spacesIn": "参加しているスペース",
       "spacesInNone": "まだどのスペースにも参加していません",
-      "default": "デフォルト"
+      "default": "デフォルト",
+      "paused": "一時停止中",
+      "off": "オフ",
+      "copyLink": "リンクをコピー",
+      "linkCopied": "リンクをコピーしました",
+      "roleOwner": "ワークスペースのオーナー",
+      "roleAdmin": "ワークスペースの管理者",
+      "roleMember": "ワークスペースのメンバー"
     },
     "mentions": {
       "people": "メンバー",
@@ -26242,6 +26320,37 @@
       "askNotNow": "今はしない",
       "askAdmin": "{agent} は {space} にいません。スペースの管理者に追加を依頼してください。",
       "dismiss": "閉じる"
+    },
+    "bot": {
+      "pausedBar": "{name} is paused. Schedules and events don't start it until you resume.",
+      "resume": "Resume",
+      "resumeFailed": "Could not resume {name}.",
+      "settings": {
+        "settingsButton": "エージェントの設定",
+        "status": "Status",
+        "active": "Active",
+        "paused": "Paused",
+        "off": "Off",
+        "pauseFailed": "エージェントのステータスを変更できませんでした。",
+        "description": "Description",
+        "save": "Save",
+        "saveFailed": "Could not save the description.",
+        "model": "Model",
+        "allSettings": "All agent settings",
+        "general": "一般",
+        "appsTab": "アプリ",
+        "routines": "ルーティン",
+        "workspaceDefault": "ワークスペースのデフォルト",
+        "modelDefault": "ワークスペースのデフォルト",
+        "modelDefaultNamed": "ワークスペースのデフォルト（{model}）",
+        "cancel": "キャンセル",
+        "searchApps": "アプリを検索",
+        "noApps": "このワークスペースにはまだコネクタがありません。",
+        "noAppsMatch": "「{query}」に一致するアプリはありません。",
+        "appsUnavailable": "このエージェントのアプリはエージェントページで設定します。",
+        "appsFailed": "エージェントのアプリを変更できませんでした。",
+        "role": "役割"
+      }
     }
   },
   "imageGen": {
@@ -26855,7 +26964,6 @@
         "evals": "評価",
         "people": "メンバー",
         "billing": "請求",
-        "support": "サポート",
         "advanced": "詳細設定",
         "danger": "危険な操作"
       },
@@ -26871,7 +26979,6 @@
         "roles": "ロール",
         "identity": "ID 管理",
         "audit": "監査ログ",
-        "help": "ヘルプ",
         "plan": "プラン",
         "usage": "使用量",
         "agents": "エージェント",
@@ -27613,5 +27720,9 @@
     "community": "Discord コミュニティ",
     "whatsNew": "新機能",
     "fullChangelog": "すべての変更履歴"
+  },
+  "botPage": {
+    "title": "ボット",
+    "description": "ボットはバックグラウンドで動き、結果を届けます。ボットはまだありません。"
   }
 }

@@ -6669,6 +6669,24 @@ await p.approvals.resolve('<execution_id>', 'deny', { note: 'Send it to the ops 
 
 The `executionId` of a held call from code is `ConnectorApprovalPendingError.executionId`. With a workspace-scoped token, poll the by-id read until `detail.run.state` is final; do not repeat the `run`. With any other token, repeat the identical `run` after approval. `p.approvals.sessionsNeedingInput()` returns `{ total, sessions }`: the count of held calls per session. The Review inbox (`p.review.*`) is in [SDK reference > The workspace handle](/docs/developers#sdk-reference).
 
+### Talk to bots
+
+Experimental, behind the workspace flag `kortix_bot` (and `chat`). A bot is an agent from `kortix.yaml` that a person messages in their own chat. Every agent except `mode: subagent` ones is a bot. A bot's chat is the person's DM space with the agent, and each message in it starts a thread, which is one session.
+
+```ts
+const bots = kortix.workspace(workspaceId).bots;
+const list = await bots.list();
+const chat = await kortix.workspace(workspaceId).spaces.dm('marketing');
+await bots.setPaused('marketing', true); // { bot, stopped_sessions }
+```
+
+| Route | What it does |
+| -- | -- |
+| `GET /v1/workspaces/:id/bots` | The bots the caller can message, with `status` (`active`, `paused`, `off`) and the caller's `chat_space_id`. |
+| `POST /v1/workspaces/:id/bots/:name/pause` | `{ paused }`. A paused bot gets messages, but no automatic trigger starts it, and its running tasks stop. Needs the trigger-update permission. |
+
+Both routes answer 403 `feature_disabled` while `kortix_bot` is off.
+
 ### Deploy and operate Apps
 
 An App is a service the workspace hosts. `p.apps` creates it, uploads a build, deploys a release and runs its machines.

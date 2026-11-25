@@ -38,7 +38,8 @@ describe('registry ↔ contract', () => {
       [...FEATURE_FLAG_KEYS]
         .filter((key) => {
           const def = REGISTERED_FEATURE_FLAGS.find((f) => f.key === key);
-          // A hidden flag is listed (read-only) only while it resolves on.
+          // A withdrawn flag is never listed; a hidden flag is listed (read-only) only while it resolves on.
+          if (def?.withdrawn) return false;
           return !def?.catalogHidden || resolveFeatureFlag({}, key);
         })
         .sort(),
@@ -208,14 +209,20 @@ describe('resolveFeatureFlag — explicit override wins', () => {
     }
   });
 
-  test('chat is an experimental, explicit opt-in flag offered everywhere', () => {
-    expect(findCatalogFlag('chat')).toMatchObject({
-      stability: 'experimental',
-      enabled: false,
-      operator_only: false,
-    });
+  test('chat is merged into kortix_bot: not listed, on with kortix_bot or a stored chat choice', () => {
+    expect(buildFeatureFlagCatalog({}).map((f) => f.key)).not.toContain('chat');
     expect(resolveFeatureFlag({}, 'chat')).toBe(false);
+    expect(resolveFeatureFlag({ experimental: { kortix_bot: true } }, 'chat')).toBe(true);
     expect(resolveFeatureFlag({ experimental: { chat: true } }, 'chat')).toBe(true);
+    expect(resolveFeatureFlag({ experimental: { kortix_bot: true, chat: false } }, 'chat')).toBe(true);
+  });
+
+  test('chat_input, chat_front and spaces_proactive are withdrawn: never listed, always off', () => {
+    const on = { experimental: { kortix_bot: true, chat: true, chat_input: true, chat_front: true, spaces_proactive: true } };
+    for (const key of ['chat_input', 'chat_front', 'spaces_proactive'] as const) {
+      expect(resolveFeatureFlag(on, key)).toBe(false);
+      expect(buildFeatureFlagCatalog(on).map((f) => f.key)).not.toContain(key);
+    }
   });
 
   test('chat reads the legacy Channels and One chat overrides: chat, else project_channels, else infinichat', () => {
@@ -224,7 +231,6 @@ describe('resolveFeatureFlag — explicit override wins', () => {
     expect(resolveFeatureFlag({ experimental: { project_channels: false, infinichat: true } }, 'chat')).toBe(false);
     expect(resolveFeatureFlag({ experimental: { chat: false, project_channels: true } }, 'chat')).toBe(false);
     expect(resolveFeatureFlag({ experimental: { chat: 'yes', project_channels: true } }, 'chat')).toBe(true);
-    expect(buildFeatureFlagCatalog({ experimental: { project_channels: true } }).find((f) => f.key === 'chat')).toMatchObject({ enabled: true, overridden: true });
     for (const key of ['project_channels', 'infinichat']) {
       expect(isFeatureFlagKey(key)).toBe(false);
       expect(buildFeatureFlagCatalog({}).map((flag) => flag.key as string)).not.toContain(key);

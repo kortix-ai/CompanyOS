@@ -156,6 +156,13 @@ export interface FeatureFlagDef {
    */
   catalogHidden?: true;
   /**
+   * Removed from the product as a switch: the catalog never lists it and no
+   * project can turn it on. `off`: it always resolves false (its code stays
+   * dormant). `kortix_bot`: it resolves with the `kortix_bot` flag (merged
+   * into it).
+   */
+  withdrawn?: 'off' | 'kortix_bot';
+  /**
    * IAM actions that exist only with this flag. The account permission catalog
    * (`GET /accounts/:id/iam/permissions`) leaves them out until a project of the
    * account has the flag on ({@link hiddenIamActions}).
@@ -349,6 +356,9 @@ const FLAGS: readonly FeatureFlagDef[] = [
   // serializer keeps sending `true` for older clients.
   {
     key: 'chat',
+    // Merged into `kortix_bot` (Jay, 2026-11-25): one switch. `chat` stays the code's name for the
+    // channels and DMs; it resolves on with `kortix_bot`, or with a stored `chat` override from before.
+    withdrawn: 'kortix_bot',
     name: 'Slack-style Spaces',
     description:
       "Use Slack-style channels and direct messages, where every message starts a thread. Switches the sidebar to the chat layout. Separate from Spaces, which groups sessions, files and tabs.",
@@ -463,6 +473,8 @@ const FLAGS: readonly FeatureFlagDef[] = [
   },
   {
     key: 'chat_input',
+    // Withdrawn (Jay, 2026-11-25): not needed with Kortix bot. Always off, not listed; its code stays dormant.
+    withdrawn: 'off',
     name: 'Spaces-ChatInput',
     description:
       'One control under the composer for who answers and how: pick the agent, and every other setting stays on Auto, inherited from that agent. Open a row to override the model, thinking effort, secrets, provider keys or sandbox for this session, and reset it to Auto in one click.',
@@ -479,6 +491,8 @@ const FLAGS: readonly FeatureFlagDef[] = [
   },
   {
     key: 'chat_front',
+    // Withdrawn (Jay, 2026-11-25): not needed with Kortix bot. Always off, not listed; its code stays dormant.
+    withdrawn: 'off',
     name: 'Spaces-Router',
     description:
       'With Slack-style Spaces on, the agent you chat with in a thread is a router: it does quick work itself (an answer, a short text, a look at the thread files) and hands longer work to the Space\'s agents. It writes back like a person, in short messages. An agent saves its full result as a file in the thread, and the router links that file instead of retyping it. Show work under a message opens the work behind it. Needs My Kortix on in kortix.yaml.',
@@ -503,6 +517,8 @@ const FLAGS: readonly FeatureFlagDef[] = [
   },
   {
     key: 'spaces_proactive',
+    // Withdrawn (Jay, 2026-11-25): not needed with Kortix bot. Always off, not listed; its code stays dormant.
+    withdrawn: 'off',
     name: 'Spaces-Proactive',
     description:
       'With Slack-style Spaces on, a space can watch itself: turn on Proactive in its details, and an agent reads what happens there (finished threads, questions left open, people who join) and writes in the chat only when it matters: a result worth sharing, a decision you need to make, or something overdue. It can also start a thread that does the work. Optional daily brief at 9:00.',
@@ -598,6 +614,35 @@ const FLAGS: readonly FeatureFlagDef[] = [
       '(KORTIX_FEATURE_FLAGS → kortixd). WEB: no Calendar row and no palette entry; /workspaces/:id/calendar renders FeatureGateScreen. ' +
       'The calendar_items and calendar_comments rows stay.',
   },
+  {
+    key: 'kortix_bot',
+    name: 'Kortix bot',
+    description:
+      "A person messages each of the workspace's agents as a bot, in one chat per person. The bot answers in plain text, starts work as tasks, and posts each result as a reply under the message that asked for it.",
+    stability: 'experimental',
+    wip: true,
+    available: () => true,
+    platformDefault: () => false,
+    enforcement: 'behavioral',
+    enforcementNote:
+      'Off => every surface is unchanged. API: GET /bots answers 403 feature_disabled unless the flag is on (routes/bots.ts). The bot chat is the DM space: `chat` (channels and DMs) is merged into this flag and resolves on with it. ' +
+      'WEB and MOBILE: no Bots section, bot chat or bot settings render. A bot is an agent from kortix.yaml; ' +
+      'the flag adds no table, so turning it off loses no data.',
+  },
+  {
+    key: 'sidebar_rail',
+    name: 'Sidebar rail',
+    description:
+      "On desktop, a fixed icon rail sits beside the sidebar: Home, Search and More at the top, Help and the panel toggle at the bottom. More lists every other page. With the panel collapsed, hovering Home or More shows the panel on that section.",
+    stability: 'experimental',
+    wip: true,
+    available: () => true,
+    platformDefault: () => false,
+    enforcement: 'ui-only',
+    enforcementNote:
+      'UI-ONLY: the web project sidebar (packages/ui/src/workspace/sidebar/project-sidebar.tsx) mounts ProjectRail on desktop while this is on. ' +
+      'Off, the sidebar is unchanged. Mobile never shows the rail. No route reads it.',
+  },
 ];
 
 const FLAG_BY_KEY: Record<FeatureFlagKey, FeatureFlagDef> = Object.fromEntries(
@@ -640,6 +685,9 @@ function explicitOverride(metadata: unknown, key: FeatureFlagKey): boolean | und
 export function resolveFeatureFlag(metadata: unknown, key: FeatureFlagKey): boolean {
   const def = FLAG_BY_KEY[key];
   if (!def || !def.available()) return false;
+  if (def.withdrawn === 'off') return false;
+  // Merged into `kortix_bot`: on with it, or with the project's own stored choice from before the merge.
+  if (def.withdrawn === 'kortix_bot') return resolveFeatureFlag(metadata, 'kortix_bot') || explicitOverride(metadata, key) === true;
   return explicitOverride(metadata, key) ?? def.platformDefault();
 }
 
@@ -695,6 +743,8 @@ export interface FeatureFlagView {
  */
 export function buildFeatureFlagCatalog(metadata: unknown): FeatureFlagView[] {
   return FLAGS.flatMap((f) => {
+    // A withdrawn flag is no switch: never listed.
+    if (f.withdrawn) return [];
     const enabled = resolveFeatureFlag(metadata, f.key);
     if (f.catalogHidden && !enabled) return [];
     return [{

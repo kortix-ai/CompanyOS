@@ -21,6 +21,8 @@ import { Suggestion } from '@tiptap/suggestion';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { floatingZ, useDialogDepth } from '@kortix/ui/lib/z-stack';
+
 import { useTranslations } from '@/i18n/use-translations';
 
 /** An open `/` menu: what was typed after the slash, where it sits, and the range to replace. */
@@ -139,6 +141,8 @@ export function SlashMenu({
   keysRef: React.RefObject<(event: KeyboardEvent) => boolean>;
   onPickMedia: () => void;
 }) {
+  // Portaled to <body>: on the floating scale, so it shows above a dialog the editor sits in.
+  const depth = useDialogDepth();
   const t = useTranslations('artifacts');
   const [active, setActive] = useState(0);
   const [mac] = useState(isMac);
@@ -213,9 +217,9 @@ export function SlashMenu({
       ref={list}
       role="listbox"
       aria-label={t('blockMenu')}
-      style={style}
+      style={{ ...style, zIndex: floatingZ(depth) }}
       onMouseDown={(e) => e.preventDefault()}
-      className={`${MENU_PANEL_STATIC} fixed z-50 w-64 overflow-x-hidden overflow-y-auto overscroll-contain`}
+      className={`${MENU_PANEL_STATIC} fixed w-64 overflow-x-hidden overflow-y-auto overscroll-contain`}
     >
       {items.length === 0 ? (
         <p className="text-muted-foreground px-2 py-1.5 text-sm">{t('blockMenuEmpty')}</p>

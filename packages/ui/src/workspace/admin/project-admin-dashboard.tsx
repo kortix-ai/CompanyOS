@@ -103,7 +103,6 @@ import {
   ShieldIcon,
   FingerprintIcon,
   ScrollIcon,
-  QuestionIcon,
   CreditCardIcon,
   CoinsIcon,
   MonitorPlayIcon,
@@ -153,7 +152,6 @@ const ACCOUNT_SECTION_ICONS: Record<WorkspaceAccountSectionKey, Icon> = {
   roles: ShieldIcon,
   identity: FingerprintIcon,
   audit: ScrollIcon,
-  help: QuestionIcon,
   plan: CreditCardIcon,
   usage: CoinsIcon,
 };
@@ -179,9 +177,6 @@ const RESOURCE_PAGES: Partial<Record<ProjectAdminResourceKey, SectionPage>> = {
   repo: lazyPage(() => import('../layout/project-files-view'), (m) => m.ProjectFilesView),
 };
 
-
-/** The rail group drawn in the rail's footer instead of the scrolling list. */
-const RAIL_FOOTER_GROUP: WorkspaceSettingsGroupId = 'support';
 
 /* A host page owns a full-viewport root (`AppsView` is `h-svh`). Inside this
    pane that box would overflow by the header's height and clip its last row,
@@ -501,13 +496,11 @@ export function ProjectAdminDashboard({
         linkOut: !!row.href,
       })),
     });
-    const footer = groups.find((group) => group.id === RAIL_FOOTER_GROUP);
+    // No footer group since Help left the panel (2026-11-25).
     setRail({
       projectId,
-      groups: groups
-        .filter((group) => group.id !== RAIL_FOOTER_GROUP)
-        .map((group) => toRail(group, tSettings(`groups.${group.id}`))),
-      footer: footer ? toRail(footer) : null,
+      groups: groups.map((group) => toRail(group, tSettings(`groups.${group.id}`))),
+      footer: null,
       active,
     });
   }, [accessCheckFailed, settled, groups, active, projectId, setRail, tSettings]);

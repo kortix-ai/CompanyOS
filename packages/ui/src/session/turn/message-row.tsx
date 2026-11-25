@@ -11,7 +11,8 @@ import Hint from '../../primitives/hint';
  * and the channel row of the same prompt read at one size and weight. The 600
  * name above it, at the same size, carries the row's hierarchy.
  */
-export const MESSAGE_TEXT_CLASS = 'text-foreground text-sm leading-relaxed font-medium';
+// Regular weight, the agent's Markdown answers' own: every message body in a chat reads alike.
+export const MESSAGE_TEXT_CLASS = 'text-foreground text-sm leading-relaxed';
 
 /**
  * One message in a channel or a thread: the author's 36px avatar in a fixed
@@ -51,17 +52,22 @@ export function MessageRow({
     <div
       data-slot="message-row"
       className={cn(
-        'group/message hover:bg-hover relative flex gap-2 px-5',
+        // `gap-3`: the avatar stands apart from the text it belongs to, the way a chat reads.
+        'group/message hover:bg-hover/60 relative flex gap-3 px-5',
         // Baseline: a compact row's gutter time sits on the body's first line.
         compact ? 'items-baseline py-0.5' : 'items-start pt-2 pb-1.5',
-        selected && 'bg-active hover:bg-active',
+        // Light fills: a row is a line of chat, not a button. Hover at 60% of the hover tone, selected at 60% of the active tone.
+        selected && 'bg-active/60 hover:bg-active/60',
         className,
       )}
     >
       {/* `w-10` is the `lg` avatar's own width: every body starts on one edge.
           A person's photo sits `rounded-md` with no hairline: in a row the
           face is the edge, and the ring read as a frame around it. */}
-      <div className="w-10 shrink-0 [&_[data-slot=avatar]]:rounded-md [&_[data-slot=avatar]]:after:hidden">
+      {/* `pt-0.5` (full rows): baseline-aligned beside the name, the time's
+          16px line box starts ~2px down the row (measured), so the avatar's
+          top meets the top of the time. */}
+      <div className={cn('w-10 shrink-0 [&_[data-slot=avatar]]:rounded-md [&_[data-slot=avatar]]:after:hidden', !compact && 'pt-0.5')}>
         {compact ? (
           time ? (
             <Hint label={time.title} side="top" sideOffset={6}>

@@ -1,7 +1,7 @@
 {
   "generatedAt": "static",
-  "count": 1828,
-  "aliases": 713,
+  "count": 1832,
+  "aliases": 715,
   "routes": [
     {
       "method": "GET",
@@ -2942,6 +2942,16 @@
     },
     {
       "method": "GET",
+      "path": "/v1/projects/:workspaceId/bots",
+      "aliasOf": "/v1/workspaces/:workspaceId/bots"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/:workspaceId/bots/:name/pause",
+      "aliasOf": "/v1/workspaces/:workspaceId/bots/:name/pause"
+    },
+    {
+      "method": "GET",
       "path": "/v1/projects/:workspaceId/branches",
       "aliasOf": "/v1/workspaces/:workspaceId/branches"
     },
@@ -5843,6 +5853,14 @@
     {
       "method": "PATCH",
       "path": "/v1/workspaces/:workspaceId/automations"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/:workspaceId/bots"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/:workspaceId/bots/:name/pause"
     },
     {
       "method": "GET",

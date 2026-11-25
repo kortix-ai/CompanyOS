@@ -21,6 +21,13 @@ export function bindProjectOperationsReview(projectId: string) {
         P.claimWarmProjectSession(projectId, input),
     },
 
+    /** The bots the caller can message (`kortix_bot` flag). A bot's chat is `spaces.dm(name)`. */
+    bots: {
+      list: () => P.listWorkspaceBots(projectId),
+      /** `setPaused(name, paused)`: a paused bot gets messages but no automatic run. */
+      setPaused: (name: string, paused: boolean) => P.setWorkspaceBotPaused(projectId, name, paused),
+    },
+
     /** Channels and the caller's DMs (`chat` flag). A session joins one with `sessions.create({ space_id })`. */
     spaces: {
       list: () => P.listWorkspaceSpaces(projectId),

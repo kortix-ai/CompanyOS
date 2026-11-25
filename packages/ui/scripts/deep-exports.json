@@ -236,6 +236,7 @@
     "./lib/icon-config",
     "./lib/telemetry",
     "./lib/utils",
+    "./lib/z-stack",
     "./markdown/copy-button",
     "./markdown/doc-editor/doc-embed",
     "./markdown/doc-editor/doc-extensions",

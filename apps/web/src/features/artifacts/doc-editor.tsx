@@ -25,6 +25,8 @@ import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { floatingZ, useDialogDepth } from '@kortix/ui/lib/z-stack';
+
 import { createDocSaver, pendingSave, type DocSaveStatus, type DocSaver, type Known } from './doc-autosave';
 import { fileBase64, isMedia, mediaPath, mediaUrls, tooLarge } from './doc-media';
 import { SlashCommand, SlashMenu, type SlashState } from './doc-slash-menu';
@@ -457,6 +459,8 @@ function EmbedOffer({
   onClose: () => void;
 }) {
   const t = useTranslations('artifacts');
+  // Portaled to <body>: on the floating scale, so it shows above a dialog the editor sits in.
+  const depth = useDialogDepth();
   const [loading, setLoading] = useState(false);
   // 0: Keep as link, 1: Show embed (the default, the reason the menu opened).
   const [active, setActive] = useState(1);
@@ -547,9 +551,9 @@ function EmbedOffer({
     <div
       role="menu"
       aria-label={t('embedOffer')}
-      style={{ top: at.bottom + 6, left: at.left }}
+      style={{ top: at.bottom + 6, left: at.left, zIndex: floatingZ(depth) }}
       onMouseDown={(e) => e.preventDefault()}
-      className={`${MENU_PANEL_STATIC} fixed z-50 w-48`}
+      className={`${MENU_PANEL_STATIC} fixed w-48`}
     >
       <button
         type="button"

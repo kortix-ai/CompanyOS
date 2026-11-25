@@ -23,7 +23,7 @@ export default function OneChatPage() {
   const beforeSend = useProjectSendGate(id);
   if (flag.isLoading) return null;
   if (!flag.enabled) {
-    return <FeatureGateScreen featureKey="chat" featureName="Chat" description={tI18nComplete.raw('textfe0dab79db43')} />;
+    return <FeatureGateScreen featureKey="kortix_bot" featureName="Kortix bot" description={tI18nComplete.raw('textfe0dab79db43')} />;
   }
   return (
     <SpaceView

@@ -23,7 +23,8 @@ import {
 } from '../session-lifecycle';
 import { buildTurnTrace, kortixSessionIdFor, type LogMessage } from './spans';
 
-const SOURCE = 'system:qualiloop' as const;
+// Origin `user` (not a `system:` source): the test must meet the agent a person meets in their own chat.
+const SOURCE = 'qualiloop' as const;
 /** Under QualiLoop's longest reply timeout (600 s). */
 const TURN_TIMEOUT_MS = 570_000;
 const POLL_MS = 1_000;

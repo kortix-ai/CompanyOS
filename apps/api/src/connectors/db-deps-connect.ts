@@ -41,10 +41,10 @@ export function composioConnectionMetadata(input: {
 }
 
 /** Keep transcript references from the live row when provider IO used an older snapshot. */
-export function composioMetadataWrite(metadata: Record<string, unknown>, completed = false, completing = false) {
+export function composioMetadataWrite(metadata: Record<string, unknown>, completed = false, preserveRequestingSession = false) {
   const waiting = readRequestingSessionId(metadata);
   return sql`(${JSON.stringify(metadata)}::jsonb
-    || jsonb_build_object('requesting_session_id', ${completing
+    || jsonb_build_object('requesting_session_id', ${preserveRequestingSession
       ? sql`coalesce(${connectorConnections.metadata}->'requesting_session_id', 'null'::jsonb)`
       : sql`coalesce(to_jsonb(${waiting}::text), ${connectorConnections.metadata}->'requesting_session_id', 'null'::jsonb)`}))
     || jsonb_build_object('connect_session_ids', (

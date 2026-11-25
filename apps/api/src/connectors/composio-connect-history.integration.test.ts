@@ -132,7 +132,22 @@ test('account-scoped completion and start preserve the same completed conversati
   if (!connection) throw new Error('missing synthetic connection');
   expect(await finalizeComposioConnect(projectId, connectionId, connection, 'googlecalendar', userId))
     .toMatchObject({ connected: true });
-  await mergeRequestingSession(connectionId, crypto.randomUUID());
+  const next = crypto.randomUUID();
+  await mergeRequestingSession(connectionId, next);
   await startComposioConnect(projectId, connectionId, connection, 'googlecalendar', {});
   expect((await listed(first))[0]?.connected).toBe(true);
+  expect((await listed(next))[0]?.connected).toBe(true);
+});
+
+test('repeated completion deduplicates history and revoked rows never confirm', async () => {
+  const first = crypto.randomUUID();
+  await reset(first);
+  active = true;
+  await finalize();
+  await finalize();
+  const [row] = await db.select().from(connectorConnections).where(eq(connectorConnections.connectionId, connectionId));
+  expect(row?.metadata?.connect_session_ids).toEqual([first]);
+  await db.update(connectorConnections).set({ status: 'revoked' }).where(eq(connectorConnections.connectionId, connectionId));
+  expect(await finalize()).toMatchObject({ connected: false });
+  expect(await listed(first)).toEqual([]);
 });

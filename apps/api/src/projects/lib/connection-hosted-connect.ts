@@ -42,7 +42,7 @@ export async function startComposioConnect(projectId: string, connectionId: stri
       isNoAuth: result.isNoAuth, previous: metadata,
       connectedAs: result.connectedAccountId && result.connectedAccountId === metadata.connected_account_id
         ? connectedAsOf(metadata) : null,
-    }), result.connected),
+    }), result.connected, true),
   });
   return { app, connectUrl: result.connectUrl, connected: result.connected, isNoAuth: result.isNoAuth };
 }

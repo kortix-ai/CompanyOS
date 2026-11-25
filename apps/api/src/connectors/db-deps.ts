@@ -543,7 +543,7 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
           provider: 'composio',
           toolkit: conn.app,
           requesting_session_id: requestingSessionId ?? readRequestingSessionId(previous),
-        }),
+        }, false, !requestingSessionId),
         updatedAt: sql`now()`,
       });
       const stableUserId = composioStableUserId(connectionId);
@@ -603,7 +603,7 @@ export const dbConnectorRouterDeps: ConnectorRouterDeps = {
             result.connectedAccountId === previous.connected_account_id
               ? connectedAsOf(previous)
               : null,
-        }), result.connected),
+        }), result.connected, !requestingSessionId),
       });
       return {
         provider: 'composio',

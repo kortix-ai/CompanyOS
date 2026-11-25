@@ -146,28 +146,13 @@ function TitleBar({ children }: { children?: ReactNode }) {
 }
 
 /**
- * A window anchored top-left inside the pane and running off its right edge:
- * a product shot, not a screenshot shrunk into a box. `bleed` also runs it
- * off the foot; without it the window stops short and leaves the lit band
- * at the foot clear, where the glow and the hover dither show.
+ * A window anchored top-left inside the pane, with air above and to its
+ * left, running off the pane's right and bottom edges: a product shot, not a
+ * screenshot shrunk into a box.
  */
-function BleedWindow({
-  children,
-  className,
-  bleed = false,
-}: {
-  children: ReactNode;
-  className?: string;
-  bleed?: boolean;
-}) {
+function BleedWindow({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div
-      className={cn(
-        'bg-card absolute top-6 -right-px left-6 overflow-hidden border',
-        bleed ? '-bottom-px rounded-tl-md' : 'bottom-14 rounded-l-md',
-        className,
-      )}
-    >
+    <div className={cn('bg-card absolute top-6 -right-px -bottom-px left-6 overflow-hidden rounded-tl-md border', className)}>
       {children}
     </div>
   );
@@ -177,7 +162,7 @@ function BleedWindow({
 export function DesktopArt() {
   return (
     <SurfaceArt surface="desktop" className="min-h-64 lg:min-h-0">
-      <BleedWindow bleed className="top-8 left-8">
+      <BleedWindow className="top-8 left-8">
         <TitleBar />
         <UiImage
           src={DESKTOP_SHOT}
@@ -319,7 +304,7 @@ const MCP_REQUEST = 'Ask Kortix to draft the Q4 launch plan';
 export function TerminalArt() {
   return (
     <SurfaceArt surface="terminal" className="min-h-60">
-      <BleedWindow className="top-5 bottom-10 left-5">
+      <BleedWindow className="top-5 left-5">
         <TitleBar>
           <span className="text-muted-foreground ml-2 font-mono text-xs">~/acme</span>
         </TitleBar>
@@ -362,7 +347,7 @@ const MCP_CLIENTS = [
 export function McpArt() {
   return (
     <SurfaceArt surface="mcp" className="min-h-60">
-      <BleedWindow className="top-5 bottom-10 left-5">
+      <BleedWindow className="top-5 left-5">
         <div className="flex items-center gap-1 border-b px-2 py-1.5 text-xs">
           {MCP_CLIENTS.map((client, index) => (
             <span

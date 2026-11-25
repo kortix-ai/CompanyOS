@@ -184,6 +184,16 @@ describe('the Claude account a request uses', () => {
       message: `Anthropic refuses the Claude account "Selected": ${ORG_OFF} An admin of its Claude organization must turn Claude Code back on, or connect another Claude account.`,
     });
     expect(await missingClaudeSubscription({ accountId: ACCOUNT, projectId: PROJECT, userId: OWNER, model: 'claude-agent/opus' })).toBeNull();
+    // A private session of OTHER resolves OTHER's own accounts. OTHER sees the reason;
+    // OWNER, prompting it (a Space-shared private session), never sees OTHER's account named.
+    const othersSession = randomUUID();
+    await db.insert(projectSessions).values({ sessionId: othersSession, accountId: ACCOUNT, projectId: PROJECT, branchName: othersSession, createdBy: OTHER, visibility: 'private' });
+    expect((await missingClaudeSubscription({ accountId: ACCOUNT, projectId: PROJECT, sessionId: othersSession, userId: OTHER, model: 'claude-agent/opus' }))?.message)
+      .toContain('Anthropic refuses the Claude account "Selected"');
+    expect(await missingClaudeSubscription({ accountId: ACCOUNT, projectId: PROJECT, sessionId: othersSession, userId: OWNER, model: 'claude-agent/opus' })).toEqual({
+      model: 'claude-agent/opus', message: 'Connect your Claude subscription to use Claude models.',
+    });
+    await db.delete(projectSessions).where(eq(projectSessions.sessionId, othersSession));
 
     // After the 15-minute hold the account is tried again.
     await db.update(accountSecretResources).set({ verifiedAt: sql`now() - interval '16 minutes'` }).where(eq(accountSecretResources.secretId, SHARED));

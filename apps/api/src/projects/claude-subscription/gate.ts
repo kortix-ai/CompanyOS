@@ -57,7 +57,13 @@ export async function missingClaudeSubscription(input: {
     sessionId: input.sessionId ?? null, personalUserId,
   });
   if (!problem) return null;
-  // No account at all keeps the Connect text; any other reason names the accounts and the fix.
-  const message = problem.code === 'provider_not_connected' ? CLAUDE_SUBSCRIPTION_REQUIRED_MESSAGE : `${problem.message} ${problem.suggestion}`;
+  // The reason names accounts and Anthropic's words. Only the caller's own accounts
+  // (`personalUserId` is the caller) or accounts shared with everyone (null) may be
+  // named: a Space-shared private session still resolves its creator's private
+  // accounts until a turn binds the prompter, and those are not the caller's to see.
+  const nameable = personalUserId === null || personalUserId === input.userId;
+  const message = problem.code === 'provider_not_connected' || !nameable
+    ? CLAUDE_SUBSCRIPTION_REQUIRED_MESSAGE
+    : `${problem.message} ${problem.suggestion}`;
   return { model: input.model, message };
 }

@@ -232,7 +232,8 @@ export function QueuedPromptList({
   const sharedSteer =
     heldCount === 0 &&
     listed > 0 &&
-    rows.every((row) => row.state !== 'failed' && row.steer && !row.steerFallback);
+    // A parked row waits for the machine, not the turn: it never shares the steer note.
+    rows.every((row) => row.state !== 'failed' && row.steer && !row.steerFallback && !row.unreachable);
   if (listed === 0 && heldCount === 0) return null;
   // One edit at a time: the composer holds a single draft.
   const editRow = editing ? undefined : onEdit;
@@ -366,6 +367,7 @@ export function QueuedPromptList({
                       {heldCount === 0 &&
                         !sharedSteer &&
                         !failed &&
+                        !row.unreachable &&
                         (row.steer || row.steerFallback) && (
                           <p className="text-muted-foreground text-xs" data-queued-delivery>
                             {row.steerFallback
@@ -373,6 +375,11 @@ export function QueuedPromptList({
                               : t('steerNextStep')}
                           </p>
                         )}
+                      {row.unreachable && (
+                        <p className="text-muted-foreground text-xs" data-queued-unreachable>
+                          {t('queuedRuntimeUnreachable')}
+                        </p>
+                      )}
                       {failed && (
                         <p className="flex flex-wrap items-baseline gap-x-2 text-xs" role="status" title={row.lastError}>
                           <span className="text-kortix-red">

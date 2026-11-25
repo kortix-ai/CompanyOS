@@ -94,6 +94,25 @@ describe('projectQueueRows', () => {
     ]);
   });
 
+  // A prompt parked on a machine that did not answer is still in line: the
+  // server re-sends it on its backoff (30 s, 2 min, 8 min). The row says why it
+  // waits, and keeps every control a queued row has.
+  test('a prompt parked on an unreachable machine says so and stays a queued row', () => {
+    const { rows } = projectQueueRows({
+      prompts: [
+        prompt({ prompt_id: 'parked', reason: 'runtime_unreachable' }),
+        prompt({ prompt_id: 'plain' }),
+        prompt({ prompt_id: 'parked-failed', state: 'failed', reason: 'runtime_unreachable' }),
+      ],
+    });
+    expect(rows.map((r) => [r.id, r.state, r.unreachable ?? false, r.removable, r.interruptible])).toEqual([
+      ['parked', 'queued', true, true, true],
+      ['plain', 'queued', false, true, true],
+      // A failed row shows its error, not the wait.
+      ['parked-failed', 'failed', false, true, false],
+    ]);
+  });
+
   // A queued prompt runs as its author. The API answers 403 not_prompt_author
   // to anyone else's edit, Stop and send or retry, so none is offered.
   test("another member's rows offer no edit, Stop and send or retry", () => {
